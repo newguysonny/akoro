@@ -33,6 +33,16 @@ test("every read behind the details page runs under a named step", () => {
   }
 });
 
+test("/health proves the deadline code is deployed (build identity)", async () => {
+  const app = await read("app.js");
+  // The constant is exported from the module and surfaced by /health, so a
+  // stale or rolled-back deploy is detectable without server access.
+  assert.match(routes, /export const COMMUNITIES_QUERY_TIMEOUT_MS = QUERY_TIMEOUT_MS;/);
+  assert.match(app, /import communitiesModule, \{ COMMUNITIES_QUERY_TIMEOUT_MS \} from \"\.\/modules\/communities\/routes\.js\";/);
+  assert.match(app, /git: process\.env\.RENDER_GIT_COMMIT \|\| null,/);
+  assert.match(app, /modules: \{ communities: \{ queryDeadlineMs: COMMUNITIES_QUERY_TIMEOUT_MS \} \},/);
+});
+
 test("a deadline-exceeded query answers 504, not an eternal pending request", () => {
   assert.match(routes, /if \(!err\?\.deadlineExceeded\) return next\(err\);/);
   assert.match(routes, /res\.status\(504\)\.json\(\{/);

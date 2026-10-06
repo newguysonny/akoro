@@ -134,12 +134,16 @@ const UPLOAD_TIMEOUT_MS  = 120000;  // bodies can be big; slow is expected, dead
 
 /* Recast an abort as the same shape every other network failure has, so the
    cache fallback, offline queue and page error states all engage — whether it
-   aborted the connection (fetch) or the body read (json()). */
-function recastAbort(err) {
+   aborted the connection (fetch) or the body read (json()). The wait length
+   travels with the error so an error card can say HOW LONG the silence
+   lasted (a screenshot then distinguishes "no answer in 30s" from a server
+   that answered with its own timeout). */
+function recastAbort(err, timeoutMs) {
   if (err?.name !== 'AbortError' && err?.name !== 'TimeoutError') return err;
   const e = new Error('The request timed out — check your connection and try again.');
   e.isNetwork = true;
   e.timedOut  = true;
+  if (timeoutMs > 0) e.timeoutMs = timeoutMs;
   return e;
 }
 
@@ -149,7 +153,7 @@ function fetchWithTimeout(url, opts = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   return fetch(url, { ...opts, signal: ctrl.signal })
     .finally(() => clearTimeout(timer))
-    .catch((e) => { throw recastAbort(e); });
+    .catch((e) => { throw recastAbort(e, timeoutMs); });
 }
 
 /* A deadline the CALLER disarms once the response body has been read.
@@ -265,7 +269,7 @@ export async function apiGet(path, { cache = true, timeout } = {}) {
     if (cache) cacheSet(path, json);            // fire-and-forget snapshot
     return json;
   } catch (err) {
-    const e = recastAbort(err);                 // a body-read abort is a network error too
+    const e = recastAbort(err, ms);             // a body-read abort is a network error too
     // Offline / network failure → serve the last-known-good copy if we have one.
     if (cache && isNetworkError(e)) {
       const hit = await cacheGet(path);
@@ -293,7 +297,7 @@ async function apiSend(method, path, body, { queueOffline = false, timeout } = {
     if (!r.ok) throw await apiError(r, method, path);
     return await r.json();
   } catch (err) {
-    const e = recastAbort(err);                 // a body-read abort is a network error too
+    const e = recastAbort(err, ms);             // a body-read abort is a network error too
     if (queueOffline && isNetworkError(e)) {
       // When a service worker controls the page, its Background Sync queue has
       // already captured this failed request and will replay it (even if the app
@@ -330,7 +334,7 @@ export async function apiUpload(path, formData, { method = 'POST' } = {}) {
     if (!r.ok) throw await apiError(r, method, path);
     return await r.json();
   } catch (err) {
-    throw recastAbort(err);
+    throw recastAbort(err, UPLOAD_TIMEOUT_MS);
   } finally {
     deadline.settle();
   }

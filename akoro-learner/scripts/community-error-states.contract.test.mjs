@@ -23,7 +23,7 @@ const [page, communityApi, api] = await Promise.all([
 test("classifyError maps every failure to its honest kind", () => {
   assert.match(page, /function classifyError\(e\) \{/);
   assert.match(page, /if \(e\?\.status === 404 \|\| e\?\.status === 403\) return \{ kind: 'missing' \};/);
-  assert.match(page, /if \(e\?\.timedOut \|\| e\?\.status === 504\) return \{ kind: 'slow', step: e\?\.step \};/);
+  assert.match(page, /if \(e\?\.timedOut \|\| e\?\.status === 504\) return \{ kind: 'slow', step: e\?\.step, timeoutMs: e\?\.timeoutMs \};/);
   assert.match(page, /if \(e\?\.status === 503\) return \{ kind: 'setup' \};/);
   assert.match(page, /if \(e\?\.status\) return \{ kind: 'server', message: e\?\.message \};/);
   assert.match(page, /return \{ kind: 'network' \};/);
@@ -41,8 +41,11 @@ test("each kind has its own icon, title and body — no kind blames the network 
   assert.match(page, /icon: 'ti-wifi-off', title: "Couldn't reach this community"/);
   // "that's on our side, not your connection" — the sentence that was missing.
   assert.match(page, /that's on our side, not your connection\./);
-  // The 504's step is shown so a screenshot names the wedged query.
+  // The 504's step is shown so a screenshot names the wedged query; a client
+  // deadline with NO server answer says how long the silence lasted — the two
+  // lines separate "server hung on X" from "request never reached the server".
   assert.match(page, /The server gave up waiting on: \{error\.step\}/);
+  assert.match(page, /No answer at all within \{Math\.round\(error\.timeoutMs \/ 1000\)\} seconds/);
   // Server errors show the API's own user-facing message.
   assert.match(page, /error\.kind === 'server' \? \(error\.message \|\| meta\.body\) : meta\.body/);
   // 'missing' still falls through to the not-found card, not this one.

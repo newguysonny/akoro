@@ -57,7 +57,7 @@ import tasksModule                from "./modules/tasks/routes.js";
 import selfStudyModule            from "./modules/self-study/routes.js";
 import pharmdModule              from "./modules/pharmd/routes.js";
 import { startRoutineScheduler }  from "./modules/self-study/routines.js";
-import communitiesModule          from "./modules/communities/routes.js";
+import communitiesModule, { COMMUNITIES_QUERY_TIMEOUT_MS } from "./modules/communities/routes.js";
 import instructorModule           from "./modules/instructor/index.js";
 import instructorToolsModule      from "./modules/instructor/tools.js";
 import teachingToolsModule        from "./modules/teaching/tools.js";
@@ -331,6 +331,16 @@ app.get("/health", async (req, res) => {
   res.status(healthy ? 200 : 503).json({
     status: healthy ? "ok" : "degraded", instance: config.instanceId,
     uptime: Math.round(process.uptime()), env: config.nodeEnv,
+    // Build identity: WHICH code is live must be answerable without server
+    // access — a frontend fix deployed while the API silently rolled back
+    // (or vice versa) otherwise reads as "the fix didn't work". Render sets
+    // RENDER_GIT_COMMIT on every deploy; module flags prove specific fixes
+    // are on board (the communities query deadline).
+    build: {
+      git: process.env.RENDER_GIT_COMMIT || null,
+      startedAt: new Date(Date.now() - process.uptime() * 1000).toISOString(),
+    },
+    modules: { communities: { queryDeadlineMs: COMMUNITIES_QUERY_TIMEOUT_MS } },
     checks: { database: dbOk ? "ok" : "error", redis: redisOk ? "ok" : "error" },
     // Breaker states are local (no round-trip): a provider outage is visible
     // in /health the moment it trips, not only when requests fail.

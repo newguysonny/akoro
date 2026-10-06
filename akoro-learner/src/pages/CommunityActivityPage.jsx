@@ -261,7 +261,7 @@ const ERROR_STATES = {
 
 function classifyError(e) {
   if (e?.status === 404 || e?.status === 403) return { kind: 'missing' };
-  if (e?.timedOut || e?.status === 504) return { kind: 'slow', step: e?.step };
+  if (e?.timedOut || e?.status === 504) return { kind: 'slow', step: e?.step, timeoutMs: e?.timeoutMs };
   if (e?.status === 503) return { kind: 'setup' };
   if (e?.status) return { kind: 'server', message: e?.message };
   return { kind: 'network' };
@@ -337,11 +337,15 @@ export default function CommunityActivityPage() {
             <p style={{ fontSize: 12.5, color: 'var(--ak-text-muted)', marginTop: 4 }}>
               {error.kind === 'server' ? (error.message || meta.body) : meta.body}
             </p>
-            {error.step && (
+            {error.step ? (
               <p style={{ fontSize: 11, color: 'var(--ak-text-muted)', marginTop: 6, opacity: .85 }}>
                 The server gave up waiting on: {error.step}
               </p>
-            )}
+            ) : error.timeoutMs ? (
+              <p style={{ fontSize: 11, color: 'var(--ak-text-muted)', marginTop: 6, opacity: .85 }}>
+                No answer at all within {Math.round(error.timeoutMs / 1000)} seconds - the request may not have reached our server.
+              </p>
+            ) : null}
             <button onClick={retry}
               style={{ marginTop: 16, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 20px', borderRadius: 100, border: 'none', background: BRAND, color: '#fff', fontSize: 12.5, fontWeight: 900, cursor: 'pointer', fontFamily: "'Nunito',sans-serif" }}>
               <Icon name="ti-refresh" size={14}/> Try again

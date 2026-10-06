@@ -23,7 +23,9 @@ test("a deadline can be armed by the caller and covers the body read", () => {
 });
 
 test("an abort past the deadline looks like every other network failure", () => {
-  assert.match(api, /function recastAbort\(err\) \{/);
+  assert.match(api, /function recastAbort\(err, timeoutMs\) \{/);
+  // The wait length travels with the error so a card can say how long the silence lasted.
+  assert.match(api, /if \(timeoutMs > 0\) e\.timeoutMs = timeoutMs;/);
   assert.match(api, /err\?\.name !== 'AbortError' && err\?\.name !== 'TimeoutError'/);
   assert.match(api, /e\.isNetwork = true;/);
   assert.match(api, /e\.timedOut  = true;/);
@@ -34,7 +36,7 @@ test("an abort past the deadline looks like every other network failure", () => 
 test("apiGet keeps one clock across headers, error body and JSON body", () => {
   assert.match(api, /const deadline = armDeadline\(ms\);       \/\/ headers AND body under one clock/);
   assert.match(api, /method: 'GET', signal: deadline\.signal/);
-  assert.match(api, /const e = recastAbort\(err\);                 \/\/ a body-read abort is a network error too/);
+  assert.match(api, /const e = recastAbort\(err, ms\);             \/\/ a body-read abort is a network error too/);
   assert.match(api, /finally \{\n    deadline\.settle\(\);\n  \}\n\}\n\n\/\/ Shared write path/);
 });
 

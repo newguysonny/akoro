@@ -84,6 +84,10 @@ router.use(authenticateToken);
    its late failure is swallowed on purpose (an unhandled rejection from a
    race we already abandoned must not crash the process). */
 const QUERY_TIMEOUT_MS = 20000;
+// Exported for /health: the deployed build must be able to PROVE it carries
+// the query deadline — a deploy that silently rolled back is otherwise
+// indistinguishable from a hang, which is exactly the ambiguity we just hit.
+export const COMMUNITIES_QUERY_TIMEOUT_MS = QUERY_TIMEOUT_MS;
 
 function step(label, promise) {
   let timer;
