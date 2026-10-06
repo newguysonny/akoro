@@ -8,14 +8,17 @@ import { parseTopicFile, topicPath, PHARMD_BUCKET, DEFAULT_DIR } from "../script
  * the migration seeds the structure (programme → years → courses),
  * the uploader parses the reference zips into topic rows + Storage
  * objects, and the /api/pharmd module serves the tree the learner
- * app's Pharm D discovery pages render.
+ * app's Pharm D discovery pages render. The uploader engine is
+ * shared by the CLI script and the API's admin console, so both
+ * front doors run the same tested code.
  */
 
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [migration, manifest, uploader, routes, app, page, pharmdApi] = await Promise.all([
+const [migration, manifest, uploader, engine, routes, app, page, pharmdApi] = await Promise.all([
   read("2026-pharmd-courses.sql"),
   read("manifest.json"),
   read("../scripts/upload-pharmd-courses.mjs"),
+  read("../modules/pharmd/uploader.js"),
   read("../modules/pharmd/routes.js"),
   read("../app.js"),
   read("../../akoro-learner/src/components/pharmd/PharmDProgram.jsx"),
@@ -78,11 +81,45 @@ test("uploader: public bucket, readable paths, idempotent writes", () => {
   assert.equal(topicPath("BIO 111", 1, "Cell Structure and Organization"),
     "BIO 111/01 - Cell Structure and Organization.pdf");
   assert.ok(DEFAULT_DIR.endsWith("PHARM.D PILOT PROGRAMME COURSES"), "defaults to the reference folder");
-  assert.ok(uploader.includes("createBucket(PHARMD_BUCKET, { public: true })"), "public bucket, ensured once");
-  assert.ok(uploader.includes("upsert: true"), "storage objects re-upload with upsert");
-  assert.ok(uploader.includes('onConflict: "course_id,position"'), "topic rows upsert on (course_id, position)");
-  assert.ok(uploader.includes("parseTopicFile"), "parses through the shared, tested parser");
-  assert.ok(uploader.includes("import(\"../db.js\")"), "db loads lazily — the parser stays importable without env");
+  // The engine (shared by the CLI and the admin console).
+  assert.ok(engine.includes("createBucket(PHARMD_BUCKET, { public: true })"), "public bucket, ensured once");
+  assert.ok(engine.includes("upsert: true"), "storage objects re-upload with upsert");
+  assert.ok(engine.includes('onConflict: "course_id,position"'), "topic rows upsert on (course_id, position)");
+  assert.ok(engine.includes("parseTopicFile"), "parses through the shared, tested parser");
+  assert.ok(engine.includes('import("../../db.js")'), "db loads lazily — the parser stays importable without env");
+  assert.ok(engine.includes("dryRun = false"), "dry run supported — count without writing");
+  assert.ok(engine.includes("failures"), "per-topic problems are reported, not thrown away");
+  // The CLI is a thin front door: same engine, not a copy.
+  assert.ok(uploader.includes("runPharmdUpload"), "CLI delegates to the engine");
+  assert.ok(uploader.includes('from "../modules/pharmd/uploader.js"'), "imports the engine");
+  assert.ok(uploader.includes("export { runPharmdUpload"), "re-exports keep old imports working");
+  assert.ok(!uploader.includes("createBucket"), "no duplicated upload logic in the CLI");
+});
+
+test("admin console: the uploader as a URL, key-guarded", () => {
+  // Shared secret from the environment — disabled until set.
+  assert.ok(routes.includes("process.env.PHARMD_UPLOAD_KEY"), "key comes from PHARMD_UPLOAD_KEY");
+  assert.ok(routes.includes("Upload console not configured"), "unset key → 404 (disabled by default)");
+  assert.ok(routes.includes("Bad upload key"), "wrong key → 401");
+  assert.ok(routes.includes('req.get("x-pharmd-upload-key") || req.query.key'), "key via header or ?key=");
+  // The three endpoints.
+  assert.ok(routes.includes('router.get("/admin/upload"'), "GET console page");
+  assert.ok(routes.includes('router.get("/admin/upload/status"'), "GET status JSON");
+  assert.ok(routes.includes('router.post("/admin/upload"'), "POST starts the job");
+  // Key-guarded, not learner-guarded: declared above authenticateToken.
+  const consoleAt = routes.indexOf('router.get("/admin/upload"');
+  const authAt = routes.indexOf("router.use(authenticateToken)");
+  assert.ok(consoleAt > -1 && authAt > -1 && consoleAt < authAt, "console sits above the learner auth wall");
+  // The job runs in the background — the POST returns immediately.
+  assert.ok(routes.includes('import { runPharmdUpload }    from "./uploader.js"'), "routes reuse the engine");
+  assert.ok(routes.includes(".then((result) => { job.result = result; })"), "background job, result lands in status");
+  assert.ok(routes.includes("409"), "a second start while running → 409");
+  assert.ok(routes.includes("req.body?.dryRun !== false"), "absent dryRun defaults to dry run (safe)");
+  // The console page: same-origin, no build step, no injection.
+  assert.ok(routes.includes("CONSOLE_HTML"), "the page is served by the API itself");
+  assert.ok(routes.includes("URLSearchParams(location.search)"), "the key is read client-side, never echoed");
+  assert.ok(routes.includes("textContent"), "log renders as text — nothing is innerHTML'd");
+  assert.ok(routes.includes('content="noindex"'), "not indexed");
 });
 
 test("API: the catalogue is public, completion is per-learner", () => {
