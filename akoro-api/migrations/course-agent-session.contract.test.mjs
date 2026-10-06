@@ -60,3 +60,24 @@ test("honest states — no pretending", () => {
   assert.ok(viewer.includes("You may need to enrol"), "access failures say what to do");
   assert.ok(viewer.includes("Couldn"), "load failures are shown, not swallowed");
 });
+
+test("course pages carry real icons, never emoji decoration", () => {
+  // Agents are lucide icons, people are initials discs — typography and
+  // vector glyphs only. The one emoji that can still render is
+  // DB-supplied identity (agent_emoji a learner picked at agent
+  // creation, course.emoji the teacher chose), passed through as-is.
+  assert.ok(parts.includes("icon: Bot"), "Nexus — Bot icon");
+  assert.ok(parts.includes("icon: Gem"), "Pythia — Gem icon");
+  assert.ok(parts.includes("icon: Zap"), "Axiom — Zap icon");
+  assert.ok(parts.includes("icon: Tornado"), "Zeno — Tornado icon");
+  assert.ok(parts.includes("icon: Sparkles"), "Ada — Sparkles icon");
+  assert.ok(parts.includes("icon: Triangle"), "Sigma — Triangle icon");
+  assert.ok(parts.includes("initialsOf"), "people render as initials discs");
+  assert.ok(!parts.includes("RV_EMOJI") && !page.includes("RV_EMOJI"), "the review-avatar emoji arrays are gone");
+  assert.ok(page.includes("icon: Swords"), "battle-vs-many renders the Swords icon");
+  assert.ok(page.includes("Bot"), "host-agent fallback is the Bot icon");
+  assert.ok(parts.includes("startsWith('ti-')"), "ti-* glyph names render through Tabler");
+  const emojiish = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/u;
+  assert.ok(!emojiish.test(parts), "parts.jsx is emoji-free");
+  assert.ok(!emojiish.test(page), "CourseDetailsPage.jsx is emoji-free");
+});

@@ -7,7 +7,7 @@ import { useCart } from '../../contexts/CartContext.jsx';
 import {
   ChevronLeft, ChevronDown, Play, Users, Clock, Star, Globe, Lock,
   CheckCircle2, Radio, ShoppingCart, CalendarPlus, MonitorPlay, BookOpen,
-  Award, Swords, TrendingUp, Calendar, ArrowRight, Share2, Flag, Check, Plus, Video,
+  Award, Swords, TrendingUp, Calendar, ArrowRight, Share2, Flag, Check, Plus, Video, Bot,
 } from 'lucide-react';
 import { API } from '../../services/api.js';
 import { BRAND, GREEN, RED } from '../../constants.js';
@@ -17,7 +17,7 @@ import AgentSessionViewer from '../../components/courses/AgentSessionViewer.jsx'
 import AddToFolderPage from '../../components/library/AddToFolderPage.jsx';
 
 /* ── palette ──────────────────────────────────────────────── */
-import { INK, MUTED, BORDER, LIGHT, BG, FONT, GlobalCss, card, Btn, Avatar, LiveBadge, StarRow, PLATFORMS, PlatformBadge, ActionChips, SectionTitle, DEFAULT_MODULES, DEFAULT_COURSE, VideoPlayer, Curriculum, RV_EMOJI, RV_BG, Reviews, AGENTS, BATTLES, BattleCard, BattlesSection, REVISIONS, RV_HOST_EMOJI, RV_HOST_BG, RevisionsSection, mapCourse, CourseOverview, EnrolledVideoView } from './parts.jsx';
+import { INK, MUTED, BORDER, LIGHT, BG, FONT, GlobalCss, card, Btn, Avatar, LiveBadge, StarRow, PLATFORMS, PlatformBadge, ActionChips, SectionTitle, DEFAULT_MODULES, DEFAULT_COURSE, VideoPlayer, Curriculum, RV_BG, Reviews, AGENTS, BATTLES, BattleCard, BattlesSection, REVISIONS, RV_HOST_BG, RevisionsSection, mapCourse, CourseOverview, EnrolledVideoView } from './parts.jsx';
 
 export default function CourseDetailsPage() {
   const { slug } = useParams();
@@ -140,8 +140,8 @@ export default function CourseDetailsPage() {
         return {
           id: b.id, status: st, topic: b.topic || b.title,
           viewers: b.peak_viewers || b.total_participants || 0,
-          a: { name: b.user_agents?.agent_name || 'Host agent', emoji: b.user_agents?.agent_emoji || '🤖', bg: '#EDE8F8', color: BRAND },
-          b: { name: `${b.total_participants || 1} agents`, emoji: '⚔️', bg: '#FEF0E6', color: '#E8884A' },
+          a: { name: b.user_agents?.agent_name || 'Host agent', icon: b.user_agents?.agent_emoji ? undefined : Bot, emoji: b.user_agents?.agent_emoji, bg: '#EDE8F8', color: BRAND },
+          b: { name: `${b.total_participants || 1} agents`, icon: Swords, bg: '#FEF0E6', color: '#E8884A' },
           sa: 0, sb: 0,
         };
       }).filter(Boolean);
