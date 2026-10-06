@@ -11,6 +11,10 @@
  *   /api/tasks/*         tasks       — teacher AI task agent (Anthropic loop)
  */
 
+// Outbound meter FIRST: it patches global fetch, and every client library
+// (supabase-js, the OpenAI SDK) captures fetch when it is constructed —
+// importing this after them would measure nothing.
+import "./lib/outboundMeter.js";
 import "dotenv/config";
 import express                    from "express";
 import { createServer }           from "http";
@@ -20,6 +24,7 @@ import Redis                      from "ioredis";
 import cors                       from "cors";
 import helmet                     from "helmet";
 import compression                from "compression";
+import { outboundSummary }        from "./lib/outboundMeter.js";
 import cookieParser               from "cookie-parser";
 import path                       from "path";
 import { fileURLToPath }          from "url";
@@ -398,6 +403,11 @@ app.get("/health", async (req, res) => {
       sinceBootBytes: egress.totalBytes,
       last24hBytes: egress.hours.reduce((s, h) => s + h.bytes, 0),
       hourlyBytes: egress.hours.map((h) => ({ hour: h.hour, bytes: h.bytes })),
+      // The category Render billed 5.67 GB of: bytes the service itself
+      // SENDS (prompts, audio, Supabase bodies, header volume). Numbers
+      // only — the per-host attribution lives behind the internal secret.
+      outboundSinceBootBytes: outboundSummary().totalBytes,
+      outboundLast24hBytes: outboundSummary().last24hBytes,
     },
     checks: { database: dbOk ? "ok" : "error", redis: redisOk ? "ok" : "error" },
     // Breaker states are local (no round-trip): a provider outage is visible
@@ -430,6 +440,7 @@ app.get("/internal/egress", (req, res) => {
     totalBytes: egress.totalBytes,
     requests: egress.requests,
     hours: egress.hours,
+    outbound: outboundSummary(),
     routes: [...egress.byRoute.entries()]
       .map(([route, v]) => ({ route, ...v, avgBytes: Math.round(v.bytes / Math.max(v.requests, 1)) }))
       .sort((a, b) => b.bytes - a.bytes)

@@ -40,6 +40,28 @@ test("the per-route breakdown is guarded like preflight, sorted by bytes", () =>
   assert.match(appJs, /\.sort\(\(a, b\) => b\.bytes - a\.bytes\)/);
 });
 
+test("outbound (service-initiated) bytes are metered at the fetch layer", async () => {
+  const meter = await read("lib/outboundMeter.js");
+  // Render billed 5.67 GB as Service-Initiated — the app's own outbound
+  // requests. The meter patches fetch BEFORE any client library is built.
+  const firstImport = appJs.indexOf('import "./lib/outboundMeter.js";');
+  assert.ok(firstImport !== -1, "outbound meter import exists");
+  assert.ok(
+    appJs.indexOf('import "./lib/outboundMeter.js";') < appJs.indexOf('import "dotenv/config";'),
+    "outbound meter is imported before dotenv — and thus before every client library"
+  );
+  assert.match(meter, /globalThis\.fetch = function akoroMeteredFetch/);
+  // Header volume counts too: a million small calls a day is real bandwidth.
+  assert.match(meter, /const HEADER_ESTIMATE_BYTES = 400;/);
+  // Body sizing handles the payload families the app actually sends.
+  assert.match(meter, /typeof Blob !== "undefined" && body instanceof Blob\) return body\.size;/);
+  assert.match(meter, /typeof FormData !== "undefined" && body instanceof FormData\)/);
+  assert.match(meter, /recordOutbound\(host, HEADER_ESTIMATE_BYTES \+ url\.length \+ bodyBytes\(body\)\);/);
+  // Public summary is numbers-only; per-host attribution is internal-only.
+  assert.match(appJs, /outboundSinceBootBytes: outboundSummary\(\)\.totalBytes,/);
+  assert.match(appJs, /outbound: outboundSummary\(\),/);
+});
+
 test("the in-memory video upload landmine is capped at 2 GB, not 50", () => {
   // A 50 GB memory buffer on a 512 MB instance OOMs long before the limit,
   // and every proxied byte later leaves for R2 through metered egress.
