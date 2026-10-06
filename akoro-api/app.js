@@ -408,6 +408,10 @@ app.get("/health", async (req, res) => {
       // only — the per-host attribution lives behind the internal secret.
       outboundSinceBootBytes: outboundSummary().totalBytes,
       outboundLast24hBytes: outboundSummary().last24hBytes,
+      // Top destinations by outbound bytes so a browser visit to /health is
+      // enough to see WHO is eating the budget (hostnames only — the
+      // Supabase project ref is already public in the web client bundle).
+      outboundTopHosts: outboundSummary().hosts.slice(0, 3).map((h) => ({ host: h.host, bytes: h.bytes, requests: h.requests })),
     },
     checks: { database: dbOk ? "ok" : "error", redis: redisOk ? "ok" : "error" },
     // Breaker states are local (no round-trip): a provider outage is visible

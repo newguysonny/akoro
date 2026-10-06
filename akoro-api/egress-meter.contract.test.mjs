@@ -59,6 +59,7 @@ test("outbound (service-initiated) bytes are metered at the fetch layer", async 
   assert.match(meter, /recordOutbound\(host, HEADER_ESTIMATE_BYTES \+ url\.length \+ bodyBytes\(body\)\);/);
   // Public summary is numbers-only; per-host attribution is internal-only.
   assert.match(appJs, /outboundSinceBootBytes: outboundSummary\(\)\.totalBytes,/);
+  assert.match(appJs, /outboundTopHosts: outboundSummary\(\)\.hosts\.slice\(0, 3\)/);
   assert.match(appJs, /outbound: outboundSummary\(\),/);
 });
 
