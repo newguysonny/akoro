@@ -16,15 +16,26 @@ import test from "node:test";
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
 const routes = await read("modules/communities/routes.js");
 
-test("a step() helper races every query against a deadline", () => {
-  assert.match(routes, /const QUERY_TIMEOUT_MS = 20000;/);
-  assert.match(routes, /function step\(label, promise\) \{/);
-  // The losing query's late failure is swallowed on purpose.
-  assert.match(routes, /promise\.catch\(\(\) => \{\}\);   \/\/ it lost the race — a late failure is not news/);
+test("a step() helper races every query against a deadline", async () => {
+  // step() now lives in lib/queryDeadline.js — extracted after the timer
+  // callback was caught crashing on supabase's bare-thenable builders
+  // (`promise.catch is not a function` thrown BEFORE the reject, wedging
+  // the request forever: the deadline itself was the communities hang).
+  // The behavioural proof is in modules/communities/queryDeadline.test.mjs;
+  // these pins keep the wiring honest.
+  const lib = await read("lib/queryDeadline.js");
+  assert.match(routes, /import \{ step, DEFAULT_QUERY_TIMEOUT_MS \} from "\.\.\/\.\.\/lib\/queryDeadline\.js";/);
+  assert.match(lib, /export function step\(label, promise, ms = DEFAULT_QUERY_TIMEOUT_MS\)/);
+  assert.match(lib, /export const DEFAULT_QUERY_TIMEOUT_MS = 20_000;/);
+  // The guard: attaching the losing promise's failure handler can never
+  // throw inside the timer callback — a bare thenable has no .catch.
+  assert.match(lib, /promise\?\.catch\?\.\(\(\) => \{\}\);/);
   // The hang is NAMED in the logs — this is what turns the next occurrence
   // from "frontend bug?" into a one-line diagnosis.
-  assert.match(routes, /console\.error\("\[communities\] query timed out", \{ step: label, ms: QUERY_TIMEOUT_MS \}\);/);
-  assert.match(routes, /err\.deadlineExceeded = true;/);
+  assert.match(lib, /query timed out", \{ step: label, ms \}\);/);
+  assert.match(lib, /err\.deadlineExceeded = true;/);
+  // And the poisoned pattern must not return to the routes file.
+  assert.doesNotMatch(routes, /promise\.catch\(/);
 });
 
 test("every read behind the details page runs under a named step", () => {
@@ -37,7 +48,7 @@ test("/health proves the deadline code is deployed (build identity)", async () =
   const app = await read("app.js");
   // The constant is exported from the module and surfaced by /health, so a
   // stale or rolled-back deploy is detectable without server access.
-  assert.match(routes, /export const COMMUNITIES_QUERY_TIMEOUT_MS = QUERY_TIMEOUT_MS;/);
+  assert.match(routes, /export const COMMUNITIES_QUERY_TIMEOUT_MS = DEFAULT_QUERY_TIMEOUT_MS;/);
   assert.match(app, /import communitiesModule, \{ COMMUNITIES_QUERY_TIMEOUT_MS \} from \"\.\/modules\/communities\/routes\.js\";/);
   assert.match(app, /git: process\.env\.RENDER_GIT_COMMIT \|\| null,/);
   assert.match(app, /modules: \{ communities: \{ queryDeadlineMs: COMMUNITIES_QUERY_TIMEOUT_MS \} \},/);

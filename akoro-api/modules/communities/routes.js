@@ -38,6 +38,7 @@ import { Router }                         from "express";
 import db                                 from "../../db.js";
 import { authenticateToken }              from "../auth/routes.js";
 import { emitAutonomyEvent } from "../autonomy/triggers.js";
+import { step, DEFAULT_QUERY_TIMEOUT_MS } from "../../lib/queryDeadline.js";
 
 const router = Router();
 const edu    = () => db.schema("edu");
@@ -102,26 +103,11 @@ router.use((req, _res, next) => {
    a frontend bug. The losing query is left to settle in the background —
    its late failure is swallowed on purpose (an unhandled rejection from a
    race we already abandoned must not crash the process). */
-const QUERY_TIMEOUT_MS = 20000;
 // Exported for /health: the deployed build must be able to PROVE it carries
 // the query deadline — a deploy that silently rolled back is otherwise
 // indistinguishable from a hang, which is exactly the ambiguity we just hit.
-export const COMMUNITIES_QUERY_TIMEOUT_MS = QUERY_TIMEOUT_MS;
+export const COMMUNITIES_QUERY_TIMEOUT_MS = DEFAULT_QUERY_TIMEOUT_MS;
 
-function step(label, promise) {
-  let timer;
-  const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => {
-      promise.catch(() => {});   // it lost the race — a late failure is not news
-      console.error("[communities] query timed out", { step: label, ms: QUERY_TIMEOUT_MS });
-      const err = new Error(`Timed out after ${QUERY_TIMEOUT_MS}ms: ${label}`);
-      err.deadlineExceeded = true;
-      err.step = label;
-      reject(err);
-    }, QUERY_TIMEOUT_MS);
-  });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
-}
 
 /** Member counts for the given community ids, in one query. */
 async function memberCounts(ids) {
