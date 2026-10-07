@@ -67,7 +67,26 @@ const isCommunitySchemaUnavailable = (err) => {
     /(?:schema cache|schema .* not (?:exposed|allowed)|relation .* does not exist|could not find (?:the )?table)/i.test(text);
 };
 
+// ── Arrival + auth brackets ────────────────────────────────────────────────
+// The detail route has hung for days across two services and three builds,
+// while every audited path on e33316f is deadline-capped (10s auth I/O, 20s
+// queries). When reality disagrees with the audit, instrument reality: one
+// line the INSTANT a communities request arrives, one when auth has passed.
+// The next hang then names its segment from the logs alone —
+//   no "arrived"  → the request never reached this process (edge/SW/browser)
+//   arrived, no "auth ok" → wedged in authenticateToken (the [auth] 503 line
+//                           names the call; its absence is itself a finding)
+//   auth ok, no response  → wedged in a route handler (the step 504 line
+//                           names the query)
+router.use((req, _res, next) => {
+  console.log(`[communities] ${req.method} ${req.originalUrl} — arrived`);
+  next();
+});
 router.use(authenticateToken);
+router.use((req, _res, next) => {
+  console.log(`[communities] ${req.method} ${req.originalUrl} — auth ok (${req.user?.role ?? "?"} ${String(req.user?.id ?? "").slice(0, 8)})`);
+  next();
+});
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 

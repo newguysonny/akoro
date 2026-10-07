@@ -34,3 +34,17 @@ test("an auth stall is a retryable 503, never a logout and never silence", () =>
 test("the 6-hourly provider-token cron respects the jobs gate", () => {
   assert.match(meeting, /skipJob\("provider token refresh"\)/);
 });
+
+test("communities requests narrate arrival and auth in the logs", async () => {
+  const routes = await read("modules/communities/routes.js");
+  // The bracket pair that segments the next hang: arrival (pre-auth) and
+  // auth-ok (post-authenticateToken). Whichever line is missing names the
+  // wedged segment.
+  assert.match(routes, /— arrived/);
+  assert.match(routes, /— auth ok/);
+  const arrived = routes.indexOf("— arrived");
+  const authMount = routes.indexOf("router.use(authenticateToken);");
+  const authOk = routes.indexOf("— auth ok");
+  assert.ok(arrived !== -1 && arrived < authMount && authMount < authOk,
+    "bracket order: arrived → authenticateToken → auth ok");
+});
