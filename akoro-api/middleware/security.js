@@ -279,6 +279,11 @@ export function securityLog(event, req, extra = {}, { level = 'error' } = {}) {
     ip:      req?.ip,
     method:  req?.method,
     path:    req?.path,
+    // Full URL, immune to Express's mount-stripping of req.url. A 422 logged
+    // as "/sessions/<uuid>" after the URL had been stripped by three nested
+    // routers cost a full audit to (not) find — originalUrl pinpoints the
+    // endpoint on the first log line instead.
+    url:     req?.originalUrl,
     userId:  req?.user?.id ?? null,
     ...scrub(extra),
   };

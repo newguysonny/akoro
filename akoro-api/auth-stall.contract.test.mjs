@@ -48,3 +48,17 @@ test("communities requests narrate arrival and auth in the logs", async () => {
   assert.ok(arrived !== -1 && arrived < authMount && authMount < authOk,
     "bracket order: arrived → authenticateToken → auth ok");
 });
+
+test("securityLog entries carry the full, never-mount-stripped URL", async () => {
+  const security = await read("middleware/security.js");
+  // The requestLogger logs req.path, which Express rewrites to the
+  // innermost-router-relative path while a request descends into nested
+  // mounts — a 422 showed up as "/sessions/<uuid>" with no hint of which
+  // of four possible routers answered. originalUrl never changes, so every
+  // AUTH_CHALLENGE / HTTP_NOT_FOUND / HTTP_ERROR line now names its endpoint.
+  assert.match(security, /url:\s*req\?\.originalUrl/);
+  const urlAt = security.indexOf("url:");
+  const userIdAt = security.indexOf("userId:");
+  assert.ok(urlAt !== -1 && userIdAt !== -1 && urlAt < userIdAt,
+    "url sits beside the other request identity fields");
+});
