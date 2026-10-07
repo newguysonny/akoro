@@ -79,6 +79,12 @@ export default function LearnerDashboard() {
   };
   const discoverQFromUrl    = () => new URLSearchParams(location.search).get("q") || "";
   const pharmdCourseFromUrl = () => new URLSearchParams(location.search).get("course") || null;
+  // The focused discovery feeds (Teaching guide / Live classes): ?focus=
+  // on the courses view — same feed, one rail.
+  const discoveryFocusFromUrl = () => {
+    const f = new URLSearchParams(location.search).get("focus");
+    return f === "guides" || f === "live" ? f : null;
+  };
   const [discoverView,  setDiscoverView]  = useState(discoverViewFromUrl);
   const [discoverQuery, setDiscoverQuery] = useState(discoverQFromUrl);
   // Keep tab in sync when the URL changes (Back/Forward, deep link).
@@ -1145,9 +1151,10 @@ export default function LearnerDashboard() {
           )}
           {tab==="discovery" && (higherEd
             ? (discoverView==="courses"
-              // No header on the courses feed — it opens straight into the
-              // catalogue. Back to the hub is the Discover tab in the bottom nav.
-              ? <DiscoveryTab initialQuery={discoverQuery}/>
+              // The courses feed (all rails), or its focused variants —
+              // ?focus=guides / live, the Teaching guide and Live classes
+              // discovery pages the hub's cards open. Same UI, one rail.
+              ? <DiscoveryTab initialQuery={discoverQuery} focus={discoveryFocusFromUrl()}/>
               // The Pharm D programme page, mounted IN-TAB (inside the shell:
               // side nav, header, Now-Studying) on desktop/tablet — on mobile
               // it renders itself as the full-screen takeover. ?view=pharmd +
@@ -1163,6 +1170,7 @@ export default function LearnerDashboard() {
               : <DiscoverHub
                   userId={userProfile?.id}
                   onOpenPharmd={()=>navigate("/app?tab=discovery&view=pharmd")}
+                  onOpenRail={(rail,q)=>navigate(`/app?tab=discovery&view=courses&focus=${rail}${q?`&q=${encodeURIComponent(q)}`:""}`)}
                   onOpenCourses={(q)=>navigate(`/app?tab=discovery&view=courses${q?`&q=${encodeURIComponent(q)}`:""}`)}
                   onOpenCourse={(c)=>c?.slug&&navigate(`/course/${c.slug}`)}
                   onOpenRecord={openRecordTracked}

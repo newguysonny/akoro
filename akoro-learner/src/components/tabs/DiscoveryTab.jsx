@@ -8,6 +8,11 @@
  *   · Live Classes    — published live courses  → /course/:slug
  *   · Video Courses   — published video courses → /course/:slug
  *
+ * focus prop ('guides' | 'live'): the focused discovery pages the
+ * Discover hub's Teaching guide / Live classes cards open — the exact
+ * same UI, header + search + chips, showing just that one rail
+ * (expanded as a grid). null = the full multi-rail feed.
+ *
  * Data sources:
  *   GET /api/adaptive/marketplace/listings          — agents
  *   GET /api/courses/published?type=live|video      — course catalogue
@@ -377,7 +382,7 @@ function PurchaseHistorySheet({ onClose }) {
 }
 
 /* ── Main tab ──────────────────────────────────────────────── */
-export default function DiscoveryTab({ initialQuery = '' }) {
+export default function DiscoveryTab({ initialQuery = '', focus = null }) {
   const { t } = useLang();
   const navigate = useNavigate();
   const [agents,  setAgents]  = useState([]);
@@ -391,7 +396,9 @@ export default function DiscoveryTab({ initialQuery = '' }) {
   // learner taps Courses with text already in the hub's search box.
   const [query,   setQuery]   = useState(initialQuery);
   const [ownedIds, setOwnedIds] = useState(new Set());
-  const [expanded, setExpanded] = useState({});   // { live, video, guides }
+  // { live, video, guides } — a focused page opens on its rail expanded
+  // (the full grid), the feed's rails start as teaser strips.
+  const [expanded, setExpanded] = useState(focus ? { [focus]: true } : {});
   const [toast,    setToast]    = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const { inCart } = useCart();
@@ -487,6 +494,19 @@ export default function DiscoveryTab({ initialQuery = '' }) {
     <div style={{ padding: '4px 0 90px', fontFamily: FONT }}>
       <style>{`@keyframes sheet-up{from{transform:translateY(100%)}to{transform:translateY(0)}}`}</style>
 
+      {/* The focused pages carry the hub card's own title — the learner
+          tapped "Teaching guide" / "Live classes", the page says so. */}
+      {focus && (
+        <div style={{ padding: '12px 16px 2px' }}>
+          <h1 style={{ fontSize: 21, fontWeight: 900, color: 'var(--ak-text)', margin: 0 }}>
+            {focus === 'guides' ? t('dhub.card_guide') : t('dhub.card_live')}
+          </h1>
+          <p style={{ fontSize: 12.5, color: 'var(--ak-text-sub)', margin: '3px 0 0' }}>
+            {focus === 'guides' ? t('dhub.card_guide_desc') : t('dhub.card_live_desc')}
+          </p>
+        </div>
+      )}
+
       {/* Search + purchases */}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 14px 0' }}>
         <div style={{ position: 'relative', flex: 1 }}>
@@ -507,9 +527,10 @@ export default function DiscoveryTab({ initialQuery = '' }) {
       <Categories value={cat} onChange={setCat} />
 
       {/* Recommended for you */}
-      {courseRail('reco', { pre: t('discovery.rail_reco_pre'), hi: t('discovery.rail_reco_hi') }, BRAND, recommended, loadingCourses)}
+      {!focus && courseRail('reco', { pre: t('discovery.rail_reco_pre'), hi: t('discovery.rail_reco_hi') }, BRAND, recommended, loadingCourses)}
 
       {/* Teaching Guides */}
+      {(!focus || focus === 'guides') && (
       <Rail
         title={{ pre: t('discovery.rail_guides_pre'), hi: t('discovery.cat_guides') }}
         accent={BRAND} count={fAgents.length} loading={lAgents}
@@ -519,18 +540,19 @@ export default function DiscoveryTab({ initialQuery = '' }) {
           <AgentCard key={a.id} listing={a} owned={ownedIds.has(a.agent_id)} inCart={inCart(a.id)} wide={expanded.guides} onOpen={(li) => navigate(`/agent/${li.id}`)} />
         ))}
       </Rail>
+      )}
 
       {/* Live Classes */}
-      {courseRail('live', { pre: t('discovery.rail_live_pre'), hi: t('discovery.cat_live') }, RED, fLive, lLive)}
+      {(!focus || focus === 'live') && courseRail('live', { pre: t('discovery.rail_live_pre'), hi: t('discovery.cat_live') }, RED, fLive, lLive)}
 
       {/* Video Courses */}
-      {courseRail('video', { pre: t('discovery.rail_video_pre'), hi: t('discovery.cat_video') }, GREEN, fVideo, lVideo)}
+      {!focus && courseRail('video', { pre: t('discovery.rail_video_pre'), hi: t('discovery.cat_video') }, GREEN, fVideo, lVideo)}
 
       {/* Trending courses */}
-      {courseRail('trending', { pre: t('discovery.rail_trending_pre'), hi: t('discovery.rail_trending_hi') }, '#E8884A', trending, loadingCourses)}
+      {!focus && courseRail('trending', { pre: t('discovery.rail_trending_pre'), hi: t('discovery.rail_trending_hi') }, '#E8884A', trending, loadingCourses)}
 
       {/* Featured courses */}
-      {courseRail('featured', { pre: t('discovery.rail_featured_pre'), hi: t('discovery.rail_featured_hi') }, '#EC4899', featured, loadingCourses)}
+      {!focus && courseRail('featured', { pre: t('discovery.rail_featured_pre'), hi: t('discovery.rail_featured_hi') }, '#EC4899', featured, loadingCourses)}
 
       {historyOpen && <PurchaseHistorySheet onClose={() => setHistoryOpen(false)} />}
       {toast && <Toast msg={toast.msg} color={toast.color} onDone={() => setToast(null)} />}

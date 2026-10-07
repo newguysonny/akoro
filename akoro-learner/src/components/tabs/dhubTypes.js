@@ -33,13 +33,13 @@ export const TYPES = (t) => ([
     kw: 'pharm d pharmacy doctor program clinical pharmacology',
   },
   {
-    key: 'guide', icon: 'ti-user', accent: '#8B5CF6', soon: true,
+    key: 'guide', icon: 'ti-user', accent: '#8B5CF6', soon: false,
     grad: 'linear-gradient(140deg,#4C8DF0,#2E62D9)',
     label: t('dhub.card_guide'), desc: t('dhub.card_guide_desc'),
     kw: 'teaching guide teacher agents tutors trained',
   },
   {
-    key: 'live', icon: 'ti-broadcast', accent: RED, soon: true,
+    key: 'live', icon: 'ti-broadcast', accent: RED, soon: false,
     grad: 'linear-gradient(140deg,#EF4E78,#C92A54)',
     label: t('dhub.card_live'), desc: t('dhub.card_live_desc'),
     kw: 'live classes real time tutors stream broadcast',
