@@ -158,7 +158,16 @@ async function findCommunity(id) {
 async function communityOr404(res, id) {
   const c = await findCommunity(id);
   if (!c) { missing(res); return null; }
-  return withExtras([c])[0];
+  // withExtras is async: it returns a Promise. The founding typo of the
+  // communities saga indexed that promise — a promise has no 0 property,
+  // so the helper resolved undefined for every community that EXISTS —
+  // and all nine callers replied to a truthy-checking `if (!c) return;`
+  // by returning WITHOUT a response: the request hung forever, no error,
+  // no log. Present since the base commit; "not found" answered instantly
+  // while "found" never answered at all.
+  const rows = await withExtras([c]);
+  if (!rows[0]) { missing(res); return null; }  // falsy ⇒ ALWAYS responded
+  return rows[0];
 }
 
 /** Add creator_name + submissions_count to raw activity rows. */
