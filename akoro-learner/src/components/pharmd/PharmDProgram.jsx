@@ -19,8 +19,11 @@
  *
  * Layout and visuals are the reference's, unchanged; only the
  * chrome colours ride the app's --ak-* theme tokens (light/dark
- * follows the app), and the reference's 430px phone column centres
- * itself on tablet/desktop (mobile is full-bleed).
+ * follows the app). The reference's 430px phone column is the
+ * MOBILE look (the full-bleed takeover); on tablet/desktop the page
+ * spans the full width of the shell's content area — like the
+ * Discover hub and the Contents/Materials pages — with the folder
+ * art kept to a banner height.
  *
  * Mounted in-tab by LearnerDashboard when the Discover hub's Pharm D
  * card opens (?view=pharmd): on desktop/tablet the page renders INSIDE
@@ -267,7 +270,13 @@ export default function PharmDProgram({ onClose, focus, onFocusConsumed,
         /* Desktop/tablet — in-tab inside the app shell: plain flow content,
            the tab's own scroll container scrolls it, the shell chrome stays. */
         .pd-inline{width:100%;display:flex;justify-content:center;font-family:'Nunito',system-ui,sans-serif;color:var(--ak-text,#111827)}
-        .pd-phone-inline{max-width:none;height:auto;overflow:visible;background:transparent}
+        /* In-tab (tablet/desktop, >=768px) the 430px phone column and its
+           centring are the MOBILE look — the page spans the full width of
+           the shell's content area, like the Discover hub / Contents pages.
+           Written as .pd-phone.pd-phone-inline so it beats .pd-phone's
+           max-width/height/overflow/background regardless of rule order
+           (a bare .pd-phone-inline loses to the later .pd-phone rule). */
+        .pd-phone.pd-phone-inline{width:100%;max-width:none;height:auto;overflow:visible;background:transparent}
         .pd-phone{width:100%;max-width:430px;height:100%;overflow-y:auto;position:relative;background:var(--ak-bg,#FAFAFC);padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
         .pd-back{width:36px;height:36px;border-radius:50%;border:none;background:rgba(255,255,255,0.14);color:#fff;font-size:1.1rem;font-weight:700;cursor:pointer;margin-bottom:20px;font-family:inherit}
         /* Browse */
@@ -290,6 +299,9 @@ export default function PharmDProgram({ onClose, focus, onFocusConsumed,
         /* Folder */
         .pd-folder-hero{padding:20px 22px 24px;position:relative}
         .pd-folder-art{width:100%;aspect-ratio:1.6;border-radius:16px;display:flex;align-items:center;justify-content:center;margin:18px 0 20px;position:relative;overflow:hidden}
+        /* In-tab the art spans the content area — keep it a banner: the
+           reference's 1.6 ratio full-width would be a huge gradient slab. */
+        .pd-phone.pd-phone-inline .pd-folder-art{max-height:280px}
         .pd-code-big{font-size:2.6rem;font-weight:900;color:rgba(255,255,255,0.92);letter-spacing:.02em}
         .pd-folder-title{font-size:1.5rem;font-weight:900;margin:0 0 4px;color:var(--ak-text,#111827)}
         .pd-author-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}
