@@ -647,7 +647,7 @@ export const AR = {
   'dhub.card_contents_desc':    'فيديو وصوت وملاحظات وملفات PDF شاركها المجتمع',
   'discovery.contents_all':    'الكل',
   'discovery.contents_videos': 'فيديو',
-  'discovery.contents_audio':  'صوت',
+  'discovery.contents_audios': 'صوتيات',
   'discovery.contents_pdfs':   'ملفات PDF',
   'discovery.contents_notes':  'ملاحظات',
   'discovery.contents_images': 'صور',

@@ -654,7 +654,7 @@ export const ES = {
   'dhub.card_contents_desc':    'Videos, audio, apuntes y PDFs compartidos por la comunidad',
   'discovery.contents_all':    'Todo',
   'discovery.contents_videos': 'Videos',
-  'discovery.contents_audio':  'Audio',
+  'discovery.contents_audios': 'Audios',
   'discovery.contents_pdfs':   'PDFs',
   'discovery.contents_notes':  'Apuntes',
   'discovery.contents_images': 'Imágenes',
