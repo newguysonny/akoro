@@ -7,15 +7,17 @@ import { useCart } from '../../contexts/CartContext.jsx';
 import {
   ChevronLeft, ChevronDown, Play, Users, Clock, Star, Globe, Lock,
   CheckCircle2, Radio, ShoppingCart, CalendarPlus, MonitorPlay, BookOpen,
-  Award, Swords, TrendingUp, Calendar, ArrowRight, Share2, Flag, Check, Plus, Video,
+  Award, Swords, TrendingUp, Calendar, ArrowRight, Share2, Flag, Check, Plus, Video, Bot,
 } from 'lucide-react';
 import { API } from '../../services/api.js';
 import { BRAND, GREEN, RED } from '../../constants.js';
 import Toast from '../../components/common/Toast.jsx';
 import AkoroLogo from '../../components/common/AkoroLogo.jsx';
+import AgentSessionViewer from '../../components/courses/AgentSessionViewer.jsx';
+import AddToFolderPage from '../../components/library/AddToFolderPage.jsx';
 
 /* ── palette ──────────────────────────────────────────────── */
-import { INK, MUTED, BORDER, LIGHT, BG, FONT, GlobalCss, card, Btn, Avatar, LiveBadge, StarRow, PLATFORMS, PlatformBadge, ActionChips, SectionTitle, DEFAULT_MODULES, DEFAULT_COURSE, VideoPlayer, Curriculum, RV_EMOJI, RV_BG, Reviews, AGENTS, BATTLES, BattleCard, BattlesSection, REVISIONS, RV_HOST_EMOJI, RV_HOST_BG, RevisionsSection, mapCourse, CourseOverview, EnrolledVideoView } from './parts.jsx';
+import { INK, MUTED, BORDER, LIGHT, BG, FONT, GlobalCss, card, Btn, Avatar, LiveBadge, StarRow, PLATFORMS, PlatformBadge, ActionChips, SectionTitle, DEFAULT_MODULES, DEFAULT_COURSE, VideoPlayer, Curriculum, RV_BG, Reviews, AGENTS, BATTLES, BattleCard, BattlesSection, REVISIONS, RV_HOST_BG, RevisionsSection, mapCourse, CourseOverview, EnrolledVideoView } from './parts.jsx';
 
 export default function CourseDetailsPage() {
   const { slug } = useParams();
@@ -43,7 +45,13 @@ export default function CourseDetailsPage() {
   };
   const [data, setData] = useState(null);
   const [courseType, setCourseType] = useState('live');
+  // "Agent session" — the course video opened as a learning session in the
+  // shared reader (tools, Q&A, transport). Opened with the current lesson.
+  const [agentOpen, setAgentOpen] = useState(false);
+  const [agentLesson, setAgentLesson] = useState(null);
+  const openAgentSession = (lesson) => { setAgentLesson(lesson); setAgentOpen(true); };
   const [isEnrolled, setIsEnrolled] = useState(false);
+  const [addToFolder, setAddToFolder] = useState(null);   // the lesson being filed into folders
   const [loading, setLoading] = useState(true);
   const [enrolling, setEnrolling] = useState(false);
   const [toast, setToast] = useState(null);
@@ -66,6 +74,17 @@ export default function CourseDetailsPage() {
       setData(mapped);
       setCourseType(mapped.type);
       setIsEnrolled(enrolled);
+      // Reopening from the Now-Studying bar: ?agent=<lessonId> jumps straight
+      // back into the agent session on that lesson (consumed once — a refresh
+      // shows the plain course page, not a loop of reopenings).
+      try {
+        const agentParam = new URLSearchParams(window.location.search).get('agent');
+        if (agentParam) {
+          window.history.replaceState({}, '', window.location.pathname);
+          const target = mapped.modules.flatMap((m) => m.lessons || []).find((l) => l?.id === agentParam);
+          if (target) { setAgentLesson(target); setAgentOpen(true); }
+        }
+      } catch { /* no search params — nothing to reopen */ }
     })().finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [slug]);
@@ -121,8 +140,8 @@ export default function CourseDetailsPage() {
         return {
           id: b.id, status: st, topic: b.topic || b.title,
           viewers: b.peak_viewers || b.total_participants || 0,
-          a: { name: b.user_agents?.agent_name || 'Host agent', emoji: b.user_agents?.agent_emoji || '🤖', bg: '#EDE8F8', color: BRAND },
-          b: { name: `${b.total_participants || 1} agents`, emoji: '⚔️', bg: '#FEF0E6', color: '#E8884A' },
+          a: { name: b.user_agents?.agent_name || 'Host agent', icon: b.user_agents?.agent_emoji ? undefined : Bot, emoji: b.user_agents?.agent_emoji, bg: '#EDE8F8', color: BRAND },
+          b: { name: `${b.total_participants || 1} agents`, icon: Swords, bg: '#FEF0E6', color: '#E8884A' },
           sa: 0, sb: 0,
         };
       }).filter(Boolean);
@@ -175,15 +194,40 @@ export default function CourseDetailsPage() {
         {loading ? (
           <div style={{ height: 200, borderRadius: 22, background: '#EDE8E1', animation: 'cp-pulse 1.5s ease infinite' }} />
         ) : isEnrolled && courseType === 'video' ? (
-          <EnrolledVideoView course={view.course} modules={view.modules} />
+          <EnrolledVideoView course={view.course} modules={view.modules} onAgentSession={openAgentSession} onLessonMore={setAddToFolder} />
         ) : (
           <CourseOverview
             type={courseType} isEnrolled={isEnrolled} course={view.course} modules={view.modules}
             onPlay={() => {}} onEnrol={enroll} enrolling={enrolling}
             onAddToCart={addToCart} addingCart={addingCart} inCart={inCart(view.course.id)}
-            onJoinLive={() => navigate('/app')} />
+            onJoinLive={() => navigate('/app')} onAgentSession={openAgentSession} onLessonMore={setAddToFolder} />
         )}
       </div>
+
+      {/* The agent session — the course video in the shared session reader */}
+      {agentOpen && (
+        <AgentSessionViewer
+          course={view.course}
+          lesson={agentLesson}
+          onClose={() => setAgentOpen(false)}
+        />
+      )}
+
+      {/* ⋯ on a curriculum lesson — file it into folders (it plays back
+          from here via the stored link). */}
+      {addToFolder && (
+        <AddToFolderPage
+          item={{
+            itemType: 'lesson',
+            itemRef: String(addToFolder.id ?? ''),
+            title: addToFolder.title,
+            sub: `${view.course?.title || 'Course'}${addToFolder.module ? ` · ${addToFolder.module}` : ''}`,
+            kind: addToFolder.type === 'video' ? 'video' : 'text',
+            link: `/course/${view.course?.slug || slug}`,
+          }}
+          onClose={() => setAddToFolder(null)}
+        />
+      )}
 
       {toast && <Toast msg={toast.msg} color={toast.color} onDone={() => setToast(null)} />}
     </div>

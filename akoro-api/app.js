@@ -11,6 +11,10 @@
  *   /api/tasks/*         tasks       — teacher AI task agent (Anthropic loop)
  */
 
+// Outbound meter FIRST: it patches global fetch, and every client library
+// (supabase-js, the OpenAI SDK) captures fetch when it is constructed —
+// importing this after them would measure nothing.
+import "./lib/outboundMeter.js";
 import "dotenv/config";
 import express                    from "express";
 import { createServer }           from "http";
@@ -19,6 +23,9 @@ import { createAdapter }          from "@socket.io/redis-adapter";
 import Redis                      from "ioredis";
 import cors                       from "cors";
 import helmet                     from "helmet";
+import compression                from "compression";
+import { skipJob as sharedSkipJob } from "./lib/jobsGate.js";
+import { outboundSummary }        from "./lib/outboundMeter.js";
 import cookieParser               from "cookie-parser";
 import path                       from "path";
 import { fileURLToPath }          from "url";
@@ -30,9 +37,15 @@ import {
 
 import config                     from "./config/index.js";
 import { runConfigChecks }         from "./lib/preflightChecks.js";
+import { runWithRouteUsage } from "./lib/usageMeter.js";
 import { schoolBillTo }            from "./lib/coins.js";
+import { breakerStats } from "./lib/circuitBreaker.js";
+import { createLoadShedder }       from "./middleware/loadShedder.js";
+import { createTenantQuotaMiddleware } from "./middleware/tenantQuota.js";
 import { SITE_BASE_DOMAINS, isTenantHost, refreshTenantHosts } from "./modules/school/tenant.js";
 import db, { checkDb }           from "./db.js";
+import { applyMigrations, migrationsAlreadyApplied, migrationUrl, currentGitSha } from "./lib/migrations.js";
+import { traceRedis, startRedisTraceReporting } from "./lib/redisTrace.js";
 
 // ─── Module imports ───────────────────────────────────────────────────────────
 import authModule, { authenticateSocket } from "./modules/auth/routes.js";
@@ -43,10 +56,14 @@ import rankingModule              from "./modules/ranking/routes.js";
 import profilesModule             from "./modules/profiles/routes.js";
 import adaptiveModule, {
   setupAdaptiveWebSocket }        from "./modules/adaptive-learning/index.js";
+import { startChatFollowUpWorker } from "./modules/adaptive-learning/chat-follow-ups.js";
+import { startLearnerAutonomyWorker, recoverLearnerAutonomySchedules } from "./modules/adaptive-learning/learner-autonomy.js";
 import battleModule               from "./modules/battle/routes.js";
 import tasksModule                from "./modules/tasks/routes.js";
 import selfStudyModule            from "./modules/self-study/routes.js";
-import communitiesModule          from "./modules/communities/routes.js";
+import pharmdModule              from "./modules/pharmd/routes.js";
+import { startRoutineScheduler }  from "./modules/self-study/routines.js";
+import communitiesModule, { COMMUNITIES_QUERY_TIMEOUT_MS } from "./modules/communities/routes.js";
 import instructorModule           from "./modules/instructor/index.js";
 import instructorToolsModule      from "./modules/instructor/tools.js";
 import teachingToolsModule        from "./modules/teaching/tools.js";
@@ -61,6 +78,19 @@ import contentModule             from "./modules/content/routes.js";
 import paystackWebhookRouter     from "./modules/webhooks/paystack.js";
 import adminModule              from "./modules/admin/index.js";
 import contactModule            from "./modules/contact/routes.js";
+import pilotApplicationsModule from "./modules/pilot-applications/routes.js";
+import billingGatewayModule    from "./modules/billing/gateway.js";
+import "./modules/billing/jobs.js"; // billing cron jobs (trial-expiry / invoice-generation / payment-retry)
+import agentToolRequestsModule  from "./modules/agent-tool-requests/routes.js";
+import learnerGoalsModule       from "./modules/learner-goals/routes.js";
+import agentProposalsModule      from "./modules/agent-proposals/routes.js";
+import blogsModule               from "./modules/blogs/routes.js";
+import recordsModule             from "./modules/records/routes.js";
+import {
+  agentToolsRouter as agentToolsModule,
+  agentActionConfirmationsRouter as agentActionConfirmationsModule,
+  agentMemoryRouter as agentMemoryModule,
+} from "./modules/agent-tools/index.js";
 import passport                  from "passport";
 
 const __dirname  = path.dirname(fileURLToPath(import.meta.url));
@@ -163,6 +193,10 @@ const corsDelegate = (req, cb) => {
 // ─── Socket.io + Redis adapter ────────────────────────────────────────────────
 const redisPub = new Redis(config.redis.url);
 const redisSub = redisPub.duplicate();
+// Local quota forensics (AKORO_REDIS_TRACE=true) — inert when the flag is off.
+traceRedis(redisPub, "api/pub");
+traceRedis(redisSub, "api/sub");
+startRedisTraceReporting();
 redisPub.on("error", (err) => console.error("[redis/pub]", err.message));
 redisSub.on("error", (err) => console.error("[redis/sub]", err.message));
 
@@ -227,6 +261,66 @@ app.use(helmet({
 }));
 app.use(cors(corsDelegate));
 app.use(cookieParser());
+
+// ── Egress meter ─────────────────────────────────────────────────────────────
+// Render meters outbound bandwidth (5 GB/month on Hobby) and the operator's
+// workspace was SUSPENDED for exhausting it in four days with no users —
+// "how is this even possible" had no answer because nothing measured it.
+// This counts the actual bytes each route puts on the wire (after
+// compression — the wrapper sits ahead of it), keeps an hourly ring so the
+// burn PATTERN is visible (a steady 3 a.m. climb means bots or a worker,
+// spikes only during testing means the operator's own traffic), and exposes
+// a public total in /health plus a per-route breakdown behind the internal
+// secret. WebSockets bypass Express and are not counted.
+const egress = { since: new Date().toISOString(), totalBytes: 0, requests: 0, byRoute: new Map(), hours: [] };
+const egressHour = () => Math.floor(Date.now() / 3_600_000);
+function egressTick(hour, bytes) {
+  const ring = egress.hours;
+  const last = ring[ring.length - 1];
+  if (!last || last.hour !== hour) {
+    ring.push({ hour, bytes });
+    while (ring.length > 24) ring.shift();
+  } else {
+    last.bytes += bytes;
+  }
+}
+app.use((req, res, next) => {
+  const route = () => (req.route?.path ? `${req.baseUrl || ""}${req.route.path}` : req.path.split("?")[0]).slice(0, 120);
+  let bytes = 0;
+  const origWrite = res.write, origEnd = res.end;
+  res.write = function (chunk, ...rest) { if (chunk?.length) bytes += chunk.length; return origWrite.call(this, chunk, ...rest); };
+  res.end   = function (chunk, ...rest) { if (chunk?.length) bytes += chunk.length; return origEnd.call(this, chunk, ...rest); };
+  res.on("finish", () => {
+    const key = `${req.method} ${route()}`;
+    const row = egress.byRoute.get(key) || { requests: 0, bytes: 0 };
+    row.requests++; row.bytes += bytes;
+    egress.byRoute.set(key, row);
+    egress.totalBytes += bytes; egress.requests++;
+    egressTick(egressHour(), bytes);
+  });
+  next();
+});
+setInterval(() => {
+  const mb = (egress.totalBytes / 1e6).toFixed(1);
+  const top = [...egress.byRoute.entries()].sort((a, b) => b[1].bytes - a[1].bytes).slice(0, 3)
+    .map(([k, v]) => `${k} ${(v.bytes / 1e6).toFixed(1)}MB`).join(" | ");
+  console.log(`[egress] ${mb} MB out since boot; top: ${top || "-"}`);
+}, 60 * 60 * 1000).unref?.();
+// ─── Response compression ──────────────────────────────────────────────────────
+// Render's Hobby workspace caps outbound bandwidth at 5 GB/month (April 2026
+// plan change; it used to be 100 GB). Every uncompressed JSON response is
+// billed byte-for-byte, and gzip typically shrinks API JSON 5-10×, so this one
+// middleware is the single biggest egress reduction available. SSE streams are
+// excluded: buffering them would stall token-by-token chat/training streaming,
+// and they are already sent in small chunks. WebSocket traffic (Socket.io)
+// does not pass through Express middleware and is unaffected.
+app.use(compression({
+  filter: (req, res) => {
+    const type = String(res.getHeader("Content-Type") || "");
+    if (type.includes("text/event-stream")) return false;   // never buffer SSE
+    return compression.filter(req, res);
+  },
+}));
 // Paystack webhook signature validation needs the RAW request body. The raw
 // parser must run BEFORE the global JSON parser (body-parser skips bodies
 // already consumed by an earlier parser) — otherwise req.body arrives here as
@@ -234,25 +328,97 @@ app.use(cookieParser());
 // rejected with "Invalid signature" (payments then never auto-grant agents).
 app.use("/api/adaptive/marketplace/webhook", express.raw({ type: "application/json" }));
 app.use(PAYSTACK_WEBHOOK_PATH,               express.raw({ type: "application/json" }));
+// Submission file uploads are the one payload family that outgrows the 2mb
+// global cap (a 5MB file arrives as ~6.8MB of base64). Parse them here, first
+// — body-parser marks the body consumed so the global parser skips it.
+app.use("/api/self-study/:id/files",          express.json({ limit: "9mb" }));
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(requestLogger);
+// Load shedding (plan §3.5): under extreme load, shed low-priority traffic
+// with an honest 503 + Retry-After instead of collapsing. Auth and health are
+// exempt — sessions must stay refreshable while the server is on its knees.
+app.use(createLoadShedder());
+// Per-school quota (plan §3.2): school-site traffic is attributed by Origin
+// and counted against the school's tier quota — one classroom is thirty
+// "users", so per-user limits can't see a noisy school. Fails open.
+app.use(createTenantQuotaMiddleware());
 app.use(passport.initialize());
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+// Uploads are served without auth (question images etc.), which makes them the
+// one URL family a crawler or scraper can pull in bulk. Past-question scans are
+// exactly what AI crawlers and exam-pirate scrapers look for, and on the 5 GB
+// Hobby bandwidth cap a few bulk pulls are real money. robots.txt stops the
+// well-behaved ones; X-Robots-Tag keeps them out of indexes even if the file
+// is reached via a direct link.
+app.get("/robots.txt", (_req, res) => {
+  res.type("text/plain").send("User-agent: *\nDisallow: /\n");
+});
+app.use("/uploads",
+  (_req, res, next) => { res.setHeader("X-Robots-Tag", "noindex, nofollow"); next(); },
+  express.static(path.join(__dirname, "uploads"), {
+    // Files are stored under unique generated names (a re-upload gets a NEW
+    // filename), so a URL's content never changes — cache it hard. Without
+    // this, a 500 MB lecture video is metered egress on EVERY view; with it,
+    // Cloudflare and the browser keep a copy and Render serves a view only
+    // when the edge misses.
+    maxAge: "30d",
+    immutable: true,
+  }));
 app.use((_req, res, next) => { res.setHeader("X-Instance-Id", config.instanceId); next(); });
 
 // ─── Health & readiness ───────────────────────────────────────────────────────
 let serverReady = false;
-app.get("/health", async (_req, res) => {
-  const [dbOk, redisOk] = await Promise.all([
-    checkDb(),
-    redisPub.ping().then((r) => r === "PONG").catch(() => false),
-  ]);
+// Render's healthCheckPath pings /health around the clock. Probing the DB and
+// Redis on every ping bills BOTH platforms for commands (the Postgres quota
+// AND the Upstash command quota) — so the deep verdict runs at most once per
+// AKORO_HEALTH_PROBE_SECONDS (default 120) and is cached. `?deep=1` always
+// probes now (humans, alerting).
+const HEALTH_PROBE_MS = 1000 * Math.max(Number(process.env.AKORO_HEALTH_PROBE_SECONDS) || 120, 15);
+let healthCache = { at: 0, dbOk: false, redisOk: false };
+app.get("/health", async (req, res) => {
+  const deep = req.query.deep === "1";
+  const fresh = Date.now() - healthCache.at < HEALTH_PROBE_MS;
+  if (deep || !fresh) {
+    // Zero-Redis health: ioredis keeps `status` current from connect/error
+    // events — no PING round-trip, so an uptime monitor costs 0 commands.
+    const redisOk = redisPub.status === "ready";
+    const dbOk = await checkDb();
+    healthCache = { at: Date.now(), dbOk, redisOk };
+  }
+  const { dbOk, redisOk } = healthCache;
   const healthy = dbOk && redisOk;
   res.status(healthy ? 200 : 503).json({
     status: healthy ? "ok" : "degraded", instance: config.instanceId,
     uptime: Math.round(process.uptime()), env: config.nodeEnv,
+    // Build identity: WHICH code is live must be answerable without server
+    // access — a frontend fix deployed while the API silently rolled back
+    // (or vice versa) otherwise reads as "the fix didn't work". Render sets
+    // RENDER_GIT_COMMIT on every deploy; module flags prove specific fixes
+    // are on board (the communities query deadline).
+    build: {
+      git: process.env.RENDER_GIT_COMMIT || null,
+      startedAt: new Date(Date.now() - process.uptime() * 1000).toISOString(),
+    },
+    modules: { communities: { queryDeadlineMs: COMMUNITIES_QUERY_TIMEOUT_MS } },
+    egress: {
+      sinceBootBytes: egress.totalBytes,
+      last24hBytes: egress.hours.reduce((s, h) => s + h.bytes, 0),
+      hourlyBytes: egress.hours.map((h) => ({ hour: h.hour, bytes: h.bytes })),
+      // The category Render billed 5.67 GB of: bytes the service itself
+      // SENDS (prompts, audio, Supabase bodies, header volume). Numbers
+      // only — the per-host attribution lives behind the internal secret.
+      outboundSinceBootBytes: outboundSummary().totalBytes,
+      outboundLast24hBytes: outboundSummary().last24hBytes,
+      // Top destinations by outbound bytes so a browser visit to /health is
+      // enough to see WHO is eating the budget (hostnames only — the
+      // Supabase project ref is already public in the web client bundle).
+      outboundTopHosts: outboundSummary().hosts.slice(0, 3).map((h) => ({ host: h.host, bytes: h.bytes, requests: h.requests })),
+    },
     checks: { database: dbOk ? "ok" : "error", redis: redisOk ? "ok" : "error" },
+    // Breaker states are local (no round-trip): a provider outage is visible
+    // in /health the moment it trips, not only when requests fail.
+    breakers: breakerStats(),
+    cached: !deep && fresh,
   });
 });
 app.get("/ready", (_req, res) =>
@@ -265,6 +431,27 @@ app.get("/ready", (_req, res) =>
 // x-internal-secret header (same guard as the worker-callback endpoints). In dev
 // (no INTERNAL_SECRET set) it's open for convenience. Returns 200 when all
 // blockers pass, 503 when any fail — so an uptime monitor / deploy step can gate.
+// GET /internal/egress — the per-route answer to "what is eating the
+// bandwidth". Same guard as preflight: x-internal-secret, or dev when no
+// secret is configured.
+app.get("/internal/egress", (req, res) => {
+  const secret = config.internalSecret;
+  const authorized = secret
+    ? req.headers["x-internal-secret"] === secret
+    : config.isDev;
+  if (!authorized) return res.status(403).json({ success: false, message: "Forbidden" });
+  res.json({
+    since: egress.since,
+    totalBytes: egress.totalBytes,
+    requests: egress.requests,
+    hours: egress.hours,
+    outbound: outboundSummary(),
+    routes: [...egress.byRoute.entries()]
+      .map(([route, v]) => ({ route, ...v, avgBytes: Math.round(v.bytes / Math.max(v.requests, 1)) }))
+      .sort((a, b) => b.bytes - a.bytes)
+      .slice(0, 30),
+  });
+});
 app.get("/internal/preflight", (req, res) => {
   const secret = config.internalSecret;
   const authorized = secret
@@ -365,6 +552,12 @@ function isNonRoutable(ip) {
 }
 
 app.use("/api", attachRateLimitIdentity);
+// Usage metering: attribute every DB command this request causes to its
+// route (ids normalised out so cardinality stays bounded).
+app.use("/api", (req, res, next) => {
+  const norm = req.path.replace(/\/[0-9a-f-]{16,}/gi, "/:id").replace(/\/\d+/g, "/:id");
+  runWithRouteUsage(`${req.method} ${norm}`, next);
+});
 // Background jobs call this same API over loopback as the user who scheduled
 // the work. They skip the per-user limiters and are counted here instead, so a
 // cron firing six assignments cannot trip a 10/min ceiling — while a runaway
@@ -376,6 +569,16 @@ app.use("/api", internalLimit);
 // stays in sync with what's configured in the Paystack dashboard; it defaults
 // to /api/webhooks/paystack when the env var is unset.
 app.use(PAYSTACK_WEBHOOK_PATH, paystackWebhookRouter);
+// Private Python-agent tool gateway. It has its own shared credential and
+// session-bound capability; standardLimit still protects the service caller.
+app.use("/api/internal/agent-tools/v1", standardLimit, agentToolsModule);
+// Browser-facing review/approve/decline endpoints for Python-agent write
+// proposals. They authenticate the learner and never expose the private tools
+// credential.
+app.use("/api/agent-actions/v1", standardLimit, agentActionConfirmationsModule);
+// Learner-visible controls to inspect and clear compact study memory created by
+// the additive Python agent. Raw chat history remains at /api/adaptive/chat.
+app.use("/api/agent-memory/v1", standardLimit, agentMemoryModule);
 app.use("/api/auth",     authModule);           // auth router applies strictLimit/refreshLimit internally
 app.use("/api",          standardLimit, coursesModule);
 app.use("/api/ranking",  standardLimit, rankingModule);
@@ -386,33 +589,135 @@ app.use("/api/adaptive", teachingLimit,  adaptiveModule);
 app.use("/api/battle",   standardLimit, battleModule);
 app.use("/api/battle",   standardLimit, battleFeedRouter);
 
+// ─── Boot-time migrations (host-independent) ────────────────────────────────
+// Railway applied migrations as a release step; Render's equivalent
+// (preDeployCommand) needs a paid plan, so free-tier deploys silently skipped
+// them. The backend now self-migrates at boot: idempotent SQL + a session
+// advisory lock make it safe, and the run is skipped entirely when the last
+// edu.migration_log row already matches this deploy's SHA — so a plain
+// restart (free tier wake) costs one SELECT, not 150 DDL statements.
+// It deliberately runs BEFORE any background worker starts: workers query
+// tables at startup (learner-autonomy schedule recovery), and on the deploy
+// that introduces a new table the old boot order let the worker race the
+// migration and log a scary failure. Schema only, never demo data (mirrors
+// the old deploy command).
+// Disable with MIGRATIONS_ON_BOOT=false (e.g. one replica owns migrations).
+if (process.env.MIGRATIONS_ON_BOOT !== "false") {
+  const mUrl = migrationUrl();
+  const mSha = currentGitSha();
+  if (!mUrl) {
+    console.warn("[MIGRATIONS] no MIGRATION_DATABASE_URL/DATABASE_URL configured — boot migration SKIPPED. Set the Supabase Postgres connection string so deploys self-migrate.");
+  } else {
+    try {
+      if (await migrationsAlreadyApplied(mUrl, mSha)) {
+        console.log(`[MIGRATIONS] already applied for ${String(mSha).slice(0, 7) || "this build"} — skipping boot run`);
+      } else {
+        const { applied, failed } = await applyMigrations({ url: mUrl, groups: ["schema"], label: "boot" });
+        if (failed) console.error(`[MIGRATIONS] ${failed} migration(s) FAILED at boot — check the logs above; the API is starting anyway.`);
+      }
+    } catch (e) {
+      // A failed migration must not crash-loop the whole service: start and
+      // let the loud log (and /health) tell the operator. The error is also
+      // recorded in edu.migration_log for the next boot to retry.
+      console.error("[MIGRATIONS] boot run failed — starting anyway:", e.message);
+    }
+  }
+}
+
+// ─── Background jobs kill switch ─────────────────────────────────────────────
+// Every recurring job (sweeps, crons, schedulers) burns Redis commands while
+// the process runs — on a metered free tier that can outrun real usage with
+// ZERO users. Three dials, most specific wins:
+//   AKORO_JOBS_ENABLED="chat follow-ups worker,learner-autonomy worker"
+//     → ONLY the named jobs run (each BullMQ worker idles at ~1-2k cmds/month,
+//       so running only the learner-facing two fits the free tier comfortably)
+//   AKORO_JOBS_DISABLED="eval worker,battle worker"
+//     → all jobs EXCEPT the named ones run
+//   AKORO_BACKGROUND_JOBS_ENABLED=false
+//     → the everything switch, unchanged
+// Job names are exactly the strings passed to skipJob below (battle worker,
+// eval worker, chat follow-ups worker, learner-autonomy worker, autonomy
+// cycle worker, embedding sweeper, alert worker, routine scheduler, tenant
+// host refresh). The tasks worker has its own legacy gate (ENABLE_TASK_WORKER).
+// The gate lives in lib/jobsGate.js now: module-level crons (live-session
+// scheduler, leaderboard rebuild) must respect the same dials as every
+// worker — they used to register on import with no gate at all.
+const skipJob = sharedSkipJob;
+
 // Eagerly start the BullMQ battle worker at boot (it was previously imported
 // lazily on the first enqueue, so battles could stall until some action kicked
 // it). Guarded by REDIS_URL so environments without Redis stay quiet.
-if (process.env.REDIS_URL) {
+if (process.env.REDIS_URL && !skipJob("battle worker")) {
   import("./modules/battle/worker.js")
     .then(() => console.log("[battle] worker started at boot"))
     .catch((e) => console.error("[battle] worker failed to start:", e.message));
 
   // Eval runs. Same guard: a suite is minutes of model calls, so it runs on a
   // queue and the admin page polls.
-  import("./lib/evalWorker.js")
-    .then((m) => m.startEvalWorker())
-    .catch((e) => console.error("[evals] worker failed to start:", e.message));
+  if (!skipJob("eval worker")) {
+    import("./lib/evalWorker.js")
+      .then((m) => m.startEvalWorker())
+      .catch((e) => console.error("[evals] worker failed to start:", e.message));
+  }
+
+  // Learner-requested agent check-ins are durable delayed jobs. Their worker
+  // creates the persistent chat and notification at the requested time.
+  try {
+    if (!skipJob("chat follow-ups worker")) {
+      startChatFollowUpWorker();
+      console.log("[chat-follow-ups] worker started at boot");
+    }
+  } catch (e) {
+    console.error("[chat-follow-ups] worker failed to start:", e.message);
+  }
+
+  // The learner's persisted opt-in, not a browser state, authorizes every
+  // autonomous due-task nudge. Recovery only restores delayed due-time jobs;
+  // it never enables autonomy for a learner.
+  try {
+    if (!skipJob("learner-autonomy worker")) {
+      startLearnerAutonomyWorker();
+      recoverLearnerAutonomySchedules()
+        .then((scheduled) => console.log(`[learner-autonomy] recovered ${scheduled ?? 0} due-task review(s)`))
+        .catch((e) => console.error("[learner-autonomy] schedule recovery failed:", e.message));
+      console.log("[learner-autonomy] worker started at boot");
+    }
+  } catch (e) {
+    console.error("[learner-autonomy] worker failed to start:", e.message);
+  }
+
+  // Full Autonomy level 2 (Planner): the background study loop. One env
+  // var picks the rhythm — AKORO_AUTONOMY_CYCLE_EVERY=5m / 1h loops the
+  // planner at that pace around the clock; unset, it's the nightly cycle
+  // (one batch inside the 21:00-22:00 Africa/Lagos window). All knobs:
+  // AKORO_AUTONOMY_* in modules/autonomy/cadence.js.
+  try {
+    if (!skipJob("autonomy cycle worker")) {
+      const autonomy = await import("./modules/autonomy/index.js");
+      autonomy.startAutonomyCycleWorker();
+      console.log("[autonomy] planner worker started at boot");
+    }
+  } catch (e) {
+    console.error("[autonomy] planner worker failed to start:", e.message);
+  }
 }
 
 // Keeps the vector stores current. Rows arrive without embeddings (SQL seeds,
 // a failed inline call) and rows get edited after being embedded; both leave
 // search quietly wrong, and nothing used to report either.
-import("./lib/embeddingSweeper.js")
-  .then((m) => m.startEmbeddingSweeper())
-  .catch((e) => console.error("[embeddings] sweeper failed to start:", e.message));
+if (!skipJob("embedding sweeper")) {
+  import("./lib/embeddingSweeper.js")
+    .then((m) => m.startEmbeddingSweeper())
+    .catch((e) => console.error("[embeddings] sweeper failed to start:", e.message));
+}
 
 // Alert rules — spend, latency, failures, and work that has silently stopped.
 // Needs no Redis: it reads the telemetry tables on a cron.
-import("./lib/alertWorker.js")
-  .then((m) => m.startAlertWorker())
-  .catch((e) => console.error("[alerts] worker failed to start:", e.message));
+if (!skipJob("alert worker")) {
+  import("./lib/alertWorker.js")
+    .then((m) => m.startAlertWorker())
+    .catch((e) => console.error("[alerts] worker failed to start:", e.message));
+}
 app.use("/api/student",  standardLimit, studentFeedRouter);
 app.use("/api/tasks",      aiLimit,       tasksModule);
 // Only /plan calls a model; the rest is ordinary CRUD. Putting the whole module
@@ -420,6 +725,7 @@ app.use("/api/tasks",      aiLimit,       tasksModule);
 // assigning, which a single afternoon of setting work would blow straight past.
 app.use("/api/self-study/plan", aiLimit);
 app.use("/api/self-study", standardLimit, selfStudyModule);
+app.use("/api/pharmd",      standardLimit, pharmdModule);          // PHARM.D programme catalogue
 app.use("/api/communities",  standardLimit, communitiesModule);  // higher-ed study groups
 app.use("/api/instructor/tools", standardLimit, instructorToolsModule);  // platform tools/assets catalog + purchase
 app.use("/api/teaching/tools",   aiLimit,       teachingToolsModule);  // teaching tool suite — LLM + TTS, so aiLimit
@@ -430,21 +736,75 @@ app.use("/api/school",     standardLimit, schoolModule);        // school partne
 app.use("/api/voice",      aiLimit,       voiceModule);
 app.use("/api/content",    standardLimit, contentModule);   // public blog + careers, admin CRUD
 app.use("/api/admin",      standardLimit, adminModule);     // admin-only: users, instructors, courses, stats
+app.use("/api",            standardLimit, agentToolRequestsModule); // explicit learner Agent Chat feature/tool requests
+app.use("/api/goals",      standardLimit, learnerGoalsModule); // the learner's educational goals (Full Autonomy spine)
+app.use("/api/agent/proposals", standardLimit, agentProposalsModule); // Full Autonomy proposal inbox (approve executes via chat tools)
+app.use("/api/blogs",      standardLimit, blogsModule); // learner-authored blogs (higherEd library: draft / publish)
+app.use("/api/records",    standardLimit, recordsModule); // learner library shelf: uploads (R2), links, pastes
 app.use("/api/contact",    standardLimit, contactModule);  // public contact/partner intake + admin inbox
+app.use("/api/public/pilot-applications", standardLimit, pilotApplicationsModule); // public /apply form (Tiers & Credits plan §4.2 — the one unauth write)
+app.use("/api/subscriptions",  standardLimit, billingGatewayModule); // learner subscription checkout (Phase 3; webhook-fulfilled)
 
 // ─── 404 ──────────────────────────────────────────────────────────────────────
-app.use((_req, res) => res.status(404).json({ success: false, message: "Route not found" }));
+app.use((_req, res) => res.status(404).json({ success: false, message: "Route not found", code: "not_found" }));
 
 // ─── Global error handler ─────────────────────────────────────────────────────
+// The contract: a failure the CALLER caused or can fix is a 4xx carrying a
+// stable machine-readable `code`; a failure inside the server is a 500 that
+// reveals nothing but the instance id. Body-parser faults (bad JSON, oversized
+// body, weird charset) and multer upload errors are client payload problems —
+// reporting them as 500 sends frontends down the "server is broken, retry or
+// give up" path for bodies the CLIENT must fix. Postgres unique violations are
+// the client's conflict to resolve, but their messages name constraints
+// (schema reconnaissance), so the response stays generic.
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
   if (err instanceof MulterError)
     return res.status(400).json({ success: false, message: `Upload error: ${err.message}`, code: err.code });
-  console.error(`[${config.instanceId.slice(0, 8)}] [ERROR]`, err.message);
+  if (err?.type === "entity.parse.failed")
+    return res.status(400).json({ success: false, message: "Request body is not valid JSON", code: "invalid_json" });
+  if (err?.type === "entity.too.large")
+    return res.status(413).json({ success: false, message: "Request body is too large", code: "payload_too_large" });
+  if (err?.type === "charset.unsupported")
+    return res.status(415).json({ success: false, message: "Request body charset is not supported", code: "unsupported_charset" });
+  if (err?.code === "23505")
+    return res.status(409).json({ success: false, message: "That record already exists", code: "conflict" });
+  // Deliberate, typed fail-fast (plan §3.3/§3.4): breaker open or queue full.
+  // These carry their own status + Retry-After AND a stable `code` — the code
+  // requirement is what separates OUR typed errors from library errors that
+  // merely follow the http-errors expose convention (body-parser etc., all
+  // classified above). 503, never 500: nothing is broken; the client's correct
+  // move is to retry after the window.
+  if (err?.expose === true && err?.code && Number.isInteger(err?.statusCode) && err.statusCode >= 400) {
+    if (err.retryAfterSec) res.setHeader("Retry-After", String(err.retryAfterSec));
+    return res.status(err.statusCode).json({
+      success: false,
+      message: err.message,
+      code: err.code,
+    });
+  }
+  console.error(`[${config.instanceId.slice(0, 8)}] [ERROR]`, err?.stack || err?.message || err);
   res.status(500).json({
-    success: false, message: "Internal server error", instance: config.instanceId,
-    ...(config.isDev && { stack: err.stack }),
+    success: false, message: "Internal server error", code: "internal_error", instance: config.instanceId,
+    ...(config.isDev && { stack: err?.stack }),
   });
+});
+
+// ─── Process safety nets ──────────────────────────────────────────────────────
+// Express 4 does NOT forward a rejected promise to the error handler, so a
+// single un-awaited failure in any route would otherwise crash the process
+// (Node's default since v15) and take down every chat surface at once — the
+// exact all-chats-down shape of the Sept 2026 outage. Log it loudly and keep
+// serving; the request that lost its promise times out and retries, everyone
+// else keeps working.
+process.on("unhandledRejection", (reason) => {
+  console.error("[unhandledRejection]", reason?.stack || reason);
+});
+// A synchronous throw OUTSIDE Express is different: process state is unknown.
+// Log, then exit — Render's restart policy brings the process back cleanly.
+process.on("uncaughtException", (err) => {
+  console.error("[uncaughtException]", err?.stack || err);
+  process.exit(1);
 });
 
 // ─── Graceful shutdown ────────────────────────────────────────────────────────
@@ -461,6 +821,27 @@ process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT",  () => shutdown("SIGINT"));
 
 // ─── Start ────────────────────────────────────────────────────────────────────
+// Boot-time migrations already ran — they sit ABOVE the background-worker
+// section so no worker can query a table before the deploy that creates it
+// has applied (the learner-autonomy recovery race of 2026-09-12).
+
+// Weekly routine preparation (drafts only — assignment stays human).
+if (!skipJob("routine scheduler")) startRoutineScheduler();
+
+// Context-layer preflight (Context Layer Adoption P0): every registered
+// doctrine set must resolve within budget or the process refuses to serve —
+// agent behaviour can never silently change because a workspace file went
+// missing. The logged version hash makes doctrine drift observable.
+{
+  const { preflight } = await import("./modules/agent-context/context-manager.js");
+  const contextLayer = await preflight();
+  if (!contextLayer.ok) {
+    console.error("[context-layer] PREFLIGHT FAIL:", contextLayer.problems.join(" | "));
+    process.exit(1);
+  }
+  console.log(`[context-layer] ok v${contextLayer.version} — ${contextLayer.sets.length} sets, manifest v${contextLayer.manifestVersion}`);
+}
+
 httpServer.listen(config.server.port, config.server.host, () => {
   serverReady = true;
 
@@ -470,7 +851,9 @@ httpServer.listen(config.server.port, config.server.host, () => {
   refreshTenantHosts()
     .then((r) => console.log(`[tenant] host cache: ${r.slugs} school slugs, ${r.domains} custom domains${r.loaded ? "" : " (NOT LOADED — credentials denied to unlisted subdomains)"}`))
     .catch(() => {});
-  setInterval(() => { refreshTenantHosts().catch(() => {}); }, 5 * 60 * 1000).unref?.();
+  if (!skipJob("tenant host refresh")) {
+    setInterval(() => { refreshTenantHosts().catch(() => {}); }, 5 * 60 * 1000).unref?.();
+  }
   console.log(`
 [API]  Akoro API  [${config.instanceId.slice(0, 8)}]  --  http://localhost:${config.server.port}
 

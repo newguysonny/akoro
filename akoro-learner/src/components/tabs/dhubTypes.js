@@ -12,13 +12,13 @@ import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
 export const FONT = "'Nunito', sans-serif";
 
 /* Gradient + art per type card. Order matches the product spec:
-   Notes/Materials, Courses, Pharm D, Teaching guide, Live classes. */
+   Contents/Materials, Courses, Pharm D, Teaching guide, Live classes. */
 export const TYPES = (t) => ([
   {
-    key: 'notes', icon: 'ti-edit', accent: GOLD, soon: true,
+    key: 'contents', icon: 'ti-edit', accent: GOLD, soon: false,
     grad: 'linear-gradient(140deg,#7C5CE6,#5B3FD1)',
-    label: t('dhub.card_notes'), desc: t('dhub.card_notes_desc'),
-    kw: 'notes materials library records pdf document upload link paste',
+    label: t('dhub.card_contents'), desc: t('dhub.card_contents_desc'),
+    kw: 'contents materials notes library records pdf document upload video audio paste',
   },
   {
     key: 'courses', icon: 'ti-book', accent: BRAND, soon: false, primary: true,
@@ -27,19 +27,19 @@ export const TYPES = (t) => ([
     kw: 'courses video lessons catalogue study curriculum marketplace',
   },
   {
-    key: 'pharmd', icon: 'ti-pill', accent: GREEN, soon: true,
+    key: 'pharmd', icon: 'ti-pill', accent: GREEN, soon: false,
     grad: 'linear-gradient(140deg,#14B8A6,#0C7E72)',
     label: t('dhub.card_pharmd'), desc: t('dhub.card_pharmd_desc'),
     kw: 'pharm d pharmacy doctor program clinical pharmacology',
   },
   {
-    key: 'guide', icon: 'ti-user', accent: '#8B5CF6', soon: true,
+    key: 'guide', icon: 'ti-user', accent: '#8B5CF6', soon: false,
     grad: 'linear-gradient(140deg,#4C8DF0,#2E62D9)',
     label: t('dhub.card_guide'), desc: t('dhub.card_guide_desc'),
     kw: 'teaching guide teacher agents tutors trained',
   },
   {
-    key: 'live', icon: 'ti-broadcast', accent: RED, soon: true,
+    key: 'live', icon: 'ti-broadcast', accent: RED, soon: false,
     grad: 'linear-gradient(140deg,#EF4E78,#C92A54)',
     label: t('dhub.card_live'), desc: t('dhub.card_live_desc'),
     kw: 'live classes real time tutors stream broadcast',

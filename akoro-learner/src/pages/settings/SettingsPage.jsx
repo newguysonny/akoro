@@ -21,8 +21,11 @@ import {
   BRAND, RED, ORANGE, Icon,
 } from './shared.jsx';
 import { LogoutModal } from './sheets.jsx';
+import { DrawnAvatar } from '../../components/common/AgentAvatar.jsx';
 import { UserTab } from './userTab.jsx';
 import { AgentTab } from './agentTab.jsx';
+import { AppShell } from '../../components/AppShell.jsx';
+import { effectivePlan } from '../../utils/planOverride.js';
 
 /* ─── Loading skeleton ────────────────────────────────────────── */
 /* ─── Loading skeleton ────────────────────────────────────────── */
@@ -122,6 +125,7 @@ export default function SettingsPage() {
           avatarEmoji:   data.avatarEmoji || '👨🏾‍🎓',
           phone:         data.phone,
           country:       data.country,
+          city:          data.city || '',
           school:        data.schoolName,
           schoolType:    data.schoolType,
           year:          data.yearGroup,
@@ -129,11 +133,12 @@ export default function SettingsPage() {
           guideEmoji:    data.guideEmoji    || '🧠',
           subjects:      data.subjects      || [],
           language,
+          timeZone:      data.timeZone || null,
           displayMode,
           accentColor:   accent,
           twoFactor:     data.twoFactorEnabled || false,
           googleLinked:  !!data.email,
-          plan:          'Free',
+          plan:          effectivePlan(data.plan),
           sessionsUsed:  0,
           sessionsLimit: 30,
           teachingHours: '0h',
@@ -183,7 +188,7 @@ export default function SettingsPage() {
             id:user.id,email:user.email,username:user.username,
             fullName:user.fullName,avatarUrl:user.avatarUrl,avatarEmoji:'👨🏾‍🎓',
             subjects:[],language,displayMode,accentColor:accent,
-            twoFactor:false,googleLinked:false,plan:'Free',sessionsUsed:0,
+            twoFactor:false,googleLinked:false,plan:effectivePlan(),sessionsUsed:0,
             sessionsLimit:30,teachingHours:'0h',xpBalance:0,
             memberId:user.id,memberSince:'—',
             notif:{ email:true,sms:false,push:true,whatsapp:false,whatsappNumber:'',
@@ -206,7 +211,8 @@ export default function SettingsPage() {
   const color = accentColor;
 
   return (
-    <div style={{ minHeight:'100vh',background:'var(--ak-bg)',
+    <AppShell>
+    <div style={{ minHeight:'100%',background:'var(--ak-bg)',
       fontFamily:"'Nunito',sans-serif",maxWidth:480,margin:'0 auto' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
@@ -233,11 +239,9 @@ export default function SettingsPage() {
           border:`2px solid ${color}`,flexShrink:0,
           display:'flex',alignItems:'center',justifyContent:'center',
           background:`${color}18`,fontSize:16 }}>
-          {profile?.avatarUrl
-            ? <img src={profile.avatarUrl} style={{ width:'100%',height:'100%',objectFit:'cover' }}/>
-            : profile?.avatarEmoji || user?.avatarUrl
-              ? <img src={user?.avatarUrl} style={{ width:'100%',height:'100%',objectFit:'cover' }}/>
-              : '👤'
+          {(profile?.avatarUrl || user?.avatarUrl)
+            ? <img src={profile?.avatarUrl || user?.avatarUrl} style={{ width:'100%',height:'100%',objectFit:'cover' }}/>
+            : <DrawnAvatar emoji={profile?.avatarEmoji} size={24}/>
           }
         </div>
         <div style={{ flex:1,minWidth:0 }}>
@@ -300,5 +304,6 @@ export default function SettingsPage() {
         <LogoutModal onClose={()=>setShowLogout(false)} onConfirm={handleLogoutConfirm}/>
       )}
     </div>
+    </AppShell>
   );
 }

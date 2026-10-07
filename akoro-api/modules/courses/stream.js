@@ -58,6 +58,7 @@ import { getSignedUrl }                   from "@aws-sdk/s3-request-presigner";
 import path                               from "path";
 import { fileURLToPath }                  from "url";
 import { authenticateToken, requireRole } from "../auth/routes.js";
+import { r2Send } from "../../lib/r2Breaker.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -108,7 +109,11 @@ const res404 = (res, msg)             => res.status(404).json({ success: false, 
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits:  { fileSize: 50 * 1024 * 1024 * 1024 },
+  // 2 GB, not 50: this is a MEMORY buffer on a 512 MB free instance, and
+  // every proxied byte later leaves for R2 through Render's METERED egress
+  // (the API-PUT path is the expensive one; presigned direct-to-R2 uploads
+  // are the fix before this endpoint ever ships to real instructors).
+  limits:  { fileSize: 2 * 1024 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const ALLOWED = [
       "video/mp4", "video/quicktime", "video/x-msvideo",
@@ -154,7 +159,7 @@ const getContentType = (filename) => {
  */
 const uploadSourceToR2 = async (buffer, courseId, videoId, ext) => {
   const key = `courses/${courseId}/videos/${videoId}/source${ext}`;
-  await r2.send(new PutObjectCommand({
+  await r2Send(r2, new PutObjectCommand({
     Bucket:      R2_BUCKET,
     Key:         key,
     Body:        buffer,
@@ -180,13 +185,13 @@ const generateSignedSourceUrl = async (sourceKey) => {
  * Covers both staging source and all encoded HLS files in one call.
  */
 const deleteR2Prefix = async (prefix) => {
-  const { Contents } = await r2.send(
+  const { Contents } = await r2Send(r2, 
     new ListObjectsV2Command({ Bucket: R2_BUCKET, Prefix: prefix })
   );
   if (!Contents?.length) return;
   await Promise.all(
     Contents.map((obj) =>
-      r2.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: obj.Key }))
+      r2Send(r2, new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: obj.Key }))
     )
   );
 };

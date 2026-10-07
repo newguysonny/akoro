@@ -23,7 +23,13 @@ import {
 import { decayEngine } from "./agents/student/decayEngine.js";
 import { resolveLadder, provenanceLabel } from "./lessonLadder.js";
 import { NaNaEsumai } from "./agents/nana-esumai/guide.js";
-import db from "../../db.js";
+import { normalizeSessionReference } from "./sessionReference.js";
+import { serialiseTeachingEvidence } from "./teaching-evidence.js";
+import {
+  createSessionRecord, ensureSessionRecord, appendSessionBlocks, completeSessionRecord,
+  readSessionBlocks,
+} from "./teaching-session/lifecycle.js";
+import { loadContinuationContext, loadDecayPriorLesson, carryForward } from "./teaching-session/context.js";
 
 export const activeSessions = new Map();
 
@@ -50,133 +56,6 @@ function scheduleSessionReap(sessionId) {
   }, SESSION_REAP_GRACE_MS);
   if (t.unref) t.unref();   // don't keep the process alive for a reap timer
   sessionReapTimers.set(sessionId, t);
-}
-
-// ── adaptive_sessions persistence ────────────────────────────────────────────
-// The WS flow already saves agent knowledge/stats/deltas. These helpers also
-// persist the session row + typed block transcript so the Sessions list
-// (GET /sessions) and "Continue Teaching" (continuation mode) work for WS
-// sessions. The DB row id is stashed on the orchestrator as `dbSessionId`.
-async function createSessionRecord(orchestrator, { studentId, topic, subject, openingBlocks }) {
-  if (orchestrator?.dbSessionId) return orchestrator.dbSessionId;   // already saved
-  const row = {
-    student_id:             studentId,
-    student_agent_id:       orchestrator.studentAgentRecord?.id || null,
-    // topic + subject are NOT NULL — never let a missing value silently drop
-    // the whole session row (which is what kept sessions off the list).
-    topic:                  topic || "Untitled session",
-    subject:                subject || "General",
-    // These columns are JSONB — send real arrays/objects. Sending
-    // JSON.stringify(...) stored a JSON *string* scalar ("[]") instead of an
-    // array, which then read back wrong downstream.
-    subtopics:              Array.isArray(orchestrator.session?.mustKnowParts) ? orchestrator.session.mustKnowParts : [],
-    objectives:             {},
-    current_subtopic_idx:   0,
-    current_phase:          "1",
-    status:                 "active",
-    started_at:             new Date().toISOString(),
-    updated_at:             new Date().toISOString(),
-    session_history:        [],
-    objectives_covered:     {},
-    confidence_by_subtopic: {},
-    block_history:          Array.isArray(openingBlocks) ? openingBlocks : [],
-  };
-
-  try {
-    let { data, error } = await db.schema("edu").from("adaptive_sessions")
-      .insert(row).select("id").single();
-
-    // The session row is what makes a session visible in the Sessions tab, so
-    // never let one optional column take the whole row down with it.
-    // student_agent_id is a decoration; student_id/topic/subject are the row.
-    // (Its FK pointed at public.user_agents while we write edu.student_agents
-    // ids — that silently killed EVERY insert.)
-    if (error && row.student_agent_id) {
-      console.warn("[adaptive_sessions create] retrying without student_agent_id:", error.message);
-      ({ data, error } = await db.schema("edu").from("adaptive_sessions")
-        .insert({ ...row, student_agent_id: null }).select("id").single());
-    }
-    if (error) throw error;
-    orchestrator.dbSessionId = data.id;
-    // Remember the identity so a later fallback save (cancel/disconnect before
-    // the row existed) can still persist the session.
-    orchestrator.sessionMeta = { studentId, topic, subject };
-    return data.id;
-  } catch (e) {
-    // Loud: a failure here is why a session would never appear in the list.
-    console.error("[adaptive_sessions create] FAILED — session will not be listed:",
-      e.code || "", e.message, e.details || "");
-    orchestrator.saveError = { message: e.message, code: e.code || null };
-    return null;
-  }
-}
-
-// Ensure a DB row exists for this orchestrator — used by the cancel/disconnect
-// path so a session started but never "completed" is still saved.
-async function ensureSessionRecord(orchestrator) {
-  if (orchestrator?.dbSessionId) return orchestrator.dbSessionId;
-  const meta = orchestrator?.sessionMeta;
-  if (!meta?.studentId) return null;
-  return createSessionRecord(orchestrator, { ...meta, openingBlocks: [] });
-}
-
-async function appendSessionBlocks(orchestrator, newBlocks) {
-  const id = orchestrator?.dbSessionId || await ensureSessionRecord(orchestrator);
-  if (!id || !newBlocks?.length) return;
-  try {
-    const { data } = await db.schema("edu").from("adaptive_sessions")
-      .select("block_history").eq("id", id).single();
-    const existing = Array.isArray(data?.block_history) ? data.block_history : [];
-
-    // WHERE THEY GOT TO, not just what was said.
-    //
-    // current_phase and current_subtopic_idx were written once at creation as
-    // "1" and 0 and never touched again, so the stored row always claimed the
-    // learner was on the first phase of the first subtopic no matter how far
-    // they had come. Continuing a session read that back and restarted them at
-    // the beginning — the transcript was there, the progress was not.
-    //
-    // subtopics is refreshed too: the ladder is resolved after the row is
-    // created, so the row was written with whatever was known at insert time,
-    // which for a resolved-later ladder is an empty array.
-    const sess = orchestrator?.session ?? {};
-    await db.schema("edu").from("adaptive_sessions").update({
-      block_history:        [...existing, ...newBlocks],
-      current_phase:        String(sess.phase ?? "1").replace(/^PHASE_/, ""),
-      current_subtopic_idx: Number.isInteger(sess.mustKnowIndex) ? sess.mustKnowIndex : 0,
-      ...(Array.isArray(sess.mustKnowParts) && sess.mustKnowParts.length
-        ? { subtopics: sess.mustKnowParts }
-        : {}),
-      updated_at:           new Date().toISOString(),
-    }).eq("id", id);
-  } catch (e) {
-    console.warn("[adaptive_sessions append]", e.message);
-  }
-}
-
-async function completeSessionRecord(orchestrator) {
-  const id = orchestrator?.dbSessionId;
-  if (!id) return;
-  try {
-    // Read prior status + student so ranking XP is awarded exactly once.
-    const { data: prior } = await db.schema("edu").from("adaptive_sessions")
-      .select("status, student_id, subject").eq("id", id).maybeSingle();
-
-    await db.schema("edu").from("adaptive_sessions").update({
-      status:       "complete",
-      completed_at: new Date().toISOString(),
-      updated_at:   new Date().toISOString(),
-    }).eq("id", id);
-
-    if (prior && prior.status !== "complete" && prior.student_id) {
-      try {
-        const { awardXP, XP } = await import("../ranking/routes.js");
-        awardXP({ userId: prior.student_id, reason: "teaching_session", amount: XP.SESSION_ATTEND, subject: prior.subject || null }).catch(() => {});
-      } catch { /* ranking module unavailable — non-fatal */ }
-    }
-  } catch (e) {
-    console.warn("[adaptive_sessions complete]", e.message);
-  }
 }
 
 // Wire io globally so webhook can emit agent_purchased
@@ -294,29 +173,26 @@ function resultToTypedBlocks(result, agentPairId) {
   const guideEmoji = result.guideEmoji || "🧠";
   const renderStyle = result.guideRenderStyle || NANA_RENDER_STYLE;
   const agentName  = result.studentAgentName || "Agent";
-  const confidence = result.adaptiveEngine?.understanding ?? 0;
+  // These labels are already shaped by the server-side evidence workflow.
+  // They are safe learner-facing direction, not raw evaluation values.
+  const learningState = result.publicLearningState || {};
 
   // No drift block. A wandering learner is steered inside NaNa's own tip now,
   // as part of a turn that still teaches — rather than by a red alarm from a
   // second agent that replaced the whole turn with a scolding. Sargeant still
   // appears below for the assessment gate, which is a different job.
 
-  // Subtopic advance — full header sequence
-  if (result.subtopicAdvanced && result.currentSubtopic) {
-    // Header only. The objectives ride on it rather than following as their own
-    // checklist, and the phase plan is not shown at all — it steers the
-    // teaching agent, and the phase badge on its messages already tells the
-    // learner where they are.
-    blocks.push({
-      type:    "subtopic-hdr",
-      subtopic: result.currentSubtopic,
-      idx:     result.subtopicIdx     ?? 0,
-      items:   result.subtopicObjectives ?? [],
-      total:   result.totalSubtopics  ?? 1,
-      topic:   result.topic    ?? "",
-      subject: result.subject  ?? "",
-    });
-  }
+  const advancedObjectiveHeader = result.subtopicAdvanced && result.currentSubtopic
+    ? {
+        type:    "subtopic-hdr",
+        subtopic: result.currentSubtopic,
+        idx:     result.subtopicIdx     ?? 0,
+        items:   result.subtopicObjectives ?? [],
+        total:   result.totalSubtopics  ?? 1,
+        topic:   result.topic    ?? "",
+        subject: result.subject  ?? "",
+      }
+    : null;
 
   // Sargeant assessment gate
   if (result.wardenHolding && result.wardenHoldMessage) {
@@ -328,34 +204,39 @@ function resultToTypedBlocks(result, agentPairId) {
     });
   }
 
-  // Student agent response
+  // Student Agent response. The current idea and short explanation of the
+  // prompt's purpose are deterministic server-owned UI copy—never an inferred
+  // browser state and never a claim that the agent has mastered the concept.
   if (result.studentAgentResponse) {
     blocks.push({
-      type:       "student-agent",
-      agent:      agentName,
-      emoji:      "🤖",
-      phase:      `${agentName} · Phase ${result.currentPhase ?? "?"} · ${confidence}%`,
-      confidence,
-      text:       result.studentAgentResponse,
+      type:            "student-agent",
+      agent:           agentName,
+      emoji:           "🤖",
+      currentIdea:     learningState.currentIdea || null,
+      whyThisResponse: learningState.whyThisResponse || null,
+      text:            result.studentAgentResponse,
     });
   }
 
-  // Guide message
+  // Teaching Guide response. A short evidence status and next learning move
+  // replace the internal phase label; private scores and evaluator rationale
+  // stay on the server.
   if (result.guideMessage) {
-    const phase = result.phaseChanged && result.phaseLabel
-      ? result.phaseLabel
-      : result.currentPhase
-      ? `Phase ${result.currentPhase}${result.guideIsUrgent ? " — Intervening" : ""}`
-      : "Guide";
     blocks.push({
-      type:        "guide",
-      agent:       guideName,
-      emoji:       guideEmoji,
-      phase,
-      text:        result.guideMessage,
+      type:             "guide",
+      agent:            guideName,
+      emoji:            guideEmoji,
+      learningState:    learningState.learningState || null,
+      nextLearningMove: learningState.nextLearningMove || null,
+      text:             result.guideMessage,
       renderStyle,
     });
   }
+
+  // When this turn unlocks a new objective, introduce it only after the
+  // responses about the just-completed idea. This keeps each response context
+  // truthful and leaves the familiar objective tracker ready for the next turn.
+  if (advancedObjectiveHeader) blocks.push(advancedObjectiveHeader);
 
   // Sargeant assessment result
   if (result.assessmentResult) {
@@ -396,7 +277,7 @@ export function setupWebSocket(io) {
   const IDENTITY_EVENTS = new Set([
     "list_agent_pairs", "get_my_agents",
     "start_session", "start_student_session", "start_decay_session", "start_adaptive_session",
-    "teacher_message", "request_summary", "resume_session", "end_session",
+    "teacher_message", "request_summary", "resume_session", "park_session", "end_session",
     "switch_agent_pair", "get_knowledge_health", "get_subject_topics",
     "acknowledge_alert", "get_state", "get_agent_growth",
     "subscribe-student", "join-student-room",
@@ -466,7 +347,7 @@ export function setupWebSocket(io) {
 
     // ── start_session ─────────────────────────────────────────
     // v3.2: accepts userId for ownership check
-    socket.on("start_session", async ({ agentId, topic, agentPairId, sessionId, userId }) => {
+    socket.on("start_session", async ({ agentId, topic, agentPairId, userId }) => {
       if (!agentId || !topic) return socket.emit("error", { message: "agentId and topic required" });
       try {
         let pairId = agentPairId;
@@ -475,7 +356,9 @@ export function setupWebSocket(io) {
           pairId = prefs.guide_pair_id || "nana-sargeant";
         }
 
-        const id = sessionId || `session_${agentId}_${Date.now()}`;
+        // A fresh session id is server-generated. Accepting an arbitrary id here
+        // could overwrite another live entry in the in-memory session map.
+        const id = `session_${agentId}_${Date.now()}`;
         const orchestrator = await getOrchestrator({
           agentPairId: pairId,
           agentId,
@@ -537,8 +420,11 @@ export function setupWebSocket(io) {
         const caller = userId || studentId;
         const agent  = await getOrCreateStudentAgent(studentId);
         const decaySessionPayload = await decayEngine.generateDecaySession(agent.id, studentId, subject, topic);
-
-        if (notificationId) await decayEngine.markNotificationRead(notificationId);
+        // A client may send an arbitrary notification UUID. Retain it for the
+        // session only when it belongs to this authenticated learner.
+        const ownedNotificationId = notificationId && await decayEngine.markNotificationRead(notificationId, studentId)
+          ? notificationId
+          : null;
 
         const id = `decay_${studentId}_${Date.now()}`;
         const orchestrator = await getOrchestrator({
@@ -546,7 +432,7 @@ export function setupWebSocket(io) {
           teacherAgentId: teacherAgentId || null,
           userId: caller,
           sessionType: "decay_review",
-          decayPayload: { ...decaySessionPayload, notificationId },
+          decayPayload: { ...decaySessionPayload, notificationId: ownedNotificationId },
         });
         const init = await orchestrator.initialize(studentId, topic);
 
@@ -562,7 +448,8 @@ export function setupWebSocket(io) {
           message: init.openingPrompt, mustKnowParts: init.mustKnowParts,
           topicBoundary: init.topicBoundary, studentAgentName: init.studentAgentName,
           agentLevel: init.agentLevel, knowledgeScore: init.knowledgeScore,
-          initialState: init.initialState, decayPayload: decaySessionPayload,
+          initialState: init.initialState,
+          decayPayload: decaySessionPayload,
         });
       } catch (err) { console.error("[start_decay_session]", err); socket.emit("error", { message: err.message }); }
     });
@@ -582,6 +469,7 @@ export function setupWebSocket(io) {
       mode = "fresh",
       sessionId: prevSessionId,   // for continuation
       notificationId,             // for decay
+      reference,                  // compact text returned by /teaching/reference
       userId,
     }) => {
       if (!studentId || !topic)
@@ -595,44 +483,31 @@ export function setupWebSocket(io) {
 
       try {
         const caller     = userId || studentId;
+        // Socket payloads are client-controlled. Only retain the capped,
+        // text-only reference produced by the authenticated upload endpoint.
+        const sessionReference = normalizeSessionReference(reference);
         let historyBlocks = [];
         let decayPayload  = null;
         let sessionType   = "free_teaching";
         let resumeFrom    = null;
+        let resumeTeachingEvidence = null;
+        let ownedNotificationId = null;
+        // The previous conversation, restored as agent memory (continuation)
+        // or as review context (decay). UI chrome is filtered out by the
+        // mapper/orchestrator; only the spoken turns become context.
+        let priorBlocks   = [];
 
         // ── Continuation: load block history from DB ─────────
         if (mode === "continuation" && prevSessionId) {
           sessionType = "continuation";
-          try {
-            const { data: prevSession } = await db.schema("edu")
-              .from("adaptive_sessions")
-              .select("block_history, updated_at, completed_at, current_subtopic_idx, current_phase")
-              .eq("id", prevSessionId)
-              .single();
-
-            // The position, not just the transcript. Loading only the words
-            // meant a continuation showed the previous lesson greyed out and
-            // then began teaching subtopic 1 again.
-            if (prevSession) {
-              resumeFrom = {
-                subtopicIdx: Number(prevSession.current_subtopic_idx) || 0,
-                phase: `PHASE_${String(prevSession.current_phase || "1").replace(/^PHASE_/, "")}`,
-              };
-            }
-
-            if (prevSession?.block_history?.length) {
-              const completedAt = prevSession.completed_at || prevSession.updated_at;
-              const daysSince   = Math.max(0, Math.round(
-                (Date.now() - new Date(completedAt).getTime()) / 86_400_000
-              ));
-              historyBlocks = [
-                { type: "system-divider", label: `Previous session · ${daysSince} days ago` },
-                ...prevSession.block_history.map(b => ({ ...b, faded: true })),
-              ];
-            }
-          } catch (e) {
-            console.warn("[start_adaptive_session] history load failed:", e.message);
-          }
+          // Ownership is enforced inside the loader (the continuation id
+          // comes from the browser); a missing history degrades to a fresh
+          // start, never a failed session.
+          const continuation = await loadContinuationContext({ studentId, prevSessionId });
+          historyBlocks          = continuation.historyBlocks;
+          priorBlocks            = continuation.priorBlocks;
+          resumeFrom             = continuation.resumeFrom;
+          resumeTeachingEvidence = continuation.resumeTeachingEvidence;
         }
 
         // ── Decay: load decay context ─────────────────────────
@@ -640,7 +515,19 @@ export function setupWebSocket(io) {
           sessionType = "decay_review";
           const agent = await getOrCreateStudentAgent(studentId);
           decayPayload = await decayEngine.generateDecaySession(agent.id, studentId, subject, topic);
-          if (notificationId) await decayEngine.markNotificationRead(notificationId);
+          // An alert id is an untrusted browser value. It may be carried into
+          // the session only after the token-derived learner owns that alert.
+          if (notificationId && await decayEngine.markNotificationRead(notificationId, studentId)) {
+            ownedNotificationId = notificationId;
+          }
+          decayPayload = { ...decayPayload, notificationId: ownedNotificationId };
+
+          // A review resumes the relationship, not just the topic health: the
+          // tail of the most recent lesson on this topic becomes the agent's
+          // conversational memory, and the modal shows it faded.
+          const priorLesson = await loadDecayPriorLesson({ studentId, topic });
+          priorBlocks   = priorLesson.priorBlocks;
+          historyBlocks = priorLesson.historyBlocks;
         }
 
         // ── Create orchestrator with mode-aware context ───────
@@ -650,15 +537,15 @@ export function setupWebSocket(io) {
           userId:               caller,
           sessionType,
           subject,
-          continuationSessionId: mode === "continuation" ? prevSessionId : null,
+          // The restored conversation. (A continuationSessionId used to be
+          // passed here and silently dropped — getOrchestrator never named
+          // it, so every continuation restarted the agent with empty memory.)
+          priorBlocks,
           decayPayload,
-          // Prompt context injected here — orchestrator uses this to
-          // set agent's opening knowledge state
-          agentContext: {
-            mode,
-            historyLoaded:    historyBlocks.length > 0,
-            previousSessionId: prevSessionId ?? null,
-          },
+          // Capped source material from the higher-ed start-session modal.
+          // It is session-memory only; no file or raw text is persisted.
+          referenceMaterial: sessionReference,
+          teachingEvidence: resumeTeachingEvidence,
         });
 
         // Read by initialize() once the ladder is resolved, so the session
@@ -717,6 +604,11 @@ export function setupWebSocket(io) {
           initialState:      init.initialState,
           decayPayload,
           historyBlocks,
+          reference: sessionReference ? {
+            name: sessionReference.name,
+            chars: sessionReference.chars,
+            truncated: sessionReference.truncated,
+          } : null,
           // Provenance of the lesson plan, so the learner can see where it came
           // from (school scheme of work / exam syllabus / AI-generated).
           source: ladder ? {
@@ -737,9 +629,12 @@ export function setupWebSocket(io) {
         // session even if this initial insert fails or hasn't finished yet.
         orchestrator.sessionMeta = { studentId, topic, subject };
 
-        // Persist in background — never blocks the session
+        // Persist in background — never blocks the session. The new row
+        // carries the prior transcript (faded) so the NEXT continuation sees
+        // the whole chain, not just this hop.
         createSessionRecord(orchestrator, {
-          studentId, topic, subject, openingBlocks: init.openingBlocks,
+          studentId, topic, subject,
+          openingBlocks: carryForward(priorBlocks, init.openingBlocks),
         }).then(rowId => {
           socket.emit("session_saved", {
             sessionId: id,
@@ -769,6 +664,9 @@ export function setupWebSocket(io) {
           onStudentChunk: (token) => socket.emit("student_token",  { token }),
           onStateUpdate:  (state) => socket.emit("state_update",   state),
           onGuideChunk:   (token) => socket.emit("guide_token",    { token }),
+          // Observable workflow labels only—never raw messages, model rationale,
+          // or an instruction that the browser may use to choose a tool.
+          onWorkflowStep: (step) => socket.emit("teaching_workflow_step", step),
         });
 
         socket.emit("student_done");
@@ -785,10 +683,12 @@ export function setupWebSocket(io) {
           agentPairId,
           turnXP:         result.turnXP || 0,
           sessionType:    result.sessionType,
+          workflow:       result.workflow || null,
         });
 
-        // Persist the turn (human message + response blocks) to the transcript.
-        appendSessionBlocks(orchestrator, [{ type: "user", text: message }, ...blocks]);
+        // Persist the turn and compact server-owned evidence before another
+        // socket event (especially end_session) can observe this session.
+        await appendSessionBlocks(orchestrator, [{ type: "user", text: message }, ...blocks]);
       } catch (err) {
         console.error("[teacher_message]", err);
         socket.emit("student_done"); socket.emit("guide_done");
@@ -817,7 +717,7 @@ export function setupWebSocket(io) {
     // survived a transient drop. If the orchestrator is gone (server restart,
     // landed on another instance, or grace window expired) the client is told
     // to start fresh instead.
-    socket.on("resume_session", ({ sessionId, studentId, userId } = {}) => {
+    socket.on("resume_session", async ({ sessionId, studentId, userId } = {}) => {
       const orchestrator = sessionId ? activeSessions.get(sessionId) : null;
       if (!orchestrator) return socket.emit("resume_failed", { sessionId: sessionId || null });
 
@@ -827,6 +727,13 @@ export function setupWebSocket(io) {
       if (owner && me && owner !== me) return socket.emit("resume_failed", { sessionId });
 
       cancelSessionReap(sessionId);
+
+      // A remounted client (minimize → restore) arrives with empty local
+      // blocks; the same per-turn-appended history a continuation loads
+      // rebuilds its transcript. A client that merely reconnected keeps its
+      // intact local blocks and ignores this. Not faded — this is the live
+      // session's own conversation, not a previous one.
+      const historyBlocks = await readSessionBlocks(orchestrator);
 
       const caller = userId || studentId || orchestrator.studentId;
       socket.join(`session:${sessionId}`);
@@ -850,7 +757,27 @@ export function setupWebSocket(io) {
         currentSubtopic: orchestrator.session?.mustKnowParts?.[orchestrator.session?.mustKnowIndex] || null,
         topic:        orchestrator.session?.topic   || null,
         subject:      orchestrator.subject          || null,
+        historyBlocks,
       });
+    });
+
+    // ── park_session ──────────────────────────────────────────
+    // Minimize: save the session the way an end does, but keep it resumable.
+    // The transcript is already appended per turn; this ensures the DB row
+    // exists (status stays "active", so it lists as resumable) before the
+    // socket drops. The disconnect handler then holds the orchestrator
+    // through its grace window so a quick restore resumes the live session.
+    socket.on("park_session", async () => {
+      const { sessionId } = socket.data;
+      const orchestrator = activeSessions.get(sessionId);
+      if (!orchestrator) return socket.emit("session_parked", { sessionId: sessionId || null, saved: false, reason: "no active session" });
+      try {
+        const rowId = await ensureSessionRecord(orchestrator);
+        socket.emit("session_parked", { sessionId, saved: !!rowId, rowId: rowId || null });
+      } catch (err) {
+        console.error("[park_session]", err);
+        socket.emit("session_parked", { sessionId, saved: false, error: err.message });
+      }
     });
 
     // ── end_session ───────────────────────────────────────────
@@ -862,6 +789,7 @@ export function setupWebSocket(io) {
       try {
         const endResult = await orchestrator.endSession();
         const formatted = fmtSessionEnd(endResult);
+        await ensureSessionRecord(orchestrator);
         await completeSessionRecord(orchestrator);   // mark the session row complete
         activeSessions.delete(sessionId);
         await clearStateCache(agentId);
@@ -912,12 +840,23 @@ export function setupWebSocket(io) {
         socket.emit("agent_pair_switching", { newAgentPairId });
 
         // Rebuild the orchestrator with the new teacher; reuse student + topic
+        const priorOrchestrator = activeSessions.get(sessionId);
         const orchestrator = await getOrchestrator({
           mode:     "student",
           studentId,
           userId:   caller,
           teacherAgentId,
+          referenceMaterial: priorOrchestrator?.referenceMaterial || null,
+          teachingEvidence: serialiseTeachingEvidence(priorOrchestrator?.teachingEvidence),
         });
+        if (priorOrchestrator?.session) {
+          orchestrator.resumeFrom = {
+            subtopicIdx: priorOrchestrator.session.mustKnowIndex || 0,
+            phase: priorOrchestrator.session.phase || "PHASE_1",
+          };
+          orchestrator.dbSessionId = priorOrchestrator.dbSessionId || null;
+          orchestrator.sessionMeta = priorOrchestrator.sessionMeta || null;
+        }
         const init = await orchestrator.initialize(studentId, topic);
 
         // Swap in place under the same sessionId so the socket room stays valid
@@ -934,6 +873,9 @@ export function setupWebSocket(io) {
           knowledgeScore:   init.knowledgeScore,
           initialState:     init.initialState,
           studentAgentName: init.studentAgentName,
+          // The client appends this one server-shaped guide message after its
+          // switch divider; it must not manufacture a phase or learning state.
+          guideOpeningBlock: init.openingBlocks?.find((block) => block.type === "guide") || null,
           guideProfile: {
             name:        orchestrator.guideOrchestrator?.guide?.name  || "NaNa Esumai",
             emoji:       orchestrator.guideOrchestrator?.guide?.emoji || "🧠",
@@ -968,8 +910,8 @@ export function setupWebSocket(io) {
     // ── acknowledge_alert ─────────────────────────────────────
     socket.on("acknowledge_alert", async ({ notificationId }) => {
       try {
-        await decayEngine.markNotificationRead(notificationId);
-        socket.emit("alert_acknowledged", { notificationId });
+        const acknowledged = await decayEngine.markNotificationRead(notificationId, socket.data.user.id);
+        socket.emit("alert_acknowledged", { notificationId, acknowledged });
       } catch (err) { socket.emit("error", { message: err.message }); }
     });
 

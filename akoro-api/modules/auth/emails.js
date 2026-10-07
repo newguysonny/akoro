@@ -113,17 +113,31 @@ function alertBox(text, bg = "#FBF6F1", accent = AMBER, textColor = BODY) {
 
 // ─── § Resend helper ─────────────────────────────────────────────────────────
 
-async function sendEmail({ to, subject, text, html }) {
+async function sendEmail({ to, subject, text, html, from }) {
   const { Resend } = await import("resend");
   const resend = new Resend(process.env.RESEND_API_KEY);
   const { error } = await resend.emails.send({
-    from: `Akoro Learning <${EMAIL_FROM}>`,
+    from: from ?? `Akoro Learning <${EMAIL_FROM}>`,
     to:   Array.isArray(to) ? to : [to],
     subject,
     text,
     html,
   });
   if (error) throw new Error(`Email send failed: ${error.message}`);
+}
+
+/**
+ * Generic outbound email — plan §4.6 Phase 4 messaging. Used by the billing
+ * message-delivery job for admin-composed messages (no fixed template): the
+ * subject/body are the admin's own words. `fromName`/`fromAddress` override
+ * the default sender with the billing_settings branding when provided.
+ * Throws on failure so the delivery job can record delivery_status.
+ */
+export async function sendGenericEmail({ to, subject, text, html, fromName, fromAddress }) {
+  const from = (fromName && fromAddress)
+    ? `${fromName} <${fromAddress}>`
+    : (fromAddress ? `Akoro Learning <${fromAddress}>` : undefined);
+  await sendEmail({ to, subject, text, html, from });
 }
 
 // ─── § Templates ─────────────────────────────────────────────────────────────

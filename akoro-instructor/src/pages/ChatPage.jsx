@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Send, Plus, Brain, Edit3, CheckSquare, X, Paperclip, Camera,
   Upload, FileText, ScanLine, Loader, CheckCircle2,
+  Eye, History, Copy, Check,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, FileUploadZone, Toast } from '../components/Primitives.jsx';
@@ -11,7 +12,56 @@ import LiveRecorder from '../components/LiveRecorder.jsx';
 import { uploadTraining } from '../services/trainingApi.js';
 import { useStatsAPI } from '../hooks/useStatsAPI.js';
 import { useInstructorSocket } from '../hooks/useWebSocket.js';
-import { apiGet, apiPost } from '../services/api.js';
+import { apiGet, apiPost, apiDelete, API } from '../services/api.js';
+import ActivityPreviewPanel from '../components/ActivityPreviewPanel.jsx';
+import FortizoChatComposer from '../components/common/FortizoChatComposer.jsx';
+import RichText from '../components/common/RichText.jsx';
+
+/* Subtle per-message copy affordance: copies the exact text, flips to a
+   check briefly. Clipboard API with an execCommand fallback for old
+   webviews; a failure never throws into the chat. */
+async function copyPlainText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch { /* fall through */ }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    return true;
+  } catch { return false; }
+}
+
+function CopyMsgButton({ text }) {
+  const [done, setDone] = useState(false);
+  if (!text) return null;
+  return (
+    <button
+      type="button"
+      title="Copy message"
+      aria-label="Copy message"
+      onClick={async () => {
+        if (await copyPlainText(text)) {
+          setDone(true);
+          setTimeout(() => setDone(false), 1400);
+        }
+      }}
+      style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: 22, height: 18, padding: 0, border: 'none', background: 'transparent',
+        cursor: 'pointer', color: MUTED2, opacity: .6, borderRadius: 5,
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.opacity = 1; }}
+      onMouseLeave={(e) => { e.currentTarget.style.opacity = .6; }}
+    >
+      {done ? <Check size={12} color={GREEN} /> : <Copy size={12} />}
+    </button>
+  );
+}
+
 import { useAuth } from '../contexts/AuthContext.jsx';
 import {
   AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, PURPLE, BLUE, FONT,
@@ -23,6 +73,23 @@ const AGENT_AVATARS = ['🤖', '🔮', '⚡', '🌀', '✨', '🔺', '🌙', '�
 
 const CHAT_INIT = [
   { id: 1, from: 'agent', text: "Good morning! I'm ready to help — training, quizzes, reminders, or student reports. What do you need?", time: '8:01 AM' },
+];
+
+// Prompt chips: one tap fills the composer — the instructor completes the
+// class, subject, or audience before sending (the agent never guesses one).
+const PROMPT_CHIPS = [
+  { label: 'Draft a quiz', fill: 'Draft a 10-question quiz for ' },
+  { label: 'Prep this week\'s activities', fill: 'Prep this week\'s activities — ' },
+  { label: 'Last assignment results', fill: 'How did the last assignment go? ' },
+  { label: 'Weekly routine', fill: 'Schedule a weekly revision draft every ' },
+];
+
+// Chat modes map to the unified agent endpoint's `mode` — the same trio the
+// learner app offers. The label never reaches the API; the id does.
+const CHAT_MODES = [
+  { id: 'default', label: 'Standard', description: 'Balanced everyday support' },
+  { id: 'think', label: 'Deep think', description: 'Slower, step-by-step reasoning' },
+  { id: 'research', label: 'Research', description: 'Leans on syllabus and past questions' },
 ];
 
 const REPLIES = [
@@ -44,6 +111,7 @@ export default function ChatPage() {
   const [messages, setMessages]   = useState(CHAT_INIT);
   const [input, setInput]         = useState('');
   const [isTask, setIsTask]       = useState(false);
+  const [chatMode, setChatMode]   = useState('default');
   const [taskChips, setTaskChips] = useState([]);
   const [toast, setToast]         = useState(null);
   const [myTools, setMyTools]     = useState([]);   // unlocked Tools & Assets
@@ -82,6 +150,81 @@ export default function ChatPage() {
   const feedRef   = useRef(null);
   const attachRef = useRef(null);
   const inputRef  = useRef(null);
+
+  // ── Durable conversations ────────────────────────────────────────────────
+  // The instructor chat shares the learner session store: the server owns the
+  // transcript, a refresh (or a return visit) resumes the last conversation,
+  // and every agent turn carries conversationId + turnId so drafts prepared in
+  // this chat are stamped with its session.
+  const [chatSessions, setChatSessions] = useState([]);
+  const [drawerOpen, setDrawerOpen]     = useState(false);
+  const chatSessionRef     = useRef(null);
+  const creatingSessionRef = useRef(null);
+  const CHAT_BASE = '/api/adaptive/chat';
+  const newTurnId = () => `turn_${(globalThis.crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2)}`)}`;
+
+  const ensureChatSession = (firstText) => {
+    if (chatSessionRef.current) return Promise.resolve(chatSessionRef.current);
+    if (creatingSessionRef.current) return creatingSessionRef.current;
+    creatingSessionRef.current = apiPost(`${CHAT_BASE}/sessions`, { title: firstText || '' })
+      .then((d) => {
+        const id = d?.session?.id ?? null;
+        if (id) { chatSessionRef.current = id; setChatSessions((prev) => [d.session, ...prev]); }
+        return id;
+      })
+      .catch((e) => {
+        // A failed session create used to vanish — sends then went out with no
+        // conversationId and NOTHING was ever persisted, so history always
+        // looked like a brand-new chat. Surface it.
+        console.warn('[chat] session create failed:', e?.message);
+        return null;
+      })
+      .finally(() => { creatingSessionRef.current = null; });
+    return creatingSessionRef.current;
+  };
+
+  const loadChatSessions = () => apiGet(`${CHAT_BASE}/sessions`)
+    .then((d) => { const list = d?.sessions ?? []; setChatSessions(list); return list; })
+    .catch(() => []);
+
+  const openChatSession = async (id) => {
+    setDrawerOpen(false);
+    if (id === chatSessionRef.current) return;
+    try {
+      const d = await apiGet(`${CHAT_BASE}/sessions/${id}/messages`);
+      const msgs = (d?.messages ?? []).map((m) => ({
+        id: m.id,
+        from: m.role === 'user' ? 'me' : 'agent',
+        text: m.text,
+        time: new Date(m.created_at).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' }),
+      }));
+      chatSessionRef.current = id;
+      setMessages(msgs.length ? msgs : CHAT_INIT);
+    } catch (e) {
+      // History failures were once silent — the instructor just saw a fresh
+      // chat and had no way to know the load failed. Say it out loud.
+      console.warn('[chat] open history failed:', e?.message);
+      setToast({ type: 'error', message: 'Could not load that conversation — try again in a moment.' });
+    }
+  };
+
+  const newChat = () => { setDrawerOpen(false); chatSessionRef.current = null; setMessages(CHAT_INIT); setInput(''); };
+
+  const removeChatSession = async (id) => {
+    setChatSessions((prev) => prev.filter((x) => x.id !== id));
+    try { await apiDelete(`${CHAT_BASE}/sessions/${id}`); } catch { /* ignore */ }
+    if (chatSessionRef.current === id) newChat();
+  };
+
+  // On mount: load the session list and resume the most recent conversation
+  // so a refresh (or tomorrow's visit) picks up exactly where things stopped.
+  useEffect(() => {
+    (async () => {
+      const list = await loadChatSessions();
+      if (list.length && !chatSessionRef.current) openChatSession(list[0].id);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Load agent profile ──
   useEffect(() => {
@@ -142,8 +285,8 @@ export default function ChatPage() {
     return () => document.removeEventListener('mousedown', h);
   }, []);
 
-  const pushAgent = useCallback((text) => {
-    setMessages((prev) => [...prev, { id: Date.now() + Math.random(), from: 'agent', text, time: now() }]);
+  const pushAgent = useCallback((text, extra = {}) => {
+    setMessages((prev) => [...prev, { id: Date.now() + Math.random(), from: 'agent', text, time: now(), ...extra }]);
   }, []);
 
   const pushMe = useCallback((text, task = false, chips = []) => {
@@ -188,19 +331,52 @@ export default function ChatPage() {
         pushAgent(REPLIES[Math.floor(Math.random() * REPLIES.length)]);
       }
     } else {
-      // Normal AI chat — OpenAI educational tutor (no tasks/tools)
+      // Normal AI chat — the unified agent endpoint, streamed for live status.
+      const history = [...messages, { from: 'me', text: bodyText }]
+        .map((m) => ({ role: m.from === 'me' ? 'user' : 'assistant', content: m.text }))
+        .slice(-8);
+      // Durable turn: an owned session plus an idempotent turn key — the same
+      // key on the JSON fallback lets the server repair a partial write
+      // instead of duplicating the exchange.
+      const sid = await ensureChatSession(bodyText);
+      const attemptTurn = async (turnId) => {
+        try {
+          return await sendStreaming({ message: bodyText, history, agentName, role: 'instructor', conversationId: sid, turnId, mode: chatMode }, setAiStatus);
+        } catch (streamErr) {
+          console.warn('[chat] stream unavailable, using JSON reply:', streamErr.message);
+          return await apiPost('/api/adaptive/chat/agent', { message: bodyText, history, agentName, role: 'instructor', conversationId: sid, turnId, mode: chatMode });
+        } finally { setAiStatus(''); }
+      };
+      let data;
       try {
-        const history = [...messages, { from: 'me', text: bodyText }]
-          .map((m) => ({ role: m.from === 'me' ? 'user' : 'assistant', content: m.text }))
-          .slice(-8);
-        const data = await apiPost('/api/adaptive/chat/tutor', {
-          message: bodyText, history, agentName, role: 'instructor',
-        });
-        pushAgent(data.reply || data.response || "I'm here to help with teaching and your subjects — what would you like to explore?");
+        data = await attemptTurn(newTurnId());
       } catch (e) {
-        console.warn('[chat] tutor reply failed:', e.message);
-        pushAgent('Sorry — I had trouble responding just now. Please try again.');
+        // One quiet retry on a fresh turn key — a dropped stream or a cold
+        // model call is usually transient. The failed turn can have applied
+        // nothing durably, so a fresh key cannot double-apply anything.
+        try {
+          setAiStatus('Thinking…');
+          await new Promise((r) => setTimeout(r, 1200));
+          data = await attemptTurn(newTurnId());
+        } catch {
+          setAiStatus('');
+          console.warn('[chat] tutor reply failed:', e.message);
+          pushAgent('Sorry — I had trouble responding just now. Please try again.');
+          return;
+        }
       }
+      // Human-in-the-loop: a successful prepare/revise execution rides
+      // with the reply as a draft echo — render its Preview affordance.
+      const previews = (data.toolExecutions || [])
+        .filter((x) => (x.tool === 'prepare_activity' && x.success || x.tool === 'revise_activity_draft' && x.revised) && x.draft)
+        .map((x) => x.draft);
+      (data.toolExecutions || [])
+        .filter((x) => x.tool === 'revise_activity_draft' && x.revised && x.draft)
+        .forEach((x) => setDraftRevisions((prev) => ({ ...prev, [x.draft.id]: (prev[x.draft.id] || 0) + 1 })));
+      pushAgent(
+        data.reply || data.response || "I'm here to help with teaching and your subjects — what would you like to explore?",
+        previews.length ? { previews } : {},
+      );
     }
   };
 
@@ -315,6 +491,60 @@ export default function ChatPage() {
     }
   };
 
+  // ── Human-in-the-loop preview — side-by-side with the chat ──────────────
+  const [previewDraft, setPreviewDraft] = useState(null);   // draft id or null
+  const [aiStatus, setAiStatus] = useState('');             // live tool status ("Resolving your class…")
+  const [draftStates, setDraftStates] = useState({});       // { [id]: 'assigned'|'discarded' }
+  const [draftRevisions, setDraftRevisions] = useState({}); // { [id]: bump count }
+  // Resolutions are pushed as chat messages: the instructor sees the outcome,
+  // and because replies ride the history, the agent knows it too next turn —
+  // it can then confirm to the instructor that the work was assigned (the
+  // LEARNERS are notified by the platform itself at assign time, not by the agent).
+  const resolveDraft = (id, state) => {
+    setDraftStates((prev) => ({ ...prev, [id]: state }));
+    pushAgent(state === 'assigned'
+      ? '✅ Assigned — the learners on this draft have been notified and it is on their Activities feed.'
+      : '🗑️ Draft discarded — nothing was sent to anyone.');
+  };
+
+  // Streaming status: the agent endpoint speaks SSE (status events while the
+  // tool loop runs — drafting plans, resolving classes). Falls back to the
+  // plain JSON reply if the stream never starts; the reply handling after is
+  // identical for both.
+  const sendStreaming = async (payload, onStatus) => {
+    const res = await fetch(`${API}/api/adaptive/chat/agent?stream=1`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.body) throw new Error('Streaming is not available');
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '', finalData = null;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf('\n\n')) !== -1) {
+        const block = buf.slice(0, idx);
+        buf = buf.slice(idx + 2);
+        const dataLine = block.split('\n').find((l) => l.startsWith('data: '));
+        const isDone = block.split('\n').some((l) => l.startsWith('event: done'));
+        if (!dataLine) continue;
+        try {
+          const evt = JSON.parse(dataLine.slice(6));
+          if (isDone) finalData = evt;
+          else onStatus(evt.label || '');
+        } catch { /* keep-alive or partial frame */ }
+      }
+    }
+    if (!finalData) throw new Error('The stream ended without a reply');
+    return finalData;
+  };
+
   const hasInput = taskChips.length > 0 || input.trim().length > 0;
 
   return (
@@ -336,9 +566,19 @@ export default function ChatPage() {
         .ci-attach-item:hover{background:${LIGHT}}
         .ci-typing{display:inline-block;width:6px;height:6px;border-radius:50%;background:${MUTED2};margin:0 2px;animation:ciTyping 1.4s infinite ease-in-out}
         @keyframes ciTyping{0%,80%,100%{transform:scale(0);opacity:0}40%{transform:scale(1);opacity:1}}
+        /* Fortizo split (matches the learner's reader + session view): the
+           preview docks BESIDE the chat from 768px up — a laptop at 125%
+           zoom is still a two-pane screen, never a modal. Only phones and
+           small tablets (the learner's useIsMobileView threshold) take
+           over the full screen. */
+        @media (max-width: 767px){
+          .ci-preview-panel{position:fixed;inset:0;width:100%!important;z-index:400;background:#F7F5F1;padding:12px}
+        }
       `}</style>
 
-      <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 150px)' }}>
+      <div style={{ maxWidth: previewDraft ? 'min(1180px, 97vw)' : 720, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 150px)' }}>
+        <div style={{ display: 'flex', gap: 14, flex: 1, minHeight: 0 }}>
+        <div className="ci-chat-col" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
 
         {/* Agent header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: WHITE, borderRadius: 16, border: bdr(1, BORDER), marginBottom: 12 }}>
@@ -352,9 +592,32 @@ export default function ChatPage() {
               </div>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 6, position: 'relative' }}>
             <Btn variant="secondary" size="sm" onClick={() => { setDraftName(agentName); setDraftEmoji(agentEmoji); setCustModal(true); }}><Edit3 size={13} />Edit</Btn>
+            <Btn variant="secondary" size="sm" onClick={() => setDrawerOpen((p) => !p)}><History size={13} />History</Btn>
             <Btn variant="primary" size="sm" onClick={() => setTrainModal(true)}><Brain size={13} />Train</Btn>
+            {drawerOpen && (
+              <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', width: 300, maxHeight: 340, overflowY: 'auto', background: WHITE, border: bdr(1, BORDER), borderRadius: 14, boxShadow: '0 12px 32px rgba(23,23,23,.14)', padding: 6, zIndex: 40 }}>
+                <button onClick={newChat} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 10px', border: 'none', background: 'rgba(232,136,74,.08)', borderRadius: 10, cursor: 'pointer', fontSize: 12.5, fontWeight: 800, color: AMBER, fontFamily: FONT }}>
+                  <Plus size={13} /> New chat
+                </button>
+                {chatSessions.length > 0 && <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: .5, color: MUTED2, textTransform: 'uppercase', padding: '10px 10px 4px' }}>Past conversations</div>}
+                {chatSessions.map((sess) => (
+                  <div key={sess.id} onClick={() => openChatSession(sess.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 10, cursor: 'pointer' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = LIGHT; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sess.title || 'New chat'}</div>
+                      <div style={{ fontSize: 10.5, color: MUTED2 }}>{new Date(sess.last_message_at).toLocaleDateString('en-NG', { month: 'short', day: 'numeric' })}</div>
+                    </div>
+                    <button onClick={(e) => { e.stopPropagation(); removeChatSession(sess.id); }} title="Delete conversation"
+                      style={{ border: 'none', background: 'none', cursor: 'pointer', color: MUTED2, padding: 4, display: 'flex' }}><X size={12} /></button>
+                  </div>
+                ))}
+                {chatSessions.length === 0 && <div style={{ padding: '10px', fontSize: 11.5, color: MUTED2 }}>Conversations you have with your agent will appear here.</div>}
+              </div>
+            )}
           </div>
         </div>
 
@@ -405,9 +668,33 @@ export default function ChatPage() {
                         ))}
                       </div>
                     )}
-                    {textPart && <span style={{ whiteSpace: 'pre-wrap' }}>{textPart}</span>}
+                    {textPart && (isMe
+                      ? <span style={{ whiteSpace: 'pre-wrap' }}>{textPart}</span>
+                      : <RichText text={textPart} color={INK} />)}
                   </div>
-                  <div style={{ fontSize: 10, color: MUTED2, marginTop: 3, textAlign: isMe ? 'right' : 'left' }}>{msg.time}</div>
+                  {!isMe && (msg.previews || []).length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                      {msg.previews.map((d, pi) => {
+                        const st = draftStates[d.id];
+                        return (
+                          <button key={d.id} disabled={!!st} onClick={() => setPreviewDraft(d.id)}
+                            title={st ? undefined : 'Preview this draft — assigning is your call'}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 20, cursor: st ? 'default' : 'pointer', fontFamily: FONT, fontSize: 11, fontWeight: 800,
+                              border: st === 'assigned' ? '1px solid #BBF7D0' : st === 'discarded' ? `1px solid ${BORDER}` : '1px solid rgba(168,85,247,.45)',
+                              background: st === 'assigned' ? '#DCFCE7' : st === 'discarded' ? LIGHT : 'rgba(168,85,247,.08)',
+                              color: st === 'assigned' ? GREEN : st === 'discarded' ? MUTED2 : PURPLE }}>
+                            {st === 'assigned' ? <><CheckCircle2 size={12} /> Assigned ✓</>
+                              : st === 'discarded' ? <>Discarded</>
+                              : <><Eye size={12} /> {msg.previews.length > 1 ? `Preview ${pi + 1}` : 'Preview'} — {d.title}</>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 10, color: MUTED2, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
+                    {msg.time}
+                    <CopyMsgButton text={textPart} />
+                  </div>
                 </div>
               </div>
             );
@@ -439,10 +726,26 @@ export default function ChatPage() {
               </div>
             </div>
           )}
+          {!trainingInChat && aiStatus && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '-4px 0 0 36px' }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: AMBER, display: 'inline-block', animation: 'ciTyping 1.4s infinite ease-in-out' }} />
+              <span style={{ fontSize: 11, fontWeight: 700, color: MUTED, fontFamily: FONT }}>{aiStatus}</span>
+            </div>
+          )}
         </div>
 
         {/* Input bar */}
         <div style={{ paddingTop: 10 }}>
+          {!isTask && input === '' && (
+            <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8 }}>
+              {PROMPT_CHIPS.map((chip) => (
+                <button key={chip.label} className="ci-qp" onClick={() => { setInput(chip.fill); inputRef.current?.focus(); }}
+                  title="Tap to fill the composer — complete the details before sending">
+                  {chip.label}
+                </button>
+              ))}
+            </div>
+          )}
           {isTask && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderRadius: 10, background: 'rgba(232,136,74,.1)', border: bdr(1, 'rgba(232,136,74,.3)'), marginBottom: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><CheckSquare size={12} color={AMBER} /><span style={{ fontSize: 11.5, fontWeight: 700, color: AMBER }}>Sending as task</span></div>
@@ -450,13 +753,38 @@ export default function ChatPage() {
             </div>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, background: LIGHT, borderRadius: taskChips.length > 0 ? 18 : 50, border: bdr(1.5, isTask ? AMBER : BORDER), padding: taskChips.length > 0 ? '10px 10px 8px 12px' : '6px 8px', minHeight: 50 }}>
-            <div ref={attachRef} style={{ position: 'relative', flexShrink: 0, alignSelf: 'flex-end' }}>
-              <button onClick={() => setAttachMenu((p) => !p)} style={{ width: 32, height: 32, borderRadius: '50%', background: attachMenu ? 'rgba(232,136,74,.15)' : WHITE, border: bdr(1, attachMenu ? AMBER : BORDER), display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                <Plus size={14} color={attachMenu ? AMBER : MUTED2} />
-              </button>
-              {attachMenu && (
-                <div className="ci-attach-menu">
+          {/* Tool chips (unlocked agent tools) render above the composer. */}
+          {taskChips.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, paddingBottom: 8 }}>
+              {taskChips.map((chip) => (
+                <span key={chip} className="ci-task-chip"><CheckSquare size={9} />{chip}<button onClick={() => removeChip(chip)} tabIndex={-1}><X size={9} /></button></span>
+              ))}
+            </div>
+          )}
+
+          <div style={{ position: 'relative' }}>
+            <FortizoChatComposer
+              value={input}
+              onChange={setInput}
+              onSend={send}
+              inputRef={inputRef}
+              placeholder={taskChips.length > 0 ? 'Add a note… (optional)' : `Ask ${agentName} anything…`}
+              sendDisabled={!hasInput}
+              taskAction={() => setIsTask((p) => !p)}
+              taskActive={isTask}
+              taskLabel="Mark as task"
+              attachmentAction={() => setAttachMenu((p) => !p)}
+              attachmentLabel="Attach — photo OCR, file, or document"
+              voiceLabel="Voice input is not available in the instructor console yet"
+              audioLabel="Audio notes are not available in the instructor console yet"
+              modelId={chatMode}
+              modelLabel={CHAT_MODES.find((o) => o.id === chatMode)?.label || 'Standard'}
+              modelOptions={CHAT_MODES}
+              onModelChange={setChatMode}
+              modelLabelDescription="Choose a supported chat mode"
+            />
+            {attachMenu && (
+              <div className="ci-attach-menu">
                   {[
                     { icon: <Camera size={15} color={GREEN} />, label: 'Photo / Image OCR', desc: 'Scan & extract text', act: () => { setAttachType('ocr'); setAttachModal(true); setAttachMenu(false); } },
                     { icon: <Upload size={15} color={PURPLE} />, label: 'Upload file', desc: 'PDF, Word, Excel…', act: () => { setAttachType('file'); setAttachModal(true); setAttachMenu(false); } },
@@ -475,31 +803,19 @@ export default function ChatPage() {
                 </div>
               )}
             </div>
+        </div>
+        </div>
 
-            <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, minWidth: 0 }}>
-              {taskChips.map((chip) => (
-                <span key={chip} className="ci-task-chip"><CheckSquare size={9} />{chip}<button onClick={() => removeChip(chip)} tabIndex={-1}><X size={9} /></button></span>
-              ))}
-              <input
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-                  if (e.key === 'Backspace' && input === '' && taskChips.length > 0) removeChip(taskChips[taskChips.length - 1]);
-                }}
-                placeholder={taskChips.length > 0 ? 'Add a note… (optional)' : `Ask ${agentName} anything…`}
-                style={{ flex: 1, minWidth: 80, background: 'transparent', border: 'none', outline: 'none', fontSize: 13, color: INK, fontFamily: FONT, padding: '2px 0' }}
-              />
-            </div>
-
-            <button onClick={() => setIsTask((p) => !p)} title="Mark as task" style={{ width: 30, height: 30, borderRadius: '50%', background: isTask ? 'rgba(232,136,74,.15)' : LIGHT, border: bdr(1, isTask ? AMBER : BORDER), display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, alignSelf: 'flex-end' }}>
-              <CheckSquare size={13} color={isTask ? AMBER : MUTED2} />
-            </button>
-            <button onClick={send} disabled={!hasInput} style={{ width: 34, height: 34, borderRadius: '50%', background: hasInput ? AMBER : BORDER, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: hasInput ? 'pointer' : 'default', flexShrink: 0, alignSelf: 'flex-end' }}>
-              <Send size={14} color={WHITE} />
-            </button>
+        {previewDraft && (
+          <div className="ci-preview-panel" style={{ width: 430, maxWidth: '46vw', flexShrink: 0, minHeight: 0 }}>
+            <ActivityPreviewPanel
+              draftId={previewDraft}
+              revision={draftRevisions[previewDraft] || 0}
+              onClose={() => setPreviewDraft(null)}
+              onResolved={resolveDraft}
+            />
           </div>
+        )}
         </div>
       </div>
 

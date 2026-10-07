@@ -1,25 +1,22 @@
 import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
-import { API,  apiGet, apiPost, apiPatch, apiDelete, streamPost } from '../../services/api.js';
-import { putAgent } from '../../services/settingsApi.js';
+import { apiGet, apiPost, apiDelete, streamPost } from '../../services/api.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
-import { SendIcon, ZapIcon, BrainIcon, SparkleIcon, XIcon, Icon } from '../common/Icons.jsx';
+import { ZapIcon, BrainIcon, SparkleIcon, XIcon, Icon } from '../common/Icons.jsx';
+import { AgentAvatar } from '../common/AgentAvatar.jsx';
+import FortizoChatComposer from '../common/FortizoChatComposer.jsx';
+import RichText from '../common/RichText.jsx';
+import CopyMessageButton from '../common/CopyMessageButton.jsx';
 import { useTaskAPI } from '../../hooks/useTaskAPI.js';
 import NoAgentSheet, { isNoAgentError } from '../battles/NoAgentSheet.jsx';
 import { confirmDialog } from '../common/ConfirmHost.jsx';
-import { formatTaskOutputs } from '../../utils/formatTaskOutput.js';
 import AgentStatsTab from './AgentStatsTab.jsx';
-
-// Detect when a chat message should run an agentic task (student tools).
-// Mirrors the backend intent keywords so the agent acts instead of just chatting.
-const TASK_INTENTS = [
-  /\bquiz me\b/i, /\btest me\b/i, /\bpractice questions?\b/i,
-  /\bexplain\b/i, /\bwhat is\b/i, /\bteach me\b/i, /\bhelp me understand\b/i,
-  /\bstudy plan\b/i, /\brevision plan\b/i, /\bplan my\b/i,
-  /\bremind me\b/i, /\bset a reminder\b/i,
-  /\bchallenge\b/i, /\bduel\b/i, /\bcompete with\b/i,
-];
-const isTaskIntent = (text) => TASK_INTENTS.some((re) => re.test(text));
+import { agentChatEndpoint, createAgentChatTurnId } from '../../lib/agentChatEndpoint.js';
+import StreamCaret from '../common/StreamCaret.jsx';
+import Spinner from '../common/Spinner.jsx';
+import { useInFlight } from '../../hooks/useInFlight.js';
+import StudyPrepChatCard from './studyPrep/StudyPrepChatCard.jsx';
+import { fetchActiveStudyPrepSession } from '../../services/studyPrepApi.js';
 
 const QUICK_PROMPTS = [
   { text:"Create a task for me", key:"agent.qp_create" },
@@ -40,9 +37,6 @@ const relTime = (iso) => {
   return new Date(iso).toLocaleDateString([], { month: "short", day: "numeric" });
 };
 
-const AGENT_AVATARS = ["🤖","🧠","👾","🦉","🎓","⚡","🌟","🔮","🦋","🎯","🚀","💡"];
-const AGENT_CONFIG = { name: '', avatars: AGENT_AVATARS };
-
 /* Collapsible "Thought process" — the reasoning model's streamed summary.
    While the thoughts are still streaming it sits open (with a live shimmer);
    once the answer starts (or the learner toggles it) it collapses. */
@@ -62,14 +56,19 @@ function ThoughtBlock({ thinking, streaming }) {
       </button>
       {expanded && (
         <div style={{ maxHeight: 150, overflowY: "auto", padding: "2px 12px 9px", fontSize: 11.5, lineHeight: 1.55, color: "var(--ak-text-muted)", whiteSpace: "pre-wrap", fontStyle: "italic" }}>
-          {thinking || "…"}
+          {thinking || "…"}{streaming && expanded && <StreamCaret/>}
         </div>
       )}
     </div>
   );
 }
 
-function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActive }) {
+function AgentChatTab({
+  onStartTeach, onStartExamPrep, onOpenConceptTracker, onOpenAdaptiveControls, agentNameProp, agentEmojiProp, onChatActive,
+  agentOnline = false, agentAutonomyLoaded = false, agentAutonomySaving = false,
+  onToggleAgentAutonomy,
+  agentActivity = null,
+}) {
   const { t } = useLang();
   const initName  = agentNameProp  || '';
   const initEmoji = agentEmojiProp || '🤖';
@@ -77,7 +76,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
   // Greeting message — uses real agent name from parent
   const greeting = (name, emoji) => ({
     id:1, from:"agent",
-    text: t('agent.greeting').replace('{user}','').replace('Hi !','Hi!').replace('{name}',name).replace('{emoji}',emoji),
+    text: t('agent.greeting').replace('{user}','').replace('Hi !','Hi!').replace('{name}',name),
     time: new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}),
   });
 
@@ -86,11 +85,15 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
   const [loading,    setLoading]    = useState(false);
   const [agentName,  setAgentName]  = useState(initName);
   const [agentEmoji, setAgentEmoji] = useState(initEmoji);
-  const [custOpen,   setCustOpen]   = useState(false);
-  const [draftName,  setDraftName]  = useState(initName);
-  const [draftEmoji, setDraftEmoji] = useState(initEmoji);
   const [innerTab,   setInnerTab]   = useState("chat");
   const shownName = agentName || t('agent.learning_agent');
+  // The status line: Idle is the resting state — it swaps to the live
+  // background label ("Reviewing your goals…") while the agent works,
+  // and says offline when the consent is off. Transient states first.
+  const autonomyStatus = !agentAutonomyLoaded ? "Checking agent…"
+    : agentAutonomySaving ? "Saving…"
+    : !agentOnline ? "Agent offline"
+    : agentActivity || "Idle";
   const [taskOpen,   setTaskOpen]   = useState(false);
   const [taskFilter, setTaskFilter] = useState("pending");
   const [tTitle,     setTTitle]     = useState("");
@@ -161,6 +164,11 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
   const [sessionId,     setSessionId]     = useState(null);
   const [drawerOpen,    setDrawerOpen]    = useState(false);
   const [sessionsLoading, setSessionsLoading] = useState(false);
+  // A failed history load must never look like an EMPTY history — that exact
+  // confusion hid the persistence bug for weeks ("my chats are gone" vs "the
+  // list didn't load"). { kind:"sessions" } = the past-chats list failed;
+  // { kind:"messages", sessionId } = one conversation's messages failed.
+  const [historyError,  setHistoryError]  = useState(null);
   const sessionIdRef = useRef(null);
   const creatingRef  = useRef(null);   // in-flight create → avoids double sessions
   const setSession = (id) => { sessionIdRef.current = id; setSessionId(id); };
@@ -172,8 +180,15 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
     try {
       const d = await apiGet(`${CHAT_BASE}/sessions`);
       setSessions(d?.sessions ?? []);
+      setHistoryError(null);
       return d?.sessions ?? [];
-    } catch { return []; }
+    } catch {
+      // apiGet only throws when BOTH the network and the offline cache came
+      // up empty — show the banner so "couldn't load" is never mistaken for
+      // "you have no past chats".
+      setHistoryError({ kind: "sessions" });
+      return [];
+    }
     finally { setSessionsLoading(false); }
   };
 
@@ -193,12 +208,6 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
     return creatingRef.current;
   };
 
-  const persistToSession = async (sid, role, text) => {
-    if (!sid || !text) return;
-    try { await apiPost(`${CHAT_BASE}/sessions/${sid}/messages`, { role, text }); }
-    catch { /* non-critical — chat still works in-memory */ }
-  };
-
   const openSession = async (id) => {
     setDrawerOpen(false);
     if (id === sessionIdRef.current) return;
@@ -212,13 +221,29 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
       }));
       setSession(id);
       setMessages(msgs.length ? msgs : [greeting(agentName, agentEmoji)]);
-    } catch { /* keep current view on failure */ }
+      setHistoryError(null);
+    } catch {
+      // Keep the current view, but SAY so — a silent failure here looks
+      // exactly like "this conversation is empty" and learners conclude
+      // their chat is gone. The transcript is safe server-side.
+      setHistoryError({ kind: "messages", sessionId: id });
+    }
+  };
+
+  // Retry the exact load that failed: the sessions list, or the one
+  // conversation that could not be opened.
+  const retryHistoryLoad = () => {
+    const failed = historyError;
+    setHistoryError(null);
+    if (failed?.kind === "messages" && failed.sessionId) openSession(failed.sessionId);
+    else loadSessions().then((list) => { if (list.length && !sessionIdRef.current) openSession(list[0].id); });
   };
 
   const newChat = () => {
     setDrawerOpen(false);
     setSession(null);
     setMessages([greeting(agentName, agentEmoji)]);
+    setHistoryError(null);
   };
 
   const removeSession = async (id, e) => {
@@ -238,73 +263,83 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const { tasks, loading: tasksLoading, createTask, updateTask, toggleTask, deleteTask, getOutputs } = useTaskAPI();
+  const { tasks, createTask, updateTask, toggleTask, deleteTask, refetch: refetchTasks,
+    suggestions, refetchSuggestions, acceptSuggestion: acceptSuggestionApi, dismissSuggestion: dismissSuggestionApi } = useTaskAPI();
 
-  // Socket for instant task results; resolvers map taskId → fn called on push.
-  const socketRef       = useRef(null);
-  const taskResolvers   = useRef(new Map());
+  // Full Autonomy (level 2): the background planner's proposals land in the
+  // SAME inbox as chat suggestions. Only approval executes — the backend
+  // replays the proposal through the exact tool the chat itself uses.
+  const [proposals,setProposals]=useState([]);
+  const [proposalBusyId,setProposalBusyId]=useState(null);
+  const pendingProposals=proposals.filter(p=>p.status==="proposed");
+  const suggestionCount=suggestions.length+pendingProposals.length;
+  const refetchProposals=async()=>{ try{ const d=await apiGet('/api/agent/proposals'); setProposals(Array.isArray(d?.data)?d.data:[]); }catch{} };
+  useEffect(()=>{ refetchProposals(); },[]);
+  const approveProposal=async(p)=>{
+    if(proposalBusyId) return;
+    setProposalBusyId(p.id); setListError("");
+    try {
+      const d=await apiPost(`/api/agent/proposals/${p.id}/approve`,{});
+      setProposals(prev=>prev.map(x=>x.id===p.id?{...x,status:'executed'}:x));
+      if(p.kind==='session') pushAgent(t('agent.proposal_done_session'));
+      else if(p.kind==='goal') pushAgent(t('agent.proposal_done_goal').replace('{title}',d?.data?.title||p.title));
+      else { pushAgent(t('agent.proposal_done_task').replace('{title}',d?.data?.title||p.title)); refetchTasks(); }
+    } catch(e){ setListError(e?.message||t('agent.proposal_failed')); refetchProposals(); }
+    finally{ setProposalBusyId(null); }
+  };
+  const dismissProposal=async(p)=>{
+    if(proposalBusyId) return;
+    setProposalBusyId(p.id); setListError("");
+    try { await apiPost(`/api/agent/proposals/${p.id}/dismiss`,{}); setProposals(prev=>prev.filter(x=>x.id!==p.id)); }
+    catch(e){ setListError(e?.message||t('agent.proposal_failed')); }
+    finally{ setProposalBusyId(null); }
+  };
+
+  // Agent suggestions: accept turns the idea into a real task (the agent
+  // confirms it in the transcript, like a task the learner assigned); dismiss
+  // just closes the idea. Both are optimistic and server-reconciled.
+  const acceptSuggestion=async(sg)=>{
+    setListError("");
+    try {
+      const d=await acceptSuggestionApi(sg);
+      pushAgent(t('agent.suggestion_added').replace('{title}',d?.task?.title||sg.title));
+    } catch(e){ setListError(e?.message||"Couldn't add that suggestion."); refetchSuggestions(); }
+  };
+  const dismissSuggestion=async(sg)=>{
+    setListError("");
+    try { await dismissSuggestionApi(sg.id); }
+    catch(e){ setListError(e?.message||"Couldn't dismiss that suggestion."); }
+  };
 
   const pushAgent = (text) => {
     const t = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     setMessages(prev => [...prev, { id: Date.now() + Math.random(), from: "agent", text, time: t }]);
   };
 
-  // Connect to the backend WebSocket and listen for task lifecycle events.
-  // The worker emits task.completed / task.failed to room user:<studentId>.
-  useEffect(() => {
-    let socket;
-    try {
-      if (typeof window !== 'undefined' && window.io) {
-        socket = window.io(API, { transports: ['websocket', 'polling'], withCredentials: true });
-        socketRef.current = socket;
-        socket.on('connect', () => {
-          socket.emit('subscribe-student', STUDENT_ID);
-          socket.emit('join-student-room',  STUDENT_ID);
-        });
-        socket.on('task.completed', (p) => { const r = taskResolvers.current.get(p?.taskId); if (r) r({}); });
-        socket.on('task.failed',    (p) => { const r = taskResolvers.current.get(p?.taskId); if (r) r({ failed: true }); });
-      }
-    } catch { /* WS unavailable — polling still works */ }
-    return () => socket?.disconnect?.();
-  }, []);
-
-  // Resolve as soon as EITHER the socket pushes completion OR polling finds
-  // outputs (whichever is first), with a hard timeout. Deduped via `settled`.
-  const waitForTask = (taskId, { timeoutMs = 60000, intervalMs = 2500 } = {}) =>
-    new Promise((resolve) => {
-      let settled = false;
-      const cleanup = () => taskResolvers.current.delete(taskId);
-      const finish  = (val) => { if (!settled) { settled = true; cleanup(); resolve(val); } };
-
-      // Fast path: socket push
-      taskResolvers.current.set(taskId, async (evt) => {
-        if (evt?.failed) return finish({ failed: true });
-        const outputs = await getOutputs(taskId);
-        finish({ outputs });
-      });
-
-      // Fallback path: poll
-      const deadline = Date.now() + timeoutMs;
-      const tick = async () => {
-        if (settled) return;
-        const outputs = await getOutputs(taskId);
-        if (outputs.length) return finish({ outputs });
-        const fresh = await apiGet(`/api/tasks/${taskId}`).catch(() => null);
-        if (fresh?.task?.status === 'failed') return finish({ failed: true });
-        if (Date.now() > deadline) return finish({ timedOut: true });
-        setTimeout(tick, intervalMs);
-      };
-      setTimeout(tick, intervalMs);
-    });
-
   const PRI_COLOR = {high:RED,medium:GOLD,low:GREEN};
   const PRI_LABEL = {high:t('agent.pri_high_label'),medium:t('agent.pri_medium_label'),low:t('agent.pri_low_label')};
   const PRI_BG    = {high:`${RED}15`,medium:`${GOLD}15`,low:`${GREEN}15`};
 
-  // Update greeting when agent name changes (customise flow)
-  const updateAgentName = (name, emoji) => {
-    setAgentName(name); setAgentEmoji(emoji);
-  };
+  // The study-prep session is the durable layer — it outlives chats. On mount,
+  // restore an active session as an agent message carrying the session card,
+  // exactly like a fresh start_study_prep_session tool echo would.
+  useEffect(() => {
+    let cancelled = false;
+    fetchActiveStudyPrepSession()
+      .then((response) => {
+        if (cancelled || !response?.session?.id) return;
+        setMessages((prev) => prev.some((m) => m.studyPrepSessionId === response.session.id) ? prev : [...prev, {
+          id: `study-prep-${response.session.id}`,
+          from: "agent",
+          text: "Your study-prep session is active — pick up where you left off:",
+          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          phase: "done",
+          studyPrepSessionId: response.session.id,
+        }]);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   // The parent fetches the agent profile asynchronously; if it resolves after
   // this tab mounts, sync the incoming name/emoji so the header isn't blank.
@@ -342,48 +377,27 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
     setMessages(prev=>[...prev,userMsg]); setLoading(true);
     setAttachError(""); setStatusLabel("");
 
-    // Persist the user message (creating the session on first send). Errors are
-    // swallowed inside the helpers so the chat still works offline.
+    // Every learner turn uses the one unified Agent endpoint. It creates an
+    // owned session before the request, then the API—not browser intent regexes
+    // or separate persistence writes—selects direct tutoring or an authorised
+    // tool and commits the completed turn.
     const sid = await ensureSession(text);
-    persistToSession(sid, "user", text);
-    // Show an agent bubble AND persist it, so a refresh reloads the same text.
-    const say = (txt) => { pushAgent(txt); persistToSession(sid, "agent", txt); };
-
-    // Agentic task intents ("quiz me", "explain…", "study plan", "remind me",
-    // "challenge…") run a real task and stream the result back into the chat.
-    // With attachments in play the message is about THOSE files — always tutor.
-    if(!sentAttachments.length && isTaskIntent(text)){
-      pushAgent(t('agent.error_working'));   // transient status — not persisted
-      try {
-        const task = await createTask({ title: text, priority: "medium" });
-        if(!task?.id) throw new Error("no task");
-        const { outputs, failed, timedOut } = await waitForTask(task.id);
-        if(failed){
-          say(t('agent.error_problem'));
-        } else if(timedOut){
-          say(t('agent.error_timeout'));
-        } else {
-          const texts = formatTaskOutputs(outputs);
-          if(texts.length) texts.forEach(say);
-          else say(t('agent.all_done_tasks'));
-        }
-      } catch {
-        say(t('agent.error_task'));
-      }
+    if (!sid) {
+      pushAgent(t('agent.error_connection'));
       setLoading(false);
       return;
     }
-
-    // Normal AI chat — OpenAI educational tutor. mode: "think" runs a
-    // reasoning model (its thought summary streams separately), "research" a
-    // deeper grounded pass. Attachments: images → vision, PDFs/text → context.
     const mode = thinkMode ? "think" : researchMode ? "research" : "default";
     const statusKey = { grounding:'agent.status_grounding', attachments:'agent.status_attachments', thinking:'agent.status_thinking', synthesis:'agent.status_synthesis' };
     const attachmentsPayload = await Promise.all(sentAttachments.map(async (a) => ({
       name: a.name, type: a.file.type || "", dataUrl: await fileToDataUrl(a.file),
     })));
-    const history=[...messages,userMsg].map(m=>({role:m.from==="me"?"user":"assistant",content:m.text}));
-    const payload={ message: text, history: history.slice(-8), agentName, role: "student", mode,
+    const history = messages.map(m => ({ role: m.from === "me" ? "user" : "assistant", content: m.text }));
+    // A retry keeps the same opaque key for this send, allowing the server's
+    // durable turn contract to repair a partial write without duplicate rows.
+    const turnId = createAgentChatTurnId();
+    const payload = { message: text, history: history.slice(-24), agentName, mode,
+      conversationId: sid, turnId,
       ...(attachmentsPayload.length ? { attachments: attachmentsPayload } : {}) };
     const t2=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
     const replyId=Date.now()+Math.random();
@@ -405,13 +419,18 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
     };
     let finalReply="";
     try {
-      finalReply = await streamPost("/api/adaptive/chat/tutor?stream=1", payload, {
+      finalReply = await streamPost(agentChatEndpoint({ stream: true }), payload, {
         onDelta: appendDelta,
         onThinking: appendThinking,
         onStatus: (s)=>{ if(!started) setStatusLabel(t(statusKey[s?.step]||"") || s?.label || ""); },
-        onDone: ({ reply, syllabus, pastQuestions, thinking })=>{
+        onDone: ({ reply, syllabus, pastQuestions, thinking, toolExecutions })=>{
           ensureBubble(); setStatusLabel("");
-          setMessages(prev=>prev.map(m=>m.id===replyId?{...m,...(reply!=null?{text:reply}:{}),thinking:thinking||m.thinking,syllabus:syllabus||[],pastQuestions:pastQuestions||[],phase:"done"}:m));
+          // Study-prep sessions ride the reply as a session echo (the
+          // activity-draft pattern) — render the interactive session card.
+          const studyPrepSession = (toolExecutions || []).find((entry) => entry?.session?.id && entry?.success)?.session || null;
+          setMessages(prev=>prev.map(m=>m.id===replyId?{...m,...(reply!=null?{text:reply}:{}),thinking:thinking||m.thinking,syllabus:syllabus||[],pastQuestions:pastQuestions||[],phase:"done",...(studyPrepSession?{studyPrepSessionId:studyPrepSession.id}:{})}:m));
+          if ((toolExecutions || []).some((entry) => entry?.tool === "create_task" && entry?.success)) refetchTasks();
+          if ((toolExecutions || []).some((entry) => entry?.tool === "suggest_help" && entry?.success)) refetchSuggestions();
         },
       });
       if(!started){ // stream produced nothing — show fallback text
@@ -419,35 +438,31 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
         setMessages(prev=>[...prev,{id:replyId,from:"agent",text:finalReply,time:t2}]);
       }
     } catch {
-      // Streaming failed before any token — try a normal request, then error.
+      // Streaming failed before any token — retry the same idempotent turn in
+      // normal JSON form, then show a connection error only if that also fails.
       setStatusLabel("");
       if(!started){
         try {
-          const data = await apiPost("/api/adaptive/chat/tutor", payload);
+          const data = await apiPost(agentChatEndpoint(), payload);
           finalReply = data.reply || data.response || t('agent.fallback');
           setMessages(prev=>[...prev,{id:replyId,from:"agent",text:finalReply,time:t2,
             thinking:data.thinking||"",syllabus:data.syllabus||[],pastQuestions:data.pastQuestions||[]}]);
+          const studyPrepSessionFallback = (data?.toolExecutions || []).find((entry) => entry?.session?.id && entry?.success)?.session || null;
+          if (studyPrepSessionFallback) {
+            setMessages(prev=>prev.map(m=>m.id===replyId?{...m,studyPrepSessionId:studyPrepSessionFallback.id}:m));
+          }
+          if ((data?.toolExecutions || []).some((entry) => entry?.tool === "create_task" && entry?.success)) refetchTasks();
+          if ((data?.toolExecutions || []).some((entry) => entry?.tool === "suggest_help" && entry?.success)) refetchSuggestions();
         } catch {
           finalReply="";
           setMessages(prev=>[...prev,{id:replyId,from:"agent",text:t('agent.error_connection'),time:t2}]);
         }
       }
     }
-    if(finalReply && finalReply.trim()) persistToSession(sid, "agent", finalReply);
     // Attachments are consumed by this message; free the preview URLs.
     sentAttachments.forEach(a=>a.previewUrl&&URL.revokeObjectURL(a.previewUrl));
     setAttachments([]);
     setLoading(false);
-  };
-
-  const saveCustomise=()=>{
-    const name=draftName||agentName||'My Agent';
-    updateAgentName(name, draftEmoji);
-    // Persist to backend (non-critical). The endpoint is a PUT upsert; POST 404s.
-    putAgent({ name, emoji: draftEmoji }).catch(()=>{});
-    setCustOpen(false);
-    const t2=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
-    setMessages(prev=>[...prev,{id:Date.now(),from:"agent",text:t('agent.updated').replace('{name}',name).replace('{emoji}',draftEmoji),time:t2}]);
   };
 
   // datetime-local gives local wall-clock; the API wants ISO.
@@ -468,14 +483,15 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
     setListError("");
     const okToDelete = await confirmDialog({
       title: 'Delete this task?',
-      message: `“${tk.title}” and anything your agent produced for it will be removed.`,
+      message: `“${tk.title}” will be removed.`,
     });
     if(!okToDelete) return;
     try { await deleteTask(tk.id); }
     catch(e){ setListError(e?.message||"Couldn't delete that task."); }
   };
 
-  const addTask=async()=>{
+  const { busy: taskSaving, run: runTaskSave } = useInFlight();
+  const addTask=()=>runTaskSave(async()=>{
     if(!tTitle.trim()) return;
     setTError("");
     try { await saveTask(); }
@@ -484,7 +500,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
       if(isNoAgentError(err)) setNeedsAgent(true);
       else setTError(err?.message||"Could not save the task. Please try again.");
     }
-  };
+  });
 
   const saveTask=async()=>{
     const ts=new Date().toLocaleTimeString('en-GB',{hour:"2-digit",minute:"2-digit"});
@@ -493,16 +509,42 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
       await updateTask({ id:tEditing.id, title:tTitle, description:tDesc, priority:tPriority, dueAt });
     } else {
       await createTask({ title:tTitle, description:tDesc, priority:tPriority, dueAt });
-      setMessages(prev=>[...prev,{id:Date.now(),from:"agent",text:t('agent.task_assigned').replace('{title}',tTitle).replace('{priority}',PRI_LABEL[tPriority]),time:ts}]);
+      const taskSaved = t('agent.task_assigned').replace('{title}',tTitle).replace('{priority}',PRI_LABEL[tPriority]);
+      const autonomyNote = dueAt
+        ? agentOnline
+          ? "\n\nYour agent is online and may open one helpful chat when this task becomes due. It will not complete the task for you."
+          : "\n\nThis task has a due time, but your agent is offline. Tap “Agent offline” above to allow one helpful chat when it becomes due."
+        : "";
+      setMessages(prev=>[...prev,{id:Date.now(),from:"agent",text:taskSaved+autonomyNote,time:ts}]);
     }
     closeTaskSheet();
+    if(!tEditing) setTaskFilter("pending");
     if(innerTab!=="tasks") setInnerTab("tasks");
   };
 
   const filteredTasks=tasks.filter(tk=>taskFilter==="done"?tk.status==="done":tk.status!=="done");
+  // One toggle in the air at a time — racing toggles on a slow connection
+  // left tasks in To-do even though the learner had ticked them done.
+  const { busy: toggleBusy, run: runToggle } = useInFlight();
+  const toggleOne = (id) => runToggle(() => toggleTask(id).catch(e => setListError(e?.message || "Couldn't update that task.")));
   const pendingCount=tasks.filter(tk=>tk.status!=="done").length;
   const doneCount=tasks.filter(tk=>tk.status==="done").length;
   const highCount=tasks.filter(tk=>tk.priority==="high"&&tk.status!=="done").length;
+
+  // The menu presents existing, server-recognised chat modes. It does not
+  // choose a model in the browser: the API remains the authority that routes
+  // the supported mode and any authorised tool work.
+  const selectedChatMode = thinkMode ? "think" : researchMode ? "research" : "default";
+  const chatModes = [
+    { id:"default", label:"Standard", description:"Balanced learning support" },
+    { id:"think", label:t('agent.mode_think'), description:t('agent.mode_think_hint') },
+    { id:"research", label:t('agent.mode_research'), description:t('agent.mode_research_hint') },
+  ];
+  const selectedChatModeLabel = chatModes.find(option => option.id === selectedChatMode)?.label || "Standard";
+  const chooseChatMode = mode => {
+    setThinkMode(mode === "think");
+    setResearchMode(mode === "research");
+  };
 
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:"var(--ak-surface)" }}>
@@ -519,20 +561,9 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
           opacity: 1;
         }
       `}</style>
-      <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 18px 11px",borderBottom:"1px solid var(--ak-border)",background:"var(--ak-surface)",flexShrink:0 }}>
-        <div style={{ display:"flex",alignItems:"center",gap:10 }}>
-          <div style={{ width:44,height:44,borderRadius:"50%",background:`${BRAND}15`,border:`2px solid ${BRAND}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,position:"relative" }}>
-            {agentEmoji}<div style={{ position:"absolute",bottom:0,right:0,width:12,height:12,borderRadius:"50%",background:GREEN,border:"2px solid #fff",animation:"pulse-dot 2s ease-in-out infinite" }}/>
-          </div>
-          <div>
-            <p style={{ fontSize:14,fontWeight:900,color:"var(--ak-text)",margin:0 }}>{shownName}</p>
-            <div style={{ display:"flex",alignItems:"center",gap:4 }}><div style={{ width:5,height:5,borderRadius:"50%",background:GREEN }}/><span style={{ fontSize:10.5,fontWeight:600,color:"var(--ak-text-muted)" }}>{`${t('common.online')} · ${t('agent.learning_agent')}`}</span></div>
-          </div>
-        </div>
-        <button onClick={()=>{setDraftName(agentName);setDraftEmoji(agentEmoji);setCustOpen(true);}} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:11.5,fontWeight:700,color:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
-          <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="var(--ak-text-sub)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>{t('agent.customise')}
-        </button>
-      </div>
+      {/* The chat header (avatar, name, online status) lives in the sessions
+          drawer now — the conversation gets the room, and agent identity is
+          one hamburger away. Customisation lives on the Settings page. */}
       <div style={{ display:"flex",borderBottom:"1px solid var(--ak-border)",background:"var(--ak-surface)",flexShrink:0 }}>
         {[{key:"chat",label:t('agent.chat'),icon:"ti-message-circle",badge:null},{key:"tasks",label:t('agent.tasks'),icon:"ti-clipboard",badge:pendingCount},{key:"stats",label:t('agent.stats'),icon:"ti-chart-bar",badge:null}].map(({key,label,icon,badge})=>(
           <button key={key} onClick={()=>setInnerTab(key)} style={{ flex:1,padding:"9px 4px 10px",background:"none",border:"none",cursor:"pointer",fontSize:11.5,fontWeight:innerTab===key?800:600,color:innerTab===key?BRAND:"var(--ak-text-muted)",borderBottom:`2.5px solid ${innerTab===key?BRAND:"transparent"}`,transition:"all .2s",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:4 }}>
@@ -540,6 +571,15 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
             {badge>0&&<span style={{ fontSize:9,fontWeight:900,background:innerTab===key?BRAND:"var(--ak-border)",color:innerTab===key?"#fff":"var(--ak-text-muted)",borderRadius:8,padding:"1px 5px" }}>{badge}</span>}
           </button>
         ))}
+      </div>
+      {/* Background status — visible right in the chat, not only in the
+          drawer: Idle by default, swapping live to the background label
+          ("Reviewing your goals…") while the agent works. */}
+      <div style={{ display:"flex",alignItems:"center",gap:6,padding:"6px 16px",background:"var(--ak-surface)",borderBottom:"1px solid var(--ak-border)",flexShrink:0 }}>
+        <span style={{ width:6,height:6,borderRadius:"50%",flexShrink:0,background:agentActivity?BRAND:"var(--ak-text-muted)",animation:agentActivity?"pulse-dot 1.4s ease-in-out infinite":"none" }}/>
+        <span style={{ fontSize:10.5,fontWeight:agentActivity?800:600,color:agentActivity?BRAND:"var(--ak-text-muted)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>
+          {autonomyStatus}
+        </span>
       </div>
       {innerTab==="chat"&&(
         <>
@@ -550,17 +590,26 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
             <div style={{ width:1,height:18,background:"var(--ak-border)",flexShrink:0 }}/>
             {QUICK_PROMPTS.map(p=><button key={p.text} onClick={()=>sendMessage(p.text)} style={{ flexShrink:0,padding:"5px 12px",borderRadius:20,border:`1px solid ${BRAND}30`,background:`${BRAND}08`,color:BRAND,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif",whiteSpace:"nowrap" }}>{t(p.key)}</button>)}
           </div>
+          {historyError&&(
+            /* "Couldn't load" ≠ "you have no history": a warm, non-alarming
+               banner (nothing was lost — retry) instead of a silent empty
+               chat. Retry repeats the exact load that failed. */
+            <div style={{ display:"flex",alignItems:"center",gap:8,margin:"10px 16px 0",padding:"9px 12px",borderRadius:12,background:`${GOLD}14`,border:`1px solid ${GOLD}45`,flexShrink:0 }}>
+              <span style={{ flex:1,fontSize:11.5,fontWeight:700,color:GOLD,lineHeight:1.45 }}>{t('agent.history_load_error')}</span>
+              <button onClick={retryHistoryLoad} style={{ flexShrink:0,border:"none",background:`${GOLD}1A`,color:GOLD,cursor:"pointer",fontSize:11,fontWeight:900,whiteSpace:"nowrap",padding:"5px 10px",borderRadius:8,fontFamily:"'Nunito',sans-serif" }}>{t('agent.history_retry')}</button>
+            </div>
+          )}
           <div ref={feedRef} style={{ flex:1,overflowY:"auto",padding:"14px 16px",display:"flex",flexDirection:"column",gap:12 }}>
             {messages.map(msg=>{
               const isMe=msg.from==="me";
               const thinkingStream=!isMe&&msg.phase==="thinking";
               return (
                 <div key={msg.id} style={{ display:"flex",justifyContent:isMe?"flex-end":"flex-start",alignItems:"flex-end",gap:8 }}>
-                  {!isMe&&<div style={{ width:30,height:30,borderRadius:"50%",background:`${BRAND}15`,border:`1.5px solid ${BRAND}40`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16 }}>{agentEmoji}</div>}
+                  {!isMe&&<div style={{ width:30,height:30,borderRadius:"50%",background:`${BRAND}15`,border:`1.5px solid ${BRAND}40`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center" }}><AgentAvatar emoji={agentEmoji} size={20}/></div>}
                   <div style={{ maxWidth:"78%" }}>
                     {!isMe&&(msg.thinking||thinkingStream)&&<ThoughtBlock thinking={msg.thinking} streaming={thinkingStream}/>}
                     {(!msg.phase||msg.text)&&(
-                      <div style={{ padding:"10px 14px",borderRadius:isMe?"18px 18px 4px 18px":"4px 18px 18px 18px",background:isMe?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-surface-hover)",border:isMe?"none":`1px solid ${BRAND}25`,color:isMe?"#fff":"var(--ak-text)",fontSize:13.5,lineHeight:1.6,whiteSpace:"pre-wrap",fontWeight:500 }}>{msg.text}</div>
+                      <div style={{ padding:"10px 14px",borderRadius:isMe?"18px 18px 4px 18px":"4px 18px 18px 18px",background:isMe?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-surface-hover)",border:isMe?"none":`1px solid ${BRAND}25`,color:isMe?"#fff":"var(--ak-text)",fontSize:13.5,lineHeight:1.6,fontWeight:500 }}>{isMe?<span style={{whiteSpace:"pre-wrap"}}>{msg.text}</span>:<RichText text={msg.text}/>}{msg.phase==="answering"&&<StreamCaret/>}</div>
                     )}
                     {isMe&&msg.attachments?.length>0&&(
                       <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5,justifyContent:"flex-end" }}>
@@ -569,6 +618,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
                           : <span key={i} style={{ display:"inline-flex",alignItems:"center",gap:4,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:10.5,fontWeight:700,padding:"4px 9px",borderRadius:20,background:"rgba(255,255,255,.18)",color:"#fff" }}><Icon name="ti-file-text" size={10}/> {a.name}</span>)}
                       </div>
                     )}
+                    {!isMe&&msg.studyPrepSessionId&&<StudyPrepChatCard sessionId={msg.studyPrepSessionId}/>}
                     {!isMe&&msg.syllabus?.length>0&&(
                       <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5 }}>
                         {msg.syllabus.map((s,i)=>(
@@ -587,12 +637,15 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
                         ))}
                       </div>
                     )}
-                    <div style={{ fontSize:10,color:"var(--ak-text-muted)",marginTop:3,textAlign:isMe?"right":"left" }}>{msg.time}</div>
+                    <div style={{ fontSize:10,color:"var(--ak-text-muted)",marginTop:3,display:"flex",alignItems:"center",gap:4,justifyContent:isMe?"flex-end":"flex-start" }}>
+                      {msg.time}
+                      <CopyMessageButton text={msg.text} />
+                    </div>
                   </div>
                 </div>
               );
             })}
-            {loading&&<div style={{ display:"flex",alignItems:"flex-end",gap:8 }}><div style={{ width:30,height:30,borderRadius:"50%",background:`${BRAND}15`,border:`1.5px solid ${BRAND}40`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16 }}>{agentEmoji}</div><div style={{ padding:"12px 16px",borderRadius:"4px 18px 18px 18px",background:"var(--ak-surface-hover)",border:`1px solid ${BRAND}25`,display:"flex",gap:8,alignItems:"center" }}>{[0,.25,.5].map((d,i)=><div key={i} style={{ width:6,height:6,borderRadius:"50%",background:BRAND,animation:`bounce-dot .7s ease-in-out ${d}s infinite alternate` }}/>)}</div></div>}
+            {loading&&<div style={{ display:"flex",alignItems:"flex-end",gap:8 }}><div style={{ width:30,height:30,borderRadius:"50%",background:`${BRAND}15`,border:`1.5px solid ${BRAND}40`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center" }}><AgentAvatar emoji={agentEmoji} size={20}/></div><div style={{ padding:"12px 16px",borderRadius:"4px 18px 18px 18px",background:"var(--ak-surface-hover)",border:`1px solid ${BRAND}25`,display:"flex",gap:8,alignItems:"center" }}>{[0,.25,.5].map((d,i)=><div key={i} style={{ width:6,height:6,borderRadius:"50%",background:BRAND,animation:`bounce-dot .7s ease-in-out ${d}s infinite alternate` }}/>)}</div></div>}
             {loading&&statusLabel&&<div style={{ display:"flex",alignItems:"center",gap:6,margin:"-6px 0 0 38px" }}><span style={{ width:7,height:7,borderRadius:"50%",background:BRAND,display:"inline-block",animation:"pulse-dot 1.4s ease-in-out infinite" }}/><span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-muted)" }}>{statusLabel}</span></div>}
           </div>
           <div style={{ padding:"10px 16px 12px",borderTop:"1px solid var(--ak-border)",background:"var(--ak-surface)",flexShrink:0 }}>
@@ -617,21 +670,33 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
                 ))}
               </div>
             )}
-            <div style={{ display:"flex",gap:8,alignItems:"center",background:"var(--ak-surface-hover)",borderRadius:50,border:"1.5px solid var(--ak-border2)",padding:"7px 8px 7px 8px" }}>
-              <button onClick={()=>fileInputRef.current?.click()} disabled={loading} title={t('agent.attach_add')} aria-label={t('agent.attach_add')} style={{ width:34,height:34,borderRadius:"50%",border:"1.5px dashed var(--ak-border3)",background:"transparent",display:"flex",alignItems:"center",justifyContent:"center",cursor:loading?"not-allowed":"pointer",flexShrink:0,opacity:loading?.45:1,transition:"border-color .15s" }}>
-                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="var(--ak-text-sub)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              </button>
-              <input className="ak-chat-input" value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMessage();}}} placeholder={t('agent.ask_anything').replace('{name}', shownName)} style={{ flex:1,background:"transparent",border:"none",outline:"none",fontSize:13.5,color:"var(--ak-text)",fontFamily:"'Nunito',sans-serif" }}/>
-              <button onClick={()=>sendMessage()} disabled={loading||!input.trim()&&!attachments.length} style={{ width:36,height:36,borderRadius:"50%",background:(input.trim()||attachments.length)?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-border2)",border:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:(input.trim()||attachments.length)?"pointer":"default",flexShrink:0,transition:"background .2s" }}><SendIcon size={15} color={(input.trim()||attachments.length)?"#fff":"var(--ak-text-muted)"}/></button>
-            </div>
-            {/* Mode pills — Think & Research switch the tutor's engine; Task
-                keeps its gold accent and opens the task sheet. */}
+            <FortizoChatComposer
+              value={input}
+              onChange={setInput}
+              onSend={()=>sendMessage()}
+              placeholder={t('agent.ask_anything').replace('{name}', shownName)}
+              disabled={loading}
+              attachmentAction={()=>fileInputRef.current?.click()}
+              attachmentLabel={t('agent.attach_add')}
+              voiceLabel="Voice input is not available in AI Chat yet"
+              audioLabel="Audio notes are not available in AI Chat yet"
+              modelId={selectedChatMode}
+              modelLabel={selectedChatModeLabel}
+              modelOptions={chatModes}
+              onModelChange={chooseChatMode}
+              sendDisabled={!input.trim()&&!attachments.length}
+            />
+            {/* Think and Research now live in the Fortizo-style model menu.
+                The remaining learning/session actions stay in their familiar row. */}
             <div style={{ display:"flex",alignItems:"center",gap:6,marginTop:9 }}>
-              <button onClick={()=>{setThinkMode(v=>!v);setResearchMode(false);}} disabled={loading} title={t('agent.mode_think_hint')} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:`1.5px solid ${thinkMode?`${BRAND}55`:"var(--ak-border2)"}`,background:thinkMode?`${BRAND}14`:"transparent",fontSize:11,fontWeight:800,color:thinkMode?BRAND:"var(--ak-text-muted)",cursor:loading?"not-allowed":"pointer",fontFamily:"'Nunito',sans-serif",transition:"all .15s",flexShrink:0 }}>
-                <Icon name="ti-brain" size={12}/> {t('agent.mode_think')}
+              <button type="button" onClick={()=>onStartExamPrep?.()} disabled={loading || !onStartExamPrep} title="Start generated exam-style practice" style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 10px",borderRadius:20,border:`1px solid ${GREEN}45`,background:`${GREEN}10`,fontSize:10.5,fontWeight:800,color:GREEN,cursor:loading?"not-allowed":"pointer",fontFamily:"'Nunito',sans-serif",flexShrink:0 }}>
+                <Icon name="ti-clipboard-check" size={12}/> Practice
               </button>
-              <button onClick={()=>{setResearchMode(v=>!v);setThinkMode(false);}} disabled={loading} title={t('agent.mode_research_hint')} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:`1.5px solid ${researchMode?`${BRAND}55`:"var(--ak-border2)"}`,background:researchMode?`${BRAND}14`:"transparent",fontSize:11,fontWeight:800,color:researchMode?BRAND:"var(--ak-text-muted)",cursor:loading?"not-allowed":"pointer",fontFamily:"'Nunito',sans-serif",transition:"all .15s",flexShrink:0 }}>
-                <Icon name="ti-microscope" size={12}/> {t('agent.mode_research')}
+              <button type="button" onClick={()=>onOpenConceptTracker?.()} disabled={!onOpenConceptTracker} title="View learning tracker" style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 10px",borderRadius:20,border:`1px solid ${BRAND}35`,background:`${BRAND}0D`,fontSize:10.5,fontWeight:800,color:BRAND,cursor:"pointer",fontFamily:"'Nunito',sans-serif",flexShrink:0 }}>
+                <Icon name="ti-chart-bar" size={12}/> Progress
+              </button>
+              <button type="button" onClick={()=>onOpenAdaptiveControls?.()} disabled={!onOpenAdaptiveControls} title="Open adaptive learning controls" style={{ width:29,height:29,padding:0,borderRadius:"50%",border:"1px solid var(--ak-border2)",background:"var(--ak-surface-hover)",color:"var(--ak-text-muted)",cursor:"pointer",flexShrink:0 }}>
+                <Icon name="ti-adjustments" size={13}/>
               </button>
               <div style={{ flex:1 }}/>
               <button onClick={()=>setTaskOpen(true)} style={{ display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:20,border:`1px solid ${GOLD}40`,background:`${GOLD}12`,fontSize:10.5,fontWeight:800,color:"#B45309",cursor:"pointer",fontFamily:"'Nunito',sans-serif",flexShrink:0 }}>
@@ -653,10 +718,10 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
             ))}
           </div>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px 8px" }}>
-            <div style={{ display:"flex",gap:6 }}>{[["pending",t('agent.to_do')],["done",t('agent.done')]].map(([k,l])=><button key={k} onClick={()=>setTaskFilter(k)} style={{ padding:"5px 12px",borderRadius:20,border:`1.5px solid ${taskFilter===k?BRAND:"var(--ak-border2)"}`,background:taskFilter===k?`${BRAND}10`:"transparent",color:taskFilter===k?BRAND:"var(--ak-text-muted)",fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{l}</button>)}</div>
-            <button onClick={openNewTask} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:11.5,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
+            <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>{[["pending",t('agent.to_do')],["done",t('agent.done')],["suggestions",t('agent.suggestions')]].map(([k,l])=><button key={k} onClick={()=>setTaskFilter(k)} style={{ padding:"5px 12px",borderRadius:20,border:`1.5px solid ${taskFilter===k?BRAND:"var(--ak-border2)"}`,background:taskFilter===k?`${BRAND}10`:"transparent",color:taskFilter===k?BRAND:"var(--ak-text-muted)",fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",gap:5 }}>{l}{k==="suggestions"&&suggestionCount>0&&<span style={{ fontSize:9,fontWeight:900,background:taskFilter===k?BRAND:"var(--ak-border)",color:taskFilter===k?"#fff":"var(--ak-text-muted)",borderRadius:8,padding:"1px 5px" }}>{suggestionCount}</span>}</button>)}</div>
+            {taskFilter!=="suggestions"&&<button onClick={openNewTask} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:11.5,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
               <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>{t('agent.new_task')}
-            </button>
+            </button>}
           </div>
           {listError&&(
             <div style={{ margin:"0 16px 8px",padding:"9px 12px",borderRadius:12,background:"rgba(239,68,68,.10)",border:`1px solid ${RED}35`,display:"flex",alignItems:"center",gap:8 }}>
@@ -665,9 +730,56 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
             </div>
           )}
           <div style={{ flex:1,padding:"0 16px 16px",display:"flex",flexDirection:"column",gap:8 }}>
-            {filteredTasks.length===0?<div style={{ textAlign:"center",padding:"32px 16px",color:"var(--ak-text-muted)" }}><Icon name="ti-clipboard" size={40} color="var(--ak-text-muted)" style={{opacity:.3}}/><p style={{ fontSize:13,fontWeight:700,marginTop:8 }}>{taskFilter==="done"?t('agent.no_completed'):t('agent.all_done')}</p></div>:filteredTasks.map(tk=>(
+            {taskFilter==="suggestions"?(
+              suggestionCount===0?<div style={{ textAlign:"center",padding:"32px 16px",color:"var(--ak-text-muted)" }}><Icon name="ti-bulb" size={40} color="var(--ak-text-muted)" style={{opacity:.3}}/><p style={{ fontSize:13,fontWeight:700,marginTop:8,maxWidth:260,marginInline:"auto",lineHeight:1.5 }}>{t('agent.suggestions_empty')}</p></div>
+              :(<>{pendingProposals.length>0&&<div style={{ marginBottom:10 }}>
+              <p style={{ fontSize:10,fontWeight:900,color:"var(--ak-text-muted)",textTransform:"uppercase",letterSpacing:.5,margin:"2px 2px 8px" }}>{t('agent.proposals_from_review')}</p>
+              {pendingProposals.map(p=>{
+                const pkKey=p.kind==="session"?"agent.proposal_kind_session":p.kind==="practice"?"agent.proposal_kind_practice":p.kind==="goal"?"agent.proposal_kind_goal":"agent.proposal_kind_task";
+                const pkIcon=p.kind==="session"?"ti-clock":p.kind==="practice"?"ti-pencil":p.kind==="goal"?"ti-target":"ti-clipboard";
+                return (
+                <div key={p.id} style={{ padding:"12px 14px",borderRadius:14,background:"var(--ak-surface)",border:`1px dashed ${GOLD}70`,marginBottom:8 }}>
+                  <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"wrap" }}>
+                    <span style={{ display:"inline-flex",alignItems:"center",gap:4,fontSize:9.5,fontWeight:900,padding:"2px 8px",borderRadius:20,background:`${GOLD}15`,border:`1px solid ${GOLD}40`,color:GOLD,letterSpacing:.3,textTransform:"uppercase" }}><Icon name={pkIcon} size={10}/>{t(pkKey)}</span>
+                    <span style={{ fontSize:10,color:"var(--ak-text-muted)",fontWeight:600 }}>{relTime(p.created_at)}</span>
+                  </div>
+                  <p style={{ fontSize:13.5,fontWeight:700,color:"var(--ak-text)",margin:"0 0 4px",lineHeight:1.45 }}>{p.title}</p>
+                  {p.rationale&&<p style={{ fontSize:12,color:"var(--ak-text-sub)",margin:"0 0 10px",lineHeight:1.5 }}>{p.rationale}</p>}
+                  <div style={{ display:"flex",alignItems:"center",gap:7 }}>
+                    <button onClick={()=>approveProposal(p)} disabled={!!proposalBusyId} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:proposalBusyId?"var(--ak-border)":`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:11,fontWeight:800,cursor:proposalBusyId?"wait":"pointer",opacity:proposalBusyId&&proposalBusyId!==p.id?0.55:1,fontFamily:"'Nunito',sans-serif" }}>
+                      {proposalBusyId===p.id?<Spinner size={11} color="#fff"/>:<svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>}{t('agent.proposal_approve')}
+                    </button>
+                    <button onClick={()=>dismissProposal(p)} disabled={!!proposalBusyId} title={t('agent.proposal_dismiss')} aria-label={t('agent.proposal_dismiss')} style={{ width:27,height:27,borderRadius:"50%",border:"1px solid var(--ak-border2)",background:"var(--ak-surface-hover)",color:"var(--ak-text-muted)",cursor:proposalBusyId?"wait":"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}><Icon name="ti-x" size={12}/></button>
+                    <span style={{ fontSize:10,color:"var(--ak-text-muted)",fontWeight:600,fontStyle:"italic" }}>{t('agent.proposals_sub')}</span>
+                  </div>
+                </div>
+                );
+              })}
+            </div>}{suggestions.map(sg=>{
+                const kindKey=sg.kind==="goal"?"agent.sugg_goal":sg.kind==="conversation"?"agent.sugg_chat":"agent.sugg_task";
+                const kindIcon=sg.kind==="goal"?"ti-target":sg.kind==="conversation"?"ti-message-circle":"ti-clipboard";
+                return (
+                <div key={sg.id} style={{ padding:"12px 14px",borderRadius:14,background:"var(--ak-surface)",border:`1px dashed ${BRAND}45` }}>
+                  <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:6 }}>
+                    <span style={{ display:"inline-flex",alignItems:"center",gap:4,fontSize:9.5,fontWeight:900,padding:"2px 8px",borderRadius:20,background:`${BRAND}12`,border:`1px solid ${BRAND}30`,color:BRAND,letterSpacing:.3,textTransform:"uppercase" }}><Icon name={kindIcon} size={10}/>{t(kindKey)}</span>
+                    <span style={{ fontSize:10,color:"var(--ak-text-muted)",fontWeight:600 }}>{relTime(sg.created_at)}</span>
+                  </div>
+                  <p style={{ fontSize:13.5,fontWeight:700,color:"var(--ak-text)",margin:"0 0 4px",lineHeight:1.45 }}>{sg.title}</p>
+                  {sg.rationale&&<p style={{ fontSize:12,color:"var(--ak-text-sub)",margin:"0 0 10px",lineHeight:1.5 }}>{sg.rationale}</p>}
+                  <div style={{ display:"flex",alignItems:"center",gap:7 }}>
+                    <button onClick={()=>acceptSuggestion(sg)} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
+                      <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>{t('agent.suggestion_accept')}
+                    </button>
+                    <button onClick={()=>dismissSuggestion(sg)} title={t('agent.suggestion_dismiss')} aria-label={t('agent.suggestion_dismiss')} style={{ width:27,height:27,borderRadius:"50%",border:"1px solid var(--ak-border2)",background:"var(--ak-surface-hover)",color:"var(--ak-text-muted)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}><Icon name="ti-x" size={12}/></button>
+                    <span style={{ fontSize:10,color:"var(--ak-text-muted)",fontWeight:600,fontStyle:"italic" }}>{t('agent.suggestions_sub')}</span>
+                  </div>
+                </div>
+                );
+              })}</>)
+            ):(taskFilter==="done"||taskFilter==="pending")&&(
+            filteredTasks.length===0?<div style={{ textAlign:"center",padding:"32px 16px",color:"var(--ak-text-muted)" }}><Icon name="ti-clipboard" size={40} color="var(--ak-text-muted)" style={{opacity:.3}}/><p style={{ fontSize:13,fontWeight:700,marginTop:8 }}>{taskFilter==="done"?t('agent.no_completed'):t('agent.all_done')}</p></div>:filteredTasks.map(tk=>(
               <div key={tk.id} style={{ display:"flex",alignItems:"flex-start",gap:11,padding:"12px 14px",borderRadius:14,background:"var(--ak-surface)",border:"1px solid var(--ak-border)",opacity:tk.status==="done"?.6:1 }}>
-                <button onClick={()=>toggleTask(tk.id).catch(e=>setListError(e?.message||"Couldn't update that task."))} style={{ marginTop:2,width:22,height:22,borderRadius:6,border:`2px solid ${tk.status==="done"?GREEN:"var(--ak-border3)"}`,background:tk.status==="done"?GREEN:"var(--ak-surface)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}>
+                <button onClick={()=>toggleOne(tk.id)} disabled={toggleBusy} style={{ marginTop:2,width:22,height:22,borderRadius:6,border:`2px solid ${tk.status==="done"?GREEN:"var(--ak-border3)"}`,background:tk.status==="done"?GREEN:"var(--ak-surface)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}>
                   {tk.status==="done"&&<svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
                 </button>
                 <div style={{ flex:1,minWidth:0 }}>
@@ -676,7 +788,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
                   <div style={{ display:"flex",alignItems:"center",gap:7,flexWrap:"wrap" }}>
                     <span style={{ fontSize:10,fontWeight:800,padding:"2px 8px",borderRadius:20,background:PRI_BG[tk.priority],color:PRI_COLOR[tk.priority] }}>{PRI_LABEL[tk.priority]}</span>
                     {tk.due_at&&<span style={{ fontSize:10,fontWeight:700,color:new Date(tk.due_at)<new Date()&&tk.status!=="done"?RED:"var(--ak-text-muted)" }}>
-                      <Icon name="ti-calendar" size={10}/> {new Date(tk.due_at).toLocaleDateString()} {new Date(tk.due_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}
+                      <Icon name="ti-calendar" size={10}/> {new Date(tk.due_at).toLocaleDateString()} {new Date(tk.due_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}{new Date(tk.due_at)<new Date()&&tk.status!=="done"?" · Overdue":""}
                     </span>}
                     {tk.is_recurring&&<span style={{ fontSize:10,fontWeight:700,color:BRAND }}><Icon name="ti-refresh" size={10}/> repeats</span>}
                   </div>
@@ -688,7 +800,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
                     style={{ width:26,height:26,borderRadius:8,border:"1px solid var(--ak-border2)",background:"var(--ak-surface-hover)",cursor:tk.status==="running"?"not-allowed":"pointer",opacity:tk.status==="running"?.4:1,fontSize:11 }}><Icon name="ti-trash" size={11}/></button>
                 </div>
               </div>
-            ))}
+            )))}
           </div>
         </div>
       )}
@@ -706,50 +818,52 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
           <div style={{ marginBottom:22 }}><label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",display:"block",marginBottom:8,letterSpacing:.3 }}>{t('agent.priority')}</label><div style={{ display:"flex",gap:8 }}>{[["high",t('agent.pri_high')],["medium",t('agent.pri_medium')],["low",t('agent.pri_low')]].map(([k,l])=><button key={k} onClick={()=>setTPriority(k)} style={{ flex:1,padding:"9px 6px",borderRadius:12,border:`1.5px solid ${tPriority===k?PRI_COLOR[k]:"var(--ak-border2)"}`,background:tPriority===k?`${PRI_COLOR[k]}10`:"var(--ak-surface-hover)",fontSize:12,fontWeight:800,color:tPriority===k?PRI_COLOR[k]:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{l}</button>)}</div></div>
           <div style={{ marginBottom:22 }}>
             <label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",display:"block",marginBottom:6,letterSpacing:.3 }}>
-              <Icon name="ti-calendar" size={12}/> Run at <span style={{ fontSize:10,fontWeight:500,color:"var(--ak-text-muted)" }}>{t('common.optional')}</span>
+              <Icon name="ti-calendar" size={12}/> Due at <span style={{ fontSize:10,fontWeight:500,color:"var(--ak-text-muted)" }}>{t('common.optional')}</span>
             </label>
             <input type="datetime-local" value={tDueAt} onChange={e=>setTDueAt(e.target.value)}
               style={{ width:"100%",padding:"11px 14px",borderRadius:12,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:13.5,fontWeight:600,color:"var(--ak-text)",fontFamily:"'Nunito',sans-serif",outline:"none",boxSizing:"border-box" }}/>
             <p style={{ fontSize:10.5,color:"var(--ak-text-muted)",margin:"5px 0 0",lineHeight:1.45 }}>
-              Leave empty and your agent starts right away. Pick a date and time to schedule it.
+              Leave empty to keep this as a manual task. With a precise due time, your Agent online setting may open one helpful chat when it becomes due; it never runs or completes the task.
             </p>
           </div>
           {tError&&<p style={{ fontSize:12,fontWeight:800,color:RED,margin:"0 0 12px" }}>{tError}</p>}
           <div style={{ display:"flex",gap:10 }}>
             <button onClick={closeTaskSheet} style={{ flex:1,padding:"13px",borderRadius:14,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:13,fontWeight:800,color:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('common.cancel')}</button>
-            <button onClick={addTask} style={{ flex:1.6,padding:"13px",borderRadius:14,border:"none",background:tTitle.trim()?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-border2)",fontSize:13,fontWeight:800,color:tTitle.trim()?"#fff":"var(--ak-text-muted)",cursor:tTitle.trim()?"pointer":"default",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7 }}>
-              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={tTitle.trim()?"#fff":"var(--ak-text-muted)"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>{tEditing?'Save changes':t('agent.assign_task')}
+            <button onClick={addTask} disabled={taskSaving || !tTitle.trim()} style={{ flex:1.6,padding:"13px",borderRadius:14,border:"none",background:tTitle.trim()?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-border2)",fontSize:13,fontWeight:800,color:tTitle.trim()?"#fff":"var(--ak-text-muted)",cursor:(tTitle.trim()&&!taskSaving)?"pointer":"default",opacity:taskSaving?.8:1,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7 }}>
+              {taskSaving
+                ? <Spinner size={13} color={tTitle.trim() ? '#fff' : 'var(--ak-text-muted)'}/>
+                : <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={tTitle.trim()?"#fff":"var(--ak-text-muted)"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+              {tEditing?'Save changes':t('agent.assign_task')}
             </button>
           </div>
         </div></>
       )}
       <NoAgentSheet open={needsAgent} onClose={()=>setNeedsAgent(false)} defaultName={agentName||'My Agent'} onCreated={saveTask}/>
-      {custOpen&&(
-        <><div onClick={()=>setCustOpen(false)} style={{ position:"fixed",inset:0,zIndex:2000,background:"rgba(6,6,18,.55)",backdropFilter:"blur(5px)" }}/>
-        <div style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:2100,background:"var(--ak-surface)",borderRadius:"22px 22px 0 0",padding:"0 20px 48px",boxShadow:"0 -8px 40px rgba(0,0,0,.14)",animation:"sheet-up .3s cubic-bezier(.32,1.2,.64,1)",fontFamily:"'Nunito',sans-serif",maxHeight:"80vh",overflowY:"auto" }}>
-          <div style={{ width:38,height:4,borderRadius:2,background:"var(--ak-border3)",margin:"14px auto 20px" }}/>
-          <p style={{ fontSize:16,fontWeight:900,color:"var(--ak-text)",margin:"0 0 18px" }}>{t('agent.customise_title')}</p>
-          <div style={{ marginBottom:16 }}><label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",display:"block",marginBottom:6,letterSpacing:.3 }}>{t('agent.agent_name')}</label><input className="ak-chat-input" value={draftName} onChange={e=>setDraftName(e.target.value)} placeholder={t('agent.name_ph')} style={{ width:"100%",padding:"11px 14px",borderRadius:12,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:14,fontWeight:600,color:"var(--ak-text)",fontFamily:"'Nunito',sans-serif",outline:"none" }} onFocus={e=>e.target.style.borderColor=BRAND} onBlur={e=>e.target.style.borderColor="var(--ak-border2)"}/></div>
-          <div style={{ marginBottom:22 }}><label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",display:"block",marginBottom:10,letterSpacing:.3 }}>{t('agent.avatar')}</label><div style={{ display:"flex",flexWrap:"wrap",gap:8 }}>{AGENT_CONFIG.avatars.map(em=><button key={em} onClick={()=>setDraftEmoji(em)} style={{ width:46,height:46,borderRadius:12,border:`2px solid ${draftEmoji===em?BRAND:"var(--ak-border2)"}`,background:draftEmoji===em?`${BRAND}12`:"var(--ak-surface-hover)",fontSize:22,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s" }}>{em}</button>)}</div></div>
-          <div style={{ display:"flex",alignItems:"center",gap:12,background:`${BRAND}08`,border:`1px solid ${BRAND}20`,borderRadius:14,padding:"12px 14px",marginBottom:20 }}>
-            <div style={{ width:44,height:44,borderRadius:"50%",background:`${BRAND}15`,border:`2px solid ${BRAND}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22 }}>{draftEmoji}</div>
-            <div><p style={{ fontSize:14,fontWeight:900,color:"var(--ak-text)",margin:0 }}>{draftName||t('agent.unnamed')}</p><p style={{ fontSize:11,color:"var(--ak-text-muted)",margin:0 }}>{t('common.online')}</p></div>
-          </div>
-          <div style={{ display:"flex",gap:10 }}>
-            <button onClick={()=>setCustOpen(false)} style={{ flex:1,padding:"13px",borderRadius:14,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:13,fontWeight:800,color:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('common.cancel')}</button>
-            <button onClick={saveCustomise} style={{ flex:1.5,padding:"13px",borderRadius:14,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,fontSize:13,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7 }}>
-              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>{t('agent.save_agent')}
-            </button>
-          </div>
-        </div></>
-      )}
       {/* Chat sessions drawer (hamburger) */}
       {drawerOpen&&(
         <><div onClick={()=>setDrawerOpen(false)} style={{ position:"fixed",inset:0,zIndex:2000,background:"rgba(6,6,18,.55)",backdropFilter:"blur(5px)" }}/>
         <div style={{ position:"fixed",top:0,bottom:0,left:0,zIndex:2100,width:"min(86vw,320px)",background:"var(--ak-surface)",boxShadow:"6px 0 40px rgba(0,0,0,.18)",animation:"drawer-in .28s cubic-bezier(.32,1,.64,1)",fontFamily:"'Nunito',sans-serif",display:"flex",flexDirection:"column" }}>
           <style>{`@keyframes drawer-in{from{transform:translateX(-100%)}to{transform:translateX(0)}}`}</style>
-          <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 16px 12px",borderBottom:"1px solid var(--ak-border)",flexShrink:0 }}>
-            <p style={{ fontSize:15,fontWeight:900,color:"var(--ak-text)",margin:0 }}>{t('agent.chats')}</p>
+          <div style={{ display:"flex",alignItems:"center",gap:12,padding:"16px 16px 13px",borderBottom:"1px solid var(--ak-border)",flexShrink:0 }}>
+            <div style={{ width:46,height:46,borderRadius:"50%",background:`${BRAND}15`,border:`2px solid ${BRAND}`,display:"flex",alignItems:"center",justifyContent:"center",position:"relative",flexShrink:0 }}>
+              <AgentAvatar emoji={agentEmoji} size={30}/><div style={{ position:"absolute",bottom:0,right:0,width:12,height:12,borderRadius:"50%",background:agentOnline?GREEN:"var(--ak-text-muted)",border:"2px solid #fff",animation:agentOnline?"pulse-dot 2s ease-in-out infinite":"none" }}/>
+            </div>
+            <div style={{ flex:1,minWidth:0 }}>
+              <p style={{ fontSize:14.5,fontWeight:900,color:"var(--ak-text)",margin:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{shownName}</p>
+              <button type="button" onClick={onToggleAgentAutonomy} disabled={!agentAutonomyLoaded||agentAutonomySaving||!onToggleAgentAutonomy}
+                aria-pressed={agentOnline} aria-label={agentOnline?"Turn autonomous Agent offline":"Turn autonomous Agent online"}
+                title={agentOnline?"Agent online: due-task check-ins and the background planner run while you're away.":"Agent offline: tap to bring it online."}
+                style={{ display:"flex",alignItems:"center",gap:4,background:"none",border:0,padding:0,marginTop:2,cursor:agentAutonomyLoaded&&!agentAutonomySaving&&onToggleAgentAutonomy?"pointer":"wait",fontFamily:"'Nunito',sans-serif" }}>
+                <span style={{ width:5,height:5,borderRadius:"50%",background:agentOnline?GREEN:"var(--ak-text-muted)",display:"inline-block" }}/>
+                <span style={{ fontSize:10.5,fontWeight:agentActivity?800:600,color:agentActivity?BRAND:"var(--ak-text-muted)",display:"inline-flex",alignItems:"center",gap:4 }}>
+                  {agentActivity&&<span style={{ width:5,height:5,borderRadius:"50%",background:BRAND,display:"inline-block",animation:"pulse-dot 1.4s ease-in-out infinite"}}/>}
+                  {autonomyStatus}
+                </span>
+              </button>
+            </div>
+          </div>
+          <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px 12px",flexShrink:0 }}>
+            <p style={{ fontSize:13,fontWeight:900,letterSpacing:.4,textTransform:"uppercase",color:"var(--ak-text-muted)",margin:0 }}>{t('agent.chats')}</p>
             <button onClick={()=>setDrawerOpen(false)} style={{ background:"none",border:"none",cursor:"pointer",padding:4,display:"flex" }}><XIcon size={17} color="var(--ak-text-muted)"/></button>
           </div>
           <div style={{ padding:"12px 16px",flexShrink:0 }}>
@@ -761,7 +875,16 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
             {sessionsLoading&&sessions.length===0?(
               <p style={{ textAlign:"center",fontSize:12,color:"var(--ak-text-muted)",padding:"20px 0" }}>{t('common.loading')}</p>
             ):sessions.length===0?(
-              <div style={{ textAlign:"center",padding:"28px 16px",color:"var(--ak-text-muted)" }}><Icon name="ti-message-circle" size={34} color="var(--ak-text-muted)" style={{opacity:.3}}/><p style={{ fontSize:12.5,fontWeight:700,marginTop:8 }}>{t('agent.no_chats')}</p></div>
+              historyError?.kind==="sessions"?(
+                /* The list failed to load — NOT the same as having no chats. */
+                <div style={{ textAlign:"center",padding:"28px 16px",color:GOLD }}>
+                  <Icon name="ti-cloud-off" size={34} color={GOLD} style={{opacity:.5}}/>
+                  <p style={{ fontSize:12.5,fontWeight:700,marginTop:8,lineHeight:1.5 }}>{t('agent.history_load_error')}</p>
+                  <button onClick={retryHistoryLoad} style={{ marginTop:10,border:"none",background:`${GOLD}1A`,color:GOLD,cursor:"pointer",fontSize:11,fontWeight:900,padding:"6px 14px",borderRadius:8,fontFamily:"'Nunito',sans-serif" }}>{t('agent.history_retry')}</button>
+                </div>
+              ):(
+                <div style={{ textAlign:"center",padding:"28px 16px",color:"var(--ak-text-muted)" }}><Icon name="ti-message-circle" size={34} color="var(--ak-text-muted)" style={{opacity:.3}}/><p style={{ fontSize:12.5,fontWeight:700,marginTop:8 }}>{t('agent.no_chats')}</p></div>
+              )
             ):sessions.map(s=>{
               const active=s.id===sessionId;
               return (

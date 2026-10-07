@@ -13,6 +13,6 @@
 # code against an un-migrated DB.
 #
 # Requires DATABASE_URL (or MIGRATION_DATABASE_URL) in this service's variables.
-# Runs schema migrations AND the demo seeds (all idempotent). To exclude demo
-# data on an environment, set DB_DEPLOY_GROUPS=schema in its variables.
-preDeployCommand = "npm run db:deploy"
+# Run schema migrations only. Demo seed data is intentionally excluded from
+# production deployments.
+preDeployCommand = "npm run db:migrate"

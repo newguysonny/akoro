@@ -216,7 +216,7 @@ export default function AiChatPage() {
           lane.current = 'tutor';   // not a parent — study tutor from here on
         } catch { lane.current = 'tutor'; }
       }
-      const data = await apiPost('/api/adaptive/chat/tutor', {
+      const data = await apiPost('/api/adaptive/chat/agent', {
         message: body, history, agentName: aiName || 'Akoro', role: isStudent ? 'student' : 'instructor',
       });
       setMessages((p) => [...p, { from: 'agent', text: data.reply || data.response || "I'm here to help — could you rephrase that?" }]);

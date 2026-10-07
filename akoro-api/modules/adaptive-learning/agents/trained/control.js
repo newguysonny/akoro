@@ -5,6 +5,7 @@
 // =============================================================
 
 import { buildControlPrompt } from "../../training/agentPromptBuilder.js";
+import { buildTrainedBoundaryPrompt } from "../../../agent-context/personas/trained.js";
 
 import { openai } from "../../../../lib/aiModel.js";
 
@@ -34,14 +35,7 @@ export class TrainedControl {
       messages: [
         {
           role: "system",
-          content: `Define ON-topic and OFF-topic for this session.
-This teacher has taught: ${taught.slice(0, 10).join(", ")}.
-Return JSON:
-{
-  "allowed":  ["concept1", "concept2", "concept3", "concept4"],
-  "offTopic": ["thing1", "thing2", "thing3", "thing4"],
-  "boundaryStatement": "one sentence"
-}`,
+          content: await buildTrainedBoundaryPrompt({ taughtList: taught.slice(0, 10).join(", ") }),
         },
         { role: "user", content: `Topic: ${topic}` },
       ],

@@ -16,6 +16,7 @@ import multer            from "multer";
 import { authenticateToken } from "../auth/routes.js";
 import { transcribeBufferDeepgram, hasDeepgram, grantAgentToken } from "./deepgram.js";
 import { tutorSystemPrompt } from "../adaptive-learning/chat.js";
+import { loadDoctrine } from "../agent-context/context-manager.js";
 import { coinsAvailable, debitCoins, InsufficientCoins } from "../../lib/coins.js";
 import { getAiBillTo } from "../../lib/aiContext.js";
 import { estimateAudioMinutes, coinsForSttMinutes, coinsForTtsChars } from "../../lib/aiPricing.js";
@@ -187,8 +188,11 @@ router.post("/agent-token", authenticateToken, async (req, res) => {
       token_type: token.token_type,
       agentName: "Akoro",
       greeting: `Hi${firstName ? " " + firstName : ""}! I'm your school's AI study assistant. Ask me anything — go ahead, I'm listening.`,
-      prompt: tutorSystemPrompt({ agentName: "Akoro", role })
-        + " You are speaking out loud in a live voice conversation — keep replies short and natural, 1-3 sentences, no markdown, no bullet lists, no code blocks.",
+      // P1 (Context Layer Adoption): the chat persona loads from the
+      // akoro-agent/ workspace (tutorSystemPrompt is async now); the speech
+      // channel rules live in channels/SPEECH.md.
+      prompt: (await tutorSystemPrompt({ agentName: "Akoro", role }))
+        + " " + (await loadDoctrine("channels/SPEECH.md")),
     });
   } catch (err) {
     console.error("[voice/agent-token]", err.message);

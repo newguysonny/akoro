@@ -38,7 +38,11 @@ export default function SelfStudyList({ onStart, subjectFilter = 'all' }) {
 
   const load = useCallback(() => {
     apiGet('/api/self-study/mine')
-      .then(d => setItems(d?.data ?? []))
+      // Live courses are a moment in the timetable, not an agent session —
+      // they live in the Activity feed. Everything assigned starts here as
+      // an agent session exactly like self study always has.
+      // Locked journey stages wait their turn — they are not startable work yet.
+      .then(d => setItems((d?.data ?? []).filter(a => (a.type || 'self_study') !== 'live_course' && !a.journey?.locked)))
       .catch(() => setItems([]))
       .finally(() => setLoad(false));
   }, []);

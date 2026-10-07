@@ -15,6 +15,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECT_COLORS, STUDENT_ID } from '../../constants.js';
 import { apiGet } from '../../services/api.js';
 import { Icon } from '../common/Icons.jsx';
+import { AgentAvatar } from '../common/AgentAvatar.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
 const FONT = "'Nunito', sans-serif";
@@ -118,7 +119,7 @@ export default function AgentStatsTab({ studentId = STUDENT_ID, agentName = 'Age
       <div style={{ background: `linear-gradient(135deg, ${BRAND}, #4C1DCC)`, borderRadius: 18, padding: '16px 16px 18px', color: '#fff' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-            <div style={{ width: 46, height: 46, borderRadius: 13, background: 'rgba(255,255,255,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>{agentEmoji}</div>
+            <div style={{ width: 46, height: 46, borderRadius: 13, background: 'rgba(255,255,255,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><AgentAvatar emoji={agentEmoji} size={30}/></div>
             <div>
               <div style={{ fontSize: 15, fontWeight: 900 }}>{agentName}</div>
               <div style={{ fontSize: 11.5, fontWeight: 700, opacity: .85 }}>{t('agent.level')} {intel?.level ?? 1} · {intel?.knowledge_score ?? 0} {t('stats.knowledge_score')}</div>

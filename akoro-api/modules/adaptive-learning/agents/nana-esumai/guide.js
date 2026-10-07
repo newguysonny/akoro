@@ -11,6 +11,14 @@
  */
 
 import { openai } from "../base-orchestrator.js";
+// P2 (Context Layer Adoption): every prompt below loads VERBATIM from the
+// akoro-agent/ workspace via these builders — byte-identical to the
+// pre-migration literals, pinned by agentContext.golden.personas.test.mjs.
+import {
+  buildKnowledgeMapPrompt, buildObjectivesPrompt, buildOpenSubtopicPrompt, buildCoachTurnPrompt,
+  buildPushFurtherPrompt, buildEvaluateSubtopicPrompt, buildMustKnowPrompt, buildEvidenceInstruction,
+  buildTipDecisionPrompt, buildClassAnalyticsPrompt, buildEvaluateSessionPrompt,
+} from "../../../agent-context/personas/nana-esumai.js";
 
 /**
  * Turn whatever the model returned into a ladder that holds its shape.
@@ -87,25 +95,12 @@ export class NaNaEsumai {
       // property is more than an assertion.
       model: opts.model || "gpt-4.1-mini", temperature: 0.25,
       __feature: opts.feature || undefined, __userId: opts.userId || undefined,
+      // Bounded: the SDK defaults (10-min timeout, 2 retries) once let one
+      // stalled call hang a whole chat turn past the browser's patience.
+      __timeoutMs: 45_000, __maxRetries: 1,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content:
-          `You are a curriculum expert building a KNOWLEDGE MAP: an ordered path through a topic ` +
-          `where each step is teachable in 5-10 minutes and depends only on the steps before it.\n\n` +
-          `START AT THE REAL BEGINNING. The first step is almost never the topic's headline idea — it is ` +
-          `the vocabulary or substance the headline idea is ABOUT. For "The water cycle" the first step is ` +
-          `what water is and what it is made of, NOT "the three states of water": a learner who does not ` +
-          `know what water is cannot be taught that it has states. Ask yourself what a learner must already ` +
-          `know for step 1 to make sense; if the answer is anything, that is the real step 1.\n\n` +
-          `Then build: name the thing → how it behaves → what it does in one place → how the parts connect → ` +
-          `the whole picture.\n\n` +
-          `For EACH step give:\n` +
-          `  title      — concrete and specific. Never "Introduction", "Basics" or "Advanced concepts".\n` +
-          `  kind       — one of: foundation | mechanism | application | synthesis\n` +
-          `  buildsOn   — the title of the step it depends on, or null for the first\n` +
-          `  whyNow     — one short sentence: what the learner can do after this that they could not before\n\n` +
-          `6-8 steps. Exactly one synthesis step, and it is the last.\n` +
-          `JSON only: { "steps": [{ "title": "...", "kind": "...", "buildsOn": null, "whyNow": "..." }] }` },
+        { role: "system", content: await buildKnowledgeMapPrompt() },
         { role: "user",   content:
           (groundingContext
             ? `${groundingContext}\n\nBuild the map STRICTLY from the syllabus references above — use their wording and scope. Do not introduce material they don't cover.\n\n`
@@ -123,9 +118,10 @@ export class NaNaEsumai {
   async generateObjectives(subtopic, topic, subject, groundingContext = "") {
     const res = await openai.chat.completions.create({
       model: "gpt-4.1-mini", temperature: 0.2,
+      __timeoutMs: 45_000, __maxRetries: 1,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: `Return 3 clear, measurable learning objectives for this subtopic.\nJSON only: { "objectives": ["By the end, the student can...", "..."] }` },
+        { role: "system", content: await buildObjectivesPrompt() },
         { role: "user",   content:
           (groundingContext ? `${groundingContext}\n\nKeep the objectives within the scope of the syllabus references above.\n\n` : "") +
           `Subtopic: ${subtopic}\nTopic: ${topic}\nSubject: ${subject}` },
@@ -134,26 +130,103 @@ export class NaNaEsumai {
     return JSON.parse(res.choices[0].message.content).objectives || [];
   }
 
+  /* ── Assignment workbench: draft graded questions ────────── */
+  /**
+   * Draft assignment questions with the marking built in. The instructor
+   * sets the shape — total points and which question types are allowed
+   * (reference: assignment generation and creator.md) — and the model
+   * allocates points across questions weighted by difficulty and thinking
+   * level, so every question arrives already worth its marks. MCQs carry
+   * their options and the correct index; every other type is open answer.
+   */
+  async generateAssignmentQuestions({ topic, subject, totalPoints, questionTypes, difficulty, subtopics }) {
+    const types  = (Array.isArray(questionTypes) && questionTypes.length)
+      ? questionTypes.join(", ") : "MCQ, Short answer";
+    const areas  = (Array.isArray(subtopics) && subtopics.length)
+      ? `\nQuestion areas from the approved task breakdown (cover them in order):\n${subtopics.map((s, i) => `  ${i + 1}. ${s}`).join("\n")}\n` : "";
+    const total  = Number(totalPoints) || null;
+    const res = await openai.chat.completions.create({
+      model: "gpt-4.1-mini", temperature: 0.3,
+      __timeoutMs: 45_000, __maxRetries: 1,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content:
+          "You write graded assignment questions for a school class. " +
+          "Use ONLY the question types listed. Produce " +
+          (total
+            ? "as many questions as the total points sensibly support (about one question per 3-5 points, minimum 3, maximum 12)"
+            : "4 to 6 questions and choose a sensible total (10, 20, 50 or 100)") +
+          ". Allocate max_points across the questions so they sum EXACTLY" +
+          (total ? ` to ${total}` : " to that total") +
+          ". Weight the points by difficulty and thinking level — harder questions and higher cognitive levels earn more marks. " +
+          "difficulty is one of Easy, Medium, Hard. cognitive_level is one of Recall, Understand, Apply, Analyze, Evaluate, Create. " +
+          'MCQ questions must carry exactly 4 options plus "correct", the 0-based index of the right one; every other type has no options. ' +
+          'Return JSON: { "questions": [ { "text": string, "type": string, "max_points": number, "difficulty": string, "cognitive_level": string, "options"?: string[], "correct"?: number } ] }' },
+        { role: "user", content:
+          `Topic: ${topic}\nSubject: ${subject}\nQuestion types to use: ${types}` +
+          (difficulty ? `\nOverall difficulty target: ${difficulty}` : "") +
+          (total ? `\nTotal points: ${total}` : "") + areas },
+      ],
+    });
+    let questions = [];
+    try { questions = JSON.parse(res.choices[0].message.content).questions || []; } catch { questions = []; }
+    return questions
+      .filter(q => q && typeof q.text === "string" && q.text.trim())
+      .map(q => ({
+        text:            q.text.trim(),
+        type:            String(q.type || "").trim(),
+        max_points:      Number(q.max_points) || null,
+        difficulty:      String(q.difficulty || "").trim(),
+        cognitive_level: String(q.cognitive_level || "").trim(),
+        options: Array.isArray(q.options) ? q.options.map(o => String(o)).filter(Boolean) : null,
+        correct: Number.isInteger(q.correct) ? q.correct : null,
+      }));
+  }
+
+  /* ── Assignment workbench: draft the marking rubric ──────── */
+  /**
+   * Draft a rubric — criteria with points — for the same brief. When the
+   * total is known the criteria points sum to it; without one the model
+   * returns percentage weights, which the workbench shows as-is until the
+   * instructor sets a total.
+   */
+  async generateAssignmentRubric({ topic, subject, totalPoints, questionTypes }) {
+    const types = (Array.isArray(questionTypes) && questionTypes.length) ? questionTypes.join(", ") : null;
+    const total = Number(totalPoints) || null;
+    const res = await openai.chat.completions.create({
+      model: "gpt-4.1-mini", temperature: 0.25,
+      __timeoutMs: 45_000, __maxRetries: 1,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content:
+          "You write marking rubrics for school assignments. 3 to 6 criteria, each a short noun phrase a teacher can grade against. " +
+          (total
+            ? `The criteria points must sum EXACTLY to ${total}.`
+            : "Return percentage weights that sum to 100.") +
+          ' Return JSON: { "rubric": [ { "criterion": string, "points": number } ] }' },
+        { role: "user", content:
+          `Topic: ${topic}\nSubject: ${subject}` +
+          (total ? `\nTotal points: ${total}` : "") +
+          (types ? `\nQuestion types in the assignment: ${types}` : "") },
+      ],
+    });
+    let rubric = [];
+    try { rubric = JSON.parse(res.choices[0].message.content).rubric || []; } catch { rubric = []; }
+    return rubric
+      .filter(r => r && typeof r.criterion === "string" && r.criterion.trim())
+      .map(r => ({ criterion: r.criterion.trim(), points: Number(r.points) || 0 }));
+  }
+
   /* ── Opening message when subtopic begins ────────────────── */
   async openSubtopic({ subtopic, topic, subject, agentName, agentEmoji, phase, objectives, subtopicIdx, totalSubtopics }) {
     const objList = objectives.map((o, i) => `  ${i + 1}. ${o}`).join("\n");
     const res = await openai.chat.completions.create({
       model: "gpt-4.1-mini", temperature: 0.4,
       messages: [
-        { role: "system", content:
-          `You are NaNa Esumai, an encouraging learning guide.\n` +
-          `A human is about to teach ${agentName} ${agentEmoji} (their Student AI Agent) about "${subtopic}" (part of ${topic}, ${subject}).\n` +
-          `This is subtopic ${subtopicIdx + 1} of ${totalSubtopics}.\n\n` +
-          `Open the subtopic with:\n` +
-          `1. A LESSON HOOK (1-2 sentences) — grab attention before any theory. Use one of:\n` +
-          `   a surprising fact, a "what would happen if…" question, a relatable everyday scenario,\n` +
-          `   or a puzzle the learner can't yet solve. Make them curious, don't explain yet.\n` +
-          `2. WHY IT MATTERS — one concrete REAL-WORLD application of "${subtopic}": where it shows up\n` +
-          `   in daily life, a job, technology, or the local community. Be specific, not generic.\n` +
-          `3. The learning objectives (list them).\n` +
-          `4. An INTERACTIVE opener to the human: "Start by sharing what you know about ${subtopic} with ${agentName}."\n` +
-          `   — and add one warm-up question they can answer from everyday experience.\n\n` +
-          `Keep it concise and warm. Mention ${agentName}'s current confidence is low on this topic.` },
+        { role: "system", content: await buildOpenSubtopicPrompt({
+          subtopic, topic, subject, agentName, agentEmoji,
+          subtopicNumber: subtopicIdx + 1, totalSubtopics,
+        }) },
         { role: "user", content: `Objectives:\n${objList}` },
       ],
     });
@@ -172,26 +245,9 @@ export class NaNaEsumai {
       model: "gpt-4.1-mini", temperature: 0.35,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content:
-          `You are NaNa Esumai. You are coaching a human who is teaching ${agentName} about "${subtopic}".\n\n` +
-          `Phase: ${phase}\n` +
-          `${agentName}'s confidence: ${agentConfidence}%\n` +
-          `Objectives remaining: ${JSON.stringify(remaining)}\n\n` +
-          `Your job:\n` +
-          `- Tell the human what ${agentName} understood and what gap remains\n` +
-          `- Be specific: "Good! But ${agentName} still needs to understand [X]"\n` +
-          `- If all objectives for this phase are covered → set readyToAdvance: true\n` +
-          `- Never explain the topic yourself\n` +
-          `- 1-2 sentences max\n\n` +
-          `Return JSON:\n` +
-          `{\n` +
-          `  "coachingTip": "...",\n` +
-          `  "gapIdentified": "string or null",\n` +
-          `  "objectiveCovered": "matched objective string or null",\n` +
-          `  "readyToAdvance": false,\n` +
-          `  "isUrgent": false,\n` +
-          `  "confidenceDelta": 0\n` +
-          `}` },
+        { role: "system", content: await buildCoachTurnPrompt({
+          subtopic, phase, agentName, agentConfidence, remaining: JSON.stringify(remaining),
+        }) },
         { role: "user", content: JSON.stringify({ humanMessage, agentResponse, recentHistory: history.slice(-4) }) },
       ],
     });
@@ -208,10 +264,7 @@ export class NaNaEsumai {
     const res = await openai.chat.completions.create({
       model: "gpt-4.1-mini", temperature: 0.4,
       messages: [
-        { role: "system", content:
-          `You are NaNa Esumai coaching a human who is teaching ${agentName} about "${subtopic}" (${topic}).\n\n` +
-          `${agentName} has shown good understanding. Ask the human to push ${agentName} further with a real-world application or edge case.\n` +
-          `Be specific about what kind of question to ask. 1-2 sentences.` },
+        { role: "system", content: await buildPushFurtherPrompt({ subtopic, topic, agentName }) },
         { role: "user", content: JSON.stringify({ humanMessage, agentResponse }) },
       ],
     });
@@ -224,10 +277,7 @@ export class NaNaEsumai {
       model: "gpt-4.1-mini", temperature: 0.3,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content:
-          `Evaluate how well the human taught ${agentName} about "${subtopic}".\n` +
-          `Be warm, specific, celebratory.\n` +
-          `Return JSON: { "score": 0-100, "strengths": ["...", "..."], "missedConcepts": ["..."], "teachingTip": "..." }` },
+        { role: "system", content: await buildEvaluateSubtopicPrompt({ subtopic, agentName }) },
         { role: "user", content: JSON.stringify({ finalConfidence, objectivesCovered, recentHistory: history.slice(-8) }) },
       ],
     });
@@ -244,7 +294,7 @@ export class NaNaEsumai {
       model: "gpt-4.1-mini", temperature: 0.2,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: `You are a curriculum expert.\nReturn the 3-5 essential sub-concepts a student MUST understand for this topic.\nJSON only: { "mustKnow": ["concept1", "concept2", ...] }\nKeep each concept short (1-3 words).` },
+        { role: "system", content: await buildMustKnowPrompt() },
         { role: "user",   content: `Topic: ${topic}` },
       ],
     });
@@ -266,9 +316,17 @@ export class NaNaEsumai {
 
   async getTip(params, onChunk = null) {
     const { topic, phase, currentSubtopic, humanMessage, studentResponse,
-            understanding, confusion, history, mustKnowParts, mustKnowIndex } = params;
+            understanding, confusion, history, mustKnowParts, mustKnowIndex,
+            teachingEvidence = {}, dialogue = {} } = params;
+    const evidenceInstruction = await buildEvidenceInstruction({ teachingEvidence, dialogue });
 
-    const systemPrompt = `You are NaNa Esumai, a gentle and encouraging teaching coach.\nYou watch a human teach their Student Agent and give short practical tips.\n\nTopic: "${topic}"\nPhase: ${phase}\nMust-know parts: ${JSON.stringify(mustKnowParts)}\nCurrent subtopic: ${currentSubtopic || "none"}\nUnderstanding: ${understanding}%\nConfusion: ${confusion}%\n\nYour style:\n- Warm, encouraging, uses friendly analogies\n- Always finds something positive before redirecting\n- Tip length: 1-2 sentences max\n- NEVER say: scaffold, socratic, metacognitive\n- If confusion > 50% OR misconception → isUrgent: true\n\nSTAYING ON TOPIC IS YOUR JOB TOO.\nA separate agent used to police this and it was wrong about it constantly — it read "Hello" as off-topic and told a child to get back to work, on their opening message. You have the context it lacked, so you handle it:\n- A greeting, a question about how this works, or a moment of confusion is NOT off topic. Answer it briefly and warmly, then give the teaching nudge as usual.\n- If they genuinely wander, DO NOT scold. Find the thread back: acknowledge what they said in half a sentence, then connect it to "${topic}" and give them something to say next.\n- Set offTopic: true ONLY when the message has nothing to do with the lesson AND they have already been steered back once. Even then your tip stays kind.\n- Never spend a teaching turn on a redirect. Your tip should always leave them with something to teach next.\n\nMake it INTERACTIVE — rotate your tips across these moves instead of only explaining:\n- Suggest a REAL-WORLD example or where this shows up in everyday life\n- Suggest a concrete analogy or a quick "picture this…" hook\n- Suggest asking the agent a check question, or a "what if we changed X?" twist\n- Suggest a tiny worked example or a 10-second mini-challenge\nPrefer a suggestion the human can act on in their very next message.\n\nDecide:\n- nextAction: DIG_DEEPER | CLEAR_MISTAKE | NAME_IT | NEXT_SUBTOPIC | ONE_MORE_PUSH | USE_ANALOGY | GAP_CLOSED | TRIGGER_RECALL | CHALLENGE | MASTERY\n- nextPhase: PHASE_1 | PHASE_2 | PHASE_3 | PHASE_4 | MASTERY | null\n- nextMustKnowIndex: ${mustKnowIndex}\n- isUrgent: boolean\n- offTopic: boolean — see above; steering counts as teaching, not as a violation\n\nReturn JSON only:\n{ "tip": "...", "nextAction": "...", "nextPhase": null, "nextMustKnowIndex": ${mustKnowIndex}, "isUrgent": false, "offTopic": false, "detectedMisconception": null }`;
+    const systemPrompt = await buildTipDecisionPrompt({
+      topic, phase,
+      mustKnowParts: JSON.stringify(mustKnowParts),
+      currentSubtopic: currentSubtopic || "none",
+      understanding, confusion,
+      evidenceInstruction, mustKnowIndex,
+    });
 
     const messages = [
       { role: "system", content: systemPrompt },
@@ -285,12 +343,31 @@ export class NaNaEsumai {
     return JSON.parse(res.choices[0].message.content);
   }
 
+  /**
+   * classAnalytics — an AI read of one assigned activity's class results.
+   *
+   * Consumes only aggregate teaching signals (status, understanding,
+   * confusion, engagement, knowledge score — first names, no transcripts),
+   * so the report explains the class rather than quoting it.
+   */
+  async classAnalytics(brief, learners) {
+    const res = await openai.chat.completions.create({
+      model: "gpt-4.1-mini", temperature: 0.25,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: await buildClassAnalyticsPrompt() },
+        { role: "user", content: JSON.stringify({ brief, learners }) },
+      ],
+    });
+    return JSON.parse(res.choices[0].message.content);
+  }
+
   async evaluateSession(topic, history, finalUnderstanding) {
     const res = await openai.chat.completions.create({
       model: "gpt-4.1-mini", temperature: 0.2,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: `You are NaNa Esumai. Evaluate how well the human taught their Student Agent.\nWarm, encouraging, celebratory tone.\nReturn JSON: { "overallScore": 0-100, "strengths": ["...", "...", "..."], "nextTimeTip": "...", "nextLesson": "..." }` },
+        { role: "system", content: await buildEvaluateSessionPrompt() },
         { role: "user",   content: JSON.stringify({ topic, history: history.slice(-20), finalUnderstanding }) },
       ],
     });

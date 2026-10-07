@@ -12,6 +12,13 @@
  */
 
 import { openai } from "../base-orchestrator.js";
+// P2 (Context Layer Adoption): prompts load VERBATIM from the akoro-agent/
+// workspace — byte-identical to the pre-migration literals, pinned by
+// agentContext.golden.personas.test.mjs.
+import {
+  buildProctorQuestionsPrompt, buildProctorEvaluatePrompt,
+  buildProctorHintPrompt, buildProctorVerdictPrompt,
+} from "../../../agent-context/personas/sargeant.js";
 
 const MODEL = "gpt-4.1-mini";
 
@@ -36,17 +43,11 @@ export class SergeantProctor {
       model: MODEL, temperature: 0.4,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content:
-          `You are Sergeant, a strict but fair examiner. Generate exactly ${this.questionCount} ` +
-          `open-ended assessment questions on "${this.topic}"${this.subject ? ` (${this.subject})` : ""} ` +
-          `for a human candidate.\n` +
-          `Rules:\n` +
-          `- Progress from recall → application → analysis (increasing difficulty)\n` +
-          `- Each question targets a specific learning objective\n` +
-          `- No multiple choice. No yes/no. Require explanation.\n` +
-          `- Concise, unambiguous wording.\n\n` +
-          `Return JSON: { "opening": "one strict intro sentence", "questions": [ ` +
-          `{ "q": "...", "objective": "...", "difficulty": "recall|application|analysis" } ] }` },
+        { role: "system", content: await buildProctorQuestionsPrompt({
+          questionCount: this.questionCount,
+          topic: this.topic,
+          subjectSuffix: this.subject ? ` (${this.subject})` : "",
+        }) },
         { role: "user", content:
           `Topic: ${this.topic}\nObjectives: ${JSON.stringify(this.objectives)}\nCount: ${this.questionCount}` },
       ],
@@ -69,13 +70,7 @@ export class SergeantProctor {
       model: MODEL, temperature: 0.1,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content:
-          `You are Sergeant evaluating a human candidate's answer. Be strict but fair.\n` +
-          `Difficulty: ${q.difficulty}. Objective: ${q.objective}.\n` +
-          `Return JSON: { "score": 0-100, "correct": bool, ` +
-          `"feedback": "one sentence — precise, what was right or missing", ` +
-          `"needsHint": bool (true only if the answer shows partial understanding worth nudging), ` +
-          `"misconception": "the specific wrong idea, or null" }` },
+        { role: "system", content: await buildProctorEvaluatePrompt({ difficulty: q.difficulty, objective: q.objective }) },
         { role: "user", content: JSON.stringify({ question: q.q, answer, objective: q.objective }) },
       ],
     });
@@ -118,10 +113,7 @@ export class SergeantProctor {
     const res = await openai.chat.completions.create({
       model: MODEL, temperature: 0.5,
       messages: [
-        { role: "system", content:
-          `You are Sergeant. The candidate's answer is partially right. Give ONE short ` +
-          `Socratic hint that points toward the gap WITHOUT revealing the answer. ` +
-          `One sentence. Strict tone.` },
+        { role: "system", content: await buildProctorHintPrompt() },
         { role: "user", content: JSON.stringify({ question: q.q, answer, missing: ev.feedback }) },
       ],
     });
@@ -145,14 +137,15 @@ export class SergeantProctor {
     const res = await openai.chat.completions.create({
       model: MODEL, temperature: 0.3,
       messages: [
-        { role: "system", content:
-          `You are Sergeant delivering a final assessment verdict on the candidate's "${this.topic}" exam.\n` +
-          `Academic score: ${avg}%. Cheat probability: ${(cheatProbability * 100).toFixed(0)}%. ` +
-          `Verdict: ${verdictLabel}.\n` +
-          `Write 2-3 sentences: acknowledge performance, name the strongest and weakest area, and ` +
-          `${verdictLabel === "terminated" || verdictLabel === "flagged"
-              ? "state plainly that proctoring flags require review before this result counts."
-              : "give one concrete next step."}` },
+        { role: "system", content: await buildProctorVerdictPrompt({
+          topic: this.topic,
+          avg,
+          cheatPercent: (cheatProbability * 100).toFixed(0),
+          verdictLabel,
+          verdictTail: verdictLabel === "terminated" || verdictLabel === "flagged"
+            ? "state plainly that proctoring flags require review before this result counts."
+            : "give one concrete next step.",
+        }) },
         { role: "user", content: JSON.stringify({
             avg, verdictLabel, cheatProbability,
             cheatEvents: cheatEvents.slice(0, 8),

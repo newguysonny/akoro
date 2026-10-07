@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "test:agent-actions": "node --test src/lib/agentChatEndpoint.test.mjs src/lib/agentChatTransport.contract.test.mjs",
     "check:header": "esbuild scripts/check-subtopic-header.mjs --bundle --platform=node --format=cjs --outfile=node_modules/.cache/csh.cjs --loader:.jsx=jsx --jsx=automatic && node node_modules/.cache/csh.cjs",
     "check:dhub": "node scripts/check-dhub-hub.mjs && node scripts/check-dhub-search.mjs"
   },
@@ -18,6 +19,7 @@
     "@tensorflow/tfjs": "^4.22.0",
     "hls.js": "^1.6.16",
     "lucide-react": "^1.18.0",
+    "pdfjs-dist": "^4.10.38",
     "qrcode": "^1.5.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

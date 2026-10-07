@@ -9,6 +9,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import config           from "./config/index.js";
+import { countQuery }   from "./lib/usageMeter.js";
 
 const clientOptions = {
   auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
@@ -21,13 +22,33 @@ if (!config.supabase.url || !config.supabase.serviceKey) {
   process.exit(1);
 }
 
-const db = createClient(config.supabase.url, config.supabase.serviceKey, clientOptions);
+// Meter every PostgREST entry point (from/rpc/schema) so the platform's
+// per-command quota is observable per route. Builders execute once, so
+// builder creation ≈ command count.
+function metered(client) {
+  const wrapSchema = (schemaBuilder) => {
+    const from = schemaBuilder.from.bind(schemaBuilder);
+    const rpc = schemaBuilder.rpc.bind(schemaBuilder);
+    schemaBuilder.from = (...a) => { countQuery(); return from(...a); };
+    schemaBuilder.rpc  = (...a) => { countQuery(); return rpc(...a); };
+    return schemaBuilder;
+  };
+  const from = client.from.bind(client);
+  const rpc = client.rpc.bind(client);
+  const schema = client.schema.bind(client);
+  client.from    = (...a) => { countQuery(); return from(...a); };
+  client.rpc     = (...a) => { countQuery(); return rpc(...a); };
+  client.schema  = (...a) => wrapSchema(schema(...a));
+  return client;
+}
+
+const db = metered(createClient(config.supabase.url, config.supabase.serviceKey, clientOptions));
 
 export const readDb = config.db.readUrl && config.db.readUrl !== config.supabase.url
-  ? createClient(config.db.readUrl, config.supabase.serviceKey, {
+  ? metered(createClient(config.db.readUrl, config.supabase.serviceKey, {
       ...clientOptions,
       global: { headers: { "x-akoro-instance": `${config.instanceId}-read` } },
-    })
+    }))
   : db;
 
 export const checkDb = async () => {

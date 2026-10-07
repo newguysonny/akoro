@@ -53,13 +53,19 @@ export async function sendPushToUser(userId, payload) {
   } catch (e) { console.warn("[webpush] load subs failed:", e.message); return; }
   if (!subs.length) return;
 
+  // 120 chars is the visible ceiling on most lock screens; the rest is bytes
+  // the device never shows. TTL stops offline devices from queuing stale
+  // pushes for days; topic lets the push service collapse a burst ("you have
+  // 12 new battle results") into one visible notification per tag.
   const body = JSON.stringify({
     title: payload.title || "Akoro",
-    body:  payload.body || "",
+    body:  String(payload.body || "").slice(0, 120),
     link:  payload.link || "/notifications",
     tag:   payload.tag || payload.type || "akoro",
     type:  payload.type || "system",
   });
+  const topic = String(payload.tag || payload.type || "akoro")
+    .replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 32) || "akoro";
 
   const dead = [];
   await Promise.all(subs.map(async (s) => {
@@ -67,6 +73,7 @@ export async function sendPushToUser(userId, payload) {
       await webpush.sendNotification(
         { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
         body,
+        { TTL: 3600, topic },
       );
     } catch (err) {
       // 404/410 → the subscription is gone; prune it.

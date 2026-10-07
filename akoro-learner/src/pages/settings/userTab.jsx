@@ -10,11 +10,24 @@ import { LS_DISPLAY } from '../../contexts/ThemeContext.jsx';
 import { changePassword, deactivateAccount, deleteAccount, setDefaultAgent, uploadAvatar } from '../../services/settingsApi.js';
 import {
   BRAND, RED, ORANGE, ALL_SUBJECTS, SUBJ_ICON, rowBase,
-  COUNTRIES, GUIDES, SCHOOL_TYPES, STUDY_LEVELS, YEARS, LANGUAGES,
+  COUNTRIES, GUIDES, STUDY_LEVELS, YEARS, LANGUAGES,
   Icon, Toggle, ProgressBar, SubjectChip, Section, Row, AvatarCircle, SubjectsRow,
 } from './shared.jsx';
-import { AvatarPickerSheet, SubjectsSheet, GenericSheet, TwoFactorSheet } from './sheets.jsx';
-import { isHigherEdUI } from '../../utils/studyLevel.js';
+import { AvatarPickerSheet, SubjectsSheet, GenericSheet, TwoFactorSheet, AlarmSoundSheet } from './sheets.jsx';
+import { getAlarmChoice, storeAlarmChoice, alarmChoiceLabel, getCustomAlarmMeta, saveCustomAlarm, clearCustomAlarm } from '../../services/alarmSound.js';
+import { isHigherEdUI, setCachedTier } from '../../utils/studyLevel.js';
+import { PLAN_OPTIONS, setPlanOverride, featureGated } from '../../utils/planOverride.js';
+
+// A concise, recognisable list keeps the mobile selector usable. The API still
+// validates IANA identifiers, so the agent never treats a display label as a
+// timezone authority.
+const TIME_ZONES = [
+  'Africa/Lagos', 'Africa/Accra', 'Africa/Johannesburg', 'Africa/Nairobi',
+  'Europe/London', 'Europe/Paris', 'Europe/Berlin',
+  'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+  'America/Toronto', 'Asia/Dubai', 'Asia/Kolkata', 'Asia/Singapore', 'Asia/Tokyo',
+  'Australia/Sydney', 'Pacific/Auckland',
+];
 
 /* ─── Notification section ────────────────────────────────────── */
 /* ─── Notification section ────────────────────────────────────── */
@@ -124,8 +137,22 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
   const [sheet,        setSheet]        = useState(null);
   const [subjectSheet, setSubjectSheet] = useState(false);
   const [avatarSheet,  setAvatarSheet]  = useState(false);
+  const [alarmSheet,   setAlarmSheet]   = useState(false);
+  // Schedule alarm sound — device-local choice (localStorage) + optional
+  // uploaded file (IndexedDB), like records. Loaded once; the sheet
+  // previews via the alarmSound service directly.
+  const [alarmChoice,  setAlarmChoice]  = useState(() => getAlarmChoice());
+  const [alarmCustom,  setAlarmCustom]  = useState(null);   // { name } | null
+  useEffect(() => { getCustomAlarmMeta().then(setAlarmCustom); }, []);
   const [twoFaSheet,   setTwoFaSheet]   = useState(null); // 'enable' | 'disable' | null
   const [toast,        setToast]        = useState('');
+
+  // Keep the tier cache in step with the profile this tab is showing (and
+  // just saved): publishing means every mounted surface — sidebar, library,
+  // dashboard — flips in the same tick instead of on the next visit.
+  useEffect(() => {
+    if (profile) setCachedTier(isHigherEdUI(profile) ? 'higher' : 'school');
+  }, [profile]);
 
   const color   = accentColor || profile.accentColor || BRAND;
   const xpPct   = profile.sessionsLimit
@@ -179,32 +206,124 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
       return;
     }
 
+    /* Study level — the MERGED level/school-type control. One pick writes
+       studyLevel AND a matching schoolType, so the columns can never
+       conflict (the old two-field UI let "University" fight "Senior
+       Secondary School", and the school-match-wins rule settled it the
+       wrong way). studyLevel.js makes the level authoritative regardless,
+       but keeping the pair consistent means every other reader of
+       school_type sees the same story. */
+    if (field === 'studyLevel') {
+      const TYPE_BY_LEVEL = {
+        'Primary School':       'Primary School',
+        'Junior Secondary':     'Junior Secondary School',
+        'Senior Secondary':     'Senior Secondary School',
+        'Sixth Form / A-Level': 'Sixth Form',
+        'University':           'University',
+        'Professional':         'Other',
+      };
+      const prevLevel = profile.studyLevel, prevType = profile.schoolType;
+      const nextType  = TYPE_BY_LEVEL[val] || 'Other';
+      const levelChanged = val !== prevLevel;
+      setProfile(p => ({ ...p, studyLevel: val, schoolType: nextType }));
+      try {
+        const result = await onSaveProfile({ studyLevel: val, schoolType: nextType });
+        if (result?.queued || result?._offline) {
+          showToast('Saved on this device — it will sync when you are online');
+          return;
+        }
+        // The PATCH response is a PARTIAL projection — it must include
+        // schoolType, but older deployments don't return studyLevel at all
+        // (the field was missing from the response until the API fix). So:
+        // confirm success strictly, and confirm each field only when the
+        // response actually carries it. A present-but-different value still
+        // fails the save; an absent one is tolerated, not mistaken for a
+        // mismatch the way `undefined !== val` was (that bug made every
+        // level change "fail" AFTER the database write had succeeded).
+        const confirmedLevel = result?.data?.studyLevel === undefined || result?.data?.studyLevel === val;
+        const confirmedType  = result?.data?.schoolType === undefined || result?.data?.schoolType === nextType;
+        if (result?.success !== true || !confirmedLevel || !confirmedType) {
+          throw new Error('The change was not confirmed by Akoro. Please try again.');
+        }
+        showToast('Saved');
+        // A level switch re-derives the app (tier, nav, discovery). Reload
+        // only after the server confirmed — not after a rejected or queued
+        // request, which previously restored the old database value.
+        if (levelChanged) {
+          try { localStorage.setItem('akoro_boot_splash', String(Date.now())); } catch { /* private mode */ }
+          setTimeout(() => window.location.reload(), 650);   // let the toast breathe
+        }
+      } catch (error) {
+        // Roll the pair back together — never a half-applied level change.
+        setProfile(p => (p?.studyLevel === val ? { ...p, studyLevel: prevLevel, schoolType: prevType } : p));
+        console.warn('[settings] level save failed', error);
+        showToast(error?.message || 'Could not save this change. Please try again.');
+      }
+      return;
+    }
+
+    /* Current Plan — a DEVICE-LOCAL test switch (utils/planOverride.js),
+       the plan sibling of the study-level selector above. The plan is not
+       a PATCH-able profile field and billing will own it later, so this
+       flips what plan-driven UI shows on this device — no server write to
+       pretend at. Remove the case + row when the plan goes server-side. */
+    if (field === 'plan') {
+      const previous = profile.plan || 'Free';
+      setPlanOverride(val);
+      setProfile(p => ({ ...p, plan: val || 'Free' }));
+      showToast(val === 'Free' ? 'Default plan restored' : `Switched to ${val} — testing view`);
+      // A plan switch re-derives what's gated (Battles, Rankings,
+      // Gradebook). Same staged reload as study level: the splash shows,
+      // and every surface re-reads the plan fresh at boot — no half-gated
+      // state where one nav locked and another didn't.
+      if ((val || 'Free') !== previous) {
+        try { localStorage.setItem('akoro_boot_splash', String(Date.now())); } catch { /* private mode */ }
+        setTimeout(() => window.location.reload(), 650);   // let the toast breathe
+      }
+      return;
+    }
+
     const fieldMap = {
       fullName:'fullName', username:'username', phone:'phone',
-      country:'country', school:'schoolName', schoolType:'schoolType',
+      city:'city', country:'country', school:'schoolName',
       year:'yearGroup', teachingGuide:'teachingGuide',
-      language:'language', displayMode:'displayMode',
+      language:'language', timeZone:'timeZone', displayMode:'displayMode',
       accentColor:'accentColor', twoFactor:'twoFactorEnabled',
     };
     const apiKey = fieldMap[field] || field;
+    const previousValue = profile[field];
+    const reloadsApp = ['language', 'displayMode', 'accentColor'].includes(field)
+      && val && val !== previousValue;
+
+    // Optimistic feedback keeps the sheet responsive, but the API response is
+    // still the source of truth. A profile field must never be described as
+    // "saved locally" unless it has actually entered the offline write queue.
     setProfile(p => ({ ...p, [field]: val }));
     try {
-      await onSaveProfile({ [apiKey]: val });
-      showToast('Saved');
-    } catch {
-      showToast('Saved locally');
-    }
+      const result = await onSaveProfile({ [apiKey]: val });
+      if (result?.queued || result?._offline) {
+        showToast('Saved on this device — it will sync when you are online');
+        return;
+      }
+      if (result?.success !== true) {
+        throw new Error('The change was not confirmed by Akoro. Please try again.');
+      }
 
-    /* Level, language and theme switches all re-derive the whole app (the
-       school ↔ higher-ed tier reads studyLevel/schoolType; language and
-       theme come from storage at boot), so a plain state update isn't
-       enough — stage the branded boot splash and hard-reload so every
-       screen re-renders from the new setting. Runs on the saved-locally
-       path too: the queued write replays after the reload. */
-    if (['studyLevel', 'schoolType', 'language', 'displayMode', 'accentColor'].includes(field)
-        && val && val !== profile[field]) {
-      try { localStorage.setItem('akoro_boot_splash', String(Date.now())); } catch { /* private mode */ }
-      setTimeout(() => window.location.reload(), 650);   // let the toast breathe
+      showToast('Saved');
+
+      // Level, language and theme switches re-derive the app at boot. Reload
+      // only after the server has confirmed the update—not after a rejected or
+      // queued request, which previously restored the old database value.
+      if (reloadsApp) {
+        try { localStorage.setItem('akoro_boot_splash', String(Date.now())); } catch { /* private mode */ }
+        setTimeout(() => window.location.reload(), 650);   // let the toast breathe
+      }
+    } catch (error) {
+      // Do not leave a rejected optimistic value on screen. Guard the rollback
+      // so a later save to the same field cannot be overwritten by this one.
+      setProfile(p => p?.[field] === val ? { ...p, [field]: previousValue } : p);
+      console.warn('[settings] profile save failed', error);
+      showToast(error?.message || 'Could not save this change. Please try again.');
     }
   }, [onSaveProfile, setProfile, onLogout, profile, onSetMode, onSetAccent, onSetLanguage, guideMap]);
 
@@ -219,9 +338,14 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
         { icon:'ti-receipt',  title:'settings.order_history', sub:'settings.order_history_sub', go:()=>navigate('/orders') },
         isHigherEdUI(profile)
           ? { icon:'ti-users', title:'settings.communities',  sub:'settings.communities_sub',  go:()=>navigate('/communities') }
-          : { icon:'ti-activity', title:'settings.activities', sub:'settings.activities_sub',  go:()=>navigate('/activities') },
+          // lowerEd gets BOTH its cards — flattened, or the nested array
+          // renders as one blank card (which is exactly what happened).
+          : [
+              { icon:'ti-activity', title:'settings.activities', sub:'settings.activities_sub',  go:()=>navigate('/activities') },
+              { icon:'ti-books-2',  title:'settings.gradebook',  sub:'settings.gradebook_sub',   go:()=>featureGated('Gradebook') ? navigate('/upgrade?trigger=gradebook') : navigate('/gradebook') },
+            ],
         { icon:'ti-books',    title:'settings.library',       sub:'settings.library_sub',       go:()=>navigate('/library') },
-      ].map(card => (
+      ].flat().map(card => (
         <button key={card.title} onClick={card.go}
           style={{ display:'flex',alignItems:'center',gap:12,width:'calc(100% - 32px)',
             margin:'0 16px 14px',borderRadius:16,padding:'14px 16px',cursor:'pointer',
@@ -269,11 +393,21 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
           sub={profile.googleLinked?t('settings.linked_via_google'):undefined}/>
         <Row icon="ti-phone" label={t('settings.phone')} value={profile.phone||t('settings.not_set')}
           onClick={()=>openSheet('phone',t('settings.phone'),'text')}/>
+        <Row icon="ti-building-community" label="City" value={profile.city||t('settings.not_set')}
+          sub="Optional — self-reported location"
+          onClick={()=>openSheet('city','City','text')}/>
         <Row icon="ti-map-pin" label={t('settings.country')}    value={profile.country||t('settings.not_set')}
           onClick={()=>openSheet('country',t('settings.country'),'select',COUNTRIES)}/>
+        <Row icon="ti-clock" label="Time zone" value={profile.timeZone||'Africa/Lagos (Akoro default)'}
+          sub="Used for your agent chats, tasks and reminders"
+          onClick={()=>openSheet('timeZone','Time zone','select',TIME_ZONES)}/>
       </Section>
 
       <Section title={t('settings.learn_study')}>
+        {/* Level + school type are ONE control. Every option is
+            tier-unambiguous, and picking one writes BOTH profile columns as
+            a consistent pair (saveField intercepts 'studyLevel'), so the
+            two fields can never disagree about school vs higher-ed. */}
         <Row icon="ti-school" label={t('settings.study_level')} value={profile.studyLevel||t('settings.not_set')}
           onClick={()=>openSheet('studyLevel',t('settings.study_level'),'select',STUDY_LEVELS)}/>
         <Row icon="ti-chalkboard" label={t('settings.teaching_guide')}
@@ -281,8 +415,6 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
           onClick={()=>openSheet('teachingGuide',t('settings.teaching_guide'),'select',guides.length ? guides : GUIDES)}/>
         <Row icon="ti-building" label={t('settings.school_name')} value={profile.school||t('settings.not_set')}
           onClick={()=>openSheet('school',t('settings.school_name'),'text')}/>
-        <Row icon="ti-school" label={t('settings.school_type')} value={profile.schoolType||t('settings.not_set')}
-          onClick={()=>openSheet('schoolType',t('settings.school_type'),'select',SCHOOL_TYPES)}/>
         <Row icon="ti-calendar" label={t('settings.year_class')} value={profile.year||t('settings.not_set')}
           onClick={()=>openSheet('year',t('settings.year_class'),'select',YEARS)}/>
         <SubjectsRow subjects={profile.subjects||[]}
@@ -301,7 +433,9 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
       <Section title={t('settings.plan_usage')}>
         <Row icon="ti-coin" label="Credit Balance" value={`${(coinBalance||0).toLocaleString()} coins`}
           sub="Top up & view AI usage" onClick={()=>navigate('/wallet')}/>
-        <Row icon="ti-star" label={t('settings.current_plan')} value={profile.plan||'Free'}/>
+        <Row icon="ti-star" label={t('settings.current_plan')} value={profile.plan||'Free'}
+          sub="Tap to switch — device-local test control until billing goes live"
+          onClick={()=>openSheet('plan',t('settings.current_plan'),'select',PLAN_OPTIONS)}/>
         <div style={rowBase}>
           <span style={{ fontSize:17,width:28,flexShrink:0,display:'flex',alignItems:'center' }}>
             <Icon name="ti-chart-bar" size={17} color="var(--ak-text-sub)"/>
@@ -338,6 +472,13 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
         notif={profile.notif||{}}
         setNotif={n=>setProfile(p=>({...p,notif:n}))}
         onSaveNotif={onSaveNotif}/>
+
+      <Section title={t('settings.schedule_alarm')}>
+        <Row icon="ti-alarm" label={t('alarm.sound')}
+          sub={t('alarm.sound_sub')}
+          value={alarmChoiceLabel(alarmChoice, alarmCustom?.name)}
+          onClick={()=>setAlarmSheet(true)}/>
+      </Section>
 
       <Section title={t('settings.help_support')}>
         <Row icon="ti-message-circle" label={t('settings.contact_support')}  onClick={()=>showToast(t('settings.opening_support'))}/>
@@ -386,6 +527,28 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
       </Section>
       <div style={{ height:40 }}/>
 
+      {alarmSheet&&(
+        <AlarmSoundSheet
+          current={alarmChoice}
+          customName={alarmCustom?.name}
+          color={color}
+          onClose={()=>setAlarmSheet(false)}
+          onSave={(id)=>{ setAlarmChoice(id); storeAlarmChoice(id); }}
+          onUpload={async (file)=>{
+            const meta = await saveCustomAlarm(file);   // throws on bad type/size
+            setAlarmCustom(meta);
+            setAlarmChoice('custom');
+            storeAlarmChoice('custom');
+          }}
+          onClearCustom={async ()=>{
+            await clearCustomAlarm();
+            setAlarmCustom(null);
+            setAlarmChoice((c)=>{
+              if (c === 'custom') { storeAlarmChoice('default:chime'); return 'default:chime'; }
+              return c;
+            });
+          }}/>
+      )}
       {avatarSheet&&(
         <AvatarPickerSheet type="user"
           current={{ emoji:profile.avatarEmoji, photoUrl:profile.avatarUrl }}

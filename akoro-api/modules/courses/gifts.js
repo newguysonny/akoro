@@ -14,6 +14,7 @@
 
 import { Router }                         from "express";
 import axios                              from "axios";
+import { paystackPost, paystackGet }            from "../../lib/paystackBreaker.js";
 import crypto                             from "crypto";
 import { body, validationResult }         from "express-validator";
 import db                                 from "../../db.js";
@@ -96,7 +97,7 @@ const handlers = {
     }).select().single();
 
     // Initiate Paystack
-    const { data: psData } = await axios.post(
+    const { data: psData } = await paystackPost(
       "https://api.paystack.co/transaction/initialize",
       {
         email:     sender.email,

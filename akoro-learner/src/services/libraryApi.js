@@ -16,6 +16,7 @@
  * any page changes.
  */
 import { apiGet } from './api.js';
+import { fetchMyBlogs } from './blogApi.js';
 
 /* Courses — my active enrollments, joined with their course record. */
 async function fetchCourses() {
@@ -61,6 +62,23 @@ async function fetchGuides() {
   } catch { return []; }
 }
 
+/* Blogs — the learner's own posts (drafts + published) from /api/blogs. */
+async function fetchBlogs() {
+  try {
+    const d = await fetchMyBlogs();
+    return (d?.data ?? []).map(b => ({
+      id:        b.id,
+      kind:      'blog',
+      title:     b.title || 'Untitled blog',
+      subtitle:  b.status === 'published' ? 'Published' : 'Draft',
+      details:   b.excerpt || null,
+      blogStatus: b.status,
+      updatedAt: b.updated_at || null,
+      source:    'blogs',
+    }));
+  } catch { return []; }
+}
+
 /* The other kinds have no learner endpoint yet — seams for when they land. */
 const fetchFolders     = () => Promise.resolve([]); // TODO: /api/library/folders
 const fetchCollections = () => Promise.resolve([]); // TODO: /api/library/collections
@@ -70,6 +88,6 @@ const fetchCollections = () => Promise.resolve([]); // TODO: /api/library/collec
  * enrolled first (guides keep their catalog order after the courses).
  */
 export function fetchMyLibrary() {
-  return Promise.all([fetchCourses(), fetchGuides(), fetchFolders(), fetchCollections()])
+  return Promise.all([fetchCourses(), fetchGuides(), fetchBlogs(), fetchFolders(), fetchCollections()])
     .then(groups => groups.flat());
 }

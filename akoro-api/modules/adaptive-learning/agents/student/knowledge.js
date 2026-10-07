@@ -14,7 +14,12 @@ import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
+  // Same secret — the app's standard name is SUPABASE_SERVICE_KEY (see
+  // .env.example / student-state.js); SUPABASE_SERVICE_ROLE_KEY is an alias
+  // the original agent code used. Without the fallback a deployment that only
+  // sets the standard name crashes the whole API at boot ("supabaseKey is
+  // required") — every chat surface dies.
+  process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_KEY
 );
 
 import { openai } from "../../../../lib/aiModel.js";

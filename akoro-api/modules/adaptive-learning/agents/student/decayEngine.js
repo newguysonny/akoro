@@ -16,9 +16,13 @@ import { embed } from "./knowledge.js";
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
+  // SUPABASE_SERVICE_ROLE_KEY is an alias for the app's standard
+  // SUPABASE_SERVICE_KEY (same service-role secret) — fall back so a
+  // deployment setting only the standard name still boots.
+  process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_KEY
 );
 import { openai } from "../../../../lib/aiModel.js";
+import { buildDecayMustKnowPrompt } from "../../../agent-context/personas/student.js";
 
 // =============================================================
 // DECAY CONFIGURATION
@@ -505,16 +509,25 @@ export class DecayEngine {
   }
 
   // ── Mark notification as read ────────────────────────────────
-  async markNotificationRead(notificationId) {
-    await supabase
+  // Notification ids travel through a browser and are therefore never authority
+  // by themselves. Scope every mutation to the authenticated learner, too.
+  async markNotificationRead(notificationId, studentId) {
+    if (!notificationId || !studentId) return false;
+    const { data, error } = await supabase
       .schema("edu").from("decay_notifications")
       .update({ is_read: true, read_at: new Date() })
-      .eq("id", notificationId);
+      .eq("id", notificationId)
+      .eq("student_id", studentId)
+      .select("id")
+      .maybeSingle();
+    if (error) throw error;
+    return !!data;
   }
 
   // ── Mark notification as actioned (session started) ──────────
-  async markNotificationActioned(notificationId, sessionId) {
-    await supabase
+  async markNotificationActioned(notificationId, sessionId, studentId) {
+    if (!notificationId || !studentId) return false;
+    const { data, error } = await supabase
       .schema("edu").from("decay_notifications")
       .update({
         is_actioned: true,
@@ -523,7 +536,12 @@ export class DecayEngine {
         is_read:     true,
         read_at:     new Date(),
       })
-      .eq("id", notificationId);
+      .eq("id", notificationId)
+      .eq("student_id", studentId)
+      .select("id")
+      .maybeSingle();
+    if (error) throw error;
+    return !!data;
   }
 
   // ── Get full knowledge health dashboard for a student ────────
@@ -620,8 +638,7 @@ export class DecayEngine {
         messages: [
           {
             role: "system",
-            content: `Return 3-5 must-know concepts for this subject/topic.
-JSON only: { "mustKnow": ["concept1", "concept2", ...] }`,
+            content: await buildDecayMustKnowPrompt(),
           },
           { role: "user", content: `Subject: ${subject}, Topic: ${topic}` },
         ],

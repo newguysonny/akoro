@@ -1,9 +1,9 @@
-import { useState } from 'react';
-import { Settings, Lock, User, Shield, Megaphone } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Settings, Lock, User, Shield, Megaphone, CreditCard } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Inp, Toast } from '../components/Primitives.jsx';
-import { apiPost } from '../services/api.js';
+import { apiGet, apiPost, apiPatch } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, FONT } from '../constants.js';
 
 export default function SettingsPage() {
@@ -13,11 +13,43 @@ export default function SettingsPage() {
   const [pwBusy,    setPwBusy]    = useState(false);
   const [announce,  setAnnounce]  = useState({ title: '', message: '', target_role: 'all' });
   const [annBusy,   setAnnBusy]   = useState(false);
+  const [billing,   setBilling]   = useState(null);   // { settings, gateway }
+  const [billDraft, setBillDraft] = useState(null);
+  const [billBusy,  setBillBusy]  = useState(false);
   const [toast,     setToast]     = useState(null);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
+  };
+
+  useEffect(() => {
+    apiGet('/api/admin/billing-settings')
+      .then((r) => { setBilling(r.data ?? null); setBillDraft(r.data?.settings ?? null); })
+      .catch(() => {});
+  }, []);
+
+  const setBill = (k) => (e) => setBillDraft(f => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
+
+  const saveBilling = async () => {
+    setBillBusy(true);
+    try {
+      const res = await apiPatch('/api/admin/billing-settings', {
+        email_from_name: billDraft.email_from_name,
+        email_from_address: billDraft.email_from_address,
+        support_email: billDraft.support_email ?? '',
+        notify_payment_failed: billDraft.notify_payment_failed,
+        notify_trial_ending: billDraft.notify_trial_ending,
+        notify_pilot_ending: billDraft.notify_pilot_ending,
+      });
+      setBilling(res.data ?? null);
+      setBillDraft(res.data?.settings ?? null);
+      showToast('Billing settings saved');
+    } catch (err) {
+      showToast(err.message || 'Failed to save billing settings', 'error');
+    } finally {
+      setBillBusy(false);
+    }
   };
 
   const setPw  = (k) => (e) => setPwForm(f => ({ ...f, [k]: e.target.value }));
@@ -136,6 +168,75 @@ export default function SettingsPage() {
             </div>
           </form>
         </div>
+
+        {/* Billing: notifications & branding card (plan §4.6 #4) */}
+        <div style={cardStyle}>
+          {cardTitle('Billing — Notifications & Branding', CreditCard)}
+          {billDraft ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <Inp label="Sender name" value={billDraft.email_from_name} onChange={setBill('email_from_name')} placeholder="Akoro" />
+                </div>
+                <div style={{ flex: 1.4 }}>
+                  <Inp label="From address" value={billDraft.email_from_address} onChange={setBill('email_from_address')} placeholder="noreply@akoro.app" />
+                </div>
+              </div>
+              <Inp label="Support email (shown in billing messages)" value={billDraft.support_email ?? ''} onChange={setBill('support_email')} placeholder="support@akoro.app" />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '14px 16px', background: LIGHT, borderRadius: 12 }}>
+                {[
+                  ['notify_payment_failed', 'Email the customer when a payment fails'],
+                  ['notify_trial_ending', 'Email the customer before a trial ends'],
+                  ['notify_pilot_ending', 'Email the school admin before a pilot ends'],
+                ].map(([k, label]) => (
+                  <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600, color: INK, fontFamily: FONT, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(billDraft[k])}
+                      onChange={setBill(k)}
+                      style={{ width: 16, height: 16, accentColor: AMBER, cursor: 'pointer' }}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <Btn type="button" disabled={billBusy} onClick={saveBilling}>
+                  <CreditCard size={14} /> {billBusy ? 'Saving…' : 'Save Billing Settings'}
+                </Btn>
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize: 13, color: MUTED, fontFamily: FONT }}>Loading billing settings…</div>
+          )}
+        </div>
+
+        {/* Billing: gateway status card (read-only — keys live in env) */}
+        {billing?.gateway && (
+          <div style={cardStyle}>
+            {cardTitle('Billing — Gateway', CreditCard)}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+              {[
+                ['Paystack mode', billing.gateway.paystack_mode === 'live' ? 'Live' : billing.gateway.paystack_mode === 'test' ? 'Test' : 'Not configured'],
+                ['Paystack keys', billing.gateway.paystack_public_key && billing.gateway.paystack_secret_key ? 'Public + secret present' : 'Missing — set PAYSTACK_PUBLIC_KEY / PAYSTACK_SECRET_KEY'],
+                ['Webhook URL', billing.gateway.webhook_url || '—'],
+                ['Email provider (Resend)', billing.gateway.email_provider_configured ? 'Configured' : 'Not configured (RESEND_API_KEY)'],
+                ['SMS provider (Twilio)', billing.gateway.sms_provider_configured ? 'Configured' : 'Not configured (TWILIO_*)'],
+              ].map(([k, v], i) => (
+                <div key={k} style={{
+                  display: 'flex', justifyContent: 'space-between', gap: 16,
+                  padding: '10px 0', borderTop: i === 0 ? 'none' : `1px solid ${BORDER}`,
+                }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>{k}</span>
+                  <span style={{ fontSize: 12.5, color: INK, fontFamily: FONT, textAlign: 'right' }}>{v}</span>
+                </div>
+              ))}
+            </div>
+            <p style={{ fontSize: 11.5, color: MUTED, fontFamily: FONT, margin: '14px 0 0' }}>
+              Keys are environment variables on the API service and are never editable from this dashboard.
+            </p>
+          </div>
+        )}
 
         {/* Admin account card */}
         <div style={cardStyle}>

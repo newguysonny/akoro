@@ -68,6 +68,18 @@
   outline-offset: 2px;
 }
 
+/* Text inputs commonly sit inside a rounded field shell. A global rectangular
+   outline cuts across that shell on mobile (and was visible on every focused
+   learner input). Their component-level border/focus treatment plus the caret
+   already identifies focus, so retain the global keyboard ring for controls
+   while removing only the geometry-breaking text-entry outline. */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none !important;
+  outline-offset: 0;
+}
+
 /* ═══ Reduced motion ══════════════════════════════════════════════════════
    Honour the OS setting globally instead of per-component: animations snap to
    their end state and transitions become instantaneous. Covers pulse-dot,
@@ -84,3 +96,114 @@
 /* Alias: settings subject-map uses "ti-clock-history", which Tabler renamed
    to "history" — point it at the same glyph so the row isn't blank. */
 .ti-clock-history:before { content: "\ebea"; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   App shell (components/AppShell.jsx) — admin-style responsive frame.
+
+   Tablet + desktop (>768px) get the left sidebar, collapsible to an icon
+   rail via the header hamburger (.ak-collapsed) exactly like the admin
+   portal — EXPANDED by default, remembered in localStorage, purely
+   user-driven (no viewport media query overriding it). Mobile (≤768px)
+   hides the sidebar completely and every page renders exactly as it did
+   before — the dashboard keeps its bottom nav, secondary pages keep their
+   back-button headers.
+
+   The .ak-bottom-nav / .ak-fab / .ak-now-bar / .ak-dash-scroll rules re-anchor
+   the dashboard's fixed mobile chrome for the desktop frame: the bottom nav
+   goes away, and the FAB + now-studying bar sit in the content column to the
+   right of the sidebar instead of spanning the whole viewport. The
+   now-studying surface itself is two-way: the dashboard's mobile bar
+   (≤768px) and the fixed full-width player bar (NowStudyingTabletBar) on
+   EVERYTHING above mobile — tablet and desktop alike. The sidebar no
+   longer carries a now-studying card.
+   ══════════════════════════════════════════════════════════════════════════ */
+.ak-shell {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--ak-bg);
+}
+.ak-shell-main {
+  flex: 1;
+  min-width: 0;
+  height: 100vh;
+  overflow-y: auto;        /* scroll container for pages that scroll themselves */
+  display: flex;
+  flex-direction: column;
+}
+.ak-sidebar {
+  width: 240px;
+  transition: width .15s;
+  flex-shrink: 0;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--ak-surface);
+  border-right: 1px solid var(--ak-border);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Collapsed rail (user-driven via the header hamburger, default state):
+   labels, captions and text collapse, badges re-anchor to the icon's
+   corner, brand centres, items become square tiles. */
+.ak-sidebar.ak-collapsed { width: 76px; }
+.ak-collapsed .ak-sb-label,
+.ak-collapsed .ak-sb-brand-text,
+.ak-collapsed .ak-sb-section { display: none; }
+.ak-collapsed .ak-sb-brand { padding: 20px 0 14px; justify-content: center; }
+.ak-collapsed .ak-sb-item {
+  justify-content: center;
+  gap: 0;
+  padding: 12px 0;
+  margin: 3px auto;
+  width: 48px;
+}
+.ak-collapsed .ak-sb-badge {
+  position: absolute;
+  top: 3px;
+  left: calc(50% + 7px);
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  font-size: 9px;
+}
+
+/* Mobile (≤768px): no sidebar at all — the page renders as it always has,
+   and the hamburger has nothing to toggle. The dashboard header is also
+   LEARN-ONLY here (.ak-mobile-hide, set by LearnerDashboard when the tab
+   isn't Learn/Challenges): the other tabs get the full viewport and the
+   bottom nav carries the chrome. Tablet/desktop show it on every tab. */
+@media (max-width: 768px) {
+  .ak-sidebar { display: none; }
+  .ak-sb-toggle { display: none !important; }
+  .ak-mobile-hide { display: none !important; }
+}
+
+/* NowStudyingTabletBar base state — mobile only is it hidden (the
+   dashboard's own NowStudyingBar above the bottom nav covers ≤768px).
+   This rule MUST stay ABOVE the ≥769px block: same specificity, so the
+   later `display: block` there only wins because it comes later. */
+.ak-tabnow { display: none; }
+
+/* Everything above mobile — desktop frame adjustments for the dashboard's
+   fixed mobile chrome, plus the now-studying handover: the mobile bar and
+   bottom nav go away and the fixed, full-width NowStudyingTabletBar
+   (Spotify-style 3-column player bar) becomes the surface on tablet AND
+   desktop alike. While a parked item exists (.ak-has-nowbar, set by
+   AppShell) the sidebar and the content column stop above the bar and the
+   FAB + scroll area clear it; with nothing parked the frame is the plain
+   desktop one. */
+@media (min-width: 769px) {
+  .ak-bottom-nav { display: none !important; }
+  .ak-now-bar   { display: none !important; }  /* player bar takes over */
+  .ak-fab { bottom: 20px !important; }          /* nothing left to clear */
+  .ak-dash-scroll { padding-bottom: 64px !important; }  /* FAB clearance */
+
+  .ak-shell { --ak-tabnow-h: 78px; }
+  .ak-tabnow { display: block; }
+  .ak-sb-now { display: none !important; }  /* player bar takes over */
+  .ak-has-nowbar .ak-sidebar    { height: calc(100vh - var(--ak-tabnow-h)); }
+  .ak-has-nowbar .ak-shell-main { height: calc(100vh - var(--ak-tabnow-h)); }
+  .ak-has-nowbar .ak-fab         { bottom: calc(var(--ak-tabnow-h) + 20px) !important; }
+  .ak-has-nowbar .ak-dash-scroll { padding-bottom: calc(var(--ak-tabnow-h) + 64px) !important; }
+}

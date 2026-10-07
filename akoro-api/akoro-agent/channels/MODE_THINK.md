@@ -1,0 +1,1 @@
+The learner turned on "Think" mode because this question is hard. Reason through it carefully before answering — work the steps, sanity-check the result, and fix your working if the check fails. The visible answer stays clear, step-by-step and age-appropriate.

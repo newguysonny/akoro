@@ -79,10 +79,15 @@ function forgetExpiry() {
  */
 export function refreshSession() {
   if (!refreshing) {
+    // One deadline for the whole refresh: connection AND body. A refresh
+    // whose response stalls mid-body must not pin `refreshing` (and every
+    // authed request behind it) open forever.
+    const deadline = armDeadline(REFRESH_TIMEOUT_MS);
     refreshing = fetch(`${API}/api/auth/refresh`, {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': PORTAL_ID },
       body: '{}',
+      signal: deadline.signal,
     }).then(async (r) => {
       const json = r.ok ? await r.json().catch(() => null) : null;
       if (json) rememberExpiry(json);
@@ -91,7 +96,7 @@ export function refreshSession() {
       // the server would still honour.
       return { ok: r.ok, status: r.status, json };
     }).catch(() => ({ ok: false, status: 0, json: null }))
-      .finally(() => { refreshing = null; });
+      .finally(() => { refreshing = null; deadline.settle(); });
   }
   return refreshing;
 }
@@ -104,12 +109,74 @@ function endSession() {
   }
 }
 
+/* ── Request timeout ───────────────────────────────────────────────────────
+   A stalled connection never rejects a fetch — the browser sits on a dead
+   socket for minutes (mobile networks do this constantly: the signal drops
+   mid-request and nothing ever comes back, not even an error). Without a
+   deadline, every page that fires such a request shows its loading skeleton
+   forever — no error state, no empty state, no way out. The community pages
+   were where this bit first: they are the app's only reads with the offline
+   cache disabled, so they had no last-known-good copy to fall back to either.
+
+   The deadline turns a stall into an ordinary network error, which the
+   existing machinery already knows how to handle: reads fall back to the
+   offline cache (when enabled), pages show their "couldn't reach" state with
+   a retry button, and offline-queued writes queue.
+
+   30s default: generous enough for a cold API start to finish answering,
+   short enough that a learner on a dead connection isn't staring at a
+   skeleton. VITE_API_TIMEOUT_MS overrides it (a slow deploy can raise it);
+   per-call `timeout: 0` opts out entirely for genuinely long operations.
+   Uploads get their own, longer budget. */
+const DEFAULT_TIMEOUT_MS = Number(import.meta.env?.VITE_API_TIMEOUT_MS) || 30000;
+const REFRESH_TIMEOUT_MS = 15000;   // a hung refresh must not hang every request behind it
+const UPLOAD_TIMEOUT_MS  = 120000;  // bodies can be big; slow is expected, dead is not
+
+/* Recast an abort as the same shape every other network failure has, so the
+   cache fallback, offline queue and page error states all engage — whether it
+   aborted the connection (fetch) or the body read (json()). The wait length
+   travels with the error so an error card can say HOW LONG the silence
+   lasted (a screenshot then distinguishes "no answer in 30s" from a server
+   that answered with its own timeout). */
+function recastAbort(err, timeoutMs) {
+  if (err?.name !== 'AbortError' && err?.name !== 'TimeoutError') return err;
+  const e = new Error('The request timed out — check your connection and try again.');
+  e.isNetwork = true;
+  e.timedOut  = true;
+  if (timeoutMs > 0) e.timeoutMs = timeoutMs;
+  return e;
+}
+
+function fetchWithTimeout(url, opts = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
+  if (!timeoutMs || timeoutMs <= 0 || opts.signal) return fetch(url, opts);   // opt-out, or the caller owns the deadline
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  return fetch(url, { ...opts, signal: ctrl.signal })
+    .finally(() => clearTimeout(timer))
+    .catch((e) => { throw recastAbort(e, timeoutMs); });
+}
+
+/* A deadline the CALLER disarms once the response body has been read.
+   fetchWithTimeout bounds time-to-headers; a proxy can still deliver the
+   headers and then stall the body, and an unbounded json() read hangs a page
+   exactly like an unbounded fetch (the community details page did this:
+   "keeps loading, no data arriving"). Arm, thread the signal into
+   authedFetch, settle in the finally. */
+function armDeadline(timeoutMs = DEFAULT_TIMEOUT_MS) {
+  if (!timeoutMs || timeoutMs <= 0 || typeof AbortController === 'undefined') {
+    return { signal: undefined, settle() {} };
+  }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  return { signal: ctrl.signal, settle() { clearTimeout(timer); } };
+}
+
 /** fetch + one transparent refresh-and-retry on 401. */
-async function authedFetch(url, opts) {
+async function authedFetch(url, opts, timeoutMs = DEFAULT_TIMEOUT_MS) {
   // Known-expired token: refresh once up front instead of letting every
   // request in this batch discover it independently.
   if (accessExpired()) await refreshSession();
-  const res = await fetch(url, opts);
+  const res = await fetchWithTimeout(url, opts, timeoutMs);
   if (res.status !== 401) return res;
   // Never recurse on the auth endpoints themselves.
   if (String(url).includes('/api/auth/')) return res;
@@ -121,7 +188,7 @@ async function authedFetch(url, opts) {
     if (r2.status === 401 || r2.status === 403) endSession();
     return res;
   }
-  return fetch(url, opts);
+  return fetchWithTimeout(url, opts, timeoutMs);
 }
 
 
@@ -154,7 +221,13 @@ const STATUS_COPY = {
 
 async function apiError(res, method, path) {
   let serverMsg = '';
-  try { const j = await res.json(); serverMsg = j.error || j.message || ''; } catch {}
+  let serverCode, serverStep;
+  try {
+    const j = await res.json();
+    serverMsg = j.error || j.message || '';
+    serverCode = j.code;    // e.g. COMMUNITIES_QUERY_TIMEOUT — lets a page say WHY
+    serverStep = j.step;    // the query step a 504 gave up waiting on
+  } catch {}
   const err = new Error(
     serverMsg ||
     STATUS_COPY[res.status] ||
@@ -162,6 +235,8 @@ async function apiError(res, method, path) {
                        : 'That did not work. Please try again.')
   );
   err.status = res.status;
+  err.code   = serverCode;
+  err.step   = serverStep;
   err.path   = path;
   err.method = method;
   err.detail = `${method} ${path} -> ${res.status}`;   // logs only, never shown
@@ -184,37 +259,46 @@ function markOffline(data) {
   return data;
 }
 
-export async function apiGet(path, { cache = true } = {}) {
+export async function apiGet(path, { cache = true, timeout } = {}) {
+  const ms = timeout ?? DEFAULT_TIMEOUT_MS;
+  const deadline = armDeadline(ms);       // headers AND body under one clock
   try {
-    const r = await authedFetch(`${API}${path}`, { ...BASE_OPTS, method: 'GET' });
+    const r = await authedFetch(`${API}${path}`, { ...BASE_OPTS, method: 'GET', signal: deadline.signal }, ms);
     if (!r.ok) throw await apiError(r, 'GET', path);
     const json = await r.json();
     if (cache) cacheSet(path, json);            // fire-and-forget snapshot
     return json;
   } catch (err) {
+    const e = recastAbort(err, ms);             // a body-read abort is a network error too
     // Offline / network failure → serve the last-known-good copy if we have one.
-    if (cache && isNetworkError(err)) {
+    if (cache && isNetworkError(e)) {
       const hit = await cacheGet(path);
       if (hit) return markOffline(hit.data);
     }
-    throw err;
+    throw e;
+  } finally {
+    deadline.settle();
   }
 }
 
 // Shared write path. Pass { queueOffline: true } for replay-safe, fire-and-forget
 // mutations: if the request fails because we're offline, it's stored and replayed
 // on reconnect, and an optimistic { queued: true } is returned instead of throwing.
-async function apiSend(method, path, body, { queueOffline = false } = {}) {
+async function apiSend(method, path, body, { queueOffline = false, timeout } = {}) {
+  const ms = timeout ?? DEFAULT_TIMEOUT_MS;
+  const deadline = armDeadline(ms);       // headers AND body under one clock
   try {
     const r = await authedFetch(`${API}${path}`, {
       ...BASE_OPTS,
       method,
+      signal: deadline.signal,
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    });
+    }, ms);
     if (!r.ok) throw await apiError(r, method, path);
-    return r.json();
+    return await r.json();
   } catch (err) {
-    if (queueOffline && isNetworkError(err)) {
+    const e = recastAbort(err, ms);             // a body-read abort is a network error too
+    if (queueOffline && isNetworkError(e)) {
       // When a service worker controls the page, its Background Sync queue has
       // already captured this failed request and will replay it (even if the app
       // is closed). Only when there's no SW controller do we fall back to the
@@ -224,13 +308,37 @@ async function apiSend(method, path, body, { queueOffline = false } = {}) {
       if (!swControlled) await enqueue({ method, path, body });
       return { queued: true, _offline: true };
     }
-    throw err;
+    throw e;
+  } finally {
+    deadline.settle();
   }
 }
 
 export const apiPost   = (path, body, opts) => apiSend('POST', path, body, opts);
+export const apiPut    = (path, body, opts) => apiSend('PUT', path, body, opts);
 export const apiPatch  = (path, body, opts) => apiSend('PATCH', path, body, opts);
 export const apiDelete = (path, opts)       => apiSend('DELETE', path, undefined, opts);
+
+// Multipart companion to apiPost. Do not use BASE_OPTS here: the browser must
+// set the FormData boundary itself, so only the portal hint is supplied.
+export async function apiUpload(path, formData, { method = 'POST' } = {}) {
+  const deadline = armDeadline(UPLOAD_TIMEOUT_MS);
+  try {
+    const r = await authedFetch(`${API}${path}`, {
+      method,
+      credentials: 'include',
+      headers: { 'X-Akoro-Portal': PORTAL_ID },
+      body: formData,
+      signal: deadline.signal,
+    }, UPLOAD_TIMEOUT_MS);
+    if (!r.ok) throw await apiError(r, method, path);
+    return await r.json();
+  } catch (err) {
+    throw recastAbort(err, UPLOAD_TIMEOUT_MS);
+  } finally {
+    deadline.settle();
+  }
+}
 
 let _flushing = false;
 /**

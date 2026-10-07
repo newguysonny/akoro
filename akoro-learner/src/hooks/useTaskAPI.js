@@ -32,8 +32,8 @@ export function useTaskAPI() {
     return d.task;
   }, [agentId]);
 
-  // Edit a task that hasn't started. Sending dueAt/isRecurring re-queues it on
-  // the backend, so the new time is the one that actually fires.
+  // Edit a learner-owned study task. A precise dueAt updates the server-side,
+  // opt-in Agent Chat review only; it never queues task execution.
   const updateTask = useCallback(async ({ id, title, description, priority, dueAt, isRecurring, cronExpr }) => {
     const d = await apiPatch(`/api/tasks/${id}`, { title, description, priority, dueAt, isRecurring, cronExpr });
     if (d?.task) setTasks(prev => prev.map(t => (t.id === id ? { ...t, ...d.task } : t)));
@@ -104,5 +104,37 @@ export function useTaskAPI() {
     return { task, outputs: [], timedOut: true };
   }, [createTask, getOutputs]);
 
-  return { tasks, loading, agentId, createTask, updateTask, toggleTask, deleteTask, createChallenge, getOutputs, runTaskAndWait, refetch: fetchTasks };
+  // ── Agent suggestions ────────────────────────────────────────────────────────
+  // The agent's proactive ideas (the "Suggestions" pill in the Tasks tab).
+  // Advice until the learner acts: accept creates the real task here,
+  // dismiss just closes the idea. Both reconcile against the server.
+  const [suggestions, setSuggestions] = useState([]);
+
+  const fetchSuggestions = useCallback(() => {
+    return apiGet('/api/tasks/suggestions')
+      .then(d => { const list = d?.suggestions ?? []; setSuggestions(list); return list; })
+      .catch(() => { setSuggestions([]); return []; });
+  }, []);
+
+  useEffect(() => { fetchSuggestions(); }, [fetchSuggestions]);
+
+  const acceptSuggestion = useCallback(async (sg) => {
+    const d = await apiPost(`/api/tasks/suggestions/${sg.id}/accept`);
+    setSuggestions(prev => prev.filter(s => s.id !== sg.id));
+    if (d?.task) setTasks(prev => (prev.some(t => t.id === d.task.id) ? prev : [d.task, ...prev]));
+    return d;
+  }, []);
+
+  const dismissSuggestion = useCallback(async (id) => {
+    const previous = suggestions;
+    setSuggestions(prev => prev.filter(s => s.id !== id));
+    try {
+      await apiPatch(`/api/tasks/suggestions/${id}/dismiss`);
+    } catch (e) {
+      setSuggestions(previous);   // the idea is still open — don't lie about it
+      throw e;
+    }
+  }, [suggestions]);
+
+  return { tasks, loading, agentId, createTask, updateTask, toggleTask, deleteTask, createChallenge, getOutputs, runTaskAndWait, refetch: fetchTasks, suggestions, refetchSuggestions: fetchSuggestions, acceptSuggestion, dismissSuggestion };
 }

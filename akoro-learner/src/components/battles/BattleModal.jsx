@@ -15,6 +15,7 @@ import { API, apiGet, apiPost } from '../../services/api.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { XIcon, UsersIcon, TrophyIcon, FlameIcon, BookIcon, PlayIcon, ZapIcon, Icon } from '../common/Icons.jsx';
+import { AgentAvatar } from '../common/AgentAvatar.jsx';
 import { LiveBadge } from '../common/ProgressBar.jsx';
 
 const B = '/api/battle';
@@ -231,7 +232,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
   const TAB_ITEMS = [['watch', 'Battle'], ['stats', 'Stats'], ['log', 'Log'], ['questions', 'Questions']];
 
   const AgentPill = ({ p, big }) => (
-    <div style={{ width: big ? 52 : 42, height: big ? 52 : 42, borderRadius: '50%', background: `${p?.agentColor}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: big ? 26 : 22, flexShrink: 0, boxShadow: `0 0 16px ${p?.agentColor}66` }}>{p?.agentEmoji}</div>
+    <div style={{ width: big ? 52 : 42, height: big ? 52 : 42, borderRadius: '50%', background: `${p?.agentColor}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: `0 0 16px ${p?.agentColor}66` }}><AgentAvatar emoji={p?.agentEmoji} size={big ? 34 : 28}/></div>
   );
 
   const TimerRing = () => (
@@ -247,7 +248,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
   const StudentRow = ({ p, rank }) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 12, background: p.userId === myId ? 'rgba(232,136,74,.15)' : 'rgba(255,255,255,.04)', border: p.userId === myId ? '1px solid rgba(232,136,74,.35)' : '1px solid rgba(255,255,255,.07)' }}>
       <span style={{ fontSize: 12, width: 18, textAlign: 'center' }}>{rank === 0 ? <Icon name="ti-medal" size={12} color={GOLD}/> : rank === 1 ? <Icon name="ti-medal" size={12} color="#C0C0C0"/> : rank === 2 ? <Icon name="ti-medal" size={12} color="#CD7F32"/> : rank + 1}</span>
-      <div style={{ width: 28, height: 28, borderRadius: '50%', background: `${p.agentColor}33`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>{p.agentEmoji}</div>
+      <div style={{ width: 28, height: 28, borderRadius: '50%', background: `${p.agentColor}33`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><AgentAvatar emoji={p.agentEmoji} size={19}/></div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <span style={{ fontSize: 12, fontWeight: 800, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.agentName}</span>
@@ -336,7 +337,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
                       {/* Teacher card */}
                       {teacher && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', borderRadius: 12, background: 'rgba(124,58,237,.16)', border: '1px solid rgba(124,58,237,.32)', marginBottom: 12 }}>
-                          <div style={{ width: 44, height: 44, borderRadius: '50%', background: `${teacher.agentColor}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0, boxShadow: `0 0 16px ${teacher.agentColor}66` }}>{teacher.agentEmoji}</div>
+                          <div style={{ width: 44, height: 44, borderRadius: '50%', background: `${teacher.agentColor}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: `0 0 16px ${teacher.agentColor}66` }}><AgentAvatar emoji={teacher.agentEmoji} size={29}/></div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ color: '#fff', fontWeight: 800, fontSize: 13.5 }}>{teacher.agentName}</div>
                             <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 7px', borderRadius: 20, background: 'rgba(124,58,237,.35)', color: '#C4B5FD' }}>TEACHER</span>
@@ -411,7 +412,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
                           </span>
                           {pickers.length > 0 && (
                             <span style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap' }}>
-                              {pickers.map((a, j) => <span key={j} style={{ fontSize: 10, padding: '1px 7px', borderRadius: 20, background: a.userId === myId ? 'rgba(255,255,255,.18)' : 'rgba(255,255,255,.08)', color: '#fff' }}>{a.agentEmoji} {a.userId === myId ? 'You' : a.agentName}</span>)}
+                              {pickers.map((a, j) => <span key={j} style={{ fontSize: 10, padding: '1px 7px', borderRadius: 20, background: a.userId === myId ? 'rgba(255,255,255,.18)' : 'rgba(255,255,255,.08)', color: '#fff', display: 'inline-flex', alignItems: 'center', gap: 4 }}><AgentAvatar emoji={a.agentEmoji} size={11}/> {a.userId === myId ? 'You' : a.agentName}</span>)}
                             </span>
                           )}
                         </div>

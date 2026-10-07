@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { BRAND, RED, GREEN } from '../../constants.js';
 import { XIcon, Icon } from '../common/Icons.jsx';
+import { AgentAvatar } from '../common/AgentAvatar.jsx';
 
 const AMBER = '#F59E0B';
 
@@ -72,9 +73,9 @@ export default function VoiceExam({
             <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: `2px solid ${orbGlow}`, animation: 've-orb-pulse 1.6s ease-in-out infinite', opacity: .5 }} />
           )}
           <div style={{ width: 132, height: 132, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 54, background: `radial-gradient(circle at 50% 35%, ${BRAND}, #2A0E66)`,
+            background: `radial-gradient(circle at 50% 35%, ${BRAND}, #2A0E66)`,
             boxShadow: `0 0 46px ${orbGlow}`, transform: `scale(${orbScale})`, transition: 'transform .18s ease' }}>
-            {agentEmoji}
+            <AgentAvatar emoji={agentEmoji} size={78}/>
           </div>
         </div>
 

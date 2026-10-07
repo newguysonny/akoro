@@ -22,12 +22,22 @@ import PaymentsPage         from './pages/PaymentsPage.jsx';
 import PayoutsPage          from './pages/PayoutsPage.jsx';
 import ReviewsPage          from './pages/ReviewsPage.jsx';
 import CouponsPage          from './pages/CouponsPage.jsx';
+import TiersPage            from './pages/TiersPage.jsx';
+import PilotSchoolsPage     from './pages/PilotSchoolsPage.jsx';
+import AuditLogPage         from './pages/AuditLogPage.jsx';
+import SubscriptionsPage   from './pages/SubscriptionsPage.jsx';
+import CustomersPage       from './pages/CustomersPage.jsx';
+import InvoicesPage        from './pages/InvoicesPage.jsx';
+import BillingCouponsPage  from './pages/BillingCouponsPage.jsx';
+import BillingOverviewPage from './pages/BillingOverviewPage.jsx';
+import ReconciliationPage  from './pages/ReconciliationPage.jsx';
 import ReportsPage          from './pages/ReportsPage.jsx';
 import NotificationsPage    from './pages/NotificationsPage.jsx';
 import MessagesPage         from './pages/MessagesPage.jsx';
 import MarketingPage        from './pages/MarketingPage.jsx';
 import SettingsPage         from './pages/SettingsPage.jsx';
 import WalletPage           from './pages/WalletPage.jsx';
+import AgentToolRequestsPage from './pages/AgentToolRequestsPage.jsx';
 import PrivacyPolicyPage    from './pages/PrivacyPolicyPage.jsx';
 import TermsOfServicePage   from './pages/TermsOfServicePage.jsx';
 import SigninPage           from './pages/auth/SigninPage.jsx';
@@ -115,12 +125,22 @@ export default function App() {
           <Route path="/payouts"           element={<AdminRoute><PayoutsPage /></AdminRoute>} />
           <Route path="/reviews"           element={<AdminRoute><ReviewsPage /></AdminRoute>} />
           <Route path="/coupons"           element={<AdminRoute><CouponsPage /></AdminRoute>} />
+          <Route path="/tiers"             element={<AdminRoute><TiersPage /></AdminRoute>} />
+          <Route path="/pilot-schools"      element={<AdminRoute><PilotSchoolsPage /></AdminRoute>} />
+          <Route path="/audit-log"          element={<AdminRoute><AuditLogPage /></AdminRoute>} />
+          <Route path="/subscriptions"       element={<AdminRoute><SubscriptionsPage /></AdminRoute>} />
+          <Route path="/billing-customers"   element={<AdminRoute><CustomersPage /></AdminRoute>} />
+          <Route path="/invoices"            element={<AdminRoute><InvoicesPage /></AdminRoute>} />
+          <Route path="/billing/overview"     element={<AdminRoute><BillingOverviewPage /></AdminRoute>} />
+          <Route path="/billing/coupons"      element={<AdminRoute><BillingCouponsPage /></AdminRoute>} />
+          <Route path="/billing/reconciliation" element={<AdminRoute><ReconciliationPage /></AdminRoute>} />
           <Route path="/reports"           element={<AdminRoute><ReportsPage /></AdminRoute>} />
           <Route path="/notifications"     element={<AdminRoute><NotificationsPage /></AdminRoute>} />
           <Route path="/messages"          element={<AdminRoute><MessagesPage /></AdminRoute>} />
           <Route path="/marketing"         element={<AdminRoute><MarketingPage /></AdminRoute>} />
           <Route path="/settings"          element={<AdminRoute><SettingsPage /></AdminRoute>} />
           <Route path="/wallet"            element={<AdminRoute><WalletPage /></AdminRoute>} />
+          <Route path="/agent-tool-requests" element={<AdminRoute><AgentToolRequestsPage /></AdminRoute>} />
           <Route path="/privacy"           element={<PrivacyPolicyPage />} />
           <Route path="/terms"             element={<TermsOfServicePage />} />
           <Route path="/signin"            element={<GuestRoute><SigninPage /></GuestRoute>} />

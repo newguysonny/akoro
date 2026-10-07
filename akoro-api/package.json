@@ -4,6 +4,7 @@
   "description": "Akoro Learning Platform — Modular Monolith API",
   "type": "module",
   "scripts": {
+    "postinstall": "patch-package",
     "start": "node app.js",
     "dev": "node --watch app.js",
     "worker": "node worker.js",
@@ -11,6 +12,10 @@
     "db:migrate": "node scripts/apply-migrations.mjs --group=schema",
     "db:seed:demo": "node scripts/apply-migrations.mjs --group=demo",
     "db:deploy": "node scripts/apply-migrations.mjs --group=all",
+    "test:task-scheduling": "node --test modules/adaptive-learning/learner-task-validation.test.mjs modules/adaptive-learning/chat-follow-ups.test.mjs modules/adaptive-learning/learner-time-context.test.mjs",
+    "test:agent-context": "node --test modules/agent-tools/conversation-context-validation.test.mjs modules/agent-tool-requests/validation.test.mjs modules/agent-tool-requests/routes.contract.test.mjs",
+    "test:agent-chat": "node --test modules/adaptive-learning/agent-chat-route.contract.test.mjs modules/adaptive-learning/agent-chat-intent.test.mjs modules/adaptive-learning/agent-tool-request-intent.test.mjs modules/adaptive-learning/websocket-identity.contract.test.mjs",
+    "test:adaptive-teaching": "node --test modules/adaptive-learning/teaching-evidence.test.mjs modules/adaptive-learning/teaching-workflow/runner.test.mjs",
     "smoke:instructor": "node scripts/smoke-instructor.mjs",
     "preflight": "node scripts/preflight-security.mjs"
   },
@@ -26,6 +31,7 @@
     "axios": "^1.18.1",
     "bcrypt": "^5.1.1",
     "bullmq": "^5.8.0",
+    "compression": "^1.8.2",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -39,6 +45,7 @@
     "node-cron": "^3.0.3",
     "nodemailer": "^9.0.3",
     "openai": "^4.47.0",
+    "opossum": "^10.0.0",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "pdf-lib": "^1.17.1",
@@ -57,5 +64,8 @@
     "ws": "^8.21.1",
     "brace-expansion": "^5.0.8",
     "form-data": "^4.0.6"
+  },
+  "devDependencies": {
+    "patch-package": "^8.0.1"
   }
 }

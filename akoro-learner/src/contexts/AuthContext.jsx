@@ -9,6 +9,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { API, rememberExpiry, refreshSession } from '../services/api.js';
 import { cacheClear } from '../services/offlineCache.js';
+import { clearCachedTier } from '../utils/studyLevel.js';
 
 const AuthContext = createContext(null);
 
@@ -127,6 +128,7 @@ export function AuthProvider({ children }) {
       await fetch(`${API}/api/auth/logout`, { method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'student' } });
     } catch { /* ignore */ }
     cacheClear().catch(() => {});   // drop cached data so the next account starts clean
+    clearCachedTier();              // ...and the UI tier, so it re-resolves per account
     clearUser();
     window.location.href = '/signin';
   }, [clearUser]);

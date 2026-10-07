@@ -84,6 +84,8 @@ router.post("/", async (req, res) => {
       catch (e) { errored = true; console.error("[paystack-webhook] coin top-up fulfillment failed:", e); }
       try { handled = (await fulfillVoucherWalletTopup(data)) || handled; }
       catch (e) { errored = true; console.error("[paystack-webhook] voucher wallet fulfillment failed:", e); }
+      try { handled = (await fulfillSubscriptionEvent(event)) || handled; }
+      catch (e) { errored = true; console.error("[paystack-webhook] subscription fulfillment failed:", e); }
 
       if (!handled) console.warn("[paystack-webhook] charge.success matched no domain:", data?.metadata);
       await logPaymentEvent({
@@ -118,6 +120,16 @@ router.post("/", async (req, res) => {
       }
       if (outcome !== "error") outcome = (voucherHandled || payoutHandled) ? "fulfilled" : "no_match";
       await logPaymentEvent({ eventType: `${type}.fulfillment`, reference, source: "paystack_webhook", outcome });
+      return res.status(200).json({ received: true });
+    }
+
+    if (type === "charge.failed") {
+      // Only the billing/subscription domain reacts to failed charges today
+      // (past_due + the payment-retry dunning job). Log the outcome either way.
+      let outcome = "no_match";
+      try { outcome = (await fulfillSubscriptionEvent(event)) ? "fulfilled" : "no_match"; }
+      catch (e) { outcome = "error"; console.error("[paystack-webhook] subscription failure handling failed:", e); }
+      await logPaymentEvent({ eventType: "charge.failed.fulfillment", reference, source: "paystack_webhook", outcome });
       return res.status(200).json({ received: true });
     }
 

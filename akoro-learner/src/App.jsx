@@ -27,6 +27,8 @@ const ResetPasswordPage  = lazyWithRetry(() => import('./pages/auth/ResetPasswor
 const FDEAdminPage       = lazyWithRetry(() => import('./pages/FDEAdminPage.jsx'));
 const NotificationsPage  = lazyWithRetry(() => import('./pages/NotificationsPage.jsx'));
 const ActivityPage       = lazyWithRetry(() => import('./pages/ActivityPage.jsx'));
+const ActivityDetailPage = lazyWithRetry(() => import('./pages/ActivityDetailPage.jsx'));
+const GradebookPage      = lazyWithRetry(() => import('./pages/GradebookPage.jsx'));
 const CommunityPage      = lazyWithRetry(() => import('./pages/CommunityPage.jsx'));
 const CommunityActivityPage  = lazyWithRetry(() => import('./pages/CommunityActivityPage.jsx'));
 const CommunitySettingsPage  = lazyWithRetry(() => import('./pages/CommunitySettingsPage.jsx'));
@@ -39,11 +41,14 @@ const PrivacyPolicyPage  = lazyWithRetry(() => import('./pages/PrivacyPolicyPage
 const TermsOfServicePage = lazyWithRetry(() => import('./pages/TermsOfServicePage.jsx'));
 const AboutPage          = lazyWithRetry(() => import('./pages/AboutPage.jsx'));
 const PricingPage        = lazyWithRetry(() => import('./pages/PricingPage.jsx'));
+const PilotApplicationPage = lazyWithRetry(() => import('./pages/PilotApplicationPage.jsx'));
+const UpgradePage          = lazyWithRetry(() => import('./pages/UpgradePage.jsx'));
 const ComparisonPage     = lazyWithRetry(() => import('./pages/ComparisonPage.jsx'));
 const ContactPage        = lazyWithRetry(() => import('./pages/ContactPage.jsx'));
 const CareersPage        = lazyWithRetry(() => import('./pages/CareersPage.jsx'));
 const BlogPage           = lazyWithRetry(() => import('./pages/BlogPage.jsx'));
 const BlogPostPage       = lazyWithRetry(() => import('./pages/BlogPostPage.jsx'));
+const BlogEditorPage     = lazyWithRetry(() => import('./pages/BlogEditorPage.jsx'));
 const PartnersPage       = lazyWithRetry(() => import('./pages/PartnersPage.jsx'));
 const AssessmentPage     = lazyWithRetry(() => import('./pages/AssessmentPage.jsx'));
 const CourseDetailsPage  = lazyWithRetry(() => import('./pages/CourseDetailsPage.jsx'));
@@ -53,6 +58,13 @@ const WalletPage         = lazyWithRetry(() => import('./pages/WalletPage.jsx'))
 const CheckoutPage       = lazyWithRetry(() => import('./pages/CheckoutPage.jsx'));
 const OrderHistoryPage   = lazyWithRetry(() => import('./pages/OrderHistoryPage.jsx'));
 const NotFoundPage       = lazyWithRetry(() => import('./pages/NotFoundPage.jsx'));
+// DEV-ONLY layout preview (/dev/shell) — gated on import.meta.env.DEV so the
+// route, this reference and the chunk are all dead-code-eliminated from
+// production builds. Lets the AppShell sidebar / rail / bottom-nav behaviour
+// be checked without a signed-in session or a running API.
+const ShellPreviewPage   = import.meta.env.DEV
+  ? lazyWithRetry(() => import('./pages/ShellPreviewPage.jsx'))
+  : () => null;
 
 /* ── ProtectedRoute: requires auth, then gates on onboarding ── */
 function ProtectedRoute({ children }) {
@@ -113,6 +125,8 @@ function AppRoutes() {
       <Route path="/fde-admin" element={<ProtectedRoute><FDEAdminPage /></ProtectedRoute>}/>
       <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>}/>
       <Route path="/activities" element={<ProtectedRoute><ActivityPage /></ProtectedRoute>}/>
+      <Route path="/activities/:id" element={<ProtectedRoute><ActivityDetailPage /></ProtectedRoute>}/>
+      <Route path="/gradebook" element={<ProtectedRoute><GradebookPage /></ProtectedRoute>}/>
       <Route path="/library" element={<ProtectedRoute><LibraryPage /></ProtectedRoute>}/>
       <Route path="/communities" element={<ProtectedRoute><CommunityPage /></ProtectedRoute>}/>
       <Route path="/communities/:communityId" element={<ProtectedRoute><CommunityActivityPage /></ProtectedRoute>}/>
@@ -136,18 +150,24 @@ function AppRoutes() {
         
         
       <Route path="/pricing"  element={<PricingPage />}/>
+      <Route path="/apply"   element={<PilotApplicationPage />}/>
+      <Route path="/upgrade" element={<UpgradePage />}/>
       <Route path="/compare"  element={<ComparisonPage />}/>
       <Route path="/about"    element={<AboutPage />}/>
       <Route path="/contact"  element={<ContactPage />}/>
       <Route path="/careers"  element={<CareersPage />}/>
       <Route path="/blog"     element={<BlogPage />}/>
       <Route path="/blog/:slug" element={<BlogPostPage />}/>
+      {/* Learner-authored blogs (higherEd library) — /blog* is the public marketing blog */}
+      <Route path="/write/blog/new" element={<ProtectedRoute><BlogEditorPage /></ProtectedRoute>}/>
+      <Route path="/write/blog/:id" element={<ProtectedRoute><BlogEditorPage /></ProtectedRoute>}/>
       <Route path="/partners" element={<PartnersPage />}/>
       <Route path="/signin"          element={<GuestRoute><SigninPage /></GuestRoute>}/>
       <Route path="/signup"          element={<GuestRoute><SignupPage /></GuestRoute>}/>
       <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>}/>
       <Route path="/reset-password"  element={<ResetPasswordPage />}/>
       <Route path="/auth/callback"   element={<AuthCallback />}/>
+      {import.meta.env.DEV && <Route path="/dev/shell" element={<ShellPreviewPage />}/>}
       <Route path="*" element={<NotFoundPage />}/>
     </Routes>
       </Suspense>

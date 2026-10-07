@@ -8,6 +8,7 @@ import { Icon } from '../components/common/Icons.jsx';
 import { apiGet, apiPost } from '../services/api.js';
 import { useWallet } from '../hooks/useWallet.js';
 import { BRAND, GREEN, RED, GOLD } from '../constants.js';
+import { AppShell } from '../components/AppShell.jsx';
 
 const PRESETS = [500, 2000, 5000, 20000];
 const fmt = (n) => Number(n || 0).toLocaleString();
@@ -61,7 +62,8 @@ export default function WalletPage() {
   const recent = wallet?.recent || [];
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--ak-bg)', fontFamily: "'Nunito',sans-serif", color: 'var(--ak-text)' }}>
+    <AppShell>
+    <div style={{ minHeight: '100%', background: 'var(--ak-bg)', fontFamily: "'Nunito',sans-serif", color: 'var(--ak-text)' }}>
       {/* Header */}
       <div style={{ background: 'var(--ak-surface)', borderBottom: '1px solid var(--ak-border)', padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 12, position: 'sticky', top: 0, zIndex: 10 }}>
         <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, color: 'var(--ak-text)', lineHeight: 1 }}>‹</button>
@@ -144,6 +146,7 @@ export default function WalletPage() {
       </div>
       {toast && <div style={toastStyle}>{toast}</div>}
     </div>
+    </AppShell>
   );
 }
 

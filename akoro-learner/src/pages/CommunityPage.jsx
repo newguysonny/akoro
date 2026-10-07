@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { fetchMyCommunities, createCommunity } from '../services/communityApi.js';
 import { Icon } from '../components/common/Icons.jsx';
 import { BRAND, GREEN } from '../constants.js';
+import Spinner from '../components/common/Spinner.jsx';
+import { useInFlight } from '../hooks/useInFlight.js';
+import { AppShell } from '../components/AppShell.jsx';
 
 /* Community identity avatars (same identity-emoji pattern as agents/guides). */
 const EMOJIS = ['🌐', '📚', '🧪', '', '🎧', '💼', '🌱', '🔥', '', '🎯', '🤝', '🚀'];
@@ -75,19 +78,21 @@ function CreateCommunitySheet({ onClose, onCreated }) {
   const [name, setName]       = useState('');
   const [description, setDescription] = useState('');
   const [emoji, setEmoji]     = useState(EMOJIS[0]);
-  const [saving, setSaving]   = useState(false);
+  // One request at a time — repeated taps on a bad connection once fired
+  // repeated POSTs and created duplicate communities.
+  const { busy: saving, run: runSave } = useInFlight();
   const [err, setErr]         = useState('');
 
-  const create = async () => {
-    if (!name.trim() || saving) return;
-    setSaving(true); setErr('');
+  const create = () => runSave(async () => {
+    if (!name.trim()) return;
+    setErr('');
     try {
       const c = await createCommunity({ name: name.trim(), description: description.trim() || undefined, emoji });
       onCreated(c);
     } catch (e) {
       setErr(e?.message || 'Something went wrong. Try again.');
-    } finally { setSaving(false); }
-  };
+    }
+  });
 
   const FIELD = {
     width: '100%', boxSizing: 'border-box', borderRadius: 12, padding: '11px 13px',
@@ -147,7 +152,7 @@ function CreateCommunitySheet({ onClose, onCreated }) {
               border: 'none', background: (!name.trim() || saving) ? '#C9BCF7' : BRAND, color: '#fff',
               fontSize: 14, fontWeight: 900, fontFamily: "'Nunito',sans-serif",
             }}>
-            {saving ? 'Creating…' : 'Create community'}
+            {saving ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Spinner size={13}/> Creating…</span> : 'Create community'}
           </button>
         </div>
       </div>
@@ -173,7 +178,8 @@ export default function CommunityPage() {
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2600); };
 
   return (
-    <div style={{ width: '100vw', height: '100vh', fontFamily: "'Nunito',sans-serif", background: 'var(--ak-bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <AppShell>
+    <div style={{ width: '100%', height: '100%', fontFamily: "'Nunito',sans-serif", background: 'var(--ak-bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* HEADER */}
       <div style={{ background: 'var(--ak-surface)', backdropFilter: 'blur(14px)', borderBottom: '1px solid var(--ak-border)', padding: '14px 18px', zIndex: 100, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -237,5 +243,6 @@ export default function CommunityPage() {
         />
       )}
     </div>
+    </AppShell>
   );
 }

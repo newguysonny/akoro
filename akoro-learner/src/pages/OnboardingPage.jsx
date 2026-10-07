@@ -5,11 +5,15 @@ import { Icon } from '../components/common/Icons.jsx';
 import { useTheme } from '../contexts/ThemeContext.jsx';
 import { useLang, SUPPORTED_LANGUAGES } from '../contexts/LanguageContext.jsx';
 import { API } from '../services/api.js';
+import { isHigherEdUI, setCachedTier } from '../utils/studyLevel.js';
 import AkoroLogo from '../components/common/AkoroLogo.jsx';
+import { AgentAvatar } from '../components/common/AgentAvatar.jsx';
 
 const BRAND  = '#6C3BFF';
 const RED    = '#EF4444';
 const ACCENTS = [BRAND, '#3B82F6', '#10B981', '#E8884A', '#EC4899', '#F59E0B', '#EF4444', '#8B5CF6'];
+/* The avatar choices — emoji strings are stored keys into the drawn
+   AgentAvatar set (AgentAvatar.jsx), never rendered as glyphs. */
 const GUIDE_EMOJIS = ['🧠', '🤖', '👾', '🦉', '🎓', '⚡', '🌟', '🔮', '🦋', '🎯', '🚀', '💡'];
 const STUDY_LEVELS = ['Primary', 'Junior Secondary', 'Senior Secondary', 'University', 'Adult learner'];
 // Class/year options shown in the dropdown, dependent on the chosen study level.
@@ -269,6 +273,11 @@ export default function OnboardingPage() {
         }).catch(() => {});
       }
 
+      // Seed the UI-tier cache with the level the learner just chose, so
+      // even the very first dashboard load renders the right tier with no
+      // school-UI flash (studyLevel.js cache + useStudyTier.js revalidate).
+      setCachedTier(isHigherEdUI({ studyLevel }) ? 'higher' : 'school');
+
       markOnboarded();
       navigate('/app', { replace: true });
     } catch (e) {
@@ -406,8 +415,8 @@ export default function OnboardingPage() {
 
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
               <div style={{ width: 76, height: 76, borderRadius: 22, background: `linear-gradient(135deg,${accentColor},#4C1DCC)`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 38, boxShadow: `0 6px 20px ${accentColor}44` }}>
-                {agentEmoji}
+                display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 6px 20px ${accentColor}44` }}>
+                <AgentAvatar emoji={agentEmoji} size={46}/>
               </div>
             </div>
             <div style={{ marginBottom: 16 }}>
@@ -418,11 +427,12 @@ export default function OnboardingPage() {
               <label style={lbl}>{t('onboarding.pick_avatar')}</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                 {GUIDE_EMOJIS.map(em => (
-                  <button key={em} onClick={() => setAgentEmoji(em)} style={{
-                    width: 44, height: 44, borderRadius: 12, fontSize: 22, cursor: 'pointer',
+                  <button key={em} onClick={() => setAgentEmoji(em)} aria-label={`Avatar ${em}`} style={{
+                    width: 44, height: 44, borderRadius: 12, cursor: 'pointer',
                     border: `2px solid ${agentEmoji === em ? accentColor : 'var(--ak-border2)'}`,
                     background: agentEmoji === em ? `${accentColor}18` : 'var(--ak-surface)',
-                  }}>{em}</button>
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}><AgentAvatar emoji={em} size={30}/></button>
                 ))}
               </div>
             </div>

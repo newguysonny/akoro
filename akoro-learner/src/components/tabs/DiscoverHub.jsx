@@ -2,10 +2,14 @@
  * DiscoverHub.jsx
  * ─────────────────────────────────────────────────────────────
  * Higher-ed learners' Discover landing: a search box plus a grid of
- * discovery-type cards. The hub is a router, not a feed — only the
- * Courses card opens the course catalogue (DiscoveryTab); every other
- * type — Notes/Materials, Pharm D, Teaching guide AND Live classes —
- * answers "coming soon" until its own destination ships. (The hub's
+ * discovery-type cards. The hub is a router, not a feed — the
+ * Courses card opens the course catalogue (DiscoveryTab), Teaching guide
+ * and Live classes open their focused discovery feeds (the same
+ * DiscoveryTab UI, one rail), Pharm D asks the shell to open its
+ * programme page (PharmDProgram — browse → course folder), and
+ * Contents/Materials opens the community uploads feed
+ * (ContentsDiscoveryTab — videos, audio, notes, PDFs).
+ * (The hub's
  * Live classes is its own product, deliberately NOT the Learn tab's
  * live sessions view, which is a different thing.)
  *
@@ -27,7 +31,7 @@ import Toast from '../common/Toast.jsx';
 import DiscoverSearchPage from './DiscoverSearchPage.jsx';
 import { TYPES, matchTypes, FONT } from './dhubTypes.js';
 
-export default function DiscoverHub({ onOpenCourses, onOpenCourse, initialQuery = '' }) {
+export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord, onOpenBattles, onOpenPharmd, onOpenRail, onOpenContents, userId, initialQuery = '' }) {
   const { t } = useLang();
   const [query, setQuery] = useState(initialQuery);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -39,6 +43,12 @@ export default function DiscoverHub({ onOpenCourses, onOpenCourse, initialQuery 
   const activate = (ty, qOverride) => {
     const q = qOverride ?? query.trim();
     if (ty.key === 'courses') onOpenCourses?.(q);
+    else if (ty.key === 'pharmd') onOpenPharmd?.();
+    // The focused discovery feeds — same courses-feed UI, one rail.
+    else if (ty.key === 'guide') onOpenRail?.('guides', q);
+    else if (ty.key === 'live') onOpenRail?.('live', q);
+    // The community uploads feed — everyone's shared material.
+    else if (ty.key === 'contents') onOpenContents?.(q);
     else setToast({ msg: `${ty.label} — ${t('dhub.coming_soon')}`, color: GOLD });
   };
 
@@ -148,9 +158,12 @@ export default function DiscoverHub({ onOpenCourses, onOpenCourse, initialQuery 
       {searchOpen && (
         <DiscoverSearchPage
           initialQuery={query}
+          userId={userId}
           onClose={() => setSearchOpen(false)}
           onPick={onSearchPick}
           onOpenCourse={onOpenCourse}
+          onOpenRecord={onOpenRecord}
+          onOpenBattles={onOpenBattles}
         />
       )}
 

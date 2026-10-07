@@ -40,20 +40,33 @@ const config = {
   supabase: {
     url:        env.SUPABASE_URL,
     serviceKey: env.SUPABASE_SERVICE_KEY,
+    // Private Storage bucket holding Library record files when R2 isn't
+    // configured (created on first use; ≤ 5 MB per file).
+    recordsBucket: env.SUPABASE_RECORDS_BUCKET ?? "akoro-records",
   },
 
   // ── Database connection pool ─────────────────────────────────────────────
-  // Supabase uses PgBouncer by default, but explicit pool sizing matters
-  // when you run multiple API instances — each instance gets its own pool.
+  // Doctrine: keep the per-instance pool SURPRISINGLY SMALL and let the
+  // external connection proxy (Supabase Supavisor) absorb traffic spikes.
+  // A pool larger than the database can serve just moves the queue into
+  // Postgres, where every idle connection costs RAM and every competing
+  // connection costs context switches. Node's pg defaults (max 10, no
+  // connection timeout) are exactly the failure mode to avoid.
   //
-  // Rule of thumb:
-  //   DB_POOL_MAX per instance × number of instances ≤ Supabase connection limit
-  //   Supabase free:    60 connections → 2 instances × max 25 each
-  //   Supabase Pro:    200 connections → 4 instances × max 45 each
+  // Budget: poolMax × instances + 1 boot-time migration client ≤ the
+  // project's connection limit. Default 5 leaves headroom on the smallest
+  // Supabase compute even with a few instances. Point DATABASE_URL at the
+  // Supavisor transaction pooler (port 6543) — this codebase only issues
+  // stateless pool.query() calls, no session state, so transaction pooling
+  // is safe. DDL/migrations bypass the pool (single pg.Client via
+  // MIGRATION_DATABASE_URL, session/direct, port 5432).
   db: {
-    poolMax:      parseInt(env.DB_POOL_MAX      ?? "25",  10),
-    poolMin:      parseInt(env.DB_POOL_MIN      ?? "2",   10),
+    poolMax:      parseInt(env.DB_POOL_MAX      ?? "5",   10),
+    poolMin:      parseInt(env.DB_POOL_MIN      ?? "1",   10),
     poolIdleMs:   parseInt(env.DB_POOL_IDLE_MS  ?? "10000", 10),
+    // Fail fast when the pool is exhausted instead of queueing forever —
+    // the honest error a caller can retry, rather than a hung request.
+    poolConnectMs: parseInt(env.DB_POOL_CONNECT_MS ?? "5000", 10),
     // Read replica URL — falls back to primary if not set
     // Point this to a Supabase read replica when you add one
     readUrl:      env.DB_READ_URL ?? env.SUPABASE_URL,

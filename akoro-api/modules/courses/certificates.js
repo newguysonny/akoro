@@ -19,6 +19,7 @@ import { S3Client, PutObjectCommand }     from "@aws-sdk/client-s3";
 import db                                 from "../../db.js";
 import { authenticateToken }              from "../auth/routes.js";
 import config                             from "../../config/index.js";
+import { r2Send } from "../../lib/r2Breaker.js";
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -38,7 +39,7 @@ const r2 = new S3Client({
 });
 
 const uploadPdfToR2 = async (pdfBytes, key) => {
-  await r2.send(new PutObjectCommand({
+  await r2Send(r2, new PutObjectCommand({
     Bucket:      config.r2.bucketName,
     Key:         key,
     Body:        Buffer.from(pdfBytes),

@@ -6,11 +6,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, ChevronDown, Play, Users, Clock, Star, Globe, Lock,
   CheckCircle2, Radio, ShoppingCart, CalendarPlus, MonitorPlay, BookOpen,
-  Brain, Award, Swords, TrendingUp, Calendar, ArrowRight, Share2, Flag, Check, Plus, Video, Crown, PartyPopper,
+  Brain, Award, Swords, TrendingUp, Calendar, ArrowRight, Share2, Flag, Check, Plus, Video, Crown, PartyPopper, MoreVertical,
+  Bot, Gem, Zap, Tornado, Sparkles, Triangle,
 } from 'lucide-react';
 import { API, apiPost } from '../../services/api.js';
 import { BRAND } from '../../constants.js';
 import { Icon } from '../../components/common/Icons.jsx';
+import { AgentAvatar } from '../../components/common/AgentAvatar.jsx';
 import BattleModal from '../../components/battles/BattleModal.jsx';
 
 /* ── palette ──────────────────────────────────────────────── */
@@ -49,8 +51,13 @@ function Btn({ children, variant = 'primary', size = 'md', onClick, style }) {
   );
 }
 
-const Avatar = ({ emoji, bg = BORDER, size = 40, ring }) => (
-  <div style={{ width: size, height: size, background: bg, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.44, boxShadow: ring ? `0 0 0 2px #fff,0 0 0 4px ${BRAND}` : 'none' }}>{emoji}</div>
+/* Avatar — a colored disc. Static UI passes a lucide icon (preferred) or
+   initials; a ti-* string renders through Tabler; a stored agent_emoji
+   draws its AgentAvatar glyph (unknown keys draw the bot). */
+const Avatar = ({ icon: Ico, initials, emoji, bg = BORDER, size = 40, ring, color }) => (
+  <div style={{ width: size, height: size, background: bg, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: Math.round(size * 0.32), fontWeight: 900, letterSpacing: 0.4, color: color || MUTED2, boxShadow: ring ? `0 0 0 2px #fff,0 0 0 4px ${BRAND}` : 'none' }}>
+    {Ico ? <Ico size={Math.round(size * 0.46)} color={color || MUTED2}/> : initials ? initials : emoji ? <AgentAvatar emoji={emoji} size={Math.round(size * 0.62)}/> : null}
+  </div>
 );
 
 const LiveBadge = () => (
@@ -73,9 +80,8 @@ const PlatformBadge = ({ platform }) => {
   return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 9px', borderRadius: 100, background: cfg[0], color: '#fff', fontSize: 10, fontWeight: 800 }}><Video size={10} />{cfg[1]}</span>;
 };
 
-function ActionChips({ course }) {
+function ActionChips({ course, onAgentSession }) {
   const [calAdded, setCalAdded] = useState(false);
-  const [agentLinked, setAgentLinked] = useState(false);
   const [copied, setCopied] = useState(false);
   const share = async () => {
     const url = typeof window !== 'undefined' ? window.location.href : '';
@@ -87,7 +93,7 @@ function ActionChips({ course }) {
   };
   const chips = [
     { key: 'cal', label: calAdded ? 'Added' : 'Add to calendar', icon: <CalendarPlus size={13} />, active: calAdded, onClick: () => setCalAdded((v) => !v) },
-    { key: 'agent', label: agentLinked ? 'Agent linked' : 'Link my agent', icon: <Brain size={13} />, active: agentLinked, onClick: () => setAgentLinked((v) => !v) },
+    { key: 'agent', label: 'Agent session', icon: <Brain size={13} />, onClick: () => onAgentSession?.() },
     { key: 'share', label: copied ? 'Link copied' : 'Share class', icon: copied ? <Check size={13} /> : <Share2 size={13} />, active: copied, onClick: share },
     { key: 'host', label: 'Host revision session', icon: <Plus size={13} />, onClick: () => {} },
     { key: 'report', label: 'Report', icon: <Flag size={13} />, onClick: () => {} },
@@ -215,7 +221,7 @@ function VideoPlayer({ lesson, courseEmoji = 'ti-book' }) {
 }
 
 /* ── curriculum (shared) ──────────────────────────────────── */
-function Curriculum({ modules, isEnrolled, hours, onPick, currentTitle }) {
+function Curriculum({ modules, isEnrolled, hours, onPick, currentTitle, onLessonMore }) {
   const [open, setOpen] = useState(0);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -252,9 +258,16 @@ function Curriculum({ modules, isEnrolled, hours, onPick, currentTitle }) {
                       style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 16px', borderBottom: li < m.lessons.length - 1 ? `1px solid ${BORDER}` : 'none', cursor: clickable ? 'pointer' : unlocked ? 'default' : 'not-allowed', opacity: unlocked ? 1 : 0.5, background: active ? `${BRAND}10` : 'transparent' }}>
                       <div style={{ width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, flexShrink: 0, background: isEnrolled && l.done ? BRAND : unlocked ? '#EDE8E1' : '#F0ECE6', color: isEnrolled && l.done ? '#fff' : MUTED2 }}>{isEnrolled && l.done ? <Check size={10} /> : !unlocked ? <Lock size={9} /> : li + 1}</div>
                       {l.type === 'video' ? <Play size={12} color={unlocked ? BRAND : '#C9C5BE'} /> : <BookOpen size={12} color={unlocked ? BRAND : '#C9C5BE'} />}
-                      <span style={{ flex: 1, fontSize: 13.5, color: unlocked ? INK : '#C9C5BE' }}>{l.title}</span>
+                      <span style={{ flex: 1, fontSize: 13.5, color: unlocked ? INK : '#C9C5BE', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.title}</span>
                       <span style={{ fontSize: 11, color: MUTED2 }}>{l.duration}</span>
                       {isEnrolled && l.done && <span style={{ fontSize: 10, fontWeight: 800, color: '#2AA76E', background: '#E8F8EE', padding: '1px 8px', borderRadius: 100 }}>Done</span>}
+                      {isEnrolled && onLessonMore && (
+                        <button aria-label={`More for ${l.title}`}
+                          onClick={(e) => { e.stopPropagation(); onLessonMore({ ...l, module: m.title }); }}
+                          style={{ background: 'none', border: 'none', padding: 4, margin: '-4px -2px -4px 0', cursor: 'pointer', display: 'flex', alignItems: 'center', color: MUTED2, flexShrink: 0 }}>
+                          <MoreVertical size={14}/>
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -268,7 +281,8 @@ function Curriculum({ modules, isEnrolled, hours, onPick, currentTitle }) {
 }
 
 /* ── reviews ──────────────────────────────────────────────── */
-const RV_EMOJI = ['👦🏾', '👧🏾', '🧑🏽', '👩🏻', '👨🏿', '👩🏾'];
+/* People get initials discs — typography, not emoji. */
+const initialsOf = (name = '') => (String(name).trim().split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('')) || '?';
 const RV_BG = ['#D4EAD8', '#E4D4F0', '#C8D8E8', '#F0E4C8', '#F8E8FF', '#FFE8C0'];
 // Post a course review (enrolled learners only). Returns the saved review.
 async function submitCourseReview(courseId, rating, comment) {
@@ -322,11 +336,11 @@ function ReviewForm({ courseId }) {
 
 function Reviews({ reviews, courseId, canReview }) {
   const data = reviews?.length
-    ? reviews.map((r, i) => ({ emoji: RV_EMOJI[i % RV_EMOJI.length], bg: RV_BG[i % RV_BG.length], name: r.name, rating: r.rating, date: r.date, text: r.text }))
+    ? reviews.map((r, i) => ({ initials: initialsOf(r.name), bg: RV_BG[i % RV_BG.length], name: r.name, rating: r.rating, date: r.date, text: r.text }))
     : [
-        { emoji: '👦🏾', bg: '#D4EAD8', name: 'Chukwuemeka O.', rating: 5, date: '2 days ago', text: 'The lessons finally made calculus click for me. Loved the worked examples.' },
-        { emoji: '👧🏾', bg: '#E4D4F0', name: 'Ngozi A.', rating: 5, date: '1 week ago', text: 'Clear, well-paced and the quizzes really help retention.' },
-        { emoji: '👨🏿', bg: '#C8D8E8', name: 'Babatunde F.', rating: 4, date: '2 weeks ago', text: 'Solid course. Would love even more practice questions.' },
+        { initials: 'CO', bg: '#D4EAD8', name: 'Chukwuemeka O.', rating: 5, date: '2 days ago', text: 'The lessons finally made calculus click for me. Loved the worked examples.' },
+        { initials: 'NA', bg: '#E4D4F0', name: 'Ngozi A.', rating: 5, date: '1 week ago', text: 'Clear, well-paced and the quizzes really help retention.' },
+        { initials: 'BF', bg: '#C8D8E8', name: 'Babatunde F.', rating: 4, date: '2 weeks ago', text: 'Solid course. Would love even more practice questions.' },
       ];
   return (
     <div>
@@ -335,7 +349,7 @@ function Reviews({ reviews, courseId, canReview }) {
       {data.map((r, i) => (
         <div key={i} style={{ ...card, padding: 18, flex: '0 0 min(320px,82vw)', display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <Avatar emoji={r.emoji} bg={r.bg} size={40} />
+            <Avatar initials={r.initials} bg={r.bg} size={40} />
             <div><div style={{ fontSize: 14, fontWeight: 800, color: INK }}>{r.name}</div><div style={{ fontSize: 11, color: MUTED2 }}>Student</div></div>
             <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 100, background: '#E8F8EE', color: '#2AA76E' }}>Verified</span>
           </div>
@@ -353,12 +367,12 @@ function Reviews({ reviews, courseId, canReview }) {
 
 /* ── battles ──────────────────────────────────────────────── */
 const AGENTS = [
-  { id: 'nexus', name: 'Nexus', emoji: '🤖', owner: 'You', bg: `${BRAND}1A`, color: BRAND, isYou: true },
-  { id: 'pythia', name: 'Pythia', emoji: '🔮', owner: 'Dr. Amara', bg: '#EDE8F8', color: '#7C3AED', isTeacher: true },
-  { id: 'axiom', name: 'Axiom', emoji: '⚡', owner: 'Mr. Tobi', bg: '#FFF4C8', color: '#D97706', isTeacher: true },
-  { id: 'zeno', name: 'Zeno', emoji: '🌀', owner: 'Chukwuemeka', bg: '#D4EAD8', color: '#059669' },
-  { id: 'ada', name: 'Ada', emoji: '✨', owner: 'Ngozi', bg: '#E4D4F0', color: '#7C3AED' },
-  { id: 'sigma', name: 'Sigma', emoji: '🔺', owner: 'Babatunde', bg: '#C8D8E8', color: '#2563EB' },
+  { id: 'nexus', name: 'Nexus', icon: Bot, owner: 'You', bg: `${BRAND}1A`, color: BRAND, isYou: true },
+  { id: 'pythia', name: 'Pythia', icon: Gem, owner: 'Dr. Amara', bg: '#EDE8F8', color: '#7C3AED', isTeacher: true },
+  { id: 'axiom', name: 'Axiom', icon: Zap, owner: 'Mr. Tobi', bg: '#FFF4C8', color: '#D97706', isTeacher: true },
+  { id: 'zeno', name: 'Zeno', icon: Tornado, owner: 'Chukwuemeka', bg: '#D4EAD8', color: '#059669' },
+  { id: 'ada', name: 'Ada', icon: Sparkles, owner: 'Ngozi', bg: '#E4D4F0', color: '#7C3AED' },
+  { id: 'sigma', name: 'Sigma', icon: Triangle, owner: 'Babatunde', bg: '#C8D8E8', color: '#2563EB' },
 ];
 const BATTLES = [
   { id: 1, topic: 'Chain Rule Gauntlet', a: 0, b: 1, sa: 7, sb: 5, status: 'live', viewers: 23 },
@@ -377,7 +391,7 @@ function BattleCard({ b, onOpen }) {
   const Side = ({ ag, score, win }) => (
     <div style={{ flex: 1, textAlign: 'center' }}>
       <div style={{ position: 'relative', display: 'inline-block' }}>
-        <Avatar emoji={ag.emoji} bg={ag.bg || `${ag.color || BRAND}1A`} size={42} ring={ag.isYou ? true : undefined} />
+        <Avatar icon={ag.icon} emoji={ag.emoji} color={ag.color} bg={ag.bg || `${ag.color || BRAND}1A`} size={42} ring={ag.isYou ? true : undefined} />
         {win && <div style={{ position: 'absolute', top: -8, right: -8, fontSize: 15 }}><Crown size={15} fill={GOLD} color={GOLD}/></div>}
       </div>
       <div style={{ fontSize: 11.5, fontWeight: 800, color: INK, marginTop: 4 }}>{ag.name}</div>
@@ -493,7 +507,7 @@ function BattlesSection({ battles: real, leaderboard: realLb, lobbies }) {
         {leaderboard.map((ag, i) => (
           <div key={ag.id || ag.name || i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', borderBottom: i < leaderboard.length - 1 ? `1px solid ${BORDER}` : 'none' }}>
             <div style={{ width: 22, textAlign: 'center', fontSize: 15, fontWeight: 900, color: i === 0 ? GOLD : MUTED2 }}>{i === 0 ? <Crown size={14} fill={GOLD} color={GOLD}/> : i + 1}</div>
-            <Avatar emoji={ag.emoji} bg={ag.bg || `${ag.color || BRAND}1A`} size={32} ring={ag.isYou ? true : undefined} />
+            <Avatar icon={ag.icon} emoji={ag.emoji} color={ag.color} bg={ag.bg || `${ag.color || BRAND}1A`} size={32} ring={ag.isYou ? true : undefined} />
             <div style={{ flex: 1 }}><div style={{ fontSize: 13.5, fontWeight: 800, color: INK }}>{ag.name}{ag.isYou && <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 800, color: '#fff', background: INK, padding: '1px 7px', borderRadius: 100 }}>You</span>}</div>{ag.owner && <div style={{ fontSize: 11, color: MUTED2 }}>{ag.owner}</div>}</div>
             <div style={{ fontWeight: 900, color: ag.isYou ? BRAND : INK }}>{ag.pts} <span style={{ fontSize: 10, color: MUTED2, fontWeight: 700 }}>pts</span></div>
           </div>
@@ -506,15 +520,14 @@ function BattlesSection({ battles: real, leaderboard: realLb, lobbies }) {
 
 /* ── peer revisions ───────────────────────────────────────── */
 const REVISIONS = [
-  { id: 1, topic: 'Chain Rule deep-dive', host: 'Chukwuemeka O.', emoji: '👦🏾', bg: '#D4EAD8', time: 'Starts in 12 min', joined: 8, max: 12, status: 'starting' },
-  { id: 2, topic: 'Integration by Parts Q&A', host: 'Ngozi A.', emoji: '👧🏾', bg: '#E4D4F0', time: 'Live now', joined: 6, max: 10, status: 'live' },
-  { id: 3, topic: 'Differential Equations Study Hall', host: 'Tobi M.', emoji: '👦🏾', bg: '#C8D8E8', time: 'Tomorrow · 4 PM', joined: 0, max: 15, status: 'upcoming' },
+  { id: 1, topic: 'Chain Rule deep-dive', host: 'Chukwuemeka O.', bg: '#D4EAD8', time: 'Starts in 12 min', joined: 8, max: 12, status: 'starting' },
+  { id: 2, topic: 'Integration by Parts Q&A', host: 'Ngozi A.', bg: '#E4D4F0', time: 'Live now', joined: 6, max: 10, status: 'live' },
+  { id: 3, topic: 'Differential Equations Study Hall', host: 'Tobi M.', bg: '#C8D8E8', time: 'Tomorrow · 4 PM', joined: 0, max: 15, status: 'upcoming' },
 ];
-const RV_HOST_EMOJI = ['👦🏾', '👧🏾', '🧑🏽', '👨🏿'];
 const RV_HOST_BG = ['#D4EAD8', '#E4D4F0', '#C8D8E8', '#F0E4C8'];
 function RevisionsSection({ revisions, onJoinLive }) {
   const list = revisions?.length
-    ? revisions.map((s, i) => ({ id: i, topic: s.topic, host: s.host, emoji: RV_HOST_EMOJI[i % RV_HOST_EMOJI.length], bg: RV_HOST_BG[i % RV_HOST_BG.length], time: s.time, joined: s.joined, max: s.max, status: s.status === 'live' ? 'live' : 'upcoming' }))
+    ? revisions.map((s, i) => ({ id: i, topic: s.topic, host: s.host, bg: RV_HOST_BG[i % RV_HOST_BG.length], time: s.time, joined: s.joined, max: s.max, status: s.status === 'live' ? 'live' : 'upcoming' }))
     : REVISIONS;
   return (
     <section style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -531,7 +544,7 @@ function RevisionsSection({ revisions, onJoinLive }) {
               <div style={{ fontSize: 14, fontWeight: 800, color: INK }}>{s.topic}</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Avatar emoji={s.emoji} bg={s.bg} size={32} />
+              <Avatar initials={initialsOf(s.host)} bg={s.bg} size={32} />
               <div><div style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>{s.host}</div><div style={{ fontSize: 11, color: MUTED2, display: 'flex', alignItems: 'center', gap: 4 }}><Clock size={10} />{s.time}</div></div>
             </div>
             <div>
@@ -579,7 +592,7 @@ function mapCourse(api) {
 }
 
 /* ── guest / overview view ────────────────────────────────── */
-function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, enrolling, onJoinLive, onAddToCart, addingCart, inCart }) {
+function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, enrolling, onJoinLive, onAddToCart, addingCart, inCart, onAgentSession, onLessonMore }) {
   const isVideo = type === 'video';
   const isFree = course.priceLabel === 'Free';
   const tabs = isVideo ? ['about', 'curriculum', 'teachers', 'reviews'] : ['about', 'schedule', 'curriculum', 'teachers', 'reviews'];
@@ -587,8 +600,8 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, en
   const done = modules.reduce((a, m) => a + m.lessons.filter((l) => l.done).length, 0);
   const total = modules.reduce((a, m) => a + m.lessons.length, 0);
   const teachers = course.teachers
-    ? course.teachers.map((t) => ({ emoji: '👩🏾‍🏫', bg: '#C8E8D4', name: t.name, title: t.title || 'Instructor', bio: `Instructor for ${course.title}.` }))
-    : [{ emoji: '👩🏾‍🏫', bg: '#C8E8D4', name: course.instructor, title: 'Lead Instructor', bio: `Instructor for ${course.title}.` }];
+    ? course.teachers.map((t) => ({ initials: initialsOf(t.name), bg: '#C8E8D4', name: t.name, title: t.title || 'Instructor', bio: `Instructor for ${course.title}.` }))
+    : [{ initials: initialsOf(course.instructor), bg: '#C8E8D4', name: course.instructor, title: 'Lead Instructor', bio: `Instructor for ${course.title}.` }];
   const schedule = course.schedule || [];
 
   return (
@@ -596,7 +609,7 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, en
       {/* Hero */}
       <div style={{ position: 'relative', borderRadius: 22, overflow: 'hidden', background: 'linear-gradient(135deg,#231a4d,#0d2137)' }}>
         <div style={{ position: 'relative', zIndex: 1, padding: 24, display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'center' }}>
-          <div style={{ fontSize: 64 }}>{course.emoji}</div>
+          <div style={{ fontSize: 64, color: 'rgba(255,255,255,.9)' }}>{course.emoji?.startsWith('ti-') ? <Icon name={course.emoji} size={64}/> : (course.emoji || <Icon name="ti-book" size={64}/>)}</div>
           <div style={{ flex: 1, minWidth: 240 }}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
               {isVideo ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 900, padding: '2px 9px', borderRadius: 100, background: BRAND, color: '#fff' }}><Video size={10}/> VIDEO COURSE</span> : <LiveBadge />}
@@ -634,7 +647,12 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, en
       </div>
 
       {/* Action chips */}
-      <ActionChips course={course} />
+      <ActionChips course={course} onAgentSession={() => {
+        // Open on the first lesson that really exists — the viewer is honest
+        // when the stream is not accessible to this learner yet.
+        const firstLesson = (modules || []).flatMap((m) => m.lessons || []).find((l) => l?.id) || null;
+        onAgentSession?.(firstLesson);
+      }} />
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, padding: 4, background: '#F0ECE6', borderRadius: 14, width: 'fit-content', flexWrap: 'wrap' }}>
@@ -702,7 +720,7 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, en
       )}
 
       {/* Curriculum */}
-      {tab === 'curriculum' && <Curriculum modules={modules} isEnrolled={isEnrolled} hours={course.hours} onPick={isEnrolled ? onPlay : null} />}
+      {tab === 'curriculum' && <Curriculum modules={modules} isEnrolled={isEnrolled} hours={course.hours} onPick={isEnrolled ? onPlay : null} onLessonMore={isEnrolled ? onLessonMore : null} />}
 
       {/* Teachers */}
       {tab === 'teachers' && (
@@ -710,7 +728,7 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, en
           {teachers.map((t, i) => (
             <div key={i} style={{ ...card, padding: 22 }}>
               <div style={{ display: 'flex', gap: 14, marginBottom: 12 }}>
-                <Avatar emoji={t.emoji} bg={t.bg} size={52} />
+                <Avatar initials={t.initials} bg={t.bg} size={52} />
                 <div><div style={{ fontSize: 15, fontWeight: 900, color: INK }}>{t.name}</div><div style={{ fontSize: 12, fontWeight: 800, color: BRAND }}>{t.title}</div></div>
               </div>
               <p style={{ fontSize: 13.5, color: MUTED, margin: 0 }}>{t.bio}</p>
@@ -730,7 +748,7 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, en
 }
 
 /* ── enrolled video player view ───────────────────────────── */
-function EnrolledVideoView({ course, modules }) {
+function EnrolledVideoView({ course, modules, onAgentSession, onLessonMore }) {
   const first = (() => {
     for (const m of modules) { const l = (m.lessons || []).find((x) => x.type === 'video'); if (l) return { ...l, module: m.title }; }
     return { title: 'Lesson', type: 'video', module: modules[0]?.title };
@@ -778,7 +796,7 @@ function EnrolledVideoView({ course, modules }) {
       </div>
 
       {/* Action chips */}
-      <ActionChips course={course} />
+      <ActionChips course={course} onAgentSession={() => onAgentSession?.(lesson)} />
 
       <div style={{ display: 'flex', gap: 4, padding: 4, background: '#F0ECE6', borderRadius: 14, width: 'fit-content', flexWrap: 'wrap' }}>
         {[['content', 'Course content'], ['about', 'About'], ['reviews', 'Reviews'], ['battles', 'Battles'], ['revisions', 'Live revisions']].map(([id, label]) => (
@@ -786,7 +804,7 @@ function EnrolledVideoView({ course, modules }) {
         ))}
       </div>
 
-      {tab === 'content' && <Curriculum modules={modules} isEnrolled hours={course.hours} onPick={setLesson} currentTitle={lesson?.title} />}
+      {tab === 'content' && <Curriculum modules={modules} isEnrolled hours={course.hours} onPick={setLesson} currentTitle={lesson?.title} onLessonMore={onLessonMore} />}
       {tab === 'about' && <div style={{ ...card, padding: 22 }}><p style={{ fontSize: 13.5, color: MUTED, lineHeight: 1.7, margin: 0 }}>{course.description || 'A complete course covering the full syllabus with lessons and quizzes.'}</p></div>}
       {tab === 'reviews' && <Reviews reviews={course.reviews} courseId={course.id} canReview />}
       {tab === 'battles' && <BattlesSection battles={course.battles} leaderboard={course.leaderboard} lobbies={course.openLobbies} />}
@@ -797,4 +815,4 @@ function EnrolledVideoView({ course, modules }) {
 
 /* ── page ─────────────────────────────────────────────────── */
 
-export { INK, MUTED, BORDER, LIGHT, BG, FONT, GlobalCss, card, Btn, Avatar, LiveBadge, StarRow, PLATFORMS, PlatformBadge, ActionChips, SectionTitle, DEFAULT_MODULES, DEFAULT_COURSE, VideoPlayer, Curriculum, RV_EMOJI, RV_BG, Reviews, AGENTS, BATTLES, BattleCard, BattlesSection, REVISIONS, RV_HOST_EMOJI, RV_HOST_BG, RevisionsSection, mapCourse, CourseOverview, EnrolledVideoView };
+export { INK, MUTED, BORDER, LIGHT, BG, FONT, GlobalCss, card, Btn, Avatar, LiveBadge, StarRow, PLATFORMS, PlatformBadge, ActionChips, SectionTitle, DEFAULT_MODULES, DEFAULT_COURSE, VideoPlayer, Curriculum, RV_BG, Reviews, AGENTS, BATTLES, BattleCard, BattlesSection, REVISIONS, RV_HOST_BG, RevisionsSection, mapCourse, CourseOverview, EnrolledVideoView };

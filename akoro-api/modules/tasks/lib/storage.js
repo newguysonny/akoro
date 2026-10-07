@@ -7,6 +7,7 @@
 import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import config           from "../../../config/index.js";
+import { r2Send } from "../../../lib/r2Breaker.js";
 
 const s3 = new S3Client({
   region:      "auto",
@@ -23,5 +24,5 @@ export async function createPresignedUpload(fileName, fileType, teacherId) {
 }
 
 export async function deleteFile(fileKey) {
-  await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: fileKey }));
+  await r2Send(s3, new DeleteObjectCommand({ Bucket: BUCKET, Key: fileKey }));
 }

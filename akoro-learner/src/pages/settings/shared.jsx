@@ -3,6 +3,7 @@
  */
 
 import { useLang } from '../../contexts/LanguageContext.jsx';
+import { DrawnAvatar } from '../../components/common/AgentAvatar.jsx';
 
 const BRAND  = '#6C3BFF';
 const RED    = '#EF4444';
@@ -133,7 +134,7 @@ function AvatarCircle({ photoUrl, emoji, color, size=60, onPhotoClick }) {
         onClick={onPhotoClick}>
         {photoUrl
           ? <img src={photoUrl} style={{ width:'100%',height:'100%',objectFit:'cover' }}/>
-          : <span style={{ fontSize:size*0.43 }}>{emoji}</span>}
+          : <DrawnAvatar emoji={emoji} size={Math.round(size*0.72)}/>}
       </div>
       <div title="Edit photo" aria-label="Edit photo" style={{ position:'absolute',bottom:-2,right:-2,
         width:22,height:22,borderRadius:'50%',background:color,

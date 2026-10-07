@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, AGENT_STYLES } from '../../constants.js';
 import { ZapIcon, ChevDownIcon, Icon } from '../common/Icons.jsx';
+import { AgentAvatar } from '../common/AgentAvatar.jsx';
 
 /* Where a step sits in the arc of the topic. Four kinds, because that is the
    shape of learning something: name it, see how it works, use it, tie it
@@ -217,25 +218,23 @@ function BlockRenderer({ block, agentName, agentEmoji }) {
   if (block.type === "subtopic-hdr") return <SubtopicHeader block={block} opacity={opacity} />;
 
   /* The "NaNa plan" strip and the "Objectives" checklist used to render here.
-     Both are gone. The plan listed the four phases the teaching agent works
-     through — machinery, not something a learner acts on, and the phase badge
-     on the guide's own messages already says where they are. The objectives
-     checklist was the subtopic progress bar written out longhand: identical
-     array, identical order. It lives on the header now, one at a time, so the
-     two are one thing instead of two. Old sessions replay without them. */
+     Both are gone. The plan exposed internal workflow phases rather than a
+     learner action, while the checklist was the subtopic progress bar written
+     out longhand: identical array, identical order. The existing objective
+     header remains the single source of visible progress. */
 
   /* ── guide (NaNa Esumai) ── */
   if (block.type === "guide") return (
     <div style={{ display:"flex", alignItems:"flex-end", gap:8, marginBottom:4, opacity }}>
       <div style={{ width:28, height:28, borderRadius:"50%", background:nana.bg,
         border:`1.5px solid ${nana.ring}`, flexShrink:0, display:"flex",
-        alignItems:"center", justifyContent:"center", fontSize:14 }}>{nana.emoji}</div>
+        alignItems:"center", justifyContent:"center" }}><AgentAvatar emoji={nana.emoji} size={19}/></div>
       <div style={{ maxWidth:"80%" }}>
-        {block.phase && (
+        {block.learningState && (
           <div style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"2px 9px",
             borderRadius:20, background:nana.bg, border:`0.5px solid ${nana.ring}`,
             fontSize:9.5, fontWeight:700, color:nana.color, marginBottom:4, flexWrap:"wrap" }}>
-            {nana.emoji} {block.phase}
+            <AgentAvatar emoji={nana.emoji} size={11}/> Learning state: {block.learningState}
           </div>
         )}
         <div style={{ padding:"9px 13px", borderRadius:"4px 18px 18px 18px",
@@ -243,6 +242,11 @@ function BlockRenderer({ block, agentName, agentEmoji }) {
           color:nana.color, fontSize:13.5, lineHeight:1.6, whiteSpace:"pre-wrap", fontWeight:500 }}>
           {block.text}
         </div>
+        {block.nextLearningMove && (
+          <div style={{ fontSize:10, color:"#C7D2FE", margin:"5px 2px 0", lineHeight:1.45, fontWeight:600 }}>
+            <b style={{ color:"#E0E7FF", fontWeight:800 }}>Next:</b> {block.nextLearningMove}
+          </div>
+        )}
         <div style={{ fontSize:10, color:"rgba(255,255,255,.35)", marginTop:2 }}>{nana.name}</div>
       </div>
     </div>
@@ -253,19 +257,13 @@ function BlockRenderer({ block, agentName, agentEmoji }) {
     <div style={{ display:"flex", alignItems:"flex-end", gap:8, marginBottom:4, opacity }}>
       <div style={{ width:28, height:28, borderRadius:"50%", background:student.bg,
         border:`1.5px solid ${student.ring}`, flexShrink:0, display:"flex",
-        alignItems:"center", justifyContent:"center", fontSize:14 }}>{student.emoji}</div>
+        alignItems:"center", justifyContent:"center" }}><AgentAvatar emoji={student.emoji} size={19}/></div>
       <div style={{ maxWidth:"80%" }}>
-        {block.phase && (
+        {block.currentIdea && (
           <div style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"2px 9px",
             borderRadius:20, background:student.bg, border:`0.5px solid ${student.ring}50`,
-            fontSize:9.5, fontWeight:700, color:student.color, marginBottom:4 }}>
-            {student.emoji} {block.phase}
-            {block.confidence !== undefined && (
-              <span style={{ background:"rgba(255,255,255,.25)", borderRadius:6, padding:"1px 5px",
-                fontSize:9, fontWeight:800, color: block.confidence >= 70 ? "#6EE7B7" : block.confidence >= 40 ? "#FDE68A" : "#FCA5A5" }}>
-                {block.confidence}%
-              </span>
-            )}
+            fontSize:9.5, fontWeight:700, color:student.color, marginBottom:4, flexWrap:"wrap" }}>
+            <AgentAvatar emoji={student.emoji} size={11}/> Current idea: {block.currentIdea}
           </div>
         )}
         <div style={{ padding:"9px 13px", borderRadius:"4px 18px 18px 18px",
@@ -274,6 +272,11 @@ function BlockRenderer({ block, agentName, agentEmoji }) {
           {block.text}
           {block.audioUrl && <AudioPlayer url={block.audioUrl} tint={student.color} dark />}
         </div>
+        {block.whyThisResponse && (
+          <div style={{ fontSize:10, color:"rgba(255,255,255,.43)", margin:"5px 2px 0", lineHeight:1.45, fontWeight:600 }}>
+            <b style={{ color:"rgba(255,255,255,.60)", fontWeight:800 }}>Why this response:</b> {block.whyThisResponse}
+          </div>
+        )}
         <div style={{ fontSize:10, color:"rgba(255,255,255,.35)", marginTop:2 }}>{student.name}</div>
       </div>
     </div>
@@ -343,7 +346,7 @@ function BlockRenderer({ block, agentName, agentEmoji }) {
         <div style={{ background:"linear-gradient(135deg,rgba(120,53,15,.80),rgba(146,64,14,.80))",
           padding:"7px 13px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
           <div style={{ display:"flex", alignItems:"center", gap:7 }}>
-            <span style={{ fontSize:14 }}>{block.agentEmoji || "🤖"}</span>
+            <AgentAvatar emoji={block.agentEmoji} size={16}/>
             <span style={{ fontSize:12, fontWeight:800, color:"#FDE68A" }}>
               {block.agentName || "Agent"} — needs revision
             </span>

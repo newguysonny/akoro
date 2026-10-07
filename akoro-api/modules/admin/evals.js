@@ -92,6 +92,9 @@ router.post("/evals/run", adminOnly, asyncHandler(async (req, res) => {
   }).select().single();
   if (error) throw new Error(error.message);
 
+  // Backpressure: an eval suite is minutes of model calls — reject the run
+  // when a backlog already exists instead of queueing behind it invisibly.
+  await assertQueueCapacity(evalQueue, { name: "evals" });
   await evalQueue.add(`eval-${run.id}`, { runId: run.id });
 
   res.status(202).json({

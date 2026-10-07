@@ -1,22 +1,28 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, PRIORITY_CONFIG, STUDENT_ID } from '../constants.js';
 import { useWallet } from '../hooks/useWallet.js';
 import { API, apiGet, apiPost, apiPatch } from '../services/api.js';
+import { listRecords, setRecordProgress as setRecordProgressApi } from '../services/recordsApi.js';
+import RecordTeachSession from '../components/library/RecordTeachSession.jsx';
 import { useLang } from '../contexts/LanguageContext.jsx';
 import { useCart } from '../contexts/CartContext.jsx';
 
 // Components
 import TeacherNudge   from '../components/TeacherNudge.jsx';
+import { onActivityEvent } from '../services/activitySocket.js';
 import InstallBanner  from '../components/common/InstallBanner.jsx';
 import SessionCard    from '../components/sessions/SessionCard.jsx';
 import SelfStudyList  from '../components/sessions/SelfStudyList.jsx';
 import SessionSheet   from '../components/sessions/SessionSheet.jsx';
 import BlockRenderer  from '../components/sessions/BlockRenderer.jsx';
 import TeachAgentModal   from '../components/teaching/TeachAgentModal.jsx';
+import ConceptTrackerModal from '../components/teaching/ConceptTrackerModal.jsx';
+import AdaptiveControlsModal from '../components/teaching/AdaptiveControlsModal.jsx';
 import DecaySessionModal from '../components/teaching/DecaySessionModal.jsx';
 import ConfigModal       from '../components/teaching/ConfigModal.jsx';
 import AssessmentRoom     from '../components/assessment/AssessmentRoom.jsx';
+import ExamPrepConfidenceModal from '../components/assessment/ExamPrepConfidenceModal.jsx';
 import BattleModal       from '../components/battles/BattleModal.jsx';
 import ChallengeModal    from '../components/battles/ChallengeModal.jsx';
 import { BattlesTab, ChallengeRow } from '../components/battles/BattlesTab.jsx';
@@ -27,10 +33,15 @@ import DiscoverHub   from '../components/tabs/DiscoverHub.jsx';
 import Toast         from '../components/common/Toast.jsx';
 import { ProgressBar, LiveBadge } from '../components/common/ProgressBar.jsx';
 import { ZapIcon, MicIcon, Icon } from '../components/common/Icons.jsx';
-import AddRecordModal from '../components/dashboard/AddRecordModal.jsx';
 import NowStudyingBar from '../components/dashboard/NowStudyingBar.jsx';
+import PharmDProgram from '../components/pharmd/PharmDProgram.jsx';
+import ContentsDiscoveryTab from '../components/tabs/ContentsDiscoveryTab.jsx';
+import { AppShell, SidebarToggle } from '../components/AppShell.jsx';
+import { NavIcon } from '../components/common/NavIcons.jsx';
 import { useNowStudying } from '../utils/nowStudying.js';
-import { isHigherEdUI } from '../utils/studyLevel.js';
+import { useHigherEd } from '../hooks/useStudyTier.js';
+import { featureGated } from '../utils/planOverride.js';
+import { getAlarmChoice, startAlarm, stopAlarm } from '../services/alarmSound.js';
 import React from 'react';
 
 // Hooks
@@ -60,18 +71,77 @@ export default function LearnerDashboard() {
   // Higher-ed Discover has an inner view: the hub, or the courses feed the
   // hub's Courses card opens. Mirrored in the URL (?view=&q=) so Back/Forward
   // move between hub and courses like they do between tabs.
-  const discoverViewFromUrl = () => new URLSearchParams(location.search).get("view") === "courses" ? "courses" : "hub";
+  // The hub's inner views mirror in the URL (?view=&q=, plus ?course= for
+  // the Pharm D programme page) so Back/Forward move between hub, courses
+  // feed and the Pharm D browse/folder chain like they do between tabs.
+  const discoverViewFromUrl = () => {
+    const v = new URLSearchParams(location.search).get("view");
+    return v === "courses" || v === "pharmd" || v === "contents" ? v : "hub";
+  };
   const discoverQFromUrl    = () => new URLSearchParams(location.search).get("q") || "";
+  const pharmdCourseFromUrl = () => new URLSearchParams(location.search).get("course") || null;
+  // The focused discovery feeds (Teaching guide / Live classes): ?focus=
+  // on the courses view — same feed, one rail.
+  const discoveryFocusFromUrl = () => {
+    const f = new URLSearchParams(location.search).get("focus");
+    return f === "guides" || f === "live" ? f : null;
+  };
   const [discoverView,  setDiscoverView]  = useState(discoverViewFromUrl);
   const [discoverQuery, setDiscoverQuery] = useState(discoverQFromUrl);
   // Keep tab in sync when the URL changes (Back/Forward, deep link).
+
+  // ── "Ding, new assignment" ─────────────────────────────────────────────
+  // The teacher's assign action emits self_study_assigned into this learner's
+  // user room. One ambient socket hears it: chime, toast, and poke any
+  // mounted Activity page to refetch. Best-effort end to end — a missed
+  // announcement never blocks the work itself, which is already saved.
+  useEffect(() => {
+    const TYPE_LABEL = { self_study: 'Self study', assignment: 'Assignment', project: 'Project', live_course: 'Live course', multi_stage: 'Multi-stage journey' };
+    const TYPE_EMOJI = { self_study: '📖', assignment: '✏️', project: '🗂️', live_course: '📺', multi_stage: '🧩' };
+    return onActivityEvent(({ assignment } = {}) => {
+      if (!assignment?.title) return;
+      const label = TYPE_LABEL[assignment.type] || 'Activity';
+      const emoji = TYPE_EMOJI[assignment.type] || '📌';
+      // A two-note chime — a courtesy, never a requirement (autoplay rules
+      // may silence it until the learner has interacted; the toast still lands).
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) {
+          const ctx = new AC();
+          [[880, 0], [1174.66, 0.13]].forEach(([freq, at]) => {
+            const o = ctx.createOscillator(), g = ctx.createGain();
+            const t0 = ctx.currentTime + at;
+            o.type = 'sine'; o.frequency.value = freq;
+            g.gain.setValueAtTime(0.0001, t0);
+            g.gain.exponentialRampToValueAtTime(0.16, t0 + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.5);
+            o.connect(g); g.connect(ctx.destination);
+            o.start(t0); o.stop(t0 + 0.55);
+          });
+          setTimeout(() => ctx.close?.(), 1200);
+        }
+      } catch { /* no audio — fine */ }
+      setToast({ msg: `${emoji} New ${label.toLowerCase()}: ${assignment.title}`, color: BRAND });
+      window.dispatchEvent(new CustomEvent('ak:activity-changed', { detail: assignment }));
+    });
+  }, []);
   useEffect(() => {
     setTab(tabFromUrl());
     setDiscoverView(discoverViewFromUrl());
     setDiscoverQuery(discoverQFromUrl());
   }, [location.search]); // eslint-disable-line react-hooks/exhaustive-deps
   // A user tab switch pushes a history entry; the effect above then sets state.
-  const goTab = (key) => navigate(key === "sessions" ? "/app" : `/app?tab=${key}`);
+  // Plan gate (utils/planOverride.js — the Settings test switch): a tap on
+  // a plan-gated destination lands on the paywall instead of the tab, with
+  // the trigger naming the locked feature. The bottom nav, the tab pills
+  // and every "go to battles" CTA route through goTab, so one seam gates
+  // them all. Deep links still resolve — route guards arrive with billing.
+  const GATED_TABS = { battles: "Battles", rankings: "Rankings" };
+  const goTab = (key) => {
+    const feature = GATED_TABS[key];
+    if (feature && featureGated(feature)) return navigate(`/upgrade?trigger=${key}`);
+    navigate(key === "sessions" ? "/app" : `/app?tab=${key}`);
+  };
   const [sessionTab,        setSessionTab]        = useState("all");
   const [liveSubTab,        setLiveSubTab]        = useState("starting-soon");
   const [agentSubTab,       setAgentSubTab]       = useState("sessions");
@@ -80,17 +150,26 @@ export default function LearnerDashboard() {
   const [agentSubjectFilter,setAgentSubjectFilter]= useState("all");
   const [subjectFilter,     setSubjectFilter]     = useState("all");
   const [selectedSession,   setSelectedSession]   = useState(null);
+  const [recordViewer,      setRecordViewer]      = useState(null); // a record open as a TEACHING session
+  const [shelfRecords,      setShelfRecords]      = useState([]);   // the server shelf (skip-queue + resume)
   const [selectedChallenge, setSelectedChallenge] = useState(null);
   const [teachSession,      setTeachSession]      = useState(null); // now holds config OR null
   const [configOpen,        setConfigOpen]        = useState(false); // FAB → ConfigModal
   const [configInitial,     setConfigInitial]     = useState(null);  // pre-fill from session sheet
   const [decaySession,      setDecaySession]      = useState(null); // decay alert object
   const [assessSession,     setAssessSession]     = useState(null); // proctored assessment target
+  const [examPrepOpen,      setExamPrepOpen]      = useState(false); // learner-owned generated-practice loop
+  const [conceptTrackerOpen,setConceptTrackerOpen] = useState(false); // canonical tracker projection
+  const [adaptiveControlsOpen,setAdaptiveControlsOpen] = useState(false); // learner-selected controls / clear
   const [acceptedIds,       setAcceptedIds]       = useState(new Set());
   const [battles,           setBattles]           = useState([]);
-  const [toast,             setToast]             = useState(null);
-  const [isOnline,          setIsOnline]          = useState(true);
-  const [liveBattleModal,   setLiveBattleModal]   = useState(null);
+  const [toast,               setToast]               = useState(null);
+  // This is the server-backed autonomy consent, not browser connectivity.
+  // Defaulting false keeps the agent offline until the API confirms an opt-in.
+  const [agentOnline,         setAgentOnline]         = useState(false);
+  const [agentAutonomyLoaded, setAgentAutonomyLoaded] = useState(false);
+  const [agentAutonomySaving, setAgentAutonomySaving] = useState(false);
+  const [liveBattleModal,     setLiveBattleModal]     = useState(null);
 
   // ── API-driven state ─────────────────────────────────────────────────────
   const [sessions,     setSessions]     = useState([]);
@@ -112,44 +191,56 @@ export default function LearnerDashboard() {
   const [userProfile,  setUserProfile]  = useState(null);
   const [notifUnread,  setNotifUnread]  = useState(0);
 
-  // ── Level-aware UI: add-record action (higher-ed only) ───────────────────
-  // Sixth form / university / college / other see a + above Start Session;
-  // school learners don't. The profile fetch below decides which tier renders,
-  // so the button appears once the profile arrives — and never flashes for
-  // school learners. Records are device-local for now (frontend-only).
-  const [recordsOpen,  setRecordsOpen]  = useState(false);
-  const [recordCount,  setRecordCount]  = useState(0);
-  const higherEd = isHigherEdUI(userProfile || {});
-  const refreshRecordCount = useCallback(() => {
-    try {
-      const raw = JSON.parse(localStorage.getItem(`akoro_records_${userProfile?.id || 'me'}`) || '[]');
-      setRecordCount(Array.isArray(raw) ? Math.min(raw.length, 99) : 0);
-    } catch { setRecordCount(0); }
-  }, [userProfile?.id]);
-  useEffect(() => { if (higherEd) refreshRecordCount(); }, [higherEd, refreshRecordCount]);
+  // ── Level-aware UI tier ──────────────────────────────────────────────────
+  // Sixth form / university / college / other get the discovery hub feed and
+  // the Now-Studying bar; school learners get the plain discovery feed.
+  // Tier comes from the shared cached hook (useStudyTier.js) — correct on
+  // the FIRST render, no school-UI flash; the profile fetch below still
+  // feeds the header (name, avatar, XP).
+  const higherEd = useHigherEd();
 
   // ── Now studying — Spotify-style mini-bar ────────────────────────────────
   // Tracks the material or session the learner last opened, across all tabs
   // except the AI chat. Higher-ed gated like the records feature it leans on.
   const [now, nowActs] = useNowStudying(userProfile?.id);
+  // Reopen request for a parked Pharm.D topic (the Now-Studying bar's
+  // resume) — passed to the Discover hub, which opens the programme on it.
+  const [pharmdFocus, setPharmdFocus] = useState(null);
   // Is the AI chat SURFACE showing? (Agent tab also hosts tasks/stats/self-study,
   // where the Now-Studying bar should still appear — only chat hides it.)
   const [chatActive, setChatActive] = useState(false);
 
-  // Records live in localStorage; these helpers read/update one record's
-  // progress without a full state mirror (the modal re-reads on open).
-  const loadRecordsLocal = useCallback(() => {
-    try {
-      const raw = JSON.parse(localStorage.getItem(`akoro_records_${userProfile?.id || 'me'}`) || '[]');
-      return Array.isArray(raw) ? raw : [];
-    } catch { return []; }
-  }, [userProfile?.id]);
+  // ── Schedule alarm — the chosen ringtone (settings › Schedule alarm)
+  //    rings when a scheduled live class hits its moment, with a
+  //    stoppable banner. Choice + uploaded sound live in the
+  //    alarmSound service (device-local, like records).
+  const [alarmBanner, setAlarmBanner] = useState(null);
+  const ringAlarm = (title) => {
+    if (getAlarmChoice() === 'none') return;   // silenced
+    setAlarmBanner({ title });
+    startAlarm();
+  };
+  // An ignored ring must not ring forever — cap it, and always stop on
+  // unmount so navigating away can't leave a dangling interval.
+  useEffect(() => {
+    if (!alarmBanner) return undefined;
+    const id = setTimeout(() => { stopAlarm(); setAlarmBanner(null); }, 25000);
+    return () => clearTimeout(id);
+  }, [alarmBanner]);
+  useEffect(() => () => stopAlarm(), []);
+
+  // Records live on the server now (the Library shelf) — progress goes
+  // straight there, and the Now-Studying bar mirrors it optimistically.
   const setRecordProgress = useCallback((id, progress) => {
-    const list = loadRecordsLocal().map(r => r.id === id
-      ? { ...r, progress: Math.max(0, Math.min(100, progress)), last_opened_at: new Date().toISOString() }
-      : r);
-    try { localStorage.setItem(`akoro_records_${userProfile?.id || 'me'}`, JSON.stringify(list)); } catch { /* private mode */ }
-  }, [loadRecordsLocal, userProfile?.id]);
+    setRecordProgressApi(id, Math.max(0, Math.min(100, progress))).catch(() => { /* offline — next open re-syncs */ });
+  }, []);
+
+  // The shelf feeds the skip-queue and the bar's ▶ resume. A viewer close
+  // re-syncs it so progress on the cards is current.
+  const loadShelfRecords = useCallback(() => {
+    listRecords().then(setShelfRecords).catch(() => { /* offline — keep what we have */ });
+  }, []);
+  useEffect(() => { loadShelfRecords(); }, [loadShelfRecords]);
 
   // Opening a session tracks it as "now studying" — the bar then follows the
   // learner across tabs until they dismiss it or open something else.
@@ -167,9 +258,9 @@ export default function LearnerDashboard() {
     });
   }, [nowActs]);
 
-  // Opening a record tracks it too; links open in a new tab right away — the
-  // in-app viewer for uploads/pastes is future work, so say so instead of
-  // pretending the file opened.
+  // Opening a record tracks it in the Now-Studying bar AND opens it as a
+  // TEACHING session — the learner teaches their agent over the record's
+  // material. Links stay links (new tab).
   const openRecordTracked = useCallback((r) => {
     if (!r) return;
     const kindLabel = r.kind === 'link' ? t('records.tab_link') : r.kind === 'paste' ? t('records.tab_paste') : t('records.tab_upload');
@@ -183,22 +274,53 @@ export default function LearnerDashboard() {
     });
     if (!r.progress) { setRecordProgress(r.id, 10); nowActs.setProgress(r.id, 10); }
     if (r.kind === 'link' && r.url) { try { window.open(r.url, '_blank', 'noopener'); } catch { /* popup blocked */ } }
-    else setToast({ msg: t('records.viewer_soon'), color: GOLD });
-    setRecordsOpen(false);
+    else setRecordViewer(r);
   }, [nowActs, setRecordProgress, t]);
-
-  // Self-reported completion for records (there's no playback to measure).
-  const toggleRecordDone = useCallback((r) => {
-    const p = (r.progress || 0) >= 100 ? 10 : 100;
-    setRecordProgress(r.id, p);
-    if (now.item?.id === r.id) nowActs.setProgress(r.id, p);
-  }, [now.item, nowActs, setRecordProgress]);
 
   // Bar visibility: every tab except the AI chat surface, and never under a
   // full-screen sheet that has its own layout.
   const showNowBar = higherEd && !!now.item && !now.dismissed
     && !(tab === "agent" && chatActive) && !selectedSession && !selectedChallenge
-    && !teachSession && !liveBattleModal && !configOpen && !recordsOpen;
+    && !teachSession && !liveBattleModal && !configOpen && !recordViewer;
+
+  // Skip queue for the tablet bar's previous / next (Spotify-style track
+  // skip): sessions skip through sessions, records through records, and
+  // skipping RE-PARKS the neighbour on the bar (nothing opens) the way a
+  // player swaps tracks without opening the full screen. Battles never
+  // queue. Minimized teach/decay sessions use synthetic ids that no queue
+  // contains, so their skips disable until something trackable is parked.
+  const nowStudyQueue = useMemo(() => {
+    if (!now.item) return [];
+    if (now.item.type === 'record') return shelfRecords;
+    if (now.item.type === 'session') return [...agentSessions, ...sessions];
+    return [];
+  }, [now.item, agentSessions, sessions, shelfRecords]);
+  const canSkipNow = now.item?.type !== 'battle' && nowStudyQueue.length > 1
+    && nowStudyQueue.some(x => x && x.id === now.item.id);
+  const skipNowStudy = (dir) => {
+    if (!canSkipNow || !now.item) return;
+    const q = nowStudyQueue;
+    const i = q.findIndex(x => x && x.id === now.item.id);
+    if (i < 0) return;
+    const nx = q[(i + dir + q.length) % q.length];
+    if (!nx || nx.id === now.item.id) return;
+    if (now.item.type === 'record') {
+      nowActs.setCurrent({
+        type: 'record', id: nx.id, title: nx.name,
+        sub: nx.kind === 'link' ? t('records.tab_link') : nx.kind === 'paste' ? t('records.tab_paste') : t('records.tab_upload'),
+        emoji: nx.kind === 'link' ? 'ti-link' : nx.kind === 'paste' ? 'ti-clipboard' : 'ti-paperclip',
+        progress: nx.progress || 0,
+      });
+    } else {
+      nowActs.setCurrent({
+        type: 'session', id: nx.id,
+        title: nx.title || 'Study session',
+        sub: (SUBJECTS[nx.subject]?.label) || nx.topic || 'Session',
+        emoji: (SUBJECTS[nx.subject]?.icon) || 'ti-book',
+        progress: nx.progress || 0, snapshot: nx,
+      });
+    }
+  };
 
   // ── Minimize — park a live session on the Now-Studying bar ──────────────
   const minimizeSessionSheet = () => {
@@ -207,9 +329,14 @@ export default function LearnerDashboard() {
     setSelectedSession(null);
     setToast(t('now.minimized_toast'));
   };
-  const minimizeTeachSession = () => {
+  const minimizeTeachSession = (parked) => {
     const ts = teachSession;
     if (ts) {
+      // The live session id from the modal (fallback: whatever the state
+      // already carried). It rides in the snapshot so the bar reopens the
+      // SAME session — resumes it while the grace window holds, continues
+      // from its saved history afterwards. No conversation lost to minimize.
+      const liveId = parked?.sessionId || ts.sessionId || null;
       nowActs.setCurrent({
         type: 'session',
         id: ts.id || (ts.selfStudyId ? `self-${ts.selfStudyId}` : `teach-${ts.topic || 'session'}`),
@@ -217,12 +344,15 @@ export default function LearnerDashboard() {
         sub: (SUBJECTS[ts.subject]?.label) || ts.subject || t('now.teaching'),
         emoji: ts.agentEmoji || agentProfile.emoji || '🤖',
         progress: ts.progress || 0,
+        // The session itself rides along — the bar reopens it DIRECTLY,
+        // no details sheet in between.
+        snapshot: { __restore: 'teach', teach: { ...ts, sessionId: liveId } },
       });
     }
     setTeachSession(null);
     setToast(t('now.minimized_toast'));
   };
-  const minimizeDecaySession = () => {
+  const minimizeDecaySession = (parked) => {
     const d = decaySession;
     if (d) {
       nowActs.setCurrent({
@@ -232,6 +362,11 @@ export default function LearnerDashboard() {
         sub: d.subject || '',
         emoji: 'ti-refresh',
         progress: 0,
+        // The decay alert rides along so the bar reopens revision DIRECTLY.
+        // The live session id rides with it: restore resumes the parked
+        // session (or continues its saved history) — the re-teach
+        // conversation survives minimize.
+        snapshot: { __restore: 'decay', decay: { ...d, ...(parked?.sessionId ? { resumeSessionId: parked.sessionId } : {}) } },
       });
     }
     setDecaySession(null);
@@ -261,7 +396,7 @@ export default function LearnerDashboard() {
 
   // Bar ▶ — resume. Sessions reopen (live copy preferred, snapshot fallback);
   // records re-run the record open flow.
-  const openNowItem = () => {
+  const openNowItem = async () => {
     if (!now.item) return;
     if (now.item.type === 'battle') {
       // Prefer the freshest card (status may have flipped while parked);
@@ -269,12 +404,58 @@ export default function LearnerDashboard() {
       const fresh = battles.find(x => x.id === now.item.refId) || now.item.snapshot;
       if (fresh) setLiveBattleModal(fresh);
       else setToast(t('now.battle_ended'));
+    } else if (now.item.type === 'course') {
+      // A parked agent session (course video) — straight back to the course,
+      // reopening the session on the exact lesson.
+      const snap = now.item.snapshot;
+      if (snap?.slug) navigate(`/course/${snap.slug}${snap.lessonId ? `?agent=${snap.lessonId}` : ''}`);
+      else setToast(t('now.session_ended'));
     } else if (now.item.type === 'session') {
+      // Continue STRAIGHT into the session — no intermediate details sheet.
+      // A parked snapshot (minimized teach/decay) restores its own modal;
+      // a shelf session routes exactly the way the sheet's CTA used to:
+      // live class → join, decay → revise, agent w/ history → continuation,
+      // fresh → teaching config.
       const live = [...agentSessions, ...sessions].find(x => x.id === now.item.id);
-      openSessionTracked(live || now.item.snapshot || { id: now.item.id, title: now.item.title, progress: now.item.progress || 0 });
-    } else {
-      const r = loadRecordsLocal().find(x => x.id === now.item.id);
+      const snap = now.item.snapshot;
+      if (snap?.__restore === 'teach' && snap.teach) {
+        const ts = snap.teach;
+        // Resume the SAME live session first (minimize grace window); the
+        // modal falls back to a continuation of the saved history on
+        // resume_failed — either way the parked conversation comes back.
+        setTeachSession(ts.id || ts.sessionId
+          ? { ...ts, mode: 'continuation', resumeSessionId: ts.sessionId || ts.id }
+          : ts);
+      } else if (snap?.__restore === 'decay' && snap.decay) {
+        setDecaySession(snap.decay);   // carries resumeSessionId when a live session was parked
+      } else if (live) {
+        if (live.type === 'live') { joinLive(live); return; }
+        const decay = decayBySession[live.id] || (live.decayAlertId && decayAlerts.find(a=>a.id===live.decayAlertId)) || null;
+        if (decay) setDecaySession(decay);
+        else if (live.hasHistory && live.type === 'agent') setTeachSession({ ...live, mode: 'continuation', agentName: agentProfile.name, agentEmoji: agentProfile.emoji });
+        else { setConfigInitial({ topic: live.topic, subject: live.subject ? live.subject.charAt(0).toUpperCase()+live.subject.slice(1) : 'Science' }); setConfigOpen(true); }
+      } else {
+        setToast(t('now.session_ended'));
+      }
+    } else if (now.item.type === 'record') {
+      let r = shelfRecords.find(x => x.id === now.item.id);
+      if (!r) {
+        // Shelf state may be stale (added on another device) — try fresh.
+        try { r = (await listRecords()).find(x => x.id === now.item.id) || null; }
+        catch { r = null; }
+      }
       if (r) openRecordTracked(r);
+    } else if (now.item.type === 'library') {
+      // Content parked from the Library shelf or a folder — its route rides
+      // in the snapshot; resume is just the navigation.
+      if (now.item.snapshot?.path) navigate(now.item.snapshot.path);
+      else setToast(t('now.session_ended'));
+    } else if (now.item.type === 'pharmd') {
+      // A parked Pharm.D topic — straight onto the programme page at its
+      // course; the focus prop makes PharmDProgram reopen the exact topic.
+      const c = now.item.snapshot?.code;
+      setPharmdFocus({ ...now.item.snapshot, ts: Date.now() });
+      navigate(`/app?tab=discovery&view=pharmd${c ? `&course=${encodeURIComponent(c)}` : ''}`);
     }
   };
 
@@ -288,11 +469,54 @@ export default function LearnerDashboard() {
     return ()=>{ alive=false; clearInterval(t); };
   },[]);
 
+  // What the agent is doing RIGHT NOW (background work stream). The socket
+  // pushes labels; a quiet stretch of 90s falls back to the static subtitle.
+  const [agentActivity, setAgentActivity] = useState(null);
+  const agentActivityTimer = useRef(null);
+  const absorbAgentActivity = useCallback((label) => {
+    setAgentActivity(label || null);
+    if (agentActivityTimer.current) clearTimeout(agentActivityTimer.current);
+    if (label) agentActivityTimer.current = setTimeout(() => setAgentActivity(null), 90_000);
+  }, []);
+
+  const toggleAgentAutonomy = useCallback(async () => {
+    if (!agentAutonomyLoaded || agentAutonomySaving) return;
+    const previous = agentOnline;
+    const next = !previous;
+    setAgentOnline(next); // responsive UI; API remains the source of authority.
+    setAgentAutonomySaving(true);
+    try {
+      // One switch, both consents: online = due-task check-ins AND the
+      // background planner (level 2). Offline pauses everything and keeps
+      // the learner's planner level for when they come back online.
+      const response = await apiPatch("/api/adaptive/chat/autonomy",
+        next ? { enabled: true, level: 2 } : { enabled: false });
+      const saved = typeof response?.enabled === "boolean" ? response.enabled : next;
+      setAgentOnline(saved);
+      setToast(saved
+        ? "Agent online — it may open a chat when a task is due, and the background planner proposes next steps for you to approve."
+        : "Agent offline — due-task chats and the background planner are paused.");
+    } catch (error) {
+      setAgentOnline(previous);
+      setToast(error?.message || "Could not update your agent setting. Please retry.");
+    } finally {
+      setAgentAutonomySaving(false);
+    }
+  }, [agentAutonomyLoaded, agentAutonomySaving, agentOnline]);
+
   useEffect(()=>{
     // User profile — name, avatar, year group, XP for the header
     apiGet("/api/profiles/me")
       .then(d=>{ if(d?.id||d?.data?.id) setUserProfile(d.data||d); })
       .catch(()=>{});
+
+    // Read the durable preference every fresh dashboard load. A failed read
+    // leaves the agent safely Offline rather than treating local UI state as
+    // permission for a background worker.
+    apiGet("/api/adaptive/chat/autonomy")
+      .then(d=>{ setAgentOnline(Boolean(d?.enabled)); })
+      .catch(()=>{ setAgentOnline(false); })
+      .finally(()=>setAgentAutonomyLoaded(true));
 
     // Agent profile — student agent + guide agent
     apiGet("/api/user/agent")
@@ -356,15 +580,15 @@ export default function LearnerDashboard() {
         socket = window.io(API, { transports: ["websocket","polling"], withCredentials: true });
 
         socket.on("connect", () => {
-          // Join user room (live alerts + challenges)
-          socket.emit("subscribe-student", STUDENT_ID);
-          // Gap 1 fix: also join student:{id} room for decay cron alerts
-          socket.emit("join-student-room", STUDENT_ID);
+          // The server joins only rooms for the authenticated socket identity.
+          socket.emit("subscribe-student");
+          socket.emit("join-student-room");
         });
 
         // Live class starting soon
         socket.on("live_class_starting", alert => {
           setToast(`${alert.title} starts in ${alert.minutesUntil} min!`);
+          ringAlarm(`${alert.title} — ${alert.minutesUntil} min!`);
           setSessions(prev => prev.map(s =>
             s.id === alert.sessionId
               ? { ...s, status:"starting-soon", scheduleBucket:"starting-soon",
@@ -378,6 +602,7 @@ export default function LearnerDashboard() {
         // Live class now live
         socket.on("live_class_live", alert => {
           setToast(`${alert.title} is now LIVE! Join now.`);
+          ringAlarm(`${alert.title} is LIVE now!`);
           setSessions(prev => prev.map(s =>
             s.id === alert.sessionId
               ? { ...s, status:"live", scheduleBucket:"live",
@@ -450,6 +675,10 @@ export default function LearnerDashboard() {
           setNotifUnread(u => (u || 0) + 1);
           if (n?.title) setToast(`${n.title}`);
         });
+
+        // Agent activity — what the background agent is doing at this moment
+        // ("Checking your schedule\u2026", "Preparing a check-in\u2026").
+        socket.on("agent:activity", ({ label } = {}) => absorbAgentActivity(label));
       }
     } catch { /* socket.io not loaded — REST polling fallback */ }
 
@@ -599,7 +828,10 @@ export default function LearnerDashboard() {
     apiGet("/api/battle/my-battles").then(d=>setBattles(d?.data ?? [])).catch(()=>{});
   }, []);
 
-  const NAV_ITEMS=[{key:"sessions",icon:"📚",label:t('nav.learn')},{key:"discovery",icon:"🧭",label:t('nav.discover')},{key:"rankings",icon:"🏆",label:t('nav.rankings')},{key:"battles",icon:"⚔️",label:t('nav.battles')},{key:"agent",icon:"🤖",label:t('nav.agent')}];
+  // Bottom-nav destinations. No icon field any more: the key IS the
+  // NavIcon name (NavIcons.jsx) — the same icon set the AppShell
+  // sidebar uses, so a destination reads identically on every surface.
+  const NAV_ITEMS=[{key:"sessions",label:t('nav.learn')},{key:"discovery",label:t('nav.discover')},{key:"rankings",label:t('nav.rankings')},{key:"battles",label:t('nav.battles')},{key:"agent",label:t('nav.agent')}];
   // 'lobby' counts too: a battle waiting on its invitations is outstanding work,
   // and it can now sit there for the whole invite window rather than 5 seconds.
   // Only battles I am actually in. An unanswered invitation is counted by the
@@ -626,22 +858,43 @@ export default function LearnerDashboard() {
         @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
       `}</style>
 
-      <div style={{ width:"100vw",height:"100vh",fontFamily:"'Nunito',sans-serif",background:"var(--ak-bg)",display:"flex",flexDirection:"column",overflow:"hidden",position:"relative" }}>
+      {/* AppShell — admin-style frame: sidebar nav on tablet/desktop, nothing
+          (bottom nav stays) on mobile. Live badge counts mirror the bottom
+          nav's badges, and the parked now-studying item renders in the
+          sidebar on desktop while the fixed bar covers mobile — both driven
+          by the same showNowBar flag so they can never disagree. */}
+      <AppShell
+        badges={{ learn: totalUnread, battles: activeBattleCount, agentOnline }}
+        nowStudying={showNowBar ? {
+          item: now.item,
+          onOpen: openNowItem,
+          onAdd: () => navigate('/library?add=1'),
+          onDismiss: nowActs.dismiss,
+          onPrev: now.item?.type !== 'battle' ? () => skipNowStudy(-1) : null,
+          onNext: now.item?.type !== 'battle' ? () => skipNowStudy(1) : null,
+          canSkip: canSkipNow,
+        } : null}>
+      <div style={{ width:"100%",height:"100%",fontFamily:"'Nunito',sans-serif",background:"var(--ak-bg)",display:"flex",flexDirection:"column",overflow:"hidden",position:"relative" }}>
 
-        {(tab==="sessions"||tab==="challenges")&&(
-          /* HEADER — Learn tab only ("sessions"). Challenges is Learn's
-             second pill, so it shares the header that holds the pills;
-             every other tab renders headerless. */
-          <div style={{ background:"var(--ak-surface)",backdropFilter:"blur(14px)",borderBottom:"1px solid var(--ak-border)",padding:"14px 18px 0",zIndex:100,flexShrink:0 }}>
+        {/* HEADER — app chrome on every tab (profile, wallet, cart,
+            notifications, agent toggle), pinned above the scroll area.
+            The Learn/Challenges pills render inside it only on Learn.
+            Mobile (≤768px) is LEARN-ONLY: on the other tabs the header
+            gets .ak-mobile-hide and index.css drops it, giving the tab
+            the full viewport (the bottom nav carries the chrome there).
+            Tablet/desktop keep it on every tab. */}
+        <div className={`ak-dash-header${(tab!=="sessions"&&tab!=="challenges") ? " ak-mobile-hide" : ""}`}
+          style={{ background:"var(--ak-surface)",backdropFilter:"blur(14px)",borderBottom:"1px solid var(--ak-border)",padding:(tab==="sessions"||tab==="challenges")?"14px 18px 0":"14px 18px 14px",zIndex:100,flexShrink:0 }}>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12 }}>
             <div style={{ display:"flex",alignItems:"center",gap:11 }}>
+              <SidebarToggle/>
               <div style={{ position:"relative",cursor:"pointer" }} onClick={()=>navigate("/settings")}>
                 {userProfile?.avatarUrl
                   ? <img src={userProfile.avatarUrl} alt="" style={{ width:38,height:38,borderRadius:"50%",objectFit:"cover",border:"2px solid #EDE9FE" }}/>
                   : <div style={{ width:38,height:38,borderRadius:"50%",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:15,fontWeight:900,border:"2px solid #EDE9FE" }}>
                       {(userProfile?.fullName||userProfile?.username||"?").trim().charAt(0).toUpperCase()}
                     </div>}
-                <div style={{ position:"absolute",bottom:1,right:1,width:10,height:10,borderRadius:"50%",background:isOnline?GREEN:"var(--ak-text-muted)",border:"2px solid #fff",animation:isOnline?"pulse-dot 2s ease-in-out infinite":"none" }}/>
+                <div style={{ position:"absolute",bottom:1,right:1,width:10,height:10,borderRadius:"50%",background:agentOnline?GREEN:"var(--ak-text-muted)",border:"2px solid #fff",animation:agentOnline?"pulse-dot 2s ease-in-out infinite":"none" }}/>
               </div>
               <div>
                 <p style={{ fontSize:15,fontWeight:900,color:"var(--ak-text)",margin:0,lineHeight:1.2 }}>{userProfile?.fullName||userProfile?.username||"…"}</p>
@@ -672,9 +925,19 @@ export default function LearnerDashboard() {
                   </span>
                 )}
               </button>
-              <div onClick={()=>setIsOnline(o=>!o)} style={{ display:"flex",alignItems:"center",background:`${BRAND}12`,borderRadius:100,padding:4,cursor:"pointer",border:`1px solid ${BRAND}3D` }}>
-                <div style={{ padding:"4px 12px",borderRadius:100,background:isOnline?BRAND:"transparent",color:isOnline?"#fff":"var(--ak-text-muted)",fontSize:11,fontWeight:700,transition:"all .22s ease",display:"flex",alignItems:"center",gap:5 }}>{isOnline?<><span style={{width:6,height:6,borderRadius:"50%",background:"#fff",display:"inline-block"}}/>Online</>:"Online"}</div>
-              </div>
+              <button type="button" onClick={toggleAgentAutonomy}
+                aria-pressed={agentOnline}
+                aria-label={agentOnline ? "Turn autonomous Agent offline" : "Turn autonomous Agent online"}
+                disabled={!agentAutonomyLoaded || agentAutonomySaving}
+                title={agentOnline
+                  ? "Agent online: due-task check-ins and the background planner (proposals you approve) run while you're away."
+                  : "Agent offline: no due-task chats, no background planning."}
+                style={{ display:"flex",alignItems:"center",background:`${BRAND}12`,borderRadius:100,padding:4,cursor:agentAutonomyLoaded&&!agentAutonomySaving?"pointer":"wait",border:`1px solid ${BRAND}3D`,opacity:agentAutonomyLoaded?1:.7 }}>
+                <span style={{ padding:"4px 12px",borderRadius:100,background:agentOnline?BRAND:"transparent",color:agentOnline?"#fff":"var(--ak-text-muted)",fontSize:11,fontWeight:700,transition:"all .22s ease",display:"flex",alignItems:"center",gap:5 }}>
+                  {agentOnline&&<span style={{width:6,height:6,borderRadius:"50%",background:"#fff",display:"inline-block"}}/>}
+                  {agentAutonomySaving ? "Saving…" : agentOnline ? "Agent online" : "Agent offline"}
+                </span>
+              </button>
             </div>
           </div>
           {(tab==="sessions"||tab==="challenges")&&(
@@ -687,10 +950,10 @@ export default function LearnerDashboard() {
           </div>
           )}
         </div>
-        )}
 
-        {/* SCROLLABLE CONTENT */}
-        <div style={{ flex:1,overflowY:"auto",paddingBottom:showNowBar?136:72 }}>
+        {/* SCROLLABLE CONTENT — .ak-dash-scroll trims the bottom-nav
+            clearance on desktop, where the nav is hidden (index.css). */}
+        <div className="ak-dash-scroll" style={{ flex:1,overflowY:"auto",paddingBottom:showNowBar?136:72 }}>
           <div style={{ padding:"10px 12px 0" }}><InstallBanner/></div>
           <TeacherNudge/>
           {tab==="sessions"&&(
@@ -889,45 +1152,89 @@ export default function LearnerDashboard() {
           )}
           {tab==="discovery" && (higherEd
             ? (discoverView==="courses"
-              ? <>
-                  {/* Back to the hub — the courses feed is one of the discovery
-                      types, not the whole tab, for higher-ed learners. */}
-                  <div style={{ display:"flex",alignItems:"center",gap:8,padding:"8px 14px 0",background:"var(--ak-surface)" }}>
-                    <button onClick={()=>navigate("/app?tab=discovery")} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:20,border:"1px solid var(--ak-border2)",background:"var(--ak-surface-hover)",color:"var(--ak-text-sub)",fontSize:11.5,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",flexShrink:0 }}>
-                      <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>{t('dhub.title')}
-                    </button>
-                    {discoverQuery&&<span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-muted)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}><Icon name="ti-search" size={10} color="var(--ak-text-muted)"/> {discoverQuery}</span>}
-                  </div>
-                  <DiscoveryTab initialQuery={discoverQuery}/>
-                </>
+              // The courses feed (all rails), or its focused variants —
+              // ?focus=guides / live, the Teaching guide and Live classes
+              // discovery pages the hub's cards open. Same UI, one rail.
+              ? <DiscoveryTab initialQuery={discoverQuery} focus={discoveryFocusFromUrl()}/>
+              // The Pharm D programme page, mounted IN-TAB (inside the shell:
+              // side nav, header, Now-Studying) on desktop/tablet — on mobile
+              // it renders itself as the full-screen takeover. ?view=pharmd +
+              // ?course=CODE mirror the hub > browse > folder chain so the
+              // browser Back/Forward follow it.
+              // The Contents/Materials feed — the community's shared
+              // uploads (videos, audio, notes, PDFs), Udemy-style.
+              : discoverView==="contents"
+              ? <ContentsDiscoveryTab initialQuery={discoverQuery}/>
+              : discoverView==="pharmd"
+              ? <PharmDProgram
+                  onClose={()=>navigate("/app?tab=discovery")}
+                  courseRoute={pharmdCourseFromUrl()}
+                  onCourseRoute={(c)=>navigate(`/app?tab=discovery&view=pharmd${c?`&course=${encodeURIComponent(c)}`:""}`)}
+                  focus={pharmdFocus}
+                  onFocusConsumed={()=>setPharmdFocus(null)}/>
               : <DiscoverHub
+                  userId={userProfile?.id}
+                  onOpenPharmd={()=>navigate("/app?tab=discovery&view=pharmd")}
+                  onOpenContents={(q)=>navigate(`/app?tab=discovery&view=contents${q?`&q=${encodeURIComponent(q)}`:""}`)}
+                  onOpenRail={(rail,q)=>navigate(`/app?tab=discovery&view=courses&focus=${rail}${q?`&q=${encodeURIComponent(q)}`:""}`)}
                   onOpenCourses={(q)=>navigate(`/app?tab=discovery&view=courses${q?`&q=${encodeURIComponent(q)}`:""}`)}
-                  onOpenCourse={(c)=>c?.slug&&navigate(`/course/${c.slug}`)}/>
+                  onOpenCourse={(c)=>c?.slug&&navigate(`/course/${c.slug}`)}
+                  onOpenRecord={openRecordTracked}
+                  onOpenBattles={()=>goTab('battles')}/>
               )
             : <DiscoveryTab/>)}
           {tab==="rankings" && <RankingsTab/>}
           {tab==="battles"  && <BattlesTab battles={battles} onViewChallenge={()=>goTab("challenges")} onBattleCreated={loadBattles}/>}
-          {tab==="agent"    && <AgentChatTab onStartTeach={s=>{ setTeachSession(s); }} agentNameProp={agentProfile.name} agentEmojiProp={agentProfile.emoji} onChatActive={setChatActive}/>}
+          {tab==="agent"    && <AgentChatTab onStartTeach={s=>{ setTeachSession(s); }} onStartExamPrep={()=>setExamPrepOpen(true)} onOpenConceptTracker={()=>setConceptTrackerOpen(true)} onOpenAdaptiveControls={()=>setAdaptiveControlsOpen(true)} agentNameProp={agentProfile.name} agentEmojiProp={agentProfile.emoji} onChatActive={setChatActive}
+            agentOnline={agentOnline} agentAutonomyLoaded={agentAutonomyLoaded} agentAutonomySaving={agentAutonomySaving}
+            onToggleAgentAutonomy={toggleAgentAutonomy}
+            agentActivity={agentActivity}/>}
         </div>
+
+        {/* Schedule alarm banner — the ringtone's visible half: what's
+            ringing + Stop. Auto-stops after 25s if ignored. */}
+        {alarmBanner && (
+          <div className="ak-alarm-banner" style={{
+            position: 'fixed', top: 14, left: '50%', transform: 'translateX(-50%)',
+            zIndex: 2600, maxWidth: 'min(420px, calc(100vw - 32px))', width: 'max-content',
+            display: 'flex', alignItems: 'center', gap: 10,
+            background: 'var(--ak-surface)', border: `1.5px solid ${BRAND}66`,
+            borderRadius: 16, padding: '10px 12px 10px 14px',
+            boxShadow: '0 10px 34px rgba(0,0,0,.22)',
+            fontFamily: "'Nunito',sans-serif",
+            animation: 'sheet-up .3s ease',
+          }}>
+            <span style={{ fontSize: 20, display: 'inline-block', animation: 'pulse-dot 1.2s ease-in-out infinite' }}>🔔</span>
+            <p style={{ flex: 1, minWidth: 0, margin: 0, fontSize: 12.5, fontWeight: 900, color: 'var(--ak-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{alarmBanner.title}</p>
+            <button onClick={()=>{ stopAlarm(); setAlarmBanner(null); }}
+              style={{ flexShrink: 0, height: 32, padding: '0 14px', borderRadius: 100, border: 'none', cursor: 'pointer',
+                background: `linear-gradient(135deg,${BRAND},#4C1DCC)`, color: '#fff',
+                fontSize: 11.5, fontWeight: 900, fontFamily: "'Nunito',sans-serif",
+                boxShadow: `0 2px 10px ${BRAND}44` }}>
+              {t('alarm.stop')}
+            </button>
+          </div>
+        )}
 
         {/* Now studying — Spotify-style mini-bar (higher-ed, all tabs but chat) */}
         {showNowBar && (
           <NowStudyingBar
             item={now.item}
             onOpen={openNowItem}
-            onAdd={()=>{ setRecordsOpen(true); refreshRecordCount(); }}
+            onAdd={()=>navigate('/library?add=1')}
             onDismiss={nowActs.dismiss}/>
         )}
 
-        {/* BOTTOM NAV */}
-        <div style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:200,background:"var(--ak-surface)",backdropFilter:"blur(12px)",borderTop:"1px solid var(--ak-border)",padding:"8px 0 env(safe-area-inset-bottom,14px)",display:"flex",justifyContent:"space-around",minHeight:62 }}>
-          {NAV_ITEMS.map(({key,icon,label})=>{
+        {/* BOTTOM NAV — mobile only; hidden by CSS above 768px where the
+            AppShell sidebar takes over. */}
+        <div className="ak-bottom-nav" style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:200,background:"var(--ak-surface)",backdropFilter:"blur(12px)",borderTop:"1px solid var(--ak-border)",padding:"8px 0 env(safe-area-inset-bottom,14px)",display:"flex",justifyContent:"space-around",minHeight:62 }}>
+          {NAV_ITEMS.map(({key,label})=>{
             // "Learn" (key "sessions") stays active on the Challenges sub-tab too.
             const navActive = tab===key || (key==="sessions" && tab==="challenges");
             return (
               <div key={key} onClick={()=>goTab(key)} style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer",color:navActive?BRAND:"var(--ak-text-muted)",minWidth:56,padding:"2px 0" }}>
                 <div style={{ position:"relative" }}>
-                  <span style={{ fontSize:22 }}>{icon}</span>
+                  <NavIcon name={key} size={24} active={navActive}/>
                   {key==="sessions"&&totalUnread>0&&<div style={{ position:"absolute",top:-3,right:-6,width:14,height:14,borderRadius:"50%",background:BRAND,display:"flex",alignItems:"center",justifyContent:"center" }}><span style={{ fontSize:8,fontWeight:900,color:"#fff" }}>{totalUnread}</span></div>}
                   {key==="battles"&&activeBattleCount>0&&<div style={{ position:"absolute",top:-3,right:-6,width:14,height:14,borderRadius:"50%",background:RED,display:"flex",alignItems:"center",justifyContent:"center" }}><span style={{ fontSize:8,fontWeight:900,color:"#fff" }}>{activeBattleCount}</span></div>}
                   {key==="agent"&&<div style={{ position:"absolute",top:-2,right:-4,width:8,height:8,borderRadius:"50%",background:GREEN,border:"1.5px solid #fff" }}/>}
@@ -941,18 +1248,9 @@ export default function LearnerDashboard() {
         {/* FAB — now opens ConfigModal first. Sits above the now-studying bar
             when the bar is up (bar is ~56px over the nav). */}
         {!selectedSession&&!selectedChallenge&&!teachSession&&!configOpen&&tab!=="agent"&&tab!=="battles"&&tab!=="discovery"&&(
-          <div onClick={()=>setConfigOpen(true)} style={{ position:"fixed",bottom:showNowBar?150:78,right:18,zIndex:900,background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,borderRadius:16,padding:"9px 16px",display:"flex",alignItems:"center",gap:7,boxShadow:`0 4px 18px ${BRAND}50`,cursor:"pointer" }}>
+          <div onClick={()=>setConfigOpen(true)} className="ak-fab" style={{ position:"fixed",bottom:showNowBar?150:78,right:18,zIndex:900,background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,borderRadius:16,padding:"9px 16px",display:"flex",alignItems:"center",gap:7,boxShadow:`0 4px 18px ${BRAND}50`,cursor:"pointer" }}>
             <MicIcon size={15} color="#fff"/>
             <span style={{ fontSize:12,fontWeight:800,color:"#fff" }}>{t('dash.start_session')}</span>
-          </div>
-        )}
-
-        {/* + FAB — add a record (upload / link / paste). Higher-ed learners only:
-            sixth form, university, college, other. Sits just above Start Session. */}
-        {higherEd&&!selectedSession&&!selectedChallenge&&!teachSession&&!configOpen&&!recordsOpen&&tab!=="agent"&&tab!=="battles"&&tab!=="discovery"&&(
-          <div onClick={()=>{setRecordsOpen(true);refreshRecordCount();}} title={t('records.title')} aria-label={t('records.title')} style={{ position:"fixed",bottom:showNowBar?198:126,right:18,zIndex:900,width:40,height:40,borderRadius:"50%",background:"var(--ak-surface)",border:`1.5px solid ${BRAND}66`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:`0 3px 14px ${BRAND}33`,transition:"transform .15s" }}>
-            <svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke={BRAND} strokeWidth="2.8" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            {recordCount>0&&<div style={{ position:"absolute",top:-4,right:-4,minWidth:16,height:16,borderRadius:9,background:BRAND,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px",border:"1.5px solid var(--ak-surface)" }}><span style={{ fontSize:8.5,fontWeight:900,color:"#fff" }}>{recordCount}</span></div>}
           </div>
         )}
 
@@ -962,6 +1260,7 @@ export default function LearnerDashboard() {
         {configOpen && (
           <ConfigModal
             initial={configInitial}
+            higherEd={higherEd}
             onStart={cfg => {
               setConfigOpen(false);
               setConfigInitial(null);
@@ -972,15 +1271,6 @@ export default function LearnerDashboard() {
           />
         )}
 
-        {/* AddRecordModal — upload / link / paste (higher-ed learners only) */}
-        <AddRecordModal
-          open={recordsOpen}
-          onClose={() => { setRecordsOpen(false); refreshRecordCount(); }}
-          user={userProfile}
-          onOpenRecord={openRecordTracked}
-          onToggleDone={toggleRecordDone}
-        />
-
         {/* TeachAgentModal — now receives config OR session */}
         {teachSession && (
           <TeachAgentModal
@@ -988,8 +1278,12 @@ export default function LearnerDashboard() {
             session={teachSession?.topic ? null : teachSession}
             config={teachSession?.topic ? teachSession : null}
             // A self-study attempt has to know which session it became, or the
-            // teacher's progress view points at nothing.
+            // teacher's progress view points at nothing. The live session id
+            // is also remembered on the state itself — a minimize parks it in
+            // the Now-Studying snapshot, and restoring reopens THIS session
+            // instead of a fresh empty one.
             onSessionStarted={sid=>{
+              if (sid) setTeachSession(prev => prev ? { ...prev, sessionId: sid } : prev);
               if (teachSession?.selfStudyId && sid) {
                 // Best-effort, but not silent: if this never lands the teacher's
                 // progress view points at no session, so leave a trail.
@@ -1019,6 +1313,29 @@ export default function LearnerDashboard() {
             subject={assessSession.subject}
             objectives={assessSession.objectives || []}
             onClose={() => setAssessSession(null)}
+          />
+        )}
+        {examPrepOpen && <ExamPrepConfidenceModal
+          onClose={()=>setExamPrepOpen(false)}
+          onStartTeach={config=>{
+            setExamPrepOpen(false);
+            setTeachSession({ ...config, agentName:agentProfile.name, agentEmoji:agentProfile.emoji });
+          }}
+        />}
+        {conceptTrackerOpen && <ConceptTrackerModal onClose={()=>setConceptTrackerOpen(false)} />}
+        {adaptiveControlsOpen && <AdaptiveControlsModal onClose={()=>setAdaptiveControlsOpen(false)} />}
+
+        {/* A record opened as a TEACHING session — the learner teaches
+            their agent over the record's material (chat + content box,
+            reader on demand). Close hands the earned progress back to the
+            Now-Studying bar. */}
+        {recordViewer && (
+          <RecordTeachSession
+            record={recordViewer}
+            onClose={() => { setRecordViewer(null); loadShelfRecords(); loadAgentSessions(); }}
+            onMinimize={() => { setRecordViewer(null); setToast(t('now.minimized_toast')); }}
+            onOpened={(r) => { if (now.item?.id === r.id) nowActs.setProgress(r.id, Math.max(10, r.progress || 10)); }}
+            onProgress={(r, pct) => { if (now.item?.id === r.id) nowActs.setProgress(r.id, pct); setRecordProgress(r.id, pct); }}
           />
         )}
 
@@ -1055,6 +1372,7 @@ export default function LearnerDashboard() {
         {liveBattleModal   && <BattleModal    battle={liveBattleModal}    onMinimize={minimizeBattle} onClose={()=>setLiveBattleModal(null)}/>}
         {toast && <Toast msg={typeof toast==='string'?toast:toast.msg} color={typeof toast==='string'?RED:(toast.color||RED)} onDone={()=>setToast(null)}/>}
       </div>
+      </AppShell>
     </>
   );
 }

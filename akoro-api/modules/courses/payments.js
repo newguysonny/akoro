@@ -13,6 +13,7 @@
 
 import { Router }                         from "express";
 import axios                              from "axios";
+import { paystackPost, paystackGet }            from "../../lib/paystackBreaker.js";
 import crypto                             from "crypto";
 import { body, validationResult }         from "express-validator";
 import db                                 from "../../db.js";
@@ -254,7 +255,7 @@ const paymentHandlers = {
     // Snapshot the single line item at init so the order is on record.
     await recordPaymentItems(payment.id, [{ item_type: "course", course_id, title: course.title, unit_price_kobo: finalKobo, currency: course.currency ?? "NGN" }]);
 
-    const { data: psData } = await axios.post(
+    const { data: psData } = await paystackPost(
       "https://api.paystack.co/transaction/initialize",
       {
         email:        user.email,

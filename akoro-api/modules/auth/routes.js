@@ -99,7 +99,7 @@ const asyncHandler = (fn) => (req, res, next) =>
 const res200 = (res, data, meta = {}) => res.status(200).json({ success: true,  data, ...meta });
 const res201 = (res, data)            => res.status(201).json({ success: true,  data });
 const res400 = (res, message)         => res.status(400).json({ success: false, message });
-const res401 = (res, message)         => res.status(401).json({ success: false, message });
+const res401 = (res, message, code)   => res.status(401).json({ success: false, message, ...(code ? { code } : {}) });
 const res403 = (res, message)         => res.status(403).json({ success: false, message });
 const res404 = (res, message)         => res.status(404).json({ success: false, message });
 
@@ -169,6 +169,33 @@ function signRefresh(userId, family) {
     ? jwt.sign(payload, PRIVATE_KEY, { algorithm: "RS256", expiresIn: REFRESH_TTL_SECS })
     : jwt.sign(payload, DEV_SECRET,  { algorithm: "HS256", expiresIn: REFRESH_TTL_SECS });
   return { token, jti };
+}
+
+/* Auth I/O deadline — the wedge the watchdog finally caught live
+   (REQUEST_STALLED GET /api/communities/:id, age 25s, app otherwise
+   healthy: favicon 404 in 1ms during the stall). authenticateToken makes
+   up to three network calls BEFORE any route code runs — deny-list check,
+   the cold-cache user load, schoolBillTo on school portals — and none of
+   them had a deadline. A fetch that lands on a keep-alive socket the
+   server has just closed can hang for undici's 300s header timeout:
+   past the client's 30s give-up, past the route's own query deadline
+   (which never starts), silent in every log. Auth I/O that cannot answer
+   in 10s is a 503 the client can retry — never a 401 (that would sign
+   the learner out of a perfectly good session), never a silent hang. */
+const AUTH_IO_TIMEOUT_MS = 10_000;
+
+function withAuthDeadline(promise, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const err = new Error(`auth backend stalled on ${label}`);
+      err.step = label;
+      err.authStall = true;
+      reject(err);
+    }, AUTH_IO_TIMEOUT_MS);
+    timer.unref?.();
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 function verifyToken(token) {
@@ -336,6 +363,30 @@ export async function endSession(req, res) {
 // In production swap the in-memory map for Redis: SET jti:${jti} 1 EX ${ttl}
 
 const _denyList = new Map(); // jti → expiresAt (ms)
+const _jtiClear = new Map(); // jti → "verified not revoked until" (ms)
+
+// ─── § REQUEST-PATH USER CACHE ────────────────────────────────────────────────
+// Every authenticated request used to cost two DB commands before any app
+// logic ran: a revoked_tokens check and a full users reload. On a metered
+// free tier that alone outran real product usage. Both are now cached:
+//   • users row — 45s TTL keyed by user id. Non-security fields (avatar,
+//     full_name, onboarding) may lag up to 45s behind an edit.
+//   • revoked-token "clear" — 30s TTL keyed by jti (see DenyList.has).
+// Anything that changes a SECURITY field (is_active, role, force_logout_at)
+// must call invalidateCachedUser(userId) so the change applies immediately.
+const USER_CACHE_TTL_MS = 45_000;
+const JTI_CLEAR_TTL_MS = 30_000;
+const _userCache = new Map(); // userId → { user, expires }
+const USER_CACHE_MAX = 5_000;
+
+function cacheUser(user) {
+  if (_userCache.size >= USER_CACHE_MAX) _userCache.delete(_userCache.keys().next().value);
+  _userCache.set(user.id, { user, expires: Date.now() + USER_CACHE_TTL_MS });
+}
+
+export function invalidateCachedUser(userId) {
+  if (userId) _userCache.delete(userId);
+}
 
 const DenyList = {
   add: async (jti, expiresAt) => {
@@ -346,16 +397,28 @@ const DenyList = {
     } catch { /* table may not exist yet — in-memory fallback suffices */ }
   },
   has: async (jti) => {
+    if (!jti) return false;
     if (_denyList.has(jti)) return true;
-    // Check DB
+    // A cleared jti is trusted for a short window: the alternative is one DB
+    // command on EVERY authenticated request, which dominated the platform's
+    // command quota. Same-instance revocations stay instant via _denyList;
+    // a multi-instance deployment could observe up to this window of delay.
+    const clearUntil = _jtiClear.get(jti);
+    if (clearUntil) {
+      if (clearUntil > Date.now()) return false;
+      _jtiClear.delete(jti);
+    }
     try {
       const { data } = await db.from("revoked_tokens").select("jti").eq("jti", jti).maybeSingle();
-      return !!data;
+      if (data) { _denyList.set(jti, Date.now() + 24 * 60 * 60 * 1000); return true; } // revocation never expires back to valid
+      _jtiClear.set(jti, Date.now() + JTI_CLEAR_TTL_MS);
+      return false;
     } catch { return false; }
   },
   sweep: () => {
     const now = Date.now();
     for (const [k, v] of _denyList) if (v < now) _denyList.delete(k);
+    for (const [k, v] of _jtiClear) if (v < now) _jtiClear.delete(k);
   },
 };
 setInterval(DenyList.sweep, 60_000); // clean expired entries every minute
@@ -407,7 +470,7 @@ const RefreshStore = {
   },
 };
 
-// peekAccessToken lives in lib/tokenPeek.js: the rate limiters need it, and
+// The token-peek helpers live in lib/tokenPeek.js: the rate limiters need them, and
 // importing this module there would close the cycle security → auth → security.
 // Re-exported so callers have one obvious place to find it.
 export { peekAccessToken, readAccessToken } from "../../lib/tokenPeek.js";
@@ -444,27 +507,43 @@ export const authenticateToken = asyncHandler(async (req, res, next) => {
   try {
     decoded = verifyToken(token);
   } catch (err) {
-    return res403(res, err.name === "TokenExpiredError" ? "Access token expired" : "Invalid token");
+    // 401, never 403: an expired or bad token is FAILED AUTHENTICATION
+    // (RFC 6750 §3.1), and every client's silent-refresh flow keys on 401.
+    // Answering 403 here dressed "session expired, refresh and retry" up as
+    // "you are not allowed", so learners got a hard failure where the app
+    // should have spent the refresh cookie and replayed the request invisibly.
+    // `code` lets clients branch without parsing message text.
+    return res401(res,
+      err.name === "TokenExpiredError" ? "Access token expired" : "Invalid token",
+      err.name === "TokenExpiredError" ? "token_expired" : "token_invalid");
   }
 
   // 4. Check deny-list
-  if (decoded.jti && await DenyList.has(decoded.jti)) {
+  if (decoded.jti && await withAuthDeadline(DenyList.has(decoded.jti), "denylist")) {
     return res401(res, "Token has been revoked");
   }
 
-  // 5. Load user — try with onboarding_completed, fall back without if column is missing
+  // 5. Load user — cache first (saves a DB command on virtually every
+  // request), then the query, with a fallback without onboarding_completed
+  // if that column is missing.
   try {
     let user, dbErr;
-    ({ data: user, error: dbErr } = await db.from("users")
-      .select("id,email,username,full_name,avatar_url,role,is_active,onboarding_completed,force_logout_at")
-      .eq("id", decoded.sub).maybeSingle());
+    const cached = _userCache.get(decoded.sub);
+    if (cached && cached.expires > Date.now()) {
+      user = cached.user;
+    } else {
+      ({ data: user, error: dbErr } = await withAuthDeadline(db.from("users")
+        .select("id,email,username,full_name,avatar_url,role,is_active,onboarding_completed,force_logout_at")
+        .eq("id", decoded.sub).maybeSingle(), "user-load"));
 
-    if (dbErr) {
-      // Column may not exist yet (pending migration) — retry without it
-      ({ data: user, error: dbErr } = await db.from("users")
-        .select("id,email,username,full_name,avatar_url,role,is_active")
-        .eq("id", decoded.sub).maybeSingle());
-      if (dbErr) return res401(res, "Could not load user");
+      if (dbErr) {
+        // Column may not exist yet (pending migration) — retry without it
+        ({ data: user, error: dbErr } = await withAuthDeadline(db.from("users")
+          .select("id,email,username,full_name,avatar_url,role,is_active")
+          .eq("id", decoded.sub).maybeSingle(), "user-load-fallback"));
+        if (dbErr) return res401(res, "Could not load user");
+      }
+      if (user) cacheUser(user);
     }
 
     if (!user) return res401(res, "User not found");
@@ -477,9 +556,15 @@ export const authenticateToken = asyncHandler(async (req, res, next) => {
     // Run the rest of the request inside the AI-metering context so any AI call
     // it makes is billed correctly. On a SCHOOL portal the school funds the
     // usage (billTo); the student portal keeps the student-first hybrid.
-    const billTo = SCHOOL_PORTALS.includes(portalOf(req)) ? await schoolBillTo(user.id) : null;
+    const billTo = SCHOOL_PORTALS.includes(portalOf(req)) ? await withAuthDeadline(schoolBillTo(user.id), "school-bill-to") : null;
     return runWithAiContext({ userId: user.id, feature: featureForRequest(req), billTo }, () => next());
-  } catch {
+  } catch (err) {
+    if (err?.authStall) {
+      // Name the call that stalled and for how long — this is the line that
+      // turns the next occurrence from a mystery into a measurement.
+      console.error(`[auth] ${err.step} stalled > ${AUTH_IO_TIMEOUT_MS / 1000}s (likely a dead keep-alive socket) — 503`);
+      return res.status(503).json({ error: "The sign-in check is not answering. Please retry." });
+    }
     return res401(res, "Could not load user");
   }
 });

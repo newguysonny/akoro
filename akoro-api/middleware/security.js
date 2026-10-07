@@ -86,6 +86,18 @@ const BASE = {
   standardHeaders: true,   // X-RateLimit-* headers
   legacyHeaders:   false,
   skipSuccessfulRequests: false,
+  // One JSON envelope for every 429. express-rate-limit's default body is
+  // plain text ("Too many requests..."), which no frontend error path can
+  // parse — and a 429 the client can't identify can't back off intelligently.
+  message: { success: false, message: 'Too many requests. Please slow down and try again shortly.', code: 'rate_limited' },
+  // Log every limit hit (hardening plan: layer + route + key type). Without
+  // this, a 429 storm is invisible in the logs — the client sees rejections,
+  // the server sees nothing.
+  handler: (req, res, options) => {
+    const key = req.user?.id ? `user:${req.user.id}` : req.rateLimitId ? `session:${req.rateLimitId}` : `ip:${req.ip}`;
+    console.warn(`[ratelimit] 429 ${req.method} ${req.originalUrl} key=${key} limit=${req.rateLimit?.limit}`);
+    res.status(options.statusCode || 429).json(options.message);
+  },
 };
 
 /** Auth endpoints: login / register — 5 req / 15 min */
@@ -267,6 +279,11 @@ export function securityLog(event, req, extra = {}, { level = 'error' } = {}) {
     ip:      req?.ip,
     method:  req?.method,
     path:    req?.path,
+    // Full URL, immune to Express's mount-stripping of req.url. A 422 logged
+    // as "/sessions/<uuid>" after the URL had been stripped by three nested
+    // routers cost a full audit to (not) find — originalUrl pinpoints the
+    // endpoint on the first log line instead.
+    url:     req?.originalUrl,
     userId:  req?.user?.id ?? null,
     ...scrub(extra),
   };
@@ -280,10 +297,48 @@ export function securityLog(event, req, extra = {}, { level = 'error' } = {}) {
 /**
  * requestLogger — mounts as app-level middleware.
  * Logs completed requests (status, latency) without leaking sensitive fields.
+ *
+ * Stalled-request watchdog: the logger above only speaks when a response
+ * FINISHES — a request that hangs forever (the community-details incident:
+ * "no answer at all within 30 seconds") leaves no log line at all, so after
+ * the fact "never reached the app" and "hung inside Express" are
+ * indistinguishable. The watchdog closes that gap: any request still
+ * in-flight after STALL_MS gets one REQUEST_STALLED line in the logs with
+ * method, path and age — 25s sits above the 20s communities query deadline
+ * and below the client's 30s give-up, so it fires exactly when the client
+ * is about to see the silent-timeout card. Legitimately long request
+ * families (SSE streams, uploads) are exempt.
  */
+const STALL_MS = 25_000;
+const inFlight = new Map();               // req → { method, url, start, warned }
+let stallTimer = null;
+
+const legitimatelyLong = (req) =>
+  String(req.headers.accept || '').includes('text/event-stream')   // SSE tool loops
+  || String(req.headers['content-type'] || '').startsWith('multipart/')  // uploads
+  || Number(req.headers['content-length'] || 0) > 1_000_000;       // big bodies
+
 export function requestLogger(req, res, next) {
   const start = Date.now();
+  if (!legitimatelyLong(req)) {
+    inFlight.set(req, { method: req.method, url: req.originalUrl, start, warned: false });
+    if (!stallTimer) {
+      stallTimer = setInterval(() => {
+        const now = Date.now();
+        for (const [r, e] of inFlight) {
+          if (!e.warned && now - e.start >= STALL_MS) {
+            e.warned = true;                       // one line per request, not a drumbeat
+            securityLog('REQUEST_STALLED', r, { age_ms: now - e.start, method: e.method, url: e.url }, { level: 'error' });
+          }
+        }
+      }, 5_000);
+      stallTimer.unref?.();
+    }
+  }
+  const leave = () => inFlight.delete(req);
+  res.on('close', leave);
   res.on('finish', () => {
+    leave();
     const ms = Date.now() - start;
     const s  = res.statusCode;
     if (s < 400) return;
