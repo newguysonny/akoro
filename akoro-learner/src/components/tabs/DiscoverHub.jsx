@@ -5,8 +5,9 @@
  * discovery-type cards. The hub is a router, not a feed — only the
  * Courses card opens the course catalogue (DiscoveryTab); every other
  * type — Notes/Materials, Teaching guide AND Live classes — answers
- * "coming soon" until its own destination ships; Pharm D opens its own
- * programme page (PharmDProgram — browse → course folder → topics). (The hub's
+ * "coming soon" until its own destination ships; Pharm D asks the shell
+ * to open its programme page (PharmDProgram — browse → course folder).
+ * (The hub's
  * Live classes is its own product, deliberately NOT the Learn tab's
  * live sessions view, which is a different thing.)
  *
@@ -20,27 +21,18 @@
  * Gated by isHigherEdUI() in LearnerDashboard — school learners keep
  * the current DiscoveryTab feed directly.
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { BRAND, GOLD } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { Icon } from '../common/Icons.jsx';
 import Toast from '../common/Toast.jsx';
 import DiscoverSearchPage from './DiscoverSearchPage.jsx';
-import PharmDProgram from '../pharmd/PharmDProgram.jsx';
 import { TYPES, matchTypes, FONT } from './dhubTypes.js';
 
-export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord, onOpenBattles, userId, initialQuery = '', pharmdFocus, onPharmdFocusUsed }) {
+export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord, onOpenBattles, onOpenPharmd, userId, initialQuery = '' }) {
   const { t } = useLang();
   const [query, setQuery] = useState(initialQuery);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [pharmdOpen, setPharmdOpen] = useState(false);
-
-  /* A reopen request from the Now-Studying bar (a parked Pharm.D topic):
-     open the programme page with the focus — it jumps to the course and
-     reopens the exact topic. */
-  useEffect(() => {
-    if (pharmdFocus?.ts) setPharmdOpen(true);
-  }, [pharmdFocus?.ts]);
   const [toast, setToast] = useState(null);
 
   const all = TYPES(t);
@@ -49,7 +41,7 @@ export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord,
   const activate = (ty, qOverride) => {
     const q = qOverride ?? query.trim();
     if (ty.key === 'courses') onOpenCourses?.(q);
-    else if (ty.key === 'pharmd') setPharmdOpen(true);
+    else if (ty.key === 'pharmd') onOpenPharmd?.();
     else setToast({ msg: `${ty.label} — ${t('dhub.coming_soon')}`, color: GOLD });
   };
 
@@ -167,9 +159,6 @@ export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord,
           onOpenBattles={onOpenBattles}
         />
       )}
-
-      {pharmdOpen && <PharmDProgram onClose={() => setPharmdOpen(false)} focus={pharmdFocus}
-        onFocusConsumed={onPharmdFocusUsed} />}
 
       {toast && <Toast msg={toast.msg} color={toast.color} onDone={() => setToast(null)} />}
     </div>

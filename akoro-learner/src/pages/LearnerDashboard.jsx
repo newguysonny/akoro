@@ -34,6 +34,7 @@ import Toast         from '../components/common/Toast.jsx';
 import { ProgressBar, LiveBadge } from '../components/common/ProgressBar.jsx';
 import { ZapIcon, MicIcon, Icon } from '../components/common/Icons.jsx';
 import NowStudyingBar from '../components/dashboard/NowStudyingBar.jsx';
+import PharmDProgram from '../components/pharmd/PharmDProgram.jsx';
 import { AppShell, SidebarToggle } from '../components/AppShell.jsx';
 import { NavIcon } from '../components/common/NavIcons.jsx';
 import { useNowStudying } from '../utils/nowStudying.js';
@@ -69,8 +70,15 @@ export default function LearnerDashboard() {
   // Higher-ed Discover has an inner view: the hub, or the courses feed the
   // hub's Courses card opens. Mirrored in the URL (?view=&q=) so Back/Forward
   // move between hub and courses like they do between tabs.
-  const discoverViewFromUrl = () => new URLSearchParams(location.search).get("view") === "courses" ? "courses" : "hub";
+  // The hub's inner views mirror in the URL (?view=&q=, plus ?course= for
+  // the Pharm D programme page) so Back/Forward move between hub, courses
+  // feed and the Pharm D browse/folder chain like they do between tabs.
+  const discoverViewFromUrl = () => {
+    const v = new URLSearchParams(location.search).get("view");
+    return v === "courses" || v === "pharmd" ? v : "hub";
+  };
   const discoverQFromUrl    = () => new URLSearchParams(location.search).get("q") || "";
+  const pharmdCourseFromUrl = () => new URLSearchParams(location.search).get("course") || null;
   const [discoverView,  setDiscoverView]  = useState(discoverViewFromUrl);
   const [discoverQuery, setDiscoverQuery] = useState(discoverQFromUrl);
   // Keep tab in sync when the URL changes (Back/Forward, deep link).
@@ -436,10 +444,11 @@ export default function LearnerDashboard() {
       if (now.item.snapshot?.path) navigate(now.item.snapshot.path);
       else setToast(t('now.session_ended'));
     } else if (now.item.type === 'pharmd') {
-      // A parked Pharm.D topic — hand the focus to the Discover hub, which
-      // opens the programme page on the exact topic.
+      // A parked Pharm.D topic — straight onto the programme page at its
+      // course; the focus prop makes PharmDProgram reopen the exact topic.
+      const c = now.item.snapshot?.code;
       setPharmdFocus({ ...now.item.snapshot, ts: Date.now() });
-      goTab('discovery');
+      navigate(`/app?tab=discovery&view=pharmd${c ? `&course=${encodeURIComponent(c)}` : ''}`);
     }
   };
 
@@ -1139,10 +1148,21 @@ export default function LearnerDashboard() {
               // No header on the courses feed — it opens straight into the
               // catalogue. Back to the hub is the Discover tab in the bottom nav.
               ? <DiscoveryTab initialQuery={discoverQuery}/>
+              // The Pharm D programme page, mounted IN-TAB (inside the shell:
+              // side nav, header, Now-Studying) on desktop/tablet — on mobile
+              // it renders itself as the full-screen takeover. ?view=pharmd +
+              // ?course=CODE mirror the hub > browse > folder chain so the
+              // browser Back/Forward follow it.
+              : discoverView==="pharmd"
+              ? <PharmDProgram
+                  onClose={()=>navigate("/app?tab=discovery")}
+                  courseRoute={pharmdCourseFromUrl()}
+                  onCourseRoute={(c)=>navigate(`/app?tab=discovery&view=pharmd${c?`&course=${encodeURIComponent(c)}`:""}`)}
+                  focus={pharmdFocus}
+                  onFocusConsumed={()=>setPharmdFocus(null)}/>
               : <DiscoverHub
                   userId={userProfile?.id}
-                  pharmdFocus={pharmdFocus}
-                  onPharmdFocusUsed={()=>setPharmdFocus(null)}
+                  onOpenPharmd={()=>navigate("/app?tab=discovery&view=pharmd")}
                   onOpenCourses={(q)=>navigate(`/app?tab=discovery&view=courses${q?`&q=${encodeURIComponent(q)}`:""}`)}
                   onOpenCourse={(c)=>c?.slug&&navigate(`/course/${c.slug}`)}
                   onOpenRecord={openRecordTracked}

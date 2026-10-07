@@ -22,8 +22,13 @@
  * follows the app), and the reference's 430px phone column centres
  * itself on tablet/desktop (mobile is full-bleed).
  *
- * Mounted full-screen by DiscoverHub when the Pharm D card opens;
- * the browse view's back button closes back to the Discover hub.
+ * Mounted in-tab by LearnerDashboard when the Discover hub's Pharm D
+ * card opens (?view=pharmd): on desktop/tablet the page renders INSIDE
+ * the app shell — side nav, header and Now-Studying all stay — exactly
+ * like the hub itself; on mobile it stays the full-screen takeover.
+ * The open course rides in the URL too (?course=CODE), so the browser
+ * Back/Forward buttons walk the hub > browse > folder chain just like
+ * the in-app back arrows do.
  */
 import { useEffect, useRef, useState } from 'react';
 import { BRAND } from '../../constants.js';
@@ -31,6 +36,7 @@ import { Icon } from '../common/Icons.jsx';
 import Toast from '../common/Toast.jsx';
 import AddToFolderPage from '../library/AddToFolderPage.jsx';
 import Spinner from '../common/Spinner.jsx';
+import { useIsMobileView } from '../teaching/SessionReaderModal.jsx';
 import {
   fetchPharmdProgramme, fetchPharmdCourse, fetchPharmdProgress, completePharmdTopic,
 } from '../../services/pharmdApi.js';
@@ -61,9 +67,14 @@ const topicMeta = (t) => [
   t.size ? `${(t.size / 1024 / 1024).toFixed(1)} MB` : null,
 ].filter(Boolean).join(' · ');
 
-export default function PharmDProgram({ onClose, focus, onFocusConsumed }) {
-  const [view, setView] = useState('browse');     // browse | folder
-  const [code, setCode] = useState(null);         // the open course code
+export default function PharmDProgram({ onClose, focus, onFocusConsumed,
+  courseRoute = null,   // the course the URL says is open (null = browse view)
+  onCourseRoute,        // (code|null) — mirror a course transition into the URL
+}) {
+  const isMobile = useIsMobileView();       // mobile keeps the takeover; the rest render in-tab
+  const inline = !isMobile;
+  const [view, setView] = useState(courseRoute ? 'folder' : 'browse');  // browse | folder
+  const [code, setCode] = useState(courseRoute);   // the open course code
   const [sessionTopic, setSessionTopic] = useState(null);  // index into topics — the open topic session
   const [now, nowActs] = useNowStudying(STUDENT_ID);      // the parked Now-Studying item
   const [sheet, setSheet] = useState(null);       // { kind:'course' } | { kind:'topic', idx }
@@ -104,8 +115,12 @@ export default function PharmDProgram({ onClose, focus, onFocusConsumed }) {
     return () => { alive = false; };
   }, []);
 
-  /* Every view change starts at the top (reference window.scrollTo). */
-  useEffect(() => { scrollRef.current?.scrollTo(0, 0); }, [view, code]);
+  /* Every view change starts at the top (reference window.scrollTo) — the
+     phone column's own scroll on mobile, the tab container's when in-tab. */
+  useEffect(() => {
+    scrollRef.current?.scrollTo(0, 0);
+    scrollRef.current?.closest('.ak-dash-scroll')?.scrollTo(0, 0);
+  }, [view, code]);
 
   /* A reopen request (the Now-Studying bar's resume): head straight for
      the parked topic — openCourse LOADS the course (the old code only set
@@ -118,7 +133,7 @@ export default function PharmDProgram({ onClose, focus, onFocusConsumed }) {
     if (!focus?.code || !focus?.topicId) return;
     focusedRef.current = String(focus.topicId);
     if (focus.code !== code) {
-      openCourse(focus.code);      // loads the course; view + code ride along
+      openCourse(focus.code);      // loads the course; view + code + URL ride along
     } else if (topics.length) {
       const i = topics.findIndex((t) => String(t.id) === focusedRef.current);
       focusedRef.current = null;
@@ -143,10 +158,21 @@ export default function PharmDProgram({ onClose, focus, onFocusConsumed }) {
 
   const soon = (label) => setToast({ msg: `${label} — coming soon`, color: BRAND });
 
+  /* Open a course — or, with null, go back to the browse view. Our own
+     transitions mirror into the URL (?course=CODE) so Back/Forward walk
+     the hub > browse > folder chain; the sync effect below follows the
+     entries we did NOT push (the history buttons). */
+  const lastRouteRef = useRef(courseRoute);
   const openCourse = async (c) => {
+    if (c !== courseRoute) {
+      lastRouteRef.current = c;
+      onCourseRoute?.(c);
+    }
     setCode(c);
-    setView('folder');
+    setView(c ? 'folder' : 'browse');
+    if (c !== code) setSessionTopic(null);   // a different course's reader can't stay open
     setCourseData(null);
+    if (!c) return;
     setCourseLoading(true);
     try {
       setCourseData(await fetchPharmdCourse(c));
@@ -156,6 +182,17 @@ export default function PharmDProgram({ onClose, focus, onFocusConsumed }) {
       setCourseLoading(false);
     }
   };
+
+  /* The URL moved without us (browser Back/Forward, deep link): follow. */
+  useEffect(() => {
+    if (courseRoute === lastRouteRef.current) return;
+    lastRouteRef.current = courseRoute;
+    if (courseRoute) openCourse(courseRoute);
+    else { setView('browse'); setCode(null); setSessionTopic(null); }
+  }, [courseRoute]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* A deep link / refresh straight into a course folder: land open. */
+  useEffect(() => { if (courseRoute) openCourse(courseRoute); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* A topic opens its agent session (PharmDTopicSession) — the content
      reader modal is the main display, the teach session a chat-icon away. */
@@ -217,14 +254,20 @@ export default function PharmDProgram({ onClose, focus, onFocusConsumed }) {
       return;
     }
     if (label === 'Go to course') { setView('folder'); return; }
-    if (label === 'Go to program') { setView('browse'); return; }
+    if (label === 'Go to program') { openCourse(null); return; }
     soon(label);
   };
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={`${meta.name} — ${meta.sub}`} className="pd-page">
+    <div role={inline ? undefined : 'dialog'} aria-modal={inline ? undefined : 'true'}
+      aria-label={inline ? undefined : `${meta.name} — ${meta.sub}`}
+      className={inline ? 'pd-inline' : 'pd-page'}>
       <style>{`
         .pd-page{position:fixed;inset:0;z-index:1500;background:var(--ak-bg,#FAFAFC);display:flex;justify-content:center;font-family:'Nunito',system-ui,sans-serif;color:var(--ak-text,#111827)}
+        /* Desktop/tablet — in-tab inside the app shell: plain flow content,
+           the tab's own scroll container scrolls it, the shell chrome stays. */
+        .pd-inline{width:100%;display:flex;justify-content:center;font-family:'Nunito',system-ui,sans-serif;color:var(--ak-text,#111827)}
+        .pd-phone-inline{max-width:none;height:auto;overflow:visible;background:transparent}
         .pd-phone{width:100%;max-width:430px;height:100%;overflow-y:auto;position:relative;background:var(--ak-bg,#FAFAFC);padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
         .pd-back{width:36px;height:36px;border-radius:50%;border:none;background:rgba(255,255,255,0.14);color:#fff;font-size:1.1rem;font-weight:700;cursor:pointer;margin-bottom:20px;font-family:inherit}
         /* Browse */
@@ -285,7 +328,7 @@ export default function PharmDProgram({ onClose, focus, onFocusConsumed }) {
         .pd-state{padding:36px 22px;display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--ak-text-sub,#6B7280);font-weight:700;font-size:.85rem}
       `}</style>
 
-      <div className="pd-phone" ref={scrollRef}>
+      <div className={inline ? 'pd-phone pd-phone-inline' : 'pd-phone'} ref={scrollRef}>
 
         {/* ── View 1: Browse ── */}
         {view === 'browse' && (
@@ -340,7 +383,7 @@ export default function PharmDProgram({ onClose, focus, onFocusConsumed }) {
         {view === 'folder' && code && (
           <div>
             <div className="pd-folder-hero">
-              <button className="pd-back" aria-label="Back to programme" onClick={() => setView('browse')}>←</button>
+              <button className="pd-back" aria-label="Back to programme" onClick={() => openCourse(null)}>←</button>
               <div className="pd-folder-art" style={{ background: accentFor(code) }}>
                 <span className="pd-upload" role="button" aria-label="Set cover photo"
                   onClick={() => soon('Custom covers')}
@@ -400,13 +443,11 @@ export default function PharmDProgram({ onClose, focus, onFocusConsumed }) {
           />
         )}
 
-        {/* The Now-Studying bar, pinned to the column's bottom edge —
-            the parked item stays in view while browsing the programme
-            (under the sheets: sticky z 30 < sheet z 40). Resuming a
-            topic parked HERE reopens it directly; anything parked
-            elsewhere closes back to the hub, where the dashboard's own
-            bar knows how to resume it. */}
-        {now.item && !now.dismissed && sessionTopic === null && !sheet && (
+        {/* The Now-Studying bar, pinned to the column's bottom edge — the
+            MOBILE takeover only: in-tab the shell's own bar (side rail /
+            player bar) is already on screen, and a second one here would
+            duplicate it. (Under the sheets: sticky z 30 < sheet z 40.) */}
+        {!inline && now.item && !now.dismissed && sessionTopic === null && !sheet && (
           <NowStudyingBar sticky item={now.item}
             onOpen={() => {
               const it = now.item;
