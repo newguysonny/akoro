@@ -35,6 +35,7 @@ import { ProgressBar, LiveBadge } from '../components/common/ProgressBar.jsx';
 import { ZapIcon, MicIcon, Icon } from '../components/common/Icons.jsx';
 import NowStudyingBar from '../components/dashboard/NowStudyingBar.jsx';
 import PharmDProgram from '../components/pharmd/PharmDProgram.jsx';
+import ContentsDiscoveryTab from '../components/tabs/ContentsDiscoveryTab.jsx';
 import { AppShell, SidebarToggle } from '../components/AppShell.jsx';
 import { NavIcon } from '../components/common/NavIcons.jsx';
 import { useNowStudying } from '../utils/nowStudying.js';
@@ -75,7 +76,7 @@ export default function LearnerDashboard() {
   // feed and the Pharm D browse/folder chain like they do between tabs.
   const discoverViewFromUrl = () => {
     const v = new URLSearchParams(location.search).get("view");
-    return v === "courses" || v === "pharmd" ? v : "hub";
+    return v === "courses" || v === "pharmd" || v === "contents" ? v : "hub";
   };
   const discoverQFromUrl    = () => new URLSearchParams(location.search).get("q") || "";
   const pharmdCourseFromUrl = () => new URLSearchParams(location.search).get("course") || null;
@@ -1160,6 +1161,10 @@ export default function LearnerDashboard() {
               // it renders itself as the full-screen takeover. ?view=pharmd +
               // ?course=CODE mirror the hub > browse > folder chain so the
               // browser Back/Forward follow it.
+              // The Contents/Materials feed — the community's shared
+              // uploads (videos, audio, notes, PDFs), Udemy-style.
+              : discoverView==="contents"
+              ? <ContentsDiscoveryTab initialQuery={discoverQuery}/>
               : discoverView==="pharmd"
               ? <PharmDProgram
                   onClose={()=>navigate("/app?tab=discovery")}
@@ -1170,6 +1175,7 @@ export default function LearnerDashboard() {
               : <DiscoverHub
                   userId={userProfile?.id}
                   onOpenPharmd={()=>navigate("/app?tab=discovery&view=pharmd")}
+                  onOpenContents={(q)=>navigate(`/app?tab=discovery&view=contents${q?`&q=${encodeURIComponent(q)}`:""}`)}
                   onOpenRail={(rail,q)=>navigate(`/app?tab=discovery&view=courses&focus=${rail}${q?`&q=${encodeURIComponent(q)}`:""}`)}
                   onOpenCourses={(q)=>navigate(`/app?tab=discovery&view=courses${q?`&q=${encodeURIComponent(q)}`:""}`)}
                   onOpenCourse={(c)=>c?.slug&&navigate(`/course/${c.slug}`)}

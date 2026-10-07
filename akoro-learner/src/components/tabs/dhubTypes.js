@@ -12,13 +12,13 @@ import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
 export const FONT = "'Nunito', sans-serif";
 
 /* Gradient + art per type card. Order matches the product spec:
-   Notes/Materials, Courses, Pharm D, Teaching guide, Live classes. */
+   Contents/Materials, Courses, Pharm D, Teaching guide, Live classes. */
 export const TYPES = (t) => ([
   {
-    key: 'notes', icon: 'ti-edit', accent: GOLD, soon: true,
+    key: 'contents', icon: 'ti-edit', accent: GOLD, soon: false,
     grad: 'linear-gradient(140deg,#7C5CE6,#5B3FD1)',
-    label: t('dhub.card_notes'), desc: t('dhub.card_notes_desc'),
-    kw: 'notes materials library records pdf document upload link paste',
+    label: t('dhub.card_contents'), desc: t('dhub.card_contents_desc'),
+    kw: 'contents materials notes library records pdf document upload video audio paste',
   },
   {
     key: 'courses', icon: 'ti-book', accent: BRAND, soon: false, primary: true,

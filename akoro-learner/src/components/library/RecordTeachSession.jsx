@@ -90,7 +90,10 @@ const storeSid = (rid, sid) => {
   catch { /* private mode */ }
 };
 
-export default function RecordTeachSession({ record, onClose, onMinimize, onOpened, onProgress }) {
+export default function RecordTeachSession({ record, onClose, onMinimize, onOpened, onProgress,
+  downloadUrl = null,   // records from the discovery feed ride a presigned
+                        // URL — the shelf's /:id/file route is owner-scoped
+}) {
   const { t } = useLang();
   const [state, setState] = useState('loading');          // loading | ready | error
   const [err, setErr]     = useState('');
@@ -229,13 +232,13 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
   }
 
   /* ── Ready — the teaching session with the record as its material ── */
-  const downloadUrl = recordDownloadUrl(record.id);
+  const dlUrl = downloadUrl || recordDownloadUrl(record.id);
   const media = isMedia ? {
     kind: type,
     src: fileUrl,
     title: record.name,
     onPosition: handlePosition,
-    downloadUrl,
+    downloadUrl: dlUrl,
     downloadName: record.name,
   } : null;
 
@@ -260,7 +263,7 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
           title={record.name}
           body={t('records.not_viewable')}
           action={(
-            <a href={downloadUrl} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 14,
+            <a href={dlUrl} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 14,
               background: `linear-gradient(135deg, ${BRAND}, #4C1DCC)`, color: '#fff', fontSize: 12.5, fontWeight: 800,
               padding: '11px 20px', borderRadius: 100, textDecoration: 'none', fontFamily: "'Nunito',sans-serif" }}>
               <Icon name="ti-download" size={14}/> {t('records.download')}

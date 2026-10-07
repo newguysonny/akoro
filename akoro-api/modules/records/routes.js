@@ -16,6 +16,15 @@
  *                                       its PUT, or a link, or a paste)
  *   GET    /api/records              → my shelf, newest first; uploads
  *                                       carry a 6h presigned fileUrl
+ *   GET    /api/records/discover     → the Contents/Materials feed —
+ *                                       every learner's uploads + pasted
+ *                                       notes, Premium subscribers' stay
+ *                                       private; METADATA only, no
+ *                                       presigning (bytes cost nothing
+ *                                       until someone opens a record)
+ *   GET    /api/records/discover/:id/open → presign a discovered upload,
+ *                                       or return a paste's full text —
+ *                                       one call per open
  *   PATCH  /api/records/:id          → progress (10 on first open, 100
  *                                       on mark-done — self-reported)
  *   DELETE /api/records/:id          → row + best-effort R2 object
@@ -217,6 +226,85 @@ router.get("/", authenticateToken, asyncHandler(async (req, res) => {
     .order("created_at", { ascending: false }).limit(MAX_RECORDS);
   if (error) throw error;
   res200(res, await Promise.all((data || []).map(toApi)));
+}));
+
+/* ── The Contents/Materials discovery feed (Discover hub, higher-ed) ────────
+   Everyone's uploaded material — videos, audio, PDFs, images, text files
+   and pasted notes — discoverable by the whole community, with the one
+   exception the product draws: uploads owned by PREMIUM subscribers never
+   appear (their material stays private to them). */
+async function activePremiumUserIds() {
+  const { data: tierRows } = await edu().from("tiers")
+    .select("id").eq("platform", "learner").eq("access", "paid").eq("name", "Premium").limit(1);
+  const tierId = tierRows?.[0]?.id ?? null;
+  if (!tierId) return [];
+  const { data: subs } = await edu().from("subscriptions")
+    .select("user_id").eq("tier_id", tierId).in("status", ["active", "trial", "trialing"]);
+  return [...new Set((subs || []).map((s) => s.user_id).filter(Boolean))];
+}
+
+// ─── GET /api/records/discover — the feed list ─────────────────────────────
+// METADATA ONLY: browsing the feed costs this API no storage calls — no
+// presigned URLs are minted until a learner opens one record. Paste rows
+// carry a short preview; the full text rides on /discover/:id/open.
+router.get("/discover", authenticateToken, asyncHandler(async (req, res) => {
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 80, 1), 100);
+  const premiumIds = await activePremiumUserIds();
+
+  let query = edu().from("records")
+    .select("id, user_id, kind, name, mime, size, duration, file_key, content, created_at")
+    .in("kind", ["upload", "paste"])
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (premiumIds.length) query = query.not("user_id", "in", `(${premiumIds.join(",")})`);
+  const { data: rows, error } = await query;
+  if (error) throw error;
+
+  // Legacy detail-only uploads (no file_key) can't be opened by anyone.
+  const openable = (rows || []).filter((r) => r.kind === "paste" || r.file_key);
+
+  const ownerIds = [...new Set(openable.map((r) => r.user_id).filter(Boolean))];
+  const owners = new Map();
+  if (ownerIds.length) {
+    const { data: users } = await edu().from("users").select("id, full_name").in("id", ownerIds);
+    for (const u of users || []) owners.set(u.id, u.full_name || "Learner");
+  }
+
+  res200(res, openable.map((r) => ({
+    id: r.id,
+    ownerId: r.user_id,
+    ownerName: owners.get(r.user_id) || "Learner",
+    kind: r.kind,
+    name: r.name,
+    mime: r.mime || "",
+    size: r.size || 0,
+    duration: r.duration ?? null,
+    fileType: r.kind === "upload" ? detectType(r.mime || "", r.name || "") : "note",
+    contentPreview: r.kind === "paste" ? String(r.content || "").slice(0, 280) : "",
+    createdAt: r.created_at,
+  })));
+}));
+
+// ─── GET /api/records/discover/:id/open — open one discovered record ───────
+// One call per open: presign an upload's file (with its download name), or
+// hand back a paste's full text. Premium-owned records answer 404 — they
+// were never in the feed, and a guessed or stale id must not leak them.
+router.get("/discover/:id/open", authenticateToken, asyncHandler(async (req, res) => {
+  const { data: r, error } = await edu().from("records")
+    .select("id, user_id, kind, name, file_key, content")
+    .eq("id", req.params.id).maybeSingle();
+  if (error || !r || !["upload", "paste"].includes(r.kind)) return res404(res, "Record not found.");
+  if (r.kind === "upload" && !r.file_key) return res400(res, "This record has no saved file.");
+  const premiumIds = await activePremiumUserIds();
+  if (premiumIds.includes(r.user_id)) return res404(res, "Record not found.");
+  if (r.kind === "paste") return res200(res, { content: r.content || "" });
+  const url = await createPresignedDownload(r.file_key, { downloadName: r.name })
+    .catch((err) => {
+      console.error("[records] discover presign failed:", err?.message || err);
+      return null;
+    });
+  if (!url) return res503(res, "Could not sign that file — try again.");
+  res200(res, { url });
 }));
 
 /* ── Folders — the shelf's organization layer ─────────────────────────────

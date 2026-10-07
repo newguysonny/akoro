@@ -326,7 +326,7 @@ export default function DiscoverSearchPage({
   };
 
   const pickRecord = (record) => {
-    remember(q || record.name, 'notes');
+    remember(q || record.name, 'contents');
     onClose?.();
     onOpenRecord?.(record);
   };

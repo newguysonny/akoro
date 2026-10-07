@@ -25,6 +25,21 @@ export async function listRecords() {
   return d?.data ?? [];
 }
 
+/** The Contents/Materials discovery feed — everyone's uploads and pasted
+ *  notes (Premium subscribers' stay private). Metadata only: no fileUrl
+ *  rides the list; call discoverRecordOpen() when a card is tapped. */
+export async function discoverRecords() {
+  const d = await apiGet('/api/records/discover');
+  return d?.data ?? [];
+}
+
+/** Open one discovered record — presigns its file (with download name),
+ *  or returns the paste's full text. One call per open. */
+export async function discoverRecordOpen(id) {
+  const d = await apiGet(`/api/records/discover/${id}/open`);
+  return d?.data ?? null;
+}
+
 /** Step 1 of an upload — ask the server for a PUT URL. */
 export async function presignRecordUpload({ name, mime, size }) {
   const d = await apiPost('/api/records/upload-url', { name, mime, size });

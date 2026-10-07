@@ -124,9 +124,11 @@ test("Pharm.D topics park, and the programme page shows the bar", () => {
 test("the dashboard resumes the new types", () => {
   assert.ok(dash.includes("type === 'library'"), "library: navigate the parked route");
   assert.ok(dash.includes("navigate(now.item.snapshot.path)"), "straight back to the content");
-  assert.ok(dash.includes("type === 'pharmd'"), "pharmd: hand the focus to Discover");
-  assert.ok(dash.includes("setPharmdFocus({ ...now.item.snapshot, ts: Date.now() })"), "with a fresh timestamp");
-  assert.ok(hub.includes("pharmdFocus?.ts"), "the hub opens the programme on the focus");
-  assert.ok(hub.includes("focus={pharmdFocus}"), "and threads it into PharmDProgram");
+  assert.ok(dash.includes("type === 'pharmd'"), "pharmd: straight to the programme page");
+  assert.ok(dash.includes("setPharmdFocus({ ...now.item.snapshot, ts: Date.now() })"), "with a fresh focus timestamp");
+  assert.ok(dash.includes("view=pharmd"), "landing on the programme's URL — course included");
+  assert.ok(dash.includes("focus={pharmdFocus}"), "the dashboard threads the focus into PharmDProgram");
+  assert.ok(dash.includes("courseRoute={pharmdCourseFromUrl()}"), "with the URL's course");
+  assert.ok(hub.includes("onOpenPharmd?.()"), "the hub's Pharm D card routes through the shell");
   assert.ok(pharmd.includes("focusedRef"), "the programme opens the parked topic once its list lands");
 });
