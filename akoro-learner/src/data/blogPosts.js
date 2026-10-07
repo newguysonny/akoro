@@ -1,0 +1,211 @@
+import { Brain, Lightbulb, GraduationCap, TrendingUp, BookOpen, Users } from 'lucide-react';
+
+/* Shared blog content used by both the listing page and the article detail page. */
+
+export const CATS = ['All', 'Learning Science', 'Product', 'Education', 'AI & Future', 'Case Studies', 'Community'];
+
+/* Visual meta per category — Icon + accent colour. Posts now come from the API
+   (which returns category strings), so the icon/colour is resolved client-side. */
+export const CAT_META = {
+  'Learning Science': { Icon: Brain,         color: '#EDE9FF' },
+  'Product':          { Icon: Lightbulb,     color: '#FFF3E0' },
+  'Education':        { Icon: GraduationCap,  color: '#E8F5E9' },
+  'AI & Future':      { Icon: TrendingUp,     color: '#EDE9FF' },
+  'Case Studies':     { Icon: BookOpen,       color: '#FFF3E0' },
+  'Community':        { Icon: Users,          color: '#E0F2FE' },
+};
+export const catMeta = (cat) => CAT_META[cat] || { Icon: BookOpen, color: '#EDE9FF' };
+
+/* body block types:
+   { type:'p', text }            paragraph
+   { type:'h', text }            section heading
+   { type:'quote', text }        pull quote
+   { type:'list', items:[] }     bullet list
+*/
+
+export const POSTS = [
+  {
+    id: 1,
+    slug: 'spacing-and-retrieval-practice',
+    category: 'Learning Science',
+    Icon: Brain,
+    image: 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=1200&q=80',
+    title: 'Why Spacing and Retrieval Practice Beat Re-Reading Every Time',
+    excerpt: 'Decades of cognitive science research point to two techniques that dramatically outperform passive review. Here\'s how NaNa builds them into every session.',
+    author: 'Dr. Amara Osei',
+    authorRole: 'Head of Learning Science',
+    date: 'Jun 14, 2026',
+    readMin: 7,
+    featured: true,
+    color: '#EDE9FF',
+    body: [
+      { type: 'p', text: 'Most students study the way they were taught to: read the chapter, highlight the important bits, then read it again the night before the exam. It feels productive. The pages look busy with colour, the material feels familiar, and familiarity is easily mistaken for mastery. Unfortunately, decades of research in cognitive science tell us this is one of the least efficient ways to learn anything durably.' },
+      { type: 'h', text: 'The familiarity trap' },
+      { type: 'p', text: 'When you re-read a passage, your brain recognises the words and concludes, "I know this." But recognition is not recall. The real test of learning is whether you can retrieve the information when the page is closed — and re-reading does almost nothing to build that ability.' },
+      { type: 'quote', text: 'Recognition is not recall. The page being familiar tells you nothing about whether you can produce the answer when it counts.' },
+      { type: 'h', text: 'Retrieval practice: the testing effect' },
+      { type: 'p', text: 'The single most reliable finding in the learning sciences is that the act of retrieving information from memory strengthens that memory far more than re-studying it. Every time you successfully pull a fact out of your head, the pathway to it gets stronger and easier to travel next time.' },
+      { type: 'list', items: [
+        'Close the book and try to write down everything you remember before checking.',
+        'Answer questions before you feel ready — the struggle is where the learning happens.',
+        'Use flashcards that force production, not just recognition.',
+      ] },
+      { type: 'h', text: 'Spacing: why cramming fails' },
+      { type: 'p', text: 'The second pillar is spacing. Reviewing material across several days or weeks produces dramatically better long-term retention than the same amount of study crammed into one sitting. Each time you revisit a concept after partly forgetting it, you reload it more deeply.' },
+      { type: 'h', text: 'How NaNa puts this to work' },
+      { type: 'p', text: 'NaNa schedules every concept you learn into a spaced-retrieval queue. Instead of asking you to re-read, your agent quizzes you at the precise moment you\'re about to forget — turning revision into active recall and stretching reviews across optimal intervals. You don\'t have to plan any of it; the science runs in the background while you focus on learning.' },
+    ],
+  },
+  {
+    id: 2,
+    slug: 'adaptive-battle-mode',
+    category: 'Product',
+    Icon: Lightbulb,
+    image: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=1200&q=80',
+    title: 'Introducing Adaptive Battle Mode: Your Agent Fights Smarter',
+    excerpt: 'Battle Mode just got a major upgrade. NaNa now analyses your weak spots in real time and targets exactly the concepts you need most.',
+    author: 'Kwame Asante',
+    authorRole: 'Product Lead',
+    date: 'Jun 7, 2026',
+    readMin: 4,
+    color: '#FFF3E0',
+    body: [
+      { type: 'p', text: 'Battle Mode has always been the most-loved feature in Akoro — pit your agent against a challenge and watch the knowledge fly. Today we\'re shipping the biggest upgrade since launch: Adaptive Battle Mode.' },
+      { type: 'h', text: 'What changed' },
+      { type: 'p', text: 'Previously, battles drew questions from a fixed pool for each topic. Adaptive Battle Mode replaces that with a live difficulty engine that reads your performance question-by-question and steers the fight toward the exact concepts you\'re shakiest on.' },
+      { type: 'list', items: [
+        'Real-time weak-spot detection across every concept in the topic.',
+        'Difficulty that ramps up when you\'re cruising and eases when you stall.',
+        'Post-battle reports that show precisely which ideas to revisit.',
+      ] },
+      { type: 'quote', text: 'A battle is now a diagnostic. By the time it ends, NaNa knows your gaps better than you do.' },
+      { type: 'h', text: 'Why it matters' },
+      { type: 'p', text: 'Practice only helps when it targets the edge of what you can do. Adaptive Battle Mode keeps you in that productive zone for the whole session, so every minute spent battling moves the needle. Update your app and challenge NaNa — it\'s fighting smarter now.' },
+    ],
+  },
+  {
+    id: 3,
+    slug: 'ghana-schools-stem-gap',
+    category: 'Education',
+    Icon: GraduationCap,
+    image: 'https://images.unsplash.com/photo-1427504494785-3a9ca7044f45?auto=format&fit=crop&w=1200&q=80',
+    title: 'How Ghanaian Secondary Schools Are Closing the STEM Gap with AI Tutors',
+    excerpt: 'Three schools. Eight months. A 23 % improvement in WAEC science scores. We break down what worked and what surprised us.',
+    author: 'Efua Mensah',
+    authorRole: 'Partnerships',
+    date: 'May 28, 2026',
+    readMin: 9,
+    color: '#E8F5E9',
+    body: [
+      { type: 'p', text: 'Last year we partnered with three secondary schools in the Greater Accra and Ashanti regions on a simple question: can a personal AI tutor measurably close the STEM attainment gap when class sizes routinely exceed fifty students?' },
+      { type: 'h', text: 'The setup' },
+      { type: 'p', text: 'Each participating student received an Akoro account with NaNa configured around their WAEC science syllabus. Teachers got a class dashboard showing where the cohort was struggling. We then tracked progress over two full terms.' },
+      { type: 'h', text: 'The results' },
+      { type: 'list', items: [
+        '23% average improvement in mock WAEC science scores across the three schools.',
+        'Students using NaNa for 20+ minutes a day improved nearly twice as fast.',
+        'Teachers reallocated class time away from re-explaining basics toward higher-order problem solving.',
+      ] },
+      { type: 'quote', text: '"I finally have time to teach the hard parts, because NaNa handles the drilling," — one participating physics teacher.' },
+      { type: 'h', text: 'What surprised us' },
+      { type: 'p', text: 'The biggest gains didn\'t come from the strongest students — they came from the middle of the class, the learners who previously fell through the cracks of a fifty-student room. A personal agent gave them the patient, one-to-one attention that simply isn\'t possible at that scale.' },
+      { type: 'h', text: 'Where we go next' },
+      { type: 'p', text: 'We\'re expanding the programme to twelve schools this year, with a focus on rural districts where access to specialist science teachers is thinnest. If you run a school and want to take part, our partnerships team would love to hear from you.' },
+    ],
+  },
+  {
+    id: 4,
+    slug: 'agent-native-classroom-2030',
+    category: 'AI & Future',
+    Icon: TrendingUp,
+    image: 'https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=1200&q=80',
+    title: 'The Agent-Native Classroom: What Education Looks Like in 2030',
+    excerpt: 'Every student has a personal AI agent that knows their learning history, adapts in real time, and never gives up. We\'re building towards that future today.',
+    author: 'Nana Kofi Agyemang',
+    authorRole: 'Co-founder & CEO',
+    date: 'May 19, 2026',
+    readMin: 6,
+    color: '#EDE9FF',
+    body: [
+      { type: 'p', text: 'For two hundred years, the classroom has been built around a constraint: one teacher, many students. Everything from the pace of lessons to the design of exams flows from that single bottleneck. AI agents quietly remove it — and that changes everything downstream.' },
+      { type: 'h', text: 'From one-to-many to one-to-one, at scale' },
+      { type: 'p', text: 'In an agent-native classroom, every student arrives with a personal agent that already knows their full learning history — what they\'ve mastered, where they wobble, how they best take in new ideas. The teacher becomes a conductor of dozens of personalised journeys rather than a single broadcast signal.' },
+      { type: 'quote', text: 'The teacher of 2030 isn\'t replaced by AI — they\'re amplified by it, freed to do the deeply human work machines can\'t.' },
+      { type: 'h', text: 'What the agent handles' },
+      { type: 'list', items: [
+        'Continuous, low-stakes assessment that replaces the high-anxiety final exam.',
+        'Instant, patient re-explanation in whatever way each learner needs.',
+        'Spaced revision scheduled automatically around each student\'s memory.',
+      ] },
+      { type: 'h', text: 'What stays human' },
+      { type: 'p', text: 'Mentorship. Curiosity. The spark of a teacher who believes in a student more than they believe in themselves. Agents handle the mechanics of practice and recall so that human educators can pour their energy into the things only humans can do.' },
+      { type: 'h', text: 'Building it now' },
+      { type: 'p', text: 'This isn\'t a far-off vision. Every feature we ship — adaptive battles, spaced retrieval, the class dashboard — is a brick in that 2030 classroom. We\'re building it one learner at a time, starting in Africa.' },
+    ],
+  },
+  {
+    id: 5,
+    slug: 'abena-six-month-journey',
+    category: 'Case Studies',
+    Icon: BookOpen,
+    image: 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1200&q=80',
+    title: 'From 42% to 78%: One Learner\'s Six-Month Journey with NaNa',
+    excerpt: 'Abena failed her BECE mock twice. Six months later she passed with distinction. This is her story — in her own words.',
+    author: 'Akoro Team',
+    authorRole: '',
+    date: 'May 10, 2026',
+    readMin: 5,
+    color: '#FFF3E0',
+    body: [
+      { type: 'p', text: 'When Abena first opened Akoro, she had already failed her BECE mock twice. Maths and integrated science were, in her words, "subjects I had decided I was just bad at." Six months later she sat the real exam and passed with distinction. We asked her to tell the story herself.' },
+      { type: 'h', text: 'Month one: starting over' },
+      { type: 'p', text: '"I didn\'t trust it at first. Another app, another thing telling me to study. But NaNa didn\'t lecture me — it asked me questions and waited. When I got something wrong it just showed me again, calmly, as many times as I needed."' },
+      { type: 'quote', text: '"For the first time, getting an answer wrong didn\'t feel like failing. It just felt like the next step."' },
+      { type: 'h', text: 'Months two to four: the turn' },
+      { type: 'p', text: '"The battles became my favourite part. I\'d challenge NaNa on the bus home. Slowly the questions I used to dread became the ones I wanted to fight. My mock score went from 42% to 61%."' },
+      { type: 'h', text: 'The final stretch' },
+      { type: 'list', items: [
+        'Twenty minutes of spaced revision every morning before school.',
+        'Battle Mode on her weakest topics three evenings a week.',
+        'A class dashboard her teacher used to give her targeted help.',
+      ] },
+      { type: 'h', text: 'Distinction' },
+      { type: 'p', text: '"When the results came I read my name three times. 78%. Distinction in science. I\'m not \'just bad at\' anything anymore — I just hadn\'t found the right way to practise." Abena is now helping younger students at her school get started with NaNa.' },
+    ],
+  },
+  {
+    id: 6,
+    slug: 'interleaving-study-strategy',
+    category: 'Learning Science',
+    Icon: Brain,
+    image: 'https://images.unsplash.com/photo-1509228627152-72ae9ae6848d?auto=format&fit=crop&w=1200&q=80',
+    title: 'Interleaving: The Counterintuitive Study Strategy That Actually Works',
+    excerpt: 'Mixing topics feels harder. Students score lower on immediate tests. Yet they retain far more a week later. Here\'s the science behind interleaving.',
+    author: 'Dr. Amara Osei',
+    authorRole: 'Head of Learning Science',
+    date: 'Apr 30, 2026',
+    readMin: 8,
+    color: '#E8F5E9',
+    body: [
+      { type: 'p', text: 'Imagine two students preparing for a maths exam. One practises twenty algebra problems, then twenty geometry problems, then twenty calculus problems — neatly blocked by topic. The other shuffles all sixty together in random order. Who learns more? The research says, overwhelmingly, the second student. Yet almost everyone studies like the first.' },
+      { type: 'h', text: 'What is interleaving?' },
+      { type: 'p', text: 'Interleaving means mixing different types of problems or topics within a single study session, rather than practising one kind to mastery before moving on. It feels harder and slower — and that\'s precisely why it works.' },
+      { type: 'quote', text: 'Blocked practice feels great and teaches little. Interleaving feels hard and teaches a lot. Our intuitions about studying are almost exactly backwards.' },
+      { type: 'h', text: 'Why the discomfort helps' },
+      { type: 'p', text: 'When problems are blocked, you already know which method to apply before you read the question. Interleaving forces you to first identify what kind of problem you\'re facing — the exact skill you need on a real exam, where questions arrive in no particular order.' },
+      { type: 'list', items: [
+        'You learn to discriminate between problem types, not just execute procedures.',
+        'Repeatedly reloading different methods strengthens each one.',
+        'Performance feels worse during practice but is far higher when it counts.',
+      ] },
+      { type: 'h', text: 'The catch' },
+      { type: 'p', text: 'Because interleaving makes practice feel harder, students abandon it — they see lower scores in the moment and conclude it isn\'t working. This is the central paradox of learning: the strategies that feel most effective are often the least, and vice versa.' },
+      { type: 'h', text: 'How NaNa interleaves for you' },
+      { type: 'p', text: 'NaNa automatically blends topics in your practice sessions and battles, so you\'re always discriminating between problem types rather than running on autopilot. You get the proven benefits of interleaving without having to fight the very instincts that make it hard to stick with.' },
+    ],
+  },
+];
+
+export function getPostBySlug(slug) {
+  return POSTS.find(p => p.slug === slug);
+}

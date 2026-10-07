@@ -1,0 +1,87 @@
+/**
+ * UpdatePrompt — the service-worker update lifecycle's UI half.
+ *
+ * A new deploy installs a new SW that WAITS behind the old one (no skipWaiting
+ * baked into the SW — see vite.config.js). When the waiting worker is detected
+ * (on load, every 60s, and on tab focus) this banner appears and owns the
+ * swap: "Reload now" (or the countdown reaching 0) calls updateSW(true) →
+ * postMessage SKIP_WAITING → the new SW activates → controllerchange → the
+ * page reloads into the fresh build. Until then the old SW keeps serving the
+ * old page its own cached chunks, so nothing 404s mid-session. "Later" keeps
+ * the current version until the next check. The countdown pauses while a
+ * protected flow (live session, assessment) holds the activity lock.
+ *
+ * Registers the SW itself via vite-plugin-pwa's registerSW (prompt mode). In
+ * dev, `registerSW` is a no-op, so this renders nothing.
+ */
+import { useEffect, useRef, useState } from 'react';
+import { registerSW } from 'virtual:pwa-register';
+import { isBusy, subscribeActivity } from '../../utils/activityLock.js';
+
+const COUNTDOWN = 10;
+
+export default function UpdatePrompt() {
+  const [show, setShow] = useState(false);
+  const [secs, setSecs] = useState(COUNTDOWN);
+  const [busy, setBusy] = useState(false);   // in a live session / assessment
+  const updateSW = useRef(null);
+
+  useEffect(() => {
+    updateSW.current = registerSW({
+      immediate: true,
+      onNeedRefresh() { setSecs(COUNTDOWN); setShow(true); },
+      // Proactively poll for a new deploy so the banner fires as soon as one
+      // ships: shortly after load, every 60 seconds, and whenever the tab
+      // refocuses. (registration.update() is a cheap conditional fetch of
+      // sw.js — safe to do often.)
+      onRegisteredSW(_url, registration) {
+        if (!registration) return;
+        const check = () => { registration.update().catch(() => {}); };
+        setTimeout(check, 5000);
+        const id = setInterval(check, 60 * 1000);
+        const onVis = () => { if (document.visibilityState === 'visible') check(); };
+        document.addEventListener('visibilitychange', onVis);
+        window.addEventListener('focus', check);
+        // (Listeners live for the app's lifetime — the prompt is always mounted.)
+        void id;
+      },
+    });
+  }, []);
+
+  // Pause the countdown while the learner is in a protected flow.
+  useEffect(() => {
+    setBusy(isBusy());
+    return subscribeActivity(setBusy);
+  }, []);
+
+  useEffect(() => {
+    if (!show || busy) return;   // paused while an activity holds the lock
+    if (secs <= 0) { updateSW.current?.(true); return; }   // activate new SW + reload
+    const t = setTimeout(() => setSecs((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [show, secs, busy]);
+
+  if (!show) return null;
+
+  const reloadNow = () => updateSW.current?.(true);
+  const postpone  = () => setShow(false);   // keep using the current version for now
+
+  return (
+    <div role="status" style={{
+      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 4000,
+      background: '#1A1A2E', color: '#fff', fontFamily: "'Nunito', system-ui, sans-serif",
+      padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      gap: 12, flexWrap: 'wrap', boxShadow: '0 2px 14px rgba(0,0,0,.25)',
+    }}>
+      <span style={{ fontSize: 13, fontWeight: 700 }}>
+        {busy
+          ? 'A new version of Akoro is available — it’ll reload when you finish.'
+          : `A new version of Akoro is available — reloading in ${secs}s`}
+      </span>
+      <span style={{ display: 'inline-flex', gap: 8 }}>
+        <button onClick={reloadNow} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: '#6C3BFF', color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>Reload now</button>
+        <button onClick={postpone} style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,.3)', background: 'transparent', color: '#fff', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Later</button>
+      </span>
+    </div>
+  );
+}

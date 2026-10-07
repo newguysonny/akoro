@@ -1,0 +1,373 @@
+/**
+ * assessmentGateway.js
+ *
+ * Session Assessment Gateway — WebSocket surface for proctored assessments.
+ *
+ * Flow:
+ *   register_reference  → reference_saved      (identity baseline photo)
+ *   start_assessment    → assessment_ready     (Sergeant generates questions)
+ *   proctor_frame       → proctor_result       (per-frame cheat analysis)
+ *   assessment_message  → assessment_turn      (one Q&A turn, hints, advance)
+ *   request_summary     → assessment_summary   (final, cheat-aware verdict)
+ *   end_assessment      → assessment_ended
+ *
+ * Heavy vision work is offloaded to frameAnalyzer (optional GPU microservice);
+ * the temporal scorer turns noisy per-frame signals into a stable probability.
+ */
+
+import { SergeantProctor }   from "./agents/sargeant/proctor.js";
+import { TemporalScorer }    from "./proctoring/temporalScorer.js";
+import { analyzeFrame, proctorServiceEnabled } from "./proctoring/frameAnalyzer.js";
+import db                    from "../../db.js";
+import { runWithAiContext }  from "../../lib/aiContext.js";
+
+// sessionId → { proctor, scorer, referenceImage, dbId, blocks, cheatEvents, studentId, lastFrameTs }
+const assessments = new Map();
+
+// Frames arrive every ~2s; ignore bursts under this to bound CPU.
+const MIN_FRAME_INTERVAL_MS = 1200;
+// Auto-terminate threshold — sustained high cheat probability ends the exam.
+const TERMINATE_PROBABILITY = 0.85;
+// How long a live session survives a socket drop before it's abandoned.
+// Mobile connections flap constantly; deleting on the first disconnect made
+// every submit after a blip vanish silently (new socket.id, no session).
+const RESUME_GRACE_MS = 3 * 60 * 1000;
+
+const GATEWAY_EVENTS = new Set([
+  "register_reference", "start_assessment", "proctor_frame", "resume_assessment",
+  "assessment_message", "request_assessment_summary", "end_assessment",
+]);
+
+export function setupAssessmentGateway(io) {
+  io.on("connection", (socket) => {
+
+    // Proctored assessments are identity-critical: every gateway event requires
+    // an authenticated socket (io.use() JWT middleware in app.js), and the
+    // client-supplied studentId is overwritten with the token identity so no
+    // one can sit — or poison the proctoring record of — someone else's exam.
+    socket.use((packet, next) => {
+      const [event, payload] = packet;
+      if (GATEWAY_EVENTS.has(event)) {
+        const u = socket.data.user;
+        if (!u) { socket.emit("assessment_error", { code: "auth", message: "Sign in required." }); return; } // drop
+        if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+          if ("studentId" in payload || event === "start_assessment" || event === "register_reference") payload.studentId = u.id;
+          if ("userId" in payload) payload.userId = u.id;
+        }
+      }
+      next();
+    });
+
+    /* ── Register identity reference photo ─────────────────── */
+    socket.on("register_reference", async ({ studentId, image }) => {
+      try {
+        if (!image) return socket.emit("assessment_error", { message: "no image" });
+        // Persist to storage; keep the base64 in-memory for live comparison.
+        const url = await _storeReference(studentId, image).catch(() => null);
+        socket.data.referenceImage = _stripDataUrl(image);
+        socket.data.referenceUrl   = url;
+        socket.emit("reference_saved", { ok: true, url });
+      } catch (e) {
+        socket.emit("assessment_error", { message: e.message });
+      }
+    });
+
+    /* ── Start a proctored assessment ──────────────────────── */
+    socket.on("start_assessment", async ({ studentId, topic, subject, objectives = [], questionCount = 5, userId }) => {
+      if (!studentId || !topic)
+        return socket.emit("assessment_error", { message: "studentId and topic required" });
+      try {
+        const proctor = new SergeantProctor({ topic, subject, objectives, questionCount, studentName: "candidate" });
+        // Meter the assessment LLM to the right wallet: school (billTo) on a
+        // school portal, else the student (hybrid). billTo/user come off the socket.
+        const billCtx = { userId: socket.data.user?.id, feature: "assessment", billTo: socket.data.billTo };
+        const { opening, questions } = await runWithAiContext(billCtx, () => proctor.generateQuestions());
+
+        const id = `assess_${studentId}_${Date.now()}`;
+        const scorer = new TemporalScorer();
+        const openingBlocks = [
+          { type: "proctor-banner", text: "Proctored assessment — keep your face in frame and stay alone.", serviceTier: proctorServiceEnabled() ? "full" : "client" },
+          { type: "sergeant", agent: "Sergeant", emoji: "⚡", text: opening },
+          ...(questions[0] ? [{ type: "question", idx: 1, total: questions.length, text: questions[0].q, difficulty: questions[0].difficulty }] : []),
+        ];
+
+        const state = {
+          proctor, scorer, studentId,
+          referenceImage: socket.data.referenceImage || null,
+          referenceUrl:   socket.data.referenceUrl   || null,
+          blocks:      [...openingBlocks],
+          cheatEvents: [],
+          lastFrameTs: 0,
+          dbId:        null,
+        };
+        assessments.set(id, state);
+
+        socket.data.assessmentId = id;
+        socket.join(`assessment:${id}`);
+
+        socket.emit("assessment_ready", {
+          assessmentId: id,
+          topic, subject,
+          openingBlocks,
+          totalQuestions: questions.length,
+          proctorTier: proctorServiceEnabled() ? "full" : "client",
+        });
+
+        // Persist the row in the background — never blocks exam start.
+        _createRecord(state, { studentId, topic, subject, questions, openingBlocks })
+          .catch(e => console.warn("[assessment create]", e.message));
+      } catch (e) {
+        console.error("[start_assessment]", e);
+        socket.emit("assessment_error", { message: e.message });
+      }
+    });
+
+    /* ── Per-frame proctoring ──────────────────────────────── */
+    socket.on("proctor_frame", async ({ frame, signals = {} }) => {
+      const id = socket.data.assessmentId;
+      const state = id && assessments.get(id);
+      if (!state) return;
+
+      const now = Date.now();
+      if (now - state.lastFrameTs < MIN_FRAME_INTERVAL_MS) return;   // throttle
+      state.lastFrameTs = now;
+
+      try {
+        const { signals: frameSignals, detail } = await analyzeFrame({
+          frame, clientSignals: signals, referenceImage: state.referenceImage,
+        });
+        const result = state.scorer.push(frameSignals, now);
+
+        if (process.env.PROCTOR_DEBUG === "1" || process.env.PROCTOR_DEBUG === "true") {
+          const on = Object.entries(frameSignals).filter(([, v]) => v).map(([k]) => k).join(",") || "none";
+          console.log(
+            `[proctor] frame src=${detail.source} frameBytes=${frame ? frame.length : 0} ` +
+            `signalsOn=[${on}] prob=${result.probability} level=${result.level} ` +
+            `active=[${result.active.join(",")}]${detail.serviceError ? ` svcErr="${detail.serviceError}"` : ""}`
+          );
+        }
+
+        // Log escalated signals as discrete cheat events (deduped by type+second).
+        for (const esc of result.escalations) {
+          const last = state.cheatEvents[state.cheatEvents.length - 1];
+          if (!last || last.type !== esc.type || now - last.ts > 5000) {
+            state.cheatEvents.push({ ts: now, type: esc.type, severity: esc.severity, detail: detail.objects || null });
+          }
+        }
+
+        socket.emit("proctor_result", {
+          probability: result.probability,
+          level:       result.level,
+          active:      result.active,
+          escalations: result.escalations,
+        });
+
+        // Auto-terminate on sustained high probability.
+        if (result.probability >= TERMINATE_PROBABILITY) {
+          socket.emit("assessment_terminated", {
+            reason: "Sustained proctoring violations.",
+            probability: result.probability,
+          });
+          await _finalize(state, socket, id, { forcedVerdict: "terminated" });
+        }
+      } catch (e) {
+        // Never let a bad frame break the session.
+        console.warn("[proctor_frame]", e.message);
+      }
+    });
+
+    /* ── Resume after a reconnect ──────────────────────────── */
+    // socket.io reconnects get a fresh socket (and empty socket.data). The
+    // client re-sends its assessmentId so the new socket re-binds to the
+    // still-live session instead of every subsequent emit being dropped.
+    socket.on("resume_assessment", ({ assessmentId }) => {
+      const state = assessmentId && assessments.get(assessmentId);
+      if (!state) return socket.emit("assessment_error", { code: "no_session", message: "This assessment session has expired. Please restart the assessment." });
+      // Ownership: only the candidate who started the exam may resume it.
+      if (state.studentId && socket.data.user?.id !== state.studentId)
+        return socket.emit("assessment_error", { code: "no_session", message: "This assessment session belongs to another user." });
+      if (state._expireTimer) { clearTimeout(state._expireTimer); state._expireTimer = null; }
+      socket.data.assessmentId  = assessmentId;
+      socket.data.referenceImage = state.referenceImage;
+      socket.data.referenceUrl   = state.referenceUrl;
+      socket.join(`assessment:${assessmentId}`);
+      socket.emit("assessment_resumed", { assessmentId });
+    });
+
+    /* ── One Q&A turn ──────────────────────────────────────── */
+    socket.on("assessment_message", async ({ message }) => {
+      const id = socket.data.assessmentId;
+      const state = id && assessments.get(id);
+      if (!message) return;
+      if (!state) return socket.emit("assessment_error", { code: "no_session", message: "Connection to the assessment was lost — attempting to reconnect…" });
+
+      try {
+        socket.emit("assessment_typing");
+        const cheatProbability = state.scorer.score().probability;
+        const billCtx = { userId: socket.data.user?.id, feature: "assessment", billTo: socket.data.billTo };
+        const turn = await runWithAiContext(billCtx, () => state.proctor.evaluateAnswer(message, { cheatProbability }));
+
+        const newBlocks = [
+          { type: "user", text: message },
+          { type: "sergeant", agent: "Sergeant", emoji: "⚡",
+            text: turn.eval.feedback, score: turn.eval.score, correct: turn.eval.correct },
+        ];
+        if (turn.hint)        newBlocks.push({ type: "hint", text: turn.hint });
+        if (turn.suspicious)  newBlocks.push({ type: "proctor-flag", text: "Strong answer under elevated proctoring signals — flagged for review." });
+        if (turn.advanced && turn.nextQuestion)
+          newBlocks.push({ type: "question", idx: turn.progress.index + 1, total: turn.progress.total,
+                           text: turn.nextQuestion.q, difficulty: turn.nextQuestion.difficulty });
+
+        state.blocks.push(...newBlocks);
+        socket.emit("assessment_turn", {
+          blocks:   newBlocks,
+          progress: turn.progress,
+          done:     turn.done,
+        });
+        _appendBlocks(state, newBlocks).catch(() => {});
+
+        if (turn.done) {
+          // All questions answered — finalize automatically.
+          await _finalize(state, socket, id);
+        }
+      } catch (e) {
+        console.error("[assessment_message]", e);
+        socket.emit("assessment_error", { message: e.message });
+      }
+    });
+
+    /* ── Explicit summary request ──────────────────────────── */
+    socket.on("request_assessment_summary", async () => {
+      const id = socket.data.assessmentId;
+      const state = id && assessments.get(id);
+      if (!state) return socket.emit("assessment_error", { message: "no active assessment" });
+      await _finalize(state, socket, id);
+    });
+
+    /* ── End / cleanup ─────────────────────────────────────── */
+    socket.on("end_assessment", async () => {
+      const id = socket.data.assessmentId;
+      const state = id && assessments.get(id);
+      if (state) {
+        await _markStatus(state, "abandoned").catch(() => {});
+        assessments.delete(id);
+      }
+    });
+
+    socket.on("disconnect", () => {
+      const id = socket.data.assessmentId;
+      const state = id && assessments.get(id);
+      if (state && !state.completed) {
+        // Grace period: keep the session alive so a reconnecting client can
+        // resume_assessment. Only abandon if nobody comes back in time.
+        if (state._expireTimer) clearTimeout(state._expireTimer);
+        state._expireTimer = setTimeout(() => {
+          const s = assessments.get(id);
+          if (s && !s.completed) {
+            _markStatus(s, "abandoned").catch(() => {});
+            assessments.delete(id);
+          }
+        }, RESUME_GRACE_MS);
+      }
+    });
+  });
+}
+
+/* ── Finalization (shared by done / summary / terminate) ───── */
+async function _finalize(state, socket, id, { forcedVerdict = null } = {}) {
+  if (state.completed) return;
+  state.completed = true;
+  try {
+    const snap = state.scorer.snapshot();
+    const billCtx = { userId: socket.data.user?.id, feature: "assessment", billTo: socket.data.billTo };
+    const summary = await runWithAiContext(billCtx, () => state.proctor.finalVerdict({
+      cheatProbability: snap.peakProbability,
+      cheatEvents:      state.cheatEvents,
+    }));
+    if (forcedVerdict) summary.verdict = forcedVerdict;
+
+    socket.emit("assessment_summary", {
+      ...summary,
+      proctoring: snap,
+      cheatEvents: state.cheatEvents,
+    });
+    await _completeRecord(state, summary, snap).catch(e => console.warn("[assessment complete]", e.message));
+  } catch (e) {
+    console.error("[assessment finalize]", e);
+    socket.emit("assessment_error", { message: e.message });
+  } finally {
+    assessments.delete(id);
+  }
+}
+
+/* ── Persistence helpers (edu.assessment_sessions) ─────────── */
+async function _createRecord(state, { studentId, topic, subject, questions, openingBlocks }) {
+  const { data, error } = await db.schema("edu").from("assessment_sessions").insert({
+    student_id:          studentId,
+    topic, subject:      subject || null,
+    status:              "active",
+    reference_image_url: state.referenceUrl || null,
+    identity_verified:   Boolean(state.referenceImage),
+    block_history:       openingBlocks,
+    questions:           questions,
+    started_at:          new Date().toISOString(),
+    updated_at:          new Date().toISOString(),
+  }).select("id").single();
+  if (error) throw error;
+  state.dbId = data.id;
+}
+
+async function _appendBlocks(state, newBlocks) {
+  if (!state.dbId || !newBlocks?.length) return;
+  const { data } = await db.schema("edu").from("assessment_sessions")
+    .select("block_history").eq("id", state.dbId).single();
+  const existing = Array.isArray(data?.block_history) ? data.block_history : [];
+  await db.schema("edu").from("assessment_sessions").update({
+    block_history: [...existing, ...newBlocks],
+    updated_at:    new Date().toISOString(),
+  }).eq("id", state.dbId);
+}
+
+async function _completeRecord(state, summary, snap) {
+  if (!state.dbId) return;
+  // DB-level idempotency guard: the in-memory `state.completed` flag is
+  // per-process, so two API instances (or a reconnect landing on a different
+  // replica) could each try to finalize the same session. Gate the write on the
+  // row still being open — only one conditional UPDATE flips a row out of
+  // active/abandoned, so a second finalize is a no-op instead of a double record.
+  const { data: won } = await db.schema("edu").from("assessment_sessions").update({
+    status:             summary.verdict === "terminated" ? "terminated" : "completed",
+    assessment_score:   summary.assessmentScore,
+    cheat_probability:  snap.peakProbability,
+    final_verdict:      summary.verdict,
+    verdict_detail:     summary.verdictDetail,
+    cheat_events:       state.cheatEvents,
+    proctoring_signals: snap,
+    completed_at:       new Date().toISOString(),
+    updated_at:         new Date().toISOString(),
+  }).eq("id", state.dbId).in("status", ["active", "abandoned"]).select("id").maybeSingle();
+  if (!won) console.warn(`[assessment complete] session ${state.dbId} already finalized — skipping duplicate write`);
+}
+
+async function _markStatus(state, status) {
+  if (!state.dbId) return;
+  await db.schema("edu").from("assessment_sessions").update({
+    status, updated_at: new Date().toISOString(),
+  }).eq("id", state.dbId);
+}
+
+async function _storeReference(studentId, image) {
+  const buffer = Buffer.from(_stripDataUrl(image), "base64");
+  const path = `assessment-refs/${studentId}/${Date.now()}.jpg`;
+  const { error } = await db.storage.from("training-assets")
+    .upload(path, buffer, { contentType: "image/jpeg", upsert: true });
+  if (error) throw error;
+  const { data } = db.storage.from("training-assets").getPublicUrl(path);
+  return data?.publicUrl || null;
+}
+
+function _stripDataUrl(s) {
+  return typeof s === "string" ? s.replace(/^data:image\/\w+;base64,/, "") : s;
+}
+
+export { assessments };

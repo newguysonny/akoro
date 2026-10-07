@@ -1,0 +1,183 @@
+/*
+ * tailwind.css — Akoro design system component layer.
+ *
+ * The classes here are a 1:1 conversion of the component CSS in
+ * reference/Admin-Tiers & Credits prototype page.md (Nunito / purple #6C3BFF,
+ * radius 18/10, surface #FFFFFF on bg #FAFAFC, border #E7E4F0). They are
+ * namespaced ak-* so they cannot collide with the console's pre-existing
+ * inline-style design system. Preflight is disabled in tailwind.config.js.
+ *
+ * Pages opt in by rendering inside an element with class "ak-page".
+ */
+
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  /* ── page scaffolding ─────────────────────────────────────────────────── */
+  .ak-page {
+    @apply font-nunito text-akoro-ink text-[0.95rem];
+    max-width: 980px;
+  }
+  .ak-h1     { @apply text-2xl font-extrabold m-0 mb-1; }
+  .ak-sub    { @apply text-akoro-dim m-0 mb-7 text-[0.95rem]; }
+  .ak-section-title { @apply text-base font-extrabold mt-[26px] mb-3; }
+
+  /* ── subtabs (Learner / School) ───────────────────────────────────────── */
+  .ak-subtabs { @apply flex gap-1.5 mb-[18px] bg-akoro-bg p-1 rounded-akorosm w-fit; }
+  .ak-subtab  { @apply px-[18px] py-2 border-0 bg-transparent rounded-lg font-bold text-[0.88rem] text-akoro-dim cursor-pointer; }
+  .ak-subtab:hover { @apply text-akoro-ink; }
+  .ak-subtab-active { @apply bg-akoro-surface text-akoro-purple shadow-subtab; }
+
+  /* ── tables ───────────────────────────────────────────────────────────── */
+  .ak-table  { @apply w-full bg-akoro-surface rounded-akoro border border-akoro-line border-collapse overflow-hidden; }
+  .ak-table th { @apply py-3.5 px-4 text-left text-[0.78rem] font-bold uppercase tracking-[0.03em] text-akoro-dim border-b border-akoro-line; }
+  .ak-table td { @apply py-3.5 px-4 text-left text-[0.9rem] border-b border-akoro-line align-middle; }
+  .ak-table tbody tr:last-child td { @apply border-b-0; }
+  .ak-table tr.ak-clickable { @apply cursor-pointer; }
+  .ak-table tr.ak-clickable:hover td { @apply bg-akoro-purplesoft; }
+  .ak-tier-name { @apply font-bold; }
+
+  /* ── badges & tags ────────────────────────────────────────────────────── */
+  .ak-badge { @apply inline-block py-[3px] px-2.5 rounded-full text-[0.75rem] font-bold; }
+  .ak-badge-free  { @apply bg-akoro-purplesoft text-akoro-purple; }
+  .ak-badge-paid  { @apply bg-akoro-coralsoft text-akoro-coral; }
+  .ak-badge-archived { @apply bg-akoro-bg text-akoro-dim border border-dashed border-akoro-line; }
+
+  .ak-tag { @apply text-[0.75rem] px-[9px] py-[3px] rounded-full bg-akoro-purplesoft text-akoro-purple font-semibold; }
+  .ak-tag-none { @apply text-akoro-dim bg-akoro-bg border border-dashed border-akoro-line; }
+  .ak-tags { @apply flex flex-wrap gap-1.5; }
+
+  /* ── price cells ──────────────────────────────────────────────────────── */
+  .ak-price-cell { @apply font-bold; }
+  .ak-price-free { @apply text-akoro-dim font-semibold; }
+  .ak-price-row  { @apply flex gap-2 items-center flex-wrap; }
+
+  .ak-diff-line { @apply text-[0.85rem]; }
+  .ak-diff-old  { @apply text-akoro-dim line-through; }
+  .ak-diff-new  { @apply text-akoro-green font-bold; }
+
+  /* ── inputs ───────────────────────────────────────────────────────────── */
+  .ak-credit-input {
+    @apply w-[90px] py-[7px] px-2.5 rounded-akorosm border border-akoro-line
+           bg-akoro-bg text-akoro-ink font-bold text-[0.9rem];
+    font-family: inherit;
+  }
+  .ak-credit-input:focus { outline: 2px solid #6C3BFF; outline-offset: 1px; }
+
+  .ak-input, .ak-select {
+    @apply w-full py-[9px] px-3 rounded-akorosm border border-akoro-line
+           bg-akoro-bg text-akoro-ink text-[0.92rem];
+    font-family: inherit;
+  }
+  .ak-select { @apply text-[0.9rem]; }
+  .ak-input:focus, .ak-select:focus { outline: 2px solid #6C3BFF; outline-offset: 1px; }
+
+  /* ── buttons ──────────────────────────────────────────────────────────── */
+  .ak-btn {
+    @apply py-2.5 px-[18px] rounded-akorosm border-0 bg-akoro-purple text-white
+           font-bold text-[0.88rem] cursor-pointer;
+    font-family: inherit;
+  }
+  .ak-btn:hover { opacity: 0.92; }
+  .ak-btn-ghost { @apply bg-transparent border border-akoro-line text-akoro-ink; }
+  .ak-btn-small { @apply py-[7px] px-[13px] text-[0.8rem]; }
+  .ak-btn-danger { @apply bg-transparent border border-akoro-coralborder text-akoro-coral; }
+  .ak-detail-actions { @apply flex gap-2 flex-wrap; }
+
+  .ak-toolbar { @apply flex justify-between items-center mb-4; }
+
+  /* ── cards & settings ─────────────────────────────────────────────────── */
+  .ak-card { @apply bg-akoro-surface border border-akoro-line rounded-akoro p-[18px]; }
+  .ak-settings-card { @apply bg-akoro-surface border border-akoro-line rounded-akoro p-5 max-w-[420px]; }
+
+  /* ── forms ────────────────────────────────────────────────────────────── */
+  .ak-field { @apply mb-3.5; }
+  .ak-field > label { @apply block text-[0.8rem] font-bold text-akoro-dim mb-[5px]; }
+  .ak-field-row { @apply flex gap-3; }
+  .ak-field-row .ak-field { @apply flex-1; }
+
+  .ak-feature-checks { @apply flex flex-col gap-1.5 text-left; }
+  .ak-feature-checks label { @apply flex items-center gap-[7px] text-[0.82rem] font-semibold text-akoro-ink cursor-pointer; }
+
+  /* ── overlay / modal ──────────────────────────────────────────────────── */
+  .ak-overlay {
+    @apply fixed inset-0 z-30 flex items-center justify-center p-5;
+    background: rgba(20, 17, 30, 0.45);
+  }
+  .ak-modal { @apply bg-akoro-surface rounded-akoro p-[26px] w-full max-w-[420px]; }
+  .ak-modal h2 { @apply m-0 mb-[18px] text-[1.15rem] font-extrabold; }
+  .ak-modal-actions { @apply flex justify-end gap-2.5 mt-2; }
+
+  /* ── save toast ───────────────────────────────────────────────────────── */
+  .ak-save-toast {
+    @apply fixed bottom-6 right-6 py-2.5 px-[18px] rounded-akorosm text-[0.85rem]
+           font-semibold z-20 pointer-events-none;
+    background: #221D33; color: #FAFAFC;
+    opacity: 0; transform: translateY(8px); transition: opacity 0.25s, transform 0.25s;
+  }
+  .ak-save-toast-show { opacity: 1; transform: translateY(0); }
+
+  /* ── cards (pilot schools) ────────────────────────────────────────────── */
+  .ak-cards { @apply grid gap-3.5; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+  .ak-card { @apply bg-akoro-surface border border-akoro-line rounded-akoro p-[18px]; }
+  .ak-card h3 { @apply m-0 mb-[3px] text-[1.02rem] font-extrabold; }
+  .ak-card-clickable { @apply cursor-pointer transition-colors; }
+  .ak-card-clickable:hover { @apply border-akoro-purple; }
+  .ak-card-status { @apply text-[0.78rem] font-bold mb-3; }
+  .ak-card-status-active { @apply text-akoro-green; }
+  .ak-card-status-ended { @apply text-akoro-dim; }
+  .ak-card-row { @apply flex justify-between text-[0.85rem] py-[5px] text-akoro-dim; }
+  .ak-card-row span:last-child { @apply text-akoro-ink font-semibold; }
+
+  /* ── alert banner ─────────────────────────────────────────────────────── */
+  .ak-alert-banner { @apply flex flex-col gap-2 mb-[18px]; }
+  .ak-alert-item {
+    @apply flex items-center gap-2.5 py-[11px] px-4 rounded-akorosm text-[0.85rem]
+           font-semibold bg-[#FFF1EE] border border-[#FFD6CB] text-[#A6402B];
+  }
+  .ak-alert-item-info { @apply bg-akoro-purplesoft border-[#DCD0FF] text-akoro-purple; }
+  .ak-alert-item button { @apply ml-auto bg-transparent border-0 font-bold text-[0.8rem] cursor-pointer underline; font-family: inherit; color: inherit; }
+
+  /* ── filters + pagination ─────────────────────────────────────────────── */
+  .ak-filters { @apply flex gap-2.5 mb-4 flex-wrap; }
+  .ak-filters input[type="text"] { @apply flex-1 min-w-[160px] py-[9px] px-3 rounded-akorosm border border-akoro-line bg-akoro-surface text-akoro-ink text-[0.88rem]; font-family: inherit; }
+  .ak-filters select { @apply py-[9px] px-3 rounded-akorosm border border-akoro-line bg-akoro-surface text-akoro-ink text-[0.88rem]; font-family: inherit; }
+  .ak-pagination { @apply flex justify-center gap-1.5 mt-4; }
+  .ak-pagination button {
+    @apply w-8 h-8 rounded-akorosm border border-akoro-line bg-akoro-surface text-akoro-ink
+           font-bold text-[0.85rem] cursor-pointer;
+    font-family: inherit;
+  }
+  .ak-pagination button.ak-page-active { @apply bg-akoro-purple border-akoro-purple text-white; }
+  .ak-pagination button:disabled { @apply opacity-40 cursor-default; }
+
+  /* ── detail view pieces ───────────────────────────────────────────────── */
+  .ak-back-link { @apply bg-transparent border-0 text-akoro-dim font-bold text-[0.85rem] cursor-pointer p-0 mb-3.5; font-family: inherit; }
+  .ak-back-link:hover { @apply text-akoro-purple; }
+  .ak-detail-head { @apply flex justify-between items-start mb-6; }
+  .ak-stat-row { @apply flex gap-3.5 mb-[26px] flex-wrap; }
+  .ak-stat { @apply bg-akoro-surface border border-akoro-line rounded-akoro py-4 px-5 min-w-[150px]; }
+  .ak-stat .ak-stat-label { @apply text-[0.75rem] text-akoro-dim font-bold uppercase tracking-[0.03em] mb-1.5; }
+  .ak-stat .ak-stat-value { @apply text-[1.3rem] font-extrabold; }
+  .ak-name-edit { @apply flex gap-2 items-center; }
+  .ak-name-edit input { @apply text-[1.4rem] font-extrabold py-1 px-2 rounded-akorosm border border-akoro-line bg-akoro-bg text-akoro-ink; font-family: inherit; }
+  .ak-date-input { @apply py-[7px] px-2.5 rounded-akorosm border border-akoro-line bg-akoro-bg text-akoro-ink font-bold text-[0.9rem]; font-family: inherit; }
+  .ak-date-input:focus { outline: 2px solid #6C3BFF; outline-offset: 1px; }
+
+  /* ── billing (subscriptions / customers / invoices) ────────────────────── */
+  .ak-badge-s-active   { @apply bg-akoro-greensoft text-akoro-green; }
+  .ak-badge-s-trial    { @apply bg-akoro-purplesoft text-akoro-purple; }
+  .ak-badge-s-past_due { @apply bg-akoro-coralsoft text-akoro-coral; }
+  .ak-badge-s-paused   { @apply bg-akoro-amber text-[#A8770B]; }
+  .ak-badge-s-canceled { @apply bg-akoro-bg text-akoro-dim border border-dashed border-akoro-line; }
+  .ak-badge-i-draft { @apply bg-akoro-bg text-akoro-dim border border-dashed border-akoro-line; }
+  .ak-badge-i-open  { @apply bg-akoro-purplesoft text-akoro-purple; }
+  .ak-badge-i-paid  { @apply bg-akoro-greensoft text-akoro-green; }
+  .ak-badge-i-void  { @apply bg-akoro-bg text-akoro-dim line-through; }
+
+  .ak-link-btn { @apply bg-transparent border-0 p-0 font-bold text-[inherit] text-akoro-purple cursor-pointer underline; font-family: inherit; }
+  .ak-overdue  { @apply text-akoro-coral font-bold; }
+  .ak-notes-box { @apply w-full py-2.5 px-3 rounded-akorosm border border-akoro-line bg-akoro-bg text-akoro-ink text-[0.9rem]; font-family: inherit; resize: vertical; }
+  .ak-table td.ak-num, .ak-table th.ak-num { @apply text-right; }
+}

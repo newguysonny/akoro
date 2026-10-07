@@ -1,0 +1,824 @@
+# Akoro Study-Prep — Master Plan (v7)
+
+Supersedes v6. Written after a full read of the codebase. Corrects the
+workspace location, replaces the designed context registry with the actual
+`manifest.mjs`, documents every MD file that exists, updates the "what's
+built" inventory, and identifies the two remaining gaps: operation-level
+context switching and the streaming chat UI (SSE + client).
+
+**Legend:** ✅ built and read in code · 🟡 exists, needs change · 🆕 not yet
+built · ❓ not verified.
+
+---
+
+## 1. The idea in one paragraph
+
+A learner asks to prepare for a test. A **study agent** (LLM) decides what to
+look at next, calls a tool, and reads what comes back. A **harness** (code)
+decides whether each call is allowed, then performs it. A **deterministic
+education engine** (code) scores, applies thresholds, writes state and
+evidence. A **context manager** (platform module) selects the minimum set of
+MD files for the current operation and assembles the LLM's system prompt. The
+agent never touches state, money or scores directly. The learner watches the
+whole process stream live as collapsible thinking blocks, collapsible tool
+groups, and plain-text activity messages.
+
+```
+ akoro-agent/ workspace (md, versioned)    learner state (DB)
+          │                                       │
+          ▼                                       ▼
+   ┌──────────────────┐               ┌──────────────────────┐
+   │  CONTEXT MANAGER │               │  dynamic learner     │
+   │  manifest.mjs    │               │  context (tools/DB)  │
+   │  setName=op      │               └──────────┬───────────┘
+   └────────┬─────────┘                          │
+            └─────────────────┬──────────────────┘
+                              ▼
+                      ┌───────────────┐
+                      │  STUDY AGENT  │  reasons, picks the next tool
+                      └───────┬───────┘
+                              │ structured action (+ bounded intent)
+                              ▼
+                      ┌───────────────┐
+                      │    HARNESS    │  permissions, schema, budget,
+                      │   harness.js  │  state, concurrency, idempotency
+                      └───────┬───────┘
+              reject ◄────────┴───────► execute
+                │                          │
+                │                          ▼
+                │                ┌────────────────────┐
+                │                │  EDUCATION ENGINE  │  score, threshold,
+                │                │  education-engine  │  transitions, evidence
+                │                └──────────┬─────────┘
+                └──────────────────┬────────┘
+                                   ▼
+                              OBSERVATION ──► back to agent
+                                   │
+                                   ▼
+                              REST poll / SSE → CLIENT UI   🆕 SSE not yet built
+```
+
+---
+
+## 2. Non-negotiables
+
+1. **The LLM proposes; the harness disposes; the database confirms.**
+2. **Scores, thresholds, transitions and mastery are never LLM decisions.**
+3. **No coins spent before the learner confirms the plan.**
+4. **The learner owns two gates:** confirming the plan, and confirming teach-back.
+5. **Instructions guide; limits live in code.**
+6. **Learner data lives in the database**, never in MD files.
+7. **No chain-of-thought is stored.** Reasoning tokens stream ephemerally and
+   are never written to events.
+8. **The agent only runs inside a session the learner started, on a trigger.**
+9. **Approved content only.** No open web.
+10. **Closing claims stay inside the evidence:** "demonstrated on generated
+    practice", never "mastered the term".
+11. **No backend names reach the client.** Tool function names, parameter
+    syntax, and system identifiers never appear in the UI.
+12. **Context is assembled per LLM loop**, not once per session.
+
+---
+
+## 3. The canonical 6-layer model
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  1. STUDY SESSION WORKFLOW                              │
+│     planning · awaiting_confirmation · topic_active     │
+│     replanning · paused · completed · abandoned         │
+│     Answers: WHERE ARE WE IN THE SESSION?              │
+└──────────────────────┬──────────────────────────────────┘
+                       ▼
+┌─────────────────────────────────────────────────────────┐
+│  2. TOPIC / RUN WORKFLOW                                │
+│     queued · active · understood · flagged_gap          │
+│     capped_out · deferred                               │
+│     Answers: WHAT LEARNING PHASE IS THIS TOPIC IN?     │
+└──────────────────────┬──────────────────────────────────┘
+                       ▼
+┌─────────────────────────────────────────────────────────┐
+│  3. AGENT LOOP                                          │
+│     Reason → Act → Observe → Reason → ...              │
+│     Bounded: maxIterations = 6 (POLICY constant).      │
+│     Answers: WHAT SHOULD HAPPEN NEXT?                  │
+└──────────────────────┬──────────────────────────────────┘
+                       ▼
+┌─────────────────────────────────────────────────────────┐
+│  4. CONTEXT MANAGER                                     │
+│     manifest.mjs: setName → file list → assembled sys  │
+│     Answers: WHAT SHOULD THE LLM SEE FOR THIS STEP?   │
+└──────────────────────┬──────────────────────────────────┘
+                       ▼
+┌─────────────────────────────────────────────────────────┐
+│  5. HARNESS                                             │
+│     harness.js: permissions, schema, state, budget,     │
+│     concurrency, idempotency                            │
+│     Answers: IS THIS ACTION ALLOWED? EXECUTE IT.       │
+└──────────────────────┬──────────────────────────────────┘
+                       ▼
+┌─────────────────────────────────────────────────────────┐
+│  6. DETERMINISTIC EDUCATION ENGINE                      │
+│     education-engine.js: scoring, thresholds, mastery   │
+│     evidence, state transitions, attempt limits         │
+│     Answers: WHAT ACTUALLY HAPPENED? RECORD IT.        │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 4. State machines — two levels
+
+### 4.1 Session state machine (`state-machine.js`) ✅
+
+```
+planning → awaiting_confirmation → topic_active ⇄ replanning
+                                       │
+                                    paused → topic_active | planning | replanning
+                                       │
+                                 completed | abandoned | cancelled
+```
+
+### 4.2 Topic / run state machine (`state-machine.js`) ✅
+
+```
+queued → active → understood
+                → flagged_gap → queued (re-queued by replan)
+                → capped_out → deferred → queued
+                → deferred
+```
+
+### 4.3 Policy constants (`state-machine.js → POLICY`) ✅
+
+```javascript
+MAX_TOPICS: 12
+DEFAULT_MAX_ATTEMPTS: 3        // policy table may override
+CRAM_MAX_ATTEMPTS: 1
+PASS_THRESHOLD: 0.70           // policy table may override
+MAX_ITERATIONS_PER_STEP: 6     // harness constant, not a model choice
+SESSION_TOOL_CALL_CAP: 40
+DEFERRED_RETRIES_PER_SESSION: 1
+INTENT_MAX_CHARS: 240
+```
+
+### 4.4 Rejection codes (`state-machine.js → REJECTION_CODES`) ✅
+
+`study_prep_disabled` · `session_not_found` · `tool_not_permitted` ·
+`tool_schema_invalid` · `invalid_state_transition` · `attempt_cap_exceeded` ·
+`strategy_not_permitted` · `prerequisite_violation` · `topic_not_in_syllabus` ·
+`plan_too_large` · `duplicate_topic` · `deferred_retry_used` ·
+`insufficient_balance` · `teach_back_gate` · `agent_loop_cap` ·
+`session_tool_call_cap` · `unknown_action`
+
+### 4.5 Decision nodes (`state-machine.js → DECISION_NODES`) ✅
+
+`harness_rejection` · `plan_validated` · `plan_confirmed` · `plan_adjusted` ·
+`topic_started` · `practice_generated` · `practice_scored` ·
+`strategy_offered` · `teach_back_confirmed` · `topic_advanced` ·
+`topic_deferred` · `topic_flagged` · `session_concluded` · `session_paused`
+
+---
+
+## 5. How the agent loop runs
+
+The loop is **durable and wake-driven** (`agent-loop.js` + `wiring.js`).
+
+| Wake trigger | Fired by | Agent decides |
+|---|---|---|
+| `session_started` | Learner prompt / `start_study_prep_session` tool | Research, then propose plan |
+| `plan_confirmed` | Learner taps Approve (`POST /confirm`) | Which topic first |
+| `attempt_scored` | Server scoring (`POST /submit`) | Only at decision points |
+| `teachback_confirmed` | Learner taps done (`POST /teach-back-done`) | Retest |
+| `replan_requested` | Learner (`POST /plan`) | Reorder or drop topics |
+| `budget_paused` / `resumed` | Wallet event | Continue or close |
+
+**Fast path — no model wake needed:**
+
+| Situation | Who acts |
+|---|---|
+| Score ≥ threshold → advance | Harness (`advanceTopic`) |
+| Teach-back confirmed → retest | Harness (`confirmTeachBack`) |
+| Score < threshold, attempts left | **Agent** |
+| Attempts exhausted | **Agent** |
+| All topics settled → summary | **Agent** (`concludeSession`) |
+
+---
+
+## 6. What is already built
+
+### 6.1 Core study-prep backend ✅
+
+| File | What it does |
+|---|---|
+| `study-prep/state-machine.js` | Two-level state machines, POLICY constants, rejection codes, validatePlan, teachBackGate, attemptCapGate |
+| `study-prep/harness.js` | The sole writer of session/topic state. createHarness(), createSession, proposePlan, confirmPlan, adjustPlan, startTopicPractice, submitPractice, confirmTeachBack, advanceTopic, deferTopic, retryDeferredTopic, concludeSession, pauseSession, resumeSession, cancelSession, sessionNext, getSessionView |
+| `study-prep/education-engine.js` | scoreAttempt, applyThreshold, topicOutcome, masteryWriteBack, estimateSessionCost, STRATEGY_LIBRARY, isPermittedStrategy, STUDY_PREP_COST |
+| `study-prep/agent-loop.js` | runAgentStep (bounded at 6 iterations), observationFor, replayableEvents |
+| `study-prep/llm-agent.js` | makeLlmAgent — the production LLM adapter |
+| `study-prep/narration.js` | deliberate() over DECISION_NODES enum with typed facts. PURE + snapshot-tested. pauseCopy() |
+| `study-prep/events.js` | makeEvent, stampThoughtType, publicEvent |
+| `study-prep/routes.js` | Full REST surface: 15 endpoints covering the full lifecycle |
+| `study-prep/store.js` | Supabase store (all DB writes go here) |
+| `study-prep/wiring.js` | Production composition: harness + store + topic-workflow + syllabus + LLM agent |
+| `study-prep/context-manager.js` | Shim → delegates to `modules/agent-context/context-manager.js` |
+| `study-prep/syllabus-resolver.js` | resolveTopics, prerequisiteEdges |
+| `study-prep/workflow-grouping.js` | Groups exam-prep runs by study-prep session |
+| `study-prep/read-tools.js` | resolveSyllabusTool, getLearnerState, getLearnerHistory, getRelevantMemory, getPrerequisites, searchContent, makeSessionStateReader |
+| `exam-prep-service.js` | startExamPrepRun, submitExamPrepAttempt, startExamPrepRetest, generateExamPrepAttempt, examPrepPolicyFor, scoreSubmission, nextRunStatus — extracted from the router |
+| `exam-prep-confidence.js` | HTTP surface only (auth + envelope); all behaviour in exam-prep-service.js |
+| `adaptive-workflows.js` | Workflow lifecycle; grouped by session via workflow-grouping |
+
+### 6.2 Platform context manager ✅
+
+| File | What it does |
+|---|---|
+| `modules/agent-context/context-manager.js` | loadContext(setName), loadDoctrine(file), contextVersion(), clearContextCache(), preflight(). WORKSPACE_ROOT = `../../akoro-agent` |
+| `modules/agent-context/manifest.mjs` | SETS object — the authoritative registry of all context sets (see §7) |
+| `modules/agent-context/personas/` | nana-esumai.js, sargeant.js, student-clone.js, student.js, trained.js |
+| `modules/agent-context/template.js` | Template rendering |
+| `modules/agent-context/chat-doctrine.js` | Chat doctrine assembly |
+
+### 6.3 Chat tools ✅
+
+In `chat.js` `CHAT_TOOLS` array:
+- `start_study_prep_session` — `featureGate: "study_prep"` — calls `wiring.js:startStudyPrepSession`
+- `get_study_prep_session` — `featureGate: "study_prep"` — calls `chat-tool-handlers.js:getStudyPrepSessionSummary`
+
+`AKORO_STUDY_PREP_ENABLED` flag exists. `runAgentToolLoop` iteration cap is
+still 3 globally (900 `max_tokens`) — needs raising for planning turns.
+
+### 6.4 Contract tests ✅
+
+`agent-loop.contract.test.mjs` · `contextLayer.contract.test.mjs` ·
+`deliberateNarration.snapshot.test.mjs` · `events.contract.test.mjs` ·
+`harness.contract.test.mjs` · `state-machine.contract.test.mjs` ·
+`workflow-grouping.contract.test.mjs`
+
+---
+
+## 7. Context layer — actual state
+
+### 7.1 Workspace location (corrected from v6)
+
+```
+akoro-api/akoro-agent/          ← WORKSPACE_ROOT (not modules/study-agent/workspace/)
+```
+
+### 7.2 Complete MD file inventory
+
+Every file that exists. Files marked 🔗 are in the manifest; others are
+adopted in their own set.
+
+```
+akoro-agent/
+│
+├── AGENT.md                        🔗 planning, research, teaching, reflection,
+│                                      strategies, safety (anchors every set)
+│
+├── identity/
+│   └── SOUL.md                     🔗 chat_student, persona_student,
+│                                      persona_student_agent, persona_trained
+│
+├── channels/
+│   ├── CHAT.md                     🔗 chat_student, chat_instructor, voice_session
+│   ├── CHAT_INSTRUCTOR.md          🔗 chat_instructor, voice_session
+│   ├── CHAT_STUDENT.md             🔗 chat_student, voice_session
+│   ├── MODE_RESEARCH.md            🔗 chat_student, chat_instructor
+│   ├── MODE_THINK.md               🔗 chat_student, chat_instructor
+│   ├── SPEECH.md                   🔗 voice_session
+│   └── STUDY_PREP.md               🔗 chat_student ← channel instruction for
+│                                      starting/reading study-prep sessions
+│
+├── learning/
+│   ├── LEARNING.md                 🔗 planning, teaching
+│   ├── TEACHING.md                 🔗 teaching
+│   ├── ASSESSMENT.md               🔗 reflection
+│   └── MASTERY.md                  🔗 teaching, reflection
+│
+├── memory/
+│   ├── MEMORY.md                   🔗 chat_student ← curated agent wisdom
+│   │                                  (evaporation/transpiration pairs, etc.)
+│   └── DURABLE_MEMORY.md           🔗 chat_student ← how to answer "do you remember"
+│
+├── policies/
+│   ├── EDUCATION_RULES.md          🔗 planning, research, reflection, strategies
+│   ├── TOOL_RULES.md               🔗 strategies
+│   ├── SAFETY.md                   🔗 safety
+│   ├── AGENT_CHAT.md               🔗 chat_student, chat_instructor
+│   ├── HITL_DRAFTS.md              🔗 chat_instructor
+│   └── TOOL_OBSERVATIONS.md        🔗 chat_student
+│
+├── reasoning/
+│   ├── INSPECTION.md               🔗 research
+│   ├── PLANNING.md                 🔗 planning
+│   ├── RESEARCH.md                 🔗 research
+│   └── REASONING.md                🔗 reflection
+│
+├── strategies/
+│   └── STRATEGIES.md               🔗 strategies
+│
+└── agents/
+    ├── nana-esumai/ (11 files)     🔗 persona_nana
+    ├── sargeant/ (8 files)         🔗 persona_sargeant
+    ├── student-clone/ (2 files)    🔗 persona_student
+    ├── student/ (6 + 5 files)      🔗 persona_student_agent
+    └── trained/ (8 files)          🔗 persona_trained
+```
+
+### 7.3 The actual context registry — `manifest.mjs` ✅
+
+The manifest is the source of truth. Do not maintain a parallel registry.
+
+**Study-prep sets (mode: `joined` — `loadContext(setName)`):**
+
+| Set name | Files loaded | Used when |
+|---|---|---|
+| `planning` | AGENT.md · learning/LEARNING.md · reasoning/PLANNING.md · policies/EDUCATION_RULES.md | Planning and replanning steps |
+| `research` | AGENT.md · reasoning/RESEARCH.md · reasoning/INSPECTION.md · policies/EDUCATION_RULES.md | Researching syllabus, state, history |
+| `teaching` | AGENT.md · learning/LEARNING.md · learning/TEACHING.md · learning/MASTERY.md | Intervention steps |
+| `reflection` | AGENT.md · learning/ASSESSMENT.md · learning/MASTERY.md · reasoning/REASONING.md | After a score arrives |
+| `strategies` | AGENT.md · strategies/STRATEGIES.md · policies/TOOL_RULES.md | Strategy selection |
+| `safety` | AGENT.md · policies/SAFETY.md | Safety-critical steps |
+
+**Agent chat sets (mode: `verbatim` — `loadDoctrine(file)` per file):**
+
+| Set name | Consumer |
+|---|---|
+| `chat_student` | Agent chat student role |
+| `chat_instructor` | Agent chat instructor copilot |
+| `voice_session` | Voice session bootstrap |
+| `persona_nana` | NaNa Esumai learning guide |
+| `persona_sargeant` | Sargeant assessment gate |
+| `persona_student` | Student-clone reply + analysis |
+| `persona_student_agent` | Student Agent protégé (P2b flagship) |
+| `persona_trained` | Trained teacher agents |
+
+**`PENDING_ADOPTION`:** currently empty — all workspace files are in a set.
+
+### 7.3a Operation → set → pill mapping (canonical)
+
+Two vocabularies exist in this codebase: the **manifest set names** (what
+actually loads context) and the **UI pill types** (what the client renders).
+They do not map 1:1 and that mismatch will cause drift if left implicit.
+
+**The manifest set name is canonical.** The UI pill is derived from it.
+The loop's operation-detection logic must speak in set names; the SSE emitter
+translates to pills before sending to the client.
+
+| Manifest set | When the agent uses it | UI pill | Thought_type |
+|---|---|---|---|
+| `research` | Gathering syllabus, learner state, history, prerequisites | `research` | `research` |
+| `planning` | Building or revising the study plan | `draft` | `draft` |
+| `safety` | Safety-critical validation steps | `verification` | `verification` |
+| `teaching` | Executing an intervention or starting a topic | `action` | `action` |
+| `strategies` | Choosing a strategy after a gap | `action` | `action` |
+| `reflection` | Reviewing a score or deciding what's next | `reflection` | `reflection` |
+| *(session.complete)* | Closing summary — no set switch needed | `synthesis` | `synthesis` |
+
+**Key consequences:**
+- `teaching` and `strategies` both map to the `action` pill. That is correct —
+  from the learner's perspective both are "the system doing something." The
+  distinction only matters internally (which files are loaded).
+- `safety` maps to `verification` because the learner sees a rules check, not
+  a context load.
+- `synthesis` has no manifest set of its own today. When `session.complete` is
+  called, the loop stays in `reflection` context. If a `summary` set is needed
+  later, add it to the manifest and update this table.
+- The SSE `tool_row` event carries `type` (the pill name, derived here) — the
+  loop never sends a raw set name to the client.
+
+**Derivation function (add to `sse.js`):**
+
+```javascript
+const SET_TO_PILL = {
+  research:   'research',
+  planning:   'draft',
+  safety:     'verification',
+  teaching:   'action',
+  strategies: 'action',
+  reflection: 'reflection',
+};
+
+function pillFromSet(setName) {
+  return SET_TO_PILL[setName] ?? 'research';
+}
+```
+
+### 7.4 Context assembly
+
+```
+SET = manifest.mjs[setName].files        (required — boot preflight checks these)
+extras = optional runtime additions      (dynamic, optional, not boot-checked)
+
+For each file: read → cache → size-check (MAX_FILE_BYTES: 8 192)
+Assembled: "# path\ncontent\n---\n..." (MAX_CONTEXT_BYTES: 24 576)
+```
+
+Context is assembled **per LLM loop** using `loadContext(setName)`.
+
+### 7.5 Gap: operation-level context switching 🆕
+
+The `wiring.js` currently calls `buildAgentContext({ setName: "planning" })`
+only. The manifest defines 6 study-prep sets but the loop only uses one.
+
+The study-prep sets `research`, `teaching`, `reflection`, `strategies`,
+`safety` exist and are tested but are **not yet wired to specific operations
+in the agent loop**. The loop needs to select the right set name based on the
+current operation detected from the observation.
+
+This is the **highest-priority remaining backend gap**.
+
+### 7.6 Adding new MD files
+
+1. Create the file in the workspace (≤ 8 192 bytes).
+2. Add it to a set in `manifest.mjs`.
+3. The agent loop does not change. The harness does not change.
+4. The boot preflight catches missing required files on next deploy.
+
+### 7.7 Adding an operation
+
+An **operation** is a fully wired unit. Adding only one of its parts produces
+a dormant or broken partial — the most common way this architecture drifts.
+
+An operation has five parts. All five must be in place before it is live:
+
+| Part | What it is | Where it lives |
+|---|---|---|
+| **Set** | The manifest.mjs entry listing which MD files to load | `manifest.mjs` |
+| **Trigger** | The observation type or decision node that activates this set | `wiring.js` operation-detection logic |
+| **Permitted tools** | The tool list the harness exposes in this state | `harness.js` / state-machine tool gating |
+| **Decision nodes** | The `DECISION_NODES` values this operation can produce | `state-machine.js` |
+| **Pill mapping** | The UI pill derived from this set name | `sse.js:pillFromSet` + §7.3a table |
+
+**Adding only the set (§7.6) produces a dormant operation.** The set exists
+in the manifest and passes boot preflight, but the loop never selects it
+because no trigger points at it. This is the current state of `teaching`,
+`reflection`, `strategies`, and `safety` — all defined, all dormant (§7.5).
+
+**Adding a new role or persona is not an operation.** A role that has its
+own state, gates, truth, and lifecycle is a **second agent**. If you catch
+yourself designing a role that needs its own session state machine, its own
+harness checks, or its own set of decision nodes that don't appear in
+`DECISION_NODES` — stop. That is a second agent. It must reuse the six-layer
+model from §3, not be bolted onto an existing operation.
+
+The "just add a set" instinct is the single most likely way this architecture
+drifts into an unclosed operation enum. Use the five-part checklist above.
+
+---
+
+## 8. Tools
+
+### 8.1 Agent-callable (study-prep loop)
+
+| Tool | Backed by | Phase |
+|---|---|---|
+| `resolveSyllabus` | `read-tools.js:resolveSyllabusTool` | planning |
+| `getLearnerState` | `read-tools.js:getLearnerState` | planning, topic |
+| `getLearnerHistory` | `read-tools.js:getLearnerHistory` | planning, topic |
+| `getRelevantMemory` | `read-tools.js:getRelevantMemory` | planning, topic |
+| `getPrerequisites` | `read-tools.js:getPrerequisites` | planning |
+| `searchContent` | `read-tools.js:searchContent` (disabled in current loop) | planning, topic |
+| `getSessionState` | `read-tools.js:makeSessionStateReader(harness)` | all |
+| `propose_plan` | `harness.proposePlan` | planning, replan |
+| `recommend_strategy` | `harness.recommendStrategy` | topic decision |
+| `offer_teachback` | `harness.offerTeachBack` | topic decision |
+| `defer_topic` | `harness.deferTopic` | topic decision |
+| `flag_topic` | `harness.flagTopic` | topic decision |
+| `conclude_session` | `harness.concludeSession` | closing |
+
+### 8.2 Harness-only
+
+Score attempts · charge wallet · all session/topic state transitions ·
+concept evidence writes · plan confirmation · practice generation.
+
+### 8.3 Chat tools (model-callable via `CHAT_TOOLS`)
+
+- `start_study_prep_session` — creates session + runs one planning step
+- `get_study_prep_session` — read current session status for chat context
+
+---
+
+## 9. The harness (`harness.js`) ✅
+
+Full pipeline for every proposed action:
+
+| # | Check | Reject code |
+|---|---|---|
+| 1 | Session found and owned by learner | `session_not_found` |
+| 2 | Tool is permitted in current state | `tool_not_permitted` |
+| 3 | Arguments match schema | `tool_schema_invalid` |
+| 4 | State transition is valid | `invalid_state_transition` |
+| 5 | Attempt cap not exceeded | `attempt_cap_exceeded` |
+| 6 | Strategy is in the approved library | `strategy_not_permitted` |
+| 7 | Prerequisite order respected | `prerequisite_violation` |
+| 8 | Topic in approved syllabus | `topic_not_in_syllabus` |
+| 9 | Plan size ≤ 12 | `plan_too_large` |
+| 10 | No duplicate topics | `duplicate_topic` |
+| 11 | Deferred retry slot unused | `deferred_retry_used` |
+| 12 | Wallet can cover the charge | `insufficient_balance` |
+| 13 | Teach-back gate for retests | `teach_back_gate` |
+| 14 | Session tool-call cap | `session_tool_call_cap` |
+
+Rejections are returned as **observations** — the agent reads the code and
+adapts. It never retries the identical call.
+
+---
+
+## 10. Education engine (`education-engine.js`) ✅
+
+Pure functions — no DB, no LLM, no clock.
+
+- `scoreAttempt(answerKey, answers)` — deterministic scoring
+- `applyThreshold({ score, passThreshold, attemptsUsed, maxAttempts })` — `{ passed, capped, attemptsRemaining }`
+- `topicOutcome({ passed, capped })` — `understood | capped_out | retest_offered`
+- `masteryWriteBack({ currentMastery, knowledgeConfidence, score, passed, attemptsUsed })` — exponential blend
+- `estimateSessionCost({ topicCount })` — plan-card estimate
+- `STRATEGY_LIBRARY` + `isPermittedStrategy(strategy)` — the five permitted strategies
+- `STUDY_PREP_COST` — `COINS_PER_PRACTICE: 2`, `PRACTICES_PER_TOPIC: 2`, `LOOP_LLM_COINS_PER_STEP: 1`
+
+---
+
+## 11. Narration (`narration.js`) ✅
+
+`deliberate(decisionNode, facts)` — harness narration generator over the
+closed `DECISION_NODES` enum. Pure + snapshot-tested. The model never writes
+narration — the harness produces it from typed facts after each decision.
+
+`pauseCopy(reason)` — UI banner text for pause states.
+
+Templates exist for every decision node (plan_validated, plan_confirmed,
+topic_started, practice_generated, practice_scored, strategy_offered,
+teach_back_confirmed, topic_advanced, topic_deferred, topic_flagged,
+session_concluded, session_paused, harness_rejection).
+
+---
+
+## 12. State and data
+
+### 12.1 Tables (exist in DB)
+
+```sql
+study_prep_sessions
+  id, learner_id, entry_mode, scope_params jsonb,
+  status, paused_reason, active_topic_id,
+  plan jsonb, estimate jsonb,
+  policy_version text, tool_calls_used int,
+  goal, subject, class_level, exam_board,
+  created_at, updated_at, completed_at
+
+study_prep_topics
+  id, session_id, syllabus_topic_id, position, label,
+  status, attempts_used, deferred_retry_used bool,
+  flagged_reason, exam_prep_run_id, learner_confirmed_ready,
+  updated_at
+  UNIQUE (session_id, position)
+
+study_prep_events              -- append-only; agent's durable memory
+  id, session_id, topic_id,
+  sequence int UNIQUE (session_id, sequence),
+  event_type, thought_type, origin,
+  tool, action, agent_intent, decision_node,
+  narrative, facts jsonb,
+  iteration int, duration_ms, created_at
+```
+
+### 12.2 `thought_type` stamping (`events.js:stampThoughtType`)
+
+Derived from `decisionNode`, `eventType`, and `origin` — never from the model.
+
+| Source | Label |
+|---|---|
+| `eventType: agent_tool_call` | `research` |
+| `decisionNode: plan_validated | plan_adjusted` | `draft` |
+| `origin: harness` on rejection | `verification` |
+| `decisionNode: topic_started | practice_generated | strategy_offered | teach_back_confirmed | topic_advanced | topic_deferred | topic_flagged` | `action` |
+| `decisionNode: practice_scored` | `reflection` |
+| `decisionNode: session_concluded` | `synthesis` |
+
+---
+
+## 13. REST surface (`routes.js`) ✅
+
+All 15 endpoints are built. Base path: `/study-prep`.
+
+| Method | Path | What it does |
+|---|---|---|
+| POST | `/sessions` | Create session + run one planning agent step |
+| GET | `/sessions` | Restore active session (or null) |
+| GET | `/sessions/:id` | Session view (session, topics, events) |
+| POST | `/sessions/:id/plan` | Replan (runs planning step in replanning state) |
+| POST | `/sessions/:id/confirm` | Learner approves plan card |
+| POST | `/sessions/:id/adjust` | Drop topics before confirming |
+| POST | `/sessions/:id/topics/:topicId/practice` | Generate diagnostic or retest |
+| POST | `/sessions/:id/topics/:topicId/submit` | Submit answers; engine scores |
+| POST | `/sessions/:id/topics/:topicId/teach-back-done` | Learner confirms teach-back |
+| POST | `/sessions/:id/next` | What happens now (sessionNext) |
+| POST | `/sessions/:id/advance` | Advance to next topic |
+| POST | `/sessions/:id/defer` | Defer active topic |
+| POST | `/sessions/:id/retry-deferred` | Retry a deferred topic |
+| POST | `/sessions/:id/conclude` | Close the session |
+| POST | `/sessions/:id/pause` | Pause (learner or wallet) |
+| POST | `/sessions/:id/resume` | Resume a paused session |
+| POST | `/sessions/:id/cancel` | Cancel the session |
+
+**Gap:** No SSE endpoint exists. The client currently polls. The streaming
+chat UI requires a `GET /sessions/:id/stream` SSE endpoint. 🆕
+
+---
+
+## 14. Streaming chat UI 🆕
+
+This is the primary remaining work. Everything else in this section is new.
+
+### 14.1 Three-element stream pattern
+
+```
+[thinking block]      ← collapsible, auto-closes when done
+[tool group]          ← collapsible, rows stream in one at a time
+[activity message]    ← large plain text, never collapsed
+[card]                ← plan, session, score, gate — not part of trace
+```
+
+### 14.2 Thinking blocks
+
+- SSE `thinking_start` → open collapsed `<details>`, show "Thinking…"
+- SSE `thinking_delta` → append to body
+- SSE `thinking_end` → update summary to "Thought for Xs", auto-close
+- **Never stored** in events. Requires extended thinking on API calls.
+- On reload: "Thought for Xs" with no expandable body — expected.
+
+### 14.3 Tool call groups
+
+Consecutive `research` operation calls → one `tool_group` block.
+Single propose/action/synthesis calls → `tool_single` with label + timing.
+
+### 14.4 Descriptive row format — no backend names
+
+```
+[type pill]  Headline — short plain-English action
+             Description — one sentence, what is happening
+             ✓ / ✕  Result
+             [agent / system]
+```
+
+**Pill types** are derived from manifest set names via `pillFromSet()` (§7.3a).
+The loop speaks in set names; the SSE emitter translates before sending.
+
+`research` · `draft` · `verification` · `action` · `reflection` · `synthesis`
+
+Actor labels: `agent` (model decided) · `system` (platform executed)
+
+### 14.5 Activity message
+
+Model's `text` content blocks — 16px/500-weight plain text, no bubble.
+
+### 14.6 SSE event contract 🆕
+
+Endpoint: `GET /study-prep/sessions/:id/stream`
+
+```
+event: thinking_start   data: { block_index }
+event: thinking_delta   data: { block_index, text }
+event: thinking_end     data: { block_index, elapsed_ms }
+event: tool_group_open  data: { group_id, label }
+event: tool_row         data: { group_id|call_id, type, headline, description, result, actor, bad }
+event: tool_group_close data: { group_id }
+event: tool_single_open data: { call_id, label, ok, ms }
+event: tool_single_close data: { call_id }
+event: activity         data: { text }
+event: card             data: { kind: "plan"|"session"|"score"|"gate"|"summary", payload }
+event: topic_update     data: { topic_ref, status, tag }
+event: wallet_update    data: { spent, wallet, ceiling }
+event: session_update   data: { status, wakes }
+event: harness_reject   data: { code, message }
+event: done             data: {}
+```
+
+### 14.7 Client rendering rules
+
+| Event | Action |
+|---|---|
+| `thinking_*` | Open/stream/close thinking block |
+| `tool_group_*` / `tool_single_*` | Open/stream rows/close tool block |
+| `tool_row` | Append `.tl-row` inside current block |
+| `activity` | Append plain `.act` div |
+| `card` | Render plan, session, score, gate, or summary card |
+| `topic_update` | Mutate session card row in place |
+| `wallet_update` | Update session card footer |
+| `harness_reject` | Append `verification` row with `bad: true` |
+| `done` | Enable input bar |
+
+**Rebuild on reload:** reconstruct trace from events. Thinking not stored —
+blocks show "Thought for Xs" only.
+
+### 14.8 Reference artifact
+
+Simulation at **https://claude.ai/artifact/ApfA9zFV7JWK4UoJdrDik4** —
+demonstrates all 4 scenarios with the exact UI. The HTML source is the
+canonical reference for component structure, row format, and stream order.
+
+---
+
+## 15. Cost, billing, concurrency
+
+- **Estimate:** `estimateSessionCost(topicCount)` — practice + LLM loop coins.
+  Shown on plan card before confirm.
+- **Ceiling:** `min(1.5 × estimate, wallet)`. Harness refuses past it.
+- **402:** Supabase wallet check → `InsufficientBalanceError` → session pauses.
+- **Concurrency:** every harness write is conditional on expected status.
+  Race losers no-op without duplicating events.
+- **Autonomy:** agent wakes only on a trigger inside a confirmed session.
+
+---
+
+## 16. Remaining work (ordered)
+
+| # | Change | Status | Where |
+|---|---|---|---|
+| 1 | Raise `runAgentToolLoop` iteration cap to 8 for planning turns | 🟡 | `chat.js` ~L2617 |
+| 2 | Enable extended thinking on study-prep model calls | 🆕 | `chat.js` / `llm-agent.js` |
+| 3 | **Operation-level context switching** — detect operation from observation, select the matching set name | 🆕 | `wiring.js:runStudyPrepPlanningStep` + topic step |
+| 4 | **SSE endpoint** — `GET /study-prep/sessions/:id/stream` | 🆕 | `routes.js` + new `sse.js` |
+| 5 | **Client streaming UI** — thinking blocks, tool groups, activity messages, cards | 🆕 | `AgentChatTab.jsx` |
+| 6 | Plan card, session card, score ring, teach-back gate, summary components | 🆕 | New React components |
+| 7 | Session-aware wrapper around exam-prep modal | 🟡 | `ExamPrepConfidenceModal.jsx` |
+| 8 | Group workflow list by session in the UI | 🟡 | `adaptive-workflows.js` view |
+| 9 | Verify JSS1 Basic Science rows in syllabus and concept_catalog | ❓ | DB |
+| 10 | Verify real per-generation coin cost from `lib/aiPricing.js` | ❓ | `aiPricing.js` |
+
+---
+
+## 17. Acceptance tests
+
+**Already passing (contract tests exist):**
+- Harness rejection codes for every invalid action
+- State machine transitions (valid and invalid)
+- Plan validation (prerequisites, syllabus, cap, duplicates)
+- Education engine scoring, thresholds, mastery write-back
+- Narration snapshots for every decision node
+- Event stamping and thought_type derivation
+- Context layer: all sets load within budget
+
+**Still needed for new work:**
+
+**Context switching:**
+- Planning step loads `planning` set, not `research` or `teaching`
+- Teaching step loads `teaching` set when operation detected
+- Strategy step loads `strategies` set
+
+**SSE:**
+- Thinking blocks auto-close on `thinking_end`; re-expand on tap
+- Tool rows stream in one-by-one inside open group
+- Activity messages are plain text, never in a bubble
+- No function call syntax visible anywhere in the client
+- Harness rejects render as `verification` rows, red result
+- Plan card Approve disabled after tap; session card updates live
+- Reload: event log reconstructs all tool rows; thinking blocks show "Thought for Xs" only
+
+---
+
+## 18. Decisions
+
+| # | Decision | Choice |
+|---|---|---|
+| D1 | Where does the loop run? | **JS `runAgentToolLoop` / `study-prep/agent-loop.js`**. Python agent stays out. |
+| D2 | Show model-written `intent` per call? | **Yes** — bounded (240 chars), treated as untrusted display text |
+| D3 | How many workspace files? | **All of them** — they already exist. Add via manifest.mjs only. |
+| D4 | Fast path without waking the model? | **Yes** for advance and post-teach-back retest. Wake agent for strategy, cap-out, replan, summary. |
+| D5 | Plan confirmation mechanism | **REST `POST /sessions/:id/confirm`** (learner-owned gate) |
+| D6 | Iteration caps | Step: 6 (POLICY.MAX_ITERATIONS_PER_STEP). Session: 40 (POLICY.SESSION_TOOL_CALL_CAP). |
+| D7 | Deferred retry | One per session (POLICY.DEFERRED_RETRIES_PER_SESSION). New run, attempts reset. |
+| D8 | Topic cap | 12 (POLICY.MAX_TOPICS). |
+| D9 | Budget ceiling | `min(1.5 × estimate, wallet)`. 402 on zero. |
+| D10 | Strategy policy | Harness enforces `isPermittedStrategy`. Agent chooses from the 5. `STRATEGIES.md` guides. |
+| D11 | Show reasoning tokens? | **Yes** — ephemeral thinking blocks. Never stored. Extended thinking required. |
+| D12 | Backend names in UI? | **Never.** Descriptive headline + description + result only. |
+| D13 | Actor labels in UI? | **`agent`** (model decided) · **`system`** (platform executed). |
+| D14 | Thinking on reload? | "Thought for Xs" summary, no body. Expected and intentional. |
+| D15 | Group vs single tool display? | Consecutive research calls → `tool_group`. Single propose/action → `tool_single` with timing. |
+| D16 | Context assembly timing? | **Per LLM loop** via `loadContext(setName)`. Not once per session. |
+| D17 | Stable vs dynamic context? | Files in the manifest set are stable (cache candidates). Learner data is always rebuilt. |
+| D18 | MD file discovery? | `manifest.mjs` is the registry. Frontmatter discovery is not planned — the manifest contract tests enforce the closed set. |
+| D19 | Operation → set mapping? | The six manifest sets map to operations: planning, research, teaching, reflection, strategies, safety. The loop infers the set from the current observation type. |
+
+---
+
+## 19. Verify before building the remaining items
+
+- JSS1 Basic Science rows in `edu.syllabus_*` and `concept_catalog` (❓).
+- Real per-generation coin cost from `lib/aiPricing.js` (❓ — examples use 2).
+- The `llm-agent.js` model string and whether extended thinking is already
+  enabled or needs adding (❓).
+- Whether `content.search` is disabled by design or a gap — `read-tools.js`
+  returns `{ disabled: true }` today (confirmed in `wiring.js`).
+- How the current `AgentChatTab.jsx` renders events — so the new SSE renderer
+  extends it rather than replaces it.
+
+---
+
+## 20. Reference artifact
+
+Simulation at **https://claude.ai/artifact/ApfA9zFV7JWK4UoJdrDik4** —
+demonstrates all 4 scenarios (full session, plan rejected, budget ceiling,
+topic caps out) with the exact streaming UI. Send with this document.

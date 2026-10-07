@@ -1,0 +1,9 @@
+*.log
+.DS_Store
+.claude/
+.env
+build/
+dist/
+dump.rdb
+extracted/
+node_modules/

@@ -1,0 +1,18 @@
+# Render Blueprint for the Akoro API.
+#
+# Before using this blueprint, set DATABASE_URL (or MIGRATION_DATABASE_URL) in
+# the Render service environment to a direct Postgres / Supabase pooler URL.
+# The API itself uses SUPABASE_URL + SUPABASE_SERVICE_KEY at runtime; migrations
+# need a Postgres connection string so new tables are present before new API
+# code starts accepting traffic.
+services:
+  - type: web
+    name: akoro-api
+    runtime: node
+    rootDir: akoro-api
+    buildCommand: npm ci
+    # Schema only: demo seed data must never be deployed to production.
+    preDeployCommand: npm run db:migrate
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeployTrigger: commit

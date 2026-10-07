@@ -1,0 +1,105 @@
+/**
+ * Education Engine — deterministic scoring, thresholds, mastery evidence and
+ * cost estimation for the study-prep build (Master Plan §4.5).
+ *
+ * PURE FUNCTIONS ONLY. No db, no LLM, no clock reads — every input is passed
+ * in, so contract tests run with fixed fixtures and no time bombs. The agent
+ * uses this engine; it never replaces it.
+ */
+
+/** Deterministic answer-key scoring. The LLM never scores anything. */
+export function scoreAttempt(answerKey, answers) {
+  const submitted = {};
+  for (const item of Array.isArray(answers) ? answers : []) {
+    const id = String(item?.questionId || "").replace(/[\r\n\x00]+/g, " ").trim().slice(0, 80);
+    const answerIndex = Number(item?.answerIndex);
+    if (!id || !Number.isInteger(answerIndex) || answerIndex < 0 || answerIndex > 3 || submitted[id] !== undefined) {
+      throw new Error("invalid_answers");
+    }
+    submitted[id] = answerIndex;
+  }
+  const key = answerKey || {};
+  const total = Object.keys(key).length;
+  if (total > 10) throw new Error("too_many_answers");
+  const correct = Object.entries(key).filter(([id, answer]) => submitted[id] === Number(answer)).length;
+  const score = total ? Math.round((correct / total) * 10_000) / 10_000 : 0;
+  return { submitted, total, correct, score };
+}
+
+/** Threshold routing for a topic attempt (70% default, policy overridable). */
+export function applyThreshold({ score, passThreshold, attemptsUsed, maxAttempts }) {
+  const passed = Number(score) >= Number(passThreshold);
+  const attemptsRemaining = Math.max(0, Number(maxAttempts) - Number(attemptsUsed));
+  const capped = !passed && attemptsRemaining === 0;
+  return { passed, capped, attemptsRemaining };
+}
+
+/** Topic outcome for the session state machine (S4 topic states). */
+export function topicOutcome({ passed, capped }) {
+  if (passed) return "understood";
+  if (capped) return "capped_out";
+  return "retest_offered";
+}
+
+/**
+ * Deterministic mastery write-back (Master Plan §4.5): a passed attempt lifts
+ * evidence toward the pass threshold band; a failed attempt decays it
+ * slightly. `knowledge_confidence` (0–100) maps to the 0–1 scale as fallback
+ * (S4 §6). Never an LLM judgement.
+ */
+export function masteryWriteBack({ currentMastery = null, knowledgeConfidence = null, score, passed, attemptsUsed = 1 }) {
+  const hasMastery = currentMastery != null && Number.isFinite(Number(currentMastery)) && Number(currentMastery) >= 0 && Number(currentMastery) <= 1;
+  const hasConfidence = knowledgeConfidence != null && Number.isFinite(Number(knowledgeConfidence));
+  const baseline = hasMastery
+    ? Number(currentMastery)
+    : hasConfidence ? Math.max(0, Math.min(100, Number(knowledgeConfidence))) / 100
+      : null;
+  const observed = Number(score);
+  if (baseline == null) {
+    // No prior evidence: the attempt itself is the first evidence.
+    return { previous: null, next: passed ? Math.max(observed, 0.7) : observed, evidence: "first_attempt" };
+  }
+  // Exponential-ish blend: fresh evidence outweighs stale state, more so after
+  // multiple attempts (retrieval practice). Bounded to [0, 1].
+  const weight = Math.min(0.6, 0.35 + 0.1 * (Math.max(1, Number(attemptsUsed)) - 1));
+  const next = Math.max(0, Math.min(1, baseline * (1 - weight) + observed * weight));
+  return { previous: baseline, next: Math.round(next * 10_000) / 10_000, evidence: passed ? "passed_attempt" : "attempt_evidence" };
+}
+
+/**
+ * Plan-card cost estimate (Master Plan §4.11): per-topic practice generation
+ * plus the per-loop LLM cost at a ROUNDED value so the learner is never
+ * surprised (S5 still-open recommendation, adopted as Decision).
+ */
+export const STUDY_PREP_COST = Object.freeze({
+  COINS_PER_PRACTICE: 2,
+  PRACTICES_PER_TOPIC: 2,          // diagnostic + one retest band
+  LOOP_LLM_COINS_PER_STEP: 1,      // rounded per-step loop overhead
+});
+
+export function estimateSessionCost({ topicCount, maxIterationsPerStep = 6 }) {
+  const topics = Math.max(0, Math.min(Number(topicCount) || 0, 12));
+  const practice = topics * STUDY_PREP_COST.COINS_PER_PRACTICE * STUDY_PREP_COST.PRACTICES_PER_TOPIC;
+  const planningLoop = STUDY_PREP_COST.LOOP_LLM_COINS_PER_STEP;                 // one planning step
+  const topicLoops = topics * STUDY_PREP_COST.LOOP_LLM_COINS_PER_STEP;           // one step per topic settle
+  return {
+    practiceCoins: practice,
+    loopCoins: planningLoop + topicLoops,
+    totalCoins: practice + planningLoop + topicLoops,
+    maxIterationsPerStep,
+    breakdown: { perTopicPractice: STUDY_PREP_COST.COINS_PER_PRACTICE * STUDY_PREP_COST.PRACTICES_PER_TOPIC, planningLoop, topicLoops },
+  };
+}
+
+/**
+ * Strategy library (Master Plan §4.2/§4.12 Decision 3): the agent may only
+ * offer strategies from this curated list — anything else is rejected with
+ * strategy_not_permitted. `escalate_human` is the fifth entry from S5.
+ */
+export const STRATEGY_LIBRARY = Object.freeze([
+  "teach_back", "different_analogy", "interleave", "space_out", "escalate_human",
+]);
+
+export function isPermittedStrategy(strategy) {
+  return STRATEGY_LIBRARY.includes(String(strategy || "").trim());
+}

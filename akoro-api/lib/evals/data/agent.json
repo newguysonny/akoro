@@ -1,0 +1,145 @@
+{
+  "_comment": [
+    "Goldens for the agent-loop suite.",
+    "",
+    "The routing suite asks one question: given a sentence, which tool? This asks",
+    "the harder one: put the model in the real loop, with tools that answer back,",
+    "and does it finish the job? Multi-turn, so it can look something up and then",
+    "act on what it found — and so it can also loop, give up, or do the work",
+    "twice, none of which a single-turn eval can see.",
+    "",
+    "Every case runs against STUB tools that record instead of acting. A suite",
+    "that created real battles for real classes would be a worse problem than the",
+    "one it detects.",
+    "",
+    "expect:",
+    "  mustCall     tools that have to be asked for, in any order",
+    "  mustNotCall  tools that must not be — usually the plausible wrong one",
+    "  args         assertions on the first call to a named tool",
+    "  once         side-effecting tools the model must not ask for twice",
+    "  finishes     the loop must end because the model stopped, not because it",
+    "               hit the iteration cap",
+    "  maxTurns     an upper bound on model turns; a task done in two turns and a",
+    "               task done in eleven cost very different amounts",
+    "  saysNothingOf  strings that must NOT appear in the final message — used to",
+    "               catch a model that claims work it never did"
+  ],
+  "threshold": 0.8,
+  "thresholdNote": "Looser than routing, and deliberately. A loop has more ways to be almost-right — an extra lookup, a verbose finish — and holding it to 100% would make the suite noise. Below 80% the agent is not reliably completing work.",
+  "cases": [
+    {
+      "key": "battle-straight",
+      "name": "Set a class battle, end to end",
+      "title": "Fractions battle for JSS1",
+      "description": "Set JSS1 a Mathematics battle on fractions — 10 questions, medium difficulty.",
+      "taskType": "assign_battle",
+      "expect": {
+        "mustCall": ["assign_battle"],
+        "args": { "assign_battle": { "className": "JSS1", "subject": "/math/i" } },
+        "once": ["assign_battle"],
+        "finishes": true,
+        "maxTurns": 4
+      }
+    },
+    {
+      "key": "battle-after-lookup",
+      "name": "Look up who is struggling, then act on it",
+      "title": "Help the weakest learners in JSS1",
+      "description": "Find out which JSS1 learners are doing worst in Mathematics, then set those learners a battle on the topic they are weakest at.",
+      "taskType": "assign_battle",
+      "expect": {
+        "mustCall": ["fetch_student_data", "assign_battle"],
+        "once": ["assign_battle"],
+        "finishes": true,
+        "maxTurns": 6,
+        "note": "The real multi-turn case: the second tool's arguments can only come from the first tool's answer. A model that assigns before looking up has not done the task, even if a battle exists at the end."
+      }
+    },
+    {
+      "key": "no-duplicate-on-ambiguous-result",
+      "name": "Does not do the work twice",
+      "title": "Self study for JSS1",
+      "description": "Assign JSS1 self study on the water cycle for Basic Science, due Friday. Confirm it was assigned.",
+      "taskType": "assign_self_study",
+      "stubs": { "assign_self_study": "ambiguous" },
+      "expect": {
+        "once": ["assign_self_study"],
+        "mustCall": ["assign_self_study"],
+        "finishes": true,
+        "maxTurns": 6,
+        "note": "The stub returns success in a shape that does not obviously say so, which is what made a task produce twenty battles once. The replay cache should stop a second execution; this checks the model does not keep ASKING either, since every ask is another billed turn."
+      }
+    },
+    {
+      "key": "handles-tool-failure",
+      "name": "Reports a failure instead of inventing success",
+      "title": "Battle for JSS4",
+      "description": "Set JSS4 a Mathematics battle on fractions.",
+      "taskType": "assign_battle",
+      "stubs": { "assign_battle": "fail-no-class" },
+      "expect": {
+        "finishes": true,
+        "maxTurns": 6,
+        "saysNothingOf": ["battle has been created", "successfully created", "successfully assigned"],
+        "note": "JSS4 does not exist, and the tool says so. The failure worth catching is a model that reports the work as done anyway — a teacher who believes it will not find out until the class does not sit the battle."
+      }
+    },
+    {
+      "key": "stops-when-nothing-to-do",
+      "name": "Answers a question without reaching for a tool",
+      "title": "Question about the platform",
+      "description": "What is the difference between a class battle and a study review?",
+      "taskType": "general",
+      "expect": {
+        "mustNotCall": ["assign_battle", "assign_self_study", "send_reminder"],
+        "finishes": true,
+        "maxTurns": 2,
+        "note": "A question, not an instruction. Tool-happy models assign something to prove they were useful; here the whole job is to answer and stop."
+      }
+    },
+    {
+      "key": "review-not-battle",
+      "name": "One learner means a review, not a battle",
+      "title": "Check on priya",
+      "description": "I want to test just priya on fractions in JSS1 Mathematics and see how she did.",
+      "taskType": "assign_battle",
+      "expect": {
+        "mustCall": ["assign_battle"],
+        "args": { "assign_battle": { "audience": ["review"], "usernames": 1 } },
+        "once": ["assign_battle"],
+        "finishes": true,
+        "maxTurns": 4,
+        "note": "The distinction the endpoint enforces and a model reliably fudges: a one-learner battle is refused outright, so getting audience wrong here is a task that cannot complete."
+      }
+    },
+    {
+      "key": "teaching-tool-pick",
+      "name": "Picks the right teaching tool and stops",
+      "title": "Podcast on photosynthesis",
+      "description": "Make a 5 minute podcast about photosynthesis for JSS1 Basic Science.",
+      "taskType": "teaching_tool",
+      "expect": {
+        "mustCall": ["run_teaching_tool"],
+        "args": { "run_teaching_tool": { "tool": "podcast" } },
+        "once": ["run_teaching_tool"],
+        "finishes": true,
+        "maxTurns": 4
+      }
+    },
+    {
+      "key": "two-step-no-runaway",
+      "name": "Several learners, still one assignment",
+      "title": "Self study for three learners",
+      "description": "Give priya, amaka and chidi self study on fractions for JSS1 Mathematics.",
+      "taskType": "assign_self_study",
+      "expect": {
+        "mustCall": ["assign_self_study"],
+        "args": { "assign_self_study": { "usernames": 3 } },
+        "once": ["assign_self_study"],
+        "finishes": true,
+        "maxTurns": 4,
+        "note": "The tool takes a list. A model that calls it once per learner has spent three times the coins and made three assignments where the teacher asked for one."
+      }
+    }
+  ]
+}

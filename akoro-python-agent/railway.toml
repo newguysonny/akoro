@@ -1,0 +1,14 @@
+# Deploy akoro-python-agent as a separate Railway service.
+# Set AKORO_AGENT_SERVICE_SECRET and OPENAI_API_KEY in Railway Variables.
+# The future akoro-api bridge reaches this service using PYTHON_AGENT_SERVICE_URL.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+numReplicas = 1

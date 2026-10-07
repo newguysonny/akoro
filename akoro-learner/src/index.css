@@ -1,0 +1,209 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Akoro design tokens — scales from docs/UI-AUDIT-learner-2026-09.md (Step 2).
+
+   Theme-DEPENDENT colours live in ThemeContext (--ak-bg, --ak-surface, …).
+   Everything here is theme-independent scaffolding: shape, rhythm, layering,
+   motion, and status hues that read on both themes. New UI uses these; the
+   ~2,800 legacy inline values migrate as files are touched.
+   ══════════════════════════════════════════════════════════════════════════ */
+:root {
+  /* Radius — the 5 shapes the app actually draws (maps 17 legacy values:
+     ≤9→sm, 10–13→md, 14–18→lg, 20–24→xl, 50%/99/100→full). */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+  --r-full: 999px;
+
+  /* Type — 5 steps cover the 38 legacy sizes (half-points snap to nearest). */
+  --fs-xs: 10px;
+  --fs-sm: 12px;
+  --fs-md: 13.5px;
+  --fs-lg: 16px;
+  --fs-xl: 21px;
+
+  /* Space — 4px base grid. */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-6: 24px;
+  --s-8: 32px;
+
+  /* Z-index — named layers, replaces 27 loose values. Order matters:
+     nav < bar < fab < sheet-backdrop < sheet < toast. */
+  --z-nav: 200;
+  --z-bar: 850;
+  --z-fab: 900;
+  --z-sheet-back: 2000;
+  --z-sheet: 2100;
+  --z-toast: 4000;
+
+  /* Motion — the three durations the app already gravitated to, plus its
+     de-facto spring curve (bottom sheets use it everywhere). */
+  --t-fast: .15s;
+  --t-med: .2s;
+  --t-slow: .3s;
+  --ease-spring: cubic-bezier(.32, 1.2, .64, 1);
+
+  /* Status — mid-lightness hues that read on light AND dark backgrounds.
+     For status TEXT with proper contrast per theme, use the theme tokens
+     --ak-success-text / --ak-warn-text / --ak-danger-text in ThemeContext. */
+  --ak-success: #10B981;
+  --ak-warn: #F59E0B;
+  --ak-danger: #EF4444;
+}
+
+/* ═══ Focus visibility ════════════════════════════════════════════════════
+   Keyboard users get a visible ring everywhere — including on the 14 controls
+   that suppress the default with inline `outline:'none'` (hence !important:
+   inline styles would otherwise win). :focus-visible matches keyboard focus
+   only, so mouse/touch users never see a ring on tap. */
+:focus-visible {
+  outline: 2px solid var(--ak-accent, #6C3BFF) !important;
+  outline-offset: 2px;
+}
+
+/* Text inputs commonly sit inside a rounded field shell. A global rectangular
+   outline cuts across that shell on mobile (and was visible on every focused
+   learner input). Their component-level border/focus treatment plus the caret
+   already identifies focus, so retain the global keyboard ring for controls
+   while removing only the geometry-breaking text-entry outline. */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none !important;
+  outline-offset: 0;
+}
+
+/* ═══ Reduced motion ══════════════════════════════════════════════════════
+   Honour the OS setting globally instead of per-component: animations snap to
+   their end state and transitions become instantaneous. Covers pulse-dot,
+   bounce-dot, sheet-up, drawer-in, toast-in and every inline transition. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Alias: settings subject-map uses "ti-clock-history", which Tabler renamed
+   to "history" — point it at the same glyph so the row isn't blank. */
+.ti-clock-history:before { content: "\ebea"; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   App shell (components/AppShell.jsx) — admin-style responsive frame.
+
+   Tablet + desktop (>768px) get the left sidebar, collapsible to an icon
+   rail via the header hamburger (.ak-collapsed) exactly like the admin
+   portal — EXPANDED by default, remembered in localStorage, purely
+   user-driven (no viewport media query overriding it). Mobile (≤768px)
+   hides the sidebar completely and every page renders exactly as it did
+   before — the dashboard keeps its bottom nav, secondary pages keep their
+   back-button headers.
+
+   The .ak-bottom-nav / .ak-fab / .ak-now-bar / .ak-dash-scroll rules re-anchor
+   the dashboard's fixed mobile chrome for the desktop frame: the bottom nav
+   goes away, and the FAB + now-studying bar sit in the content column to the
+   right of the sidebar instead of spanning the whole viewport. The
+   now-studying surface itself is two-way: the dashboard's mobile bar
+   (≤768px) and the fixed full-width player bar (NowStudyingTabletBar) on
+   EVERYTHING above mobile — tablet and desktop alike. The sidebar no
+   longer carries a now-studying card.
+   ══════════════════════════════════════════════════════════════════════════ */
+.ak-shell {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--ak-bg);
+}
+.ak-shell-main {
+  flex: 1;
+  min-width: 0;
+  height: 100vh;
+  overflow-y: auto;        /* scroll container for pages that scroll themselves */
+  display: flex;
+  flex-direction: column;
+}
+.ak-sidebar {
+  width: 240px;
+  transition: width .15s;
+  flex-shrink: 0;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--ak-surface);
+  border-right: 1px solid var(--ak-border);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Collapsed rail (user-driven via the header hamburger, default state):
+   labels, captions and text collapse, badges re-anchor to the icon's
+   corner, brand centres, items become square tiles. */
+.ak-sidebar.ak-collapsed { width: 76px; }
+.ak-collapsed .ak-sb-label,
+.ak-collapsed .ak-sb-brand-text,
+.ak-collapsed .ak-sb-section { display: none; }
+.ak-collapsed .ak-sb-brand { padding: 20px 0 14px; justify-content: center; }
+.ak-collapsed .ak-sb-item {
+  justify-content: center;
+  gap: 0;
+  padding: 12px 0;
+  margin: 3px auto;
+  width: 48px;
+}
+.ak-collapsed .ak-sb-badge {
+  position: absolute;
+  top: 3px;
+  left: calc(50% + 7px);
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  font-size: 9px;
+}
+
+/* Mobile (≤768px): no sidebar at all — the page renders as it always has,
+   and the hamburger has nothing to toggle. The dashboard header is also
+   LEARN-ONLY here (.ak-mobile-hide, set by LearnerDashboard when the tab
+   isn't Learn/Challenges): the other tabs get the full viewport and the
+   bottom nav carries the chrome. Tablet/desktop show it on every tab. */
+@media (max-width: 768px) {
+  .ak-sidebar { display: none; }
+  .ak-sb-toggle { display: none !important; }
+  .ak-mobile-hide { display: none !important; }
+}
+
+/* NowStudyingTabletBar base state — mobile only is it hidden (the
+   dashboard's own NowStudyingBar above the bottom nav covers ≤768px).
+   This rule MUST stay ABOVE the ≥769px block: same specificity, so the
+   later `display: block` there only wins because it comes later. */
+.ak-tabnow { display: none; }
+
+/* Everything above mobile — desktop frame adjustments for the dashboard's
+   fixed mobile chrome, plus the now-studying handover: the mobile bar and
+   bottom nav go away and the fixed, full-width NowStudyingTabletBar
+   (Spotify-style 3-column player bar) becomes the surface on tablet AND
+   desktop alike. While a parked item exists (.ak-has-nowbar, set by
+   AppShell) the sidebar and the content column stop above the bar and the
+   FAB + scroll area clear it; with nothing parked the frame is the plain
+   desktop one. */
+@media (min-width: 769px) {
+  .ak-bottom-nav { display: none !important; }
+  .ak-now-bar   { display: none !important; }  /* player bar takes over */
+  .ak-fab { bottom: 20px !important; }          /* nothing left to clear */
+  .ak-dash-scroll { padding-bottom: 64px !important; }  /* FAB clearance */
+
+  .ak-shell { --ak-tabnow-h: 78px; }
+  .ak-tabnow { display: block; }
+  .ak-sb-now { display: none !important; }  /* player bar takes over */
+  .ak-has-nowbar .ak-sidebar    { height: calc(100vh - var(--ak-tabnow-h)); }
+  .ak-has-nowbar .ak-shell-main { height: calc(100vh - var(--ak-tabnow-h)); }
+  .ak-has-nowbar .ak-fab         { bottom: calc(var(--ak-tabnow-h) + 20px) !important; }
+  .ak-has-nowbar .ak-dash-scroll { padding-bottom: calc(var(--ak-tabnow-h) + 64px) !important; }
+}

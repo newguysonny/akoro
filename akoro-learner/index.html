@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#6C3BFF" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>Akoro — Learn</title>
+    <link rel="icon" type="image/x-icon"    href="/favicon.ico" />
+    <link rel="icon" type="image/svg+xml"   href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32"  href="/favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180"     href="/logo/akoro-light-180.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+
+    <!-- Apply saved theme BEFORE React mounts to prevent flash-of-wrong-theme -->
+    <script>
+      (function() {
+        var mode   = localStorage.getItem('akoro_display_mode') || 'system';
+        var accent = localStorage.getItem('akoro_accent_color') || '#6C3BFF';
+        var dark   = mode === 'dark' ||
+                     (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        var r = document.documentElement;
+        r.setAttribute('data-theme', dark ? 'dark' : 'light');
+        var lang = localStorage.getItem('akoro_language') || 'English';
+        var codes = {English:'en',Spanish:'es',Portuguese:'pt',French:'fr',Yoruba:'yo',Igbo:'ig',Hausa:'ha',Pidgin:'pcm',Arabic:'ar'};
+        r.lang = codes[lang] || 'en';
+        r.dir  = r.lang === 'ar' ? 'rtl' : 'ltr';
+        var v = dark
+          ? { '--ak-bg':'#0D1117','--ak-surface':'#161B22','--ak-surface-hover':'#1C2128',
+              '--ak-border':'#21262D','--ak-border2':'#30363D','--ak-border3':'#484F58',
+              '--ak-text':'#E6EDF3','--ak-text-sec':'#C9D1D9',
+              '--ak-text-sub':'#8B949E','--ak-text-muted':'#6E7681',
+              '--ak-toggle-off':'#30363D','--ak-tag-bg':'#21262D',
+              '--ak-tag-text':'#C9D1D9','--ak-select-bg':'#0D1117','--ak-input-bg':'#0D1117' }
+          : { '--ak-bg':'#F9FAFB','--ak-surface':'#ffffff','--ak-surface-hover':'#F9FAFB',
+              '--ak-border':'#F3F4F6','--ak-border2':'#E5E7EB','--ak-border3':'#D1D5DB',
+              '--ak-text':'#111827','--ak-text-sec':'#374151',
+              '--ak-text-sub':'#6B7280','--ak-text-muted':'#9CA3AF',
+              '--ak-toggle-off':'#E5E7EB','--ak-tag-bg':'#F3F4F6',
+              '--ak-tag-text':'#374151','--ak-select-bg':'#F9FAFB','--ak-input-bg':'#ffffff' };
+        v['--ak-accent'] = accent;
+        for (var k in v) r.style.setProperty(k, v[k]);
+      })();
+    </script>
+
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      /* Base: all pages inherit theme background and text colour */
+      html, body, #root {
+        height: 100%;
+        font-family: 'Nunito', sans-serif;
+        background: var(--ak-bg, #F9FAFB);
+        color: var(--ak-text, #111827);
+        transition: background 0.2s, color 0.2s;
+      }
+
+      /* Scrollbar — dark mode aware */
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-track { background: var(--ak-bg, #F9FAFB); }
+      ::-webkit-scrollbar-thumb { background: var(--ak-border2, #E5E7EB); border-radius: 99px; }
+      ::-webkit-scrollbar-thumb:hover { background: var(--ak-text-muted, #9CA3AF); }
+
+      /* Inputs inherit theme automatically */
+      input, textarea, select, button {
+        font-family: 'Nunito', sans-serif;
+        color: var(--ak-text, #111827);
+        background: var(--ak-input-bg, #fff);
+      }
+
+      /* Common dark-mode friendly overrides for any hardcoded white backgrounds
+         that aren't yet using CSS vars (belt-and-suspenders) */
+      [data-theme="dark"] .ak-card  { background: var(--ak-surface) !important; }
+      [data-theme="dark"] .ak-page  { background: var(--ak-bg)      !important; }
+
+      @keyframes sheet-up  { from { transform: translateY(100%); opacity:0; } to { transform: translateY(0); opacity:1; } }
+      @keyframes pulse-dot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.5; transform:scale(.85); } }
+      @keyframes fade-in   { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+      @keyframes spin      { to { transform: rotate(360deg); } }
+      @keyframes pulse     { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+
+      /* Level-switch splash — staged by Settings before location.reload().
+         Dark brand splash regardless of theme (momentary, like a console
+         boot screen); the app's real theme takes over the moment it paints. */
+      @keyframes splash-breathe { 0%,100% { transform:scale(1); opacity:1; } 50% { transform:scale(.92); opacity:.75; } }
+      #akoro-splash {
+        position: fixed; inset: 0; z-index: 99999;
+        display: none; flex-direction: column;
+        align-items: center; justify-content: center; gap: 18px;
+        background: #0A0A0E;
+        font-family: 'Nunito', sans-serif;
+      }
+      #akoro-splash .ak-splash-logo { width: 72px; height: 72px; animation: splash-breathe 1.5s ease-in-out infinite; }
+      #akoro-splash .ak-splash-text { color: #E6EDF3; font-size: 15px; font-weight: 600; letter-spacing: .2px; }
+      @media (prefers-reduced-motion: reduce) {
+        #akoro-splash .ak-splash-logo { animation: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Boot splash: shows for staged reloads (level/language/theme switch)
+         AND every cold start of an APP route (PWA launch) — never on the
+         public marketing pages. main.jsx fades it out once the app boots. -->
+    <div id="akoro-splash" aria-hidden="true">
+      <img class="ak-splash-logo" src="/logo/akoro-icon-dark.svg" alt="" />
+      <div class="ak-splash-text">Loading...</div>
+    </div>
+    <script>
+      (function() {
+        var show = false;
+        try {
+          show = !!localStorage.getItem('akoro_boot_splash');
+        } catch (e) { /* private mode — fall through to route check */ }
+        if (!show) {
+          // App routes only; marketing pages (/, /pricing, /blog, …) skip it.
+          show = /^\/(app|onboarding|settings|notifications|wallet|cart|checkout|orders|draw|assessment|fde-admin|course\/|agent\/)/.test(location.pathname);
+        }
+        if (show) document.getElementById('akoro-splash').style.display = 'flex';
+      })();
+    </script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

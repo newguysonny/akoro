@@ -1,0 +1,151 @@
+# Golden-path tests
+
+Exercises the three MVP journeys — battle, task, self study — against a REAL
+API, a REAL Postgres and a REAL Redis. Not mocks: these caught two migration
+failures that only appear on a fresh database, and a `POST /api/self-study`
+that was a guaranteed 500 in production.
+
+## Why it needs a local stack
+
+The API talks PostgREST, not Postgres. So the stack is:
+
+    app.js  →  shim :3998 (adds /rest/v1)  →  PostgREST :3999  →  Postgres :5433
+
+## Setup
+
+    apt-get install -y postgresql-16-pgvector
+    curl -sL https://github.com/PostgREST/PostgREST/releases/download/v12.2.3/postgrest-v12.2.3-linux-static-x64.tar.xz \
+      | tar -xJ -C /usr/local/bin
+
+    redis-server --daemonize yes
+    initdb -D /tmp/pg -U postgres --auth=trust
+    pg_ctl -D /tmp/pg -o '-p 5433 -c unix_socket_directories=/tmp/pgsock' -l /tmp/pg.log start
+    createdb -h localhost -p 5433 -U postgres akoro
+
+Supabase provides four things a bare Postgres doesn't. Add them before migrating:
+
+    CREATE EXTENSION pgcrypto SCHEMA extensions;   -- schema-qualified, as Supabase has it
+    CREATE EXTENSION vector;
+    CREATE SCHEMA auth;
+    CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT NULL::uuid $$;
+    CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role; CREATE ROLE authenticator;
+
+Then:
+
+    DATABASE_URL=postgresql://postgres@localhost:5433/akoro node scripts/apply-migrations.mjs --group=all
+
+## Running
+
+Boot the API against the shim, then:
+
+    node scripts/golden-path/gp-battle.mjs
+    node scripts/golden-path/gp-all.mjs      # task + self study
+
+## Note
+
+Logins are rate limited to 5 per 15 minutes per IP — which is the limiter
+working, since it was inert until recently. Restart the API between full runs;
+the store is in-process.
+
+## Battle fields — what the endpoints actually require
+
+Taken from the routes, not from the tool's own claims. gp-chat-battle.mjs
+asserts both halves of this table.
+
+| Field            | Class battle | Learners (in a class) | Course battle | Study review |
+|------------------|--------------|-----------------------|---------------|--------------|
+| `title`          | required     | required              | required      | required     |
+| `audience`       | required     | required              | required      | required     |
+| `className`      | required     | required              | —             | required     |
+| `subject`        | **required** | **required**          | optional      | **required** |
+| `usernames`      | —            | two or more           | —             | exactly one  |
+| `courseId`       | —            | —                     | required*     | —            |
+| `topic`          | optional†    | optional†             | optional‡     | optional†    |
+| `difficulty`     | intermediate | intermediate          | intermediate  | intermediate |
+| `totalQuestions` | 15           | 15                    | 15            | 15           |
+| `durationMinutes`| 15           | 15                    | 15            | 15           |
+| `xpPrize`        | 200          | 200                   | 200           | 200          |
+| `questionSource` | auto         | auto                  | auto          | auto         |
+| `scheduledFor`   | now          | now                   | now           | now          |
+
+\* or the course the task is attached to.
+† recorded, and steers AI generation, but does NOT narrow the past-questions
+bank — that is searched by SUBJECT, which is why subject is the mandatory one.
+‡ FILTERS the course's own bank, so a topic that course has no questions for
+comes back empty.
+
+At least 5 questions must be findable or creation is refused. `questionSource`
+'bank' refuses rather than generating; 'ai' generates the lot and costs coins.
+
+## If gp-tools reports "Connection error"
+
+That is the stand-in model being down, not a regression — every AI path fails
+at once and the message comes from the OpenAI client, not from our code. Check
+it before reading anything into the failures:
+
+    curl -s localhost:4900/v1/models >/dev/null && echo up || echo down
+
+## AI-backed paths (gp-tools.mjs)
+
+Needs a stand-in model, since these paths would otherwise call OpenAI:
+
+    node scripts/golden-path/mock-openai.mjs &
+    export OPENAI_BASE_URL=http://127.0.0.1:4900/v1
+    export ENABLE_TASK_WORKER=true
+    export INTERNAL_API_URL=http://127.0.0.1:4800
+    export RATE_LIMIT_AI=500 RATE_LIMIT_STANDARD=2000 RATE_LIMIT_STRICT=100
+
+What the mock DOES prove: routing, tool selection plumbing, argument
+validation, DB writes, coin charging, artifact persistence, every failure
+branch. What it CANNOT prove: whether a real model picks the right tool or
+writes good questions. That needs a live key.
+
+## The half a stand-in model cannot cover (evals)
+
+That last gap is what `lib/evals/` is for, and it is a different kind of test:
+it costs money, it is not deterministic, and a failure means the MODEL changed
+its mind rather than that someone broke the code. So it does not run here.
+
+    node scripts/evals/run.mjs                       # list suites and estimates
+    node scripts/evals/run.mjs routing gpt-4o-mini   # exits non-zero on failure
+
+Three suites. `questions` asks whether generated questions can be marked — the
+answer key inside the options, no duplicates, how many survive `normalise()`.
+`routing` asks whether the model picks the right tool for what a teacher typed,
+using the cases in `docs/CHAT-COMMANDS.md` so documentation and test cannot
+drift. `agent` puts the model in the real task loop with tools that answer back
+and asks whether it finishes the job. All refuse to run without
+`OPENAI_API_KEY`: against the stand-in model every case would pass for the wrong
+reason, and a green board that proves nothing is worse than an error, because
+someone will quote it.
+
+**Goldens are data.** `lib/evals/data/*.json` — a case can be added without a
+deploy, and the diff on a golden reads as a change of intent rather than a
+change of program.
+
+**Each suite carries its own bar**, versioned in that same file next to a note
+saying why. `questions` passes only at 100%: every check is structural, and a
+mis-keyed question marks a correct learner wrong, permanently, in a
+competition. `agent` passes at 80%: a loop has more ways to be almost-right,
+and holding it to 100% would make the suite noise. The CLI exits non-zero when
+a suite is BELOW ITS BAR — not on any individual failure, which is what the
+tolerance is for. The bar is stored on each run, so raising a threshold later
+does not repaint finished runs red.
+
+**The `agent` suite runs the real loop.** `modules/tasks/lib/agentLoop.js` was
+lifted out of the task worker precisely so the suite could run it rather than a
+copy — a copy would pass while the real loop drifted. The only seam is
+`callTool`: the worker passes real executors, the suite passes stubs that record
+instead of acting. Nothing it runs touches the database, sends a notification or
+spends a coin. What is scored is the trace — which tools were asked for, with
+what arguments, how many times, and whether the loop ended because the model was
+finished or because it ran out of rope.
+
+Admins can run the same suites from the Evals page, which is the only control
+in that app that spends. `gp-evals.mjs` covers everything around the model call
+— permissions, the estimate, the refusal, one-run-at-a-time, cancellation,
+failures-first results — without spending anything.
+
+Coins are real. A run costs a few, and a wallet at zero fails every AI test
+with "Insufficient coin balance" — top up the test accounts, don't chase it as
+a bug.

@@ -1,0 +1,18 @@
+# Railway config for the akoro-api service.
+#
+#   Root Directory: akoro-api   (set in the Railway dashboard)
+#
+# Only the pre-deploy command is declared here — builder, start command, and
+# everything else stay exactly as configured in the dashboard. This file just
+# adds the DB migration step.
+
+[deploy]
+# Apply pending schema migrations in a one-off container BEFORE the new version
+# goes live. Idempotent (safe to re-run). If it fails, the deploy is aborted and
+# the currently-running version keeps serving — so a bad migration can't ship
+# code against an un-migrated DB.
+#
+# Requires DATABASE_URL (or MIGRATION_DATABASE_URL) in this service's variables.
+# Run schema migrations only. Demo seed data is intentionally excluded from
+# production deployments.
+preDeployCommand = "npm run db:migrate"
