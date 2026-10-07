@@ -212,13 +212,21 @@ export default function SettingsPage() {
 
   return (
     <AppShell>
-    <div style={{ minHeight:'100%',background:'var(--ak-bg)',
-      fontFamily:"'Nunito',sans-serif",maxWidth:480,margin:'0 auto' }}>
+    <div className="ak-settings-page" style={{ minHeight:'100%',background:'var(--ak-bg)',
+      fontFamily:"'Nunito',sans-serif" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
         @keyframes sheet-up{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}
         *{box-sizing:border-box}
         input,textarea,button,select{font-family:'Nunito',sans-serif}
+        /* Mobile keeps the centred 480px column; on tablet/desktop (>=768px,
+           the app's isMobile breakpoint) the page spans the full width of
+           the shell's content area — like the Discover hub / Contents and
+           the Pharm D pages. */
+        .ak-settings-page{max-width:480px;margin:0 auto}
+        @media (min-width:768px){
+          .ak-settings-page{max-width:none;margin:0}
+        }
       `}</style>
 
       {/* Header */}
