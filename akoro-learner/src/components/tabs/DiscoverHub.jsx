@@ -29,7 +29,7 @@ import DiscoverSearchPage from './DiscoverSearchPage.jsx';
 import PharmDProgram from '../pharmd/PharmDProgram.jsx';
 import { TYPES, matchTypes, FONT } from './dhubTypes.js';
 
-export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord, onOpenBattles, userId, initialQuery = '', pharmdFocus }) {
+export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord, onOpenBattles, userId, initialQuery = '', pharmdFocus, onPharmdFocusUsed }) {
   const { t } = useLang();
   const [query, setQuery] = useState(initialQuery);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -168,7 +168,8 @@ export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord,
         />
       )}
 
-      {pharmdOpen && <PharmDProgram onClose={() => setPharmdOpen(false)} focus={pharmdFocus} />}
+      {pharmdOpen && <PharmDProgram onClose={() => setPharmdOpen(false)} focus={pharmdFocus}
+        onFocusConsumed={onPharmdFocusUsed} />}
 
       {toast && <Toast msg={toast.msg} color={toast.color} onDone={() => setToast(null)} />}
     </div>

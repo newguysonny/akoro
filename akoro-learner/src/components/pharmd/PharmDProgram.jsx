@@ -61,7 +61,7 @@ const topicMeta = (t) => [
   t.size ? `${(t.size / 1024 / 1024).toFixed(1)} MB` : null,
 ].filter(Boolean).join(' · ');
 
-export default function PharmDProgram({ onClose, focus }) {
+export default function PharmDProgram({ onClose, focus, onFocusConsumed }) {
   const [view, setView] = useState('browse');     // browse | folder
   const [code, setCode] = useState(null);         // the open course code
   const [sessionTopic, setSessionTopic] = useState(null);  // index into topics — the open topic session
@@ -107,21 +107,24 @@ export default function PharmDProgram({ onClose, focus }) {
   /* Every view change starts at the top (reference window.scrollTo). */
   useEffect(() => { scrollRef.current?.scrollTo(0, 0); }, [view, code]);
 
-  /* A reopen request (the Now-Studying bar's resume): go to the parked
-     course and open the parked topic — directly if its list is already
-     on screen, or as soon as the course loads it. */
+  /* A reopen request (the Now-Studying bar's resume): head straight for
+     the parked topic — openCourse LOADS the course (the old code only set
+     the folder view, so the topics never arrived and the folder sat on
+     'Could not load the topics'), and the effect below opens the reader
+     session the moment the list lands. Consumed once: the caller is told,
+     so a later plain visit to Pharm D starts at the programme browse. */
   const focusedRef = useRef(null);
   useEffect(() => {
     if (!focus?.code || !focus?.topicId) return;
     focusedRef.current = String(focus.topicId);
     if (focus.code !== code) {
-      setCode(focus.code);
-      setView('folder');          // the course load lands the topics → below
+      openCourse(focus.code);      // loads the course; view + code ride along
     } else if (topics.length) {
       const i = topics.findIndex((t) => String(t.id) === focusedRef.current);
       focusedRef.current = null;
       if (i >= 0) openTopic(i);
     }
+    onFocusConsumed?.();
   }, [focus?.ts]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!focusedRef.current || !topics.length) return;
