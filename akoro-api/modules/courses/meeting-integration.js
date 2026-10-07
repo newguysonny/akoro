@@ -695,7 +695,12 @@ const meetingHandlers = {
 // Proactively refreshes tokens expiring within 30 minutes.
 // Queries Supabase directly (not Redis) so no token is missed due to cache eviction.
 
-cron.schedule("0 */6 * * *", async () => {
+// Behind the shared jobs gate like every recurring job — a 6-hourly token
+// refresh is not something to run with the rest deliberately stood down.
+import { skipJob } from "../../lib/jobsGate.js";
+if (skipJob("provider token refresh")) {
+  console.log("[cron] provider-token refresh NOT registered (jobs gate)");
+} else cron.schedule("0 */6 * * *", async () => {
   console.log("[cron] 🔄 Checking for expiring provider tokens...");
 
   const thirtyMinFromNow = new Date(Date.now() + 30 * 60 * 1000).toISOString();

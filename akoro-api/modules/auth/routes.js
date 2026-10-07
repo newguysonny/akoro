@@ -171,6 +171,33 @@ function signRefresh(userId, family) {
   return { token, jti };
 }
 
+/* Auth I/O deadline — the wedge the watchdog finally caught live
+   (REQUEST_STALLED GET /api/communities/:id, age 25s, app otherwise
+   healthy: favicon 404 in 1ms during the stall). authenticateToken makes
+   up to three network calls BEFORE any route code runs — deny-list check,
+   the cold-cache user load, schoolBillTo on school portals — and none of
+   them had a deadline. A fetch that lands on a keep-alive socket the
+   server has just closed can hang for undici's 300s header timeout:
+   past the client's 30s give-up, past the route's own query deadline
+   (which never starts), silent in every log. Auth I/O that cannot answer
+   in 10s is a 503 the client can retry — never a 401 (that would sign
+   the learner out of a perfectly good session), never a silent hang. */
+const AUTH_IO_TIMEOUT_MS = 10_000;
+
+function withAuthDeadline(promise, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const err = new Error(`auth backend stalled on ${label}`);
+      err.step = label;
+      err.authStall = true;
+      reject(err);
+    }, AUTH_IO_TIMEOUT_MS);
+    timer.unref?.();
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 function verifyToken(token) {
   const verifyKey = USE_RSA ? PUBLIC_KEY : DEV_SECRET;
   const algs      = USE_RSA ? ALLOWED_ALGS : ["HS256"];
@@ -492,7 +519,7 @@ export const authenticateToken = asyncHandler(async (req, res, next) => {
   }
 
   // 4. Check deny-list
-  if (decoded.jti && await DenyList.has(decoded.jti)) {
+  if (decoded.jti && await withAuthDeadline(DenyList.has(decoded.jti), "denylist")) {
     return res401(res, "Token has been revoked");
   }
 
@@ -505,15 +532,15 @@ export const authenticateToken = asyncHandler(async (req, res, next) => {
     if (cached && cached.expires > Date.now()) {
       user = cached.user;
     } else {
-      ({ data: user, error: dbErr } = await db.from("users")
+      ({ data: user, error: dbErr } = await withAuthDeadline(db.from("users")
         .select("id,email,username,full_name,avatar_url,role,is_active,onboarding_completed,force_logout_at")
-        .eq("id", decoded.sub).maybeSingle());
+        .eq("id", decoded.sub).maybeSingle(), "user-load"));
 
       if (dbErr) {
         // Column may not exist yet (pending migration) — retry without it
-        ({ data: user, error: dbErr } = await db.from("users")
+        ({ data: user, error: dbErr } = await withAuthDeadline(db.from("users")
           .select("id,email,username,full_name,avatar_url,role,is_active")
-          .eq("id", decoded.sub).maybeSingle());
+          .eq("id", decoded.sub).maybeSingle(), "user-load-fallback"));
         if (dbErr) return res401(res, "Could not load user");
       }
       if (user) cacheUser(user);
@@ -529,9 +556,15 @@ export const authenticateToken = asyncHandler(async (req, res, next) => {
     // Run the rest of the request inside the AI-metering context so any AI call
     // it makes is billed correctly. On a SCHOOL portal the school funds the
     // usage (billTo); the student portal keeps the student-first hybrid.
-    const billTo = SCHOOL_PORTALS.includes(portalOf(req)) ? await schoolBillTo(user.id) : null;
+    const billTo = SCHOOL_PORTALS.includes(portalOf(req)) ? await withAuthDeadline(schoolBillTo(user.id), "school-bill-to") : null;
     return runWithAiContext({ userId: user.id, feature: featureForRequest(req), billTo }, () => next());
-  } catch {
+  } catch (err) {
+    if (err?.authStall) {
+      // Name the call that stalled and for how long — this is the line that
+      // turns the next occurrence from a mystery into a measurement.
+      console.error(`[auth] ${err.step} stalled > ${AUTH_IO_TIMEOUT_MS / 1000}s (likely a dead keep-alive socket) — 503`);
+      return res.status(503).json({ error: "The sign-in check is not answering. Please retry." });
+    }
     return res401(res, "Could not load user");
   }
 });
