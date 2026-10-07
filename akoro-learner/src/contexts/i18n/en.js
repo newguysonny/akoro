@@ -136,6 +136,8 @@ export const EN = {
   'discovery.rail_video_pre':  'Explore ',
   'discovery.rail_reco_pre':      'Recommended ',
   'discovery.rail_reco_hi':       'for you',
+  'discovery.rail_new_pre':      'New ',
+  'discovery.rail_new_hi':       'releases',
   'discovery.rail_trending_pre':  'Trending ',
   'discovery.rail_trending_hi':   'courses',
   'discovery.rail_featured_pre':  'Featured ',

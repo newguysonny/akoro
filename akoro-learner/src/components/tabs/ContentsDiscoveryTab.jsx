@@ -22,10 +22,10 @@
  *   GET /api/records/discover           — the feed (metadata + owners)
  *   GET /api/records/discover/:id/open  — one call per open
  */
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
-import { discoverRecords, discoverRecordOpen } from '../../services/recordsApi.js';
+import { discoverRecords, discoverRecordOpen, listRecords } from '../../services/recordsApi.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import Toast from '../common/Toast.jsx';
 import RecordTeachSession from '../library/RecordTeachSession.jsx';
@@ -62,6 +62,7 @@ function RecordCard({ item, type, wide, opening, onOpen }) {
   const mine = item.ownerId === STUDENT_ID;
   const dur = fmtDuration(item.duration);
   const date = item.createdAt ? new Date(item.createdAt).toLocaleDateString() : null;
+  const fresh = item.createdAt && (Date.now() - new Date(item.createdAt).getTime() < 7 * 86400000);
   return (
     <button
       onClick={() => onOpen(item)}
@@ -92,6 +93,12 @@ function RecordCard({ item, type, wide, opening, onOpen }) {
             color: '#fff', background: GREEN, padding: '3px 7px', borderRadius: 6,
           }}>{t('discovery.contents_you')}</span>
         )}
+        {fresh && (
+          <span style={{
+            position: 'absolute', bottom: 7, left: 7, fontSize: 9, fontWeight: 900, letterSpacing: .3,
+            color: '#fff', background: 'rgba(17,12,40,.72)', padding: '3px 7px', borderRadius: 6,
+          }}>NEW</span>
+        )}
       </div>
 
       <div style={{ fontSize: 13.5, fontWeight: 900, color: 'var(--ak-text)', lineHeight: 1.25,
@@ -115,7 +122,9 @@ function Rail({ title, accent, count, loading, expanded, onToggle, children, emp
   return (
     <section style={{ marginTop: 26 }}>
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', padding: '0 14px', gap: 10 }}>
-        <h2 style={{ fontSize: 21, fontWeight: 900, color: 'var(--ak-text)', margin: 0, lineHeight: 1.15 }}>{title}</h2>
+        <h2 style={{ fontSize: 21, fontWeight: 900, color: 'var(--ak-text)', margin: 0, lineHeight: 1.15 }}>
+          {typeof title === 'string' ? title : <>{title.pre}<span style={{ color: accent }}>{title.hi}</span></>}
+        </h2>
         {count > 0 && (
           <button onClick={onToggle} style={{ background: 'none', border: 'none', color: BRAND, fontSize: 13, fontWeight: 900, cursor: 'pointer', fontFamily: FONT, flexShrink: 0, whiteSpace: 'nowrap' }}>
             {expanded ? t('discovery.show_less') : t('discovery.see_all')}
@@ -137,6 +146,15 @@ function Rail({ title, accent, count, loading, expanded, onToggle, children, emp
   );
 }
 
+/* The feed bucket a record belongs to — pastes and uploaded text files
+   are the notes rail. Shared by the rails, the taste signal and the
+   recommendation mix. */
+function typeOf(it) {
+  if (it.kind === 'paste') return 'note';
+  if (it.fileType === 'text') return 'note';
+  return TYPES[it.fileType] ? it.fileType : null;
+}
+
 /* ── The feed ─────────────────────────────────────────────────── */
 export default function ContentsDiscoveryTab({ initialQuery = '' }) {
   const { t } = useLang();
@@ -149,6 +167,7 @@ export default function ContentsDiscoveryTab({ initialQuery = '' }) {
   const [openingId, setOpeningId] = useState(null);
   const [session, setSession] = useState(null);   // the record opened as a teaching session
   const [toast, setToast] = useState(null);
+  const [myTypes, setMyTypes] = useState(() => new Set());  // my shelf's types — the taste signal
 
   useEffect(() => {
     let alive = true;
@@ -156,6 +175,19 @@ export default function ContentsDiscoveryTab({ initialQuery = '' }) {
       .then(d => { if (alive) setItems(Array.isArray(d) ? d : []); })
       .catch(() => { if (alive) setLoadErr(true); })
       .finally(() => { if (alive) setLoading(false); });
+    /* My own shelf's content types — the honest "for you" signal we have:
+       what the learner actually studies leads the recommendations. */
+    listRecords()
+      .then(rows => {
+        if (!alive) return;
+        const s = new Set();
+        for (const r of rows || []) {
+          const ty = typeOf(r);
+          if (ty) s.add(ty);
+        }
+        setMyTypes(s);
+      })
+      .catch(() => {});   // no signal — recommendations fall back to balance
     return () => { alive = false; };
   }, []);
 
@@ -167,13 +199,43 @@ export default function ContentsDiscoveryTab({ initialQuery = '' }) {
   const buckets = useMemo(() => {
     const b = { video: [], audio: [], pdf: [], note: [], image: [] };
     for (const it of items) {
-      const ty = it.kind === 'paste' ? 'note'
-        : it.fileType === 'text' ? 'note'
-        : TYPES[it.fileType] ? it.fileType : null;
+      const ty = typeOf(it);
       if (ty && matches(it)) b[ty].push(it);
     }
     return b;
   }, [items, q]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* Recommended for you — taste-weighted: the content types on the
+     learner's own shelf lead, and a round-robin across types keeps the
+     rail a balanced platter instead of a duplicate of one type rail.
+     Newest first inside each type (the feed already is). */
+  const recommended = useMemo(() => {
+    const order = [
+      ...Object.keys(TYPES).filter(k => myTypes.has(k)),
+      ...Object.keys(TYPES).filter(k => !myTypes.has(k)),
+    ];
+    const idx = {}; const out = [];
+    let progress = true;
+    while (out.length < 12 && progress) {
+      progress = false;
+      for (const k of order) {
+        const list = buckets[k] || [];
+        if (idx[k] === undefined) idx[k] = 0;
+        if (idx[k] < list.length) {
+          out.push(list[idx[k]++]);
+          progress = true;
+          if (out.length >= 12) break;
+        }
+      }
+    }
+    return out;
+  }, [buckets, myTypes]);
+
+  /* New releases — the newest shared material, straight by date. */
+  const newReleases = useMemo(() =>
+    [...Object.values(buckets).flat()]
+      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+      .slice(0, 12), [buckets]);
 
   const toggle = (k) => setExpanded(e => ({ ...e, [k]: !e[k] }));
 
@@ -269,7 +331,36 @@ export default function ContentsDiscoveryTab({ initialQuery = '' }) {
           </p>
         </div>
       ) : (
-        Object.keys(TYPES)
+        <React.Fragment>
+        {/* Recommended for you — taste-weighted, balanced across types */}
+        {chip === 'all' && recommended.length > 0 && (
+          <Rail
+            title={{ pre: t('discovery.rail_reco_pre'), hi: t('discovery.rail_reco_hi') }}
+            accent={BRAND} count={recommended.length} loading={false}
+            expanded={!!expanded.reco} onToggle={() => toggle('reco')}
+            emptyText={t('discovery.contents_empty')}>
+            {(expanded.reco ? recommended : recommended.slice(0, 10)).map(it => (
+              <RecordCard key={`reco-${it.id}`} item={it} type={typeOf(it)} wide={!!expanded.reco}
+                opening={openingId === it.id} onOpen={open}/>
+            ))}
+          </Rail>
+        )}
+
+        {/* New releases — the newest shared material, NEW on this week's */}
+        {chip === 'all' && newReleases.length > 0 && (
+          <Rail
+            title={{ pre: t('discovery.rail_new_pre'), hi: t('discovery.rail_new_hi') }}
+            accent={GREEN} count={newReleases.length} loading={false}
+            expanded={!!expanded.new} onToggle={() => toggle('new')}
+            emptyText={t('discovery.contents_empty')}>
+            {(expanded.new ? newReleases : newReleases.slice(0, 10)).map(it => (
+              <RecordCard key={`new-${it.id}`} item={it} type={typeOf(it)} wide={!!expanded.new}
+                opening={openingId === it.id} onOpen={open}/>
+            ))}
+          </Rail>
+        )}
+
+        {Object.keys(TYPES)
           .filter(k => chip === 'all' || chip === k)
           .filter(k => buckets[k].length > 0 || chip === k)
           .map(k => (
@@ -287,7 +378,8 @@ export default function ContentsDiscoveryTab({ initialQuery = '' }) {
                   opening={openingId === it.id} onOpen={open}/>
               ))}
             </Rail>
-          ))
+          ))}
+        </React.Fragment>
       )}
 
       {/* The opened record — the same teaching session a shelf record opens.
