@@ -52,8 +52,9 @@ test("join-request badges ride the websocket, not a 60-second poll", () => {
   assert.match(layout, /on\('notification', onPush\)/);
 });
 
-test("background jobs can stand down on metered deployments", () => {
-  assert.match(appJs, /AKORO_BACKGROUND_JOBS_ENABLED \?\? "true"/);
+test("background jobs can stand down on metered deployments", async () => {
+  const gateJs = await readFile(new URL("../../lib/jobsGate.js", import.meta.url), "utf8");
+  assert.match(gateJs, /AKORO_BACKGROUND_JOBS_ENABLED \?\? "true"/);
   for (const job of ["embedding sweeper", "alert worker", "eval worker", "routine scheduler", "tenant host refresh"]) {
     assert.ok(appJs.includes(`skipJob("${job}")`), `guarded: ${job}`);
   }

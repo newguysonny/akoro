@@ -158,8 +158,15 @@ const refreshLeaderboard = async () => {
   console.log(`[ranking] ✅ Leaderboard refreshed  entries=${all.length}`);
 };
 
-// Run every 15 minutes
-cron.schedule("*/15 * * * *", refreshLeaderboard);
+// Run every 15 minutes — behind the shared jobs gate (full xp_transactions
+// read + leaderboard rewrite per run; not something to run with everything
+// else deliberately disabled).
+import { skipJob } from "../../lib/jobsGate.js";
+if (skipJob("leaderboard refresh")) {
+  console.log("[ranking] ⏰ leaderboard cron NOT registered (jobs gate)");
+} else {
+  cron.schedule("*/15 * * * *", refreshLeaderboard);
+}
 
 // ─── Ranking handlers ─────────────────────────────────────────────────────────
 

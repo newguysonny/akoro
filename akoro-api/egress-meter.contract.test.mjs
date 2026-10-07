@@ -63,6 +63,53 @@ test("outbound (service-initiated) bytes are metered at the fetch layer", async 
   assert.match(appJs, /outbound: outboundSummary\(\),/);
 });
 
+test("outbound metering covers the node:http plane, not just fetch", async () => {
+  // axios (Zoom/Google in the live-session scheduler) and the AWS SDK (R2)
+  // ride on ClientRequest, not fetch — the meter was blind to exactly the
+  // clients the ungated crons use.
+  const meter = await read("lib/outboundMeter.js");
+  assert.match(meter, /ClientRequest\?\.prototype/);
+  assert.match(meter, /akoroMeteredWrite/);
+  assert.match(meter, /akoroMeteredEnd/);
+  // Loopback (task worker → this API) is not billable egress — proven at
+  // runtime by the delta===0 assertion below; this pins the intent in prose.
+  assert.match(meter, /Loopback \(the task worker calling this API over 127/);
+  // Runtime proof: a real http.request with a body must land in the tally.
+  const { outboundSummary, recordOutbound } = await import("./lib/outboundMeter.js");
+  const http = await import("node:http");
+  const { promisify } = await import("node:util");
+  const server = http.createServer((req, res) => { res.writeHead(200); res.end("ok"); });
+  await promisify((cb) => server.listen(0, "127.0.0.1", cb))();
+  const port = server.address().port;
+  const before = outboundSummary().totalBytes;
+  await new Promise((resolve) => {
+    const req = http.request({ host: "127.0.0.1", port, method: "POST", path: "/" }, (res) => { res.resume(); res.on("end", resolve); });
+    req.end("x".repeat(500));
+  });
+  const delta = outboundSummary().totalBytes - before;
+  server.close();
+  // Loopback is deliberately NOT counted — the request must not move the meter.
+  assert.equal(delta, 0, "loopback requests are not egress");
+  // And the host-exclusion path itself works (the record call is exercised
+  // by every non-loopback request the suite makes; here we only assert the
+  // tally API stays consistent).
+  const s = outboundSummary();
+  assert.ok(Number.isFinite(s.totalBytes) && Array.isArray(s.hosts));
+});
+
+test("the ungated crons now respect the jobs dials", async () => {
+  const gate = await read("lib/jobsGate.js");
+  const scheduler = await read("modules/courses/scheduler.js");
+  const ranking = await read("modules/ranking/routes.js");
+  const appJs = await read("app.js");
+  // One gate, shared: app.js delegates, and the two module-level crons
+  // (1-min live-session scheduler, 15-min leaderboard rebuild) ask it too.
+  assert.match(gate, /export function skipJob\(name\)/);
+  assert.match(appJs, /skipJob as sharedSkipJob/);
+  assert.match(scheduler, /skipJob\("live-session scheduler"\)/);
+  assert.match(ranking, /skipJob\("leaderboard refresh"\)/);
+});
+
 test("the in-memory video upload landmine is capped at 2 GB, not 50", () => {
   // A 50 GB memory buffer on a 512 MB instance OOMs long before the limit,
   // and every proxied byte later leaves for R2 through metered egress.

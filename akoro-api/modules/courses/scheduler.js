@@ -491,8 +491,16 @@ const tick = async () => {
   }
 };
 
-cron.schedule("* * * * *", tick);
-console.log("[scheduler] ⏰ DB-backed live-session cron registered (1-min tick)");
+// The dials must reach this cron too: it ticks every minute, queries
+// live_sessions, and for OAuth-backed sessions calls Zoom/Google — with
+// every BullMQ worker disabled, this still ran around the clock.
+import { skipJob } from "../../lib/jobsGate.js";
+if (skipJob("live-session scheduler")) {
+  console.log("[scheduler] ⏰ live-session cron NOT registered (jobs gate)");
+} else {
+  cron.schedule("* * * * *", tick);
+  console.log("[scheduler] ⏰ DB-backed live-session cron registered (1-min tick)");
+}
 
 // ─── § MANUAL TRIGGERS ────────────────────────────────────────────────────────
 // REST endpoints so teachers/admins can act without waiting for the tick.

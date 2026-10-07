@@ -88,6 +88,47 @@ function bodyBytes(body) {
   }
 }
 
+/* The node:http plane — axios (Zoom/Google calls in the live-session
+   scheduler), the AWS SDK (R2 uploads), and anything else not on fetch.
+   Patched on ClientRequest.prototype so it catches every client no matter
+   how the request was created. Node's undici (global fetch) has its own
+   connector and never touches ClientRequest, so nothing is double-counted.
+   Loopback requests are left out — a service talking to itself is not the
+   egress Render bills. */
+import http from "node:http";
+const CR = http.ClientRequest?.prototype;
+if (CR && !Object.prototype.hasOwnProperty.call(CR, "__akoroMetered")) {
+  try {
+    Object.defineProperty(CR, "__akoroMetered", { value: true, configurable: true });
+    const origWrite = CR.write;
+    CR.write = function akoroMeteredWrite(chunk, ...rest) {
+      try {
+        if (chunk != null && (typeof chunk === "string" || typeof chunk === "object")) {
+          this.__akoroSent = (this.__akoroSent || 0) + (chunk.length ?? 0);
+        }
+      } catch { /* metering must never break a request */ }
+      return origWrite.call(this, chunk, ...rest);
+    };
+    const origEnd = CR.end;
+    CR.end = function akoroMeteredEnd(chunk, ...rest) {
+      try {
+        let body = this.__akoroSent || 0;
+        if (chunk != null && (typeof chunk === "string" || typeof chunk === "object") && typeof chunk !== "function") {
+          body += chunk.length ?? 0;
+        }
+        const host = String(this.host || this.getHeader?.("host") || "(http-other)");
+        // Loopback (the task worker calling this API over 127.0.0.1) is not
+        // billable egress; everything else counts.
+        if (!/^(127\.0\.0\.1|localhost|\[::1\])(:|$)/.test(host)) {
+          recordOutbound(host, HEADER_ESTIMATE_BYTES + body);
+        }
+        this.__akoroSent = 0;
+      } catch { /* metering must never break a request */ }
+      return origEnd.call(this, chunk, ...rest);
+    };
+  } catch { /* a metering patch failure must never stop the app */ }
+}
+
 const origFetch = globalThis.fetch?.bind(globalThis);
 if (typeof origFetch === "function" && !globalThis.__akoroOutboundMetered) {
   globalThis.__akoroOutboundMetered = true;

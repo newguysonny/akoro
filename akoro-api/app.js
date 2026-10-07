@@ -24,6 +24,7 @@ import Redis                      from "ioredis";
 import cors                       from "cors";
 import helmet                     from "helmet";
 import compression                from "compression";
+import { skipJob as sharedSkipJob } from "./lib/jobsGate.js";
 import { outboundSummary }        from "./lib/outboundMeter.js";
 import cookieParser               from "cookie-parser";
 import path                       from "path";
@@ -638,22 +639,10 @@ if (process.env.MIGRATIONS_ON_BOOT !== "false") {
 // eval worker, chat follow-ups worker, learner-autonomy worker, autonomy
 // cycle worker, embedding sweeper, alert worker, routine scheduler, tenant
 // host refresh). The tasks worker has its own legacy gate (ENABLE_TASK_WORKER).
-const backgroundJobsEnabled = String(process.env.AKORO_BACKGROUND_JOBS_ENABLED ?? "true").trim().toLowerCase() === "true";
-const JOBS_ONLY = String(process.env.AKORO_JOBS_ENABLED ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-const JOBS_DISABLED = String(process.env.AKORO_JOBS_DISABLED ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-const skipJob = (name) => {
-  if (JOBS_ONLY.length && !JOBS_ONLY.includes(name)) {
-    console.log(`[jobs] ${name} skipped (not listed in AKORO_JOBS_ENABLED)`);
-    return true;
-  }
-  if (JOBS_DISABLED.includes(name)) {
-    console.log(`[jobs] ${name} skipped (AKORO_JOBS_DISABLED)`);
-    return true;
-  }
-  if (backgroundJobsEnabled) return false;
-  console.log(`[jobs] ${name} skipped (AKORO_BACKGROUND_JOBS_ENABLED=false)`);
-  return true;
-};
+// The gate lives in lib/jobsGate.js now: module-level crons (live-session
+// scheduler, leaderboard rebuild) must respect the same dials as every
+// worker — they used to register on import with no gate at all.
+const skipJob = sharedSkipJob;
 
 // Eagerly start the BullMQ battle worker at boot (it was previously imported
 // lazily on the first enqueue, so battles could stall until some action kicked
