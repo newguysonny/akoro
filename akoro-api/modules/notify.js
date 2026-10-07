@@ -41,28 +41,23 @@ export async function notifyUser({ userId, type, title, content = null, relatedI
   } catch { /* no socket */ }
 
   // Web Push to the user's PWA devices (best-effort; no-op if not subscribed or
-  // push is disabled). Respects the push_enabled preference.
+  // push is disabled). Push AND email read the one preferences row together —
+  // notifyUser used to query user_notification_preferences twice per call.
+  let pushEnabled = true;
+  let emailEnabled = true;
   try {
-    let pushEnabled = true;
-    try {
-      const { data: prefs } = await db
-        .from("user_notification_preferences")
-        .select("push_enabled").eq("user_id", userId).maybeSingle();
-      if (prefs && prefs.push_enabled === false) pushEnabled = false;
-    } catch { /* default on */ }
+    const { data: prefs } = await db
+      .from("user_notification_preferences")
+      .select("push_enabled, email_enabled").eq("user_id", userId).maybeSingle();
+    if (prefs && prefs.push_enabled === false) pushEnabled = false;
+    if (prefs && prefs.email_enabled === false) emailEnabled = false;
+  } catch { /* default both on */ }
+  try {
     if (pushEnabled) sendPushToUser(userId, { title, body: content || title, link, type });
   } catch { /* push best-effort */ }
 
   if (email?.to) {
-    // Respect the user's email preference (default on when no row exists).
-    let emailEnabled = true;
-    try {
-      const { data: prefs } = await db
-        .from("user_notification_preferences")
-        .select("email_enabled").eq("user_id", userId).maybeSingle();
-      if (prefs && prefs.email_enabled === false) emailEnabled = false;
-    } catch { /* default to sending */ }
-
+    // emailEnabled comes from the shared preferences read above.
     if (emailEnabled) {
       sendNotificationEmail({
         to: email.to, name: email.name,

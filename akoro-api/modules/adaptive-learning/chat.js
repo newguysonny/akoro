@@ -2708,6 +2708,16 @@ router.post("/agent", async (req, res) => {
   const wantsStream = req.query.stream === "1" || req.query.stream === "true"
     || (req.headers.accept || "").includes("text/event-stream");
   let headersSent = false;
+  // Heartbeat: a long tool loop (blog research, multi-turn tool calls) can run
+  // silent for minutes. Cloudflare's proxy drops connections idle ~100s, the
+  // client then falls back to a NON-STREAMING retry — and the whole agent
+  // loop, every prompt and tool call, is billed to the outbound budget a
+  // second time. A 20s comment frame costs nothing and keeps the pipe open.
+  // SSE comments (": ping") are ignored by every EventSource parser — and by
+  // this API's own client, which skips blocks without a data line.
+  let heartbeat = null;
+  const stopHeartbeat = () => { if (heartbeat) { clearInterval(heartbeat); heartbeat = null; } };
+  res.on("close", stopHeartbeat);
   const beginStream = () => {
     if (headersSent) return;
     res.writeHead(200, {
@@ -2718,6 +2728,10 @@ router.post("/agent", async (req, res) => {
     });
     res.flushHeaders?.();
     headersSent = true;
+    heartbeat = setInterval(() => {
+      if (!res.destroyed && !res.writableEnded) res.write(": ping\n\n");
+    }, 20_000);
+    heartbeat.unref?.();
   };
   const send = (event, data) => {
     if (!res.destroyed && !res.writableEnded) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
