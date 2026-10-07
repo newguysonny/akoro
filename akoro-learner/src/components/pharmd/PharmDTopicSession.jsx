@@ -179,6 +179,7 @@ export default function PharmDTopicSession({ topic, course, onClose }) {
     media: null,
     pages,
     renderPageContent,
+    rawPages: true,            // pdf.js canvases carry their own margins
     allowTextMarking: false,   // canvases can't carry HTML annotate/redact
   };
 

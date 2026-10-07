@@ -971,10 +971,15 @@ export default function SessionReaderModal({
        reader pane becomes a media player: the ORIGINAL file plays, and the
        toolbar swaps page nav/zoom for transport (±10s, play/pause, speed).
      allowTextMarking: false hides Annotate/Hide in the selection popover
-       (they operate on HTML pages — canvases/images can't carry them). */
+       (they operate on HTML pages — canvases/images can't carry them).
+     rawPages: true — the pages are finished documents (pdf.js canvases):
+       they carry their own margins, so the reader drops the inner page
+       padding and the width cap, keeps ONE small margin around the page
+       stack and a tight gap between pages — the document fills the pane. */
   renderPageContent = null,
   media = null,
   allowTextMarking = true,
+  rawPages = false,
 }) {
   const isMobile = useIsMobileView();
   const split = !isMobile && !!chatNode;
@@ -1489,13 +1494,20 @@ export default function SessionReaderModal({
                 downloadName={media.downloadName}
               />
             ) : (
-            <div ref={viewerRef} onClick={handleViewerClick} className="pdf-scroll h-full overflow-auto flex flex-col items-center px-3 md:px-6 pt-9 pb-16" style={{ background: "var(--ak-bg)" }}>
+            <div ref={viewerRef} onClick={handleViewerClick}
+              className={`pdf-scroll h-full overflow-auto flex flex-col items-center ${rawPages ? "px-1.5 md:px-3 pt-2 md:pt-3 pb-8" : "px-3 md:px-6 pt-9 pb-16"}`}
+              style={{ background: "var(--ak-bg)" }}>
               {pages.map((p, i) => (
                 <div
                   key={i}
                   data-page-index={i}
                   style={{ transform: `scale(${zoom})`, transformOrigin: "top center" }}
-                  className="doc-page relative w-full md:max-w-2xl mb-5 shadow-lg px-5 py-9 md:px-14 md:py-14"
+                  className={`doc-page relative w-full shadow-lg ${rawPages
+                    // A finished PDF page brings its own margins — render it
+                    // flush: no inner padding, no width cap, a tight gap so
+                    // the stack reads as one continuous document.
+                    ? "mb-1.5"
+                    : "md:max-w-2xl mb-5 px-5 py-9 md:px-14 md:py-14"}`}
                 >
                   {renderPageContent
                     ? renderPageContent(i)

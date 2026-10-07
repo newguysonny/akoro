@@ -284,6 +284,7 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
     media,
     pages,
     renderPageContent,
+    rawPages: type === 'pdf',   // canvases carry their own margins; images/cards keep the padded card
     allowTextMarking: type !== 'pdf' && type !== 'image',   // canvases/images can't carry HTML annotate/redact
   };
 
