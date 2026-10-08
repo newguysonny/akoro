@@ -56,6 +56,9 @@ import {
   recordsExtractionEnabled, parsePageOnRunpod, saveExtractionPage, getExtraction,
   MAX_PAGES_PER_REQUEST, MAX_RECORD_PAGES, MAX_IMAGE_B64_CHARS,
 } from "./extractLib.js";
+import {
+  avEnabled, transcribeRecord, getTranscript,
+} from "./avTranscribeLib.js";
 
 const router = Router();
 
@@ -614,6 +617,73 @@ router.delete("/:id", authenticateToken, asyncHandler(async (req, res) => {
   if (error) throw error;
   void removeRecordFile(existing.file_key);  // best-effort — the row is gone either way
   res.status(200).json({ success: true, data: { id: req.params.id } });
+}));
+
+/* ─── Audio/video transcription (ffmpeg 16k-mono → Deepgram, scene frames
+ * → captions) — the Fortizo §5 lane ─────────────────────────────────────────
+ *
+ *   POST /api/records/transcribe            { recordId } → job started
+ *   GET  /api/records/transcribe/:recordId  { job, transcript }
+ *
+ * The job downloads the ORIGINAL via presigned URL, extracts audio at the
+ * STT-native rate (16 kHz mono — never the raw video), transcribes with
+ * nova-2 (diarized, paragraph-timestamped), samples scene-change frames
+ * for slide captions, and writes edu.record_transcripts (delete-then-
+ * insert — re-running is idempotent). One job per record at a time.
+ */
+const avJobs = new Map();   // recordId → { running, startedAt, finishedAt, log, result }
+const avJobSnapshot = (j) => j && ({
+  running: j.running, startedAt: j.startedAt, finishedAt: j.finishedAt,
+  log: j.log.slice(-60), result: j.result,
+});
+
+router.post("/transcribe", authenticateToken, asyncHandler(async (req, res) => {
+  if (!avEnabled()) {
+    return res.status(501).json({ success: false, error: "Transcription isn't configured on this deployment yet." });
+  }
+  const recordId = String(req.body?.recordId || "");
+  if (!/^[0-9a-f-]{36}$/i.test(recordId)) return res400(res, "A recordId is required.");
+
+  const { data: rec, error: recErr } = await edu().from("records")
+    .select("id, user_id, name, mime, file_key").eq("id", recordId).maybeSingle();
+  if (recErr) throw recErr;
+  if (!rec || rec.user_id !== req.user.id) return res.status(404).json({ success: false, message: "Record not found." });
+  if (!rec.file_key) return res400(res, "This record has no saved file — only its details were captured.");
+  const mime = rec.mime || "";
+  const avKind = /^video\//.test(mime) || /\.(mp4|m4v|mov|webm|mkv)$/i.test(rec.name || "") ? "video"
+    : /^audio\//.test(mime) || /\.(mp3|m4a|aac|wav|ogg|flac)$/i.test(rec.name || "") ? "audio" : null;
+  if (!avKind) return res400(res, "Only audio and video records transcribe.");
+
+  const running = [...avJobs.values()].some((j) => j.running);
+  if (running) return res.status(409).json({ success: false, error: "A transcription is already running — try again when it finishes." });
+
+  const fileUrl = await createPresignedDownload(rec.file_key, { downloadName: rec.name });
+  const job = { running: true, startedAt: new Date().toISOString(), finishedAt: null, log: [], result: null };
+  avJobs.set(recordId, job);
+  transcribeRecord({
+    userId: req.user.id, recordId, recordName: rec.name, kind: avKind, fileUrl,
+    onLog: (line) => job.log.push(line),
+  })
+    .then((result) => { job.result = result; })
+    .catch((err) => {
+      job.log.push(`[av] FAILED: ${String(err?.message || err).slice(0, 220)}`);
+      job.result = { ok: false, error: String(err?.message || err).slice(0, 220) };
+    })
+    .finally(() => { job.running = false; job.finishedAt = new Date().toISOString(); });
+
+  res.json({ success: true, data: { job: avJobSnapshot(job), kind: avKind } });
+}));
+
+router.get("/transcribe/:recordId", authenticateToken, asyncHandler(async (req, res) => {
+  const recordId = String(req.params.recordId || "");
+  if (!/^[0-9a-f-]{36}$/i.test(recordId)) return res400(res, "A recordId is required.");
+  const { data: rec } = await edu().from("records")
+    .select("id, user_id").eq("id", recordId).maybeSingle();
+  if (!rec || rec.user_id !== req.user.id) return res.status(404).json({ success: false, message: "Record not found." });
+  res.json({ success: true, data: {
+    job: avJobSnapshot(avJobs.get(recordId) || null),
+    transcript: await getTranscript(req.user.id, recordId),
+  } });
 }));
 
 // ─── GET /api/records/:id/file — stable download seam (302 → presigned) ─────

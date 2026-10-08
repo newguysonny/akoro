@@ -43,7 +43,7 @@
 import { useEffect, useRef, useState } from 'react';
 import TeachAgentModal from '../teaching/TeachAgentModal.jsx';
 import { buildSessionReaderPages } from '../teaching/SessionReaderModal.jsx';
-import { recordDownloadUrl, getRecordExtraction } from '../../services/recordsApi.js';
+import { recordDownloadUrl, getRecordExtraction, getRecordTranscript, startRecordTranscription, getRecordTranscriptionStatus } from '../../services/recordsApi.js';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
@@ -120,6 +120,7 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
      error    → show why, offer retry / read-as-is */
   const [extract, setExtract] = useState(null);
   const [pdfBlocks, setPdfBlocks] = useState(() => new Map());  // page → layout blocks (extraction overlay)
+  const [avTranscript, setAvTranscript] = useState(null);       // { segments } — audio/video transcript
   const textsRef  = useRef([]);      // the load flow's per-page text layer (≈'' for scans)
   const applyRef  = useRef(null);    // set by the load flow; applies parsed pages to the session
 
@@ -152,6 +153,40 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
     }
   };
 
+  /* ── A/V transcription — ffmpeg 16k-mono → Deepgram on the server.
+     offer → running (poll the job) → applied: the transcript grounds the
+     session and lists under the player with click-to-seek. */
+  const startTranscription = async () => {
+    if (!record?.id) return;
+    setExtract((s) => ({ ...s, status: 'running', done: 0, error: null, elapsed: 0 }));
+    const t0 = Date.now();
+    const tick = setInterval(() => setExtract((s) => (s?.status === 'running'
+      ? { ...s, elapsed: Math.round((Date.now() - t0) / 1000) } : s)), 1000);
+    try {
+      await startRecordTranscription(record.id);
+      // Poll the job — a long lecture takes Deepgram ~20s/100min + captions.
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 5000));
+        const d = await getRecordTranscriptionStatus(record.id);
+        if (!d?.job?.running) {
+          if (d?.job?.result?.ok === false) throw new Error(d.job.result.error || 'Transcription failed.');
+          break;
+        }
+      }
+      const { segments } = await getRecordTranscript(record.id);
+      if (!segments?.length) throw new Error('No speech came out of this recording.');
+      setAvTranscript({ segments });
+      const text = segments.map((s) => (s.speaker ? `[${s.speaker}] ${s.text}` : s.text)).join('\n\n');
+      ready([{ html: '', text: '' }], null, { name: record.name, text: text.slice(0, MAX_REFERENCE_CHARS) });
+      setExtract({ status: 'applied', done: segments.length, total: segments.length, error: null });
+      setTimeout(() => setExtract((s) => (s?.status === 'applied' ? null : s)), 6000);
+    } catch (e) {
+      setExtract((s) => ({ ...s, status: 'error', error: e?.message || 'Transcription failed.' }));
+    } finally {
+      clearInterval(tick);
+    }
+  };
+
   const type   = record?.kind === 'upload' && record.fileMissing ? 'missing' : recordFileType(record);
   const isMedia = type === 'audio' || type === 'video';
   const fileUrl = record?.fileUrl || null;
@@ -168,6 +203,7 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
     setReference(null);
     setExtract(null);
     setPdfBlocks(new Map());
+    setAvTranscript(null);
     textsRef.current = [];
     applyRef.current = null;
 
@@ -274,8 +310,21 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
           applyRef.current = applyImage;
           setExtract({ status: 'offer', done: 0, total: 1 });
           ready([{ html: '', text: '' }]);
+        } else if (type === 'audio' || type === 'video') {
+          // The recording plays as-is; a transcript (cached or offered)
+          // grounds the session in the real words.
+          const { segments } = await getRecordTranscript(record.id);
+          if (cancelled) return;
+          if (segments?.length) {
+            const text = segments.map((s) => (s.speaker ? `[${s.speaker}] ${s.text}` : s.text)).join('\n\n');
+            setAvTranscript({ segments });
+            ready([{ html: '', text: '' }], null, { name: record.name, text: text.slice(0, MAX_REFERENCE_CHARS) });
+            return;
+          }
+          setExtract({ status: 'offer', av: true, done: 0, total: 1 });
+          ready([{ html: '', text: '' }]);
         } else {
-          // audio / video / other — nothing to preload
+          // other — nothing to preload
           ready([{ html: '', text: '' }]);
         }
       } catch (e) {
@@ -399,6 +448,9 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
     // Extraction blocks per page — generated summaries/quiz citations carry
     // the exact block bbox, and citeJump flashes that region on the scan.
     pageBlocks: pages.map((_, i) => pdfBlocks.get(i + 1) || null),
+    // A/V transcript segments — the reader lists them under the player;
+    // clicking a segment seeks the recording to that moment.
+    transcript: avTranscript,
   };
 
   /* A remembered session id (24h) makes reopening a record CONTINUE its
@@ -429,7 +481,9 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
               <strong style={{ fontSize: 14.5, fontWeight: 900, color: 'var(--ak-text)' }}>Extracting the text…</strong>
             </div>
             <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ak-text-sub)', margin: '0 0 12px' }}>
-              {extract.total > 1 ? `Page ${Math.min(extract.done + 1, extract.total)} of ${extract.total}` : 'Reading the page'} — this stays open until it's done.
+              {extract.av
+                ? `Transcribing${extract.elapsed ? ` — ${extract.elapsed}s` : ''}. Long recordings take a minute or two; this stays open until it's done.`
+                : extract.total > 1 ? `Page ${Math.min(extract.done + 1, extract.total)} of ${extract.total}` : 'Reading the page'}
             </p>
             <div style={{ height: 8, borderRadius: 5, background: 'var(--ak-tag-bg, #EEF0F5)', overflow: 'hidden' }}>
               <div style={{ width: `${Math.max(6, extractPct)}%`, height: '100%', borderRadius: 5,
@@ -469,15 +523,16 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
                 <Icon name="ti-sparkles" size={17} color={BRAND}/>
               </span>
               <strong style={{ fontSize: 14.5, fontWeight: 900, color: 'var(--ak-text)' }}>
-                {type === 'image' ? 'Extract the text from this image?' : 'Scanned document detected'}
+                {extract.av ? 'Transcribe this recording?' : type === 'image' ? 'Extract the text from this image?' : 'Scanned document detected'}
               </strong>
             </div>
             <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ak-text-sub)', margin: '6px 0 14px', lineHeight: 1.55 }}>
-              This {type === 'image' ? 'image has no readable text layer' : "PDF has no readable text layer — it's a scan"}.
-              Extract the text with AI and it reads like a normal document: the agent can teach from it, quote it and quiz you on it.
+              {extract.av
+                ? 'Turn the speech into a timestamped transcript (with speakers). The agent teaches from the real words, and every line jumps the player to that moment.'
+                : `This ${type === 'image' ? 'image has no readable text layer' : "PDF has no readable text layer — it's a scan"}. Extract the text with AI and it reads like a normal document: the agent can teach from it, quote it and quiz you on it.`}
             </p>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={startExtraction} style={btnPrimary}>Extract text</button>
+              <button onClick={extract.av ? startTranscription : startExtraction} style={btnPrimary}>{extract.av ? 'Transcribe' : 'Extract text'}</button>
               <button onClick={() => setExtract(null)} style={btnGhost}>Read as-is</button>
             </div>
           </>

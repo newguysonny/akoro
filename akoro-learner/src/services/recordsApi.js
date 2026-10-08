@@ -162,5 +162,29 @@ export async function extractRecordPages({ recordId, pages }) {
   return d?.data ?? { pages: [] };
 }
 
+/* ── A/V transcription (ffmpeg → Deepgram, via the API) ───────────────────
+   The reader offers it for audio/video records; segments ground the
+   session and drive click-to-seek in the player. */
+
+/** Cached transcript — { segments:[{kind,startMs,endMs,speaker,text}], text } (empty when none). */
+export async function getRecordTranscript(recordId) {
+  try {
+    const d = await apiGet(`/api/records/transcribe/${recordId}`);
+    return d?.data?.transcript ?? { segments: [], text: '' };
+  } catch { return { segments: [], text: '' }; }
+}
+
+/** Start the transcription job (409 while another runs). */
+export async function startRecordTranscription(recordId) {
+  const d = await apiPost('/api/records/transcribe', { recordId });
+  return d?.data ?? {};
+}
+
+/** Job status + transcript in one poll — { job, transcript }. */
+export async function getRecordTranscriptionStatus(recordId) {
+  const d = await apiGet(`/api/records/transcribe/${recordId}`);
+  return d?.data ?? { job: null, transcript: { segments: [], text: '' } };
+}
+
 /** Stable "save a copy" link — cookies auth it, R2 serves the bytes. */
 export const recordDownloadUrl = (id) => `${API}/api/records/${id}/file`;
