@@ -60,6 +60,8 @@ import { fileURLToPath }                  from "url";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import db                                 from "../../db.js";
 import { autoTranscribeContent }          from "../records/avTranscribeLib.js";
+import { mediaWorkerEnabled }             from "../records/mediaClient.js";
+import { dispatchEncode }                 from "./encodeDispatch.js";
 import { r2Send } from "../../lib/r2Breaker.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -201,7 +203,12 @@ const deleteR2Prefix = async (prefix) => {
 // ─── § BULLMQ PRODUCER ────────────────────────────────────────────────────────
 // Only adds jobs — never processes them. Worker.js is the consumer.
 
-const encodingQueue = new Queue("video-encoding", {
+// Encode dispatch — the media container (media-worker/) when MEDIA_WORKER_URL
+// is set: the video never passes through this server or its Redis. The BullMQ
+// queue below is the fallback (byte-for-byte the original path) and is only
+// constructed when no container is configured — container mode opens no
+// Redis lane for encoding at all.
+const encodingQueue = mediaWorkerEnabled() ? null : new Queue("video-encoding", {
   connection: { url: process.env.REDIS_URL ?? "redis://localhost:6379" },
   defaultJobOptions: {
     attempts:         3,
@@ -268,21 +275,48 @@ const streamHandlers = {
       updatedAt:        now(),
     });
 
-    // Step 3 — queue encoding job
-    const job = await encodingQueue.add("encode", {
-      videoId,
-      courseId,
-      sourceKey,             // worker uses this — no file paths, no shared disk
-      originalName: req.file.originalname,
-    });
-
-    console.log(`[stream] 📤 Job queued  videoId=${videoId}  jobId=${job.id}`);
+    // Step 3 — dispatch the encode. Container mode: one HTTPS call; the
+    // bytes go container ↔ R2 and never through this server. If the
+    // container can't take the job, the record says FAILED (honest) rather
+    // than sitting "queued" forever — re-uploading is the retry.
+    let jobId = null;
+    let via = "queue";
+    if (encodingQueue) {
+      const job = await encodingQueue.add("encode", {
+        videoId,
+        courseId,
+        sourceKey,             // worker uses this — no file paths, no shared disk
+        originalName: req.file.originalname,
+      });
+      jobId = job.id;
+      console.log(`[stream] 📤 Job queued (bullmq)  videoId=${videoId}  jobId=${jobId}`);
+    } else {
+      try {
+        jobId = await dispatchEncode({ videoId, courseId, sourceKey });
+        via = "media-worker";
+        console.log(`[stream] 📤 Job dispatched to media worker  videoId=${videoId}  jobId=${jobId}`);
+      } catch (err) {
+        console.error(`[stream] media worker dispatch failed:`, String(err?.message || err).slice(0, 200));
+        VideoStore.update(videoId, {
+          encodingStatus: "failed",
+          errorMessage: `Encoding could not be dispatched: ${String(err?.message || err).slice(0, 160)}`,
+          updatedAt: now(),
+        });
+        return res202(res, {
+          videoId,
+          jobId: null,
+          encodingStatus: "failed",
+          message: "Source staged, but the encoder is unreachable right now — re-upload to retry.",
+        });
+      }
+    }
 
     res202(res, {
       videoId,
-      jobId:          job.id,
+      jobId,
       encodingStatus: "queued",
-      message:        "Source staged on R2. Encoding queued — poll /api/stream/status/:videoId for progress.",
+      via,
+      message: `Source staged on R2. Encoding ${via === "media-worker" ? "dispatched to the media worker" : "queued"} — poll /api/stream/status/:videoId for progress.`,
     });
   }),
 
@@ -295,8 +329,11 @@ const streamHandlers = {
     const video = VideoStore.get(req.params.videoId);
     if (!video) return res404(res, `Video ${req.params.videoId} not found`);
 
-    const jobs      = await encodingQueue.getJobs(["active", "waiting", "failed"]);
-    const activeJob = jobs.find((j) => j.data?.videoId === req.params.videoId);
+    let activeJob = null;
+    if (encodingQueue) {
+      const jobs = await encodingQueue.getJobs(["active", "waiting", "failed"]);
+      activeJob = jobs.find((j) => j.data?.videoId === req.params.videoId) ?? null;
+    }
 
     res200(res, {
       videoId:          video.id,

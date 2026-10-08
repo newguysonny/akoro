@@ -65,10 +65,14 @@ MEDIA_WORKER_URL=https://akoro-media-worker.<your-subdomain>.workers.dev
   set — the API then downloads only the tiny 16 kHz mp3 + frames from R2
   for Deepgram/captions. Unset → the in-process ffmpeg path remains as
   the fallback (byte-for-byte the old behavior).
-- **Encode lane**: `akoro-api/worker.js` (BullMQ) can be retired by
-  changing the stream module's enqueue to an authenticated
-  `POST {MEDIA_WORKER_URL}/jobs/encode` — callbacks are already
-  identical. Until that swap, the old worker keeps working as-is.
+- **Encode lane** (flipped): the stream module's upload dispatches
+  straight to `POST /jobs/encode` when `MEDIA_WORKER_URL` is set — media
+  moves container ↔ R2, never through the API, and no BullMQ encode
+  queue is opened at all. The container then drives the SAME
+  `/api/stream/internal/*` callbacks the old worker did, so the
+  instructor's status polling and the auto-transcribe hook are unchanged.
+  Unset → the BullMQ queue + `akoro-api/worker.js` run exactly as before.
+  With it set, stand the old worker down (`VIDEO_WORKER_ENABLED=false`).
 
 ## Endpoints
 
