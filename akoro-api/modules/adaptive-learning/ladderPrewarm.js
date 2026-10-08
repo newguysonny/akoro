@@ -17,6 +17,7 @@
  */
 
 import cron from "node-cron";
+import { registerTick, cronSource } from "../../lib/cronTicks.js";
 import db from "../../db.js";
 import { resolveLadder } from "./lessonLadder.js";
 import { NaNaEsumai } from "./agents/nana-esumai/guide.js";
@@ -90,19 +91,21 @@ export async function prewarmLadders({ max = MAX_PER_RUN } = {}) {
 }
 
 // Off-peak by default so it never competes with lesson traffic.
-if (process.env.LADDER_PREWARM !== "off") {
+const runLadderPrewarm = () => {
+  const start = Date.now();
+  return prewarmLadders()
+    .then(({ scanned, warmed }) => workerTick("ladder-prewarm", {
+      reason: "cron", jobsFound: scanned, jobsProcessed: warmed, durationMs: Date.now() - start,
+    }))
+    .catch((e) => workerTick("ladder-prewarm", {
+      reason: "cron", jobsFound: 0, jobsProcessed: 0, durationMs: Date.now() - start, error: e.message,
+    }));
+};
+registerTick("ladder-prewarm", runLadderPrewarm);
+if (process.env.LADDER_PREWARM !== "off" && cronSource() !== "cloudflare") {
   const schedule = process.env.LADDER_PREWARM_CRON || "20 2 * * *";
   if (cron.validate(schedule)) {
-    cron.schedule(schedule, () => {
-      const start = Date.now();
-      prewarmLadders()
-        .then(({ scanned, warmed }) => workerTick("ladder-prewarm", {
-          reason: "cron", jobsFound: scanned, jobsProcessed: warmed, durationMs: Date.now() - start,
-        }))
-        .catch((e) => workerTick("ladder-prewarm", {
-          reason: "cron", jobsFound: 0, jobsProcessed: 0, durationMs: Date.now() - start, error: e.message,
-        }));
-    });
+    cron.schedule(schedule, () => { runLadderPrewarm(); });
     console.log(`[ladder prewarm] scheduled (${schedule})`);
   } else {
     console.warn(`[ladder prewarm] invalid LADDER_PREWARM_CRON "${schedule}" — disabled`);

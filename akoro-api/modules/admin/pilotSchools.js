@@ -24,6 +24,7 @@
 
 import { Router } from "express";
 import cron from "node-cron";
+import { registerTick, cronSource } from "../../lib/cronTicks.js";
 import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { validatePilotSchoolInput, buildPilotPatch, todayStr } from "../../lib/pilotModel.js";
@@ -252,7 +253,7 @@ router.post("/pilot-applications/:id/reject", ...adminOnly, asyncHandler(async (
  * Ends active cohorts whose end_date has passed and audit-logs each one, so
  * the Schools list never shows a stale "Pilot active". Idempotent.
  */
-cron.schedule("30 3 * * *", async () => {
+export async function runPilotExpiryCheck() {
   try {
     const today = todayStr();
 
@@ -307,9 +308,18 @@ cron.schedule("30 3 * * *", async () => {
         after: { status: "ended" } });
     }
     console.log(`[pilot-expiry-check] ended ${expired.length} pilot cohort(s)`);
+    return { ended: expired.length };
   } catch (e) {
     console.error("[pilot-expiry-check] failed:", e.message);
+    throw e;
   }
-});
+}
+
+// The clock: local node-cron by default; when CRON_SOURCE=cloudflare the
+// edge ticker (cf/cron-ticker) fires runPilotExpiryCheck via /api/internal/ticks.
+registerTick("pilot-expiry-check", runPilotExpiryCheck);
+if (cronSource() !== "cloudflare") {
+  cron.schedule("30 3 * * *", () => { runPilotExpiryCheck().catch(() => {}); });
+}
 
 export default router;

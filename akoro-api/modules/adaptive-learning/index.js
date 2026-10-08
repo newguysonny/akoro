@@ -22,6 +22,7 @@
 
 import { Router }                from "express";
 import cron                      from "node-cron";
+import { registerTick, cronSource } from "../../lib/cronTicks.js";
 import trainingRouter            from "./training/agentTraining.js";
 import { startLiveStream, receiveChunk, endLiveStream } from "./training/agentTraining.js";
 import marketplaceRouter         from "./marketplace/routes.js";
@@ -141,22 +142,21 @@ export const setupAdaptiveWebSocket = (io) => {
   // decay, and pushes review alerts over the same io instance.
   // Nightly at 03:00 server time (off-peak). Guarded so overlapping
   // runs can't pile up if a pass takes longer than expected.
-  let decayRunning = false;
-  cron.schedule("0 3 * * *", async () => {
-    if (decayRunning) {
-      console.log("[DecayEngine] Previous run still in progress — skipping.");
-      return;
-    }
-    decayRunning = true;
+  const runDecayTick = async () => {
     try {
       await decayEngine.runDecayScheduler(io);
     } catch (err) {
       console.error("[DecayEngine] Scheduled run failed:", err.message);
-    } finally {
-      decayRunning = false;
+      throw err;
     }
-  });
-  console.log("[DecayEngine] Decay scheduler registered (nightly 03:00).");
+  };
+  registerTick("decay-scheduler", runDecayTick);   // the registry carries the overlap guard
+  if (cronSource() !== "cloudflare") {
+    cron.schedule("0 3 * * *", () => { runDecayTick().catch(() => {}); });
+    console.log("[DecayEngine] Decay scheduler registered (nightly 03:00).");
+  } else {
+    console.log("[DecayEngine] Decay scheduler on the Cloudflare ticker (CRON_SOURCE=cloudflare).");
+  }
 };
 
 export default router;
