@@ -50,12 +50,15 @@ function HeaderSkeletonBar({ w, h = 14 }) {
   );
 }
 
-/* The reference's empty state: a soft icon tile, a bold title, a quiet sub. */
-export function CommunityEmptyState({ icon = 'ti-clipboard', title, sub }) {
+/* The reference's empty state: a soft icon tile, a bold title, a quiet sub.
+   `compact` trims the tile and padding for section-level rails (the full
+   size is for whole-body zero states). */
+export function CommunityEmptyState({ icon = 'ti-clipboard', title, sub, compact = false }) {
+  const tile = compact ? 44 : 52;
   return (
-    <div style={{ textAlign: 'center', padding: '36px 30px 60px', color: 'var(--ak-text-sub)' }}>
-      <div style={{ width: 52, height: 52, borderRadius: 'var(--r-lg)', background: 'var(--ak-border)', color: 'var(--ak-text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
-        <Icon name={icon} size={24}/>
+    <div style={{ textAlign: 'center', padding: compact ? '14px 20px 26px' : '36px 30px 60px', color: 'var(--ak-text-sub)' }}>
+      <div style={{ width: tile, height: tile, borderRadius: 'var(--r-lg)', background: 'var(--ak-border)', color: 'var(--ak-text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+        <Icon name={icon} size={compact ? 20 : 24}/>
       </div>
       <div style={{ fontWeight: 800, color: 'var(--ak-text)', fontSize: 15, marginBottom: 3 }}>{title}</div>
       {sub && <div style={{ fontSize: 13 }}>{sub}</div>}
