@@ -26,6 +26,12 @@
  *   POST   /activities/:activityId/submit → member submits (idempotent)
  *   DELETE /activities/:activityId        → delete (activity creator only)
  *
+ * Community items (members share content into a community — the
+ * "Add to community" page, mirroring the library's Add-to-folder):
+ *   GET    /:id/items          → the community's shared materials (members only)
+ *   POST   /items              → add one thing to N communities (members
+ *                                only, idempotent per community)
+ *
  * Creator tools:
  *   GET    /:id/members        → member list (names, avatars, roles)
  *   GET    /:id/analytics      → community stats + recent submissions
@@ -197,6 +203,31 @@ async function findActivity(id) {
   return data ?? null;
 }
 
+// ─── community items (shared materials) ──────────────────────────────────────
+// Caps and payload validation mirror modules/records (the Add-to-folder
+// family): one bulk write over the caller's selected communities, the
+// display snapshot stored at add time, idempotent per community.
+const MAX_COMMUNITIES_PER_ADD = 50;
+const MAX_COMMUNITY_ITEMS     = 200;
+const ITEM_TYPES = new Set(["record", "pharmd_topic", "lesson", "library"]);
+const ITEM_KINDS = new Set(["pdf", "audio", "video", "image", "text", "link", "paste", "blog", "course", "topic"]);
+
+/* Validate the shared-item payload; returns { error } or { row }. */
+function normalizeCommunityItem(body = {}) {
+  const itemType = String(body.itemType || "").trim();
+  if (!ITEM_TYPES.has(itemType)) return { error: `itemType must be one of: ${[...ITEM_TYPES].join(", ")}.` };
+  const itemRef = String(body.itemRef || "").trim();
+  if (!itemRef || itemRef.length > 200) return { error: "itemRef is required (≤ 200 characters)." };
+  const title = String(body.title || "").trim();
+  if (!title || title.length > 255) return { error: "A title is required (≤ 255 characters)." };
+  const sub = String(body.sub || "").trim().slice(0, 255) || null;
+  const kind = String(body.kind || "").trim().slice(0, 50) || null;
+  if (kind && !ITEM_KINDS.has(kind)) return { error: `kind must be one of: ${[...ITEM_KINDS].join(", ")}.` };
+  const link = String(body.link || "").trim();
+  if (link && !/^\/[a-zA-Z0-9\-_/]*$/.test(link)) return { error: "link must be an in-app path starting with /." };
+  return { row: { item_type: itemType, item_ref: itemRef, title, sub, kind, link: link || null } };
+}
+
 // ─── community activity routes (registered before /:id routes) ──────────────
 
 /* POST /activities/:activityId/submit — a member submits (idempotent). */
@@ -233,6 +264,48 @@ router.delete("/activities/:activityId", asyncHandler(async (req, res) => {
   if (error) throw communityDbError(error, "complete this community request");
 
   ok(res, { deleted: true });
+}));
+
+// ─── POST /items — add one thing to N communities (members only) ─────────────
+// The Add-to-community page multi-selects communities for a single item, so
+// the write is bulk over the caller's chosen community ids — the mirror of
+// POST /api/records/folders/items. Registered before the /:id routes
+// ("items" must not be captured as :id).
+router.post("/items", asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const body = req.body || {};
+
+  const communityIds = [...new Set(Array.isArray(body.communityIds) ? body.communityIds.map(String) : [])];
+  if (!communityIds.length) return bad(res, "Pick at least one community.");
+  if (communityIds.length > MAX_COMMUNITIES_PER_ADD) return bad(res, "Too many communities selected.");
+
+  const { error: itemErr, row } = normalizeCommunityItem(body);
+  if (itemErr) return bad(res, itemErr);
+
+  // Every target community must have the caller as a member.
+  const { data: mems } = await step("communityMembership", edu().from("community_members")
+    .select("community_id").eq("user_id", userId).in("community_id", communityIds));
+  const memberIds = new Set((mems || []).map((m) => m.community_id));
+  if (memberIds.size !== communityIds.length) {
+    return denied(res, "You can only add to communities you've joined.");
+  }
+
+  // Community names, for the caller's toast.
+  const { data: comms } = await step("communityNames", edu().from("communities")
+    .select("id, name").in("id", communityIds));
+
+  for (const communityId of communityIds) {
+    // Respect the per-community cap on every target.
+    const { count } = await step("communityItemCount", edu().from("community_items")
+      .select("id", { count: "exact", head: true }).eq("community_id", communityId));
+    if ((count || 0) >= MAX_COMMUNITY_ITEMS) {
+      return bad(res, `A community is full (${MAX_COMMUNITY_ITEMS} items) — remove one first.`);
+    }
+    const { error } = await edu().from("community_items")
+      .upsert({ community_id: communityId, user_id: userId, ...row }, { onConflict: "community_id,item_type,item_ref" });
+    if (error) throw communityDbError(error, "add this item");
+  }
+  ok(res, { added: communityIds.length, communities: (comms || []).map((c) => c.name) });
 }));
 
 // ─── GET /mine — my joined communities ──────────────────────────────────────
@@ -397,6 +470,32 @@ router.post("/:id/activities", asyncHandler(async (req, res) => {
   if (error) throw communityDbError(error, "complete this community request");
 
   ok(res, (await withActivityExtras([data]))[0]);
+}));
+
+/* GET /:id/items — the community's shared materials (members only).
+   Newest first; the adder's name rides along so the page can say who
+   shared what. */
+router.get("/:id/items", asyncHandler(async (req, res) => {
+  const c = await communityOr404(res, req.params.id);
+  if (!c) return;
+
+  const { data: mem } = await edu().from("community_members")
+    .select("user_id").eq("community_id", c.id).eq("user_id", req.user.id).maybeSingle();
+  if (!mem) return denied(res, "Join this community to see its materials.");
+
+  const { data, error } = await step("communityItems", edu().from("community_items")
+    .select("id, item_type, item_ref, title, sub, kind, link, created_at, user_id")
+    .eq("community_id", c.id)
+    .order("created_at", { ascending: false }).limit(MAX_COMMUNITY_ITEMS));
+  if (error) throw communityDbError(error, "load these materials");
+
+  const names = await userNames((data || []).map((it) => it.user_id));
+  ok(res, (data || []).map((it) => ({
+    id: it.id, itemType: it.item_type, itemRef: it.item_ref,
+    title: it.title, sub: it.sub || "", kind: it.kind || "topic",
+    link: it.link || null, createdAt: it.created_at,
+    addedBy: names.get(it.user_id) || "",
+  })), { total: (data || []).length });
 }));
 
 // ─── creator tools: members + analytics ─────────────────────────────────────

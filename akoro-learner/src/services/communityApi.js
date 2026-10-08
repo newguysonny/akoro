@@ -122,3 +122,23 @@ export async function fetchCommunityAnalytics(communityId) {
     return d?.data ?? null;
   } catch { return null; }
 }
+
+/* ── Community items (shared materials) ───────────────────────────────────── */
+
+/* The community's shared materials — content members added via the
+   "Add to community" page, newest first. Degrades to empty: the rail
+   simply doesn't render. */
+export async function fetchCommunityItems(communityId) {
+  try {
+    const d = await apiGet(`/api/communities/${communityId}/items`, { cache: false });
+    return d?.data ?? [];
+  } catch { return []; }
+}
+
+/** Add one thing to N communities (the Add-to-community page
+ * multi-selects). item = { itemType, itemRef, title, sub, kind, link }.
+ * Idempotent per community. Throws with a user-facing message. */
+export async function addCommunityItem({ communityIds, itemType, itemRef, title, sub, kind, link }) {
+  const d = await apiPost('/api/communities/items', { communityIds, itemType, itemRef, title, sub, kind, link });
+  return d?.data ?? null;
+}

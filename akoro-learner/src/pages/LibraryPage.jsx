@@ -9,6 +9,8 @@ import AddRecordModal from '../components/dashboard/AddRecordModal.jsx';
 import CreateFolderSheet from '../components/library/CreateFolderSheet.jsx';
 import LibraryFolderPage from '../components/library/LibraryFolderPage.jsx';
 import AddToFolderPage from '../components/library/AddToFolderPage.jsx';
+import AddToTargetSheet from '../components/library/AddToTargetSheet.jsx';
+import AddToCommunityPage from '../components/communities/AddToCommunityPage.jsx';
 import NowStudyingBar from '../components/dashboard/NowStudyingBar.jsx';
 import RecordTeachSession, { recordFileType } from '../components/library/RecordTeachSession.jsx';
 import { useHigherEd } from '../hooks/useStudyTier.js';
@@ -310,6 +312,8 @@ export default function LibraryPage() {
   const [folderSheetOpen, setFolderSheetOpen] = useState(false);
   const [folderPage, setFolderPage] = useState(null);   // the folder opened full-screen
   const [addToFolder, setAddToFolder] = useState(null); // the content being filed away
+  const [addToCommunity, setAddToCommunity] = useState(null); // the content being shared to communities
+  const [addTarget, setAddTarget] = useState(null);   // the snapshot awaiting a folder/community pick
   // The blog option belongs to the higher-ed tier (studyLevel.js gate) —
   // resolved via the shared cached hook, so the page never flashes the
   // school layout at a higher-ed learner while the tier revalidates.
@@ -342,27 +346,33 @@ export default function LibraryPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  /* ⋯ on a shelf row → file that content away. Snapshots are stored at
-     add time (title/sub/kind/link), so a folder never re-asks the shelf. */
-  const openAddToFolder = (item) => {
-    if (!item) return;
+  /* ⋯ on a shelf row → choose where to file that content (folder or
+     community). Snapshots are stored at add time (title/sub/kind/link),
+     so neither target re-asks the shelf. */
+  const fileItemSnapshot = (item) => {
+    if (!item) return null;
     if (item.isRecordItem) {
       const ft = recordFileType(item);
       const kind = item.kind === 'link' ? 'link'
         : item.kind === 'paste' ? 'paste'
         : ['pdf','audio','video','image','text'].includes(ft) ? ft : 'text';
-      setAddToFolder({ itemType: 'record', itemRef: String(item.id), title: item.name, sub: 'Your record', kind, link: null });
-    } else if (item.kind === 'blog') {
-      setAddToFolder({ itemType: 'library', itemRef: String(item.id), title: item.title, sub: 'Blog', kind: 'blog', link: `/write/blog/${item.id}` });
-    } else if (item.kind === 'course') {
-      setAddToFolder({ itemType: 'library', itemRef: String(item.id), title: item.title, sub: 'Course', kind: 'course', link: item.slug ? `/course/${item.slug}` : null });
-    } else {
-      const k = item.kind || 'text';
-      setAddToFolder({
-        itemType: 'library', itemRef: String(item.id), title: item.title,
-        sub: k[0].toUpperCase() + k.slice(1), kind: ['pdf','audio','video','image','text','link','paste','blog','course','topic'].includes(k) ? k : 'text', link: null,
-      });
+      return { itemType: 'record', itemRef: String(item.id), title: item.name, sub: 'Your record', kind, link: null };
     }
+    if (item.kind === 'blog') {
+      return { itemType: 'library', itemRef: String(item.id), title: item.title, sub: 'Blog', kind: 'blog', link: `/write/blog/${item.id}` };
+    }
+    if (item.kind === 'course') {
+      return { itemType: 'library', itemRef: String(item.id), title: item.title, sub: 'Course', kind: 'course', link: item.slug ? `/course/${item.slug}` : null };
+    }
+    const k = item.kind || 'text';
+    return {
+      itemType: 'library', itemRef: String(item.id), title: item.title,
+      sub: k[0].toUpperCase() + k.slice(1), kind: ['pdf','audio','video','image','text','link','paste','blog','course','topic'].includes(k) ? k : 'text', link: null,
+    };
+  };
+  const openAddTarget = (item) => {
+    const snapshot = fileItemSnapshot(item);
+    if (snapshot) setAddTarget(snapshot);
   };
 
   /* Opening shelf content parks it on the Now-Studying bar — blogs,
@@ -560,7 +570,7 @@ export default function LibraryPage() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-            {displayed.map(a => <LibraryItem key={a.id} item={a} onMore={openAddToFolder} onOpen={openLibraryItem} />)}
+            {displayed.map(a => <LibraryItem key={a.id} item={a} onMore={openAddTarget} onOpen={openLibraryItem} />)}
           </div>
         )}
       </div>
@@ -637,12 +647,26 @@ export default function LibraryPage() {
         />
       )}
 
-      {/* ⋯ on any shelf row — pick the folders this content joins. */}
+      {/* ⋯ on any shelf row — folder or community. */}
+      {addTarget && (
+        <AddToTargetSheet
+          item={addTarget}
+          onClose={() => setAddTarget(null)}
+          onPickFolder={(snap) => { setAddToFolder(snap); setAddTarget(null); }}
+          onPickCommunity={(snap) => { setAddToCommunity(snap); setAddTarget(null); }}
+        />
+      )}
       {addToFolder && (
         <AddToFolderPage
           item={addToFolder}
           onClose={() => setAddToFolder(null)}
           onAdded={() => { listFolders().then(setFolders).catch(() => {}); }}
+        />
+      )}
+      {addToCommunity && (
+        <AddToCommunityPage
+          item={addToCommunity}
+          onClose={() => setAddToCommunity(null)}
         />
       )}
 
@@ -661,7 +685,7 @@ export default function LibraryPage() {
       {/* The Now-Studying bar, mobile — the tablet bar comes with AppShell.
           This page has no bottom nav of its own, so the bar rides the
           screen's bottom edge (the scoped style re-anchors it). */}
-      {higherEd && now.item && !now.dismissed && !viewer && !folderPage && !addToFolder && (
+      {higherEd && now.item && !now.dismissed && !viewer && !folderPage && !addToFolder && !addToCommunity && !addTarget && (
         <div className="ak-lib-nowbar">
           <style>{`@media (min-width:769px){.ak-lib-nowbar{display:none}}.ak-lib-nowbar .ak-now-bar{bottom:env(safe-area-inset-bottom,0px)}`}</style>
           <NowStudyingBar item={now.item} onOpen={openNowFromLibrary} onAdd={() => setSheetOpen(true)} onDismiss={nowActs.dismiss}/>

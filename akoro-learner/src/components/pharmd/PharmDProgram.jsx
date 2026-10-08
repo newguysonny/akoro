@@ -38,6 +38,7 @@ import { BRAND } from '../../constants.js';
 import { Icon } from '../common/Icons.jsx';
 import Toast from '../common/Toast.jsx';
 import AddToFolderPage from '../library/AddToFolderPage.jsx';
+import AddToCommunityPage from '../communities/AddToCommunityPage.jsx';
 import Spinner from '../common/Spinner.jsx';
 import { useIsMobileView } from '../teaching/SessionReaderModal.jsx';
 import {
@@ -55,7 +56,7 @@ const GREEN = '#2BB673';
 /* Sheet menus (reference sheetActionsFor). */
 const SHEET_ACTIONS = {
   topic: [
-    ['ti-share', 'Share'], ['ti-folder-plus', 'Add to folder'], ['ti-download', 'Download'],
+    ['ti-share', 'Share'], ['ti-folder-plus', 'Add to folder'], ['ti-users', 'Add to community'], ['ti-download', 'Download'],
     ['ti-check', 'Mark as complete'], ['ti-book-2', 'Go to course'],
   ],
   course: [
@@ -82,6 +83,7 @@ export default function PharmDProgram({ onClose, focus, onFocusConsumed,
   const [now, nowActs] = useNowStudying(STUDENT_ID);      // the parked Now-Studying item
   const [sheet, setSheet] = useState(null);       // { kind:'course' } | { kind:'topic', idx }
   const [addToFolder, setAddToFolder] = useState(null);  // the topic being filed into folders
+  const [addToCommunity, setAddToCommunity] = useState(null);  // the topic being shared to communities
   const [toast, setToast] = useState(null);
 
   /* Real data: the programme tree, the open course, my completion. */
@@ -244,6 +246,11 @@ export default function PharmDProgram({ onClose, focus, onFocusConsumed,
     if (kind === 'topic' && label === 'Add to folder') {
       const t = topics[idx];
       if (t) setAddToFolder(t);
+      return;
+    }
+    if (kind === 'topic' && label === 'Add to community') {
+      const t = topics[idx];
+      if (t) setAddToCommunity(t);
       return;
     }
     if (kind === 'topic' && label === 'Mark as complete') {
@@ -517,6 +524,21 @@ export default function PharmDProgram({ onClose, focus, onFocusConsumed,
             link: null,
           }}
           onClose={() => setAddToFolder(null)}
+        />
+      )}
+
+      {/* ⋯ → Add to community on a topic — pick the communities it joins. */}
+      {addToCommunity && (
+        <AddToCommunityPage
+          item={{
+            itemType: 'pharmd_topic',
+            itemRef: String(addToCommunity.id),
+            title: addToCommunity.title,
+            sub: `${code || 'PHARM.D'} · PHARM.D`,
+            kind: 'topic',
+            link: null,
+          }}
+          onClose={() => setAddToCommunity(null)}
         />
       )}
 

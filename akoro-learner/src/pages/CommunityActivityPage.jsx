@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  fetchCommunityStrict, fetchCommunityActivitiesStrict,
+  fetchCommunityStrict, fetchCommunityActivitiesStrict, fetchCommunityItems,
   createCommunityActivity, submitCommunityActivity, joinCommunity, leaveCommunity,
 } from '../services/communityApi.js';
 import CommunityShell, { IconChip, useCommunityToast, CommunityEmptyState, SectionTitle, ACCENTS } from '../components/communities/CommunityShell.jsx';
@@ -20,9 +20,9 @@ import { useInFlight } from '../hooks/useInFlight.js';
  *     join/leave endpoints) and the type tabs — all three ride sticky;
  *   · the reference's dashed "New activity" button (owner only);
  *   · the activity feed as surface cards in the reference's row language,
- *     the reference's empty state (per tab), and a "Popular activities"
- *     rail (the reference's "Popular materials" pattern) ranking the
- *     community's activities by submissions.
+ *     the reference's empty state (per tab), and the reference's
+ *     "Popular materials" rail fed by the content members have shared
+ *     into this community (the Add-to-community flow).
  *
  * Types carry line icons (the reference replaces emoji throughout); the
  * stored community emoji still renders in the header tile.
@@ -60,6 +60,14 @@ const STAGE_KINDS = [
   { key: 'project',     icon: 'ti-folder',    emoji: '🗂️', name: 'Project' },
 ];
 const stageKindName = (k) => (STAGE_KINDS.find((x) => x.key === k) || STAGE_KINDS[0]).name;
+
+/* kind → line icon, for the shared-materials rail (the same vocabulary as
+   the library's folder items). */
+const KIND_ICONS = {
+  pdf: 'ti-file-text', audio: 'ti-headphones', video: 'ti-video', image: 'ti-photo',
+  text: 'ti-file-text', link: 'ti-link', paste: 'ti-clipboard', blog: 'ti-news',
+  course: 'ti-school', topic: 'ti-book',
+};
 
 /* The reference's tab rail: All + the five types, each with its per-tab
    empty-state copy. */
@@ -309,6 +317,7 @@ export default function CommunityActivityPage() {
   const { communityId } = useParams();
   const [community, setCommunity]   = useState(null);
   const [activities, setActivities] = useState([]);
+  const [items, setItems]           = useState([]);   // shared materials (the Popular materials rail)
   const [loading, setLoading]       = useState(true);
   const [sheetOpen, setSheetOpen]   = useState(false);
   const [typeFilter, setTypeFilter] = useState('all');
@@ -322,9 +331,14 @@ export default function CommunityActivityPage() {
 
   const load = useCallback(async () => {
     try {
-      const [c, list] = await Promise.all([fetchCommunityStrict(communityId), fetchCommunityActivitiesStrict(communityId)]);
+      const [c, list, shared] = await Promise.all([
+        fetchCommunityStrict(communityId),
+        fetchCommunityActivitiesStrict(communityId),
+        fetchCommunityItems(communityId),
+      ]);
       setCommunity(c);
       setActivities(list);
+      setItems(shared);
       setError(null);
     } catch (e) {
       setError(classifyError(e));
@@ -531,31 +545,27 @@ export default function CommunityActivityPage() {
         )}
       </div>
 
-      {/* Popular activities — the reference's "Popular materials" rail
-          (ranked rows), fed by the community's real submission counts. */}
-      {activities.length > 4 && (
+      {/* Popular materials — the reference's rail, fed by the content
+          members have shared into this community (newest first). Rows
+          with an in-app link reopen their source. */}
+      {items.length > 0 && (
         <>
-          <SectionTitle>Popular activities</SectionTitle>
-          {[...activities]
-            .sort((x, y) => (y.submissions_count || 0) - (x.submissions_count || 0))
-            .slice(0, 4)
-            .map((a, i) => {
-              const tm = typeMeta(a.type);
-              return (
-                <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--s-3)', padding: '9px 0' }}>
-                  <div style={{ width: 18, textAlign: 'center', color: 'var(--ak-text-muted)', fontWeight: 800, fontSize: 13.5, flexShrink: 0 }}>{i + 1}</div>
-                  <div style={{ width: 42, height: 42, borderRadius: 'var(--r-sm)', flexShrink: 0, background: ACCENTS[i % ACCENTS.length], color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Icon name={tm.icon} size={18}/>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</div>
-                    <div style={{ fontSize: 12, color: 'var(--ak-text-sub)', fontWeight: 600, marginTop: 1 }}>
-                      {a.submissions_count || 0} submission{(a.submissions_count || 0) === 1 ? '' : 's'}
-                    </div>
-                  </div>
+          <SectionTitle>Popular materials</SectionTitle>
+          {items.slice(0, 4).map((it, i) => (
+            <button key={it.id} onClick={() => it.link && navigate(it.link)} disabled={!it.link}
+              style={{ display: 'flex', alignItems: 'center', gap: 'var(--s-3)', padding: '9px 0', background: 'none', border: 'none', width: '100%', textAlign: 'left', cursor: it.link ? 'pointer' : 'default', fontFamily: "'Nunito',sans-serif" }}>
+              <div style={{ width: 18, textAlign: 'center', color: 'var(--ak-text-muted)', fontWeight: 800, fontSize: 13.5, flexShrink: 0 }}>{i + 1}</div>
+              <div style={{ width: 42, height: 42, borderRadius: 'var(--r-sm)', flexShrink: 0, background: ACCENTS[i % ACCENTS.length], color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name={KIND_ICONS[it.kind] || 'ti-file-text'} size={18}/>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.title}</div>
+                <div style={{ fontSize: 12, color: 'var(--ak-text-sub)', fontWeight: 600, marginTop: 1 }}>
+                  {it.addedBy ? `Shared by ${it.addedBy} · ` : ''}added {timeAgo(it.createdAt)}
                 </div>
-              );
-            })}
+              </div>
+            </button>
+          ))}
         </>
       )}
 
