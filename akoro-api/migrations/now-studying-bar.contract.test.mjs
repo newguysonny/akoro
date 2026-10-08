@@ -96,7 +96,7 @@ test("the bar itself renders inside full-screen pages (sticky variant)", () => {
 });
 
 test("the Library page shows the bar on both layouts", () => {
-  assert.ok(lib.includes("nowStudying={{ ...now,"), "AppShell gets the store (the tablet bar)");
+  assert.ok(lib.includes("nowStudying={shellNowStudying}") && lib.includes("{ ...now, onOpen: openNowFromLibrary"), "AppShell gets the store (the tablet bar) — payload built once, shared with the folder's shell host");
   assert.ok(lib.includes("ak-lib-nowbar"), "a mobile bar renders on the page itself");
   assert.ok(lib.includes("@media (min-width:769px){.ak-lib-nowbar{display:none}}"), "mobile only — the tablet bar covers desktop");
   assert.ok(lib.includes("openNowFromLibrary"), "with its own resume handler");

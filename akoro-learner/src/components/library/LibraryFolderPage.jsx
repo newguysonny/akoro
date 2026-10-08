@@ -19,6 +19,7 @@ import { BRAND } from '../../constants.js';
 import { Icon } from '../common/Icons.jsx';
 import Toast from '../common/Toast.jsx';
 import NowStudyingBar from '../dashboard/NowStudyingBar.jsx';
+import { useIsMobileView } from '../teaching/SessionReaderModal.jsx';
 import { renameFolder, deleteFolder, listFolderItems } from '../../services/recordsApi.js';
 
 /* The reference's folder gradient — same family as Pharm.D's accent art. */
@@ -39,7 +40,9 @@ const KIND_META = {
 };
 const kindMeta = (k) => KIND_META[k] || ['ti-box', '#6B7280'];
 
-export default function LibraryFolderPage({ folder, onClose, onOpenItem, onRenamed, onDeleted, nowItem, onNowOpen, onNowDismiss }) {
+export default function LibraryFolderPage({ folder, onClose, onOpenItem, onRenamed, onDeleted, nowItem, onNowOpen, onNowDismiss, shellMode = false }) {
+  const isMobile = useIsMobileView();
+  const inShell = shellMode && !isMobile;   // desktop/tablet only — mobile NEVER changes
   const [sheet, setSheet] = useState(null);        // null | 'more' | 'rename' | 'delete'
   const [name, setName]       = useState(folder?.name || '');
   const [busy, setBusy]       = useState(false);
@@ -107,9 +110,33 @@ export default function LibraryFolderPage({ folder, onClose, onOpenItem, onRenam
   const openRename = () => { setName(folder.name || ''); setSheet('rename'); };
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={folder.name} className="lf-page">
+    <div
+      {...(inShell ? { 'aria-label': folder.name } : { role: 'dialog', 'aria-modal': 'true', 'aria-label': folder.name })}
+      className={`lf-page${inShell ? ' lf-shell' : ''}`}
+    >
       <style>{`
         .lf-page{position:fixed;inset:0;z-index:1500;background:var(--ak-bg,#FAFAFC);display:flex;justify-content:center;font-family:'Nunito',system-ui,sans-serif;color:var(--ak-text,#111827)}
+        /* ── Shell mode (tablet/desktop ≥768px): an in-shell PAGE, not an
+           overlay. Lives inside AppShell's content area — sidebar visible,
+           the shell's tablet now-bar owns the bottom edge. Mobile never
+           gets these rules (it renders the fixed overlay exactly as
+           before). */
+        .lf-shell{position:relative;inset:auto;z-index:auto;display:block;width:100%;height:100%;overflow-y:auto}
+        .lf-shell .lf-phone{max-width:none;padding:0;overflow:visible;height:auto;min-height:100%}
+        .lf-shell-inner{display:contents}
+        .lf-shell .lf-shell-inner{display:block;max-width:980px;margin:0 auto;padding:16px 32px 56px}
+        .lf-shell .lf-back{background:var(--ak-surface,#fff);border:1px solid var(--ak-border2,#E5E7EB);color:var(--ak-text,#111827);width:34px;height:34px;font-size:1rem;margin-bottom:14px}
+        /* Desktop hero: art left, info right (mobile wrappers stay plain blocks). */
+        .lf-hero-cols{display:block}
+        .lf-shell .lf-hero-cols{display:flex;gap:30px;align-items:flex-start}
+        .lf-hero-art-col{display:block}
+        .lf-shell .lf-hero-art-col{flex:0 0 320px}
+        .lf-hero-info{display:block}
+        .lf-shell .lf-hero-info{flex:1;min-width:0}
+        .lf-shell .lf-folder-hero{padding:14px 0 20px}
+        .lf-shell .lf-folder-art{margin:14px 0 0}
+        .lf-shell .lf-folder-title{font-size:1.7rem}
+        .lf-shell .lf-topic-list{padding:12px 0 0}
         .lf-phone{width:100%;max-width:430px;height:100%;overflow-y:auto;position:relative;background:var(--ak-bg,#FAFAFC);padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
         .lf-back{width:36px;height:36px;border-radius:50%;border:none;background:rgba(255,255,255,0.14);color:#fff;font-size:1.1rem;font-weight:700;cursor:pointer;margin-bottom:20px;font-family:inherit}
         /* Folder hero — the Pharm.D folder screen, same exact */
@@ -157,26 +184,33 @@ export default function LibraryFolderPage({ folder, onClose, onOpenItem, onRenam
       `}</style>
 
       <div className="lf-phone">
+        <div className="lf-shell-inner">
         <div className="lf-folder-hero">
           <button className="lf-back" aria-label="Back to library" onClick={onClose}>←</button>
-          <div className="lf-folder-art" style={{ background: folder.coverUrl ? 'var(--ak-border,#E5E7EB)' : ART_BG }}>
-            {folder.coverUrl
-              ? <img src={folder.coverUrl} alt=""/>
-              : <Icon name="ti-folder" size={54} color="rgba(255,255,255,0.92)"/>}
-            <span className="lf-upload" role="button" aria-label="Change cover photo"
-              onClick={() => soon('Custom covers')}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); soon('Custom covers'); } }}><Icon name="ti-camera" size={14}/></span>
-          </div>
-          <h2 className="lf-folder-title">{folder.name}</h2>
-          <div className="lf-author-row">
-            <span className="lf-author-avatar" style={{ background: ART_BG }}>Y</span>
-            <span className="lf-author-name">You</span>
-          </div>
-          <p className="lf-folder-meta">{itemCount} item{itemCount === 1 ? '' : 's'} · {visibilityLabel}</p>
-          {folder.description && <p className="lf-folder-desc">{folder.description}</p>}
-          <div className="lf-action-row">
-            <button className="lf-start" onClick={() => setToast({ msg: 'Tap ⋯ on any content — a record, a topic, a video — to add it here', color: BRAND })}>Add items</button>
-            <button className="lf-icon-btn" aria-label="More" onClick={() => setSheet('more')}><Icon name="ti-dots-vertical" size={20}/></button>
+          <div className="lf-hero-cols">
+            <div className="lf-hero-art-col">
+              <div className="lf-folder-art" style={{ background: folder.coverUrl ? 'var(--ak-border,#E5E7EB)' : ART_BG }}>
+                {folder.coverUrl
+                  ? <img src={folder.coverUrl} alt=""/>
+                  : <Icon name="ti-folder" size={54} color="rgba(255,255,255,0.92)"/>}
+                <span className="lf-upload" role="button" aria-label="Change cover photo"
+                  onClick={() => soon('Custom covers')}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); soon('Custom covers'); } }}><Icon name="ti-camera" size={14}/></span>
+              </div>
+            </div>
+            <div className="lf-hero-info">
+              <h2 className="lf-folder-title">{folder.name}</h2>
+              <div className="lf-author-row">
+                <span className="lf-author-avatar" style={{ background: ART_BG }}>Y</span>
+                <span className="lf-author-name">You</span>
+              </div>
+              <p className="lf-folder-meta">{itemCount} item{itemCount === 1 ? '' : 's'} · {visibilityLabel}</p>
+              {folder.description && <p className="lf-folder-desc">{folder.description}</p>}
+              <div className="lf-action-row">
+                <button className="lf-start" onClick={() => setToast({ msg: 'Tap ⋯ on any content — a record, a topic, a video — to add it here', color: BRAND })}>Add items</button>
+                <button className="lf-icon-btn" aria-label="More" onClick={() => setSheet('more')}><Icon name="ti-dots-vertical" size={20}/></button>
+              </div>
+            </div>
           </div>
         </div>
         <div className="lf-topic-list">
@@ -201,11 +235,13 @@ export default function LibraryFolderPage({ folder, onClose, onOpenItem, onRenam
             );
           })}
         </div>
+        </div>{/* /.lf-shell-inner */}
 
         {/* The Now-Studying bar, pinned to the column's bottom edge —
             the folder keeps the learner's parked item in view, under
-            the sheets (sticky z 30 < sheet z 40). */}
-        {nowItem && !sheet && (
+            the sheets (sticky z 30 < sheet z 40). In shell mode the
+            AppShell's tablet bar already owns the bottom edge. */}
+        {!inShell && nowItem && !sheet && (
           <NowStudyingBar sticky item={nowItem} onOpen={onNowOpen} onDismiss={onNowDismiss}/>
         )}
       </div>
