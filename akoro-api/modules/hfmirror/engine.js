@@ -7,15 +7,32 @@
  *   create_repo(…)                →  create the destination model repo
  *   upload_folder(…)              →  transfer the files
  *
- * The Hub library's newer copy APIs (copyFolder / copyFiles) only target
- * Buckets, not model repos, so the transfer here is per-file: each file is
- * handed to uploadFiles as its source *resolve URL* — the library's
- * WebBlob lazily range-fetches it (with the token attached, so gated
- * sources work) while the xet/LFS uploader streams it to the destination.
- * Nothing is ever buffered to RAM or disk: a multi-GB shard mirrors on a
- * small Render instance without touching its ephemeral disk, and on
- * xet-backed repos the upload dedupes server-side, so weight files the
- * Hub already stores move very little actual data.
+ * The real run prefers the Hub's SERVER-SIDE duplicate
+ * (POST /api/models/{src}/duplicate — the same call huggingface_hub's
+ * duplicate_repo makes): git history and LFS/xet objects are copied by
+ * the Hub itself, so not one byte of model weight crosses this process.
+ * An 8 GB mirror costs a single HTTP call and cannot OOM a small
+ * Render instance — which the previous file-by-file path did: the JS
+ * xet uploader runs five parallel shard streams (~64 MB of buffers
+ * each, plus the chunking WASM heap), and a 4.6 GB safetensors shard
+ * took the service over its memory limit mid-run.
+ *
+ * The per-file path remains for everything duplicate can't do
+ * (non-main revisions, or a duplicate the Hub refused), with two hard
+ * lessons baked in:
+ *
+ *   · RESUME — the destination's file list is read once and any source
+ *     file already present there is skipped. Git commits are atomic, so
+ *     a file is either present complete or absent: after a crash or an
+ *     OOM restart, re-running the mirror transfers only what's missing.
+ *
+ *   · BOUNDED MEMORY — the per-file uploads run with useXet:false, so
+ *     each file rides a single basic/multipart stream instead of the
+ *     parallel xet shard buffers.
+ *
+ * Each file is still handed to uploadFiles as its source *resolve URL* —
+ * the library's WebBlob lazily range-fetches it (so gated sources work,
+ * with the token attached) and nothing is ever buffered to disk.
  *
  * The engine reports progress through the onLog hook and returns a
  * summary — no console, no process.exit — so the HTTP console, a CLI
@@ -146,29 +163,91 @@ export async function runMirrorJob(params, hooks = {}) {
     return { dryRun: true, ok: true, source: src.id, target: dst.id, revision, files: files.length, copied: 0, transferredBytes: 0, totalBytes, failures: [], durationMs: Date.now() - started };
   }
 
-  /* 3 · Create the destination repo ("already exists" is fine — the
-     mirror just re-commits into it). */
-  try {
-    await createRepo({
-      repo: { name: dst.id, type: "model" },
-      visibility: isPrivate ? "private" : "public",
-      accessToken: writeToken, hubUrl, fetch: fx,
-    });
-    log(`[hf-mirror] created ${dst.id}${isPrivate ? " (private)" : ""}`);
-  } catch (err) {
-    if (!/exist/i.test(String(err?.message || err))) throw err;
-    log(`[hf-mirror] ${dst.id} already exists — mirroring into it`);
+  /* 3 · Server-side duplicate first — the whole repo (history, LFS and
+     xet objects included) copied by the Hub, no bytes through here.
+     Applies to the default revision only: a duplicate has no revision
+     parameter, and mirroring a branch means deviating from main. */
+  let duplicated = false;
+  if (revision === DEFAULT_REVISION) {
+    try {
+      const res = await (fx ?? fetch)(`${hubUrl}/api/models/${src.id}/duplicate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${writeToken}`,
+        },
+        body: JSON.stringify({
+          repository: dst.id,
+          visibility: isPrivate ? "private" : "public",
+        }),
+      });
+      const text = await res.text();
+      if (res.ok) {
+        const json = JSON.parse(text || "{}");
+        duplicated = true;
+        log(`[hf-mirror] server-side duplicate of ${src.id} → ${dst.id} accepted — no model bytes moved through this server`);
+        if (json.filesCopyPending) log("[hf-mirror] the Hub is copying the LFS/xet files in the background — downloads may 404 briefly");
+      } else if (res.status === 409 || /already|exist/i.test(text)) {
+        log(`[hf-mirror] ${dst.id} already exists — resuming into it file-by-file`);
+      } else {
+        log(`[hf-mirror] server-side duplicate refused (${res.status}) — transferring file-by-file`);
+      }
+    } catch (err) {
+      log(`[hf-mirror] server-side duplicate unavailable (${String(err?.message || err).slice(0, 120)}) — transferring file-by-file`);
+    }
   }
 
-  /* 4 · Transfer, one file at a time: each file is committed as its
-     source resolve URL — the library lazily range-fetches it (auth
-     attached) and streams the upload. Nothing touches RAM or disk. */
+  /* 4 · Create the destination repo when the duplicate path didn't make
+     it ("already exists" in any of the Hub's phrasings is fine — the
+     mirror just re-commits into it). */
+  if (!duplicated) {
+    try {
+      await createRepo({
+        repo: { name: dst.id, type: "model" },
+        visibility: isPrivate ? "private" : "public",
+        accessToken: writeToken, hubUrl, fetch: fx,
+      });
+      log(`[hf-mirror] created ${dst.id}${isPrivate ? " (private)" : ""}`);
+    } catch (err) {
+      if (!/already|exist/i.test(String(err?.message || err))) throw err;
+      log(`[hf-mirror] ${dst.id} already exists — mirroring into it`);
+    }
+  }
+
+  /* 5 · Transfer what's missing, one file at a time: each file is
+     committed as its source resolve URL — the library lazily
+     range-fetches it (auth attached) and streams the upload; useXet
+     stays off so memory stays a single stream, not five shard buffers. */
+  /* Resume: a git commit is atomic, so a file already in the
+     destination is complete — skip it. After a crash or restart,
+     re-running transfers only the missing files. */
+  const already = new Set();
+  if (!duplicated) {
+    try {
+      for await (const entry of listFiles({
+        repo: { name: dst.id, type: "model" },
+        accessToken: writeToken, hubUrl, fetch: fx,
+      })) {
+        if (entry?.type === "file") already.add(entry.path);
+      }
+    } catch (err) {
+      log(`[hf-mirror] could not list the destination (${String(err?.message || err).slice(0, 120)}) — transferring everything`);
+    }
+  }
+
   const capBytes = maxFileMb * 1024 * 1024;
   const failures = [];
   let copied = 0;
   let transferred = 0;
   for (const [i, f] of files.entries()) {
+    if (duplicated) break;
     const label = `[hf-mirror] (${i + 1}/${files.length}) ${f.path}`;
+    if (already.has(f.path)) {
+      copied += 1;
+      transferred += f.size || 0;
+      log(`${label} — already in the destination, skipped (resume)`);
+      continue;
+    }
     if ((f.size || 0) > capBytes) {
       log(`${label} — SKIPPED: ${formatBytes(f.size)} is over the ${maxFileMb} MB per-file cap (set HF_MAX_FILE_MB to raise it)`);
       failures.push({ path: f.path, error: `${formatBytes(f.size)} is over the ${maxFileMb} MB per-file cap` });
@@ -182,6 +261,7 @@ export async function runMirrorJob(params, hooks = {}) {
         files: [{ path: f.path, content: url }],
         commitTitle: `Mirror ${src.id}@${revision}`,
         accessToken: writeToken, hubUrl, fetch: fx,
+        useXet: false,   // single-stream basic/multipart — the xet sharder's parallel buffers OOM small instances
       });
       copied += 1;
       transferred += f.size || 0;
@@ -199,7 +279,11 @@ export async function runMirrorJob(params, hooks = {}) {
 
   const ok = failures.length === 0;
   const seconds = ((Date.now() - started) / 1000).toFixed(0);
+  if (duplicated) {
+    log(`[hf-mirror] mirror complete (server-side duplicate): ${files.length} files · 0 B moved · ${seconds}s`);
+    return { dryRun: false, ok: true, duplicated: true, source: src.id, target: dst.id, revision, files: files.length, copied: files.length, transferredBytes: 0, totalBytes, failures: [], durationMs: Date.now() - started };
+  }
   log(`[hf-mirror] ${ok ? "mirror complete" : `mirror finished with ${failures.length} failure(s)`}: ${copied}/${files.length} files · ${formatBytes(transferred)} moved · ${seconds}s`);
-  if (!ok) log("[hf-mirror] re-run the job to retry — existing files re-commit idempotently, missing ones transfer.");
-  return { dryRun: false, ok, source: src.id, target: dst.id, revision, files: files.length, copied, transferredBytes: transferred, totalBytes, failures, durationMs: Date.now() - started };
+  if (!ok) log("[hf-mirror] re-run the job to retry — files already in the destination are skipped, only the missing ones transfer.");
+  return { dryRun: false, ok, duplicated: false, source: src.id, target: dst.id, revision, files: files.length, copied, transferredBytes: transferred, totalBytes, failures, durationMs: Date.now() - started };
 }
