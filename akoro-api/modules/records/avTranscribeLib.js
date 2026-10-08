@@ -38,6 +38,7 @@ import { pipeline } from "node:stream/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hasDeepgram, transcribeFileDeepgram } from "../voice/deepgram.js";
+import { indexByContentKey } from "./searchLib.js";
 import { parsePageOnRunpod, recordsExtractionEnabled, claimContentJob, finishContentJob, getContentJob } from "./extractLib.js";
 
 const FFMPEG_PATH   = () => process.env.FFMPEG_PATH   || "ffmpeg";
@@ -287,5 +288,54 @@ export async function transcribeRecord({ userId, contentKey, recordName, kind, f
     return { segments: saved, durationSec: Math.round(dg.duration || 0), durationMs: Date.now() - started };
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+/* ── Upload-time auto-extraction ("always extract") ───────────────────────
+ * The user's rule: a file should not wait for someone to open a session
+ * before its text exists. Whoever UPLOADS pays the one-time cost in the
+ * background — every later opener (and the search index) just finds it.
+ *
+ *   • Learner A/V uploads  → routes.js POST / fires this right after the
+ *     row is registered (presigned download, same lane as the offer).
+ *   • Course videos        → the lesson write hooks (create/update) and
+ *     the encode worker's completion callback fire it for lesson:<id>.
+ *
+ * Claim-first via edu.content_jobs, exactly like the explicit route: two
+ * hooks hitting the same file is ONE transcription, and a loser walks
+ * away silently — the winner's output is shared by everyone. A failure
+ * marks the job failed, which the claim treats as re-claimable, so the
+ * reader's offer remains as the manual retry. */
+
+/** Which A/V lane a file rides, from its mime and name (pure). */
+export function avKindOf(mime, name) {
+  const m = mime || "", n = name || "";
+  return /^video\//.test(m) || /\.(mp4|m4v|mov|webm|mkv)$/i.test(n) ? "video"
+    : /^audio\//.test(m) || /\.(mp3|m4a|aac|wav|ogg|flac)$/i.test(n) ? "audio" : null;
+}
+
+/** The upload-time rule is ON unless a deployment explicitly opts out. */
+export const autoTranscribeEnabled = () => process.env.AUTO_TRANSCRIBE_UPLOADS !== "0";
+
+/**
+ * Fire-and-forget transcription of an upload/lesson. Never throws — a
+ * background job that fails must not take its trigger's response down.
+ */
+export async function autoTranscribeContent({ userId = null, contentKey, name, mime, fileUrl }) {
+  try {
+    if (!avEnabled() || !autoTranscribeEnabled()) return;
+    const kind = avKindOf(mime, name);
+    if (!kind || !contentKey || !fileUrl) return;
+    const claimed = await claimContentJob(contentKey, "av", userId);
+    if (!claimed) return;   // already running/done — the shared cache wins
+    try {
+      const result = await transcribeRecord({ userId, contentKey, recordName: name, kind, fileUrl });
+      await indexByContentKey({ contentKey, segments: result.segments }).catch(() => {});
+      await finishContentJob(contentKey, "av", "done", { segments: result.segments });
+    } catch (err) {
+      await finishContentJob(contentKey, "av", "failed", { error: String(err?.message || err).slice(0, 200) }).catch(() => {});
+    }
+  } catch (e) {
+    console.warn("[av] auto-transcribe skipped:", String(e?.message || e).slice(0, 160));
   }
 }

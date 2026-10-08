@@ -74,6 +74,36 @@ export async function rasterizeImageFile(url) {
 }
 
 /**
+ * autoExtractUpload — the "always extract" rule, uploader's side.
+ *
+ * The moment a PDF or image record is registered (right after the bytes
+ * land in the bucket), the uploader's browser rasterizes and parses it in
+ * the background — no reader, no waiting. By the time anyone opens the
+ * record (the uploader included) the extraction is cached under the file's
+ * key, the teaching session grounds instantly, and the search index has
+ * real text to chew on. A/V uploads don't come through here: the API
+ * transcribes those itself at registration. Everything fails silent — a
+ * half-finished run has still cached every batch that worked, and the
+ * reader's offer remains as the manual retry for the rest.
+ */
+export async function autoExtractUpload(record) {
+  try {
+    if (!record?.id || record.kind !== 'upload' || !record.fileUrl) return;
+    const isPdf   = record.mime === 'application/pdf' || /\.pdf$/i.test(record.name || '');
+    const isImage = /^image\//.test(record.mime || '');
+    if (!isPdf && !isImage) return;   // text files read as-is; A/V is the API's lane
+    if (isPdf) {
+      const { pdf } = await loadPdfDocument(record.fileUrl);
+      const pages = await rasterizePdfPages(pdf);
+      if (pages.length) await runRecordExtraction({ recordId: record.id, pages });
+    } else {
+      const pages = await rasterizeImageFile(record.fileUrl);
+      await runRecordExtraction({ recordId: record.id, pages });
+    }
+  } catch { /* silent — the reader still offers if this never finished */ }
+}
+
+/**
  * runRecordExtraction — rasterize → batch → merge. Resolves with
  * { pages: [{pageNumber, markdown}], error } where error is set when the
  * run stopped early (pages parsed before the failure are still returned —
