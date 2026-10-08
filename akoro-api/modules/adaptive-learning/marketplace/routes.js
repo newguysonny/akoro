@@ -103,6 +103,9 @@ async function incrementListingStudents(listingId) {
 router.get("/listings", async (req, res) => {
   try {
     const { subject, free, limit = 20, offset = 0 } = req.query;
+    // ?q= — database search across the listing's title, teacher, subject
+    // and description (PostgREST or-ilike; term sanitised for the grammar).
+    const term = String(req.query.q ?? "").replace(/[,()%\\]/g, " ").trim().slice(0, 80);
 
     let q = db
       .schema("edu").from("marketplace_summary")
@@ -114,6 +117,7 @@ router.get("/listings", async (req, res) => {
 
     if (subject)        q = q.eq("subject", subject);
     if (free === "true") q = q.eq("is_free", true);
+    if (term) q = q.or(`title.ilike.%${term}%,teacher_name.ilike.%${term}%,subject.ilike.%${term}%,description.ilike.%${term}%`);
 
     const { data, error } = await q;
     if (error) throw error;
