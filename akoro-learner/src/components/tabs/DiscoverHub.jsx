@@ -66,7 +66,19 @@ export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord,
   const onEnter = () => activate(visible[0] || all[1]);
 
   return (
-    <div style={{ padding: '4px 0 90px', fontFamily: FONT }}>
+    <div style={{ padding: searchOpen ? 0 : '4px 0 90px', fontFamily: FONT }}>
+      {searchOpen ? (
+        <DiscoverSearchPage
+          initialQuery={query}
+          userId={userId}
+          onClose={() => setSearchOpen(false)}
+          onPick={onSearchPick}
+          onOpenCourse={onOpenCourse}
+          onOpenRecord={onOpenRecord}
+          onOpenBattles={onOpenBattles}
+        />
+      ) : (
+      <>
       {/* Header */}
       <div style={{ padding: '12px 16px 2px' }}>
         <h1 style={{ fontSize: 21, fontWeight: 900, color: 'var(--ak-text)', margin: 0 }}>
@@ -77,9 +89,11 @@ export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord,
         </p>
       </div>
 
-      {/* Search — opening the box raises the full-screen search page
-          (typing, recent searches and live results live there); the hub
-          box stays read-only so returning with a query still filters. */}
+      {/* Search — opening the box raises the search page (typing,
+          recent searches and live results live there): a full-screen
+          takeover on mobile, in-tab inside the app shell with the side
+          nav on tablet/desktop. The hub box stays read-only so
+          returning with a query still filters. */}
       <div style={{ padding: '10px 16px 4px' }}>
         <div style={{ position: 'relative' }}>
           <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: .5, pointerEvents: 'none' }}><Icon name="ti-search" size={14}/></span>
@@ -154,17 +168,7 @@ export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord,
           </button>
         </div>
       )}
-
-      {searchOpen && (
-        <DiscoverSearchPage
-          initialQuery={query}
-          userId={userId}
-          onClose={() => setSearchOpen(false)}
-          onPick={onSearchPick}
-          onOpenCourse={onOpenCourse}
-          onOpenRecord={onOpenRecord}
-          onOpenBattles={onOpenBattles}
-        />
+      </>
       )}
 
       {toast && <Toast msg={toast.msg} color={toast.color} onDone={() => setToast(null)} />}

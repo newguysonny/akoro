@@ -21,6 +21,7 @@ import { Icon } from '../common/Icons.jsx';
 import { apiGet } from '../../services/api.js';
 import { listRecords } from '../../services/recordsApi.js';
 import { TYPES, matchTypes, FONT } from './dhubTypes.js';
+import { useIsMobileView } from '../teaching/SessionReaderModal.jsx';
 
 export const RECENTS_KEY = 'akoro.dhubRecents';
 export const MAX_RECENTS = 8;
@@ -215,6 +216,8 @@ export default function DiscoverSearchPage({
   initialCourses = [], userId, initialLoading = true,
 }) {
   const { t } = useLang();
+  const isMobile = useIsMobileView();   // mobile keeps the takeover; the rest render in-tab
+  const inline = !isMobile;
   const [query, setQuery] = useState(initialQuery);
   const [focused, setFocused] = useState(false);
   const [recents, setRecents] = useState(loadRecents);
@@ -289,17 +292,20 @@ export default function DiscoverSearchPage({
      Refresh if the profile resolves after this overlay has mounted. */
   useEffect(() => { loadRecordsRemote(setRecords); }, []);
 
-  /* Esc closes; this overlay owns the viewport while open. */
+  /* Esc closes. The mobile takeover owns the viewport, so it locks the
+     body scroll; in-tab (tablet/desktop) the app shell's own scroll
+     container does the scrolling — and the side nav stays visible. */
   useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
     const onKeyDown = (event) => { if (event.key === 'Escape') onClose?.(); };
     document.addEventListener('keydown', onKeyDown);
+    if (inline) return () => document.removeEventListener('keydown', onKeyDown);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     return () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [onClose]);
+  }, [onClose, inline]);
 
   const remember = (text, scope = 'search') => {
     const next = pushRecent(recents, text, scope);
@@ -364,10 +370,19 @@ export default function DiscoverSearchPage({
   };
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={t('dhub.search_aria')} className="dhub-search-page">
+    <div role={inline ? undefined : 'dialog'} aria-modal={inline ? undefined : 'true'}
+      aria-label={t('dhub.search_aria')} className={`dhub-search-page${inline ? ' dhub-search-inline' : ''}`}>
       <style>{`
         @keyframes dhub-search-shimmer{0%{background-position:100% 0}100%{background-position:-100% 0}}
         .dhub-search-page{position:fixed;inset:0;z-index:1500;background:var(--ak-surface,#fff);color:var(--ak-text,#111827);font-family:${FONT};display:flex;flex-direction:column}
+        /* Tablet/desktop — in-tab inside the app shell: plain flow content,
+           the tab's own scroll container (.ak-dash-scroll) scrolls it, the
+           shell chrome (side nav) stays visible, and the search top bar
+           rides sticky at the top of that scroll. Compound selector so it
+           beats the base .dhub-search-page rule regardless of rule order. */
+        .dhub-search-page.dhub-search-inline{position:relative;inset:auto;z-index:auto;width:100%;display:block;background:transparent}
+        .dhub-search-page.dhub-search-inline .dhub-search-top{position:sticky;top:0;z-index:10;background:var(--ak-surface,#fff)}
+        .dhub-search-page.dhub-search-inline .dhub-search-body{overflow:visible;padding-bottom:32px}
         .dhub-search-top{display:flex;align-items:center;gap:10px;padding:14px 16px 12px;border-bottom:1px solid var(--ak-border,#F3F4F6);flex-shrink:0}
         .dhub-search-close{width:30px;height:30px;flex-shrink:0;border:none;background:none;display:flex;align-items:center;justify-content:center;color:var(--ak-text,#111827);cursor:pointer;padding:0}
         .dhub-search-shell{flex:1;display:flex;align-items:center;gap:8px;background:var(--ak-surface-hover,#F9FAFB);border:1.5px solid var(--ak-border2,#E5E7EB);border-radius:50px;padding:9px 14px;transition:border-color .15s ease,box-shadow .15s ease}
