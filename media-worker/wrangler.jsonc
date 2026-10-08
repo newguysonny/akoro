@@ -1,33 +1,42 @@
 // wrangler.jsonc — Cloudflare Containers deploy for the media worker.
 //
-// NOTE: the Containers config surface has been evolving quickly — verify
-// the `containers` block and instance type names against the current
-// Cloudflare docs (developers.cloudflare.com/containers) before the first
-// `wrangler deploy`. The container image itself (./Dockerfile) runs
-// anywhere Docker runs — Fly.io, a VPS, Render — unchanged.
+// Shape verified against developers.cloudflare.com/containers (Sep 2026):
+// a `containers` entry + a Durable Object binding + an `exports` entry
+// for the same class. Optional sizing/rollout fields (instance_type and
+// friends) are documented in the Wrangler configuration reference
+// (developers.cloudflare.com/workers/wrangler/configuration/#containers) —
+// omitted here so the first deploy runs on defaults; add them once you
+// know your encode sizes.
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
+  "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "akoro-media-worker",
   "main": "cf/worker.js",
-  "compatibility_date": "2026-09-01",
+  "compatibility_date": "2026-10-08",
 
+  // The container image — Wrangler builds and pushes it on deploy
+  // (Docker must be running locally). linux/amd64 only.
   "containers": [
     {
       "class_name": "MediaContainer",
       "image": "./Dockerfile",
-      // standard-2: 2 vCPU / 4 GB — comfortable for 1080p HLS encodes.
-      "instance_type": "standard-2",
-      "max_instances": 2,
-      // Non-secret configuration baked into the instance. SECRETS do not
-      // belong here — see README (they ride via wrangler secrets and the
-      // wrapper's start env, or set them as image env in your registry).
-      "vars": {
-        "MAX_CONCURRENT_JOBS": "1"
-      }
+      // Cap the fleet: encode jobs are heavy, and the container's own
+      // MAX_CONCURRENT_JOBS lane guard keeps each instance serialized.
+      "max_instances": 2
     }
   ],
 
-  "bindings": [
-    { "name": "MEDIA", "class_name": "MediaContainer" }
-  ]
+  // The Container class IS a Durable Object — this binding is what the
+  // edge Worker routes through (env.MEDIA).
+  "durable_objects": {
+    "bindings": [
+      { "name": "MEDIA", "class_name": "MediaContainer" }
+    ]
+  },
+
+  "exports": {
+    "MediaContainer": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  }
 }
