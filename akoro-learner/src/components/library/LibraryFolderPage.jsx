@@ -117,26 +117,17 @@ export default function LibraryFolderPage({ folder, onClose, onOpenItem, onRenam
       <style>{`
         .lf-page{position:fixed;inset:0;z-index:1500;background:var(--ak-bg,#FAFAFC);display:flex;justify-content:center;font-family:'Nunito',system-ui,sans-serif;color:var(--ak-text,#111827)}
         /* ── Shell mode (tablet/desktop ≥768px): an in-shell PAGE, not an
-           overlay. Lives inside AppShell's content area — sidebar visible,
-           the shell's tablet now-bar owns the bottom edge. Mobile never
-           gets these rules (it renders the fixed overlay exactly as
-           before). */
-        .lf-shell{position:relative;inset:auto;z-index:auto;display:block;width:100%;height:100%;overflow-y:auto}
-        .lf-shell .lf-phone{max-width:none;padding:0;overflow:visible;height:auto;min-height:100%}
-        .lf-shell-inner{display:contents}
-        .lf-shell .lf-shell-inner{display:block;max-width:980px;margin:0 auto;padding:16px 32px 56px}
-        .lf-shell .lf-back{background:var(--ak-surface,#fff);border:1px solid var(--ak-border2,#E5E7EB);color:var(--ak-text,#111827);width:34px;height:34px;font-size:1rem;margin-bottom:14px}
-        /* Desktop hero: art left, info right (mobile wrappers stay plain blocks). */
-        .lf-hero-cols{display:block}
-        .lf-shell .lf-hero-cols{display:flex;gap:30px;align-items:flex-start}
-        .lf-hero-art-col{display:block}
-        .lf-shell .lf-hero-art-col{flex:0 0 320px}
-        .lf-hero-info{display:block}
-        .lf-shell .lf-hero-info{flex:1;min-width:0}
-        .lf-shell .lf-folder-hero{padding:14px 0 20px}
-        .lf-shell .lf-folder-art{margin:14px 0 0}
-        .lf-shell .lf-folder-title{font-size:1.7rem}
-        .lf-shell .lf-topic-list{padding:12px 0 0}
+           overlay — the exact twin of PharmDProgram's inline look. The
+           page spans the full width of the shell's content area (no
+           column cap), the shell's own scroll container scrolls it, the
+           sidebar and the shell's tablet now-bar stay. Mobile never gets
+           these rules — it renders the fixed overlay exactly as before. */
+        .lf-shell{position:relative;inset:auto;z-index:auto;display:block;width:100%}
+        .lf-phone.lf-shell-phone{max-width:none;height:auto;overflow:visible;background:transparent}
+        /* In-tab the art spans the content area — keep it a banner: the
+           1.6-ratio full-width slab is capped exactly like the Pharm.D
+           folder's. */
+        .lf-shell .lf-folder-art{max-height:280px}
         .lf-phone{width:100%;max-width:430px;height:100%;overflow-y:auto;position:relative;background:var(--ak-bg,#FAFAFC);padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
         .lf-back{width:36px;height:36px;border-radius:50%;border:none;background:rgba(255,255,255,0.14);color:#fff;font-size:1.1rem;font-weight:700;cursor:pointer;margin-bottom:20px;font-family:inherit}
         /* Folder hero — the Pharm.D folder screen, same exact */
@@ -183,34 +174,27 @@ export default function LibraryFolderPage({ folder, onClose, onOpenItem, onRenam
         .lf-btn{padding:12px 0;border-radius:100px;border:none;font-family:inherit;font-weight:800;font-size:.9rem;cursor:pointer}
       `}</style>
 
-      <div className="lf-phone">
-        <div className="lf-shell-inner">
+      <div className={`lf-phone${inShell ? ' lf-shell-phone' : ''}`}>
         <div className="lf-folder-hero">
           <button className="lf-back" aria-label="Back to library" onClick={onClose}>←</button>
-          <div className="lf-hero-cols">
-            <div className="lf-hero-art-col">
-              <div className="lf-folder-art" style={{ background: folder.coverUrl ? 'var(--ak-border,#E5E7EB)' : ART_BG }}>
-                {folder.coverUrl
-                  ? <img src={folder.coverUrl} alt=""/>
-                  : <Icon name="ti-folder" size={54} color="rgba(255,255,255,0.92)"/>}
-                <span className="lf-upload" role="button" aria-label="Change cover photo"
-                  onClick={() => soon('Custom covers')}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); soon('Custom covers'); } }}><Icon name="ti-camera" size={14}/></span>
-              </div>
-            </div>
-            <div className="lf-hero-info">
-              <h2 className="lf-folder-title">{folder.name}</h2>
-              <div className="lf-author-row">
-                <span className="lf-author-avatar" style={{ background: ART_BG }}>Y</span>
-                <span className="lf-author-name">You</span>
-              </div>
-              <p className="lf-folder-meta">{itemCount} item{itemCount === 1 ? '' : 's'} · {visibilityLabel}</p>
-              {folder.description && <p className="lf-folder-desc">{folder.description}</p>}
-              <div className="lf-action-row">
-                <button className="lf-start" onClick={() => setToast({ msg: 'Tap ⋯ on any content — a record, a topic, a video — to add it here', color: BRAND })}>Add items</button>
-                <button className="lf-icon-btn" aria-label="More" onClick={() => setSheet('more')}><Icon name="ti-dots-vertical" size={20}/></button>
-              </div>
-            </div>
+          <div className="lf-folder-art" style={{ background: folder.coverUrl ? 'var(--ak-border,#E5E7EB)' : ART_BG }}>
+            {folder.coverUrl
+              ? <img src={folder.coverUrl} alt=""/>
+              : <Icon name="ti-folder" size={54} color="rgba(255,255,255,0.92)"/>}
+            <span className="lf-upload" role="button" aria-label="Change cover photo"
+              onClick={() => soon('Custom covers')}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); soon('Custom covers'); } }}><Icon name="ti-camera" size={14}/></span>
+          </div>
+          <h2 className="lf-folder-title">{folder.name}</h2>
+          <div className="lf-author-row">
+            <span className="lf-author-avatar" style={{ background: ART_BG }}>Y</span>
+            <span className="lf-author-name">You</span>
+          </div>
+          <p className="lf-folder-meta">{itemCount} item{itemCount === 1 ? '' : 's'} · {visibilityLabel}</p>
+          {folder.description && <p className="lf-folder-desc">{folder.description}</p>}
+          <div className="lf-action-row">
+            <button className="lf-start" onClick={() => setToast({ msg: 'Tap ⋯ on any content — a record, a topic, a video — to add it here', color: BRAND })}>Add items</button>
+            <button className="lf-icon-btn" aria-label="More" onClick={() => setSheet('more')}><Icon name="ti-dots-vertical" size={20}/></button>
           </div>
         </div>
         <div className="lf-topic-list">
@@ -235,7 +219,6 @@ export default function LibraryFolderPage({ folder, onClose, onOpenItem, onRenam
             );
           })}
         </div>
-        </div>{/* /.lf-shell-inner */}
 
         {/* The Now-Studying bar, pinned to the column's bottom edge —
             the folder keeps the learner's parked item in view, under
