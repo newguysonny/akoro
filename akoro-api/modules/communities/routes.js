@@ -56,6 +56,10 @@ const bad     = (res, m) => res.status(400).json({ success: false, error: m });
 const denied  = (res, m) => res.status(403).json({ success: false, error: m });
 const missing = (res) => res.status(404).json({ success: false, error: "Not found" });
 
+/* ?q= search term — strip characters that break the PostgREST or-grammar
+   and cap the length, same contract as the courses/records endpoints. */
+const likeTerm = (raw) => String(raw ?? "").replace(/[,()%\\]/g, " ").trim().slice(0, 80);
+
 // Supabase's REST client returns structured errors. Retain that information
 // instead of throwing only its message, so a missing newly-deployed table can
 // be distinguished from an unexpected application failure below.
@@ -327,11 +331,11 @@ router.get("/mine", asyncHandler(async (req, res) => {
 // ─── GET / — public communities (discovery) ─────────────────────────────────
 
 router.get("/", asyncHandler(async (req, res) => {
-  const q      = String(req.query.q || "").trim();
+  const term   = likeTerm(req.query.q);
   const limit  = Math.min(parseInt(req.query.limit, 10) || 50, 100);
 
   let query = edu().from("communities").select("*").eq("is_public", true);
-  if (q) query = query.ilike("name", `%${q}%`);
+  if (term) query = query.or(`name.ilike.%${term}%,description.ilike.%${term}%`);
   const { data, error } = await query.order("created_at", { ascending: false }).limit(limit);
   if (error) throw communityDbError(error, "complete this community request");
 

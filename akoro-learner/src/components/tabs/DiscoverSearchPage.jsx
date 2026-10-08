@@ -10,8 +10,11 @@
  *
  * Data boundaries are intentional:
  *   • enrolled courses and classmates come from authenticated API endpoints;
- *   • saved records are the existing device-local Higher Ed records; and
- *   • folders are not shown until the Library has a real folders endpoint.
+ *   • saved records, library folders and joined communities are the
+ *     learner's own server-side sets; and
+ *   • published courses, public communities, teaching-guide listings and
+ *     Pharm.D courses are searched in the DATABASE (?q= endpoints, or the
+ *     complete programme tree for Pharm D).
  * No sample classmates, course progress, or folder results are invented.
  */
 import { useEffect, useRef, useState } from 'react';
@@ -19,7 +22,9 @@ import { BRAND, GREEN, GOLD, SUBJECT_COLORS } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { Icon } from '../common/Icons.jsx';
 import { apiGet } from '../../services/api.js';
-import { listRecords } from '../../services/recordsApi.js';
+import { listRecords, listFolders } from '../../services/recordsApi.js';
+import { fetchMyCommunities } from '../../services/communityApi.js';
+import { fetchPharmdProgramme } from '../../services/pharmdApi.js';
 import { TYPES, matchTypes, FONT } from './dhubTypes.js';
 import { useIsMobileView } from '../teaching/SessionReaderModal.jsx';
 import useDebouncedValue from '../../hooks/useDebouncedValue.js';
@@ -57,6 +62,26 @@ export function matchRecord(record, query) {
 export function matchClassmate(person, query) {
   const q = (query || '').trim().toLowerCase();
   return !!q && `${person.full_name || ''} ${person.username || ''} ${person.className || ''}`.toLowerCase().includes(q);
+}
+
+export function matchCommunity(community, query) {
+  const q = (query || '').trim().toLowerCase();
+  return !!q && `${community.name || ''} ${community.description || ''}`.toLowerCase().includes(q);
+}
+
+export function matchFolder(folder, query) {
+  const q = (query || '').trim().toLowerCase();
+  return !!q && `${folder.name || ''} ${folder.description || ''}`.toLowerCase().includes(q);
+}
+
+export function matchListing(listing, query) {
+  const q = (query || '').trim().toLowerCase();
+  return !!q && `${listing.title || ''} ${listing.teacher_name || ''} ${listing.subject || ''}`.toLowerCase().includes(q);
+}
+
+export function matchPharmdCourse(course, query) {
+  const q = (query || '').trim().toLowerCase();
+  return !!q && `${course.title || ''} ${course.code || ''}`.toLowerCase().includes(q);
 }
 
 function loadRecents() {
@@ -214,6 +239,7 @@ function Skeleton({ wide = false }) {
 
 export default function DiscoverSearchPage({
   initialQuery = '', onClose, onPick, onOpenCourse, onOpenRecord, onOpenBattles,
+  onOpenCommunity, onOpenFolder, onOpenAgent, onOpenPharmdCourse,
   initialCourses = [], userId, initialLoading = true,
 }) {
   const { t } = useLang();
@@ -226,6 +252,17 @@ export default function DiscoverSearchPage({
   const [enrolledCourses, setEnrolledCourses] = useState([]);
   const [classmates, setClassmates] = useState([]);
   const [records, setRecords] = useState([]);
+  // Communities and teaching-guide listings are DB-searched (?q=) while a
+  // query is active; null = not searched yet.
+  const [communities, setCommunities] = useState(null);
+  const [listings, setListings] = useState(null);
+  // The learner's own small sets — joined communities (private ones the
+  // public search can't see), library folders, and the Pharm.D programme
+  // tree — load once on the first real query, then filter client-side.
+  const [myCommunities, setMyCommunities] = useState([]);
+  const [folders, setFolders] = useState([]);
+  const [pharmdCourses, setPharmdCourses] = useState([]);
+  const [deepLoading, setDeepLoading] = useState(false);
   const [learningLoading, setLearningLoading] = useState(initialLoading);
   const [peopleLoading, setPeopleLoading] = useState(initialLoading);
 
@@ -235,13 +272,27 @@ export default function DiscoverSearchPage({
   const materialRows = q ? records.filter((record) => matchRecord(record, q)).slice(0, 5) : [];
   const courseRows = q ? catalogueCourses.filter((course) => matchCourse(course, q)).slice(0, 5) : [];
   const classmateRows = q ? classmates.filter((person) => matchClassmate(person, q)).slice(0, 5) : [];
-  const hasResults = typeRows.length || materialRows.length || courseRows.length || classmateRows.length;
-  const loadingSearch = learningLoading || peopleLoading;
+  /* Communities merge the public database hits with the learner's joined
+     communities (covers private ones), de-duped by id. */
+  const communityPool = q ? [...(communities ?? []), ...myCommunities] : [];
+  const seenCommunityIds = new Set();
+  const communityRows = communityPool
+    .filter((c) => c?.id && !seenCommunityIds.has(c.id) && seenCommunityIds.add(c.id) && matchCommunity(c, q))
+    .slice(0, 5);
+  const folderRows = q ? folders.filter((f) => matchFolder(f, q)).slice(0, 5) : [];
+  const listingRows = q ? (listings ?? []).filter((a) => matchListing(a, q)).slice(0, 5) : [];
+  const pharmdRows = q ? pharmdCourses.filter((c) => matchPharmdCourse(c, q)).slice(0, 5) : [];
+  const hasResults = typeRows.length || materialRows.length || courseRows.length || classmateRows.length
+    || communityRows.length || folderRows.length || listingRows.length || pharmdRows.length;
+  const loadingSearch = learningLoading || peopleLoading || deepLoading;
 
   /* Catalogue search hits the DATABASE: the debounced query re-fetches the
      published-courses endpoints with ?q= (server-side ILIKE across title,
      description and subject, raised cap) and stale responses are dropped
-     by request id. Empty query restores the browse fetch. */
+     by request id. Communities (name + description) and teaching-guide
+     listings (title, teacher, subject, description) are database searches
+     too — fetched only while a query is active. Empty query restores the
+     browse fetch. */
   const catalogueReqRef = useRef(0);
   const debouncedQ = useDebouncedValue(query.trim(), 300);
   useEffect(() => {
@@ -251,7 +302,9 @@ export default function DiscoverSearchPage({
     Promise.all([
       apiGet(`/api/courses/published?type=live&limit=${cap}${eq}`).catch(() => null),
       apiGet(`/api/courses/published?type=video&limit=${cap}${eq}`).catch(() => null),
-    ]).then(([live, video]) => {
+      debouncedQ ? apiGet(`/api/communities?limit=20${eq}`).catch(() => null) : null,
+      debouncedQ ? apiGet(`/api/adaptive/marketplace/listings?limit=20${eq}`).catch(() => null) : null,
+    ]).then(([live, video, comms, listingRows]) => {
       if (catalogueReqRef.current !== id) return;
       const rows = [
         ...(live?.courses || []).map((course) => ({ ...course, _kind: 'live' })),
@@ -259,7 +312,29 @@ export default function DiscoverSearchPage({
       ];
       if (rows.length) setCatalogueCourses(rows);
       else if (debouncedQ) setCatalogueCourses([]);   // an empty DB answer is the result
+      if (debouncedQ) {
+        setCommunities(Array.isArray(comms?.data) ? comms.data : []);
+        setListings(Array.isArray(listingRows?.listings) ? listingRows.listings : []);
+      }
     });
+  }, [debouncedQ]);
+
+  /* The learner's own sets load once, lazily on the first real query, so
+     opening the search page stays light. Private communities the public
+     ?q= search can't see still match from this personal fetch. */
+  const personalRef = useRef(false);
+  useEffect(() => {
+    if (!debouncedQ || personalRef.current) return;
+    personalRef.current = true;
+    setDeepLoading(true);
+    Promise.all([
+      fetchMyCommunities().then(setMyCommunities).catch(() => {}),
+      listFolders().then(setFolders).catch(() => {}),
+      fetchPharmdProgramme().then((d) => {
+        const years = Array.isArray(d?.years) ? d.years : [];
+        setPharmdCourses(years.flatMap((y) => (Array.isArray(y?.courses) ? y.courses : [])));
+      }).catch(() => {}),
+    ]).finally(() => setDeepLoading(false));
   }, [debouncedQ]);
 
   /* Enrolled courses and classmates load once — they're the learner's own
@@ -329,9 +404,10 @@ export default function DiscoverSearchPage({
 
   const scopeMeta = (scope) => {
     const type = all.find((row) => row.key === scope);
-    return type
-      ? { icon: type.icon, chipBg: type.grad, label: type.label }
-      : { icon: 'ti-search', chipBg: 'var(--ak-surface-hover)', label: t('dhub.scope_search') };
+    if (type) return { icon: type.icon, chipBg: type.grad, label: type.label };
+    if (scope === 'communities') return { icon: 'ti-users', chipBg: 'linear-gradient(135deg,#7C5CE6,#5B3FD1)', label: t('dhub.communities') };
+    if (scope === 'folders') return { icon: 'ti-folder', chipBg: 'linear-gradient(135deg,#F59E0B,#B45309)', label: t('dhub.folders') };
+    return { icon: 'ti-search', chipBg: 'var(--ak-surface-hover)', label: t('dhub.scope_search') };
   };
 
   const pickType = (type) => {
@@ -351,18 +427,45 @@ export default function DiscoverSearchPage({
     onOpenRecord?.(record);
   };
 
+  const pickCommunity = (community) => {
+    remember(q || community.name, 'communities');
+    onClose?.();
+    onOpenCommunity?.(community);
+  };
+
+  const pickFolder = (folder) => {
+    remember(q || folder.name, 'folders');
+    onClose?.();
+    onOpenFolder?.(folder);
+  };
+
+  const pickListing = (listing) => {
+    remember(q || listing.title, 'guide');
+    onClose?.();
+    onOpenAgent?.(listing);
+  };
+
+  const pickPharmdCourse = (course) => {
+    remember(q || course.title, 'pharmd');
+    onClose?.();
+    onOpenPharmdCourse?.(course.code || course.id);
+  };
+
   const openBattles = () => {
     onClose?.();
     onOpenBattles?.();
   };
 
-  /* Enter follows the strongest actionable result: a published course, then a
-     material, then a Discover destination. It never pretends a classmate row
-     is a profile page when the product only supports battling classmates. */
+  /* Enter follows the strongest actionable result: a published course, then
+     a material, then a community, a folder, and finally a Discover
+     destination. It never pretends a classmate row is a profile page when
+     the product only supports battling classmates. */
   const onEnter = () => {
     if (!q) return;
     if (courseRows.length) return pickCourse(courseRows[0]);
     if (materialRows.length) return pickRecord(materialRows[0]);
+    if (communityRows.length) return pickCommunity(communityRows[0]);
+    if (folderRows.length) return pickFolder(folderRows[0]);
     if (typeRows.length) return pickType(typeRows[0]);
     remember(q, 'search');
     onPick?.(all.find((type) => type.key === 'courses'), q);
@@ -494,6 +597,30 @@ export default function DiscoverSearchPage({
             {courseRows.length > 0 && (
               <Section title={t('dhub.courses')}>
                 {courseRows.map((course) => <SearchRow key={`${course._kind || 'course'}-${course.id || course.slug || course.title}`} icon={course._kind === 'live' ? 'ti-broadcast' : 'ti-book'} iconBg={course._kind === 'live' ? 'linear-gradient(135deg,#EF4E78,#C92A54)' : 'linear-gradient(135deg,#F28C52,#DE5F26)'} title={course.title} subtitle={[course.subject, course._kind === 'live' ? labels.live : labels.course].filter(Boolean).join(' · ')} image={course.cover_image_url} onClick={() => pickCourse(course)} actionLabel={t('dhub.cta_open')} />)}
+              </Section>
+            )}
+
+            {communityRows.length > 0 && (
+              <Section title={t('dhub.communities')}>
+                {communityRows.map((community) => <SearchRow key={`comm-${community.id}`} icon={community.emoji || 'ti-users'} iconBg="linear-gradient(135deg,#7C5CE6,#5B3FD1)" title={community.name} subtitle={[community.description, `${community.member_count || 1} ${t('dhub.members')}`].filter(Boolean).join(' · ')} onClick={() => pickCommunity(community)} actionLabel={t('dhub.cta_open')} />)}
+              </Section>
+            )}
+
+            {folderRows.length > 0 && (
+              <Section title={t('dhub.folders')}>
+                {folderRows.map((folder) => <SearchRow key={`fold-${folder.id}`} icon="ti-folder" iconBg="linear-gradient(135deg,#F59E0B,#B45309)" title={folder.name} subtitle={folder.description || t('dhub.folders')} onClick={() => pickFolder(folder)} actionLabel={t('dhub.cta_open')} />)}
+              </Section>
+            )}
+
+            {listingRows.length > 0 && (
+              <Section title={t('dhub.guides')}>
+                {listingRows.map((listing) => <SearchRow key={`agent-${listing.id}`} icon="🎓" iconBg="linear-gradient(135deg,#4C8DF0,#2E62D9)" image={listing.cover_image_url} title={listing.title} subtitle={[listing.teacher_name, listing.subject].filter(Boolean).join(' · ')} onClick={() => pickListing(listing)} actionLabel={t('dhub.cta_open')} />)}
+              </Section>
+            )}
+
+            {pharmdRows.length > 0 && (
+              <Section title={t('dhub.card_pharmd')}>
+                {pharmdRows.map((course) => <SearchRow key={`pharmd-${course.id}`} icon="ti-pill" iconBg="linear-gradient(135deg,#14B8A6,#0C7E72)" title={course.title} subtitle={course.code} onClick={() => pickPharmdCourse(course)} actionLabel={t('dhub.cta_open')} />)}
               </Section>
             )}
 

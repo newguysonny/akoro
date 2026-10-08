@@ -341,6 +341,13 @@ export default function LibraryPage() {
       setItems(lib);
       setRecords(recs);
       setFolders(flds);
+      // Deep link (Discover search results): /library?folder=<id> opens
+      // that folder full-screen once the shelf lands.
+      const folderParam = searchParams.get('folder');
+      if (folderParam) {
+        const target = (flds || []).find((f) => `${f.id}` === `${folderParam}`);
+        if (target) setFolderPage(target);
+      }
     } finally { setLoading(false); }
   }, []);
 
