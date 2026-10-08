@@ -28,6 +28,7 @@
 import { useEffect, useRef, useState } from 'react';
 import TeachAgentModal from '../teaching/TeachAgentModal.jsx';
 import { API } from '../../services/api.js';
+import { startLessonTranscription, getLessonTranscriptionStatus } from '../../services/recordsApi.js';
 import { setNowStudying, updateNowProgress } from '../../utils/nowStudying.js';
 import { BRAND } from '../../constants.js';
 import { Icon } from '../common/Icons.jsx';
@@ -98,6 +99,70 @@ export default function AgentSessionViewer({ course, lesson, onClose }) {
     // Keyed on the lesson identity — reopening the session retries naturally.
   }, [lesson?.id]);
 
+  /* ── The transcript lane ──────────────────────────────────────────────
+     A course video transcribes ONCE (shared cache keyed by the lesson):
+     the first learner to ask pays for it, everyone after grounds
+     instantly. Cached → the session opens already grounded; not cached →
+     the reader offers, and the transcript grounds on arrival. */
+  const [avState, setAvState] = useState('idle');        // idle | running | ready | failed
+  const [avTranscript, setAvTranscript] = useState(null);
+  const [avError, setAvError] = useState(null);
+  const [avReference, setAvReference] = useState(null);  // grounds the agent
+
+  /* Cached transcript on open — one status call, instant ground. */
+  useEffect(() => {
+    let cancelled = false;
+    if (!lesson?.id || state !== 'ready') return;
+    getLessonTranscriptionStatus(lesson.id).then((d) => {
+      if (cancelled) return;
+      const segs = d?.transcript?.segments || [];
+      if (segs.length) {
+        setAvTranscript({ segments: segs });
+        setAvReference({
+          name: lesson?.title || 'Lesson video',
+          text: (d.transcript.text || segs.map((s) => (s.speaker ? `[${s.speaker}] ${s.text}` : s.text)).join('\n\n')).slice(0, 12_000),
+        });
+        setAvState('ready');
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lesson?.id, state]);
+
+  /* The offer → poll → ground flow (same shape the library records use). */
+  const startTranscription = async () => {
+    if (!lesson?.id || avState === 'running' || avState === 'ready') return;
+    setAvState('running');
+    setAvError(null);
+    try {
+      // 409 is fine — someone else's job is already running; it is shared.
+      await startLessonTranscription(lesson.id).catch(() => {});
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 5000));
+        const d = await getLessonTranscriptionStatus(lesson.id);
+        if (d?.job && !d.job.running) {
+          if (d.job.result?.ok === false) throw new Error(d.job.result.error || 'Transcription failed.');
+          if (!d.transcript?.segments?.length && !d.job.running) break;   // done but empty → final read below
+        }
+        if (d?.transcript?.segments?.length) {
+          const segs = d.transcript.segments;
+          setAvTranscript({ segments: segs });
+          setAvReference({
+            name: lesson?.title || 'Lesson video',
+            text: (d.transcript.text || segs.map((s) => (s.speaker ? `[${s.speaker}] ${s.text}` : s.text)).join('\n\n')).slice(0, 12_000),
+          });
+          setAvState('ready');
+          return;
+        }
+      }
+      const d = await getLessonTranscriptionStatus(lesson.id);
+      if (!d?.transcript?.segments?.length) throw new Error('No speech came out of this video.');
+    } catch (e) {
+      setAvState('failed');
+      setAvError(e?.message || 'Transcription failed.');
+    }
+  };
+
   /* Persist position/completion — the same endpoints and rules the
      course player uses (every ~10s, complete within 5s of the end). */
   const saveProgress = ({ time, duration }) => {
@@ -157,6 +222,7 @@ export default function AgentSessionViewer({ course, lesson, onClose }) {
       sub: state === 'loading' ? 'Opening the lesson…'
         : state === 'empty' ? 'Video coming soon — this lesson has no video yet'
         : state === 'error' ? err
+        : avState === 'ready' ? `${courseTitle} · transcript attached — tap to watch`
         : `${courseTitle} · tap to watch`,
     },
     pct: state === 'ready' ? videoPct : null,
@@ -170,6 +236,10 @@ export default function AgentSessionViewer({ course, lesson, onClose }) {
       onTimeUpdate: saveProgress,
       // Course streams are presigned and expiring — no download seam here.
     } : null,
+    transcript: avState === 'ready' ? avTranscript : null,
+    onTranscribe: stream && avState !== 'ready' ? startTranscription : null,
+    transcribeState: avState === 'failed' ? 'failed' : avState === 'running' ? 'running' : 'idle',
+    transcribeError: avError,
     pages: [],
     allowTextMarking: false,
   };
@@ -184,6 +254,7 @@ export default function AgentSessionViewer({ course, lesson, onClose }) {
         topic: lessonTitle,
         subject: course?.subject || 'General',
         ...(priorSid ? { sessionId: priorSid, mode: 'continuation' } : {}),
+        ...(avReference ? { reference: avReference } : {}),
       }}
       content={content}
       onClose={onClose}

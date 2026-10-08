@@ -40,7 +40,8 @@ test("the learner page filters by type and renders stage roadmaps", () => {
     assert.match(page, new RegExp(key.replace(/'/g, "'")));
   }
   assert.match(page, /const visible = typeFilter === 'all'/);
-  assert.match(page, /visible\.map\(a => <CommunityActivityCard/);
+  assert.match(page, /visible\.map\(\(a, i\) =>/);
+  assert.match(page, /<CommunityActivityCard key=\{a\.id\}/);
   // Cards carry the type label and multi_stage cards their numbered stages.
   assert.match(page, /typeMeta\(a\.type\)/);
   assert.match(page, /a\.stages\.map\(\(s, i\) =>/);
