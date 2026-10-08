@@ -564,7 +564,7 @@ router.post("/extract", authenticateToken, asyncHandler(async (req, res) => {
     try {
       const { blocks, markdown, model } = await parsePageOnRunpod({ imageBase64: b64 });
       await saveExtractionPage({ userId, recordId, pageNumber, blocks, markdown, model });
-      parsed.push({ pageNumber, markdown, model });
+      parsed.push({ pageNumber, markdown, model, blocks });   // blocks ride back for the reader's layout overlay
     } catch (err) {
       // Mid-batch failure: keep the pages that worked, surface why.
       return res.json({
