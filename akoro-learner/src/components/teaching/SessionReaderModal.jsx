@@ -228,18 +228,39 @@ function extractTerms(sentences) {
 
 const titleCase = (w) => w.charAt(0).toUpperCase() + w.slice(1);
 
-function sentenceCiteFor(pageIndex) {
-  return { page: pageIndex, dataCite: `p-${pageIndex}` };
+/* The extraction block covering a sentence offset — a citation's precise
+   flash target on a scanned page (bbox_2d, normalized 0-1000). Blocks are
+   the page's markdown in order, so walking their text lengths maps any
+   offset in the joined page text back to the box it came from. */
+function blockBboxForOffset(pageText, blocks, sentence) {
+  if (!Array.isArray(blocks) || !blocks.length) return null;
+  const at = pageText.indexOf(sentence);
+  if (at < 0) return null;
+  let acc = 0;
+  for (const b of blocks) {
+    const len = String(b?.text_content || "").length + 2;   // the "\n\n" join
+    if (at < acc + len) {
+      return Array.isArray(b?.bbox_2d) && b.bbox_2d.length === 4 ? b.bbox_2d : null;
+    }
+    acc += len;
+  }
+  return null;
 }
 
-function deriveSummary(pageText, pageIndex) {
+function sentenceCiteFor(pageIndex, bbox = null) {
+  return bbox
+    ? { page: pageIndex, dataCite: `p-${pageIndex}`, bbox }
+    : { page: pageIndex, dataCite: `p-${pageIndex}` };
+}
+
+function deriveSummary(pageText, pageIndex, blocks = null) {
   const sentences = splitSentences(pageText).sort((a, b) => b.length - a.length).slice(0, 3);
   return sentences
     .sort((a, b) => pageText.indexOf(a) - pageText.indexOf(b)) // restore reading order
-    .map((s) => ({ text: s.length > 240 ? s.slice(0, 240).trim() + "…" : s, cite: sentenceCiteFor(pageIndex) }));
+    .map((s) => ({ text: s.length > 240 ? s.slice(0, 240).trim() + "…" : s, cite: sentenceCiteFor(pageIndex, blockBboxForOffset(pageText, blocks, s)) }));
 }
 
-function deriveQuiz(pageText, pageIndex, wanted) {
+function deriveQuiz(pageText, pageIndex, wanted, blocks = null) {
   const sentences = splitSentences(pageText);
   const terms = extractTerms(sentences);
   if (terms.length < 4) return [];
@@ -266,7 +287,7 @@ function deriveQuiz(pageText, pageIndex, wanted) {
       { key: "C", text: titleCase(distractors[1]), correct: false },
       { key: "D", text: titleCase(distractors[2]), correct: false },
     ];
-    questions.push({ prompt: `Complete this line from the material: “${blanked.trim()}”`, cite: sentenceCiteFor(pageIndex), options });
+    questions.push({ prompt: `Complete this line from the material: “${blanked.trim()}”`, cite: sentenceCiteFor(pageIndex, blockBboxForOffset(pageText, blocks, host)), options });
   }
   return questions;
 }
@@ -293,7 +314,7 @@ const QUIZ_HINTS = {
 };
 
 /** Build everything a generated result tab needs, from the page it was made on. */
-export function deriveToolContent(toolId, { pages, createdPage, values = {}, topic = "", subject = "" }) {
+export function deriveToolContent(toolId, { pages, createdPage, values = {}, topic = "", subject = "", pageBlocks = null }) {
   // The cover carries no text — fall forward to the first content page.
   let pageIdx = pages[createdPage]?.text ? createdPage : pages.findIndex((p) => p.text);
   if (pageIdx < 0) pageIdx = 0;
@@ -302,7 +323,7 @@ export function deriveToolContent(toolId, { pages, createdPage, values = {}, top
 
   switch (toolId) {
     case "summary": {
-      const points = deriveSummary(pageText, pageIdx);
+      const points = deriveSummary(pageText, pageIdx, pageBlocks?.[pageIdx] || null);
       return {
         summaryPoints: points,
         emptyReason: points.length ? null : "This page doesn't have enough running text to digest yet.",
@@ -310,7 +331,7 @@ export function deriveToolContent(toolId, { pages, createdPage, values = {}, top
     }
     case "quiz": {
       const wanted = parseInt(values.count, 10) || 5;
-      const questions = deriveQuiz(pageText, pageIdx, Math.min(wanted, 10));
+      const questions = deriveQuiz(pageText, pageIdx, Math.min(wanted, 10), pageBlocks?.[pageIdx] || null);
       return {
         quizQuestions: questions,
         quizAnswers: questions.map(() => ({ selected: null, checked: false, dontKnow: false })),
@@ -390,6 +411,8 @@ const READER_CSS = `
 .sreader-menu{background:var(--ak-surface);border:1px solid var(--ak-border2);box-shadow:0 18px 44px rgba(0,0,0,.5);}
 .folio-citation{display:inline-flex;align-items:center;gap:3px;font-size:0.65rem;font-family:ui-monospace,Menlo,monospace;color:var(--ak-accent);background:rgba(108,59,255,.16);border-radius:999px;padding:1px 7px;margin-left:6px;cursor:pointer;vertical-align:middle;border:none;white-space:nowrap;}
 .folio-citation:hover{background:var(--ak-accent);color:#fff;}
+.cite-bbox-flash{position:absolute;z-index:4;border:2.5px solid #7C3AED;background:rgba(124,58,237,.16);border-radius:4px;pointer-events:none;box-shadow:0 0 0 4px rgba(124,58,237,.10);animation:citeBoxFlash 2.3s ease-out forwards;}
+@keyframes citeBoxFlash{0%{opacity:0;transform:scale(1.05)}12%{opacity:1;transform:scale(1)}70%{opacity:.85}100%{opacity:0}}
 .cite-flash{animation:sreaderCiteFlash 2.2s ease-out;border-radius:4px;}
 @keyframes sreaderCiteFlash{
   0%{background:rgba(108,59,255,.22);box-shadow:0 0 0 4px rgba(108,59,255,.22);}
@@ -980,6 +1003,11 @@ export default function SessionReaderModal({
   media = null,
   allowTextMarking = true,
   rawPages = false,
+  /* pageBlocks[i] — the AI extraction's layout blocks for PDF page i
+     (bbox_2d normalized 0-1000). When present, generated summaries/quiz
+     citations carry the exact block's bbox, and citeJump flashes THAT
+     region on the scanned page — Fortizo's jump-and-flash, grounded. */
+  pageBlocks = null,
 }) {
   const isMobile = useIsMobileView();
   const split = !isMobile && !!chatNode;
@@ -1169,7 +1197,7 @@ export default function SessionReaderModal({
     const toolId = formTool;
     // Derive the result from the page's real text up front, so the content
     // is stable for the life of the tab (Fortizo stored its mock the same way).
-    const derived = deriveToolContent(toolId, { pages, createdPage: currentPage, values, topic: docTitle, subject: sourceName });
+    const derived = deriveToolContent(toolId, { pages, createdPage: currentPage, values, topic: docTitle, subject: sourceName, pageBlocks });
     setTimeout(() => {
       const tdef = toolById(toolId);
       const focusLabel = (values.focus && values.focus.trim()) || `Page ${currentPage + 1}`;
@@ -1211,6 +1239,22 @@ export default function SessionReaderModal({
           void target.offsetWidth; // restart the animation if clicked again
           target.classList.add("cite-flash");
           setTimeout(() => target.classList.remove("cite-flash"), 2300);
+        }
+        // PDF pages: the citation carries the extraction block's bbox —
+        // flash THAT region on the page, not the whole sheet.
+        if (Array.isArray(cite.bbox) && cite.bbox.length === 4) {
+          const pageDiv = viewerRef.current?.querySelector(`[data-page-index="${cite.page}"]`);
+          if (pageDiv) {
+            const [x1, y1, x2, y2] = cite.bbox;
+            const box = document.createElement("div");
+            box.className = "cite-bbox-flash";
+            box.style.left = `${Math.max(0, x1) / 10}%`;
+            box.style.top = `${Math.max(0, y1) / 10}%`;
+            box.style.width = `${Math.max(0.5, (x2 - x1) / 10)}%`;
+            box.style.height = `${Math.max(0.5, (y2 - y1) / 10)}%`;
+            pageDiv.appendChild(box);
+            setTimeout(() => box.remove(), 2400);
+          }
         }
       }, 450);
     });

@@ -396,6 +396,9 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
     renderPageContent,
     rawPages: type === 'pdf',   // canvases carry their own margins; images/cards keep the padded card
     allowTextMarking: type !== 'pdf' && type !== 'image',   // canvases/images can't carry HTML annotate/redact
+    // Extraction blocks per page — generated summaries/quiz citations carry
+    // the exact block bbox, and citeJump flashes that region on the scan.
+    pageBlocks: pages.map((_, i) => pdfBlocks.get(i + 1) || null),
   };
 
   /* A remembered session id (24h) makes reopening a record CONTINUE its
