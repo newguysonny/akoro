@@ -170,6 +170,16 @@ export async function extractRecordPages({ recordId, contentKey, pages }) {
   return d?.data ?? { pages: [] };
 }
 
+/** Semantic library search — hybrid (vector + keyword) over YOUR records'
+    content: what a paste SAYS, what a scanned PDF contains, what a recording
+    was about. [] when offline/unconfigured — the shelf stays browsable. */
+export async function searchRecords(q, limit = 12) {
+  try {
+    const d = await apiGet(`/api/records/search?q=${encodeURIComponent(q)}&limit=${limit}`);
+    return d?.data?.results ?? [];
+  } catch { return []; }
+}
+
 /* ── A/V transcription (ffmpeg → Deepgram, via the API) ───────────────────
    The reader offers it for audio/video records; segments ground the
    session and drive click-to-seek in the player. */
@@ -195,6 +205,21 @@ export async function getSharedTranscript(contentKey) {
 export async function startRecordTranscription({ recordId, contentKey }) {
   const d = await apiPost('/api/records/transcribe', contentKey ? { contentKey } : { recordId });
   return d?.data ?? {};
+}
+
+/** Start a COURSE lesson's transcription (shared cache keyed by the lesson —
+    transcribed once for everyone; 409 just means someone's job is running). */
+export async function startLessonTranscription(lessonId) {
+  const d = await apiPost('/api/records/transcribe', { lessonId });
+  return d?.data ?? {};
+}
+
+/** Course lesson job + transcript in one poll — { job, transcript }. */
+export async function getLessonTranscriptionStatus(lessonId) {
+  try {
+    const d = await apiGet(`/api/records/transcribe/lesson/${lessonId}`);
+    return d?.data ?? { job: null, transcript: { segments: [], text: '' } };
+  } catch { return { job: null, transcript: { segments: [], text: '' } }; }
 }
 
 /** Job status + transcript in one poll — { job, transcript }. */

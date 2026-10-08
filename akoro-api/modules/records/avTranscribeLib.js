@@ -234,10 +234,16 @@ export async function transcribeRecord({ userId, contentKey, recordName, kind, f
   onLog(`[av] ${label} — downloading the original…`);
   const dir = await mkdtemp(join(tmpdir(), "ak-av-"));
   try {
-    const srcPath = join(dir, "source");
-    const res = await fetch(fileUrl);
-    if (!res.ok) throw new Error(`Could not fetch the record (${res.status})`);
-    await pipeline(res.body, createWriteStream(srcPath));
+    // Course lessons stream as HLS (m3u8) — a playlist is not a file, so
+    // ffmpeg reads the URL itself (it demuxes HLS natively, https included).
+    // Everything else is a plain bytes URL and downloads first.
+    const isHls = /\.m3u8($|\?)/i.test(fileUrl || "");
+    const srcPath = isHls ? fileUrl : join(dir, "source");
+    if (!isHls) {
+      const res = await fetch(fileUrl);
+      if (!res.ok) throw new Error(`Could not fetch the record (${res.status})`);
+      await pipeline(res.body, createWriteStream(srcPath));
+    }
     onLog(`[av] extracted → ${kind === "video" ? "audio + scene frames" : "audio 16 kHz mono"}`);
 
     // 1 · Audio lane — 16 kHz mono, the §5 optimization.

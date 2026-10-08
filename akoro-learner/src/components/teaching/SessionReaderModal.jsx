@@ -1012,6 +1012,12 @@ export default function SessionReaderModal({
      audio/video materials: listed under the player; a click seeks the
      recording to that moment. */
   transcript = null,
+  /* Course-video transcription offer — the reader renders the row, the
+     session owns the job (start, poll, ground). Records drive their own
+     offer from RecordTeachSession and pass no onTranscribe. */
+  onTranscribe = null,
+  transcribeState = null,   // 'idle' | 'running' | 'failed'
+  transcribeError = null,
 }) {
   const isMobile = useIsMobileView();
   const split = !isMobile && !!chatNode;
@@ -1545,6 +1551,30 @@ export default function SessionReaderModal({
                     downloadName={media.downloadName}
                   />
                 </div>
+                {onTranscribe && !transcript?.segments?.length && (
+                  /* No transcript yet — one honest row: what it does, what
+                     it costs (a shared job, so at most once per video). */
+                  <div className="flex-shrink-0 px-3 md:px-5 py-2.5 border-t" style={{ borderColor: "var(--ak-border)", background: "var(--ak-surface)" }}>
+                    <button type="button" onClick={onTranscribe} disabled={transcribeState === "running"}
+                      className="w-full text-left rounded-xl px-3.5 py-2.5 border transition-opacity"
+                      style={{ borderColor: transcribeState === "failed" ? "#FCA5A5" : "var(--ak-border2)",
+                               background: "var(--ak-surface)", opacity: transcribeState === "running" ? 0.7 : 1 }}>
+                      <span className="text-xs font-bold" style={{ color: transcribeState === "failed" ? "#DC2626" : "var(--ak-text)" }}>
+                        {transcribeState === "running"
+                          ? "Transcribing the audio — this runs once for everyone, you can keep watching…"
+                          : transcribeState === "failed"
+                            ? "Transcription didn't finish — tap to try again"
+                            : "Transcribe this video — let your agent hear it too"}
+                      </span>
+                      {transcribeState !== "running" && (
+                        <span className="block text-[11px] font-semibold mt-0.5" style={{ color: "var(--ak-text-sub)" }}>
+                          {transcribeState === "failed" ? (transcribeError || "Something interrupted the job.")
+                            : "Speech becomes a clickable, searchable, groundable transcript."}
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                )}
                 {transcript?.segments?.length > 0 && (
                   <div className="flex-1 min-h-0 overflow-y-auto px-3 md:px-5 py-3" style={{ background: "var(--ak-bg)" }}>
                     <div className="text-xs font-semibold mb-2" style={{ color: "var(--ak-text-sub)" }}>

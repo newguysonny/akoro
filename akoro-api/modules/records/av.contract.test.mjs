@@ -25,7 +25,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(join(here, p), "utf8");
 
 const [routesSrc, libSrc, appSrc, manifest, migration, envExample, deepgramSrc,
-  teachSessionSrc, readerSrc, teachModalSrc, playerSrc, recordsApiSrc] = await Promise.all([
+  teachSessionSrc, readerSrc, teachModalSrc, playerSrc, recordsApiSrc, courseViewerSrc] = await Promise.all([
   read("routes.js"),
   read("avTranscribeLib.js"),
   read("../../app.js"),
@@ -38,6 +38,7 @@ const [routesSrc, libSrc, appSrc, manifest, migration, envExample, deepgramSrc,
   read("../../../akoro-learner/src/components/teaching/TeachAgentModal.jsx"),
   read("../../../akoro-learner/src/components/library/MediaPlayer.jsx"),
   read("../../../akoro-learner/src/services/recordsApi.js"),
+  read("../../../akoro-learner/src/components/courses/AgentSessionViewer.jsx"),
 ]);
 
 const { parseSceneTimes, shapeSegments, transcriptText } = await import("./avTranscribeLib.js");
@@ -130,8 +131,19 @@ test("the transcribe routes authenticate, own-check, gate and single-run", () =>
   assert.match(routesSrc, /avEnabled\(\)/, "the enabled gate exists");
   assert.match(routesSrc, /Transcription isn't configured/, "the honest 501");
   assert.match(routesSrc, /409/, "a concurrent first-open polls instead of double-spending");
-  assert.match(routesSrc, /createPresignedDownload\(contentKey/, "the original downloads via presigned URL");
+  assert.match(routesSrc, /createPresignedDownload\(id\.contentKey/, "records download via presigned URL");
+  assert.match(routesSrc, /String\(req\.body\?\.lessonId \|\| ""\)/, "lessons start through the same POST");
   assert.match(routesSrc, /Only audio and video records transcribe/, "audio/video kinds only");
+  // Course videos ride the same lane — one shared transcription per lesson.
+  assert.match(routesSrc, /resolveLessonContent/, "lessons resolve through the enrolment-gated helper");
+  assert.match(routesSrc, /lesson:\$\{lesson\.id\}/, "a lesson's cache key is lesson:<id>");
+  assert.match(routesSrc, /router\.get\("\/transcribe\/lesson\/:lessonId", authenticateToken/, "lesson status + transcript read");
+  assert.match(routesSrc, /Enrol in this course to use this lesson/, "access mirrors GET /api/lessons/:id");
+  assert.match(libSrc, /\.m3u8/, "HLS playlists stream straight through ffmpeg (a playlist is not a file)");
+  assert.match(courseViewerSrc, /startLessonTranscription/, "the course session offers transcription");
+  assert.match(courseViewerSrc, /getLessonTranscriptionStatus/, "the course session polls the shared job");
+  assert.match(courseViewerSrc, /avReference \? \{ reference: avReference \}/, "a ready transcript grounds the course session");
+  assert.match(readerSrc, /onTranscribe && !transcript\?\.segments\?\.length/, "the reader offers transcription only when there is no transcript yet");
   assert.match(appSrc, /from "\.\/modules\/records\/routes\.js"|recordsModule/, "records module is mounted");
 });
 

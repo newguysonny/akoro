@@ -64,6 +64,16 @@ const STORES = [
     filter: (query) => query.eq("status", "active"),
   },
   {
+    // The library's semantic index (modules/records/searchLib.js). Rows are
+    // immutable once written — the writer embeds inline, this only backfills
+    // whatever landed while the embedding call was failing. No stamp: a
+    // chunk's text never changes, so "missing" is the only staleness.
+    table: "record_chunks", schema: "edu",
+    select: "id, chunk_text, created_at, embedded_at",
+    text: (r) => r.chunk_text ?? "",
+    stamp: null,
+  },
+  {
     // One compact summary per chat session, also learner-owned and clearable.
     table: "learner_agent_conversation_summaries", schema: "edu",
     key: "chat_session_id",

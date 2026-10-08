@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchMyLibrary } from '../services/libraryApi.js';
-import { listRecords, listFolders, setRecordProgress, touchRecordOpened } from '../services/recordsApi.js';
+import { listRecords, listFolders, setRecordProgress, touchRecordOpened, searchRecords } from '../services/recordsApi.js';
 import { Icon, XIcon } from '../components/common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../constants.js';
 import { useLang } from '../contexts/LanguageContext.jsx';
@@ -304,6 +304,24 @@ export default function LibraryPage() {
   const [filter, setFilter]     = useState('all');
   const [viewer, setViewer]     = useState(null);   // the record open as a session
 
+  /* Semantic search — the server searches INSIDE your records (what a paste
+     says, what a scanned PDF contains, what a recording was about), fused
+     vector + keyword. Debounced; empty query returns to the shelf. */
+  const [q, setQ]                   = useState('');
+  const [qResults, setQResults]     = useState(null);   // null = not searching
+  const [qBusy, setQBusy]           = useState(false);
+  useEffect(() => {
+    const query = q.trim();
+    if (!query) { setQResults(null); setQBusy(false); return; }
+    setQBusy(true);
+    const id = setTimeout(async () => {
+      const results = await searchRecords(query, 20);
+      setQResults(results);
+      setQBusy(false);
+    }, 350);
+    return () => clearTimeout(id);
+  }, [q]);
+
   // ── Add a record — the + in the header ────────────────────────────────────
   // Every learner (school and higher-ed alike) adds material from the shelf
   // that holds it. The Now-Studying bar's + deep-links here with ?add=1.
@@ -451,6 +469,17 @@ export default function LibraryPage() {
     navigate('/app');
   };
 
+  /* A search hit names a record; open it through the normal flow. */
+  const openSearchHit = async (hit) => {
+    let r = records.find((x) => x.id === hit.recordId);
+    if (!r) {
+      try { r = ((await listRecords()) || []).find((x) => x.id === hit.recordId) || null; } catch { /* offline */ }
+    }
+    if (!r) { setToast('That record is no longer on your shelf'); return; }
+    setQ('');
+    openRecord(r);
+  };
+
   /* Opening a record starts a TEACHING session over it — same flow as
      "Start teaching", with the file itself as the material. Links stay links. */
   const openRecord = (r) => {
@@ -531,6 +560,28 @@ export default function LibraryPage() {
         <div style={{ display: 'flex', gap: 6, marginTop: 12, overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
           {KINDS.map(k => <button key={k.key} style={TAB(filter === k.key)} onClick={() => setFilter(k.key)}>{k.label}</button>)}
         </div>
+
+        {/* Search — finds what your records SAY, not just what they're named */}
+        <div style={{ position: 'relative', marginTop: 10 }}>
+          <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', display: 'flex', color: 'var(--ak-text-muted)' }}>
+            <Icon name="ti-search" size={14} />
+          </span>
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search inside your records…"
+            aria-label="Search your library"
+            style={{ width: '100%', boxSizing: 'border-box', padding: '9px 34px 9px 33px', borderRadius: 100,
+              border: '1px solid var(--ak-border)', background: 'var(--ak-bg)', color: 'var(--ak-text)',
+              fontFamily: "'Nunito',sans-serif", fontSize: 12.5, fontWeight: 700, outline: 'none' }}
+          />
+          {q && (
+            <button onClick={() => setQ('')} aria-label="Clear search"
+              style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'var(--ak-border)',
+                border: 'none', borderRadius: 100, width: 20, height: 20, cursor: 'pointer', color: 'var(--ak-text-muted)',
+                fontSize: 11, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>×</button>
+          )}
+        </div>
       </div>
 
       {/* CONTENT */}
@@ -562,7 +613,53 @@ export default function LibraryPage() {
             </div>
           </div>
         )}
-        {loading ? (
+        {qResults !== null ? (
+          /* SEARCH RESULTS — chunk hits, best match first. */
+          qBusy ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {[1,2,3].map(i => <div key={i} style={{ height: 70, borderRadius: 14, background: 'var(--ak-border)', opacity: .4 }} />)}
+            </div>
+          ) : qResults.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+              <div style={{ fontSize: 40, marginBottom: 10, color: BRAND }}><Icon name="ti-search" size={40} /></div>
+              <p style={{ fontSize: 14, color: 'var(--ak-text-muted)', fontWeight: 700 }}>No matches for “{q.trim()}”</p>
+              <p style={{ fontSize: 12, color: 'var(--ak-text-muted)', fontWeight: 600, marginTop: 4 }}>
+                Try different words — search looks inside your files, pastes and recordings.
+              </p>
+            </div>
+          ) : (
+            <>
+              <p style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--ak-text-muted)', margin: '0 0 8px', letterSpacing: .3 }}>
+                {qResults.length} MATCH{qResults.length === 1 ? '' : 'ES'} · “{q.trim()}”
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                {qResults.map((hit, i) => {
+                  const meta = hit.chunkKind === 'page' ? `Page ${hit.pageNumber}`
+                    : hit.chunkKind === 'transcript' && hit.startMs != null
+                      ? `${Math.floor(hit.startMs / 60000)}:${String(Math.floor((hit.startMs % 60000) / 1000)).padStart(2, '0')}`
+                      : hit.chunkKind === 'paste' ? 'Pasted text' : 'Title';
+                  const emoji = hit.kind === 'link' ? 'ti-link' : hit.kind === 'paste' ? 'ti-clipboard' : 'ti-paperclip';
+                  return (
+                    <button key={`${hit.recordId}-${i}`} onClick={() => openSearchHit(hit)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left', padding: '11px 13px',
+                        borderRadius: 14, border: '1px solid var(--ak-border)', background: 'var(--ak-surface)', cursor: 'pointer', fontFamily: "'Nunito',sans-serif" }}>
+                      <div style={{ width: 38, height: 38, borderRadius: 11, background: `${BRAND}14`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Icon name={emoji} size={18} color={BRAND} />
+                      </div>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <p style={{ fontSize: 13, fontWeight: 800, color: 'var(--ak-text)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hit.name}</p>
+                          <span style={{ flexShrink: 0, fontSize: 9.5, fontWeight: 800, color: BRAND, background: `${BRAND}14`, padding: '2px 7px', borderRadius: 100 }}>{meta}</span>
+                        </div>
+                        <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--ak-text-muted)', margin: '2px 0 0', lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{hit.snippet}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )
+        ) : loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {[1,2,3,4].map(i => <div key={i} style={{ height: 70, borderRadius: 14, background: 'var(--ak-border)', opacity: .4 }} />)}
           </div>

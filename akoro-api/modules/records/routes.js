@@ -60,6 +60,7 @@ import {
 import {
   avEnabled, transcribeRecord, getTranscript,
 } from "./avTranscribeLib.js";
+import { indexRecord, indexByContentKey, searchRecordChunks } from "./searchLib.js";
 
 const router = Router();
 
@@ -224,6 +225,12 @@ router.post("/", authenticateToken, asyncHandler(async (req, res) => {
 
   const { data, error } = await edu().from("records").insert(row).select().single();
   if (error) throw error;
+  // Semantic search index — the name always, pasted text too. Fire-and-forget:
+  // an embedding hiccup must not fail a create; the sweeper repairs gaps.
+  void indexRecord({
+    userId, recordId: data.id, name: data.name, contentKey: data.file_key,
+    pasteText: data.kind === "paste" ? data.content : null,
+  });
   res201(res, await toApi(data));
 }));
 
@@ -250,6 +257,25 @@ async function activePremiumUserIds() {
     .select("user_id").eq("tier_id", tierId).in("status", ["active", "trial", "trialing"]);
   return [...new Set((subs || []).map((s) => s.user_id).filter(Boolean))];
 }
+
+// ─── GET /api/records/search?q= — semantic library search ──────────────────
+// Hybrid RRF (vector + lexical) over the learner's OWN chunks — see
+// 2026-record-search.sql. Degrades to lexical-only when embeddings are
+// unavailable; never searches anyone else's library.
+router.get("/search", authenticateToken, asyncHandler(async (req, res) => {
+  const q = String(req.query.q || "").trim();
+  if (!q) return res400(res, "A search query is required.");
+  try {
+    const results = await searchRecordChunks({
+      userId: req.user.id, q,
+      limit: Number(req.query.limit) || 12,
+    });
+    res200(res, { results, query: q });
+  } catch (err) {
+    console.warn("[record-search] search failed:", String(err?.message || err).slice(0, 160));
+    res200(res, { results: [], query: q, error: "Search is unavailable right now." });
+  }
+}));
 
 // ─── GET /api/records/discover — the feed list ─────────────────────────────
 // METADATA ONLY: browsing the feed costs this API no storage calls — no
@@ -614,6 +640,8 @@ router.post("/extract", authenticateToken, asyncHandler(async (req, res) => {
     }
   }
   await finishContentJob(contentKey, "parse", "done", { pages: parsed.length });
+  // Search index (owner's record, shared-key aware) — never blocks the reply.
+  void indexByContentKey({ contentKey, pages: parsed });
   okExtract(res, { contentKey, pages: parsed });
 }));
 
@@ -670,6 +698,35 @@ router.delete("/:id", authenticateToken, asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, data: { id: req.params.id } });
 }));
 
+/* ── Course-video transcription target ───────────────────────────────────────
+ * A lesson's video_url (often a presigned, expiring HLS stream) transcribes
+ * into the SAME shared cache a record uses, keyed `lesson:<id>` — one
+ * transcription per lesson for everyone, claimed once. Access mirrors
+ * GET /api/lessons/:id exactly: instructors/admins, active enrollees, and
+ * preview lessons. */
+async function resolveLessonContent(lessonId, user, { requireVideo = true } = {}) {
+  if (!/^[0-9a-f-]{36}$/i.test(lessonId)) return { status: 400, message: "A valid lessonId is required." };
+  const { data: lesson, error } = await db.from("lessons")
+    .select("id, title, video_url, is_preview, course_modules ( course_id )")
+    .eq("id", lessonId).maybeSingle();
+  if (error) throw error;
+  if (!lesson) return { status: 404, message: "Lesson not found." };
+  if (requireVideo && !lesson.video_url) return { status: 400, message: "This lesson has no video to transcribe yet." };
+
+  if (!lesson.is_preview && !["instructor", "admin"].includes(user.role)) {
+    const courseId = lesson.course_modules?.course_id;
+    const { data: enrollment } = await db.from("enrollments")
+      .select("id").eq("user_id", user.id).eq("course_id", courseId).eq("status", "active").maybeSingle();
+    if (!enrollment) return { status: 403, message: "Enrol in this course to use this lesson." };
+  }
+  return {
+    contentKey: `lesson:${lesson.id}`,
+    name: lesson.title,
+    mime: "video/mp4",
+    fileUrl: lesson.video_url,
+  };
+}
+
 /* ─── Audio/video transcription (ffmpeg 16k-mono → Deepgram, scene frames
  * → captions) — the Fortizo §5 lane ─────────────────────────────────────────
  *
@@ -692,11 +749,22 @@ router.post("/transcribe", authenticateToken, asyncHandler(async (req, res) => {
   if (!avEnabled()) {
     return res.status(501).json({ success: false, error: "Transcription isn't configured on this deployment yet." });
   }
-  const id = await resolveAiContent(req);
-  if (id.status) return res.status(id.status).json({ success: false, message: id.message });
-  const { contentKey, name: recName } = id;
+  // Two target kinds share this lane: a library record (recordId/contentKey —
+  // the file downloads via presigned URL) and a course lesson (lessonId — the
+  // stream URL is already fetchable, HLS included; ffmpeg reads it directly).
+  const lessonId = String(req.body?.lessonId || "");
+  let target;
+  if (lessonId) {
+    target = await resolveLessonContent(lessonId, req.user);
+    if (target.status) return res.status(target.status).json({ success: false, message: target.message });
+  } else {
+    const id = await resolveAiContent(req);
+    if (id.status) return res.status(id.status).json({ success: false, message: id.message });
+    target = { ...id, fileUrl: await createPresignedDownload(id.contentKey, { downloadName: id.name }) };
+  }
+  const { contentKey, name: recName, fileUrl } = target;
 
-  const mime = id.mime || "";
+  const mime = target.mime || "";
   const avKind = /^video\//.test(mime) || /\.(mp4|m4v|mov|webm|mkv)$/i.test(recName || "") ? "video"
     : /^audio\//.test(mime) || /\.(mp3|m4a|aac|wav|ogg|flac)$/i.test(recName || "") ? "audio" : null;
   if (!avKind) return res400(res, "Only audio and video records transcribe.");
@@ -707,8 +775,6 @@ router.post("/transcribe", authenticateToken, asyncHandler(async (req, res) => {
   if (!claimed) {
     return res.status(409).json({ success: false, error: "This recording is being transcribed right now — the shared transcript will appear in a moment.", job: await getContentJob(contentKey, "av") });
   }
-
-  const fileUrl = await createPresignedDownload(contentKey, { downloadName: recName });
   const job = { running: true, startedAt: new Date().toISOString(), finishedAt: null, log: [], result: null };
   avJobs.set(contentKey, job);
   transcribeRecord({
@@ -717,6 +783,9 @@ router.post("/transcribe", authenticateToken, asyncHandler(async (req, res) => {
   })
     .then((result) => {
       job.result = result;
+      // Search index (owner's record; lesson keys resolve to no record and
+      // are skipped) — never blocks the job's completion.
+      void indexByContentKey({ contentKey, segments: result.segments });
       return finishContentJob(contentKey, "av", "done", { segments: result.segments });
     })
     .catch((err) => {
@@ -727,6 +796,15 @@ router.post("/transcribe", authenticateToken, asyncHandler(async (req, res) => {
     .finally(() => { job.running = false; job.finishedAt = new Date().toISOString(); });
 
   res.json({ success: true, data: { job: avJobSnapshot(job), kind: avKind } });
+}));
+
+router.get("/transcribe/lesson/:lessonId", authenticateToken, asyncHandler(async (req, res) => {
+  const target = await resolveLessonContent(String(req.params.lessonId || ""), req.user, { requireVideo: false });
+  if (target.status) return res.status(target.status).json({ success: false, message: target.message });
+  res.json({ success: true, data: {
+    job: avJobSnapshot(avJobs.get(target.contentKey) || null) || await getContentJob(target.contentKey, "av"),
+    transcript: await getTranscript(target.contentKey),
+  } });
 }));
 
 router.get("/transcribe/:recordId", authenticateToken, asyncHandler(async (req, res) => {
