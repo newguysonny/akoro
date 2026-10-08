@@ -1,0 +1,98 @@
+/**
+ * extractPages.js — client-side page rasterization for the reader's AI
+ * text extraction (hanji-parse-4b on RunPod, via /api/records/extract).
+ *
+ * The READER already renders PDFs (pdf.js) and images, so rasterization
+ * happens right here in the browser: each page is drawn to a canvas at a
+ * little under the parse model's 2-megapixel training cap, flattened to
+ * white-background JPEG, and handed to the API in ≤8-page batches. The
+ * server side never needs a PDF renderer, and nothing leaves the device
+ * except the page images the model has to see anyway.
+ *
+ * Batching keeps each request small and progress honest; a failed batch
+ * keeps everything parsed before it (the API upserts per page, so
+ * re-running only parses what's missing).
+ */
+import * as pdfjsLib from 'pdfjs-dist';
+import { extractRecordPages } from '../../services/recordsApi.js';
+
+export const MAX_RECORD_PAGES = 60;   // matches the API's cap
+
+// The parse model trains/serves at a 2 MP pixel cap — render a bit under
+// it so pages land at (roughly) the resolution the checkpoint expects and
+// the base64 pages stay small.
+const TARGET_PIXELS  = 1_600_000;
+const JPEG_QUALITY   = 0.82;
+const MAX_RENDER_SCALE = 2.5;
+
+function drawScaled(source, srcW, srcH) {
+  const scale = Math.min(MAX_RENDER_SCALE, Math.sqrt(TARGET_PIXELS / Math.max(1, srcW * srcH)));
+  const canvas = document.createElement('canvas');
+  canvas.width  = Math.max(1, Math.round(srcW * scale));
+  canvas.height = Math.max(1, Math.round(srcH * scale));
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';                       // PDFs paint on transparency — flatten to paper white
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+  const b64 = canvas.toDataURL('image/jpeg', JPEG_QUALITY).split(',')[1];
+  canvas.width = 0;                                // release the pixels eagerly
+  return b64;
+}
+
+/** Render every page of an open pdf.js document to base64 JPEG pages. */
+export async function rasterizePdfPages(pdf, { maxPages = MAX_RECORD_PAGES, onProgress } = {}) {
+  const total = Math.min(pdf.numPages, maxPages);
+  const pages = [];
+  for (let p = 1; p <= total; p++) {
+    const page = await pdf.getPage(p);
+    const base = page.getViewport({ scale: 1 });
+    const scale = Math.min(MAX_RENDER_SCALE, Math.sqrt(TARGET_PIXELS / Math.max(1, base.width * base.height)));
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(viewport.width));
+    canvas.height = Math.max(1, Math.round(viewport.height));
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    pages.push({ pageNumber: p, imageBase64: canvas.toDataURL('image/jpeg', JPEG_QUALITY).split(',')[1] });
+    canvas.width = 0;
+    onProgress?.(p, total);
+  }
+  return pages;
+}
+
+/** One image record — fetched, downscaled to the pixel cap, base64 JPEG. */
+export async function rasterizeImageFile(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Could not load the image (${res.status}).`);
+  const blob = await res.blob();
+  const bmp = await createImageBitmap(blob);
+  const imageBase64 = drawScaled(bmp, bmp.width, bmp.height);
+  bmp.close?.();
+  return [{ pageNumber: 1, imageBase64 }];
+}
+
+/**
+ * runRecordExtraction — rasterize → batch → merge. Resolves with
+ * { pages: [{pageNumber, markdown}], error } where error is set when the
+ * run stopped early (pages parsed before the failure are still returned —
+ * they're already saved server-side).
+ */
+export async function runRecordExtraction({ recordId, pages, onProgress } = {}) {
+  const BATCH = 8;
+  const collected = [];
+  let error = null;
+  for (let i = 0; i < pages.length && !error; i += BATCH) {
+    const batch = pages.slice(i, i + BATCH);
+    try {
+      const res = await extractRecordPages({ recordId, pages: batch });
+      collected.push(...(res?.pages || []));
+      if (res?.error) error = res.error;          // mid-batch page failure — keep what worked
+    } catch (e) {
+      error = e?.message || 'Extraction failed — try again in a moment.';
+    }
+    onProgress?.(Math.min(pages.length, i + batch.length), pages.length);
+  }
+  return { pages: collected, error };
+}

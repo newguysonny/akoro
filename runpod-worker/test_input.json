@@ -1,7 +1,6 @@
 {
   "input": {
-    "prompt": "Convert this document to clean markdown. Preserve headings, tables and lists exactly.",
-    "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/document-question-answering.png",
-    "max_tokens": 1024
+    "image_b64": "iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mP8z8BQz4AFMGETHDkSAKwNAQEXXBhQAAAAAElFTkSuQmCC",
+    "max_new_tokens": 512
   }
 }

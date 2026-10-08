@@ -52,6 +52,10 @@ import {
   recordsStorageEnabled, createPresignedUpload, createPresignedDownload, removeRecordFile,
   ownsRecordFileKey, isFallbackFileKey, MAX_FALLBACK_FILE_BYTES,
 } from "./lib/storage.js";
+import {
+  recordsExtractionEnabled, parsePageOnRunpod, saveExtractionPage, getExtraction,
+  MAX_PAGES_PER_REQUEST, MAX_RECORD_PAGES, MAX_IMAGE_B64_CHARS,
+} from "./extractLib.js";
 
 const router = Router();
 
@@ -509,6 +513,73 @@ router.post("/folders/items", authenticateToken, asyncHandler(async (req, res) =
   }
   const names = (owned || []).map((f) => f.name);
   res201(res, { added: folderIds.length, folders: names });
+}));
+
+/* ─── AI extraction (hanji-parse-4b on RunPod) — scanned PDFs & images ──────
+ *
+ * The READER rasterizes pages client-side (pdf.js / the loaded image) and
+ * posts them here in ≤8-page batches; each page runs one /runsync call on
+ * the parse worker, and the result upserts into edu.record_extractions.
+ * Re-opening a record reads the cache (GET /extract/:recordId) — extraction
+ * is idempotent per page, so re-running refreshes.
+ *
+ *   POST /api/records/extract            { recordId, pages:[{pageNumber,
+ *                                          imageBase64}] } → parsed pages
+ *   GET  /api/records/extract/:recordId  cached extraction (may be empty)
+ *
+ * NOTE: registered before the generic /:id routes below. The body limit
+ * is raised app-wide (see app.js) — page JPEGs ride the JSON body, base64'd.
+ */
+const okExtract = (res, data) => res.json({ success: true, data });
+
+router.post("/extract", authenticateToken, asyncHandler(async (req, res) => {
+  if (!recordsExtractionEnabled()) {
+    return res.status(501).json({ success: false, error: "Text extraction isn't configured on this deployment yet." });
+  }
+  const userId   = req.user.id;
+  const recordId = String(req.body?.recordId || "");
+  const pages    = Array.isArray(req.body?.pages) ? req.body.pages : [];
+  if (!/^[0-9a-f-]{36}$/i.test(recordId)) return res400(res, "A recordId is required.");
+  if (!pages.length) return res400(res, "Send at least one rendered page.");
+  if (pages.length > MAX_PAGES_PER_REQUEST) return res400(res, `Send at most ${MAX_PAGES_PER_REQUEST} pages per request.`);
+
+  // Ownership first — never parse bytes for a record that isn't yours.
+  const { data: rec, error: recErr } = await edu().from("records")
+    .select("id, name, kind").eq("id", recordId).eq("user_id", userId).maybeSingle();
+  if (recErr) throw recErr;
+  if (!rec) return res.status(404).json({ success: false, message: "Record not found." });
+
+  const parsed = [];
+  for (const p of pages) {
+    const pageNumber = Number(p?.pageNumber);
+    const imageBase64 = typeof p?.imageBase64 === "string" ? p.imageBase64 : "";
+    if (!Number.isInteger(pageNumber) || pageNumber < 1 || pageNumber > MAX_RECORD_PAGES) {
+      return res400(res, `Page numbers must be 1-${MAX_RECORD_PAGES}.`);
+    }
+    if (!imageBase64) return res400(res, `Page ${pageNumber} has no image.`);
+    if (imageBase64.length > MAX_IMAGE_B64_CHARS) {
+      return res400(res, `Page ${pageNumber}'s image is too large — re-render it smaller.`);
+    }
+    const b64 = imageBase64.replace(/^data:[^,]*,/, "");   // tolerate data: URIs
+    try {
+      const { blocks, markdown, model } = await parsePageOnRunpod({ imageBase64: b64 });
+      await saveExtractionPage({ userId, recordId, pageNumber, blocks, markdown, model });
+      parsed.push({ pageNumber, markdown, model });
+    } catch (err) {
+      // Mid-batch failure: keep the pages that worked, surface why.
+      return res.json({
+        success: parsed.length > 0,
+        data: { recordId, pages: parsed, failedPage: pageNumber, error: String(err?.message || err) },
+      });
+    }
+  }
+  okExtract(res, { recordId, pages: parsed });
+}));
+
+router.get("/extract/:recordId", authenticateToken, asyncHandler(async (req, res) => {
+  const recordId = String(req.params.recordId || "");
+  if (!/^[0-9a-f-]{36}$/i.test(recordId)) return res400(res, "A recordId is required.");
+  okExtract(res, await getExtraction(req.user.id, recordId));
 }));
 
 // ─── PATCH /api/records/:id — progress / last-opened ────────────────────────
