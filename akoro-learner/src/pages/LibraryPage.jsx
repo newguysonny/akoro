@@ -15,6 +15,7 @@ import NowStudyingBar from '../components/dashboard/NowStudyingBar.jsx';
 import RecordTeachSession, { recordFileType } from '../components/library/RecordTeachSession.jsx';
 import { useHigherEd } from '../hooks/useStudyTier.js';
 import { AppShell } from '../components/AppShell.jsx';
+import { useIsMobileView } from '../components/teaching/SessionReaderModal.jsx';
 import { useNowStudying } from '../utils/nowStudying.js';
 
 /* Icon + accent per library kind (tabler icons, matches the app's icon style) */
@@ -524,6 +525,8 @@ export default function LibraryPage() {
       : items.filter(a => a.kind === filter);
   const activeLabel = KINDS.find(k => k.key === filter)?.label || 'Library';
 
+  const isMobile = useIsMobileView();
+
   const TAB = (active) => ({
     padding: '6px 16px', borderRadius: 100, border: 'none', cursor: 'pointer',
     fontFamily: "'Nunito',sans-serif", fontSize: 12, fontWeight: active ? 800 : 600,
@@ -531,8 +534,29 @@ export default function LibraryPage() {
     flexShrink: 0, whiteSpace: 'nowrap',
   });
 
+  const shellNowStudying = { ...now, onOpen: openNowFromLibrary, onAdd: () => setSheetOpen(true), onDismiss: nowActs.dismiss };
+
+  /* A folder open on tablet/desktop renders IN THE SHELL: the folder page
+     becomes the page body — sidebar visible, the shell's tablet now-bar
+     on the bottom edge — instead of the floating phone-column overlay.
+     Mobile (≤768px) keeps the fixed overlay exactly as before. */
+  if (folderPage && !isMobile) {
+    return (
+      <AppShell nowStudying={shellNowStudying}>
+        <LibraryFolderPage
+          folder={folderPage}
+          shellMode
+          onClose={() => setFolderPage(null)}
+          onOpenItem={openFolderItem}
+          onRenamed={(f) => { setFolders((fs) => fs.map((x) => (x.id === f.id ? f : x))); setFolderPage(f); }}
+          onDeleted={(id) => { setFolders((fs) => fs.filter((x) => x.id !== id)); setFolderPage(null); setToast('Folder deleted'); }}
+        />
+      </AppShell>
+    );
+  }
+
   return (
-    <AppShell nowStudying={{ ...now, onOpen: openNowFromLibrary, onAdd: () => setSheetOpen(true), onDismiss: nowActs.dismiss }}>
+    <AppShell nowStudying={shellNowStudying}>
     <div style={{ width: '100%', height: '100%', fontFamily: "'Nunito',sans-serif", background: 'var(--ak-bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* HEADER */}
       <div style={{ background: 'var(--ak-surface)', backdropFilter: 'blur(14px)', borderBottom: '1px solid var(--ak-border)', padding: '14px 18px', zIndex: 100, flexShrink: 0 }}>
