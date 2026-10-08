@@ -1008,6 +1008,10 @@ export default function SessionReaderModal({
      citations carry the exact block's bbox, and citeJump flashes THAT
      region on the scanned page — Fortizo's jump-and-flash, grounded. */
   pageBlocks = null,
+  /* transcript — { segments:[{kind, startMs, endMs, speaker, text}] } for
+     audio/video materials: listed under the player; a click seeks the
+     recording to that moment. */
+  transcript = null,
 }) {
   const isMobile = useIsMobileView();
   const split = !isMobile && !!chatNode;
@@ -1524,19 +1528,48 @@ export default function SessionReaderModal({
 
           <div className="flex-1 min-h-0 relative overflow-hidden">
             {isMedia ? (
-              /* The record itself — original bytes, presigned URL, range seeks. */
-              <MediaPlayer
-                kind={media.kind}
-                src={media.src}
-                title={media.title || docTitle}
-                startAt={media.startAt}
-                onReady={setPlayerApi}
-                onState={setPlayerState}
-                onPosition={media.onPosition}
-                onTimeUpdate={media.onTimeUpdate}
-                downloadUrl={media.downloadUrl}
-                downloadName={media.downloadName}
-              />
+              /* The record itself — original bytes, presigned URL, range seeks —
+                 with its transcript underneath (click a line, land on the moment). */
+              <div className="h-full flex flex-col">
+                <div className="flex-shrink-0">
+                  <MediaPlayer
+                    kind={media.kind}
+                    src={media.src}
+                    title={media.title || docTitle}
+                    startAt={media.startAt}
+                    onReady={setPlayerApi}
+                    onState={setPlayerState}
+                    onPosition={media.onPosition}
+                    onTimeUpdate={media.onTimeUpdate}
+                    downloadUrl={media.downloadUrl}
+                    downloadName={media.downloadName}
+                  />
+                </div>
+                {transcript?.segments?.length > 0 && (
+                  <div className="flex-1 min-h-0 overflow-y-auto px-3 md:px-5 py-3" style={{ background: "var(--ak-bg)" }}>
+                    <div className="text-xs font-semibold mb-2" style={{ color: "var(--ak-text-sub)" }}>
+                      Transcript · {transcript.segments.length} segment{transcript.segments.length === 1 ? "" : "s"} — tap a line to jump there
+                    </div>
+                    {transcript.segments.map((s, i) => {
+                      const mmss = (ms) => {
+                        const t = Math.floor((ms || 0) / 1000);
+                        return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+                      };
+                      return (
+                        <button key={i} type="button"
+                          onClick={() => playerApi?.seekTo?.((s.startMs || 0) / 1000)}
+                          className="w-full text-left rounded-lg px-3 py-2 mb-1.5 border transition-colors"
+                          style={{ borderColor: "var(--ak-border2)", background: "var(--ak-surface)" }}>
+                          <span className="font-ui-mono text-[10px] font-bold mr-2" style={{ color: "var(--ak-accent)" }}>{mmss(s.startMs)}</span>
+                          {s.speaker && <span className="text-[10px] font-black mr-2" style={{ color: "var(--ak-text-sub)" }}>{s.speaker}</span>}
+                          {s.kind === "visual" && <span className="text-[10px] font-black mr-2" style={{ color: "#D97706" }}>SLIDE</span>}
+                          <span className="text-xs leading-relaxed" style={{ color: "var(--ak-text)" }}>{s.text}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             ) : (
             <div ref={viewerRef} onClick={handleViewerClick}
               className={`pdf-scroll h-full overflow-auto flex flex-col items-center ${rawPages ? "px-1.5 md:px-3 pt-2 md:pt-3 pb-8" : "px-3 md:px-6 pt-9 pb-16"}`}

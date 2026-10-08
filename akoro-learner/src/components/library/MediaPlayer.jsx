@@ -140,6 +140,13 @@ export default function MediaPlayer({ kind, src, title, startAt = 0, onReady, on
     el.currentTime = Math.max(0, Math.min(el.duration, (el.currentTime || 0) + delta));
     setTime(el.currentTime);
   }, []);
+  const seekTo = useCallback((seconds) => {
+    const el = elRef.current;
+    if (!el) return;
+    el.currentTime = Math.max(0, Number.isFinite(el.duration) ? Math.min(seconds, el.duration) : seconds);
+    setTime(el.currentTime);
+  }, []);
+
   const cycleRate = useCallback((dir = 1) => {
     const el = elRef.current; if (!el) return;
     const idx = RATES.indexOf(el.playbackRate);
@@ -149,8 +156,8 @@ export default function MediaPlayer({ kind, src, title, startAt = 0, onReady, on
   }, [onState]);
 
   useEffect(() => {
-    onReady?.({ toggle, skip, cycleRate, rates: RATES });
-  }, [onReady, toggle, skip, cycleRate]);
+    onReady?.({ toggle, skip, seekTo, cycleRate, rates: RATES });
+  }, [onReady, toggle, skip, seekTo, cycleRate]);
 
   const seek = (e) => {
     const el = elRef.current; if (!el) return;

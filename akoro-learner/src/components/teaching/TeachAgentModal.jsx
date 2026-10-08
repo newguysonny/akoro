@@ -905,6 +905,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
     renderPageContent: content.renderPageContent || null,
     rawPages: content.rawPages || false,
     pageBlocks: content.pageBlocks || null,
+    transcript: content.transcript || null,
     allowTextMarking: content.allowTextMarking ?? true,
     onClose: closeReader,
     onExplainSelection: explainSelection,
