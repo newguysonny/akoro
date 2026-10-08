@@ -37,12 +37,19 @@ export async function loadPdfDocument(src) {
 
 /* One PDF page. Renders lazily (IntersectionObserver from the parent
    viewer scroll container) and re-renders if it becomes visible again
-   after the canvas was cleared by the browser. */
-export function PdfPage({ pdf, pageNumber }) {
+   after the canvas was cleared by the browser.
+
+   `blocks` (optional) — the AI extraction's layout blocks for this page
+   (bbox_2d in normalized 0-1000 [left, top, right, bottom]). When present,
+   a small "Layout" chip toggles an overlay that draws what the model read
+   on top of the scan: text blocks in the brand tint, figures in amber —
+   the learner can SEE the extraction matched the page. */
+export function PdfPage({ pdf, pageNumber, blocks = null }) {
   const wrapRef  = useRef(null);
   const canvasRef = useRef(null);
   const [aspect, setAspect] = useState(1.414);          // A4-ish until measured
   const [gone, setGone]     = useState(false);          // render failed — honest fallback
+  const [showBlocks, setShowBlocks] = useState(false);  // the extraction overlay
 
   useEffect(() => {
     let cancelled = false;
@@ -93,6 +100,9 @@ export function PdfPage({ pdf, pageNumber }) {
     return () => { cancelled = true; io.disconnect(); };
   }, [pdf, pageNumber]);
 
+  const blockList = Array.isArray(blocks) ? blocks.filter((b) => Array.isArray(b?.bbox_2d) && b.bbox_2d.length === 4) : [];
+  const isFigure = (t) => String(t || '').trim() === '<image>';
+
   return (
     <div ref={wrapRef} style={{ position: 'relative', width: '100%', background: '#fff' }}>
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: 'auto', aspectRatio: `1 / ${aspect}` }}/>
@@ -101,6 +111,29 @@ export function PdfPage({ pdf, pageNumber }) {
         /* transparent but selectable — the pdf.js approach: the spans carry
            the real words aligned to the glyphs; dragging selects them. */
         color: 'transparent', WebkitUserSelect: 'text', userSelect: 'text' }}/>
+      {/* AI-extraction layout overlay — bboxes are normalized 0-1000, so
+          percent = value/10. Figures (<image> sentinel) tint amber. */}
+      {showBlocks && blockList.length > 0 && blockList.map((b, i) => {
+        const [x1, y1, x2, y2] = b.bbox_2d;
+        const fig = isFigure(b.text_content);
+        return (
+          <div key={`blk-${i}`} title={fig ? 'figure' : String(b.text_content || '').slice(0, 120)}
+            style={{ position: 'absolute', left: `${x1 / 10}%`, top: `${y1 / 10}%`,
+              width: `${Math.max(0.4, (x2 - x1) / 10)}%`, height: `${Math.max(0.4, (y2 - y1) / 10)}%`,
+              border: `1.5px solid ${fig ? 'rgba(245,158,11,.85)' : 'rgba(76,29,204,.55)'}`,
+              background: fig ? 'rgba(245,158,11,.14)' : 'rgba(76,29,204,.08)',
+              borderRadius: 3, pointerEvents: 'auto' }}/>
+        );
+      })}
+      {blockList.length > 0 && (
+        <button onClick={() => setShowBlocks((v) => !v)}
+          style={{ position: 'absolute', top: 8, right: 8, zIndex: 3, border: '1px solid rgba(15,23,42,.12)',
+            borderRadius: 99, padding: '4px 10px', fontSize: 10.5, fontWeight: 900, fontFamily: "'Nunito',sans-serif",
+            background: showBlocks ? 'rgba(76,29,204,.92)' : 'rgba(255,255,255,.92)',
+            color: showBlocks ? '#fff' : '#4C1DCC', cursor: 'pointer', boxShadow: '0 2px 8px rgba(15,23,42,.12)' }}>
+          {showBlocks ? `Layout ✓ ${blockList.length}` : `Layout ${blockList.length}`}
+        </button>
+      )}
       {gone && (
         <div style={{ padding: '40px 20px', textAlign: 'center', fontFamily: "'Nunito',sans-serif" }}>
           <p style={{ fontSize: 12.5, fontWeight: 700, color: '#6B7280', margin: 0 }}>

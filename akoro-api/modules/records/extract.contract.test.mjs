@@ -22,7 +22,7 @@ import { test } from "node:test";
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(join(here, p), "utf8");
 
-const [routesSrc, libSrc, appSrc, manifest, recordsMigration, teachSessionSrc, extractPagesSrc, recordsApiSrc, workerSrc] = await Promise.all([
+const [routesSrc, libSrc, appSrc, manifest, recordsMigration, teachSessionSrc, extractPagesSrc, recordsApiSrc, workerSrc, pdfPagesSrc] = await Promise.all([
   read("routes.js"),
   read("extractLib.js"),
   read("../../app.js"),
@@ -32,6 +32,7 @@ const [routesSrc, libSrc, appSrc, manifest, recordsMigration, teachSessionSrc, e
   read("../../../akoro-learner/src/components/library/extractPages.js"),
   read("../../../akoro-learner/src/services/recordsApi.js"),
   read("../../../runpod-worker/handler.py"),
+  read("../../../akoro-learner/src/components/library/PdfPages.jsx"),
 ]);
 
 const { parseBlocks, sortBlocks, blocksToMarkdown, parsePageOnRunpod, recordsExtractionEnabled } =
@@ -166,6 +167,12 @@ test("the reader rasterizes client-side and offers extraction for scans & images
   assert.match(teachSessionSrc, /getRecordExtraction/, "the cache is consulted before spending GPU time");
   assert.match(teachSessionSrc, /runRecordExtraction/, "the reader drives the batched run");
   assert.match(recordsApiSrc, /\/api\/records\/extract\//, "the service seam points at the new routes");
+  // The layout overlay — stored bboxes become visible on the page
+  assert.match(routesSrc, /parsed\.push\(\{ pageNumber, markdown, model, blocks \}\)/, "the POST response carries blocks back");
+  assert.match(teachSessionSrc, /blocks=\{pdfBlocks\.get\(i \+ 1\)\}/, "the reader hands each page its blocks");
+  assert.match(pdfPagesSrc, /export function PdfPage\(\{ pdf, pageNumber, blocks = null \}\)/, "PdfPage accepts blocks");
+  assert.match(pdfPagesSrc, /x1 \/ 10/, "bbox 0-1000 → percent math (value/10)");
+  assert.match(pdfPagesSrc, /Layout/, "the per-page Layout toggle chip exists");
 });
 
 test("the worker owns the prompt contract the model was fine-tuned on", () => {

@@ -119,6 +119,7 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
      applied  → text replaced the blanks (transient confirmation)
      error    → show why, offer retry / read-as-is */
   const [extract, setExtract] = useState(null);
+  const [pdfBlocks, setPdfBlocks] = useState(() => new Map());  // page → layout blocks (extraction overlay)
   const textsRef  = useRef([]);      // the load flow's per-page text layer (≈'' for scans)
   const applyRef  = useRef(null);    // set by the load flow; applies parsed pages to the session
 
@@ -141,7 +142,9 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
         onProgress: (done, total) => setExtract((s) => ({ ...s, done, total })),
       });
       if (!res.pages.length) throw new Error(res.error || 'Extraction returned no text — try again.');
-      apply(new Map(res.pages.map((p) => [p.pageNumber, p.markdown])));
+      const byPage = new Map(res.pages.map((p) => [p.pageNumber, p.markdown]));
+      const blocksByPage = new Map(res.pages.filter((p) => Array.isArray(p.blocks) && p.blocks.length).map((p) => [p.pageNumber, p.blocks]));
+      apply(byPage, blocksByPage);
       setExtract({ status: 'applied', done: res.pages.length, total: rendered.length, error: res.error || null });
       setTimeout(() => setExtract((s) => (s?.status === 'applied' ? null : s)), 6000);
     } catch (e) {
@@ -164,6 +167,7 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
     setPdfParts(null);
     setReference(null);
     setExtract(null);
+    setPdfBlocks(new Map());
     textsRef.current = [];
     applyRef.current = null;
 
@@ -207,10 +211,12 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
           textsRef.current = texts;
 
           // applyExtracted — swap the page texts (and the grounding) for the
-          // parsed markdown; the canvases stay as the visual page.
-          const applyExtracted = (byPage) => {
+          // parsed markdown; the canvases stay as the visual page. Blocks
+          // ride along for the per-page Layout overlay.
+          const applyExtracted = (byPage, blocksByPage) => {
             const perPage = texts.map((tx, i) => ({ html: '', text: byPage.get(i + 1) || tx || '' }));
             const md = perPage.map((p) => p.text).filter(Boolean).join('\n\n').trim();
+            setPdfBlocks(blocksByPage instanceof Map ? blocksByPage : new Map());
             ready(perPage, { pdf, PdfPage },
               md ? { name: record.name, text: md.slice(0, MAX_REFERENCE_CHARS) } : null);
           };
@@ -229,9 +235,12 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
           const byPage = new Map((cached.pages || [])
             .filter((p) => (p.markdown || '').trim())
             .map((p) => [p.pageNumber, p.markdown]));
+          const blocksByPage = new Map((cached.pages || [])
+            .filter((p) => Array.isArray(p.blocks) && p.blocks.length)
+            .map((p) => [p.pageNumber, p.blocks]));
           const haveAll = texts.length > 0 && texts.every((_, i) => byPage.has(i + 1));
           if (haveAll) {
-            applyExtracted(byPage);   // cached — straight into a grounded session
+            applyExtracted(byPage, blocksByPage);   // cached — straight into a grounded session
             return;
           }
           applyRef.current = applyExtracted;
@@ -343,7 +352,7 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
   const renderPageContent = (i) => {
     if (type === 'pdf' && pdfParts?.pdf) {
       const PdfCanvas = pdfParts.PdfPage;
-      return <PdfCanvas pdf={pdfParts.pdf} pageNumber={i + 1}/>;
+      return <PdfCanvas pdf={pdfParts.pdf} pageNumber={i + 1} blocks={pdfBlocks.get(i + 1)}/>;
     }
     if (type === 'image') {
       return <img src={fileUrl} alt={record.name} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }}/>;
