@@ -3,6 +3,7 @@ import { useParams, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { fetchCommunity, fetchCommunityMembers } from '../services/communityApi.js';
 import CommunityShell, { useCommunityToast, ACCENTS } from '../components/communities/CommunityShell.jsx';
+import { Icon } from '../components/common/Icons.jsx';
 import { BRAND } from '../constants.js';
 
 /**

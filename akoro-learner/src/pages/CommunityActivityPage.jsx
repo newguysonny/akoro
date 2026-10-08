@@ -21,8 +21,10 @@ import { useInFlight } from '../hooks/useInFlight.js';
  *   · the reference's dashed "New activity" button (owner only);
  *   · the activity feed as surface cards in the reference's row language,
  *     the reference's empty state (per tab), and the reference's
- *     "Popular materials" rail fed by the content members have shared
- *     into this community (the Add-to-community flow).
+ *     "Popular materials" + "Popular folders" rails — always shown, each
+ *     with the reference's empty state when empty. Materials are fed by
+ *     the content members have shared (the Add-to-community flow);
+ *     folders hold their empty state until that feature lands.
  *
  * Types carry line icons (the reference replaces emoji throughout); the
  * stored community emoji still renders in the header tile.
@@ -547,27 +549,43 @@ export default function CommunityActivityPage() {
 
       {/* Popular materials — the reference's rail, fed by the content
           members have shared into this community (newest first). Rows
-          with an in-app link reopen their source. */}
-      {items.length > 0 && (
-        <>
-          <SectionTitle>Popular materials</SectionTitle>
-          {items.slice(0, 4).map((it, i) => (
-            <button key={it.id} onClick={() => it.link && navigate(it.link)} disabled={!it.link}
-              style={{ display: 'flex', alignItems: 'center', gap: 'var(--s-3)', padding: '9px 0', background: 'none', border: 'none', width: '100%', textAlign: 'left', cursor: it.link ? 'pointer' : 'default', fontFamily: "'Nunito',sans-serif" }}>
-              <div style={{ width: 18, textAlign: 'center', color: 'var(--ak-text-muted)', fontWeight: 800, fontSize: 13.5, flexShrink: 0 }}>{i + 1}</div>
-              <div style={{ width: 42, height: 42, borderRadius: 'var(--r-sm)', flexShrink: 0, background: ACCENTS[i % ACCENTS.length], color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Icon name={KIND_ICONS[it.kind] || 'ti-file-text'} size={18}/>
+          with an in-app link reopen their source. The section always
+          shows: an empty rail gets the reference's empty state, not
+          silence. */}
+      <SectionTitle>Popular materials</SectionTitle>
+      {items.length > 0 ? (
+        items.slice(0, 4).map((it, i) => (
+          <button key={it.id} onClick={() => it.link && navigate(it.link)} disabled={!it.link}
+            style={{ display: 'flex', alignItems: 'center', gap: 'var(--s-3)', padding: '9px 0', background: 'none', border: 'none', width: '100%', textAlign: 'left', cursor: it.link ? 'pointer' : 'default', fontFamily: "'Nunito',sans-serif" }}>
+            <div style={{ width: 18, textAlign: 'center', color: 'var(--ak-text-muted)', fontWeight: 800, fontSize: 13.5, flexShrink: 0 }}>{i + 1}</div>
+            <div style={{ width: 42, height: 42, borderRadius: 'var(--r-sm)', flexShrink: 0, background: ACCENTS[i % ACCENTS.length], color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name={KIND_ICONS[it.kind] || 'ti-file-text'} size={18}/>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.title}</div>
+              <div style={{ fontSize: 12, color: 'var(--ak-text-sub)', fontWeight: 600, marginTop: 1 }}>
+                {it.addedBy ? `Shared by ${it.addedBy} · ` : ''}added {timeAgo(it.createdAt)}
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.title}</div>
-                <div style={{ fontSize: 12, color: 'var(--ak-text-sub)', fontWeight: 600, marginTop: 1 }}>
-                  {it.addedBy ? `Shared by ${it.addedBy} · ` : ''}added {timeAgo(it.createdAt)}
-                </div>
-              </div>
-            </button>
-          ))}
-        </>
+            </div>
+          </button>
+        ))
+      ) : (
+        <CommunityEmptyState compact
+          icon="ti-file-text"
+          title="No materials yet"
+          sub="Tap ⋯ on any content and choose “Add to community” to share it here."
+        />
       )}
+
+      {/* Popular folders — the reference's second rail. Communities have
+          no folders feature yet, so the section holds its empty state
+          until one lands; the structure is already in place. */}
+      <SectionTitle>Popular folders</SectionTitle>
+      <CommunityEmptyState compact
+        icon="ti-folder"
+        title="No folders yet"
+        sub="Folders shared in this community will appear here."
+      />
 
       {toastNode}
       {sheetOpen && (
