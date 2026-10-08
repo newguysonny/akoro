@@ -19,6 +19,10 @@
  *     runs, steady brand while it waits in the lobby. Battles don't queue,
  *     so the skip controls hide while a battle is parked.
  *
+ * The WHOLE bar opens the item — tap anywhere, like tapping a player.
+ * The control buttons (skip / play / quick-add / dismiss) stop the tap
+ * from bubbling, so their own action runs instead of the open.
+ *
  * Responsive (rules in index.css): shown ONLY on tablet (769–1024px),
  * where it replaces the sidebar's NowStudyingSidebarCard; mobile (≤768px)
  * keeps its own bar above the bottom nav and desktop (>1024px) keeps the
@@ -42,7 +46,7 @@ export default function NowStudyingTabletBar({ item, onOpen, onAdd, onDismiss, o
   const livePulse  = { animation: 'ak-tabnow-pulse 1.6s ease-in-out infinite' };
   const pct        = Math.max(0, Math.min(100, item.progress || 0));
   const skipBtn    = (dir) => (
-    <button onClick={dir < 0 ? onPrev : onNext} disabled={!canSkip}
+    <button onClick={(e) => { e.stopPropagation(); (dir < 0 ? onPrev : onNext)?.(e); }} disabled={!canSkip}
       title={dir < 0 ? t('now.prev') : t('now.next')} aria-label={dir < 0 ? t('now.prev') : t('now.next')}
       style={{
         width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
@@ -55,12 +59,13 @@ export default function NowStudyingTabletBar({ item, onOpen, onAdd, onDismiss, o
   );
 
   return (
-    <div className="ak-tabnow" style={{
+    <div className="ak-tabnow" onClick={onOpen} style={{
       position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 'var(--z-bar)',
       background: 'var(--ak-surface)', borderTop: '1px solid var(--ak-border)',
       boxShadow: '0 -4px 18px rgba(0,0,0,.10)', fontFamily: FONT,
       height: 'var(--ak-tabnow-h, 78px)',
       animation: 'ak-tabnow-in .28s ease-out',
+      cursor: 'pointer',
     }}>
       <style>{`
         @keyframes ak-tabnow-in{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}
@@ -73,10 +78,10 @@ export default function NowStudyingTabletBar({ item, onOpen, onAdd, onDismiss, o
         alignItems: 'center', gap: 16, padding: '0 18px', height: '100%',
       }}>
 
-        {/* 1 — Name & details: art tile + title + source line. The whole
-            column opens the item, like tapping the track in a player. */}
-        <div className="ak-tabnow-meta" onClick={onOpen} title={item.title}
-          style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0, cursor: 'pointer' }}>
+        {/* 1 — Name & details: art tile + title + source line. Taps land
+            on the bar's root (open), like tapping the track in a player. */}
+        <div className="ak-tabnow-meta" title={item.title}
+          style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
           <div style={{
             width: 46, height: 46, borderRadius: 'var(--r-md, 12px)', flexShrink: 0,
             background: battleLive ? `${RED}14` : `${BRAND}14`,
@@ -108,7 +113,7 @@ export default function NowStudyingTabletBar({ item, onOpen, onAdd, onDismiss, o
         <div className="ak-tabnow-center" style={{ minWidth: 0, padding: '0 4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, marginBottom: 7 }}>
             {!isBattle && onPrev && skipBtn(-1)}
-            <button onClick={onOpen} title={isBattle ? t('now.resume_battle') : t('now.resume')}
+            <button onClick={(e) => { e.stopPropagation(); onOpen?.(); }} title={isBattle ? t('now.resume_battle') : t('now.resume')}
               aria-label={isBattle ? t('now.resume_battle') : t('now.resume')}
               style={{
                 width: 40, height: 40, borderRadius: '50%', flexShrink: 0, border: 'none', cursor: 'pointer',
@@ -153,7 +158,7 @@ export default function NowStudyingTabletBar({ item, onOpen, onAdd, onDismiss, o
         {/* 3 — Tool icons: open the material (book / swords), quick-add a
             record (study items only), dismiss the parked item. */}
         <div className="ak-tabnow-tools" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
-          <button onClick={onOpen} title={isBattle ? t('now.resume_battle') : t('now.resume')}
+          <button onClick={(e) => { e.stopPropagation(); onOpen?.(); }} title={isBattle ? t('now.resume_battle') : t('now.resume')}
             aria-label={isBattle ? t('now.resume_battle') : t('now.resume')}
             style={{
               width: 36, height: 36, borderRadius: '50%', flexShrink: 0, cursor: 'pointer',
@@ -163,7 +168,7 @@ export default function NowStudyingTabletBar({ item, onOpen, onAdd, onDismiss, o
             <Icon name={isBattle ? 'ti-swords' : 'ti-book'} size={17} color={BRAND}/>
           </button>
           {!isBattle && (
-            <button onClick={onAdd} title={t('records.title')} aria-label={t('records.title')}
+            <button onClick={(e) => { e.stopPropagation(); onAdd?.(); }} title={t('records.title')} aria-label={t('records.title')}
               style={{
                 width: 36, height: 36, borderRadius: '50%', flexShrink: 0, cursor: 'pointer',
                 background: 'transparent', border: '1.5px solid var(--ak-border2)',
@@ -172,7 +177,7 @@ export default function NowStudyingTabletBar({ item, onOpen, onAdd, onDismiss, o
               <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="var(--ak-text-sub)" strokeWidth="2.2" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
             </button>
           )}
-          <button onClick={onDismiss} title={t('now.dismiss')} aria-label={t('now.dismiss')}
+          <button onClick={(e) => { e.stopPropagation(); onDismiss?.(); }} title={t('now.dismiss')} aria-label={t('now.dismiss')}
             style={{
               width: 30, height: 30, borderRadius: '50%', flexShrink: 0, cursor: 'pointer',
               background: 'transparent', border: 'none', opacity: .55,
