@@ -1,0 +1,99 @@
+# akoro media-worker
+
+An ffmpeg container for the heavy media lanes — **the API never touches
+media again**. Two jobs:
+
+| Endpoint | Job | Replaces |
+|---|---|---|
+| `POST /jobs/encode` | course-video → adaptive HLS on R2 (same flow + callbacks as the old BullMQ worker) | `akoro-api/worker.js` |
+| `POST /jobs/extract-audio` | any A/V source → 16 kHz mono mp3 + scene-change frames on R2 (the ffmpeg half of the transcript lane) | the ffmpeg/download half inside `akoro-api`'s `avTranscribeLib.js` |
+
+Every job endpoint is `x-internal-secret`-authenticated and answers **202
+immediately**; the caller polls `GET /jobs/:id`. Deepgram, RunPod
+captions, transcripts and the database all stay in the API — this
+container only ever moves bytes and runs ffmpeg.
+
+## Why
+
+Render's 512 MB free instance OOMs when ffmpeg + a downloaded original +
+the API share a box. Media was always a separate concern: worker.js
+already talked to the API only over `INTERNAL_SECRET`-authenticated HTTP,
+and pulled/pushed straight from R2. This package makes that boundary a
+real container.
+
+## Deploy
+
+### Cloudflare Containers
+
+```bash
+cd media-worker
+npm install
+npx wrangler secret put INTERNAL_SECRET
+npx wrangler secret put R2_ACCOUNT_ID        # …and the other R2_* secrets
+npx wrangler secret put API_BASE_URL
+npx wrangler deploy
+```
+
+The `containers` block in `wrangler.jsonc` (instance type names, binding
+shape) evolves quickly — verify against
+[developers.cloudflare.com/containers](https://developers.cloudflare.com/containers)
+before the first deploy. **Secrets** set via `wrangler secret put` live in
+the Worker environment; make sure the start env of the container picks
+them up per the current docs (or bake non-secret config via `vars`, and
+secrets via your registry's image env).
+
+### Anywhere else Docker runs
+
+The image is deliberately self-sufficient — Fly.io, Hetzner, Render
+(docker runtime) all work unchanged:
+
+```bash
+docker build -t akoro-media-worker .
+docker run -d -p 8080:8080 --env-file .env akoro-media-worker
+```
+
+## Wiring the API
+
+Point `akoro-api` at it with one env:
+
+```
+MEDIA_WORKER_URL=https://akoro-media-worker.<your-subdomain>.workers.dev
+```
+
+- **Transcription lane**: `avTranscribeLib.transcribeRecord` delegates the
+  ffmpeg half to `POST /jobs/extract-audio` when `MEDIA_WORKER_URL` is
+  set — the API then downloads only the tiny 16 kHz mp3 + frames from R2
+  for Deepgram/captions. Unset → the in-process ffmpeg path remains as
+  the fallback (byte-for-byte the old behavior).
+- **Encode lane**: `akoro-api/worker.js` (BullMQ) can be retired by
+  changing the stream module's enqueue to an authenticated
+  `POST {MEDIA_WORKER_URL}/jobs/encode` — callbacks are already
+  identical. Until that swap, the old worker keeps working as-is.
+
+## Endpoints
+
+| Method | Path | Body | Notes |
+|---|---|---|---|
+| GET | `/healthz` | — | no auth; platform probe |
+| POST | `/jobs/encode` | `{videoId, courseId, sourceKey}` | 202 → `{jobId}` |
+| POST | `/jobs/extract-audio` | `{url, kind?, maxFrames?, sceneThreshold?, prefix?}` | `kind` audio\|video (default video); HLS urls read directly by ffmpeg |
+| GET | `/jobs/:id` | — | `{state: running\|done\|failed, log, result}` |
+| GET | `/jobs` | — | recent snapshots |
+
+Job results:
+
+- encode → `{videoUrl, variants}` (and the API got its
+  `/api/stream/internal/update` callbacks, exactly like the old worker)
+- extract → `{audio: {key, url}, frames: [{key, url, tSec}], durationSec}`
+  — URLs are 1-hour presigned GETs; the mp3 is ~7 MB/hour of audio.
+
+## Tests
+
+```bash
+npm test
+```
+
+Offline contract tests: pure ffmpeg arg builders pinned against the
+API's conventions, the HTTP surface (auth, 409 lanes, 202 + poll), and
+the API-side delegation seam. The integration test that actually runs
+ffmpeg skips itself when no binary is present (CI / sandbox).

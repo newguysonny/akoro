@@ -1,0 +1,18 @@
+{
+  "name": "@akoro/media-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "ffmpeg media container for akoro \u2014 course-video HLS encoding + A/V extraction, triggered over HTTP, storage on R2. The API never touches media.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.600.0",
+    "@aws-sdk/s3-request-presigner": "^3.600.0",
+    "express": "^4.19.2"
+  }
+}

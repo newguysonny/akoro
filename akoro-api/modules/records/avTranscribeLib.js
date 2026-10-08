@@ -38,6 +38,7 @@ import { pipeline } from "node:stream/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hasDeepgram, transcribeFileDeepgram } from "../voice/deepgram.js";
+import { mediaWorkerEnabled, remoteExtractAudio, downloadTo } from "./mediaClient.js";
 import { indexByContentKey } from "./searchLib.js";
 import { parsePageOnRunpod, recordsExtractionEnabled, claimContentJob, finishContentJob, getContentJob } from "./extractLib.js";
 
@@ -235,45 +236,71 @@ export async function transcribeRecord({ userId, contentKey, recordName, kind, f
   onLog(`[av] ${label} — downloading the original…`);
   const dir = await mkdtemp(join(tmpdir(), "ak-av-"));
   try {
-    // Course lessons stream as HLS (m3u8) — a playlist is not a file, so
-    // ffmpeg reads the URL itself (it demuxes HLS natively, https included).
-    // Everything else is a plain bytes URL and downloads first.
-    const isHls = /\.m3u8($|\?)/i.test(fileUrl || "");
-    const srcPath = isHls ? fileUrl : join(dir, "source");
-    if (!isHls) {
-      const res = await fetch(fileUrl);
-      if (!res.ok) throw new Error(`Could not fetch the record (${res.status})`);
-      await pipeline(res.body, createWriteStream(srcPath));
-    }
-    onLog(`[av] extracted → ${kind === "video" ? "audio + scene frames" : "audio 16 kHz mono"}`);
+    // The ffmpeg half runs in the MEDIA CONTAINER when one is deployed —
+    // the API then pulls only the small artifacts (16 kHz mp3 ≈ 7 MB/hour,
+    // capped frames). No container configured → the in-process path below,
+    // byte-for-byte the original behavior.
+    const frameRows = [];
+    const frameFiles = [];   // { file, tSec } — the caption loop's input
+    let audioPath = join(dir, "audio.mp3");
+    let deepgramLog = "[av] transcribing with Deepgram nova-2 (diarized)…";
 
-    // 1 · Audio lane — 16 kHz mono, the §5 optimization.
-    const audioPath = join(dir, "audio.mp3");
-    await runFfmpeg(extractAudioArgs(srcPath, audioPath));
-    onLog("[av] transcribing with Deepgram nova-2 (diarized)…");
+    if (mediaWorkerEnabled()) {
+      onLog("[av] ffmpeg runs in the media worker — this server only fetches the small artifacts");
+      const remote = await remoteExtractAudio({
+        url: fileUrl, kind,
+        maxFrames: MAX_FRAMES(), sceneThreshold: SCENE_THRESHOLD(),
+        prefix: `av-cache/${contentKey}`,
+        onLog,
+      });
+      await downloadTo(remote.audio.url, audioPath);
+      for (const [i, fr] of (remote.frames || []).entries()) {
+        const file = `frame-${String(i + 1).padStart(3, "0")}.jpg`;
+        await downloadTo(fr.url, join(dir, file));
+        frameFiles.push({ file, tSec: Number(fr.tSec) || 0 });
+      }
+    } else {
+      // Course lessons stream as HLS (m3u8) — a playlist is not a file, so
+      // ffmpeg reads the URL itself (it demuxes HLS natively, https included).
+      // Everything else is a plain bytes URL and downloads first.
+      const isHls = /\.m3u8($|\?)/i.test(fileUrl || "");
+      const srcPath = isHls ? fileUrl : join(dir, "source");
+      if (!isHls) {
+        const res = await fetch(fileUrl);
+        if (!res.ok) throw new Error(`Could not fetch the record (${res.status})`);
+        await pipeline(res.body, createWriteStream(srcPath));
+      }
+
+      // 1 · Audio lane — 16 kHz mono, the §5 optimization.
+      await runFfmpeg(extractAudioArgs(srcPath, audioPath));
+
+      // 2 · Visual lane — scene-change frames, capped (video only).
+      if (kind === "video" && MAX_FRAMES() > 0) {
+        try {
+          const outPattern = join(dir, "frame-%03d.jpg");
+          let stderrTail = "";
+          await runFfmpeg(sampleSceneFramesArgs(srcPath, outPattern, {
+            maxFrames: MAX_FRAMES(), threshold: SCENE_THRESHOLD(),
+          }), { onStderr: (s) => { stderrTail = s; } });
+          const times = parseSceneTimes(stderrTail);
+          const files = (await readdir(dir)).filter((f) => /^frame-\d+\.jpg$/.test(f)).sort();
+          for (const [i, f] of files.entries()) {
+            frameFiles.push({ file: f, tSec: times[i] ?? 0 });
+          }
+        } catch (err) {
+          onLog(`[av] frame sampling skipped: ${String(err?.message || err).slice(0, 140)}`);
+        }
+      }
+      if (frameFiles.length) onLog(`[av] ${frameFiles.length} scene frame(s) sampled — captioning via ${FRAME_PROVIDER()}…`);
+    }
+
+    onLog(deepgramLog);
     const dg = await transcribeFileDeepgram(audioPath, "audio/mpeg");
     onLog(`[av] speech: ${dg.paragraphs?.length || 0} paragraphs · ${(dg.fullText || "").split(/\s+/).filter(Boolean).length} words`);
 
-    // 2 · Visual lane — scene-change frames, capped (video only).
-    const frameRows = [];
-    if (kind === "video" && MAX_FRAMES() > 0) {
-      try {
-        const outPattern = join(dir, "frame-%03d.jpg");
-        let stderrTail = "";
-        await runFfmpeg(sampleSceneFramesArgs(srcPath, outPattern, {
-          maxFrames: MAX_FRAMES(), threshold: SCENE_THRESHOLD(),
-        }), { onStderr: (s) => { stderrTail = s; } });
-        const times = parseSceneTimes(stderrTail);
-        const files = (await readdir(dir)).filter((f) => /^frame-\d+\.jpg$/.test(f)).sort();
-        onLog(`[av] ${files.length} scene frame(s) sampled — captioning via ${FRAME_PROVIDER()}…`);
-        for (const [i, f] of files.entries()) {
-          const tSec = times[i] ?? 0;
-          const caption = await captionFrame(join(dir, f), tSec);
-          if (caption) frameRows.push({ tSec, caption });
-        }
-      } catch (err) {
-        onLog(`[av] frame sampling skipped: ${String(err?.message || err).slice(0, 140)}`);
-      }
+    for (const { file, tSec } of frameFiles) {
+      const caption = await captionFrame(join(dir, file), tSec);
+      if (caption) frameRows.push({ tSec, caption });
     }
 
     const model = "deepgram/nova-2";

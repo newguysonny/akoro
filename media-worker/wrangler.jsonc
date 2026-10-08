@@ -1,0 +1,33 @@
+// wrangler.jsonc — Cloudflare Containers deploy for the media worker.
+//
+// NOTE: the Containers config surface has been evolving quickly — verify
+// the `containers` block and instance type names against the current
+// Cloudflare docs (developers.cloudflare.com/containers) before the first
+// `wrangler deploy`. The container image itself (./Dockerfile) runs
+// anywhere Docker runs — Fly.io, a VPS, Render — unchanged.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "akoro-media-worker",
+  "main": "cf/worker.js",
+  "compatibility_date": "2026-09-01",
+
+  "containers": [
+    {
+      "class_name": "MediaContainer",
+      "image": "./Dockerfile",
+      // standard-2: 2 vCPU / 4 GB — comfortable for 1080p HLS encodes.
+      "instance_type": "standard-2",
+      "max_instances": 2,
+      // Non-secret configuration baked into the instance. SECRETS do not
+      // belong here — see README (they ride via wrangler secrets and the
+      // wrapper's start env, or set them as image env in your registry).
+      "vars": {
+        "MAX_CONCURRENT_JOBS": "1"
+      }
+    }
+  ],
+
+  "bindings": [
+    { "name": "MEDIA", "class_name": "MediaContainer" }
+  ]
+}
