@@ -7,6 +7,7 @@ import { AgentAvatar } from '../common/AgentAvatar.jsx';
 import FortizoChatComposer from '../common/FortizoChatComposer.jsx';
 import RichText from '../common/RichText.jsx';
 import CopyMessageButton from '../common/CopyMessageButton.jsx';
+import { copyPlainText } from '../common/CopyMessageButton.jsx';
 import { useTaskAPI } from '../../hooks/useTaskAPI.js';
 import NoAgentSheet, { isNoAgentError } from '../battles/NoAgentSheet.jsx';
 import { confirmDialog } from '../common/ConfirmHost.jsx';
@@ -251,6 +252,28 @@ function AgentChatTab({
     setSessions(prev => prev.filter(s => s.id !== id));
     try { await apiDelete(`${CHAT_BASE}/sessions/${id}`); } catch { /* ignore */ }
     if (id === sessionIdRef.current) newChat();
+  };
+
+  // ── Copy a whole session from its row in the drawer ────────────────────────
+  // Pulls the FULL conversation from the server (not just what's on screen),
+  // formats it role-labelled for pasting into research/notes, and copies via
+  // the shared clipboard helper. The row's icon flips to a check on success;
+  // a failed copy/fetch leaves it untouched — this must never throw into the
+  // tab (same contract as the per-message copy button).
+  const [copiedId, setCopiedId] = useState(null);
+  const copySession = async (s, e) => {
+    e?.stopPropagation?.();
+    try {
+      const d = await apiGet(`${CHAT_BASE}/sessions/${s.id}/messages`);
+      const msgs = d?.messages ?? [];
+      if (!msgs.length) return;
+      const stamp = (iso) => { try { return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
+      const body = msgs.map(m => `${m.role === "user" ? "You" : "Agent"} (${stamp(m.created_at)}):\n${m.text ?? ""}`).join("\n\n");
+      const out = `${s.title || "Agent chat"}\n${msgs.length} message${msgs.length === 1 ? "" : "s"} · copied ${new Date().toLocaleString()}\n\n${body}`;
+      if (!(await copyPlainText(out))) return;
+      setCopiedId(s.id);
+      setTimeout(() => setCopiedId((cur) => (cur === s.id ? null : cur)), 1400);
+    } catch { /* leave the icon untouched */ }
   };
 
   // On mount: load the session list and resume the most recent conversation
@@ -893,6 +916,11 @@ function AgentChatTab({
                     <p style={{ fontSize:13,fontWeight:active?800:700,color:active?BRAND:"var(--ak-text)",margin:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{s.title||t('agent.new_chat')}</p>
                     <p style={{ fontSize:10.5,color:"var(--ak-text-muted)",margin:"2px 0 0" }}>{relTime(s.last_message_at)}</p>
                   </div>
+                  <button onClick={(e)=>copySession(s,e)} title="Copy this chat" aria-label="Copy this chat" style={{ background:"none",border:"none",cursor:"pointer",padding:5,display:"flex",flexShrink:0,opacity:copiedId===s.id?1:.6 }}>
+                    {copiedId===s.id
+                      ? <Icon name="ti-check" size={14} color={GREEN}/>
+                      : <Icon name="ti-copy" size={14} color="var(--ak-text-muted)"/>}
+                  </button>
                   <button onClick={(e)=>removeSession(s.id,e)} title={t('common.delete')} style={{ background:"none",border:"none",cursor:"pointer",padding:5,display:"flex",flexShrink:0,opacity:.6 }}>
                     <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="var(--ak-text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                   </button>
