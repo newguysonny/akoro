@@ -80,6 +80,7 @@ import paystackWebhookRouter     from "./modules/webhooks/paystack.js";
 import adminModule              from "./modules/admin/index.js";
 import contactModule            from "./modules/contact/routes.js";
 import pilotApplicationsModule from "./modules/pilot-applications/routes.js";
+import ticksRouter                     from "./modules/admin/ticks.js";
 import billingGatewayModule    from "./modules/billing/gateway.js";
 import "./modules/billing/jobs.js"; // billing cron jobs (trial-expiry / invoice-generation / payment-retry)
 import agentToolRequestsModule  from "./modules/agent-tool-requests/routes.js";
@@ -747,6 +748,7 @@ app.use("/api/records",    standardLimit, recordsModule); // learner library she
 app.use("/api/contact",    standardLimit, contactModule);  // public contact/partner intake + admin inbox
 app.use("/api/public/pilot-applications", standardLimit, pilotApplicationsModule); // public /apply form (Tiers & Credits plan §4.2 — the one unauth write)
 app.use("/api/subscriptions",  standardLimit, billingGatewayModule); // learner subscription checkout (Phase 3; webhook-fulfilled)
+app.use("/api/internal/ticks", ticksRouter);            // scheduler ticks — x-internal-secret, not JWT (Cloudflare cron ticker)
 
 // ─── 404 ──────────────────────────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).json({ success: false, message: "Route not found", code: "not_found" }));

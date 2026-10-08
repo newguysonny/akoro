@@ -1,0 +1,17 @@
+# cf/cron-ticker — the edge clock for akoro-api's scheduled jobs.
+# Deploy: npx wrangler deploy   (after `wrangler secret put API_BASE_URL`
+# and `wrangler secret put INTERNAL_SECRET` — the API's own values).
+#
+# NOTE the UTC times: node-cron ran on the SERVER's timezone; Cron
+# Triggers always fire in UTC. 03:00 server-time schedules translate
+# 1:1 only if the server ran UTC — shift the entries here if it didn't.
+name = "akoro-cron-ticker"
+main = "src/worker.js"
+compatibility_date = "2026-10-08"
+
+[triggers]
+crons = [
+  "20 2 * * *",   # ladder-prewarm      (LADDER_PREWARM_CRON default)
+  "0 3 * * *",    # decay-scheduler
+  "30 3 * * *",   # pilot-expiry-check
+]
