@@ -7,6 +7,10 @@
  *   • a DRY RUN actually runs end-to-end against a mocked Hub (whoami
  *     + file tree), plans the mirror, and never leaks the token into
  *     the job log;
+ *   • a REAL RUN prefers the Hub's server-side duplicate (no model
+ *     bytes through this process), and when the destination already
+ *     exists it RESUMES file-by-file — skipping everything already
+ *     there — instead of aborting (the OOM-restart incident);
  *   • the console routes keep their safe defaults (dry run on, private
  *     on), stay key-guarded, and can't double-run;
  *   • the module is mounted and its env contract is documented.
@@ -132,12 +136,120 @@ test("a bad source repo id aborts before any Hub call", async () => {
   );
 });
 
+/* ── the real run: duplicate-first, resume-into-existing ───────────────── */
+
+const HF_ALREADY = "You already created this model repo: tester/source-model. URL: https://huggingface.co/api/repos/create";
+
+/** A mock hub that records every call, so tests can assert what the engine
+ *  did (and did NOT) ask the Hub to do. */
+function realRunHub({ duplicateStatus, duplicateBody, destTree, createStatus = 201 }) {
+  const calls = [];
+  const respond = (status, body) => new Response(typeof body === "string" ? body : JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },   // the lib reads the error body only under this type
+  });
+  return {
+    calls,
+    fetch(url, init) {
+      const u = String(url);
+      calls.push(`${init?.method || "GET"} ${u}`);
+      if (u.includes("/api/whoami-v2")) {
+        return Promise.resolve(respond(200, {
+          name: "tester", type: "user",
+          auth: { accessToken: { displayName: "test", role: "write", createdAt: "2026-01-01T00:00:00.000Z" } },
+        }));
+      }
+      if (u.includes("/api/models/org/source-model/tree/")) {
+        return Promise.resolve(respond(200, [
+          { type: "file", path: "config.json", size: 739 },
+          { type: "file", path: "tokenizer.json", size: 713_164 },
+          { type: "file", path: "model.safetensors", size: 4_600_000_000, lfs: { oid: "x", size: 4_600_000_000 } },
+        ]));
+      }
+      if (u.includes("/api/models/org/source-model/duplicate")) {
+        return Promise.resolve(respond(duplicateStatus, duplicateBody));
+      }
+      if (u.includes("/api/repos/create")) {
+        return Promise.resolve(respond(createStatus, createStatus === 409 ? JSON.stringify({ error: HF_ALREADY }) : { name: "tester/source-model" }));
+      }
+      if (u.includes("/api/models/tester/source-model/tree/")) {
+        return Promise.resolve(respond(200, destTree));
+      }
+      return Promise.resolve(respond(404, { error: "unexpected " + u }));
+    },
+  };
+}
+
+const runReal = (hub) => {
+  const lines = [];
+  return runMirrorJob(
+    { source: "org/source-model", dryRun: false, writeToken: MOCK_TOKEN, fetchImpl: hub.fetch },
+    { onLog: (line) => lines.push(line) },
+  ).then((summary) => ({ summary, lines, calls: hub.calls }));
+};
+
+test("a real run duplicates server-side — no model bytes cross this process", async () => {
+  const hub = realRunHub({ duplicateStatus: 200, duplicateBody: { url: "https://huggingface.co/tester/source-model", filesCopyPending: true } });
+  const { summary, lines, calls } = await runReal(hub);
+
+  assert.equal(summary.duplicated, true);
+  assert.equal(summary.ok, true);
+  assert.equal(summary.transferredBytes, 0, "the Hub copies the weights — nothing moved through the mirror");
+  assert.equal(summary.failures.length, 0);
+  assert.match(lines.join("\n"), /no model bytes moved through this server/);
+  assert.match(lines.join("\n"), /copying the LFS\/xet files in the background/);
+  assert.ok(!calls.some((c) => c.includes("/api/repos/create")), "the duplicate creates the repo — no separate create");
+  assert.ok(!calls.some((c) => c.includes("tester/source-model/tree")), "no per-file work — the destination tree is never even listed");
+  assert.ok(!calls.some((c) => c.includes("resolve/")), "no file downloads");
+});
+
+test("an existing destination resumes file-by-file instead of aborting", async () => {
+  // The OOM-restart incident: duplicate → 409, create → HF's "already
+  // created" phrasing, and a destination holding the small files already.
+  const hub = realRunHub({
+    duplicateStatus: 409,
+    duplicateBody: { error: HF_ALREADY },
+    createStatus: 409,
+    destTree: [
+      { type: "file", path: "config.json", size: 739 },
+      { type: "file", path: "tokenizer.json", size: 713_164 },
+      { type: "file", path: "model.safetensors", size: 4_600_000_000, lfs: { oid: "x", size: 4_600_000_000 } },
+    ],
+  });
+  const { summary, lines, calls } = await runReal(hub);
+
+  assert.equal(summary.duplicated, false);
+  assert.equal(summary.ok, true);
+  assert.equal(summary.copied, 3, "every file already in the destination counts as done");
+  assert.equal(summary.failures.length, 0);
+  assert.match(lines.join("\n"), /already exists — resuming into it file-by-file/);
+  assert.match(lines.join("\n"), /already in the destination, skipped \(resume\)/);
+  assert.ok(!calls.some((c) => c.includes("resolve/")), "nothing re-downloads — the shards stay where they are");
+});
+
+test("a refused duplicate falls back to create + per-file transfer", async () => {
+  const hub = realRunHub({
+    duplicateStatus: 404,
+    duplicateBody: { error: "not supported here" },
+    createStatus: 201,
+    destTree: [{ type: "file", path: "config.json", size: 739 }],
+  });
+  const { summary, lines, calls } = await runReal(hub);
+
+  assert.equal(summary.duplicated, false);
+  assert.match(lines.join("\n"), /server-side duplicate refused \(404\)/);
+  assert.match(lines.join("\n"), /created tester\/source-model \(private\)/);
+  assert.ok(calls.some((c) => c.includes("/api/repos/create")), "the fallback creates the destination itself");
+  assert.match(lines.join("\n"), /config\.json.*already in the destination/);
+});
+
 /* ── source-level wiring ───────────────────────────────────────────────── */
 
 test("the engine streams from source URLs — nothing touches RAM or disk", () => {
   assert.match(engineSrc, /from "@huggingface\/hub"/, "the official hub client");
   assert.match(engineSrc, /\/resolve\/\$\{encodeURIComponent\(revision\)\}\//, "files are addressed by their source resolve URL");
   assert.match(engineSrc, /content: url/, "uploadFiles streams from that URL (lazy WebBlob, no temp file)");
+  assert.match(engineSrc, /useXet: false/, "per-file uploads ride a single stream — the xet sharder's parallel buffers OOM small instances");
   assert.doesNotMatch(engineSrc, /createWriteStream|mkdtemp|openAsBlob/, "no temp files — Render's small disk stays untouched");
   assert.match(engineSrc, /visibility: isPrivate \? "private" : "public"/, "destination visibility is honoured");
   assert.match(engineSrc, /scrub\(friendly\)/, "even failure messages are token-scrubbed");

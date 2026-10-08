@@ -154,7 +154,7 @@ const CONSOLE_HTML = `<!doctype html>
   #log{background:#1E293B;border:1px solid #334155;border-radius:10px;padding:14px;min-height:180px;max-height:60vh;overflow:auto;white-space:pre-wrap;font-size:.78rem;line-height:1.5}
 </style></head><body>
 <h1>Hugging Face model mirror</h1>
-<p>Copies a model repo into your account: plan → create the destination repo → transfer file by file. Start with a dry run — it lists everything without touching anything.</p>
+<p>Copies a model repo into your account. Main-revision mirrors go as a server-side duplicate on the Hub — no model bytes pass through this server, however big the model. Anything the duplicate can't do (other revisions, or a destination that already exists) falls back to a file-by-file transfer that resumes where it left off. Start with a dry run — it lists everything without touching anything.</p>
 <div id="st">loading…</div>
 <p id="keep">⏳ Job running — <strong>keep this tab open</strong>: the 10-second polling keeps this service awake (free Render plans sleep after ~15 quiet minutes) and the log live. Closing the tab never cancels the run — but if you're on the free plan, don't leave it closed for long.</p>
 <div class="row">
