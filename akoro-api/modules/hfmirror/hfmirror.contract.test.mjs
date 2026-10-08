@@ -134,14 +134,13 @@ test("a bad source repo id aborts before any Hub call", async () => {
 
 /* ── source-level wiring ───────────────────────────────────────────────── */
 
-test("the engine transfers from disk, not RAM, and cleans up", () => {
+test("the engine streams from source URLs — nothing touches RAM or disk", () => {
   assert.match(engineSrc, /from "@huggingface\/hub"/, "the official hub client");
-  assert.match(engineSrc, /openAsBlob\(/, "uploads read from a disk-backed Blob (node:fs openAsBlob)");
-  assert.match(engineSrc, /createWriteStream/, "downloads stream to a temp file");
-  assert.match(engineSrc, /mkdtemp/, "each job gets its own temp dir");
-  assert.match(engineSrc, /recursive: true, force: true/, "the temp dir is removed at the end");
+  assert.match(engineSrc, /\/resolve\/\$\{encodeURIComponent\(revision\)\}\//, "files are addressed by their source resolve URL");
+  assert.match(engineSrc, /content: url/, "uploadFiles streams from that URL (lazy WebBlob, no temp file)");
+  assert.doesNotMatch(engineSrc, /createWriteStream|mkdtemp|openAsBlob/, "no temp files — Render's small disk stays untouched");
   assert.match(engineSrc, /visibility: isPrivate \? "private" : "public"/, "destination visibility is honoured");
-  assert.match(engineSrc, /scrub\(String\(err/, "even failure messages are token-scrubbed");
+  assert.match(engineSrc, /scrub\(friendly\)/, "even failure messages are token-scrubbed");
   assert.match(engineSrc, /dryRun = true/, "dry run is the engine default");
   assert.match(engineSrc, /isPrivate = true/, "private is the engine default");
 });
