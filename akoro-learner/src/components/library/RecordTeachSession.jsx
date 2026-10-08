@@ -43,7 +43,7 @@
 import { useEffect, useRef, useState } from 'react';
 import TeachAgentModal from '../teaching/TeachAgentModal.jsx';
 import { buildSessionReaderPages } from '../teaching/SessionReaderModal.jsx';
-import { recordDownloadUrl, getRecordExtraction, getRecordTranscript, startRecordTranscription, getRecordTranscriptionStatus } from '../../services/recordsApi.js';
+import { recordDownloadUrl, getRecordExtraction, getSharedExtraction, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus } from '../../services/recordsApi.js';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
@@ -139,6 +139,7 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
       }
       const res = await runRecordExtraction({
         recordId: record.id,
+        contentKey: record.contentKey || null,   // shared file → parsed once for everyone
         pages: rendered,
         onProgress: (done, total) => setExtract((s) => ({ ...s, done, total })),
       });
@@ -163,11 +164,11 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
     const tick = setInterval(() => setExtract((s) => (s?.status === 'running'
       ? { ...s, elapsed: Math.round((Date.now() - t0) / 1000) } : s)), 1000);
     try {
-      await startRecordTranscription(record.id);
+      await startRecordTranscription({ recordId: record.id, contentKey: record.contentKey || null });
       // Poll the job — a long lecture takes Deepgram ~20s/100min + captions.
       for (;;) {
         await new Promise((r) => setTimeout(r, 5000));
-        const d = await getRecordTranscriptionStatus(record.id);
+        const d = await getRecordTranscriptionStatus({ recordId: record.id, contentKey: record.contentKey || null });
         if (!d?.job?.running) {
           if (d?.job?.result?.ok === false) throw new Error(d.job.result.error || 'Transcription failed.');
           break;
@@ -266,7 +267,7 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
             return;
           }
 
-          const cached = await getRecordExtraction(record.id);
+          const cached = record.contentKey ? await getSharedExtraction(record.contentKey) : await getRecordExtraction(record.id);
           if (cancelled) return;
           const byPage = new Map((cached.pages || [])
             .filter((p) => (p.markdown || '').trim())
@@ -300,7 +301,7 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
             ready([{ html: '', text: md }], null,
               md ? { name: record.name, text: md.slice(0, MAX_REFERENCE_CHARS) } : null);
           };
-          const cached = await getRecordExtraction(record.id);
+          const cached = record.contentKey ? await getSharedExtraction(record.contentKey) : await getRecordExtraction(record.id);
           if (cancelled) return;
           const md = (cached.pages || []).find((p) => p.pageNumber === 1 && (p.markdown || '').trim())?.markdown;
           if (md) {
@@ -313,7 +314,7 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
         } else if (type === 'audio' || type === 'video') {
           // The recording plays as-is; a transcript (cached or offered)
           // grounds the session in the real words.
-          const { segments } = await getRecordTranscript(record.id);
+          const { segments } = record.contentKey ? await getSharedTranscript(record.contentKey) : await getRecordTranscript(record.id);
           if (cancelled) return;
           if (segments?.length) {
             const text = segments.map((s) => (s.speaker ? `[${s.speaker}] ${s.text}` : s.text)).join('\n\n');

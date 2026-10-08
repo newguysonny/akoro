@@ -12,8 +12,12 @@
  * Pages are rasterized CLIENT-side (the reader already renders PDFs and
  * images), so this side never needs a PDF renderer: the learner's browser
  * sends ≤8 JPEG pages per request, each page runs one /runsync call, and
- * results land in edu.record_extractions (upsert — extraction is
- * idempotent per page).
+ * results land in edu.content_parses — keyed by the STORAGE FILE KEY, not
+ * the record or the user. A learner's own upload has a user-scoped key
+ * (privacy inherits); a SHARED file (the discovery feed) has one key, so
+ * it is parsed ONCE and every later opener reads the same rows for free.
+ * content_jobs is the single-flight claim: concurrent first-openers don't
+ * double-spend — the loser polls instead of running.
  *
  * Everything here runs without auth context; the routes own ownership
  * checks, caps and the enabled-501 contract.
@@ -25,6 +29,56 @@
 /* The db client loads lazily inside the persistence helpers (uploader.js
    pattern) — the pure helpers above stay importable without Supabase env. */
 const dbLazy = async () => (await import("../../db.js")).default;
+
+/* ── The single-flight claim (edu.content_jobs) ───────────────────────────
+   A runner CLAIMS (content_key, lane) before spending anything: another
+   LIVE claim loses (poll instead), a finished/failed/stale claim is
+   re-claimable (refresh / crashed worker). */
+const CLAIM_STALE_MINUTES = 10;
+
+export async function claimContentJob(contentKey, lane, userId) {
+  const db = await dbLazy();
+  const nowIso = new Date().toISOString();
+  const staleIso = new Date(Date.now() - CLAIM_STALE_MINUTES * 60000).toISOString();
+  const patch = { status: "running", started_by: userId, started_at: nowIso, updated_at: nowIso, result: null };
+  // Flip an existing finished/failed/stale row — only if it isn't a live claim.
+  const { data: flipped } = await db.schema("edu").from("content_jobs")
+    .update(patch).eq("content_key", contentKey).eq("lane", lane)
+    .or(`status.neq.running,updated_at.lt.${staleIso}`)
+    .select("content_key");
+  if (flipped?.length) return true;
+  // No row to flip — claim it outright.
+  const { error: insErr } = await db.schema("edu").from("content_jobs")
+    .insert({ content_key: contentKey, lane, ...patch });
+  if (!insErr) return true;
+  // A row appeared under us: only win if it isn't a live claim.
+  const { data: row } = await db.schema("edu").from("content_jobs")
+    .select("status, updated_at").eq("content_key", contentKey).eq("lane", lane).maybeSingle();
+  if (row && (row.status !== "running" || row.updated_at <= staleIso)) {
+    const { data: again } = await db.schema("edu").from("content_jobs")
+      .update(patch).eq("content_key", contentKey).eq("lane", lane)
+      .or(`status.neq.running,updated_at.lt.${staleIso}`)
+      .select("content_key");
+    return !!again?.length;
+  }
+  return false;
+}
+
+export async function finishContentJob(contentKey, lane, status, result = null) {
+  const db = await dbLazy();
+  const { error } = await db.schema("edu").from("content_jobs")
+    .update({ status, result, updated_at: new Date().toISOString() })
+    .eq("content_key", contentKey).eq("lane", lane);
+  if (error) throw error;
+}
+
+export async function getContentJob(contentKey, lane) {
+  const db = await dbLazy();
+  const { data } = await db.schema("edu").from("content_jobs")
+    .select("status, started_at, updated_at, result")
+    .eq("content_key", contentKey).eq("lane", lane).maybeSingle();
+  return data || null;
+}
 
 const RUNPOD_API     = "https://api.runpod.ai";
 const RUNSYNC_TIMEOUT_MS = 150_000;   // one 4B-model page ≈ seconds; queue spikes happen
@@ -139,14 +193,14 @@ export async function parsePageOnRunpod({ imageBase64, maxNewTokens = 8192, fetc
 
 /* ── Persistence ───────────────────────────────────────────────────────── */
 
-/** Upsert one parsed page. Returns the stored row's shape (no blobs). */
-export async function saveExtractionPage({ userId, recordId, pageNumber, blocks, markdown, model }) {
+/** Upsert one parsed page into the SHARED per-file cache. */
+export async function saveExtractionPage({ contentKey, pageNumber, blocks, markdown, model }) {
   const db = await dbLazy();
   const { data, error } = await db.schema("edu")
-    .from("record_extractions")
+    .from("content_parses")
     .upsert(
-      { user_id: userId, record_id: recordId, page_number: pageNumber, blocks: JSON.stringify(blocks), markdown, model },
-      { onConflict: "record_id,page_number" },
+      { content_key: contentKey, page_number: pageNumber, blocks: JSON.stringify(blocks), markdown, model },
+      { onConflict: "content_key,page_number" },
     )
     .select("page_number, markdown, model, updated_at")
     .single();
@@ -154,14 +208,13 @@ export async function saveExtractionPage({ userId, recordId, pageNumber, blocks,
   return { ...data, blocks: JSON.parse(data.blocks || "[]") };
 }
 
-/** The cached extraction for a record — [] pages when none yet. */
-export async function getExtraction(userId, recordId) {
+/** The cached extraction for a FILE (any opener's money already spent). */
+export async function getExtraction(contentKey) {
   const db = await dbLazy();
   const { data, error } = await db.schema("edu")
-    .from("record_extractions")
+    .from("content_parses")
     .select("page_number, markdown, blocks, model, updated_at")
-    .eq("user_id", userId)
-    .eq("record_id", recordId)
+    .eq("content_key", contentKey)
     .order("page_number");
   if (error) throw error;
   const pages = (data || []).map((row) => ({

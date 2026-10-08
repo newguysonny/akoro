@@ -54,6 +54,7 @@ import {
 } from "./lib/storage.js";
 import {
   recordsExtractionEnabled, parsePageOnRunpod, saveExtractionPage, getExtraction,
+  claimContentJob, finishContentJob, getContentJob,
   MAX_PAGES_PER_REQUEST, MAX_RECORD_PAGES, MAX_IMAGE_B64_CHARS,
 } from "./extractLib.js";
 import {
@@ -315,7 +316,7 @@ router.get("/discover/:id/open", authenticateToken, asyncHandler(async (req, res
       return null;
     });
   if (!url) return res503(res, "Could not sign that file — try again.");
-  res200(res, { url });
+  res200(res, { url, contentKey: r.file_key });   // the shared AI cache key
 }));
 
 /* ── Folders — the shelf's organization layer ─────────────────────────────
@@ -522,35 +523,70 @@ router.post("/folders/items", authenticateToken, asyncHandler(async (req, res) =
  *
  * The READER rasterizes pages client-side (pdf.js / the loaded image) and
  * posts them here in ≤8-page batches; each page runs one /runsync call on
- * the parse worker, and the result upserts into edu.record_extractions.
- * Re-opening a record reads the cache (GET /extract/:recordId) — extraction
- * is idempotent per page, so re-running refreshes.
+ * the parse worker, and results land in edu.content_parses — keyed by the
+ * STORAGE FILE KEY. A learner's own upload has a user-scoped key (privacy
+ * inherits); a SHARED file (discovery) has one key, so it is parsed ONCE
+ * and every later opener reads the same rows for free.
  *
- *   POST /api/records/extract            { recordId, pages:[{pageNumber,
- *                                          imageBase64}] } → parsed pages
- *   GET  /api/records/extract/:recordId  cached extraction (may be empty)
+ * Identity: { recordId } (your record) or { contentKey } (a shared file's
+ * storage key — verified with the exact access rule the discovery feed
+ * uses). A single-flight claim (edu.content_jobs) keeps concurrent
+ * first-opens from double-spending: the loser gets 409 + the job row and
+ * polls instead.
  *
- * NOTE: registered before the generic /:id routes below. The body limit
- * is raised app-wide (see app.js) — page JPEGs ride the JSON body, base64'd.
+ *   POST /api/records/extract              { recordId|contentKey, pages:≤8 }
+ *   GET  /api/records/extract/:recordId    cached extraction (your record)
+ *   GET  /api/records/extract/content/:key cached extraction (shared file)
+ *
+ * NOTE: registered before the generic /:id routes below. Body limit is
+ * raised app-wide (app.js) — page JPEGs ride the JSON body, base64'd.
  */
 const okExtract = (res, data) => res.json({ success: true, data });
+
+/* recordId | contentKey → { contentKey, name } | { status, message }. */
+async function resolveAiContent(req) {
+  const userId     = req.user.id;
+  const recordId   = String(req.body?.recordId || "");
+  const contentKey = String(req.body?.contentKey || "");
+  if (recordId) {
+    if (!/^[0-9a-f-]{36}$/i.test(recordId)) return { status: 400, message: "A valid recordId is required." };
+    const { data: rec, error } = await edu().from("records")
+      .select("id, user_id, name, mime, file_key").eq("id", recordId).maybeSingle();
+    if (error) throw error;
+    if (!rec || rec.user_id !== userId) return { status: 404, message: "Record not found." };
+    if (!rec.file_key) return { status: 400, message: "This record has no saved file — only its details were captured." };
+    return { contentKey: rec.file_key, name: rec.name, mime: rec.mime };
+  }
+  if (contentKey) {
+    // Shared content — the SAME rule the discovery feed opens under.
+    const { data: rec, error } = await edu().from("records")
+      .select("id, user_id, name, mime, file_key, kind").eq("file_key", contentKey).maybeSingle();
+    if (error) throw error;
+    if (!rec || rec.kind !== "upload") return { status: 404, message: "Content not found." };
+    const premiumIds = await activePremiumUserIds();
+    if (rec.user_id !== userId && premiumIds.includes(rec.user_id)) return { status: 404, message: "Content not found." };
+    return { contentKey, name: rec.name, mime: rec.mime };
+  }
+  return { status: 400, message: "A recordId or contentKey is required." };
+}
 
 router.post("/extract", authenticateToken, asyncHandler(async (req, res) => {
   if (!recordsExtractionEnabled()) {
     return res.status(501).json({ success: false, error: "Text extraction isn't configured on this deployment yet." });
   }
-  const userId   = req.user.id;
-  const recordId = String(req.body?.recordId || "");
-  const pages    = Array.isArray(req.body?.pages) ? req.body.pages : [];
-  if (!/^[0-9a-f-]{36}$/i.test(recordId)) return res400(res, "A recordId is required.");
+  const id = await resolveAiContent(req);
+  if (id.error !== undefined || id.status) return res.status(id.status).json({ success: false, message: id.message });
+  const { contentKey } = id;
+
+  const pages = Array.isArray(req.body?.pages) ? req.body.pages : [];
   if (!pages.length) return res400(res, "Send at least one rendered page.");
   if (pages.length > MAX_PAGES_PER_REQUEST) return res400(res, `Send at most ${MAX_PAGES_PER_REQUEST} pages per request.`);
 
-  // Ownership first — never parse bytes for a record that isn't yours.
-  const { data: rec, error: recErr } = await edu().from("records")
-    .select("id, name, kind").eq("id", recordId).eq("user_id", userId).maybeSingle();
-  if (recErr) throw recErr;
-  if (!rec) return res.status(404).json({ success: false, message: "Record not found." });
+  // Single flight: only one parse runs per file; latecomers poll.
+  const claimed = await claimContentJob(contentKey, "parse", req.user.id);
+  if (!claimed) {
+    return res.status(409).json({ success: false, error: "This file is being extracted right now — the shared result will appear in a moment.", job: await getContentJob(contentKey, "parse") });
+  }
 
   const parsed = [];
   for (const p of pages) {
@@ -566,23 +602,38 @@ router.post("/extract", authenticateToken, asyncHandler(async (req, res) => {
     const b64 = imageBase64.replace(/^data:[^,]*,/, "");   // tolerate data: URIs
     try {
       const { blocks, markdown, model } = await parsePageOnRunpod({ imageBase64: b64 });
-      await saveExtractionPage({ userId, recordId, pageNumber, blocks, markdown, model });
+      await saveExtractionPage({ contentKey, pageNumber, blocks, markdown, model });
       parsed.push({ pageNumber, markdown, model, blocks });   // blocks ride back for the reader's layout overlay
     } catch (err) {
+      await finishContentJob(contentKey, "parse", parsed.length ? "done" : "failed", { pages: parsed.length, error: String(err?.message || err).slice(0, 200) });
       // Mid-batch failure: keep the pages that worked, surface why.
       return res.json({
         success: parsed.length > 0,
-        data: { recordId, pages: parsed, failedPage: pageNumber, error: String(err?.message || err) },
+        data: { contentKey, pages: parsed, failedPage: pageNumber, error: String(err?.message || err) },
       });
     }
   }
-  okExtract(res, { recordId, pages: parsed });
+  await finishContentJob(contentKey, "parse", "done", { pages: parsed.length });
+  okExtract(res, { contentKey, pages: parsed });
 }));
 
 router.get("/extract/:recordId", authenticateToken, asyncHandler(async (req, res) => {
   const recordId = String(req.params.recordId || "");
   if (!/^[0-9a-f-]{36}$/i.test(recordId)) return res400(res, "A recordId is required.");
-  okExtract(res, await getExtraction(req.user.id, recordId));
+  const { data: rec, error } = await edu().from("records")
+    .select("file_key").eq("id", recordId).eq("user_id", req.user.id).maybeSingle();
+  if (error) throw error;
+  if (!rec) return res.status(404).json({ success: false, message: "Record not found." });
+  okExtract(res, rec.file_key ? await getExtraction(rec.file_key) : { pages: [], markdown: "" });
+}));
+
+router.get("/extract/content/:key", authenticateToken, asyncHandler(async (req, res) => {
+  const contentKey = String(req.params.key || "");
+  if (!contentKey) return res400(res, "A content key is required.");
+  const probe = { ...req, body: { contentKey } };
+  const id = await resolveAiContent(probe);
+  if (id.status) return res.status(id.status).json({ success: false, message: id.message });
+  okExtract(res, await getExtraction(id.contentKey));
 }));
 
 // ─── PATCH /api/records/:id — progress / last-opened ────────────────────────
@@ -641,33 +692,37 @@ router.post("/transcribe", authenticateToken, asyncHandler(async (req, res) => {
   if (!avEnabled()) {
     return res.status(501).json({ success: false, error: "Transcription isn't configured on this deployment yet." });
   }
-  const recordId = String(req.body?.recordId || "");
-  if (!/^[0-9a-f-]{36}$/i.test(recordId)) return res400(res, "A recordId is required.");
+  const id = await resolveAiContent(req);
+  if (id.status) return res.status(id.status).json({ success: false, message: id.message });
+  const { contentKey, name: recName } = id;
 
-  const { data: rec, error: recErr } = await edu().from("records")
-    .select("id, user_id, name, mime, file_key").eq("id", recordId).maybeSingle();
-  if (recErr) throw recErr;
-  if (!rec || rec.user_id !== req.user.id) return res.status(404).json({ success: false, message: "Record not found." });
-  if (!rec.file_key) return res400(res, "This record has no saved file — only its details were captured.");
-  const mime = rec.mime || "";
-  const avKind = /^video\//.test(mime) || /\.(mp4|m4v|mov|webm|mkv)$/i.test(rec.name || "") ? "video"
-    : /^audio\//.test(mime) || /\.(mp3|m4a|aac|wav|ogg|flac)$/i.test(rec.name || "") ? "audio" : null;
+  const mime = id.mime || "";
+  const avKind = /^video\//.test(mime) || /\.(mp4|m4v|mov|webm|mkv)$/i.test(recName || "") ? "video"
+    : /^audio\//.test(mime) || /\.(mp3|m4a|aac|wav|ogg|flac)$/i.test(recName || "") ? "audio" : null;
   if (!avKind) return res400(res, "Only audio and video records transcribe.");
 
-  const running = [...avJobs.values()].some((j) => j.running);
-  if (running) return res.status(409).json({ success: false, error: "A transcription is already running — try again when it finishes." });
+  // Cross-instance single flight (edu.content_jobs) — a shared recording
+  // is transcribed ONCE no matter who opens it first.
+  const claimed = await claimContentJob(contentKey, "av", req.user.id);
+  if (!claimed) {
+    return res.status(409).json({ success: false, error: "This recording is being transcribed right now — the shared transcript will appear in a moment.", job: await getContentJob(contentKey, "av") });
+  }
 
-  const fileUrl = await createPresignedDownload(rec.file_key, { downloadName: rec.name });
+  const fileUrl = await createPresignedDownload(contentKey, { downloadName: recName });
   const job = { running: true, startedAt: new Date().toISOString(), finishedAt: null, log: [], result: null };
-  avJobs.set(recordId, job);
+  avJobs.set(contentKey, job);
   transcribeRecord({
-    userId: req.user.id, recordId, recordName: rec.name, kind: avKind, fileUrl,
+    userId: req.user.id, contentKey, recordName: recName, kind: avKind, fileUrl,
     onLog: (line) => job.log.push(line),
   })
-    .then((result) => { job.result = result; })
+    .then((result) => {
+      job.result = result;
+      return finishContentJob(contentKey, "av", "done", { segments: result.segments });
+    })
     .catch((err) => {
       job.log.push(`[av] FAILED: ${String(err?.message || err).slice(0, 220)}`);
       job.result = { ok: false, error: String(err?.message || err).slice(0, 220) };
+      return finishContentJob(contentKey, "av", "failed", { error: String(err?.message || err).slice(0, 200) });
     })
     .finally(() => { job.running = false; job.finishedAt = new Date().toISOString(); });
 
@@ -677,12 +732,25 @@ router.post("/transcribe", authenticateToken, asyncHandler(async (req, res) => {
 router.get("/transcribe/:recordId", authenticateToken, asyncHandler(async (req, res) => {
   const recordId = String(req.params.recordId || "");
   if (!/^[0-9a-f-]{36}$/i.test(recordId)) return res400(res, "A recordId is required.");
-  const { data: rec } = await edu().from("records")
-    .select("id, user_id").eq("id", recordId).maybeSingle();
-  if (!rec || rec.user_id !== req.user.id) return res.status(404).json({ success: false, message: "Record not found." });
+  const { data: rec, error } = await edu().from("records")
+    .select("file_key").eq("id", recordId).eq("user_id", req.user.id).maybeSingle();
+  if (error) throw error;
+  if (!rec) return res.status(404).json({ success: false, message: "Record not found." });
   res.json({ success: true, data: {
-    job: avJobSnapshot(avJobs.get(recordId) || null),
-    transcript: await getTranscript(req.user.id, recordId),
+    job: avJobSnapshot(avJobs.get(rec.file_key) || null),
+    transcript: rec.file_key ? await getTranscript(rec.file_key) : { segments: [], text: "" },
+  } });
+}));
+
+router.get("/transcribe/content/:key", authenticateToken, asyncHandler(async (req, res) => {
+  const contentKey = String(req.params.key || "");
+  if (!contentKey) return res400(res, "A content key is required.");
+  const probe = { ...req, body: { contentKey } };
+  const id = await resolveAiContent(probe);
+  if (id.status) return res.status(id.status).json({ success: false, message: id.message });
+  res.json({ success: true, data: {
+    job: avJobSnapshot(avJobs.get(id.contentKey) || null) || await getContentJob(id.contentKey, "av"),
+    transcript: await getTranscript(id.contentKey),
   } });
 }));
 

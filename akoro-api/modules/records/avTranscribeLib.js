@@ -18,11 +18,15 @@
  *     `AV_FRAME_PROVIDER=openai` switches to gpt-4o-mini descriptions;
  *     `off` keeps the lane speech-only.
  *
- * Results land in edu.record_transcripts — one row per segment, both
- * kinds in one table, chronological by start_ms. The reader plays the
- * ORIGINAL file while the transcript grounds the session and drives
- * click-to-seek. Everything is delete-then-insert per run, so
- * re-transcribing is idempotent.
+ * Results land in edu.content_transcripts — one row per segment, both
+ * kinds in one table, chronological by start_ms, keyed by the STORAGE
+ * FILE KEY: a learner's own upload has a user-scoped key (privacy
+ * inherits), a SHARED file (discovery) has one key, so it transcribes
+ * ONCE and every later opener reads the same rows for free. The reader
+ * plays the ORIGINAL file while the transcript grounds the session and
+ * drives click-to-seek. Delete-then-insert per run; re-running is
+ * idempotent. claimContentJob (extractLib) keeps concurrent first-opens
+ * from double-spending.
  *
  * The db client loads lazily (uploader.js pattern) so the pure shaping
  * helpers stay importable by tests without Supabase env.
@@ -34,7 +38,7 @@ import { pipeline } from "node:stream/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hasDeepgram, transcribeFileDeepgram } from "../voice/deepgram.js";
-import { parsePageOnRunpod, recordsExtractionEnabled } from "./extractLib.js";
+import { parsePageOnRunpod, recordsExtractionEnabled, claimContentJob, finishContentJob, getContentJob } from "./extractLib.js";
 
 const FFMPEG_PATH   = () => process.env.FFMPEG_PATH   || "ffmpeg";
 const FRAME_PROVIDER = () => (process.env.AV_FRAME_PROVIDER || "auto").toLowerCase();
@@ -185,14 +189,14 @@ async function captionFrame(framePath, tSec) {
 /* ── Persistence (lazy db — the uploader.js pattern) ───────────────────── */
 const dbLazy = async () => (await import("../../db.js")).default;
 
-export async function replaceTranscript(userId, recordId, segments, model) {
+export async function replaceTranscript(userId, contentKey, segments, model) {
   const db = await dbLazy();
-  const del = await db.schema("edu").from("record_transcripts")
-    .delete().eq("record_id", recordId).eq("user_id", userId);
+  const del = await db.schema("edu").from("content_transcripts")
+    .delete().eq("content_key", contentKey);
   if (del.error) throw del.error;
   if (!segments.length) return 0;
   const rows = segments.map((s) => ({
-    user_id: userId, record_id: recordId, kind: s.kind,
+    content_key: contentKey, user_id: userId, kind: s.kind,
     start_ms: s.start_ms, end_ms: s.end_ms, speaker: s.speaker,
     text: s.text, model: s.model || model,
   }));
@@ -203,11 +207,11 @@ export async function replaceTranscript(userId, recordId, segments, model) {
   return rows.length;
 }
 
-export async function getTranscript(userId, recordId) {
+export async function getTranscript(contentKey) {
   const db = await dbLazy();
-  const { data, error } = await db.schema("edu").from("record_transcripts")
+  const { data, error } = await db.schema("edu").from("content_transcripts")
     .select("kind, start_ms, end_ms, speaker, text, model")
-    .eq("user_id", userId).eq("record_id", recordId)
+    .eq("content_key", contentKey)
     .order("start_ms", { ascending: true });
   if (error) throw error;
   const segments = (data || []).map((r) => ({
@@ -224,9 +228,9 @@ export async function getTranscript(userId, recordId) {
  * `fileUrl` is the presigned download the route resolved (ownership
  * checked there). Reports through onLog; returns a summary.
  */
-export async function transcribeRecord({ userId, recordId, recordName, kind, fileUrl, onLog = () => {} }) {
+export async function transcribeRecord({ userId, contentKey, recordName, kind, fileUrl, onLog = () => {} }) {
   const started = Date.now();
-  const label = recordName || recordId;
+  const label = recordName || contentKey;
   onLog(`[av] ${label} — downloading the original…`);
   const dir = await mkdtemp(join(tmpdir(), "ak-av-"));
   try {
@@ -271,7 +275,7 @@ export async function transcribeRecord({ userId, recordId, recordName, kind, fil
       frames: frameRows, model,
     });
     if (!segments.length) throw new Error("No speech or captions came out of this recording.");
-    const saved = await replaceTranscript(userId, recordId, segments, model);
+    const saved = await replaceTranscript(userId, contentKey, segments, model);
     const seconds = ((Date.now() - started) / 1000).toFixed(0);
     onLog(`[av] done — ${saved} segment(s) in ${seconds}s`);
     return { segments: saved, durationSec: Math.round(dg.duration || 0), durationMs: Date.now() - started };

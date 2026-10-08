@@ -271,7 +271,9 @@ export default function ContentsDiscoveryTab({ initialQuery = '' }) {
         setSession({ ...item, content: d?.content || item.contentPreview || '', fileUrl: null });
       } else {
         if (!d?.url) throw new Error('no url');
-        setSession({ ...item, fileUrl: d.url });
+        // contentKey = the file's storage key — extraction/transcription
+        // cache by it, so a shared file is parsed ONCE for everyone.
+        setSession({ ...item, fileUrl: d.url, contentKey: d.contentKey || null });
       }
     } catch {
       setToast({ msg: t('discovery.contents_open_fail'), color: RED });
