@@ -25,6 +25,15 @@
  * asks about the material's real sentences, not just its name. The server
  * caps references at 12,000 chars; we slice to fit.
  *
+ * AI EXTRACTION (hanji-parse-4b on RunPod): SCANNED PDFs (no text layer)
+ * and image records have nothing to ground — this reader offers to EXTRACT
+ * the text: pages are rasterized here (pdf.js / the loaded image), parsed
+ * by the worker through /api/records/extract, cached per page, and the
+ * result replaces the blank page texts AND grounds the session — the
+ * scanned doc behaves like a text PDF afterwards (selectable, Generate-
+ * tools-capable). The canvases stay as the visual page; extraction only
+ * fills the words.
+ *
  * CONTINUATION: the teaching session's id is remembered (sessionStorage,
  * 24h) per record, so reopening a record continues yesterday's teaching
  * instead of always starting cold. Watched-through milestones keep the
@@ -34,10 +43,11 @@
 import { useEffect, useRef, useState } from 'react';
 import TeachAgentModal from '../teaching/TeachAgentModal.jsx';
 import { buildSessionReaderPages } from '../teaching/SessionReaderModal.jsx';
-import { recordDownloadUrl } from '../../services/recordsApi.js';
+import { recordDownloadUrl, getRecordExtraction } from '../../services/recordsApi.js';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
+import { rasterizePdfPages, rasterizeImageFile, runRecordExtraction } from './extractPages.js';
 
 const MAX_TEXT_CHARS = 500_000;   // a 500k-char text file ≈ 190 reader pages — plenty
 const MAX_REFERENCE_CHARS = 12_000;   // the server's reference cap
@@ -103,6 +113,42 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
   const openedRef = useRef(false);
   const progressRef = useRef(record?.progress || 0);
 
+  /* ── AI extraction (scanned PDFs & images) ──────────────────────────────
+     offer    → the record has no text layer; ask before spending GPU time
+     running  → rasterizing/parsing, progress done/total
+     applied  → text replaced the blanks (transient confirmation)
+     error    → show why, offer retry / read-as-is */
+  const [extract, setExtract] = useState(null);
+  const textsRef  = useRef([]);      // the load flow's per-page text layer (≈'' for scans)
+  const applyRef  = useRef(null);    // set by the load flow; applies parsed pages to the session
+
+  const startExtraction = async () => {
+    const apply = applyRef.current;
+    if (!apply || !record?.id) return;
+    setExtract((s) => ({ ...s, status: 'running', done: 0, error: null }));
+    try {
+      let rendered;
+      if (type === 'pdf' && pdfParts?.pdf) {
+        rendered = await rasterizePdfPages(pdfParts.pdf);
+      } else if (type === 'image' && fileUrl) {
+        rendered = await rasterizeImageFile(fileUrl);
+      } else {
+        throw new Error('Nothing extractable in this record.');
+      }
+      const res = await runRecordExtraction({
+        recordId: record.id,
+        pages: rendered,
+        onProgress: (done, total) => setExtract((s) => ({ ...s, done, total })),
+      });
+      if (!res.pages.length) throw new Error(res.error || 'Extraction returned no text — try again.');
+      apply(new Map(res.pages.map((p) => [p.pageNumber, p.markdown])));
+      setExtract({ status: 'applied', done: res.pages.length, total: rendered.length, error: res.error || null });
+      setTimeout(() => setExtract((s) => (s?.status === 'applied' ? null : s)), 6000);
+    } catch (e) {
+      setExtract((s) => ({ ...s, status: 'error', error: e?.message || 'Extraction failed.' }));
+    }
+  };
+
   const type   = record?.kind === 'upload' && record.fileMissing ? 'missing' : recordFileType(record);
   const isMedia = type === 'audio' || type === 'video';
   const fileUrl = record?.fileUrl || null;
@@ -117,6 +163,9 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
     setPages([]);
     setPdfParts(null);
     setReference(null);
+    setExtract(null);
+    textsRef.current = [];
+    applyRef.current = null;
 
     const fail = (msg) => { if (!cancelled) { setErr(msg); setState('error'); } };
     const ready = (pgs, parts = null, ref = null) => {
@@ -155,8 +204,39 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
           // Generate tools work on the document's real sentences. The same
           // text grounds the teaching session.
           const joined = texts.join('\n\n');
-          ready(texts.map((tx) => ({ html: '', text: tx })), { pdf, PdfPage },
-            joined ? { name: record.name, text: joined.slice(0, MAX_REFERENCE_CHARS) } : null);
+          textsRef.current = texts;
+
+          // applyExtracted — swap the page texts (and the grounding) for the
+          // parsed markdown; the canvases stay as the visual page.
+          const applyExtracted = (byPage) => {
+            const perPage = texts.map((tx, i) => ({ html: '', text: byPage.get(i + 1) || tx || '' }));
+            const md = perPage.map((p) => p.text).filter(Boolean).join('\n\n').trim();
+            ready(perPage, { pdf, PdfPage },
+              md ? { name: record.name, text: md.slice(0, MAX_REFERENCE_CHARS) } : null);
+          };
+
+          // A text layer thinner than ~20 chars/page is a scan — extraction
+          // is the only way this record grounds the session.
+          const scanned = joined.replace(/\s+/g, '').length < 20 * Math.max(1, texts.length);
+          if (!scanned) {
+            ready(texts.map((tx) => ({ html: '', text: tx })), { pdf, PdfPage },
+              joined ? { name: record.name, text: joined.slice(0, MAX_REFERENCE_CHARS) } : null);
+            return;
+          }
+
+          const cached = await getRecordExtraction(record.id);
+          if (cancelled) return;
+          const byPage = new Map((cached.pages || [])
+            .filter((p) => (p.markdown || '').trim())
+            .map((p) => [p.pageNumber, p.markdown]));
+          const haveAll = texts.length > 0 && texts.every((_, i) => byPage.has(i + 1));
+          if (haveAll) {
+            applyExtracted(byPage);   // cached — straight into a grounded session
+            return;
+          }
+          applyRef.current = applyExtracted;
+          setExtract({ status: 'offer', done: 0, total: texts.length });
+          ready(texts.map((tx) => ({ html: '', text: tx })), { pdf, PdfPage }, null);
         } else if (type === 'text') {
           const res = await fetch(fileUrl);
           if (!res.ok) throw new Error(`Could not load the file (${res.status}).`);
@@ -167,8 +247,26 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
             subject: 'Library record',
             reference: { name: record.name, text },
           }), null, text ? { name: record.name, text: text.slice(0, MAX_REFERENCE_CHARS) } : null);
+        } else if (type === 'image') {
+          // An image never carries a text layer — the cache is checked and
+          // otherwise the offer overlay goes up over the plain image page.
+          const applyImage = (byPage) => {
+            const md = (byPage.get(1) || '').trim();
+            ready([{ html: '', text: md }], null,
+              md ? { name: record.name, text: md.slice(0, MAX_REFERENCE_CHARS) } : null);
+          };
+          const cached = await getRecordExtraction(record.id);
+          if (cancelled) return;
+          const md = (cached.pages || []).find((p) => p.pageNumber === 1 && (p.markdown || '').trim())?.markdown;
+          if (md) {
+            ready([{ html: '', text: md }], null, { name: record.name, text: md.slice(0, MAX_REFERENCE_CHARS) });
+            return;
+          }
+          applyRef.current = applyImage;
+          setExtract({ status: 'offer', done: 0, total: 1 });
+          ready([{ html: '', text: '' }]);
         } else {
-          // image / audio / video / other — nothing to preload
+          // audio / video / other — nothing to preload
           ready([{ html: '', text: '' }]);
         }
       } catch (e) {
@@ -297,8 +395,88 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
      the session too. */
   const priorSid = readStoredSid(record.id);
 
+  /* ── AI extraction overlay — offer / progress / result ─────────────────── */
+  const extractPct = extract?.total ? Math.round(((extract.done || 0) / extract.total) * 100) : 0;
+  const btnPrimary = { flex: 1, border: 'none', borderRadius: 100, padding: '11px 0', fontSize: 12.5,
+    fontWeight: 800, color: '#fff', background: `linear-gradient(135deg, ${BRAND}, #4C1DCC)`,
+    cursor: 'pointer', fontFamily: "'Nunito',sans-serif" };
+  const btnGhost = { border: '1px solid var(--ak-border2, #E5E7EB)', borderRadius: 100, padding: '11px 16px',
+    fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text-sub)', background: 'transparent',
+    cursor: 'pointer', fontFamily: "'Nunito',sans-serif" };
+  const extractOverlay = extract ? (
+    <div role="dialog" aria-label="AI text extraction" style={{ position: 'fixed', inset: 0, zIndex: 3400,
+      background: 'rgba(10,12,24,.55)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', padding: 20, fontFamily: "'Nunito',sans-serif" }}>
+      <div style={{ width: 'min(400px, 100%)', background: 'var(--ak-surface)', borderRadius: 22,
+        padding: '22px 20px 18px', border: '1px solid var(--ak-border2, #E5E7EB)',
+        boxShadow: '0 18px 48px rgba(15,23,42,.28)' }}>
+        {extract.status === 'running' ? (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <span className="ti ti-loader-2" style={{ fontSize: 18, color: BRAND, animation: 'rteach-spin 1s linear infinite' }}/>
+              <strong style={{ fontSize: 14.5, fontWeight: 900, color: 'var(--ak-text)' }}>Extracting the text…</strong>
+            </div>
+            <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ak-text-sub)', margin: '0 0 12px' }}>
+              {extract.total > 1 ? `Page ${Math.min(extract.done + 1, extract.total)} of ${extract.total}` : 'Reading the page'} — this stays open until it's done.
+            </p>
+            <div style={{ height: 8, borderRadius: 5, background: 'var(--ak-tag-bg, #EEF0F5)', overflow: 'hidden' }}>
+              <div style={{ width: `${Math.max(6, extractPct)}%`, height: '100%', borderRadius: 5,
+                background: `linear-gradient(90deg, ${BRAND}, #4C1DCC)`, transition: 'width .4s ease' }}/>
+            </div>
+          </>
+        ) : extract.status === 'error' ? (
+          <>
+            <strong style={{ fontSize: 14.5, fontWeight: 900, color: 'var(--ak-text)' }}>Extraction didn't finish</strong>
+            <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ak-text-sub)', margin: '8px 0 14px', lineHeight: 1.5 }}>
+              {extract.error}{extract.done ? ` ${extract.done} page${extract.done === 1 ? '' : 's'} were saved — a retry only parses the rest.` : ''}
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={startExtraction} style={btnPrimary}>Try again</button>
+              <button onClick={() => setExtract(null)} style={btnGhost}>Read as-is</button>
+            </div>
+          </>
+        ) : extract.status === 'applied' ? (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ width: 34, height: 34, borderRadius: 12, background: 'rgba(16,185,129,.12)',
+                border: '1px solid rgba(16,185,129,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="ti-check" size={18} color="#10B981"/>
+              </span>
+              <strong style={{ fontSize: 14.5, fontWeight: 900, color: 'var(--ak-text)' }}>Text extracted</strong>
+            </div>
+            <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ak-text-sub)', margin: '8px 0 0', lineHeight: 1.5 }}>
+              {extract.done} page{extract.done === 1 ? '' : 's'} now read like a text document — the agent teaches from the real words.
+              {extract.error ? ` (${extract.error})` : ''}
+            </p>
+          </>
+        ) : (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+              <span style={{ width: 34, height: 34, borderRadius: 12, background: `${BRAND}15`,
+                border: `1px solid ${BRAND}38`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="ti-sparkles" size={17} color={BRAND}/>
+              </span>
+              <strong style={{ fontSize: 14.5, fontWeight: 900, color: 'var(--ak-text)' }}>
+                {type === 'image' ? 'Extract the text from this image?' : 'Scanned document detected'}
+              </strong>
+            </div>
+            <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ak-text-sub)', margin: '6px 0 14px', lineHeight: 1.55 }}>
+              This {type === 'image' ? 'image has no readable text layer' : "PDF has no readable text layer — it's a scan"}.
+              Extract the text with AI and it reads like a normal document: the agent can teach from it, quote it and quiz you on it.
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={startExtraction} style={btnPrimary}>Extract text</button>
+              <button onClick={() => setExtract(null)} style={btnGhost}>Read as-is</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  ) : null;
+
   return (
-    <TeachAgentModal
+    <>
+      <TeachAgentModal
       config={{
         topic: record.name,
         subject: 'General',
@@ -310,5 +488,7 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
       onMinimize={onMinimize}
       onSessionStarted={(sid) => storeSid(record.id, sid)}
     />
+      {extractOverlay}
+    </>
   );
 }

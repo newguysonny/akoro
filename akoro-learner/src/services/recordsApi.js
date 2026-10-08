@@ -143,5 +143,24 @@ export async function deleteRecord(id) {
   return true;
 }
 
+/* ── AI text extraction (hanji-parse-4b on RunPod) ────────────────────────
+   The reader rasterizes a record's pages; the API runs each page through
+   the parse worker and caches the result. Scanned PDFs and images come
+   back with real, selectable, groundable text. */
+
+/** The cached extraction for a record — { pages:[{pageNumber,markdown}], markdown } (empty when none). */
+export async function getRecordExtraction(recordId) {
+  try {
+    const d = await apiGet(`/api/records/extract/${recordId}`);
+    return d?.data ?? { pages: [], markdown: '' };
+  } catch { return { pages: [], markdown: '' }; }   // unconfigured / offline → no extraction, reader still works
+}
+
+/** Send rendered pages ({pageNumber, imageBase64}) — one batch of ≤8. */
+export async function extractRecordPages({ recordId, pages }) {
+  const d = await apiPost('/api/records/extract', { recordId, pages });
+  return d?.data ?? { pages: [] };
+}
+
 /** Stable "save a copy" link — cookies auth it, R2 serves the bytes. */
 export const recordDownloadUrl = (id) => `${API}/api/records/${id}/file`;

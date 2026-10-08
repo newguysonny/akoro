@@ -47,27 +47,40 @@ starts.
 
 ## API
 
-`POST /run` (or `/runsync`) on the endpoint URL with your RunPod API key:
+The handler is prompt-coupled — it serves the EXACT production prompt the
+checkpoint was fine-tuned on (vendored from `hanji-main`,
+`src/extract/parse_prompts.py → PRODUCTION_BBOX_2D_JSON_PROMPT`), resizes
+input to the training pixel cap (2 MP), and decodes greedily. Client
+prompts are ignored unless `PARSE_MODEL_ALLOW_PROMPT=1` on the worker.
 
 ```jsonc
-// document parse / OCR
+// request — one rendered page per call (this is how Hanji's own
+// qwen_lora provider drives it)
 { "input": {
-    "prompt": "Convert this document to clean markdown.",
-    "image": "https://example.com/scan.png",          // URL, data URI or bare base64
-    "max_tokens": 1024
+    "image_b64": "<PNG/JPEG base64, raw or data: URI>",
+    "max_new_tokens": 8192           // optional
 }}
 
-// plain chat (no image)
-{ "input": { "prompt": "What is 84 * 3 / 2?", "max_tokens": 128 } }
-
-// full control
-{ "input": { "messages": [
-    { "role": "user", "content": [
-      { "type": "image", "image": "data:image/png;base64,…" },
-      { "type": "text",  "text": "Extract the invoice total." } ] } ] } }
+// response
+{ "raw": "[{\"bbox_2d\":[…],\"text_content\":\"…\"}]",
+  "blocks": [ { "bbox_2d": [x1,y1,x2,y2], "text_content": "…" } ],  // 0-1000 coords, reading order
+  "image_size": [1240, 1754], "model": "hanji-dev/hanji-parse-4b",
+  "gpu": "NVIDIA …", "wall_ms": 1420 }
 ```
 
-Response: `{ "output": "<markdown/text>", "model": "hanji-dev/hanji-parse-4b", "gpu": "…", "timing_s": 3.2 }`
+Block semantics: tables come back as GitHub-Flavored Markdown inside
+`text_content`, figures as the `<image>` sentinel, an empty page as `[]`,
+checkboxes inline as `[x]`/`[ ]`. Render pages to PNG/JPEG client-side
+(the akoro reader does this with pdf.js) and call the endpoint per page.
+
+RunPod REST (any HTTP client):
+
+```bash
+curl -X POST "https://api.runpod.ai/v2/$ENDPOINT_ID/runsync" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"input": {"image_b64": "…"}}'
+```
 
 ## Environment variables (all optional)
 

@@ -166,7 +166,8 @@
     "2026-hot-path-indexes.sql",
     "2026-library-folders.sql",
     "2026-library-folder-items.sql",
-    "2026-community-items.sql"
+    "2026-community-items.sql",
+    "2026-record-extractions.sql"
   ],
   "demo": [
     "2026-seed-school.sql",

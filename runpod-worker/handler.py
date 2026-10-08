@@ -1,10 +1,25 @@
 """
 handler.py — RunPod serverless worker for hanji-dev/hanji-parse-4b
 ────────────────────────────────────────────────────────────────────
-Document-parsing/OCR VLM worker. The model is a Qwen3-VL-4B fine-tune
-(image-text-to-text), so this handler loads AutoProcessor +
-AutoModelForImageTextToText — NOT AutoModelForCausalLM/text-generation,
-which would crash on this checkpoint.
+Document-parsing/OCR worker for the Qwen3-VL-4B fine-tune. This model is
+PROMPT-COUPLED: it was fine-tuned to answer one exact prompt — the Hanji
+production bbox_2d_json prompt (copied verbatim from the vendored
+hanji-main source, src/extract/parse_prompts.py) — and answers with a
+JSON array of layout blocks:
+
+    [{"bbox_2d": [x1, y1, x2, y2], "text_content": "..."}]
+
+Coordinates are normalized 0-1000 (left, top, right, bottom), tables come
+back as GitHub-Flavored Markdown, figures come back as the "<image>"
+sentinel, and an empty page is exactly []. Deviating from the prompt
+degrades quality, so this handler ignores client prompts by default
+(PARSE_MODEL_ALLOW_PROMPT=1 to override deliberately).
+
+The /predict contract Hanji's own server uses (serving/server.py) is:
+    request  {image_b64, prompt, max_new_tokens}
+    response {raw, wall_ms, ...}
+Our RunPod handler mirrors it, and additionally returns the parsed
+`blocks` so callers don't each re-implement the JSON extraction.
 
 Deployment contract (RunPod cached-models feature):
   • The endpoint's Model field is set to MODEL_NAME (default
@@ -14,7 +29,7 @@ Deployment contract (RunPod cached-models feature):
     never a runtime download, never billed for one. Set
     RUNPOD_ALLOW_DOWNLOAD=1 only to intentionally bypass the cache.
 
-Local test (needs a GPU box or a CPU-tolerant setup):
+Local test (needs a GPU box):
   python3 -u handler.py --test_input test_input.json
 """
 
@@ -27,18 +42,111 @@ os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 os.environ.setdefault("HF_HUB_CACHE", "/runpod-volume/huggingface-cache/hub")
 
 import base64
+import io
+import json
+import re
 import time
-import urllib.request
 
 import runpod
 import torch
+from PIL import Image
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
 # ── Configuration ────────────────────────────────────────────────────────
 MODEL_ID       = os.environ.get("MODEL_NAME", "hanji-dev/hanji-parse-4b")
 HF_CACHE_ROOT  = os.environ.get("HF_HUB_CACHE", "/runpod-volume/huggingface-cache/hub")
 ALLOW_DOWNLOAD = os.environ.get("RUNPOD_ALLOW_DOWNLOAD", "0") == "1"
-DEFAULT_MAX_NEW_TOKENS = int(os.environ.get("DEFAULT_MAX_NEW_TOKENS", "1024"))
+ALLOW_PROMPT   = os.environ.get("PARSE_MODEL_ALLOW_PROMPT", "0") == "1"
+MAX_PIXELS     = int(os.environ.get("QWEN_MAX_IMAGE_PIXELS", "2000000"))  # training pixel cap
+DEFAULT_MAX_NEW_TOKENS = int(os.environ.get("DEFAULT_MAX_NEW_TOKENS", "8192"))
+
+
+# ── The exact prompt the model was fine-tuned on (hanji-main,
+#    src/extract/parse_prompts.py → PRODUCTION_BBOX_2D_JSON_PROMPT). ──────
+PRODUCTION_BBOX_2D_JSON_PROMPT = r"""Detect every BLOCK in this document and return a JSON array.
+
+Schema: [{"bbox_2d":[x1,y1,x2,y2], "text_content":"..."}]
+Coordinates: normalized 0-1000 page coordinates; [x1,y1,x2,y2] = [left,top,right,bottom].
+
+EMPTY PAGE: If the page has no legible content, return exactly []. Otherwise, transcribe every legible content block; a page with only one legible item is not empty.
+
+Your DEFAULT is to GROUP. Most such pages form 5-30 records; sparse pages may form only 1-4. More than 30 remains unusual. A
+"block" is a semantic SECTION (a panel, a heading + its content, a key-value group,
+or a whole table), NOT a single line, cell, or field. If you are emitting one record
+per line, per cell, or per form field, STOP - that is WRONG. When a region is not a
+clean table, you must STILL group it into section blocks; never fall back to
+one-record-per-element.
+
+Block categories:
+- Text records: ONE record per block - a heading TOGETHER WITH the lines beneath it,
+  a paragraph, a list, or a key-value field group. text_content = the block's text,
+  with "\n" between its lines. DO NOT emit one record per line.
+- Table records: a table or dense grid of cells, rendered as GitHub-Flavored Markdown
+  (| col | col |\n|---|---|\n| cell | cell |). Never emit one record per cell or
+  per row - the markdown carries every cell. A repeated item|amount list (receipt
+  lines, menu items) IS a table.
+  HEADERLESS TABLES: if a table has no visible column headings, DO NOT invent any.
+  Render only the visible rows/cells in their observed order. If Markdown syntax needs
+  a separator row, use empty header cells rather than synthetic names like "Column 1".
+  TABLE CELL TEXT: cell contents must be plain visible text. Do NOT add Markdown
+  emphasis or formatting inside cells (no **bold**, _italics_, backticks, or headings)
+  unless that formatting is the only way to preserve information that is visible on
+  the page.
+  TALL TABLES: A logical table on one page is ONE block regardless of row count. Include
+  every visible row in one GFM table. Its bbox_2d must tightly enclose the full table
+  from the first row through the last row.
+- Image records: ONE record per photo, figure, chart, scan, or non-text graphic.
+  text_content = "<image>". Handwritten signatures, cursive e-signatures, initials,
+  signature scribbles, and signature marks are ALWAYS images - do NOT transcribe or
+  guess them, even if partly readable. Printed labels such as "Signature:" remain text.
+  Do NOT emit for logos < 40 px wide.
+
+CRITICAL - transcribe MEANING, not layout glyphs:
+- Fill-in / blank lines: emit ONLY the label, NOT the blank. Write "Name:" - never
+  "Name:________________". For signature fields, keep the printed label as text and
+  emit the actual signature mark itself as an image record with text_content="<image>".
+- NEVER reproduce decorative rules or separators - rows of *, -, _, =, ., or any
+  repeated glyph. Omit them entirely; they are not content.
+- Checkboxes / Y-N / selection fields: write the field and its options on one line with the marks inline - "<row label> Y [x] N [ ]", "<label>: [x] Yes [ ] No"; "[x]" filled, "[ ]" empty; one record per field, not per option.
+- text_content must equal the VISIBLE text of the block - never pad, repeat, or
+  continue a character run. No single text block exceeds ~20 lines; split a longer
+  section at its sub-headings.
+
+Grouping rules:
+- A section heading and the content beneath it (down to the next heading) form ONE block.
+- A field label and its value are ONE block - EVEN in a dense report header. Write
+  "Visit Date: 08/12/2025" as one record; NEVER split the label from its value
+  ("Visit Date:" + "08/12/2025" as two records is WRONG).
+- On forms, when a key has an associated value, merge the key and value into the same
+  block and bbox so the association is explicit. If several related key-value fields
+  are visually grouped, emit the group as one block with one "Label: value" line per field.
+- A bordered or visually-grouped PANEL (e.g. a "PRESCRIBER INFORMATION" box with all
+  its fields) is ONE block - join its label:value pairs with "\n".
+- A row of related cells that is NOT a clean table (a lab-result line, a transaction
+  line) is ONE block - join the cells into one line; NEVER one record per cell.
+- NEVER emit a bare value, a single cell, or a lone field as its own record.
+- Keep COLUMNS separate: two side-by-side panels (e.g. Patient | Ordering Provider,
+  Bill To | Ship To) are TWO blocks - never merge across the gutter.
+- DO NOT merge unrelated neighboring panels or sections.
+- Group by semantic relationship, NOT by bbox size. Small unrelated regions must stay
+  separate. Example: a page title at the top-left and a page number at the top-right
+  are TWO blocks, even if both boxes are small and on the same horizontal band. Only
+  group items that belong to the same section, panel, list, table, or key-value group.
+- Prefer CORRECT grouping over tight boxes: a block's bbox may be wide and may lightly
+  touch a neighbor - do NOT over-split a section just to keep boxes small or separate.
+- Page-edge content: if visible text touches or sits near the page boundary, inspect the
+  full edge carefully and make the bbox include the entire visible glyphs/block, even if
+  the box must start at 0 or end at 1000. Do NOT shrink edge boxes inward.
+- Bbox coverage is strict: every transcribed character in text_content MUST be inside
+  that record's bbox_2d, with no clipped letters. This matters most for small regions,
+  rotated/non-horizontal text, page-edge text, headers/footers, stamps, and fax strips.
+  Use a tight box around the actual region, but never make it so tight that any visible
+  character you transcribed falls outside the box.
+
+Output JSON only.
+Checkboxes: transcribe every checkbox as [x] if marked or [ ] if unmarked, placed before its label (e.g. "[x] Allergies reviewed"; Y/N pairs as "Y [x] N [ ]"). Include every checkbox, including checkbox grids and Y/N option pairs."""
+
+PRODUCTION_PROMPT = "<image>\n" + PRODUCTION_BBOX_2D_JSON_PROMPT
 
 
 # ── Cached-snapshot resolution (RunPod's HF cache layout) ───────────────
@@ -79,43 +187,50 @@ def resolve_snapshot_path(model_id: str) -> str:
     )
 
 
-# ── Image loading (fallback when qwen_vl_utils isn't importable) ────────
-def _load_image_pil(ref):
-    from PIL import Image
-    from io import BytesIO
-
-    if isinstance(ref, bytes):
-        return Image.open(BytesIO(ref)).convert("RGB")
-    s = str(ref)
-    if s.startswith("data:"):                       # data:image/png;base64,…
-        payload = s.split(",", 1)[1] if "," in s else s
-        return Image.open(BytesIO(base64.b64decode(payload))).convert("RGB")
-    if s.startswith(("http://", "https://")):
-        with urllib.request.urlopen(s, timeout=30) as r:
-            return Image.open(BytesIO(r.read())).convert("RGB")
-    if os.path.exists(s):                           # local path (rare in serverless)
-        return Image.open(s).convert("RGB")
-    try:                                            # bare base64
-        return Image.open(BytesIO(base64.b64decode(s))).convert("RGB")
-    except Exception:
-        raise ValueError(f"unsupported image reference: {s[:80]}…")
+def resize_to_cap(img: Image.Image) -> Image.Image:
+    """Shrink to the training pixel cap — bigger images cost tokens and
+    drift from the resolution the checkpoint was trained at."""
+    w, h = img.size
+    if w * h <= MAX_PIXELS:
+        return img
+    scale = (MAX_PIXELS / (w * h)) ** 0.5
+    return img.resize((max(1, int(w * scale)), max(1, int(h * scale))), Image.LANCZOS)
 
 
-def _vision_inputs(messages):
-    """Images for the processor — qwen_vl_utils when present, PIL fallback."""
+def extract_blocks(raw: str):
+    """Best-effort parse of the model's JSON array out of the raw output.
+    Tolerates code fences and prose around the array; returns [] when the
+    output carries no parsable array (caller decides what that means)."""
+    if not raw:
+        return []
+    text = raw.strip()
+    start, end = text.find("["), text.rfind("]")
+    if start == -1 or end <= start:
+        return []
     try:
-        from qwen_vl_utils import process_vision_info
-        images, videos = process_vision_info(messages)
-        return images or None, videos or None
-    except ImportError:
-        images = []
-        for msg in messages:
-            content = msg.get("content")
-            if isinstance(content, list):
-                for part in content:
-                    if isinstance(part, dict) and part.get("type") == "image":
-                        images.append(_load_image_pil(part.get("image")))
-        return (images or None), None
+        items = json.loads(text[start:end + 1])
+    except Exception:
+        return []
+    if not isinstance(items, list):
+        return []
+    blocks = []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        bbox = it.get("bbox_2d", it.get("bbox"))
+        text_content = it.get("text_content", it.get("text"))
+        if not isinstance(bbox, (list, tuple)) or len(bbox) != 4 or text_content is None:
+            continue
+        try:
+            blocks.append({
+                "bbox_2d": [float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])],
+                "text_content": str(text_content),
+            })
+        except (TypeError, ValueError):
+            continue
+    # Reading order: top-to-bottom, then left-to-right (0-1000 space).
+    blocks.sort(key=lambda b: (b["bbox_2d"][1], b["bbox_2d"][0]))
+    return blocks
 
 
 # ── Model load — ONCE per worker boot (this is the cold-start cost) ─────
@@ -139,67 +254,50 @@ _gpu_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU
 print(f"[worker] ready — {_gpu_name}")
 
 
-# ── Input normalization ──────────────────────────────────────────────────
-def build_messages(job_input):
-    """Accepts {prompt, image?, system?} or a full {messages: [...]} array.
-    Plain-string message content is wrapped for the VLM template."""
-    if isinstance(job_input.get("messages"), list) and job_input["messages"]:
-        messages = []
-        for msg in job_input["messages"]:
-            role, content = msg.get("role", "user"), msg.get("content", "")
-            if isinstance(content, str):
-                content = [{"type": "text", "text": content}]
-            messages.append({"role": role, "content": content})
-        return messages
-
-    content = []
-    if job_input.get("image"):
-        content.append({"type": "image", "image": job_input["image"]})
-    content.append({
-        "type": "text",
-        "text": job_input.get("prompt") or "Extract all text from this document as clean markdown.",
-    })
-    messages = [{"role": "user", "content": content}]
-    if job_input.get("system"):
-        messages.insert(0, {"role": "system", "content": [{"type": "text", "text": job_input["system"]}]})
-    return messages
-
-
 # ── The handler ──────────────────────────────────────────────────────────
 def handler(job):
     job_input = job.get("input") or {}
     started = time.time()
 
-    max_new_tokens = int(job_input.get("max_tokens", DEFAULT_MAX_NEW_TOKENS))
-    temperature    = float(job_input.get("temperature", 0.7))
-    do_sample      = bool(job_input.get("do_sample", True))
-    messages       = build_messages(job_input)
+    image_b64 = job_input.get("image_b64") or job_input.get("image")
+    if not isinstance(image_b64, str) or not image_b64.strip():
+        return {"error": "image_b64 is required (PNG/JPEG, raw base64 or a data: URI)"}
+    if image_b64.startswith("data:"):
+        image_b64 = image_b64.split(",", 1)[1] if "," in image_b64 else image_b64
+    try:
+        img = Image.open(io.BytesIO(base64.b64decode(image_b64))).convert("RGB")
+    except Exception:
+        return {"error": "image_b64 is not a valid image"}
 
-    prompt_text = _processor.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True,
-    )
-    images, videos = _vision_inputs(messages)
-    inputs = _processor(
-        text=[prompt_text], images=images, videos=videos, return_tensors="pt",
-    ).to(_model.device)
+    img = resize_to_cap(img)
+    prompt = job_input.get("prompt") if ALLOW_PROMPT else None
+    prompt = prompt if isinstance(prompt, str) and prompt.strip() else PRODUCTION_PROMPT
+    try:
+        max_new_tokens = int(job_input.get("max_new_tokens") or job_input.get("max_tokens") or DEFAULT_MAX_NEW_TOKENS)
+    except (TypeError, ValueError):
+        max_new_tokens = DEFAULT_MAX_NEW_TOKENS
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    images = [Image.open(io.BytesIO(buf.getvalue()))]
+
+    text = prompt if prompt.startswith("<image>") else f"<image>\n{prompt}"
+    inputs = _processor(text=[text], images=images, return_tensors="pt").to(_model.device)
 
     with torch.inference_mode():
-        generated = _model.generate(
-            **inputs,
-            max_new_tokens=max_new_tokens,
-            do_sample=do_sample,
-            temperature=temperature if do_sample else None,
-        )
+        generated = _model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
 
-    completion = _processor.decode(
+    raw = _processor.decode(
         generated[0][inputs["input_ids"].shape[1]:],
         skip_special_tokens=True,
     )
     return {
-        "output": completion,
+        "raw": raw,
+        "blocks": extract_blocks(raw),
+        "image_size": list(img.size),
         "model": MODEL_ID,
         "gpu": _gpu_name,
-        "timing_s": round(time.time() - started, 2),
+        "wall_ms": int((time.time() - started) * 1000),
     }
 
 
