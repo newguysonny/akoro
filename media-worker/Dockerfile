@@ -1,7 +1,9 @@
 # akoro media-worker — ffmpeg + the job server, nothing else.
 # The API never touches media again: this container downloads from R2
 # (or reads HLS streams directly), runs ffmpeg, uploads back to R2.
-FROM node:22-bookworm-slim
+# linux/amd64 is what Containers runs — pin it so an Apple-Silicon or ARM
+# build machine doesn't produce an image the platform rejects.
+FROM --platform=linux/amd64 node:22-bookworm-slim
 
 # ffmpeg/ffprobe from Debian — the same binaries the Render worker used.
 RUN apt-get update \

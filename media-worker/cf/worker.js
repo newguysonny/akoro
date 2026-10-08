@@ -1,23 +1,39 @@
 // cf/worker.js — the Cloudflare edge wrapper.
 //
-// A tiny Worker whose only job is to route requests into the Container
-// (cloudflare.com/products/containers). The container is started on
-// demand and allowed to idle down; jobs themselves are serialized
-// INSIDE the container (MAX_CONCURRENT_JOBS), so scaling means more
-// container instances, not bigger boxes.
+// Routing follows the documented pattern (developers.cloudflare.com/
+// containers): the DO binding (env.MEDIA) is the container's namespace,
+// and getByName() hands each request to one running instance. The
+// container starts on first request, serves until idle, then sleeps.
 //
-// Secrets live in the WORKER environment (wrangler secret put) and are
-// handed to the container as start env — the container image itself
-// carries none.
+// Secrets live in the WORKER environment (`wrangler secret put …`) and
+// are copied onto the container at start via envVars — the Worker env is
+// the only place secrets exist; the container image carries none.
 
-import { Container, getContainer } from "cloudflare:workers";
+import { Container } from "@cloudflare/containers";
 
 export class MediaContainer extends Container {
   defaultPort = 8080;
-  // Idle-down after 10 quiet minutes; a new request cold-starts it.
+  // Idle-down after 10 quiet minutes; the next request cold-starts it
+  // (~2–3 s), and /jobs/:id polling keeps it warm while jobs run.
   sleepAfter = "10m";
-  // A crashed/suspended instance restarts on the next request.
-  restartPolicy = "on-failure";
+
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.envVars = {
+      INTERNAL_SECRET:      env.INTERNAL_SECRET      ?? "",
+      R2_ACCOUNT_ID:        env.R2_ACCOUNT_ID        ?? "",
+      R2_ACCESS_KEY_ID:     env.R2_ACCESS_KEY_ID     ?? "",
+      R2_SECRET_ACCESS_KEY: env.R2_SECRET_ACCESS_KEY ?? "",
+      R2_BUCKET_NAME:       env.R2_BUCKET_NAME       ?? "",
+      R2_PUBLIC_URL:        env.R2_PUBLIC_URL        ?? "",
+      API_BASE_URL:         env.API_BASE_URL         ?? "",
+      MAX_CONCURRENT_JOBS:  "1",
+    };
+  }
+
+  onStart()    { console.log("[media-worker] container started"); }
+  onStop()     { console.log("[media-worker] container stopped"); }
+  onError(err) { console.error("[media-worker] container error:", err); }
 }
 
 export default {
@@ -29,10 +45,10 @@ export default {
       return Response.json({ ok: true, service: "akoro-media-worker-edge" });
     }
 
-    // One shared instance per account: encode jobs are heavy, and the
-    // container's own lane guard keeps them serialized. Fan out later by
-    // hashing job ids onto instances — not needed until encode volume does.
-    const container = getContainer(env.MEDIA);
-    return container.fetch(request);
+    // One shared instance for now: encode jobs are heavy and the
+    // container's own MAX_CONCURRENT_JOBS lane guard serializes them.
+    // To fan out later: getRandom(env.MEDIA, N) from @cloudflare/containers.
+    const container = env.MEDIA.getByName("singleton");
+    return await container.fetch(request);
   },
 };
