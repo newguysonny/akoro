@@ -17,6 +17,7 @@ import db from "../db.js";
 import { redisConnectionOptions } from "./redisOptions.js";
 import { SUITES, suiteByKey, runSuite } from "./evals/index.js";
 import { traceRedis } from "./redisTrace.js";
+import { workerJob } from "./workerLog.js";
 
 const connection = traceRedis(new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "eval-worker" })), "eval-worker");
 connection.on("error", (e) => console.error("[evals/redis]", e.message));
@@ -87,6 +88,8 @@ export function startEvalWorker() {
     settings: { stalledInterval: 300_000 },
   });
 
+  worker.on("completed", (job) => workerJob("evals", "done", job, { runId: job.data?.runId }));
+  worker.on("failed",    (job, err) => workerJob("evals", "failed", job, { runId: job?.data?.runId, error: err?.message }));
   worker.on("error", (e) => console.error("[evals/worker]", e.message));
   console.log(`[evals] worker started (${SUITES.length} suites)`);
   return worker;

@@ -22,6 +22,7 @@ import { hasCoins } from "../../lib/coins.js";
 // an eval must not do: billing, DB writes, delivery.
 import { runAgentLoop } from "./lib/agentLoop.js";
 import { reportAgentActivity, agentToolActivity, clearAgentActivity } from "../../lib/agentActivity.js";
+import { workerJob }                        from "../../lib/workerLog.js";
 
 const MODEL = OPENAI_MODEL;
 
@@ -132,8 +133,14 @@ export const taskWorker = new Worker("task-runner", async (job) => {
   settings:    { stalledInterval: 300_000 }, // 5 min between stalled-job scans
 });
 
-taskWorker.on("completed", (job) => console.log(`[tasks/worker] ✅ Job ${job.id} done`));
-taskWorker.on("failed",    (job, err) => console.error(`[tasks/worker] ❌ Job ${job?.id} failed:`, err.message));
+taskWorker.on("completed", (job) => {
+  console.log(`[tasks/worker] ✅ Job ${job.id} done`);
+  workerJob("tasks-runner", "done", job);
+});
+taskWorker.on("failed",    (job, err) => {
+  console.error(`[tasks/worker] ❌ Job ${job?.id} failed:`, err.message);
+  workerJob("tasks-runner", "failed", job, { error: err?.message });
+});
 
 // Recover overdue tasks on startup
 recoverOverdueTasks().then((n) => n > 0 && console.log(`[tasks/worker] Recovered ${n} overdue tasks`));

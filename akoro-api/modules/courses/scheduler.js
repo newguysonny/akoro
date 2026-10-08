@@ -35,6 +35,7 @@ import { meetingsPost, meetingsDelete } from "../../lib/meetingsBreaker.js";
 import db            from "../../db.js";
 import { createMeeting } from "./meeting-integration.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
+import { workerTick } from "../../lib/workerLog.js";
 
 // This scheduler is now backed by the `live_sessions` Postgres table — the same
 // rows the instructor app and live-sessions router read/write. Status vocabulary
@@ -442,8 +443,13 @@ const ensureDemoSessions = async () => {
 let _tickRunning = false;
 
 const tick = async () => {
-  if (_tickRunning) return;           // avoid overlap on slow DB
+  if (_tickRunning) {           // avoid overlap on slow DB
+    workerTick("live-session-scheduler", { reason: "poll", skipped: "overlap" });
+    return;
+  }
   _tickRunning = true;
+  const tickStart = Date.now();
+  let jobsFound = 0, jobsProcessed = 0;
   try {
     // Keep the demo courses perpetually live-testable. Never fatal.
     try { await ensureDemoSessions(); }
@@ -459,11 +465,13 @@ const tick = async () => {
       .eq("status", "scheduled")
       .lte("scheduled_start", horizon);
 
+    jobsFound += (upcoming ?? []).length;
     for (const s of upcoming ?? []) {
       const startMs = new Date(s.scheduled_start).getTime();
       if (startMs - now <= LINK_LEAD_MIN * 60000 && startMs - now > 0) {
         const linked = await createLiveLink(s);
         if (linked.join_url) {
+          jobsProcessed += 1;   // meeting link created
           await emitToParticipants(s.course_id, "live_class_starting", {
             sessionId: s.id, title: s.title,
             minutesUntil: Math.round((startMs - now) / 60000),
@@ -471,7 +479,7 @@ const tick = async () => {
           });
         }
       }
-      if (startMs <= now) await activateSession(s);
+      if (startMs <= now) { await activateSession(s); jobsProcessed += 1; }
     }
 
     // Live sessions past their end time + grace.
@@ -480,14 +488,20 @@ const tick = async () => {
       .select("*")
       .eq("status", "live");
 
+    jobsFound += (liveOnes ?? []).length;
     for (const s of liveOnes ?? []) {
       const endMs = new Date(s.scheduled_end || s.scheduled_start).getTime() + GRACE_MIN * 60000;
-      if (now >= endMs) await expireSession(s);
+      if (now >= endMs) { await expireSession(s); jobsProcessed += 1; }
     }
   } catch (err) {
     console.error("[scheduler] tick error:", err.message);
   } finally {
     _tickRunning = false;
+    // Every wake-up logs, idle ones included — a column of jobsFound: 0 is
+    // the optimization signal (a 1-minute poll that finds nothing).
+    workerTick("live-session-scheduler", {
+      reason: "poll", jobsFound, jobsProcessed, durationMs: Date.now() - tickStart,
+    });
   }
 };
 

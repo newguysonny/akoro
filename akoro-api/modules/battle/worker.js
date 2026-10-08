@@ -15,6 +15,7 @@ import { thinkingTimeMs, autoPlayers } from "./agentPlayer.js";
 import { embedQuestion, recall, recallStrength, answerFromRecall, guess } from "./agentRecall.js";
 import { updateKnowledgeConfidence, flagBattleReviewTopics } from "./knowledge.js";
 import { emitAutonomyEvent } from "../autonomy/triggers.js";
+import { workerJob } from "../../lib/workerLog.js";
 
 const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "battle-worker" }));
 redis.on("error", (err) => console.error("[battle-worker/redis]", err.message));
@@ -702,7 +703,13 @@ async function refreshLeaderboard(courseId, scope) {
 }
 
 // ─── Worker events ────────────────────────────────────────────────────────────
-worker.on("completed", (job) => console.log(`[battle-worker] ✅ ${job.data.action} battle=${job.data.battleId ?? ""}`));
-worker.on("failed",    (job, err) => console.error(`[battle-worker] ❌ ${job?.data.action} failed:`, err.message));
+worker.on("completed", (job) => {
+  console.log(`[battle-worker] ✅ ${job.data.action} battle=${job.data.battleId ?? ""}`);
+  workerJob("battles", "done", job, { action: job.data?.action });
+});
+worker.on("failed",    (job, err) => {
+  console.error(`[battle-worker] ❌ ${job?.data.action} failed:`, err.message);
+  workerJob("battles", "failed", job, { action: job?.data?.action, error: err?.message });
+});
 
 export default worker;
