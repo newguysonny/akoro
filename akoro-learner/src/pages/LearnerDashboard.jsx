@@ -1180,7 +1180,11 @@ export default function LearnerDashboard() {
                   onOpenCourses={(q)=>navigate(`/app?tab=discovery&view=courses${q?`&q=${encodeURIComponent(q)}`:""}`)}
                   onOpenCourse={(c)=>c?.slug&&navigate(`/course/${c.slug}`)}
                   onOpenRecord={openRecordTracked}
-                  onOpenBattles={()=>goTab('battles')}/>
+                  onOpenBattles={()=>goTab('battles')}
+                  onOpenCommunity={(c)=>c?.id&&navigate(`/communities/${c.id}`)}
+                  onOpenFolder={(f)=>navigate(`/library${f?.id?`?folder=${encodeURIComponent(f.id)}`:""}`)}
+                  onOpenAgent={(a)=>a?.id&&navigate(`/agent/${a.id}`)}
+                  onOpenPharmdCourse={(code)=>navigate(`/app?tab=discovery&view=pharmd${code?`&course=${encodeURIComponent(code)}`:""}`)}/>
               )
             : <DiscoveryTab/>)}
           {tab==="rankings" && <RankingsTab/>}

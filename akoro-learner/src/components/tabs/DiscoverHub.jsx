@@ -31,7 +31,7 @@ import Toast from '../common/Toast.jsx';
 import DiscoverSearchPage from './DiscoverSearchPage.jsx';
 import { TYPES, matchTypes, FONT } from './dhubTypes.js';
 
-export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord, onOpenBattles, onOpenPharmd, onOpenRail, onOpenContents, userId, initialQuery = '' }) {
+export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord, onOpenBattles, onOpenPharmd, onOpenRail, onOpenContents, onOpenCommunity, onOpenFolder, onOpenAgent, onOpenPharmdCourse, userId, initialQuery = '' }) {
   const { t } = useLang();
   const [query, setQuery] = useState(initialQuery);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -76,6 +76,10 @@ export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord,
           onOpenCourse={onOpenCourse}
           onOpenRecord={onOpenRecord}
           onOpenBattles={onOpenBattles}
+          onOpenCommunity={onOpenCommunity}
+          onOpenFolder={onOpenFolder}
+          onOpenAgent={onOpenAgent}
+          onOpenPharmdCourse={onOpenPharmdCourse}
         />
       ) : (
       <>
