@@ -27,7 +27,7 @@ const [routesSrc, libSrc, appSrc, manifest, recordsMigration, teachSessionSrc, e
   read("extractLib.js"),
   read("../../app.js"),
   read("../../migrations/manifest.json"),
-  read("../../migrations/2026-record-extractions.sql"),
+  read("../../migrations/2026-content-cache.sql"),
   read("../../../akoro-learner/src/components/library/RecordTeachSession.jsx"),
   read("../../../akoro-learner/src/components/library/extractPages.js"),
   read("../../../akoro-learner/src/services/recordsApi.js"),
@@ -136,7 +136,7 @@ test("parsePageOnRunpod: queue failures throw, incomplete statuses throw, unconf
 
 /* ── route + wiring contract ───────────────────────────────────────────── */
 
-test("the extract routes authenticate, check ownership, cap batches, and 501 honestly", () => {
+test("the extract routes: auth, ownership OR shared access, caps, claim, honest 501", () => {
   const postIdx = routesSrc.indexOf('router.post("/extract"');
   const patchIdx = routesSrc.indexOf('router.patch("/:id"');
   assert.ok(postIdx !== -1 && patchIdx !== -1, "the POST /extract route exists");
@@ -144,20 +144,27 @@ test("the extract routes authenticate, check ownership, cap batches, and 501 hon
 
   assert.match(routesSrc, /router\.post\("\/extract", authenticateToken/, "POST /extract is learner-authenticated");
   assert.match(routesSrc, /router\.get\("\/extract\/:recordId", authenticateToken/, "GET /extract/:recordId is learner-authenticated");
-  assert.match(routesSrc, /\.eq\("user_id", userId\)\.maybeSingle\(\)/, "ownership is checked before any parsing");
+  assert.match(routesSrc, /router\.get\("\/extract\/content\/:key", authenticateToken/, "the shared-content read route exists");
+  assert.match(routesSrc, /rec\.user_id !== userId/, "your records stay owner-only");
+  assert.match(routesSrc, /premiumIds\.includes\(rec\.user_id\)/, "shared keys pass the SAME rule the discovery feed uses");
+  assert.match(routesSrc, /claimContentJob\(contentKey, "parse", req\.user\.id\)/, "single-flight claim before spending");
+  assert.match(routesSrc, /finishContentJob\(contentKey, "parse"/, "the claim is released with a status");
+  assert.match(routesSrc, /409/, "a concurrent first-open polls instead of double-spending");
   assert.match(routesSrc, /recordsExtractionEnabled\(\)/, "the enabled gate exists");
   assert.match(routesSrc, /Text extraction isn't configured/, "the honest 501 message");
   assert.match(routesSrc, /MAX_PAGES_PER_REQUEST/, "the ≤8 pages-per-request cap is enforced");
   assert.match(routesSrc, /MAX_IMAGE_B64_CHARS/, "per-page image size cap");
-  assert.match(routesSrc, /onConflict/, "the upsert (idempotent per page) is on the hot path via extractLib");
-  assert.match(libSrc, /onConflict: "record_id,page_number"/, "persistence upserts per (record, page)");
+  assert.match(libSrc, /onConflict: "content_key,page_number"/, "persistence upserts per (file, page)");
+  assert.match(routesSrc, /contentKey: r\.file_key/, "discover-open hands back the shared cache key");
 });
 
-test("the migration exists, is registered, and follows the learner-data rules", () => {
-  assert.match(manifest, /2026-record-extractions\.sql/, "registered in the manifest");
-  assert.match(recordsMigration, /REFERENCES public\.users\(id\) ON DELETE CASCADE/, "rows die with their learner");
-  assert.match(recordsMigration, /REFERENCES edu\.records\(id\) ON DELETE CASCADE/, "rows die with their record");
-  assert.match(recordsMigration, /UNIQUE \(record_id, page_number\)/, "idempotency key");
+test("the shared content cache: file-keyed rows, single-flight claims", () => {
+  assert.match(manifest, /2026-content-cache\.sql/, "registered in the manifest");
+  assert.ok(!manifest.includes("2026-record-extractions.sql"), "the per-record table is gone — cache is file-keyed");
+  assert.match(recordsMigration, /UNIQUE \(content_key, page_number\)/, "idempotency per file+page");
+  assert.match(recordsMigration, /PRIMARY KEY \(content_key, lane\)/, "one claim per file+lane");
+  assert.match(recordsMigration, /CHECK \(lane IN \('parse', 'av'\)\)/, "both lanes share the claim table");
+  assert.match(recordsMigration, /ON DELETE SET NULL/, "shared cache outlives the user who ran the job");
   assert.match(appSrc, /\/api\/records\/extract.*express\.json\(\{ limit: "25mb" \}/, "the route's raised body limit");
 });
 
@@ -166,7 +173,8 @@ test("the reader rasterizes client-side and offers extraction for scans & images
   assert.match(extractPagesSrc, /TARGET_PIXELS\s*=\s*1_600_000/, "rendered a bit under the model's 2MP cap");
   assert.match(extractPagesSrc, /BATCH = 8/, "pages go up in ≤8-page batches");
   assert.match(teachSessionSrc, /Scanned document detected/, "the offer overlay exists");
-  assert.match(teachSessionSrc, /getRecordExtraction/, "the cache is consulted before spending GPU time");
+  assert.match(teachSessionSrc, /getSharedExtraction\(record\.contentKey\)/, "shared files read the shared cache before spending");
+  assert.match(recordsApiSrc, /export async function getSharedExtraction/, "the shared-cache seam exists");
   assert.match(teachSessionSrc, /runRecordExtraction/, "the reader drives the batched run");
   assert.match(recordsApiSrc, /\/api\/records\/extract\//, "the service seam points at the new routes");
   // The layout overlay — stored bboxes become visible on the page

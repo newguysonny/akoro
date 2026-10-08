@@ -30,7 +30,7 @@ const [routesSrc, libSrc, appSrc, manifest, migration, envExample, deepgramSrc,
   read("avTranscribeLib.js"),
   read("../../app.js"),
   read("../../migrations/manifest.json"),
-  read("../../migrations/2026-record-transcripts.sql"),
+  read("../../migrations/2026-content-cache.sql"),
   read("../../.env.example"),
   read("../voice/deepgram.js"),
   read("../../../akoro-learner/src/components/library/RecordTeachSession.jsx"),
@@ -124,21 +124,23 @@ test("the transcribe routes authenticate, own-check, gate and single-run", () =>
   assert.ok(postIdx < fileIdx, "registered before the generic /:id routes");
   assert.match(routesSrc, /router\.post\("\/transcribe", authenticateToken/);
   assert.match(routesSrc, /router\.get\("\/transcribe\/:recordId", authenticateToken/);
-  assert.match(routesSrc, /rec\.user_id !== req\.user\.id/, "ownership checked before any bytes move");
+  assert.match(routesSrc, /router\.get\("\/transcribe\/content\/:key", authenticateToken/, "the shared-content read route exists");
+  assert.match(routesSrc, /rec\.user_id !== userId/, "your records stay owner-only (resolveAiContent)");
+  assert.match(routesSrc, /claimContentJob\(contentKey, "av", req\.user\.id\)/, "cross-instance single flight before spending");
   assert.match(routesSrc, /avEnabled\(\)/, "the enabled gate exists");
   assert.match(routesSrc, /Transcription isn't configured/, "the honest 501");
-  assert.match(routesSrc, /409/, "a running job can't double-start");
-  assert.match(routesSrc, /createPresignedDownload\(rec\.file_key/, "the original downloads via presigned URL");
+  assert.match(routesSrc, /409/, "a concurrent first-open polls instead of double-spending");
+  assert.match(routesSrc, /createPresignedDownload\(contentKey/, "the original downloads via presigned URL");
   assert.match(routesSrc, /Only audio and video records transcribe/, "audio/video kinds only");
   assert.match(appSrc, /from "\.\/modules\/records\/routes\.js"|recordsModule/, "records module is mounted");
 });
 
-test("the migration exists, is registered, and follows the learner-data rules", () => {
-  assert.match(manifest, /2026-record-transcripts\.sql/, "registered in the manifest");
-  assert.match(migration, /REFERENCES public\.users\(id\) ON DELETE CASCADE/, "rows die with their learner");
-  assert.match(migration, /REFERENCES edu\.records\(id\) ON DELETE CASCADE/, "rows die with their record");
+test("the shared transcript cache: file-keyed rows in the content-cache migration", () => {
+  assert.match(manifest, /2026-content-cache\.sql/, "registered in the manifest");
+  assert.ok(!manifest.includes("2026-record-transcripts.sql"), "the per-record table is gone — cache is file-keyed");
   assert.match(migration, /kind IN \('speech', 'visual'\)/, "the two segment kinds");
-  assert.match(migration, /record_transcripts_record_idx/, "the (record_id, start_ms) index for time-order reads");
+  assert.match(migration, /content_transcripts_key_idx/, "the (content_key, start_ms) index for time-order reads");
+  assert.match(migration, /user_id     UUID REFERENCES public\.users\(id\) ON DELETE SET NULL/, "the cache outlives whoever ran the job");
 });
 
 test("the env contract is documented", () => {
@@ -151,7 +153,8 @@ test("the env contract is documented", () => {
 /* ── the reader ────────────────────────────────────────────────────────── */
 
 test("the reader offers transcription, grounds from it, and lists segments with click-to-seek", () => {
-  assert.match(teachSessionSrc, /startRecordTranscription/, "the offer starts the job");
+  assert.match(teachSessionSrc, /startRecordTranscription\(\{ recordId: record\.id, contentKey: record\.contentKey \|\| null \}\)/, "the offer starts the job (shared or own)");
+  assert.match(recordsApiSrc, /export async function getSharedTranscript/, "the shared-transcript seam exists");
   assert.match(teachSessionSrc, /getRecordTranscriptionStatus/, "the job is polled");
   assert.match(teachSessionSrc, /Transcribe this recording\?/, "the av offer overlay exists");
   assert.match(teachSessionSrc, /getRecordTranscript\(record\.id\)/, "the cache is consulted before spending money");

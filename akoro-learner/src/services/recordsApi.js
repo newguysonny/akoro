@@ -148,7 +148,7 @@ export async function deleteRecord(id) {
    the parse worker and caches the result. Scanned PDFs and images come
    back with real, selectable, groundable text. */
 
-/** The cached extraction for a record — { pages:[{pageNumber,markdown}], markdown } (empty when none). */
+/** The cached extraction for one of YOUR records (empty when none). */
 export async function getRecordExtraction(recordId) {
   try {
     const d = await apiGet(`/api/records/extract/${recordId}`);
@@ -156,9 +156,17 @@ export async function getRecordExtraction(recordId) {
   } catch { return { pages: [], markdown: '' }; }   // unconfigured / offline → no extraction, reader still works
 }
 
+/** The cached extraction for a SHARED file (its storage key) — parsed once for everyone. */
+export async function getSharedExtraction(contentKey) {
+  try {
+    const d = await apiGet(`/api/records/extract/content/${encodeURIComponent(contentKey)}`);
+    return d?.data ?? { pages: [], markdown: '' };
+  } catch { return { pages: [], markdown: '' }; }
+}
+
 /** Send rendered pages ({pageNumber, imageBase64}) — one batch of ≤8. */
-export async function extractRecordPages({ recordId, pages }) {
-  const d = await apiPost('/api/records/extract', { recordId, pages });
+export async function extractRecordPages({ recordId, contentKey, pages }) {
+  const d = await apiPost('/api/records/extract', contentKey ? { contentKey, pages } : { recordId, pages });
   return d?.data ?? { pages: [] };
 }
 
@@ -166,7 +174,7 @@ export async function extractRecordPages({ recordId, pages }) {
    The reader offers it for audio/video records; segments ground the
    session and drive click-to-seek in the player. */
 
-/** Cached transcript — { segments:[{kind,startMs,endMs,speaker,text}], text } (empty when none). */
+/** The cached transcript for one of YOUR records (empty when none). */
 export async function getRecordTranscript(recordId) {
   try {
     const d = await apiGet(`/api/records/transcribe/${recordId}`);
@@ -174,15 +182,26 @@ export async function getRecordTranscript(recordId) {
   } catch { return { segments: [], text: '' }; }
 }
 
-/** Start the transcription job (409 while another runs). */
-export async function startRecordTranscription(recordId) {
-  const d = await apiPost('/api/records/transcribe', { recordId });
+/** The cached transcript for a SHARED recording — transcribed once for everyone. */
+export async function getSharedTranscript(contentKey) {
+  try {
+    const d = await apiGet(`/api/records/transcribe/content/${encodeURIComponent(contentKey)}`);
+    return d?.data?.transcript ?? { segments: [], text: '' };
+  } catch { return { segments: [], text: '' }; }
+}
+
+/** Start the transcription job (409 while someone else's runs — the shared
+    transcript lands for everyone when it finishes). */
+export async function startRecordTranscription({ recordId, contentKey }) {
+  const d = await apiPost('/api/records/transcribe', contentKey ? { contentKey } : { recordId });
   return d?.data ?? {};
 }
 
 /** Job status + transcript in one poll — { job, transcript }. */
-export async function getRecordTranscriptionStatus(recordId) {
-  const d = await apiGet(`/api/records/transcribe/${recordId}`);
+export async function getRecordTranscriptionStatus({ recordId, contentKey }) {
+  const d = contentKey
+    ? await apiGet(`/api/records/transcribe/content/${encodeURIComponent(contentKey)}`)
+    : await apiGet(`/api/records/transcribe/${recordId}`);
   return d?.data ?? { job: null, transcript: { segments: [], text: '' } };
 }
 
