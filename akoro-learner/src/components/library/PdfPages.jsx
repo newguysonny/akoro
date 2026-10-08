@@ -50,6 +50,7 @@ export function PdfPage({ pdf, pageNumber, blocks = null }) {
   const [aspect, setAspect] = useState(1.414);          // A4-ish until measured
   const [gone, setGone]     = useState(false);          // render failed — honest fallback
   const [showBlocks, setShowBlocks] = useState(false);  // the extraction overlay
+  const [wrapW, setWrapW]   = useState(0);              // measured CSS width — sizes the extraction text layer
 
   useEffect(() => {
     let cancelled = false;
@@ -97,7 +98,12 @@ export function PdfPage({ pdf, pageNumber, blocks = null }) {
       entries.forEach((en) => { if (en.isIntersecting) render(); });
     }, { root: wrap.closest('.pdf-scroll') || null, rootMargin: '400px 0px' });
     io.observe(wrap);
-    return () => { cancelled = true; io.disconnect(); };
+    // The extraction text layer sizes its type from the laid-out width —
+    // keep it honest across container resizes.
+    const ro = new ResizeObserver(() => setWrapW(wrap.clientWidth || 0));
+    ro.observe(wrap);
+    setWrapW(wrap.clientWidth || 0);
+    return () => { cancelled = true; io.disconnect(); ro.disconnect(); };
   }, [pdf, pageNumber]);
 
   const blockList = Array.isArray(blocks) ? blocks.filter((b) => Array.isArray(b?.bbox_2d) && b.bbox_2d.length === 4) : [];
@@ -125,6 +131,27 @@ export function PdfPage({ pdf, pageNumber, blocks = null }) {
               borderRadius: 3, pointerEvents: 'auto' }}/>
         );
       })}
+      {/* The extraction AS a text layer: each block's text sits transparently
+          over its own bbox, so scans become selectable/searchable exactly
+          like pdf.js text pages. Container ignores pointers; the spans
+          capture only where text actually is. */}
+      {blockList.length > 0 && wrapW > 0 && (
+        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 2 }}>
+          {blockList.filter((b) => !isFigure(b.text_content) && String(b.text_content || '').trim()).map((b, i) => {
+            const [x1, y1, x2, y2] = b.bbox_2d;
+            const hPx = (Math.max(0, y2 - y1) / 1000) * (wrapW * aspect);
+            return (
+              <span key={`btxt-${i}`} style={{ position: 'absolute', left: `${x1 / 10}%`, top: `${y1 / 10}%`,
+                width: `${Math.max(0.5, (x2 - x1) / 10)}%`, height: `${Math.max(0.5, (y2 - y1) / 10)}%`,
+                fontSize: `${Math.max(7, Math.min(30, hPx * 0.6))}px`, lineHeight: 1.15,
+                color: 'transparent', WebkitUserSelect: 'text', userSelect: 'text',
+                whiteSpace: 'pre-wrap', overflow: 'hidden', pointerEvents: 'auto', cursor: 'text' }}>
+                {String(b.text_content || '')}
+              </span>
+            );
+          })}
+        </div>
+      )}
       {blockList.length > 0 && (
         <button onClick={() => setShowBlocks((v) => !v)}
           style={{ position: 'absolute', top: 8, right: 8, zIndex: 3, border: '1px solid rgba(15,23,42,.12)',

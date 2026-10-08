@@ -22,7 +22,7 @@ import { test } from "node:test";
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(join(here, p), "utf8");
 
-const [routesSrc, libSrc, appSrc, manifest, recordsMigration, teachSessionSrc, extractPagesSrc, recordsApiSrc, workerSrc, pdfPagesSrc] = await Promise.all([
+const [routesSrc, libSrc, appSrc, manifest, recordsMigration, teachSessionSrc, extractPagesSrc, recordsApiSrc, workerSrc, pdfPagesSrc, readerSrc, teachModalSrc] = await Promise.all([
   read("routes.js"),
   read("extractLib.js"),
   read("../../app.js"),
@@ -33,6 +33,8 @@ const [routesSrc, libSrc, appSrc, manifest, recordsMigration, teachSessionSrc, e
   read("../../../akoro-learner/src/services/recordsApi.js"),
   read("../../../runpod-worker/handler.py"),
   read("../../../akoro-learner/src/components/library/PdfPages.jsx"),
+  read("../../../akoro-learner/src/components/teaching/SessionReaderModal.jsx"),
+  read("../../../akoro-learner/src/components/teaching/TeachAgentModal.jsx"),
 ]);
 
 const { parseBlocks, sortBlocks, blocksToMarkdown, parsePageOnRunpod, recordsExtractionEnabled } =
@@ -173,6 +175,16 @@ test("the reader rasterizes client-side and offers extraction for scans & images
   assert.match(pdfPagesSrc, /export function PdfPage\(\{ pdf, pageNumber, blocks = null \}\)/, "PdfPage accepts blocks");
   assert.match(pdfPagesSrc, /x1 \/ 10/, "bbox 0-1000 → percent math (value/10)");
   assert.match(pdfPagesSrc, /Layout/, "the per-page Layout toggle chip exists");
+  // Citations: generated tools carry the block bbox, citeJump flashes that region
+  assert.match(readerSrc, /function blockBboxForOffset/, "sentences map back to their extraction block");
+  assert.match(readerSrc, /sentenceCiteFor\(pageIndex, blockBboxForOffset/, "summary/quiz citations carry the block bbox");
+  assert.match(readerSrc, /cite-bbox-flash/, "citeJump flashes the exact bbox region on the page");
+  assert.match(readerSrc, /pageBlocks = null/, "the reader accepts per-page blocks");
+  assert.match(teachModalSrc, /pageBlocks: content\.pageBlocks \|\| null/, "TeachAgentModal forwards pageBlocks to the reader");
+  assert.match(teachSessionSrc, /pageBlocks: pages\.map/, "RecordTeachSession supplies the per-page blocks");
+  // Extracted text becomes a selectable layer on the scan
+  assert.match(pdfPagesSrc, /btxt-/, "block texts render as a transparent selectable layer");
+  assert.match(pdfPagesSrc, /pointerEvents: 'auto', cursor: 'text'/, "spans capture selection; empty areas pass through");
 });
 
 test("the worker owns the prompt contract the model was fine-tuned on", () => {
