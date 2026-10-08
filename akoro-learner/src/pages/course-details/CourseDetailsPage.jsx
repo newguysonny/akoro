@@ -15,6 +15,8 @@ import Toast from '../../components/common/Toast.jsx';
 import AkoroLogo from '../../components/common/AkoroLogo.jsx';
 import AgentSessionViewer from '../../components/courses/AgentSessionViewer.jsx';
 import AddToFolderPage from '../../components/library/AddToFolderPage.jsx';
+import AddToTargetSheet from '../../components/library/AddToTargetSheet.jsx';
+import AddToCommunityPage from '../../components/communities/AddToCommunityPage.jsx';
 
 /* ── palette ──────────────────────────────────────────────── */
 import { INK, MUTED, BORDER, LIGHT, BG, FONT, GlobalCss, card, Btn, Avatar, LiveBadge, StarRow, PLATFORMS, PlatformBadge, ActionChips, SectionTitle, DEFAULT_MODULES, DEFAULT_COURSE, VideoPlayer, Curriculum, RV_BG, Reviews, AGENTS, BATTLES, BattleCard, BattlesSection, REVISIONS, RV_HOST_BG, RevisionsSection, mapCourse, CourseOverview, EnrolledVideoView } from './parts.jsx';
@@ -52,6 +54,22 @@ export default function CourseDetailsPage() {
   const openAgentSession = (lesson) => { setAgentLesson(lesson); setAgentOpen(true); };
   const [isEnrolled, setIsEnrolled] = useState(false);
   const [addToFolder, setAddToFolder] = useState(null);   // the lesson being filed into folders
+  const [addToCommunity, setAddToCommunity] = useState(null);   // the lesson being shared to communities
+  const [addTarget, setAddTarget] = useState(null);           // the snapshot awaiting a folder/community pick
+  /* ⋯ on a curriculum lesson → choose where to file it (folder or
+     community). The snapshot is stored at add time (it plays back from
+     here via the stored link). */
+  const openLessonAdd = (lesson) => {
+    if (!lesson) return;
+    setAddTarget({
+      itemType: 'lesson',
+      itemRef: String(lesson.id ?? ''),
+      title: lesson.title,
+      sub: `${view.course?.title || 'Course'}${lesson.module ? ` · ${lesson.module}` : ''}`,
+      kind: lesson.type === 'video' ? 'video' : 'text',
+      link: `/course/${view.course?.slug || slug}`,
+    });
+  };
   const [loading, setLoading] = useState(true);
   const [enrolling, setEnrolling] = useState(false);
   const [toast, setToast] = useState(null);
@@ -194,13 +212,13 @@ export default function CourseDetailsPage() {
         {loading ? (
           <div style={{ height: 200, borderRadius: 22, background: '#EDE8E1', animation: 'cp-pulse 1.5s ease infinite' }} />
         ) : isEnrolled && courseType === 'video' ? (
-          <EnrolledVideoView course={view.course} modules={view.modules} onAgentSession={openAgentSession} onLessonMore={setAddToFolder} />
+          <EnrolledVideoView course={view.course} modules={view.modules} onAgentSession={openAgentSession} onLessonMore={openLessonAdd} />
         ) : (
           <CourseOverview
             type={courseType} isEnrolled={isEnrolled} course={view.course} modules={view.modules}
             onPlay={() => {}} onEnrol={enroll} enrolling={enrolling}
             onAddToCart={addToCart} addingCart={addingCart} inCart={inCart(view.course.id)}
-            onJoinLive={() => navigate('/app')} onAgentSession={openAgentSession} onLessonMore={setAddToFolder} />
+            onJoinLive={() => navigate('/app')} onAgentSession={openAgentSession} onLessonMore={openLessonAdd} />
         )}
       </div>
 
@@ -213,19 +231,25 @@ export default function CourseDetailsPage() {
         />
       )}
 
-      {/* ⋯ on a curriculum lesson — file it into folders (it plays back
-          from here via the stored link). */}
+      {/* ⋯ on a curriculum lesson — folder or community. */}
+      {addTarget && (
+        <AddToTargetSheet
+          item={addTarget}
+          onClose={() => setAddTarget(null)}
+          onPickFolder={(snap) => { setAddToFolder(snap); setAddTarget(null); }}
+          onPickCommunity={(snap) => { setAddToCommunity(snap); setAddTarget(null); }}
+        />
+      )}
       {addToFolder && (
         <AddToFolderPage
-          item={{
-            itemType: 'lesson',
-            itemRef: String(addToFolder.id ?? ''),
-            title: addToFolder.title,
-            sub: `${view.course?.title || 'Course'}${addToFolder.module ? ` · ${addToFolder.module}` : ''}`,
-            kind: addToFolder.type === 'video' ? 'video' : 'text',
-            link: `/course/${view.course?.slug || slug}`,
-          }}
+          item={addToFolder}
           onClose={() => setAddToFolder(null)}
+        />
+      )}
+      {addToCommunity && (
+        <AddToCommunityPage
+          item={addToCommunity}
+          onClose={() => setAddToCommunity(null)}
         />
       )}
 
