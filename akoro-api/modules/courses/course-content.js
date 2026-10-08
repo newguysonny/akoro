@@ -33,6 +33,7 @@
 import { Router }                         from "express";
 import { body, param, validationResult }  from "express-validator";
 import db                                 from "../../db.js";
+import { autoTranscribeContent } from "../records/avTranscribeLib.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { awardXP, XP }                     from "../ranking/routes.js";
 
@@ -83,6 +84,25 @@ const requireEnrollment = asyncHandler(async (req, res, next) => {
   req.enrollment = enrollment;
   next();
 });
+
+/**
+ * fireLessonTranscription — "always extract" for course videos. Whenever a
+ * lesson's video_url lands (lesson created with it, or set/changed by an
+ * update, or the encode worker completing a just-uploaded file), the video
+ * transcribes itself in the background under the shared lesson:<id> key.
+ * Claim-first via edu.content_jobs, so this, the encode hook and a learner
+ * tapping the reader's offer all collapse into ONE transcription.
+ */
+const fireLessonTranscription = (lesson, userId) => {
+  if (!lesson?.id || !lesson.video_url) return;
+  void autoTranscribeContent({
+    userId: userId ?? null,
+    contentKey: `lesson:${lesson.id}`,
+    name: lesson.title,
+    mime: "video/mp4",
+    fileUrl: lesson.video_url,
+  });
+};
 
 // ─── § VALIDATION RULES ───────────────────────────────────────────────────────
 
@@ -356,6 +376,9 @@ const lessonHandlers = {
       .single();
 
     if (error) throw new Error(error.message);
+    // "Always extract": a lesson that lands with a video transcribes itself
+    // in the background — the transcript is ready before the first learner.
+    fireLessonTranscription(data, req.user?.id);
     res201(res, data);
   }),
 
@@ -378,6 +401,7 @@ const lessonHandlers = {
       .single();
 
     if (error || !data) return res404(res, "Lesson not found");
+    if (updates.video_url !== undefined) fireLessonTranscription(data, req.user?.id);
     res200(res, data);
   }),
 

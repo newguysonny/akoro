@@ -18,6 +18,7 @@ import {
   listRecords, presignRecordUpload, putFileTo, createRecord,
   setRecordProgress, deleteRecord,
 } from '../../services/recordsApi.js';
+import { autoExtractUpload } from '../library/extractPages.js';
 
 const BRAND = '#6C3BFF';
 const RED   = '#EF4444';
@@ -175,7 +176,11 @@ export default function AddRecordModal({ open, onClose, user, onOpenRecord, onRe
       // 1. presign → 2. PUT the bytes straight to R2 (progress!) → 3. register
       const { uploadUrl, fileKey } = await presignRecordUpload({ name: file.name, mime: file.type || '', size: file.size });
       await putFileTo(uploadUrl, file, setPct);
-      await createRecord({ kind: 'upload', fileKey, name: file.name, mime: file.type || '', size: file.size, duration: dur || undefined });
+      const created = await createRecord({ kind: 'upload', fileKey, name: file.name, mime: file.type || '', size: file.size, duration: dur || undefined });
+      // "Always extract" — parse it NOW, in this tab, so the text (and the
+      // search index) is ready before anyone opens it. Silent, cancellable
+      // by simply closing the tab; the reader's offer covers the rest.
+      void autoExtractUpload(created);
       setFile(null); setDur(null); setPct(0);
       await reload();
     } catch (e) {

@@ -58,7 +58,8 @@ import {
   MAX_PAGES_PER_REQUEST, MAX_RECORD_PAGES, MAX_IMAGE_B64_CHARS,
 } from "./extractLib.js";
 import {
-  avEnabled, transcribeRecord, getTranscript,
+  avEnabled, transcribeRecord, getTranscript, replaceTranscript,
+  avKindOf, autoTranscribeContent, autoTranscribeEnabled,
 } from "./avTranscribeLib.js";
 import { indexRecord, indexByContentKey, searchRecordChunks } from "./searchLib.js";
 
@@ -231,6 +232,16 @@ router.post("/", authenticateToken, asyncHandler(async (req, res) => {
     userId, recordId: data.id, name: data.name, contentKey: data.file_key,
     pasteText: data.kind === "paste" ? data.content : null,
   });
+  // "Always extract": an audio/video upload transcribes ITSELF, right now —
+  // the transcript (and its search chunks) simply exist before anyone opens
+  // the record. Claim-first, so this and the explicit route are one job.
+  if (data.kind === "upload" && data.file_key && avEnabled() && autoTranscribeEnabled() && avKindOf(data.mime, data.name)) {
+    void createPresignedDownload(data.file_key, { downloadName: data.name })
+      .then((fileUrl) => autoTranscribeContent({
+        userId, contentKey: data.file_key, name: data.name, mime: data.mime, fileUrl,
+      }))
+      .catch(() => {});
+  }
   res201(res, await toApi(data));
 }));
 

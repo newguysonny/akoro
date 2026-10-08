@@ -58,6 +58,8 @@ import { getSignedUrl }                   from "@aws-sdk/s3-request-presigner";
 import path                               from "path";
 import { fileURLToPath }                  from "url";
 import { authenticateToken, requireRole } from "../auth/routes.js";
+import db                                 from "../../db.js";
+import { autoTranscribeContent }          from "../records/avTranscribeLib.js";
 import { r2Send } from "../../lib/r2Breaker.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -403,6 +405,30 @@ const streamHandlers = {
     if (!updated) return res404(res, `Video ${videoId} not found`);
 
     console.log(`[stream] 📥 Worker update  videoId=${videoId}  status=${data.encodingStatus ?? `${data.encodingProgress}%`}`);
+
+    // "Always extract" — the moment the encode lands in the bucket, the video
+    // transcribes itself (shared lesson:<id> key). If a lesson already points
+    // at this exact URL it is found and queued; if the lesson is written
+    // later, the lesson hooks fire then. Either way: at most one job, and the
+    // reader's manual offer remains as the retry. Never blocks the response.
+    if (data.encodingStatus === "completed" && updated.videoUrl) {
+      try {
+        const { data: lesson } = await db.from("lessons")
+          .select("id, title, video_url").eq("video_url", updated.videoUrl).limit(1).maybeSingle();
+        if (lesson) {
+          void autoTranscribeContent({
+            userId: null,
+            contentKey: `lesson:${lesson.id}`,
+            name: lesson.title,
+            mime: "video/mp4",
+            fileUrl: updated.videoUrl,
+          });
+        }
+      } catch (e) {
+        console.warn("[stream] auto-transcribe lookup skipped:", String(e?.message || e).slice(0, 140));
+      }
+    }
+
     res200(res, updated);
   }),
 };
