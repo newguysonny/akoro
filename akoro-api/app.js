@@ -65,6 +65,7 @@ import pharmdModule              from "./modules/pharmd/routes.js";
 import hfMirrorModule            from "./modules/hfmirror/routes.js";
 import { startRoutineScheduler }  from "./modules/self-study/routines.js";
 import communitiesModule, { COMMUNITIES_QUERY_TIMEOUT_MS } from "./modules/communities/routes.js";
+import { setupDiscussionSocket } from "./modules/communities/discussionSocket.js";
 import instructorModule           from "./modules/instructor/index.js";
 import instructorToolsModule      from "./modules/instructor/tools.js";
 import teachingToolsModule        from "./modules/teaching/tools.js";
@@ -253,6 +254,7 @@ io.on("connection", (socket) => {
 });
 
 setupAdaptiveWebSocket(io);
+setupDiscussionSocket(io);   // community discussions — membership-gated chat rooms
 setupVoiceStreaming(io);
 
 // ─── Core middleware ──────────────────────────────────────────────────────────

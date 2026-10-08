@@ -48,6 +48,7 @@ import { Icon } from '../common/Icons.jsx';
 import { BRAND } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { rasterizePdfPages, rasterizeImageFile, runRecordExtraction } from './extractPages.js';
+import { fetchItemCommunities } from '../../services/communityApi.js';
 
 const MAX_TEXT_CHARS = 500_000;   // a 500k-char text file ≈ 190 reader pages — plenty
 const MAX_REFERENCE_CHARS = 12_000;   // the server's reference cap
@@ -121,6 +122,12 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
   const [extract, setExtract] = useState(null);
   const [pdfBlocks, setPdfBlocks] = useState(() => new Map());  // page → layout blocks (extraction overlay)
   const [avTranscript, setAvTranscript] = useState(null);       // { segments } — audio/video transcript
+  // The communities (of mine) this record is connected to — the reader's
+  // gate for its community discussion. null = lookup not resolved yet
+  // (reader keeps the previous behavior); [] = connected to none: the
+  // discussion feature doesn't exist on this content; [..] = the chat
+  // rides the reader.
+  const [discussionCommunities, setDiscussionCommunities] = useState(null);
   const textsRef  = useRef([]);      // the load flow's per-page text layer (≈'' for scans)
   const applyRef  = useRef(null);    // set by the load flow; applies parsed pages to the session
 
@@ -340,6 +347,19 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [record?.id, type, fileUrl]);
 
+  /* Which of my communities hold this record → the reader's discussion.
+     Best-effort and never blocking: a slow lookup must not delay the
+     material, and a failed one simply keeps the reader as it was. */
+  useEffect(() => {
+    let cancelled = false;
+    setDiscussionCommunities(null);
+    if (!record?.id) return undefined;
+    fetchItemCommunities({ itemType: 'record', itemRef: String(record.id) })
+      .then((list) => { if (!cancelled) setDiscussionCommunities(Array.isArray(list) ? list : []); })
+      .catch(() => { if (!cancelled) setDiscussionCommunities([]); });
+    return () => { cancelled = true; };
+  }, [record?.id]);
+
   /* First open → 10% progress + last-opened stamp (caller's job). */
   useEffect(() => {
     if (state === 'ready' && !openedRef.current) {
@@ -452,6 +472,10 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
     // A/V transcript segments — the reader lists them under the player;
     // clicking a segment seeks the recording to that moment.
     transcript: avTranscript,
+    // Community discussion — persistent group chat of every community
+    // this record is connected to (the discussion is owned by the
+    // community; the record merely hosts it while open).
+    discussion: discussionCommunities ? { communities: discussionCommunities } : null,
   };
 
   /* A remembered session id (24h) makes reopening a record CONTINUE its

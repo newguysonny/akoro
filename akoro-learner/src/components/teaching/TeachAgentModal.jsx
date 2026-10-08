@@ -910,6 +910,10 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
     transcribeState: content.transcribeState || null,
     transcribeError: content.transcribeError || null,
     allowTextMarking: content.allowTextMarking ?? true,
+    // The community discussion attached to this content — every content
+    // connected to one of the learner's communities carries its chat
+    // into the reader. Null (plain topic sessions) keeps the old reader.
+    discussion: content.discussion || null,
     onClose: closeReader,
     onExplainSelection: explainSelection,
   } : {

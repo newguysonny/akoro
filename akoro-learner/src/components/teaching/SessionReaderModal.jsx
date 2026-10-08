@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react
 import { BRAND, GREEN, GOLD, RED } from "../../constants.js";
 import { Icon } from "../common/Icons.jsx";
 import MediaPlayer from "../library/MediaPlayer.jsx";
+import ReaderDiscussion from "./ReaderDiscussion.jsx";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    SessionReaderModal — the Fortizo reader, adopted into the higher-ed
@@ -476,9 +477,13 @@ function TabPill({ tab, active, onSelect, onClose }) {
 
 /* ── Generate grid + creation form (Fortizo) ───────────────────────────────── */
 
-function GenerateGrid({ onPick }) {
+function GenerateGrid({ onPick, discussion }) {
   const generated = TOOL_DEFS.filter((t) => !t.community);
-  const community = TOOL_DEFS.filter((t) => t.community);
+  // The Discussion card only features when this content is CONNECTED to
+  // one of the learner's communities — that's when the messaging exists.
+  // Q&A stays a session-local board either way.
+  const community = TOOL_DEFS.filter((t) => t.community
+    && (t.id !== "discussion" || !!discussion?.communities?.length));
   const Card = (t) => (
     <button
       key={t.id}
@@ -499,8 +504,12 @@ function GenerateGrid({ onPick }) {
     <div className="px-4 pt-3.5 pb-2 flex-shrink-0">
       <div className="font-display text-base font-semibold mb-2" style={{ color: "var(--ak-text)" }}>Generate</div>
       <div className="grid grid-cols-2 gap-2 mb-4">{generated.map(Card)}</div>
-      <div className="font-display text-base font-semibold mb-2" style={{ color: "var(--ak-text)" }}>Community</div>
-      <div className="grid grid-cols-2 gap-2">{community.map(Card)}</div>
+      {community.length > 0 && (
+        <>
+          <div className="font-display text-base font-semibold mb-2" style={{ color: "var(--ak-text)" }}>Community</div>
+          <div className="grid grid-cols-2 gap-2">{community.map(Card)}</div>
+        </>
+      )}
     </div>
   );
 }
@@ -1018,6 +1027,15 @@ export default function SessionReaderModal({
   onTranscribe = null,
   transcribeState = null,   // 'idle' | 'running' | 'failed'
   transcribeError = null,
+  /* discussion — the community discussion attached to this content:
+     { communities:[{id, name, emoji, memberCount}] }. Null = the caller
+     didn't look the content up (plain sessions, other surfaces — the
+     local mock board keeps today's behavior). Empty list = looked up,
+     nothing connected: the messaging only exists where a community
+     connection does, so the Discussion card hides. With communities,
+     the Discussion tab is the community's REAL persistent group chat
+     (owned by the community, live over socket.io). */
+  discussion = null,
 }) {
   const isMobile = useIsMobileView();
   const split = !isMobile && !!chatNode;
@@ -1525,7 +1543,7 @@ export default function SessionReaderModal({
                       <CreationForm toolId={formTool} initialFocus={prefillFocus} onBack={() => setFormTool(null)} onSubmit={handleFormSubmit}/>
                     </div>
                   ) : (
-                    <GenerateGrid onPick={handleToolPick}/>
+                    <GenerateGrid onPick={handleToolPick} discussion={discussion}/>
                   )}
                 </div>
               )}
@@ -1653,16 +1671,23 @@ export default function SessionReaderModal({
           </div>
         )}
         {activeTabId === "discussion" && (
-          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4" style={{ background: "var(--ak-bg)" }}>
-            <CommunityBoard
-              title="Discussion"
-              subtitle="Talk through this material — points, questions, connections."
-              placeholder="Start a discussion…"
-              actionLabel="Post"
-              emptyText="No discussion yet — start the conversation."
-              threads={discussionThreads}
-              setThreads={setDiscussionThreads}
-            />
+          <div className={discussion?.communities?.length ? "flex-1 min-h-0 px-4 py-4" : "flex-1 min-h-0 overflow-y-auto px-4 py-4"} style={{ background: "var(--ak-bg)" }}>
+            {discussion?.communities?.length ? (
+              /* Connected: the community's persistent, real-time group
+                 chat — owned by the community, open on every content
+                 it's connected to. */
+              <ReaderDiscussion communities={discussion.communities}/>
+            ) : (
+              <CommunityBoard
+                title="Discussion"
+                subtitle="Talk through this material — points, questions, connections."
+                placeholder="Start a discussion…"
+                actionLabel="Post"
+                emptyText="No discussion yet — start the conversation."
+                threads={discussionThreads}
+                setThreads={setDiscussionThreads}
+              />
+            )}
           </div>
         )}
 
