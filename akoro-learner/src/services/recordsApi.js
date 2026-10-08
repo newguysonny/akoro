@@ -28,8 +28,15 @@ export async function listRecords() {
 /** The Contents/Materials discovery feed — everyone's uploads and pasted
  *  notes (Premium subscribers' stay private). Metadata only: no fileUrl
  *  rides the list; call discoverRecordOpen() when a card is tapped. */
-export async function discoverRecords() {
-  const d = await apiGet('/api/records/discover');
+/* The Contents/Materials discovery feed — the community's shared records,
+   newest first. `q` (optional) searches the DATABASE (name + paste text);
+   `limit` raises the fetch cap for search passes. */
+export async function discoverRecords({ q, limit } = {}) {
+  const params = new URLSearchParams();
+  if (q && String(q).trim()) params.set('q', String(q).trim());
+  if (limit) params.set('limit', String(limit));
+  const qs = params.toString();
+  const d = await apiGet(`/api/records/discover${qs ? `?${qs}` : ''}`);
   return d?.data ?? [];
 }
 

@@ -284,7 +284,7 @@ test("folder items: any content files into folders, snapshots at add time", () =
   assert.ok(!/topic:\s*\[[^\]]*Add to Library/.test(pharmd), "the old stub label is gone from the topic sheet");
   assert.ok(libraryPage.includes("MoreBtn"), "every shelf card has the ⋯");
   assert.ok((libraryPage.match(/onMore=\{onMore\}/g) || []).length >= 5, "all five card kinds thread onMore");
-  assert.ok(libraryPage.includes("openAddToFolder"), "the shelf builds item snapshots");
+  assert.ok(libraryPage.includes("fileItemSnapshot"), "the shelf builds item snapshots");
   assert.ok(libraryPage.includes("itemType: 'record'"), "records are fileable");
   assert.ok(parts.includes("onLessonMore"), "curriculum lessons carry ⋯");
   assert.ok(parts.includes("MoreVertical"), "the lesson ⋯ glyph");

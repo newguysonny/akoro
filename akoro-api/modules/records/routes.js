@@ -250,6 +250,9 @@ async function activePremiumUserIds() {
 router.get("/discover", authenticateToken, asyncHandler(async (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 80, 1), 100);
   const premiumIds = await activePremiumUserIds();
+  // ?q= — database search across the record's name and (for pastes) its
+  // text (PostgREST or-ilike; term sanitised for the grammar).
+  const term = String(req.query.q ?? "").replace(/[,()%\\]/g, " ").trim().slice(0, 80);
 
   let query = edu().from("records")
     .select("id, user_id, kind, name, mime, size, duration, file_key, content, created_at")
@@ -257,6 +260,7 @@ router.get("/discover", authenticateToken, asyncHandler(async (req, res) => {
     .order("created_at", { ascending: false })
     .limit(limit);
   if (premiumIds.length) query = query.not("user_id", "in", `(${premiumIds.join(",")})`);
+  if (term) query = query.or(`name.ilike.%${term}%,content.ilike.%${term}%`);
   const { data: rows, error } = await query;
   if (error) throw error;
 

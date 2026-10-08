@@ -25,6 +25,7 @@ import { useNavigate } from 'react-router-dom';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, STUDENT_ID } from '../../constants.js';
 import { API, apiGet } from '../../services/api.js';
+import useDebouncedValue from '../../hooks/useDebouncedValue.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { useCart } from '../../contexts/CartContext.jsx';
 import Toast from '../common/Toast.jsx';
@@ -428,6 +429,29 @@ export default function DiscoveryTab({ initialQuery = '', focus = null }) {
   loadAllRef.current   = loadAll;
   loadOwnedRef.current = loadOwned;
 
+  /* Search hits the DATABASE, not the 40-row browse cache: the debounced
+     query re-fetches every source with ?q= (server-side ILIKE across
+     title/subject/teacher), and stale responses are dropped by request id.
+     The client-side byQuery still refines on top, so keystrokes feel
+     instant while the authoritative list arrives. */
+  const searchReqRef = useRef(0);
+  const [hits, setHits] = useState(null);   // null = browsing; else { agents?, live?, video? }
+  const debouncedQ = useDebouncedValue(query.trim(), 300);
+  useEffect(() => {
+    if (!debouncedQ) { setHits(null); return; }
+    const id = ++searchReqRef.current;
+    const eq = encodeURIComponent(debouncedQ);
+    apiGet(`${MKT}/listings?limit=50&q=${eq}`)
+      .then(d => { if (searchReqRef.current === id) setHits(h => ({ ...(h || {}), agents: d.listings || [] })); })
+      .catch(() => { if (searchReqRef.current === id) setHits(h => ({ ...(h || {}), agents: [] })); });
+    apiGet(`/api/courses/published?type=live&limit=50&q=${eq}`)
+      .then(d => { if (searchReqRef.current === id) setHits(h => ({ ...(h || {}), live: d.courses || [] })); })
+      .catch(() => { if (searchReqRef.current === id) setHits(h => ({ ...(h || {}), live: [] })); });
+    apiGet(`/api/courses/published?type=video&limit=50&q=${eq}`)
+      .then(d => { if (searchReqRef.current === id) setHits(h => ({ ...(h || {}), video: d.courses || [] })); })
+      .catch(() => { if (searchReqRef.current === id) setHits(h => ({ ...(h || {}), video: [] })); });
+  }, [debouncedQ]);
+
   // Live refresh — backend pushes agent_purchased after a payment confirms.
   useEffect(() => {
     if (typeof window === 'undefined' || !window.io) return;
@@ -461,9 +485,15 @@ export default function DiscoveryTab({ initialQuery = '', focus = null }) {
   const q = query.trim().toLowerCase();
   const byQuery = (text) => !q || (text || '').toLowerCase().includes(q);
 
-  const fAgents = useMemo(() => agents.filter(a => matchCat(a.subject, cat) && byQuery(`${a.title} ${a.teacher_name} ${a.subject}`)), [agents, cat, q]);
-  const fLive   = useMemo(() => live.filter(c => matchCat(c.subject, cat) && byQuery(`${c.title} ${c.subject}`)), [live, cat, q]);
-  const fVideo  = useMemo(() => video.filter(c => matchCat(c.subject, cat) && byQuery(`${c.title} ${c.subject}`)), [video, cat, q]);
+  /* While searching, the sources are the DATABASE hits (?q= server-side);
+     while browsing, they're the curated 40-row feeds. */
+  const agentsPool = hits ? (hits.agents ?? []) : agents;
+  const livePool   = hits ? (hits.live   ?? []) : live;
+  const videoPool  = hits ? (hits.video  ?? []) : video;
+
+  const fAgents = useMemo(() => agentsPool.filter(a => matchCat(a.subject, cat) && byQuery(`${a.title} ${a.teacher_name} ${a.subject}`)), [agentsPool, cat, q]);
+  const fLive   = useMemo(() => livePool.filter(c => matchCat(c.subject, cat) && byQuery(`${c.title} ${c.subject}`)), [livePool, cat, q]);
+  const fVideo  = useMemo(() => videoPool.filter(c => matchCat(c.subject, cat) && byQuery(`${c.title} ${c.subject}`)), [videoPool, cat, q]);
 
   // Curated Udemy-style sections, derived from the combined course pool.
   const pool = useMemo(() => [...fLive, ...fVideo], [fLive, fVideo]);

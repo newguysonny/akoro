@@ -23,6 +23,11 @@ const router = Router();
 // want a category key (for filter pills), an emoji and a 2-stop
 // gradient. Map subject → presentation here so the front-end
 // stays unchanged.
+
+/* ?q= search term, sanitised for PostgREST's or() grammar: commas and
+   parens separate filters in the string and % is the wildcard, so a raw
+   term would break the filter or leak a broader match. */
+const likeTerm = (raw) => String(raw ?? "").replace(/[,()%\\]/g, " ").trim().slice(0, 80);
 const SUBJECT_META = {
   "mathematics":         { cat: "stem",      emoji: "🧮", grad: ["#E8F0FF", "#D4E4FF"] },
   "further mathematics": { cat: "stem",      emoji: "📐", grad: ["#E8F0FF", "#D4E4FF"] },
@@ -91,6 +96,10 @@ router.get("/courses/published", async (req, res) => {
       .eq("is_published", true);
     // Optional ?type=live|video filter for the discovery categories.
     if (req.query.type === "live" || req.query.type === "video") q = q.eq("course_type", req.query.type);
+    // Optional ?q= — database search across title, description and subject
+    // (PostgREST or-ilike). Discovery passes the learner's debounced query.
+    const term = likeTerm(req.query.q);
+    if (term) q = q.or(`title.ilike.%${term}%,description.ilike.%${term}%,subject.ilike.%${term}%`);
     const { data, error } = await q
       .order("rating", { ascending: false })
       .order("total_students", { ascending: false })

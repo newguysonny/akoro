@@ -14,7 +14,7 @@
  *   • folders are not shown until the Library has a real folders endpoint.
  * No sample classmates, course progress, or folder results are invented.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BRAND, GREEN, GOLD, SUBJECT_COLORS } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { Icon } from '../common/Icons.jsx';
@@ -22,6 +22,7 @@ import { apiGet } from '../../services/api.js';
 import { listRecords } from '../../services/recordsApi.js';
 import { TYPES, matchTypes, FONT } from './dhubTypes.js';
 import { useIsMobileView } from '../teaching/SessionReaderModal.jsx';
+import useDebouncedValue from '../../hooks/useDebouncedValue.js';
 
 export const RECENTS_KEY = 'akoro.dhubRecents';
 export const MAX_RECENTS = 8;
@@ -237,21 +238,34 @@ export default function DiscoverSearchPage({
   const hasResults = typeRows.length || materialRows.length || courseRows.length || classmateRows.length;
   const loadingSearch = learningLoading || peopleLoading;
 
-  /* Catalogue and enrolled courses are separate on purpose. Public results can
-     include any published course; the default Continue learning surface only
-     includes a course the signed-in learner enrolled in. */
+  /* Catalogue search hits the DATABASE: the debounced query re-fetches the
+     published-courses endpoints with ?q= (server-side ILIKE across title,
+     description and subject, raised cap) and stale responses are dropped
+     by request id. Empty query restores the browse fetch. */
+  const catalogueReqRef = useRef(0);
+  const debouncedQ = useDebouncedValue(query.trim(), 300);
   useEffect(() => {
-    let alive = true;
+    const id = ++catalogueReqRef.current;
+    const eq = debouncedQ ? `&q=${encodeURIComponent(debouncedQ)}` : '';
+    const cap = debouncedQ ? 50 : 40;
     Promise.all([
-      apiGet('/api/courses/published?type=live&limit=40').catch(() => null),
-      apiGet('/api/courses/published?type=video&limit=40').catch(() => null),
+      apiGet(`/api/courses/published?type=live&limit=${cap}${eq}`).catch(() => null),
+      apiGet(`/api/courses/published?type=video&limit=${cap}${eq}`).catch(() => null),
     ]).then(([live, video]) => {
+      if (catalogueReqRef.current !== id) return;
       const rows = [
         ...(live?.courses || []).map((course) => ({ ...course, _kind: 'live' })),
         ...(video?.courses || []).map((course) => ({ ...course, _kind: 'video' })),
       ];
-      if (alive && rows.length) setCatalogueCourses(rows);
+      if (rows.length) setCatalogueCourses(rows);
+      else if (debouncedQ) setCatalogueCourses([]);   // an empty DB answer is the result
     });
+  }, [debouncedQ]);
+
+  /* Enrolled courses and classmates load once — they're the learner's own
+     small personalised sets, not database searches. */
+  useEffect(() => {
+    let alive = true;
     apiGet('/api/user/enrollments')
       .then((data) => {
         const rows = data?.data || data?.enrollments || [];

@@ -22,13 +22,14 @@
  *   GET /api/records/discover           — the feed (metadata + owners)
  *   GET /api/records/discover/:id/open  — one call per open
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
 import { discoverRecords, discoverRecordOpen, listRecords } from '../../services/recordsApi.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import Toast from '../common/Toast.jsx';
 import RecordTeachSession from '../library/RecordTeachSession.jsx';
+import useDebouncedValue from '../../hooks/useDebouncedValue.js';
 
 const FONT = "'Nunito', sans-serif";
 const CARD_W = 172;
@@ -171,12 +172,32 @@ export default function ContentsDiscoveryTab({ initialQuery = '' }) {
 
   useEffect(() => {
     let alive = true;
-    discoverRecords()
-      .then(d => { if (alive) setItems(Array.isArray(d) ? d : []); })
+    const load = (opts) => discoverRecords(opts)
+      .then(d => { if (alive) { setItems(Array.isArray(d) ? d : []); setLoadErr(false); } })
       .catch(() => { if (alive) setLoadErr(true); })
       .finally(() => { if (alive) setLoading(false); });
-    /* My own shelf's content types — the honest "for you" signal we have:
-       what the learner actually studies leads the recommendations. */
+    load();
+    return () => { alive = false; };
+  }, []);
+
+  /* Search hits the DATABASE, not the 80-row browse feed: the debounced
+     query re-fetches /api/records/discover with ?q= (server-side ILIKE
+     across the record's name and paste text, raised cap). The client-side
+     matches() still refines on top between keystrokes. */
+  const debouncedQ = useDebouncedValue(query.trim(), 300);
+  const searchReqRef = useRef(0);
+  useEffect(() => {
+    if (!debouncedQ) return;
+    const id = ++searchReqRef.current;
+    discoverRecords({ q: debouncedQ, limit: 100 })
+      .then(rows => { if (searchReqRef.current === id) setItems(Array.isArray(rows) ? rows : []); })
+      .catch(() => { /* keep the last good feed */ });
+  }, [debouncedQ]);
+
+  /* My own shelf's content types — the honest "for you" signal we have:
+     what the learner actually studies leads the recommendations. */
+  useEffect(() => {
+    let alive = true;
     listRecords()
       .then(rows => {
         if (!alive) return;
