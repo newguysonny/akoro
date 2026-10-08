@@ -16,6 +16,7 @@ import db from "../../db.js";
 import { notifyUser } from "../notify.js";
 import { redisConnectionOptions } from "../../lib/redisOptions.js";
 import { traceRedis } from "../../lib/redisTrace.js";
+import { workerJob } from "../../lib/workerLog.js";
 import { buildAutonomyTaskMessage } from "./learner-autonomy-policy.js";
 
 const QUEUE_NAME = "learner-agent-autonomy";
@@ -372,8 +373,14 @@ export function startLearnerAutonomyWorker() {
     drainDelay: 60,
     settings: { stalledInterval: 300_000 },
   });
-  worker.on("completed", (job) => console.log(`[learner-autonomy] completed job ${job.id}`));
-  worker.on("failed", (job, error) => console.error(`[learner-autonomy] failed job ${job?.id}:`, error.message));
+  worker.on("completed", (job, result) => {
+    console.log(`[learner-autonomy] completed job ${job.id}`);
+    workerJob("learner-autonomy", "done", job, { skipped: result?.skipped ?? false, delivered: result?.delivered ?? false });
+  });
+  worker.on("failed", (job, error) => {
+    console.error(`[learner-autonomy] failed job ${job?.id}:`, error.message);
+    workerJob("learner-autonomy", "failed", job, { error: error?.message });
+  });
   return worker;
 }
 

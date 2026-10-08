@@ -14,6 +14,7 @@ import Redis from "ioredis";
 import db from "../../db.js";
 import { redisConnectionOptions } from "../../lib/redisOptions.js";
 import { traceRedis } from "../../lib/redisTrace.js";
+import { workerTick, workerJob } from "../../lib/workerLog.js";
 import { runAutonomyCycleForUser } from "./cycle.js";
 import { autonomyCadence, fmtMs, inNightlyWindow, minCycleCutoff, minCycleMs, weeklyRunsCap } from "./cadence.js";
 
@@ -103,42 +104,63 @@ export function startAutonomyCycleWorker() {
     drainDelay: 60_000,
     settings: { stalledInterval: 300_000 },
   });
-  worker.on("failed", (job, err) => console.error(`[autonomy/cycle] job ${job?.id} failed:`, err?.message));
+  worker.on("completed", (job, result) =>
+    workerJob("autonomy-cycle", "done", job, { skipped: result?.skipped ?? null })
+  );
+  worker.on("failed", (job, err) => {
+    console.error(`[autonomy/cycle] job ${job?.id} failed:`, err?.message);
+    workerJob("autonomy-cycle", "failed", job, { error: err?.message });
+  });
 
   // The nightly stagger: one tick paces at most one batch into the queue
   // during the window (and claims rows atomically so a multi-replica deploy
   // cannot double-enqueue the same learner). Tick, window, batch size and
   // per-learner cadence all come from AKORO_AUTONOMY_* (cadence.js).
   schedulerTimer = setInterval(async () => {
+    const tickStart = Date.now();
+    let inWindow = false, jobsFound = 0, jobsProcessed = 0;
     try {
       const cadence = autonomyCadence();
-      if (!inNightlyWindow(new Date(), cadence)) return;
-      const due = await duePlanners(cadence.batchLimit);
-      if (!due.length) return;
-      const cutoff = minCycleCutoff(cadence);
-      const claimed = await edu().from("learner_agent_autonomy")
-        .update({ last_cycle_at: new Date().toISOString() })
-        .in("user_id", due.map((d) => d.user_id))
-        .or(`last_cycle_at.is.null,last_cycle_at.lt.${cutoff}`)
-        .select("user_id");
-      let enqueued = 0;
-      for (const row of claimed?.data ?? []) {
-        await enqueueAutonomyCycle(row.user_id)
-          .then(() => { enqueued += 1; })
-          .catch(async (e) => {
-            console.warn("[autonomy/cycle] enqueue failed:", e.message);
-            // Give the claim back so the next tick retries instead of
-            // locking the learner out for a whole pace window on a
-            // transient failure.
-            edu().from("learner_agent_autonomy")
-              .update({ last_cycle_at: null })
-              .eq("user_id", row.user_id)
-              .then(() => {}, () => {});
-          });
+      inWindow = inNightlyWindow(new Date(), cadence);
+      if (inWindow) {
+        const due = await duePlanners(cadence.batchLimit);
+        jobsFound = due.length;
+        if (due.length) {
+          const cutoff = minCycleCutoff(cadence);
+          const claimed = await edu().from("learner_agent_autonomy")
+            .update({ last_cycle_at: new Date().toISOString() })
+            .in("user_id", due.map((d) => d.user_id))
+            .or(`last_cycle_at.is.null,last_cycle_at.lt.${cutoff}`)
+            .select("user_id");
+          let enqueued = 0;
+          for (const row of claimed?.data ?? []) {
+            await enqueueAutonomyCycle(row.user_id)
+              .then(() => { enqueued += 1; })
+              .catch(async (e) => {
+                console.warn("[autonomy/cycle] enqueue failed:", e.message);
+                // Give the claim back so the next tick retries instead of
+                // locking the learner out for a whole pace window on a
+                // transient failure.
+                edu().from("learner_agent_autonomy")
+                  .update({ last_cycle_at: null })
+                  .eq("user_id", row.user_id)
+                  .then(() => {}, () => {});
+              });
+          }
+          jobsProcessed = enqueued;
+          if (enqueued) console.log(`[autonomy/cycle] enqueued ${enqueued} nightly planner run(s)`);
+        }
       }
-      if (enqueued) console.log(`[autonomy/cycle] enqueued ${enqueued} nightly planner run(s)`);
     } catch (e) {
       console.error("[autonomy/cycle] scheduler tick failed:", e.message);
+    } finally {
+      // Every tick logs, idle ones included: outside the nightly window or
+      // with no due learners is the normal case, and a run of jobsFound: 0
+      // rows is the signal to widen the tick or gate it behind a cheaper
+      // condition.
+      workerTick("autonomy-cycle-scheduler", {
+        reason: "poll", inWindow, jobsFound, jobsProcessed, durationMs: Date.now() - tickStart,
+      });
     }
   }, autonomyCadence().tickMs);
   schedulerTimer.unref?.();

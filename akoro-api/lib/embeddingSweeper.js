@@ -21,6 +21,7 @@
 
 import db from "../db.js";
 import { openai } from "./aiModel.js";
+import { workerTick } from "./workerLog.js";
 
 /**
  * The stores, and how to turn a row into the text that gets embedded.
@@ -215,18 +216,27 @@ export function startEmbeddingSweeper() {
   const on = process.env.NODE_ENV === "production" || process.env.EMBED_SWEEP === "on";
   if (!on) { console.log("[embeddings] sweeper off (set EMBED_SWEEP=on to enable)"); return null; }
 
-  const runIt = async () => {
+  const runIt = async (reason = "poll") => {
+    const start = Date.now();
+    let jobsFound = 0, jobsProcessed = 0;
     try {
       const did = await sweepOnce();
+      jobsFound = did.reduce((n, d) => n + d.filled + d.failed, 0);
+      jobsProcessed = did.reduce((n, d) => n + d.filled, 0);
       if (did.length) console.log("[embeddings] swept:", did.map((d) => `${d.store} +${d.filled}${d.failed ? ` (${d.failed} failed)` : ""}`).join(", "));
     } catch (e) { console.error("[embeddings] sweep error:", e.message); }
+    finally {
+      // Every pass logs, empty ones included — a sweeper that wakes to find
+      // nothing is the optimization signal.
+      workerTick("embedding-sweeper", { reason, jobsFound, jobsProcessed, durationMs: Date.now() - start });
+    }
   };
 
   // Ten minutes. Fast enough that a note is searchable within one lesson,
   // slow enough that an idle instance is not paying to ask an empty question.
   timer = setInterval(runIt, 10 * 60 * 1000);
   timer.unref?.();
-  setTimeout(runIt, 30_000).unref?.();   // after boot settles
+  setTimeout(() => runIt("boot"), 30_000).unref?.();   // after boot settles
   console.log("[embeddings] sweeper started (every 10m)");
   return timer;
 }

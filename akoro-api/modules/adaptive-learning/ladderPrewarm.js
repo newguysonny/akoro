@@ -20,6 +20,7 @@ import cron from "node-cron";
 import db from "../../db.js";
 import { resolveLadder } from "./lessonLadder.js";
 import { NaNaEsumai } from "./agents/nana-esumai/guide.js";
+import { workerTick } from "../../lib/workerLog.js";
 
 const MAX_PER_RUN = Math.max(1, parseInt(process.env.LADDER_PREWARM_MAX ?? "40", 10));
 const key = (s) => String(s || "").toLowerCase().trim();
@@ -92,7 +93,16 @@ export async function prewarmLadders({ max = MAX_PER_RUN } = {}) {
 if (process.env.LADDER_PREWARM !== "off") {
   const schedule = process.env.LADDER_PREWARM_CRON || "20 2 * * *";
   if (cron.validate(schedule)) {
-    cron.schedule(schedule, () => { prewarmLadders().catch(() => {}); });
+    cron.schedule(schedule, () => {
+      const start = Date.now();
+      prewarmLadders()
+        .then(({ scanned, warmed }) => workerTick("ladder-prewarm", {
+          reason: "cron", jobsFound: scanned, jobsProcessed: warmed, durationMs: Date.now() - start,
+        }))
+        .catch((e) => workerTick("ladder-prewarm", {
+          reason: "cron", jobsFound: 0, jobsProcessed: 0, durationMs: Date.now() - start, error: e.message,
+        }));
+    });
     console.log(`[ladder prewarm] scheduled (${schedule})`);
   } else {
     console.warn(`[ladder prewarm] invalid LADDER_PREWARM_CRON "${schedule}" — disabled`);

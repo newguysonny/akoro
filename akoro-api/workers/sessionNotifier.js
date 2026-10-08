@@ -19,6 +19,7 @@ import Redis                          from "ioredis";
 import db                             from "../db.js";
 import { sendSessionNotifications }   from "../services/notificationService.js";
 import { bullRedisOptions }           from "../lib/redisOptions.js";
+import { workerJob }                  from "../lib/workerLog.js";
 
 const redisConn = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", bullRedisOptions);
 redisConn.on("error", (err) => console.error("[sessionNotifier/Redis]", err.message));
@@ -150,12 +151,14 @@ const worker = new Worker(
   }
 );
 
-worker.on("completed", (job, result) =>
-  console.log(`[sessionNotifier] ✅ Job ${job.id} complete  notified=${result.notified}`)
-);
+worker.on("completed", (job, result) => {
+  console.log(`[sessionNotifier] ✅ Job ${job.id} complete  notified=${result.notified}`);
+  workerJob("session-notifier", "done", job, { notified: result?.notified ?? 0 });
+});
 
-worker.on("failed", (job, err) =>
-  console.error(`[sessionNotifier] ❌ Job ${job?.id} failed:`, err.message)
-);
+worker.on("failed", (job, err) => {
+  console.error(`[sessionNotifier] ❌ Job ${job?.id} failed:`, err.message);
+  workerJob("session-notifier", "failed", job, { error: err?.message });
+});
 
 export default worker;

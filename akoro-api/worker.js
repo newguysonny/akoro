@@ -71,6 +71,7 @@ import path                     from "path";
 import { fileURLToPath }        from "url";
 import https                    from "https";
 import http                     from "http";
+import { workerJob }              from "./lib/workerLog.js";
 
 const execAsync = promisify(exec);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -424,11 +425,13 @@ const worker = new Worker(
 worker.on("active",    (job) =>
   console.log(`[worker] ▶️  Active   jobId=${job.id}  videoId=${job.data.videoId}`)
 );
-worker.on("completed", (job, result) =>
-  console.log(`[worker] ✅ Complete  jobId=${job.id}  url=${result.videoUrl}`)
-);
+worker.on("completed", (job, result) => {
+  console.log(`[worker] ✅ Complete  jobId=${job.id}  url=${result.videoUrl}`);
+  workerJob("video-encoding", "done", job, { videoId: job.data?.videoId });
+});
 worker.on("failed",    async (job, err) => {
   console.error(`[worker] ❌ Failed   jobId=${job?.id}  videoId=${job?.data?.videoId}  error=${err.message}`);
+  workerJob("video-encoding", "failed", job, { videoId: job?.data?.videoId, error: err?.message });
   if (job?.data?.videoId) {
     await updateVideoStatus(job.data.videoId, {
       encodingStatus: "failed",

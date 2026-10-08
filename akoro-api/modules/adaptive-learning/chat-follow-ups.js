@@ -15,6 +15,7 @@ import db from "../../db.js";
 import { notifyUser } from "../notify.js";
 import { redisConnectionOptions } from "../../lib/redisOptions.js";
 import { traceRedis } from "../../lib/redisTrace.js";
+import { workerJob } from "../../lib/workerLog.js";
 import { validateFollowUpId, validateFollowUpInput } from "./chat-follow-up-validation.js";
 
 const QUEUE_NAME = "agent-chat-follow-ups";
@@ -286,7 +287,13 @@ export function startChatFollowUpWorker() {
     drainDelay: 60,
     settings: { stalledInterval: 300_000 },
   });
-  worker.on("completed", (job) => console.log(`[chat-follow-ups] delivered job ${job.id}`));
-  worker.on("failed", (job, error) => console.error(`[chat-follow-ups] failed job ${job?.id}:`, error.message));
+  worker.on("completed", (job, result) => {
+    console.log(`[chat-follow-ups] delivered job ${job.id}`);
+    workerJob("chat-follow-ups", "done", job, { skipped: result?.skipped ?? false, delivered: result?.delivered ?? false });
+  });
+  worker.on("failed", (job, error) => {
+    console.error(`[chat-follow-ups] failed job ${job?.id}:`, error.message);
+    workerJob("chat-follow-ups", "failed", job, { error: error?.message });
+  });
   return worker;
 }
