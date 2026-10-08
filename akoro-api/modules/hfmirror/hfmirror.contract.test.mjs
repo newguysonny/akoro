@@ -155,6 +155,8 @@ test("the console routes are key-guarded with safe defaults", () => {
   assert.match(routesSrc, /CONSOLE_HTML/, "the console page exists");
   assert.match(routesSrc, /\/mirror\/status/, "the status endpoint exists");
   assert.match(routesSrc, /textContent/, "the log renders as text, never innerHTML");
+  assert.match(routesSrc, /setInterval\(refresh, 10000\)/, "polling is throttled to 10s (metered connections)");
+  assert.match(routesSrc, /keep this tab open/i, "the console tells the operator to keep the tab open while a job runs");
 });
 
 test("the mirror is mounted and its env contract is documented", () => {

@@ -143,6 +143,7 @@ const CONSOLE_HTML = `<!doctype html>
   h1{font-size:1.05rem;margin:0 0 6px}
   p{color:#94A3B8;font-size:.8rem;margin:0 0 16px}
   #st{color:#7DD3FC}
+  #keep{display:none;color:#FBBF24;font-size:.78rem;margin:-6px 0 14px;line-height:1.5}
   .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
   input[type=text]{flex:1;min-width:200px;background:#1E293B;border:1px solid #334155;color:#E2E8F0;border-radius:8px;padding:9px 12px;font:inherit}
   label{font-size:.78rem;color:#94A3B8;display:flex;align-items:center;gap:6px}
@@ -155,6 +156,7 @@ const CONSOLE_HTML = `<!doctype html>
 <h1>Hugging Face model mirror</h1>
 <p>Copies a model repo into your account: plan → create the destination repo → transfer file by file. Start with a dry run — it lists everything without touching anything.</p>
 <div id="st">loading…</div>
+<p id="keep">⏳ Job running — <strong>keep this tab open</strong>: the 10-second polling keeps this service awake (free Render plans sleep after ~15 quiet minutes) and the log live. Closing the tab never cancels the run — but if you're on the free plan, don't leave it closed for long.</p>
 <div class="row">
   <input type="text" id="source" placeholder="Source repo — e.g. openai/whisper-large-v3">
   <input type="text" id="target" placeholder="Target name (optional — defaults to your-account/source-name)">
@@ -191,6 +193,9 @@ async function refresh(){
       }
     }
     setText("st", s);
+    // While a job runs, surface the keep-alive note: this tab's polling is
+    // what keeps a free-tier Render service awake (and the log live).
+    document.getElementById("keep").style.display = (job && job.running) ? "block" : "none";
     var busy = !!(job && job.running);
     document.getElementById("run").disabled = busy;
   } catch (e) { setText("st", "status fetch failed: " + e.message); }
@@ -220,7 +225,7 @@ document.getElementById("run").onclick = function(){
   if (confirm("Mirror " + v + " for real? A new repo is created on your account and every file is transferred. (Run a dry run first if you haven't.)")) start();
 };
 refresh();
-setInterval(refresh, 1500);
+setInterval(refresh, 10000);   // throttled on purpose — metered connections
 </script>
 </body></html>`;
 
