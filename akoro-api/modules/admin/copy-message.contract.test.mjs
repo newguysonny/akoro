@@ -32,3 +32,15 @@ test("the copy action degrades gracefully and confirms — it never throws", () 
     assert.match(src, /return false;\s*\} catch \{ return false; \}|catch \{ return false; \}/);
   }
 });
+
+test("the agent chat drawer copies a WHOLE session from its row", () => {
+  // The chats drawer's session rows carry a copy affordance beside the
+  // delete one — for researching agent responses outside the app.
+  assert.match(learnerTab, /const copySession = async \(s, e\)/);
+  assert.match(learnerTab, /copySession\(s,e\)/);                       // on the row, next to delete
+  assert.match(learnerTab, /\/sessions\/\$\{s\.id\}\/messages/);        // the FULL conversation from the server
+  assert.match(learnerTab, /copyPlainText/);                            // the shared clipboard helper
+  assert.match(learnerTab, /m\.role === "user" \? "You" : "Agent"/);    // role-labelled for research
+  assert.match(learnerTab, /copiedId===s\.id/);                         // check-then-revert confirmation
+  assert.match(learnerTab, /\} catch \{ \/\* leave the icon untouched \*\/ \}/); // never throws into the tab
+});
