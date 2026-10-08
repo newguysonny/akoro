@@ -8,13 +8,14 @@
  *   upload_folder(…)              →  transfer the files
  *
  * The Hub library's newer copy APIs (copyFolder / copyFiles) only target
- * Buckets, not model repos, so the transfer here is per-file: each source
- * file streams from the resolve endpoint to a temp file on disk, is
- * re-uploaded from that disk-backed FileBlob (lazy reads — the file is
- * never fully buffered in RAM), then deleted. One file in flight keeps
- * RAM and disk flat on a small Render instance, and on xet-backed repos
- * the re-upload dedupes server-side, so weight files the Hub already
- * stores move very little actual data.
+ * Buckets, not model repos, so the transfer here is per-file: each file is
+ * handed to uploadFiles as its source *resolve URL* — the library's
+ * WebBlob lazily range-fetches it (with the token attached, so gated
+ * sources work) while the xet/LFS uploader streams it to the destination.
+ * Nothing is ever buffered to RAM or disk: a multi-GB shard mirrors on a
+ * small Render instance without touching its ephemeral disk, and on
+ * xet-backed repos the upload dedupes server-side, so weight files the
+ * Hub already stores move very little actual data.
  *
  * The engine reports progress through the onLog hook and returns a
  * summary — no console, no process.exit — so the HTTP console, a CLI
@@ -22,11 +23,6 @@
  * log: every line and failure message goes through scrub(), which
  * redacts anything shaped like hf_****.
  */
-import { openAsBlob } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
-import { pipeline } from "node:stream/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { createRepo, listFiles, uploadFiles, whoAmI } from "@huggingface/hub";
 
 export const DEFAULT_HUB_URL    = "https://huggingface.co";
@@ -164,53 +160,41 @@ export async function runMirrorJob(params, hooks = {}) {
     log(`[hf-mirror] ${dst.id} already exists — mirroring into it`);
   }
 
-  /* 4 · Transfer, one file at a time: resolve → temp file → FileBlob
-     upload → delete. Sequential keeps RAM and disk flat. */
+  /* 4 · Transfer, one file at a time: each file is committed as its
+     source resolve URL — the library lazily range-fetches it (auth
+     attached) and streams the upload. Nothing touches RAM or disk. */
   const capBytes = maxFileMb * 1024 * 1024;
-  const dir = await mkdtemp(join(tmpdir(), "hf-mirror-"));
   const failures = [];
   let copied = 0;
   let transferred = 0;
-  try {
-    for (const [i, f] of files.entries()) {
-      const label = `[hf-mirror] (${i + 1}/${files.length}) ${f.path}`;
-      if ((f.size || 0) > capBytes) {
-        log(`${label} — SKIPPED: ${formatBytes(f.size)} is over the ${maxFileMb} MB per-file cap (set HF_MAX_FILE_MB to raise it)`);
-        failures.push({ path: f.path, error: `${formatBytes(f.size)} is over the ${maxFileMb} MB per-file cap` });
-        continue;
-      }
-      const tmpPath = join(dir, `file-${i}.bin`);
-      try {
-        const segs = f.path.split("/").map(encodeURIComponent).join("/");
-        const url = `${hubUrl}/${src.id}/resolve/${encodeURIComponent(revision)}/${segs}`;
-        const headers = {};
-        if (sourceToken || writeToken) headers.authorization = `Bearer ${sourceToken || writeToken}`;
-        const res = await fetch(url, { headers, redirect: "follow" });
-        if (!res.ok || !res.body) {
-          throw new Error(res.status === 401 || res.status === 403
-            ? `HTTP ${res.status} — the token can't read this file (gated model? accept its licence with the source account first)`
-            : `HTTP ${res.status} downloading the file`);
-        }
-        await pipeline(res.body, createWriteStream(tmpPath));
-        const up = await uploadFiles({
-          repo: { name: dst.id, type: "model" },
-          files: [{ path: f.path, content: openAsBlob(tmpPath) }],
-          commitTitle: `Mirror ${src.id}@${revision}`,
-          accessToken: writeToken, hubUrl, fetch: fx,
-        });
-        copied += 1;
-        transferred += f.size || 0;
-        log(`${label} — done (${formatBytes(f.size)})`);
-        void up;
-      } catch (err) {
-        log(`${label} — FAILED: ${err?.message || err}`);
-        failures.push({ path: f.path, error: scrub(String(err?.message || err)) });
-      } finally {
-        await rm(tmpPath, { force: true }).catch(() => {});
-      }
+  for (const [i, f] of files.entries()) {
+    const label = `[hf-mirror] (${i + 1}/${files.length}) ${f.path}`;
+    if ((f.size || 0) > capBytes) {
+      log(`${label} — SKIPPED: ${formatBytes(f.size)} is over the ${maxFileMb} MB per-file cap (set HF_MAX_FILE_MB to raise it)`);
+      failures.push({ path: f.path, error: `${formatBytes(f.size)} is over the ${maxFileMb} MB per-file cap` });
+      continue;
     }
-  } finally {
-    await rm(dir, { recursive: true, force: true }).catch(() => {});
+    try {
+      const segs = f.path.split("/").map(encodeURIComponent).join("/");
+      const url = new URL(`${hubUrl}/${src.id}/resolve/${encodeURIComponent(revision)}/${segs}`);
+      const up = await uploadFiles({
+        repo: { name: dst.id, type: "model" },
+        files: [{ path: f.path, content: url }],
+        commitTitle: `Mirror ${src.id}@${revision}`,
+        accessToken: writeToken, hubUrl, fetch: fx,
+      });
+      copied += 1;
+      transferred += f.size || 0;
+      log(`${label} — done (${formatBytes(f.size)})`);
+      void up;
+    } catch (err) {
+      const raw = String(err?.message || err);
+      const friendly = /\b(401|403)\b/.test(raw)
+        ? `${raw} — the token can't read this file (gated model? accept its licence with the source account first)`
+        : raw;
+      log(`${label} — FAILED: ${friendly}`);
+      failures.push({ path: f.path, error: scrub(friendly) });
+    }
   }
 
   const ok = failures.length === 0;
