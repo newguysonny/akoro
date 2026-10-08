@@ -14,6 +14,8 @@ const sessionChat = await readFile(
   new URL("../../../akoro-learner/src/components/teaching/SessionChatView.jsx", import.meta.url), "utf8");
 const learnerButton = await readFile(
   new URL("../../../akoro-learner/src/components/common/CopyMessageButton.jsx", import.meta.url), "utf8");
+const apiChat = await readFile(
+  new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
 
 test("all three chat surfaces render a per-message copy button", () => {
   assert.match(instructorPage, /<CopyMsgButton text=\{textPart\} \/>/);
@@ -33,14 +35,34 @@ test("the copy action degrades gracefully and confirms — it never throws", () 
   }
 });
 
-test("the agent chat drawer copies a WHOLE session from its row", () => {
-  // The chats drawer's session rows carry a copy affordance beside the
-  // delete one — for researching agent responses outside the app.
+test("the agent chat drawer's session rows carry a kebab options menu", () => {
+  // ONE affordance per row — a vertical-dots button opening a small menu
+  // with the three actions: copy the whole chat, rename it, delete it.
+  assert.match(learnerTab, /<Icon name="ti-dots-vertical" size=\{14\}/);
+  assert.match(learnerTab, /"Copy chat"/);
+  assert.match(learnerTab, /"Rename"/);
+  assert.match(learnerTab, /"Delete"/);
+  assert.match(learnerTab, /data-session-menu/, "menu + kebab share the outside-click guard");
+  assert.match(learnerTab, /openUp=idx>=sessions\.length-2/, "bottom rows open the menu upward so it never clips");
+});
+
+test("the drawer's menu copies a WHOLE session for research", () => {
+  // Pulls the FULL conversation from the server (not just what's on
+  // screen), formats it role-labelled, copies via the shared helper.
   assert.match(learnerTab, /const copySession = async \(s, e\)/);
-  assert.match(learnerTab, /copySession\(s,e\)/);                       // on the row, next to delete
-  assert.match(learnerTab, /\/sessions\/\$\{s\.id\}\/messages/);        // the FULL conversation from the server
-  assert.match(learnerTab, /copyPlainText/);                            // the shared clipboard helper
-  assert.match(learnerTab, /m\.role === "user" \? "You" : "Agent"/);    // role-labelled for research
-  assert.match(learnerTab, /copiedId===s\.id/);                         // check-then-revert confirmation
-  assert.match(learnerTab, /\} catch \{ \/\* leave the icon untouched \*\/ \}/); // never throws into the tab
+  assert.match(learnerTab, /copySession\(s\);/);                                      // fired from the menu item
+  assert.match(learnerTab, /\/sessions\/\$\{s\.id\}\/messages/);                      // the FULL conversation from the server
+  assert.match(learnerTab, /copyPlainText/);                                          // the shared clipboard helper
+  assert.match(learnerTab, /m\.role === "user" \? "You" : "Agent"/);                  // role-labelled for research
+  assert.match(learnerTab, /copiedId===s\.id/, "check-then-revert confirmation");
+  assert.match(learnerTab, /\} catch \{ \/\* leave the icon untouched \*\/ \}/);      // never throws into the tab
+});
+
+test("rename goes through the API's owner-scoped PATCH", () => {
+  assert.match(learnerTab, /apiPatch\(`/);
+  assert.match(learnerTab, /saveRename/);
+  assert.match(learnerTab, /d\.session\.title/, "the server-normalized title wins in the list");
+  assert.match(learnerTab, /apiPatch/, "services/api exports apiPatch");
+  assert.match(apiChat, /router\.patch\("\/sessions\/:id"/, "PATCH /sessions/:id exists");
+  assert.match(apiChat, /sessionTitleFrom\(req\.body\?\.title\)/, "…and normalizes the title like create does");
 });

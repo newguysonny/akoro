@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
-import { apiGet, apiPost, apiDelete, streamPost } from '../../services/api.js';
+import { apiGet, apiPost, apiPatch, apiDelete, streamPost } from '../../services/api.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { ZapIcon, BrainIcon, SparkleIcon, XIcon, Icon } from '../common/Icons.jsx';
 import { AgentAvatar } from '../common/AgentAvatar.jsx';
@@ -254,6 +254,17 @@ function AgentChatTab({
     if (id === sessionIdRef.current) newChat();
   };
 
+  // The row options menu closes on any outside click; Escape also cancels
+  // an in-progress rename.
+  useEffect(() => {
+    if (!menuFor && !renamingId) return undefined;
+    const close = (e) => { if (!e.target.closest?.("[data-session-menu]")) setMenuFor(null); };
+    const onKey = (e) => { if (e.key === "Escape") { setMenuFor(null); setRenamingId(null); } };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", onKey); };
+  }, [menuFor, renamingId]);
+
   // ── Copy a whole session from its row in the drawer ────────────────────────
   // Pulls the FULL conversation from the server (not just what's on screen),
   // formats it role-labelled for pasting into research/notes, and copies via
@@ -261,6 +272,21 @@ function AgentChatTab({
   // a failed copy/fetch leaves it untouched — this must never throw into the
   // tab (same contract as the per-message copy button).
   const [copiedId, setCopiedId] = useState(null);
+  // Row options — one kebab per session opens a small menu: copy, rename,
+  // delete. menuFor = the session id whose menu is open; renamingId = the
+  // session being renamed inline (the row's title becomes an editor).
+  const [menuFor,    setMenuFor]    = useState(null);
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const saveRename = async (s) => {
+    const title = renameDraft.trim();
+    setRenamingId(null);
+    if (!title || title === s.title) return;
+    try {
+      const d = await apiPatch(`${CHAT_BASE}/sessions/${s.id}`, { title });
+      if (d?.session?.title) setSessions(prev => prev.map(x => (x.id === s.id ? { ...x, title: d.session.title } : x)));
+    } catch { /* keep the old title — a failed rename is silent, like delete */ }
+  };
   const copySession = async (s, e) => {
     e?.stopPropagation?.();
     try {
@@ -866,7 +892,7 @@ function AgentChatTab({
       {drawerOpen&&(
         <><div onClick={()=>setDrawerOpen(false)} style={{ position:"fixed",inset:0,zIndex:2000,background:"rgba(6,6,18,.55)",backdropFilter:"blur(5px)" }}/>
         <div style={{ position:"fixed",top:0,bottom:0,left:0,zIndex:2100,width:"min(86vw,320px)",background:"var(--ak-surface)",boxShadow:"6px 0 40px rgba(0,0,0,.18)",animation:"drawer-in .28s cubic-bezier(.32,1,.64,1)",fontFamily:"'Nunito',sans-serif",display:"flex",flexDirection:"column" }}>
-          <style>{`@keyframes drawer-in{from{transform:translateX(-100%)}to{transform:translateX(0)}}`}</style>
+          <style>{`@keyframes drawer-in{from{transform:translateX(-100%)}to{transform:translateX(0)}}.ak-sess-menu-item:hover{background:var(--ak-surface-hover)}`}</style>
           <div style={{ display:"flex",alignItems:"center",gap:12,padding:"16px 16px 13px",borderBottom:"1px solid var(--ak-border)",flexShrink:0 }}>
             <div style={{ width:46,height:46,borderRadius:"50%",background:`${BRAND}15`,border:`2px solid ${BRAND}`,display:"flex",alignItems:"center",justifyContent:"center",position:"relative",flexShrink:0 }}>
               <AgentAvatar emoji={agentEmoji} size={30}/><div style={{ position:"absolute",bottom:0,right:0,width:12,height:12,borderRadius:"50%",background:agentOnline?GREEN:"var(--ak-text-muted)",border:"2px solid #fff",animation:agentOnline?"pulse-dot 2s ease-in-out infinite":"none" }}/>
@@ -908,22 +934,45 @@ function AgentChatTab({
               ):(
                 <div style={{ textAlign:"center",padding:"28px 16px",color:"var(--ak-text-muted)" }}><Icon name="ti-message-circle" size={34} color="var(--ak-text-muted)" style={{opacity:.3}}/><p style={{ fontSize:12.5,fontWeight:700,marginTop:8 }}>{t('agent.no_chats')}</p></div>
               )
-            ):sessions.map(s=>{
+            ):sessions.map((s, idx)=>{
               const active=s.id===sessionId;
+              const openUp=idx>=sessions.length-2;   // bottom rows open upward so the menu never clips
               return (
-                <div key={s.id} onClick={()=>openSession(s.id)} style={{ display:"flex",alignItems:"center",gap:8,padding:"10px 10px",borderRadius:10,cursor:"pointer",background:active?`${BRAND}12`:"transparent",border:`1px solid ${active?`${BRAND}30`:"transparent"}`,marginBottom:2 }}>
-                  <div style={{ flex:1,minWidth:0 }}>
-                    <p style={{ fontSize:13,fontWeight:active?800:700,color:active?BRAND:"var(--ak-text)",margin:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{s.title||t('agent.new_chat')}</p>
-                    <p style={{ fontSize:10.5,color:"var(--ak-text-muted)",margin:"2px 0 0" }}>{relTime(s.last_message_at)}</p>
-                  </div>
-                  <button onClick={(e)=>copySession(s,e)} title="Copy this chat" aria-label="Copy this chat" style={{ background:"none",border:"none",cursor:"pointer",padding:5,display:"flex",flexShrink:0,opacity:copiedId===s.id?1:.6 }}>
-                    {copiedId===s.id
-                      ? <Icon name="ti-check" size={14} color={GREEN}/>
-                      : <Icon name="ti-copy" size={14} color="var(--ak-text-muted)"/>}
-                  </button>
-                  <button onClick={(e)=>removeSession(s.id,e)} title={t('common.delete')} style={{ background:"none",border:"none",cursor:"pointer",padding:5,display:"flex",flexShrink:0,opacity:.6 }}>
-                    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="var(--ak-text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-                  </button>
+                <div key={s.id} onClick={()=>openSession(s.id)} style={{ position:"relative",display:"flex",alignItems:"center",gap:8,padding:"10px 10px",borderRadius:10,cursor:renamingId===s.id?"default":"pointer",background:active?`${BRAND}12`:"transparent",border:`1px solid ${active?`${BRAND}30`:"transparent"}`,marginBottom:2 }}>
+                  {renamingId===s.id?(
+                    <div data-session-menu onClick={(e)=>e.stopPropagation()} style={{ display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0 }}>
+                      <input autoFocus value={renameDraft} onChange={(e)=>setRenameDraft(e.target.value)}
+                        onKeyDown={(e)=>{ if(e.key==="Enter") saveRename(s); else if(e.key==="Escape") setRenamingId(null); }}
+                        maxLength={80} aria-label="Chat name"
+                        style={{ flex:1,minWidth:0,fontSize:13,fontWeight:700,color:"var(--ak-text)",background:"var(--ak-surface-hover)",border:`1.5px solid ${BRAND}55`,borderRadius:8,padding:"6px 9px",outline:"none",fontFamily:"'Nunito',sans-serif" }}/>
+                      <button type="button" onClick={()=>saveRename(s)} title="Save name" aria-label="Save name" style={{ background:"none",border:"none",cursor:"pointer",padding:4,display:"flex",flexShrink:0 }}><Icon name="ti-check" size={15} color={GREEN}/></button>
+                      <button type="button" onClick={()=>setRenamingId(null)} title={t('common.cancel')||"Cancel"} aria-label={t('common.cancel')||"Cancel"} style={{ background:"none",border:"none",cursor:"pointer",padding:4,display:"flex",flexShrink:0 }}><Icon name="ti-x" size={15} color="var(--ak-text-muted)"/></button>
+                    </div>
+                  ):(
+                    <>
+                      <div style={{ flex:1,minWidth:0 }}>
+                        <p style={{ fontSize:13,fontWeight:active?800:700,color:active?BRAND:"var(--ak-text)",margin:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{s.title||t('agent.new_chat')}</p>
+                        <p style={{ fontSize:10.5,color:"var(--ak-text-muted)",margin:"2px 0 0" }}>{relTime(s.last_message_at)}</p>
+                      </div>
+                      <button data-session-menu onClick={(e)=>{ e.stopPropagation(); setMenuFor(menuFor===s.id?null:s.id); }} title="Chat options" aria-label="Chat options" aria-expanded={menuFor===s.id} style={{ background:"none",border:"none",cursor:"pointer",padding:5,display:"flex",flexShrink:0,opacity:.6 }}>
+                        <Icon name="ti-dots-vertical" size={14} color="var(--ak-text-muted)"/>
+                      </button>
+                    </>
+                  )}
+                  {menuFor===s.id&&renamingId!==s.id&&(
+                    <div data-session-menu onClick={(e)=>e.stopPropagation()} style={{ position:"absolute",right:6,top:openUp?undefined:46,bottom:openUp?46:undefined,width:154,background:"var(--ak-surface)",border:"1px solid var(--ak-border2)",borderRadius:12,boxShadow:"0 10px 30px rgba(15,23,42,.18)",padding:4,zIndex:60,animation:"drawer-in .16s ease" }}>
+                      {[
+                        { key:"copy",   icon:copiedId===s.id?"ti-check":"ti-copy",  label:copiedId===s.id?"Copied":"Copy chat", color:copiedId===s.id?GREEN:"var(--ak-text)", run:()=>{ setMenuFor(null); copySession(s); } },
+                        { key:"rename", icon:"ti-pencil", label:"Rename", color:"var(--ak-text)", run:()=>{ setMenuFor(null); setRenamingId(s.id); setRenameDraft(s.title||""); } },
+                        { key:"delete", icon:"ti-trash",  label:"Delete", color:RED, run:(e)=>{ setMenuFor(null); removeSession(s.id,e); } },
+                      ].map(it=>(
+                        <button key={it.key} type="button" className="ak-sess-menu-item" onClick={(e)=>it.run(e)} style={{ display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 10px",borderRadius:8,border:"none",background:"none",cursor:"pointer",fontFamily:"'Nunito',sans-serif",textAlign:"left" }}>
+                          <Icon name={it.icon} size={14} color={it.color}/>
+                          <span style={{ fontSize:12.5,fontWeight:800,color:it.color }}>{it.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
