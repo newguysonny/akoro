@@ -142,3 +142,38 @@ export async function addCommunityItem({ communityIds, itemType, itemRef, title,
   const d = await apiPost('/api/communities/items', { communityIds, itemType, itemRef, title, sub, kind, link });
   return d?.data ?? null;
 }
+
+/* ── Community discussions (the reader's group chat) ──────────────────────── */
+/* One persistent, real-time discussion per community — OWNED by the
+   community, never by the content. When content connected to a community
+   opens in the reader, the reader looks the community up (for-item) and
+   offers the conversation; members chat like a group chat and the same
+   thread follows the community's materials everywhere. Reads degrade,
+   the post throws (the composer shows the API's message). */
+
+/* Which of MY communities have this content — the reader's gate for
+   showing the discussion at all. itemType: record | pharmd_topic |
+   lesson | library. */
+export async function fetchItemCommunities({ itemType = 'record', itemRef }) {
+  try {
+    const d = await apiGet(`/api/communities/for-item?itemType=${encodeURIComponent(itemType)}&itemRef=${encodeURIComponent(itemRef)}`, { cache: false });
+    return d?.data ?? [];
+  } catch { return []; }
+}
+
+/* The discussion's persistent history (newest last). before = ISO cursor
+   for "load earlier". Null on failure — the pane shows an honest error. */
+export async function fetchDiscussionMessages(communityId, { limit = 60, before } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (before) params.set('before', before);
+  try {
+    const d = await apiGet(`/api/communities/${communityId}/discussion/messages?${params}`, { cache: false });
+    return d?.data ?? null;
+  } catch { return null; }
+}
+
+/* Post to the discussion. Throws with a user-facing message. */
+export async function postDiscussionMessage(communityId, body) {
+  const d = await apiPost(`/api/communities/${communityId}/discussion/messages`, { body });
+  return d?.data ?? null;
+}
