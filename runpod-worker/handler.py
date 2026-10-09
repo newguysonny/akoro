@@ -147,7 +147,7 @@ Grouping rules:
 Output JSON only.
 Checkboxes: transcribe every checkbox as [x] if marked or [ ] if unmarked, placed before its label (e.g. "[x] Allergies reviewed"; Y/N pairs as "Y [x] N [ ]"). Include every checkbox, including checkbox grids and Y/N option pairs."""
 
-PRODUCTION_PROMPT = "<image>\n" + PRODUCTION_BBOX_2D_JSON_PROMPT
+PRODUCTION_PROMPT = PRODUCTION_BBOX_2D_JSON_PROMPT
 
 
 # ── Cached-snapshot resolution (RunPod's HF cache layout) ───────────────
@@ -271,7 +271,7 @@ def _ensure_model():
             _model = AutoModelForImageTextToText.from_pretrained(
                 _model_path,
                 trust_remote_code=False,
-                torch_dtype="auto",          # bf16 weights, as shipped
+                dtype="auto",                # bf16 weights, as shipped
                 device_map="auto",           # single GPU → whole model on the GPU
                 local_files_only=(not ALLOW_DOWNLOAD),
             )
@@ -311,7 +311,13 @@ def handler(job):
     img.save(buf, format="PNG")
     images = [Image.open(io.BytesIO(buf.getvalue()))]
 
-    text = prompt if prompt.startswith("<image>") else f"<image>\n{prompt}"
+    # Qwen3-VL's processor expands <|image_pad|> into the EXACT number of
+    # visual tokens for the image. The old '<image>' prefix is literal text
+    # to it — generation then sees 0 image tokens against N features and
+    # raises "Image features and image tokens do not match: tokens: 0".
+    # Operators who already embed the placeholder are left alone.
+    if "<|image_pad|>" not in prompt:
+        prompt = f"<|vision_start|><|image_pad|><|vision_end|>\n{prompt}"
     try:
         processor, model, gpu_name = _ensure_model()
     except ModelUnavailable as e:

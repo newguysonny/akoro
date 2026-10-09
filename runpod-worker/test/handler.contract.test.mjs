@@ -48,6 +48,15 @@ test("a missing cache fails the JOB, not the worker", () => {
     "…with the exact remedy in the message");
 });
 
+test("the vision prompt uses Qwen3-VL's real placeholder — never the obsolete <image>", () => {
+  assert.match(handler, /<\|vision_start\|><\|image_pad\|><\|vision_end\|>/,
+    "the processor expands <|image_pad|> to the exact visual token count");
+  assert.ok(!handler.includes("PRODUCTION_PROMPT = \"<image>"),
+    "the old prefix is literal text to Qwen3-VL — it caused tokens: 0 vs features 1122");
+  assert.match(handler, /"<\|image_pad\|>" not in prompt/, "operator-supplied placeholders survive");
+  assert.match(handler, /dtype="auto"/, "the non-deprecated dtype kwarg");
+});
+
 test("the endpoint contract is unchanged", () => {
   assert.match(handler, /job_input\.get\("image_b64"\) or job_input\.get\("image"\)/);
   assert.match(handler, /PARSE_MODEL_ALLOW_PROMPT/, "prompt lock still configurable");
