@@ -211,6 +211,7 @@ session mode" (`fresh | continuation | decay`); "Adaptive Learning Workflow"
 | D36 | Cross-learner strategy pattern | Counted over **all learners, anonymously** — totals only, shown only when ≥ 5 learners match. Individual stories still need the learner's opt-in. The privacy policy states that anonymous learning statistics are used to recommend strategies. | User decision (Q18). |
 | D37 | Recording struggles and breakthroughs | Every workflow records misconceptions, gaps, recoveries and strategy outcomes through one Education Engine recorder into `learner_concept_evidence`; breakthroughs are detected from those events; existing teaching and exam-prep history is backfilled. Built early (Phase 4a), because Agent Checks, peer help and the strategy pattern depend on it (§7.8.1). | Gap found 2026-10-09: today only Study Prep pass/fail and the Python service write evidence. |
 | D38 | Struggle taxonomy | A closed, versioned list of **41 struggle types in 8 categories** (§7.15): each with how it is detected (rule / agent / learner), when it counts as resolved, whether it is concept-tied and whether it may be a peer story. Struggles and breakthroughs share one table (`edu.learning_struggles`). Six sensitive types (anxiety, health…) are type-and-date only, never stories, learner-deletable; health expires in 30 days. | User decision. |
+| D39 | Schools and instructors see struggles | **Yes.** For learners linked to a school (`mgmt.students.user_id`), the learner's school admins and the instructors who teach their class/subject see the learner's **non-sensitive** struggles (type, concept, open/resolved, what worked) and class-level totals in the school dashboard. **Sensitive types** are not shown individually; instructors see only a neutral "may need support" flag when 2+ sensitive struggles are open within 14 days (no type, no details). Learners are told in Settings → Agent that their school can see this. | User decision (Q19); sensitive handling is the plan default (Q21). |
 | D10 | Who writes narration? | **Harness templates** (`ActivityNarrator`, grown from `narration.js:deliberate()`) for facts; the agent's `intent` (≤ 240 chars, sanitised, untrusted display text) for "why". v3's `narration` field **is** `intent`. | Deterministic where possible (v3 §40), already built (v7). |
 | D11 | Event store | New generic `edu.workflow_events`. `study_prep_events` is kept read-only and backfilled. | One stream model for four workflows (v3 §43). |
 | D12 | Live transport | **Event store is the source of truth; transport is replaceable.** Teaching and Decay keep the existing Socket.IO connection. Study Prep and Practice use SSE (same heartbeat pattern as `/chat/agent`). Both carry the identical event envelope. Replay: `GET /api/workflows/:id/events?after=N`. | v3 §42–43; reuses what already works. |
@@ -678,6 +679,72 @@ recordStrategyOutcome({ strategy, version, before, after })
   persisted on every use). The agent may only choose from it. No repeating the
   same failed strategy indefinitely: `recommendStrategies` excludes a strategy
   that already failed for this concept in this workflow.
+
+#### 7.7.1 Where the Strategy Library lives and how a strategy runs
+
+**Today:** the library is a bare list of five names, written twice
+(`education-engine.js` `STRATEGY_LIBRARY` and `state-machine.js`
+`POLICY.STRATEGY_LIBRARY`), checked by `isPermittedStrategy`, and described to
+the model in one file, `akoro-agent/strategies/STRATEGIES.md`. A name says
+nothing about *how* to run it.
+
+**Target: one module + one workspace folder.**
+
+```
+akoro-api/modules/adaptive-learning/strategies/
+  library.js          ← the single source of truth (data, versioned)
+  library.contract.test.mjs
+akoro-agent/strategies/
+  STRATEGIES.md       ← short overview: when to pick which (loaded in `strategies` sets)
+  teach_back.md       ← how NaNa runs this strategy (one file per strategy, ≤ 8 KB)
+  contrast_pairs.md
+  …
+```
+
+Each entry in `library.js` is a definition, not just a name:
+
+```js
+{
+  id: "contrast_pairs",
+  version: 3,                        // library version it was added/changed in
+  status: "enabled",                 // enabled | disabled (admin/env kill switch)
+  name: "Contrast pairs",
+  summary: "Put two easily-confused ideas side by side and make the learner state the difference.",
+  targets: ["interference", "overgeneralization", "misconception"],   // §7.15 struggle types
+  workflows: ["study_prep", "teaching", "decay_review"],              // where it may be chosen
+  runsAs: { workflow: "teaching", mode: "teach_agent", operation: "teach" },
+  guide: "strategies/contrast_pairs.md",   // NaNa's instructions, loaded into the Teaching context
+  success: "both concepts distinguished on a mixed Agent Check",
+  limits: { maxUsesPerTopic: 2 },
+  cost: "normal_teaching_turns",
+}
+```
+
+**How a strategy is used, end to end:**
+
+1. A struggle is detected (§7.15) — e.g. `interference` between evaporation
+   and transpiration.
+2. The Adaptive Learning Engine lists strategies whose `targets` include that
+   struggle and whose `workflows` include the current workflow, ranked by the
+   anonymous pattern (what worked for others) and this learner's history.
+3. The controller agent picks one (`request_teaching({ strategy: "contrast_pairs", … })`).
+4. The harness checks it: in the library, `enabled`, allowed in this workflow,
+   under its `limits` → otherwise `strategy_not_permitted`.
+5. It runs where `runsAs` says (here: a Teaching session). The Context Manager
+   adds the strategy's `guide` file to NaNa's context, so NaNa knows exactly
+   how to run it.
+6. The result is judged against `success` (usually the next Agent Check);
+   `recordStrategyOutcome` stores it with `strategy_version`; if the struggle
+   resolves, the breakthrough's `what_worked_strategy` is this id.
+
+**Adding or changing a strategy** = one entry in `library.js` + its guide MD
+file + a manifest entry for the guide; the contract test checks every entry
+has a guide, valid targets and workflows. Nothing else changes (no agent-loop
+or harness edits). Versions are persisted on every use, so old outcomes stay
+interpretable.
+
+**Disabling** a strategy (admin/env) takes effect immediately: the harness
+rejects it and the engine stops recommending it.
 
 ### 7.8 Learner Model 🟡
 
@@ -1415,7 +1482,7 @@ paths: the proctored assessment and Decay's recall rounds.
 - **Never an individual peer story.** They may count in anonymous totals
   (≥ 5 learners, D36).
 - Used only to adapt pacing and tone (shorter sessions, easier wins first,
-  NaNa's wording). Not shown to schools or instructors (see Q19).
+  NaNa's wording). Not shown to schools or instructors individually (D39).
 - The learner can see and delete them in Settings → Agent ("What your agent
   has noticed").
 
@@ -2507,6 +2574,8 @@ existing contract test.** Phases 11 (UI) can start in parallel after Phase 3.
 - `recordLearningEvent` in the Education Engine; `source` on every event.
 - Wire the **current** Teaching code (evidence observer) and Study Prep store to
   it now, so data starts accumulating before the workflow refactors.
+- Strategy Library module (`strategies/library.js` + per-strategy guide files,
+  §7.7.1) replacing the two duplicated lists.
 - `recordStrategyOutcome`; struggle detection for the `rule` types (§7.15) and
   `recordStruggle` for agent/learner types; breakthrough resolution;
   `edu.learning_struggles`, question tags, confusion pairs, timings.
@@ -2573,6 +2642,7 @@ existing contract test.** Phases 11 (UI) can start in parallel after Phase 3.
 - **Exit:** no direct writes to concept state outside the Education Engine (grep-enforced contract test).
 
 ### Phase 11 — UI
+- School dashboard: learners' struggles for linked students (D39), class totals.
 - `streamReducer`, `ThinkingBlock`, `ToolGroup`, `ToolRow`, `ActivityMessage`,
   `ScoreCard`, `PlanCard`, `TeachingHandoffCard`, `WorkflowCard`,
   `WorkflowResumeCard`, `WorkflowStateBadge`, `GateButton`.
@@ -2744,8 +2814,9 @@ LLM failure must never corrupt workflow state.
 | Q16 | ~~Decay `retrieval_practice` human vs agent~~ — **resolved (D32):** keep human recall for now. | Done |
 | Q17 | ~~Peer help consent default~~ — **resolved (D34):** off by default; a clear toggle in Settings → Agent. | Done |
 | Q18 | ~~Pattern population~~ — **resolved (D36):** all learners, anonymously, totals only, ≥ 5. | Done |
-| Q19 | Should schools/instructors ever see a learner's struggles (e.g. non-sensitive ones in the class dashboard)? Plan default: no. | Before school dashboards use it |
-| Q20 | Approve Strategy Library v3 (the new strategies listed in §7.15.3)? | Before Phase 8 |
+| Q19 | ~~Schools/instructors see struggles~~ — **resolved (D39):** yes, non-sensitive ones in full. | Done |
+| Q21 | Sensitive struggles for instructors: neutral "may need support" flag only (plan default), full detail, or nothing? | Before school dashboards use it |
+| Q20 | Approve Strategy Library v3 (the new strategies listed in §7.15.3)? How the library works: §7.7.1. | Before Phase 8 |
 | Q14 | ~~Practice UI~~ — **resolved (D29):** Practice is the live proctored assessment in `AssessmentRoom`, which keeps its UI. | Done |
 | Q13 | ~~DeepSeek / Grok data handling~~ — **resolved:** accepted by the product owner (2026-10-09); both enabled per §7.11.5a. | Done |
 | Q12 | ~~Per-tier model lists~~ — **resolved (§7.11.5a).** Grok and DeepSeek model ids and prices are filled into `AI_MODELS` at setup (a setup task, not an open question). Fable stays off until a tier is given it. | Done |
