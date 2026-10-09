@@ -1814,9 +1814,11 @@ edu.generated_syllabi (
   model text, prompt_version text,
   status text check in ('provisional','promoted','rejected') default 'provisional',
   promoted_subject_id uuid null,      -- edu.syllabus_subjects when promoted
-  created_at timestamptz default now(),
-  unique (subject, class_level, coalesce(exam_board,''), coalesce(term,''), status) -- reuse, one provisional per scope
+  created_at timestamptz default now()
 )
+-- one provisional outline per scope, reused across learners:
+-- unique index on (lower(subject), lower(class_level), coalesce(exam_board,''), coalesce(term,''))
+--   where status = 'provisional'
 ```
 
 ### 14.2 Changed tables 🟡
