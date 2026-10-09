@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  applyTraceEvent, blocksFromSavedTrace, durationLabel, groupLabel, groupTraceBlocks, settleRunning, thoughtLabel,
+  applyTraceEvent, blocksFromSavedTrace, durationLabel, groupLabel, groupTraceBlocks, promoteActivity, settleRunning, thoughtLabel,
 } from './agentChatTrace.js';
 
 const fold = (events, start = 1000) => events.reduce(
@@ -91,4 +91,54 @@ test('labels read like the reference', () => {
   assert.equal(thoughtLabel(7400), 'Thought for 7 seconds');
   assert.equal(durationLabel(81), '81ms');
   assert.equal(durationLabel(1400), '1.4s');
+});
+
+test('words between steps stream into one activity block; the answer is promoted out of the trace', () => {
+  let blocks = fold([
+    ['activity_start', { id: 'act_1' }],
+    ['activity_delta', { id: 'act_1', text: 'Let me ' }],
+    ['activity_delta', { id: 'act_1', text: 'check.' }],
+  ]);
+  assert.equal(blocks[0].status, 'running');
+  assert.equal(blocks[0].text, 'Let me check.');
+  blocks = applyTraceEvent(blocks, 'activity_end', { id: 'act_1', text: 'Let me check.' });
+  assert.equal(blocks[0].status, 'done');
+  blocks = applyTraceEvent(blocks, 'activity_start', { id: 'act_2' });
+  blocks = applyTraceEvent(blocks, 'activity_delta', { id: 'act_2', text: 'The answer.' });
+  const promoted = promoteActivity(blocks, 'act_2');
+  assert.equal(promoted.text, 'The answer.');
+  assert.deepEqual(promoted.blocks.map((block) => block.id), ['act_1']);
+  // A dropped stream (failed call) vanishes; an empty ended one too.
+  assert.deepEqual(applyTraceEvent(blocks, 'activity_drop', { id: 'act_2' }).map((block) => block.id), ['act_1']);
+  assert.deepEqual(fold([['activity_start', { id: 'e' }], ['activity_end', { id: 'e', text: '' }]]), []);
+});
+
+test('tool rows carry what was found and what changed; changes stand alone, reads group as sources', () => {
+  const blocks = fold([
+    ['tool_start', { id: 'r1', category: 'read', headline: 'Reading a blog article' }], ['tool_end', { id: 'r1', ms: 5, items: ['Photosynthesis basics'] }],
+    ['tool_start', { id: 'r2', category: 'read', headline: 'Searching your notes' }], ['tool_end', { id: 'r2', ms: 5 }],
+    ['tool_start', { id: 'c1', category: 'action', headline: 'Creating a task' }],
+    ['tool_end', { id: 'c1', ms: 9, change: { label: 'Created a task', title: 'Revise', fields: [{ label: 'Due', value: '2026-10-12' }] } }],
+    ['tool_start', { id: 'q1', category: 'research', headline: 'Checking your goals' }], ['tool_end', { id: 'q1', ms: 5 }],
+  ]);
+  assert.deepEqual(blocks[0].items, ['Photosynthesis basics']);
+  const items = groupTraceBlocks(blocks);
+  assert.deepEqual(items.map((item) => item.type), ['group', 'tool', 'tool']);
+  // A check right after reads starts its own row rather than joining their group.
+  assert.deepEqual(groupTraceBlocks(fold([
+    ['tool_start', { id: 'a', category: 'research', headline: 'A' }], ['tool_end', { id: 'a', ms: 1 }],
+    ['tool_start', { id: 'b', category: 'read', headline: 'B' }], ['tool_end', { id: 'b', ms: 1 }],
+    ['tool_start', { id: 'c', category: 'read', headline: 'C' }], ['tool_end', { id: 'c', ms: 1 }],
+  ])).map((item) => item.type), ['tool', 'group']);
+  assert.equal(groupLabel(items[0].tools), 'Read 2 sources');
+  assert.equal(items[1].change.label, 'Created a task');
+});
+
+test('developer view: raw I/O lives on the live row only and is dropped from a saved trace', () => {
+  const blocks = fold([
+    ['tool_start', { id: 't', headline: 'Checking your goals', raw: { name: 'list_my_goals', args: '{}' } }],
+    ['tool_end', { id: 't', ms: 3, raw: { output: '{"goals":[]}' } }],
+  ]);
+  assert.deepEqual(blocks[0].raw, { name: 'list_my_goals', args: '{}', output: '{"goals":[]}' });
+  assert.ok(!('raw' in blocksFromSavedTrace(blocks)[0]));
 });

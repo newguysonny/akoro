@@ -2439,13 +2439,48 @@ async function streamChat({ send, messages, model, max_tokens = 700, temperature
 }
 
 /*
+ * One tool-loop DECISION on the standard model, streamed: text the model
+ * writes streams to onText as it arrives (the words between steps), tool
+ * calls are assembled from their deltas. Returns the assistant message in
+ * the chat-completions shape, or { aborted } when the learner stopped.
+ */
+async function streamDecision({ messages, tools, toolChoice, onText = null, isAborted = () => false }) {
+  const stream = await openai.chat.completions.create({
+    model: OPENAI_MODEL,
+    temperature: 0.6,
+    max_tokens: 900,
+    messages,
+    tools,
+    tool_choice: toolChoice,
+    stream: true,
+  });
+  let content = "";
+  const calls = [];
+  for await (const chunk of stream) {
+    if (isAborted()) return { aborted: true, assistant: { role: "assistant", content } };
+    const delta = chunk.choices?.[0]?.delta;
+    if (!delta) continue;
+    if (delta.content) { content += delta.content; onText?.(delta.content); }
+    for (const part of delta.tool_calls || []) {
+      const index = part.index ?? calls.length;
+      calls[index] ||= { id: "", type: "function", function: { name: "", arguments: "" } };
+      if (part.id) calls[index].id = part.id;
+      if (part.function?.name) calls[index].function.name += part.function.name;
+      if (part.function?.arguments) calls[index].function.arguments += part.function.arguments;
+    }
+  }
+  const toolCalls = calls.filter((call) => call?.function?.name);
+  return { assistant: { role: "assistant", content, ...(toolCalls.length ? { tool_calls: toolCalls } : {}) } };
+}
+
+/*
  * Think mode: one tool-loop DECISION on the reasoning model. Its reasoning
  * summary streams into the step's "Thought for Ns" row (onReasoning); the
  * result comes back in the chat-completions assistant shape the loop already
  * uses. Throws when the model or API surface is unavailable so the loop can
  * fall back to the standard model.
  */
-async function thinkDecision({ systemContent, transcript, tools, toolChoice, onReasoning = () => {}, isAborted = () => false }) {
+async function thinkDecision({ systemContent, transcript, tools, toolChoice, onReasoning = () => {}, onText = null, isAborted = () => false }) {
   const stream = await openai.responses.create({
     model: THINK_MODEL,
     input: toResponsesInput([{ role: "system", content: systemContent }, ...transcript], { native: true }),
@@ -2461,7 +2496,7 @@ async function thinkDecision({ systemContent, transcript, tools, toolChoice, onR
     if (isAborted()) return { aborted: true, assistant: { role: "assistant", content } };
     if (ev.type === "response.reasoning_summary_part.added" && ev.summary_index > 0) onReasoning("\n\n");
     else if (ev.type === "response.reasoning_summary_text.delta" && ev.delta) onReasoning(ev.delta);
-    else if (ev.type === "response.output_text.delta" && ev.delta) content += ev.delta;
+    else if (ev.type === "response.output_text.delta" && ev.delta) { content += ev.delta; onText?.(ev.delta); }
     else if (ev.type === "response.output_item.done" && ev.item?.type === "function_call") {
       toolCalls.push({ id: ev.item.call_id, type: "function", function: { name: ev.item.name, arguments: ev.item.arguments || "{}" } });
     }
@@ -2713,7 +2748,7 @@ export function clarify(field, question, extra = {}) {
   return { needsClarification: true, missing: field, question, ...extra };
 }
 
-async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, status, tools = openAiChatTools(), requiredTool = null, role = "student", trace = null, isAborted = () => false, think = false }) {
+async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, status, tools = openAiChatTools(), requiredTool = null, role = "student", trace = null, isAborted = () => false, think = false, streamText = true }) {
   const executions = [];
   const transcript = [...messages];
   if (requiredTool && !tools.some((tool) => tool.function?.name === requiredTool)) {
@@ -2738,47 +2773,64 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
     const toolChoice = iteration === 0 && requiredTool
       ? { type: "function", function: { name: requiredTool } }
       : "auto";
+    // Words the model writes stream live as an activity block. The step's
+    // thinking row closes when they start (they narrate the step themselves).
+    // Research mode buffers instead: its answer is regenerated on the
+    // research model, so live text would show twice.
+    let thinkOpen = Boolean(thinkId);
+    const closeThink = (text) => { if (thinkOpen) { trace.thinkEnd(thinkId, text); thinkOpen = false; } };
+    let liveId = null;
+    const onText = streamText && trace
+      ? (text) => { closeThink(""); if (!liveId) liveId = trace.activityStart(); trace.activityDelta(liveId, text); }
+      : null;
+    const stoppedHere = (assistantSoFar) => {
+      closeThink("");
+      if (liveId) trace.activityEnd(liveId, assistantSoFar?.content || "");
+      return { messages: transcript, toolExecutions: executions, aborted: true };
+    };
     let assistant = null;
     let reasoned = false;
     if (reasonDecisions) {
       try {
         const decision = await thinkDecision({
-          systemContent, transcript, tools, toolChoice, isAborted,
-          onReasoning: (text) => { if (thinkId) trace.thinkDelta(thinkId, text); },
+          systemContent, transcript, tools, toolChoice, isAborted, onText,
+          onReasoning: (text) => { if (thinkOpen) trace.thinkDelta(thinkId, text); },
         });
-        if (decision.aborted) {
-          if (thinkId) trace.thinkEnd(thinkId, "");
-          return { messages: transcript, toolExecutions: executions, aborted: true };
-        }
+        if (decision.aborted) return stoppedHere(decision.assistant);
         assistant = decision.assistant;
         reasoned = true;
       } catch (error) {
         console.warn("[agent-chat] think decision unavailable — standard model for the rest of this turn:", error?.message || error);
         reasonDecisions = false;
+        // Any words already shown came from the failed call; the retry rewrites them.
+        if (liveId) { trace.activityDrop(liveId); liveId = null; }
       }
     }
     if (!assistant) {
-      const result = await openai.chat.completions.create({
-        model: OPENAI_MODEL,
-        max_tokens: 900,
+      const decision = await streamDecision({
         messages: [{ role: "system", content: systemContent }, ...transcript],
-        tools,
-        tool_choice: toolChoice,
+        tools, toolChoice, onText, isAborted,
       });
-      assistant = result.choices?.[0]?.message ?? { role: "assistant", content: "" };
+      if (decision.aborted) return stoppedHere(decision.assistant);
+      assistant = decision.assistant;
     }
     const calls = Array.isArray(assistant.tool_calls) ? assistant.tool_calls : [];
-    if (thinkId) trace.thinkEnd(thinkId, decisionNarration(calls));
+    closeThink(decisionNarration(calls));
+    const content = typeof assistant.content === "string" ? assistant.content.trim() : "";
     if (!calls.length) {
-      // A reasoned decision that calls no tool IS the Think-mode answer —
-      // reuse it rather than paying for a second reasoning pass.
-      const finalText = reasoned && typeof assistant.content === "string" ? assistant.content.trim() : "";
-      return { messages: transcript, toolExecutions: executions, ...(finalText ? { finalText } : {}) };
+      // A decision that calls no tool IS the answer: what already streamed
+      // becomes the reply (promoted out of the trace), so no second model
+      // call is paid for. Research mode still regenerates on its own model.
+      const finalText = (reasoned || streamText) ? content : "";
+      if (liveId) {
+        if (finalText) trace.activityPromote(liveId);
+        else trace.activityDrop(liveId);
+      }
+      return { messages: transcript, toolExecutions: executions, ...(finalText ? { finalText, promoted: Boolean(liveId) } : {}) };
     }
-    // Text the model wrote alongside its tool calls is shown between the
-    // steps (it used to be discarded); the final reply still comes from the
-    // tools-disabled answer call below.
-    if (typeof assistant.content === "string" && assistant.content.trim()) trace?.activity(assistant.content);
+    // Text written alongside tool calls stays between the steps.
+    if (liveId) trace.activityEnd(liveId, content);
+    else if (content) trace?.activity(content);
     transcript.push(assistant);
     for (const call of calls) {
       if (isAborted()) return { messages: transcript, toolExecutions: executions, aborted: true };
@@ -2789,7 +2841,7 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
       // The header stream too - the same labels the background workers send,
       // so the agent's subtitle shows live work during active chats as well.
       agentToolActivity(studentId, tool);
-      const traceRow = trace?.toolStart(tool);
+      const traceRow = trace?.toolStart(tool, input);
       let toolResult;
       try { toolResult = await executeChatTool(tool, input, studentId, { conversationId, role }); }
       catch (error) {
@@ -2888,7 +2940,8 @@ router.post("/agent", async (req, res) => {
   // between tool-loop steps and while the answer streams.
   let stopEntry = null;
   const isAborted = () => Boolean(stopEntry?.stop);
-  const trace = createChatTrace({ send: wantsStream ? send : null });
+  // Developer view (opt-in from the app): raw tool I/O on the live stream only.
+  const trace = createChatTrace({ send: wantsStream ? send : null, developer: req.body?.developer === true });
 
   try {
     const {
@@ -3086,6 +3139,7 @@ router.post("/agent", async (req, res) => {
       trace,
       isAborted,
       think: isThink,
+      streamText: !isResearch,
     });
     const stopped = () => Boolean(prepared.aborted) || isAborted();
     const finalMessages = [{ role: "system", content: systemContent }, ...prepared.messages];
@@ -3100,7 +3154,7 @@ router.post("/agent", async (req, res) => {
       // the only authority that may invoke an Akoro tool.
       // Think mode: the reasoned last decision already is the answer; else
       // reason over the tool results (if any) for the answer.
-      if (isThink && prepared.finalText) { reply = prepared.finalText; usedModel = THINK_MODEL; }
+      if (prepared.finalText) { reply = prepared.finalText; usedModel = isThink ? THINK_MODEL : OPENAI_MODEL; }
       else if (isThink) {
         try { ({ reply, thinking } = await thinkOnce({ messages: finalMessages, model: THINK_MODEL, trace })); usedModel = THINK_MODEL; } catch { /* fallback below */ }
       }
@@ -3116,10 +3170,11 @@ router.post("/agent", async (req, res) => {
         reply = completion.choices?.[0]?.message?.content?.trim() || "";
       }
     } else {
-      if (!stopped() && isThink && prepared.finalText) {
+      if (!stopped() && prepared.finalText) {
+        // Already on screen when it streamed as the last step's words.
         reply = prepared.finalText;
-        usedModel = THINK_MODEL;
-        send("delta", { text: reply });
+        usedModel = isThink ? THINK_MODEL : OPENAI_MODEL;
+        if (!prepared.promoted) send("delta", { text: reply });
       } else if (!stopped() && isThink) {
         status("thinking", "Thinking…");
         try { ({ reply, thinking } = await streamThinkWithResponses({ send, messages: finalMessages, model: THINK_MODEL, trace, isAborted })); usedModel = THINK_MODEL; } catch { /* fall through */ }

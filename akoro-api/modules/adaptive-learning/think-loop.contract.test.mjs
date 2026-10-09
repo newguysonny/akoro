@@ -55,9 +55,21 @@ const server = http.createServer((req, res) => {
         completed,
       ]);
     }
-    // chat.completions fallback: a decision with no tool call.
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ choices: [{ message: { role: "assistant", content: "" } }], usage: { prompt_tokens: 5, completion_tokens: 5 } }));
+    // chat.completions (standard model, streamed): the first decision writes a
+    // few words and calls a tool in pieces; once a result is in, it answers.
+    const sawToolResult = (params.messages || []).some((message) => message.role === "tool");
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    const chunk = (delta) => res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta }] })}\n\n`);
+    if (!sawToolResult) {
+      chunk({ role: "assistant", content: "Let me " });
+      chunk({ content: "check." });
+      chunk({ tool_calls: [{ index: 0, id: "call_9", type: "function", function: { name: "get_agent_", arguments: "" } }] });
+      chunk({ tool_calls: [{ index: 0, function: { name: "capabilities", arguments: "{}" } }] });
+    } else {
+      chunk({ role: "assistant", content: "Here is " });
+      chunk({ content: "what I can do." });
+    }
+    res.end("data: [DONE]\n\n");
   });
 });
 await new Promise((resolve) => server.listen(0, resolve));
@@ -86,8 +98,11 @@ test("Think mode: real reasoning per step, the tool runs, the last decision is t
   assert.deepEqual(events.map(([event]) => event), [
     "think_start", "think_delta", "think_delta", "think_delta", "think_end",
     "tool_start", "tool_end",
+    // The answer's words stream live, then move to the reply.
     "think_start", "think_delta", "think_end",
+    "activity_start", "activity_delta", "activity_delta", "activity_promote",
   ]);
+  assert.equal(trace.blocks().filter((block) => block.type === "activity").length, 0, "the promoted answer is not stored twice");
   const [first, , second] = trace.blocks();
   assert.equal(first.source, "reasoning");
   assert.equal(first.text, "They ask what I can do.\n\nCheck the live list.");
@@ -109,17 +124,42 @@ test("Think mode: an unavailable reasoning model falls back to the standard mode
       systemContent: "doctrine", messages: [{ role: "user", content: "hi" }],
       studentId: "00000000-0000-4000-8000-000000000001", tools, trace, think: true,
     });
-    assert.equal(result.finalText, undefined, "no reasoned answer to reuse");
     assert.ok(requests.some((r) => r.url.endsWith("/chat/completions")));
+    assert.equal(result.finalText, "Here is what I can do.");
     assert.equal(trace.blocks()[0].source, undefined, "the row falls back to narration");
   } finally { responsesUp = true; }
 });
 
-test("standard mode never calls the reasoning model", async () => {
+test("standard mode streams words between steps, assembles streamed tool calls, and the last words become the reply", async () => {
   requests.length = 0;
-  await runAgentToolLoop({
+  const events = [];
+  const trace = createChatTrace({ send: (event, data) => events.push([event, data]) });
+  const result = await runAgentToolLoop({
     systemContent: "doctrine", messages: [{ role: "user", content: "hi" }],
-    studentId: "00000000-0000-4000-8000-000000000001", tools, trace: createChatTrace(),
+    studentId: "00000000-0000-4000-8000-000000000001", tools, trace,
   });
-  assert.ok(requests.length >= 1 && requests.every((r) => r.url.endsWith("/chat/completions")));
+  assert.ok(requests.length === 2 && requests.every((r) => r.url.endsWith("/chat/completions") && r.params.stream === true));
+  assert.deepEqual(result.toolExecutions.map((entry) => entry.tool), ["get_agent_capabilities"]);
+  assert.equal(result.finalText, "Here is what I can do.");
+  assert.equal(result.promoted, true);
+  assert.deepEqual(events.map(([event]) => event), [
+    "think_start", "think_end", "activity_start", "activity_delta", "activity_delta", "activity_end",
+    "tool_start", "tool_end",
+    "think_start", "think_end", "activity_start", "activity_delta", "activity_delta", "activity_promote",
+  ]);
+  // Words alongside a tool call stay between the steps; the answer does not.
+  assert.deepEqual(trace.blocks().filter((block) => block.type === "activity").map((block) => block.text), ["Let me check."]);
+});
+
+test("research mode buffers words (its answer is regenerated) and never promotes", async () => {
+  requests.length = 0;
+  const events = [];
+  const result = await runAgentToolLoop({
+    systemContent: "doctrine", messages: [{ role: "user", content: "hi" }],
+    studentId: "00000000-0000-4000-8000-000000000001", tools,
+    trace: createChatTrace({ send: (event) => events.push(event) }), streamText: false,
+  });
+  assert.equal(result.finalText, undefined);
+  assert.ok(!events.some((event) => event.startsWith("activity_")));
+  assert.ok(events.includes("activity"), "words alongside a tool call still show, whole");
 });
