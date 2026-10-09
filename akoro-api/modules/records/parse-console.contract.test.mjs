@@ -157,5 +157,8 @@ test("the console page is self-sufficient and the app mounts it", () => {
 
   assert.match(appJs, /parseConsoleModule/, "imported in app.js");
   assert.match(appJs, /app\.use\("\/api\/parse"/, "mounted at /api/parse");
+  assert.match(appJs, /app\.use\("\/api\/parse\/console",\s*express\.json\(\{ limit: "12mb" \}\)\)/,
+    "scoped 12mb body parser BEFORE the global 2mb one — a real page image must not 413");
+  assert.match(consoleSrc, /Cache-Control", "no-store/, "the page is never cached — an old console lies");
   assert.match(envExample, /PARSE_CONSOLE_KEY/, "the env var is documented");
 });

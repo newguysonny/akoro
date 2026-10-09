@@ -80,8 +80,12 @@ router.post("/console", consoleGuard, asyncHandler(async (req, res) => {
 
 /* ── The console page ──────────────────────────────────────────────────── */
 
+const CONSOLE_VERSION = "v3 · run-armed";
+
 router.get("/console", consoleGuard, (_req, res) => {
-  res.type("html").send(`<!doctype html>
+  res.type("html");
+  res.set("Cache-Control", "no-store");   // a cached page here = an old console that lies
+  res.send(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Parse-worker console</title>
@@ -104,7 +108,7 @@ router.get("/console", consoleGuard, (_req, res) => {
   input[type=file]{color:#9AA0BE}
 </style></head><body><main>
 <h1>Parse-worker <span>console</span></h1>
-<p class="sub">One page → the RunPod hanji-parse endpoint. Every run is a real GPU job.</p>
+<p class="sub">One page → the RunPod hanji-parse endpoint. Every run is a real GPU job. <span style="color:#4A507A">console ${CONSOLE_VERSION}</span></p>
 
 <label>Endpoint</label>
 <div class="status" id="status">checking…</div>
