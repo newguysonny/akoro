@@ -118,7 +118,8 @@ router.get("/console", consoleGuard, (_req, res) => {
 <label>max_new_tokens</label>
 <input type="number" id="tokens" value="4096" min="64" max="8192" step="64"/>
 
-<button id="run">Run parse</button>
+<button id="run" disabled title="Pick an image or paste base64 first">Run parse</button>
+<div class="status" id="fileinfo"></div>
 <div class="status" id="runstat"></div>
 
 <h1 style="font-size:15px;margin-top:30px">Result</h1>
@@ -150,12 +151,22 @@ router.get("/console", consoleGuard, (_req, res) => {
       $('status').innerHTML = bits.join(' · ');
     })
     .catch(function(){ $('status').textContent = 'status unreachable'; });
+  var refresh = function(){
+    var v = $('b64').value.trim();
+    $('run').disabled = !v;
+    $('fileinfo').innerHTML = v
+      ? '✓ image ready · ~' + Math.round(v.length * 3 / 4 / 1024) + ' KB'
+        + (v.length > 8000000 ? ' · <span class="err">over the ~6 MB cap — shrink or re-export the page</span>' : '')
+      : '';
+  };
+  $('b64').addEventListener('input', refresh);
   $('file').addEventListener('change', function(){
     var f = this.files && this.files[0]; if (!f) return;
     var r = new FileReader();
-    r.onload = function(){ $('b64').value = r.result; };
+    r.onload = function(){ $('b64').value = r.result; refresh(); };
     r.readAsDataURL(f);
   });
+  refresh();
   $('run').addEventListener('click', function(){
     var btn = this; btn.disabled = true;
     $('runstat').textContent = 'parsing… (first call on a cold worker loads the model, ~10-20s)';

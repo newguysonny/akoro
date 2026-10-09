@@ -151,6 +151,7 @@ test("the console page is self-sufficient and the app mounts it", () => {
   assert.match(consoleSrc, /x-parse-console-key/, "the page echoes the key as a header");
   assert.match(consoleSrc, /console\/status/, "status poll on load");
   assert.match(consoleSrc, /first call on a cold worker loads the model/, "honest latency note");
+  assert.match(consoleSrc, /run'\).disabled = !v/, "Run arms only once an image is loaded — no empty 400s");
   assert.ok(!consoleSrc.includes("process.env.RUNPOD_API_KEY") || !consoleSrc.split("router.get(\"/console\"")[1].includes("RUNPOD_API_KEY"),
     "the page never embeds server secrets");
 
