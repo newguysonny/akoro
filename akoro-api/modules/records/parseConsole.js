@@ -49,9 +49,15 @@ router.get("/console/status", consoleGuard, asyncHandler(async (req, res) => {
         data.blocks = job.parsed.blocks; data.markdown = job.parsed.markdown;
         data.model = job.model || null;  data.wallMs = job.wallMs ?? null;
         last = { ok: true, model: data.model, blocks: data.blocks.length, wallMs: data.wallMs, at: new Date().toISOString() };
-      } else {
-        data.error = (job.output && job.output.error) || `Parse job ${job.status}`;
+      } else if (job.output && job.output.error) {
+        data.error = job.output.error;            // the worker's own readable message
         last = { ok: false, error: data.error, at: new Date().toISOString() };
+      } else {
+        // FAILED/TIMED_OUT with NO output = the process died before it could
+        // answer (CUDA OOM on a small GPU, a broken torch/torchvision pair,
+        // a kernel-level kill). The traceback lives in the worker logs.
+        data.error = `Parse job ${job.status} with no worker message — open the endpoint in the RunPod console → Logs for the traceback. Usual causes: a 16 GB GPU (this model wants 24 GB), or a torch/torchvision mismatch.`;
+        last = { ok: false, error: `Parse job ${job.status} (no worker message — see RunPod worker logs)`, at: new Date().toISOString() };
       }
     }
     return ok(res, { job: data });
