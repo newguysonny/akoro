@@ -339,6 +339,7 @@ app.use(PAYSTACK_WEBHOOK_PATH,               express.raw({ type: "application/js
 // — body-parser marks the body consumed so the global parser skips it.
 app.use("/api/self-study/:id/files",          express.json({ limit: "9mb" }));
 app.use("/api/records/extract",               express.json({ limit: "25mb" }));   // extraction: ≤8 rendered pages, base64'd
+app.use("/api/parse/console",                 express.json({ limit: "12mb" }));   // parse console: ONE page, base64'd (worker cap ≈6 MB binary)
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(requestLogger);
