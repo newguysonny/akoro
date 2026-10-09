@@ -1148,8 +1148,27 @@ with four tools, tried from most specific to least:
 | 3 | `syllabus.resolve_platform` | read | `edu.syllabus_subjects/topics/subtopics` by subject, class level and exam board, plus semantic `searchSyllabus` for near matches | topics with subtopics and objectives |
 | 4 | `syllabus.generate` | execute | — | an **AI-drafted outline** saved as a provisional syllabus |
 
-The learner's school and class come from their enrollment (server-side, never
-from the client). A learner with no school skips 1–2.
+**Finding the learner's school, class and term** (server-side; never from the
+client, never from names):
+
+| Order | Source | Gives | Used by |
+|---|---|---|---|
+| 1 | **Linked enrollment:** `mgmt.students` where `user_id` = the authenticated learner and `status = 'active'` → `school_id`, `class_id` → `mgmt.classes.name` (e.g. `JSS1`) | school, class | `resolve_class`, `resolve_school` |
+| 2 | **Current term:** `mgmt.academic_calendar` for that school — the term whose `resumption` … `vacation` dates contain today | term | `resolve_class` (filters `syllabus_items.term`) |
+| 3 | **Learner profile** (self-reported): `users.year_group` / `study_level`, `subjects` | class level | `resolve_platform`, `generate` |
+| 4 | **What the learner says** in the conversation ("I'm in JSS1", "my WAEC exam") | class level, exam board | `resolve_platform`, `generate` |
+
+- The school and class tools (`resolve_class`, `resolve_school`) run **only**
+  with a linked enrollment (row 1). The self-reported `school_name` is not
+  used to open a school's syllabus.
+- **Names are never used to identify a learner.** Student names repeat
+  (two "Ada Okafor"s, across schools) and a protégé name is chosen by the
+  learner, so matching on either could load another child's class. When an
+  account has no linked enrollment, a name match (+ date of birth / admission
+  number) may only produce a **link suggestion** that the school confirms in
+  the school portal; the agent never acts on an unconfirmed match.
+- No enrollment and no class level known → the agent asks the learner one
+  question ("Which class are you in?") before falling back to `generate`.
 
 **How the agent uses them.** The agent decides which to call (e.g. go
 straight to `resolve_platform` when the learner says "prepare me for JAMB
@@ -2146,7 +2165,7 @@ LLM failure must never corrupt workflow state.
 | # | Item | Owner/phase |
 |---|---|---|
 | Q1 | JSS1 Basic Science rows in `edu.syllabus_*` and `concept_catalog` ❓ — no longer a blocker (D30 generates an outline when missing), but real rows give better plans | Phase 0 |
-| Q15 | How a learner's school + class + term are looked up (enrollment table and current-term source) for `resolve_class` ❓ | Phase 0 |
+| Q15 | ~~School/class/term lookup~~ — **resolved (§8.7):** linked `mgmt.students.user_id` → class; term from `mgmt.academic_calendar`; profile/conversation for class level; names only for school-confirmed link suggestions. | Done |
 | Q2 | Real per-generation coin cost in `lib/aiPricing.js` (examples use 2) ❓ | Phase 0 |
 | Q3 | Default stays `gpt-4o-mini` (D23). Open: which assessor/evidence model env locks to, and whether controller prompts need per-model tuning (run the same scenarios on each selectable model). | Phase 6 spike |
 | Q4 | Teaching worst-case turn cost and the balance check threshold | Phase 6 |
