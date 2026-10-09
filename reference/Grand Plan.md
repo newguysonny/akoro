@@ -193,7 +193,8 @@ session mode" (`fresh | continuation | decay`); "Adaptive Learning Workflow"
 | D8 | Teaching timeout | **On decision timeout, malformed output or LLM failure, fall back to the default recommendation** (the existing dialogue-move → action table). | User decision. The learner always gets a reply. |
 | D9 | What streams into a thinking block? | **The provider's reasoning *summary* when the chosen model offers one** (OpenAI reasoning models via the Responses API — already used by agent-chat Think mode; Claude with `thinking.display: "summarized"`), streamed live. **Otherwise** (e.g. the default `gpt-4o-mini`) the agent's `intent` streamed as it is generated, then the harness narration. Raw chain-of-thought is never available or shown. Summaries are shown live but **not stored**; on reload the block shows the stored narration. | Matches the coding-agent experience and the existing `ThoughtBlock`, without exposing hidden reasoning. |
 | D27 | Activity text | **The agent may write its own short learner-facing message** with each action (`message`, ≤ 400 chars, streamed as an activity block), like the text a coding agent writes between tool calls. Facts in it (scores, pass/fail, coins) must come from the harness: the narrator inserts them; the model's text may not state them. | Makes the stream read like a coding agent instead of only templates. |
-| D28 | Where the live stream UI is used | **Only the Agent Chat tab** (`AgentChatTab.jsx`) renders the coding-agent stream (thinking → tool rows → activity → reply), including Study Prep and any workflow shown in chat. **`TeachAgentModal` keeps its current UI** (and `DecaySessionModal`, which shares that design). The backend still emits and stores the same events for every workflow; the modals just don't render them as a trace. | User decision. |
+| D28 | Where the live stream UI is used | **Only the Agent Chat tab** (`AgentChatTab.jsx`) renders the coding-agent stream (thinking → tool rows → activity → reply), including Study Prep and any workflow shown in chat. **`TeachAgentModal` keeps its current UI** (and `DecaySessionModal`, which shares that design), and **`AssessmentRoom` keeps its UI** for Practice (D29). The backend still emits and stores the same events for every workflow; the modals just don't render them as a trace. | User decision. |
+| D29 | What Practice is | **Practice = the live proctored assessment** (`AssessmentRoom` + Session Assessment Gateway + Sergeant). The agent chooses questions, probes and hints; proctoring, scoring and the verdict stay in code. `AssessmentRoom` keeps its UI. | User decision (§11). |
 | D10 | Who writes narration? | **Harness templates** (`ActivityNarrator`, grown from `narration.js:deliberate()`) for facts; the agent's `intent` (≤ 240 chars, sanitised, untrusted display text) for "why". v3's `narration` field **is** `intent`. | Deterministic where possible (v3 §40), already built (v7). |
 | D11 | Event store | New generic `edu.workflow_events`. `study_prep_events` is kept read-only and backfilled. | One stream model for four workflows (v3 §43). |
 | D12 | Live transport | **Event store is the source of truth; transport is replaceable.** Teaching and Decay keep the existing Socket.IO connection. Study Prep and Practice use SSE (same heartbeat pattern as `/chat/agent`). Both carry the identical event envelope. Replay: `GET /api/workflows/:id/events?after=N`. | v3 §42–43; reuses what already works. |
@@ -539,7 +540,7 @@ workflows/STUDY_PREP.md     how the study-prep controller works, gates, handoff
 workflows/TEACHING.md       controller role; protégé/NaNa are tools; turn shape
 workflows/GUIDE_MODE.md     learn_with_guide: NaNa teaches directly, no protégé; check-question style
 workflows/DECAY_REVIEW.md   retention review, when to hand off to teaching
-workflows/PRACTICE.md       question sourcing, labelling, evidence
+workflows/PRACTICE.md       proctored assessment: question focus, probing, hint policy, what the agent may not touch
 learning/RETENTION.md       decay signals, retrieval practice principles
 ```
 
@@ -551,7 +552,7 @@ guide_controller:    ["AGENT.md", "workflows/TEACHING.md", "workflows/GUIDE_MODE
 teaching_strategy:   ["AGENT.md", "workflows/TEACHING.md", "strategies/STRATEGIES.md", "policies/TOOL_RULES.md"]
 decay_inspection:    ["AGENT.md", "workflows/DECAY_REVIEW.md", "learning/RETENTION.md", "reasoning/INSPECTION.md", "learning/MASTERY.md"]
 decay_review:        ["AGENT.md", "workflows/DECAY_REVIEW.md", "learning/RETENTION.md", "learning/TEACHING.md", "strategies/STRATEGIES.md"]
-practice:            ["AGENT.md", "workflows/PRACTICE.md", "learning/ASSESSMENT.md", "policies/EDUCATION_RULES.md"]
+practice:            ["AGENT.md", "workflows/PRACTICE.md", "learning/ASSESSMENT.md", "learning/MASTERY.md", "policies/EDUCATION_RULES.md"]
 ```
 
 The existing study-prep sets gain `workflows/STUDY_PREP.md` only after the
@@ -1425,49 +1426,123 @@ evidence writes, the notification-ownership check (`markNotificationRead`) ✅.
 
 ---
 
-## 11. Workflow 4 — Practice
+## 11. Workflow 4 — Practice (live proctored assessment)
 
-**Purpose:** standalone practice — topic practice, verified past questions,
-generated questions, exam simulation.
-**Entries:** Practice button, dashboard practice card, recommendation from
-another workflow's outcome.
-**Owns:** practice session, attempts.
+**Purpose:** Practice **is** the live proctored assessment — the existing
+Session Assessment Gateway (`AssessmentRoom.jsx` + `assessmentGateway.js`):
+identity check, webcam proctoring, Sergeant-led question-and-answer, and a
+cheat-aware verdict. The workflow type stays `practice`.
 
-### 11.1 States (persisted)
+Do not confuse it with the **practice capability** (`practice.generate` /
+`practice.submit`, the unproctored exam-prep attempts) that Study Prep,
+Teaching and Decay use for diagnostics and retests. That capability is
+unchanged and is not this workflow.
+
+**Entries:** dashboard (today's assessment, `/assessment/today` ✅),
+assessment list, a recommendation from another workflow's outcome
+(e.g. Teaching completed → "Take a proctored check").
+**Owns:** the assessment session (`edu.assessment_sessions` ✅), Q&A
+transcript, proctoring record, verdict.
+
+### 11.1 What exists today ✅
+
+- Socket events: `register_reference → start_assessment → proctor_frame* /
+  assessment_message* → request_assessment_summary → end_assessment`, plus
+  `resume_assessment` with a 3-minute reconnect grace.
+- Identity: reference photo, identity match via the optional `proctor-service`
+  (InsightFace + YOLOv8) or browser TF.js signals.
+- `TemporalScorer` turns per-frame signals into a cheat probability;
+  auto-terminate at **0.85** (`TERMINATE_PROBABILITY`).
+- Sergeant (`agents/sargeant`) generates questions, evaluates answers, gives
+  hints, checks drift, and writes the verdict text.
+- Table `edu.assessment_sessions`: status `active | completed | abandoned |
+  terminated`, `questions`, `block_history`, `cheat_events`,
+  `proctoring_signals`, `assessment_score` (0–100), `cheat_probability`,
+  `final_verdict` (`pass | fail | flagged | terminated`), `verdict_detail`.
+- Voice exam mode (`VoiceExam.jsx`).
+
+### 11.2 States (persisted)
 
 ```
-created → preparing → ready → attempt_active → submitted → scoring → evaluated
-                                   ▲                                      │
-                                   └──────── another set (agent proposes, ┤
-                                             learner accepts)             ▼
-                                                                      completed
-any non-terminal ⇄ paused ; → abandoned | cancelled
+created → consent ──(reference photo registered)──► preparing ──(questions ready)──► in_progress
+                                                                                       │
+                                     ┌──────────────── integrity terminate (≥ 0.85) ◄──┤
+                                     ▼                                                 │ all questions
+                                 terminated                                            ▼ answered
+                                                                                    scoring
+                                                                                       │
+                                                                                   evaluated ──► completed
+in_progress ⇄ paused (socket drop; resumable within the grace window, then abandoned)
+any non-terminal → abandoned | cancelled
 ```
 
-`scoring` is server-only and brief; it exists so a crash mid-score is
-recoverable.
+`edu.assessment_sessions.status` stays as it is; the richer states live on
+`workflow_instances.state`. `terminated` is a terminal state the agent can
+never cause or reverse.
 
-### 11.2 Operations → tools → context set
+### 11.3 Operations → tools → context set
 
 | Operation | Agent tools | Set |
 |---|---|---|
-| prepare | `learner.get_state`, `learner.get_history`, `concept.get_prerequisites`, `practice.list_sources` | `practice` |
-| generate | `practice.generate({ source: "verified_past" | "generated", focusConcepts, size })` ⟂ | `practice` |
-| present / submit | learner gate (no agent) | — |
-| score | harness-only (Education Engine) | — |
-| evaluate / record_evidence | read tools; Education Engine writes evidence | `practice` |
-| recommend_next | `practice.propose_another_set` ⟂ · `practice.recommend_teaching` ⟂ · `practice.propose_complete` ⟂ | `practice` |
-| retrieval_practice | `retrieval.ask` ⟂ — recall rounds on concepts missed in the set, before offering another set | `practice` |
+| prepare | `learner.get_state`, `learner.get_history`, `concept.get_prerequisites`, `teaching.get_evidence` (read) | `practice` |
+| generate_questions | `assessment.generate({ focusConcepts, count, difficulty })` ⟂ — Sergeant generates; question bank and rubric stay server-side | `practice` |
+| conduct (per turn) | `assessment.ask_next` ⟂ · `assessment.probe({ depth })` ⟂ (a follow-up on the same question) · `assessment.give_hint({ level })` ⟂ | `practice` |
+| evaluate_answer | harness-only: Sergeant judges against the rubric (assessor role, model locked, D23); Education Engine normalises the judgement to a score | — |
+| recommend_next | `practice.recommend_teaching` ⟂ · `practice.recommend_retrieval` ⟂ · `practice.propose_complete` ⟂ | `practice` |
 
-### 11.3 Rules
+The agent decides **what to ask and how deep to go** (focus concepts,
+follow-up probes, whether a hint is warranted). It never decides the score,
+the verdict, or anything about integrity.
 
-- Verified past questions allowed; generated questions allowed but **never**
-  presented as official past questions (source label on every question).
-- Answer keys server-side; reuse the existing verified `/practice`
-  infrastructure and exam-prep attempt security (status-guarded submit,
-  `attempt_already_submitted`).
-- Recommending teaching creates nothing by itself; it offers the learner a
-  card that starts a direct Teaching Workflow.
+### 11.4 Fixed in code (never the agent's call)
+
+- All proctoring: frame analysis, identity match, `TemporalScorer`, the 0.85
+  auto-terminate, cheat events. The agent does not see raw frames and cannot
+  pause, soften or override proctoring.
+- Hint policy: maximum hints per question and per session, and the score
+  deduction each hint carries (harness constants).
+- Scoring: Sergeant's per-answer judgement is a **proposal**; the Education
+  Engine applies the rubric and produces `assessment_score`.
+- Verdict: `final_verdict` is computed by code from score, pass threshold and
+  `cheat_probability` (`flagged` when integrity is doubtful even if the score
+  passes). Sergeant writes only `verdict_detail` (the explanation).
+- Evidence: written to the learner model only for `completed` sessions that
+  are not `flagged`/`terminated`.
+- The assessor model is locked by env (D23); the learner's model choice does
+  not apply to judging. It may apply to the controller's question selection.
+
+### 11.5 Agent loop
+
+Turn-based, like Teaching: **pre-step** (record the answer, harness scoring)
+→ **agent loop** (max 3 iterations, ends when the agent asks the next
+question/probe/hint) → **post-step** (progress, integrity check, evidence
+queue). Decision timeout or malformed output → fallback: ask the next
+question in the generated order (today's behaviour).
+
+### 11.6 UI
+
+**`AssessmentRoom` keeps its current UI** (D28): consent → split view
+(webcam + proctor meter / Sergeant Q&A) → summary. No thinking blocks or tool
+rows. Events are still stored in `workflow_events` (replay, audit, developer mode).
+
+### 11.7 `retrieval_practice` (D25) in this workflow
+
+Not during the proctored attempt — recall hints would change what is being
+measured. It is offered **after** the summary (`practice.recommend_retrieval`)
+on concepts the learner missed; it runs in the Agent Chat tab or a Decay
+Review, not inside the assessment.
+
+### 11.8 Outcome
+
+```json
+{ "workflowId": "…", "status": "completed",
+  "outcome": { "score": 80, "passed": true, "verdict": "pass",
+               "cheatProbability": 0.12, "conceptEvidence": [ … ],
+               "recommendedNextAction": "none" | "teaching" | "retrieval_practice" } }
+```
+
+A `terminated` or `flagged` assessment emits an outcome too, with no
+evidence written and `recommendedNextAction: "none"`.
 
 ---
 
@@ -1658,10 +1733,7 @@ edu.decay_review_sessions (
   status, strategy_used, evidence jsonb, created_at, updated_at, completed_at
 )
 
-edu.practice_sessions (
-  id, workflow_id, learner_id, subject, topic, focus_concepts jsonb,
-  source text, attempts jsonb, status, created_at, updated_at, completed_at
-)
+-- Practice uses the existing edu.assessment_sessions (§14.2); no new table.
 ```
 
 ### 14.2 Changed tables 🟡
@@ -1672,6 +1744,7 @@ edu.study_prep_topics     + teaching_workflow_id; status check widened to §8.3 
 edu.adaptive_sessions     + workflow_id, entry_mode, source_workflow_id, source_topic_id, strategy,
                             teaching_mode ('teach_agent' | 'learn_with_guide')
 edu.adaptive_workflow_runs + workflow_id, study_prep_topic_id (attempt record only)
+edu.assessment_sessions   + workflow_id (Practice); status values unchanged
 edu.study_prep_events     read-only after cut-over; backfilled into workflow_events
 ```
 
@@ -1847,9 +1920,12 @@ existing contract test.** Phases 11 (UI) can start in parallel after Phase 3.
 - `mode: "decay"` becomes a compatibility adapter.
 - **Exit:** Scenario C.
 
-### Phase 9 — Practice Workflow
-- `practice/controller.js`, `practice_sessions`, source labelling, submit guards.
-- **Exit:** Scenario D.
+### Phase 9 — Practice Workflow (proctored assessment)
+- `practice/controller.js` on top of `assessmentGateway.js`; `assessment_sessions.workflow_id`.
+- Agent-driven question selection/probes/hints with fallback to the generated order.
+- Verdict computed in code; Sergeant's judgement normalised by the Education Engine; assessor model locked.
+- `AssessmentRoom` UI unchanged.
+- **Exit:** Scenario D and its integrity variants; existing assessment gateway tests green.
 
 ### Phase 10 — Learner model unification
 - Fold `decideNextAction` into Adaptive Learning Engine recommendations.
@@ -1894,8 +1970,13 @@ resolved; next review date extended. Variant: recall fails → `different_analog
 or child Teaching → retest. `retrieval_practice` requested inside Study Prep →
 `strategy_not_permitted`.
 
-**D — Practice:** Practice → generate (labelled sources) → answer → server
-score → evidence → recommend next → completed.
+**D — Practice (proctored):** start from the dashboard → reference photo →
+questions generated → Q&A turns (agent picks follow-ups/hints within the hint
+limits) → summary → code computes score and verdict → evidence written →
+recommend next → completed. Variants: sustained cheat probability ≥ 0.85 →
+`terminated`, no evidence, the agent cannot prevent or reverse it; socket drop
+→ resume within 3 minutes; past the grace window → abandoned; a learner who
+picked Claude Opus still gets judged by the locked assessor model.
 
 **E — Reconnect:** agent running → socket/SSE drops → reconnect with last
 sequence → state restored → missing events replayed in order → continues.
@@ -1972,13 +2053,13 @@ LLM failure must never corrupt workflow state.
 | Q5 | Starting cap values in §7.2 table (Teaching turns, strategy changes, Practice caps) | Tune in staging |
 | Q6 | ~~`retrieval_practice`~~ — **resolved (D25):** Strategy Library v2, Decay Review + Practice only. | Done |
 | Q7 | ~~"Learning with guide" toggle~~ — **resolved (D24):** built as the `learn_with_guide` Teaching mode. | Done |
-| Q14 | Standalone Practice: show it in the Agent Chat tab (with the live stream) or in its own view like the modals? | Phase 9 |
+| Q14 | ~~Practice UI~~ — **resolved (D29):** Practice is the live proctored assessment in `AssessmentRoom`, which keeps its UI. | Done |
 | Q13 | DeepSeek's API is hosted outside Nigeria (in China) and learners include minors. Check the data-processing terms and whether school-funded (Pilot) sessions need the school's consent before DeepSeek is enabled for them. | Before enabling DeepSeek |
 | Q12 | Per-tier model lists — **resolved (§7.11.5a).** Still open: Grok and DeepSeek model ids and prices at setup. Fable stays off until a tier is given it. | Before picker UI |
 | Q8 | `content.search` — enable for Study Prep research or keep disabled? | Phase 4 |
 | Q9 | Who can see developer mode (staff role only)? | Phase 11 |
 | Q10 | Notification channels for handoff/completion (in-app only, or web push via existing `notifications/webpush.js`)? | Phase 7 |
-| Q11 | Does standalone Practice have an existing UI to migrate, or is the Practice view new? | Phase 0 |
+| Q11 | ~~Standalone Practice UI~~ — **resolved (D29):** `AssessmentRoom`. | Done |
 
 ---
 
