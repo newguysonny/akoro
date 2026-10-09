@@ -89,6 +89,7 @@ import learnerGoalsModule       from "./modules/learner-goals/routes.js";
 import agentProposalsModule      from "./modules/agent-proposals/routes.js";
 import blogsModule               from "./modules/blogs/routes.js";
 import recordsModule             from "./modules/records/routes.js";
+import { recordsExtractionEnabled, runpodEndpointHealth } from "./modules/records/extractLib.js";
 import {
   agentToolsRouter as agentToolsModule,
   agentActionConfirmationsRouter as agentActionConfirmationsModule,
@@ -380,6 +381,23 @@ let serverReady = false;
 // probes now (humans, alerting).
 const HEALTH_PROBE_MS = 1000 * Math.max(Number(process.env.AKORO_HEALTH_PROBE_SECONDS) || 120, 15);
 let healthCache = { at: 0, dbOk: false, redisOk: false };
+let runpodProbe  = null;   // last DEEP probe of the RunPod parse endpoint
+
+/* Best-effort probe of the configured RunPod parse endpoint — never throws.
+   The endpoint is an OPTIONAL dependency (scanned-PDF extraction degrades
+   gracefully without it), so its state is REPORTED in /health, never gated
+   into the 200/503: Render restarts services whose health check fails, and
+   a RunPod blip must not restart the API. */
+const probeRunpod = async () => {
+  try {
+    const d = await runpodEndpointHealth();
+    return { ok: true, status: d.status ?? null, jobs: d.jobs ?? null,
+             workers: d.workers ?? null, latencyMs: d.latencyMs ?? null,
+             checkedAt: new Date().toISOString() };
+  } catch (e) {
+    return { ok: false, error: e?.message || "probe failed", checkedAt: new Date().toISOString() };
+  }
+};
 app.get("/health", async (req, res) => {
   const deep = req.query.deep === "1";
   const fresh = Date.now() - healthCache.at < HEALTH_PROBE_MS;
@@ -388,6 +406,9 @@ app.get("/health", async (req, res) => {
     // events — no PING round-trip, so an uptime monitor costs 0 commands.
     const redisOk = redisPub.status === "ready";
     const dbOk = await checkDb();
+    // RunPod is probed only on a deep, deliberate check (?deep=1) AND only
+    // when configured — the cached fast path never waits on it.
+    runpodProbe = deep && recordsExtractionEnabled() ? await probeRunpod() : null;
     healthCache = { at: Date.now(), dbOk, redisOk };
   }
   const { dbOk, redisOk } = healthCache;
@@ -420,6 +441,17 @@ app.get("/health", async (req, res) => {
       outboundTopHosts: outboundSummary().hosts.slice(0, 3).map((h) => ({ host: h.host, bytes: h.bytes, requests: h.requests })),
     },
     checks: { database: dbOk ? "ok" : "error", redis: redisOk ? "ok" : "error" },
+    // RunPod parse-worker setup: config presence is always visible (cheap,
+    // no round-trip — set RUNPOD_API_KEY + RUNPOD_PARSE_ENDPOINT_ID on this
+    // service and `configured` flips here). `probe` appears only after a
+    // ?deep=1 with config present: RunPod's own endpoint health (workers,
+    // queue) plus latency. Informational — see probeRunpod above.
+    runpod: {
+      configured: recordsExtractionEnabled(),
+      keyPresent: !!process.env.RUNPOD_API_KEY,
+      endpointId: process.env.RUNPOD_PARSE_ENDPOINT_ID || null,
+      ...(runpodProbe ? { probe: runpodProbe } : {}),
+    },
     // Breaker states are local (no round-trip): a provider outage is visible
     // in /health the moment it trips, not only when requests fail.
     breakers: breakerStats(),

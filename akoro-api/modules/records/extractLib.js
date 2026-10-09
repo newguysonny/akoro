@@ -90,6 +90,37 @@ export const MAX_IMAGE_B64_CHARS   = 8 * 1024 * 1024;   // ≈ 6 MB JPEG after b
 export const recordsExtractionEnabled = () =>
   !!process.env.RUNPOD_API_KEY && !!process.env.RUNPOD_PARSE_ENDPOINT_ID;
 
+/**
+ * runpodEndpointHealth — GET /v2/:id/health on the configured endpoint
+ * (RunPod's own health: { status, jobs:{completed,failed,in_queue},
+ * workers:{idle,running} }). Used by the API's /health deep probe so a
+ * glance answers "is the parse worker set up AND alive". Short timeout —
+ * this rides the health endpoint, which must stay fast. Throws on any
+ * failure; the caller formats. fetchImpl overrides fetch (contract test).
+ */
+export async function runpodEndpointHealth({ timeoutMs = 3500, fetchImpl = null } = {}) {
+  const apiKey     = process.env.RUNPOD_API_KEY;
+  const endpointId = process.env.RUNPOD_PARSE_ENDPOINT_ID;
+  if (!apiKey || !endpointId) throw new Error("RunPod extraction is not configured (RUNPOD_API_KEY / RUNPOD_PARSE_ENDPOINT_ID)");
+  const fx = fetchImpl || fetch;
+  const started = Date.now();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fx(`${RUNPOD_API}/v2/${endpointId}/health`, {
+      headers: { authorization: `Bearer ${apiKey}` },
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`RunPod health HTTP ${res.status}`);
+    return { ...(await res.json()), latencyMs: Date.now() - started };
+  } catch (err) {
+    if (err?.name === "AbortError") throw new Error(`RunPod health probe timed out (${timeoutMs}ms)`);
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /* ── Model-output shaping (pure — exported for the contract test) ─────── */
 
 const IMAGE_SENTINEL     = "<image>";

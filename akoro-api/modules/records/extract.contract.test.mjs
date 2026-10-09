@@ -37,7 +37,7 @@ const [routesSrc, libSrc, appSrc, manifest, recordsMigration, teachSessionSrc, e
   read("../../../akoro-learner/src/components/teaching/TeachAgentModal.jsx"),
 ]);
 
-const { parseBlocks, sortBlocks, blocksToMarkdown, parsePageOnRunpod, recordsExtractionEnabled } =
+const { parseBlocks, sortBlocks, blocksToMarkdown, parsePageOnRunpod, recordsExtractionEnabled, runpodEndpointHealth } =
   await import("./extractLib.js");
 
 /* ── pure shaping ──────────────────────────────────────────────────────── */
@@ -201,4 +201,52 @@ test("the worker owns the prompt contract the model was fine-tuned on", () => {
   assert.match(workerSrc, /QWEN_MAX_IMAGE_PIXELS.*2000000|MAX_PIXELS.*2000000/, "the training pixel cap");
   assert.match(workerSrc, /do_sample=False/, "greedy decode — the model is prompt-coupled, not chat");
   assert.match(workerSrc, /PARSE_MODEL_ALLOW_PROMPT/, "client prompts are ignored unless deliberately allowed");
+});
+
+test("runpodEndpointHealth — the /health deep probe of the parse endpoint", async () => {
+  // unconfigured → a clear throw, before any network call
+  delete process.env.RUNPOD_API_KEY;
+  delete process.env.RUNPOD_PARSE_ENDPOINT_ID;
+  await assert.rejects(() => runpodEndpointHealth(), /not configured/);
+
+  // configured → GET /v2/:id/health with the bearer key, latency attached
+  process.env.RUNPOD_API_KEY = "rpa_test";
+  process.env.RUNPOD_PARSE_ENDPOINT_ID = "ep_test_123";
+  let seen = null;
+  const fetchImpl = async (url, opts = {}) => {
+    seen = { url, opts };
+    return { ok: true, status: 200, json: async () => ({ status: "healthy", jobs: { completed: 2, failed: 0, in_queue: 0 }, workers: { idle: 1, running: 0 } }) };
+  };
+  const d = await runpodEndpointHealth({ fetchImpl });
+  assert.equal(seen.url, "https://api.runpod.ai/v2/ep_test_123/health");
+  assert.equal(seen.opts.headers.authorization, "Bearer rpa_test");
+  assert.ok(seen.opts.signal instanceof AbortSignal, "bounded by an AbortController");
+  assert.equal(d.status, "healthy");
+  assert.equal(d.workers.idle, 1);
+  assert.ok(Number.isFinite(d.latencyMs), "latencyMs rides the result");
+
+  // non-200 → readable throw; abort → timeout message
+  await assert.rejects(
+    () => runpodEndpointHealth({ fetchImpl: async () => ({ ok: false, status: 503 }) }),
+    /HTTP 503/,
+  );
+  await assert.rejects(
+    // a fetch that honors the signal, like the real one
+    () => runpodEndpointHealth({ timeoutMs: 1, fetchImpl: (url, opts = {}) =>
+      new Promise((_, reject) => opts.signal?.addEventListener("abort",
+        () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })))) }),
+    /timed out/,
+  );
+  delete process.env.RUNPOD_API_KEY;
+  delete process.env.RUNPOD_PARSE_ENDPOINT_ID;
+
+  // the /health wiring: config always reported, probe deep-only, never gated
+  const appJs = read("../../app.js");
+  assert.match(appJs, /runpod: \{/, "/health reports the RunPod block");
+  assert.match(appJs, /configured: recordsExtractionEnabled\(\)/);
+  assert.match(appJs, /keyPresent: !!process\.env\.RUNPOD_API_KEY/, "key presence, never the key");
+  assert.match(appJs, /endpointId: process\.env\.RUNPOD_PARSE_ENDPOINT_ID \|\| null/);
+  assert.match(appJs, /deep && recordsExtractionEnabled\(\) \? await probeRunpod\(\) : null/,
+    "the live probe rides ?deep=1 only");
+  assert.match(appJs, /must not restart the API/, "never gates the health status — Render restarts on failing checks");
 });
