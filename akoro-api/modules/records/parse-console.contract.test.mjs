@@ -129,7 +129,8 @@ test("unconfigured → 501; empty image → 400 (no job submitted); submit failu
   globalThis.fetch = async (url, opts = {}) => {
     if (!String(url).startsWith("https://api.runpod.ai")) return realFetch(url, opts);
     if (String(url).endsWith("/run")) return { ok: false, status: 500, text: async () => "boom" };
-    return { ok: true, status: 200, json: async () => ({ id: "job_7", status: "COMPLETED", output: { error: "Model unavailable: Cached model not found" } }) };
+    if (String(url).includes("/status/job_7")) return { ok: true, status: 200, json: async () => ({ id: "job_7", status: "FAILED", output: { error: "Model unavailable: Cached model not found" } }) };
+    if (String(url).includes("/status/job_9")) return { ok: true, status: 200, json: async () => ({ id: "job_9", status: "FAILED", output: null }) };
   };
   try {
     ({ server, port } = await startServer());
@@ -142,9 +143,12 @@ test("unconfigured → 501; empty image → 400 (no job submitted); submit failu
     // (third submit also 502s; now poll a completed-with-error job)
     res = await call(port, "GET", "/console/status?jobId=job_7", { headers: H });
     assert.equal(res.status, 200);
-    const j = JSON.parse(res.text);
+    let j = JSON.parse(res.text);
     assert.equal(j.data.job.done, true, JSON.stringify(j).slice(0, 300));
     assert.match(j.data.job.error, /Model unavailable/, "the worker's readable error is the result");
+    res = await call(port, "GET", "/console/status?jobId=job_9", { headers: H });
+    j = JSON.parse(res.text);
+    assert.match(j.data.job.error, /no worker message.*RunPod console → Logs/, "a bare FAILED names where the traceback lives");
     await stop(server);
   } finally { globalThis.fetch = realFetch; }
 });
