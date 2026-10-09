@@ -207,6 +207,7 @@ session mode" (`fresh | continuation | decay`); "Adaptive Learning Workflow"
 | D33 | Files and non-traditional goals | Study Prep accepts files; they are saved to the learner's Records library and indexed. For scholarship/competition/custom goals the agent builds the syllabus from the files, asks once for a syllabus or materials if there are none, and only then drafts one (§8.8). | User decision. |
 | D34 | Peer agent help | Peers share **breakthroughs, not knowledge**: when a learner gets past a misconception or repeated failure, Akoro records the struggle and what worked (`edu.learning_breakthroughs`). A stuck learner's agent sends only the struggle and gets up to 3 matching stories plus the most effective strategy across ≥ 5 learners. Opt-in, off by default (Settings → Agent); never evidence; `peer_help` joins Strategy Library v2 (§7.13). | User decision. |
 | D35 | Blog research | Upgrade blog search to passage-level hybrid search over article bodies, with citations; used for study methods and strategy, never as syllabus or evidence (§7.14). | User decision. |
+| D36 | Cross-learner strategy pattern | Counted over **all learners, anonymously** — totals only, shown only when ≥ 5 learners match. Individual stories still need the learner's opt-in. The privacy policy states that anonymous learning statistics are used to recommend strategies. | User decision (Q18). |
 | D10 | Who writes narration? | **Harness templates** (`ActivityNarrator`, grown from `narration.js:deliberate()`) for facts; the agent's `intent` (≤ 240 chars, sanitised, untrusted display text) for "why". v3's `narration` field **is** `intent`. | Deterministic where possible (v3 §40), already built (v7). |
 | D11 | Event store | New generic `edu.workflow_events`. `study_prep_events` is kept read-only and backfilled. | One stream model for four workflows (v3 §43). |
 | D12 | Live transport | **Event store is the source of truth; transport is replaceable.** Teaching and Decay keep the existing Socket.IO connection. Study Prep and Practice use SSE (same heartbeat pattern as `/chat/agent`). Both carry the identical event envelope. Replay: `GET /api/workflows/:id/events?after=N`. | v3 §42–43; reuses what already works. |
@@ -1149,8 +1150,13 @@ source_workflow, shareable boolean, embedding vector, created_at
   model from the evidence summaries and the strategy record**, not copied from
   the learner's messages or notes. A filter removes names, schools, contact
   details and anything quoted from the learner.
-- `shareable` is set from the learner's opt-in at the time (Settings → Agent);
-  turning the setting off later makes all their records unshareable.
+- Records are written for **every** learner. `shareable` only controls whether
+  a record can be shown **as a story**; it follows the learner's opt-in
+  (Settings → Agent), and turning the setting off makes all their records
+  unshareable as stories.
+- **Every** record — shareable or not, hidden or not — counts toward the
+  anonymous **pattern** totals (D36). Only totals are ever shown, and only when
+  at least 5 learners match.
 - Learners can see their own breakthroughs ("Your agent's stories") under
   Settings → Agent and hide any one of them.
 
@@ -1189,9 +1195,10 @@ peers.consult({ conceptId, struggleType, misconception, classLevel? })
 - **Matching:** same concept, then misconception similarity (embedding on
   `struggle_summary` + `misconception_key`), then similar class level; prefer
   breakthroughs with a big score jump and recent dates. Only `shareable` records.
-- **Pattern:** across all matching shareable records, which strategy most often
-  worked — returned only when at least 5 learners match, so no single learner
-  can be identified.
+- **Pattern:** across **all learners' matching records, anonymously** (D36),
+  which strategy most often worked and for what share of learners — returned
+  only when at least 5 learners match, as totals only (no stories, names,
+  schools or dates), so no single learner can be identified.
 - Stories are shown with the agent's name and emoji only.
 
 #### 7.13.3 How the stories are used
@@ -2455,7 +2462,8 @@ leaf's stomata worked; 2/5 → 5/5") and, once ≥ 5 learners match, the pattern
 ("teach_back worked for 8 of 12") → NaNa tries that move in B's Teaching
 session → nothing is written to B's notes or evidence. Variants: A has the
 setting off → A's story is never returned; A turns it off later → all A's
-records become unshareable; fewer than 5 matches → no pattern shown; B's own
+records become unshareable; fewer than 5 matches → no pattern shown; learners who never opted in still count
+toward the pattern totals but their stories are never returned; B's own
 data never leaves B's side; A hides one story in Settings → it is never shown.
 
 **P — Blog research:** the agent searches "spaced repetition before exams" →
@@ -2522,7 +2530,7 @@ LLM failure must never corrupt workflow state.
 | Q7 | ~~"Learning with guide" toggle~~ — **resolved (D24):** built as the `learn_with_guide` Teaching mode. | Done |
 | Q16 | ~~Decay `retrieval_practice` human vs agent~~ — **resolved (D32):** keep human recall for now. | Done |
 | Q17 | ~~Peer help consent default~~ — **resolved (D34):** off by default; a clear toggle in Settings → Agent. | Done |
-| Q18 | The cross-learner **pattern** ("teach_back worked for 8 of 12"): count only opted-in learners (plan default), or all learners anonymously since only totals are shown (≥ 5)? | Before §7.13 ships |
+| Q18 | ~~Pattern population~~ — **resolved (D36):** all learners, anonymously, totals only, ≥ 5. | Done |
 | Q14 | ~~Practice UI~~ — **resolved (D29):** Practice is the live proctored assessment in `AssessmentRoom`, which keeps its UI. | Done |
 | Q13 | ~~DeepSeek / Grok data handling~~ — **resolved:** accepted by the product owner (2026-10-09); both enabled per §7.11.5a. | Done |
 | Q12 | ~~Per-tier model lists~~ — **resolved (§7.11.5a).** Grok and DeepSeek model ids and prices are filled into `AI_MODELS` at setup (a setup task, not an open question). Fable stays off until a tier is given it. | Done |
