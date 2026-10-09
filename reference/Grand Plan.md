@@ -38,6 +38,7 @@ checked against the code on 2026-10-09.
    - 7.12 Agent Check
    - 7.13 Peer agent help
    - 7.14 Blog research
+   - 7.15 Learning struggle taxonomy
 8. Workflow 1 — Study Prep
 9. Workflow 2 — Teaching (agent-driven)
 10. Workflow 3 — Decay Review
@@ -205,10 +206,11 @@ session mode" (`fresh | continuation | decay`); "Adaptive Learning Workflow"
 | D31 | How practice works | **Agent Check** (§7.12): NaNa asks, the learner's agent answers only from its owner's notes, Sergeant judges, the Education Engine scores. No human answers. Replaces `practice.generate/submit` in Study Prep, Teaching and Decay. The proctored assessment stays human and separate. | User decision: practice tests the agent, like Battles. |
 | D32 | Decay `retrieval_practice` | **Stays human recall for now** — the one place outside the proctored assessment and guide mode where the learner answers questions. Its answers are scored server-side and tagged `source: "learner_recall"`; the Agent Check still runs the retention check and retest. Revisit later. | User decision (Q16). |
 | D33 | Files and non-traditional goals | Study Prep accepts files; they are saved to the learner's Records library and indexed. For scholarship/competition/custom goals the agent builds the syllabus from the files, asks once for a syllabus or materials if there are none, and only then drafts one (§8.8). | User decision. |
-| D34 | Peer agent help | Peers share **breakthroughs, not knowledge**: when a learner gets past a misconception or repeated failure, Akoro records the struggle and what worked (`edu.learning_breakthroughs`). A stuck learner's agent sends only the struggle and gets up to 3 matching stories plus the most effective strategy across ≥ 5 learners. Opt-in, off by default (Settings → Agent); never evidence; `peer_help` joins Strategy Library v2 (§7.13). | User decision. |
+| D34 | Peer agent help | Peers share **breakthroughs, not knowledge**: when a learner gets past a misconception or repeated failure, Akoro records the struggle and what worked (`edu.learning_struggles`). A stuck learner's agent sends only the struggle and gets up to 3 matching stories plus the most effective strategy across ≥ 5 learners. Opt-in, off by default (Settings → Agent); never evidence; `peer_help` joins Strategy Library v2 (§7.13). | User decision. |
 | D35 | Blog research | Upgrade blog search to passage-level hybrid search over article bodies, with citations; used for study methods and strategy, never as syllabus or evidence (§7.14). | User decision. |
 | D36 | Cross-learner strategy pattern | Counted over **all learners, anonymously** — totals only, shown only when ≥ 5 learners match. Individual stories still need the learner's opt-in. The privacy policy states that anonymous learning statistics are used to recommend strategies. | User decision (Q18). |
 | D37 | Recording struggles and breakthroughs | Every workflow records misconceptions, gaps, recoveries and strategy outcomes through one Education Engine recorder into `learner_concept_evidence`; breakthroughs are detected from those events; existing teaching and exam-prep history is backfilled. Built early (Phase 4a), because Agent Checks, peer help and the strategy pattern depend on it (§7.8.1). | Gap found 2026-10-09: today only Study Prep pass/fail and the Python service write evidence. |
+| D38 | Struggle taxonomy | A closed, versioned list of **43 struggle types in 8 categories** (§7.15): each with how it is detected (rule / agent / learner), when it counts as resolved, whether it is concept-tied and whether it may be a peer story. Struggles and breakthroughs share one table (`edu.learning_struggles`). Six sensitive types (anxiety, health…) are type-and-date only, never stories, learner-deletable; health expires in 30 days. | User decision. |
 | D10 | Who writes narration? | **Harness templates** (`ActivityNarrator`, grown from `narration.js:deliberate()`) for facts; the agent's `intent` (≤ 240 chars, sanitised, untrusted display text) for "why". v3's `narration` field **is** `intent`. | Deterministic where possible (v3 §40), already built (v7). |
 | D11 | Event store | New generic `edu.workflow_events`. `study_prep_events` is kept read-only and backfilled. | One stream model for four workflows (v3 §43). |
 | D12 | Live transport | **Event store is the source of truth; transport is replaceable.** Teaching and Decay keep the existing Socket.IO connection. Study Prep and Practice use SSE (same heartbeat pattern as `/chat/agent`). Both carry the identical event envelope. Replay: `GET /api/workflows/:id/events?after=N`. | v3 §42–43; reuses what already works. |
@@ -717,9 +719,13 @@ including `misconception_active`). Every workflow calls it:
 `proctored`, `chat`) so the engine can weight evidence and the learner model
 never mixes them silently.
 
-**Breakthrough detection** (§7.13.1) runs on these events: a pure function
+**Struggle detection** (§7.15) runs on these events and on timings,
+question tags, deferrals and streaks: `rule` types are computed by code;
+`agent` and `learner` types go through `recordStruggle({ type, conceptId?,
+observation })`, which checks the type is in the taxonomy and the observation
+cites real evidence. **Breakthrough detection** (§7.13.1) runs on these events: a pure function
 watches each new event against the concept's history and writes a
-`learning_breakthroughs` row when a struggle resolves. It needs the strategy
+`learning_struggles` row (status → resolved) when a struggle resolves. It needs the strategy
 outcome records (`recordStrategyOutcome`) so it knows *what worked*.
 
 **Backfill:** existing `adaptive_sessions.teaching_evidence` misconception
@@ -1152,41 +1158,35 @@ knowledge:
 > me that transpiration is the plant 'sweating' through them. After that they
 > scored 5/5."
 
-#### 7.13.1 Breakthrough records — captured automatically
+#### 7.13.1 Struggles and breakthroughs — captured automatically
 
-When a learner gets unstuck, the Education Engine writes a **breakthrough
-record**. It is built from history Akoro already keeps:
+Akoro records each **struggle** when it is detected (any type from the
+taxonomy in §7.15) and turns it into a **breakthrough** when it resolves. One
+table holds both — a breakthrough is a resolved struggle:
 
-| Struggle detected from | Resolved when |
-|---|---|
-| `learner_concept_evidence`: `misconception_detected` | the same concept gets `misconception_cleared` |
-| `recall_gap` / a failed Agent Check or retest | a later check or retest passes |
-| A topic that needed several attempts or strategy changes (`study_prep_topics.attempts_used`, strategy history) | the topic reaches `understood` |
-| Decay relapse (retained → decayed) | the decay review completes retained |
-| Teaching evidence: unresolved misconception | repaired (`misconceptionRepaired`) |
-
-`edu.learning_breakthroughs`:
+`edu.learning_struggles`:
 
 ```
 id, learner_id (never exposed), agent_id,
-subject, class_level, concept_id, topic_label,
-struggle_type      misconception | repeated_failure | slow_progress | decay_relapse
-struggle_summary   ≤ 200 chars — "confused evaporation with transpiration"
-misconception_key  normalised label for matching
-attempts_before    int
-strategies_tried   text[]   — e.g. {standard_explanation, different_analogy}
-what_worked        strategy id (from the library) + ≤ 300-char description
-                   of the move that worked ("drew a leaf with stomata; the
-                   'plant sweating' analogy")
-score_before, score_after, days_to_overcome,
-source_workflow, shareable boolean, embedding vector, created_at
+category, struggle_type        from STRUGGLE_TYPES (§7.15), versioned
+subject, class_level, concept_id (null for general types), topic_label,
+detected_by                    rule | agent | learner
+detected_at, evidence_refs[]   the evidence/events it was detected from
+status                         open | resolved | abandoned | expired
+struggle_summary               ≤ 200 chars (null for sensitive types)
+misconception_key              normalised label for matching (concept types)
+attempts_before, strategies_tried[]
+what_worked_strategy, what_worked   ≤ 300 chars (null for sensitive types)
+score_before, score_after, days_to_overcome, resolved_at
+source_workflow, sensitive boolean, shareable boolean, hidden boolean,
+expires_at (health_energy: +30 days), embedding vector
 ```
 
 - `struggle_summary` and `what_worked` are **written by a locked summariser
   model from the evidence summaries and the strategy record**, not copied from
   the learner's messages or notes. A filter removes names, schools, contact
   details and anything quoted from the learner.
-- Records are written for **every** learner. `shareable` only controls whether
+- Struggles are recorded for **every** learner (open and resolved). `shareable` only controls whether
   a record can be shown **as a story**; it follows the learner's opt-in
   (Settings → Agent), and turning the setting off makes all their records
   unshareable as stories.
@@ -1220,7 +1220,7 @@ The asking agent never sends knowledge or the learner's data — only **the
 struggle**:
 
 ```
-peers.consult({ conceptId, struggleType, misconception, classLevel? })
+peers.consult({ struggleType, conceptId?, misconception?, classLevel? })   // struggleType from §7.15
   → {
       stories: [ { agent: "Kofi's Agent 🦉", struggle, attemptsBefore,
                    whatWorked, strategy, scoreBefore, scoreAfter } ],   // up to 3
@@ -1228,9 +1228,11 @@ peers.consult({ conceptId, struggleType, misconception, classLevel? })
     }
 ```
 
-- **Matching:** same concept, then misconception similarity (embedding on
-  `struggle_summary` + `misconception_key`), then similar class level; prefer
-  breakthroughs with a big score jump and recent dates. Only `shareable` records.
+- **Matching:** same struggle type; for concept types the same concept, then
+  misconception similarity (embedding on `struggle_summary` +
+  `misconception_key`); for general types (procrastination, overload,
+  streak break…) similar class level and context; then prefer
+  breakthroughs with a big score jump and recent dates. Only resolved, `shareable`, non-sensitive, non-hidden records become stories.
 - **Pattern:** across **all learners' matching records, anonymously** (D36),
   which strategy most often worked and for what share of learners — returned
   only when at least 5 learners match, as totals only (no stories, names,
@@ -1251,12 +1253,12 @@ peers.consult({ conceptId, struggleType, misconception, classLevel? })
   matching story directly.
 - Stories are **never evidence** and never written to the learner's notes.
 
-#### 7.13.4 Also for study struggles (later)
+#### 7.13.4 All struggle types, not only concepts
 
-The same record shape can capture non-topic struggles — breaking a streak and
-recovering it, exam-week planning, consistency — from goal and streak
-history. Out of scope for the first release; the table allows
-`struggle_type = 'study_habit'` from day one.
+Consulting covers every type in §7.15 — a learner who keeps procrastinating
+on a hard topic gets stories from learners who beat procrastination, not just
+concept explanations. Sensitive types never produce stories, only anonymous
+totals.
 
 #### 7.13.5 Limits
 
@@ -1284,6 +1286,158 @@ category only (`ilike`), then `read_blog_post` returns a whole post.
   chip linking to the post.
 - **Use:** study methods, exam strategy, motivation, platform guidance. The
   blog is **never** a syllabus source and never evidence.
+
+### 7.15 Learning struggle taxonomy (D38) 🆕
+
+Every struggle Akoro records uses one **closed list** of types, grouped into
+eight categories. The list is data (`STRUGGLE_TYPES`, versioned like the
+Strategy Library); the agent can only record a type from it, and adding a type
+is a deliberate change with a contract test.
+
+**Columns:**
+- **Detected by** — `rule`: computed by code from evidence, scores, timings or
+  history (preferred) · `agent`: the controller or Sergeant observes it and
+  records it through the recorder (needs a cited observation) · `learner`: the
+  learner says it ("I always freeze in tests").
+- **Concept?** — tied to a concept (matched by concept in consulting) or
+  general (matched by type and context).
+- **Story?** — may be shared as an individual peer story (with opt-in). `—` =
+  sensitive: never an individual story, only anonymous totals (§7.15.2).
+
+#### Concept & understanding
+
+| Type | Meaning | Detected by | Signal | Resolved when | Concept? | Story? |
+|---|---|---|---|---|---|---|
+| `misconception` | Wrong mental model | rule | `misconception_detected` evidence | `misconception_cleared` | ✓ | ✓ |
+| `partial_understanding` | Right idea, incomplete ("knows stomata exist, not what they do") | rule + agent | Sergeant/teaching evidence: claim supported but key parts missing (quality 0.4–0.7) | full explanation / check passes | ✓ | ✓ |
+| `fragile_knowledge` | Recalls but can't apply; passes recognition, fails transfer | rule | passes `recall`-tagged questions, fails `apply`/`transfer`-tagged ones | passes apply/transfer questions | ✓ | ✓ |
+| `vocabulary_language` | Knows the idea, trips on the term or the language of instruction | agent | correct in own words / another language, wrong or missing key term | uses the term correctly | ✓ | ✓ |
+| `prior_knowledge_conflict` | New correct model fights an older learned one | agent | misconception that matches an earlier-taught model, or the learner says "but we were taught…" | new model used consistently | ✓ | ✓ |
+| `overgeneralization` | Applies a rule too broadly ("all plants sweat") | agent (Sergeant tag) | judge tags the error as over-applied rule | boundary cases answered correctly | ✓ | ✓ |
+| `prerequisite_gap` | Can't get it because an earlier concept is missing | rule | fails the topic **and** fails a prerequisite from `concept_edges` | prerequisite then topic pass | ✓ | ✓ |
+
+#### Recall & memory
+
+| Type | Meaning | Detected by | Signal | Resolved when | Concept? | Story? |
+|---|---|---|---|---|---|---|
+| `decay` | Forgot over time | rule | retention check fails after an earlier pass | retention restored | ✓ | ✓ |
+| `encoding_failure` | Never stored it, only recognised it | rule | taught, but the agent's notes on it are thin/none (`recallStrength`) or free recall never succeeded | free recall succeeds | ✓ | ✓ |
+| `retrieval_failure` | Stored but can't access under pressure | rule | notes/earlier recall good, fails timed or proctored | passes under the same conditions | ✓ | ✓ |
+| `interference` | Two similar concepts block each other | rule | errors swap a known confusion pair (evaporation ↔ transpiration) | both distinguished on a mixed check | ✓ | ✓ |
+| `context_dependence` | Knows it in one format, not another | rule | passes one representation (text), fails another (diagram, word problem) | passes both | ✓ | ✓ |
+
+#### Strategy & approach
+
+| Type | Meaning | Detected by | Signal | Resolved when | Concept? | Story? |
+|---|---|---|---|---|---|---|
+| `wrong_strategy` | Studying the right thing the wrong way | rule | strategy fails here while another works for similar learners on the same struggle | a different strategy works | ✓ | ✓ |
+| `strategy_plateau` | A strategy that used to work stopped working | rule | a strategy with past success for this learner fails twice running | a new strategy works | ✓ | ✓ |
+| `no_strategy` | Doesn't know how to attack the topic | learner + agent | "I don't know where to start", long idle on a topic | progress after a suggested approach | ✓ | ✓ |
+| `inefficient_strategy` | Works but too slow / effortful | rule | passes, but attempts or time far above the median for that topic | similar result in less time | ✓ | ✓ |
+
+#### Motivation & affect
+
+| Type | Meaning | Detected by | Signal | Resolved when | Concept? | Story? |
+|---|---|---|---|---|---|---|
+| `streak_break` | Momentum loss | rule | streak broken (existing streak data) | streak rebuilt (e.g. 5 days) | — | ✓ |
+| `confidence_collapse` | One failure spirals into avoidance | rule + agent | failure followed by deferring/avoiding the topic, negative self-talk | returns to the topic and passes | ✓ | — sensitive |
+| `frustration_giving_up` | Repeated failure, no path forward | rule + agent | repeated fails then abandon/quit | completes after a change | ✓ | — sensitive |
+| `anxiety` | Knows it, freezes in assessment | learner + rule | learner says so, or untimed ≫ timed/proctored performance | performs under assessment | — | — sensitive |
+| `boredom_disengagement` | Too easy or too abstract | agent | very short answers, skipping, fast passes with low engagement | engagement returns (harder/concrete material) | ✓ | ✓ |
+| `overload` | Too much at once, can't prioritise | learner + rule | plan size vs available time, "I'm overwhelmed" | plan narrowed and followed | — | ✓ |
+
+#### Process & habit
+
+| Type | Meaning | Detected by | Signal | Resolved when | Concept? | Story? |
+|---|---|---|---|---|---|---|
+| `procrastination` | Keeps deferring the hard topic | rule | same topic deferred repeatedly; a workflow left in `ready` for days | topic attempted | ✓ | ✓ |
+| `poor_planning` | Exam week, no schedule | rule | exam date near, no plan or plan created very late | plan followed to the exam | — | ✓ |
+| `time_management` | Runs out mid-topic | rule | sessions repeatedly end mid-topic | topics finished within sessions | — | ✓ |
+| `inconsistent_practice` | Sporadic, no spacing | rule | irregular gaps between sessions | steady spacing for 2+ weeks | — | ✓ |
+| `no_self_monitoring` | Doesn't realise they're stuck | rule | self-rated confident, then fails (calibration gap) | ratings match results | ✓ | ✓ |
+
+#### Environment & circumstance
+
+| Type | Meaning | Detected by | Signal | Resolved when | Concept? | Story? |
+|---|---|---|---|---|---|---|
+| `time_pressure` | Real deadline vs time available | rule | deadline vs plan estimate | plan fits / deadline met | — | ✓ |
+| `distraction_context` | Device, noise, interruptions | learner + rule | learner says so; frequent pauses/backgrounding | uninterrupted sessions | — | ✓ |
+| `resource_gap` | No access to material or help | rule | no syllabus/materials found (§8.7–8.8), learner asks for material | materials obtained / outline used | — | ✓ |
+| `device_access` | Offline, low bandwidth | rule | repeated disconnects, low-bandwidth flags | stable sessions (or offline mode used) | — | ✓ |
+| `health_energy` | Tired, unwell, low capacity | **learner only** | the learner says so; never inferred | — (expires) | — | — sensitive |
+
+#### Assessment & performance
+
+| Type | Meaning | Detected by | Signal | Resolved when | Concept? | Story? |
+|---|---|---|---|---|---|---|
+| `test_anxiety` | Understood, performed poorly | rule + learner | strong teaching/recall evidence, poor proctored or timed result | performs in the proctored assessment | ✓ | — sensitive |
+| `format_mismatch` | Knows it, fails the question type | rule | passes the concept in one question type, fails another type | passes that type | ✓ | ✓ |
+| `careless_error` | Knew it, misread | agent (Sergeant tag) | wrong answer with correct reasoning shown, or instant self-correction | error rate falls | ✓ | ✓ |
+| `speed` | Correct but too slow | rule | correct answers over the time budget | within time | ✓ | ✓ |
+| `retest_failure` | Passed once, failed the check | rule | a pass followed by a failed check/retest | passes again | ✓ | ✓ |
+
+#### Meta / learning-to-learn
+
+| Type | Meaning | Detected by | Signal | Resolved when | Concept? | Story? |
+|---|---|---|---|---|---|---|
+| `help_seeking_failure` | Didn't ask, or asked wrong | rule + agent | stuck long without hints/questions, or vague asks | asks a specific question that unblocks | ✓ | ✓ |
+| `feedback_misuse` | Got feedback, didn't act on it | rule | the same gap Sergeant named reappears after feedback | gap closed | ✓ | ✓ |
+| `fixed_mindset` | "I'm just bad at this" | agent (from the learner's words) | repeated fixed-ability statements | — (tracked, not "resolved") | — | — sensitive |
+| `goal_confusion` | Doesn't know what "understood" means | agent + learner | asks what counts as done; sets vague goals | goal restated and met | — | ✓ |
+
+#### 7.15.1 Detection needs these signals
+
+Several rule-based types need data the plan must capture:
+- **Question tags** on every Agent Check / proctored question: `skill`
+  (`recall | apply | transfer`), `format` (`mcq | short | diagram | word_problem
+  | calculation`), `time_budget_s`. NaNa/question source sets them.
+- **Confusion pairs** per subject (e.g. evaporation ↔ transpiration) — learned
+  from judged errors, admin-reviewable.
+- **Timings:** time per question and per session; session end reason.
+- **Self-rating** (optional one-tap "How sure are you?") before some checks,
+  for `no_self_monitoring`.
+- Existing: streaks, `concept_edges`, deferrals, workflow states, socket
+  disconnects, wallet pauses.
+
+Note on source: Agent Checks test the **agent's** notes, so types detected from
+them describe the learner's *teaching* (e.g. `encoding_failure` = they never
+taught it properly). Types about performing under pressure (`anxiety`,
+`test_anxiety`, `retrieval_failure` under timing) come from the human-answered
+paths: the proctored assessment and Decay's recall rounds.
+
+#### 7.15.2 Sensitive types
+
+`confidence_collapse`, `frustration_giving_up`, `anxiety`, `health_energy`,
+`test_anxiety`, `fixed_mindset`:
+- Stored as **type + date (+ concept if any) only** — no free-text summary.
+- Never inferred from a single message; `health_energy` only from the learner's
+  own words and **expires after 30 days**.
+- **Never an individual peer story.** They may count in anonymous totals
+  (≥ 5 learners, D36).
+- Used only to adapt pacing and tone (shorter sessions, easier wins first,
+  NaNa's wording). Not shown to schools or instructors (see Q19).
+- The learner can see and delete them in Settings → Agent ("What your agent
+  has noticed").
+
+#### 7.15.3 Struggle → strategy
+
+The Adaptive Learning Engine maps each struggle type to candidate strategies,
+then ranks them with the anonymous pattern (what worked for others with the
+same struggle) and this learner's history:
+
+| Struggle category | Uses existing strategies | Needs new strategies (Strategy Library v3, Q20) |
+|---|---|---|
+| Concept & understanding | `teach_back`, `different_analogy`, `peer_help` | `contrast_pairs` (overgeneralization, interference), `prerequisite_review` (prerequisite gap), `vocabulary_focus` (vocabulary/language), `worked_examples` (fragile knowledge) |
+| Recall & memory | `space_out`, `retrieval_practice`, `interleave` | `varied_formats` (context dependence) |
+| Strategy & approach | any other approved strategy, `peer_help` | — |
+| Motivation & affect | `space_out`, `escalate_human` | `easy_wins_first` (confidence collapse), `chunk_plan` (overload), `make_concrete` (boredom) |
+| Process & habit | `space_out` | `schedule_plan` (poor planning, inconsistent practice), `chunk_plan` (time management) |
+| Environment | — | `offline_pack` (device/access), `chunk_plan` (time pressure) |
+| Assessment & performance | `retrieval_practice` | `timed_practice` (speed, anxiety), `format_practice` (format mismatch), `check_your_work` (careless error) |
+| Meta | `escalate_human` | `self_check` (no self-monitoring, feedback misuse), `goal_clarify` (goal confusion) |
+
+Until v3 is approved, unmapped struggles fall back to the closest existing
+strategy plus a NaNa coaching note.
 
 ---
 
@@ -2160,15 +2314,24 @@ content.blog_chunks (                 -- §7.14
 
 edu/public user_agents: + help_others_opt_in boolean default false, + helped_count int default 0   -- §7.13
 
-edu.learning_breakthroughs (           -- §7.13.1
-  id uuid pk, learner_id uuid, agent_id uuid, subject text, class_level text,
-  concept_id uuid null, topic_label text,
-  struggle_type text check in ('misconception','repeated_failure','slow_progress','decay_relapse','study_habit'),
-  struggle_summary text, misconception_key text, attempts_before int,
-  strategies_tried text[], what_worked_strategy text, what_worked text,
-  score_before numeric, score_after numeric, days_to_overcome int,
-  source_workflow text, shareable boolean default false, hidden boolean default false,
-  embedding vector, created_at timestamptz default now()
+edu.learning_struggles (               -- §7.13.1, §7.15
+  id uuid pk, learner_id uuid, agent_id uuid,
+  category text, struggle_type text,    -- STRUGGLE_TYPES (versioned)
+  subject text, class_level text, concept_id uuid null, topic_label text,
+  detected_by text check in ('rule','agent','learner'), detected_at timestamptz,
+  evidence_refs uuid[], status text check in ('open','resolved','abandoned','expired'),
+  struggle_summary text null, misconception_key text null,
+  attempts_before int, strategies_tried text[],
+  what_worked_strategy text null, what_worked text null,
+  score_before numeric, score_after numeric, days_to_overcome int, resolved_at timestamptz,
+  source_workflow text, sensitive boolean, shareable boolean default false,
+  hidden boolean default false, expires_at timestamptz null, embedding vector
+)
+-- index (struggle_type, concept_id, status); index (learner_id, status)
+
+-- question tags for detection (§7.15.1): on every generated/bank question
+--   skill ('recall'|'apply'|'transfer'), format, time_budget_s
+edu.confusion_pairs ( subject text, concept_a uuid, concept_b uuid, observed int, status text )
 )
 
 edu.generated_syllabi (
@@ -2344,7 +2507,9 @@ existing contract test.** Phases 11 (UI) can start in parallel after Phase 3.
 - `recordLearningEvent` in the Education Engine; `source` on every event.
 - Wire the **current** Teaching code (evidence observer) and Study Prep store to
   it now, so data starts accumulating before the workflow refactors.
-- `recordStrategyOutcome`; breakthrough detector + `edu.learning_breakthroughs`.
+- `recordStrategyOutcome`; struggle detection for the `rule` types (§7.15) and
+  `recordStruggle` for agent/learner types; breakthrough resolution;
+  `edu.learning_struggles`, question tags, confusion pairs, timings.
 - One-off backfill from `adaptive_sessions.teaching_evidence` and exam-prep runs.
 - **Exit:** a misconception detected and repaired in a live teaching session
   appears in `learner_concept_evidence` and produces a breakthrough row;
@@ -2579,6 +2744,8 @@ LLM failure must never corrupt workflow state.
 | Q16 | ~~Decay `retrieval_practice` human vs agent~~ — **resolved (D32):** keep human recall for now. | Done |
 | Q17 | ~~Peer help consent default~~ — **resolved (D34):** off by default; a clear toggle in Settings → Agent. | Done |
 | Q18 | ~~Pattern population~~ — **resolved (D36):** all learners, anonymously, totals only, ≥ 5. | Done |
+| Q19 | Should schools/instructors ever see a learner's struggles (e.g. non-sensitive ones in the class dashboard)? Plan default: no. | Before school dashboards use it |
+| Q20 | Approve Strategy Library v3 (the new strategies listed in §7.15.3)? | Before Phase 8 |
 | Q14 | ~~Practice UI~~ — **resolved (D29):** Practice is the live proctored assessment in `AssessmentRoom`, which keeps its UI. | Done |
 | Q13 | ~~DeepSeek / Grok data handling~~ — **resolved:** accepted by the product owner (2026-10-09); both enabled per §7.11.5a. | Done |
 | Q12 | ~~Per-tier model lists~~ — **resolved (§7.11.5a).** Grok and DeepSeek model ids and prices are filled into `AI_MODELS` at setup (a setup task, not an open question). Fable stays off until a tier is given it. | Done |
