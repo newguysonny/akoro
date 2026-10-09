@@ -208,6 +208,7 @@ session mode" (`fresh | continuation | decay`); "Adaptive Learning Workflow"
 | D34 | Peer agent help | Peers share **breakthroughs, not knowledge**: when a learner gets past a misconception or repeated failure, Akoro records the struggle and what worked (`edu.learning_breakthroughs`). A stuck learner's agent sends only the struggle and gets up to 3 matching stories plus the most effective strategy across ≥ 5 learners. Opt-in, off by default (Settings → Agent); never evidence; `peer_help` joins Strategy Library v2 (§7.13). | User decision. |
 | D35 | Blog research | Upgrade blog search to passage-level hybrid search over article bodies, with citations; used for study methods and strategy, never as syllabus or evidence (§7.14). | User decision. |
 | D36 | Cross-learner strategy pattern | Counted over **all learners, anonymously** — totals only, shown only when ≥ 5 learners match. Individual stories still need the learner's opt-in. The privacy policy states that anonymous learning statistics are used to recommend strategies. | User decision (Q18). |
+| D37 | Recording struggles and breakthroughs | Every workflow records misconceptions, gaps, recoveries and strategy outcomes through one Education Engine recorder into `learner_concept_evidence`; breakthroughs are detected from those events; existing teaching and exam-prep history is backfilled. Built early (Phase 4a), because Agent Checks, peer help and the strategy pattern depend on it (§7.8.1). | Gap found 2026-10-09: today only Study Prep pass/fail and the Python service write evidence. |
 | D10 | Who writes narration? | **Harness templates** (`ActivityNarrator`, grown from `narration.js:deliberate()`) for facts; the agent's `intent` (≤ 240 chars, sanitised, untrusted display text) for "why". v3's `narration` field **is** `intent`. | Deterministic where possible (v3 §40), already built (v7). |
 | D11 | Event store | New generic `edu.workflow_events`. `study_prep_events` is kept read-only and backfilled. | One stream model for four workflows (v3 §43). |
 | D12 | Live transport | **Event store is the source of truth; transport is replaceable.** Teaching and Decay keep the existing Socket.IO connection. Study Prep and Practice use SSE (same heartbeat pattern as `/chat/agent`). Both carry the identical event envelope. Replay: `GET /api/workflows/:id/events?after=N`. | v3 §42–43; reuses what already works. |
@@ -689,6 +690,41 @@ recordStrategyOutcome({ strategy, version, before, after })
 - Narration is never evidence. Evidence is stored separately.
 - `student-state.js` cognitive fields and `agents/student/knowledge.js`
   remain during migration; reduce to one representation in Phase 10.
+
+#### 7.8.1 What every workflow must record (D37)
+
+**Today this is partial** (checked 2026-10-09): Study Prep writes only
+pass/fail `assessment_result`; Teaching keeps misconceptions inside each
+session's `adaptive_sessions.teaching_evidence` JSON and never reaches the
+learner model; Decay only decays `knowledge_confidence`; the proctored
+assessment writes no concept evidence; `misconception_detected/cleared` is
+only written by the Python agent through the concept-state gateway.
+
+**Target:** one recorder in the Education Engine,
+`recordLearningEvent({ learnerId, conceptId, kind, source, workflowId, details })`,
+writing to `learner_concept_evidence` (and updating `learner_concept_state`,
+including `misconception_active`). Every workflow calls it:
+
+| Workflow | Must record |
+|---|---|
+| Study Prep | every Agent Check result per concept (`assessment_result`, `recall_gap` for each gap Sergeant names, `recall_success`); strategy chosen and its outcome |
+| Teaching | `misconception_detected` when the evidence observer finds one; `misconception_cleared` when it is repaired; `recall_gap` / `recall_success` per must-know part; strategy changes and outcome |
+| Decay Review | `recall_gap` when the retention check finds decay; `recall_success` when restored; the learner's recall rounds (`source: learner_recall`) |
+| Practice (proctored) | per-concept `assessment_result` for completed, unflagged sessions only |
+| Agent Chat | misconceptions the agent notices in conversation, only through the same recorder (tagged `source: chat`, lower weight) |
+
+`source` is always set (`agent_recall`, `teaching`, `learner_recall`,
+`proctored`, `chat`) so the engine can weight evidence and the learner model
+never mixes them silently.
+
+**Breakthrough detection** (§7.13.1) runs on these events: a pure function
+watches each new event against the concept's history and writes a
+`learning_breakthroughs` row when a struggle resolves. It needs the strategy
+outcome records (`recordStrategyOutcome`) so it knows *what worked*.
+
+**Backfill:** existing `adaptive_sessions.teaching_evidence` misconception
+data and exam-prep run history are converted into evidence events once, so
+breakthroughs and the anonymous pattern (D36) start with history, not empty.
 
 ### 7.9 Event stream, narration and transport 🆕
 
@@ -2304,6 +2340,16 @@ existing contract test.** Phases 11 (UI) can start in parallel after Phase 3.
   loads `strategies`, teaching turns load `teaching_controller`, etc.; all
   sets within budget; boot preflight green.
 
+### Phase 4a — Learning evidence everywhere (D37)
+- `recordLearningEvent` in the Education Engine; `source` on every event.
+- Wire the **current** Teaching code (evidence observer) and Study Prep store to
+  it now, so data starts accumulating before the workflow refactors.
+- `recordStrategyOutcome`; breakthrough detector + `edu.learning_breakthroughs`.
+- One-off backfill from `adaptive_sessions.teaching_evidence` and exam-prep runs.
+- **Exit:** a misconception detected and repaired in a live teaching session
+  appears in `learner_concept_evidence` and produces a breakthrough row;
+  backfill is idempotent; existing tests green.
+
 ### Phase 5 — Study Prep completion
 - Topic state machine §8.3; exam-prep run reduced to attempt record.
 - Agent wake triggers for topic decisions; every intervention via Teaching (D15).
@@ -2356,6 +2402,8 @@ existing contract test.** Phases 11 (UI) can start in parallel after Phase 3.
 
 ### Phase 10 — Learner model unification
 - Fold `decideNextAction` into Adaptive Learning Engine recommendations.
+- Retire the per-session misconception copies (`student-state` arrays,
+  `teaching_evidence` misconception fields) now that Phase 4a records them centrally.
 - All workflows write through Education Engine; scale guards (0–1 vs 0–100).
 - **Exit:** no direct writes to concept state outside the Education Engine (grep-enforced contract test).
 
