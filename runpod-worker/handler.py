@@ -324,7 +324,7 @@ def handler(job):
         # Readable per-job failure — the endpoint stays deployable and the
         # message names the fix (Model field / RUNPOD_ALLOW_DOWNLOAD).
         return {"error": f"Model unavailable: {e}"}
-    inputs = processor(text=[text], images=images, return_tensors="pt").to(model.device)
+    inputs = processor(text=[prompt], images=images, return_tensors="pt").to(model.device)
 
     with torch.inference_mode():
         generated = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
