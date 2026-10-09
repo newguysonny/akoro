@@ -2055,8 +2055,8 @@ LLM failure must never corrupt workflow state.
 | Q6 | ~~`retrieval_practice`~~ — **resolved (D25):** Strategy Library v2, Decay Review + Practice only. | Done |
 | Q7 | ~~"Learning with guide" toggle~~ — **resolved (D24):** built as the `learn_with_guide` Teaching mode. | Done |
 | Q14 | ~~Practice UI~~ — **resolved (D29):** Practice is the live proctored assessment in `AssessmentRoom`, which keeps its UI. | Done |
-| Q13 | DeepSeek's API is hosted outside Nigeria (in China) and learners include minors. Check the data-processing terms and whether school-funded (Pilot) sessions need the school's consent before DeepSeek is enabled for them. | Before enabling DeepSeek |
-| Q12 | Per-tier model lists — **resolved (§7.11.5a).** Still open: Grok and DeepSeek model ids and prices at setup. Fable stays off until a tier is given it. | Before picker UI |
+| Q13 | ~~DeepSeek / Grok data handling~~ — **resolved:** accepted by the product owner (2026-10-09); both enabled per §7.11.5a. | Done |
+| Q12 | ~~Per-tier model lists~~ — **resolved (§7.11.5a).** Grok and DeepSeek model ids and prices are filled into `AI_MODELS` at setup (a setup task, not an open question). Fable stays off until a tier is given it. | Done |
 | Q8 | `content.search` — enable for Study Prep research or keep disabled? | Phase 4 |
 | Q9 | Who can see developer mode (staff role only)? | Phase 11 |
 | Q10 | Notification channels for handoff/completion (in-app only, or web push via existing `notifications/webpush.js`)? | Phase 7 |
