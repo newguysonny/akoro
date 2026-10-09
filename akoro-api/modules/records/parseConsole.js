@@ -210,8 +210,8 @@ router.get("/console", consoleGuard, (_req, res) => {
                 $('runstat').innerHTML = '<span class="err">' + job.error + '</span>';
               } else if (!job.blocks || !job.blocks.length) {
                 $('md').textContent = 'The model ran but returned no parsable blocks.'
-                  + (job.rawPreview ? '\n\n— model raw output —\n' + job.rawPreview
-                                    : '\n\nThe model\'s raw output was EMPTY — it ended its turn immediately (likely a prompt-format mismatch).');
+                  + (job.rawPreview ? '\\n\\n— model raw output —\\n' + job.rawPreview
+                                    : '\\n\\nThe model\\'s raw output was EMPTY — it ended its turn immediately (likely a prompt-format mismatch).');
                 $('runstat').innerHTML = '<b>done' + (job.wallMs ? ' · worker ' + job.wallMs + 'ms' : '') + '</b> · <span class="err">0 blocks — raw output below</span>';
               } else {
                 $('md').textContent = job.markdown || '—';
