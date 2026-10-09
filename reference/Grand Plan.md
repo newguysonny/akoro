@@ -206,6 +206,7 @@ session mode" (`fresh | continuation | decay`); "Adaptive Learning Workflow"
 | D21 | Learner model scale | Concept state 0–1 is canonical. `knowledge_confidence` (0–100) is read as `/100` fallback only. Never mix scales silently. | All sources agree. |
 | D22 | Billing | Every LLM call already meters through `lib/aiModel.js` → `chargeForAI`. The harness checks balance before each paid action. Study Prep keeps its plan estimate + ceiling. Teaching/Decay are metered per call (§7.10). | Matches today's billing. |
 | D23 | Which LLM? | **Learners can switch models** (GPT, Claude Sonnet/Opus/Haiku/Fable, Grok, …) from a picker in the chat box; **default stays `gpt-4o-mini`**. The choice drives every call in their session (chat, controller agents, personas) except assessment/evidence judging, which env keeps fixed. Models, prices and providers are declared in env (§7.11). | User decision: stronger models for learners who want better results, billed at that model's price. |
+| D26 | Models per plan tier | **Every tier defaults to `gpt-4o-mini`.** Which models a tier may switch to is an admin-editable `allowed_models[]` on the `tiers` table (§7.11.5a). | User decision on the default; per-tier lists follow the existing gated-features pattern. |
 | D25 | `retrieval_practice` strategy | **Added in Strategy Library v2**, permitted in **Decay Review and Practice only**; not in Study Prep for now. | User decision. Decay is forgetting, not misunderstanding; recall is the cheap first fix (§10.2). |
 | D24 | Teaching modes | **Two modes in one Teaching Workflow:** `teach_agent` (learner teaches the protégé, NaNa coaches) and `learn_with_guide` (NaNa teaches the learner directly, **no protégé**). Same states, transcript, evidence pipeline and progression gate. The learner can switch between turns. | User decision. "Learning from the teacher" and "teaching an agent with the teacher's guidance". |
 
@@ -886,7 +887,8 @@ resolveModel({ role, learnerChoice, workflowInstance }) → { id, provider, apiM
 
 1. Role locked by env → env model.
 2. Learner's choice, if: picker enabled · model `enabled` and `selectable` ·
-   learner's plan allows its `tier` · model has the role's required `caps`.
+   model is in the payer's tier `allowed_models[]` (§7.11.5a) · model has the
+   role's required `caps`.
 3. Role env default (`AI_MODEL_ROLE_*`).
 4. `AI_MODEL_DEFAULT` (= `gpt-4o-mini`; legacy `OPENAI_MODEL` honoured during migration).
 
@@ -933,8 +935,32 @@ messages, tools, tool call, streaming chunks, `usage`):
 - The learner sees the cost before switching. Study Prep plan cards, the
   ceiling, and Teaching's per-turn balance check all use the **chosen**
   model's price. Switching mid-session re-checks the remaining budget.
-- Premium models can be limited to paid tiers (`tier`), and admins can
-  disable any model instantly with `enabled: false`.
+- Admins can disable any model instantly with `enabled: false`.
+
+#### 7.11.5a Models per plan tier (D26)
+
+**Every tier defaults to `gpt-4o-mini`.** What a learner may switch *to* is
+set per tier by admins, as an `allowed_models[]` list on the `tiers` table
+(same pattern as `gated_features[]` in the Tiers & Credits admin plan) — no
+deploy needed to change it. A model must be both `enabled` in the catalogue
+and in the learner's tier list to appear in their picker.
+
+Starting lists (admin-editable; confirm before launch):
+
+| Tier | Default | May switch to |
+|---|---|---|
+| Pilot (school-funded) | `gpt-4o-mini` | — (no switching; pilot usage is the Freemium cost test, and the school pays) |
+| Trial | `gpt-4o-mini` | Claude Haiku |
+| Freemium | `gpt-4o-mini` | Claude Haiku, Claude Sonnet, GPT-4.1 |
+| Premium | `gpt-4o-mini` | Claude Haiku, Claude Sonnet, GPT-4.1, Claude Opus, Grok |
+| (any) | — | Claude Fable: off for everyone until Q12 decides |
+
+- Coins are still charged at the chosen model's price on every tier; the tier
+  list controls access, not price.
+- When a session is funded by a school (`billTo`), the school's tier list
+  applies, not the learner's.
+- If a learner's tier changes (downgrade, trial ends) and their saved choice
+  is no longer allowed, the next message falls back to `gpt-4o-mini` with a notice.
 
 #### 7.11.6 Migration
 
@@ -1874,7 +1900,7 @@ LLM failure must never corrupt workflow state.
 | Q5 | Starting cap values in §7.2 table (Teaching turns, strategy changes, Practice caps) | Tune in staging |
 | Q6 | ~~`retrieval_practice`~~ — **resolved (D25):** Strategy Library v2, Decay Review + Practice only. | Done |
 | Q7 | ~~"Learning with guide" toggle~~ — **resolved (D24):** built as the `learn_with_guide` Teaching mode. | Done |
-| Q12 | Which models are learner-selectable on which plan tiers; Grok model ids and prices; whether Fable (slow, expensive) is offered at all. | Before picker UI |
+| Q12 | Confirm the starting per-tier model lists in §7.11.5a; Grok model ids and prices; whether Fable (slow, ≈65× the default's cost) is offered at all. | Before picker UI |
 | Q8 | `content.search` — enable for Study Prep research or keep disabled? | Phase 4 |
 | Q9 | Who can see developer mode (staff role only)? | Phase 11 |
 | Q10 | Notification channels for handoff/completion (in-app only, or web push via existing `notifications/webpush.js`)? | Phase 7 |
