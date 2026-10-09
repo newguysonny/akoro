@@ -385,15 +385,21 @@ export function initOfflineSync() {
  * POST a request and consume a Server-Sent Events stream.
  *   onDelta(textChunk) — called for each incremental token
  *   onDone(payload)    — called once with the final { reply, metadata }
+ *   onTrace(event, data) — Agent Chat steps: think_start/think_end,
+ *                       tool_start/tool_end, activity (Grand Plan §13.4)
+ *   signal             — AbortSignal; aborting it is the ■ stop button
  * Returns the accumulated reply text. Throws on network/stream errors so the
- * caller can fall back to a non-streaming request.
+ * caller can fall back to a non-streaming request (an abort throws an
+ * AbortError — callers must NOT fall back on a stop).
  */
-export async function streamPost(path, body, { onDelta, onDone, onThinking, onStatus } = {}) {
+const TRACE_EVENTS = new Set(['think_start', 'think_end', 'tool_start', 'tool_end', 'activity']);
+export async function streamPost(path, body, { onDelta, onDone, onThinking, onStatus, onTrace, signal } = {}) {
   const r = await authedFetch(`${API}${path}`, {
     ...BASE_OPTS,
     method:  'POST',
     headers: { ...BASE_OPTS.headers, Accept: 'text/event-stream' },
     body:    JSON.stringify(body),
+    ...(signal ? { signal } : {}),
   });
   if (!r.ok) throw await apiError(r, 'POST', path);
   // A 200 with no body means the stream died before it began — the caller's
@@ -421,6 +427,7 @@ export async function streamPost(path, body, { onDelta, onDone, onThinking, onSt
     if (event === 'delta' && parsed.text != null) { full += parsed.text; onDelta?.(parsed.text); }
     else if (event === 'thinking' && parsed.text) { think += parsed.text; onThinking?.(parsed.text, think); }
     else if (event === 'status')  { onStatus?.(parsed); }
+    else if (TRACE_EVENTS.has(event)) { onTrace?.(event, parsed); }
     else if (event === 'done')  { if (parsed.reply != null) full = parsed.reply; onDone?.({ ...parsed, thinking: parsed.thinking ?? think }); }
     else if (event === 'error') { throw new Error(parsed.error || 'stream error'); }
   };

@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { AGENT_CHAT_ENDPOINT, agentChatEndpoint, createAgentChatTurnId } from "./agentChatEndpoint.js";
+import { AGENT_CHAT_ENDPOINT, AGENT_CHAT_STOP_ENDPOINT, agentChatEndpoint, createAgentChatTurnId } from "./agentChatEndpoint.js";
 
 test("all learner Agent Chat turns use the single /agent response endpoint", () => {
   assert.equal(AGENT_CHAT_ENDPOINT, "/api/adaptive/chat/agent");
   assert.equal(agentChatEndpoint(), AGENT_CHAT_ENDPOINT);
   assert.equal(agentChatEndpoint({ stream: true }), "/api/adaptive/chat/agent?stream=1");
+  assert.equal(AGENT_CHAT_STOP_ENDPOINT, "/api/adaptive/chat/agent/stop");
 });
 
 test("each Agent Chat request has an opaque retry-safe turn identifier", () => {

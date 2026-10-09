@@ -12,12 +12,14 @@ import { useTaskAPI } from '../../hooks/useTaskAPI.js';
 import NoAgentSheet, { isNoAgentError } from '../battles/NoAgentSheet.jsx';
 import { confirmDialog } from '../common/ConfirmHost.jsx';
 import AgentStatsTab from './AgentStatsTab.jsx';
-import { agentChatEndpoint, createAgentChatTurnId } from '../../lib/agentChatEndpoint.js';
+import { AGENT_CHAT_STOP_ENDPOINT, agentChatEndpoint, createAgentChatTurnId } from '../../lib/agentChatEndpoint.js';
 import StreamCaret from '../common/StreamCaret.jsx';
 import Spinner from '../common/Spinner.jsx';
 import { useInFlight } from '../../hooks/useInFlight.js';
 import StudyPrepChatCard from './studyPrep/StudyPrepChatCard.jsx';
 import { fetchActiveStudyPrepSession } from '../../services/studyPrepApi.js';
+import TraceBlocks from './agentChat/TraceBlocks.jsx';
+import { applyTraceEvent, blocksFromSavedTrace, settleRunning } from '../../lib/agentChatTrace.js';
 
 const QUICK_PROMPTS = [
   { text:"Create a task for me", key:"agent.qp_create" },
@@ -116,6 +118,16 @@ function AgentChatTab({
   const [attachments,  setAttachments]  = useState([]);   // {id, file, name, size, previewUrl}
   const [attachError,  setAttachError]  = useState("");
   const [statusLabel,  setStatusLabel]  = useState("");   // streaming phase ("Searching the syllabus…")
+  // A turn streams as interleaved thinking / tool / text steps (Grand Plan
+  // §13.4). `running` spans the WHOLE turn (loading only covers the wait for
+  // the first step); while it is true the send arrow is a ■ stop button.
+  const [running,      setRunning]      = useState(false);
+  const abortRef       = useRef(null);
+  const turnIdRef      = useRef(null);
+  // Scrolling: follow new output only while the learner is already at the
+  // bottom; otherwise offer a floating ↓ "jump to latest" button.
+  const atBottomRef    = useRef(true);
+  const [showJump,     setShowJump]     = useState(false);
   const fileInputRef   = useRef(null);
   const MAX_FILES      = 4;
   const MAX_FILE_MB    = 5;
@@ -219,8 +231,10 @@ function AgentChatTab({
         from: m.role === "user" ? "me" : "agent",
         text: m.text,
         time: new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        ...(m.role !== "user" && Array.isArray(m.trace) ? { blocks: blocksFromSavedTrace(m.trace) } : {}),
       }));
       setSession(id);
+      atBottomRef.current = true;
       setMessages(msgs.length ? msgs : [greeting(agentName, agentEmoji)]);
       setHistoryError(null);
     } catch {
@@ -254,17 +268,6 @@ function AgentChatTab({
     if (id === sessionIdRef.current) newChat();
   };
 
-  // The row options menu closes on any outside click; Escape also cancels
-  // an in-progress rename.
-  useEffect(() => {
-    if (!menuFor && !renamingId) return undefined;
-    const close = (e) => { if (!e.target.closest?.("[data-session-menu]")) setMenuFor(null); };
-    const onKey = (e) => { if (e.key === "Escape") { setMenuFor(null); setRenamingId(null); } };
-    document.addEventListener("mousedown", close);
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", onKey); };
-  }, [menuFor, renamingId]);
-
   // ── Copy a whole session from its row in the drawer ────────────────────────
   // Pulls the FULL conversation from the server (not just what's on screen),
   // formats it role-labelled for pasting into research/notes, and copies via
@@ -278,6 +281,19 @@ function AgentChatTab({
   const [menuFor,    setMenuFor]    = useState(null);
   const [renamingId, setRenamingId] = useState(null);
   const [renameDraft, setRenameDraft] = useState("");
+
+  // The row options menu closes on any outside click; Escape also cancels
+  // an in-progress rename. Declared AFTER menuFor/renamingId: the deps array
+  // is read during render, so an earlier position threw a TDZ ReferenceError
+  // ("Cannot access 'menuFor' before initialization") and crashed the tab.
+  useEffect(() => {
+    if (!menuFor && !renamingId) return undefined;
+    const close = (e) => { if (!e.target.closest?.("[data-session-menu]")) setMenuFor(null); };
+    const onKey = (e) => { if (e.key === "Escape") { setMenuFor(null); setRenamingId(null); } };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", onKey); };
+  }, [menuFor, renamingId]);
   const saveRename = async (s) => {
     const title = renameDraft.trim();
     setRenamingId(null);
@@ -403,7 +419,24 @@ function AgentChatTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agentNameProp, agentEmojiProp]);
 
-  useEffect(()=>{ if(feedRef.current) feedRef.current.scrollTop=feedRef.current.scrollHeight; },[messages,loading]);
+  // Follow new output only while already at the bottom (the reference
+  // behaviour); scrolled up to read, the view stays put and ↓ appears.
+  const scrollToLatest=(smooth=false)=>{
+    const el=feedRef.current; if(!el) return;
+    if(smooth&&el.scrollTo) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" }); else el.scrollTop=el.scrollHeight;
+    atBottomRef.current=true; setShowJump(false);
+  };
+  const onFeedScroll=()=>{
+    const el=feedRef.current; if(!el) return;
+    const atBottom=el.scrollHeight-el.scrollTop-el.clientHeight<80;
+    atBottomRef.current=atBottom;
+    if(atBottom) setShowJump(false);
+  };
+  useEffect(()=>{
+    if(!feedRef.current) return;
+    if(atBottomRef.current) feedRef.current.scrollTop=feedRef.current.scrollHeight;
+    else setShowJump(true);
+  },[messages,loading]);
 
   // Tell the dashboard whether the CHAT surface is showing (vs tasks/stats/
   // self-study sub-tabs): the Now-Studying bar hides on chat only, per spec.
@@ -418,12 +451,13 @@ function AgentChatTab({
     // stands in so the model (and the transcript) knows what's being asked.
     const raw=(overrideText??input).trim();
     const text=raw || (attachments.length ? t('agent.attach_default_msg') : "");
-    if(!text||loading) return;
+    if(!text||loading||running) return;
     if(!overrideText) setInput("");
+    atBottomRef.current=true; setShowJump(false);   // your own message always brings you to the bottom
     const ts=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
     const userMsg={id:Date.now(),from:"me",text,time:ts,attachments:attachments.map(a=>({name:a.name,previewUrl:a.previewUrl}))};
     const sentAttachments=attachments;
-    setMessages(prev=>[...prev,userMsg]); setLoading(true);
+    setMessages(prev=>[...prev,userMsg]); setLoading(true); setRunning(true);
     setAttachError(""); setStatusLabel("");
 
     // Every learner turn uses the one unified Agent endpoint. It creates an
@@ -433,7 +467,7 @@ function AgentChatTab({
     const sid = await ensureSession(text);
     if (!sid) {
       pushAgent(t('agent.error_connection'));
-      setLoading(false);
+      setLoading(false); setRunning(false);
       return;
     }
     const mode = thinkMode ? "think" : researchMode ? "research" : "default";
@@ -445,6 +479,7 @@ function AgentChatTab({
     // A retry keeps the same opaque key for this send, allowing the server's
     // durable turn contract to repair a partial write without duplicate rows.
     const turnId = createAgentChatTurnId();
+    turnIdRef.current = turnId;
     const payload = { message: text, history: history.slice(-24), agentName, mode,
       conversationId: sid, turnId,
       ...(attachmentsPayload.length ? { attachments: attachmentsPayload } : {}) };
@@ -455,25 +490,38 @@ function AgentChatTab({
       if(started) return;
       started=true;
       setLoading(false);   // hide typing dots — the bubble now carries the text
-      setMessages(prev=>[...prev,{id:replyId,from:"agent",text:"",time:t2,thinking:"",phase:"thinking"}]);
+      setMessages(prev=>[...prev,{id:replyId,from:"agent",text:"",time:t2,thinking:"",phase:"thinking",blocks:[]}]);
     };
-    const appendThinking=(chunk)=>{
+    // Every step of the turn (thinking, tool, text between steps) folds into
+    // the reply's ordered block list — interleaved as many times as it runs.
+    const appendTrace=(event,data)=>{
       ensureBubble();
-      setMessages(prev=>prev.map(m=>m.id===replyId?{...m,thinking:m.thinking+chunk}:m));
+      setStatusLabel("");
+      setMessages(prev=>prev.map(m=>m.id===replyId?{...m,blocks:applyTraceEvent(m.blocks,event,data,Date.now())}:m));
     };
+    // Think-mode reasoning summary streams live into its own thinking row.
+    const appendThinking=(chunk)=>appendTrace("thinking",{ text: chunk });
     const appendDelta=(chunk)=>{
       ensureBubble();
       setStatusLabel("");
-      setMessages(prev=>prev.map(m=>m.id===replyId?{...m,text:m.text+chunk,phase:"answering"}:m));
+      setMessages(prev=>prev.map(m=>m.id===replyId?{...m,text:m.text+chunk,phase:"answering",
+        blocks:m.phase==="answering"?m.blocks:settleRunning(m.blocks,Date.now())}:m));
     };
+    const controller=typeof AbortController!=="undefined"?new AbortController():null;
+    abortRef.current=controller;
     let finalReply="";
     try {
       finalReply = await streamPost(agentChatEndpoint({ stream: true }), payload, {
+        signal: controller?.signal,
+        onTrace: appendTrace,
         onDelta: appendDelta,
         onThinking: appendThinking,
         onStatus: (s)=>{ if(!started) setStatusLabel(t(statusKey[s?.step]||"") || s?.label || ""); },
-        onDone: ({ reply, syllabus, pastQuestions, thinking, toolExecutions })=>{
+        onDone: ({ reply, syllabus, pastQuestions, thinking, toolExecutions, trace })=>{
           ensureBubble(); setStatusLabel("");
+          // Settle every step; if the live steps never arrived (an older API),
+          // fall back to the saved trace the done event carries.
+          setMessages(prev=>prev.map(m=>m.id===replyId?{...m,blocks:m.blocks?.length?settleRunning(m.blocks,Date.now()):blocksFromSavedTrace(trace)}:m));
           // Study-prep sessions ride the reply as a session echo (the
           // activity-draft pattern) — render the interactive session card.
           const studyPrepSession = (toolExecutions || []).find((entry) => entry?.session?.id && entry?.success)?.session || null;
@@ -487,15 +535,23 @@ function AgentChatTab({
         setMessages(prev=>[...prev,{id:replyId,from:"agent",text:finalReply,time:t2}]);
       }
     } catch {
+      setStatusLabel("");
+      if(controller?.signal.aborted){
+        // ■ Stop: keep what already streamed, mark the turn stopped. Never
+        // fall back to the non-streaming retry — that would re-run the turn.
+        ensureBubble();
+        setMessages(prev=>prev.map(m=>m.id===replyId?{...m,phase:"done",stopped:true,
+          blocks:settleRunning(m.blocks,Date.now(),{ stopped:true })}:m));
+      }
       // Streaming failed before any token — retry the same idempotent turn in
       // normal JSON form, then show a connection error only if that also fails.
-      setStatusLabel("");
-      if(!started){
+      else if(!started){
         try {
           const data = await apiPost(agentChatEndpoint(), payload);
           finalReply = data.reply || data.response || t('agent.fallback');
           setMessages(prev=>[...prev,{id:replyId,from:"agent",text:finalReply,time:t2,
-            thinking:data.thinking||"",syllabus:data.syllabus||[],pastQuestions:data.pastQuestions||[]}]);
+            thinking:data.thinking||"",syllabus:data.syllabus||[],pastQuestions:data.pastQuestions||[],
+            blocks:blocksFromSavedTrace(data.trace)}]);
           const studyPrepSessionFallback = (data?.toolExecutions || []).find((entry) => entry?.session?.id && entry?.success)?.session || null;
           if (studyPrepSessionFallback) {
             setMessages(prev=>prev.map(m=>m.id===replyId?{...m,studyPrepSessionId:studyPrepSessionFallback.id}:m));
@@ -512,6 +568,20 @@ function AgentChatTab({
     sentAttachments.forEach(a=>a.previewUrl&&URL.revokeObjectURL(a.previewUrl));
     setAttachments([]);
     setLoading(false);
+    setRunning(false);
+    abortRef.current=null;
+    turnIdRef.current=null;
+  };
+
+  // ■ Stop: tell the server to stop THIS turn first (a dropped connection alone
+  // never stops it — the server finishes and saves the full reply so a retry
+  // replays it), then end the stream here. The server stops at its next
+  // checkpoint (between tool steps, or mid-answer) and saves the turn as stopped.
+  const stopTurn=async()=>{
+    const controller=abortRef.current, turnId=turnIdRef.current;
+    if(!controller) return;
+    try { if(turnId) await apiPost(AGENT_CHAT_STOP_ENDPOINT, { turnId }); } catch { /* best effort */ }
+    controller.abort();
   };
 
   // datetime-local gives local wall-clock; the API wants ISO.
@@ -648,54 +718,81 @@ function AgentChatTab({
               <button onClick={retryHistoryLoad} style={{ flexShrink:0,border:"none",background:`${GOLD}1A`,color:GOLD,cursor:"pointer",fontSize:11,fontWeight:900,whiteSpace:"nowrap",padding:"5px 10px",borderRadius:8,fontFamily:"'Nunito',sans-serif" }}>{t('agent.history_retry')}</button>
             </div>
           )}
-          <div ref={feedRef} style={{ flex:1,overflowY:"auto",padding:"14px 16px",display:"flex",flexDirection:"column",gap:12 }}>
+          {/* The feed: your messages in a grey box; the agent's turn unboxed —
+              thinking rows, tool rows/groups and text interleaved as the turn
+              ran, then the reply (Grand Plan §13.4). */}
+          <div style={{ flex:1,position:"relative",display:"flex",flexDirection:"column",minHeight:0 }}>
+          <div ref={feedRef} onScroll={onFeedScroll} style={{ flex:1,overflowY:"auto",padding:"14px 16px",display:"flex",flexDirection:"column",gap:14 }}>
             {messages.map(msg=>{
               const isMe=msg.from==="me";
               const thinkingStream=!isMe&&msg.phase==="thinking";
-              return (
-                <div key={msg.id} style={{ display:"flex",justifyContent:isMe?"flex-end":"flex-start",alignItems:"flex-end",gap:8 }}>
-                  {!isMe&&<div style={{ width:30,height:30,borderRadius:"50%",background:`${BRAND}15`,border:`1.5px solid ${BRAND}40`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center" }}><AgentAvatar emoji={agentEmoji} size={20}/></div>}
-                  <div style={{ maxWidth:"78%" }}>
-                    {!isMe&&(msg.thinking||thinkingStream)&&<ThoughtBlock thinking={msg.thinking} streaming={thinkingStream}/>}
-                    {(!msg.phase||msg.text)&&(
-                      <div style={{ padding:"10px 14px",borderRadius:isMe?"18px 18px 4px 18px":"4px 18px 18px 18px",background:isMe?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-surface-hover)",border:isMe?"none":`1px solid ${BRAND}25`,color:isMe?"#fff":"var(--ak-text)",fontSize:13.5,lineHeight:1.6,fontWeight:500 }}>{isMe?<span style={{whiteSpace:"pre-wrap"}}>{msg.text}</span>:<RichText text={msg.text}/>}{msg.phase==="answering"&&<StreamCaret/>}</div>
-                    )}
-                    {isMe&&msg.attachments?.length>0&&(
-                      <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5,justifyContent:"flex-end" }}>
-                        {msg.attachments.map((a,i)=>a.previewUrl
-                          ? <img key={i} src={a.previewUrl} alt={a.name} style={{ width:52,height:52,objectFit:"cover",borderRadius:10,border:"1px solid rgba(255,255,255,.4)" }}/>
-                          : <span key={i} style={{ display:"inline-flex",alignItems:"center",gap:4,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:10.5,fontWeight:700,padding:"4px 9px",borderRadius:20,background:"rgba(255,255,255,.18)",color:"#fff" }}><Icon name="ti-file-text" size={10}/> {a.name}</span>)}
-                      </div>
-                    )}
-                    {!isMe&&msg.studyPrepSessionId&&<StudyPrepChatCard sessionId={msg.studyPrepSessionId}/>}
-                    {!isMe&&msg.syllabus?.length>0&&(
-                      <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5 }}>
-                        {msg.syllabus.map((s,i)=>(
-                          <span key={i} title={`${s.exam?s.exam+" ":""}${s.subject} — ${s.topic}`} style={{ display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:800,padding:"3px 9px",borderRadius:20,background:`${BRAND}12`,border:`1px solid ${BRAND}30`,color:BRAND,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
-                            <Icon name="ti-book" size={10}/> {s.exam?`${s.exam} · `:""}{s.topic}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {!isMe&&msg.pastQuestions?.length>0&&(
-                      <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5 }}>
-                        {msg.pastQuestions.map((s,i)=>(
-                          <span key={i} title={`${s.exam} ${s.year||""}${s.subject?` · ${s.subject}`:""}${s.topic?` — ${s.topic}`:""}`} style={{ display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:800,padding:"3px 9px",borderRadius:20,background:"rgba(232,136,74,.12)",border:"1px solid rgba(232,136,74,.35)",color:"#B45309",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
-                            <Icon name="ti-edit" size={10}/> {s.exam}{s.year?` ${s.year}`:""}{s.topic?` · ${s.topic}`:""}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    <div style={{ fontSize:10,color:"var(--ak-text-muted)",marginTop:3,display:"flex",alignItems:"center",gap:4,justifyContent:isMe?"flex-end":"flex-start" }}>
-                      {msg.time}
-                      <CopyMessageButton text={msg.text} />
+              if(isMe) return (
+                <div key={msg.id} style={{ display:"flex",flexDirection:"column",alignItems:"flex-end" }}>
+                  <div style={{ maxWidth:"86%",padding:"10px 14px",borderRadius:14,background:"var(--ak-surface-hover)",border:"1px solid var(--ak-border)",color:"var(--ak-text)",fontSize:14,lineHeight:1.55,fontWeight:500,whiteSpace:"pre-wrap",wordBreak:"break-word" }}>{msg.text}</div>
+                  {msg.attachments?.length>0&&(
+                    <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5,justifyContent:"flex-end" }}>
+                      {msg.attachments.map((a,i)=>a.previewUrl
+                        ? <img key={i} src={a.previewUrl} alt={a.name} style={{ width:52,height:52,objectFit:"cover",borderRadius:10,border:"1px solid var(--ak-border2)" }}/>
+                        : <span key={i} style={{ display:"inline-flex",alignItems:"center",gap:4,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:10.5,fontWeight:700,padding:"4px 9px",borderRadius:20,background:"var(--ak-surface-hover)",border:"1px solid var(--ak-border)",color:"var(--ak-text-sub)" }}><Icon name="ti-file-text" size={10}/> {a.name}</span>)}
                     </div>
+                  )}
+                  <div style={{ fontSize:10,color:"var(--ak-text-muted)",marginTop:3,display:"flex",alignItems:"center",gap:4 }}>
+                    {msg.time}
+                    <CopyMessageButton text={msg.text} />
+                  </div>
+                </div>
+              );
+              return (
+                <div key={msg.id} style={{ display:"flex",flexDirection:"column",alignItems:"stretch",minWidth:0 }}>
+                  {msg.blocks?.length>0&&<TraceBlocks blocks={msg.blocks}/>}
+                  {!msg.blocks?.length&&(msg.thinking||thinkingStream)&&<ThoughtBlock thinking={msg.thinking} streaming={thinkingStream}/>}
+                  {msg.text&&(
+                    <div style={{ fontSize:14.5,lineHeight:1.65,color:"var(--ak-text)",fontWeight:500,wordBreak:"break-word" }}><RichText text={msg.text}/>{msg.phase==="answering"&&<StreamCaret/>}</div>
+                  )}
+                  {msg.stopped&&(
+                    <div style={{ display:"flex",alignItems:"center",gap:6,marginTop:4,fontSize:11.5,fontWeight:700,color:"var(--ak-text-muted)" }}>
+                      <span style={{ width:8,height:8,borderRadius:2,background:"var(--ak-text-muted)",display:"inline-block" }}/>{t('agent.stopped')}
+                    </div>
+                  )}
+                  {!isMe&&msg.studyPrepSessionId&&<StudyPrepChatCard sessionId={msg.studyPrepSessionId}/>}
+                  {!isMe&&msg.syllabus?.length>0&&(
+                    <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5 }}>
+                      {msg.syllabus.map((s,i)=>(
+                        <span key={i} title={`${s.exam?s.exam+" ":""}${s.subject} — ${s.topic}`} style={{ display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:800,padding:"3px 9px",borderRadius:20,background:`${BRAND}12`,border:`1px solid ${BRAND}30`,color:BRAND,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
+                          <Icon name="ti-book" size={10}/> {s.exam?`${s.exam} · `:""}{s.topic}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {!isMe&&msg.pastQuestions?.length>0&&(
+                    <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5 }}>
+                      {msg.pastQuestions.map((s,i)=>(
+                        <span key={i} title={`${s.exam} ${s.year||""}${s.subject?` · ${s.subject}`:""}${s.topic?` — ${s.topic}`:""}`} style={{ display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:800,padding:"3px 9px",borderRadius:20,background:"rgba(232,136,74,.12)",border:"1px solid rgba(232,136,74,.35)",color:"#B45309",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
+                          <Icon name="ti-edit" size={10}/> {s.exam}{s.year?` ${s.year}`:""}{s.topic?` · ${s.topic}`:""}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ fontSize:10,color:"var(--ak-text-muted)",marginTop:3,display:"flex",alignItems:"center",gap:4 }}>
+                    {msg.time}
+                    {msg.text&&<CopyMessageButton text={msg.text} />}
                   </div>
                 </div>
               );
             })}
-            {loading&&<div style={{ display:"flex",alignItems:"flex-end",gap:8 }}><div style={{ width:30,height:30,borderRadius:"50%",background:`${BRAND}15`,border:`1.5px solid ${BRAND}40`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center" }}><AgentAvatar emoji={agentEmoji} size={20}/></div><div style={{ padding:"12px 16px",borderRadius:"4px 18px 18px 18px",background:"var(--ak-surface-hover)",border:`1px solid ${BRAND}25`,display:"flex",gap:8,alignItems:"center" }}>{[0,.25,.5].map((d,i)=><div key={i} style={{ width:6,height:6,borderRadius:"50%",background:BRAND,animation:`bounce-dot .7s ease-in-out ${d}s infinite alternate` }}/>)}</div></div>}
-            {loading&&statusLabel&&<div style={{ display:"flex",alignItems:"center",gap:6,margin:"-6px 0 0 38px" }}><span style={{ width:7,height:7,borderRadius:"50%",background:BRAND,display:"inline-block",animation:"pulse-dot 1.4s ease-in-out infinite" }}/><span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-muted)" }}>{statusLabel}</span></div>}
+            {loading&&(
+              <div style={{ display:"flex",alignItems:"center",gap:8,color:"var(--ak-text-muted)",fontSize:12.5,fontWeight:600 }}>
+                <span style={{ display:"flex",gap:5 }}>{[0,.25,.5].map((d,i)=><span key={i} style={{ width:6,height:6,borderRadius:"50%",background:BRAND,display:"inline-block",animation:`bounce-dot .7s ease-in-out ${d}s infinite alternate` }}/>)}</span>
+                {statusLabel&&<span>{statusLabel}</span>}
+              </div>
+            )}
+          </div>
+          {showJump&&(
+            <button type="button" onClick={()=>scrollToLatest(true)} title={t('agent.jump_latest')} aria-label={t('agent.jump_latest')}
+              style={{ position:"absolute",bottom:12,left:"50%",transform:"translateX(-50%)",width:36,height:36,borderRadius:"50%",background:"var(--ak-surface)",border:"1px solid var(--ak-border2)",boxShadow:"0 4px 14px rgba(15,23,42,.16)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",padding:0,zIndex:5 }}>
+              <Icon name="ti-arrow-down" size={17} color="var(--ak-text)"/>
+            </button>
+          )}
           </div>
           <div style={{ padding:"10px 16px 12px",borderTop:"1px solid var(--ak-border)",background:"var(--ak-surface)",flexShrink:0 }}>
             {attachError&&(
@@ -724,7 +821,10 @@ function AgentChatTab({
               onChange={setInput}
               onSend={()=>sendMessage()}
               placeholder={t('agent.ask_anything').replace('{name}', shownName)}
-              disabled={loading}
+              disabled={running}
+              running={running}
+              onStop={stopTurn}
+              stopLabel={t('agent.stop')}
               attachmentAction={()=>fileInputRef.current?.click()}
               attachmentLabel={t('agent.attach_add')}
               voiceLabel="Voice input is not available in AI Chat yet"

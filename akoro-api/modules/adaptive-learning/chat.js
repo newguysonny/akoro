@@ -62,6 +62,7 @@ import {
 } from "./learner-autonomy.js";
 import { requiresAgentCapabilitiesTool, requiresActivityPreparation, requiredLearnerDataTool, requiredStudyPrepTool } from "./agent-chat-intent.js";
 import { agentToolActivity } from "../../lib/agentActivity.js";
+import { createChatTrace, decisionNarration } from "./chat-trace.js";
 import { hasExplicitToolRequestConsent } from "./agent-tool-request-intent.js";
 import { getLearnerProfileContext } from "./learner-profile-context.js";
 import { validateLearnerTaskInput } from "./learner-task-validation.js";
@@ -2204,11 +2205,15 @@ router.get("/sessions/:id/messages", async (req, res) => {
       .eq("id", req.params.id).eq("user_id", req.user.id).maybeSingle();
     if (!session) return res.status(404).json({ error: "Session not found" });
 
-    const { data, error } = await db
+    const loadMessages = (columns) => db
       .from("chat_messages")
-      .select("id, role, text, created_at")
+      .select(columns)
       .eq("session_id", req.params.id)
       .order("created_at", { ascending: true });
+    // The reply trace column may not exist yet during a rolling deploy —
+    // fall back to the plain transcript rather than failing the history load.
+    let { data, error } = await loadMessages("id, role, text, created_at, trace");
+    if (error && /trace/i.test(String(error.message || ""))) ({ data, error } = await loadMessages("id, role, text, created_at"));
     if (error) throw new Error(error.message);
     res.json({ success: true, messages: data ?? [] });
   } catch (err) {
@@ -2411,13 +2416,16 @@ import { tutorSystemPrompt, assembleChatDoctrine } from "../agent-context/chat-d
 export { tutorSystemPrompt, assembleChatDoctrine };
 
 /* chat.completions streaming → `delta` events. Returns the full text. */
-async function streamChat({ send, messages, model, max_tokens = 700, temperature = 0.6, tools = null, toolChoice = undefined }) {
+async function streamChat({ send, messages, model, max_tokens = 700, temperature = 0.6, tools = null, toolChoice = undefined, isAborted = () => false }) {
   const stream = await openai.chat.completions.create({
     model, temperature, max_tokens, stream: true, messages,
     ...(tools ? { tools, ...(toolChoice !== undefined ? { tool_choice: toolChoice } : {}) } : {}),
   });
   let full = "";
   for await (const chunk of stream) {
+    // The learner pressed stop (the connection closed): leaving the loop ends
+    // the upstream stream; usage so far is still metered by meteredCreate.
+    if (isAborted()) break;
     const delta = chunk.choices?.[0]?.delta?.content;
     if (delta) { full += delta; send("delta", { text: delta }); }
   }
@@ -2439,7 +2447,7 @@ function toResponsesInput(messages) {
 /* Reasoning model via the Responses API. Reasoning summaries stream as
    `thinking` events, the answer as `delta`. Throws when the model or API
    surface is unavailable so the caller can fall back. */
-async function streamThinkWithResponses({ send, messages, model }) {
+async function streamThinkWithResponses({ send, messages, model, isAborted = () => false }) {
   const useReasoning = model !== "gpt-4o";   // gpt-4o has no reasoning surface
   const stream = await openai.responses.create({
     model,
@@ -2450,6 +2458,7 @@ async function streamThinkWithResponses({ send, messages, model }) {
   });
   let full = "";
   for await (const ev of stream) {
+    if (isAborted()) break;
     if (ev.type === "response.reasoning_summary_text.delta" && ev.delta) send("thinking", { text: ev.delta });
     else if (ev.type === "response.output_text.delta" && ev.delta) { full += ev.delta; send("delta", { text: ev.delta }); }
     else if (ev.type === "response.failed") throw new Error(ev.response?.error?.message || "reasoning model failed");
@@ -2588,16 +2597,50 @@ async function appendBasicChatTurn({ conversationId, userId, userMessage, assist
     .select("id, title").eq("id", conversationId).eq("user_id", userId).maybeSingle();
   if (sessionError || !session) throw new Error("Agent Chat session was not found");
   const now = new Date().toISOString();
-  const { error } = await db.from("chat_messages").insert([
+  const { data: inserted, error } = await db.from("chat_messages").insert([
     { session_id: conversationId, user_id: userId, role: "user", text: userMessage },
     { session_id: conversationId, user_id: userId, role: "agent", text: assistantMessage },
-  ]);
+  ]).select("id, role");
   if (error) throw error;
   const patch = { last_message_at: now, updated_at: now };
   if (!session.title || session.title === "New chat") patch.title = sessionTitleFrom(userMessage);
   const { error: updateError } = await db.from("chat_sessions").update(patch).eq("id", conversationId).eq("user_id", userId);
   if (updateError) throw updateError;
+  return { assistantMessageId: (inserted || []).find((row) => row.role === "agent")?.id ?? null };
 }
+
+/**
+ * Store a reply's bounded trace (thinking / tool / activity blocks) so a
+ * reloaded chat shows the same steps. Best effort: a missing column during a
+ * rolling deploy or a write hiccup never touches the saved reply itself.
+ */
+let warnedTraceColumn = false;
+async function saveMessageTrace({ messageId, userId, trace }) {
+  if (!messageId || !Array.isArray(trace) || !trace.length) return;
+  try {
+    const { error } = await db.from("chat_messages").update({ trace })
+      .eq("id", messageId).eq("user_id", userId).eq("role", "agent");
+    if (error) throw error;
+  } catch (error) {
+    if (!warnedTraceColumn) {
+      warnedTraceColumn = true;
+      console.warn("[agent-chat] reply trace not saved (migration 2026-chat-message-trace pending?):", error?.message || error);
+    }
+  }
+}
+
+// One Agent Chat turn may interleave decisions, tool calls and text many
+// times (Grand Plan §13.4). Bounded by code, never by the model.
+export const CHAT_TOOL_LOOP_MAX_ITERATIONS = 8;
+const STOPPED_REPLY = "(Stopped before finishing.)";
+
+// ■ Stop. Only an EXPLICIT stop (POST /agent/stop with the turn id) ends a
+// turn early — a dropped connection does not: the server still finishes and
+// saves the full reply, so the client's same-turnId retry replays the real
+// answer instead of a "stopped" stub. In-memory and per instance: a stop that
+// lands on another instance is a no-op and the turn simply completes.
+const activeTurnStops = new Map();   // `${userId}:${turnId}` → { stop: boolean }
+const turnStopKey = (userId, turnId) => `${userId}:${turnId}`;
 
 function openAiChatTools({ allowToolRequest = true } = {}) {
   return getLearnerChatTools({ allowToolRequest }).map((tool) => ({
@@ -2622,7 +2665,7 @@ export function clarify(field, question, extra = {}) {
   return { needsClarification: true, missing: field, question, ...extra };
 }
 
-async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, status, tools = openAiChatTools(), requiredTool = null, role = "student" }) {
+async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, status, tools = openAiChatTools(), requiredTool = null, role = "student", trace = null, isAborted = () => false }) {
   const executions = [];
   const transcript = [...messages];
   if (requiredTool && !tools.some((tool) => tool.function?.name === requiredTool)) {
@@ -2631,7 +2674,12 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
   // The unified endpoint serves instructor/school tutoring too, but learner
   // account tools are never authorised for those roles.
   if (!tools.length) return { messages: transcript, toolExecutions: executions };
-  for (let iteration = 0; iteration < 3; iteration += 1) {
+  for (let iteration = 0; iteration < CHAT_TOOL_LOOP_MAX_ITERATIONS; iteration += 1) {
+    // Stop pressed between steps: end here, before spending another call.
+    if (isAborted()) return { messages: transcript, toolExecutions: executions, aborted: true };
+    // Each decision is a "Thought for Ns" row; its text is harness narration
+    // of what the agent chose (D10), never model reasoning.
+    const thinkId = trace?.thinkStart();
     const result = await openai.chat.completions.create({
       model: OPENAI_MODEL,
       max_tokens: 900,
@@ -2646,9 +2694,15 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
     });
     const assistant = result.choices?.[0]?.message ?? { role: "assistant", content: "" };
     const calls = Array.isArray(assistant.tool_calls) ? assistant.tool_calls : [];
+    if (thinkId) trace.thinkEnd(thinkId, decisionNarration(calls));
     if (!calls.length) return { messages: transcript, toolExecutions: executions };
+    // Text the model wrote alongside its tool calls is shown between the
+    // steps (it used to be discarded); the final reply still comes from the
+    // tools-disabled answer call below.
+    if (typeof assistant.content === "string" && assistant.content.trim()) trace?.activity(assistant.content);
     transcript.push(assistant);
     for (const call of calls) {
+      if (isAborted()) return { messages: transcript, toolExecutions: executions, aborted: true };
       const tool = call?.function?.name;
       let input = {};
       try { input = JSON.parse(call?.function?.arguments || "{}"); } catch { input = {}; }
@@ -2656,6 +2710,7 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
       // The header stream too - the same labels the background workers send,
       // so the agent's subtitle shows live work during active chats as well.
       agentToolActivity(studentId, tool);
+      const traceRow = trace?.toolStart(tool);
       let toolResult;
       try { toolResult = await executeChatTool(tool, input, studentId, { conversationId, role }); }
       catch (error) {
@@ -2666,6 +2721,7 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         console.warn(`[agent-chat] tool ${tool} error:`, error?.message || error);
         toolResult = { success: false, error: "The requested Akoro action could not be completed." };
       }
+      if (traceRow) trace.toolEnd(traceRow, toolResult);
       // Structured observation: the tool's real backend outcome becomes the
       // model's next input, so the reply confirms facts, not intent.
       const observation = toolObservation({ action: tool, result: toolResult, requestId: newToolRequestId() });
@@ -2699,6 +2755,15 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
   }
   return { messages: transcript, toolExecutions: executions };
 }
+
+// ■ Stop for a running Agent Chat turn — owner-scoped by the token identity.
+router.post("/agent/stop", (req, res) => {
+  const turnId = String(req.body?.turnId ?? "");
+  if (!CHAT_TURN_ID.test(turnId)) return res.status(422).json({ error: "turnId is invalid" });
+  const entry = activeTurnStops.get(turnStopKey(req.user.id, turnId));
+  if (entry) entry.stop = true;
+  return res.json({ success: true, stopping: Boolean(entry) });
+});
 
 // The one learner Agent Chat response authority. It owns direct tutoring,
 // attachments/grounding/modes and the authorised tool loop; the browser never
@@ -2737,6 +2802,11 @@ router.post("/agent", async (req, res) => {
     if (!res.destroyed && !res.writableEnded) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   };
   const status = (step, label) => send("status", { step, label });
+  // Stop (■): set by POST /agent/stop for this learner's turn; checked
+  // between tool-loop steps and while the answer streams.
+  let stopEntry = null;
+  const isAborted = () => Boolean(stopEntry?.stop);
+  const trace = createChatTrace({ send: wantsStream ? send : null });
 
   try {
     const {
@@ -2758,6 +2828,12 @@ router.post("/agent", async (req, res) => {
       return res.status(422).json({ error: "turnId is required for durable Agent Chat" });
     }
     if (turnId && !CHAT_TURN_ID.test(turnId)) return res.status(422).json({ error: "turnId is invalid" });
+    if (turnId) {
+      const key = turnStopKey(req.user.id, turnId);
+      stopEntry = { stop: false };
+      activeTurnStops.set(key, stopEntry);
+      res.on("close", () => { if (activeTurnStops.get(key) === stopEntry) activeTurnStops.delete(key); });
+    }
 
     const mode = ["think", "research"].includes(rawMode) ? rawMode : "default";
     const isThink = mode === "think";
@@ -2925,7 +3001,10 @@ router.post("/agent", async (req, res) => {
         : ((instructorTools.length && requiresActivityPreparation(userMessage, dialogue))
           ? "prepare_activity" : null),
       role,
+      trace,
+      isAborted,
     });
+    const stopped = () => Boolean(prepared.aborted) || isAborted();
     const finalMessages = [{ role: "system", content: systemContent }, ...prepared.messages];
     const tools = null;   // the preflight loop above is the only executor
     let reply = "";
@@ -2951,11 +3030,11 @@ router.post("/agent", async (req, res) => {
         reply = completion.choices?.[0]?.message?.content?.trim() || "";
       }
     } else {
-      if (isThink && !prepared.toolExecutions.length) {
+      if (!stopped() && isThink && !prepared.toolExecutions.length) {
         status("thinking", "Thinking…");
-        try { reply = await streamThinkWithResponses({ send, messages: finalMessages, model: THINK_MODEL }); usedModel = THINK_MODEL; } catch { /* fall through */ }
+        try { reply = await streamThinkWithResponses({ send, messages: finalMessages, model: THINK_MODEL, isAborted }); usedModel = THINK_MODEL; } catch { /* fall through */ }
       }
-      if (!reply) {
+      if (!reply && !stopped()) {
         if (isResearch) status("synthesis", "Writing it up…");
         usedModel = isResearch ? RESEARCH_MODEL : "gpt-4o-mini";
         try {
@@ -2966,15 +3045,20 @@ router.post("/agent", async (req, res) => {
             max_tokens: isResearch ? 2200 : 900,
             tools,
             toolChoice: "none",
+            isAborted,
           });
         } catch (error) {
           if (!isResearch) throw error;
           usedModel = "gpt-4o-mini";
-          reply = await streamChat({ send, messages: finalMessages, model: usedModel, max_tokens: 900, tools, toolChoice: "none" });
+          reply = await streamChat({ send, messages: finalMessages, model: usedModel, max_tokens: 900, tools, toolChoice: "none", isAborted });
         }
       }
     }
+    // A stopped turn keeps whatever streamed so far, marked as stopped, so the
+    // saved transcript matches what the learner saw.
+    if (stopped()) reply = reply.trim() ? `${reply.trim()}\n\n${STOPPED_REPLY}` : STOPPED_REPLY;
     if (!reply.trim()) reply = "I'm here to help with your studies — ask me anything about your subjects!";
+    const traceBlocks = trace.blocks();
 
     // Persist EVERY completed turn. The previous gate — skip the save when
     // req/res looks destroyed ("client stream abandoned") — meant that behind
@@ -2990,7 +3074,7 @@ router.post("/agent", async (req, res) => {
       if (durable) {
         if (wantsStream) status("saving", "Saving this study context…");
         try {
-          await persistLearnerAgentConversationTurn({
+          const persisted = await persistLearnerAgentConversationTurn({
             conversationId,
             userId: req.user.id,
             sessionId: agentSessionId(conversationId),
@@ -3002,17 +3086,18 @@ router.post("/agent", async (req, res) => {
             memories: safeMemoryUpdates(userMessage),
           });
           turnSaved = true;
+          await saveMessageTrace({ messageId: persisted?.assistantMessageId, userId: req.user.id, trace: traceBlocks });
         } catch (persistError) {
           // The reply already happened — never lose the transcript to a
           // durable-write hiccup. Fall back to the plain two-row append.
           console.error("[/chat/agent] durable persist failed — appending basic transcript:", persistError.message);
           await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply })
-            .then(() => { turnSaved = true; })
+            .then(async (saved) => { turnSaved = true; await saveMessageTrace({ messageId: saved?.assistantMessageId, userId: req.user.id, trace: traceBlocks }); })
             .catch((e) => console.error("[/chat/agent] basic transcript append failed:", e.message));
         }
       } else {
         await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply })
-          .then(() => { turnSaved = true; })
+          .then(async (saved) => { turnSaved = true; await saveMessageTrace({ messageId: saved?.assistantMessageId, userId: req.user.id, trace: traceBlocks }); })
           .catch((e) => console.error("[/chat/agent] basic transcript append failed:", e.message));
       }
     } else if (!warnedUnsavedTurn) {
@@ -3024,7 +3109,7 @@ router.post("/agent", async (req, res) => {
     // failing write above, saved=true with an empty reload points at the read
     // side (GET /sessions, GET /sessions/:id/messages) or the client.
     console.log(`[agent-chat] turn user=${String(req.user.id).slice(0, 8)} conv=${conversationId ?? "-"} `
-      + `turn=${turnId ?? "-"} durable=${durable} tools=${prepared.toolExecutions.length} `
+      + `turn=${turnId ?? "-"} durable=${durable} tools=${prepared.toolExecutions.length} stopped=${stopped()} `
       + `saved=${turnSaved} ${Date.now() - t0}ms`);
 
     const metadata = {
@@ -3035,9 +3120,9 @@ router.post("/agent", async (req, res) => {
       ...(durable ? { durableContext: true } : {}),
     };
     if (!wantsStream) {
-      return res.json({ success: true, reply, response: reply, thinking, syllabus: syllabusRefs, pastQuestions: pastRefs, curriculum: curriculumRefs, mode, metadata, toolExecutions: prepared.toolExecutions });
+      return res.json({ success: true, reply, response: reply, thinking, syllabus: syllabusRefs, pastQuestions: pastRefs, curriculum: curriculumRefs, mode, metadata, toolExecutions: prepared.toolExecutions, trace: traceBlocks });
     }
-    send("done", { reply, thinking, syllabus: syllabusRefs, pastQuestions: pastRefs, curriculum: curriculumRefs, mode, metadata, toolExecutions: prepared.toolExecutions });
+    send("done", { reply, thinking, syllabus: syllabusRefs, pastQuestions: pastRefs, curriculum: curriculumRefs, mode, metadata, toolExecutions: prepared.toolExecutions, trace: traceBlocks, stopped: stopped() });
     return res.end();
   } catch (error) {
     console.error("[/chat/agent]", error);

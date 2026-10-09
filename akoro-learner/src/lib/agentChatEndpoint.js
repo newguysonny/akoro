@@ -11,6 +11,9 @@ export function agentChatEndpoint({ stream = false } = {}) {
   return stream ? `${AGENT_CHAT_ENDPOINT}?stream=1` : AGENT_CHAT_ENDPOINT;
 }
 
+/** ■ Stop for a running turn: POST { turnId }. */
+export const AGENT_CHAT_STOP_ENDPOINT = `${AGENT_CHAT_ENDPOINT}/stop`;
+
 export function createAgentChatTurnId() {
   const uuid = typeof globalThis.crypto?.randomUUID === "function"
     ? globalThis.crypto.randomUUID()
