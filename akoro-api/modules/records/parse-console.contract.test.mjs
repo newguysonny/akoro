@@ -199,3 +199,24 @@ test("the console page is self-sufficient, never cached, and the app mounts it",
   assert.match(envExample, /PARSE_CONSOLE_KEY/, "the env var is documented");
   assert.match(consoleSrc, /parsePageRunAsync|\/run'/, "the module submits via /run");
 });
+
+test("the served page's script parses — escapes inside the server template survive", async () => {
+  // The page is a server-side template literal: '\n' written in it becomes
+  // a real line break in the browser's script, and \' becomes a bare quote.
+  // One such string broke the whole script and froze the header on
+  // "checking…" (2026-10-09). Parse what the browser actually receives.
+  const saved = Object.fromEntries(ENV.map((k) => [k, process.env[k]]));
+  process.env.PARSE_CONSOLE_KEY = "sekrit";
+  const { server, port } = await startServer();
+  try {
+    const { status, text } = await call(port, "GET", "/console?key=sekrit");
+    assert.equal(status, 200);
+    const scripts = [...text.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+    assert.ok(scripts.length >= 1, "the page carries its script");
+    const vm = await import("node:vm");
+    for (const script of scripts) assert.doesNotThrow(() => new vm.Script(script), "the console script must parse");
+  } finally {
+    await stop(server);
+    for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  }
+});
