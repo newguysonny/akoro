@@ -212,6 +212,7 @@ session mode" (`fresh | continuation | decay`); "Adaptive Learning Workflow"
 | D37 | Recording struggles and breakthroughs | Every workflow records misconceptions, gaps, recoveries and strategy outcomes through one Education Engine recorder into `learner_concept_evidence`; breakthroughs are detected from those events; existing teaching and exam-prep history is backfilled. Built early (Phase 4a), because Agent Checks, peer help and the strategy pattern depend on it (§7.8.1). | Gap found 2026-10-09: today only Study Prep pass/fail and the Python service write evidence. |
 | D38 | Struggle taxonomy | A closed, versioned list of **41 struggle types in 8 categories** (§7.15): each with how it is detected (rule / agent / learner), when it counts as resolved, whether it is concept-tied and whether it may be a peer story. Struggles and breakthroughs share one table (`edu.learning_struggles`). Six sensitive types (anxiety, health…) are type-and-date only, never stories, learner-deletable; health expires in 30 days. | User decision. |
 | D39 | Schools and instructors see struggles | **Yes.** For learners linked to a school (`mgmt.students.user_id`), the learner's school admins and the instructors who teach their class/subject see the learner's **non-sensitive** struggles (type, concept, open/resolved, what worked) and class-level totals in the school dashboard. **Sensitive types** are not shown individually; instructors see only a neutral "may need support" flag when 2+ sensitive struggles are open within 14 days (no type, no details). Learners are told in Settings → Agent that their school can see this. | User decision (Q19); sensitive handling is the plan default (Q21). |
+| D40 | Strategy Library v3 | **Approved:** 15 new strategies, 22 in total, each with targets, where it runs, permitted workflows and a NaNa guide file (§7.7.2). | User decision (Q20). |
 | D10 | Who writes narration? | **Harness templates** (`ActivityNarrator`, grown from `narration.js:deliberate()`) for facts; the agent's `intent` (≤ 240 chars, sanitised, untrusted display text) for "why". v3's `narration` field **is** `intent`. | Deterministic where possible (v3 §40), already built (v7). |
 | D11 | Event store | New generic `edu.workflow_events`. `study_prep_events` is kept read-only and backfilled. | One stream model for four workflows (v3 §43). |
 | D12 | Live transport | **Event store is the source of truth; transport is replaceable.** Teaching and Decay keep the existing Socket.IO connection. Study Prep and Practice use SSE (same heartbeat pattern as `/chat/agent`). Both carry the identical event envelope. Replay: `GET /api/workflows/:id/events?after=N`. | v3 §42–43; reuses what already works. |
@@ -745,6 +746,43 @@ interpretable.
 
 **Disabling** a strategy (admin/env) takes effect immediately: the harness
 rejects it and the engine stops recommending it.
+
+#### 7.7.2 Strategy Library v3 — approved (D40)
+
+22 strategies. **SP** Study Prep · **T** Teaching · **D** Decay Review ·
+**P** Practice (proctored). "Human answers" marks the strategies where the
+learner, not their agent, answers (exceptions to D31, like D32).
+
+| Strategy | Ver. | Targets (§7.15) | Runs as | Workflows |
+|---|---|---|---|---|
+| `teach_back` | 1 | misconception, partial_understanding, encoding_failure | Teaching session, teach_agent | SP T D |
+| `different_analogy` | 1 | misconception, prior_knowledge_conflict, partial_understanding | NaNa coaching inside Teaching | SP T D |
+| `interleave` | 1 | interference, context_dependence | mixed-topic plan order / mixed Agent Check | SP P |
+| `space_out` | 1 | decay, inconsistent_practice, overload | schedule a later pass / next review date | SP D P |
+| `escalate_human` | 1 | frustration_giving_up, help_seeking_failure, any after repeated failure | notify the learner's instructor (D39) or ask a human | SP T D |
+| `retrieval_practice` | 2 | decay, retrieval_failure | recall rounds with hint ladder — **human answers** | D P |
+| `peer_help` | 2 | any shareable type | peer stories into Teaching / chat (§7.13) | SP T D |
+| `contrast_pairs` | 3 | interference, overgeneralization, misconception | Teaching: two ideas side by side, learner teaches the difference | SP T D |
+| `prerequisite_review` | 3 | prerequisite_gap | Study Prep inserts the prerequisite topic first (replan), Teaching on it | SP T |
+| `vocabulary_focus` | 3 | vocabulary_language | Teaching: key terms, plain-language and local-language bridges | SP T D |
+| `worked_examples` | 3 | fragile_knowledge, partial_understanding, no_strategy | Teaching: NaNa walks examples, learner teaches the agent to apply them | SP T |
+| `varied_formats` | 3 | context_dependence, format_mismatch | Teaching + Agent Check in several representations (text, diagram, word problem) | SP T D |
+| `easy_wins_first` | 3 | confidence_collapse, frustration_giving_up, fixed_mindset | reorder to start with achievable items, then build up | SP T D |
+| `chunk_plan` | 3 | overload, time_management, time_pressure | split the topic or plan into smaller parts | SP |
+| `make_concrete` | 3 | boredom_disengagement | real-life examples or a harder challenge | SP T |
+| `schedule_plan` | 3 | poor_planning, inconsistent_practice, procrastination | a dated schedule to the exam with reminders | SP |
+| `offline_pack` | 3 | device_access, resource_gap | downloadable summary and practice for offline use | SP D |
+| `timed_practice` | 3 | speed, anxiety, test_anxiety, retrieval_failure | short low-stakes timed rounds — **human answers**, unproctored | D P |
+| `format_practice` | 3 | format_mismatch | Agent Check / practice in the failing question format | SP P |
+| `check_your_work` | 3 | careless_error | NaNa coaches a checking habit; review of own answers — **human answers** | T P |
+| `self_check` | 3 | no_self_monitoring, feedback_misuse, help_seeking_failure | "How sure are you?" before checks, then compare | SP T |
+| `goal_clarify` | 3 | goal_confusion, no_strategy | restate what "understood" means; set a measurable goal | SP (and Agent Chat) |
+
+Each strategy gets its guide file `akoro-agent/strategies/<id>.md` (≤ 8 KB),
+written for NaNa, and a `library.js` entry as in §7.7.1. Strategies that run
+outside Teaching (`chunk_plan`, `schedule_plan`, `offline_pack`,
+`prerequisite_review`, `interleave`) are executed by the Study Prep harness
+(replan / schedule / export), not by a Teaching session.
 
 ### 7.8 Learner Model 🟡
 
@@ -1492,7 +1530,7 @@ The Adaptive Learning Engine maps each struggle type to candidate strategies,
 then ranks them with the anonymous pattern (what worked for others with the
 same struggle) and this learner's history:
 
-| Struggle category | Uses existing strategies | Needs new strategies (Strategy Library v3, Q20) |
+| Struggle category | v1/v2 strategies | v3 strategies (approved, D40) |
 |---|---|---|
 | Concept & understanding | `teach_back`, `different_analogy`, `peer_help` | `contrast_pairs` (overgeneralization, interference), `prerequisite_review` (prerequisite gap), `vocabulary_focus` (vocabulary/language), `worked_examples` (fragile knowledge) |
 | Recall & memory | `space_out`, `retrieval_practice`, `interleave` | `varied_formats` (context dependence) |
@@ -1503,8 +1541,7 @@ same struggle) and this learner's history:
 | Assessment & performance | `retrieval_practice` | `timed_practice` (speed, anxiety), `format_practice` (format mismatch), `check_your_work` (careless error) |
 | Meta | `escalate_human` | `self_check` (no self-monitoring, feedback misuse), `goal_clarify` (goal confusion) |
 
-Until v3 is approved, unmapped struggles fall back to the closest existing
-strategy plus a NaNa coaching note.
+Full per-strategy targets and workflows: §7.7.2.
 
 ---
 
@@ -2575,7 +2612,9 @@ existing contract test.** Phases 11 (UI) can start in parallel after Phase 3.
 - Wire the **current** Teaching code (evidence observer) and Study Prep store to
   it now, so data starts accumulating before the workflow refactors.
 - Strategy Library module (`strategies/library.js` + per-strategy guide files,
-  §7.7.1) replacing the two duplicated lists.
+  §7.7.1) replacing the two duplicated lists; all 22 v3 entries and their
+  `akoro-agent/strategies/<id>.md` guides (§7.7.2); harness execution for the
+  non-Teaching strategies (replan, schedule, offline export).
 - `recordStrategyOutcome`; struggle detection for the `rule` types (§7.15) and
   `recordStruggle` for agent/learner types; breakthrough resolution;
   `edu.learning_struggles`, question tags, confusion pairs, timings.
@@ -2816,7 +2855,7 @@ LLM failure must never corrupt workflow state.
 | Q18 | ~~Pattern population~~ — **resolved (D36):** all learners, anonymously, totals only, ≥ 5. | Done |
 | Q19 | ~~Schools/instructors see struggles~~ — **resolved (D39):** yes, non-sensitive ones in full. | Done |
 | Q21 | Sensitive struggles for instructors: neutral "may need support" flag only (plan default), full detail, or nothing? | Before school dashboards use it |
-| Q20 | Approve Strategy Library v3 (the new strategies listed in §7.15.3)? How the library works: §7.7.1. | Before Phase 8 |
+| Q20 | ~~Strategy Library v3~~ — **resolved (D40):** approved. | Done |
 | Q14 | ~~Practice UI~~ — **resolved (D29):** Practice is the live proctored assessment in `AssessmentRoom`, which keeps its UI. | Done |
 | Q13 | ~~DeepSeek / Grok data handling~~ — **resolved:** accepted by the product owner (2026-10-09); both enabled per §7.11.5a. | Done |
 | Q12 | ~~Per-tier model lists~~ — **resolved (§7.11.5a).** Grok and DeepSeek model ids and prices are filled into `AI_MODELS` at setup (a setup task, not an open question). Fable stays off until a tier is given it. | Done |
