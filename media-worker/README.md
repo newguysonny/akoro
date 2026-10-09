@@ -23,7 +23,16 @@ real container.
 
 ## Deploy
 
-### Cloudflare Containers
+### Cloudflare Containers — two ways
+
+**From the browser (recommended, no local tooling):** the repo's GitHub
+Actions workflow `Deploy media-worker` builds the image on a GitHub runner
+(which has Docker — the Render API does not) and runs wrangler deploy with
+repo secrets. One-time setup is documented in the workflow header
+(`.github/workflows/deploy-media-worker.yml`): 2 Cloudflare secrets +
+7 `MW_*` app secrets, then Actions → Deploy media-worker → Run workflow.
+
+**From a local machine:**
 
 ```bash
 cd media-worker

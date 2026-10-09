@@ -1,0 +1,83 @@
+# Deploy the media-worker Cloudflare Container — from the browser.
+#
+# The equivalent of `cd media-worker && npx wrangler deploy` (plus secret
+# rotation), run on a GitHub runner (which HAS Docker — the API service on
+# Render does not, which is why this is a workflow and not an API endpoint).
+#
+# One-time setup (repo Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_API_TOKEN     — CF dashboard → My Profile → API Tokens →
+#                              "Edit Cloudflare Workers" template + add the
+#                              Containers permission set (Account · Workers
+#                              Containers Scripts · Edit); include Account ID
+#   CLOUDFLARE_ACCOUNT_ID    — CF dashboard, right sidebar
+#   MW_INTERNAL_SECRET       — EXACTLY the API's INTERNAL_SECRET
+#   MW_R2_ACCOUNT_ID         ┐
+#   MW_R2_ACCESS_KEY_ID      │ the same 5 R2 values the Render API uses
+#   MW_R2_SECRET_ACCESS_KEY  │
+#   MW_R2_BUCKET_NAME        │
+#   MW_R2_PUBLIC_URL         ┘
+#   MW_API_BASE_URL          — e.g. https://api.akoro.name.ng
+#
+# Run: Actions tab → "Deploy media-worker" → Run workflow.
+# Verify afterwards: GET <workers-url>/edge-health (no wake), then /healthz
+# (must show r2:true), then a real /jobs/extract-audio.
+
+name: Deploy media-worker
+
+on:
+  workflow_dispatch:
+    inputs:
+      rotate_secrets:
+        description: "Re-push the MW_* app secrets to the Worker first (idempotent)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: media-worker-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install wrangler
+        working-directory: media-worker
+        run: npm ci --ignore-scripts
+
+      - name: Push app secrets to the Worker
+        if: ${{ inputs.rotate_secrets }}
+        working-directory: media-worker
+        env:
+          CLOUDFLARE_API_TOKEN:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          INTERNAL_SECRET:       ${{ secrets.MW_INTERNAL_SECRET }}
+          R2_ACCOUNT_ID:         ${{ secrets.MW_R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID:      ${{ secrets.MW_R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY:  ${{ secrets.MW_R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME:        ${{ secrets.MW_R2_BUCKET_NAME }}
+          R2_PUBLIC_URL:         ${{ secrets.MW_R2_PUBLIC_URL }}
+          API_BASE_URL:          ${{ secrets.MW_API_BASE_URL }}
+        run: |
+          set -e
+          missing=0
+          for name in INTERNAL_SECRET R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET_NAME R2_PUBLIC_URL API_BASE_URL; do
+            if [ -z "${!name}" ]; then echo "::error::GitHub secret MW_${name} is not set"; missing=1; fi
+          done
+          [ "$missing" = "0" ] || exit 1
+          for name in INTERNAL_SECRET R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET_NAME R2_PUBLIC_URL API_BASE_URL; do
+            printf '%s' "${!name}" | npx wrangler secret put "$name"
+          done
+
+      - name: Build + deploy the container
+        working-directory: media-worker
+        env:
+          CLOUDFLARE_API_TOKEN:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy
