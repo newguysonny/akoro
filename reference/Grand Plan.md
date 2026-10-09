@@ -213,6 +213,7 @@ session mode" (`fresh | continuation | decay`); "Adaptive Learning Workflow"
 | D38 | Struggle taxonomy | A closed, versioned list of **41 struggle types in 8 categories** (§7.15): each with how it is detected (rule / agent / learner), when it counts as resolved, whether it is concept-tied and whether it may be a peer story. Struggles and breakthroughs share one table (`edu.learning_struggles`). Six sensitive types (anxiety, health…) are type-and-date only, never stories, learner-deletable; health expires in 30 days. | User decision. |
 | D39 | Schools and instructors see struggles | **Yes.** For learners linked to a school (`mgmt.students.user_id`), the learner's school admins and the instructors who teach their class/subject see the learner's **non-sensitive** struggles (type, concept, open/resolved, what worked) and class-level totals in the school dashboard. **Sensitive types** show on the dashboard as a neutral **"may need support"** flag when 2+ sensitive struggles are open within 14 days; the instructor can **open the flag to see full detail** (types, concepts, dates). Every opening of sensitive detail is logged (who, when, which learner). `health_energy` still expires after 30 days. Learners are told in Settings → Agent that their school can see this, including sensitive struggles. | User decisions (Q19, Q21). |
 | D40 | Strategy Library v3 | **Approved:** 15 new strategies, 22 in total, each with targets, where it runs, permitted workflows and a NaNa guide file (§7.7.2). | User decision (Q20). |
+| D41 | Agent Chat tab look and behaviour | Modelled on the coding-agent reference video/screenshots: "Thought for Ns" rows, expandable tool rows and groups, change rows, unboxed markdown activity text, interleaved order, jump-to-latest, stop button. Learner language in learner mode; raw tool I/O only in developer mode. The chat tool loop streams every iteration (§13.4). | User decision. |
 | D10 | Who writes narration? | **Harness templates** (`ActivityNarrator`, grown from `narration.js:deliberate()`) for facts; the agent's `intent` (≤ 240 chars, sanitised, untrusted display text) for "why". v3's `narration` field **is** `intent`. | Deterministic where possible (v3 §40), already built (v7). |
 | D11 | Event store | New generic `edu.workflow_events`. `study_prep_events` is kept read-only and backfilled. | One stream model for four workflows (v3 §43). |
 | D12 | Live transport | **Event store is the source of truth; transport is replaceable.** Teaching and Decay keep the existing Socket.IO connection. Study Prep and Practice use SSE (same heartbeat pattern as `/chat/agent`). Both carry the identical event envelope. Replay: `GET /api/workflows/:id/events?after=N`. | v3 §42–43; reuses what already works. |
@@ -2368,6 +2369,75 @@ component structure, row format and stream order.
 Behind a developer flag: workflow type/state/sub-state, operation, tool name,
 event id, sequence, latency, context set, rejection codes, fallback reason.
 
+### 13.4 Agent Chat tab — coding-agent UI spec (D41)
+
+Reference: `reference/screen-20260930-103526_5RMBLnv7_compressed.mp4` and the
+two screenshots of a coding agent (Claude Code on the web), studied 2026-10-09.
+The Agent Chat tab should look and behave like it.
+
+**What the reference does**
+
+| Element | Collapsed | Expanded | While running |
+|---|---|---|---|
+| **Thinking** | 🧠 "Thought for 7 seconds" + chevron, muted grey | indented body with a thin left rule, monospace-ish muted text | opens automatically and streams; collapses to the summary line when it ends |
+| **Single tool** | terminal icon · "used Bash ✓ 81ms" + chevron | boxed **COMMAND** panel and **STDOUT / STDERR** panels, each with a copy button | spinner instead of ✓, live duration |
+| **Tool group** | ">_ Ran commands 3 ›" — consecutive tool calls collapse into one line | the individual "used …" rows, each expandable again | count grows as calls arrive |
+| **Read group** | "Explored 1 read ›" | the files/sources read | — |
+| **Change row** | "Edit path/file.js +14 −3 ›", "Write path/file +108 ›" | the diff | — |
+| **Activity text** | — | plain, large, proportional text between steps — no bubble; markdown: **bold**, `inline code` chips, lists, headings, code blocks with copy/download | streams word by word |
+| **User message** | grey rounded box | — | — |
+| **Order** | thinking → tools → text, repeated many times in one turn; any element may be missing | | |
+| **Scrolling** | floating ↓ "jump to latest" button; auto-scroll only when already at the bottom | | |
+| **Composer** | "What would you like to do?", attachment + mode buttons; **■ stop** button while running, **→ send** when idle | | |
+| **Progress** | small spinner at the left of the element currently running | | |
+
+**Akoro mapping (learner language, D12)**
+
+| Reference | Akoro Agent Chat |
+|---|---|
+| Thought for Ns | Same row. Body = reasoning summary when the chosen model provides one, else the agent's intent + narration (D9). Context-set label in muted blue (v3 §35). |
+| used Bash ✓ 81ms → COMMAND / STDOUT | `ToolRow`: pill + **headline** ("Checking your Basic Science syllabus") ✓ 142ms. Expanded (learner mode): **What I checked** (description) and **What I found** (the result line, plus a short bounded result list where useful — e.g. the 6 topics found). Raw tool name, arguments and output only in developer mode, in COMMAND/OUTPUT-style boxes with copy buttons. |
+| Ran commands N | `ToolGroup`: "Checked 4 things ›" (consecutive research/inspection calls). |
+| Explored N reads | "Read 2 sources ›" — syllabus, files, blog passages (with source chips). |
+| Edit file +14 −3 | **Change rows** for things the agent changed: "Updated your study plan · +2 topics ›", "Saved a note to your agent ›", "Created a teaching session ›" — expanded shows before/after. |
+| Activity text | `ActivityMessage` — same style; markdown; term chips instead of code chips; code blocks only when the subject needs them. |
+| Agent Check | battle-style rows inside a group: NaNa's question → your agent's answer (citing the note) → Sergeant's verdict (§7.12.4), then a score card. |
+| ■ stop | Interrupts the turn: the loop stops at its next checkpoint, nothing half-done is committed, the stream ends with "Stopped". |
+
+**Backend changes this needs (today's code)**
+
+Today `/chat/agent` runs the tool loop **without streaming** (`runAgentToolLoop`:
+up to 3 iterations, `max_tokens: 900`), shows only one-line `status` labels,
+throws away any text the model writes between tool calls, and streams only the
+final answer (`delta`) — plus reasoning summaries in Think mode.
+
+1. **Stream every iteration** of the tool loop (`stream: true` with tools):
+   text the model writes before/between tool calls → `activity.delta`;
+   each tool call → `tool.started` / `tool.completed|failed` with headline,
+   description, result and duration from the tool's display templates.
+2. **Raise the loop cap** for chat (8 iterations; the v7 note) with the
+   existing billing and timeouts.
+3. **Reasoning** → `agent.narration.*` per D9 (summary when available).
+4. **Persist the turn's trace** with the assistant message (ordered list of
+   thinking / tool / group / change / activity blocks, bounded) in the existing
+   durable conversation store, so a reload shows the same blocks. Reasoning
+   summaries are live-only (D9).
+5. **Stop:** `POST /chat/agent/turns/:turnId/stop` (owner only) → abort
+   signal checked between iterations and passed to the model stream.
+6. Map today's events: `thinking` → `agent.narration.delta`, `status` →
+   `tool.*`, `delta` → `reply.delta`; keep the old ones for one release so
+   older app builds still render.
+
+**Frontend changes (`AgentChatTab.jsx`, ~990 lines today)**
+
+- Shared `streamReducer` + `ThinkingBlock` (from today's `ThoughtBlock`),
+  `ToolRow`, `ToolGroup`, `ChangeRow`, `ActivityMessage` (markdown),
+  `ScoreCard`, `GateButton` (§13.2).
+- User message as a grey rounded box; agent output unboxed.
+- Jump-to-latest button; stick-to-bottom only when at the bottom.
+- Send button becomes ■ stop while a turn runs.
+- Developer mode toggle shows raw tool I/O boxes with copy buttons.
+
 ---
 
 ## 14. Data model and migrations
@@ -2682,6 +2752,8 @@ existing contract test.** Phases 11 (UI) can start in parallel after Phase 3.
 - **Exit:** no direct writes to concept state outside the Education Engine (grep-enforced contract test).
 
 ### Phase 11 — UI
+- Agent Chat tab per §13.4 (can start right after Phase 3: it only needs the event
+  stream and the streaming chat tool loop).
 - School dashboard: learners' struggles for linked students (D39), class totals.
 - `streamReducer`, `ThinkingBlock`, `ToolGroup`, `ToolRow`, `ActivityMessage`,
   `ScoreCard`, `PlanCard`, `TeachingHandoffCard`, `WorkflowCard`,
