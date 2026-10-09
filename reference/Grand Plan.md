@@ -35,6 +35,7 @@ checked against the code on 2026-10-09.
    - 7.9 Event stream, narration and transport
    - 7.10 Cost, concurrency, idempotency
    - 7.11 Model switching
+   - 7.12 Agent Check
 8. Workflow 1 — Study Prep
 9. Workflow 2 — Teaching (agent-driven)
 10. Workflow 3 — Decay Review
@@ -168,6 +169,8 @@ Use these terms in code, comments, events, tests and docs.
 - **Protégé (Student Agent)** — the AI learner the human teaches. A tool.
 - **NaNa Esumai** — the teaching guide persona. A tool.
 - **Sargeant** — the assessment/boundary persona. A tool.
+- **Agent Check** — practice in which NaNa asks, the learner's agent answers
+  from its owner's notes only, and Sergeant judges (§7.12). No human answers.
 - **Outcome** — the formal result a workflow emits on completion/abandonment.
 - **Handoff** — a parent workflow creating a child workflow (e.g. Study Prep → Teaching).
 - **Narration** — learner-safe text describing what the system is doing.
@@ -197,12 +200,13 @@ session mode" (`fresh | continuation | decay`); "Adaptive Learning Workflow"
 | D28 | Where the live stream UI is used | **Only the Agent Chat tab** (`AgentChatTab.jsx`) renders the coding-agent stream (thinking → tool rows → activity → reply), including Study Prep and any workflow shown in chat. **`TeachAgentModal` keeps its current UI** (and `DecaySessionModal`, which shares that design), and **`AssessmentRoom` keeps its UI** for Practice (D29). The backend still emits and stores the same events for every workflow; the modals just don't render them as a trace. | User decision. |
 | D29 | What Practice is | **Practice = the live proctored assessment** (`AssessmentRoom` + Session Assessment Gateway + Sergeant). The agent chooses questions, probes and hints; proctoring, scoring and the verdict stay in code. `AssessmentRoom` keeps its UI. | User decision (§11). |
 | D30 | No syllabus found | Syllabus is resolved **class → school → platform → AI-generated**. `syllabus.generate` is allowed only after the other three return nothing; the draft is grounded on the national curriculum, checked by code, saved as provisional, and always labelled as AI-drafted (§8.7). | User decision: a missing syllabus must never block a learner. |
+| D31 | How practice works | **Agent Check** (§7.12): NaNa asks, the learner's agent answers only from its owner's notes, Sergeant judges, the Education Engine scores. No human answers. Replaces `practice.generate/submit` in Study Prep, Teaching and Decay. The proctored assessment stays human and separate. | User decision: practice tests the agent, like Battles. |
 | D10 | Who writes narration? | **Harness templates** (`ActivityNarrator`, grown from `narration.js:deliberate()`) for facts; the agent's `intent` (≤ 240 chars, sanitised, untrusted display text) for "why". v3's `narration` field **is** `intent`. | Deterministic where possible (v3 §40), already built (v7). |
 | D11 | Event store | New generic `edu.workflow_events`. `study_prep_events` is kept read-only and backfilled. | One stream model for four workflows (v3 §43). |
 | D12 | Live transport | **Event store is the source of truth; transport is replaceable.** Teaching and Decay keep the existing Socket.IO connection. Study Prep and Practice use SSE (same heartbeat pattern as `/chat/agent`). Both carry the identical event envelope. Replay: `GET /api/workflows/:id/events?after=N`. | v3 §42–43; reuses what already works. |
 | D13 | Context registry | **`manifest.mjs` stays the only registry.** No frontmatter discovery. Operation → set mapping lives in code per workflow. New MD files go under `akoro-api/akoro-agent/`. | v7 D18; the manifest has contract tests and a boot preflight. |
 | D14 | Event categories | The v3 controlled taxonomy (11 categories). UI pills are derived from categories by one mapping function. | v3 §57; v7's 6 pills become a subset. |
-| D15 | Teach-back in Study Prep | **Creates a Teaching Workflow** (handoff). The topic waits in `awaiting_teaching`. Retest unlocks on `TEACHING_COMPLETED`. Other strategies run inline inside Study Prep and unlock retest through the learner's "Ready for retest" gate. | v3 §28–30. |
+| D15 | Interventions in Study Prep | **Every intervention is a Teaching Workflow** (`teach_agent` mode) — because the check tests the agent, the fix has to go into the agent's notes. The chosen strategy (teach_back, different_analogy, …) shapes how NaNa coaches inside that session. The topic waits in `awaiting_teaching`; retest unlocks on `TEACHING_COMPLETED`. No inline interventions, no "Ready for retest" gate. | v3 §28–30, revised by D31. |
 | D16 | Topic state model | **One topic state machine** (§8.3). The exam-prep run stays as the per-attempt record, not a second state authority. | Removes the two-state-machine overlap. |
 | D17 | Teaching phases | `PHASE_1 → PHASE_4 → MASTERY` are kept as the **progression sub-state inside `teaching_active`**, driven only by `applyTeachingProgress`. | Reconciles v3 states with the existing, tested gate. |
 | D18 | `evidence_capture` (v3 Teaching state) | **Becomes an operation**, not a persisted state. Evidence is captured every turn; flipping persisted state every turn adds writes and races for no gain. | Only deviation from v3's state list. |
@@ -310,7 +314,7 @@ DATABASE / DETERMINISTIC ENGINE   decides: score, pass, charge, transition,
 | Old workflow state | 🟡 `workflow-state.js`, `adaptive-workflows.js` | Exam-prep projection. To be absorbed. |
 | Teaching | 🟡 Socket.IO `start_adaptive_session` with `mode: fresh | continuation`; rows in `edu.adaptive_sessions`; `teaching-session/lifecycle.js` (row writes), `teaching-session/state-machine.js` (pure phase gate `applyTeachingProgress`, `ACTION_FOR_DIALOGUE_MOVE`) | Each turn runs a **fixed 8-step pipeline** (`teaching-workflow/runner.js`). The model never chooses steps. |
 | Decay | 🟡 Same socket, `mode: "decay"` → `sessionType = "decay_review"`; `decayEngine.generateDecaySession`; runs the teaching pipeline with a decay payload | No states of its own. Scheduler `runDecayScheduler` in `decayEngine.js`. |
-| Practice | 🟡 `practice.generate / practice.submit` inside Study Prep; separate past-questions and task tools | No workflow. |
+| Practice capability | 🟡 `practice.generate / practice.submit` inside Study Prep (human answers) · ✅ Battles: `battle/agentRecall.js` (agent answers from the learner's notes only), `battle/questionSource.js`, single-learner "study review" mode | Replaced by the Agent Check (§7.12), built from the battle code. |
 | Context | ✅ `modules/agent-context/` — `context-manager.js`, `manifest.mjs` (6 joined study-prep sets + verbatim chat/persona sets), workspace at `akoro-api/akoro-agent/` (65 MD files) | Budget: 8 192 B/file, 24 576 B/set. |
 | Tools | ✅ `tools/registry.js` — 17 study-prep tools in 3 levels (read / propose / execute) + `HARNESS_ONLY_OPERATIONS` | Study Prep only. |
 | Learner state | 🟡 `learner_concept_state`, `learner_concept_evidence`, `knowledge_confidence`, `student-state.js` (`decideNextAction`), `teaching-evidence.js` | Several representations; `decideNextAction` is a competing decision-maker. |
@@ -529,7 +533,6 @@ manifest set (stable, cached, boot-preflighted)
 | Study Prep | verification (plan checks, safety) | `safety` ✅ |
 | Study Prep | strategy_selection, teach_back_creation | `strategies` ✅ |
 | Study Prep | reflection, outcome_evaluation, synthesis | `reflection` ✅ |
-| Study Prep | intervention (inline strategy) | `teaching` ✅ |
 | Teaching (`teach_agent`) | all teaching-turn operations | `teaching_controller` 🆕 |
 | Teaching (`learn_with_guide`) | all teaching-turn operations | `guide_controller` 🆕 |
 | Teaching | select_teaching_strategy, adapt_strategy | `teaching_strategy` 🆕 |
@@ -728,7 +731,7 @@ decision.proposed · decision.accepted · decision.rejected · decision.fallback
 tool.started · tool.completed · tool.failed
 
 learner.action_required · learner.action_received
-   (plan.approved, teaching.started, answer.submitted, ready_for_retest,
+   (plan.approved, teaching.started, answer.submitted (proctored / guide mode),
     workflow.resumed, topup.completed)
 
 assessment.started · assessment.completed
@@ -1015,6 +1018,79 @@ Starting lists (confirmed 2026-10-09; admins can edit them later):
    error mapping, billing at the right price.
 5. Picker API + UI behind `AI_MODEL_PICKER_ENABLED`.
 
+### 7.12 Agent Check — practice that tests the learner's agent (D31) 🆕
+
+`practice.generate` / `practice.submit` (a human answers generated questions)
+is replaced by an **Agent Check**, built the way Battles already work:
+
+```
+NaNa (teaching guide) asks  →  the learner's agent answers  →  Sergeant judges
+```
+
+**No human answers.** The check measures what the learner has taught their
+agent. In Akoro the agent only knows what its owner taught it, so the result
+is a direct measure of the learner's teaching — and every gap it finds is
+something for the learner to teach next. This is the same loop as Battles
+("teach the agent, the agent does better").
+
+#### 7.12.1 One check, step by step
+
+| Step | Who | What | Reuses |
+|---|---|---|---|
+| 1. Questions | **NaNa** (question source) | Picks questions on the topic: verified past questions / question bank first, generated questions otherwise (labelled, never shown as official past questions). Answer key stays server-side. | `battle/questionSource.js`, exam-prep question generation |
+| 2. Answer | **The learner's agent** | Answers each question **only from the learner's own notes** (`edu.student_knowledge`): the question is embedded, the notes are searched (similarity floor 0.30, rerank to 4 notes), and the model sees nothing else — no syllabus, no general knowledge, no answer key. If the notes don't cover it, the agent says UNKNOWN and guesses, and the log says so. | `battle/agentRecall.js` (`recall`, `answerFromRecall`, `recallStrength`) |
+| 3. Judge | **Sergeant** | Multiple choice: the Education Engine compares to the key (deterministic); Sergeant writes the one-line explanation. Short answer: Sergeant judges against the rubric — a proposal the Education Engine normalises. Sergeant also names each gap ("your notes don't say where transpiration happens"). | `agents/sargeant/assessment.js` |
+| 4. Score | **Education Engine** | Score, threshold, attempt count, outcome, evidence. **A correct guess (UNKNOWN) counts as not demonstrated** — it shows in the log but never as evidence. | `education-engine.js` |
+
+The agent check is one harness `execute` tool:
+
+```
+practice.run_agent_check({ topicId, mode: "diagnostic" | "retest" | "retention_check", size })
+  → { score, total, passed, perQuestion: [{ outcome: correct|wrong|guessed, gap? }], gaps: [...] }
+```
+
+plus a free read tool the controller uses first:
+
+```
+agent.get_knowledge_coverage({ topicId }) → { notes: n, strength: "none"|"thin"|"good" }   // recallStrength, no model call
+```
+
+If the agent has **no notes** on a topic, the controller skips the check
+(saves coins) and goes straight to teaching, narrating why ("Your agent
+doesn't have any notes on Water Cycle yet — let's teach it first").
+
+#### 7.12.2 Fixed in code
+
+- The recall prompt contains only the learner's notes; nothing else may be
+  added (contract test pins the prompt inputs).
+- **The three roles are model-locked by env**, not affected by the learner's
+  model choice (D23): `agent_recall` (today `BATTLE_ANSWER_MODEL`, default
+  `gpt-4o-mini`), `question_generator`, and `assessor`. A stronger model could
+  answer from general knowledge despite instructions, and question difficulty
+  must not change with the learner's plan, so scores stay comparable.
+- Scoring, thresholds, attempt caps and evidence writes are the Education
+  Engine's. Charging happens before the check, per check, by the harness.
+- Evidence is tagged `source: "agent_recall"`. Closing claims say what was
+  measured: "your agent answered 4 of 5 from your notes", never "you mastered".
+
+#### 7.12.3 Where it is used
+
+| Workflow | Use |
+|---|---|
+| Study Prep | Diagnostic and retest for every topic (§8.3–8.4) |
+| Teaching (`teach_agent` mode) | `teaching.request_assessment` runs an agent check on the concepts just taught |
+| Decay Review | The retention check and retest (has the agent's knowledge faded?) |
+| Practice (proctored) | **Not used** — the proctored assessment stays human (D29) |
+| Teaching (`learn_with_guide` mode) | Not used — the human answers NaNa's check questions in that mode (§9.3) |
+
+#### 7.12.4 What the learner sees
+
+- **Agent Chat tab** (Study Prep): a battle-style log streams in as tool rows —
+  "NaNa asked: What drives evaporation?" · "Your agent answered B, from your
+  note *Evaporation is…*" · "Sergeant: correct" — then a score card and the
+  list of gaps.
+- **Teach Agent modal:** the existing UI shows the result card; no trace UI (D28).
+
 ---
 
 ## 8. Workflow 1 — Study Prep
@@ -1042,50 +1118,54 @@ waiting_learner or waiting_child (derived from the active topic).
 
 1. Approve plan (`awaiting_confirmation → topic_active`). Only the learner's
    explicit confirmation does this.
-2. Submit answers (diagnostic, retest).
-3. Start/continue the Teaching Workflow (happens in Teaching).
-4. "Ready for retest" after an inline strategy.
-5. Top-up / resume after a budget pause.
+2. Start/continue the Teaching Workflow when a gap is found (happens in Teaching).
+3. Top-up / resume after a budget pause.
+
+There is no "submit answers" gate: diagnostics and retests are Agent Checks
+(§7.12) and run without the learner answering. The learner watches them in the
+chat.
 
 ### 8.3 Topic states 🟡 (D16)
 
 ```
-queued → active → diagnostic_ready → diagnostic
-                                       │
-                         ┌─────────────┴─────────────┐
-                       passed                     below threshold
-                         │                           │
-                     understood               intervention_required
-                                                     │ (agent chooses strategy)
-                                     ┌───────────────┴───────────────┐
-                                 teach_back                     other strategy
-                                     │                               │
-                             awaiting_teaching                  intervention
-                                     │ TEACHING_COMPLETED            │ learner: ready
-                                     └───────────┬───────────────────┘
-                                            retest_ready
-                                                 │
-                                               retest
-                                       ┌─────────┴─────────┐
-                                    passed           below threshold
-                                       │            ┌──────┴──────┐
-                                  understood   attempts left   attempts exhausted
-                                               intervention_      capped_out
-                                               required (new          │
-                                               strategy)       deferred | flagged_gap
+queued → active ── no notes on this topic ──────────────────────┐
+           │                                                    │
+           ▼                                                    │
+     diagnostic_ready → diagnostic (Agent Check)                │
+                             │                                  │
+               ┌─────────────┴─────────────┐                    │
+             passed                   below threshold           │
+               │                           │                    │
+           understood             intervention_required ◄───────┘
+                                           │ (agent chooses strategy)
+                                           ▼
+                                   awaiting_teaching   (Teaching Workflow, teach_agent mode)
+                                           │ TEACHING_COMPLETED
+                                           ▼
+                                      retest_ready
+                                           │
+                                     retest (Agent Check)
+                             ┌─────────────┴─────────────┐
+                          passed                   below threshold
+                             │                ┌──────────┴──────────┐
+                        understood       attempts left        attempts exhausted
+                                         intervention_           capped_out
+                                         required (new               │
+                                         strategy)            deferred | flagged_gap
 deferred → queued (one deferred retry per session)   flagged_gap → queued (replan)
 ```
 
 States: `queued, active, diagnostic_ready, diagnostic,
-intervention_required, intervention, awaiting_teaching, retest_ready, retest,
-understood, flagged_gap, capped_out, deferred`.
+intervention_required, awaiting_teaching, retest_ready, retest, understood,
+flagged_gap, capped_out, deferred`.
 
 `intervention_required` generalises v3's `teach_back_required` because the
 chosen strategy may not be teach-back. `teaching_workflow_id` is set on the
 topic while `awaiting_teaching`.
 
 The exam-prep run (`learner_exam_prep_runs` / `adaptive_workflow_runs`)
-remains the **attempt record** (questions, answers, score, attempt number).
+remains the **attempt record** (questions, the agent's answers and the notes
+it used, per-question judgement, score, attempt number).
 Its status routing (`nextRunStatus`) stops being authoritative; the topic
 state machine is.
 
@@ -1096,22 +1176,21 @@ state machine is.
 | research / inspection | planning start, after a gap | `syllabus.resolve_class`, `syllabus.resolve_school`, `syllabus.resolve_platform`, `syllabus.generate` (only if all three found nothing, §8.7), `learner.get_state`, `learner.get_history`, `learner.get_relevant_memory`, `concept.get_prerequisites`, `session.get_state`, `content.search` (flagged) | `research` |
 | planning / replanning | `planning`, `replanning` | `plan.validate`, `propose_plan` ⟂, `session.replan` | `planning` |
 | verification | plan checks | `plan.validate` | `safety` |
-| diagnostic / retest | topic `diagnostic_ready` / `retest_ready` | `practice.generate` (execute) | `reflection` |
+| diagnostic / retest | topic `active` / `diagnostic_ready` / `retest_ready` | `agent.get_knowledge_coverage` (read), `practice.run_agent_check` (execute, §7.12) | `reflection` |
 | reflection / outcome_evaluation | after a score | read tools | `reflection` |
-| strategy_selection | `intervention_required` | `offer_strategy`, `request_teach_back` 🆕 ⟂ | `strategies` |
-| intervention | `intervention` (inline) | `explain_with_strategy` 🆕 ⟂ (persona: guide) | `teaching` |
+| strategy_selection | `intervention_required` | `request_teaching({ strategy, focusGaps })` 🆕 ⟂ — always a Teaching Workflow (D15) | `strategies` |
 | topic_advance | topic settled | `advance_topic` ⟂, `defer_topic` ⟂, `topic.flag` | `reflection` |
 | session_completion | all topics settled | `conclude_session` ⟂ | `reflection` |
 
-⟂ = terminal action (ends the step). `request_teach_back` asks the harness to
-create a Teaching Workflow; the harness checks state, strategy, idempotency
+⟂ = terminal action (ends the step). `request_teaching` asks the harness to
+create a Teaching Workflow (with the strategy and the gaps the check found); the harness checks state, strategy, idempotency
 and creates it (`workflow.create_child` is harness-only).
 
 ### 8.5 Agent loop
 
 **Wake triggers:** `session_started` · `plan_confirmed` · `attempt_scored`
 (below threshold only) · `teaching_completed` · `teaching_abandoned` ·
-`ready_for_retest` · `attempts_exhausted` · `all_topics_settled` ·
+`attempts_exhausted` · `all_topics_settled` ·
 `replan_requested` · `resumed`.
 
 **Fast path (no model wake, harness only, still narrated):**
@@ -1119,7 +1198,8 @@ score ≥ threshold → `understood` → next topic `active`;
 `TEACHING_COMPLETED` validated → `retest_ready`.
 
 **Agent decides:** research depth and order, plan order (within prerequisite
-constraints), which strategy after a gap, defer vs flag vs replan at cap,
+constraints), whether a diagnostic is worth running (skip it when the agent
+has no notes), which strategy to hand to Teaching after a gap, defer vs flag vs replan at cap,
 the closing summary.
 
 **Fixed in code:** plan validation, confirmation, charging, scoring,
@@ -1352,7 +1432,7 @@ whatever the agent did — nothing it generates can skip them.
 | ask_followup / request_clarification / challenge | `protege.respond({ move, focusConcept })` with `move ∈ {ask_followup, request_clarification, challenge, acknowledge, teach_back_prompt, confused_student}` | persona | **yes** ⟂ |
 | coach | `guide.coach({ focus, style })` (NaNa) | persona | no (protégé reply still follows) |
 | select_teaching_strategy / adapt_strategy | `strategy.select({ strategy, reason_code })` | propose | no |
-| assess | `teaching.request_assessment({ conceptIds })` → practice generated server-side, answer key server-side | execute | **yes** ⟂ (waits for learner answers) |
+| assess | `teaching.request_assessment({ conceptIds })` → an Agent Check (§7.12) on the concepts just taught; the protégé answers from the notes; Sergeant judges | execute | **yes** ⟂ (result card) |
 | complete | `teaching.propose_complete()` — accepted only if `teachingObjectiveMet`; else `objective_not_met` | propose | **yes** ⟂ |
 | pause | `teaching.propose_pause({ reason })` | propose | **yes** ⟂ |
 
@@ -1476,12 +1556,12 @@ any non-terminal ⇄ paused ; → abandoned | cancelled
 | Operation | Agent tools | Set |
 |---|---|---|
 | inspect_decay / inspect_history / inspect_concept | `decay.get_alert`, `learner.get_history`, `learner.get_concept_evidence`, `concept.get_prerequisites` | `decay_inspection` |
-| generate_diagnostic | `practice.generate({ mode: "retention_check", size: small })` ⟂ (waits for answers) | `decay_inspection` |
+| generate_diagnostic | `practice.run_agent_check({ mode: "retention_check", size: small })` ⟂ — has the agent's knowledge faded? | `decay_inspection` |
 | evaluate_retention | read the scored result (Education Engine `evaluateRetention` decides retained/decayed) | `decay_inspection` |
-| select_strategy | `strategy.select` (normally `retrieval_practice` first), `request_teach_back` ⟂ (creates a child Teaching Workflow, `entry_mode = decay_review`) | `decay_review` |
+| select_strategy | `strategy.select` (normally `retrieval_practice` first), `request_teaching` ⟂ (creates a child Teaching Workflow, `entry_mode = decay_review`) | `decay_review` |
 | retrieval_practice | `retrieval.ask({ conceptId, hintLevel })` ⟂ — recall question; the hint ladder (none → cue → partial) is enforced by the harness; answers scored server-side; up to 3 rounds | `decay_review` |
-| intervene | turn-based, same turn shape as Teaching §9.3: `guide.coach`, `protege.respond`, `explain_with_strategy` ⟂ | `decay_review` |
-| generate_retest / score_retest | `practice.generate({ mode: "retest" })` ⟂; scoring harness-only | `decay_review` |
+| intervene | turn-based, same turn shape as Teaching §9.3: `guide.coach`, `protege.respond` ⟂ (the learner re-teaches the agent) | `decay_review` |
+| generate_retest / score_retest | `practice.run_agent_check({ mode: "retest" })` ⟂; scoring harness-only | `decay_review` |
 | complete | `decay.propose_complete` ⟂ | `decay_review` |
 
 **Typical decay path with `retrieval_practice`:**
@@ -1523,10 +1603,9 @@ Session Assessment Gateway (`AssessmentRoom.jsx` + `assessmentGateway.js`):
 identity check, webcam proctoring, Sergeant-led question-and-answer, and a
 cheat-aware verdict. The workflow type stays `practice`.
 
-Do not confuse it with the **practice capability** (`practice.generate` /
-`practice.submit`, the unproctored exam-prep attempts) that Study Prep,
-Teaching and Decay use for diagnostics and retests. That capability is
-unchanged and is not this workflow.
+Do not confuse it with the **Agent Check** (§7.12) that Study Prep, Teaching
+and Decay use for diagnostics and retests. In the Agent Check the learner's
+agent answers; in this workflow the **human** answers, proctored.
 
 **Entries:** dashboard (today's assessment, `/assessment/today` ✅),
 assessment list, a recommendation from another workflow's outcome
@@ -1641,10 +1720,10 @@ evidence written and `recommendedNextAction: "none"`.
 ### 12.1 Study Prep → Teaching handoff
 
 ```
-diagnostic 3/5 → Education Engine: below 70% → topic: intervention_required
-   → agent (strategies set): request_teach_back(reason_code)
+Agent Check 3/5 → Education Engine: below 70% → topic: intervention_required
+   → agent (strategies set): request_teaching({ strategy, focusGaps })
    → harness checks: Study Prep active · topic is intervention_required ·
-     teach_back permitted · no non-terminal Teaching child for this topic ·
+     strategy permitted · no non-terminal Teaching child for this topic ·
      idempotency key unused
    → ONE transaction:
         create Teaching instance (entry_mode=study_prep, parent=SP, source topic, reason, strategy)
@@ -1658,10 +1737,11 @@ diagnostic 3/5 → Education Engine: below 70% → topic: intervention_required
 If a non-terminal Teaching child already exists for the topic, the harness
 returns it (resume) instead of creating another.
 
-The child's starting mode follows the strategy: `teach_back` →
-`teach_agent`; `different_analogy` (when it hands off rather than running
-inline) → `learn_with_guide`. The learner may switch modes inside the session;
-the outcome contract is the same either way.
+A Study Prep child always starts in **`teach_agent`** mode, because the
+retest is an Agent Check and only teaching the agent changes its notes (D31).
+The strategy and the gaps the check named are passed in, and shape how NaNa
+coaches. The learner may switch to `learn_with_guide` to understand the topic
+first, but the topic only improves once they teach the agent.
 
 ### 12.2 Teaching → Study Prep completion
 
@@ -1885,8 +1965,9 @@ GET  /api/workflows/:id/stream          (SSE)
 ```
 
 **Study Prep** ✅ (`/study-prep`, all 17 existing endpoints kept). Changes:
-`teach-back-done` remains for inline strategies ("Ready for retest"); the
-teach-back strategy now goes through the handoff.
+`topics/:topicId/practice` and `topics/:topicId/submit` become one `topics/:topicId/agent-check`
+(learner-triggered retry; the agent normally runs it). `teach-back-done` is retired —
+retest unlocks on `TEACHING_COMPLETED`.
 
 **Teaching** 🆕
 
@@ -1992,7 +2073,10 @@ existing contract test.** Phases 11 (UI) can start in parallel after Phase 3.
 
 ### Phase 5 — Study Prep completion
 - Topic state machine §8.3; exam-prep run reduced to attempt record.
-- Agent wake triggers for topic decisions; inline strategies + "Ready for retest" gate.
+- Agent wake triggers for topic decisions; every intervention via Teaching (D15).
+- Agent Check (§7.12): `practice.run_agent_check`, `agent.get_knowledge_coverage`,
+  built from `battle/agentRecall.js` + `questionSource.js` + Sergeant; locked
+  recall/question/assessor models; guessed answers excluded from evidence.
 - Absorb `workflow-state.js` / `adaptive-workflows.js` projections.
 - Submit-status guard and transactional score/evidence/topic write.
 - Syllabus resolution chain (§8.7): `resolve_class`, `resolve_school`,
@@ -2016,7 +2100,7 @@ existing contract test.** Phases 11 (UI) can start in parallel after Phase 3.
   today's gate tests (`state-machine.test.mjs`, `runner.test.mjs` equivalents).
 
 ### Phase 7 — Handoff and completion callback
-- `request_teach_back` → harness child creation (idempotent, one transaction).
+- `request_teaching` → harness child creation (idempotent, one transaction).
 - Outcome delivery → `StudyPrepController.onChildOutcome` → `retest_ready`.
 - Abandon/unmet handling.
 - **Exit:** Scenario B (critical end-to-end) passes, including app close and later resume.
@@ -2114,6 +2198,16 @@ generation charge; (5) the agent calls `syllabus.generate` while a platform
 syllabus exists → `syllabus_exists`. No learner ever gets a dead end for lack
 of a syllabus.
 
+**M — Agent Check:** Study Prep topic starts → the agent checks note
+coverage → notes exist → Agent Check runs: NaNa's questions, the agent's
+answers citing the learner's notes, Sergeant's verdicts stream in the chat →
+3/5 → Teaching (teach_agent) with the named gaps → the learner teaches → retest
+Agent Check 5/5 → understood. Variants: no notes → no check, straight to
+Teaching, no charge; the agent guesses correctly on UNKNOWN → shown as a guess,
+not counted as evidence; the learner picked Claude Opus → recall, questions and
+judging still use the locked models; the recall prompt contains nothing but
+the learner's notes (asserted).
+
 **I — Plan rejection:** agent proposes an order violating prerequisites →
 `prerequisite_violation` shown as a red verification row → agent revises →
 valid plan shown.
@@ -2172,6 +2266,7 @@ LLM failure must never corrupt workflow state.
 | Q5 | Starting cap values in §7.2 table (Teaching turns, strategy changes, Practice caps) | Tune in staging |
 | Q6 | ~~`retrieval_practice`~~ — **resolved (D25):** Strategy Library v2, Decay Review + Practice only. | Done |
 | Q7 | ~~"Learning with guide" toggle~~ — **resolved (D24):** built as the `learn_with_guide` Teaching mode. | Done |
+| Q16 | Decay's `retrieval_practice` (D25) has the **human** recall from memory, while D31 makes practice agent-only. Keep it as the one human recall step in Decay, or make Decay agent-only too (the learner re-teaches the agent instead)? | Phase 8 |
 | Q14 | ~~Practice UI~~ — **resolved (D29):** Practice is the live proctored assessment in `AssessmentRoom`, which keeps its UI. | Done |
 | Q13 | ~~DeepSeek / Grok data handling~~ — **resolved:** accepted by the product owner (2026-10-09); both enabled per §7.11.5a. | Done |
 | Q12 | ~~Per-tier model lists~~ — **resolved (§7.11.5a).** Grok and DeepSeek model ids and prices are filled into `AI_MODELS` at setup (a setup task, not an open question). Fable stays off until a tier is given it. | Done |
