@@ -197,7 +197,9 @@ test("the reader rasterizes client-side and offers extraction for scans & images
 
 test("the worker owns the prompt contract the model was fine-tuned on", () => {
   assert.match(workerSrc, /PRODUCTION_BBOX_2D_JSON_PROMPT/, "the production prompt ships with the worker");
-  assert.match(workerSrc, /"<image>\\n" \+ PRODUCTION_BBOX_2D_JSON_PROMPT/, "the leading <image> prefix is part of the contract");
+  assert.match(workerSrc, /PRODUCTION_PROMPT = PRODUCTION_BBOX_2D_JSON_PROMPT/, "unwrapped — the obsolete <image> prefix caused tokens: 0, features N (fixed in parse-worker v1.0.3)");
+  assert.match(workerSrc, /if "<\|image_pad\|>" not in prompt:\n        prompt = f"<\|vision_start\|><\|image_pad\|><\|vision_end\|>\\n\{prompt\}"/, "Qwen3-VL placeholder rule — the processor expands <|image_pad|> to the exact visual token count");
+  assert.doesNotMatch(workerSrc, /"<image>\\n" \+ PRODUCTION/, "the obsolete <image> prefix must never return");
   assert.match(workerSrc, /QWEN_MAX_IMAGE_PIXELS.*2000000|MAX_PIXELS.*2000000/, "the training pixel cap");
   assert.match(workerSrc, /do_sample=False/, "greedy decode — the model is prompt-coupled, not chat");
   assert.match(workerSrc, /PARSE_MODEL_ALLOW_PROMPT/, "client prompts are ignored unless deliberately allowed");
