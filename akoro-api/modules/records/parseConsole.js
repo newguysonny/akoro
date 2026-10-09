@@ -131,8 +131,17 @@ router.get("/console", consoleGuard, (_req, res) => {
   var key = new URLSearchParams(location.search).get('key') || '';
   var H = { 'x-parse-console-key': key, 'content-type': 'application/json' };
   var $ = function(id){ return document.getElementById(id); };
-  fetch('/api/parse/console/status', { headers: H })
-    .then(function(r){ return r.json(); })
+  var getJson = function(url, opts){
+    return fetch(url, opts).then(function(r){
+      return r.text().then(function(t){
+        try { return JSON.parse(t); }
+        catch(_) {
+          throw new Error('The server answered with a non-JSON page (HTTP ' + r.status + ') — the API is likely mid-deploy or restarting. Wait a minute and retry.');
+        }
+      });
+    });
+  };
+  getJson('/api/parse/console/status', { headers: H })
     .then(function(d){
       var data = d.data || {};
       var bits = [];
@@ -151,16 +160,16 @@ router.get("/console", consoleGuard, (_req, res) => {
     var btn = this; btn.disabled = true;
     $('runstat').textContent = 'parsing… (first call on a cold worker loads the model, ~10-20s)';
     $('out').textContent = '—'; $('md').textContent = '—';
-    fetch('/api/parse/console', { method:'POST', headers: H,
+    getJson('/api/parse/console', { method:'POST', headers: H,
         body: JSON.stringify({ imageBase64: $('b64').value, maxNewTokens: parseInt($('tokens').value,10) || 4096 }) })
-      .then(function(r){ return r.json().then(function(j){ return { s:r.status, j:j }; }); })
+      .then(function(j){ return { s:0, j:j }; })
       .then(function(x){
         $('out').textContent = JSON.stringify(x.j, null, 2);
         var md = x.j && x.j.data && x.j.data.markdown;
         $('md').textContent = md || (x.j && x.j.error) || '—';
         $('runstat').innerHTML = x.j && x.j.success
           ? '<b>done in ' + (x.j.data.wallMs||0) + 'ms</b>'
-          : '<span class="err">' + ((x.j && x.j.error) || ('HTTP ' + x.s)) + '</span>';
+          : '<span class="err">' + ((x.j && x.j.error) || 'the request failed') + '</span>';
       })
       .catch(function(e){ $('runstat').innerHTML = '<span class="err">' + e + '</span>'; })
       .finally(function(){ btn.disabled = false; });
