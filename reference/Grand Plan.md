@@ -205,7 +205,7 @@ session mode" (`fresh | continuation | decay`); "Adaptive Learning Workflow"
 | D20 | Migration strategy | Generalise the existing Study Prep engine first. **Existing contract tests must stay green** at every phase. Teaching, Decay, Practice move onto it after. | Full structure 2 §26. |
 | D21 | Learner model scale | Concept state 0–1 is canonical. `knowledge_confidence` (0–100) is read as `/100` fallback only. Never mix scales silently. | All sources agree. |
 | D22 | Billing | Every LLM call already meters through `lib/aiModel.js` → `chargeForAI`. The harness checks balance before each paid action. Study Prep keeps its plan estimate + ceiling. Teaching/Decay are metered per call (§7.10). | Matches today's billing. |
-| D23 | Which LLM? | **Learners can switch models** (GPT, Claude Sonnet/Opus/Haiku/Fable, Grok, …) from a picker in the chat box; **default stays `gpt-4o-mini`**. The choice drives every call in their session (chat, controller agents, personas) except assessment/evidence judging, which env keeps fixed. Models, prices and providers are declared in env (§7.11). | User decision: stronger models for learners who want better results, billed at that model's price. |
+| D23 | Which LLM? | **Learners can switch models** (GPT, Claude Sonnet/Opus/Haiku/Fable, Grok, DeepSeek, …) from a picker in the chat box; **default stays `gpt-4o-mini`**. The choice drives every call in their session (chat, controller agents, personas) except assessment/evidence judging, which env keeps fixed. Models, prices and providers are declared in env (§7.11). | User decision: stronger models for learners who want better results, billed at that model's price. |
 | D26 | Models per plan tier | **Every tier defaults to `gpt-4o-mini`.** Which models a tier may switch to is an admin-editable `allowed_models[]` on the `tiers` table (§7.11.5a). | User decision on the default; per-tier lists follow the existing gated-features pattern. |
 | D25 | `retrieval_practice` strategy | **Added in Strategy Library v2**, permitted in **Decay Review and Practice only**; not in Study Prep for now. | User decision. Decay is forgetting, not misunderstanding; recall is the cheap first fix (§10.2). |
 | D24 | Teaching modes | **Two modes in one Teaching Workflow:** `teach_agent` (learner teaches the protégé, NaNa coaches) and `learn_with_guide` (NaNa teaches the learner directly, **no protégé**). Same states, transcript, evidence pipeline and progression gate. The learner can switch between turns. | User decision. "Learning from the teacher" and "teaching an agent with the teacher's guidance". |
@@ -846,6 +846,7 @@ is an env change plus, for a new provider type, one adapter.
 | `claude-opus` | anthropic | `claude-opus-5-5` | Claude Opus | 4.00 | 20.00 | |
 | `claude-fable` | anthropic | `claude-fable-5-1` | Claude Fable | 10.00 | 50.00 | most capable; slow on hard turns |
 | `grok` | xai (OpenAI-compatible) | set in env | Grok | set in env | set in env | ids and prices change — verify at setup |
+| `deepseek` | deepseek (OpenAI-compatible) | set in env | DeepSeek | set in env | set in env | use a model variant that supports tool calling; ids and prices change — verify at setup |
 
 Claude prices are Anthropic first-party rates as of 2026-10-06. Every price
 lives in the catalogue, not in code, and must be re-checked when a model is added.
@@ -858,7 +859,7 @@ use it), `enabled`, and optional `fallbackModel`.
 - **A model without a price fails boot.** The hard-coded `MODEL_PRICES`
   becomes the default catalogue, so nothing changes while `AI_MODELS` is unset.
 - API keys stay in env per provider (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
-  `XAI_API_KEY`), never in the catalogue.
+  `XAI_API_KEY`, `DEEPSEEK_API_KEY`), never in the catalogue.
 - Only models with `tools` can run workflow controllers (the agent loop needs
   tool calling). All models listed above support tool calling and streaming.
 
@@ -905,7 +906,7 @@ messages, tools, tool call, streaming chunks, `usage`):
 
 - **openai** — today's client.
 - **openai_compatible** — same client with `baseURL` + key from env (Grok/xAI,
-  others).
+  DeepSeek, others).
 - **anthropic** — the official `@anthropic-ai/sdk` Messages API (never an
   OpenAI-compatible shim). The adapter must handle:
   - **No forced tool choice.** Current Claude models reject
@@ -949,12 +950,13 @@ Starting lists (confirmed 2026-10-09; admins can edit them later):
 
 | Tier | Default | May switch to |
 |---|---|---|
-| Pilot (school-funded) | `gpt-4o-mini` | — (no switching; pilot usage is the Freemium cost test, and the school pays) |
-| Trial | `gpt-4o-mini` | Claude Haiku |
-| Freemium | `gpt-4o-mini` | Claude Haiku, Claude Sonnet, GPT-4.1 |
-| Premium | `gpt-4o-mini` | Claude Haiku, Claude Sonnet, GPT-4.1, Claude Opus, Grok |
+| Pilot (school-funded) | `gpt-4o-mini` | DeepSeek |
+| Trial | `gpt-4o-mini` | Claude Haiku, DeepSeek |
+| Freemium | `gpt-4o-mini` | Claude Haiku, Claude Sonnet, GPT-4.1, DeepSeek |
+| Premium | `gpt-4o-mini` | Claude Haiku, Claude Sonnet, GPT-4.1, Claude Opus, Grok, DeepSeek |
 | (any) | — | Claude Fable: off for everyone (can be added to a tier list later) |
 
+- DeepSeek is available on **every** tier (user decision, 2026-10-09).
 - Coins are still charged at the chosen model's price on every tier; the tier
   list controls access, not price.
 - When a session is funded by a school (`billTo`), the school's tier list
@@ -1865,7 +1867,8 @@ and persona replies all use Sonnet and are billed at Sonnet's price; the
 assessor stays on its env model; a Claude model never receives a forced
 `tool_choice`; a Claude refusal becomes a `model_refusal` observation, not a
 crash; a model outside the learner's tier is refused with a notice; a catalogue
-entry without a price fails boot; adding Grok is an env-only change.
+entry without a price fails boot; adding Grok or DeepSeek is an env-only change;
+a Pilot learner can switch to DeepSeek and to nothing else.
 
 **UI checks:** thinking blocks collapse/expand; tool rows stream in order;
 activity text never in a bubble; no tool names in learner mode; rejects render
@@ -1900,7 +1903,8 @@ LLM failure must never corrupt workflow state.
 | Q5 | Starting cap values in §7.2 table (Teaching turns, strategy changes, Practice caps) | Tune in staging |
 | Q6 | ~~`retrieval_practice`~~ — **resolved (D25):** Strategy Library v2, Decay Review + Practice only. | Done |
 | Q7 | ~~"Learning with guide" toggle~~ — **resolved (D24):** built as the `learn_with_guide` Teaching mode. | Done |
-| Q12 | Per-tier model lists — **resolved (§7.11.5a).** Still open: Grok model ids and prices at setup. Fable stays off until a tier is given it. | Before picker UI |
+| Q13 | DeepSeek's API is hosted outside Nigeria (in China) and learners include minors. Check the data-processing terms and whether school-funded (Pilot) sessions need the school's consent before DeepSeek is enabled for them. | Before enabling DeepSeek |
+| Q12 | Per-tier model lists — **resolved (§7.11.5a).** Still open: Grok and DeepSeek model ids and prices at setup. Fable stays off until a tier is given it. | Before picker UI |
 | Q8 | `content.search` — enable for Study Prep research or keep disabled? | Phase 4 |
 | Q9 | Who can see developer mode (staff role only)? | Phase 11 |
 | Q10 | Notification channels for handoff/completion (in-app only, or web push via existing `notifications/webpush.js`)? | Phase 7 |
