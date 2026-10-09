@@ -716,6 +716,8 @@ export const EN = {
   'agent.stop':                  'Stop',
   'agent.jump_latest':           'Jump to latest',
   'agent.stopped':               'Stopped.',
+  'agent.dev_view':              'Developer view',
+  'agent.dev_view_hint':         'Show raw tool details on each step',
   'agent.attach_add':            'Add a photo or file',
   'agent.attach_remove':         'Remove attachment',
   'agent.attach_too_many':       'Up to {max} files at once.',

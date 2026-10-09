@@ -7,6 +7,10 @@
  *                               streaming into that row
  *   tool_start / tool_end     → a tool row ("Checking your goals ✓ 120ms")
  *   activity                  → plain text the agent wrote between steps
+ *   activity_start/_delta/_end → the same text, streaming word by word
+ *   activity_promote          → that streamed text was the answer: it moves
+ *                               to the reply (promoteActivity)
+ *   activity_drop             → discard streamed text (a failed call)
  *   thinking (delta)          → a reasoning-summary row that streams live (Think mode)
  * and the final reply as `delta` text, which stays on the message itself.
  *
@@ -40,14 +44,32 @@ export function applyTraceEvent(blocks, event, data = {}, now = Date.now()) {
         type: 'tool', id, status: 'running', startedAt: now, ms: 0,
         category: data.category || 'research', headline: data.headline || '', description: data.description || '',
         ok: null, result: '',
+        ...(data.raw ? { raw: { name: data.raw.name || '', args: data.raw.args || '' } } : {}),
       }];
     case 'tool_end':
       return upsert(list, id, (block) => ({
         ...(block || { type: 'tool', id, category: 'research', headline: '', description: '' }),
         status: 'done', ok: data.ok !== false, result: String(data.result || ''), ms: Number(data.ms) || 0,
+        ...(Array.isArray(data.items) && data.items.length ? { items: data.items.map(String) } : {}),
+        ...(data.change ? { change: data.change } : {}),
+        ...(data.raw ? { raw: { ...(block?.raw || {}), output: data.raw.output || '' } } : {}),
       }));
     case 'activity':
       return data?.text ? [...list, { type: 'activity', id, text: String(data.text) }] : list;
+    case 'activity_start':
+      return [...list, { type: 'activity', id, status: 'running', text: '' }];
+    case 'activity_delta':
+      return upsert(list, id, (block) => ({
+        ...(block || { type: 'activity', id, status: 'running', text: '' }),
+        text: String(block?.text || '') + String(data.text || ''),
+      }));
+    case 'activity_end':
+      return data.text || list.find((block) => block.id === id)?.text
+        ? upsert(list, id, (block) => ({ ...(block || { type: 'activity', id }), status: 'done', text: String(data.text || block?.text || '') }))
+        : list.filter((block) => block.id !== id);
+    case 'activity_promote':
+    case 'activity_drop':
+      return list.filter((block) => block.id !== id);
     case 'thinking': {
       // Reasoning summary deltas (Think mode): extend the live reasoning row,
       // or open one after whatever ran before it.
@@ -70,6 +92,15 @@ function upsert(list, id, update) {
   return next;
 }
 
+/**
+ * activity_promote: the streamed words were the answer. Returns the blocks
+ * without that activity and its text, which the caller puts on the reply.
+ */
+export function promoteActivity(blocks, id) {
+  const block = (blocks || []).find((item) => item.id === id && item.type === 'activity');
+  return { blocks: (blocks || []).filter((item) => item.id !== id), text: block?.text || '' };
+}
+
 /** The reply started streaming, the turn ended or was stopped: settle anything still running. */
 export function settleRunning(blocks, now = Date.now(), { stopped = false } = {}) {
   return (blocks || []).map((block) => (block.status === 'running'
@@ -82,7 +113,7 @@ export function blocksFromSavedTrace(trace) {
   if (!Array.isArray(trace)) return [];
   return trace
     .filter((block) => block && ['thinking', 'tool', 'activity'].includes(block.type))
-    .map((block) => ({ ...block, status: 'done' }));
+    .map(({ raw, ...block }) => ({ ...block, status: 'done' }));
 }
 
 /**
@@ -91,11 +122,15 @@ export function blocksFromSavedTrace(trace) {
  */
 export function groupTraceBlocks(blocks) {
   const items = [];
+  // Change rows stand alone ("Created a task · …"), like the reference's edit
+  // rows; reads and checks group separately ("Read 2 sources", "Checked 3 things").
+  const groupable = (block) => block?.type === 'tool' && !block.change;
+  const sameKind = (a, b) => (a.category || 'research') === (b.category || 'research');
   for (const block of blocks || []) {
     const prev = items[items.length - 1];
-    if (block.type === 'tool' && prev?.type === 'tool') {
+    if (groupable(block) && groupable(prev) && sameKind(block, prev)) {
       items[items.length - 1] = { type: 'group', id: `group_${prev.id}`, tools: [prev, block] };
-    } else if (block.type === 'tool' && prev?.type === 'group') {
+    } else if (groupable(block) && prev?.type === 'group' && sameKind(block, prev.tools[0])) {
       prev.tools = [...prev.tools, block];
     } else {
       items.push(block);
@@ -104,11 +139,12 @@ export function groupTraceBlocks(blocks) {
   return items;
 }
 
-/** "Checked 3 things" / "Did 2 things" / "Ran 4 steps". */
+/** "Checked 3 things" / "Read 2 sources" / "Did 2 things" / "Ran 4 steps". */
 export function groupLabel(tools) {
   const count = (tools || []).length;
   const categories = new Set((tools || []).map((tool) => tool.category));
   if (categories.size === 1 && categories.has('research')) return `Checked ${count} things`;
+  if (categories.size === 1 && categories.has('read')) return `Read ${count} source${count === 1 ? '' : 's'}`;
   if (categories.size === 1 && categories.has('action')) return `Did ${count} things`;
   return `Ran ${count} steps`;
 }

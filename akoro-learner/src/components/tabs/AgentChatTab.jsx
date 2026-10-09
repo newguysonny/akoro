@@ -19,7 +19,7 @@ import { useInFlight } from '../../hooks/useInFlight.js';
 import StudyPrepChatCard from './studyPrep/StudyPrepChatCard.jsx';
 import { fetchActiveStudyPrepSession } from '../../services/studyPrepApi.js';
 import TraceBlocks from './agentChat/TraceBlocks.jsx';
-import { applyTraceEvent, blocksFromSavedTrace, settleRunning } from '../../lib/agentChatTrace.js';
+import { applyTraceEvent, blocksFromSavedTrace, promoteActivity, settleRunning } from '../../lib/agentChatTrace.js';
 
 const QUICK_PROMPTS = [
   { text:"Create a task for me", key:"agent.qp_create" },
@@ -29,6 +29,8 @@ const QUICK_PROMPTS = [
   { text:"Explain Mitosis",      key:"agent.qp_explain" },
   { text:"Help with an essay",   key:"agent.qp_essay" },
 ];
+const DEV_VIEW_KEY = 'ak.agentChat.devView';
+
 // Compact relative time for the sessions drawer ("now", "5m", "3h", "2d").
 const relTime = (iso) => {
   if (!iso) return "";
@@ -122,6 +124,13 @@ function AgentChatTab({
   // §13.4). `running` spans the WHOLE turn (loading only covers the wait for
   // the first step); while it is true the send arrow is a ■ stop button.
   const [running,      setRunning]      = useState(false);
+  // Developer view: raw tool name / arguments / output on each tool row.
+  // A per-device preference — storage can be unavailable, so never required.
+  const [devView, setDevView] = useState(() => { try { return localStorage.getItem(DEV_VIEW_KEY) === '1'; } catch { return false; } });
+  const toggleDevView = () => setDevView((on) => {
+    try { localStorage.setItem(DEV_VIEW_KEY, on ? '0' : '1'); } catch { /* preference only */ }
+    return !on;
+  });
   const abortRef       = useRef(null);
   const turnIdRef      = useRef(null);
   // Scrolling: follow new output only while the learner is already at the
@@ -482,6 +491,7 @@ function AgentChatTab({
     turnIdRef.current = turnId;
     const payload = { message: text, history: history.slice(-24), agentName, mode,
       conversationId: sid, turnId,
+      ...(devView ? { developer: true } : {}),
       ...(attachmentsPayload.length ? { attachments: attachmentsPayload } : {}) };
     const t2=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
     const replyId=Date.now()+Math.random();
@@ -497,6 +507,15 @@ function AgentChatTab({
     const appendTrace=(event,data)=>{
       ensureBubble();
       setStatusLabel("");
+      // The last step's streamed words were the answer: they become the reply.
+      if(event==="activity_promote"){
+        setMessages(prev=>prev.map(m=>{
+          if(m.id!==replyId) return m;
+          const { blocks, text } = promoteActivity(m.blocks, data?.id);
+          return {...m,blocks:settleRunning(blocks,Date.now()),text:m.text+text,phase:"answering"};
+        }));
+        return;
+      }
       setMessages(prev=>prev.map(m=>m.id===replyId?{...m,blocks:applyTraceEvent(m.blocks,event,data,Date.now())}:m));
     };
     // Think-mode reasoning summary streams live into its own thinking row.
@@ -1076,6 +1095,19 @@ function AgentChatTab({
                 </div>
               );
             })}
+          </div>
+          <div style={{ borderTop:"1px solid var(--ak-border)",padding:"10px 16px",flexShrink:0 }}>
+            <button type="button" role="switch" aria-checked={devView} onClick={toggleDevView}
+              style={{ display:"flex",alignItems:"center",gap:10,width:"100%",background:"none",border:"none",padding:"4px 0",cursor:"pointer",fontFamily:"'Nunito',sans-serif",textAlign:"left" }}>
+              <Icon name="ti-code" size={15} color="var(--ak-text-muted)"/>
+              <span style={{ flex:1,minWidth:0 }}>
+                <span style={{ display:"block",fontSize:12.5,fontWeight:800,color:"var(--ak-text)" }}>{t('agent.dev_view')}</span>
+                <span style={{ display:"block",fontSize:10.5,color:"var(--ak-text-muted)" }}>{t('agent.dev_view_hint')}</span>
+              </span>
+              <span aria-hidden style={{ width:32,height:18,borderRadius:9,background:devView?BRAND:"var(--ak-border2)",position:"relative",transition:"background .15s",flexShrink:0 }}>
+                <span style={{ position:"absolute",top:2,left:devView?16:2,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left .15s" }}/>
+              </span>
+            </button>
           </div>
         </div></>
       )}

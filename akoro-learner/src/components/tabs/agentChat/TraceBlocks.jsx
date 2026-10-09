@@ -5,10 +5,13 @@
  *   🧠 Thought for 3 seconds ›        collapsible; streams open while running
  *   🔍 Checking your goals ✓ 120ms ›  collapsible; What I checked / What I found
  *   >_ Checked 3 things ›             consecutive tool rows, grouped
+ *   📖 Read 2 sources ›               consecutive reads, grouped
+ *   ✎ Created a task · Revise … ›     change rows: what the agent changed
  *   plain text                         what the agent wrote between steps
  *
  * Interleaved in whatever order the turn produced them, as many times as the
- * tool loop ran. Learner language only — tool names never appear here.
+ * tool loop ran. Learner language only — tool names appear only in the
+ * opt-in developer view, which shows the raw name, arguments and output.
  */
 import { useEffect, useState } from 'react';
 import { BRAND, GREEN, RED } from '../../../constants.js';
@@ -83,12 +86,67 @@ export function ThinkingRow({ block }) {
   );
 }
 
+const PANEL_LABEL = { fontSize: 9.5, fontWeight: 900, letterSpacing: .6, textTransform: 'uppercase', color: MUTED, marginBottom: 3 };
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}(T[\d:.]+(Z|[+-]\d{2}:?\d{2})?)?$/;
+
+/** ISO dates read as local dates; everything else as given. */
+function fieldValue(value) {
+  const text = String(value ?? '');
+  if (!ISO_DATE.test(text)) return text;
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) return text;
+  return text.length > 10
+    ? date.toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+    : date.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function CopyButton({ text }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); }
+    catch { /* clipboard unavailable */ }
+  };
+  return (
+    <button type="button" onClick={copy} aria-label={copied ? 'Copied' : 'Copy'} title={copied ? 'Copied' : 'Copy'}
+      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', color: copied ? GREEN : MUTED }}>
+      <Icon name={copied ? 'ti-check' : 'ti-copy'} size={13}/>
+    </button>
+  );
+}
+
+/** Developer view: COMMAND / ARGUMENTS / OUTPUT boxes with copy buttons. */
+function RawPanel({ label, text }) {
+  if (!text) return null;
+  return (
+    <div style={{ padding: '7px 11px', borderTop: '1px solid var(--ak-border)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={PANEL_LABEL}>{label}</div>
+        <CopyButton text={text}/>
+      </div>
+      <pre style={{ margin: 0, maxHeight: 220, overflow: 'auto', fontSize: 11.5, lineHeight: 1.5, color: 'var(--ak-text-sub)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: "ui-monospace,'SF Mono',Menlo,monospace" }}>{text}</pre>
+    </div>
+  );
+}
+
+function RawPanels({ raw }) {
+  if (!raw) return null;
+  return (
+    <>
+      <RawPanel label="Tool" text={raw.name}/>
+      <RawPanel label="Arguments" text={raw.args}/>
+      <RawPanel label="Output" text={raw.output}/>
+    </>
+  );
+}
+
+const TOOL_ICON = { action: 'ti-bolt', read: 'ti-book', research: 'ti-search' };
+
 /** 🔍 Checking your goals ✓ 120ms — expands to What I checked / What I found. */
 export function ToolRow({ block, nested = false }) {
   const [open, setOpen] = useState(false);
   const running = block.status === 'running';
   const elapsed = useElapsed(running, block.startedAt);
-  const icon = block.category === 'action' ? 'ti-bolt' : 'ti-search';
+  const icon = TOOL_ICON[block.category] || 'ti-search';
   return (
     <div style={nested ? { paddingLeft: 4 } : undefined}>
       <RowButton onClick={() => setOpen(!open)} expanded={open} label={block.headline}>
@@ -104,15 +162,56 @@ export function ToolRow({ block, nested = false }) {
       {open && (
         <div style={{ margin: '2px 0 8px 20px', border: '1px solid var(--ak-border)', borderRadius: 10, overflow: 'hidden', background: 'var(--ak-surface-hover)' }}>
           <div style={{ padding: '7px 11px', borderBottom: '1px solid var(--ak-border)' }}>
-            <div style={{ fontSize: 9.5, fontWeight: 900, letterSpacing: .6, textTransform: 'uppercase', color: MUTED, marginBottom: 3 }}>What I checked</div>
+            <div style={PANEL_LABEL}>What I checked</div>
             <div style={{ fontSize: 12.5, color: 'var(--ak-text-sub)', lineHeight: 1.5 }}>{block.description || block.headline}</div>
           </div>
           <div style={{ padding: '7px 11px' }}>
-            <div style={{ fontSize: 9.5, fontWeight: 900, letterSpacing: .6, textTransform: 'uppercase', color: MUTED, marginBottom: 3 }}>What I found</div>
+            <div style={PANEL_LABEL}>What I found</div>
             <div style={{ fontSize: 12.5, color: block.ok === false ? RED : 'var(--ak-text-sub)', lineHeight: 1.5 }}>
               {running ? 'Working on it…' : (block.result || (block.status === 'stopped' ? 'Stopped' : 'Done'))}
             </div>
+            {block.items?.length > 0 && (
+              <ul style={{ margin: '4px 0 0', paddingLeft: 18, listStyle: 'disc', fontSize: 12.5, color: 'var(--ak-text-sub)', lineHeight: 1.55 }}>
+                {block.items.map((item, index) => <li key={index}>{item}</li>)}
+              </ul>
+            )}
           </div>
+          <RawPanels raw={block.raw}/>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** ✎ Created a task · Revise photosynthesis — what the agent changed; expands to the details. */
+export function ChangeRow({ block }) {
+  const [open, setOpen] = useState(false);
+  const { change } = block;
+  const label = change.title ? `${change.label} · ${change.title}` : change.label;
+  const hasDetails = Boolean(change.fields?.length || block.raw);
+  return (
+    <div>
+      <RowButton onClick={() => hasDetails && setOpen(!open)} expanded={open} label={label}>
+        <Icon name="ti-pencil" size={13} color={GREEN}/>
+        <span style={{ fontWeight: 600, color: 'var(--ak-text-sub)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+          {change.label}{change.title && <span style={{ fontWeight: 700, color: 'var(--ak-text)' }}> · {change.title}</span>}
+        </span>
+        <span style={{ fontSize: 11, opacity: .85, flexShrink: 0 }}>{durationLabel(block.ms)}</span>
+        {hasDetails && <Chevron open={open}/>}
+      </RowButton>
+      {open && (
+        <div style={{ margin: '2px 0 8px 20px', border: '1px solid var(--ak-border)', borderRadius: 10, overflow: 'hidden', background: 'var(--ak-surface-hover)' }}>
+          {change.fields?.length > 0 && (
+            <div style={{ padding: '7px 11px', display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 12, rowGap: 3, fontSize: 12.5 }}>
+              {change.fields.map((field) => (
+                <div key={field.label} style={{ display: 'contents' }}>
+                  <span style={{ color: MUTED, fontWeight: 700 }}>{field.label}</span>
+                  <span style={{ color: 'var(--ak-text-sub)', overflowWrap: 'anywhere' }}>{fieldValue(field.value)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <RawPanels raw={block.raw}/>
         </div>
       )}
     </div>
@@ -125,10 +224,13 @@ export function ToolGroup({ group }) {
   const running = group.tools.some((tool) => tool.status === 'running');
   const failed = group.tools.some((tool) => tool.ok === false);
   const label = groupLabel(group.tools);
+  const reads = group.tools.every((tool) => tool.category === 'read');
   return (
     <div>
       <RowButton onClick={() => setOpen(!open)} expanded={open} label={label}>
-        {running ? <SmallSpinner/> : <span style={{ fontFamily: "ui-monospace,'SF Mono',Menlo,monospace", fontSize: 11.5, fontWeight: 700, color: MUTED }}>&gt;_</span>}
+        {running ? <SmallSpinner/> : reads
+          ? <Icon name="ti-book" size={13} color={MUTED}/>
+          : <span style={{ fontFamily: "ui-monospace,'SF Mono',Menlo,monospace", fontSize: 11.5, fontWeight: 700, color: MUTED }}>&gt;_</span>}
         <span style={{ fontWeight: 600, color: 'var(--ak-text-sub)' }}>{label}</span>
         {!running && (failed
           ? <span style={{ color: RED, fontWeight: 800, fontSize: 12 }}>✕</span>
@@ -144,11 +246,11 @@ export function ToolGroup({ group }) {
   );
 }
 
-/** Text the agent wrote between steps — unboxed, like the reply. */
+/** Text the agent wrote between steps — unboxed, like the reply; streams word by word. */
 export function ActivityText({ block }) {
   return (
     <div style={{ fontSize: 14.5, lineHeight: 1.65, color: 'var(--ak-text)', margin: '4px 0 6px' }}>
-      <RichText text={block.text}/>
+      <RichText text={block.text}/>{block.status === 'running' && <StreamCaret/>}
     </div>
   );
 }
@@ -162,6 +264,7 @@ export default function TraceBlocks({ blocks }) {
       <style>{'@keyframes ak-trace-spin{to{transform:rotate(360deg)}}'}</style>
       {items.map((item) => {
         if (item.type === 'thinking') return <ThinkingRow key={item.id} block={item}/>;
+        if (item.type === 'tool' && item.change) return <ChangeRow key={item.id} block={item}/>;
         if (item.type === 'tool') return <ToolRow key={item.id} block={item}/>;
         if (item.type === 'group') return <ToolGroup key={item.id} group={item}/>;
         if (item.type === 'activity') return <ActivityText key={item.id} block={item}/>;

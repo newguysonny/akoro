@@ -16,7 +16,9 @@ test("every Agent Chat tool has learner-language display — no backend name eve
     const display = CHAT_TOOL_DISPLAY[name];
     assert.ok(display, `${name} has no display entry`);
     assert.ok(!display.headline.includes("_") && !display.description.includes("_"), `${name} leaks a code name`);
-    assert.ok(["research", "action"].includes(display.category));
+    assert.ok(["research", "read", "action"].includes(display.category));
+    // Every action has a past-tense change label for its change row.
+    if (display.category === "action") assert.ok(display.done && !display.done.includes("_"), `${name} has no change label`);
   }
   // An unknown tool still renders neutrally, never as its raw name.
   assert.equal(chatToolDisplay("some_new_tool").headline, "Checking your study data");
@@ -83,10 +85,13 @@ test("the tool loop streams every step and is bounded by code, not the model", (
   assert.match(chatSource, /export const CHAT_TOOL_LOOP_MAX_ITERATIONS = 8;/);
   assert.match(loop, /iteration < CHAT_TOOL_LOOP_MAX_ITERATIONS/);
   assert.match(loop, /trace\?\.thinkStart\(\)/);
-  assert.match(loop, /trace\.thinkEnd\(thinkId, decisionNarration\(calls\)\)/);
-  assert.match(loop, /trace\?\.toolStart\(tool\)/);
+  assert.match(loop, /closeThink\(decisionNarration\(calls\)\)/);
+  assert.match(loop, /trace\?\.toolStart\(tool, input\)/);
   assert.match(loop, /trace\.toolEnd\(traceRow, toolResult\)/);
-  assert.match(loop, /trace\?\.activity\(assistant\.content\)/);
+  // Words stream live as they are written; research mode buffers them.
+  assert.match(loop, /trace\.activityDelta\(liveId, text\)/);
+  assert.match(loop, /else if \(content\) trace\?\.activity\(content\)/);
+  assert.match(route, /streamText: !isResearch,/);
 });
 
 test("stop (■) ends the turn between steps and while the answer streams", () => {
@@ -157,10 +162,10 @@ test("tool results reach the reasoning model: native items for decisions, develo
 test("Think mode reasons at every decision, falls back per turn, and reuses a final reasoned decision", () => {
   assert.match(loop, /let reasonDecisions = think;/);
   assert.match(loop, /await thinkDecision\(\{/);
-  assert.match(loop, /onReasoning: \(text\) => \{ if \(thinkId\) trace\.thinkDelta\(thinkId, text\); \}/);
+  assert.match(loop, /onReasoning: \(text\) => \{ if \(thinkOpen\) trace\.thinkDelta\(thinkId, text\); \}/);
   assert.match(loop, /reasonDecisions = false;/);
-  assert.match(loop, /model: OPENAI_MODEL,/);
-  assert.match(loop, /finalText \? \{ finalText \} : \{\}/);
+  assert.match(chatSource, /async function streamDecision[\s\S]*?model: OPENAI_MODEL,/);
+  assert.match(loop, /finalText \? \{ finalText, promoted: Boolean\(liveId\) \} : \{\}/);
   assert.match(route, /think: isThink,/);
   assert.match(chatSource, /reasoning: \{ effort: THINK_DECISION_EFFORT, summary: "auto" \}/);
 });
@@ -169,10 +174,76 @@ test("Think mode answers on the reasoning model even after tools ran", () => {
   // The old gate (`!prepared.toolExecutions.length`) sent every tool turn to
   // gpt-4o-mini, so Think almost never reasoned.
   assert.doesNotMatch(route, /isThink && !prepared\.toolExecutions\.length/);
-  assert.match(route, /if \(!stopped\(\) && isThink && prepared\.finalText\)/);
+  assert.match(route, /if \(!stopped\(\) && prepared\.finalText\)/);
+  assert.match(route, /if \(!prepared\.promoted\) send\("delta", \{ text: reply \}\)/);
   assert.match(route, /streamThinkWithResponses\(\{ send, messages: finalMessages, model: THINK_MODEL, trace, isAborted \}\)/);
   assert.match(route, /thinkOnce\(\{ messages: finalMessages, model: THINK_MODEL, trace \}\)/);
   // The answer's reasoning is a saved trace row too, not a loose event.
   assert.doesNotMatch(chatSource, /send\("thinking"/);
   assert.match(chatSource, /trace\.thinkDelta\(thinkId, text\)/);
+});
+
+// ── Found items, read groups, change rows, developer view ───────────────────
+
+test("a research row shows a few short labels of what was found — never whole records", async () => {
+  const { chatToolFoundItems } = await import("./chat-trace.js");
+  assert.deepEqual(chatToolFoundItems({ goals: [{ id: "g1", title: "Pass WAEC Physics", notes: "private" }, { name: "Read daily" }, { id: "x" }] }),
+    ["Pass WAEC Physics", "Read daily"]);
+  assert.equal(chatToolFoundItems({ topics: Array.from({ length: 20 }, (_, i) => `Topic ${i}`) }).length, 6);
+  assert.deepEqual(chatToolFoundItems({ ok: true }), []);
+  assert.ok(chatToolFoundItems({ items: ["x".repeat(500)] })[0].length <= 80);
+});
+
+test("a successful action is a change row with its title and whitelisted fields only", async () => {
+  const { chatToolChange } = await import("./chat-trace.js");
+  const change = chatToolChange("create_task", { taskId: "t1", title: "Revise photosynthesis", internalScore: 9 }, { title: "x", due_at: "2026-10-12T19:00:00+01:00", priority: "high", secret: "no" });
+  assert.deepEqual(change, {
+    label: "Created a task", title: "Revise photosynthesis",
+    fields: [{ label: "Due", value: "2026-10-12T19:00:00+01:00" }, { label: "Priority", value: "high" }],
+  });
+  assert.equal(chatToolChange("create_task", { error: "nope" }, {}), null, "a failed action is not a change");
+  assert.equal(chatToolChange("create_task", { needsClarification: true }, {}), null);
+  assert.equal(chatToolChange("list_my_goals", { goals: [] }, {}), null, "reads never make change rows");
+});
+
+test("the trace carries found items and changes; raw tool I/O only in developer mode and never stored", () => {
+  const events = [];
+  const dev = createChatTrace({ send: (event, data) => events.push([event, data]), developer: true });
+  const row = dev.toolStart("create_goal", { title: "Score 80%" });
+  const block = dev.toolEnd(row, { created: true, goalId: "g1", title: "Score 80%", targetDate: "2026-12-01" });
+  assert.equal(block.change.label, "Saved a goal");
+  assert.equal(events[0][1].raw.name, "create_goal");
+  assert.match(events[0][1].raw.args, /Score 80%/);
+  assert.match(events[1][1].raw.output, /"goalId": "g1"/);
+  assert.ok(!("raw" in block), "raw I/O is never in the stored trace");
+  assert.ok(!JSON.stringify(dev.blocks()).includes("goalId"));
+
+  const plain = [];
+  const learner = createChatTrace({ send: (event, data) => plain.push(data) });
+  const read = learner.toolStart("list_my_goals", {});
+  learner.toolEnd(read, { goals: [{ title: "A" }, { title: "B" }] });
+  assert.ok(plain.every((data) => !("raw" in data)), "no raw I/O without developer mode");
+  assert.deepEqual(learner.blocks()[0].items, ["A", "B"]);
+  assert.equal(chatToolDisplay("read_blog_post").category, "read");
+});
+
+test("streamed words: promoted text moves to the reply, dropped text vanishes, ended text is kept with its line breaks", () => {
+  const events = [];
+  const trace = createChatTrace({ send: (event, data) => events.push([event, data]) });
+  const kept = trace.activityStart();
+  trace.activityDelta(kept, "Line one.\n\n");
+  trace.activityDelta(kept, "Line two.");
+  trace.activityEnd(kept, "Line one.\n\nLine two.");
+  const answer = trace.activityStart();
+  trace.activityDelta(answer, "The answer.");
+  trace.activityPromote(answer);
+  const failed = trace.activityStart();
+  trace.activityDelta(failed, "half");
+  trace.activityDrop(failed);
+  assert.deepEqual(trace.blocks().map((block) => block.text), ["Line one.\n\nLine two."]);
+  assert.deepEqual(events.map(([event]) => event), [
+    "activity_start", "activity_delta", "activity_delta", "activity_end",
+    "activity_start", "activity_delta", "activity_promote",
+    "activity_start", "activity_delta", "activity_drop",
+  ]);
 });

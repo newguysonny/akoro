@@ -10,7 +10,7 @@ const blocks = await readFile(new URL('../components/tabs/agentChat/TraceBlocks.
 const between = (text, start, end) => text.slice(text.indexOf(start), text.indexOf(end, text.indexOf(start)));
 
 test('thinking, tools and text stream as interleaved steps of one turn', () => {
-  assert.match(api, /TRACE_EVENTS = new Set\(\['think_start', 'think_delta', 'think_end', 'tool_start', 'tool_end', 'activity'\]\)/);
+  assert.match(api, /TRACE_EVENTS = new Set\(\[\s+'think_start', 'think_delta', 'think_end', 'tool_start', 'tool_end',\s+'activity',/);
   assert.match(api, /onTrace\?\.\(event, parsed\)/);
   const send = between(tab, 'const sendMessage=async', 'const toLocalInput=');
   assert.match(send, /onTrace: appendTrace/);
@@ -53,8 +53,20 @@ test('a reloaded chat rebuilds the same steps from the saved trace', () => {
   assert.match(open, /blocksFromSavedTrace\(m\.trace\)/);
 });
 
-test('the trace UI never shows backend tool names', () => {
+test('the trace UI never shows backend tool names (only the opt-in developer view shows raw I/O)', () => {
   assert.doesNotMatch(blocks, /\.tool\b/);
+  assert.match(blocks, /<RawPanels raw=\{block\.raw\}\/>/);
+  // Developer view is opt-in, per device, and sent with the turn.
+  assert.match(tab, /\.\.\.\(devView \? \{ developer: true \} : \{\}\)/);
+  assert.match(tab, /role="switch" aria-checked=\{devView\}/);
   assert.match(blocks, /What I checked/);
   assert.match(blocks, /What I found/);
+});
+
+test('the last step\'s streamed words become the reply instead of being written twice', () => {
+  const send = between(tab, 'const sendMessage=async', 'const toLocalInput=');
+  assert.match(send, /if\(event==="activity_promote"\)/);
+  assert.match(send, /promoteActivity\(m\.blocks, data\?\.id\)/);
+  assert.match(api, /'activity_start', 'activity_delta', 'activity_end', 'activity_promote', 'activity_drop'/);
+  assert.match(blocks, /<ChangeRow key=\{item\.id\} block=\{item\}\/>/);
 });
