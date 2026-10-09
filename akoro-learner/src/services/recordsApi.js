@@ -8,7 +8,7 @@
  * Links and pastes are plain JSON.
  *
  * Flow for an upload:
- *   1. presignRecordUpload()  → POST /api/records/upload-url → {uploadUrl, fileKey}
+ *   1. presignRecordUpload()  → POST /api/records/upload-url → {uploadUrl, fileKey, store}
  *   2. putFileTo()            → PUT the raw file to uploadUrl (XHR so we get progress)
  *   3. createRecord()         → POST /api/records with the fileKey
  *

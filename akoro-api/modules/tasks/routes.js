@@ -471,7 +471,7 @@ router.post("/upload-url", async (req, res) => {
     if (!fileName || !fileType) return res.status(400).json({ error: "fileName and fileType are required" });
     if (sizeBytes > 2 * 1024 * 1024 * 1024) return res.status(400).json({ error: "File too large (max 2GB)" });
 
-    const result = await createPresignedUpload(fileName, fileType, req.user.id);
+    const result = await createPresignedUpload(fileName, fileType, req.user.id, { sizeBytes });
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
