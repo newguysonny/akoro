@@ -110,3 +110,69 @@ test("the reply trace is returned and stored for reload, and history tolerates t
   assert.match(chatSource, /loadMessages\("id, role, text, created_at, trace"\)/);
   assert.match(chatSource, /loadMessages\("id, role, text, created_at"\)/);
 });
+
+// ── Think mode: real reasoning at every step and after tools ────────────────
+
+test("Think mode streams the model's real reasoning into the step's row; it wins over narration", () => {
+  const events = [];
+  const trace = createChatTrace({ send: (event, data) => events.push([event, data]) });
+  const id = trace.thinkStart();
+  trace.thinkDelta(id, "The learner asks about goals.");
+  trace.thinkDelta(id, "\n\nCheck them first.");
+  const block = trace.thinkEnd(id, "Next: checking your goals…");
+  assert.deepEqual(events.map(([event]) => event), ["think_start", "think_delta", "think_delta", "think_end"]);
+  assert.equal(block.source, "reasoning");
+  assert.equal(block.text, "The learner asks about goals.\n\nCheck them first.");
+  // Without streamed reasoning, the row keeps the harness narration.
+  const plain = createChatTrace();
+  const other = plain.thinkStart();
+  assert.equal(plain.thinkEnd(other, "Next: checking your goals…").source, undefined);
+  // A delta for a closed row is ignored.
+  plain.thinkDelta(other, "late");
+  assert.equal(plain.blocks()[0].text, "Next: checking your goals…");
+});
+
+test("tool results reach the reasoning model: native items for decisions, developer notes for the answer", async () => {
+  const { toResponsesInput, toResponsesTools } = await import("./responses-input.js");
+  const transcript = [
+    { role: "system", content: "doctrine" },
+    { role: "user", content: "What are my goals?" },
+    { role: "assistant", content: null, tool_calls: [{ id: "call_1", type: "function", function: { name: "list_my_goals", arguments: "{}" } }] },
+    { role: "tool", tool_call_id: "call_1", content: '{"success":true}' },
+  ];
+  const native = toResponsesInput(transcript, { native: true });
+  assert.deepEqual(native.slice(2), [
+    { type: "function_call", call_id: "call_1", name: "list_my_goals", arguments: "{}" },
+    { type: "function_call_output", call_id: "call_1", output: '{"success":true}' },
+  ]);
+  assert.ok(native.every((item) => !("id" in item)), "no item ids — valid without reasoning items");
+  const answer = toResponsesInput(transcript);
+  assert.equal(answer.length, 3, "the empty tool-call message is dropped");
+  assert.equal(answer[2].role, "developer");
+  assert.match(answer[2].content[0].text, /^Akoro tool result \(list_my_goals\): \{"success":true\}$/);
+  const [tool] = toResponsesTools([{ type: "function", function: { name: "x", description: "d", parameters: { type: "object" } } }]);
+  assert.deepEqual(tool, { type: "function", name: "x", description: "d", parameters: { type: "object" }, strict: false });
+});
+
+test("Think mode reasons at every decision, falls back per turn, and reuses a final reasoned decision", () => {
+  assert.match(loop, /let reasonDecisions = think;/);
+  assert.match(loop, /await thinkDecision\(\{/);
+  assert.match(loop, /onReasoning: \(text\) => \{ if \(thinkId\) trace\.thinkDelta\(thinkId, text\); \}/);
+  assert.match(loop, /reasonDecisions = false;/);
+  assert.match(loop, /model: OPENAI_MODEL,/);
+  assert.match(loop, /finalText \? \{ finalText \} : \{\}/);
+  assert.match(route, /think: isThink,/);
+  assert.match(chatSource, /reasoning: \{ effort: THINK_DECISION_EFFORT, summary: "auto" \}/);
+});
+
+test("Think mode answers on the reasoning model even after tools ran", () => {
+  // The old gate (`!prepared.toolExecutions.length`) sent every tool turn to
+  // gpt-4o-mini, so Think almost never reasoned.
+  assert.doesNotMatch(route, /isThink && !prepared\.toolExecutions\.length/);
+  assert.match(route, /if \(!stopped\(\) && isThink && prepared\.finalText\)/);
+  assert.match(route, /streamThinkWithResponses\(\{ send, messages: finalMessages, model: THINK_MODEL, trace, isAborted \}\)/);
+  assert.match(route, /thinkOnce\(\{ messages: finalMessages, model: THINK_MODEL, trace \}\)/);
+  // The answer's reasoning is a saved trace row too, not a loose event.
+  assert.doesNotMatch(chatSource, /send\("thinking"/);
+  assert.match(chatSource, /trace\.thinkDelta\(thinkId, text\)/);
+});

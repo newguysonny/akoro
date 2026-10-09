@@ -53,6 +53,22 @@ test('reasoning-summary deltas stream into one live row; settling closes it', ()
   assert.equal(blocks[0].ms, 3000);
 });
 
+test('Think mode: real reasoning streams into its own decision row, then settles', () => {
+  const blocks = fold([
+    ['think_start', { id: 'think_1' }],
+    ['think_delta', { id: 'think_1', text: 'The learner asks about goals, ' }],
+    ['think_delta', { id: 'think_1', text: 'so check them first.' }],
+  ]);
+  assert.equal(blocks.length, 1);
+  assert.equal(blocks[0].source, 'reasoning');
+  assert.equal(blocks[0].status, 'running');
+  assert.equal(blocks[0].text, 'The learner asks about goals, so check them first.');
+  const done = applyTraceEvent(blocks, 'think_end', { id: 'think_1', ms: 2100, text: 'The learner asks about goals, so check them first.', source: 'reasoning' }, 5000);
+  assert.equal(done[0].status, 'done');
+  assert.equal(done[0].source, 'reasoning');
+  assert.equal(done[0].ms, 2100);
+});
+
 test('stop marks running rows as stopped', () => {
   const blocks = settleRunning(fold([['tool_start', { id: 't', headline: 'Checking' }]]), 2000, { stopped: true });
   assert.equal(blocks[0].status, 'stopped');
