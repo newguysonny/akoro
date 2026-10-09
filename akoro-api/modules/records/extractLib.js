@@ -170,6 +170,77 @@ export function blocksToMarkdown(blocks) {
 
 /* ── The RunPod call ───────────────────────────────────────────────────── */
 
+/* ── The async job seam (the parse console; long GPU jobs must never ride
+   an open HTTP request — Cloudflare/Render proxies kill them ~100s) ────── */
+
+/** Submit one page WITHOUT waiting → { jobId, status }. */
+export async function parsePageRunAsync({ imageBase64, maxNewTokens = 8192, fetchImpl = null } = {}) {
+  const apiKey     = process.env.RUNPOD_API_KEY;
+  const endpointId = process.env.RUNPOD_PARSE_ENDPOINT_ID;
+  if (!apiKey || !endpointId) throw new Error("RunPod extraction is not configured (RUNPOD_API_KEY / RUNPOD_PARSE_ENDPOINT_ID)");
+  const fx = fetchImpl || fetch;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20_000);
+  try {
+    const res = await fx(`${RUNPOD_API}/v2/${endpointId}/run`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+      body: JSON.stringify({ input: { image_b64: imageBase64, max_new_tokens: maxNewTokens } }),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`RunPod HTTP ${res.status}${body ? `: ${body.slice(0, 200)}` : ""}`);
+    }
+    const payload = await res.json();
+    if (!payload?.id) throw new Error("RunPod did not return a job id");
+    return { jobId: payload.id, status: payload.status || "IN_QUEUE" };
+  } catch (err) {
+    if (err?.name === "AbortError") throw new Error("RunPod did not accept the job in time — try again");
+    throw err;
+  } finally { clearTimeout(timer); }
+}
+
+/** One poll of a submitted job → { jobId, status, output?, parsed?, wallMs? }. */
+export async function getParseJob({ jobId, fetchImpl = null } = {}) {
+  const apiKey     = process.env.RUNPOD_API_KEY;
+  const endpointId = process.env.RUNPOD_PARSE_ENDPOINT_ID;
+  if (!apiKey || !endpointId) throw new Error("RunPod extraction is not configured (RUNPOD_API_KEY / RUNPOD_PARSE_ENDPOINT_ID)");
+  const fx = fetchImpl || fetch;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20_000);
+  try {
+    const res = await fx(`${RUNPOD_API}/v2/${endpointId}/status/${encodeURIComponent(jobId)}`, {
+      headers: { authorization: `Bearer ${apiKey}` },
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`RunPod HTTP ${res.status}`);
+    const p = await res.json();
+    const out = { jobId: p?.id || jobId, status: p?.status || "IN_QUEUE", output: p?.output || null };
+    if (out.status === "COMPLETED" && out.output && !out.output.error) {
+      out.parsed = shapeParseOutput(out.output);
+      out.model  = out.output.model || null;
+      if (Number.isFinite(out.output.wall_ms)) out.wallMs = out.output.wall_ms;
+    }
+    return out;
+  } catch (err) {
+    if (err?.name === "AbortError") throw new Error("RunPod status poll timed out — try again");
+    throw err;
+  } finally { clearTimeout(timer); }
+}
+
+/** Shape a COMPLETED job's output into { blocks, markdown } (the poll path;
+ * the runsync path maps inline in parsePageOnRunpod). */
+export function shapeParseOutput(out) {
+  const blocks = (Array.isArray(out.blocks) && out.blocks.length ? out.blocks : parseBlocks(out.raw))
+    .map((b) => ({
+      bbox_2d: (Array.isArray(b?.bbox_2d) ? b.bbox_2d : []).slice(0, 4).map(Number),
+      text_content: String(b?.text_content ?? ""),
+    }))
+    .filter((b) => b.bbox_2d.length === 4 && b.bbox_2d.every(Number.isFinite));
+  return { blocks, markdown: blocksToMarkdown(blocks) };
+}
+
 /**
  * parsePageOnRunpod — one rendered page → { blocks, markdown, model }.
  * `fetchImpl` overrides fetch (the contract test's mock); everything else
