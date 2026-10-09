@@ -238,7 +238,13 @@ export function shapeParseOutput(out) {
       text_content: String(b?.text_content ?? ""),
     }))
     .filter((b) => b.bbox_2d.length === 4 && b.bbox_2d.every(Number.isFinite));
-  return { blocks, markdown: blocksToMarkdown(blocks) };
+  const shaped = { blocks, markdown: blocksToMarkdown(blocks) };
+  // COMPLETED but nothing parsable — the model DID answer, so keep its
+  // literal words (truncated) for the console: an empty success must never
+  // be silent. An EMPTY preview is itself a diagnosis — the model ended its
+  // turn immediately (prompt-format mismatch), not a parse failure.
+  if (!blocks.length && typeof out.raw === "string") shaped.rawPreview = out.raw.slice(0, 1500);
+  return shaped;
 }
 
 /**

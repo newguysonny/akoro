@@ -153,6 +153,34 @@ test("unconfigured → 501; empty image → 400 (no job submitted); submit failu
   } finally { globalThis.fetch = realFetch; }
 });
 
+test("a COMPLETED run with zero parsable blocks carries the model's raw output", async () => {
+  process.env.PARSE_CONSOLE_KEY = "sekrit";
+  process.env.RUNPOD_API_KEY = "rpa_test";
+  process.env.RUNPOD_PARSE_ENDPOINT_ID = "ep_console";
+  const realFetch = globalThis.fetch;
+  // job_10: the model answered, but nothing in its words parsed as blocks
+  // (live 2026-10-09: COMPLETED · wallMs 6359 · blocks [] — an empty success
+  // must surface WHAT the model actually said, not a silent []).
+  globalThis.fetch = async (url, opts = {}) => {
+    if (!String(url).startsWith("https://api.runpod.ai")) return realFetch(url, opts);
+    if (String(url).endsWith("/run")) return { ok: true, status: 200, json: async () => ({ id: "job_10", status: "IN_QUEUE" }) };
+    return { ok: true, status: 200, json: async () => ({ id: "job_10", status: "COMPLETED", output: {
+      raw: "I'm sorry, I can't help with that.", blocks: [],
+      model: "hanji-dev/hanji-parse-4b", wall_ms: 6359,
+    } }) };
+  };
+  try {
+    const { server, port } = await startServer();
+    const r = await call(port, "POST", "/console", { headers: H, body: JSON.stringify({ imageBase64: PNG_DATA_URI }) });
+    assert.equal(r.status, 200);
+    const p = JSON.parse((await call(port, "GET", "/console/status?jobId=job_10", { headers: H })).text);
+    assert.equal(p.data.job.done, true);
+    assert.deepEqual(p.data.job.blocks, []);
+    assert.equal(p.data.job.rawPreview, "I'm sorry, I can't help with that.", "the model's words survive to the console — no silent empty success");
+    await stop(server);
+  } finally { globalThis.fetch = realFetch; }
+});
+
 test("the console page is self-sufficient, never cached, and the app mounts it", () => {
   assert.match(consoleSrc, /type="file"/, "file picker");
   assert.match(consoleSrc, /readAsDataURL/, "client-side base64");
