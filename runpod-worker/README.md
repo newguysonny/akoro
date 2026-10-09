@@ -20,15 +20,24 @@ starts.
 | `requirements.txt` | runpod, torch, transformers ≥4.57 (Qwen3-VL), qwen-vl-utils |
 | `test_input.json` | Local test payload (`python3 -u handler.py --test_input test_input.json`) |
 
-## Deploy (RunPod console)
+## Deploy
 
-1. **Build & push the image** — from this folder:
-   ```bash
-   docker build -t <dockerhub-user>/hanji-parse-worker:latest .
-   docker push <dockerhub-user>/hanji-parse-worker:latest
-   ```
-2. **Serverless → New Endpoint**
-   - Container image: your pushed tag
+**Automatic:** `.github/workflows/deploy-runpod-worker.yml` runs only when
+`runpod-worker/**` changes: contract tests → build (repo-root context) → push
+`ghcr.io/<owner>/akoro-runpod-worker:<sha>` → point the RunPod template at that
+tag. One-time setup (disconnect RunPod's GitHub integration, GHCR access,
+`RUNPOD_API_KEY` / `RUNPOD_TEMPLATE_ID` secrets) is in the workflow header.
+
+**Manual** — from the repo root:
+```bash
+docker build -f runpod-worker/Dockerfile -t ghcr.io/<owner>/akoro-runpod-worker:dev .
+docker push ghcr.io/<owner>/akoro-runpod-worker:dev
+```
+
+### Endpoint settings (RunPod console)
+
+1. **Serverless → New Endpoint** (or edit the existing one)
+   - Container image: the pushed tag
    - **Model field: `hanji-dev/hanji-parse-4b`** ← RunPod pre-downloads the
      weights to `/runpod-volume/huggingface-cache/hub/` and tries to start
      workers on hosts that already have it; cold-host pulls are **unbilled**.
@@ -41,7 +50,7 @@ starts.
      is comfortable for full document pages.
    - **Max workers: a hard cap** (3–5) so runaway traffic can't scale your bill.
    - Active workers: 0 (scale to zero between jobs).
-3. Deploy. First invocation on a cold host downloads + loads; afterwards the
+2. Deploy. First invocation on a cold host downloads + loads; afterwards the
    handler resolves the cached snapshot **offline** (`HF_HUB_OFFLINE=1`) — no
    runtime downloads, ever.
 
