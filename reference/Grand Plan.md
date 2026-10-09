@@ -201,6 +201,7 @@ session mode" (`fresh | continuation | decay`); "Adaptive Learning Workflow"
 | D29 | What Practice is | **Practice = the live proctored assessment** (`AssessmentRoom` + Session Assessment Gateway + Sergeant). The agent chooses questions, probes and hints; proctoring, scoring and the verdict stay in code. `AssessmentRoom` keeps its UI. | User decision (§11). |
 | D30 | No syllabus found | Syllabus is resolved **class → school → platform → AI-generated**. `syllabus.generate` is allowed only after the other three return nothing; the draft is grounded on the national curriculum, checked by code, saved as provisional, and always labelled as AI-drafted (§8.7). | User decision: a missing syllabus must never block a learner. |
 | D31 | How practice works | **Agent Check** (§7.12): NaNa asks, the learner's agent answers only from its owner's notes, Sergeant judges, the Education Engine scores. No human answers. Replaces `practice.generate/submit` in Study Prep, Teaching and Decay. The proctored assessment stays human and separate. | User decision: practice tests the agent, like Battles. |
+| D32 | Decay `retrieval_practice` | **Stays human recall for now** — the one place outside the proctored assessment and guide mode where the learner answers questions. Its answers are scored server-side and tagged `source: "learner_recall"`; the Agent Check still runs the retention check and retest. Revisit later. | User decision (Q16). |
 | D10 | Who writes narration? | **Harness templates** (`ActivityNarrator`, grown from `narration.js:deliberate()`) for facts; the agent's `intent` (≤ 240 chars, sanitised, untrusted display text) for "why". v3's `narration` field **is** `intent`. | Deterministic where possible (v3 §40), already built (v7). |
 | D11 | Event store | New generic `edu.workflow_events`. `study_prep_events` is kept read-only and backfilled. | One stream model for four workflows (v3 §43). |
 | D12 | Live transport | **Event store is the source of truth; transport is replaceable.** Teaching and Decay keep the existing Socket.IO connection. Study Prep and Practice use SSE (same heartbeat pattern as `/chat/agent`). Both carry the identical event envelope. Replay: `GET /api/workflows/:id/events?after=N`. | v3 §42–43; reuses what already works. |
@@ -1082,6 +1083,7 @@ doesn't have any notes on Water Cycle yet — let's teach it first").
 | Decay Review | The retention check and retest (has the agent's knowledge faded?) |
 | Practice (proctored) | **Not used** — the proctored assessment stays human (D29) |
 | Teaching (`learn_with_guide` mode) | Not used — the human answers NaNa's check questions in that mode (§9.3) |
+| Decay `retrieval_practice` | Not used — the human recalls from memory (D32) |
 
 #### 7.12.4 What the learner sees
 
@@ -2266,7 +2268,7 @@ LLM failure must never corrupt workflow state.
 | Q5 | Starting cap values in §7.2 table (Teaching turns, strategy changes, Practice caps) | Tune in staging |
 | Q6 | ~~`retrieval_practice`~~ — **resolved (D25):** Strategy Library v2, Decay Review + Practice only. | Done |
 | Q7 | ~~"Learning with guide" toggle~~ — **resolved (D24):** built as the `learn_with_guide` Teaching mode. | Done |
-| Q16 | Decay's `retrieval_practice` (D25) has the **human** recall from memory, while D31 makes practice agent-only. Keep it as the one human recall step in Decay, or make Decay agent-only too (the learner re-teaches the agent instead)? | Phase 8 |
+| Q16 | ~~Decay `retrieval_practice` human vs agent~~ — **resolved (D32):** keep human recall for now. | Done |
 | Q14 | ~~Practice UI~~ — **resolved (D29):** Practice is the live proctored assessment in `AssessmentRoom`, which keeps its UI. | Done |
 | Q13 | ~~DeepSeek / Grok data handling~~ — **resolved:** accepted by the product owner (2026-10-09); both enabled per §7.11.5a. | Done |
 | Q12 | ~~Per-tier model lists~~ — **resolved (§7.11.5a).** Grok and DeepSeek model ids and prices are filled into `AI_MODELS` at setup (a setup task, not an open question). Fable stays off until a tier is given it. | Done |
