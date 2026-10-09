@@ -1112,8 +1112,23 @@ own knowledge is never used, so it is generic advice under another agent's name.
 | Who is asked | 2 random active agents | Up to 3 agents **strong on this topic**: their notes cover it (`recallStrength` on their `edu.student_knowledge`) and their concept state for it is ≥ 0.7 |
 | How they answer | Persona prompt, general knowledge | **From their own notes** (`agentRecall` style), rewritten as an explanation, analogy, worked example or memory trick — never quoted verbatim |
 | What they can be asked | Study habits, motivation, … | Those, **plus** "how would you explain *X*?" for a specific gap the Agent Check found |
-| Consent | Not needed (no data used) | The helper learner must **opt in** ("Let my agent help other learners", default off). Without opted-in strong peers, it falls back to today's persona-only advice, labelled as general |
+| Consent | Not needed (no data used) | The helper learner must **opt in** — **off by default**, switched on in **Settings → Agent** (see below). Without opted-in strong peers, it falls back to today's persona-only advice, labelled as general |
 | Privacy | Asker's data never leaves | Unchanged — plus helper notes never leave as text: only a short rewritten answer, PII-filtered, ≤ 600 chars, shown with the agent's name/emoji only |
+
+**The setting (Settings → Agent tab, `pages/settings/agentTab.jsx`):** a new
+section "Helping other learners" with one `Toggle`:
+
+> **Let my agent help other learners** — Off
+> When this is on, other learners' agents can ask yours how it would explain a
+> topic. Your agent answers in its own words from what you've taught it. Your
+> notes, name and details are never shared — only your agent's name and emoji.
+> You can turn this off at any time.
+
+- Stored as `user_agents.help_others_opt_in boolean default false`, saved with
+  the existing agent `PATCH`. Turning it off takes effect for the next consult.
+- Below the toggle, a small count when on: "Your agent has helped N learners".
+- No learner is ever asked to turn it on during a study session; the setting is
+  only in Settings.
 
 **As a strategy:** Strategy Library v2 adds **`peer_help`**. After a gap, the
 controller may choose it: the gaps are sent to strong peers, their
@@ -2024,7 +2039,7 @@ content.blog_chunks (                 -- §7.14
   body text, embedding vector, position int, updated_at timestamptz
 )
 
-users / learner settings: + agent_help_opt_in boolean default false   -- §7.13
+edu/public user_agents: + help_others_opt_in boolean default false, + helped_count int default 0   -- §7.13
 
 edu.generated_syllabi (
   id uuid pk, created_by_learner uuid, subject text, class_level text,
@@ -2349,7 +2364,8 @@ learner says "just draft it" → `syllabus.generate`; the agent tries
 Sergeant drops an inaccurate one → the rest go into the Teaching session as
 NaNa material → nothing is written to the learner's notes or evidence.
 Variants: no opted-in strong peers → labelled general advice; a helper who has
-not opted in is never asked; a peer reply containing a phone number is filtered.
+not opted in is never asked; the toggle is off for every new account and only
+changeable in Settings → Agent; turning it off excludes the agent from the next consult; a peer reply containing a phone number is filtered.
 
 **P — Blog research:** the agent searches "spaced repetition before exams" →
 a passage from a post body (not only titles) comes back with its slug → the
@@ -2414,7 +2430,7 @@ LLM failure must never corrupt workflow state.
 | Q6 | ~~`retrieval_practice`~~ — **resolved (D25):** Strategy Library v2, Decay Review + Practice only. | Done |
 | Q7 | ~~"Learning with guide" toggle~~ — **resolved (D24):** built as the `learn_with_guide` Teaching mode. | Done |
 | Q16 | ~~Decay `retrieval_practice` human vs agent~~ — **resolved (D32):** keep human recall for now. | Done |
-| Q17 | Default for `agent_help_opt_in` — off (privacy-first, plan default) or on with a clear setting? Many learners are minors. | Before §7.13 ships |
+| Q17 | ~~Peer help consent default~~ — **resolved (D34):** off by default; a clear toggle in Settings → Agent. | Done |
 | Q14 | ~~Practice UI~~ — **resolved (D29):** Practice is the live proctored assessment in `AssessmentRoom`, which keeps its UI. | Done |
 | Q13 | ~~DeepSeek / Grok data handling~~ — **resolved:** accepted by the product owner (2026-10-09); both enabled per §7.11.5a. | Done |
 | Q12 | ~~Per-tier model lists~~ — **resolved (§7.11.5a).** Grok and DeepSeek model ids and prices are filled into `AI_MODELS` at setup (a setup task, not an open question). Fable stays off until a tier is given it. | Done |
