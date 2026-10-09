@@ -205,6 +205,8 @@ session mode" (`fresh | continuation | decay`); "Adaptive Learning Workflow"
 | D20 | Migration strategy | Generalise the existing Study Prep engine first. **Existing contract tests must stay green** at every phase. Teaching, Decay, Practice move onto it after. | Full structure 2 §26. |
 | D21 | Learner model scale | Concept state 0–1 is canonical. `knowledge_confidence` (0–100) is read as `/100` fallback only. Never mix scales silently. | All sources agree. |
 | D22 | Billing | Every LLM call already meters through `lib/aiModel.js` → `chargeForAI`. The harness checks balance before each paid action. Study Prep keeps its plan estimate + ceiling. Teaching/Decay are metered per call (§7.10). | Matches today's billing. |
+| D23 | Which LLM runs where? | **A Model Controller** (§7.11) resolves the model for every call from env-configured models and roles. No call site names a model. A learner-facing model picker in the chat box comes later, behind a flag, limited to an allowlist. | User decision. Lets new providers/models be added by env without code changes. |
+| D24 | Teaching modes | **Two modes in one Teaching Workflow:** `teach_agent` (learner teaches the protégé, NaNa coaches) and `learn_with_guide` (NaNa teaches the learner directly, **no protégé**). Same states, transcript, evidence pipeline and progression gate. The learner can switch between turns. | User decision. "Learning from the teacher" and "teaching an agent with the teacher's guidance". |
 
 ---
 
@@ -514,7 +516,8 @@ manifest set (stable, cached, boot-preflighted)
 | Study Prep | strategy_selection, teach_back_creation | `strategies` ✅ |
 | Study Prep | reflection, outcome_evaluation, synthesis | `reflection` ✅ |
 | Study Prep | intervention (inline strategy) | `teaching` ✅ |
-| Teaching | all teaching-turn operations | `teaching_controller` 🆕 |
+| Teaching (`teach_agent`) | all teaching-turn operations | `teaching_controller` 🆕 |
+| Teaching (`learn_with_guide`) | all teaching-turn operations | `guide_controller` 🆕 |
 | Teaching | select_teaching_strategy, adapt_strategy | `teaching_strategy` 🆕 |
 | Decay | inspect_decay, inspect_history, inspect_concept, evaluate_retention | `decay_inspection` 🆕 |
 | Decay | intervene, select_strategy | `decay_review` 🆕 |
@@ -525,6 +528,7 @@ manifest set (stable, cached, boot-preflighted)
 ```
 workflows/STUDY_PREP.md     how the study-prep controller works, gates, handoff
 workflows/TEACHING.md       controller role; protégé/NaNa are tools; turn shape
+workflows/GUIDE_MODE.md     learn_with_guide: NaNa teaches directly, no protégé; check-question style
 workflows/DECAY_REVIEW.md   retention review, when to hand off to teaching
 workflows/PRACTICE.md       question sourcing, labelling, evidence
 learning/RETENTION.md       decay signals, retrieval practice principles
@@ -534,6 +538,7 @@ learning/RETENTION.md       decay signals, retrieval practice principles
 
 ```js
 teaching_controller: ["AGENT.md", "workflows/TEACHING.md", "learning/LEARNING.md", "learning/TEACHING.md", "learning/MASTERY.md", "policies/EDUCATION_RULES.md"]
+guide_controller:    ["AGENT.md", "workflows/TEACHING.md", "workflows/GUIDE_MODE.md", "learning/LEARNING.md", "learning/ASSESSMENT.md", "learning/MASTERY.md", "policies/EDUCATION_RULES.md"]
 teaching_strategy:   ["AGENT.md", "workflows/TEACHING.md", "strategies/STRATEGIES.md", "policies/TOOL_RULES.md"]
 decay_inspection:    ["AGENT.md", "workflows/DECAY_REVIEW.md", "learning/RETENTION.md", "reasoning/INSPECTION.md", "learning/MASTERY.md"]
 decay_review:        ["AGENT.md", "workflows/DECAY_REVIEW.md", "learning/RETENTION.md", "learning/TEACHING.md", "strategies/STRATEGIES.md"]
@@ -794,6 +799,109 @@ workflow instance at a time (advisory lock or `locked_until` column on
 - Charges carry a `ref` already (`chargeForAI` ✅); practice charges reuse the
   attempt id.
 
+### 7.11 Model Controller 🆕 (D23)
+
+**Problem today:** `lib/aiModel.js` reads one `OPENAI_MODEL` (default
+`gpt-4o-mini`), about 60 call sites import it, the client is OpenAI-only,
+and `aiPricing.js` charges **any unknown model at gpt-4o-mini prices**.
+Switching to a pricier model would silently under-charge.
+
+**Goal:** add or swap models through env only; choose a model per role; later
+let the learner pick a model in the chat box.
+
+#### 7.11.1 Model catalogue (env-driven)
+
+```
+AI_MODELS = JSON list, e.g.
+[
+  { "id": "fast",     "provider": "openai",    "apiModel": "gpt-4o-mini",
+    "label": "Fast",     "price": { "in": 0.15, "out": 0.60 },
+    "caps": ["tools","stream","json"], "selectable": true,  "tier": "free" },
+  { "id": "smart",    "provider": "openai",    "apiModel": "gpt-4.1",
+    "label": "Smart",    "price": { "in": 2.00, "out": 8.00 },
+    "caps": ["tools","stream","json"], "selectable": true,  "tier": "plus" },
+  { "id": "claude",   "provider": "anthropic", "apiModel": "<model id>",
+    "label": "Claude",   "price": { "in": …, "out": … },
+    "caps": ["tools","stream","json"], "selectable": false }
+]
+```
+
+- Providers: `openai`, `anthropic`, `openai_compatible` (any OpenAI-shaped
+  endpoint; `baseUrlEnv` + `apiKeyEnv` per entry). Keys stay in env, never in
+  the catalogue JSON.
+- A model **without a price is refused at boot** (fixes the silent fallback).
+  The price table moves from the hard-coded `MODEL_PRICES` into the catalogue;
+  the existing entries become the default catalogue so nothing changes when
+  `AI_MODELS` is unset.
+- Each entry declares capabilities. A role that needs tool calling can only
+  resolve to a model with `tools`.
+
+#### 7.11.2 Roles
+
+Every LLM call names a **role**, not a model:
+
+```
+study_prep_controller · teaching_controller · decay_controller · practice_controller
+persona_protege · persona_guide · persona_assessor
+chat · tasks · instructor · default
+```
+
+Role → model comes from env: `AI_MODEL_DEFAULT=fast`,
+`AI_MODEL_ROLE_TEACHING_CONTROLLER=smart`, … Unset roles use the default.
+`OPENAI_MODEL` keeps working as the legacy default during migration.
+Embeddings, speech-to-text and text-to-speech keep their own settings (out of scope).
+
+#### 7.11.3 Resolution
+
+```js
+resolveModel({ role, learnerChoice, workflowInstance }) → { id, provider, apiModel, price, caps }
+```
+
+Order: **locked role** (admin/env says this role is fixed) → **learner's
+choice** (if the picker is on, the model is `selectable`, the learner's plan
+allows its tier, and it has the role's required capabilities) → **role env**
+→ **default**. Every resolution is logged on the call's telemetry
+(`recordAiCall` already records `model`).
+
+- Workflow controllers and the progression-critical roles are **locked by
+  default**; the learner's choice applies to `chat` and to the reply-producing
+  persona roles (`persona_guide`, `persona_protege`) unless env says otherwise.
+- The resolved model id is stored on the decision event (developer mode) and
+  on `workflow_instances.model_selection` so a session is reproducible.
+- **Fallback model:** if a provider's circuit breaker is open, the role's
+  `fallbackModel` (same capabilities) is used and a `model.fallback` telemetry
+  record is written. The agent loop's own fallback (D8) still applies on top.
+
+#### 7.11.4 Provider adapters
+
+`meteredCreate` stays the single call path (billing, timing, breaker,
+max-token guard). Behind it, one adapter per provider normalises to the
+OpenAI chat-completions shape the codebase already uses: messages, tools,
+`tool_choice: "required"`, streaming chunks, and `usage` (prompt / completion
+/ cached tokens), so billing and the agent loop do not change. One circuit
+breaker per provider.
+
+#### 7.11.5 Learner model picker (later)
+
+- `GET /api/ai/models` → selectable models with label, tier, and a relative
+  cost hint ("≈3× coins per message").
+- The choice is saved per chat thread / workflow instance; switching applies
+  from the next turn and emits a `model.changed` learner event.
+- The harness checks the choice on every call (allowlist, tier, capability).
+  An invalid choice falls back to the role default and tells the learner.
+- Plan card and coin estimates use the **resolved** model's price.
+
+#### 7.11.6 Migration
+
+1. Add `lib/modelRegistry.js` (catalogue, roles, `resolveModel`), defaulting
+   to today's behaviour.
+2. `meteredCreate` accepts `__role`; when `model` is absent it resolves by role.
+3. Move call sites from `OPENAI_MODEL` to `__role` (grep-enforced contract test:
+   no new `OPENAI_MODEL` imports outside the registry).
+4. Add the Anthropic and `openai_compatible` adapters with contract tests
+   (tool call round-trip, streaming usage, error mapping).
+5. Picker UI behind `AI_MODEL_PICKER_ENABLED`.
+
 ---
 
 ## 8. Workflow 1 — Study Prep
@@ -922,15 +1030,43 @@ system produces evidence of the learner's understanding.
 Study Prep handoff (`entry_mode = study_prep`); Decay handoff
 (`entry_mode = decay_review`); Continue (resume, never create).
 **Owns:** teaching state, teaching evidence, transcript (`adaptive_sessions`
-row), phases.
+row), phases, mode.
+
+### 9.0 Two teaching modes (D24)
+
+| | `teach_agent` — Learn by teaching | `learn_with_guide` — Learn with the guide |
+|---|---|---|
+| Who the learner talks to | The protégé (their AI Student Agent), with NaNa coaching on the side | NaNa (the teaching guide) only |
+| Protégé | Yes | **No** — never called |
+| What the learner does | Explains the concept so the protégé understands | Learns from NaNa: answers check questions, explains back to NaNa, works examples |
+| Evidence comes from | The learner's explanations to the protégé | The learner's answers and explain-backs to NaNa |
+| Progression gate | `applyTeachingProgress` | The same gate, same must-know parts |
+| Typical use | Teach-back strategy; Dashboard "Teach Agent" | First exposure, `different_analogy`, a learner who isn't ready to teach yet |
+
+- **One workflow, two modes.** `teaching_mode` is stored on the session row
+  and on every turn event. The learner switches with the existing toggle in
+  `TeachAgentModal`; the switch is a learner action that applies from the next
+  turn. Transcript, evidence, phase and mustKnow position carry across.
+- **Phase labels per mode** (same phase ids, different learner copy):
+  guide mode — "What do you already know?" · "Must-know parts" ·
+  "Explain it back to me" · "Push a little further" · "Mastery".
+- **Evidence weighting:** every evidence row carries
+  `source: "teach_agent" | "learn_with_guide"`. The Education Engine may weight
+  them differently (explaining to the protégé is stronger evidence than
+  answering a guide's question); the gate's MASTERY rule is unchanged.
+- **Default mode by entry:** Dashboard → the learner chooses; Study Prep
+  handoff with `teach_back` → `teach_agent`; Study Prep or Decay with
+  `different_analogy` → `learn_with_guide` (§12.1).
+- Today the toggle is UI-only (no backend, an honest "not wired yet" note).
+  This plan wires it.
 
 ### 9.1 Who is who (locked, D4)
 
 | Role | What it is | Can it change state? |
 |---|---|---|
 | **Teaching controller agent** | The LLM that drives the session through the agent loop | No — it proposes |
-| **Protégé (Student Agent)** | A `persona` tool: produces the protégé's reply in a requested move | No |
-| **NaNa Esumai** | A `persona` tool: produces a coaching nudge for the learner | No |
+| **Protégé (Student Agent)** | A `persona` tool: produces the protégé's reply in a requested move. `teach_agent` mode only. | No |
+| **NaNa Esumai** | A `persona` tool. `teach_agent`: a coaching nudge for the learner. `learn_with_guide`: the guide's teaching reply to the learner. | No |
 | **Sargeant** | A `persona` tool: assessment judgement/boundary | No |
 | **Harness + gate** | Code | Yes — the only writer |
 
@@ -992,9 +1128,20 @@ learner message
 events → store → socket → modal
 ```
 
-The learner always gets exactly one protégé reply per turn (from the agent's
-choice or the fallback). Evidence recording and the gate run every turn
+The learner always gets exactly one reply per turn (from the agent's choice
+or the fallback): the protégé's in `teach_agent` mode, NaNa's in
+`learn_with_guide` mode. Evidence recording and the gate run every turn
 whatever the agent did — nothing it generates can skip them.
+
+**Guide mode differences in the turn:**
+- Pre-step `observe_teaching_evidence` reads the learner's answer/explain-back
+  to the guide instead of their explanation to the protégé.
+- Post-step `assess_protege_understanding` is skipped (there is no protégé);
+  its place is taken by `assess_learner_response` (Education Engine checks the
+  answer against the must-know part; Sargeant may judge free-text answers).
+- Fallback reply: `guide.teach` with the move from the default recommendation
+  table (`DIG_DEEPER` → re-ask with a narrower question, `USE_ANALOGY` → an
+  analogy, `CLEAR_MISTAKE` → correct the misconception, etc.).
 
 ### 9.4 Operations → tools → context set
 
@@ -1010,14 +1157,25 @@ whatever the agent did — nothing it generates can skip them.
 | complete | `teaching.propose_complete()` — accepted only if `teachingObjectiveMet`; else `objective_not_met` | propose | **yes** ⟂ |
 | pause | `teaching.propose_pause({ reason })` | propose | **yes** ⟂ |
 
+**Guide mode catalogue** (`learn_with_guide`) — the protégé tools are not
+offered at all; the harness rejects them with `tool_not_permitted` if requested:
+
+| Operation | Agent tools | Level | Terminal? |
+|---|---|---|---|
+| inspect_learner_state / inspect_topic | same read tools as above | read | no |
+| teach | `guide.teach({ move, focusConcept })` with `move ∈ {explain, ask_check_question, give_example, use_analogy, correct_misconception, ask_explain_back, summarise}` | persona | **yes** ⟂ |
+| select_teaching_strategy / adapt_strategy | `strategy.select` | propose | no |
+| assess / complete / pause | same as above | — | **yes** ⟂ |
+
 Fixed harness steps (never in the catalogue): `load_session_state`,
 `observe_teaching_evidence`, `assess_protege_understanding`,
 `persist_cognitive_state`, `record_verified_learning`,
 `gate_teaching_progress`. These are today's `teaching-workflow/tools.js`
 implementations, reused as-is.
 
-Context sets: `teaching_controller` for every operation; `teaching_strategy`
-added when the operation is strategy selection/adaptation. The protégé and
+Context sets: `teaching_controller` (teach_agent) or `guide_controller`
+(learn_with_guide) for every operation; `teaching_strategy` added when the
+operation is strategy selection/adaptation. The protégé and
 NaNa keep their own persona sets (`persona_student_agent`, `persona_nana`) ✅
 inside their tool calls.
 
@@ -1195,6 +1353,11 @@ diagnostic 3/5 → Education Engine: below 70% → topic: intervention_required
 If a non-terminal Teaching child already exists for the topic, the harness
 returns it (resume) instead of creating another.
 
+The child's starting mode follows the strategy: `teach_back` →
+`teach_agent`; `different_analogy` (when it hands off rather than running
+inline) → `learn_with_guide`. The learner may switch modes inside the session;
+the outcome contract is the same either way.
+
 ### 12.2 Teaching → Study Prep completion
 
 ```
@@ -1317,6 +1480,7 @@ edu.workflow_instances (
   idempotency_key text null,
   policy_version text, workflow_version text, context_version text, strategy_version int,
   locked_until timestamptz null,        -- single active agent step
+  model_selection jsonb default '{}',   -- learner choice + resolved model per role (§7.11)
   paused_reason text null,
   metadata jsonb default '{}',
   created_at, updated_at, completed_at, abandoned_at, cancelled_at
@@ -1351,7 +1515,8 @@ edu.practice_sessions (
 ```
 edu.study_prep_sessions   + workflow_id
 edu.study_prep_topics     + teaching_workflow_id; status check widened to §8.3 states
-edu.adaptive_sessions     + workflow_id, entry_mode, source_workflow_id, source_topic_id, strategy
+edu.adaptive_sessions     + workflow_id, entry_mode, source_workflow_id, source_topic_id, strategy,
+                            teaching_mode ('teach_agent' | 'learn_with_guide')
 edu.adaptive_workflow_runs + workflow_id, study_prep_topic_id (attempt record only)
 edu.study_prep_events     read-only after cut-over; backfilled into workflow_events
 ```
@@ -1433,6 +1598,9 @@ WORKFLOW_ENGINE_ENABLED           🆕 instances + events dual-write
 WORKFLOW_EVENT_STREAM_ENABLED     🆕 SSE/socket workflow_event + replay
 STUDY_PREP_TOPIC_AGENT_ENABLED    🆕 agent wakes for topic decisions + context switching
 TEACHING_WORKFLOW_V2_ENABLED      🆕 agent-driven teaching turns (off → old fixed pipeline)
+TEACHING_GUIDE_MODE_ENABLED       🆕 learn_with_guide mode (off → toggle stays UI-only)
+AI_MODELS / AI_MODEL_DEFAULT / AI_MODEL_ROLE_*  🆕 model catalogue and role routing (§7.11)
+AI_MODEL_PICKER_ENABLED           🆕 learner model picker in the chat box
 STUDY_PREP_TEACHING_HANDOFF_ENABLED 🆕 teach_back → Teaching Workflow
 DECAY_WORKFLOW_ENABLED            🆕
 PRACTICE_WORKFLOW_ENABLED         🆕
@@ -1467,6 +1635,8 @@ existing contract test.** Phases 11 (UI) can start in parallel after Phase 3.
   `operation`, `decisionTimeoutMs`, fallback hook, per-workflow caps.
 - Generic harness core + per-workflow check plug-ins; existing rejection codes unchanged.
 - Per-workflow tool registries over one binder; add `persona` level and display templates.
+- Model Controller backend (§7.11.6 steps 1–4): `lib/modelRegistry.js`,
+  roles, required prices, `__role` on `meteredCreate`, provider adapters.
 - **Exit:** Study Prep runs through the generic runtime with identical
   behaviour (existing tests green); runtime contract tests with stub agents
   (cap, timeout → fallback, malformed → observation, terminal stop).
@@ -1499,7 +1669,10 @@ existing contract test.** Phases 11 (UI) can start in parallel after Phase 3.
 - Protégé, NaNa, Sargeant wrapped as `persona` tools.
 - `adaptive_sessions.workflow_id`; socket `open_workflow`; `start_adaptive_session` → create/resume adapter.
 - Direct create endpoint; resume; history.
-- **Exit:** Scenario A; teaching contract tests: gate cannot be skipped,
+- `learn_with_guide` mode (§9.0): `guide.teach` tool, `guide_controller` set,
+  `assess_learner_response` post-step, mode switch between turns, wire the
+  `TeachAgentModal` toggle.
+- **Exit:** Scenarios A and J; teaching contract tests: gate cannot be skipped,
   fallback on timeout/malformed, loop stops on reply, cap enforced,
   `propose_complete` rejected until objective met, phases unchanged vs
   today's gate tests (`state-machine.test.mjs`, `runner.test.mjs` equivalents).
@@ -1531,13 +1704,14 @@ existing contract test.** Phases 11 (UI) can start in parallel after Phase 3.
   `WorkflowResumeCard`, `WorkflowStateBadge`, `GateButton`.
 - Dashboard descriptors + deterministic routing; modals take `workflowId`.
 - Developer mode.
-- **Exit:** UI acceptance checks in §18.
+- Model picker in the chat box (§7.11.5) behind `AI_MODEL_PICKER_ENABLED`.
+- **Exit:** UI acceptance checks in §18; Scenario K.
 
 ### Phase 12 — Hardening and rollout
 - Failure tests §19; data migration §14.3; flag-by-flag rollout; observability
   (workflow_id, type, learner, operation, state, tool, latency, tokens, cost,
   result, error — never answer keys or reasoning).
-- **Exit:** all scenarios A–I pass in staging with flags on; old paths removed only after a release with flags on.
+- **Exit:** all scenarios A–K pass in staging with flags on; old paths removed only after a release with flags on.
 
 ---
 
@@ -1584,6 +1758,20 @@ defer/flag within policy → one deferred retry per session.
 `prerequisite_violation` shown as a red verification row → agent revises →
 valid plan shown.
 
+**J — Learn with the guide:** Dashboard → Teach Agent → choose "Learn with
+the guide" → Teaching Workflow (`learn_with_guide`) → NaNa teaches, asks check
+questions, asks the learner to explain back → no protégé call appears in any
+event → evidence recorded with `source: learn_with_guide` → gate reaches
+MASTERY → completed. Then: switch modes mid-session → the next turn uses the
+protégé, and phase/transcript/evidence carry over.
+
+**K — Model switching:** an env-only change of `AI_MODEL_ROLE_TEACHING_CONTROLLER`
+changes the model used with no code change; a catalogue entry without a price
+fails boot; with the picker on, the learner selects an allowed model → the
+next chat turn uses it and is billed at its price; selecting a model outside
+their tier is refused and falls back with a notice; a locked role ignores the
+learner's choice.
+
 **UI checks:** thinking blocks collapse/expand; tool rows stream in order;
 activity text never in a bubble; no tool names in learner mode; rejects render
 as red verification rows; Approve disabled after tap; reload reconstructs the
@@ -1612,11 +1800,12 @@ LLM failure must never corrupt workflow state.
 |---|---|---|
 | Q1 | JSS1 Basic Science rows in `edu.syllabus_*` and `concept_catalog` ❓ | Phase 0 |
 | Q2 | Real per-generation coin cost in `lib/aiPricing.js` (examples use 2) ❓ | Phase 0 |
-| Q3 | Is `gpt-4o-mini` good enough for controller decisions, or does the controller need a stronger model (cost/latency trade-off)? | Phase 6 spike |
+| Q3 | Which model should each controller role default to? (With the Model Controller this is an env setting, not a code change — decide from a Phase 6 spike on quality vs cost vs latency.) | Phase 6 spike |
 | Q4 | Teaching worst-case turn cost and the balance check threshold | Phase 6 |
 | Q5 | Starting cap values in §7.2 table (Teaching turns, strategy changes, Practice caps) | Tune in staging |
 | Q6 | Should `retrieval_practice` join the Strategy Library (v2) for Decay? Library changes are versioned. | Phase 8 |
-| Q7 | "Learning with guide" toggle in `TeachAgentModal` is UI-only today. Wire it as a Teaching option (NaNa-led turns) or leave out of scope? | Product decision |
+| Q7 | ~~"Learning with guide" toggle~~ — **resolved (D24):** built as the `learn_with_guide` Teaching mode. | Done |
+| Q12 | Which models are learner-selectable, on which plan tiers, and how is the relative cost shown? | Before picker UI |
 | Q8 | `content.search` — enable for Study Prep research or keep disabled? | Phase 4 |
 | Q9 | Who can see developer mode (staff role only)? | Phase 11 |
 | Q10 | Notification channels for handoff/completion (in-app only, or web push via existing `notifications/webpush.js`)? | Phase 7 |
@@ -1634,5 +1823,5 @@ LLM failure must never corrupt workflow state.
 | Adaptive Learning *Engine* (not workflow) | Full structure 3 | v3 §19–20 |
 | Promote study-prep infrastructure; migration map | Full structure 2 | — |
 | Code baseline, harness checks, policy constants, manifest, five-part operation rule | Study-Prep Master Plan v7 | Plans 1–5, concrete sessions v1/v2 |
-| Agent-driven teaching turn, controller agent, loop end/cap/fallback | User decisions (this review) | — |
+| Agent-driven teaching turn, controller agent, loop end/cap/fallback, Model Controller, learn_with_guide mode | User decisions (this review) | — |
 | Code facts | `akoro-api` / `akoro-learner` as of 2026-10-09 | — |
