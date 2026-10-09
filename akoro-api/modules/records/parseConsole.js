@@ -47,6 +47,7 @@ router.get("/console/status", consoleGuard, asyncHandler(async (req, res) => {
     if (data.done) {
       if (job.parsed) {
         data.blocks = job.parsed.blocks; data.markdown = job.parsed.markdown;
+        if (!data.blocks.length && job.parsed.rawPreview !== undefined) data.rawPreview = job.parsed.rawPreview;
         data.model = job.model || null;  data.wallMs = job.wallMs ?? null;
         last = { ok: true, model: data.model, blocks: data.blocks.length, wallMs: data.wallMs, at: new Date().toISOString() };
       } else if (job.output && job.output.error) {
@@ -96,7 +97,7 @@ router.post("/console", consoleGuard, asyncHandler(async (req, res) => {
 
 /* ── The console page ──────────────────────────────────────────────────── */
 
-const CONSOLE_VERSION = "v4 · submit+poll";
+const CONSOLE_VERSION = "v4.1 · submit+poll · raw-visible";
 
 router.get("/console", consoleGuard, (_req, res) => {
   res.type("html");
@@ -204,8 +205,18 @@ router.get("/console", consoleGuard, (_req, res) => {
               var job = s && s.data && s.data.job; if (!job || !job.done) return;
               clearInterval(poll);
               $('out').textContent = JSON.stringify(s.data, null, 2);
-              $('md').textContent = job.error || job.markdown || '—';
-              $('runstat').innerHTML = job.error ? ('<span class="err">' + job.error + '</span>') : '<b>done' + (job.wallMs ? ' · worker ' + job.wallMs + 'ms' : '') + '</b>';
+              if (job.error) {
+                $('md').textContent = job.error;
+                $('runstat').innerHTML = '<span class="err">' + job.error + '</span>';
+              } else if (!job.blocks || !job.blocks.length) {
+                $('md').textContent = 'The model ran but returned no parsable blocks.'
+                  + (job.rawPreview ? '\n\n— model raw output —\n' + job.rawPreview
+                                    : '\n\nThe model\'s raw output was EMPTY — it ended its turn immediately (likely a prompt-format mismatch).');
+                $('runstat').innerHTML = '<b>done' + (job.wallMs ? ' · worker ' + job.wallMs + 'ms' : '') + '</b> · <span class="err">0 blocks — raw output below</span>';
+              } else {
+                $('md').textContent = job.markdown || '—';
+                $('runstat').innerHTML = '<b>done' + (job.wallMs ? ' · worker ' + job.wallMs + 'ms' : '') + '</b>';
+              }
               btn.disabled = false;
             })
             .catch(function(e){ clearInterval(poll); $('runstat').innerHTML = '<span class="err">' + e.message + '</span>'; btn.disabled = false; });
