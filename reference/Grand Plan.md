@@ -211,7 +211,7 @@ session mode" (`fresh | continuation | decay`); "Adaptive Learning Workflow"
 | D36 | Cross-learner strategy pattern | Counted over **all learners, anonymously** — totals only, shown only when ≥ 5 learners match. Individual stories still need the learner's opt-in. The privacy policy states that anonymous learning statistics are used to recommend strategies. | User decision (Q18). |
 | D37 | Recording struggles and breakthroughs | Every workflow records misconceptions, gaps, recoveries and strategy outcomes through one Education Engine recorder into `learner_concept_evidence`; breakthroughs are detected from those events; existing teaching and exam-prep history is backfilled. Built early (Phase 4a), because Agent Checks, peer help and the strategy pattern depend on it (§7.8.1). | Gap found 2026-10-09: today only Study Prep pass/fail and the Python service write evidence. |
 | D38 | Struggle taxonomy | A closed, versioned list of **41 struggle types in 8 categories** (§7.15): each with how it is detected (rule / agent / learner), when it counts as resolved, whether it is concept-tied and whether it may be a peer story. Struggles and breakthroughs share one table (`edu.learning_struggles`). Six sensitive types (anxiety, health…) are type-and-date only, never stories, learner-deletable; health expires in 30 days. | User decision. |
-| D39 | Schools and instructors see struggles | **Yes.** For learners linked to a school (`mgmt.students.user_id`), the learner's school admins and the instructors who teach their class/subject see the learner's **non-sensitive** struggles (type, concept, open/resolved, what worked) and class-level totals in the school dashboard. **Sensitive types** are not shown individually; instructors see only a neutral "may need support" flag when 2+ sensitive struggles are open within 14 days (no type, no details). Learners are told in Settings → Agent that their school can see this. | User decision (Q19); sensitive handling is the plan default (Q21). |
+| D39 | Schools and instructors see struggles | **Yes.** For learners linked to a school (`mgmt.students.user_id`), the learner's school admins and the instructors who teach their class/subject see the learner's **non-sensitive** struggles (type, concept, open/resolved, what worked) and class-level totals in the school dashboard. **Sensitive types** show on the dashboard as a neutral **"may need support"** flag when 2+ sensitive struggles are open within 14 days; the instructor can **open the flag to see full detail** (types, concepts, dates). Every opening of sensitive detail is logged (who, when, which learner). `health_energy` still expires after 30 days. Learners are told in Settings → Agent that their school can see this, including sensitive struggles. | User decisions (Q19, Q21). |
 | D40 | Strategy Library v3 | **Approved:** 15 new strategies, 22 in total, each with targets, where it runs, permitted workflows and a NaNa guide file (§7.7.2). | User decision (Q20). |
 | D10 | Who writes narration? | **Harness templates** (`ActivityNarrator`, grown from `narration.js:deliberate()`) for facts; the agent's `intent` (≤ 240 chars, sanitised, untrusted display text) for "why". v3's `narration` field **is** `intent`. | Deterministic where possible (v3 §40), already built (v7). |
 | D11 | Event store | New generic `edu.workflow_events`. `study_prep_events` is kept read-only and backfilled. | One stream model for four workflows (v3 §43). |
@@ -1520,7 +1520,8 @@ paths: the proctored assessment and Decay's recall rounds.
 - **Never an individual peer story.** They may count in anonymous totals
   (≥ 5 learners, D36).
 - Used only to adapt pacing and tone (shorter sessions, easier wins first,
-  NaNa's wording). Not shown to schools or instructors individually (D39).
+  NaNa's wording). Shown to the learner's school behind a "may need support" flag, with full
+  detail when an instructor opens it; every opening is logged (D39).
 - The learner can see and delete them in Settings → Agent ("What your agent
   has noticed").
 
@@ -2854,7 +2855,7 @@ LLM failure must never corrupt workflow state.
 | Q17 | ~~Peer help consent default~~ — **resolved (D34):** off by default; a clear toggle in Settings → Agent. | Done |
 | Q18 | ~~Pattern population~~ — **resolved (D36):** all learners, anonymously, totals only, ≥ 5. | Done |
 | Q19 | ~~Schools/instructors see struggles~~ — **resolved (D39):** yes, non-sensitive ones in full. | Done |
-| Q21 | Sensitive struggles for instructors: neutral "may need support" flag only (plan default), full detail, or nothing? | Before school dashboards use it |
+| Q21 | ~~Sensitive struggles for instructors~~ — **resolved (D39):** flag on the dashboard, full detail when opened, access logged. | Done |
 | Q20 | ~~Strategy Library v3~~ — **resolved (D40):** approved. | Done |
 | Q14 | ~~Practice UI~~ — **resolved (D29):** Practice is the live proctored assessment in `AssessmentRoom`, which keeps its UI. | Done |
 | Q13 | ~~DeepSeek / Grok data handling~~ — **resolved:** accepted by the product owner (2026-10-09); both enabled per §7.11.5a. | Done |
