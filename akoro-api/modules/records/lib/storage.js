@@ -22,7 +22,7 @@
  * deletes keep dispatching on the key, and only NEW uploads move to R2.
  */
 
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadBucketCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl }                       from "@aws-sdk/s3-request-presigner";
 import config                                 from "../../../config/index.js";
 import db                                     from "../../../db.js";
@@ -76,18 +76,51 @@ function ensureFallbackBucket() {
   return fallbackBucketReady;
 }
 
-/** Presign a PUT for one record file. Key is always under the owner's prefix. */
-export async function createPresignedUpload(fileName, fileType, userId) {
+/* ── R2 liveness ───────────────────────────────────────────────────────────
+ * Presigning is OFFLINE SigV4 — it cannot detect an R2 outage. The only
+ * way to know R2 will take the bytes before handing the client a URL is
+ * a cheap HeadBucket through the SAME breaker every other R2 op uses, so
+ * a tripped breaker answers instantly instead of hanging the upload-url
+ * request. A success is trusted for 60s — one probe per minute, not one
+ * per upload; if R2 dies inside that minute the client's PUT fails
+ * exactly as it would have before this fallback existed. */
+const R2_PROBE_OK_MS = 60 * 1000;
+let r2ProbeOkUntil = 0;
+async function r2Reachable() {
+  if (Date.now() < r2ProbeOkUntil) return true;
+  try {
+    await r2Send(s3, new HeadBucketCommand({ Bucket: BUCKET }));
+    r2ProbeOkUntil = Date.now() + R2_PROBE_OK_MS;
+    return true;
+  } catch (err) {
+    console.error("[records/storage] R2 unreachable — files up to 5 MB will ride the Supabase fallback:", err.message);
+    return false;
+  }
+}
+
+/** Presign a PUT for one record file. Key is always under the owner's prefix.
+ *  R2 is PRIMARY. `sizeBytes` (when the caller knows it) decides the failure
+ *  lane: files over MAX_FALLBACK_FILE_BYTES are R2-only and skip the probe
+ *  entirely — nothing else can hold them, so if R2 is down their PUT fails
+ *  with R2's own error; files up to the cap fall back to Supabase whenever
+ *  R2 is unreachable. Unknown size conservatively stays fallback-eligible —
+ *  Supabase's own fileSizeLimit backstops the PUT. Returns
+ *  { uploadUrl, fileKey, store } — store is "r2" or "supabase". */
+export async function createPresignedUpload(fileName, fileType, userId, { sizeBytes } = {}) {
   const safe = String(fileName || "record").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120);
 
   if (recordsStorageEnabled()) {
-    const key  = `records/${userId}/${Date.now()}-${safe}`;
-    const cmd  = new PutObjectCommand({ Bucket: BUCKET, Key: key, ContentType: fileType || "application/octet-stream" });
-    const uploadUrl = await getSignedUrl(s3, cmd, { expiresIn: 900 });
-    return { uploadUrl, fileKey: key };
+    const tooBigForFallback = Number.isFinite(sizeBytes) && sizeBytes > MAX_FALLBACK_FILE_BYTES;
+    if (tooBigForFallback || (await r2Reachable())) {
+      const key  = `records/${userId}/${Date.now()}-${safe}`;
+      const cmd  = new PutObjectCommand({ Bucket: BUCKET, Key: key, ContentType: fileType || "application/octet-stream" });
+      const uploadUrl = await getSignedUrl(s3, cmd, { expiresIn: 900 });
+      return { uploadUrl, fileKey: key, store: "r2" };
+    }
+    console.warn("[records/storage] R2 down — this upload rides the Supabase fallback");
   }
 
-  // No R2 on this deployment — small files go to the Supabase fallback.
+  // No R2 on this deployment — or R2 is down and the file fits the fallback.
   // Supabase's signed upload URL takes the same raw PUT the client already
   // sends (Content-Type and all), so nothing on the learner changes.
   const key = `${FALLBACK_PREFIX}${userId}/${Date.now()}-${safe}`;
@@ -96,7 +129,7 @@ export async function createPresignedUpload(fileName, fileType, userId) {
   if (error || !/^https?:\/\//i.test(String(data?.signedUrl || ""))) {
     throw new Error(`Supabase storage could not sign the upload: ${error?.message || "no signed URL returned"}`);
   }
-  return { uploadUrl: data.signedUrl, fileKey: key };
+  return { uploadUrl: data.signedUrl, fileKey: key, store: "supabase" };
 }
 
 /** A readable URL for the file — inline for the viewer (media/pdf),
