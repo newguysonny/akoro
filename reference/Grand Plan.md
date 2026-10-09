@@ -191,7 +191,8 @@ session mode" (`fresh | continuation | decay`); "Adaptive Learning Workflow"
 | D6 | Teaching loop termination | **The loop ends as soon as the agent replies to the learner.** | User decision. Keeps live chat latency low. |
 | D7 | Teaching loop cap | **Max 3 decision iterations per turn** (`TEACHING_POLICY.MAX_ITERATIONS_PER_TURN`). | User decision. |
 | D8 | Teaching timeout | **On decision timeout, malformed output or LLM failure, fall back to the default recommendation** (the existing dialogue-move → action table). | User decision. The learner always gets a reply. |
-| D9 | Show reasoning tokens? | **No.** Thinking blocks show narration (harness templates + the agent's bounded `intent`). The platform model is OpenAI `gpt-4o-mini`; no raw reasoning is available or wanted. | v3 §2 wins over v7 D11. |
+| D9 | What streams into a thinking block? | **The provider's reasoning *summary* when the chosen model offers one** (OpenAI reasoning models via the Responses API — already used by agent-chat Think mode; Claude with `thinking.display: "summarized"`), streamed live. **Otherwise** (e.g. the default `gpt-4o-mini`) the agent's `intent` streamed as it is generated, then the harness narration. Raw chain-of-thought is never available or shown. Summaries are shown live but **not stored**; on reload the block shows the stored narration. | Matches the coding-agent experience and the existing `ThoughtBlock`, without exposing hidden reasoning. |
+| D27 | Activity text | **The agent may write its own short learner-facing message** with each action (`message`, ≤ 400 chars, streamed as an activity block), like the text a coding agent writes between tool calls. Facts in it (scores, pass/fail, coins) must come from the harness: the narrator inserts them; the model's text may not state them. | Makes the stream read like a coding agent instead of only templates. |
 | D10 | Who writes narration? | **Harness templates** (`ActivityNarrator`, grown from `narration.js:deliberate()`) for facts; the agent's `intent` (≤ 240 chars, sanitised, untrusted display text) for "why". v3's `narration` field **is** `intent`. | Deterministic where possible (v3 §40), already built (v7). |
 | D11 | Event store | New generic `edu.workflow_events`. `study_prep_events` is kept read-only and backfilled. | One stream model for four workflows (v3 §43). |
 | D12 | Live transport | **Event store is the source of truth; transport is replaceable.** Teaching and Decay keep the existing Socket.IO connection. Study Prep and Practice use SSE (same heartbeat pattern as `/chat/agent`). Both carry the identical event envelope. Replay: `GET /api/workflows/:id/events?after=N`. | v3 §42–43; reuses what already works. |
@@ -429,12 +430,17 @@ async function runAgentStep({ controller, instance, trigger, caps }) {
   "operation": "strategy_selection",
   "tool": "offer_strategy",
   "args": { "strategy": "teach_back", "reason_code": "repeated_misconception" },
-  "intent": "Your earlier attempts mixed up evaporation and transpiration, so a teach-back fits best."
+  "intent": "Your earlier attempts mixed up evaporation and transpiration, so a teach-back fits best.",
+  "message": "Water Cycle needs a bit more work, so I'm setting up a teaching session for it."
 }
 ```
 
-- Exactly **one** action per iteration (`tool_choice: "required"`, as today).
+- Exactly **one** action per iteration (`tool_choice: "required"` on OpenAI as
+  today; `auto` + instruction on Claude, §7.11.4).
 - `intent` ≤ 240 chars, sanitised, untrusted display text. Not a reasoning field.
+- `message` (optional, ≤ 400 chars, D27): learner-facing activity text sent
+  with the action. Shown as an `activity` block. A filter rejects score,
+  pass/fail and coin claims in model text; those come from the narrator.
 - `operation` is a **claim** — the harness checks it is allowed in the current
   state and that the tool belongs to it.
 - Malformed output → recorded as a malformed iteration → observation → next
@@ -786,7 +792,33 @@ Tool names appear only in developer mode.
 - On reconnect the client sends its last `sequence`; the server replays the
   gap, then streams.
 - Thinking blocks persist as narration events, so a reload shows the same
-  blocks (unlike v7's ephemeral design).
+  blocks. Streamed reasoning summaries are live-only (D9).
+
+#### 7.9.7 Live streaming (the coding-agent feel)
+
+The learner sees each element appear and fill in as it happens:
+
+```
+agent.narration.start   → ThinkingBlock opens (live shimmer), "Thinking…"
+agent.narration.delta   → reasoning-summary text (D9) or intent text, token by token
+agent.narration.end     → "Thought for 2s · [context]", block auto-collapses
+tool.started            → ToolRow appears in the open ToolGroup with a spinner
+tool.completed|failed   → ✓/✕ result + timing fill in; group collapses when the next element starts
+activity.delta / activity → agent's message (D27) streams as plain text
+reply.delta / reply     → protégé / NaNa / chat answer streams word by word
+learner.action_required → card or gate button
+```
+
+- `*.delta` events are **live only** (not written to `workflow_events`); the
+  matching closing event (`agent.narration`, `activity`, `reply`) is stored
+  with the full bounded text, so replay rebuilds the same blocks.
+- Thinking and tool groups are always collapsible; the block that is
+  currently streaming stays open, earlier ones collapse (existing
+  `ThoughtBlock` behaviour).
+- The stream order is whatever happened; THINKING → TOOLS → ACTIVITY is the
+  common shape, not a rule (v3 §78).
+- Persona and chat replies stream through `meteredCreate` streaming
+  (already metered with `include_usage`).
 
 ### 7.10 Cost, concurrency, idempotency
 
@@ -1547,6 +1579,15 @@ modal does not own state.
 workflow internals. Pattern THINKING → TOOL GROUP → ACTIVITY is supported but
 not required — any subset in any order is valid (v3 §78).
 
+**The general agent chat (`/chat/agent`, `AgentChatTab.jsx`) uses the same
+stream and components.** It is not a workflow, so its events are not stored in
+`workflow_events`, but it emits the same envelope over its existing SSE
+connection: today's `thinking`/`delta`/`status` events map to
+`agent.narration.delta`/`reply.delta`/`tool.*`, and `status` one-liners become
+proper `ToolRow`s. The existing `ThoughtBlock` becomes the shared
+`ThinkingBlock`. When a chat tool starts a workflow (e.g.
+`start_study_prep_session`), the chat shows that workflow's stream inline.
+
 The `Learning Workflows chat simulation.md` HTML is the visual reference for
 component structure, row format and stream order.
 
@@ -1737,6 +1778,10 @@ existing contract test.** Phases 11 (UI) can start in parallel after Phase 3.
 ### Phase 3 — Event stream
 - v3 envelope; `ActivityNarrator` (templates for every event type, snapshot tests).
 - Replay endpoint; SSE stream; Socket.IO `workflow_event`.
+- Live deltas (§7.9.7): narration/intent and reasoning-summary streaming per
+  provider, `activity` from the agent's `message` (D27) with the fact filter,
+  streamed replies.
+- Agent chat (`/chat/agent`) emits the same envelope.
 - Backfill `study_prep_events`.
 - **Exit:** reconnect test replays missing events in order; narrator contract
   test fails on any event type without a template.
@@ -1870,7 +1915,10 @@ crash; a model outside the learner's tier is refused with a notice; a catalogue
 entry without a price fails boot; adding Grok or DeepSeek is an env-only change;
 a Pilot learner can switch to DeepSeek and to nothing else.
 
-**UI checks:** thinking blocks collapse/expand; tool rows stream in order;
+**UI checks:** thinking text streams in live and the block collapses when it
+ends; tool rows appear with a spinner and fill in their result; the agent's
+activity text and replies stream word by word; the agent chat and workflow
+chats look identical; thinking blocks collapse/expand; tool rows stream in order;
 activity text never in a bubble; no tool names in learner mode; rejects render
 as red verification rows; Approve disabled after tap; reload reconstructs the
 same blocks from events.
