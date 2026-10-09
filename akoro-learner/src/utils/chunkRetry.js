@@ -14,11 +14,22 @@
  */
 const KEY = 'akoro_chunk_reloaded';
 
-// True for the "stale chunk after deploy" family of errors (dynamic import /
-// preload failures), regardless of browser wording.
+// True for the "stale chunk after deploy" family of errors, regardless of
+// browser wording. TWO sub-families:
+//  • import failures — the fetch/preload of the chunk itself dies;
+//  • evaluation crashes — the import SUCCEEDS (the old service worker serves
+//    cached chunks against a fresh index.html, or the reverse) and the
+//    mismatched module graph trips at init time: "Cannot access 'X' before
+//    initialization" (TDZ), "has already been declared", "does not provide
+//    an export named …". Live example 2026-10-09: a ReferenceError TDZ with
+//    an empty stack surfaced as a full error page instead of the silent
+//    recover-because isChunkError didn't recognize it. Same root cause,
+//    same recovery — the once-per-session guard still lets a genuine code
+//    bug surface on the second occurrence.
 export function isChunkError(err) {
   const msg = String(err?.message || err || '');
-  return /dynamically imported module|Importing a module script failed|Loading chunk|ChunkLoadError|Failed to fetch|preload/i.test(msg);
+  return /dynamically imported module|Importing a module script failed|Loading chunk|ChunkLoadError|Failed to fetch|preload/i.test(msg)
+    || /before initialization|has already been declared|does not provide an export named/i.test(msg);
 }
 
 // Escape the stale SW-cached shell (once, guarded) then reload — shared by
