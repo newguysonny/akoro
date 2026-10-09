@@ -45,6 +45,7 @@ import base64
 import io
 import json
 import re
+import threading
 import time
 
 import runpod
@@ -233,25 +234,54 @@ def extract_blocks(raw: str):
     return blocks
 
 
-# ── Model load — ONCE per worker boot (this is the cold-start cost) ─────
-print(f"[worker] resolving cached snapshot for {MODEL_ID} …")
-_model_path = resolve_snapshot_path(MODEL_ID)
-print(f"[worker] loading from {_model_path}")
+# ── Model load — LAZY, on the first request ──────────────────────────────
+# Deliberately NOT at import. RunPod's build pipeline (and any boot probe)
+# runs this container BEFORE the model cache volume exists; a module-level
+# load there raised out of resolve_snapshot_path and killed the process
+# before runpod.serverless.start() — the exact "Could not find
+# runpod.serverless.start" build failure. Lazy loading keeps boot instant
+# and harmless; the first job on a cold worker pays the ~10-20s VRAM load
+# (FlashBoot + cached models keep that the only cold-start cost).
+_model_lock = threading.Lock()
+_processor  = None
+_model      = None
+_gpu_name   = "CPU"
 
-_processor = AutoProcessor.from_pretrained(
-    _model_path, trust_remote_code=False, local_files_only=(not ALLOW_DOWNLOAD),
-)
-_model = AutoModelForImageTextToText.from_pretrained(
-    _model_path,
-    trust_remote_code=False,
-    torch_dtype="auto",          # bf16 weights, as shipped
-    device_map="auto",           # single GPU → whole model on the GPU
-    local_files_only=(not ALLOW_DOWNLOAD),
-)
-_model.eval()
 
-_gpu_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
-print(f"[worker] ready — {_gpu_name}")
+class ModelUnavailable(RuntimeError):
+    """The cached model can't be loaded right now. Reported per JOB — the
+    worker process stays up so a config fix (Model field / cache mount)
+    lands on the next job without a redeploy."""
+
+
+def _ensure_model():
+    """Load the model once per worker; never crash the process on failure."""
+    global _processor, _model, _gpu_name
+    if _model is not None:
+        return _processor, _model, _gpu_name
+    with _model_lock:
+        if _model is not None:      # lost the race — it's loaded now
+            return _processor, _model, _gpu_name
+        try:
+            _model_path = resolve_snapshot_path(MODEL_ID)
+            print(f"[worker] loading {MODEL_ID} from {_model_path}")
+            _processor = AutoProcessor.from_pretrained(
+                _model_path, trust_remote_code=False, local_files_only=(not ALLOW_DOWNLOAD),
+            )
+            _model = AutoModelForImageTextToText.from_pretrained(
+                _model_path,
+                trust_remote_code=False,
+                torch_dtype="auto",          # bf16 weights, as shipped
+                device_map="auto",           # single GPU → whole model on the GPU
+                local_files_only=(not ALLOW_DOWNLOAD),
+            )
+            _model.eval()
+            _gpu_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
+            print(f"[worker] ready — {_gpu_name}")
+        except Exception as e:
+            print(f"[worker] model unavailable: {e}")
+            raise ModelUnavailable(str(e)) from e
+        return _processor, _model, _gpu_name
 
 
 # ── The handler ──────────────────────────────────────────────────────────
@@ -282,12 +312,18 @@ def handler(job):
     images = [Image.open(io.BytesIO(buf.getvalue()))]
 
     text = prompt if prompt.startswith("<image>") else f"<image>\n{prompt}"
-    inputs = _processor(text=[text], images=images, return_tensors="pt").to(_model.device)
+    try:
+        processor, model, gpu_name = _ensure_model()
+    except ModelUnavailable as e:
+        # Readable per-job failure — the endpoint stays deployable and the
+        # message names the fix (Model field / RUNPOD_ALLOW_DOWNLOAD).
+        return {"error": f"Model unavailable: {e}"}
+    inputs = processor(text=[text], images=images, return_tensors="pt").to(model.device)
 
     with torch.inference_mode():
-        generated = _model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+        generated = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
 
-    raw = _processor.decode(
+    raw = processor.decode(
         generated[0][inputs["input_ids"].shape[1]:],
         skip_special_tokens=True,
     )
@@ -296,7 +332,7 @@ def handler(job):
         "blocks": extract_blocks(raw),
         "image_size": list(img.size),
         "model": MODEL_ID,
-        "gpu": _gpu_name,
+        "gpu": gpu_name,
         "wall_ms": int((time.time() - started) * 1000),
     }
 

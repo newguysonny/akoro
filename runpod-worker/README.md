@@ -15,7 +15,7 @@ starts.
 
 | File | Purpose |
 |---|---|
-| `handler.py` | Loads the cached model offline, serves OCR/document-parse requests |
+| `handler.py` | Serves OCR/document-parse requests; loads the cached model OFFLINE on the first request (lazy — the container boots clean even without the cache, so builds/tests pass) |
 | `Dockerfile` | Lean runtime image — **no weights inside** |
 | `requirements.txt` | runpod, torch, transformers ≥4.57 (Qwen3-VL), qwen-vl-utils |
 | `test_input.json` | Local test payload (`python3 -u handler.py --test_input test_input.json`) |
