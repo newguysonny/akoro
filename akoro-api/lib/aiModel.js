@@ -25,6 +25,10 @@ const chatBreaker = makeAiBreaker(
   "openai-chat",
   (params, reqOpts) => rawClient.chat.completions.create(params, reqOpts),
 );
+const responsesBreaker = makeAiBreaker(
+  "openai-responses",
+  (params, reqOpts) => rawClient.responses.create(params, reqOpts),
+);
 const embeddingsBreaker = makeAiBreaker(
   "openai-embeddings",
   (params) => rawClient.embeddings.create(params),
@@ -158,6 +162,98 @@ function estimateTokens(messages) {
   } catch { return 500; }
 }
 
+/**
+ * Responses-API usage in the chat-completions shape the wallet and telemetry
+ * already price: input → prompt, output (reasoning tokens included — OpenAI
+ * bills them as output) → completion, cached input kept for the cache discount.
+ */
+export function responsesUsageToChat(usage) {
+  if (!usage) return null;
+  return {
+    prompt_tokens: usage.input_tokens ?? 0,
+    completion_tokens: usage.output_tokens ?? 0,
+    prompt_tokens_details: { cached_tokens: usage.input_tokens_details?.cached_tokens ?? 0 },
+  };
+}
+
+/**
+ * Metered Responses API call (reasoning models: Think mode). The same contract
+ * as meteredCreate — payer from __userId or the request context, hard block on
+ * an empty wallet, debit by real usage × markup, every call timed. Usage comes
+ * from the final `response.completed` (or incomplete/failed) event on a
+ * stream, or `response.usage` otherwise; an abandoned stream is charged an
+ * estimate so a stopped Think turn is never free.
+ */
+async function meteredResponses(params = {}) {
+  const store   = aiContext.getStore() || {};
+  const userId  = params.__userId  ?? store.userId  ?? null;
+  const feature = params.__feature ?? store.feature ?? "ai";
+  const ref     = params.__ref     ?? null;
+  const billTo  = params.__billTo  ?? store.billTo  ?? null;
+  const clean = { ...params };
+  delete clean.__userId; delete clean.__feature; delete clean.__ref; delete clean.__billTo;
+
+  const bills = Boolean(userId || billTo);
+  if (bills) {
+    const { ok, total } = await coinsAvailable({ userId, billTo, min: 1 });
+    if (!ok) throw new InsufficientCoins(1, total);
+  }
+  const model = clean.model || OPENAI_MODEL;
+  const started = Date.now();
+  const settle = (usage, { ttfbMs = null, streamed = false, ok = true, errorKind = null } = {}) => {
+    const tokensIn  = usage?.prompt_tokens ?? 0;
+    const tokensOut = usage?.completion_tokens ?? 0;
+    const cachedIn  = usage ? cachedTokensOf(usage) : 0;
+    recordAiCall({
+      feature, model, ms: Date.now() - started, ttfbMs,
+      tokensIn, tokensOut, cachedIn,
+      costUsd: usage ? usdCost(model, tokensIn, tokensOut, cachedIn) : null,
+      userId, ref, streamed, ok, errorKind,
+    });
+    if (bills && usage) {
+      chargeForAI({ userId, feature, model, usage, ref, billTo })
+        .catch((e) => { if (!(e instanceof InsufficientCoins)) console.warn("[coins] charge failed:", e.message); });
+    }
+  };
+
+  let source;
+  try { source = await responsesBreaker.fire(clean); }
+  catch (e) { settle(null, { streamed: Boolean(clean.stream), ok: false, errorKind: errorKindOf(e) }); throw e; }
+
+  if (!clean.stream) {
+    settle(responsesUsageToChat(source?.usage));
+    return source;
+  }
+
+  // Abandoned stream (stop, error): estimate input from the prompt and output
+  // from what streamed, floored so hidden reasoning tokens are not free.
+  // Capped: inline image data URLs would otherwise read as huge prompts.
+  const promptEstimate = Math.min(32_000, estimateTokens([{ content: clean.input }, { content: clean.instructions || "" }]));
+  const gen = (async function* () {
+    let usage = null;
+    let ttfbMs = null;
+    let streamedChars = 0;
+    const t0 = Date.now();
+    try {
+      for await (const ev of source) {
+        if (typeof ev?.delta === "string") {
+          streamedChars += ev.delta.length;
+          if (ttfbMs == null) ttfbMs = Date.now() - t0;
+        }
+        if (ev?.response?.usage) usage = ev.response.usage;   // completed / incomplete / failed
+        yield ev;
+      }
+    } finally {
+      try {
+        const fallback = { prompt_tokens: promptEstimate, completion_tokens: Math.max(Math.ceil(streamedChars / 4), 300) };
+        settle(responsesUsageToChat(usage) || fallback, { ttfbMs, streamed: true });
+      } catch { /* billing must not break the stream */ }
+    }
+  })();
+  if (source && source.controller) gen.controller = source.controller;
+  return gen;
+}
+
 // Metered embeddings — charged by prompt tokens (cheap, but counted).
 async function meteredEmbeddings(params = {}) {
   const store   = aiContext.getStore() || {};
@@ -173,13 +269,15 @@ async function meteredEmbeddings(params = {}) {
   return res;
 }
 
-// Proxy the client so `openai.chat.completions.create(...)` and
-// `openai.embeddings.create(...)` are metered everywhere they're used, while
+// Proxy the client so `openai.chat.completions.create(...)`,
+// `openai.responses.create(...)` and `openai.embeddings.create(...)` are
+// metered everywhere they're used, while
 // audio/other endpoints pass through (voice meters itself).
 export const openai = new Proxy(rawClient, {
   get(target, prop) {
     if (prop === "chat") return { completions: { create: meteredCreate } };
     if (prop === "embeddings") return { create: meteredEmbeddings };
+    if (prop === "responses") return { create: meteredResponses };
     const v = target[prop];
     return typeof v === "function" ? v.bind(target) : v;
   },

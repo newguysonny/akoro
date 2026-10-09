@@ -392,7 +392,7 @@ export function initOfflineSync() {
  * caller can fall back to a non-streaming request (an abort throws an
  * AbortError — callers must NOT fall back on a stop).
  */
-const TRACE_EVENTS = new Set(['think_start', 'think_end', 'tool_start', 'tool_end', 'activity']);
+const TRACE_EVENTS = new Set(['think_start', 'think_delta', 'think_end', 'tool_start', 'tool_end', 'activity']);
 export async function streamPost(path, body, { onDelta, onDone, onThinking, onStatus, onTrace, signal } = {}) {
   const r = await authedFetch(`${API}${path}`, {
     ...BASE_OPTS,

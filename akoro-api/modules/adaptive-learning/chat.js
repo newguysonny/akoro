@@ -63,6 +63,7 @@ import {
 import { requiresAgentCapabilitiesTool, requiresActivityPreparation, requiredLearnerDataTool, requiredStudyPrepTool } from "./agent-chat-intent.js";
 import { agentToolActivity } from "../../lib/agentActivity.js";
 import { createChatTrace, decisionNarration } from "./chat-trace.js";
+import { toResponsesInput, toResponsesTools } from "./responses-input.js";
 import { hasExplicitToolRequestConsent } from "./agent-tool-request-intent.js";
 import { getLearnerProfileContext } from "./learner-profile-context.js";
 import { validateLearnerTaskInput } from "./learner-task-validation.js";
@@ -2314,6 +2315,11 @@ router.delete("/sessions/:id", async (req, res) => {
 // A bad file never fails the request; it becomes a note appended to the message.
 
 const THINK_MODEL    = process.env.OPENAI_THINK_MODEL    || "o4-mini";
+// Think mode reasons at every tool-loop decision too (each "Thought for Ns"
+// row is the model's real reasoning summary). Decisions run at a lighter
+// effort than the final answer to keep a multi-step turn affordable.
+const THINK_DECISION_EFFORT = process.env.OPENAI_THINK_DECISION_EFFORT || "low";
+const THINK_ANSWER_EFFORT   = process.env.OPENAI_THINK_ANSWER_EFFORT   || "medium";
 const RESEARCH_MODEL = process.env.OPENAI_RESEARCH_MODEL || "gpt-4o";
 
 const MAX_FILES       = 4;
@@ -2432,55 +2438,97 @@ async function streamChat({ send, messages, model, max_tokens = 700, temperature
   return full;
 }
 
-/* Convert chat.completions-style messages to Responses-API input. */
-function toResponsesInput(messages) {
-  return messages.map((m) => ({
-    role: m.role,
-    content: typeof m.content === "string"
-      ? [{ type: m.role === "assistant" ? "output_text" : "input_text", text: m.content }]
-      : m.content.map((p) => p.type === "image_url"
-          ? { type: "input_image", image_url: p.image_url?.url, detail: p.image_url?.detail || "auto" }
-          : { type: "input_text", text: p.text }),
-  }));
+/*
+ * Think mode: one tool-loop DECISION on the reasoning model. Its reasoning
+ * summary streams into the step's "Thought for Ns" row (onReasoning); the
+ * result comes back in the chat-completions assistant shape the loop already
+ * uses. Throws when the model or API surface is unavailable so the loop can
+ * fall back to the standard model.
+ */
+async function thinkDecision({ systemContent, transcript, tools, toolChoice, onReasoning = () => {}, isAborted = () => false }) {
+  const stream = await openai.responses.create({
+    model: THINK_MODEL,
+    input: toResponsesInput([{ role: "system", content: systemContent }, ...transcript], { native: true }),
+    tools: toResponsesTools(tools),
+    tool_choice: toolChoice?.function?.name ? { type: "function", name: toolChoice.function.name } : "auto",
+    reasoning: { effort: THINK_DECISION_EFFORT, summary: "auto" },
+    max_output_tokens: 4000,
+    stream: true,
+  });
+  let content = "";
+  const toolCalls = [];
+  for await (const ev of stream) {
+    if (isAborted()) return { aborted: true, assistant: { role: "assistant", content } };
+    if (ev.type === "response.reasoning_summary_part.added" && ev.summary_index > 0) onReasoning("\n\n");
+    else if (ev.type === "response.reasoning_summary_text.delta" && ev.delta) onReasoning(ev.delta);
+    else if (ev.type === "response.output_text.delta" && ev.delta) content += ev.delta;
+    else if (ev.type === "response.output_item.done" && ev.item?.type === "function_call") {
+      toolCalls.push({ id: ev.item.call_id, type: "function", function: { name: ev.item.name, arguments: ev.item.arguments || "{}" } });
+    }
+    else if (ev.type === "response.failed") throw new Error(ev.response?.error?.message || "reasoning model failed");
+    else if (ev.type === "error") throw new Error(ev.message || "reasoning model error");
+  }
+  return { assistant: { role: "assistant", content, ...(toolCalls.length ? { tool_calls: toolCalls } : {}) } };
 }
 
-/* Reasoning model via the Responses API. Reasoning summaries stream as
-   `thinking` events, the answer as `delta`. Throws when the model or API
-   surface is unavailable so the caller can fall back. */
-async function streamThinkWithResponses({ send, messages, model, isAborted = () => false }) {
+/*
+ * Reasoning model via the Responses API — the Think-mode ANSWER, including
+ * after tools ran (their results arrive as developer notes). The reasoning
+ * summary streams into its own "Thought for Ns" trace row, which closes as
+ * the answer starts streaming as `delta`. Returns { reply, thinking }. Throws
+ * when the model or API surface is unavailable so the caller can fall back.
+ */
+async function streamThinkWithResponses({ send, messages, model, trace = null, isAborted = () => false }) {
   const useReasoning = model !== "gpt-4o";   // gpt-4o has no reasoning surface
   const stream = await openai.responses.create({
     model,
     input: toResponsesInput(messages),
-    ...(useReasoning ? { reasoning: { effort: "medium", summary: "auto" } } : {}),
+    ...(useReasoning ? { reasoning: { effort: THINK_ANSWER_EFFORT, summary: "auto" } } : {}),
     max_output_tokens: 4000,
     stream: true,
   });
   let full = "";
-  for await (const ev of stream) {
-    if (isAborted()) break;
-    if (ev.type === "response.reasoning_summary_text.delta" && ev.delta) send("thinking", { text: ev.delta });
-    else if (ev.type === "response.output_text.delta" && ev.delta) { full += ev.delta; send("delta", { text: ev.delta }); }
-    else if (ev.type === "response.failed") throw new Error(ev.response?.error?.message || "reasoning model failed");
-    else if (ev.type === "error") throw new Error(ev.message || "reasoning model error");
+  let thinking = "";
+  let thinkId = useReasoning ? trace?.thinkStart() : null;
+  const closeThink = () => { if (thinkId) { trace.thinkEnd(thinkId, ""); thinkId = null; } };
+  const reason = (text) => { thinking += text; if (thinkId) trace.thinkDelta(thinkId, text); };
+  try {
+    for await (const ev of stream) {
+      if (isAborted()) break;
+      if (ev.type === "response.reasoning_summary_part.added" && ev.summary_index > 0) reason("\n\n");
+      else if (ev.type === "response.reasoning_summary_text.delta" && ev.delta) reason(ev.delta);
+      else if (ev.type === "response.output_text.delta" && ev.delta) { closeThink(); full += ev.delta; send("delta", { text: ev.delta }); }
+      else if (ev.type === "response.failed") throw new Error(ev.response?.error?.message || "reasoning model failed");
+      else if (ev.type === "error") throw new Error(ev.message || "reasoning model error");
+    }
+  } finally {
+    closeThink();
   }
-  return full;
+  return { reply: full, thinking: thinking.trim() };
 }
 
-/* Non-streaming reasoning call → { reply, thinking }. */
-async function thinkOnce({ messages, model }) {
+/* Non-streaming reasoning call → { reply, thinking }; the summary is also a trace row. */
+async function thinkOnce({ messages, model, trace = null }) {
   const useReasoning = model !== "gpt-4o";
-  const resp = await openai.responses.create({
-    model,
-    input: toResponsesInput(messages),
-    ...(useReasoning ? { reasoning: { effort: "medium", summary: "auto" } } : {}),
-    max_output_tokens: 4000,
-  });
+  const thinkId = useReasoning ? trace?.thinkStart() : null;
+  let resp;
+  try {
+    resp = await openai.responses.create({
+      model,
+      input: toResponsesInput(messages),
+      ...(useReasoning ? { reasoning: { effort: THINK_ANSWER_EFFORT, summary: "auto" } } : {}),
+      max_output_tokens: 4000,
+    });
+  } catch (error) {
+    if (thinkId) trace.thinkEnd(thinkId, "");
+    throw error;
+  }
   const thinking = (Array.isArray(resp?.output) ? resp.output : [])
     .filter((o) => o?.type === "reasoning")
     .flatMap((o) => (o.summary || []).map((s) => s?.text || ""))
     .join("\n\n")
     .trim();
+  if (thinkId) { if (thinking) trace.thinkDelta(thinkId, thinking); trace.thinkEnd(thinkId, ""); }
   return { reply: String(resp?.output_text || "").trim(), thinking };
 }
 
@@ -2665,7 +2713,7 @@ export function clarify(field, question, extra = {}) {
   return { needsClarification: true, missing: field, question, ...extra };
 }
 
-async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, status, tools = openAiChatTools(), requiredTool = null, role = "student", trace = null, isAborted = () => false }) {
+async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, status, tools = openAiChatTools(), requiredTool = null, role = "student", trace = null, isAborted = () => false, think = false }) {
   const executions = [];
   const transcript = [...messages];
   if (requiredTool && !tools.some((tool) => tool.function?.name === requiredTool)) {
@@ -2674,28 +2722,59 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
   // The unified endpoint serves instructor/school tutoring too, but learner
   // account tools are never authorised for those roles.
   if (!tools.length) return { messages: transcript, toolExecutions: executions };
+  // Think mode decides every step on the reasoning model; if that model is
+  // unavailable the rest of the turn decides on the standard model.
+  let reasonDecisions = think;
   for (let iteration = 0; iteration < CHAT_TOOL_LOOP_MAX_ITERATIONS; iteration += 1) {
     // Stop pressed between steps: end here, before spending another call.
     if (isAborted()) return { messages: transcript, toolExecutions: executions, aborted: true };
     // Each decision is a "Thought for Ns" row; its text is harness narration
     // of what the agent chose (D10), never model reasoning.
+    // In Think mode the row carries the model's real reasoning summary.
     const thinkId = trace?.thinkStart();
-    const result = await openai.chat.completions.create({
-      model: OPENAI_MODEL,
-      max_tokens: 900,
-      messages: [{ role: "system", content: systemContent }, ...transcript],
-      tools,
-      // This force is limited to capability questions: it guarantees the
-      // response is based on the live Akoro inventory, but does not choose an
-      // endpoint, shape learner-facing prose, or invent a feature.
-      tool_choice: iteration === 0 && requiredTool
-        ? { type: "function", function: { name: requiredTool } }
-        : "auto",
-    });
-    const assistant = result.choices?.[0]?.message ?? { role: "assistant", content: "" };
+    // This force is limited to capability questions: it guarantees the
+    // response is based on the live Akoro inventory, but does not choose an
+    // endpoint, shape learner-facing prose, or invent a feature.
+    const toolChoice = iteration === 0 && requiredTool
+      ? { type: "function", function: { name: requiredTool } }
+      : "auto";
+    let assistant = null;
+    let reasoned = false;
+    if (reasonDecisions) {
+      try {
+        const decision = await thinkDecision({
+          systemContent, transcript, tools, toolChoice, isAborted,
+          onReasoning: (text) => { if (thinkId) trace.thinkDelta(thinkId, text); },
+        });
+        if (decision.aborted) {
+          if (thinkId) trace.thinkEnd(thinkId, "");
+          return { messages: transcript, toolExecutions: executions, aborted: true };
+        }
+        assistant = decision.assistant;
+        reasoned = true;
+      } catch (error) {
+        console.warn("[agent-chat] think decision unavailable — standard model for the rest of this turn:", error?.message || error);
+        reasonDecisions = false;
+      }
+    }
+    if (!assistant) {
+      const result = await openai.chat.completions.create({
+        model: OPENAI_MODEL,
+        max_tokens: 900,
+        messages: [{ role: "system", content: systemContent }, ...transcript],
+        tools,
+        tool_choice: toolChoice,
+      });
+      assistant = result.choices?.[0]?.message ?? { role: "assistant", content: "" };
+    }
     const calls = Array.isArray(assistant.tool_calls) ? assistant.tool_calls : [];
     if (thinkId) trace.thinkEnd(thinkId, decisionNarration(calls));
-    if (!calls.length) return { messages: transcript, toolExecutions: executions };
+    if (!calls.length) {
+      // A reasoned decision that calls no tool IS the Think-mode answer —
+      // reuse it rather than paying for a second reasoning pass.
+      const finalText = reasoned && typeof assistant.content === "string" ? assistant.content.trim() : "";
+      return { messages: transcript, toolExecutions: executions, ...(finalText ? { finalText } : {}) };
+    }
     // Text the model wrote alongside its tool calls is shown between the
     // steps (it used to be discarded); the final reply still comes from the
     // tools-disabled answer call below.
@@ -2755,6 +2834,9 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
   }
   return { messages: transcript, toolExecutions: executions };
 }
+
+// Exported for the Think-mode loop test (think-loop.contract.test.mjs).
+export { runAgentToolLoop };
 
 // ■ Stop for a running Agent Chat turn — owner-scoped by the token identity.
 router.post("/agent/stop", (req, res) => {
@@ -3003,6 +3085,7 @@ router.post("/agent", async (req, res) => {
       role,
       trace,
       isAborted,
+      think: isThink,
     });
     const stopped = () => Boolean(prepared.aborted) || isAborted();
     const finalMessages = [{ role: "system", content: systemContent }, ...prepared.messages];
@@ -3015,8 +3098,11 @@ router.post("/agent", async (req, res) => {
       // A final function-disabled call makes the model explain completed tool
       // results in learner language, while the preflight loop above remains
       // the only authority that may invoke an Akoro tool.
-      if (isThink && !prepared.toolExecutions.length) {
-        try { ({ reply, thinking } = await thinkOnce({ messages: finalMessages, model: THINK_MODEL })); usedModel = THINK_MODEL; } catch { /* fallback below */ }
+      // Think mode: the reasoned last decision already is the answer; else
+      // reason over the tool results (if any) for the answer.
+      if (isThink && prepared.finalText) { reply = prepared.finalText; usedModel = THINK_MODEL; }
+      else if (isThink) {
+        try { ({ reply, thinking } = await thinkOnce({ messages: finalMessages, model: THINK_MODEL, trace })); usedModel = THINK_MODEL; } catch { /* fallback below */ }
       }
       if (!reply) {
         usedModel = isResearch ? RESEARCH_MODEL : "gpt-4o-mini";
@@ -3030,9 +3116,13 @@ router.post("/agent", async (req, res) => {
         reply = completion.choices?.[0]?.message?.content?.trim() || "";
       }
     } else {
-      if (!stopped() && isThink && !prepared.toolExecutions.length) {
+      if (!stopped() && isThink && prepared.finalText) {
+        reply = prepared.finalText;
+        usedModel = THINK_MODEL;
+        send("delta", { text: reply });
+      } else if (!stopped() && isThink) {
         status("thinking", "Thinking…");
-        try { reply = await streamThinkWithResponses({ send, messages: finalMessages, model: THINK_MODEL, isAborted }); usedModel = THINK_MODEL; } catch { /* fall through */ }
+        try { ({ reply, thinking } = await streamThinkWithResponses({ send, messages: finalMessages, model: THINK_MODEL, trace, isAborted })); usedModel = THINK_MODEL; } catch { /* fall through */ }
       }
       if (!reply && !stopped()) {
         if (isResearch) status("synthesis", "Writing it up…");

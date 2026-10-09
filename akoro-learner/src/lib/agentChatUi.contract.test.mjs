@@ -10,7 +10,7 @@ const blocks = await readFile(new URL('../components/tabs/agentChat/TraceBlocks.
 const between = (text, start, end) => text.slice(text.indexOf(start), text.indexOf(end, text.indexOf(start)));
 
 test('thinking, tools and text stream as interleaved steps of one turn', () => {
-  assert.match(api, /TRACE_EVENTS = new Set\(\['think_start', 'think_end', 'tool_start', 'tool_end', 'activity'\]\)/);
+  assert.match(api, /TRACE_EVENTS = new Set\(\['think_start', 'think_delta', 'think_end', 'tool_start', 'tool_end', 'activity'\]\)/);
   assert.match(api, /onTrace\?\.\(event, parsed\)/);
   const send = between(tab, 'const sendMessage=async', 'const toLocalInput=');
   assert.match(send, /onTrace: appendTrace/);

@@ -3,6 +3,8 @@
  *
  * The server streams a turn as interleaved steps (Grand Plan §13.4):
  *   think_start / think_end   → a "Thought for Ns" row
+ *   think_delta               → Think mode: the model's real reasoning summary
+ *                               streaming into that row
  *   tool_start / tool_end     → a tool row ("Checking your goals ✓ 120ms")
  *   activity                  → plain text the agent wrote between steps
  *   thinking (delta)          → a reasoning-summary row that streams live (Think mode)
@@ -20,10 +22,18 @@ export function applyTraceEvent(blocks, event, data = {}, now = Date.now()) {
   switch (event) {
     case 'think_start':
       return [...list, { type: 'thinking', id, status: 'running', startedAt: now, ms: 0, text: '' }];
+    case 'think_delta':
+      return upsert(list, id, (block) => ({
+        ...(block || { type: 'thinking', id, status: 'running', startedAt: now, ms: 0 }),
+        source: 'reasoning', text: String(block?.text || '') + String(data.text || ''),
+      }));
     case 'think_end':
       return upsert(list, id, (block) => ({
         ...(block || { type: 'thinking', id, startedAt: now }),
-        status: 'done', ms: Number(data.ms) || 0, text: String(data.text || ''),
+        status: 'done', ms: Number(data.ms) || 0,
+        // The server's final text wins; it falls back to what streamed.
+        text: String(data.text || block?.text || ''),
+        ...(data.source || block?.source ? { source: data.source || block.source } : {}),
       }));
     case 'tool_start':
       return [...list, {

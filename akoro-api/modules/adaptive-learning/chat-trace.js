@@ -84,6 +84,11 @@ const clip = (text, max) => {
   const value = String(text ?? "").replace(/\s+/g, " ").trim();
   return value.length > max ? `${value.slice(0, max - 1)}…` : value;
 };
+/** Like clip, but keeps paragraph breaks — reasoning summaries are multi-paragraph. */
+const clipParagraphs = (text, max) => {
+  const value = String(text ?? "").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+};
 
 /** The largest list in a result, by length — "3 found" lines come from this. */
 function primaryCount(result) {
@@ -122,7 +127,7 @@ export function decisionNarration(calls) {
 }
 
 /** Bounded copy kept for reload. */
-export const TRACE_LIMITS = Object.freeze({ MAX_BLOCKS: 60, MAX_TEXT_CHARS: 2_000 });
+export const TRACE_LIMITS = Object.freeze({ MAX_BLOCKS: 60, MAX_TEXT_CHARS: 4_000 });
 
 /**
  * createChatTrace({ send, now }) — emits the live events and keeps the
@@ -131,7 +136,10 @@ export const TRACE_LIMITS = Object.freeze({ MAX_BLOCKS: 60, MAX_TEXT_CHARS: 2_00
  *
  * Events (all carry a stable `id` per block):
  *   think_start { id }                 — a decision step began
- *   think_end   { id, ms, text }       — step done; text = harness narration
+ *   think_delta { id, text }           — Think mode: real reasoning-summary text, streamed
+ *   think_end   { id, ms, text, source } — step done; text = the reasoning
+ *                                        summary (source "reasoning") or, when
+ *                                        none streamed, harness narration
  *   tool_start  { id, category, headline, description }
  *   tool_end    { id, ok, result, ms }
  *   activity    { id, text }           — text the model wrote between steps
@@ -139,6 +147,7 @@ export const TRACE_LIMITS = Object.freeze({ MAX_BLOCKS: 60, MAX_TEXT_CHARS: 2_00
 export function createChatTrace({ send = null, now = () => Date.now() } = {}) {
   const blocks = [];
   const open = new Map();
+  const reasoning = new Map();   // think id → streamed reasoning-summary text
   let seq = 0;
   const nextId = (prefix) => `${prefix}_${++seq}`;
   const emit = (event, data) => { try { send?.(event, data); } catch { /* a trace line must never break the turn */ } };
@@ -151,10 +160,23 @@ export function createChatTrace({ send = null, now = () => Date.now() } = {}) {
       emit("think_start", { id });
       return id;
     },
+    /** Real reasoning-summary text for a running think row (Think mode). */
+    thinkDelta(id, text) {
+      if (!id || !text || !open.has(id)) return;
+      reasoning.set(id, (reasoning.get(id) || "") + text);
+      emit("think_delta", { id, text });
+    },
+    /** A reasoning summary, when one streamed, wins over the fallback text. */
     thinkEnd(id, text = "") {
       const started = open.get(id) ?? now();
       open.delete(id);
-      const block = { type: "thinking", id, ms: Math.max(0, now() - started), text: clip(text, TRACE_LIMITS.MAX_TEXT_CHARS) };
+      const summary = (reasoning.get(id) || "").trim();
+      reasoning.delete(id);
+      const block = {
+        type: "thinking", id, ms: Math.max(0, now() - started),
+        text: summary ? clipParagraphs(summary, TRACE_LIMITS.MAX_TEXT_CHARS) : clip(text, TRACE_LIMITS.MAX_TEXT_CHARS),
+        ...(summary ? { source: "reasoning" } : {}),
+      };
       keep(block);
       emit("think_end", block);
       return block;
