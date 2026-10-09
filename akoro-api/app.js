@@ -63,6 +63,7 @@ import tasksModule                from "./modules/tasks/routes.js";
 import selfStudyModule            from "./modules/self-study/routes.js";
 import pharmdModule              from "./modules/pharmd/routes.js";
 import hfMirrorModule            from "./modules/hfmirror/routes.js";
+import parseConsoleModule        from "./modules/records/parseConsole.js";
 import { startRoutineScheduler }  from "./modules/self-study/routines.js";
 import communitiesModule, { COMMUNITIES_QUERY_TIMEOUT_MS } from "./modules/communities/routes.js";
 import { setupDiscussionSocket } from "./modules/communities/discussionSocket.js";
@@ -764,6 +765,7 @@ app.use("/api/self-study/plan", aiLimit);
 app.use("/api/self-study", standardLimit, selfStudyModule);
 app.use("/api/pharmd",      standardLimit, pharmdModule);          // PHARM.D programme catalogue
 app.use("/api/hf",          standardLimit, hfMirrorModule);        // Hugging Face model mirror console (key-guarded)
+app.use("/api/parse",       standardLimit, parseConsoleModule);   // parse-worker console (key-guarded browser tester)
 app.use("/api/communities",  standardLimit, communitiesModule);  // higher-ed study groups
 app.use("/api/instructor/tools", standardLimit, instructorToolsModule);  // platform tools/assets catalog + purchase
 app.use("/api/teaching/tools",   aiLimit,       teachingToolsModule);  // teaching tool suite — LLM + TTS, so aiLimit
