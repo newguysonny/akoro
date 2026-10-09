@@ -205,7 +205,7 @@ session mode" (`fresh | continuation | decay`); "Adaptive Learning Workflow"
 | D31 | How practice works | **Agent Check** (§7.12): NaNa asks, the learner's agent answers only from its owner's notes, Sergeant judges, the Education Engine scores. No human answers. Replaces `practice.generate/submit` in Study Prep, Teaching and Decay. The proctored assessment stays human and separate. | User decision: practice tests the agent, like Battles. |
 | D32 | Decay `retrieval_practice` | **Stays human recall for now** — the one place outside the proctored assessment and guide mode where the learner answers questions. Its answers are scored server-side and tagged `source: "learner_recall"`; the Agent Check still runs the retention check and retest. Revisit later. | User decision (Q16). |
 | D33 | Files and non-traditional goals | Study Prep accepts files; they are saved to the learner's Records library and indexed. For scholarship/competition/custom goals the agent builds the syllabus from the files, asks once for a syllabus or materials if there are none, and only then drafts one (§8.8). | User decision. |
-| D34 | Peer agent help | Upgrade `consult_peer_agents`: ask up to 3 agents **strong on the topic**, answering from their own notes (rewritten, never verbatim), helpers opt in; Sergeant checks accuracy; `peer_help` joins Strategy Library v2; never evidence (§7.13). | User decision. |
+| D34 | Peer agent help | Peers share **breakthroughs, not knowledge**: when a learner gets past a misconception or repeated failure, Akoro records the struggle and what worked (`edu.learning_breakthroughs`). A stuck learner's agent sends only the struggle and gets up to 3 matching stories plus the most effective strategy across ≥ 5 learners. Opt-in, off by default (Settings → Agent); never evidence; `peer_help` joins Strategy Library v2 (§7.13). | User decision. |
 | D35 | Blog research | Upgrade blog search to passage-level hybrid search over article bodies, with citations; used for study methods and strategy, never as syllabus or evidence (§7.14). | User decision. |
 | D10 | Who writes narration? | **Harness templates** (`ActivityNarrator`, grown from `narration.js:deliberate()`) for facts; the agent's `intent` (≤ 240 chars, sanitised, untrusted display text) for "why". v3's `narration` field **is** `intent`. | Deterministic where possible (v3 §40), already built (v7). |
 | D11 | Event store | New generic `edu.workflow_events`. `study_prep_events` is kept read-only and backfilled. | One stream model for four workflows (v3 §43). |
@@ -1099,29 +1099,71 @@ doesn't have any notes on Water Cycle yet — let's teach it first").
   list of gaps.
 - **Teach Agent modal:** the existing UI shows the result card; no trace UI (D28).
 
-### 7.13 Peer agent help (D34) 🟡→ upgrade `peerConsult.js`
+### 7.13 Peer agent help — learning from how others got unstuck (D34) 🟡→ rebuild `peerConsult.js`
 
-**Today:** `consult_peer_agents` picks **two random** active agents and has the
-model answer *in their persona* with general study advice. The peer agents'
-own knowledge is never used, so it is generic advice under another agent's name.
+**Today:** `consult_peer_agents` asks two random agents for general study
+advice in their persona. **Rejected alternative:** having peers answer from
+their notes (content) — the learner already has NaNa and the syllabus for
+content; another learner's notes add nothing.
 
-**Upgrade — real help from agents that know the topic:**
+**What helps instead:** another learner who **had the same struggle and got
+past it**, and **what worked for them**. So peers share *breakthroughs*, not
+knowledge:
 
-| | Today | Upgraded |
-|---|---|---|
-| Who is asked | 2 random active agents | Up to 3 agents **strong on this topic**: their notes cover it (`recallStrength` on their `edu.student_knowledge`) and their concept state for it is ≥ 0.7 |
-| How they answer | Persona prompt, general knowledge | **From their own notes** (`agentRecall` style), rewritten as an explanation, analogy, worked example or memory trick — never quoted verbatim |
-| What they can be asked | Study habits, motivation, … | Those, **plus** "how would you explain *X*?" for a specific gap the Agent Check found |
-| Consent | Not needed (no data used) | The helper learner must **opt in** — **off by default**, switched on in **Settings → Agent** (see below). Without opted-in strong peers, it falls back to today's persona-only advice, labelled as general |
-| Privacy | Asker's data never leaves | Unchanged — plus helper notes never leave as text: only a short rewritten answer, PII-filtered, ≤ 600 chars, shown with the agent's name/emoji only |
+> "My learner also kept mixing up evaporation and transpiration — it took 3
+> tries. What finally worked was drawing a leaf with its stomata and teaching
+> me that transpiration is the plant 'sweating' through them. After that they
+> scored 5/5."
+
+#### 7.13.1 Breakthrough records — captured automatically
+
+When a learner gets unstuck, the Education Engine writes a **breakthrough
+record**. It is built from history Akoro already keeps:
+
+| Struggle detected from | Resolved when |
+|---|---|
+| `learner_concept_evidence`: `misconception_detected` | the same concept gets `misconception_cleared` |
+| `recall_gap` / a failed Agent Check or retest | a later check or retest passes |
+| A topic that needed several attempts or strategy changes (`study_prep_topics.attempts_used`, strategy history) | the topic reaches `understood` |
+| Decay relapse (retained → decayed) | the decay review completes retained |
+| Teaching evidence: unresolved misconception | repaired (`misconceptionRepaired`) |
+
+`edu.learning_breakthroughs`:
+
+```
+id, learner_id (never exposed), agent_id,
+subject, class_level, concept_id, topic_label,
+struggle_type      misconception | repeated_failure | slow_progress | decay_relapse
+struggle_summary   ≤ 200 chars — "confused evaporation with transpiration"
+misconception_key  normalised label for matching
+attempts_before    int
+strategies_tried   text[]   — e.g. {standard_explanation, different_analogy}
+what_worked        strategy id (from the library) + ≤ 300-char description
+                   of the move that worked ("drew a leaf with stomata; the
+                   'plant sweating' analogy")
+score_before, score_after, days_to_overcome,
+source_workflow, shareable boolean, embedding vector, created_at
+```
+
+- `struggle_summary` and `what_worked` are **written by a locked summariser
+  model from the evidence summaries and the strategy record**, not copied from
+  the learner's messages or notes. A filter removes names, schools, contact
+  details and anything quoted from the learner.
+- `shareable` is set from the learner's opt-in at the time (Settings → Agent);
+  turning the setting off later makes all their records unshareable.
+- Learners can see their own breakthroughs ("Your agent's stories") under
+  Settings → Agent and hide any one of them.
+
+#### 7.13.1a Consent
 
 **The setting (Settings → Agent tab, `pages/settings/agentTab.jsx`):** a new
 section "Helping other learners" with one `Toggle`:
 
 > **Let my agent help other learners** — Off
-> When this is on, other learners' agents can ask yours how it would explain a
-> topic. Your agent answers in its own words from what you've taught it. Your
-> notes, name and details are never shared — only your agent's name and emoji.
+> When this is on, other learners' agents can learn from how you got
+> past tricky topics — what you struggled with and what finally worked. Your
+> notes, messages, name and school are never shared — only a short summary
+> and your agent's name and emoji.
 > You can turn this off at any time.
 
 - Stored as `user_agents.help_others_opt_in boolean default false`, saved with
@@ -1130,21 +1172,55 @@ section "Helping other learners" with one `Toggle`:
 - No learner is ever asked to turn it on during a study session; the setting is
   only in Settings.
 
-**As a strategy:** Strategy Library v2 adds **`peer_help`**. After a gap, the
-controller may choose it: the gaps are sent to strong peers, their
-explanations are checked by Sergeant for accuracy against the topic (wrong
-ones are dropped), and the survivors go into the learner's Teaching session as
-material NaNa can use ("Another learner's agent explains it like this…"). The
-learner still teaches their own agent; peer answers are **never evidence** and
-never written into the learner's notes automatically.
+#### 7.13.2 Consulting
 
-**Also a research tool:** during Study Prep planning the agent may ask strong
-peers how they prepared for the same exam or subject (study habits).
+The asking agent never sends knowledge or the learner's data — only **the
+struggle**:
 
-**Limits:** one peer consult per topic per session, max 3 peers, metered to
-the asking learner (feature `agent_peer_consult`), Sergeant accuracy check
-runs on the locked assessor model. Helpers may get a "your agent helped
-someone" notification (no details of who).
+```
+peers.consult({ conceptId, struggleType, misconception, classLevel? })
+  → {
+      stories: [ { agent: "Kofi's Agent 🦉", struggle, attemptsBefore,
+                   whatWorked, strategy, scoreBefore, scoreAfter } ],   // up to 3
+      pattern: { learners: 12, mostEffective: "teach_back", share: 0.67 }  // only if ≥ 5 learners
+    }
+```
+
+- **Matching:** same concept, then misconception similarity (embedding on
+  `struggle_summary` + `misconception_key`), then similar class level; prefer
+  breakthroughs with a big score jump and recent dates. Only `shareable` records.
+- **Pattern:** across all matching shareable records, which strategy most often
+  worked — returned only when at least 5 learners match, so no single learner
+  can be identified.
+- Stories are shown with the agent's name and emoji only.
+
+#### 7.13.3 How the stories are used
+
+- **Strategy choice:** the pattern feeds `recommendStrategies` in the Adaptive
+  Learning Engine as one input ("for this misconception, `teach_back` worked
+  for 8 of 12 learners"). The controller still chooses; the harness still checks
+  the library.
+- **Teaching:** with the `peer_help` strategy (Strategy Library v2), the
+  stories go into the learner's Teaching session. NaNa uses the *what worked*
+  move with this learner ("Another learner fixed this by drawing the leaf's
+  stomata — want to try that?"). The learner still teaches their own agent.
+- **Agent Chat:** when a learner says they're stuck, the agent can share a
+  matching story directly.
+- Stories are **never evidence** and never written to the learner's notes.
+
+#### 7.13.4 Also for study struggles (later)
+
+The same record shape can capture non-topic struggles — breaking a streak and
+recovering it, exam-week planning, consistency — from goal and streak
+history. Out of scope for the first release; the table allows
+`struggle_type = 'study_habit'` from day one.
+
+#### 7.13.5 Limits
+
+One consult per topic per session; up to 3 stories; the consult itself is a
+database search (cheap), plus one locked-model call to phrase the stories for
+this learner, metered to the asker (feature `agent_peer_consult`). Helpers may
+get a "your agent's story helped someone" notification (no details of who).
 
 ### 7.14 Blog research (D35) 🟡→ upgrade `blogResearch.js`
 
@@ -1253,7 +1329,7 @@ state machine is.
 | verification | plan checks | `plan.validate` | `safety` |
 | diagnostic / retest | topic `active` / `diagnostic_ready` / `retest_ready` | `agent.get_knowledge_coverage` (read), `practice.run_agent_check` (execute, §7.12) | `reflection` |
 | reflection / outcome_evaluation | after a score | read tools | `reflection` |
-| strategy_selection | `intervention_required` | `peers.consult({ gaps })` when choosing `peer_help` (§7.13), then `request_teaching({ strategy, focusGaps, peerExplanations? })` 🆕 ⟂ — always a Teaching Workflow (D15) | `strategies` |
+| strategy_selection | `intervention_required` | `peers.consult({ conceptId, struggleType, misconception })` — stories + pattern from learners who overcame the same struggle (§7.13), then `request_teaching({ strategy, focusGaps, peerExplanations? })` 🆕 ⟂ — always a Teaching Workflow (D15) | `strategies` |
 | topic_advance | topic settled | `advance_topic` ⟂, `defer_topic` ⟂, `topic.flag` | `reflection` |
 | session_completion | all topics settled | `conclude_session` ⟂ | `reflection` |
 
@@ -2041,6 +2117,17 @@ content.blog_chunks (                 -- §7.14
 
 edu/public user_agents: + help_others_opt_in boolean default false, + helped_count int default 0   -- §7.13
 
+edu.learning_breakthroughs (           -- §7.13.1
+  id uuid pk, learner_id uuid, agent_id uuid, subject text, class_level text,
+  concept_id uuid null, topic_label text,
+  struggle_type text check in ('misconception','repeated_failure','slow_progress','decay_relapse','study_habit'),
+  struggle_summary text, misconception_key text, attempts_before int,
+  strategies_tried text[], what_worked_strategy text, what_worked text,
+  score_before numeric, score_after numeric, days_to_overcome int,
+  source_workflow text, shareable boolean default false, hidden boolean default false,
+  embedding vector, created_at timestamptz default now()
+)
+
 edu.generated_syllabi (
   id uuid pk, created_by_learner uuid, subject text, class_level text,
   exam_board text null, term text null,
@@ -2359,13 +2446,17 @@ Variants: no files → the agent asks once for a syllabus or materials →
 learner says "just draft it" → `syllabus.generate`; the agent tries
 `syllabus.generate` while files are attached → rejected.
 
-**O — Peer help:** an Agent Check names a gap → the agent chooses `peer_help`
-→ up to 3 opted-in agents strong on the topic answer from their notes →
-Sergeant drops an inaccurate one → the rest go into the Teaching session as
-NaNa material → nothing is written to the learner's notes or evidence.
-Variants: no opted-in strong peers → labelled general advice; a helper who has
-not opted in is never asked; the toggle is off for every new account and only
-changeable in Settings → Agent; turning it off excludes the agent from the next consult; a peer reply containing a phone number is filtered.
+**O — Peer help:** learner A (opted in) confuses evaporation and
+transpiration, fails twice, then passes after a teach-back with a stomata
+drawing → a breakthrough record is written (summary and what-worked phrased by
+the locked model, no quotes, no names). Learner B's Agent Check shows the same
+confusion → the agent consults → B gets A's story ("took 3 tries; drawing the
+leaf's stomata worked; 2/5 → 5/5") and, once ≥ 5 learners match, the pattern
+("teach_back worked for 8 of 12") → NaNa tries that move in B's Teaching
+session → nothing is written to B's notes or evidence. Variants: A has the
+setting off → A's story is never returned; A turns it off later → all A's
+records become unshareable; fewer than 5 matches → no pattern shown; B's own
+data never leaves B's side; A hides one story in Settings → it is never shown.
 
 **P — Blog research:** the agent searches "spaced repetition before exams" →
 a passage from a post body (not only titles) comes back with its slug → the
@@ -2431,6 +2522,7 @@ LLM failure must never corrupt workflow state.
 | Q7 | ~~"Learning with guide" toggle~~ — **resolved (D24):** built as the `learn_with_guide` Teaching mode. | Done |
 | Q16 | ~~Decay `retrieval_practice` human vs agent~~ — **resolved (D32):** keep human recall for now. | Done |
 | Q17 | ~~Peer help consent default~~ — **resolved (D34):** off by default; a clear toggle in Settings → Agent. | Done |
+| Q18 | The cross-learner **pattern** ("teach_back worked for 8 of 12"): count only opted-in learners (plan default), or all learners anonymously since only totals are shown (≥ 5)? | Before §7.13 ships |
 | Q14 | ~~Practice UI~~ — **resolved (D29):** Practice is the live proctored assessment in `AssessmentRoom`, which keeps its UI. | Done |
 | Q13 | ~~DeepSeek / Grok data handling~~ — **resolved:** accepted by the product owner (2026-10-09); both enabled per §7.11.5a. | Done |
 | Q12 | ~~Per-tier model lists~~ — **resolved (§7.11.5a).** Grok and DeepSeek model ids and prices are filled into `AI_MODELS` at setup (a setup task, not an open question). Fable stays off until a tier is given it. | Done |
