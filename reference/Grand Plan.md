@@ -945,7 +945,7 @@ set per tier by admins, as an `allowed_models[]` list on the `tiers` table
 deploy needed to change it. A model must be both `enabled` in the catalogue
 and in the learner's tier list to appear in their picker.
 
-Starting lists (admin-editable; confirm before launch):
+Starting lists (confirmed 2026-10-09; admins can edit them later):
 
 | Tier | Default | May switch to |
 |---|---|---|
@@ -953,7 +953,7 @@ Starting lists (admin-editable; confirm before launch):
 | Trial | `gpt-4o-mini` | Claude Haiku |
 | Freemium | `gpt-4o-mini` | Claude Haiku, Claude Sonnet, GPT-4.1 |
 | Premium | `gpt-4o-mini` | Claude Haiku, Claude Sonnet, GPT-4.1, Claude Opus, Grok |
-| (any) | — | Claude Fable: off for everyone until Q12 decides |
+| (any) | — | Claude Fable: off for everyone (can be added to a tier list later) |
 
 - Coins are still charged at the chosen model's price on every tier; the tier
   list controls access, not price.
@@ -1900,7 +1900,7 @@ LLM failure must never corrupt workflow state.
 | Q5 | Starting cap values in §7.2 table (Teaching turns, strategy changes, Practice caps) | Tune in staging |
 | Q6 | ~~`retrieval_practice`~~ — **resolved (D25):** Strategy Library v2, Decay Review + Practice only. | Done |
 | Q7 | ~~"Learning with guide" toggle~~ — **resolved (D24):** built as the `learn_with_guide` Teaching mode. | Done |
-| Q12 | Confirm the starting per-tier model lists in §7.11.5a; Grok model ids and prices; whether Fable (slow, ≈65× the default's cost) is offered at all. | Before picker UI |
+| Q12 | Per-tier model lists — **resolved (§7.11.5a).** Still open: Grok model ids and prices at setup. Fable stays off until a tier is given it. | Before picker UI |
 | Q8 | `content.search` — enable for Study Prep research or keep disabled? | Phase 4 |
 | Q9 | Who can see developer mode (staff role only)? | Phase 11 |
 | Q10 | Notification channels for handoff/completion (in-app only, or web push via existing `notifications/webpush.js`)? | Phase 7 |
