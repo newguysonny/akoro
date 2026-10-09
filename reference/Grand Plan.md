@@ -205,7 +205,8 @@ session mode" (`fresh | continuation | decay`); "Adaptive Learning Workflow"
 | D20 | Migration strategy | Generalise the existing Study Prep engine first. **Existing contract tests must stay green** at every phase. Teaching, Decay, Practice move onto it after. | Full structure 2 §26. |
 | D21 | Learner model scale | Concept state 0–1 is canonical. `knowledge_confidence` (0–100) is read as `/100` fallback only. Never mix scales silently. | All sources agree. |
 | D22 | Billing | Every LLM call already meters through `lib/aiModel.js` → `chargeForAI`. The harness checks balance before each paid action. Study Prep keeps its plan estimate + ceiling. Teaching/Decay are metered per call (§7.10). | Matches today's billing. |
-| D23 | Which LLM runs where? | **A Model Controller** (§7.11) resolves the model for every call from env-configured models and roles. No call site names a model. A learner-facing model picker in the chat box comes later, behind a flag, limited to an allowlist. | User decision. Lets new providers/models be added by env without code changes. |
+| D23 | Which LLM? | **Learners can switch models** (GPT, Claude Sonnet/Opus/Haiku/Fable, Grok, …) from a picker in the chat box; **default stays `gpt-4o-mini`**. The choice drives every call in their session (chat, controller agents, personas) except assessment/evidence judging, which env keeps fixed. Models, prices and providers are declared in env (§7.11). | User decision: stronger models for learners who want better results, billed at that model's price. |
+| D25 | `retrieval_practice` strategy | **Added in Strategy Library v2**, permitted in **Decay Review and Practice only**; not in Study Prep for now. | User decision. Decay is forgetting, not misunderstanding; recall is the cheap first fix (§10.2). |
 | D24 | Teaching modes | **Two modes in one Teaching Workflow:** `teach_agent` (learner teaches the protégé, NaNa coaches) and `learn_with_guide` (NaNa teaches the learner directly, **no protégé**). Same states, transcript, evidence pipeline and progression gate. The learner can switch between turns. | User decision. "Learning from the teacher" and "teaching an agent with the teacher's guidance". |
 
 ---
@@ -627,7 +628,26 @@ recordStrategyOutcome({ strategy, version, before, after })
 - `student-state.js:decideNextAction` is folded in here as a **recommendation**
   input, and stops acting as an independent decision-maker.
 - **Strategy Library v1** (exists): `teach_back`, `different_analogy`,
-  `interleave`, `space_out`, `escalate_human`. Versioned (`strategy_version`
+  `interleave`, `space_out`, `escalate_human`.
+- **Strategy Library v2** (D25) adds `retrieval_practice`: the learner recalls
+  from memory with a hint ladder (no hint → cue → partial hint), scored by the
+  server, before any re-explanation. Each strategy carries the workflows it is
+  permitted in:
+
+  | Strategy | Study Prep | Teaching | Decay Review | Practice |
+  |---|---|---|---|---|
+  | teach_back | ✓ | ✓ | ✓ (via child Teaching) | — |
+  | different_analogy | ✓ | ✓ | ✓ | — |
+  | interleave | ✓ | — | — | ✓ |
+  | space_out | ✓ | — | ✓ | ✓ |
+  | escalate_human | ✓ | ✓ | ✓ | — |
+  | **retrieval_practice** | **— (not for now)** | — | **✓** | **✓** |
+
+  The harness checks `(strategy, version, workflowType)`; `strategy_not_permitted`
+  otherwise. The library is defined once — today it is duplicated in
+  `education-engine.js` (`STRATEGY_LIBRARY`) and `state-machine.js`
+  (`POLICY.STRATEGY_LIBRARY`); merge them, then update the `offer_strategy`
+  tool description and `strategies/STRATEGIES.md` in the same change. Versioned (`strategy_version`
   persisted on every use). The agent may only choose from it. No repeating the
   same failed strategy indefinitely: `recommendStrategies` excludes a strategy
   that already failed for this concept in this workflow.
@@ -799,57 +819,64 @@ workflow instance at a time (advisory lock or `locked_until` column on
 - Charges carry a `ref` already (`chargeForAI` ✅); practice charges reuse the
   attempt id.
 
-### 7.11 Model Controller 🆕 (D23)
+### 7.11 Model switching (D23) 🆕
+
+**What it is for:** learners can switch the LLM behind Akoro (GPT, Claude
+Sonnet, Claude Opus, Grok, …) when they want stronger results, and pay that
+model's price. **The default stays `gpt-4o-mini`** — nothing changes for a
+learner who never touches the picker.
 
 **Problem today:** `lib/aiModel.js` reads one `OPENAI_MODEL` (default
 `gpt-4o-mini`), about 60 call sites import it, the client is OpenAI-only,
-and `aiPricing.js` charges **any unknown model at gpt-4o-mini prices**.
-Switching to a pricier model would silently under-charge.
-
-**Goal:** add or swap models through env only; choose a model per role; later
-let the learner pick a model in the chat box.
+and `aiPricing.js` charges **any unknown model at gpt-4o-mini prices** — a
+learner on Opus would be charged as if on gpt-4o-mini.
 
 #### 7.11.1 Model catalogue (env-driven)
 
-```
-AI_MODELS = JSON list, e.g.
-[
-  { "id": "fast",     "provider": "openai",    "apiModel": "gpt-4o-mini",
-    "label": "Fast",     "price": { "in": 0.15, "out": 0.60 },
-    "caps": ["tools","stream","json"], "selectable": true,  "tier": "free" },
-  { "id": "smart",    "provider": "openai",    "apiModel": "gpt-4.1",
-    "label": "Smart",    "price": { "in": 2.00, "out": 8.00 },
-    "caps": ["tools","stream","json"], "selectable": true,  "tier": "plus" },
-  { "id": "claude",   "provider": "anthropic", "apiModel": "<model id>",
-    "label": "Claude",   "price": { "in": …, "out": … },
-    "caps": ["tools","stream","json"], "selectable": false }
-]
-```
+Models are declared in env (`AI_MODELS`, JSON). Adding a model or a provider
+is an env change plus, for a new provider type, one adapter.
 
-- Providers: `openai`, `anthropic`, `openai_compatible` (any OpenAI-shaped
-  endpoint; `baseUrlEnv` + `apiKeyEnv` per entry). Keys stay in env, never in
-  the catalogue JSON.
-- A model **without a price is refused at boot** (fixes the silent fallback).
-  The price table moves from the hard-coded `MODEL_PRICES` into the catalogue;
-  the existing entries become the default catalogue so nothing changes when
-  `AI_MODELS` is unset.
-- Each entry declares capabilities. A role that needs tool calling can only
-  resolve to a model with `tools`.
+| id | Provider | API model | Learner label | $/1M in | $/1M out | Notes |
+|---|---|---|---|---|---|---|
+| `gpt-4o-mini` | openai | `gpt-4o-mini` | Akoro Standard | 0.15 | 0.60 | **Default** |
+| `gpt-4.1` | openai | `gpt-4.1` | GPT-4.1 | 2.00 | 8.00 | from current price table |
+| `claude-haiku` | anthropic | `claude-haiku-5-5` | Claude Haiku | 0.10 | 0.50 | ≤100K prompt; 0.50 / 2.50 beyond |
+| `claude-sonnet` | anthropic | `claude-sonnet-5-5` | Claude Sonnet | 2.00 | 10.00 | |
+| `claude-opus` | anthropic | `claude-opus-5-5` | Claude Opus | 4.00 | 20.00 | |
+| `claude-fable` | anthropic | `claude-fable-5-1` | Claude Fable | 10.00 | 50.00 | most capable; slow on hard turns |
+| `grok` | xai (OpenAI-compatible) | set in env | Grok | set in env | set in env | ids and prices change — verify at setup |
 
-#### 7.11.2 Roles
+Claude prices are Anthropic first-party rates as of 2026-10-06. Every price
+lives in the catalogue, not in code, and must be re-checked when a model is added.
 
-Every LLM call names a **role**, not a model:
+Each entry has: `id`, `provider`, `apiModel`, `label`, `price` (in, out,
+cached-in, plus long-prompt tiers where the provider has them), `caps`
+(`tools`, `stream`, `json`), `selectable`, `tier` (which learner plans may
+use it), `enabled`, and optional `fallbackModel`.
 
-```
-study_prep_controller · teaching_controller · decay_controller · practice_controller
-persona_protege · persona_guide · persona_assessor
-chat · tasks · instructor · default
-```
+- **A model without a price fails boot.** The hard-coded `MODEL_PRICES`
+  becomes the default catalogue, so nothing changes while `AI_MODELS` is unset.
+- API keys stay in env per provider (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
+  `XAI_API_KEY`), never in the catalogue.
+- Only models with `tools` can run workflow controllers (the agent loop needs
+  tool calling). All models listed above support tool calling and streaming.
 
-Role → model comes from env: `AI_MODEL_DEFAULT=fast`,
-`AI_MODEL_ROLE_TEACHING_CONTROLLER=smart`, … Unset roles use the default.
-`OPENAI_MODEL` keeps working as the legacy default during migration.
-Embeddings, speech-to-text and text-to-speech keep their own settings (out of scope).
+#### 7.11.2 What the learner's choice controls
+
+The learner picks **one model for their conversation or session**. It is used
+for every LLM call in that session, so the whole agent gets smarter, not just
+the chat text:
+
+| Call | Uses the learner's model? | Why |
+|---|---|---|
+| Chat replies | Yes | |
+| Workflow controller agents (Study Prep, Teaching, Decay, Practice) | Yes | Safety lives in the harness, not the model — rules, caps, gates and scoring hold whatever model decides |
+| Persona replies (protégé, NaNa) | Yes | |
+| Assessment judgement (Sargeant), evidence analysis | **No — fixed by env** | Grading must be consistent across learners; a learner shouldn't change how strictly they are marked |
+| Background/system jobs (decay scheduler, ladder prewarm, tasks) | No — env default | No learner chose them |
+
+Roles stay in the code so env can still route a role
+(`AI_MODEL_ROLE_ASSESSOR=gpt-4o-mini`) or lock it (`AI_MODEL_LOCKED_ROLES=assessor,evidence`).
 
 #### 7.11.3 Resolution
 
@@ -857,50 +884,70 @@ Embeddings, speech-to-text and text-to-speech keep their own settings (out of sc
 resolveModel({ role, learnerChoice, workflowInstance }) → { id, provider, apiModel, price, caps }
 ```
 
-Order: **locked role** (admin/env says this role is fixed) → **learner's
-choice** (if the picker is on, the model is `selectable`, the learner's plan
-allows its tier, and it has the role's required capabilities) → **role env**
-→ **default**. Every resolution is logged on the call's telemetry
-(`recordAiCall` already records `model`).
+1. Role locked by env → env model.
+2. Learner's choice, if: picker enabled · model `enabled` and `selectable` ·
+   learner's plan allows its `tier` · model has the role's required `caps`.
+3. Role env default (`AI_MODEL_ROLE_*`).
+4. `AI_MODEL_DEFAULT` (= `gpt-4o-mini`; legacy `OPENAI_MODEL` honoured during migration).
 
-- Workflow controllers and the progression-critical roles are **locked by
-  default**; the learner's choice applies to `chat` and to the reply-producing
-  persona roles (`persona_guide`, `persona_protege`) unless env says otherwise.
-- The resolved model id is stored on the decision event (developer mode) and
-  on `workflow_instances.model_selection` so a session is reproducible.
-- **Fallback model:** if a provider's circuit breaker is open, the role's
-  `fallbackModel` (same capabilities) is used and a `model.fallback` telemetry
-  record is written. The agent loop's own fallback (D8) still applies on top.
+An invalid choice falls back to step 3/4 and the learner sees why. The
+resolved model is stored on `workflow_instances.model_selection` and on
+every decision event (developer mode). `recordAiCall` already logs `model`.
 
 #### 7.11.4 Provider adapters
 
-`meteredCreate` stays the single call path (billing, timing, breaker,
-max-token guard). Behind it, one adapter per provider normalises to the
-OpenAI chat-completions shape the codebase already uses: messages, tools,
-`tool_choice: "required"`, streaming chunks, and `usage` (prompt / completion
-/ cached tokens), so billing and the agent loop do not change. One circuit
-breaker per provider.
+`meteredCreate` stays the single call path (balance check, billing, timing,
+breaker, max-token guard). Behind it, one adapter per provider normalises to
+the internal shape the codebase already uses (OpenAI chat-completions style:
+messages, tools, tool call, streaming chunks, `usage`):
 
-#### 7.11.5 Learner model picker (later)
+- **openai** — today's client.
+- **openai_compatible** — same client with `baseURL` + key from env (Grok/xAI,
+  others).
+- **anthropic** — the official `@anthropic-ai/sdk` Messages API (never an
+  OpenAI-compatible shim). The adapter must handle:
+  - **No forced tool choice.** Current Claude models reject
+    `tool_choice: any/tool`. The agent loop's "required" becomes `auto` + a
+    prompt instruction to call exactly one tool + `strict: true` tool schemas.
+    A text-only answer is treated as a malformed iteration (the loop already
+    handles this; Teaching falls back per D8).
+  - **Thinking.** Claude thinks by default and Opus 5.5 can't turn it off;
+    depth is set with `effort` (`low` for chat and controller steps by default,
+    tunable per role). Thinking content is never shown to learners (D9) and
+    never stored.
+  - **Refusals.** Check `stop_reason === "refusal"` before reading content;
+    turn it into a normal `model_refusal` observation, and use the server-side
+    fallback option where available.
+  - **Usage mapping** (`input_tokens`, `output_tokens`, cache reads) → the
+    billing fields.
+  - One circuit breaker per provider; `fallbackModel` used when it is open.
 
-- `GET /api/ai/models` → selectable models with label, tier, and a relative
-  cost hint ("≈3× coins per message").
-- The choice is saved per chat thread / workflow instance; switching applies
-  from the next turn and emits a `model.changed` learner event.
-- The harness checks the choice on every call (allowlist, tier, capability).
-  An invalid choice falls back to the role default and tells the learner.
-- Plan card and coin estimates use the **resolved** model's price.
+#### 7.11.5 Learner model picker (chat box)
+
+- `GET /api/ai/models` → models the learner may pick: label, short
+  description ("Best for hard topics"), tier lock, and a cost hint relative
+  to the default ("≈ 30× coins per message" for Opus vs the default).
+- The picker sits in the chat box (and the Teaching/Study Prep composer).
+  The choice is saved on the chat thread / workflow instance and applies from
+  the next message; it emits a `model.changed` learner event.
+- The learner sees the cost before switching. Study Prep plan cards, the
+  ceiling, and Teaching's per-turn balance check all use the **chosen**
+  model's price. Switching mid-session re-checks the remaining budget.
+- Premium models can be limited to paid tiers (`tier`), and admins can
+  disable any model instantly with `enabled: false`.
 
 #### 7.11.6 Migration
 
-1. Add `lib/modelRegistry.js` (catalogue, roles, `resolveModel`), defaulting
-   to today's behaviour.
-2. `meteredCreate` accepts `__role`; when `model` is absent it resolves by role.
-3. Move call sites from `OPENAI_MODEL` to `__role` (grep-enforced contract test:
-   no new `OPENAI_MODEL` imports outside the registry).
-4. Add the Anthropic and `openai_compatible` adapters with contract tests
-   (tool call round-trip, streaming usage, error mapping).
-5. Picker UI behind `AI_MODEL_PICKER_ENABLED`.
+1. `lib/modelRegistry.js` (catalogue, roles, `resolveModel`) defaulting to
+   today's behaviour; prices required.
+2. `meteredCreate` accepts `__role` and `__learnerChoice`; resolves when
+   `model` is absent.
+3. Move call sites from `OPENAI_MODEL` to roles (contract test: no new
+   `OPENAI_MODEL` imports outside the registry).
+4. `openai_compatible` and `anthropic` adapters with contract tests: tool-call
+   round trip, no-forced-tool-choice path, streaming usage, refusal mapping,
+   error mapping, billing at the right price.
+5. Picker API + UI behind `AI_MODEL_PICKER_ENABLED`.
 
 ---
 
@@ -1265,10 +1312,27 @@ any non-terminal ⇄ paused ; → abandoned | cancelled
 | inspect_decay / inspect_history / inspect_concept | `decay.get_alert`, `learner.get_history`, `learner.get_concept_evidence`, `concept.get_prerequisites` | `decay_inspection` |
 | generate_diagnostic | `practice.generate({ mode: "retention_check", size: small })` ⟂ (waits for answers) | `decay_inspection` |
 | evaluate_retention | read the scored result (Education Engine `evaluateRetention` decides retained/decayed) | `decay_inspection` |
-| select_strategy | `strategy.select`, `request_teach_back` ⟂ (creates a child Teaching Workflow, `entry_mode = decay_review`) | `decay_review` |
+| select_strategy | `strategy.select` (normally `retrieval_practice` first), `request_teach_back` ⟂ (creates a child Teaching Workflow, `entry_mode = decay_review`) | `decay_review` |
+| retrieval_practice | `retrieval.ask({ conceptId, hintLevel })` ⟂ — recall question; the hint ladder (none → cue → partial) is enforced by the harness; answers scored server-side; up to 3 rounds | `decay_review` |
 | intervene | turn-based, same turn shape as Teaching §9.3: `guide.coach`, `protege.respond`, `explain_with_strategy` ⟂ | `decay_review` |
 | generate_retest / score_retest | `practice.generate({ mode: "retest" })` ⟂; scoring harness-only | `decay_review` |
 | complete | `decay.propose_complete` ⟂ | `decay_review` |
+
+**Typical decay path with `retrieval_practice`:**
+
+```
+short check (≈3 questions) → evaluate_retention: decayed
+→ retrieval_practice: up to 3 recall rounds, hint ladder, server-scored
+   each answer → retrieval_success / retrieval_failure evidence
+→ retest
+   passed → completed; Education Engine pushes the next review date further out
+   failed → recall isn't enough, it needs re-learning
+          → different_analogy (Teaching in learn_with_guide mode, or inline)
+            or teach_back (child Teaching in teach_agent mode)
+```
+
+Effect: most reviews become short and cheap; full teaching only happens when
+recall clearly fails; recall results feed the retention curve directly.
 
 The intervention phase reuses the Teaching turn runtime (pre-steps → agent
 loop with cap 3 and fallback → post-steps), so today's decay experience
@@ -1318,6 +1382,7 @@ recoverable.
 | score | harness-only (Education Engine) | — |
 | evaluate / record_evidence | read tools; Education Engine writes evidence | `practice` |
 | recommend_next | `practice.propose_another_set` ⟂ · `practice.recommend_teaching` ⟂ · `practice.propose_complete` ⟂ | `practice` |
+| retrieval_practice | `retrieval.ask` ⟂ — recall rounds on concepts missed in the set, before offering another set | `practice` |
 
 ### 11.3 Rules
 
@@ -1635,7 +1700,7 @@ existing contract test.** Phases 11 (UI) can start in parallel after Phase 3.
   `operation`, `decisionTimeoutMs`, fallback hook, per-workflow caps.
 - Generic harness core + per-workflow check plug-ins; existing rejection codes unchanged.
 - Per-workflow tool registries over one binder; add `persona` level and display templates.
-- Model Controller backend (§7.11.6 steps 1–4): `lib/modelRegistry.js`,
+- Model switching backend (§7.11.6 steps 1–4): `lib/modelRegistry.js`,
   roles, required prices, `__role` on `meteredCreate`, provider adapters.
 - **Exit:** Study Prep runs through the generic runtime with identical
   behaviour (existing tests green); runtime contract tests with stub agents
@@ -1731,7 +1796,10 @@ topic `retest_ready` → continue Study Prep → retest 5/5 → `understood` →
 next topic → … → session completes. No state lost at any point.
 
 **C — Decay:** alert → Review → Decay Review created → inspect → diagnostic
-→ decayed → intervention → retest → evidence → completed; alert resolved.
+→ decayed → `retrieval_practice` rounds → retest → evidence → completed; alert
+resolved; next review date extended. Variant: recall fails → `different_analogy`
+or child Teaching → retest. `retrieval_practice` requested inside Study Prep →
+`strategy_not_permitted`.
 
 **D — Practice:** Practice → generate (labelled sources) → answer → server
 score → evidence → recommend next → completed.
@@ -1765,12 +1833,13 @@ event → evidence recorded with `source: learn_with_guide` → gate reaches
 MASTERY → completed. Then: switch modes mid-session → the next turn uses the
 protégé, and phase/transcript/evidence carry over.
 
-**K — Model switching:** an env-only change of `AI_MODEL_ROLE_TEACHING_CONTROLLER`
-changes the model used with no code change; a catalogue entry without a price
-fails boot; with the picker on, the learner selects an allowed model → the
-next chat turn uses it and is billed at its price; selecting a model outside
-their tier is refused and falls back with a notice; a locked role ignores the
-learner's choice.
+**K — Model switching:** default is `gpt-4o-mini`; the learner picks Claude
+Sonnet in the chat box → the next message, the controller agent's decisions
+and persona replies all use Sonnet and are billed at Sonnet's price; the
+assessor stays on its env model; a Claude model never receives a forced
+`tool_choice`; a Claude refusal becomes a `model_refusal` observation, not a
+crash; a model outside the learner's tier is refused with a notice; a catalogue
+entry without a price fails boot; adding Grok is an env-only change.
 
 **UI checks:** thinking blocks collapse/expand; tool rows stream in order;
 activity text never in a bubble; no tool names in learner mode; rejects render
@@ -1800,12 +1869,12 @@ LLM failure must never corrupt workflow state.
 |---|---|---|
 | Q1 | JSS1 Basic Science rows in `edu.syllabus_*` and `concept_catalog` ❓ | Phase 0 |
 | Q2 | Real per-generation coin cost in `lib/aiPricing.js` (examples use 2) ❓ | Phase 0 |
-| Q3 | Which model should each controller role default to? (With the Model Controller this is an env setting, not a code change — decide from a Phase 6 spike on quality vs cost vs latency.) | Phase 6 spike |
+| Q3 | Default stays `gpt-4o-mini` (D23). Open: which assessor/evidence model env locks to, and whether controller prompts need per-model tuning (run the same scenarios on each selectable model). | Phase 6 spike |
 | Q4 | Teaching worst-case turn cost and the balance check threshold | Phase 6 |
 | Q5 | Starting cap values in §7.2 table (Teaching turns, strategy changes, Practice caps) | Tune in staging |
-| Q6 | Should `retrieval_practice` join the Strategy Library (v2) for Decay? Library changes are versioned. | Phase 8 |
+| Q6 | ~~`retrieval_practice`~~ — **resolved (D25):** Strategy Library v2, Decay Review + Practice only. | Done |
 | Q7 | ~~"Learning with guide" toggle~~ — **resolved (D24):** built as the `learn_with_guide` Teaching mode. | Done |
-| Q12 | Which models are learner-selectable, on which plan tiers, and how is the relative cost shown? | Before picker UI |
+| Q12 | Which models are learner-selectable on which plan tiers; Grok model ids and prices; whether Fable (slow, expensive) is offered at all. | Before picker UI |
 | Q8 | `content.search` — enable for Study Prep research or keep disabled? | Phase 4 |
 | Q9 | Who can see developer mode (staff role only)? | Phase 11 |
 | Q10 | Notification channels for handoff/completion (in-app only, or web push via existing `notifications/webpush.js`)? | Phase 7 |
@@ -1823,5 +1892,5 @@ LLM failure must never corrupt workflow state.
 | Adaptive Learning *Engine* (not workflow) | Full structure 3 | v3 §19–20 |
 | Promote study-prep infrastructure; migration map | Full structure 2 | — |
 | Code baseline, harness checks, policy constants, manifest, five-part operation rule | Study-Prep Master Plan v7 | Plans 1–5, concrete sessions v1/v2 |
-| Agent-driven teaching turn, controller agent, loop end/cap/fallback, Model Controller, learn_with_guide mode | User decisions (this review) | — |
+| Agent-driven teaching turn, controller agent, loop end/cap/fallback, learner model switching, learn_with_guide mode, retrieval_practice | User decisions (this review) | Claude API reference (model ids, prices, tool_choice/thinking/refusal behaviour, 2026-10-06) |
 | Code facts | `akoro-api` / `akoro-learner` as of 2026-10-09 | — |
