@@ -193,6 +193,7 @@ session mode" (`fresh | continuation | decay`); "Adaptive Learning Workflow"
 | D8 | Teaching timeout | **On decision timeout, malformed output or LLM failure, fall back to the default recommendation** (the existing dialogue-move → action table). | User decision. The learner always gets a reply. |
 | D9 | What streams into a thinking block? | **The provider's reasoning *summary* when the chosen model offers one** (OpenAI reasoning models via the Responses API — already used by agent-chat Think mode; Claude with `thinking.display: "summarized"`), streamed live. **Otherwise** (e.g. the default `gpt-4o-mini`) the agent's `intent` streamed as it is generated, then the harness narration. Raw chain-of-thought is never available or shown. Summaries are shown live but **not stored**; on reload the block shows the stored narration. | Matches the coding-agent experience and the existing `ThoughtBlock`, without exposing hidden reasoning. |
 | D27 | Activity text | **The agent may write its own short learner-facing message** with each action (`message`, ≤ 400 chars, streamed as an activity block), like the text a coding agent writes between tool calls. Facts in it (scores, pass/fail, coins) must come from the harness: the narrator inserts them; the model's text may not state them. | Makes the stream read like a coding agent instead of only templates. |
+| D28 | Where the live stream UI is used | **Only the Agent Chat tab** (`AgentChatTab.jsx`) renders the coding-agent stream (thinking → tool rows → activity → reply), including Study Prep and any workflow shown in chat. **`TeachAgentModal` keeps its current UI** (and `DecaySessionModal`, which shares that design). The backend still emits and stores the same events for every workflow; the modals just don't render them as a trace. | User decision. |
 | D10 | Who writes narration? | **Harness templates** (`ActivityNarrator`, grown from `narration.js:deliberate()`) for facts; the agent's `intent` (≤ 240 chars, sanitised, untrusted display text) for "why". v3's `narration` field **is** `intent`. | Deterministic where possible (v3 §40), already built (v7). |
 | D11 | Event store | New generic `edu.workflow_events`. `study_prep_events` is kept read-only and backfilled. | One stream model for four workflows (v3 §43). |
 | D12 | Live transport | **Event store is the source of truth; transport is replaceable.** Teaching and Decay keep the existing Socket.IO connection. Study Prep and Practice use SSE (same heartbeat pattern as `/chat/agent`). Both carry the identical event envelope. Replay: `GET /api/workflows/:id/events?after=N`. | v3 §42–43; reuses what already works. |
@@ -794,9 +795,9 @@ Tool names appear only in developer mode.
 - Thinking blocks persist as narration events, so a reload shows the same
   blocks. Streamed reasoning summaries are live-only (D9).
 
-#### 7.9.7 Live streaming (the coding-agent feel)
+#### 7.9.7 Live streaming (the coding-agent feel) — Agent Chat tab only (D28)
 
-The learner sees each element appear and fill in as it happens:
+In the Agent Chat tab, the learner sees each element appear and fill in as it happens:
 
 ```
 agent.narration.start   → ThinkingBlock opens (live shimmer), "Thinking…"
@@ -1327,7 +1328,21 @@ SESSION_TOOL_CALL_CAP: 120
 Direct sessions have `source: null` and emit a standalone completion; their
 evidence still updates the learner model.
 
-### 9.7 Transport
+### 9.7 Transport and UI
+
+**The Teaching modal keeps its current UI (D28).** No thinking blocks or tool
+rows are added to `TeachAgentModal`. It keeps rendering the conversation
+bubbles, phase labels, and the existing per-step labels
+(`teaching_workflow_step`). Under the hood:
+- the agent-driven turn (§9.3) still runs and still emits/stores
+  `workflow_events` (replay, audit, developer mode, Study Prep handoff);
+- the modal receives only what it renders today: the reply (protégé or NaNa,
+  streamed as now), phase/progress changes, step labels, and gates
+  (assessment card, completion);
+- `teaching_workflow_step` labels now come from the narrator for whichever
+  tools actually ran, instead of the fixed 8-step list;
+- `learn_with_guide` mode uses the modal's existing guide view (today
+  UI-only), now backed by the server.
 
 The modal keeps its Socket.IO connection. New messages:
 `open_workflow { workflowId }` → server resumes the instance and replays
@@ -1574,6 +1589,11 @@ modal does not own state.
 | `WorkflowStateBadge` | state/status |
 | `GateButton` | `learner.action_required` |
 | Verification row (red) | `decision.rejected` |
+
+These stream components are for the **Agent Chat tab** (D28). The Teaching
+and Decay modals keep their existing UI and consume only the events they
+render today (§9.7). Dashboard cards (`WorkflowCard`, `WorkflowResumeCard`,
+`WorkflowStateBadge`) are used on the dashboard regardless.
 
 `streamReducer(events) → UI messages` is pure and shared. The UI never needs
 workflow internals. Pattern THINKING → TOOL GROUP → ACTIVITY is supported but
@@ -1915,10 +1935,11 @@ crash; a model outside the learner's tier is refused with a notice; a catalogue
 entry without a price fails boot; adding Grok or DeepSeek is an env-only change;
 a Pilot learner can switch to DeepSeek and to nothing else.
 
-**UI checks:** thinking text streams in live and the block collapses when it
+**UI checks (Agent Chat tab):** thinking text streams in live and the block collapses when it
 ends; tool rows appear with a spinner and fill in their result; the agent's
-activity text and replies stream word by word; the agent chat and workflow
-chats look identical; thinking blocks collapse/expand; tool rows stream in order;
+activity text and replies stream word by word; Study Prep in the chat
+looks the same as plain agent chat; **the Teaching and Decay modals look
+exactly as they do today** (no trace UI), while their events are still stored; thinking blocks collapse/expand; tool rows stream in order;
 activity text never in a bubble; no tool names in learner mode; rejects render
 as red verification rows; Approve disabled after tap; reload reconstructs the
 same blocks from events.
@@ -1951,6 +1972,7 @@ LLM failure must never corrupt workflow state.
 | Q5 | Starting cap values in §7.2 table (Teaching turns, strategy changes, Practice caps) | Tune in staging |
 | Q6 | ~~`retrieval_practice`~~ — **resolved (D25):** Strategy Library v2, Decay Review + Practice only. | Done |
 | Q7 | ~~"Learning with guide" toggle~~ — **resolved (D24):** built as the `learn_with_guide` Teaching mode. | Done |
+| Q14 | Standalone Practice: show it in the Agent Chat tab (with the live stream) or in its own view like the modals? | Phase 9 |
 | Q13 | DeepSeek's API is hosted outside Nigeria (in China) and learners include minors. Check the data-processing terms and whether school-funded (Pilot) sessions need the school's consent before DeepSeek is enabled for them. | Before enabling DeepSeek |
 | Q12 | Per-tier model lists — **resolved (§7.11.5a).** Still open: Grok and DeepSeek model ids and prices at setup. Fable stays off until a tier is given it. | Before picker UI |
 | Q8 | `content.search` — enable for Study Prep research or keep disabled? | Phase 4 |
