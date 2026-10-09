@@ -1,34 +1,27 @@
 /**
  * modules/records/parseConsole.js — the parse-worker console API.
  *
- * Same front-door pattern as the HF mirror console (modules/hfmirror):
- * a shared-key guard, one same-origin HTML console, JSON in/out. An
- * OPERATOR surface for testing the RunPod hanji-parse endpoint straight
- * from the browser — every Run button is a REAL GPU job, so the routes
- * sit behind a shared key and cost nothing until used.
+ * Same front door as the HF mirror console: shared-key guard, HTML
+ * console, JSON in/out. The run is ASYNC — POST submits to RunPod's /run
+ * and returns a jobId; the page polls /console/status?jobId=… every few
+ * seconds. A GPU job must never ride an open HTTP request: proxies in
+ * front of the API (Cloudflare ~100s, Render restart windows) kill long
+ * requests with HTML error pages.
  *
- *   GET  /api/parse/console/status → { configured, endpointId, keyConfigured, last }
- *   POST /api/parse/console        → { imageBase64 | image_b64, maxNewTokens? }
- *                                    → { blocks, markdown, model, wallMs }
- *   GET  /api/parse/console        → the console page (key via ?key=,
- *                                    same as the Pharm.D / HF consoles)
+ *   GET  /api/parse/console/status[?jobId=] → config + last, or one job's poll
+ *   POST /api/parse/console                 → { imageBase64, maxNewTokens? } → { jobId }
+ *   GET  /api/parse/console                 → the console page (?key=)
  *
- * Env:
- *   PARSE_CONSOLE_KEY          — console shared secret (required to arm)
- *   RUNPOD_API_KEY             — RunPod key (required to run)
- *   RUNPOD_PARSE_ENDPOINT_ID   — the serverless parse endpoint
- *
- * The key lives only in the server env — the page reads it from its own
- * URL and echoes it back as the x-parse-console-key header; it is never
- * embedded in the HTML.
+ * Env: PARSE_CONSOLE_KEY (arms the routes), RUNPOD_API_KEY +
+ * RUNPOD_PARSE_ENDPOINT_ID (enable runs).
  */
 import express from "express";
-import { parsePageOnRunpod, MAX_IMAGE_B64_CHARS, recordsExtractionEnabled } from "./extractLib.js";
+import { parsePageRunAsync, getParseJob, MAX_IMAGE_B64_CHARS, recordsExtractionEnabled } from "./extractLib.js";
 
 const router = express.Router();
 
-const ok            = (res, data, meta = {}) => res.json({ success: true, data, ...meta });
-const asyncHandler  = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+const ok           = (res, data, meta = {}) => res.json({ success: true, data, ...meta });
+const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 const consoleGuard = (req, res, next) => {
   const want = process.env.PARSE_CONSOLE_KEY;
@@ -38,19 +31,40 @@ const consoleGuard = (req, res, next) => {
   next();
 };
 
-/* The last run's one-line outcome — the console's status poll shows it so
-   the operator can see the previous attempt (model, blocks, latency or
-   the error) without digging through JSON. */
+/* The last run's outcome — the console's status header shows it. */
 let last = null;
 
-router.get("/console/status", consoleGuard, (_req, res) => {
+const DONE = new Set(["COMPLETED", "FAILED", "TIMED_OUT", "CANCELLED"]);
+
+router.get("/console/status", consoleGuard, asyncHandler(async (req, res) => {
+  /* Poll path: one job, forwarded to RunPod — cheap, bounded, proxy-safe. */
+  if (req.query.jobId) {
+    if (!recordsExtractionEnabled()) return res.status(501).json({ success: false, error: "RunPod extraction is not configured — set RUNPOD_API_KEY / RUNPOD_PARSE_ENDPOINT_ID" });
+    let job;
+    try { job = await getParseJob({ jobId: String(req.query.jobId).slice(0, 80) }); }
+    catch (err) { return res.status(502).json({ success: false, error: String(err?.message || err).slice(0, 300) }); }
+    const data = { jobId: job.jobId, status: job.status, done: DONE.has(job.status) };
+    if (data.done) {
+      if (job.parsed) {
+        data.blocks = job.parsed.blocks; data.markdown = job.parsed.markdown;
+        data.model = job.model || null;  data.wallMs = job.wallMs ?? null;
+        last = { ok: true, model: data.model, blocks: data.blocks.length, wallMs: data.wallMs, at: new Date().toISOString() };
+      } else {
+        data.error = (job.output && job.output.error) || `Parse job ${job.status}`;
+        last = { ok: false, error: data.error, at: new Date().toISOString() };
+      }
+    }
+    return ok(res, { job: data });
+  }
+
+  /* Header path: config + the last run. */
   ok(res, {
     configured:    recordsExtractionEnabled(),
     endpointId:    process.env.RUNPOD_PARSE_ENDPOINT_ID || null,
     keyConfigured: !!process.env.PARSE_CONSOLE_KEY,
     last,
   });
-});
+}));
 
 router.post("/console", consoleGuard, asyncHandler(async (req, res) => {
   if (!recordsExtractionEnabled()) {
@@ -59,7 +73,6 @@ router.post("/console", consoleGuard, asyncHandler(async (req, res) => {
   const body = req.body || {};
   const raw = String(body.imageBase64 ?? body.image_b64 ?? "");
   if (!raw.trim()) return res.status(400).json({ success: false, error: "imageBase64 is required (a PNG/JPEG page, raw base64 or a data: URI)" });
-  // Accept data: URIs — the console's FileReader produces them.
   const b64 = raw.startsWith("data:") ? raw.slice(raw.indexOf(",") + 1) : raw;
   if (!b64.trim()) return res.status(400).json({ success: false, error: "imageBase64 carried no payload" });
   if (b64.length > MAX_IMAGE_B64_CHARS) {
@@ -67,20 +80,17 @@ router.post("/console", consoleGuard, asyncHandler(async (req, res) => {
   }
   const maxNewTokens = Math.min(Math.max(parseInt(body.maxNewTokens, 10) || 4096, 64), 8192);
 
-  const started = Date.now();
   try {
-    const out = await parsePageOnRunpod({ imageBase64: b64, maxNewTokens });
-    last = { ok: true, model: out.model || null, blocks: out.blocks?.length ?? 0, wallMs: Date.now() - started, at: new Date().toISOString() };
-    ok(res, { ...out, wallMs: last.wallMs });
+    const { jobId, status } = await parsePageRunAsync({ imageBase64: b64, maxNewTokens });
+    ok(res, { jobId, status });
   } catch (err) {
-    last = { ok: false, error: String(err?.message || err).slice(0, 300), wallMs: Date.now() - started, at: new Date().toISOString() };
-    res.status(502).json({ success: false, error: last.error, wallMs: last.wallMs });
+    res.status(502).json({ success: false, error: String(err?.message || err).slice(0, 300) });
   }
 }));
 
 /* ── The console page ──────────────────────────────────────────────────── */
 
-const CONSOLE_VERSION = "v3 · run-armed";
+const CONSOLE_VERSION = "v4 · submit+poll";
 
 router.get("/console", consoleGuard, (_req, res) => {
   res.type("html");
@@ -108,7 +118,7 @@ router.get("/console", consoleGuard, (_req, res) => {
   input[type=file]{color:#9AA0BE}
 </style></head><body><main>
 <h1>Parse-worker <span>console</span></h1>
-<p class="sub">One page → the RunPod hanji-parse endpoint. Every run is a real GPU job. <span style="color:#4A507A">console ${CONSOLE_VERSION}</span></p>
+<p class="sub">One page → the RunPod hanji-parse endpoint. Submit + poll — no held-open requests. <span style="color:#4A507A">console ${CONSOLE_VERSION}</span></p>
 
 <label>Endpoint</label>
 <div class="status" id="status">checking…</div>
@@ -151,10 +161,10 @@ router.get("/console", consoleGuard, (_req, res) => {
       var data = d.data || {};
       var bits = [];
       bits.push(data.configured ? 'configured ✓ (endpoint <b>' + (data.endpointId||'') + '</b>)' : '<span class="err">NOT configured — set RUNPOD_API_KEY / RUNPOD_PARSE_ENDPOINT_ID on the service</span>');
-      if (data.last) bits.push('last run: ' + (data.last.ok ? ('ok · ' + data.last.blocks + ' blocks · ' + data.last.wallMs + 'ms') : ('<span class="err">' + (data.last.error||'failed') + '</span>')));
+      if (data.last) bits.push('last run: ' + (data.last.ok ? ('ok · ' + data.last.blocks + ' blocks · ' + (data.last.wallMs||'?') + 'ms') : ('<span class="err">' + (data.last.error||'failed') + '</span>')));
       $('status').innerHTML = bits.join(' · ');
     })
-    .catch(function(){ $('status').textContent = 'status unreachable'; });
+    .catch(function(e){ $('status').innerHTML = '<span class="err">' + e.message + '</span>'; });
   var refresh = function(){
     var v = $('b64').value.trim();
     $('run').disabled = !v;
@@ -173,26 +183,33 @@ router.get("/console", consoleGuard, (_req, res) => {
   refresh();
   $('run').addEventListener('click', function(){
     var btn = this; btn.disabled = true;
-    $('runstat').textContent = 'parsing… (first call on a cold worker loads the model, ~10-20s)';
+    $('runstat').textContent = 'submitting…';
     $('out').textContent = '—'; $('md').textContent = '—';
     getJson('/api/parse/console', { method:'POST', headers: H,
         body: JSON.stringify({ imageBase64: $('b64').value, maxNewTokens: parseInt($('tokens').value,10) || 4096 }) })
-      .then(function(j){ return { s:0, j:j }; })
-      .then(function(x){
-        $('out').textContent = JSON.stringify(x.j, null, 2);
-        var md = x.j && x.j.data && x.j.data.markdown;
-        $('md').textContent = md || (x.j && x.j.error) || '—';
-        $('runstat').innerHTML = x.j && x.j.success
-          ? '<b>done in ' + (x.j.data.wallMs||0) + 'ms</b>'
-          : '<span class="err">' + ((x.j && x.j.error) || 'the request failed') + '</span>';
+      .then(function(j){
+        if (!j || j.success === false) throw new Error((j && j.error) || 'submit failed');
+        var jobId = j.data.jobId, n = 0;
+        $('runstat').textContent = 'queued · job ' + jobId + ' — polling… (a cold worker loads the model first, ~10-20s)';
+        var poll = setInterval(function(){
+          if (++n > 150) { clearInterval(poll); $('runstat').innerHTML = '<span class="err">still not done after ~7 min — check the RunPod dashboard</span>'; btn.disabled = false; return; }
+          getJson('/api/parse/console/status?jobId=' + encodeURIComponent(jobId), { headers: H })
+            .then(function(s){
+              var job = s && s.data && s.data.job; if (!job || !job.done) return;
+              clearInterval(poll);
+              $('out').textContent = JSON.stringify(s.data, null, 2);
+              $('md').textContent = job.error || job.markdown || '—';
+              $('runstat').innerHTML = job.error ? ('<span class="err">' + job.error + '</span>') : '<b>done' + (job.wallMs ? ' · worker ' + job.wallMs + 'ms' : '') + '</b>';
+              btn.disabled = false;
+            })
+            .catch(function(e){ clearInterval(poll); $('runstat').innerHTML = '<span class="err">' + e.message + '</span>'; btn.disabled = false; });
+        }, 3000);
       })
-      .catch(function(e){ $('runstat').innerHTML = '<span class="err">' + e + '</span>'; })
-      .finally(function(){ btn.disabled = false; });
+      .catch(function(e){ $('runstat').innerHTML = '<span class="err">' + e.message + '</span>'; btn.disabled = false; });
   });
 })();
 </script>
 </main></body></html>`);
-
 });
 
 export default router;
