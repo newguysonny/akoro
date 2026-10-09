@@ -34,10 +34,11 @@ checked against the code on 2026-10-09.
    - 7.8 Learner Model
    - 7.9 Event stream, narration and transport
    - 7.10 Cost, concurrency, idempotency
+   - 7.11 Model switching
 8. Workflow 1 — Study Prep
 9. Workflow 2 — Teaching (agent-driven)
 10. Workflow 3 — Decay Review
-11. Workflow 4 — Practice
+11. Workflow 4 — Practice (live proctored assessment)
 12. Cross-workflow relationships
 13. Dashboard and frontend
 14. Data model and migrations
