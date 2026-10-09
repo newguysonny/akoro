@@ -66,6 +66,11 @@ export default function FortizoChatComposer({
   onModelChange,
   modelLabelDescription = '',
   sendDisabled = false,
+  // While a reply is streaming the send arrow becomes a ■ stop button
+  // (Agent Chat, Grand Plan §13.4). Callers without onStop are unchanged.
+  running = false,
+  onStop,
+  stopLabel = 'Stop',
 }) {
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const composerRef = useRef(null);
@@ -187,6 +192,22 @@ export default function FortizoChatComposer({
         </div>
 
         <div style={{ flex: 1 }}/>
+        {running && onStop ? (
+          <button
+            type="button"
+            onClick={() => onStop()}
+            title={stopLabel}
+            aria-label={stopLabel}
+            style={{
+              width: 33, height: 33, padding: 0, borderRadius: 10, display: 'inline-flex',
+              alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer',
+              border: dark ? '1px solid rgba(255,255,255,.18)' : '1.5px solid var(--ak-border2)',
+              background: dark ? 'rgba(255,255,255,.08)' : 'var(--ak-surface)',
+            }}
+          >
+            <span style={{ width: 11, height: 11, borderRadius: 2, background: dark ? '#fff' : 'var(--ak-text)', display: 'block' }}/>
+          </button>
+        ) : (
         <button
           type="button"
           onClick={() => canSend && onSend?.()}
@@ -203,6 +224,7 @@ export default function FortizoChatComposer({
         >
           <Icon name="ti-arrow-up" size={17} color={canSend ? '#fff' : (dark ? '#66758F' : 'var(--ak-text-muted)')}/>
         </button>
+        )}
       </div>
     </div>
   );

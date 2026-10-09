@@ -60,6 +60,7 @@
     "2026-school-verification.sql",
     "2026-cart-unified.sql",
     "2026-chat-sessions.sql",
+    "2026-chat-message-trace.sql",
     "2026-task-output-types.sql",
     "2026-user-avatar-emoji.sql",
     "2026-contact-messages.sql",

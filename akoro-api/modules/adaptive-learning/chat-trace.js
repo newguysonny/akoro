@@ -1,0 +1,189 @@
+/**
+ * chat-trace.js — the live, learner-safe trace of one Agent Chat turn.
+ *
+ * The Agent Chat tab renders a turn the way a coding agent does: thinking
+ * rows, collapsible tool rows (grouped when consecutive), plain activity text,
+ * interleaved as many times as the tool loop iterates (Grand Plan §13.4, D41).
+ * This module is the server half: it turns each tool call into a row the
+ * learner can read ("Checking your goals ✓ 120ms"), never a backend name, and
+ * keeps a bounded copy of the trace so a reloaded chat shows the same blocks.
+ *
+ * Pure apart from the injected `send` — no db, no model, no clock unless
+ * passed in — so the contract test can drive it directly.
+ *
+ * What NEVER enters a trace: raw tool arguments, raw tool results, model
+ * reasoning tokens, answer keys, learner data beyond a count or a short
+ * outcome line. Thinking rows carry harness narration (D10) or, in Think
+ * mode, the provider's reasoning SUMMARY (D9) — the latter streams live and
+ * is not stored.
+ */
+
+/** Learner-language display for every Agent Chat tool. Unknown tools fall back to a neutral row. */
+export const CHAT_TOOL_DISPLAY = Object.freeze({
+  get_learner_context:            { category: "research", headline: "Reviewing your study profile",        description: "Looking at your class, subjects and recent activity" },
+  get_agent_capabilities:         { category: "research", headline: "Checking what I can do for you",      description: "Reading the list of things your agent can help with" },
+  check_progress:                 { category: "research", headline: "Checking your progress",              description: "Looking at your recent results and streaks" },
+  get_my_school:                  { category: "research", headline: "Checking your school",                description: "Looking up your school and class" },
+  list_school_subjects:           { category: "research", headline: "Checking your subjects",              description: "Listing the subjects your class takes" },
+  list_my_teachers:               { category: "research", headline: "Checking your teachers",              description: "Listing the teachers for your class" },
+  find_teacher:                   { category: "research", headline: "Looking up a teacher",                description: "Finding the teacher you asked about" },
+  get_my_learning_sessions:       { category: "research", headline: "Reading your learning sessions",      description: "Looking at your recent teaching sessions" },
+  create_task:                    { category: "action",   headline: "Creating a task",                     description: "Adding the task to your list" },
+  suggest_help:                   { category: "action",   headline: "Preparing a suggestion",              description: "Adding an idea to your suggestions inbox" },
+  schedule_chat_follow_up:        { category: "action",   headline: "Scheduling a follow-up",              description: "Setting a time for me to check in with you" },
+  list_scheduled_chat_follow_ups: { category: "research", headline: "Checking your scheduled check-ins",   description: "Listing the follow-ups already planned" },
+  cancel_scheduled_chat_follow_up:{ category: "action",   headline: "Cancelling a follow-up",              description: "Removing a planned check-in" },
+  consult_peer_agents:            { category: "research", headline: "Asking other learners' agents",       description: "Collecting ideas from other study agents" },
+  search_blog_posts:              { category: "research", headline: "Searching the Akoro blog",            description: "Looking for articles on this topic" },
+  read_blog_post:                 { category: "research", headline: "Reading a blog article",              description: "Reading the article in full" },
+  list_my_goals:                  { category: "research", headline: "Checking your goals",                 description: "Looking at your active study goals" },
+  create_goal:                    { category: "action",   headline: "Creating a goal",                     description: "Adding the goal to your list" },
+  update_goal_progress:           { category: "action",   headline: "Updating a goal",                     description: "Recording progress on your goal" },
+  list_my_proposals:              { category: "research", headline: "Checking your agent's proposals",     description: "Looking at ideas waiting for your approval" },
+  list_my_blogs:                  { category: "research", headline: "Checking your blog drafts",           description: "Listing your posts" },
+  save_blog_draft:                { category: "action",   headline: "Saving a blog draft",                 description: "Saving your post as a draft" },
+  publish_blog:                   { category: "action",   headline: "Publishing your post",                description: "Making your post public" },
+  list_tasks:                     { category: "research", headline: "Checking your tasks",                 description: "Looking at what's due and what's done" },
+  find_battles:                   { category: "research", headline: "Looking for battles",                 description: "Finding battles you can join" },
+  get_ranking:                    { category: "research", headline: "Checking the rankings",               description: "Looking at where you stand" },
+  get_weak_topics:                { category: "research", headline: "Finding your weaker topics",          description: "Looking for topics that need more work" },
+  get_learning_overview:          { category: "research", headline: "Reviewing your learning overview",    description: "Looking across your subjects and topics" },
+  get_knowledge_map:              { category: "research", headline: "Reading your knowledge map",          description: "Looking at what your agent knows so far" },
+  search_my_study_knowledge:      { category: "research", headline: "Searching your notes",                description: "Looking through what you've taught your agent" },
+  get_concept_tracker_summary:    { category: "research", headline: "Checking your concept tracker",       description: "Looking at concepts you've mastered and ones still open" },
+  get_learning_insights_summary:  { category: "research", headline: "Reviewing your learning insights",    description: "Looking at patterns in how you learn" },
+  get_exam_prep_status:           { category: "research", headline: "Checking your exam prep",             description: "Looking at your practice runs" },
+  get_chat_memory:                { category: "research", headline: "Recalling our earlier chats",         description: "Looking at what you've told me before" },
+  get_agent_preferences:          { category: "research", headline: "Checking your agent settings",        description: "Looking at how you've set up your agent" },
+  get_autonomy_status:            { category: "research", headline: "Checking your agent's status",        description: "Seeing whether your agent is online" },
+  start_study_prep_session:       { category: "action",   headline: "Starting a study plan",               description: "Setting up a study-prep session for you" },
+  get_study_prep_session:         { category: "research", headline: "Checking your study plan",            description: "Looking at your current study-prep session" },
+  submit_tool_request:            { category: "action",   headline: "Sending your feature request",        description: "Passing your idea to the Akoro team" },
+  prepare_activity:               { category: "action",   headline: "Drafting an activity",                description: "Preparing an activity for your review" },
+  list_activity_drafts:           { category: "research", headline: "Checking your activity drafts",       description: "Listing drafts waiting for review" },
+  discard_activity_draft:         { category: "action",   headline: "Discarding a draft",                  description: "Removing the activity draft" },
+  list_my_classrooms:             { category: "research", headline: "Checking your classes",               description: "Listing the classes you teach" },
+  get_my_profile:                 { category: "research", headline: "Checking your profile",               description: "Looking at your account details" },
+  check_activity_outcomes:        { category: "research", headline: "Checking activity results",           description: "Looking at how learners did" },
+  schedule_activity_routine:      { category: "action",   headline: "Scheduling a routine",                description: "Setting up a repeating activity" },
+  list_activity_routines:         { category: "research", headline: "Checking your routines",              description: "Listing the routines you've set" },
+  cancel_activity_routine:        { category: "action",   headline: "Cancelling a routine",                description: "Stopping a repeating activity" },
+  get_activity_draft:             { category: "research", headline: "Opening an activity draft",           description: "Reading the draft" },
+  revise_activity_draft:          { category: "action",   headline: "Revising the draft",                  description: "Updating the activity draft" },
+});
+
+const FALLBACK_DISPLAY = Object.freeze({ category: "research", headline: "Checking your study data", description: "Looking up what I need to help" });
+
+/** Display for one tool. The raw name stays server-side (developer mode only). */
+export function chatToolDisplay(tool) {
+  return CHAT_TOOL_DISPLAY[String(tool || "")] || FALLBACK_DISPLAY;
+}
+
+const MAX_RESULT_CHARS = 120;
+const clip = (text, max) => {
+  const value = String(text ?? "").replace(/\s+/g, " ").trim();
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+};
+
+/** The largest list in a result, by length — "3 found" lines come from this. */
+function primaryCount(result) {
+  if (!result || typeof result !== "object") return null;
+  let best = null;
+  for (const value of Object.values(result)) {
+    if (Array.isArray(value) && (best === null || value.length > best)) best = value.length;
+  }
+  return best;
+}
+
+/**
+ * One short, learner-safe outcome line — never the raw result. Counts and
+ * outcomes only; anything richer stays in the model's observation.
+ */
+export function chatToolResultLine(toolResult) {
+  if (toolResult == null) return { ok: true, result: "Done" };
+  if (typeof toolResult !== "object") return { ok: true, result: "Done" };
+  if (toolResult.needsClarification) return { ok: true, result: "Needs one detail from you" };
+  if (toolResult.success === false || toolResult.error) return { ok: false, result: "Couldn't complete this step" };
+  if (toolResult.disabled) return { ok: true, result: "Not available yet" };
+  const count = primaryCount(toolResult);
+  if (count !== null) return { ok: true, result: count === 0 ? "Nothing found" : `${count} found` };
+  return { ok: true, result: "Done" };
+}
+
+/** Harness narration for a decision step (D10) — built from what the agent chose, not from its reasoning. */
+export function decisionNarration(calls) {
+  const names = (calls || []).map((call) => call?.function?.name).filter(Boolean);
+  if (!names.length) return "I have what I need — writing your answer.";
+  const headlines = [...new Set(names.map((name) => chatToolDisplay(name).headline.toLowerCase()))];
+  const list = headlines.length === 1
+    ? headlines[0]
+    : `${headlines.slice(0, -1).join(", ")} and ${headlines[headlines.length - 1]}`;
+  return clip(`Next: ${list}.`, 240);
+}
+
+/** Bounded copy kept for reload. */
+export const TRACE_LIMITS = Object.freeze({ MAX_BLOCKS: 60, MAX_TEXT_CHARS: 2_000 });
+
+/**
+ * createChatTrace({ send, now }) — emits the live events and keeps the
+ * bounded trace. `send(event, data)` is the route's SSE writer (or null for
+ * the JSON path, which still returns the trace on the response).
+ *
+ * Events (all carry a stable `id` per block):
+ *   think_start { id }                 — a decision step began
+ *   think_end   { id, ms, text }       — step done; text = harness narration
+ *   tool_start  { id, category, headline, description }
+ *   tool_end    { id, ok, result, ms }
+ *   activity    { id, text }           — text the model wrote between steps
+ */
+export function createChatTrace({ send = null, now = () => Date.now() } = {}) {
+  const blocks = [];
+  const open = new Map();
+  let seq = 0;
+  const nextId = (prefix) => `${prefix}_${++seq}`;
+  const emit = (event, data) => { try { send?.(event, data); } catch { /* a trace line must never break the turn */ } };
+  const keep = (block) => { if (blocks.length < TRACE_LIMITS.MAX_BLOCKS) blocks.push(block); };
+
+  return {
+    thinkStart() {
+      const id = nextId("think");
+      open.set(id, now());
+      emit("think_start", { id });
+      return id;
+    },
+    thinkEnd(id, text = "") {
+      const started = open.get(id) ?? now();
+      open.delete(id);
+      const block = { type: "thinking", id, ms: Math.max(0, now() - started), text: clip(text, TRACE_LIMITS.MAX_TEXT_CHARS) };
+      keep(block);
+      emit("think_end", block);
+      return block;
+    },
+    toolStart(tool) {
+      const id = nextId("tool");
+      const display = chatToolDisplay(tool);
+      open.set(id, now());
+      emit("tool_start", { id, ...display });
+      return { id, display };
+    },
+    toolEnd({ id, display }, toolResult) {
+      const started = open.get(id) ?? now();
+      open.delete(id);
+      const { ok, result } = chatToolResultLine(toolResult);
+      const block = { type: "tool", id, ...display, ok, result: clip(result, MAX_RESULT_CHARS), ms: Math.max(0, now() - started) };
+      keep(block);
+      emit("tool_end", { id, ok: block.ok, result: block.result, ms: block.ms });
+      return block;
+    },
+    activity(text) {
+      const value = clip(text, TRACE_LIMITS.MAX_TEXT_CHARS);
+      if (!value) return null;
+      const block = { type: "activity", id: nextId("act"), text: value };
+      keep(block);
+      emit("activity", block);
+      return block;
+    },
+    /** The stored trace — the final reply itself is the message text, not a block. */
+    blocks() { return blocks.slice(); },
+  };
+}
