@@ -36,6 +36,8 @@ checked against the code on 2026-10-09.
    - 7.10 Cost, concurrency, idempotency
    - 7.11 Model switching
    - 7.12 Agent Check
+   - 7.13 Peer agent help
+   - 7.14 Blog research
 8. Workflow 1 — Study Prep
 9. Workflow 2 — Teaching (agent-driven)
 10. Workflow 3 — Decay Review
@@ -202,6 +204,9 @@ session mode" (`fresh | continuation | decay`); "Adaptive Learning Workflow"
 | D30 | No syllabus found | Syllabus is resolved **class → school → platform → AI-generated**. `syllabus.generate` is allowed only after the other three return nothing; the draft is grounded on the national curriculum, checked by code, saved as provisional, and always labelled as AI-drafted (§8.7). | User decision: a missing syllabus must never block a learner. |
 | D31 | How practice works | **Agent Check** (§7.12): NaNa asks, the learner's agent answers only from its owner's notes, Sergeant judges, the Education Engine scores. No human answers. Replaces `practice.generate/submit` in Study Prep, Teaching and Decay. The proctored assessment stays human and separate. | User decision: practice tests the agent, like Battles. |
 | D32 | Decay `retrieval_practice` | **Stays human recall for now** — the one place outside the proctored assessment and guide mode where the learner answers questions. Its answers are scored server-side and tagged `source: "learner_recall"`; the Agent Check still runs the retention check and retest. Revisit later. | User decision (Q16). |
+| D33 | Files and non-traditional goals | Study Prep accepts files; they are saved to the learner's Records library and indexed. For scholarship/competition/custom goals the agent builds the syllabus from the files, asks once for a syllabus or materials if there are none, and only then drafts one (§8.8). | User decision. |
+| D34 | Peer agent help | Upgrade `consult_peer_agents`: ask up to 3 agents **strong on the topic**, answering from their own notes (rewritten, never verbatim), helpers opt in; Sergeant checks accuracy; `peer_help` joins Strategy Library v2; never evidence (§7.13). | User decision. |
+| D35 | Blog research | Upgrade blog search to passage-level hybrid search over article bodies, with citations; used for study methods and strategy, never as syllabus or evidence (§7.14). | User decision. |
 | D10 | Who writes narration? | **Harness templates** (`ActivityNarrator`, grown from `narration.js:deliberate()`) for facts; the agent's `intent` (≤ 240 chars, sanitised, untrusted display text) for "why". v3's `narration` field **is** `intent`. | Deterministic where possible (v3 §40), already built (v7). |
 | D11 | Event store | New generic `edu.workflow_events`. `study_prep_events` is kept read-only and backfilled. | One stream model for four workflows (v3 §43). |
 | D12 | Live transport | **Event store is the source of truth; transport is replaceable.** Teaching and Decay keep the existing Socket.IO connection. Study Prep and Practice use SSE (same heartbeat pattern as `/chat/agent`). Both carry the identical event envelope. Replay: `GET /api/workflows/:id/events?after=N`. | v3 §42–43; reuses what already works. |
@@ -659,6 +664,7 @@ recordStrategyOutcome({ strategy, version, before, after })
   | space_out | ✓ | — | ✓ | ✓ |
   | escalate_human | ✓ | ✓ | ✓ | — |
   | **retrieval_practice** | **— (not for now)** | — | **✓** | **✓** |
+  | **peer_help** (D34) | **✓** | **✓** | **✓** | — |
 
   The harness checks `(strategy, version, workflowType)`; `strategy_not_permitted`
   otherwise. The library is defined once — today it is duplicated in
@@ -1093,6 +1099,58 @@ doesn't have any notes on Water Cycle yet — let's teach it first").
   list of gaps.
 - **Teach Agent modal:** the existing UI shows the result card; no trace UI (D28).
 
+### 7.13 Peer agent help (D34) 🟡→ upgrade `peerConsult.js`
+
+**Today:** `consult_peer_agents` picks **two random** active agents and has the
+model answer *in their persona* with general study advice. The peer agents'
+own knowledge is never used, so it is generic advice under another agent's name.
+
+**Upgrade — real help from agents that know the topic:**
+
+| | Today | Upgraded |
+|---|---|---|
+| Who is asked | 2 random active agents | Up to 3 agents **strong on this topic**: their notes cover it (`recallStrength` on their `edu.student_knowledge`) and their concept state for it is ≥ 0.7 |
+| How they answer | Persona prompt, general knowledge | **From their own notes** (`agentRecall` style), rewritten as an explanation, analogy, worked example or memory trick — never quoted verbatim |
+| What they can be asked | Study habits, motivation, … | Those, **plus** "how would you explain *X*?" for a specific gap the Agent Check found |
+| Consent | Not needed (no data used) | The helper learner must **opt in** ("Let my agent help other learners", default off). Without opted-in strong peers, it falls back to today's persona-only advice, labelled as general |
+| Privacy | Asker's data never leaves | Unchanged — plus helper notes never leave as text: only a short rewritten answer, PII-filtered, ≤ 600 chars, shown with the agent's name/emoji only |
+
+**As a strategy:** Strategy Library v2 adds **`peer_help`**. After a gap, the
+controller may choose it: the gaps are sent to strong peers, their
+explanations are checked by Sergeant for accuracy against the topic (wrong
+ones are dropped), and the survivors go into the learner's Teaching session as
+material NaNa can use ("Another learner's agent explains it like this…"). The
+learner still teaches their own agent; peer answers are **never evidence** and
+never written into the learner's notes automatically.
+
+**Also a research tool:** during Study Prep planning the agent may ask strong
+peers how they prepared for the same exam or subject (study habits).
+
+**Limits:** one peer consult per topic per session, max 3 peers, metered to
+the asking learner (feature `agent_peer_consult`), Sergeant accuracy check
+runs on the locked assessor model. Helpers may get a "your agent helped
+someone" notification (no details of who).
+
+### 7.14 Blog research (D35) 🟡→ upgrade `blogResearch.js`
+
+**Today:** `search_blog_posts` matches the query against title, excerpt and
+category only (`ilike`), then `read_blog_post` returns a whole post.
+
+**Upgrade:**
+- **Search the article body**, not just titles: blog posts are split into
+  passages with embeddings (`content.blog_chunks`), indexed on publish/update
+  by the existing embedding sweeper, using the same hybrid (semantic +
+  keyword) search pattern as the Records library. Published posts only.
+- `blog.search({ query, category?, limit })` returns the best **passages** with
+  slug, title and heading, so the agent can quote and cite precisely;
+  `blog.read({ slug })` stays for the full post.
+- Available to the Study Prep research operation, Teaching (NaNa can cite an
+  article), and the Agent Chat.
+- **Citations:** when the agent uses a blog passage, the chat shows a source
+  chip linking to the post.
+- **Use:** study methods, exam strategy, motivation, platform guidance. The
+  blog is **never** a syllabus source and never evidence.
+
 ---
 
 ## 8. Workflow 1 — Study Prep
@@ -1175,12 +1233,12 @@ state machine is.
 
 | Operation | When | Agent tools | Set |
 |---|---|---|---|
-| research / inspection | planning start, after a gap | `syllabus.resolve_class`, `syllabus.resolve_school`, `syllabus.resolve_platform`, `syllabus.generate` (only if all three found nothing, §8.7), `learner.get_state`, `learner.get_history`, `learner.get_relevant_memory`, `concept.get_prerequisites`, `session.get_state`, `content.search` (flagged) | `research` |
+| research / inspection | planning start, after a gap | `syllabus.resolve_class`, `syllabus.resolve_school`, `syllabus.resolve_platform`, `syllabus.generate` (only if all three found nothing, §8.7), `materials.list`, `materials.search`, `syllabus.from_documents`, `learner.request_materials` ⟂ (§8.8), `blog.search`, `blog.read` (§7.14), `peers.consult` (§7.13), `learner.get_state`, `learner.get_history`, `learner.get_relevant_memory`, `concept.get_prerequisites`, `session.get_state`, `content.search` (flagged) | `research` |
 | planning / replanning | `planning`, `replanning` | `plan.validate`, `propose_plan` ⟂, `session.replan` | `planning` |
 | verification | plan checks | `plan.validate` | `safety` |
 | diagnostic / retest | topic `active` / `diagnostic_ready` / `retest_ready` | `agent.get_knowledge_coverage` (read), `practice.run_agent_check` (execute, §7.12) | `reflection` |
 | reflection / outcome_evaluation | after a score | read tools | `reflection` |
-| strategy_selection | `intervention_required` | `request_teaching({ strategy, focusGaps })` 🆕 ⟂ — always a Teaching Workflow (D15) | `strategies` |
+| strategy_selection | `intervention_required` | `peers.consult({ gaps })` when choosing `peer_help` (§7.13), then `request_teaching({ strategy, focusGaps, peerExplanations? })` 🆕 ⟂ — always a Teaching Workflow (D15) | `strategies` |
 | topic_advance | topic settled | `advance_topic` ⟂, `defer_topic` ⟂, `topic.flag` | `reflection` |
 | session_completion | all topics settled | `conclude_session` ⟂ | `reflection` |
 
@@ -1300,6 +1358,60 @@ topic list itself stays the school's.
 every controller (Teaching uses them for must-know parts alongside
 `lessonLadder`; Practice uses them to pick question focus). `syllabus.generate`
 is available in Study Prep planning and Practice preparation only.
+
+### 8.8 Files, uploads and non-traditional goals (D33)
+
+**Learners can give Study Prep their own files** — "Here's the past paper and
+reading list, help me prepare for the XYZ scholarship test", a competition
+handbook, course notes, a photo of a syllabus.
+
+**Uploads go into the learner's Records library** (`modules/records` ✅), not
+just into one chat message:
+
+- Files attached in the Agent Chat while starting or running a Study Prep
+  session are saved as Records (PDF, text, image, and anything Records
+  already extracts), then extracted and indexed by the existing pipeline
+  (`/api/records/extract`, `record_chunks`, hybrid search). Today chat
+  attachments are read for one message and discarded; for Study Prep they persist.
+- The session keeps the list: `study_prep_sessions.material_record_ids`.
+- Study Prep uploads are **private by default** — not shown in the Records
+  "discover" feed unless the learner chooses to share them.
+- Limits are the Records limits (size, count, file types); scanned PDFs and
+  photos go through the existing vision extraction.
+
+**New tools:**
+
+| Tool | Level | What |
+|---|---|---|
+| `materials.list` | read | The session's materials and their extraction status |
+| `materials.search({ query })` | read | Hybrid search over the session's materials (Records search, scoped to these records) |
+| `syllabus.from_documents({ recordIds })` | execute | Builds a syllabus outline from the materials — reuses the syllabus extraction (`extractSyllabusFromText` / `extractSyllabusViaVision`) when the file *is* a syllabus, otherwise drafts topics from the content. Saved to `edu.generated_syllabi` with `source = 'documents'` and the record ids. Same code checks as `syllabus.generate`. |
+| `learner.request_materials({ reason })` | propose ⟂ | Asks the learner for a syllabus or materials ("Do you have the scholarship's syllabus or past questions? Upload them, or I can draft an outline"). Shows an upload card; the step ends until the learner replies. |
+
+**Goal type decides where the syllabus comes from.** The controller reads the
+goal and classifies it (`curricular` — school/national exam; or
+`non_curricular` — scholarship, competition, professional or course exam,
+self-chosen topic). Syllabus sources, in order:
+
+| Order | Curricular goal | Non-curricular goal |
+|---|---|---|
+| 1 | Learner's documents, if attached | Learner's documents, if attached → `syllabus.from_documents` |
+| 2 | Class → school → platform syllabus (§8.7) | Platform syllabus, if the competition/exam is on Akoro |
+| 3 | — | `learner.request_materials` (ask once) |
+| 4 | `syllabus.generate` | `syllabus.generate` from the goal description (if the learner has nothing to upload or says "just draft it") |
+
+`syllabus_source` gains `documents`. The harness keeps the "real source wins"
+rule: `syllabus.generate` is rejected while documents or a real syllabus are
+available, and `request_materials` may be asked once per session.
+
+**Materials beyond the syllabus:**
+- **Agent Check questions** (§7.12) for a documents-based session come from the
+  materials first (NaNa writes questions from the learner's files; answer keys
+  stay server-side), then the question bank.
+- **Teaching:** NaNa can draw on the materials when coaching. The learner's
+  agent still only knows what the learner teaches it — uploading a file does
+  not put it into the agent's notes.
+- Plan card shows "Outline drawn from your files: *Scholarship handbook.pdf*".
 
 ---
 
@@ -1907,12 +2019,21 @@ edu.decay_review_sessions (
 
 -- Practice uses the existing edu.assessment_sessions (§14.2); no new table.
 
+content.blog_chunks (                 -- §7.14
+  id uuid pk, post_id uuid references content.blog_posts, heading text,
+  body text, embedding vector, position int, updated_at timestamptz
+)
+
+users / learner settings: + agent_help_opt_in boolean default false   -- §7.13
+
 edu.generated_syllabi (
   id uuid pk, created_by_learner uuid, subject text, class_level text,
   exam_board text null, term text null,
   topics jsonb not null,              -- [{ id, label, objectives[] }]
   grounding jsonb,                    -- platform chunk ids / partial matches used
   model text, prompt_version text,
+  source text check in ('generated','documents') default 'generated',   -- §8.8
+  record_ids uuid[] null,             -- learner files it was drawn from
   status text check in ('provisional','promoted','rejected') default 'provisional',
   promoted_subject_id uuid null,      -- edu.syllabus_subjects when promoted
   created_at timestamptz default now()
@@ -1925,7 +2046,8 @@ edu.generated_syllabi (
 ### 14.2 Changed tables 🟡
 
 ```
-edu.study_prep_sessions   + workflow_id, syllabus_source ('class'|'school'|'platform'|'generated'), syllabus_ref
+edu.study_prep_sessions   + workflow_id, syllabus_source ('documents'|'class'|'school'|'platform'|'generated'),
+                            syllabus_ref, goal_type ('curricular'|'non_curricular'), material_record_ids uuid[]
 edu.study_prep_topics     + teaching_workflow_id; status check widened to §8.3 states
 edu.adaptive_sessions     + workflow_id, entry_mode, source_workflow_id, source_topic_id, strategy,
                             teaching_mode ('teach_agent' | 'learn_with_guide')
@@ -2081,6 +2203,9 @@ existing contract test.** Phases 11 (UI) can start in parallel after Phase 3.
   recall/question/assessor models; guessed answers excluded from evidence.
 - Absorb `workflow-state.js` / `adaptive-workflows.js` projections.
 - Submit-status guard and transactional score/evidence/topic write.
+- Files and non-traditional goals (§8.8): chat uploads → Records for Study Prep,
+  `materials.*`, `syllabus.from_documents`, `learner.request_materials`, goal type.
+- Peer agent help upgrade (§7.13) and blog passage search (§7.14).
 - Syllabus resolution chain (§8.7): `resolve_class`, `resolve_school`,
   `resolve_platform`, `syllabus.generate` + `edu.generated_syllabi`, the
   `syllabus_exists` precondition, plan-card labelling.
@@ -2210,6 +2335,26 @@ not counted as evidence; the learner picked Claude Opus → recall, questions an
 judging still use the locked models; the recall prompt contains nothing but
 the learner's notes (asserted).
 
+**N — Files and a scholarship goal:** the learner attaches a scholarship
+handbook and a past paper and says "help me prepare for this scholarship
+test" → files saved as private Records and indexed → goal classified
+non-curricular → `syllabus.from_documents` builds the outline → plan card
+says "drawn from your files" → Agent Check questions come from the files.
+Variants: no files → the agent asks once for a syllabus or materials →
+learner says "just draft it" → `syllabus.generate`; the agent tries
+`syllabus.generate` while files are attached → rejected.
+
+**O — Peer help:** an Agent Check names a gap → the agent chooses `peer_help`
+→ up to 3 opted-in agents strong on the topic answer from their notes →
+Sergeant drops an inaccurate one → the rest go into the Teaching session as
+NaNa material → nothing is written to the learner's notes or evidence.
+Variants: no opted-in strong peers → labelled general advice; a helper who has
+not opted in is never asked; a peer reply containing a phone number is filtered.
+
+**P — Blog research:** the agent searches "spaced repetition before exams" →
+a passage from a post body (not only titles) comes back with its slug → the
+chat shows a source chip → the blog is never offered as a syllabus source.
+
 **I — Plan rejection:** agent proposes an order violating prerequisites →
 `prerequisite_violation` shown as a red verification row → agent revises →
 valid plan shown.
@@ -2269,6 +2414,7 @@ LLM failure must never corrupt workflow state.
 | Q6 | ~~`retrieval_practice`~~ — **resolved (D25):** Strategy Library v2, Decay Review + Practice only. | Done |
 | Q7 | ~~"Learning with guide" toggle~~ — **resolved (D24):** built as the `learn_with_guide` Teaching mode. | Done |
 | Q16 | ~~Decay `retrieval_practice` human vs agent~~ — **resolved (D32):** keep human recall for now. | Done |
+| Q17 | Default for `agent_help_opt_in` — off (privacy-first, plan default) or on with a clear setting? Many learners are minors. | Before §7.13 ships |
 | Q14 | ~~Practice UI~~ — **resolved (D29):** Practice is the live proctored assessment in `AssessmentRoom`, which keeps its UI. | Done |
 | Q13 | ~~DeepSeek / Grok data handling~~ — **resolved:** accepted by the product owner (2026-10-09); both enabled per §7.11.5a. | Done |
 | Q12 | ~~Per-tier model lists~~ — **resolved (§7.11.5a).** Grok and DeepSeek model ids and prices are filled into `AI_MODELS` at setup (a setup task, not an open question). Fable stays off until a tier is given it. | Done |
