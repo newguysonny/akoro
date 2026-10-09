@@ -196,6 +196,7 @@ session mode" (`fresh | continuation | decay`); "Adaptive Learning Workflow"
 | D27 | Activity text | **The agent may write its own short learner-facing message** with each action (`message`, ≤ 400 chars, streamed as an activity block), like the text a coding agent writes between tool calls. Facts in it (scores, pass/fail, coins) must come from the harness: the narrator inserts them; the model's text may not state them. | Makes the stream read like a coding agent instead of only templates. |
 | D28 | Where the live stream UI is used | **Only the Agent Chat tab** (`AgentChatTab.jsx`) renders the coding-agent stream (thinking → tool rows → activity → reply), including Study Prep and any workflow shown in chat. **`TeachAgentModal` keeps its current UI** (and `DecaySessionModal`, which shares that design), and **`AssessmentRoom` keeps its UI** for Practice (D29). The backend still emits and stores the same events for every workflow; the modals just don't render them as a trace. | User decision. |
 | D29 | What Practice is | **Practice = the live proctored assessment** (`AssessmentRoom` + Session Assessment Gateway + Sergeant). The agent chooses questions, probes and hints; proctoring, scoring and the verdict stay in code. `AssessmentRoom` keeps its UI. | User decision (§11). |
+| D30 | No syllabus found | Syllabus is resolved **class → school → platform → AI-generated**. `syllabus.generate` is allowed only after the other three return nothing; the draft is grounded on the national curriculum, checked by code, saved as provisional, and always labelled as AI-drafted (§8.7). | User decision: a missing syllabus must never block a learner. |
 | D10 | Who writes narration? | **Harness templates** (`ActivityNarrator`, grown from `narration.js:deliberate()`) for facts; the agent's `intent` (≤ 240 chars, sanitised, untrusted display text) for "why". v3's `narration` field **is** `intent`. | Deterministic where possible (v3 §40), already built (v7). |
 | D11 | Event store | New generic `edu.workflow_events`. `study_prep_events` is kept read-only and backfilled. | One stream model for four workflows (v3 §43). |
 | D12 | Live transport | **Event store is the source of truth; transport is replaceable.** Teaching and Decay keep the existing Socket.IO connection. Study Prep and Practice use SSE (same heartbeat pattern as `/chat/agent`). Both carry the identical event envelope. Replay: `GET /api/workflows/:id/events?after=N`. | v3 §42–43; reuses what already works. |
@@ -486,6 +487,8 @@ through the same pipeline; each workflow adds its own checks.
 | 11 | Learner gate satisfied | `learner_gate_required` |
 | 12 | Idempotency key unused (create-type actions) | `duplicate_request` |
 | 13 | Unknown action | `unknown_action` |
+
+**Study Prep–specific (new 🆕):** `syllabus_exists` (generate called while a real syllabus was found).
 
 **Study Prep–specific (existing ✅):** `attempt_cap_exceeded`,
 `prerequisite_violation`, `topic_not_in_syllabus`, `plan_too_large`,
@@ -1090,7 +1093,7 @@ state machine is.
 
 | Operation | When | Agent tools | Set |
 |---|---|---|---|
-| research / inspection | planning start, after a gap | `syllabus.resolve`, `learner.get_state`, `learner.get_history`, `learner.get_relevant_memory`, `concept.get_prerequisites`, `session.get_state`, `content.search` (flagged) | `research` |
+| research / inspection | planning start, after a gap | `syllabus.resolve_class`, `syllabus.resolve_school`, `syllabus.resolve_platform`, `syllabus.generate` (only if all three found nothing, §8.7), `learner.get_state`, `learner.get_history`, `learner.get_relevant_memory`, `concept.get_prerequisites`, `session.get_state`, `content.search` (flagged) | `research` |
 | planning / replanning | `planning`, `replanning` | `plan.validate`, `propose_plan` ⟂, `session.replan` | `planning` |
 | verification | plan checks | `plan.validate` | `safety` |
 | diagnostic / retest | topic `diagnostic_ready` / `retest_ready` | `practice.generate` (execute) | `reflection` |
@@ -1129,6 +1132,73 @@ threshold, attempt caps, deferred-retry rule, topic cap (12), loop caps (6/40).
   "outcome": { "topics": [{ "topicId": "…", "state": "understood", "attempts": 2, "strategiesUsed": ["teach_back"] }],
                "summaryEvidenceScope": "generated_practice" } }
 ```
+
+### 8.7 Syllabus resolution — never fail for lack of a syllabus (D30)
+
+Today `syllabus.resolve` reads only the platform tables (`edu.syllabus_*`)
+with a loose class-name match, and an empty result makes every plan fail with
+`topic_not_in_syllabus`. The learner's real school/class syllabus
+(`mgmt.syllabus_items`, `mgmt.subject_syllabus`) is never read. Replace it
+with four tools, tried from most specific to least:
+
+| # | Tool | Level | Reads | Returns |
+|---|---|---|---|---|
+| 1 | `syllabus.resolve_class` | read | `mgmt.syllabus_items` + `mgmt.subject_syllabus` for the learner's school **and class** (and term when known) | topics with term and `covered`/`pending` status — tells the agent what was taught this term |
+| 2 | `syllabus.resolve_school` | read | the same tables for the learner's school, any class, when the class has none for this subject | topics, marked as school-wide |
+| 3 | `syllabus.resolve_platform` | read | `edu.syllabus_subjects/topics/subtopics` by subject, class level and exam board, plus semantic `searchSyllabus` for near matches | topics with subtopics and objectives |
+| 4 | `syllabus.generate` | execute | — | an **AI-drafted outline** saved as a provisional syllabus |
+
+The learner's school and class come from their enrollment (server-side, never
+from the client). A learner with no school skips 1–2.
+
+**How the agent uses them.** The agent decides which to call (e.g. go
+straight to `resolve_platform` when the learner says "prepare me for JAMB
+Physics"). The harness enforces two rules:
+
+- `syllabus.generate` is permitted **only after** `resolve_class`,
+  `resolve_school` (when the learner has a school) and `resolve_platform` have
+  all returned nothing **in this session**. Otherwise `syllabus_exists`
+  rejection — a real syllabus always wins over a generated one.
+- The session records the source it planned against:
+  `study_prep_sessions.syllabus_source ∈ {class, school, platform, generated}`
+  + `syllabus_ref`. The plan's `topic_not_in_syllabus` check validates against
+  that source.
+
+The agent may enrich a class/school syllabus (which has topic names only) with
+subtopics and objectives from the platform syllabus for the same topic. The
+topic list itself stays the school's.
+
+**`syllabus.generate` — the fallback, with guardrails**
+
+- Input: subject, class level, exam board/term if known, the learner's goal.
+- Grounding: nearest platform syllabus chunks (`searchSyllabus`) and any
+  partial matches from steps 1–3 are passed in, so the draft follows the
+  national curriculum where possible.
+- Output is checked by code before it is saved: 3–15 topics, no duplicates,
+  each with a short label and 2–5 objectives, subject and level match the
+  request, plain learner-safe text.
+- Saved to `edu.generated_syllabi` with `status = provisional`, the model,
+  prompt version and grounding references. Reused for the same
+  (subject, class level, exam board, term) instead of generating again.
+- **Always labelled**: the plan card says "AI-drafted outline — not your
+  school's official syllabus", and the narration says why ("I couldn't find a
+  syllabus for JSS1 Basic Science for your class, school or on Akoro, so I
+  drafted an outline from the national curriculum."). The learner confirms the
+  plan as usual (the existing gate).
+- Prerequisite order inside a generated outline is a **suggestion**, not a hard
+  constraint (only approved `concept_edges` are hard constraints).
+- Closing claims stay inside the evidence and name the source ("practised
+  against an AI-drafted outline").
+- Cost: one generation call, metered like any planning step and shown in the
+  plan estimate. No charge if a cached outline is reused.
+- Admins can review provisional outlines and **promote** one into the platform
+  syllabus (`edu.syllabus_*`, `source = 'promoted_from_generated'`) or reject
+  it. Promotion is a later admin feature; the table supports it from day one.
+
+**Other workflows:** the three `resolve_*` tools are read tools available to
+every controller (Teaching uses them for must-know parts alongside
+`lessonLadder`; Practice uses them to pick question focus). `syllabus.generate`
+is available in Study Prep planning and Practice preparation only.
 
 ---
 
@@ -1735,12 +1805,24 @@ edu.decay_review_sessions (
 )
 
 -- Practice uses the existing edu.assessment_sessions (§14.2); no new table.
+
+edu.generated_syllabi (
+  id uuid pk, created_by_learner uuid, subject text, class_level text,
+  exam_board text null, term text null,
+  topics jsonb not null,              -- [{ id, label, objectives[] }]
+  grounding jsonb,                    -- platform chunk ids / partial matches used
+  model text, prompt_version text,
+  status text check in ('provisional','promoted','rejected') default 'provisional',
+  promoted_subject_id uuid null,      -- edu.syllabus_subjects when promoted
+  created_at timestamptz default now(),
+  unique (subject, class_level, coalesce(exam_board,''), coalesce(term,''), status) -- reuse, one provisional per scope
+)
 ```
 
 ### 14.2 Changed tables 🟡
 
 ```
-edu.study_prep_sessions   + workflow_id
+edu.study_prep_sessions   + workflow_id, syllabus_source ('class'|'school'|'platform'|'generated'), syllabus_ref
 edu.study_prep_topics     + teaching_workflow_id; status check widened to §8.3 states
 edu.adaptive_sessions     + workflow_id, entry_mode, source_workflow_id, source_topic_id, strategy,
                             teaching_mode ('teach_agent' | 'learn_with_guide')
@@ -1892,6 +1974,9 @@ existing contract test.** Phases 11 (UI) can start in parallel after Phase 3.
 - Agent wake triggers for topic decisions; inline strategies + "Ready for retest" gate.
 - Absorb `workflow-state.js` / `adaptive-workflows.js` projections.
 - Submit-status guard and transactional score/evidence/topic write.
+- Syllabus resolution chain (§8.7): `resolve_class`, `resolve_school`,
+  `resolve_platform`, `syllabus.generate` + `edu.generated_syllabi`, the
+  `syllabus_exists` precondition, plan-card labelling.
 - **Exit:** full Study Prep scenario passes without Teaching (inline strategy
   path), plus plan-rejection, budget-ceiling and cap-out scenarios.
 
@@ -1997,6 +2082,17 @@ defer/flag within policy → one deferred retry per session.
 - `propose_complete` before the gate allows → `objective_not_met`;
 - evidence and gate steps ran on every turn (asserted from events).
 
+**L — Syllabus fallback:** (1) learner in a school whose class has a Basic
+Science syllabus → plan uses the class topics, `syllabus_source = class`;
+(2) class has none, school has one → `school`; (3) no school syllabus, platform
+has JSS1 Basic Science → `platform`; (4) nothing anywhere → the agent calls
+`syllabus.generate` → a checked, labelled outline is saved and used, the plan
+card shows "AI-drafted outline", the learner confirms, the session runs
+normally; a second learner with the same subject/level reuses it with no
+generation charge; (5) the agent calls `syllabus.generate` while a platform
+syllabus exists → `syllabus_exists`. No learner ever gets a dead end for lack
+of a syllabus.
+
 **I — Plan rejection:** agent proposes an order violating prerequisites →
 `prerequisite_violation` shown as a red verification row → agent revises →
 valid plan shown.
@@ -2047,7 +2143,8 @@ LLM failure must never corrupt workflow state.
 
 | # | Item | Owner/phase |
 |---|---|---|
-| Q1 | JSS1 Basic Science rows in `edu.syllabus_*` and `concept_catalog` ❓ | Phase 0 |
+| Q1 | JSS1 Basic Science rows in `edu.syllabus_*` and `concept_catalog` ❓ — no longer a blocker (D30 generates an outline when missing), but real rows give better plans | Phase 0 |
+| Q15 | How a learner's school + class + term are looked up (enrollment table and current-term source) for `resolve_class` ❓ | Phase 0 |
 | Q2 | Real per-generation coin cost in `lib/aiPricing.js` (examples use 2) ❓ | Phase 0 |
 | Q3 | Default stays `gpt-4o-mini` (D23). Open: which assessor/evidence model env locks to, and whether controller prompts need per-model tuning (run the same scenarios on each selectable model). | Phase 6 spike |
 | Q4 | Teaching worst-case turn cost and the balance check threshold | Phase 6 |
