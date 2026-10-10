@@ -169,6 +169,7 @@
     "2026-library-folder-items.sql",
     "2026-content-cache.sql",
     "2026-record-search.sql",
+    "2026-record-chat.sql",
     "2026-community-items.sql",
     "2026-community-discussions.sql"
   ],

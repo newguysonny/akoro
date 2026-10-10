@@ -247,7 +247,7 @@ export async function indexByContentKey({ contentKey, pages = null, segments = n
  * function fuse it with the lexical arm; either arm failing still leaves
  * the other. Returns chunk hits joined with their record's identity.
  */
-export async function searchRecordChunks({ userId, q, limit = 12, recordId = null }) {
+export async function searchRecordChunks({ userId, q, limit = 12, recordId = null, full = false }) {
   const query = String(q || "").trim();
   if (!query) return [];
 
@@ -278,6 +278,7 @@ export async function searchRecordChunks({ userId, q, limit = 12, recordId = nul
     startMs: r.start_ms != null ? Number(r.start_ms) : null,
     endMs: r.end_ms != null ? Number(r.end_ms) : null,
     snippet: snippetOf(r.chunk_text),
+    ...(full ? { text: r.chunk_text || "" } : {}),   // Ask needs the whole passage
     similarity: r.similarity != null ? Number(r.similarity) : 0,
     fused: r.fused != null ? Number(r.fused) : 0,
   }));
