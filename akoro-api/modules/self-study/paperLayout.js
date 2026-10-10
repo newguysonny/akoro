@@ -107,11 +107,14 @@ const IMAGE_URL = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/;
 export function cleanFigure(f) {
   if (!f || typeof f !== "object") return null;
   const caption = typeof f.caption === "string" ? f.caption.trim().slice(0, LIMITS.caption) : "";
+  // alt: what the figure shows, in words — for screen readers and the AI grader.
+  const alt = typeof f.alt === "string" ? f.alt.trim().slice(0, 300) : "";
+  const extra = { ...(caption ? { caption } : {}), ...(alt ? { alt } : {}) };
   if (typeof f.src === "string" && f.src.length <= LIMITS.imageChars && IMAGE_URL.test(f.src)) {
-    return { src: f.src, ...(caption ? { caption } : {}) };
+    return { src: f.src, ...extra };
   }
   const svg = sanitizeSvg(f.svg);
-  return svg ? { svg, ...(caption ? { caption } : {}) } : null;
+  return svg ? { svg, ...extra } : null;
 }
 
 const str = (v, max) => (typeof v === "string" ? v.trim().slice(0, max) : "");

@@ -23,6 +23,14 @@ import {
   nana, edu, ACTIVITY_TYPES, announceFor, mySchool,
   resolveStudents, createAssignment, invalid,
 } from "./createAssignment.js";
+import {
+  updateDraftPayload, newVersion, runVersionJob, paperRequestFrom, versionAt, versionsOf, latestReady,
+  editedVersion, detailsFromVersion,
+} from "./draftVersions.js";
+
+/** The model call behind an assignment draft's questions, billed to its instructor. */
+const questionChat = (instructorId) => (messages) =>
+  nana.generateAssignmentQuestions({ messages, billing: { __userId: instructorId, __feature: "assignment_questions" } });
 
 /** Battles ride the same drafting flow but assign through their battle form
  *  (the one shared BattleForm), so they are valid drafts, not bench assigns. */
@@ -194,24 +202,13 @@ async function enrichDraftPlan(draftId, topic, subject) {
   ]);
   try {
     const { subtopics, objectives } = await withDeadline;
-    const { data: row, error: readErr } = await db.from("activity_drafts")
-      .select("status, payload").eq("id", draftId).maybeSingle();
-    if (readErr || !row) throw new Error(readErr?.message || "draft no longer readable");
-    if (row.status !== "draft") return; // assigned/discarded/expired — leave it be
-    const { error: updErr } = await db.from("activity_drafts")
-      .update({ payload: { ...row.payload, subtopics, objectives, plan_status: "ready" } })
-      .eq("id", draftId);
-    if (updErr) throw new Error(updErr.message);
+    // Under the draft's lock: a question version may be landing too.
+    await updateDraftPayload(draftId, (p, row) => (row.status !== "draft" ? null   // assigned/discarded/expired — leave it be
+      : { ...p, subtopics, objectives, plan_status: "ready" }));
   } catch (e) {
     console.error("[prepare_activity] plan generator failed:", e.message);
     try {
-      const { data: row } = await db.from("activity_drafts")
-        .select("status, payload").eq("id", draftId).maybeSingle();
-      if (row?.status === "draft") {
-        await db.from("activity_drafts")
-          .update({ payload: { ...row.payload, plan_status: "fallback" } })
-          .eq("id", draftId);
-      }
+      await updateDraftPayload(draftId, (p, row) => (row.status !== "draft" ? null : { ...p, plan_status: "fallback" }));
     } catch (markErr) { console.error("[prepare_activity] plan fallback mark failed:", markErr.message); }
   }
 }
@@ -333,6 +330,13 @@ export async function createActivityDraft({ instructor, input, sessionId = null,
     payload.subtopics = [topic];
     payload.objectives = { [topic]: [`Study and complete the activities on ${topic}`] };
     payload.plan_status = "pending";
+    // An assignment's questions come from the teacher's own words — V1,
+    // built in the background like the plan (see draftVersions.js).
+    if (type === "assignment") {
+      const { request, plan } = paperRequestFrom(input);
+      payload.paper_request = { request, plan };
+      payload.versions = [newVersion(payload, { request: request || `Questions on ${topic}` })];
+    }
   }
 
   if (input?.due_hint) payload.due_hint = String(input.due_hint).trim();
@@ -376,6 +380,7 @@ export async function createActivityDraft({ instructor, input, sessionId = null,
   // reply (and the Preview button) arrive instantly while the model fills
   // the plan. Its catch is internal — never an unhandled rejection.
   if (payload.plan_status === "pending") enrichDraftPlan(draft.id, topic, subject || "General");
+  if (versionsOf(payload).length) void runVersionJob(draft.id, 1, { chat: questionChat(instructor.id) });
 
   return { draft, audienceLabel, clarified: false };
 }
@@ -474,6 +479,7 @@ export async function reviseDraftPayload(instructor, id, changes) {
 
   const payload = { ...(draft.payload || {}) };
   const applied = [];
+  let newVersionN = null;
 
   const title = asText(c.title, 200);
   if (title) { payload.title = title; applied.push("title"); }
@@ -505,6 +511,22 @@ export async function reviseDraftPayload(instructor, id, changes) {
       applied.push("stages");
     }
   } else {
+    // An assignment's questions change by VERSION: the follow-up builds the
+    // next one in the background from the latest (or the named) version.
+    if (type === "assignment" && asText(c.question_request, 1500)) {
+      const list = versionsOf(payload);
+      const base = c.base_version ? versionAt(payload, c.base_version) : latestReady(payload);
+      if (c.base_version && !base) throw invalid(`There is no version ${c.base_version} on this draft.`);
+      if (list.length && (!base || base.status !== "ready")) {
+        throw invalid(`Version ${list.at(-1).n} is still being drafted — wait for it, then ask again.`, 409);
+      }
+      try {
+        const v = newVersion(payload, { request: asText(c.question_request, 1500), basedOn: base?.n ?? null });
+        payload.versions = [...list, v];
+        newVersionN = v.n;
+      } catch (e) { throw invalid(e.message, e.status || 409); }
+      applied.push("questions");
+    }
     // self_study | assignment | project: the plan (entries + their objectives).
     const wantsPlan = Array.isArray(c.subtopics) || (c.objectives && typeof c.objectives === "object");
     if (wantsPlan) {
@@ -519,12 +541,18 @@ export async function reviseDraftPayload(instructor, id, changes) {
 
   if (c.changeNote) payload.last_change = { note: String(c.changeNote).slice(0, 200), at: new Date().toISOString() };
 
-  const { data, error } = await db.from("activity_drafts")
-    .update({ payload })
-    .eq("id", draft.id)
-    .select().single();
+  // Written under the draft's lock so a version landing meanwhile isn't
+  // lost: this round's fields go over whatever the payload holds by then.
+  const CHANGED = ["title", "instructions", "difficulty", "details", "topic", "subtopics", "objectives", "last_change"];
+  await updateDraftPayload(draft.id, (p) => ({
+    ...p,
+    ...Object.fromEntries(CHANGED.filter((k) => k in payload && payload[k] !== draft.payload?.[k]).map((k) => [k, payload[k]])),
+    ...(newVersionN ? { versions: [...versionsOf(p), payload.versions.at(-1)] } : {}),
+  }));
+  const { data, error } = await db.from("activity_drafts").select().eq("id", draft.id).single();
   if (error) throw invalid(error.message, 500);
-  return { draft: data, applied };
+  if (newVersionN) void runVersionJob(draft.id, newVersionN, { chat: questionChat(instructor.id) });
+  return { draft: data, applied, version: newVersionN };
 }
 
 /**
@@ -546,8 +574,23 @@ export async function assignActivityDraft({ instructor, id, overrides = null }) 
   if (claimErr) throw invalid(claimErr.message, 500);
   if (!claim?.length) throw invalid("This draft was already resolved", 409);
 
-  const payload = { ...(draft.payload || {}), ...(overrides && typeof overrides === "object" ? overrides : {}) };
+  const { version: pickedVersion, ...rest } = overrides && typeof overrides === "object" ? overrides : {};
+  const payload = { ...(draft.payload || {}), ...rest };
   const type = payload.type || draft.type;
+
+  // An assignment with versions sends the one on screen (the newest ready
+  // one when none is named) — unless the full edit form sent its own questions.
+  if (versionsOf(draft.payload).length && !(Array.isArray(rest.details?.questions) && rest.details.questions.length)) {
+    const v = pickedVersion != null ? versionAt(draft.payload, pickedVersion) : latestReady(draft.payload);
+    if (!v || v.status !== "ready") {
+      await db.from("activity_drafts").update({ status: "draft", resolved_at: null }).eq("id", draft.id).eq("status", "assigned");
+      throw invalid(pickedVersion != null ? `Version ${pickedVersion} isn't ready to assign.` : "The questions are still being drafted — try again in a moment.", 409);
+    }
+    payload.details = detailsFromVersion(payload.details, v);
+    if (!payload.instructions && v.paper?.instructions) payload.instructions = v.paper.instructions;
+  }
+  delete payload.versions;
+  delete payload.paper_request;
 
   // Battle drafts are completed through their battle form, not this path —
   // release the claim so the instructor can still finish it there.
@@ -607,4 +650,36 @@ export async function assignActivityDraft({ instructor, id, overrides = null }) 
   if (error) console.warn("[drafts] assign bookkeeping failed:", error.message);
 
   return { ...result, announce: announceFor(type) };
+}
+
+/* ── Versions: the teacher's edits and retries (the preview) ──────────── */
+
+/** Save the teacher's edits to one version — in place, marked edited. */
+export async function saveDraftVersion(instructor, id, n, body) {
+  const draft = await getActivityDraft(instructor, id);
+  if (draft.status !== "draft") throw invalid("Only pending drafts can be edited", 409);
+  let saved = null;
+  await updateDraftPayload(draft.id, (p) => {
+    const i = versionsOf(p).findIndex((v) => v.n === Number(n));
+    try { saved = editedVersion(p.versions?.[i], body); } catch (e) { throw invalid(e.message, e.status || 400); }
+    p.versions[i] = saved;
+    return p;
+  });
+  return saved;
+}
+
+/** Try a failed version again. */
+export async function retryDraftVersion(instructor, id, n) {
+  const draft = await getActivityDraft(instructor, id);
+  if (draft.status !== "draft") throw invalid("Only pending drafts can be retried", 409);
+  const v = versionAt(draft.payload, n);
+  if (!v) throw invalid("No such version", 404);
+  if (v.status !== "failed") throw invalid(`Version ${v.n} didn't fail — nothing to retry.`, 409);
+  await updateDraftPayload(draft.id, (p) => {
+    const i = versionsOf(p).findIndex((x) => x.n === v.n);
+    p.versions[i] = { ...p.versions[i], status: "drafting", error: null };
+    return p;
+  });
+  void runVersionJob(draft.id, v.n, { chat: questionChat(instructor.id) });
+  return { n: v.n, status: "drafting" };
 }
