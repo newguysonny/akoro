@@ -179,12 +179,13 @@ export async function getExtractionStatus({ recordId, contentKey }) {
   return d?.data ?? { done: true, pages: [], pending: [], failed: [] };
 }
 
-/** Read a Word / PowerPoint file's text into pages (the server does it from
-    the stored file; normally already done at upload). → the extraction
-    ({ pages, done: true }), or { running: true } while another run holds it.
-    Throws with the server's message when the file can't be read. */
-export async function extractOfficeRecord({ recordId, contentKey }) {
-  const d = await apiPost('/api/records/extract/office', contentKey ? { contentKey } : { recordId });
+/** Have the server read a file's text into pages from the stored file — a
+    PDF's text layer, a text file, Word / PowerPoint (normally already done
+    at upload or by the backfill). → the extraction ({ pages, done: true }),
+    or { running: true } while another run holds it. Throws with the
+    server's message when the file can't be read (err.status 422 for a scan). */
+export async function extractStoredRecordText({ recordId, contentKey }) {
+  const d = await apiPost('/api/records/extract/text', contentKey ? { contentKey } : { recordId });
   return d?.data ?? { pages: [], running: false };
 }
 

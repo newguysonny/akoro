@@ -392,6 +392,7 @@ export async function saveExtractionPages({ contentKey, pages, model }) {
   const rows = (pages || []).map((p) => ({
     content_key: contentKey, page_number: p.pageNumber,
     blocks: JSON.stringify(p.blocks || []), markdown: p.markdown || "", model,
+    ...(p.size?.width && p.size?.height ? { width: p.size.width, height: p.size.height, unit: p.size.unit || null } : {}),
   }));
   for (let i = 0; i < rows.length; i += 50) {
     const { error } = await db.schema("edu").from("content_parses")

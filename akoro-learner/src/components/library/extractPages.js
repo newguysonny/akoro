@@ -104,7 +104,11 @@ export async function autoExtractUpload(record) {
       // at its worker. (This used loadPdfDocument without importing it, so
       // background extraction threw — silently — on every PDF upload.)
       const { loadPdfDocument } = await import('./PdfPages.jsx');
-      const { pdf } = await loadPdfDocument(record.fileUrl);
+      const { pdf, texts } = await loadPdfDocument(record.fileUrl);
+      // A PDF with a real text layer is read by the server for free at
+      // registration — only a scan needs the paid parse.
+      const chars = (texts || []).join('').replace(/\s+/g, '').length;
+      if (chars >= 20 * Math.max(1, (texts || []).length)) return;
       const pages = await rasterizePdfPages(pdf);
       if (pages.length) await runRecordExtraction({ recordId: record.id, pages });
     } else {

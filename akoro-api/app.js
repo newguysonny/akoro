@@ -750,6 +750,19 @@ if (!skipJob("embedding sweeper")) {
     .catch((e) => console.error("[embeddings] sweeper failed to start:", e.message));
 }
 
+// Library text backfill — files uploaded before upload-time extraction get
+// their free, server-readable text (PDF text layers, text files, Word /
+// PowerPoint) and pastes their search index. One pass per boot, a few
+// minutes after start; idempotent, so later boots only see what's new.
+// Scans, images and recordings stay on the reader's tap-to-extract offer.
+if (!skipJob("record text backfill")) {
+  setTimeout(() => {
+    import("./modules/records/textBackfill.js")
+      .then((m) => m.backfillRecordText())
+      .catch((e) => console.error("[records/text-backfill] failed:", e.message));
+  }, 3 * 60_000).unref?.();
+}
+
 // Alert rules — spend, latency, failures, and work that has silently stopped.
 // Needs no Redis: it reads the telemetry tables on a cron.
 if (!skipJob("alert worker")) {

@@ -149,7 +149,7 @@ test("the session viewer shares the reader's toolbar, tools and tabs", () => {
   // The reader grew optional seams; the teaching session must be unaffected.
   assert.ok(reader.includes("renderPageContent = null"), "custom page renderer seam");
   assert.ok(reader.includes("media = null"), "media pane seam");
-  assert.ok(reader.includes("allowTextMarking = true"), "annotate/redact can step aside for canvases");
+  assert.ok(reader.includes("folio-mark-box"), "annotate/hide draw over canvases and images too");
   assert.ok(viewer.includes("buildSessionReaderPages"), "text records paginate like a session guide");
   assert.ok(viewer.includes("<TeachAgentModal"), "records open as real TEACHING sessions");
   assert.ok(viewer.includes("content={content}"), "the record is the session's material");
@@ -176,7 +176,7 @@ test("PDFs render as the actual document, and tools still work", () => {
   assert.ok(pdfPages.includes("IntersectionObserver"), "pages render lazily");
   assert.ok(pdfPages.includes("getTextContent"), "page text is extracted");
   assert.ok(viewer.includes("texts.map"), "tool derivation uses the real page text");
-  assert.ok(viewer.includes("type !== 'pdf' && type !== 'image'"), "canvas/image pages don't offer HTML-only annotate/redact");
+  assert.ok(!viewer.includes("allowTextMarking"), "PDF and image pages offer annotate/hide (drawn as overlays)");
 });
 
 test("the rest of the app reads the server shelf too", () => {

@@ -67,7 +67,8 @@ import {
 } from "./askLib.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
 import { activePremiumUserIds, resolveContentAccess, resolveAskTargetFor } from "./access.js";
-import { officeKindOf, extractOfficeContent } from "./officeText.js";
+import { officeKindOf } from "./officeText.js";
+import { storedTextKindOf, extractStoredText } from "./storedText.js";
 import { TOOL_IDS, TOOL_LIMITS, toolSchema, buildToolMessages, shapeToolResult, gatherToolPassages } from "./toolsLib.js";
 import {
   validateArtifactInput, validateArtifactPatch, listArtifacts, createArtifact, updateArtifact, deleteArtifact,
@@ -259,11 +260,13 @@ router.post("/", authenticateToken, asyncHandler(async (req, res) => {
       }))
       .catch(() => {});
   }
-  // Word / PowerPoint: the server reads the text into pages right away —
-  // the reader, Ask and the tools all start from that extraction.
-  if (data.kind === "upload" && data.file_key && officeKindOf(data.mime, data.name)) {
+  // Text the server can read for free — a PDF's text layer, a text file,
+  // Word / PowerPoint — becomes the file's pages right away, so Ask and the
+  // tools work from the start. (A scanned PDF claims nothing here: the
+  // uploader's browser sends it to RunPod.)
+  if (data.kind === "upload" && data.file_key && storedTextKindOf(data.mime, data.name)) {
     void createPresignedDownload(data.file_key, { downloadName: data.name })
-      .then((fileUrl) => extractOfficeContent({
+      .then((fileUrl) => extractStoredText({
         userId, contentKey: data.file_key, name: data.name, mime: data.mime, fileUrl,
       }))
       .catch(() => {});
@@ -738,22 +741,26 @@ router.get("/extract/status", authenticateToken, asyncHandler(async (req, res) =
 }));
 
 /*
- * POST /extract/office { recordId | contentKey } — read a Word / PowerPoint
- * file's text into pages (normally done at upload; this is the retry, and
- * the path for files uploaded before it existed). Needs no GPU: it runs
- * inline and answers with the extraction, or 202 while another run holds
- * the file's claim. Reading a shared file's text fills the shared cache
- * from the STORED bytes, never from anything the caller sends.
+ * POST /extract/text { recordId | contentKey } — read a file's text into
+ * pages on the server: a PDF's text layer, a text file, Word / PowerPoint
+ * (/extract/office is the same route, kept for the app's first callers).
+ * Normally done at upload or by the backfill; this is the retry and the
+ * reader's "not read yet" path. Needs no GPU: it runs inline and answers
+ * with the extraction, 202 while another run holds the file's claim, or
+ * 422 { scanned } for a scan (that's the tap-to-extract offer's job).
+ * Reading a shared file's text fills the shared cache from the STORED
+ * bytes, never from anything the caller sends.
  */
-router.post("/extract/office", authenticateToken, asyncHandler(async (req, res) => {
+router.post(["/extract/text", "/extract/office"], authenticateToken, asyncHandler(async (req, res) => {
   const id = await resolveAiContent(req);
   if (id.status) return res.status(id.status).json({ success: false, message: id.message });
-  if (!officeKindOf(id.mime, id.name)) return res400(res, "Only Word (.docx) and PowerPoint (.pptx) files are read this way.");
+  if (!storedTextKindOf(id.mime, id.name)) return res400(res, "Only PDFs, text files and Word / PowerPoint files are read this way.");
   const existing = await getExtraction(id.contentKey);
   if (existing.pages.length) return okExtract(res, { ...existing, done: true });
   const fileUrl = await createPresignedDownload(id.contentKey, { downloadName: id.name });
-  const out = await extractOfficeContent({ userId: req.user.id, contentKey: id.contentKey, name: id.name, mime: id.mime, fileUrl });
+  const out = await extractStoredText({ userId: req.user.id, contentKey: id.contentKey, name: id.name, mime: id.mime, fileUrl });
   if (out.status === "running") return res.status(202).json({ success: true, data: { running: true, done: false, pages: [] } });
+  if (out.status === "scanned") return res.status(422).json({ success: false, scanned: true, message: "This PDF is a scan — use Extract text in the reader to read it." });
   if (out.status === "failed") return res.status(422).json({ success: false, message: out.error || "Could not read this file." });
   okExtract(res, { ...(await getExtraction(id.contentKey)), done: true });
 }));
