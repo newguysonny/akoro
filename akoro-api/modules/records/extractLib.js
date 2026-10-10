@@ -385,6 +385,22 @@ export async function saveExtractionPage({ contentKey, pageNumber, blocks, markd
   return { ...data, blocks: JSON.parse(data.blocks || "[]") };
 }
 
+/** Upsert many pages at once (a Word / PowerPoint file's text pages), in
+ *  batches. Blocks are stored the way saveExtractionPage stores them. */
+export async function saveExtractionPages({ contentKey, pages, model }) {
+  const db = await dbLazy();
+  const rows = (pages || []).map((p) => ({
+    content_key: contentKey, page_number: p.pageNumber,
+    blocks: JSON.stringify(p.blocks || []), markdown: p.markdown || "", model,
+  }));
+  for (let i = 0; i < rows.length; i += 50) {
+    const { error } = await db.schema("edu").from("content_parses")
+      .upsert(rows.slice(i, i + 50), { onConflict: "content_key,page_number" });
+    if (error) throw error;
+  }
+  return rows.length;
+}
+
 /** The cached extraction for a FILE (any opener's money already spent). */
 export async function getExtraction(contentKey) {
   const db = await dbLazy();
