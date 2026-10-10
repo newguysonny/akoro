@@ -5,10 +5,11 @@
  */
 import { parseRich } from './richText.js';
 
+/* Headings scale with the text around them (13.5px text → 16.5 / 15 / 13.5). */
 const H_STYLE = {
-  1: { fontSize: 16.5, fontWeight: 800, margin: '10px 0 4px' },
-  2: { fontSize: 15, fontWeight: 800, margin: '9px 0 4px' },
-  3: { fontSize: 13.5, fontWeight: 800, margin: '8px 0 3px' },
+  1: { fontSize: '1.22em', fontWeight: 800, margin: '10px 0 4px' },
+  2: { fontSize: '1.11em', fontWeight: 800, margin: '9px 0 4px' },
+  3: { fontSize: '1em', fontWeight: 800, margin: '8px 0 3px' },
 };
 
 function Span({ s }) {
@@ -18,11 +19,13 @@ function Span({ s }) {
 
 const SpanRun = ({ spans }) => <>{spans.map((s, i) => <Span key={i} s={s} />)}</>;
 
-export default function RichText({ text }) {
+/* `size` / `lineHeight` let a host set the reading size — the Agent Chat's
+   replies are 16px; everything else keeps the compact 13.5px. */
+export default function RichText({ text, size = 13.5, lineHeight = 1.6 }) {
   const blocks = parseRich(text);
   if (!blocks.length) return null;
   return (
-    <div style={{ fontSize: 13.5, lineHeight: 1.6, fontWeight: 500 }}>
+    <div style={{ fontSize: size, lineHeight, fontWeight: 500 }}>
       {blocks.map((b, i) => {
         if (b.type === 'hr') return <div key={i} style={{ borderTop: '1px solid rgba(255,255,255,.25)', margin: '8px 0' }} />;
         if (b.type === 'h') return <div key={i} style={H_STYLE[b.level]}><SpanRun spans={b.spans} /></div>;
