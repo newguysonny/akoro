@@ -81,3 +81,15 @@ test("wiring: every learner turn carries the taught knowledge; the two tools; th
   assert.match(learnerTab, /t\('agent\.from_guide'\)/);
   assert.match(dashboard, /onTeachTopic=\{\(\{ topic, subject \}\)=>\{ setConfigInitial\(\{ topic,/);
 });
+
+test("voice: the learner talks to the same protégé", async () => {
+  const voice = await read("../voice/routes.js");
+  // The mic feeds the same chat (so every protégé rule holds), and a reply to
+  // something said aloud is read aloud.
+  assert.match(learnerTab, /const mic=useVoiceAnswer\(\{ onTranscript:\(said\)=>\{ voiceTurnRef\.current=true; sendRef\.current\?\.\(said\); \} \}\);/);
+  assert.match(learnerTab, /if\(spokenTurn && finalReply && !controller\?\.signal\.aborted\) tts\.speak\(replyId, finalReply\);/);
+  assert.doesNotMatch(learnerTab, /Voice input is not available in AI Chat yet/);
+  // A learner's realtime voice session carries the protégé rules and taught topics.
+  assert.match(voice, /\+ \(role === "student" \? await protegeVoiceRules\(req\.user\.id\) : ""\)/);
+  assert.match(voice, /loadDoctrine\("policies\/PROTEGE\.md"\)\) \+ renderTaughtContext\(taught\)/);
+});

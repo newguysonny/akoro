@@ -25,6 +25,8 @@ import { fetchActiveStudyPrepSession } from '../../services/studyPrepApi.js';
 import TraceBlocks from './agentChat/TraceBlocks.jsx';
 import { applyTraceEvent, blocksFromSavedTrace, promoteActivity, settleRunning } from '../../lib/agentChatTrace.js';
 import { CHAT_STARTERS, cleanIdeas, protegeMoves } from '../../lib/chatIdeas.js';
+import { useVoiceAnswer } from '../../hooks/useVoiceAnswer.js';
+import { useSpeakReply } from '../../hooks/useSpeakReply.js';
 
 const QUICK_PROMPTS = [
   { text:"Create a task for me", key:"agent.qp_create" },
@@ -471,6 +473,16 @@ function AgentChatTab({
   // A suggestion chip puts its text in the message box — the learner can
   // change it, then send. Nothing is sent for them.
   const composerWrapRef=useRef(null);
+
+  /* ── Voice: talk to your protégé ─────────────────────────────────────
+     The mic records, /api/voice/transcribe turns it into words, and the
+     words go through the SAME chat as typing — so the protégé's rules
+     (taught knowledge only, Teach me, the teaching guide) hold by voice
+     too. A reply to something said aloud is read aloud. */
+  const sendRef=useRef(null);
+  const voiceTurnRef=useRef(false);
+  const mic=useVoiceAnswer({ onTranscript:(said)=>{ voiceTurnRef.current=true; sendRef.current?.(said); } });
+  const tts=useSpeakReply({ voice:'nova' });
   const applyIdea=(fill)=>{
     setInput(fill);
     requestAnimationFrame(()=>{
@@ -486,6 +498,8 @@ function AgentChatTab({
     const text=raw || (attachments.length ? t('agent.attach_default_msg') : "");
     if(!text||loading||running) return;
     if(!overrideText) setInput("");
+    const spokenTurn=voiceTurnRef.current; voiceTurnRef.current=false;
+    tts.stop();
     atBottomRef.current=true; setShowJump(false);   // your own message always brings you to the bottom
     const ts=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
     const userMsg={id:Date.now(),from:"me",text,time:ts,attachments:attachments.map(a=>({name:a.name,previewUrl:a.previewUrl}))};
@@ -609,6 +623,8 @@ function AgentChatTab({
         }
       }
     }
+    // Said aloud → answered aloud.
+    if(spokenTurn && finalReply && !controller?.signal.aborted) tts.speak(replyId, finalReply);
     // Suggestions for every reply: three follow-ups, asked for AFTER the
     // reply has arrived (it never waits on them); a failure is just no chips.
     if(finalReply && !controller?.signal.aborted){
@@ -627,6 +643,8 @@ function AgentChatTab({
     abortRef.current=null;
     turnIdRef.current=null;
   };
+
+  sendRef.current=sendMessage;
 
   // ■ Stop: tell the server to stop THIS turn first (a dropped connection alone
   // never stops it — the server finishes and saves the full reply so a retry
@@ -869,6 +887,13 @@ function AgentChatTab({
                   <div style={{ fontSize:10,color:"var(--ak-text-muted)",marginTop:3,display:"flex",alignItems:"center",gap:4 }}>
                     {msg.time}
                     {msg.text&&<CopyMessageButton text={msg.text} />}
+                    {msg.text&&msg.phase!=="answering"&&msg.phase!=="thinking"&&(
+                      <button type="button" onClick={()=>tts.speakingId===msg.id?tts.stop():tts.speak(msg.id,msg.text)}
+                        title={tts.speakingId===msg.id?t('agent.listen_stop'):t('agent.listen')} aria-label={tts.speakingId===msg.id?t('agent.listen_stop'):t('agent.listen')}
+                        style={{ background:"none",border:"none",cursor:"pointer",padding:3,display:"inline-flex",alignItems:"center",color:tts.speakingId===msg.id?BRAND:"var(--ak-text-muted)" }}>
+                        {tts.loadingId===msg.id?<Spinner size={11}/>:<Icon name={tts.speakingId===msg.id?"ti-player-stop":"ti-volume"} size={13}/>}
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -888,6 +913,16 @@ function AgentChatTab({
           )}
           </div>
           <div style={{ padding:`10px ${CHAT_GUTTER}px 12px`,borderTop:"1px solid var(--ak-border)",background:"var(--ak-surface)",flexShrink:0 }}>
+            {(mic.recording||mic.transcribing||mic.micError||tts.speakError)&&(
+              <div role="status" style={{ display:"flex",alignItems:"center",gap:8,margin:"0 0 8px",padding:"7px 11px",borderRadius:10,
+                background:mic.micError||tts.speakError?"rgba(239,68,68,.10)":`${BRAND}10`,border:`1px solid ${mic.micError||tts.speakError?`${RED}35`:`${BRAND}30`}` }}>
+                {mic.recording&&<><style>{"@keyframes ak-rec-pulse{0%,100%{opacity:1}50%{opacity:.25}}"}</style><span style={{ width:8,height:8,borderRadius:"50%",background:RED,animation:"ak-rec-pulse 1.2s infinite ease-in-out",flexShrink:0 }}/></>}
+                <span style={{ flex:1,fontSize:11.5,fontWeight:700,color:mic.micError||tts.speakError?RED:BRAND }}>
+                  {mic.micError||tts.speakError||(mic.recording?t('agent.voice_listening'):t('agent.voice_transcribing'))}
+                </span>
+                {tts.speakError&&<button onClick={tts.clearSpeakError} style={{ border:"none",background:"transparent",color:RED,cursor:"pointer",fontSize:13,fontWeight:900,padding:0 }}>×</button>}
+              </div>
+            )}
             {attachError&&(
               <div style={{ display:"flex",alignItems:"center",gap:8,margin:"0 0 8px",padding:"7px 11px",borderRadius:10,background:"rgba(239,68,68,.10)",border:`1px solid ${RED}35` }}>
                 <span style={{ flex:1,fontSize:11,fontWeight:700,color:RED }}>{attachError}</span>
@@ -921,7 +956,9 @@ function AgentChatTab({
               stopLabel={t('agent.stop')}
               attachmentAction={()=>fileInputRef.current?.click()}
               attachmentLabel={t('agent.attach_add')}
-              voiceLabel="Voice input is not available in AI Chat yet"
+              voiceAction={()=>{ if(mic.recording) mic.stop(); else { tts.stop(); mic.start(); } }}
+              voiceActive={mic.recording}
+              voiceLabel={mic.recording?t('agent.voice_stop'):mic.transcribing?t('agent.voice_transcribing'):t('agent.voice_start')}
               audioLabel="Audio notes are not available in AI Chat yet"
               hideModelMenu
               sendDisabled={!input.trim()&&!attachments.length}
