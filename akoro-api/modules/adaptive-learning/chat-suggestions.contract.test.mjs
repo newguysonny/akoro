@@ -5,13 +5,14 @@ import test from "node:test";
 const { buildSuggestionMessages, shapeSuggestions, SUGGESTION_LIMITS } = await import("./chatSuggestions.js");
 const { chatIdeas, versionIdeas, STARTERS } = await import("../../../akoro-instructor/src/lib/chatIdeas.js");
 const read = (p) => readFile(new URL(p, import.meta.url), "utf8");
-const [chat, chatPage, draftCard] = await Promise.all([read("./chat.js"), read("../../../akoro-instructor/src/pages/ChatPage.jsx"), read("../../../akoro-instructor/src/components/paper/DraftCard.jsx")]);
+const [chat, chatPage, draftCard, learnerTab] = await Promise.all([read("./chat.js"), read("../../../akoro-instructor/src/pages/ChatPage.jsx"), read("../../../akoro-instructor/src/components/paper/DraftCard.jsx"), read("../../../akoro-learner/src/components/tabs/AgentChatTab.jsx")]);
 
 test("the suggestion prompt: three short next things, never assigning", () => {
   const [sys, user] = buildSuggestionMessages({ role: "instructor", ask: "5 MCQ on fractions", reply: "Draft ready — preview it to assign." });
   assert.match(sys.content, /exactly 3 short things/);
   assert.match(sys.content, /Never suggest assigning, sending or publishing/);
   assert.match(sys.content, /The user is a teacher/);
+  assert.match(sys.content, /same language the user wrote in/);
   assert.match(user.content, /The user said: 5 MCQ on fractions/);
   assert.match(buildSuggestionMessages({ reply: "x" })[0].content, /The user is a learner/);
   assert.ok(buildSuggestionMessages({ reply: "y".repeat(9000) })[1].content.length < SUGGESTION_LIMITS.replyChars + 200);
@@ -70,4 +71,8 @@ test("wiring: every reply gets suggestions, after it arrives", () => {
   assert.match(chatPage, /const isLatestReply = !isMe && mi === messages\.length - 1/);
   assert.match(chatPage, /onClick=\{\(\) => \{ setInput\(it\.fill\); inputRef\.current\?\.focus\(\); \}\}/, "a chip fills the box, it doesn't send");
   assert.match(draftCard, /if \(next\) onDraft\?\.\(next\);/);
+  // The learner's Agent Chat: starters on a fresh chat, follow-ups after every reply.
+  assert.match(learnerTab, /apiPost\('\/api\/adaptive\/chat\/suggestions', \{ ask: text, reply: finalReply, role: 'student' \}\)/);
+  assert.match(learnerTab, /messages\.length===1 \? CHAT_STARTERS\.map/);
+  assert.match(learnerTab, /onClick=\{\(\)=>applyIdea\(it\.fill\)\}/, "a chip fills the box, it doesn't send");
 });
