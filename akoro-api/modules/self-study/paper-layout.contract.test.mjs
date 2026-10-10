@@ -108,9 +108,9 @@ test("the submission PDF prints sections, the passage and the figure; markdown c
 });
 
 test("wiring: the generator lays out a paper; saving cleans it; the apps render it", () => {
-  for (const s of ["sections", "passages", "figure", "A–E", "Unicode", "sanitizeSvg("]) assert.ok(guide.includes(s), `generator: ${s}`);
+  // The generator's rules live in questionPaper.js (tested there); the guide makes the one bounded call.
   assert.equal((guide.match(/__timeoutMs: 45_000, __maxRetries: 1/g) || []).length, 4);
-  assert.ok(routes.includes("ok(res, { questions, sections, passages })"));
+  assert.ok(routes.includes("ok(res, { ...paper, warning, summary: summarizePaper(paper) })"));
   assert.ok(routes.includes("updates.details = cleanPaperDetails(updates.details)"), "edits are cleaned");
   assert.ok(createAssignment.includes("cleanPaperDetails(details)"), "creates are cleaned");
   assert.ok(page.includes("<PaperBuilder") && page.includes("cleanPaper(form)") && page.includes("<PaperView details={data.details}"));

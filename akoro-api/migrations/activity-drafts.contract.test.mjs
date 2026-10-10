@@ -396,8 +396,9 @@ test("prepare failures are diagnosable and survivable — no more silent thrash"
   assert.match(drafts, /PLAN_ENRICH_TIMEOUT_MS = 150_000/);
   assert.match(drafts, /plan_status: "ready"/);
   assert.match(drafts, /plan_status: "fallback"/);
-  assert.match(drafts, /row\.status !== "draft"\) return/);
-  assert.match(drafts, /\.\.\.row\.payload,/);
+  // …written under the draft's lock (draftVersions.js) so a question
+  // version landing at the same moment isn't overwritten.
+  assert.match(drafts, /updateDraftPayload\(draftId, \(p, row\) => \(row\.status !== "draft" \? null/);
   assert.match(drafts, /console\.error\("\[prepare_activity\] plan generator failed:/);
   // A broken machine due_at degrades to the human hint, never a dead end.
   assert.match(drafts, /dueAtNotice = "The exact due time could not be parsed/);

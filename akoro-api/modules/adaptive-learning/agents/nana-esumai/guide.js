@@ -11,7 +11,6 @@
  */
 
 import { openai } from "../base-orchestrator.js";
-import { sanitizeSvg } from "../../../self-study/paperLayout.js";
 // P2 (Context Layer Adoption): every prompt below loads VERBATIM from the
 // akoro-agent/ workspace via these builders — byte-identical to the
 // pre-migration literals, pinned by agentContext.golden.personas.test.mjs.
@@ -133,98 +132,21 @@ export class NaNaEsumai {
 
   /* ── Assignment workbench: draft graded questions ────────── */
   /**
-   * Draft assignment questions with the marking built in. The instructor
-   * sets the shape — total points and which question types are allowed
-   * (reference: assignment generation and creator.md) — and the model
-   * allocates points across questions weighted by difficulty and thinking
-   * level, so every question arrives already worth its marks. MCQs carry
-   * their options and the correct index; every other type is open answer.
-   *
-   * The draft is laid out like an exam paper (reference/question-layout-
-   * for-activity — the NCEE papers): sections with their instructions,
-   * passages several questions share, a figure between a question's text
-   * and its options when the question needs one, options lettered A–E.
-   * → { questions, sections, passages } — the layout is cleaned again
-   * (paperLayout.js) when the assignment is saved.
+   * One bounded JSON call for an assignment's questions. The messages are
+   * built by modules/self-study/questionPaper.js from the teacher's own
+   * request ("5 questions, 3 MCQ, 2 theory") — first drafts and follow-up
+   * versions alike — which also checks the result against the request and
+   * retries once. → the model's JSON string.
    */
-  async generateAssignmentQuestions({ topic, subject, totalPoints, questionTypes, difficulty, subtopics }) {
-    const types  = (Array.isArray(questionTypes) && questionTypes.length)
-      ? questionTypes.join(", ") : "MCQ, Short answer";
-    const areas  = (Array.isArray(subtopics) && subtopics.length)
-      ? `\nQuestion areas from the approved task breakdown (cover them in order):\n${subtopics.map((s, i) => `  ${i + 1}. ${s}`).join("\n")}\n` : "";
-    const total  = Number(totalPoints) || null;
+  async generateAssignmentQuestions({ messages, billing = {} }) {
     const res = await openai.chat.completions.create({
-      model: "gpt-4.1-mini", temperature: 0.3,
+      model: "gpt-4.1-mini", temperature: 0.3, max_tokens: 6000,
       __timeoutMs: 45_000, __maxRetries: 1,
       response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content:
-          "You write graded assignment questions for a school class, laid out like a printed exam paper. " +
-          "Use ONLY the question types listed. Produce " +
-          (total
-            ? "as many questions as the total points sensibly support (about one question per 3-5 points, minimum 3, maximum 12)"
-            : "4 to 6 questions and choose a sensible total (10, 20, 50 or 100)") +
-          ". Allocate max_points across the questions so they sum EXACTLY" +
-          (total ? ` to ${total}` : " to that total") +
-          ". Weight the points by difficulty and thinking level — harder questions and higher cognitive levels earn more marks. " +
-          "difficulty is one of Easy, Medium, Hard. cognitive_level is one of Recall, Understand, Apply, Analyze, Evaluate, Create. " +
-          'MCQ questions carry 4 or 5 options (read as A–E) plus "correct", the 0-based index of the right one; every other type has no options. ' +
-          "Options are short and parallel — a number with its unit, an amount, a word or a phrase — never \"all of the above\". " +
-          "\n\nPAPER LAYOUT. Group the questions into sections, one per question type or task (e.g. \"SECTION A — Multiple choice\", \"SECTION B — Short answer\"); " +
-          "each section has instructions that tell the learner exactly what to do (\"Choose the correct option from A to E.\"). " +
-          "Questions of one section are consecutive. When several questions are about one text — a comprehension passage, a case, " +
-          "a data table written out as text — put that text ONCE in passages and point those questions at it; questions then say " +
-          "\"According to the passage…\". Most assignments need no passage. " +
-          "\nFIGURES. When a question needs a diagram (a shape with labelled sides or angles, a graph, a number line, a simple circuit, " +
-          "a bar chart), give it a figure: a small black-line SVG — <svg viewBox=\"0 0 W H\"> with W ≤ 400 and H ≤ 300, using only " +
-          "line, polyline, polygon, rect, circle, ellipse, path and text; stroke=\"#000\", fill=\"none\" for shapes, font-size 12–16, " +
-          "every label the question mentions drawn in the figure. The question text says \"in the diagram below\" and the figure " +
-          "MUST match it exactly. Never more than 3 figures; no figure when words are enough. " +
-          "\nWrite maths with Unicode, never LaTeX: x², 10³, ½, ¾, √2, π, °, ×, ÷, ≤, ≥, ₦. " +
-          'Return JSON: { "sections": [ { "title": string, "instructions": string } ], ' +
-          '"passages": [ { "title": string, "text": string } ], ' +
-          '"questions": [ { "text": string, "type": string, "max_points": number, "difficulty": string, "cognitive_level": string, ' +
-          '"section": number (0-based index into sections), "passage"?: number (0-based index into passages), ' +
-          '"figure"?: { "svg": string, "caption": string }, "options"?: string[], "correct"?: number } ] }' },
-        { role: "user", content:
-          `Topic: ${topic}\nSubject: ${subject}\nQuestion types to use: ${types}` +
-          (difficulty ? `\nOverall difficulty target: ${difficulty}` : "") +
-          (total ? `\nTotal points: ${total}` : "") + areas },
-      ],
+      messages,
+      ...billing,
     });
-    let json = {};
-    try { json = JSON.parse(res.choices[0].message.content) || {}; } catch { json = {}; }
-    const sections = (Array.isArray(json.sections) ? json.sections : []).slice(0, 12)
-      .map(s => ({ title: String(s?.title || "").trim(), instructions: String(s?.instructions || "").trim() }));
-    const passages = (Array.isArray(json.passages) ? json.passages : []).slice(0, 8)
-      .map(p => ({ title: String(p?.title || "").trim(), text: String(p?.text || "").trim() }));
-    const indexIn = (v, list) => (Number.isInteger(v) && v >= 0 && v < list.length ? v : null);
-    const questions = (Array.isArray(json.questions) ? json.questions : [])
-      .filter(q => q && typeof q.text === "string" && q.text.trim())
-      .map(q => {
-        const figure = q.figure && typeof q.figure.svg === "string" ? sanitizeSvg(q.figure.svg) : null;
-        return {
-          text:            q.text.trim(),
-          type:            String(q.type || "").trim(),
-          max_points:      Number(q.max_points) || null,
-          difficulty:      String(q.difficulty || "").trim(),
-          cognitive_level: String(q.cognitive_level || "").trim(),
-          options: Array.isArray(q.options) ? q.options.map(o => String(o)).filter(Boolean).slice(0, 5) : null,
-          correct: Number.isInteger(q.correct) ? q.correct : null,
-          section: indexIn(q.section, sections),
-          passage: indexIn(q.passage, passages),
-          figure:  figure ? { svg: figure, caption: String(q.figure.caption || "").trim().slice(0, 200) } : null,
-        };
-      });
-    // Sections and passages nothing points at are dropped — and the
-    // indices renumbered so they still line up.
-    const keep = (list, key) => {
-      const used = [...new Set(questions.map(q => q[key]).filter(v => v != null))].sort((a, b) => a - b);
-      const remap = new Map(used.map((v, i) => [v, i]));
-      questions.forEach(q => { if (q[key] != null) q[key] = remap.get(q[key]); });
-      return used.map(v => list[v]);
-    };
-    return { questions, sections: keep(sections, "section"), passages: keep(passages, "passage") };
+    return res.choices?.[0]?.message?.content || "{}";
   }
 
   /* ── Assignment workbench: draft the marking rubric ──────── */

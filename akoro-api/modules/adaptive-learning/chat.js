@@ -603,7 +603,7 @@ export function getLearnerChatTools({ allowToolRequest = true } = {}) {
 export const INSTRUCTOR_TOOLS = [
   {
     name: "prepare_activity",
-    description: "Prepare an activity draft for the instructor to review and assign (human-in-the-loop: you never assign — the instructor previews the draft and taps Assign). Use when the instructor asks you to create/set/prepare an activity, assignment, project, self study, live session, journey or battle. AUDIENCE IS REQUIRED: if the instructor did not say who the work is for, do not call this tool — ask them first, then call it with their answer. The server drafts the study plan itself (subtopics and objectives — the same generator the workbench uses), so you never supply those. But subject IS required for every type except battle: if the instructor did not name one, ask before calling. ` For a batch request (\"prep this week's activities\"), call this once per activity in the same reply - each gets its own Preview button.",
+    description: "Prepare an activity draft for the instructor to review and assign (human-in-the-loop: you never assign — the instructor previews the draft and taps Assign). Use when the instructor asks you to create/set/prepare an activity, assignment, project, self study, live session, journey or battle. AUDIENCE IS REQUIRED: if the instructor did not say who the work is for, do not call this tool — ask them first, then call it with their answer. The server drafts the study plan itself (subtopics and objectives — the same generator the workbench uses), so you never supply those. But subject IS required for every type except battle: if the instructor did not name one, ask before calling. ` For a batch request (\"prep this week's activities\"), call this once per activity in the same reply - each gets its own Preview button. ASSIGNMENTS: pass the instructor's words about the questions in question_request VERBATIM (e.g. \"5 questions on photosynthesis, 3 MCQ, 2 direct theory\") and fill question_plan from them; the server writes the questions in the background (Version 1) and holds them to that count and mix — never write the questions yourself. Add diagrams only when the instructor asks for them or a question can't be asked without one.",
     input_schema: {
       type: "object",
       properties: {
@@ -620,6 +620,16 @@ export const INSTRUCTOR_TOOLS = [
           kind: { type: "string", enum: ["self_study", "assignment", "project"] },
           title: { type: "string" }, topic: { type: "string" }, subject: { type: "string" },
         }, required: ["topic"] } },
+        question_request: { type: "string", description: "assignment only: the instructor's own words about the questions, verbatim — count, mix of types, diagrams, marks." },
+        question_plan: { type: "object", description: "assignment only: the same request as structure. Only what the instructor said — leave the rest out.", properties: {
+          total: { type: "number", description: "How many questions in all." },
+          mix: { type: "array", description: "Each kind of question and how many, e.g. [{label:'MCQ',kind:'mcq',count:3},{label:'Theory',kind:'open',count:2}]. 'direct theory', 'short answer', 'essay' are open.", items: { type: "object", properties: {
+            label: { type: "string" }, kind: { type: "string", enum: ["mcq", "open"] }, count: { type: "number" },
+          }, required: ["label", "kind", "count"] } },
+          diagrams: { type: "number", description: "How many questions must have a diagram. 0 when they said no diagrams; omit when they didn't say." },
+          options: { type: "number", enum: [4, 5], description: "Options per MCQ — 4 unless they asked for 5 (A–E)." },
+          total_points: { type: "number", description: "Total marks, if they said." },
+        } },
         audience: { type: "object", description: "WHO this is for, from the instructor's own words. Ask first if unknown.", properties: {
           whole_class: { type: "boolean", description: "True for 'my whole class' / 'everyone'." },
           classroom_name: { type: "string", description: "The class as named, e.g. 'JSS 2'." },
@@ -692,12 +702,14 @@ export const INSTRUCTOR_TOOLS = [
   },
   {
     name: "revise_activity_draft",
-    description: "Apply the instructor's requested changes to a PENDING activity draft after they previewed it — e.g. make entry 2 easier, entry 1 harder, add one more entry, change the title or instructions. First call get_activity_draft, write the revised content yourself, then send the changed fields here. The topic cannot change (discard and prepare again instead); drafts already assigned cannot be revised.",
+    description: "Apply the instructor's requested changes to a PENDING activity draft after they previewed it — e.g. make entry 2 easier, entry 1 harder, add one more entry, change the title or instructions. For an assignment's QUESTIONS (make Q4 harder, add a diagram question, swap Q2) send question_request instead — each such follow-up becomes the next version (V2, V3…). First call get_activity_draft, write the revised content yourself, then send the changed fields here. The topic cannot change (discard and prepare again instead); drafts already assigned cannot be revised.",
     input_schema: {
       type: "object",
       properties: {
         draftId: { type: "string", description: "The draft id being revised." },
         changeNote: { type: "string", description: "One short line summarising what changed, e.g. 'Entry 2 made easier, added a recap entry'." },
+        question_request: { type: "string", description: "assignment only: the instructor's follow-up about the QUESTIONS, verbatim (\"make question 4 harder and add a diagram question\"). The server writes the next version in the background from the latest one (their edits included) and changes only what was asked — never write the questions yourself." },
+        base_version: { type: "number", description: "assignment only: the version to build on when the instructor names one (\"go back to version 1 and…\"). Omit to build on the latest." },
         title: { type: "string", description: "Replacement title." },
         instructions: { type: "string", description: "Replacement instructions to learners." },
         difficulty: { type: "string", enum: ["easy", "intermediate", "hard"] },
@@ -789,6 +801,10 @@ export async function executeChatTool(name, input, studentId, { conversationId =
           audience: audienceLabel, status: draft.status,
           previewHint: "Awaiting the instructor's preview — do not claim it was assigned.",
         };
+        if (Array.isArray(draft.payload?.versions) && draft.payload.versions.length) {
+          result.version = 1;
+          result.questionsNote = "Version 1 of the questions is being written now — it appears on the Preview card in a minute. Reply with one short line; don't list or invent the questions.";
+        }
         if (draft.payload?.plan_status === "pending") result.planNote = "The full study plan is being generated right now — it lands in the preview moments after this reply; the objectives stay editable there.";
         if (draft.payload?.due_notice) result.dueNote = draft.payload.due_notice;
         return result;
@@ -940,6 +956,14 @@ export async function executeChatTool(name, input, studentId, { conversationId =
           objectives: draft.payload?.objectives ?? null,
           stages: draft.payload?.details?.stages ?? null,
           scheduledHint: draft.payload?.details?.scheduled_hint ?? null,
+          // An assignment's question versions: what each is, and the newest's questions.
+          versions: Array.isArray(draft.payload?.versions) ? draft.payload.versions.map((v) => ({
+            version: v.n, status: v.status, note: v.note ?? null, edited: !!v.edited, summary: v.summary?.line ?? null,
+          })) : null,
+          latestQuestions: (() => {
+            const v = [...(draft.payload?.versions || [])].reverse().find((x) => x.status === "ready");
+            return v ? (v.paper?.questions || []).map((q, i) => `Q${i + 1} [${q.type || (q.options ? "MCQ" : "open")}${q.figure ? ", diagram" : ""}] ${String(q.q).slice(0, 140)}`) : null;
+          })(),
           audience: draft.audience ?? null,
         };
       } catch (error) { return { error: error.message || "Could not read the draft" }; }
@@ -947,10 +971,11 @@ export async function executeChatTool(name, input, studentId, { conversationId =
     case "revise_activity_draft": {
       if (role !== "instructor") return { error: "Activity drafts are only available to instructor accounts" };
       try {
-        const { draft, applied } = await reviseDraftPayload({ id: studentId, role }, String(input?.draftId || ""), input);
+        const { draft, applied, version } = await reviseDraftPayload({ id: studentId, role }, String(input?.draftId || ""), input);
         return {
           revised: true, draftId: draft.id, title: draft.title, type: draft.type,
           audience: draft.audience?.label ?? null, applied,
+          ...(version ? { version, questionsNote: `Version ${version} is being written now from the instructor's follow-up — it appears as a new tab in the preview. Reply with one short line.` } : {}),
           changeNote: String(input?.changeNote || "").slice(0, 200) || null,
           previewHint: "The updated draft is awaiting the instructor's preview again — still not assigned.",
         };
@@ -2871,7 +2896,7 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         ...((tool === "prepare_activity" && toolResult?.prepared
             || tool === "revise_activity_draft" && toolResult?.revised)
           && toolResult?.draftId
-          ? { draft: { id: toolResult.draftId, title: toolResult.title, type: toolResult.type, audience: toolResult.audience } }
+          ? { draft: { id: toolResult.draftId, title: toolResult.title, type: toolResult.type, audience: toolResult.audience, ...(toolResult.version ? { version: toolResult.version } : {}) } }
           : {}),
         // Study-prep sessions ride the same way: a session echo lets the chat
         // tab render the interactive session card (plan card, human gates)

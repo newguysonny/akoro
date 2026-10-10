@@ -62,6 +62,7 @@ import {
 import {
   createActivityDraft, assignActivityDraft, DRAFT_TYPES,
   listActivityDrafts, getActivityDraft, updateActivityDraft, discardActivityDraft,
+  saveDraftVersion, retryDraftVersion,
 } from "./drafts.js";
 import {
   listRoutines, createRoutine, updateRoutine, deleteRoutine,
@@ -77,6 +78,7 @@ import {
 import { validateMarks } from "./submissionMarkup.js";
 import { briefForLearner, pdfMeta, cleanAnswer, cleanQuestionMarks } from "./submissionView.js";
 import { cleanPaperDetails } from "./paperLayout.js";
+import { draftPaper, parseQuestionRequest, summarizePaper } from "./questionPaper.js";
 
 
 
@@ -134,17 +136,28 @@ router.post("/plan", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) =
    these routes; the instructor edits before anything is sent. */
 
 router.post("/assignment-draft/questions", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
-  const { topic, subject, total_points, question_types, difficulty, subtopics } = req.body;
+  const { topic, subject, total_points, question_types, difficulty, subtopics, request, class_level } = req.body;
   if (!topic?.trim() || !subject?.trim()) return bad(res, "topic and subject are required");
-  const { questions, sections, passages } = await nana.generateAssignmentQuestions({
-    topic:        topic.trim(),
-    subject,
-    totalPoints:  Number(total_points) || null,
-    questionTypes: Array.isArray(question_types) ? question_types : null,
-    difficulty:   typeof difficulty === "string" ? difficulty : null,
-    subtopics:    Array.isArray(subtopics) ? subtopics : null,
-  });
-  ok(res, { questions, sections, passages });
+  // The teacher's own words drive the paper ("5 questions, 3 MCQ, 2 theory,
+  // one with a diagram"); the workbench's ticked types and total fill in
+  // what the words leave open.
+  const types = Array.isArray(question_types) ? question_types.filter((t) => typeof t === "string").slice(0, 8) : [];
+  const words = typeof request === "string" ? request.slice(0, 1500) : "";
+  const fallback = parseQuestionRequest(words).mix.length || !types.length ? "" : ` Use only these question types: ${types.join(", ")}.`;
+  try {
+    const { paper, warning } = await draftPaper({
+      chat: (messages) => nana.generateAssignmentQuestions({ messages, billing: { __userId: req.user.id, __feature: "assignment_questions" } }),
+      topic: topic.trim(), subject: String(subject).trim(),
+      classLevel: typeof class_level === "string" ? class_level.slice(0, 60) : null,
+      request: (words + fallback).trim(),
+      plan: Number(total_points) > 0 && !parseQuestionRequest(words).totalPoints ? { total_points: Number(total_points) } : null,
+      difficulty: typeof difficulty === "string" ? difficulty : null,
+      subtopics: Array.isArray(subtopics) ? subtopics.filter((x) => typeof x === "string") : null,
+    });
+    ok(res, { ...paper, warning, summary: summarizePaper(paper) });
+  } catch (e) {
+    return bad(res, e.message || "Could not draft the questions.");
+  }
 }));
 
 router.post("/assignment-draft/rubric", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
@@ -245,6 +258,26 @@ router.post("/drafts/:id/assign", requireRole(TEACHER_ROLES), asyncHandler(async
     if (e.status === 409 || e.status === 400) return bad(res, e.message);
     throw e;
   }
+}));
+
+/* An assignment draft's question versions (V1, V2… — draftVersions.js). */
+const draftError = (res, e) => {
+  if (e.status === 404) return missing(res, e.message);
+  if (e.status === 403) return denied(res, e.message);
+  if ([400, 409].includes(e.status)) return bad(res, e.message);
+  throw e;
+};
+
+/** PUT /api/self-study/drafts/:id/versions/:n — the teacher's edits to one version (saved in place, marked edited). */
+router.put("/drafts/:id/versions/:n", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
+  try { ok(res, { version: await saveDraftVersion(req.user, req.params.id, req.params.n, req.body) }); }
+  catch (e) { return draftError(res, e); }
+}));
+
+/** POST /api/self-study/drafts/:id/versions/:n/retry — draft a failed version again. */
+router.post("/drafts/:id/versions/:n/retry", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
+  try { ok(res, { version: await retryDraftVersion(req.user, req.params.id, req.params.n) }); }
+  catch (e) { return draftError(res, e); }
 }));
 
 /** DELETE /api/self-study/drafts/:id — discard a pending draft. */
