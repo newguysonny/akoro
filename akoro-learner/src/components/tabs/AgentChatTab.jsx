@@ -24,7 +24,7 @@ import StudyPrepChatCard from './studyPrep/StudyPrepChatCard.jsx';
 import { fetchActiveStudyPrepSession } from '../../services/studyPrepApi.js';
 import TraceBlocks from './agentChat/TraceBlocks.jsx';
 import { applyTraceEvent, blocksFromSavedTrace, promoteActivity, settleRunning } from '../../lib/agentChatTrace.js';
-import { CHAT_STARTERS, cleanIdeas } from '../../lib/chatIdeas.js';
+import { CHAT_STARTERS, cleanIdeas, protegeMoves } from '../../lib/chatIdeas.js';
 
 const QUICK_PROMPTS = [
   { text:"Create a task for me", key:"agent.qp_create" },
@@ -74,7 +74,7 @@ function ThoughtBlock({ thinking, streaming }) {
 }
 
 function AgentChatTab({
-  onStartTeach, onStartExamPrep, onOpenConceptTracker, onOpenAdaptiveControls, agentNameProp, agentEmojiProp, onChatActive,
+  onStartTeach, onTeachTopic, onStartExamPrep, onOpenConceptTracker, onOpenAdaptiveControls, agentNameProp, agentEmojiProp, onChatActive,
   agentOnline = false, agentAutonomyLoaded = false, agentAutonomySaving = false,
   onToggleAgentAutonomy,
   agentActivity = null,
@@ -570,7 +570,7 @@ function AgentChatTab({
           // Study-prep sessions ride the reply as a session echo (the
           // activity-draft pattern) — render the interactive session card.
           const studyPrepSession = (toolExecutions || []).find((entry) => entry?.session?.id && entry?.success)?.session || null;
-          setMessages(prev=>prev.map(m=>m.id===replyId?{...m,...(reply!=null?{text:reply}:{}),thinking:thinking||m.thinking,syllabus:syllabus||[],pastQuestions:pastQuestions||[],phase:"done",...(studyPrepSession?{studyPrepSessionId:studyPrepSession.id}:{})}:m));
+          setMessages(prev=>prev.map(m=>m.id===replyId?{...m,...(reply!=null?{text:reply}:{}),thinking:thinking||m.thinking,syllabus:syllabus||[],pastQuestions:pastQuestions||[],phase:"done",...(studyPrepSession?{studyPrepSessionId:studyPrepSession.id}:{}),...protegeMoves(toolExecutions)}:m));
           if ((toolExecutions || []).some((entry) => entry?.tool === "create_task" && entry?.success)) refetchTasks();
           if ((toolExecutions || []).some((entry) => entry?.tool === "suggest_help" && entry?.success)) refetchSuggestions();
         },
@@ -596,7 +596,7 @@ function AgentChatTab({
           finalReply = data.reply || data.response || t('agent.fallback');
           setMessages(prev=>[...prev,{id:replyId,from:"agent",text:finalReply,time:t2,
             thinking:data.thinking||"",syllabus:data.syllabus||[],pastQuestions:data.pastQuestions||[],
-            blocks:blocksFromSavedTrace(data.trace)}]);
+            blocks:blocksFromSavedTrace(data.trace),...protegeMoves(data?.toolExecutions)}]);
           const studyPrepSessionFallback = (data?.toolExecutions || []).find((entry) => entry?.session?.id && entry?.success)?.session || null;
           if (studyPrepSessionFallback) {
             setMessages(prev=>prev.map(m=>m.id===replyId?{...m,studyPrepSessionId:studyPrepSessionFallback.id}:m));
@@ -806,8 +806,28 @@ function AgentChatTab({
                 <div key={msg.id} style={{ display:"flex",flexDirection:"column",alignItems:"stretch",minWidth:0 }}>
                   {msg.blocks?.length>0&&<TraceBlocks blocks={msg.blocks}/>}
                   {!msg.blocks?.length&&(msg.thinking||thinkingStream)&&<ThoughtBlock thinking={msg.thinking} streaming={thinkingStream}/>}
+                  {/* An answer from the teaching guide, not from what the learner taught. */}
+                  {msg.guide&&(
+                    <div style={{ display:"inline-flex",alignSelf:"flex-start",alignItems:"center",gap:6,margin:"0 0 6px",padding:"4px 10px",borderRadius:20,background:"rgba(232,136,74,.12)",border:"1px solid rgba(232,136,74,.4)",color:"#B45309",fontSize:11.5,fontWeight:800 }}>
+                      <Icon name="ti-school" size={12}/> {t('agent.from_guide').replace('{guide}', msg.guide.name||'NaNa')}
+                    </div>
+                  )}
                   {msg.text&&(
                     <div style={{ fontSize:16,lineHeight:1.65,color:"var(--ak-text)",fontWeight:500,wordBreak:"break-word" }}><RichText text={msg.text}/>{msg.phase==="answering"&&<StreamCaret/>}</div>
+                  )}
+                  {/* Not taught yet — the learner can teach it now. */}
+                  {msg.teach&&onTeachTopic&&(
+                    <div style={{ display:"flex",alignItems:"center",gap:10,marginTop:10,padding:"10px 12px",borderRadius:14,background:`${BRAND}0D`,border:`1px solid ${BRAND}33` }}>
+                      <span style={{ width:34,height:34,borderRadius:10,background:`${BRAND}1A`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}><Icon name="ti-chalkboard" size={17} color={BRAND}/></span>
+                      <div style={{ flex:1,minWidth:0 }}>
+                        <p style={{ margin:0,fontSize:13,fontWeight:900,color:"var(--ak-text)" }}>{t('agent.teach_title').replace('{topic}', msg.teach.topic)}</p>
+                        <p style={{ margin:"2px 0 0",fontSize:11.5,fontWeight:600,color:"var(--ak-text-muted)",lineHeight:1.4 }}>{t('agent.teach_sub')}</p>
+                      </div>
+                      <button type="button" onClick={()=>onTeachTopic(msg.teach)}
+                        style={{ padding:"8px 14px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:12.5,fontWeight:900,cursor:"pointer",fontFamily:"'Nunito',sans-serif",flexShrink:0 }}>
+                        {t('agent.teach_cta')}
+                      </button>
+                    </div>
                   )}
                   {msg.stopped&&(
                     <div style={{ display:"flex",alignItems:"center",gap:6,marginTop:4,fontSize:11.5,fontWeight:700,color:"var(--ak-text-muted)" }}>

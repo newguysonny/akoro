@@ -49,7 +49,8 @@ test("the agent knows the learner's active goals in every chat", () => {
   assert.match(chat, /align advice and suggestions with these/);
   // Students only, best-effort, and it rides the system prompt.
   assert.match(chat, /if \(role === "student"\)/);
-  assert.match(chat, /\(goalsCtx \|\| undefined\) \+/);
+  // No goals adds nothing — never the word "undefined" into the prompt.
+  assert.match(chat, /\(goalsCtx \|\| ""\) \+/);
 });
 
 test("settings manages goals with the shared loading/lock primitives", () => {
