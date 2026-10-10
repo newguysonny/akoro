@@ -16,6 +16,7 @@ import { jsonbArray, jsonbObject } from "../../lib/jsonb.js";
 import { authenticateToken } from "../auth/routes.js";
 import pkg from "pg";
 import { OPENAI_MODEL, openai } from "../../lib/aiModel.js";
+import { buildSuggestionMessages, shapeSuggestions } from "./chatSuggestions.js";
 import { publicModelList, resolveChatModel } from "../../lib/modelCatalogue.js";
 const { Pool } = pkg;
 import db from "../../db.js";
@@ -2946,6 +2947,32 @@ router.get("/models", (_req, res) => {
   // learner may pick for the standard mode (Grand Plan §7.11) — each says
   // whether this server can use it, or why not ("coming soon").
   res.json({ modes: chatModelMenu(), models: publicModelList() });
+});
+
+/**
+ * POST /api/adaptive/chat/suggestions — three short follow-ups for the
+ * reply the user just got (chips under it). Called by the app AFTER the
+ * reply arrives, so the reply never waits; any failure returns none.
+ * Body: { ask, reply, role?, context? }
+ */
+router.post("/suggestions", async (req, res) => {
+  const reply = String(req.body?.reply || "").trim();
+  if (!reply) return res.json({ success: true, suggestions: [] });
+  // The teacher's ideas only for a non-learner account that asks for them.
+  const role = req.body?.role === "instructor" && req.user?.role !== "student" ? "instructor" : "student";
+  try {
+    const completion = await openai.chat.completions.create({
+      model: process.env.OPENAI_SUGGEST_MODEL || "gpt-4o-mini", temperature: 0.5, max_tokens: 160,
+      __timeoutMs: 12_000, __maxRetries: 0,
+      response_format: { type: "json_object" },
+      messages: buildSuggestionMessages({ role, ask: req.body?.ask, reply, context: req.body?.context }),
+      __userId: req.user?.id, __feature: "chat_suggestions",
+    });
+    res.json({ success: true, suggestions: shapeSuggestions(completion.choices?.[0]?.message?.content) });
+  } catch (e) {
+    console.warn("[chat/suggestions] none this time:", String(e?.message || e).slice(0, 120));
+    res.json({ success: true, suggestions: [] });
+  }
 });
 
 router.post("/agent", async (req, res) => {

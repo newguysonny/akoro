@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Send, Plus, Brain, Edit3, CheckSquare, X, Paperclip, Camera,
   Upload, FileText, ScanLine, Loader, CheckCircle2,
-  History, Copy, Check,
+  History, Copy, Check, Lightbulb,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, FileUploadZone, Toast } from '../components/Primitives.jsx';
@@ -15,6 +15,7 @@ import { useInstructorSocket } from '../hooks/useWebSocket.js';
 import { apiGet, apiPost, apiDelete, API } from '../services/api.js';
 import ActivityPreviewPanel from '../components/ActivityPreviewPanel.jsx';
 import DraftCard from '../components/paper/DraftCard.jsx';
+import { chatIdeas, STARTERS } from '../lib/chatIdeas.js';
 import FortizoChatComposer from '../components/common/FortizoChatComposer.jsx';
 import RichText from '../components/common/RichText.jsx';
 
@@ -76,14 +77,9 @@ const CHAT_INIT = [
   { id: 1, from: 'agent', text: "Good morning! I'm ready to help — training, quizzes, reminders, or student reports. What do you need?", time: '8:01 AM' },
 ];
 
-// Prompt chips: one tap fills the composer — the instructor completes the
-// class, subject, or audience before sending (the agent never guesses one).
-const PROMPT_CHIPS = [
-  { label: 'Draft a quiz', fill: 'Draft a 10-question quiz for ' },
-  { label: 'Prep this week\'s activities', fill: 'Prep this week\'s activities — ' },
-  { label: 'Last assignment results', fill: 'How did the last assignment go? ' },
-  { label: 'Weekly routine', fill: 'Schedule a weekly revision draft every ' },
-];
+// Prompt chips (STARTERS, lib/chatIdeas.js): one tap fills the composer —
+// the instructor completes the class, subject or audience before sending
+// (the agent never guesses one). After that, each reply brings its own.
 
 // Chat modes map to the unified agent endpoint's `mode` — the same trio the
 // learner app offers. The label never reaches the API; the id does.
@@ -287,7 +283,9 @@ export default function ChatPage() {
   }, []);
 
   const pushAgent = useCallback((text, extra = {}) => {
-    setMessages((prev) => [...prev, { id: Date.now() + Math.random(), from: 'agent', text, time: now(), ...extra }]);
+    const id = Date.now() + Math.random();
+    setMessages((prev) => [...prev, { id, from: 'agent', text, time: now(), ...extra }]);
+    return id;
   }, []);
 
   const pushMe = useCallback((text, task = false, chips = []) => {
@@ -377,10 +375,20 @@ export default function ChatPage() {
           setDraftRevisions((prev) => ({ ...prev, [x.draft.id]: (prev[x.draft.id] || 0) + 1 }));
           if (x.draft.version) setPreviewVersion(null);   // an open preview jumps to the new version's tab
         });
-      pushAgent(
-        data.reply || data.response || "I'm here to help with teaching and your subjects — what would you like to explore?",
-        previews.length ? { previews } : {},
-      );
+      const replyText = data.reply || data.response || "I'm here to help with teaching and your subjects — what would you like to explore?";
+      const tools = (data.toolExecutions || []).map((x) => x.tool);
+      const replyId = pushAgent(replyText, { ...(previews.length ? { previews } : {}), tools });
+      // Suggestions for every reply. A draft's come from its own questions
+      // (see chatIdeas, under the message); any other reply asks the agent
+      // for three follow-ups AFTER it has arrived — the reply never waits.
+      if (!previews.length) {
+        apiPost('/api/adaptive/chat/suggestions', { ask: bodyText, reply: replyText, role: 'instructor' })
+          .then((r) => {
+            const ideas = (r?.suggestions || []).map((t) => ({ label: t, fill: t }));
+            if (ideas.length) setMessages((prev) => prev.map((m) => (m.id === replyId ? { ...m, ideas } : m)));
+          })
+          .catch(() => { /* no chips this time */ });
+      }
     }
   };
 
@@ -501,6 +509,7 @@ export default function ChatPage() {
   const [previewType, setPreviewType] = useState(null);
   const [aiStatus, setAiStatus] = useState('');             // live tool status ("Resolving your class…")
   const [draftStates, setDraftStates] = useState({});       // { [id]: 'assigned'|'discarded' }
+  const [draftsById, setDraftsById] = useState({});         // the draft each card loaded — its ideas read it
   const [draftRevisions, setDraftRevisions] = useState({}); // { [id]: bump count }
   // Resolutions are pushed as chat messages: the instructor sees the outcome,
   // and because replies ride the history, the agent knows it too next turn —
@@ -648,8 +657,9 @@ export default function ChatPage() {
 
         {/* Message feed */}
         <div ref={feedRef} style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '8px 2px' }}>
-          {messages.map((msg) => {
+          {messages.map((msg, mi) => {
             const isMe = msg.from === 'me';
+            const isLatestReply = !isMe && mi === messages.length - 1 && mi > 0;
             const chips = msg.chips || [];
             const textPart = chips.length ? msg.text.replace(chips.join(' · '), '').replace(/^\n/, '').trim() : msg.text;
             return (
@@ -682,11 +692,32 @@ export default function ChatPage() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
                       {msg.previews.map((d, pi) => (
                         <DraftCard key={`${d.id}-${d.version || 0}`} preview={d} state={draftStates[d.id]}
+                          onDraft={(dr) => setDraftsById((prev) => (prev[dr.id] === dr ? prev : { ...prev, [dr.id]: dr }))}
                           label={msg.previews.length > 1 ? `Preview ${pi + 1}` : 'Preview'}
                           onOpen={(id, version) => { setPreviewDraft(id); setPreviewVersion(version); setPreviewType(d.type); }} />
                       ))}
                     </div>
                   )}
+                  {/* Suggestions — under the newest reply only; a tap fills the message box. */}
+                  {isLatestReply && (() => {
+                    const last = (msg.previews || []).at(-1);
+                    const ideas = last
+                      ? chatIdeas({ latest: { draft: draftsById[last.id], version: last.version, state: draftStates[last.id] }, tools: msg.tools || [] })
+                      : msg.ideas?.length ? msg.ideas
+                        : (msg.tools || []).includes('check_activity_outcomes') ? chatIdeas({ tools: msg.tools }) : [];
+                    if (!ideas.length) return null;
+                    return (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }} aria-label="Suggestions">
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 800, color: MUTED2, fontFamily: FONT }}><Lightbulb size={11} /> {last ? 'Ideas' : 'Try next'}</span>
+                        {ideas.map((it) => (
+                          <button key={it.label} type="button" className="ci-qp" onClick={() => { setInput(it.fill); inputRef.current?.focus(); }}
+                            title="Tap to put it in the message box — change it if you like, then send">
+                            {it.label}
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })()}
                   <div style={{ fontSize: 10, color: MUTED2, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
                     {msg.time}
                     <CopyMsgButton text={textPart} />
@@ -732,9 +763,9 @@ export default function ChatPage() {
 
         {/* Input bar */}
         <div style={{ paddingTop: 10 }}>
-          {!isTask && input === '' && (
+          {!isTask && input === '' && !messages.some((m) => m.from === 'me') && (
             <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8 }}>
-              {PROMPT_CHIPS.map((chip) => (
+              {STARTERS.map((chip) => (
                 <button key={chip.label} className="ci-qp" onClick={() => { setInput(chip.fill); inputRef.current?.focus(); }}
                   title="Tap to fill the composer — complete the details before sending">
                   {chip.label}
