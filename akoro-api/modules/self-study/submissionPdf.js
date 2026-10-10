@@ -28,6 +28,7 @@ import path from "node:path";
 import { PDFDocument, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { docxToPages } from "../records/officeText.js";
+import { paperBlocks, passageRange, figurePng } from "./paperLayout.js";
 
 const require = createRequire(import.meta.url);
 const FONT_DIR = path.join(path.dirname(require.resolve("dejavu-fonts-ttf/package.json")), "ttf");
@@ -114,6 +115,16 @@ class Flow {
     this.y -= gap;
   }
   heading(text) { this.ensure(40); this.y -= 8; this.text(text, { size: 13, bold: true, color: ACCENT, gap: 6 }); }
+  /** An embedded image, scaled to fit the column (never upscaled past 1×). */
+  image(img, { indent = 0, maxH = 220, gap = 8 } = {}) {
+    const maxW = A4[0] - M * 2 - indent;
+    const s = Math.min(maxW / img.width, maxH / img.height, 1);
+    const w = img.width * s, h = img.height * s;
+    this.ensure(h + gap);
+    this.y -= h;
+    this.page.drawImage(img, { x: M + indent, y: this.y, width: w, height: h });
+    this.y -= gap;
+  }
 }
 
 /**
@@ -131,15 +142,23 @@ export function submissionMarkdown({ assignment = {}, learner = {}, submission =
   const answers = submission.answers && typeof submission.answers === "object" ? submission.answers : {};
   if (questions.length) {
     out.push("## Questions and answers", "");
-    questions.forEach((q, i) => {
-      const raw = answers[String(i)] ?? answers[i];
-      const answered = raw !== undefined && raw !== null && String(raw).trim() !== "";
-      out.push(`### Q${i + 1}. ${qText(q)}`, "");
-      if (typeof q === "object" && q && Array.isArray(q.options)) {
-        q.options.forEach((opt, oi) => out.push(`- ${answered && Number(raw) === oi ? "**[x]**" : "[ ]"} ${letterOf(oi)}. ${opt}`));
-        out.push("", answered ? `Answer: ${letterOf(raw)}` : "_No answer_", "");
-      } else out.push(answered ? String(raw) : "_No answer_", "");
-    });
+    for (const block of paperBlocks(assignment.details)) {
+      if (block.newSection) {
+        if (block.section.title) out.push(`### ${block.section.title}`, "");
+        if (block.section.instructions) out.push(`_${block.section.instructions}_`, "");
+      }
+      if (block.passage) out.push(`> **${block.passage.title || "Passage"}** (${passageRange(block.items)})`, ">", ...block.passage.text.split("\n").map((l) => `> ${l}`), "");
+      for (const { q, i } of block.items) {
+        const raw = answers[String(i)] ?? answers[i];
+        const answered = raw !== undefined && raw !== null && String(raw).trim() !== "";
+        out.push(`### Q${i + 1}. ${qText(q)}`, "");
+        if (q?.figure) out.push(`_[Figure${q.figure.caption ? `: ${q.figure.caption}` : ""} — see the PDF]_`, "");
+        if (typeof q === "object" && q && Array.isArray(q.options)) {
+          q.options.forEach((opt, oi) => out.push(`- ${answered && Number(raw) === oi ? "**[x]**" : "[ ]"} ${letterOf(oi)}. ${opt}`));
+          out.push("", answered ? `Answer: ${letterOf(raw)}` : "_No answer_", "");
+        } else out.push(answered ? String(raw) : "_No answer_", "");
+      }
+    }
   }
   if (files.length) {
     out.push("## Attachments", "");
@@ -199,10 +218,33 @@ export async function buildSubmissionPdf({ assignment = {}, learner = {}, submis
   const answers = submission.answers && typeof submission.answers === "object" ? submission.answers : {};
   if (questions.length) {
     flow.heading("Questions and answers");
-    questions.forEach((q, i) => {
-      const pts = typeof q === "object" && q && Number(q.max_points ?? q.points) > 0 ? ` (${Number(q.max_points ?? q.points)} pts)` : "";
-      flow.ensure(46);
-      flow.text(`Q${i + 1}${pts}. ${qText(q)}`, { size: 11, bold: true, gap: 3 });
+    const figures = new Map();   // the same figure is embedded once
+    for (const block of paperBlocks(assignment.details)) {
+      if (block.newSection) {
+        flow.ensure(120);   // a heading stays with what follows it
+        if (block.section.title) flow.text(block.section.title.toUpperCase(), { size: 10.5, bold: true, color: ACCENT, gap: 2 });
+        if (block.section.instructions) flow.text(block.section.instructions, { size: 10, color: MUTED, gap: 8 });
+      }
+      if (block.passage) {
+        flow.ensure(120);
+        flow.text(`${block.passage.title || "Read the passage"} — ${passageRange(block.items)}`, { size: 10.5, bold: true, gap: 3 });
+        flow.text(block.passage.text, { size: 10.5, indent: 10, gap: 10 });
+      }
+      for (const { q, i } of block.items) {
+        const pts = typeof q === "object" && q && Number(q.max_points ?? q.points) > 0 ? ` (${Number(q.max_points ?? q.points)} pts)` : "";
+        flow.ensure(46);
+        flow.text(`Q${i + 1}${pts}. ${qText(q)}`, { size: 11, bold: true, gap: 3 });
+        if (q?.figure) {
+          const key = q.figure.src || q.figure.svg;
+          if (!figures.has(key)) {
+            const png = await figurePng(q.figure);
+            figures.set(key, png ? await (png.type === "jpeg" ? doc.embedJpg(png.bytes) : doc.embedPng(png.bytes)).catch(() => null) : null);
+          }
+          const img = figures.get(key);
+          if (img) flow.image(img, { indent: 14, gap: q.figure.caption ? 2 : 8 });
+          else notes.push(`Question ${i + 1}: its figure couldn't be drawn in the PDF.`);
+          if (q.figure.caption) flow.text(q.figure.caption, { size: 9, color: MUTED, indent: 14, gap: 8 });
+      }
       const raw = answers[String(i)] ?? answers[i];
       const answered = raw !== undefined && raw !== null && String(raw).trim() !== "";
       if (typeof q === "object" && q && Array.isArray(q.options)) {
@@ -214,7 +256,8 @@ export async function buildSubmissionPdf({ assignment = {}, learner = {}, submis
       } else {
         flow.text(answered ? String(raw) : "No answer", { size: 11, color: answered ? INK : MUTED, indent: 14, gap: 10 });
       }
-    });
+      }
+    }
   } else if (Object.keys(answers).length) {
     flow.heading("Answers");
     for (const k of Object.keys(answers).sort((a, b) => Number(a) - Number(b))) {

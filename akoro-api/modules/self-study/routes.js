@@ -76,6 +76,7 @@ import {
 } from "./submissionArtifacts.js";
 import { validateMarks } from "./submissionMarkup.js";
 import { briefForLearner, pdfMeta, cleanAnswer, cleanQuestionMarks } from "./submissionView.js";
+import { cleanPaperDetails } from "./paperLayout.js";
 
 
 
@@ -135,7 +136,7 @@ router.post("/plan", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) =
 router.post("/assignment-draft/questions", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
   const { topic, subject, total_points, question_types, difficulty, subtopics } = req.body;
   if (!topic?.trim() || !subject?.trim()) return bad(res, "topic and subject are required");
-  const questions = await nana.generateAssignmentQuestions({
+  const { questions, sections, passages } = await nana.generateAssignmentQuestions({
     topic:        topic.trim(),
     subject,
     totalPoints:  Number(total_points) || null,
@@ -143,7 +144,7 @@ router.post("/assignment-draft/questions", requireRole(TEACHER_ROLES), asyncHand
     difficulty:   typeof difficulty === "string" ? difficulty : null,
     subtopics:    Array.isArray(subtopics) ? subtopics : null,
   });
-  ok(res, { questions });
+  ok(res, { questions, sections, passages });
 }));
 
 router.post("/assignment-draft/rubric", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
@@ -614,6 +615,7 @@ router.patch("/:id", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) =
   if (req.body.type && !ACTIVITY_TYPES.includes(req.body.type)) return bad(res, `Unknown activity type: ${req.body.type}`);
   const updates = Object.fromEntries(Object.entries(req.body).filter(([k]) => allowed.includes(k)));
   if (!Object.keys(updates).length) return bad(res, "No editable fields provided");
+  if (updates.details) updates.details = cleanPaperDetails(updates.details);
   updates.updated_at = now();
 
   const { data, error: uErr } = await edu().from("self_study_assignments")

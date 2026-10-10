@@ -596,7 +596,7 @@ export default function GradeSubmissionModal({
               {hasQuestions && <QuestionRail questions={qList} step={step} setStep={goStep} marks={qMarks} />}
 
               {hasQuestions && step < qList.length ? (
-                <QuestionMarker questions={qList} step={step} setStep={goStep} marks={qMarks} setMark={setMark}
+                <QuestionMarker questions={qList} paper={brief?.details} step={step} setStep={goStep} marks={qMarks} setMark={setMark}
                   answers={current.submission?.answers || {}} ai={ai} />
               ) : (<>
               {submitted && <AiDraftCard ai={ai} onApply={applyAi} onRequest={requestAi} requesting={aiRequesting} />}

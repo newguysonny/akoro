@@ -8,6 +8,7 @@ import { Icon } from '../components/common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD } from '../constants.js';
 import Spinner from '../components/common/Spinner.jsx';
 import { hasAnswer, stepStatuses, resumeStep, openingAnswers } from '../lib/questionSteps.js';
+import { MathText, QuestionFigure, QuestionContext } from '../components/activity/QuestionPaper.jsx';
 
 /**
  * ActivityDetailPage — the full-screen detail view for one activity, ported
@@ -110,7 +111,7 @@ const STEP_LOOK = {
   empty:  { bg: 'var(--ak-surface)',    fg: 'var(--ak-text-muted)', border: 'var(--ak-border)', label: 'Not answered' },
 };
 
-function Stepper({ questions, work, setWork, saved, onSaveAnswer, mid, dark, onSubmit, submitting, attachment }) {
+function Stepper({ questions, paper, work, setWork, saved, onSaveAnswer, mid, dark, onSubmit, submitting, attachment }) {
   const total = questions.length;
   const [idx, setIdx] = useState(() => resumeStep(questions, work.answers, saved));
   const [saving, setSaving] = useState(false);
@@ -199,10 +200,10 @@ function Stepper({ questions, work, setWork, saved, onSaveAnswer, mid, dark, onS
                   {mcq && <span style={{ fontSize: 9.5, fontWeight: 900, color: mid, background: `${mid}14`, padding: '2px 8px', borderRadius: 999, textTransform: 'capitalize' }}>{typeLabel(q.type) || 'Multiple choice'}</span>}
                   <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 900, color: look.fg, background: look.bg, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap' }}>{look.label}</span>
                 </div>
-                <p style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--ak-text)', lineHeight: 1.4, margin: 0, fontFamily: "'Nunito',sans-serif" }}>{qText(q)}</p>
+                <p style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--ak-text)', lineHeight: 1.4, margin: 0, fontFamily: "'Nunito',sans-serif" }}><MathText text={qText(q)}/></p>
                 {mcq ? (
                   hasAnswer(q, ans) && (
-                    <p style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', margin: '8px 0 0' }}>{letterOf(ans)}. {q.options?.[ans] ?? ''}</p>
+                    <p style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', margin: '8px 0 0' }}>{letterOf(ans)}. <MathText text={q.options?.[ans] ?? ''}/></p>
                   )
                 ) : (typed && (
                   <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ak-text)', margin: '10px 0 0', padding: '8px 11px', borderLeft: `3px solid ${mid}`, background: 'var(--ak-surface)', borderRadius: 8, whiteSpace: 'pre-wrap', maxHeight: 60, overflow: 'hidden', fontFamily: "'Nunito',sans-serif" }}>{typed.length > 160 ? `${typed.slice(0, 160)}…` : typed}</p>
@@ -243,9 +244,12 @@ function Stepper({ questions, work, setWork, saved, onSaveAnswer, mid, dark, onS
           {pts && <span style={{ fontSize: 9.5, fontWeight: 900, color: 'var(--ak-text-muted)', background: 'var(--ak-bg, rgba(0,0,0,.04))', padding: '2px 8px', borderRadius: 999 }}>{pts} pt{pts === 1 ? '' : 's'}</span>}
           <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 900, color: look.fg, background: look.bg, padding: '2px 8px', borderRadius: 999 }}>{look.label}</span>
         </div>
+        <QuestionContext key={idx} details={paper} index={idx} mid={mid}/>
         <p style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--ak-text)', lineHeight: 1.4, margin: '0 0 14px', fontFamily: "'Nunito',sans-serif" }}>
-          {qText(q)}
+          <MathText text={qText(q)}/>
         </p>
+        {/* The figure sits between the question and its options, as on the paper. */}
+        <QuestionFigure figure={q?.figure}/>
         {qMcq ? (
           <div role="radiogroup" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {q.options.map((opt, oi) => {
@@ -261,7 +265,7 @@ function Stepper({ questions, work, setWork, saved, onSaveAnswer, mid, dark, onS
                   <span style={{ width: 22, height: 22, borderRadius: 7, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10.5, fontWeight: 900, fontFamily: "'Nunito',sans-serif", border: `1.5px solid ${picked ? mid : 'var(--ak-border)'}`, background: picked ? mid : 'transparent', color: picked ? '#fff' : 'var(--ak-text-muted)' }}>
                     {letterOf(oi)}
                   </span>
-                  {opt}
+                  <MathText text={opt}/>
                 </button>
               );
             })}
@@ -291,7 +295,7 @@ function Stepper({ questions, work, setWork, saved, onSaveAnswer, mid, dark, onS
 /* Read-only question list — how a graded activity shows its questions,
    one after another: the learner's answer, the correct option (MCQ), and —
    when the teacher marked question by question — each mark and comment. */
-function StaticQuestions({ questions, answers = {}, marks = [] }) {
+function StaticQuestions({ questions, paper, answers = {}, marks = [] }) {
   const markOf = new Map((marks || []).map((m) => [Number(m.index), m]));
   return (
     <>
@@ -301,6 +305,9 @@ function StaticQuestions({ questions, answers = {}, marks = [] }) {
         const ans = answers?.[i] ?? answers?.[String(i)];
         const picked = isMcq(q) && ans !== undefined && ans !== null && String(ans) !== '' ? Number(ans) : null;
         const full = mark && mark.awarded != null && Number(mark.awarded) >= Number(mark.max);
+        // A section's instructions and a shared passage show once, above the first question that uses them.
+        const prev = questions[i - 1];
+        const opensGroup = !prev || prev?.section !== q?.section || prev?.passage !== q?.passage;
         return (
           <div key={i} style={{ background: 'var(--ak-surface)', borderRadius: 16, padding: 16, boxShadow: '0 2px 10px rgba(17,24,39,.06)', marginBottom: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 6px' }}>
@@ -311,7 +318,9 @@ function StaticQuestions({ questions, answers = {}, marks = [] }) {
                 </span>
               )}
             </div>
-            <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--ak-text)', lineHeight: 1.4, margin: '0 0 10px', fontFamily: "'Nunito',sans-serif" }}>{qText(q)}</p>
+            {opensGroup && <QuestionContext details={paper} index={i} mid={BRAND}/>}
+            <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--ak-text)', lineHeight: 1.4, margin: '0 0 10px', fontFamily: "'Nunito',sans-serif" }}><MathText text={qText(q)}/></p>
+            <QuestionFigure figure={q?.figure} compact/>
             {isMcq(q) ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                 {q.options.map((opt, oi) => {
@@ -329,7 +338,7 @@ function StaticQuestions({ questions, answers = {}, marks = [] }) {
                       <span style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900, fontFamily: "'Nunito',sans-serif", border: `1.5px solid ${correct ? '#10B981' : wrongPick ? '#EF4444' : 'var(--ak-border)'}`, background: correct ? '#10B981' : wrongPick ? '#EF4444' : 'transparent', color: correct || wrongPick ? '#fff' : 'inherit' }}>
                         {letterOf(oi)}
                       </span>
-                      {opt}
+                      <MathText text={opt}/>
                       <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 800 }}>
                         {picked === oi ? (correct ? 'your answer · correct' : 'your answer') : correct ? 'correct' : ''}
                       </span>
@@ -739,7 +748,7 @@ export default function ActivityDetailPage() {
           )}
 
           {/* graded activities show their questions read-only, correct option marked */}
-          {row.graded && questions?.length > 0 && <StaticQuestions questions={questions} answers={row.submission?.answers || {}} marks={row.feedbackQuestions || []} />}
+          {row.graded && questions?.length > 0 && <StaticQuestions questions={questions} paper={row.briefDetails} answers={row.submission?.answers || {}} marks={row.feedbackQuestions || []} />}
 
           {/* the work the learner handed in — server copy */}
           {/* Once graded, the question list above already shows each answer with its mark. */}
@@ -790,7 +799,7 @@ export default function ActivityDetailPage() {
                 {useStepper ? `Questions · ${questions.length}` : 'Your answer'}
               </p>
               {useStepper ? (
-                <Stepper questions={questions} work={work} setWork={setWork} saved={saved} onSaveAnswer={saveAnswer} mid={t.mid} dark={t.dark} onSubmit={submit} submitting={submitting}
+                <Stepper questions={questions} paper={row.briefDetails} work={work} setWork={setWork} saved={saved} onSaveAnswer={saveAnswer} mid={t.mid} dark={t.dark} onSubmit={submit} submitting={submitting}
                   attachment={(
                     <div style={{ marginTop: 16 }}>
                       <p style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', margin: '0 0 10px', fontFamily: "'Nunito',sans-serif" }}>Attachment <span style={{ color: 'var(--ak-text-muted)', fontWeight: 700 }}>— optional, for workings, diagrams or extra pages</span></p>
