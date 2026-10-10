@@ -164,10 +164,19 @@ export async function getSharedExtraction(contentKey) {
   } catch { return { pages: [], markdown: '' }; }
 }
 
-/** Send rendered pages ({pageNumber, imageBase64}) — one batch of ≤8. */
+/** SUBMIT rendered pages ({pageNumber, imageBase64}) — one batch of ≤8.
+    Returns at once ({ pending, failed? }); collect with getExtractionStatus.
+    Throws with err.status 409 when another opener's batch is running. */
 export async function extractRecordPages({ recordId, contentKey, pages }) {
   const d = await apiPost('/api/records/extract', contentKey ? { contentKey, pages } : { recordId, pages });
-  return d?.data ?? { pages: [] };
+  return d?.data ?? { pending: [] };
+}
+
+/** One poll of the submitted batch → { done, pages (saved this poll), pending, failed }. */
+export async function getExtractionStatus({ recordId, contentKey }) {
+  const q = contentKey ? `contentKey=${encodeURIComponent(contentKey)}` : `recordId=${encodeURIComponent(recordId)}`;
+  const d = await apiGet(`/api/records/extract/status?${q}`);
+  return d?.data ?? { done: true, pages: [], pending: [], failed: [] };
 }
 
 /** Semantic library search — hybrid (vector + keyword) over YOUR records'

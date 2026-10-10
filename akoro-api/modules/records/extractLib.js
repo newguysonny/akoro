@@ -72,6 +72,16 @@ export async function finishContentJob(contentKey, lane, status, result = null) 
   if (error) throw error;
 }
 
+/** Record progress on a LIVE claim (keeps it fresh — a claim untouched for
+    CLAIM_STALE_MINUTES is re-claimable). */
+export async function updateContentJob(contentKey, lane, result) {
+  const db = await dbLazy();
+  const { error } = await db.schema("edu").from("content_jobs")
+    .update({ result, updated_at: new Date().toISOString() })
+    .eq("content_key", contentKey).eq("lane", lane).eq("status", "running");
+  if (error) throw error;
+}
+
 export async function getContentJob(contentKey, lane) {
   const db = await dbLazy();
   const { data } = await db.schema("edu").from("content_jobs")
@@ -297,6 +307,52 @@ export async function parsePageOnRunpod({ imageBase64, maxNewTokens = 8192, fetc
     }))
     .filter((b) => b.bbox_2d.length === 4 && b.bbox_2d.every(Number.isFinite));
   return { blocks, markdown: blocksToMarkdown(blocks), model: out.model || null };
+}
+
+/* ── The async extract lane (POST /extract submits, GET /extract/status
+   collects) — no GPU job ever rides an open HTTP request. ─────────────── */
+
+/** How long a submitted page may stay unfinished before it counts as failed
+    (cold starts + queueing; a 4B page itself takes seconds). */
+export const PARSE_JOB_DEADLINE_MS = 10 * 60_000;
+
+const EMPTY_ANSWER =
+  "The model returned nothing for this page — it ended its answer immediately. " +
+  "This is a worker problem, not a blank page; try again after the worker is fixed.";
+
+/**
+ * Settle one polled RunPod job into what the extract lane does with it:
+ *   { state: "pending" }                            — still queued / running
+ *   { state: "saved", blocks, markdown, model, blank } — store this page
+ *   { state: "failed", error, rawPreview? }         — report, do NOT store
+ *
+ * Zero blocks is only a page when the model said so: the prompt's contract
+ * for an empty page is exactly "[]". An EMPTY answer means the model ended
+ * its turn at once (the chat-format bug of 2026-10-10), and anything else
+ * unparsable is a failed read — both used to be saved as blank pages,
+ * which hid the failure and blocked a retry.
+ */
+export function settleParseJob(job, { submittedAt = null, now = Date.now() } = {}) {
+  const status = job?.status || "IN_QUEUE";
+  if (status === "IN_QUEUE" || status === "IN_PROGRESS") {
+    if (submittedAt && now - Date.parse(submittedAt) > PARSE_JOB_DEADLINE_MS) {
+      return { state: "failed", error: "The parse worker did not finish this page in time — try again." };
+    }
+    return { state: "pending" };
+  }
+  if (status !== "COMPLETED") {
+    const reason = job?.output?.error || job?.error || "";
+    return { state: "failed", error: `Parse job ${status}${reason ? `: ${String(reason).slice(0, 200)}` : ""}` };
+  }
+  const out = job.output || {};
+  if (out.error) return { state: "failed", error: String(out.error).slice(0, 300) };
+  const shaped = shapeParseOutput(out);
+  const model = out.model || job.model || null;
+  if (shaped.blocks.length) return { state: "saved", blocks: shaped.blocks, markdown: shaped.markdown, model, blank: false };
+  const raw = typeof out.raw === "string" ? out.raw.trim() : "";
+  if (raw === "[]") return { state: "saved", blocks: [], markdown: "", model, blank: true };
+  if (!raw) return { state: "failed", error: EMPTY_ANSWER };
+  return { state: "failed", error: "The model's answer for this page could not be read.", rawPreview: raw.slice(0, 500) };
 }
 
 /* ── Persistence ───────────────────────────────────────────────────────── */

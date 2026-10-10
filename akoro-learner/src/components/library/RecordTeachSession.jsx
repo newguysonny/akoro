@@ -130,6 +130,10 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
   const [discussionCommunities, setDiscussionCommunities] = useState(null);
   const textsRef  = useRef([]);      // the load flow's per-page text layer (≈'' for scans)
   const applyRef  = useRef(null);    // set by the load flow; applies parsed pages to the session
+  // False once the reader closes: extraction polling stops instead of
+  // running on (and setting state) after unmount.
+  const aliveRef  = useRef(true);
+  useEffect(() => { aliveRef.current = true; return () => { aliveRef.current = false; }; }, []);
 
   const startExtraction = async () => {
     const apply = applyRef.current;
@@ -144,19 +148,35 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
       } else {
         throw new Error('Nothing extractable in this record.');
       }
-      const res = await runRecordExtraction({
+      // Only send pages the file doesn't have yet — a retry (or a partly
+      // extracted file) must not pay to re-parse pages already saved.
+      const readSaved = () => (record.contentKey ? getSharedExtraction(record.contentKey) : getRecordExtraction(record.id));
+      const savedBefore = await readSaved();
+      const have = new Set((savedBefore?.pages || []).map((p) => p.pageNumber));
+      const toSend = rendered.filter((p) => !have.has(p.pageNumber));
+      const res = toSend.length ? await runRecordExtraction({
         recordId: record.id,
         contentKey: record.contentKey || null,   // shared file → parsed once for everyone
-        pages: rendered,
-        onProgress: (done, total) => setExtract((s) => ({ ...s, done, total })),
-      });
-      if (!res.pages.length) throw new Error(res.error || 'Extraction returned no text — try again.');
-      const byPage = new Map(res.pages.map((p) => [p.pageNumber, p.markdown]));
-      const blocksByPage = new Map(res.pages.filter((p) => Array.isArray(p.blocks) && p.blocks.length).map((p) => [p.pageNumber, p.blocks]));
+        pages: toSend,
+        onProgress: (done, total) => { if (aliveRef.current) setExtract((s) => ({ ...s, done, total })); },
+        isCancelled: () => !aliveRef.current,
+        readSaved,
+      }) : { pages: [], failed: [], error: null };
+      if (!aliveRef.current) return;
+      // Apply everything the file now has: earlier saved pages + this run.
+      const allPages = [
+        ...(savedBefore?.pages || []).filter((p) => !res.pages.some((r) => r.pageNumber === p.pageNumber)),
+        ...res.pages,
+      ];
+      if (!allPages.length) throw new Error(res.error || 'Extraction returned no text — try again.');
+      const byPage = new Map(allPages.map((p) => [p.pageNumber, p.markdown]));
+      const blocksByPage = new Map(allPages.filter((p) => Array.isArray(p.blocks) && p.blocks.length).map((p) => [p.pageNumber, p.blocks]));
       apply(byPage, blocksByPage);
-      setExtract({ status: 'applied', done: res.pages.length, total: rendered.length, error: res.error || null });
-      setTimeout(() => setExtract((s) => (s?.status === 'applied' ? null : s)), 6000);
+      setExtract({ status: 'applied', done: allPages.length, total: rendered.length, error: res.error || null });
+      // A partial run keeps its notice up: the failed pages must be seen.
+      if (!res.error) setTimeout(() => setExtract((s) => (s?.status === 'applied' ? null : s)), 6000);
     } catch (e) {
+      if (!aliveRef.current) return;
       setExtract((s) => ({ ...s, status: 'error', error: e?.message || 'Extraction failed.' }));
     }
   };
@@ -549,6 +569,12 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
               {extract.done} page{extract.done === 1 ? '' : 's'} now read like a text document — the agent teaches from the real words.
               {extract.error ? ` (${extract.error})` : ''}
             </p>
+            {extract.error && (
+              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                <button onClick={startExtraction} style={btnPrimary}>Retry the missing pages</button>
+                <button onClick={() => setExtract(null)} style={btnGhost}>Dismiss</button>
+              </div>
+            )}
           </>
         ) : (
           <>

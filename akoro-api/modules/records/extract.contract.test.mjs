@@ -29,7 +29,8 @@ const [routesSrc, libSrc, appSrc, manifest, recordsMigration, teachSessionSrc, e
   read("../../migrations/manifest.json"),
   read("../../migrations/2026-content-cache.sql"),
   read("../../../akoro-learner/src/components/library/RecordTeachSession.jsx"),
-  read("../../../akoro-learner/src/components/library/extractPages.js"),
+  read("../../../akoro-learner/src/components/library/extractPages.js")
+    + read("../../../akoro-learner/src/lib/extractRun.js"),
   read("../../../akoro-learner/src/services/recordsApi.js"),
   read("../../../runpod-worker/handler.py"),
   read("../../../akoro-learner/src/components/library/PdfPages.jsx"),
@@ -178,7 +179,7 @@ test("the reader rasterizes client-side and offers extraction for scans & images
   assert.match(teachSessionSrc, /runRecordExtraction/, "the reader drives the batched run");
   assert.match(recordsApiSrc, /\/api\/records\/extract\//, "the service seam points at the new routes");
   // The layout overlay — stored bboxes become visible on the page
-  assert.match(routesSrc, /parsed\.push\(\{ pageNumber, markdown, model, blocks \}\)/, "the POST response carries blocks back");
+  assert.match(routesSrc, /saved\.push\(\{ pageNumber: entry\.pageNumber, markdown: settled\.markdown, model: settled\.model, blocks: settled\.blocks/, "the status poll carries blocks back");
   assert.match(teachSessionSrc, /blocks=\{pdfBlocks\.get\(i \+ 1\)\}/, "the reader hands each page its blocks");
   assert.match(pdfPagesSrc, /export function PdfPage\(\{ pdf, pageNumber, blocks = null \}\)/, "PdfPage accepts blocks");
   assert.match(pdfPagesSrc, /x1 \/ 10/, "bbox 0-1000 → percent math (value/10)");
@@ -256,4 +257,72 @@ test("runpodEndpointHealth — the /health deep probe of the parse endpoint", as
   assert.match(appJs, /deep && recordsExtractionEnabled\(\) \? await probeRunpod\(\) : null/,
     "the live probe rides ?deep=1 only");
   assert.match(appJs, /must not restart the API/, "never gates the health status — Render restarts on failing checks");
+});
+
+/* ── The async extract lane: submit (POST) → collect (GET /extract/status) ── */
+
+test("settleParseJob: real pages save, '[]' is a blank page, an empty answer is a FAILURE", async () => {
+  const { settleParseJob, PARSE_JOB_DEADLINE_MS } = await import("./extractLib.js");
+  const done = (output) => ({ status: "COMPLETED", output });
+
+  const page = settleParseJob(done({ raw: '[{"bbox_2d":[10,20,500,80],"text_content":"Photosynthesis"}]', model: "m" }));
+  assert.equal(page.state, "saved");
+  assert.equal(page.blank, false);
+  assert.equal(page.markdown, "Photosynthesis");
+  assert.equal(page.model, "m");
+
+  const blank = settleParseJob(done({ raw: " [] ", blocks: [] }));
+  assert.deepEqual([blank.state, blank.blank, blank.markdown], ["saved", true, ""], "the prompt's contract for an empty page is exactly []");
+
+  const empty = settleParseJob(done({ raw: "", blocks: [] }));
+  assert.equal(empty.state, "failed", "an empty answer is the model ending its turn — never a blank page");
+  assert.match(empty.error, /ended its answer immediately/);
+
+  const garbled = settleParseJob(done({ raw: "Sorry, I cannot", blocks: [] }));
+  assert.equal(garbled.state, "failed");
+  assert.equal(garbled.rawPreview, "Sorry, I cannot");
+
+  assert.equal(settleParseJob(done({ error: "Model unavailable: no cache" })).state, "failed");
+  assert.match(settleParseJob({ status: "FAILED" }).error, /Parse job FAILED/);
+  assert.equal(settleParseJob({ status: "IN_QUEUE" }).state, "pending");
+  const now = Date.now();
+  const late = settleParseJob({ status: "IN_PROGRESS" }, { submittedAt: new Date(now - PARSE_JOB_DEADLINE_MS - 1000).toISOString(), now });
+  assert.equal(late.state, "failed", "a page stuck past the deadline fails instead of holding the file forever");
+});
+
+test("POST /extract submits and returns at once; GET /extract/status collects and releases the claim", () => {
+  const post = routesSrc.slice(routesSrc.indexOf('router.post("/extract"'), routesSrc.indexOf('router.get("/extract/status"'));
+  const status = routesSrc.slice(routesSrc.indexOf('router.get("/extract/status"'), routesSrc.indexOf('router.get("/extract/:recordId"'));
+  assert.ok(post.length > 0 && status.length > 0, "both routes exist, status registered BEFORE /extract/:recordId");
+
+  // No GPU work rides the request: submit via /run, never /runsync.
+  assert.match(post, /parsePageRunAsync\(\{ imageBase64: b64 \}\)/);
+  assert.doesNotMatch(post, /parsePageOnRunpod/);
+  assert.match(post, /res\.status\(202\)/);
+
+  // Validation happens BEFORE the claim — a 400 can no longer leave the file locked.
+  const lastValidation = post.lastIndexOf("return res400(");
+  const claim = post.indexOf("claimContentJob(");
+  assert.ok(lastValidation !== -1 && claim > lastValidation, "every 400 returns before the claim is taken");
+  assert.match(post, /await finishContentJob\(contentKey, "parse", "failed"/, "a batch nobody accepted releases the claim");
+  assert.match(post, /await updateContentJob\(contentKey, "parse", \{ mode: "async", submittedAt, jobs \}\)/);
+
+  // The poll settles each job, saves real/blank pages, reports failures, and
+  // releases the claim when nothing is pending (the next batch can go).
+  assert.match(status, /settleParseJob\(polled, \{ submittedAt: batch\.submittedAt \}\)/);
+  assert.match(status, /await saveExtractionPage\(/);
+  assert.match(status, /entry\.state = "failed"/);
+  assert.match(status, /if \(done\) \{[\s\S]*?await finishContentJob\(contentKey, "parse", ok \? "done" : "failed"/);
+  assert.match(status, /resolveAiContent\(probe\)/, "the same ownership / shared-access rule as POST");
+});
+
+test("the reader submits, polls, stops on close, and never re-pays for saved pages", () => {
+  assert.match(recordsApiSrc, /export async function getExtractionStatus/);
+  assert.match(recordsApiSrc, /\/api\/records\/extract\/status\?/);
+  assert.match(extractPagesSrc, /if \(e\?\.status !== 409\) throw e;/, "409 → help finish the running batch, then submit");
+  assert.match(extractPagesSrc, /if \(isCancelled\(\)\) return STOPPED;/);
+  assert.match(extractPagesSrc, /EXTRACT_BATCH_DEADLINE_MS/, "bounded polling");
+  assert.match(teachSessionSrc, /isCancelled: \(\) => !aliveRef\.current/, "polling stops when the reader closes");
+  assert.match(teachSessionSrc, /const toSend = rendered\.filter\(\(p\) => !have\.has\(p\.pageNumber\)\)/, "a retry only sends missing pages");
+  assert.match(teachSessionSrc, /contentKey: record\.contentKey \|\| null/, "shared files extract under their content key");
 });

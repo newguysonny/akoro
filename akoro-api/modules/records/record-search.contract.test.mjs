@@ -87,7 +87,7 @@ test("the write path is idempotent and bounded", () => {
 
 test("indexing never blocks the flow that produced the text", () => {
   assert.match(routesSrc, /void indexRecord\(\{/, "record create fires and forgets");
-  assert.match(routesSrc, /void indexByContentKey\(\{ contentKey, pages: parsed \}\)/, "an extraction batch indexes after finishing the job");
+  assert.match(routesSrc, /if \(saved\.length\) void indexByContentKey\(\{ contentKey, pages: saved \}\)/, "each status poll indexes the pages it saved");
   assert.match(routesSrc, /void indexByContentKey\(\{ contentKey, segments: result\.segments \}\)/, "a transcription indexes after finishing the job");
   assert.match(searchLibSrc, /console\.warn\(`\[record-search\] indexing record \$\{recordId\} failed \(sweeper will repair\)/, "failures warn and defer to the sweeper");
 });

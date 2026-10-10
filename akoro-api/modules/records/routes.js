@@ -53,8 +53,8 @@ import {
   ownsRecordFileKey, isFallbackFileKey, MAX_FALLBACK_FILE_BYTES,
 } from "./lib/storage.js";
 import {
-  recordsExtractionEnabled, parsePageOnRunpod, saveExtractionPage, getExtraction,
-  claimContentJob, finishContentJob, getContentJob,
+  recordsExtractionEnabled, parsePageRunAsync, getParseJob, settleParseJob, saveExtractionPage, getExtraction,
+  claimContentJob, finishContentJob, updateContentJob, getContentJob,
   MAX_PAGES_PER_REQUEST, MAX_RECORD_PAGES, MAX_IMAGE_B64_CHARS,
 } from "./extractLib.js";
 import {
@@ -607,6 +607,13 @@ async function resolveAiContent(req) {
   return { status: 400, message: "A recordId or contentKey is required." };
 }
 
+/*
+ * POST /extract — SUBMIT a batch (≤8 rendered pages) and return at once.
+ * Each page becomes one async RunPod job; the job ids ride the single-flight
+ * claim's result, and GET /extract/status collects them. A GPU page used to
+ * ride this request via /runsync — up to 8 × 150 s — past Cloudflare's
+ * ~100 s cut, which killed long batches with an HTML error page.
+ */
 router.post("/extract", authenticateToken, asyncHandler(async (req, res) => {
   if (!recordsExtractionEnabled()) {
     return res.status(501).json({ success: false, error: "Text extraction isn't configured on this deployment yet." });
@@ -619,13 +626,9 @@ router.post("/extract", authenticateToken, asyncHandler(async (req, res) => {
   if (!pages.length) return res400(res, "Send at least one rendered page.");
   if (pages.length > MAX_PAGES_PER_REQUEST) return res400(res, `Send at most ${MAX_PAGES_PER_REQUEST} pages per request.`);
 
-  // Single flight: only one parse runs per file; latecomers poll.
-  const claimed = await claimContentJob(contentKey, "parse", req.user.id);
-  if (!claimed) {
-    return res.status(409).json({ success: false, error: "This file is being extracted right now — the shared result will appear in a moment.", job: await getContentJob(contentKey, "parse") });
-  }
-
-  const parsed = [];
+  // Validate EVERY page before claiming: a 400 after the claim used to leave
+  // the file locked as "running" for 10 minutes (everyone else got 409).
+  const work = [];
   for (const p of pages) {
     const pageNumber = Number(p?.pageNumber);
     const imageBase64 = typeof p?.imageBase64 === "string" ? p.imageBase64 : "";
@@ -636,24 +639,97 @@ router.post("/extract", authenticateToken, asyncHandler(async (req, res) => {
     if (imageBase64.length > MAX_IMAGE_B64_CHARS) {
       return res400(res, `Page ${pageNumber}'s image is too large — re-render it smaller.`);
     }
-    const b64 = imageBase64.replace(/^data:[^,]*,/, "");   // tolerate data: URIs
+    work.push({ pageNumber, b64: imageBase64.replace(/^data:[^,]*,/, "") });   // tolerate data: URIs
+  }
+
+  // Single flight: only one batch runs per file; latecomers poll.
+  const claimed = await claimContentJob(contentKey, "parse", req.user.id);
+  if (!claimed) {
+    return res.status(409).json({ success: false, error: "This file is being extracted right now — the shared result will appear in a moment.", job: await getContentJob(contentKey, "parse") });
+  }
+
+  const submittedAt = new Date().toISOString();
+  const jobs = [];
+  let submitError = null;
+  for (const { pageNumber, b64 } of work) {
     try {
-      const { blocks, markdown, model } = await parsePageOnRunpod({ imageBase64: b64 });
-      await saveExtractionPage({ contentKey, pageNumber, blocks, markdown, model });
-      parsed.push({ pageNumber, markdown, model, blocks });   // blocks ride back for the reader's layout overlay
+      const { jobId } = await parsePageRunAsync({ imageBase64: b64 });
+      jobs.push({ pageNumber, jobId, state: "pending" });
     } catch (err) {
-      await finishContentJob(contentKey, "parse", parsed.length ? "done" : "failed", { pages: parsed.length, error: String(err?.message || err).slice(0, 200) });
-      // Mid-batch failure: keep the pages that worked, surface why.
-      return res.json({
-        success: parsed.length > 0,
-        data: { contentKey, pages: parsed, failedPage: pageNumber, error: String(err?.message || err) },
-      });
+      submitError = { pageNumber, error: String(err?.message || err).slice(0, 200) };
+      break;   // the endpoint is refusing work — don't keep hammering it
     }
   }
-  await finishContentJob(contentKey, "parse", "done", { pages: parsed.length });
-  // Search index (owner's record, shared-key aware) — never blocks the reply.
-  void indexByContentKey({ contentKey, pages: parsed });
-  okExtract(res, { contentKey, pages: parsed });
+  if (!jobs.length) {
+    await finishContentJob(contentKey, "parse", "failed", { error: submitError?.error || "Submit failed" });
+    return res.status(502).json({ success: false, error: submitError?.error || "The parse worker did not accept the pages — try again." });
+  }
+  await updateContentJob(contentKey, "parse", { mode: "async", submittedAt, jobs });
+  res.status(202).json({
+    success: true,
+    data: {
+      contentKey,
+      pending: jobs.map((j) => j.pageNumber),
+      ...(submitError ? { failed: [submitError] } : {}),
+    },
+  });
+}));
+
+/*
+ * GET /extract/status?recordId=|contentKey= — collect the batch POST
+ * /extract submitted. Each poll checks the still-pending jobs on RunPod,
+ * saves the pages that finished, and releases the claim once every page
+ * is settled (so the reader can send the next batch). Any authorised
+ * opener may poll — a shared file's latecomer finishes the batch for all.
+ */
+router.get("/extract/status", authenticateToken, asyncHandler(async (req, res) => {
+  if (!recordsExtractionEnabled()) {
+    return res.status(501).json({ success: false, error: "Text extraction isn't configured on this deployment yet." });
+  }
+  const probe = { ...req, body: { recordId: req.query.recordId, contentKey: req.query.contentKey } };
+  const id = await resolveAiContent(probe);
+  if (id.status) return res.status(id.status).json({ success: false, message: id.message });
+  const { contentKey } = id;
+
+  const job = await getContentJob(contentKey, "parse");
+  const batch = job?.result?.mode === "async" && Array.isArray(job.result.jobs) ? job.result : null;
+  if (!batch) {
+    return okExtract(res, { contentKey, running: job?.status === "running", done: job?.status !== "running", pages: [], failed: [], pending: [] });
+  }
+
+  const saved = [];
+  let changed = false;
+  for (const entry of batch.jobs) {
+    if (entry.state !== "pending") continue;
+    let polled;
+    try { polled = await getParseJob({ jobId: entry.jobId }); }
+    catch { continue; }   // a status hiccup — try again on the next poll
+    const settled = settleParseJob(polled, { submittedAt: batch.submittedAt });
+    if (settled.state === "pending") continue;
+    changed = true;
+    if (settled.state === "saved") {
+      await saveExtractionPage({ contentKey, pageNumber: entry.pageNumber, blocks: settled.blocks, markdown: settled.markdown, model: settled.model });
+      entry.state = settled.blank ? "blank" : "saved";
+      saved.push({ pageNumber: entry.pageNumber, markdown: settled.markdown, model: settled.model, blocks: settled.blocks, blank: settled.blank });
+    } else {
+      entry.state = "failed";
+      entry.error = settled.error;
+      if (settled.rawPreview) entry.rawPreview = settled.rawPreview;
+    }
+  }
+
+  const pending = batch.jobs.filter((j) => j.state === "pending").map((j) => j.pageNumber);
+  const failed  = batch.jobs.filter((j) => j.state === "failed").map(({ pageNumber, error, rawPreview }) => ({ pageNumber, error, ...(rawPreview ? { rawPreview } : {}) }));
+  const done = pending.length === 0;
+  if (done) {
+    const ok = batch.jobs.filter((j) => j.state === "saved" || j.state === "blank").length;
+    await finishContentJob(contentKey, "parse", ok ? "done" : "failed", { ...batch, pages: ok });
+  } else if (changed) {
+    await updateContentJob(contentKey, "parse", batch);
+  }
+  // Search index for the pages this poll saved — never blocks the reply.
+  if (saved.length) void indexByContentKey({ contentKey, pages: saved });
+  okExtract(res, { contentKey, done, pages: saved, pending, failed });
 }));
 
 router.get("/extract/:recordId", authenticateToken, asyncHandler(async (req, res) => {
