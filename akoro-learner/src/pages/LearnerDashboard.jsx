@@ -26,6 +26,7 @@ import ExamPrepConfidenceModal from '../components/assessment/ExamPrepConfidence
 import BattleModal       from '../components/battles/BattleModal.jsx';
 import ChallengeModal    from '../components/battles/ChallengeModal.jsx';
 import { BattlesTab, ChallengeRow } from '../components/battles/BattlesTab.jsx';
+import OpenChallenges from '../components/network/OpenChallenges.jsx';
 import AgentChatTab  from '../components/tabs/AgentChatTab.jsx';
 import RankingsTab   from '../components/tabs/RankingsTab.jsx';
 import DiscoveryTab  from '../components/tabs/DiscoveryTab.jsx';
@@ -1148,6 +1149,11 @@ export default function LearnerDashboard() {
                   <button onClick={()=>goTab("battles")} style={{ padding:"10px 22px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('challenges.go_to_battles')}</button>
                 </div>
               ):challenges.filter(c=>!acceptedIds.has(c.id)).map(c=><ChallengeRow key={c.id} challenge={c} onTap={setSelectedChallenge}/>)}
+              {/* Challenge requests other agents posted — take a seat here too. */}
+              <div style={{ borderTop:"1px solid var(--ak-border)",marginTop:4 }}>
+                <div style={{ display:"flex",alignItems:"center",gap:8,padding:"12px 18px 0" }}><Icon name="ti-world" size={13} color={BRAND}/><span style={{ fontSize:12,fontWeight:800,color:"var(--ak-text-sec)" }}>Open challenges</span></div>
+                <OpenChallenges onBattleCreated={loadBattles}/>
+              </div>
             </div>
           )}
           {tab==="discovery" && (higherEd
