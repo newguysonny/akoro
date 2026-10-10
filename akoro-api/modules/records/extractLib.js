@@ -355,15 +355,28 @@ export function settleParseJob(job, { submittedAt = null, now = Date.now() } = {
   return { state: "failed", error: "The model's answer for this page could not be read.", rawPreview: raw.slice(0, 500) };
 }
 
+/** A model box (0-1000 normalized) → page coordinates (points or pixels),
+    given the page's stored size. Null when the size is unknown. */
+export function boxToPageCoords(bbox, size) {
+  if (!Array.isArray(bbox) || bbox.length !== 4 || !(size?.width > 0) || !(size?.height > 0)) return null;
+  const [x1, y1, x2, y2] = bbox.map(Number);
+  const r = (v) => Math.round(v * 100) / 100;
+  return { x1: r((x1 / 1000) * size.width), y1: r((y1 / 1000) * size.height), x2: r((x2 / 1000) * size.width), y2: r((y2 / 1000) * size.height), unit: size.unit || null };
+}
+
 /* ── Persistence ───────────────────────────────────────────────────────── */
 
 /** Upsert one parsed page into the SHARED per-file cache. */
-export async function saveExtractionPage({ contentKey, pageNumber, blocks, markdown, model }) {
+export async function saveExtractionPage({ contentKey, pageNumber, blocks, markdown, model, size = null }) {
   const db = await dbLazy();
   const { data, error } = await db.schema("edu")
     .from("content_parses")
     .upsert(
-      { content_key: contentKey, page_number: pageNumber, blocks: JSON.stringify(blocks), markdown, model },
+      {
+        content_key: contentKey, page_number: pageNumber, blocks: JSON.stringify(blocks), markdown, model,
+        // The page's real size: the 0-1000 boxes map back to points / pixels.
+        ...(size ? { width: size.width, height: size.height, unit: size.unit } : {}),
+      },
       { onConflict: "content_key,page_number" },
     )
     .select("page_number, markdown, model, updated_at")
@@ -377,7 +390,7 @@ export async function getExtraction(contentKey) {
   const db = await dbLazy();
   const { data, error } = await db.schema("edu")
     .from("content_parses")
-    .select("page_number, markdown, blocks, model, updated_at")
+    .select("page_number, markdown, blocks, model, width, height, unit, updated_at")
     .eq("content_key", contentKey)
     .order("page_number");
   if (error) throw error;
@@ -386,6 +399,7 @@ export async function getExtraction(contentKey) {
     markdown: row.markdown || "",
     blocks: typeof row.blocks === "string" ? JSON.parse(row.blocks || "[]") : (row.blocks || []),
     model: row.model,
+    size: row.width && row.height ? { width: Number(row.width), height: Number(row.height), unit: row.unit || null } : null,
     updatedAt: row.updated_at,
   }));
   return {

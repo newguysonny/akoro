@@ -326,3 +326,19 @@ test("the reader submits, polls, stops on close, and never re-pays for saved pag
   assert.match(teachSessionSrc, /const toSend = rendered\.filter\(\(p\) => !have\.has\(p\.pageNumber\)\)/, "a retry only sends missing pages");
   assert.match(teachSessionSrc, /contentKey: record\.contentKey \|\| null/, "shared files extract under their content key");
 });
+
+test("page sizes ride the extraction: real points/pixels stored, 0-1000 boxes map back", async () => {
+  const { boxToPageCoords } = await import("./extractLib.js");
+  assert.deepEqual(boxToPageCoords([100, 500, 900, 1000], { width: 612, height: 792, unit: "pt" }), { x1: 61.2, y1: 396, x2: 550.8, y2: 792, unit: "pt" });
+  assert.equal(boxToPageCoords([0, 0, 10, 10], null), null, "unknown size → null, never a guess");
+  // The reader sends the real size; the route validates it, the job keeps it, the save stores it.
+  assert.match(extractPagesSrc, /width: Math\.round\(base\.width \* 100\) \/ 100, height: Math\.round\(base\.height \* 100\) \/ 100, unit: 'pt'/);
+  assert.match(extractPagesSrc, /unit: 'px'/);
+  assert.match(routesSrc, /function pageSizeOf\(p\)/);
+  assert.match(routesSrc, /size: entry\.size \|\| null/);
+  assert.match(libSrc, /\.\.\.\(size \? \{ width: size\.width, height: size\.height, unit: size\.unit \} : \{\}\)/);
+  assert.match(libSrc, /select\("page_number, markdown, blocks, model, width, height, unit, updated_at"\)/);
+  const migration = read("../../migrations/2026-content-page-size.sql");
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS width\s+NUMERIC/);
+  assert.match(migration, /unit IN \('pt', 'px'\)/);
+});

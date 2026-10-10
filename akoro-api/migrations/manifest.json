@@ -171,6 +171,7 @@
     "2026-record-search.sql",
     "2026-record-chat.sql",
     "2026-record-artifacts.sql",
+    "2026-content-page-size.sql",
     "2026-community-items.sql",
     "2026-community-discussions.sql"
   ],

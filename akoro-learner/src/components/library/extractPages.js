@@ -56,7 +56,12 @@ export async function rasterizePdfPages(pdf, { maxPages = MAX_RECORD_PAGES, onPr
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     await page.render({ canvasContext: ctx, viewport }).promise;
-    pages.push({ pageNumber: p, imageBase64: canvas.toDataURL('image/jpeg', JPEG_QUALITY).split(',')[1] });
+    // The page's REAL size (PDF points, 1/72 in) rides along, so the stored
+    // extraction can map its 0-1000 boxes back to page coordinates.
+    pages.push({
+      pageNumber: p, imageBase64: canvas.toDataURL('image/jpeg', JPEG_QUALITY).split(',')[1],
+      width: Math.round(base.width * 100) / 100, height: Math.round(base.height * 100) / 100, unit: 'pt',
+    });
     canvas.width = 0;
     onProgress?.(p, total);
   }
@@ -70,8 +75,9 @@ export async function rasterizeImageFile(url) {
   const blob = await res.blob();
   const bmp = await createImageBitmap(blob);
   const imageBase64 = drawScaled(bmp, bmp.width, bmp.height);
+  const size = { width: bmp.width, height: bmp.height, unit: 'px' };   // the original image's pixels
   bmp.close?.();
-  return [{ pageNumber: 1, imageBase64 }];
+  return [{ pageNumber: 1, imageBase64, ...size }];
 }
 
 /**
