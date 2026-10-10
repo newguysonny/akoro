@@ -16,6 +16,11 @@ import { embedQuestion, recall, recallStrength, answerFromRecall, guess } from "
 import { updateKnowledgeConfidence, flagBattleReviewTopics } from "./knowledge.js";
 import { emitAutonomyEvent } from "../autonomy/triggers.js";
 import { workerJob } from "../../lib/workerLog.js";
+import { coinsAvailable, schoolBillTo, InsufficientCoins } from "../../lib/coins.js";
+import { prepareRuling, ruling, verdict, JUDGE } from "./judge.js";
+
+// Agents already told they are out of coins this battle (one log line each, not one per question).
+const toldNoCoins = new Set();
 
 const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "battle-worker" }));
 redis.on("error", (err) => console.error("[battle-worker/redis]", err.message));
@@ -193,6 +198,8 @@ async function startBattle(battleId) {
   if (!firstQ) return endBattle(battleId);
 
   getIO().to(`battle:${battleId}`).emit("battle:question", buildQuestionPayload(firstQ));
+  // Sergeant starts on the ruling now, so it is ready by the reveal (not in a review).
+  if (battle.battle_type !== "review") prepareRuling(firstQ).catch(() => {});
   await appendLog(battleId, "question_start", `━━━ Q1: ${firstQ.topic} ━━━`, null, null, null, 1, { questionOrder: 1, topic: firstQ.topic });
   await scheduleAgentAnswers(battleId, firstQ);
 
@@ -238,28 +245,46 @@ async function agentAnswer(battleId, questionOrder, participantId, thinkingMs = 
   // learner's own notes are searched, and the model is shown ONLY those notes.
   // A correct answer therefore means their notes contained the answer. When
   // they do not, the agent says so and guesses, and the log says which it was.
-  const embedding = await embedQuestion(`${q.topic ? q.topic + ": " : ""}${q.question_text}`);
-  const notes = await recall({
-    studentId: p.user_id, embedding, topic: q.topic,
-    // The question drives the lexical half of the search, and the subject
-    // narrows it — a Mathematics question has no business retrieving a Social
-    // Studies note, however close the vectors happen to sit.
-    queryText: q.question_text, subject: q.subject,
-  });
-
+  //
+  // Each learner pays for their OWN agent's answers (the recall and the answer
+  // are billed to them). An empty wallet doesn't stall the battle: the agent
+  // guesses, and the log says why — once.
+  const billTo = await schoolBillTo(p.user_id).catch(() => null);
+  const wallet = await coinsAvailable({ userId: p.user_id, billTo, min: 1 }).catch(() => ({ ok: true }));
   let picked, basis = "unknown", cited = null, why = "nothing in memory on this";
-  try {
-    const ans = await answerFromRecall({
-      question: q.question_text, options, notes, userId: p.user_id,
+  let broke = !wallet.ok;
+  if (!broke) {
+    const embedding = await embedQuestion(`${q.topic ? q.topic + ": " : ""}${q.question_text}`);
+    const notes = await recall({
+      studentId: p.user_id, embedding, topic: q.topic,
+      // The question drives the lexical half of the search, and the subject
+      // narrows it — a Mathematics question has no business retrieving a Social
+      // Studies note, however close the vectors happen to sit.
+      queryText: q.question_text, subject: q.subject,
     });
-    basis = ans.basis; cited = ans.cited; why = ans.why;
-    picked = ans.index;
-  } catch (e) {
-    // A model failure is not knowledge the learner lacks, so it must not be
-    // recorded as one — but the question still has to resolve or the battle
-    // stalls on it.
-    console.warn("[battle-worker] recall answer failed:", e.message);
-    basis = "unknown"; why = "could not reach my memory";
+    try {
+      const ans = await answerFromRecall({
+        question: q.question_text, options, notes, userId: p.user_id,
+      });
+      basis = ans.basis; cited = ans.cited; why = ans.why;
+      picked = ans.index;
+    } catch (e) {
+      // A model failure is not knowledge the learner lacks, so it must not be
+      // recorded as one — but the question still has to resolve or the battle
+      // stalls on it.
+      if (e instanceof InsufficientCoins) broke = true;
+      else console.warn("[battle-worker] recall answer failed:", e.message);
+      basis = "unknown"; why = "could not reach my memory";
+    }
+  }
+  if (broke) {
+    why = "out of coins";
+    const k = `${battleId}:${p.id}`;
+    if (!toldNoCoins.has(k)) {
+      toldNoCoins.add(k);
+      const { data: ag } = await db.from("user_agents").select("agent_name, agent_emoji").eq("id", p.agent_id).maybeSingle();
+      await appendLog(battleId, "out_of_coins", `${ag?.agent_name || "An agent"} is out of coins — guessing until its learner tops up`, p.user_id, ag?.agent_name, ag?.agent_emoji, questionOrder);
+    }
   }
   if (picked == null) picked = guess(options.length);
 
@@ -458,8 +483,13 @@ async function revealQuestion(battleId, questionOrder) {
     }
   }
 
+  // Sergeant's ruling: the key (marking is never a model's call) and why.
+  const judged = isReviewBattle ? null : await ruling(q).catch(() => null);
+  if (judged) await appendLog(battleId, "judge_ruling", judged.text, null, JUDGE.name, null, questionOrder, { why: judged.why });
+
   getIO().to(`battle:${battleId}`).emit("battle:reveal", {
     questionOrder, correctIndex: q.correct_answer_index, correctAnswer: options[q.correct_answer_index],
+    judge: judged,
     answers: (answers ?? []).map((a) => ({
       userId: a.battle_participants?.user_id, agentName: agentOf(a)?.agent_name,
       agentEmoji: agentOf(a)?.agent_emoji, selectedIndex: a.selected_index,
@@ -486,13 +516,14 @@ async function revealQuestion(battleId, questionOrder) {
 // ─── advance-question ─────────────────────────────────────────────────────────
 
 async function advanceQuestion(battleId, questionOrder) {
-  const { data: liveCheck } = await db.from("battles").select("status").eq("id", battleId).maybeSingle();
+  const { data: liveCheck } = await db.from("battles").select("status, battle_type").eq("id", battleId).maybeSingle();
   if (liveCheck?.status !== "live") return;   // ended early — ask nothing more
 
   const { data: q } = await db.from("battle_questions").select("*").eq("battle_id", battleId).eq("question_order", questionOrder).single();
   if (!q) return endBattle(battleId);
 
   getIO().to(`battle:${battleId}`).emit("battle:question", buildQuestionPayload(q));
+  if (liveCheck.battle_type !== "review") prepareRuling(q).catch(() => {});
   await appendLog(battleId, "question_start", `━━━ Q${questionOrder}: ${q.topic} ━━━`, null, null, null, questionOrder, { questionOrder, topic: q.topic });
   await scheduleAgentAnswers(battleId, q);
   await battleQueue.add("reveal-question",
@@ -636,6 +667,16 @@ async function endBattle(battleId) {
       ? { correct: winner?.score ?? 0, total: battleInfo?.total_questions ?? 0 }
       : null,
   });
+
+  // Sergeant's verdict (the app pays; not for a review, which has no contest).
+  if (!isReview) {
+    const v = await verdict(battleId, { participants, battleType: battleInfo?.battle_type, team: isTeam ? { totals: teamTotals, winner: teamTie ? null : winTeam } : null });
+    if (v) {
+      await appendLog(battleId, "judge_verdict", `${JUDGE.name}'s verdict: ${v}`, null, JUDGE.name, null, null);
+      global.io?.to(`battle:${battleId}`).emit("battle:verdict", { battleId, judge: JUDGE.name, verdict: v });
+    }
+  }
+  for (const p of participants) toldNoCoins.delete(`${battleId}:${p.id}`);
 
   // Revisions, once, now that the whole battle can be seen.
   //

@@ -57,6 +57,8 @@ export async function embedQuestion(text) {
       model: "text-embedding-3-small",
       input: String(text ?? "").slice(0, 8000),
       __feature: "battle_recall",
+      // One vector shared by every agent in the battle — the app's, not one learner's.
+      __payer: "platform",
     });
     return res.data?.[0]?.embedding ?? null;
   } catch (e) {
