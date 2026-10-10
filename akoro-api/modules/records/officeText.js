@@ -389,34 +389,15 @@ export async function downloadCapped(url, { maxBytes = OFFICE_LIMITS.MAX_FILE_BY
 }
 
 /**
- * Extract an Office file's text ONCE per file (the parse lane's single-
- * flight claim — the same cache a scanned PDF fills), index it, finish.
+ * Extract an Office file's text ONCE per file — the shared stored-text flow
+ * (storedText.js: claim → read → save → index → finish).
  * → { status: "done", pages } | { status: "running" } | { status: "failed", error }.
  * Never throws; deps are injectable for the test.
  */
-export async function extractOfficeContent({ userId = null, contentKey, name, mime, fileUrl }, deps = {}) {
-  const kind = officeKindOf(mime, name);
-  if (!kind || !contentKey || !fileUrl) return { status: "failed", error: "Not a Word or PowerPoint file." };
-  const lib = deps.extractLib || await import("./extractLib.js");
-  const index = deps.indexByContentKey || (await import("./searchLib.js")).indexByContentKey;
-  const download = deps.download || downloadCapped;
-  try {
-    const claimed = await lib.claimContentJob(contentKey, "parse", userId);
-    if (!claimed) return { status: "running" };
-    try {
-      const pages = officeToPages(kind, await download(fileUrl));
-      if (!pages.length) throw new Error("No text was found in this file.");
-      await lib.saveExtractionPages({ contentKey, model: OFFICE_MODELS[kind], pages });
-      await index({ contentKey, pages }).catch?.(() => {});
-      await lib.finishContentJob(contentKey, "parse", "done", { mode: "office", pages: pages.length });
-      return { status: "done", pages };
-    } catch (err) {
-      const error = String(err?.message || err).slice(0, 200);
-      await lib.finishContentJob(contentKey, "parse", "failed", { mode: "office", error }).catch(() => {});
-      return { status: "failed", error };
-    }
-  } catch (e) {
-    console.warn("[office] extraction skipped:", String(e?.message || e).slice(0, 160));
-    return { status: "failed", error: "Could not read this file right now." };
+export async function extractOfficeContent(args, deps = {}) {
+  if (!officeKindOf(args?.mime, args?.name) || !args?.contentKey || !args?.fileUrl) {
+    return { status: "failed", error: "Not a Word or PowerPoint file." };
   }
+  const { extractStoredText } = await import("./storedText.js");
+  return extractStoredText(args, deps);
 }

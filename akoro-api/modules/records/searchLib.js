@@ -129,7 +129,7 @@ export async function embedMany(texts, { userId = null } = {}) {
  * keeps re-indexing idempotent (an extraction batch that re-runs a page must
  * not leave the page searchable twice).
  */
-export async function replaceRecordChunks({ userId, recordId, contentKey = null, kind, rows, pageNumbers = null }, deps = {}) {
+export async function replaceRecordChunks({ userId, recordId, contentKey = null, kind, rows, pageNumbers = null, bill = true }, deps = {}) {
   const embed = deps.embedMany || embedMany;
   const clean = (Array.isArray(rows) ? rows : [])
     .map((r) => ({
@@ -151,7 +151,9 @@ export async function replaceRecordChunks({ userId, recordId, contentKey = null,
   if (!clean.length && !scopedPages?.length) return 0;
 
   // Embed BEFORE deleting: a failed embed must leave the old chunks in place.
-  const embeddings = clean.length ? await embed(clean.map((r) => r.text), { userId }) : [];
+  // bill:false — platform work the owner didn't ask for (the backfill): the
+  // embedding is unmetered instead of charged to their wallet.
+  const embeddings = clean.length ? await embed(clean.map((r) => r.text), { userId: bill ? userId : null }) : [];
   const db = deps.db || await dbLazy();
   let del = db.schema("edu").from("record_chunks").delete()
     .eq("record_id", recordId).eq("kind", kind);
@@ -183,22 +185,22 @@ export async function replaceRecordChunks({ userId, recordId, contentKey = null,
  * or transcript windows when present. Safe to call for records with none of
  * those — the name chunk alone still makes the record findable.
  */
-export async function indexRecord({ userId, recordId, name, contentKey = null, pasteText = null, pages = null, segments = null }) {
+export async function indexRecord({ userId, recordId, name, contentKey = null, pasteText = null, pages = null, segments = null, bill = true }) {
   if (!userId || !recordId) return;
   try {
     let n = 0;
     if (name) {
-      n += await replaceRecordChunks({ userId, recordId, contentKey, kind: "name", rows: [{ text: name }] });
+      n += await replaceRecordChunks({ userId, recordId, contentKey, kind: "name", rows: [{ text: name }], bill });
     }
     if (pasteText) {
       n += await replaceRecordChunks({
-        userId, recordId, contentKey, kind: "paste",
+        userId, recordId, contentKey, kind: "paste", bill,
         rows: chunkText(pasteText).map((text) => ({ text })),
       });
     }
     if (Array.isArray(pages) && pages.length) {
       n += await replaceRecordChunks({
-        userId, recordId, contentKey, kind: "page",
+        userId, recordId, contentKey, kind: "page", bill,
         pageNumbers: pages.map((p) => p?.pageNumber),
         rows: pages
           .filter((p) => String(p?.markdown || "").trim())
@@ -207,7 +209,7 @@ export async function indexRecord({ userId, recordId, name, contentKey = null, p
     }
     if (Array.isArray(segments) && segments.length) {
       n += await replaceRecordChunks({
-        userId, recordId, contentKey, kind: "transcript",
+        userId, recordId, contentKey, kind: "transcript", bill,
         rows: windowsFromSegments(segments),
       });
     }
@@ -223,7 +225,7 @@ export async function indexRecord({ userId, recordId, name, contentKey = null, p
  * user_id — privacy rides the row). Lessons have no record row and are
  * deliberately skipped: the library search indexes records.
  */
-export async function indexByContentKey({ contentKey, pages = null, segments = null }) {
+export async function indexByContentKey({ contentKey, pages = null, segments = null, bill = true }) {
   if (!contentKey) return;
   try {
     const db = await dbLazy();
@@ -233,7 +235,7 @@ export async function indexByContentKey({ contentKey, pages = null, segments = n
     if (!rec) return;   // a lesson stream or an orphaned key — nothing to index under
     await indexRecord({
       userId: rec.user_id, recordId: rec.id, name: rec.name,
-      contentKey: rec.file_key, pages, segments,
+      contentKey: rec.file_key, pages, segments, bill,
     });
   } catch (e) {
     console.warn("[record-search] indexByContentKey failed:", String(e?.message || e).slice(0, 160));

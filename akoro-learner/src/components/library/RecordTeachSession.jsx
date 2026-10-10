@@ -44,7 +44,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import TeachAgentModal from '../teaching/TeachAgentModal.jsx';
 import { buildSessionReaderPages } from '../teaching/SessionReaderModal.jsx';
 import { officeReaderPages } from '../../lib/officePages.js';
-import { recordDownloadUrl, extractOfficeRecord, getRecordExtraction, getSharedExtraction, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus, getAskHistory, askRecord, generateRecordTool, startRecordPodcast, getRecordPodcast, listRecordArtifacts, saveRecordArtifact, updateRecordArtifact, deleteRecordArtifact } from '../../services/recordsApi.js';
+import { recordDownloadUrl, extractStoredRecordText, getRecordExtraction, getSharedExtraction, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus, getAskHistory, askRecord, generateRecordTool, startRecordPodcast, getRecordPodcast, listRecordArtifacts, saveRecordArtifact, updateRecordArtifact, deleteRecordArtifact } from '../../services/recordsApi.js';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
@@ -332,6 +332,10 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
           // is the only way this record grounds the session.
           const scanned = joined.replace(/\s+/g, '').length < 20 * Math.max(1, texts.length);
           if (!scanned) {
+            // Ask, the tools and the tutor's document search read the
+            // server's copy of this text: an older upload may not have one
+            // yet — ask for it quietly (a no-op once it exists).
+            void extractStoredRecordText(record.contentKey ? { contentKey: record.contentKey } : { recordId: record.id }).catch(() => {});
             ready(texts.map((tx) => ({ html: '', text: tx })), { pdf, PdfPage },
               joined ? { name: record.name, text: joined.slice(0, MAX_REFERENCE_CHARS) } : null);
             return;
@@ -354,6 +358,18 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
           setExtract({ status: 'offer', done: 0, total: texts.length });
           ready(texts.map((tx) => ({ html: '', text: tx })), { pdf, PdfPage }, null);
         } else if (type === 'text') {
+          // The server's pages when it has them (or can make them now): the
+          // reader's pages then match the citations Ask and the tools give.
+          const target = record.contentKey ? { contentKey: record.contentKey } : { recordId: record.id };
+          let saved = await (record.contentKey ? getSharedExtraction(record.contentKey) : getRecordExtraction(record.id));
+          if (!(saved.pages || []).length) saved = await extractStoredRecordText(target).catch(() => ({ pages: [] }));
+          if (cancelled) return;
+          const docPages = officeReaderPages(saved.pages || [], { kind: 'text', name: record.name });
+          if (docPages.length) {
+            const md = docPages.map((p) => p.text).filter(Boolean).join('\n\n').trim();
+            ready(docPages, null, md ? { name: record.name, text: md.slice(0, MAX_REFERENCE_CHARS) } : null);
+            return;
+          }
           const res = await fetch(fileUrl);
           if (!res.ok) throw new Error(`Could not load the file (${res.status}).`);
           const raw = await res.text();
@@ -372,7 +388,7 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
           let saved = await read();
           for (let attempt = 0; !cancelled && !(saved.pages || []).length && attempt < 30; attempt += 1) {
             let out;
-            try { out = await extractOfficeRecord(target); }
+            try { out = await extractStoredRecordText(target); }
             catch (e) {
               if (cancelled) return;
               setOfficeErr(e?.message || 'This file could not be read.');

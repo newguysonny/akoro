@@ -191,9 +191,11 @@ test("the reader rasterizes client-side and offers extraction for scans & images
   assert.match(readerSrc, /pageBlocks = null/, "the reader accepts per-page blocks");
   assert.match(teachModalSrc, /pageBlocks: content\.pageBlocks \|\| null/, "TeachAgentModal forwards pageBlocks to the reader");
   assert.match(teachSessionSrc, /pageBlocks: pages\.map/, "RecordTeachSession supplies the per-page blocks");
-  // Extracted text becomes a selectable layer on the scan
-  assert.match(pdfPagesSrc, /btxt-/, "block texts render as a transparent selectable layer");
-  assert.match(pdfPagesSrc, /pointerEvents: 'auto', cursor: 'text'/, "spans capture selection; empty areas pass through");
+  // Extracted text becomes a selectable layer on the scan (shared with images)
+  const blockLayerSrc = read("../../../akoro-learner/src/components/library/BlockTextLayer.jsx");
+  assert.match(pdfPagesSrc, /<BlockTextLayer blocks=\{blockList\}/, "block texts render as a transparent selectable layer");
+  assert.match(blockLayerSrc, /pointerEvents: 'auto', cursor: 'text'/, "spans capture selection; empty areas pass through");
+  assert.match(blockLayerSrc, /scaleX\(/, "one-line blocks stretch to their box, so marks cover the printed words");
 });
 
 test("the worker owns the prompt contract the model was fine-tuned on", () => {

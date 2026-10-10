@@ -187,9 +187,9 @@ test("downloads are capped", async () => {
 
 test("routes: docx/pptx upload, extract at create, and an inline retry route", () => {
   assert.match(routes, /return officeKindOf\(mime, name\);/);
-  assert.match(routes, /officeKindOf\(data\.mime, data\.name\)\)[\s\S]{0,200}extractOfficeContent/);
-  assert.match(routes, /router\.post\("\/extract\/office", authenticateToken/);
-  const route = routes.slice(routes.indexOf('router.post("/extract/office"'), routes.indexOf('router.get("/extract/:recordId"'));
+  assert.match(routes, /storedTextKindOf\(data\.mime, data\.name\)\)[\s\S]{0,300}extractStoredText\(/);   // Office is a stored-text kind
+  assert.match(routes, /router\.post\(\["\/extract\/text", "\/extract\/office"\], authenticateToken/);
+  const route = routes.slice(routes.indexOf('router.post(["/extract/text"'), routes.indexOf('router.get("/extract/:recordId"'));
   assert.match(route, /resolveAiContent\(req\)/);            // the shared access rule
   assert.match(route, /createPresignedDownload\(id\.contentKey/);   // the STORED bytes
   assert.doesNotMatch(route, /req\.body\?\.(pages|markdown|text)/);  // never caller-supplied text
