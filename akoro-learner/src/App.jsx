@@ -9,6 +9,7 @@ import ErrorBoundary    from './components/common/ErrorBoundary.jsx';
 import ConfirmHost      from './components/common/ConfirmHost.jsx';
 import OfflineBanner     from './components/common/OfflineBanner.jsx';
 import UpdatePrompt      from './components/common/UpdatePrompt.jsx';
+import PresenceHeartbeat from './components/network/PresenceHeartbeat.jsx';
 
 // Route-level code splitting: each page is its own chunk, fetched on demand, so
 // the first load ships only the shell instead of the whole app in one bundle.
@@ -188,6 +189,7 @@ export default function App() {
                 {/* One host for every confirmDialog() call in the app. */}
                 <ConfirmHost />
                 <UpdatePrompt />
+                <PresenceHeartbeat />
               </BrowserRouter>
             </CartProvider>
           </AuthProvider>

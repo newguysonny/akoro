@@ -38,6 +38,7 @@ const { Pool } = pkg;
 import db from "../../db.js";
 import config from "../../config/index.js";
 import { consultPeerAgents, PEER_QUESTION_MIN, PEER_QUESTION_MAX } from "./peerConsult.js";
+import { searchAgents, saveSettings as saveAgentNetworkSettings, block as blockAgent, report as reportAgent, logPastQuestions, pastQuestionSummary } from "../agent-network/network.js";
 import { searchBlogPosts, readBlogPost, BLOG_SEARCH_MAX_RESULTS } from "./blogResearch.js";
 import { listGoals, createGoal, updateGoal } from "../learner-goals/service.js";
 import { listMyBlogs, createBlogPost, updateBlogPost } from "../blogs/service.js";
@@ -358,6 +359,77 @@ export const CHAT_TOOLS = [
       required: ["question"],
     },
   },
+  // ── The agent network: other learners' agents (modules/agent-network) ──
+  {
+    name: "search_agents",
+    featureGate: "agent_network",
+    description: "Find other learners' agents — ALWAYS first, before messaging, consulting or challenging anyone, so you know who is online and their real names. " +
+      "Filters (all optional): online_only (default for 'who is online'), available_only (online and not in a battle), scope (everyone | classmates | school | course | live_class | community, " +
+      "with scope_id for one course/community), query (a name or @username), school, same_school, year_group, study_level, subject, exam (WAEC/JAMB/NECO/BECE), goal, " +
+      "topic (agents TAUGHT that topic), complements_me (strong where this learner is weak — best for consulting), min_xp/max_xp, fair_match (similar XP), min_level/max_level, " +
+      "rank_max (top N nationally), min_win_rate, min_battles, min_past_questions, active_within_days, open_to_challenges, battle_time (morning|afternoon|evening|night|weekend), " +
+      "city, language, sort (relevance|xp|rank|fair|recent), page. Returns each agent's learner first name, @username, agent name, level, XP, rank, presence, what you share " +
+      "(classmate, same course…) and matches. Only agents whose privacy allows it are returned. Read-only.",
+    input_schema: {
+      type: "object",
+      properties: {
+        online_only: { type: "boolean" }, available_only: { type: "boolean" },
+        scope: { type: "string", enum: ["everyone", "classmates", "school", "course", "live_class", "community"] }, scope_id: { type: "string" },
+        query: { type: "string" }, school: { type: "string" }, same_school: { type: "boolean" }, year_group: { type: "string" }, study_level: { type: "string" },
+        subject: { type: "string" }, exam: { type: "string" }, goal: { type: "string" }, topic: { type: "string" }, complements_me: { type: "boolean" },
+        min_xp: { type: "number" }, max_xp: { type: "number" }, fair_match: { type: "boolean" }, min_level: { type: "number" }, max_level: { type: "number" },
+        rank_max: { type: "number" }, min_win_rate: { type: "number" }, min_battles: { type: "number" }, min_past_questions: { type: "number" },
+        active_within_days: { type: "number" }, open_to_challenges: { type: "boolean" },
+        battle_time: { type: "string", enum: ["morning", "afternoon", "evening", "night", "weekend"] },
+        city: { type: "string" }, language: { type: "string" },
+        sort: { type: "string", enum: ["relevance", "xp", "rank", "fair", "recent"] }, page: { type: "number" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "update_agent_network_settings",
+    featureGate: "agent_network",
+    description: "Change who can find or message this learner's agent, and their challenge preferences — ONLY when they explicitly ask " +
+      "('hide me', 'only my school can find me', 'stop challenges', 'I battle in the evenings'). visibility: everyone | school | classmates | hidden; " +
+      "accept_messages: everyone | school | classmates | nobody; open_to_challenges; battle_times; battle_types (1v1 | open | team | review).",
+    input_schema: {
+      type: "object",
+      properties: {
+        visibility: { type: "string", enum: ["everyone", "school", "classmates", "hidden"] },
+        accept_messages: { type: "string", enum: ["everyone", "school", "classmates", "nobody"] },
+        open_to_challenges: { type: "boolean" }, show_on_leaderboards: { type: "boolean" },
+        battle_times: { type: "array", items: { type: "string", enum: ["morning", "afternoon", "evening", "night", "weekend"] } },
+        battle_types: { type: "array", items: { type: "string", enum: ["1v1", "open", "team", "review"] } },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "block_agent",
+    featureGate: "agent_network",
+    description: "Block another learner's agent — ONLY when the learner explicitly asks. Blocked agents can't find, message or challenge them (and vice versa). " +
+      "Pass report_reason too when they say it was rude, unsafe or spam: that also reports it for review.",
+    input_schema: {
+      type: "object",
+      properties: { userId: { type: "string", description: "The other learner's userId from search_agents." }, report_reason: { type: "string" } },
+      required: ["userId"],
+    },
+  },
+  {
+    name: "log_past_question_practice",
+    featureGate: "agent_network",
+    description: "Record past-question practice the learner just did with you (e.g. you quizzed them on 10 WAEC 2019 Chemistry questions and they got 7). " +
+      "Battles from past papers are recorded on their own. Also returns their practice summary.",
+    input_schema: {
+      type: "object",
+      properties: {
+        exam: { type: "string" }, subject: { type: "string" }, year: { type: "number" },
+        attempted: { type: "number" }, correct: { type: "number" },
+      },
+      required: ["exam", "attempted"],
+    },
+  },
   {
     name: "ask_to_be_taught",
     description: "You are the learner's protégé: use this when they ask you to explain, quiz or help with subject content you have NOT been taught " +
@@ -626,11 +698,15 @@ const peerConsultEnabled = String(process.env.AKORO_AGENT_PEER_CONSULT_ENABLED ?
 // Blog research kill-switch (AKORO_BLOG_RESEARCH_ENABLED=false removes the
 // search/read tools everywhere at once).
 const blogResearchEnabled = String(process.env.AKORO_BLOG_RESEARCH_ENABLED ?? "true").toLowerCase() !== "false";
+// The agent network (search, messaging, challenges between learners' agents):
+// AKORO_AGENT_NETWORK_ENABLED=false removes those tools everywhere at once.
+const agentNetworkEnabled = String(process.env.AKORO_AGENT_NETWORK_ENABLED ?? "true").toLowerCase() !== "false";
 
 export function getLearnerChatTools({ allowToolRequest = true } = {}) {
   const enabled = {
     blog_research: blogResearchEnabled,
     peer_consult: peerConsultEnabled,
+    agent_network: agentNetworkEnabled,
     concept_tracker: conceptTrackerEnabled,
     learning_insights: learnerInsightsEnabled,
     exam_prep_confidence: examPrepConfidenceEnabled,
@@ -1580,6 +1656,38 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         .eq("creator_id", studentId).eq("status", "pending")
         .order("created_at", { ascending: false }).limit(10);
       return { tasks: data ?? [], count: data?.length ?? 0 };
+    }
+    case "search_agents": {
+      if (role === "instructor") return { error: "The agent network is for learners." };
+      const r = await searchAgents(studentId, input || {});
+      return {
+        agents: r.agents.map((a) => ({
+          userId: a.userId, name: a.name, username: `@${a.username}`, agent: `${a.agentEmoji} ${a.agentName}`, level: a.level, xp: a.xp,
+          rank: a.rank, winRate: a.winRate, presence: a.presence, available: a.available, school: a.school, yearGroup: a.yearGroup,
+          exam: a.exam, subjects: a.subjects, shared: a.shared, matches: a.matches, openToChallenges: a.openToChallenges, battleTimes: a.battleTimes,
+        })),
+        total: r.total, page: r.page,
+        note: r.total ? "Use the names exactly as given. Offer to message, consult or challenge one of them." : "No agents match — try fewer filters or a wider scope.",
+      };
+    }
+    case "update_agent_network_settings": {
+      if (role === "instructor") return { error: "The agent network is for learners." };
+      try { return { saved: true, settings: await saveAgentNetworkSettings(studentId, input || {}) }; }
+      catch (e) { return { saved: false, error: e.message }; }
+    }
+    case "block_agent": {
+      if (!input?.userId) return clarify("userId", "Which agent should I block? Find them with search_agents first.");
+      try {
+        if (input.report_reason) await reportAgent(studentId, input.userId, input.report_reason, { via: "agent_chat" });
+        else await blockAgent(studentId, input.userId);
+        return { blocked: true, reported: !!input.report_reason };
+      } catch (e) { return { blocked: false, error: e.message }; }
+    }
+    case "log_past_question_practice": {
+      try {
+        const logged = await logPastQuestions(studentId, { ...input, source: "agent" });
+        return { logged: true, entry: logged, summary: await pastQuestionSummary(studentId) };
+      } catch (e) { return { logged: false, error: e.message }; }
     }
     case "find_battles": {
       const { data: enrolled } = await db.from("enrollments")
@@ -2982,6 +3090,8 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         // The protégé's two moves ride the reply so the app can show them:
         // a Teach me button, and the teaching guide's mark on the answer.
         ...(tool === "ask_to_be_taught" && toolResult?.asked ? { teach: { topic: toolResult.topic, subject: toolResult.subject } } : {}),
+        // Agent search results ride as cards the app can show (Challenge / Message buttons).
+        ...(tool === "search_agents" && Array.isArray(toolResult?.agents) ? { agents: toolResult.agents.slice(0, 6) } : {}),
         ...(tool === "consult_teaching_guide" && toolResult?.consulted ? { guide: { name: toolResult.guide, ...(toolResult.teach ? { teach: toolResult.teach } : {}) } } : {}),
         ...((tool === "prepare_activity" && toolResult?.prepared
             || tool === "revise_activity_draft" && toolResult?.revised)

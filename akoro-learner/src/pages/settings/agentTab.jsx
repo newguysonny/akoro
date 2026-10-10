@@ -11,6 +11,7 @@ import { AvatarPickerSheet, SubjectsSheet, GenericSheet } from './sheets.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../../services/api.js';
 import Spinner from '../../components/common/Spinner.jsx';
+import AgentNetworkSection from './networkSection.jsx';
 import { useInFlight } from '../../hooks/useInFlight.js';
 import { confirmDialog } from '../../components/common/ConfirmHost.jsx';
 
@@ -223,6 +224,7 @@ function AgentTab({ agent, setAgent, onSaveAgent }) {
             catch { showToast('Failed to save'); }
           }}/>
       )}
+      <AgentNetworkSection/>
       {subjectSheet&&(
         <SubjectsSheet current={agent.subjects||[]} accentColor={color}
           onClose={()=>setSubjectSheet(false)}

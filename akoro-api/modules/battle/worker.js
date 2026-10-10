@@ -583,6 +583,9 @@ async function endBattle(battleId) {
     }
   }
 
+  // Past-paper questions answered here count as past-question practice.
+  await logBattlePastQuestions(battleId, participants ?? []).catch((e) => console.warn("[battle-worker] past-question log:", e.message));
+
   // Event trigger: a battle/review just finished — every participant gets
   // a fresh signal (their score is real, recent feedback worth planning on).
   for (const p of participants ?? []) {
@@ -633,6 +636,29 @@ async function endBattle(battleId) {
   await flagBattleReviewTopics(battleId);
 
   await battleQueue.add("refresh-leaderboard", { action: "refresh-leaderboard", courseId: battleInfo?.course_id, scope: "classroom" }, { delay: 2000 });
+}
+
+/** Each participant's answers to past-paper questions → past_question_attempts (per exam/subject/year). */
+async function logBattlePastQuestions(battleId, participants) {
+  const { data: qs } = await db.from("battle_questions").select("id, subject, past_exam, past_year").eq("battle_id", battleId).not("past_exam", "is", null);
+  if (!qs?.length) return;
+  const byQ = new Map(qs.map((q) => [q.id, q]));
+  const { data: answers } = await db.from("battle_answers").select("participant_id, question_id, is_correct").eq("battle_id", battleId);
+  const { data: battle } = await db.from("battles").select("subject").eq("id", battleId).maybeSingle();
+  for (const p of participants) {
+    const groups = new Map();
+    for (const a of answers || []) {
+      if (a.participant_id !== p.id || !byQ.has(a.question_id)) continue;
+      const q = byQ.get(a.question_id);
+      const k = `${q.past_exam}|${q.past_year ?? ""}`;
+      const g = groups.get(k) || { exam: q.past_exam, year: q.past_year, subject: q.subject || battle?.subject || null, attempted: 0, correct: 0 };
+      g.attempted += 1; if (a.is_correct) g.correct += 1;
+      groups.set(k, g);
+    }
+    for (const g of groups.values()) {
+      await db.schema("edu").from("past_question_attempts").insert({ user_id: p.user_id, ...g, source: "battle", battle_id: battleId });
+    }
+  }
 }
 
 // ─── expire-battle ────────────────────────────────────────────────────────────

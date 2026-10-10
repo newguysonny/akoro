@@ -177,7 +177,8 @@
     "2026-submission-storage.sql",
     "2026-submission-markup.sql",
     "2026-submission-steps.sql",
-    "2026-submission-question-files.sql"
+    "2026-submission-question-files.sql",
+    "2026-agent-network.sql"
   ],
   "demo": [
     "2026-seed-school.sql",
