@@ -759,6 +759,12 @@ export const INSTRUCTOR_TOOLS = [
         base_version: { type: "number", description: "assignment only: the version to build on when the instructor names one (\"go back to version 1 and…\"). Omit to build on the latest." },
         title: { type: "string", description: "Replacement title." },
         instructions: { type: "string", description: "Replacement instructions to learners." },
+        due_at: { type: "string", description: "A new exact due instant, ISO 8601 with a timezone offset (+01:00 for Africa/Lagos), resolved against the Current date and time. Only when the instructor states one." },
+        due_hint: { type: "string", description: "The due date as said, when it can't be resolved exactly ('end of the week')." },
+        audience: { type: "object", description: "A new audience — same shape as prepare_activity's audience — when the instructor changes who it's for.", properties: {
+          whole_class: { type: "boolean" }, classroom_id: { type: "string" }, classroom_name: { type: "string" },
+          usernames: { type: "array", items: { type: "string" } }, user_ids: { type: "array", items: { type: "string" } },
+        } },
         difficulty: { type: "string", enum: ["easy", "intermediate", "hard"] },
         subtopics: { type: "array", items: { type: "string" }, description: "The FULL revised entry list for the plan (study plan / task breakdown / milestones), in order. Send every entry, changed or not." },
         objectives: { type: "object", description: "Map of entry title to its objective lines. Omitted entries keep their existing objectives." },

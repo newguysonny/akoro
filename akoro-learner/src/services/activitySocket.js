@@ -13,19 +13,32 @@ import { io } from 'socket.io-client';
 import { API } from './api.js';
 
 let socket = null;
-const listeners = new Set();
+const listeners = new Set();        // self_study_assigned — a new activity
+const gradedListeners = new Set();  // activity_graded — { assignmentId, grade }
+
+const fire = (set, payload) => set.forEach((l) => { try { l(payload); } catch { /* one bad listener never kills the rest */ } });
+
+function ensureSocket() {
+  if (socket) return true;
+  const connect = io || (typeof window !== 'undefined' ? window.io : null);
+  if (!connect) return false;
+  socket = connect(API, { transports: ['websocket', 'polling'], withCredentials: true });
+  socket.on('self_study_assigned', (payload) => fire(listeners, payload));
+  socket.on('activity_graded', (payload) => fire(gradedListeners, payload));
+  return true;
+}
 
 export function onActivityEvent(cb) {
-  if (!socket) {
-    const connect = io || (typeof window !== 'undefined' ? window.io : null);
-    if (!connect) return () => {};
-    socket = connect(API, { transports: ['websocket', 'polling'], withCredentials: true });
-    socket.on('self_study_assigned', (payload) => {
-      listeners.forEach((l) => { try { l(payload); } catch { /* one bad listener never kills the rest */ } });
-    });
-  }
+  if (!ensureSocket()) return () => {};
   listeners.add(cb);
   return () => listeners.delete(cb);
 }
 
-export default { onActivityEvent };
+/** A teacher published a grade — the open activity page reloads it. */
+export function onActivityGraded(cb) {
+  if (!ensureSocket()) return () => {};
+  gradedListeners.add(cb);
+  return () => gradedListeners.delete(cb);
+}
+
+export default { onActivityEvent, onActivityGraded };

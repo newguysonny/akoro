@@ -100,13 +100,19 @@ function AnswerBlock({ q, i, value, files, mark, label, onEdit, onOpenFile, sans
   const labelling = q?.format === 'label' && Array.isArray(q?.labels);
   if (!answered) {
     return (
-      <div style={{ marginTop: 8, padding: '8px 11px', borderRadius: 9, border: '1px dashed #F3B4B4', background: '#FFF6F6', fontFamily: sans, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 12, fontWeight: 800, color: BAD }}>Not answered</span>
-        {onEdit && (
-          <button type="button" onClick={() => onEdit(i)}
-            style={{ marginLeft: 'auto', padding: '4px 10px', borderRadius: 8, border: 'none', background: BAD, color: '#fff', fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: sans }}>
-            Answer it
-          </button>
+      <div style={{ marginTop: 8, padding: '8px 11px', borderRadius: 9, border: '1px dashed #F3B4B4', background: '#FFF6F6', fontFamily: sans }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, fontWeight: 800, color: BAD }}>Not answered</span>
+          {mark && mark.awarded != null && <span style={{ fontSize: 11, fontWeight: 900, padding: '1px 8px', borderRadius: 999, color: '#B45309', background: 'rgba(245,158,11,.14)' }}>{mark.awarded} / {mark.max}</span>}
+          {onEdit && (
+            <button type="button" onClick={() => onEdit(i)}
+              style={{ marginLeft: 'auto', padding: '4px 10px', borderRadius: 8, border: 'none', background: BAD, color: '#fff', fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: sans }}>
+              Answer it
+            </button>
+          )}
+        </div>
+        {mark?.comment && (
+          <div style={{ marginTop: 7, padding: '7px 9px', borderRadius: 8, background: 'rgba(108,59,255,.07)', fontSize: 12, fontWeight: 600, color: INK, lineHeight: 1.5, display: 'flex', gap: 7, alignItems: 'flex-start' }}><PaperIcon name="message" size={14} color={BRAND} style={{ marginTop: 2 }} /><span>{mark.comment}</span></div>
         )}
       </div>
     );
@@ -208,7 +214,7 @@ function PaperQuestion({ q, i, value, files, mark, showKey, label, onEdit, onOpe
  * files     [{ id, name, size, kind, question }] — each shows under its question
  * marks     [{ index, awarded, max, comment }]
  */
-export default function AnswerPaper({ details, title = '', instructions = '', answers = {}, files = [], marks = [], showKey = false, label = 'Your answer', onEdit = null, onOpenFile = null, sans = 'system-ui, sans-serif', style }) {
+export default function AnswerPaper({ details, title = '', instructions = '', answers = {}, files = [], marks = [], showKey = false, label = 'Your answer', onEdit = null, onOpenFile = null, showLoose = true, sans = 'system-ui, sans-serif', style }) {
   const blocks = paperBlocks(details);
   if (!blocks.length) return null;
   const markOf = new Map((marks || []).map((m) => [Number(m.index), m]));
@@ -239,6 +245,15 @@ export default function AnswerPaper({ details, title = '', instructions = '', an
           ))}
         </div>
       ))}
+      {/* Files handed in for the whole assignment, not one question. */}
+      {showLoose && (files || []).some((f) => f && f.question == null) && (
+        <div style={{ borderTop: `1px solid ${LINE}`, padding: '12px 0 14px', fontFamily: sans }}>
+          <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: '.05em', textTransform: 'uppercase', color: MUTED, marginBottom: 6 }}>Attached to the whole assignment</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {files.filter((f) => f && f.question == null).map((f) => <FileCard key={f.id} file={f} onOpen={onOpenFile} sans={sans} />)}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

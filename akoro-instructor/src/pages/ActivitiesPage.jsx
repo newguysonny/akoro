@@ -183,7 +183,7 @@ export function cleanQuestions(raw) {
       return { q, ...extra };
     })
     .filter(Boolean)
-    .slice(0, 20);
+    .slice(0, 30);   // the API's limit (questionPaper.js)
 }
 
 /* The paper layout that rides beside the questions: empty sections and
@@ -419,7 +419,7 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
       const d = savePayload ? await savePayload(payload) : await apiPost('/api/self-study', payload);
       setDone(`Assigned to ${d?.data?.assigned ?? 0} learner${d?.data?.assigned === 1 ? '' : 's'}`);
       setForm({ ...BLANK, classId: form.classId });
-      onAssigned();
+      onAssigned(d?.data?.assigned ?? 0);
     } catch (err) {
       setError(err?.message || 'Could not assign it.');
     } finally { setSaving(false); }

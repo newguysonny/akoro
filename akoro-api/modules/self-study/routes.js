@@ -632,7 +632,7 @@ router.get("/:id", asyncHandler(async (req, res) => {
   const targetIds = (targets ?? []).map((t) => t.id);
   const { data: fileRows } = targetIds.length
     ? await edu().from("self_study_files")
-        .select("id, target_id, name, size, mime, kind, created_at").in("target_id", targetIds)
+        .select("id, target_id, name, size, mime, kind, question_index, created_at").in("target_id", targetIds)
     : { data: [] };
   const filesByTarget = new Map();
   for (const f of (fileRows ?? [])) {
@@ -650,7 +650,11 @@ router.get("/:id", asyncHandler(async (req, res) => {
         full_name: byId.get(t.student_id)?.full_name ?? "Unknown",
         username:  byId.get(t.student_id)?.username ?? null,
         emoji:     byId.get(t.student_id)?.avatar_emoji ?? null,
-        files:     (filesByTarget.get(t.id) ?? []).filter((f) => handedIn.has(f.id)),
+        files:     (filesByTarget.get(t.id) ?? []).filter((f) => handedIn.has(f.id))
+          .map(({ question_index, ...f }) => ({ ...f, ...(Number.isInteger(question_index) ? { question: question_index } : {}) })),
+        // A draft still "making" long after it started was cut off (a restart): offer Redraft.
+        ai_grade: t.ai_grade?.status === "making" && Date.now() - Date.parse(t.ai_grade.at || 0) > AI_DRAFT_STALE_MS
+          ? { ...t.ai_grade, status: "failed", error: "Drafting was interrupted — draft again." } : t.ai_grade ?? null,
         submissionPdf: pdfMeta({ ...t, submission_pdf }),
         markedPdf: marked_pdf?.key ? { ready: true, builtAt: marked_pdf.builtAt ?? null } : null,
       };
@@ -722,20 +726,30 @@ router.post("/:id/assign", requireRole(TEACHER_ROLES), asyncHandler(async (req, 
  * notified, and their gradebook files the work under "Graded activity".
  * Republishing overwrites — the latest deliberate grade wins.
  */
+/** An AI marking draft still "making" after this long was cut off. */
+const AI_DRAFT_STALE_MS = 5 * 60_000;
+
 router.patch("/:id/targets/:studentId/grade", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
   const { assignment, error } = await ownedAssignment(req, req.params.id);
   if (error === "not_found") return missing(res, "Assignment not found");
   if (error === "forbidden") return denied(res, "Not your assignment");
 
   const studentId = req.params.studentId;
-  const { grade, feedback = {} } = req.body;
+  const { grade } = req.body;
+  const sentFeedback = req.body.feedback;
+  if (sentFeedback != null && (typeof sentFeedback !== "object" || Array.isArray(sentFeedback))) return bad(res, "feedback must be an object");
+  const feedback = sentFeedback || {};
   const n = Number(grade);
   if (!Number.isFinite(n) || n < 0 || n > 100) return bad(res, "grade must be a number from 0 to 100");
-  if (feedback && typeof feedback !== "object") return bad(res, "feedback must be an object");
 
-  // A score-only publish (the gradebook) keeps the feedback already given.
   const patch = { grade: Math.round(n), graded_at: now(), graded_by: req.user.id };
-  if (req.body.feedback !== undefined) {
+  if (sentFeedback == null) {
+    // A score-only publish (the gradebook) keeps the feedback already given —
+    // but a score typed over question marks is now the teacher's own number.
+    const { data: prev } = await edu().from("self_study_targets").select("feedback")
+      .eq("assignment_id", assignment.id).eq("student_id", studentId).maybeSingle();
+    if (prev?.feedback?.mode === "questions") patch.feedback = { ...prev.feedback, mode: "manual" };
+  } else {
     // Marked question by question: each row is { index, awarded, max, comment }.
     const qm = cleanQuestionMarks(assignment.details?.questions || [], feedback.questions);
     if (qm.error) return bad(res, qm.error);
@@ -765,6 +779,25 @@ router.patch("/:id/targets/:studentId/grade", requireRole(TEACHER_ROLES), asyncH
   if (target.submission?.submittedAt) buildMarkedCopyLater(target.id);
 
   ok(res, { grade: target.grade, graded_at: target.graded_at });
+}));
+
+/**
+ * DELETE /api/self-study/:id/targets/:studentId/grade — unpublish: the work
+ * goes back to "submitted, not graded". The marks and comments stay as the
+ * teacher's draft (they come back when the grading view reopens); the
+ * learner stops seeing a grade.
+ */
+router.delete("/:id/targets/:studentId/grade", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
+  const { assignment, error } = await ownedAssignment(req, req.params.id);
+  if (error === "not_found") return missing(res, "Assignment not found");
+  if (error === "forbidden") return denied(res, "Not your assignment");
+  const { data: target, error: tErr } = await edu().from("self_study_targets")
+    .update({ grade: null, graded_at: null, graded_by: null, marked_pdf: null })
+    .eq("assignment_id", assignment.id).eq("student_id", req.params.studentId)
+    .select("id, grade").single();
+  if (tErr || !target) return missing(res, "That learner is not assigned this activity");
+  global.io?.to(`user:${req.params.studentId}`).emit("activity_graded", { assignmentId: assignment.id, grade: null });
+  ok(res, { grade: null });
 }));
 
 /** PUT /api/self-study/:id/targets/:studentId/markup { marks } — the
@@ -798,7 +831,7 @@ router.post("/:id/targets/:studentId/ai-grade", requireRole(TEACHER_ROLES), asyn
   if (!t) return missing(res, "That learner is not assigned this activity");
   if (!t.submission?.submittedAt) return bad(res, "Nothing has been submitted yet");
   const started = Date.parse(t.ai_grade?.at || "");
-  if (t.ai_grade?.status === "making" && Date.now() - started < 5 * 60_000) {
+  if (t.ai_grade?.status === "making" && Date.now() - started < AI_DRAFT_STALE_MS) {
     return res.status(409).json({ success: false, error: "Marks are already being drafted — they'll appear in a moment" });
   }
   void aiGradeTarget(t.id);
@@ -1002,12 +1035,30 @@ router.put("/:id/draft/:index", asyncHandler(async (req, res) => {
 
   const answers = { ...(target.draft?.answers || {}) };
   if (c.value === null) delete answers[String(c.index)]; else answers[String(c.index)] = c.value;
-  const draft = { answers, savedAt: now() };
+  const draft = { ...(target.draft || {}), answers, savedAt: now() };
   const { error } = await edu().from("self_study_targets")
     .update({ draft, ...(target.status === "assigned" ? { status: "started", started_at: now() } : {}) })
     .eq("id", target.id);
   if (error) throw new Error(error.message);
   ok(res, { index: c.index, value: c.value, savedAt: draft.savedAt, answered: Object.keys(answers).length });
+}));
+
+/**
+ * PUT /api/self-study/:id/draft-text { text } — the written answer of work
+ * without questions, autosaved so it follows the learner across devices.
+ */
+router.put("/:id/draft-text", asyncHandler(async (req, res) => {
+  const { data: target } = await edu().from("self_study_targets")
+    .select("id, status, grade, draft").eq("assignment_id", req.params.id).eq("student_id", req.user.id).maybeSingle();
+  if (!target) return missing(res, "This assignment was not given to you");
+  if (target.grade != null || target.status === "complete") return res.status(409).json({ success: false, error: "Already handed in — it can't change now" });
+  if (typeof req.body?.text !== "string") return bad(res, "text must be a string");
+  const draft = { ...(target.draft || {}), text: req.body.text.slice(0, 8000), savedAt: now() };
+  const { error } = await edu().from("self_study_targets")
+    .update({ draft, ...(target.status === "assigned" ? { status: "started", started_at: now() } : {}) })
+    .eq("id", target.id);
+  if (error) throw new Error(error.message);
+  ok(res, { savedAt: draft.savedAt, length: draft.text.length });
 }));
 
 router.post("/:id/start", asyncHandler(async (req, res) => {
@@ -1065,52 +1116,57 @@ router.post("/:id/link", asyncHandler(async (req, res) => {
  */
 router.post("/:id/complete", asyncHandler(async (req, res) => {
   const { data: target } = await edu().from("self_study_targets")
-    .select("id, grade, draft").eq("assignment_id", req.params.id).eq("student_id", req.user.id).maybeSingle();
+    .select("id, grade, draft, status, submission").eq("assignment_id", req.params.id).eq("student_id", req.user.id).maybeSingle();
   if (!target) return missing(res, "This assignment was not given to you");
   // Graded work is closed: a resubmission would sit under the old grade.
   if (target.grade != null) return res.status(409).json({ success: false, error: "This work has been graded — it can't be changed now" });
+  // Handed in once already (another tab, a double tap): the first stays.
+  if (target.status === "complete" && target.submission?.submittedAt) {
+    return res.status(409).json({ success: false, error: "This work was already handed in — your teacher has it." });
+  }
+  const { data: brief } = await edu().from("self_study_assignments").select("details, due_at").eq("id", req.params.id).maybeSingle();
+  const questions = Array.isArray(brief?.details?.questions) ? brief.details.questions : [];
 
   // ── The work itself: optional free text, per-question answers (keyed by
   //    question index), and the files uploaded for this target. Everything
   //    is capped so the row stays small. Backward compatible — completing
   //    with no body still works and stores an empty submission.
   const body = req.body ?? {};
-  const text = typeof body.text === "string" ? body.text.slice(0, 8000) : "";
+  const sentText = typeof body.text === "string" ? body.text.slice(0, 8000) : "";
+  const text = sentText.trim() ? sentText : String(target.draft?.text || "").slice(0, 8000);
   const answers = {};
-  // The answers submitted question by question are the work; answers sent
-  // with the hand-in (older clients) win where both exist.
+  // The answers saved question by question are the work; answers sent with
+  // the hand-in win where both exist. Each is checked like an autosave.
   const sent = body.answers && typeof body.answers === "object" && !Array.isArray(body.answers) ? body.answers : {};
   const merged = { ...(target.draft?.answers || {}), ...sent };
-  if (Object.keys(merged).length) {
-    for (const [k, v] of Object.entries(merged).slice(0, 60)) {
-      answers[String(k).slice(0, 8)] = typeof v === "number" ? v : String(v ?? "").slice(0, 4000);
-    }
+  for (const [k, v] of Object.entries(merged).slice(0, 60)) {
+    const c = cleanAnswer(questions, k, v);
+    if (!c.error && c.value !== null) answers[String(c.index)] = c.value;
   }
-  // The files are the ones on this target — each with the question it
-  // answers. A client naming fileIds (older apps) hands in just those.
-  let fileQuery = edu().from("self_study_files").select("id, name, size, mime, kind, question_index").eq("target_id", target.id);
-  if (Array.isArray(body.fileIds) && body.fileIds.length) fileQuery = fileQuery.in("id", [...new Set(body.fileIds.map(String))].slice(0, 200));
-  const { data: fileRows } = await fileQuery.order("created_at", { ascending: true }).limit(200);
+  // The work is every file on this target, each with the question it
+  // answers (removing a file deletes it, so what's here is what was kept).
+  const { data: fileRows } = await edu().from("self_study_files").select("id, name, size, mime, kind, question_index")
+    .eq("target_id", target.id).order("created_at", { ascending: true }).limit(200);
   const files = (fileRows ?? []).map((f) => ({ id: f.id, name: f.name, size: f.size, mime: f.mime, kind: f.kind, ...(Number.isInteger(f.question_index) ? { question: f.question_index } : {}) }));
-  const submission = { text, answers, files, submittedAt: now() };
+  const submittedAt = now();
+  // Late work is accepted and marked late, so the teacher sees it.
+  const dueMs = brief?.due_at ? Date.parse(brief.due_at) : NaN;
+  const late = Number.isFinite(dueMs) && Date.parse(submittedAt) > dueMs;
+  const submission = { text, answers, files, submittedAt, ...(late ? { late: true, lateByMinutes: Math.round((Date.parse(submittedAt) - dueMs) / 60000) } : {}) };
 
   const { data, error } = await edu().from("self_study_targets")
     .update({ status: "complete", completed_at: now(), submission })
     .eq("id", target.id).select().single();
   if (error) throw new Error(error.message);
 
-  // Files uploaded but left out of the submission aren't the work — drop them.
-  const keep = new Set(files.map((f) => f.id));
-  const { data: all } = await edu().from("self_study_files").select("id, storage_key").eq("target_id", target.id);
-  const stray = (all ?? []).filter((f) => !keep.has(f.id));
-  if (stray.length) {
-    await edu().from("self_study_files").delete().in("id", stray.map((f) => f.id));
-    stray.forEach((f) => void removeSubmissionObject(f.storage_key, req.user.id));
-  }
   // The submission as one PDF (+ markdown) — built and stored in the
   // background; then, when the activity has "AI auto-grade" on, the AI
   // drafts marks from it for the instructor to approve.
-  const { data: brief } = await edu().from("self_study_assignments").select("details").eq("id", req.params.id).maybeSingle();
+  // AI auto-grade: say "making" straight away, so a teacher who opens the
+  // work while the PDF is still building sees the draft on its way.
+  if (brief?.details?.ai_auto_grade) {
+    await edu().from("self_study_targets").update({ ai_grade: { status: "making", at: now() } }).eq("id", target.id).then(() => {}, () => {});
+  }
   buildSubmissionArtifacts(target.id)
     .then(() => (brief?.details?.ai_auto_grade ? aiGradeTarget(target.id) : null))
     .catch((e) => console.warn("[self-study] post-submit build failed (built on first open):", String(e?.message || e).slice(0, 160)));

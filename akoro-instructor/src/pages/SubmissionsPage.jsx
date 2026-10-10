@@ -80,7 +80,10 @@ export default function SubmissionsPage() {
       status:     t.status,
       completedAt: t.completed_at,
       grade:      t.grade ?? null,
+      gradedAt:   t.graded_at ?? null,
       feedbackText: t.feedback?.text || '',
+      feedbackMode: t.feedback?.mode || null,          // how the published score was set
+      feedbackRubric: t.feedback?.rubric ?? [],
       feedbackQuestions: t.feedback?.questions ?? [],   // marks per question, when published that way
       submission: t.submission ?? null,   // text + answers as handed in
       files:      t.files ?? [],          // attachments (metadata only)
@@ -92,14 +95,17 @@ export default function SubmissionsPage() {
 
   const ungraded = queue.filter(s => s.grade == null).length;
 
-  const onPublished = (studentId, grade) => {
-    // Fold the published grade into the roster without a refetch.
+  const onPublished = (studentId, grade, feedback = null) => {
+    // Fold the published grade (and what went with it) into the roster without a refetch.
     setDetail(d => d ? {
       ...d,
       targets: d.targets.map(t => t.student_id === studentId
-        ? { ...t, grade, graded_at: new Date().toISOString() } : t),
+        ? { ...t, grade, graded_at: new Date().toISOString(), ...(feedback ? { feedback } : {}) } : t),
     } : d);
   };
+  const onUnpublished = (studentId) => setDetail(d => d ? {
+    ...d, targets: d.targets.map(t => (t.student_id === studentId ? { ...t, grade: null, graded_at: null } : t)),
+  } : d);
 
   /* Saved marks and AI drafts fold into the roster, so moving between
      learners in the workspace never shows stale ones. */
@@ -107,19 +113,11 @@ export default function SubmissionsPage() {
     ...d, targets: d.targets.map(t => (t.student_id === studentId ? { ...t, ...patch } : t)),
   } : d);
 
+  // Open the workspace on that learner once that activity's roster is loaded
+  // (the modal is only drawn when the loaded roster is the right activity).
   const resumeDraft = (d) => {
     setKey(d.assignmentId);
-    // Open the modal once the roster lands; seed the queue index by student.
-    const openWhenLoaded = setInterval(() => {
-      setDetail(cur => {
-        if (!cur || cur.assignment?.id !== d.assignmentId) return cur;
-        clearInterval(openWhenLoaded);
-        const idx = queue.findIndex(s => s.student.id === d.studentId);
-        setGrading({ index: idx > -1 ? idx : 0 });
-        return cur;
-      });
-    }, 150);
-    setTimeout(() => clearInterval(openWhenLoaded), 4000);
+    setGrading({ studentId: d.studentId, assignmentId: d.assignmentId });
   };
 
   return (
@@ -236,6 +234,7 @@ export default function SubmissionsPage() {
                         <div style={{ fontSize: 12.5, fontWeight: 800, color: INK }}>{t.full_name}</div>
                         <div style={{ fontSize: 11, color: MUTED2 }}>
                           @{t.username || '—'}{t.completed_at ? ` · finished ${fmtWhen(t.completed_at)}` : t.status === 'started' ? ' · working' : ' · not started'}
+                          {t.submission?.late && <span style={{ color: AMBER, fontWeight: 800 }}> · late</span>}
                         </div>
                       </div>
                       {graded ? (
@@ -248,10 +247,7 @@ export default function SubmissionsPage() {
                       )}
                       <Btn size="sm" variant={graded ? 'secondary' : 'default'}
                         disabled={!gradeable}
-                        onClick={() => {
-                          const idx = queue.findIndex(s => s.student.id === t.student_id);
-                          setGrading({ index: idx > -1 ? idx : 0 });
-                        }}>
+                        onClick={() => setGrading({ studentId: t.student_id, assignmentId: detail?.assignment?.id })}>
                         {graded ? 'Review' : gradeable ? 'Grade' : '—'}
                       </Btn>
                     </div>
@@ -270,13 +266,15 @@ export default function SubmissionsPage() {
       </div>
 
       {/* The full-page grading workspace */}
-      {grading && detail && queue.length > 0 && (
+      {grading && detail && queue.length > 0 && (!grading.assignmentId || detail.assignment?.id === grading.assignmentId) && (
         <GradeSubmissionModal
+          key={grading.assignmentId || detail.assignment?.id}
           assignment={detail.assignment}
           students={queue}
-          initialIndex={Math.min(grading.index ?? 0, queue.length - 1)}
+          initialIndex={Math.max(0, queue.findIndex(s => s.student.id === grading.studentId))}
           onClose={() => setGrading(null)}
           onPublished={onPublished}
+          onUnpublished={onUnpublished}
           onMarkup={(sid, marks) => foldTarget(sid, { markup: { marks, updatedAt: new Date().toISOString() } })}
           onAiGrade={(sid, ai) => foldTarget(sid, { ai_grade: ai })}
         />

@@ -87,7 +87,7 @@ test("the work itself is captured end to end — upload, submit, grade against i
   assert.ok(routes.includes("ownedAssignment(req, t.assignment_id)"), "teachers reach files through the activity");
   assert.ok(routes.includes("the teacher needs to see this file"), "submitted files are immutable");
   // Complete captures the work: text + answers + fileIds on the target.
-  assert.ok(routes.includes("const submission = { text, answers, files, submittedAt: now() }"), "complete stores the work");
+  assert.ok(routes.includes("const submission = { text, answers, files, submittedAt, ...(late ? { late: true"), "complete stores the work (and whether it was late)");
   assert.ok(routes.includes("submission:   t.submission ?? null"), "/mine carries the submission");
   // The grading workspace shows it; the learner sees what they handed in.
   assert.ok(modal.includes("current.submission"), "the paper reads the submitted work");

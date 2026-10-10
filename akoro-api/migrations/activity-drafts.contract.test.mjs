@@ -108,7 +108,7 @@ test("all six workbench types are draftable; journeys stage through the shared p
 
 test("the chat hands the human a Preview button and a side-by-side panel", () => {
   // The button rides the real toolExecutions echo, not the model's prose.
-  assert.match(chatPage, /x\.tool === 'prepare_activity' && x\.success \|\| x\.tool === 'revise_activity_draft' && x\.revised/);
+  assert.match(chatPage, /x\.tool === 'prepare_activity' && x\.success \|\| x\.tool === 'revise_activity_draft' && x\.success/);
   // Each echo is a summary card (DraftCard) with its own Preview button.
   assert.match(chatPage, /label=\{msg\.previews\.length > 1 \? `Preview \$\{pi \+ 1\}` : 'Preview'\}/);
   assert.match(draftCard, /Assigned ✓/);
@@ -210,7 +210,7 @@ test("assignment feedback reaches the conversation; previews stay live", () => {
   assert.match(chatPage, /'✅ Assigned — the learners on this draft have been notified and it is on their Activities feed\.'/);
   assert.match(chatPage, /'🗑️ Draft discarded — nothing was sent to anyone\.'/);
   // Q2: a revise echo bumps the draft's revision counter and re-renders Preview.
-  assert.match(chatPage, /x\.tool === 'revise_activity_draft' && x\.revised/);
+  assert.match(chatPage, /x\.tool === 'revise_activity_draft' && x\.success/);
   assert.match(chatPage, /setDraftRevisions\(\(prev\) => \(\{ \.\.\.prev, \[x\.draft\.id\]: \(prev\[x\.draft\.id\] \|\| 0\) \+ 1 \}\)\)/);
   assert.match(chatPage, /revision=\{draftRevisions\[previewDraft\] \|\| 0\}/);
   // An open side-by-side panel refetches when its draft is revised.

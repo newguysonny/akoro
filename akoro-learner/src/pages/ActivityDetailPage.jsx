@@ -2,8 +2,9 @@ import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   fetchMyActivities, completeActivity, uploadActivityFile, removeActivityFile, downloadActivityFile, downloadMySubmissionPdf,
-  saveActivityAnswer, fetchActivityFileBlob, saveBlobAs,
+  saveActivityAnswer, saveActivityText, fetchActivityFileBlob, saveBlobAs,
 } from '../services/activityApi.js';
+import { onActivityGraded } from '../services/activitySocket.js';
 import { Icon } from '../components/common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD } from '../constants.js';
 import Spinner from '../components/common/Spinner.jsx';
@@ -75,8 +76,8 @@ function storeDoc(assignmentId, i, doc) {
 /* Local autosave — answers and the attached file name, per activity. */
 const storeKey = (id) => `ak_activity_work_${id}`;
 function loadWork(id) {
-  try { return JSON.parse(localStorage.getItem(storeKey(id)) || 'null') || { answers: {}, text: '', fileId: null, fileName: '', fileSize: 0 }; }
-  catch { return { answers: {}, text: '', fileId: null, fileName: '', fileSize: 0 }; }
+  try { return JSON.parse(localStorage.getItem(storeKey(id)) || 'null') || { answers: {}, text: '' }; }
+  catch { return { answers: {}, text: '' }; }
 }
 function saveWork(id, w) {
   try { localStorage.setItem(storeKey(id), JSON.stringify(w)); }
@@ -286,7 +287,7 @@ function Stepper({ questions, paper, work, saved, files, fileCounts, onType, onF
             </div>
           ))}
         </div>
-        <AnswerPaper details={paper} answers={work.answers} files={files} onEdit={go} onOpenFile={onOpenFile} sans="'Nunito',sans-serif"/>
+        <AnswerPaper details={paper} answers={work.answers} files={files} onEdit={go} onOpenFile={onOpenFile} showLoose={false} sans="'Nunito',sans-serif"/>
         {loose.length > 0 && (
           <div style={{ marginTop: 12 }}>
             <p style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--ak-text-muted)', margin: '0 0 6px', fontFamily: "'Nunito',sans-serif" }}>Attached to the whole assignment</p>
@@ -296,9 +297,9 @@ function Stepper({ questions, paper, work, saved, files, fileCounts, onType, onF
           </div>
         )}
         {stepErr && <div style={{ fontSize: 12, fontWeight: 700, color: RED, margin: '10px 0' }}>{stepErr}</div>}
-        <button onClick={onHandIn} disabled={submitting}
+        <button onClick={onHandIn} disabled={submitting || uploading !== null}
           style={{ width: '100%', marginTop: 16, padding: 12, borderRadius: 20, border: 'none', cursor: submitting ? 'default' : 'pointer', background: `linear-gradient(135deg, ${mid}, ${dark})`, color: '#fff', fontSize: 13, fontWeight: 900, fontFamily: "'Nunito',sans-serif", display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 7 }}>
-          {submitting ? <Spinner size={13}/> : <><Icon name="ti-send" size={14}/> Submit assignment</>}
+          {submitting ? <Spinner size={13}/> : uploading !== null ? <><Spinner size={13}/> Uploading…</> : <><Icon name="ti-send" size={14}/> Submit assignment</>}
         </button>
         <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--ak-text-muted)', textAlign: 'center', margin: '8px 0 0' }}>
           Once you submit, your answers go to your teacher and can't be changed.
@@ -431,6 +432,11 @@ function Receipt({ questions, submission, completedAt }) {
         <Icon name="ti-circle-check" size={24}/>
       </div>
       <h3 style={{ fontSize: 16, fontWeight: 900, margin: '0 0 3px', color: 'var(--ak-text)' }}>Handed in</h3>
+      {submission?.late && (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 900, color: '#B45309', background: 'rgba(245,158,11,.14)', padding: '2px 9px', borderRadius: 999, marginBottom: 6 }}>
+          <Icon name="ti-clock-exclamation" size={12}/> Late — after the due date
+        </span>
+      )}
       <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--ak-text-muted)', margin: '0 0 14px' }}>
         {when && !Number.isNaN(when.getTime()) ? `${when.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })} · ` : ''}your teacher is marking it
       </p>
@@ -518,6 +524,7 @@ export default function ActivityDetailPage() {
   const [saved, setSaved] = useState({});   // answers the server holds per question (autosaved)
   const [files, setFiles] = useState([]);   // uploaded so far — each with its question
   const [uploadingQ, setUploadingQ] = useState(null);
+  const [textSave, setTextSave] = useState('');   // the written answer's autosave: saving | saved | error
   const [removing, setRemoving] = useState(null);
   const [fileErr, setFileErr] = useState(null);   // { index, message }
   const [saveErrs, setSaveErrs] = useState({});
@@ -552,7 +559,10 @@ export default function ActivityDetailPage() {
           const answers = Object.fromEntries(Object.entries(opened).map(([k, v]) => [k, shownAnswer(qs[k], v)]));
           setSaved(server);
           setFiles(found.draftFiles || []);
-          setWork({ ...local, answers });
+          // The written answer (work without questions): this browser's, unless the server's is newer.
+          const serverText = typeof found.draft?.text === 'string' ? found.draft.text : null;
+          const localNewer = local.editedAt && (!found.draft?.savedAt || Date.parse(local.editedAt) > Date.parse(found.draft.savedAt));
+          setWork({ ...local, answers, text: localNewer || serverText == null ? (local.text || '') : serverText });
           // Typing this browser never got to save — save it now.
           if (found.status !== 'complete' && Array.isArray(qs) && qs.length) {
             const pending = stepStatuses(qs, answers, server).map((st, i) => (st === 'edited' ? i : -1)).filter((i) => i > -1);
@@ -564,6 +574,15 @@ export default function ActivityDetailPage() {
       .finally(() => { if (!dead) setLoading(false); });
     return () => { dead = true; };
   }, [id]);
+
+  // A teacher publishes the grade while this page is open: show it.
+  useEffect(() => onActivityGraded((evt) => {
+    const mine = rowRef.current;
+    if (!mine || String(evt?.assignmentId) !== String(mine.assignmentId)) return;
+    fetchMyActivities()
+      .then((rows) => { const fresh = rows.find((r) => r.assignmentId === mine.assignmentId); if (fresh) setRow(fresh); })
+      .catch(() => {});
+  }), []);
 
   const t = row ? typeOf(row.kind) : typeOf();
   const isDone = row?.status === 'complete';
@@ -590,14 +609,14 @@ export default function ActivityDetailPage() {
     try {
       const typed = Object.fromEntries(Object.entries(workRef.current?.answers ?? {}).filter(([i, v]) => hasAnswer(questions?.[i], v)));
       const payload = {
-        text: questions ? '' : (work?.text ?? ''),
+        text: questions ? '' : (workRef.current?.text ?? ''),
         answers: questions ? typed : {},
         // Every file uploaded for this work is handed in (each with its question).
-        fileIds: !questions && work?.fileId ? [work.fileId] : [],
+        fileIds: [],
       };
       const target = await completeActivity(row.assignmentId, payload);
       const handed = target?.submission?.files
-        ?? (questions ? files : [{ id: work?.fileId, name: work?.fileName, size: work?.fileSize, mime: null }].filter((f) => f.id));
+        ?? files;
       setRow((r) => ({ ...r, status: 'complete', completedAt: r.completedAt || new Date().toISOString(), submission: { text: payload.text, answers: target?.submission?.answers ?? payload.answers, files: handed, submittedAt: target?.submission?.submittedAt || new Date().toISOString() } }));
       sheetRef.current?.scrollTo?.({ top: 0, behavior: 'smooth' });
       // The server now owns the work — the local draft is spent.
@@ -695,9 +714,15 @@ export default function ActivityDetailPage() {
     const others = files.filter((f) => f.question != null && Number(f.question) === i && f.id !== old?.id).length;
     if (others >= PER_QUESTION_FILES) throw new Error(`Up to ${PER_QUESTION_FILES} files per question — remove one first.`);
     if (file.size > 5 * 1024 * 1024) throw new Error(`${file.name} is larger than 5MB — use smaller pictures.`);
+    // At the cap, the old copy goes first so the server has room for the new one.
+    const atCap = old && others + 1 >= PER_QUESTION_FILES;
+    if (atCap) {
+      await removeActivityFile(old.id);
+      setFiles((fs) => fs.filter((f) => f.id !== old.id));
+    }
     const meta = await uploadActivityFile(row.assignmentId, file, i);
     if (!meta?.id) throw new Error('Upload failed.');
-    if (old) await removeActivityFile(old.id).catch(() => {});
+    if (old && !atCap) await removeActivityFile(old.id).catch(() => {});
     setFiles((fs) => [...fs.filter((f) => f.id !== old?.id), { ...meta, name: meta.name || file.name, size: meta.size || file.size, question: i }]);
   };
 
@@ -767,74 +792,78 @@ export default function ActivityDetailPage() {
     setChecking(false);
   };
 
-  const dropFile = async (fileId) => {
-    try { await removeActivityFile(fileId); } catch { /* server copy dies with the target */ }
-    setWork((w) => ({ ...w, fileId: null, fileName: '', fileSize: 0 }));
+  /* Work without questions: the written answer autosaves to the server, and
+     up to 5 files ride with it (uploaded straight away; removing deletes). */
+  const LOOSE_MAX = 5;
+  const looseFiles = files.filter((f) => f.question == null);
+  const typeText = (text) => {
+    setWork((w) => ({ ...w, text, editedAt: new Date().toISOString() }));
+    setTextSave('saving');
+    clearTimeout(timers.current.text);
+    timers.current.text = setTimeout(() => {
+      saveActivityText(rowRef.current.assignmentId, workRef.current?.text ?? '')
+        .then(() => setTextSave('saved'), () => setTextSave('error'));
+    }, 900);
   };
 
-  const pickFile = async (file) => {
-    if (!file || uploading) return;
-    if (!FILE_OK.test(file.name)) { setSubmitErr('Only PDF, JPG, PNG, Word (.docx) or text files.'); return; }
-    if (file.size > 5 * 1024 * 1024) { setSubmitErr('That file is larger than 5MB.'); return; }
+  const pickLoose = async (list) => {
+    const picked = Array.from(list || []);
+    if (!picked.length || uploading) return;
     setSubmitErr('');
+    let count = looseFiles.length;
     setUploading(true);
-    try {
-      const meta = await uploadActivityFile(row.assignmentId, file);
-      if (!meta?.id) throw new Error('Upload failed.');
-      setWork((w) => ({ ...w, fileId: meta.id, fileName: meta.name || file.name, fileSize: meta.size || file.size }));
-    } catch (e) {
-      setSubmitErr(e?.message || 'Could not upload that file. Try again.');
-    } finally {
-      setUploading(false);
-      if (fileRef.current) fileRef.current.value = '';
+    for (const file of picked) {
+      if (count >= LOOSE_MAX) { setSubmitErr(`Up to ${LOOSE_MAX} files.`); break; }
+      if (!FILE_OK.test(file.name)) { setSubmitErr(`${file.name}: only PDF, JPG, PNG, Word (.docx) or text files.`); continue; }
+      if (file.size > 5 * 1024 * 1024) { setSubmitErr(`${file.name} is larger than 5MB.`); continue; }
+      try {
+        const meta = await uploadActivityFile(row.assignmentId, file);
+        if (!meta?.id) throw new Error('Upload failed.');
+        setFiles((fs) => [...fs, { ...meta, name: meta.name || file.name, size: meta.size || file.size }]);
+        count += 1;
+      } catch (e) {
+        setSubmitErr(e?.message || 'Could not upload that file. Try again.');
+      }
     }
+    setUploading(false);
+    if (fileRef.current) fileRef.current.value = '';
   };
 
-  /* The attachment area — one optional file (PDF, JPG, PNG, DOCX, ≤5MB),
-     uploaded immediately and handed in with the submission's fileIds.
-     Both flows use it: free-text work and the question stepper. */
+  /* The attachment area for work without questions — the files, then a drop zone. */
   const attachArea = (
     <>
-                  {work?.fileId ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--ak-surface)', borderRadius: 14, padding: '10px 12px', boxShadow: '0 2px 10px rgba(17,24,39,.06)', marginTop: 8, border: '1px solid rgba(16,185,129,.3)' }}>
-                      <div style={{ width: 32, height: 32, borderRadius: 9, background: 'rgba(16,185,129,.12)', color: '#047857', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <Icon name="ti-file" size={15}/>
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{work.fileName || 'Attachment'}</div>
-                        <div style={{ fontSize: 10.5, fontWeight: 700, color: '#047857', marginTop: 1 }}>{fmtSize(work.fileSize || 0)} · uploaded</div>
-                      </div>
-                      <button onClick={() => dropFile(work.fileId)} aria-label="Remove file"
-                        style={{ border: 'none', background: 'none', color: 'var(--ak-text-muted)', cursor: 'pointer', width: 26, height: 26, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <Icon name="ti-x" size={13}/>
-                      </button>
-                    </div>
-                  ) : uploading ? (
-                    <div style={{ marginTop: 8, border: '1.5px dashed var(--ak-border)', borderRadius: 14, padding: '22px 14px', textAlign: 'center', background: 'var(--ak-surface)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9 }}>
-                      <Spinner size={15} color={BRAND}/>
-                      <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)' }}>Uploading…</div>
-                    </div>
-                  ) : (
-                    <div
-                      onClick={() => fileRef.current?.click()}
-                      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                      onDragLeave={() => setDragOver(false)}
-                      onDrop={(e) => { e.preventDefault(); setDragOver(false); pickFile(e.dataTransfer.files?.[0]); }}
-                      style={{
-                        marginTop: 8, border: `1.5px dashed ${dragOver ? BRAND : 'var(--ak-border)'}`, borderRadius: 14,
-                        padding: '22px 14px', textAlign: 'center', cursor: 'pointer',
-                        background: dragOver ? `${BRAND}0A` : 'var(--ak-surface)',
-                      }}>
-                      <input ref={fileRef} type="file" style={{ display: 'none' }}
-                        accept=".pdf,.jpg,.jpeg,.png,.docx,.txt"
-                        onChange={(e) => pickFile(e.target.files?.[0])}/>
-                      <div style={{ width: 34, height: 34, borderRadius: 10, background: `${BRAND}14`, color: BRAND, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px' }}>
-                        <Icon name="ti-cloud-upload" size={16}/>
-                      </div>
-                      <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)' }}>Click to upload or drag and drop</div>
-                      <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--ak-text-muted)', marginTop: 3 }}>PDF, JPG, PNG, DOCX or TXT up to 5MB</div>
-                    </div>
-                  )}
+      {looseFiles.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+          {looseFiles.map((f) => <FileCard key={f.id} file={f} onOpen={openFile} onRemove={removeFile} busy={removing === f.id} sans="'Nunito',sans-serif"/>)}
+        </div>
+      )}
+      {fileErr?.index == null && fileErr?.message && <div style={{ fontSize: 12, fontWeight: 700, color: RED, marginTop: 8 }}>{fileErr.message}</div>}
+      {uploading ? (
+        <div style={{ marginTop: 8, border: '1.5px dashed var(--ak-border)', borderRadius: 14, padding: '22px 14px', textAlign: 'center', background: 'var(--ak-surface)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9 }}>
+          <Spinner size={15} color={BRAND}/>
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)' }}>Uploading…</div>
+        </div>
+      ) : looseFiles.length < LOOSE_MAX && (
+        <div
+          onClick={() => fileRef.current?.click()}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => { e.preventDefault(); setDragOver(false); pickLoose(e.dataTransfer.files); }}
+          style={{
+            marginTop: 8, border: `1.5px dashed ${dragOver ? BRAND : 'var(--ak-border)'}`, borderRadius: 14,
+            padding: '22px 14px', textAlign: 'center', cursor: 'pointer',
+            background: dragOver ? `${BRAND}0A` : 'var(--ak-surface)',
+          }}>
+          <input ref={fileRef} type="file" multiple style={{ display: 'none' }}
+            accept=".pdf,.jpg,.jpeg,.png,.docx,.txt"
+            onChange={(e) => pickLoose(e.target.files)}/>
+          <div style={{ width: 34, height: 34, borderRadius: 10, background: `${BRAND}14`, color: BRAND, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px' }}>
+            <Icon name="ti-cloud-upload" size={16}/>
+          </div>
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)' }}>Click to upload or drag and drop</div>
+          <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--ak-text-muted)', marginTop: 3 }}>PDF, JPG, PNG, DOCX or TXT up to 5MB · {looseFiles.length}/{LOOSE_MAX} files</div>
+        </div>
+      )}
     </>
   );
 
@@ -1081,10 +1110,13 @@ export default function ActivityDetailPage() {
               ) : (
                 <>
                   <textarea
-                    value={work?.text || ''} onChange={(e) => setWork((w) => ({ ...w, text: e.target.value }))}
+                    value={work?.text || ''} onChange={(e) => typeText(e.target.value)}
                     placeholder="Type your answer or working…"
-                    maxLength={4000}
+                    maxLength={8000}
                     style={{ width: '100%', minHeight: 110, borderRadius: 12, border: '1.5px solid var(--ak-border)', padding: '11px 13px', fontFamily: "'Nunito',sans-serif", fontSize: 12.5, fontWeight: 600, color: 'var(--ak-text)', resize: 'vertical', outline: 'none', boxSizing: 'border-box', background: 'var(--ak-surface)' }}/>
+                  <div style={{ fontSize: 11, fontWeight: 800, textAlign: 'right', marginTop: 4, color: textSave === 'error' ? RED : textSave === 'saved' ? '#047857' : 'var(--ak-text-muted)' }}>
+                    {textSave === 'saving' ? 'Saving…' : textSave === 'saved' ? 'Saved' : textSave === 'error' ? 'Not saved — check your connection' : ''}
+                  </div>
                   {attachArea}
                 </>
               )}
@@ -1098,7 +1130,7 @@ export default function ActivityDetailPage() {
       {checking && useStepper && !isDone && (
         <LastCheck check={lastCheck(questions, work.answers, saved, fileCounts)} total={questions.length} questions={questions}
           onAnswer={(i) => { setChecking(false); stepperJump.current?.(i); }}
-          onSubmit={handIn} onClose={() => !submitting && setChecking(false)} submitting={submitting} err={submitErr} mid={t.mid} dark={t.dark}/>
+          onSubmit={handIn} onClose={() => !submitting && setChecking(false)} submitting={submitting || uploadingQ !== null} err={submitErr} mid={t.mid} dark={t.dark}/>
       )}
 
       {/* the document editor, writing one question's answer */}
@@ -1127,7 +1159,7 @@ export default function ActivityDetailPage() {
             {row.graded ? `Graded · ${row.grade}%` : isDone ? 'Submitted' : row.subject || row.topic || t.label}
           </span>
           {!isDone && !row.graded ? (
-            <button onClick={submit} disabled={submitting}
+            <button onClick={submit} disabled={submitting || uploading}
               style={{ marginLeft: 'auto', padding: '12px 22px', borderRadius: 20, border: 'none', cursor: submitting ? 'default' : 'pointer', background: `linear-gradient(135deg, ${t.mid}, ${t.dark})`, color: '#fff', fontSize: 13.5, fontWeight: 800, boxShadow: '0 10px 20px -8px rgba(17,24,39,.4)', fontFamily: "'Nunito',sans-serif", display: 'inline-flex', alignItems: 'center', gap: 7 }}>
               {submitting ? <Spinner size={13}/> : <><Icon name="ti-send" size={14}/> Submit work</>}
             </button>
