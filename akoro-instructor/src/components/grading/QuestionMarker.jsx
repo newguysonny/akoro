@@ -3,13 +3,13 @@
  *
  *   Q1 → points + comment → "Save mark & next" → Q2 → … → Review → Publish
  *
- * The rail shows every question (marked ✓ / not yet) and the Review step.
+ * The rail shows every question (marked / not yet) and the Review step.
  * Each step shows what the learner answered (an MCQ's pick against the
  * key), the points (quick buttons, halves allowed), a comment the learner
  * will see under that question, and the AI's suggestion when there is one.
  * Marks live in the parent (autosaved with the grading draft).
  */
-import { Check, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Sparkles, X } from 'lucide-react';
 import { INK, MUTED, MUTED2, BORDER, WHITE, PURPLE, GREEN, RED, FONT } from '../../constants.js';
 import { questionContext, readChoice, letterOf } from '../../lib/paper.js';
 import { MathText, Figure, PassageBox } from '../paper/PaperView.jsx';
@@ -138,7 +138,7 @@ export default function QuestionMarker({ questions, paper = null, step, setStep,
               <div style={{ fontSize: 13, fontWeight: 800, color: q.correct == null ? INK : right ? GREEN : RED }}>
                 {typed !== letterOf(pick) && <span style={{ fontWeight: 600, color: MUTED }}>“{typed}” → </span>}
                 {letterOf(pick)}. <MathText text={q.options?.[pick] ?? ''} />
-                {q.correct != null && <span style={{ fontWeight: 700, color: MUTED, marginLeft: 6 }}>{right ? '✓ correct' : `✗ ${keyLine}`}</span>}
+                {q.correct != null && <span style={{ fontWeight: 700, color: MUTED, marginLeft: 6, display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: 'middle' }}>{right ? <><Check size={13} color={GREEN} /> correct</> : <><X size={13} color={RED} /> {keyLine}</>}</span>}
               </div>
             );
           })()

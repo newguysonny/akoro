@@ -111,7 +111,7 @@ const PER_QUESTION_FILES = 3;
 /* ── The assignment, one question at a time ─────────────────────────────
    Q1 → "Submit answer & next" → Q2 → … → Review → "Submit assignment".
    The question sits on top, read-only; below it an answer box like the
-   Agent Chat composer: type, 📎 attach (up to 3 files), ✏️ draw on the
+   Agent Chat composer: type, attach (up to 3 files), draw on the
    whiteboard. What's typed autosaves to the server as the learner types
    (so it follows them across devices); files upload as they're attached.
    The review lays the whole paper out with every answer under its question. */
@@ -191,7 +191,7 @@ function AnswerBox({ q, idx, value, onType, files, onPick, onRemove, onOpenFile,
           ) : status === 'edited' ? (
             <span style={{ color: 'var(--ak-text-muted)', display: 'inline-flex', alignItems: 'center', gap: 5 }}><Spinner size={10}/> Saving…</span>
           ) : status === 'saved' ? (
-            <span style={{ color: '#047857' }}>Saved ✓</span>
+            <span style={{ color: '#047857', display: 'inline-flex', alignItems: 'center', gap: 4 }}>Saved <Icon name="ti-check" size={13}/></span>
           ) : null}
         </span>
       </div>
@@ -790,7 +790,7 @@ export default function ActivityDetailPage() {
   if (!row) {
     return (
       <div style={{ position: 'fixed', inset: 0, background: 'var(--ak-bg)', zIndex: 300, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 20, fontFamily: "'Nunito',sans-serif" }}>
-        <div style={{ fontSize: 40 }}>📭</div>
+        <div style={{ width: 56, height: 56, borderRadius: 18, background: `${BRAND}14`, color: BRAND, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="ti-inbox" size={28}/></div>
         <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--ak-text)', margin: 0 }}>Activity not found</p>
         <p style={{ fontSize: 12.5, color: 'var(--ak-text-muted)', margin: 0 }}>It may have been removed.</p>
         <button onClick={() => navigate('/activities')}
@@ -1044,7 +1044,7 @@ export default function ActivityDetailPage() {
 
       {/* the whiteboard, drawing for one question's answer */}
       {board !== null && (
-        <WhiteboardModal title={`✏️ Draw your answer · Question ${board + 1}`} topic={qText(questions?.[board]).slice(0, 90)} subject={row.subject || ''}
+        <WhiteboardModal title={`Draw your answer · Question ${board + 1}`} topic={qText(questions?.[board]).slice(0, 90)} subject={row.subject || ''}
           initialStrokes={work?.drawings?.[board] || null} onAttach={attachDrawing} onClose={() => setBoard(null)}/>
       )}
 

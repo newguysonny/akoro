@@ -12,14 +12,18 @@
  * so reopening the attached drawing picks up where the learner left off.
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Undo2, Trash2, Pencil, Eraser, Paperclip } from 'lucide-react';
+import { X, Undo2, Trash2, Pencil, Eraser, Paperclip, Presentation } from 'lucide-react';
 import { BRAND } from '../../constants.js';
 
-const PALETTE = ['#FFFFFF', BRAND, '#F59E0B', '#10B981', '#EF4444', '#EC4899'];
+// Light board: ink first, then the brand and bright colours.
+const PALETTE = ['#1A1A2E', BRAND, '#F59E0B', '#10B981', '#EF4444', '#3B82F6'];
 const WIDTHS  = [2.5, 5, 9];
-const BOARD_BG = '#101225';
+const BOARD_BG = '#FFFFFF';
+const INK = '#1A1A2E';
+const MUTED = '#6B7280';
+const LINE = '#E2E5ED';
 
-export default function WhiteboardModal({ topic, subject, onClose, title = '🎨 Whiteboard', initialStrokes = null, onAttach = null, attachLabel = 'Attach to answer' }) {
+export default function WhiteboardModal({ topic, subject, onClose, title = 'Whiteboard', initialStrokes = null, onAttach = null, attachLabel = 'Attach to answer' }) {
   const canvasRef = useRef(null);
   const wrapRef  = useRef(null);
   // One flat stack of strokes; erased areas are strokes with mode 'erase'.
@@ -133,22 +137,24 @@ export default function WhiteboardModal({ topic, subject, onClose, title = '🎨
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
     width: 34, height: 34, borderRadius: 9, cursor: 'pointer', flexShrink: 0,
     border: `1px solid ${active ? BRAND : 'transparent'}`,
-    background: active ? `${BRAND}22` : 'transparent',
-    color: active ? BRAND : 'rgba(255,255,255,.55)',
+    background: active ? `${BRAND}14` : 'transparent',
+    color: active ? BRAND : MUTED,
   });
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 3400, background: 'rgba(4,4,12,.72)', backdropFilter: 'blur(6px)', display: 'flex', flexDirection: 'column', padding: 'calc(env(safe-area-inset-top, 0px) + 10px) 10px 10px', fontFamily: "'Nunito',sans-serif" }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 3400, background: '#F4F5F9', display: 'flex', flexDirection: 'column', padding: 'calc(env(safe-area-inset-top, 0px) + 10px) 10px 10px', fontFamily: "'Nunito',sans-serif" }}>
       {/* Header: what we're sketching about + the tools */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 900, color: '#fff' }}>{title}</div>
-          <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,.55)', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: 13.5, fontWeight: 900, color: INK, display: 'flex', alignItems: 'center', gap: 7 }}>
+            {onAttach ? <Pencil size={15} color={BRAND} /> : <Presentation size={15} color={BRAND} />} {title}
+          </div>
+          <div style={{ fontSize: 10.5, color: MUTED, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {subject ? `${subject} — ${topic}` : topic || 'Sketch it out'} · {onAttach ? 'attach it when it\'s ready' : 'stays on your device'}
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.14)', borderRadius: 12, padding: 5, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#FFFFFF', border: `1px solid ${LINE}`, borderRadius: 12, padding: 5, boxShadow: '0 2px 8px rgba(30,41,59,.06)', flexWrap: 'wrap' }}>
           <button type="button" title="Pen" onClick={() => setTool(t => ({ ...t, mode: 'pen' }))} style={toolBtn(tool.mode === 'pen')}>
             <Pencil size={15} />
           </button>
@@ -156,24 +162,24 @@ export default function WhiteboardModal({ topic, subject, onClose, title = '🎨
             <Eraser size={15} />
           </button>
 
-          <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,.14)', margin: '0 2px' }} />
+          <div style={{ width: 1, height: 20, background: LINE, margin: '0 2px' }} />
 
           {PALETTE.map(c => (
             <button key={c} type="button" title={`Pen colour`}
               onClick={() => setTool(t => ({ ...t, mode: 'pen', color: c }))}
-              style={{ ...toolBtn(tool.mode === 'pen' && tool.color === c), width: 24, height: 24, borderRadius: '50%', background: c, border: `2px solid ${tool.mode === 'pen' && tool.color === c ? BRAND : 'rgba(255,255,255,.25)'}` }} />
+              style={{ ...toolBtn(tool.mode === 'pen' && tool.color === c), width: 24, height: 24, borderRadius: '50%', background: c, border: `2px solid ${tool.mode === 'pen' && tool.color === c ? BRAND : '#fff'}`, boxShadow: `0 0 0 1px ${LINE}` }} />
           ))}
 
-          <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,.14)', margin: '0 2px' }} />
+          <div style={{ width: 1, height: 20, background: LINE, margin: '0 2px' }} />
 
           {WIDTHS.map(w => (
             <button key={w} type="button" title={`${w}px stroke`} onClick={() => setTool(t => ({ ...t, width: w }))}
               style={{ ...toolBtn(tool.width === w), width: 28, height: 28 }}>
-              <span style={{ display: 'block', width: w + 4, height: w + 4, borderRadius: '50%', background: tool.mode === 'erase' ? 'rgba(255,255,255,.55)' : tool.color }} />
+              <span style={{ display: 'block', width: w + 4, height: w + 4, borderRadius: '50%', background: tool.mode === 'erase' ? '#9CA3AF' : tool.color }} />
             </button>
           ))}
 
-          <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,.14)', margin: '0 2px' }} />
+          <div style={{ width: 1, height: 20, background: LINE, margin: '0 2px' }} />
 
           <button type="button" title="Undo" onClick={undo} disabled={!canUndo}
             style={{ ...toolBtn(false), opacity: canUndo ? 1 : 0.35, cursor: canUndo ? 'pointer' : 'default' }}>
@@ -188,14 +194,14 @@ export default function WhiteboardModal({ topic, subject, onClose, title = '🎨
               <Paperclip size={14} /> {attaching ? 'Attaching…' : attachLabel}
             </button>
           )}
-          <button type="button" title="Close the whiteboard" onClick={onClose} style={{ ...toolBtn(false), background: 'rgba(239,68,68,.15)' }}>
+          <button type="button" title="Close the whiteboard" onClick={onClose} style={{ ...toolBtn(false), background: 'rgba(239,68,68,.10)', color: '#DC2626' }}>
             <X size={16} />
           </button>
         </div>
       </div>
 
       {/* The board */}
-      <div ref={wrapRef} style={{ flex: 1, minHeight: 0, borderRadius: 16, overflow: 'hidden', border: '1px solid rgba(255,255,255,.14)', background: BOARD_BG, position: 'relative' }}>
+      <div ref={wrapRef} style={{ flex: 1, minHeight: 0, borderRadius: 16, overflow: 'hidden', border: `1px solid ${LINE}`, background: BOARD_BG, position: 'relative', boxShadow: '0 4px 18px rgba(30,41,59,.07)' }}>
         <canvas
           ref={canvasRef}
           onPointerDown={onDown}
@@ -206,7 +212,7 @@ export default function WhiteboardModal({ topic, subject, onClose, title = '🎨
         />
         {strokesRef.current.length === 0 && !liveRef.current && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-            <span style={{ color: 'rgba(255,255,255,.22)', fontSize: 14, fontWeight: 800 }}>
+            <span style={{ color: '#B8BECC', fontSize: 14, fontWeight: 800 }}>
               Draw it — a diagram beats a paragraph
             </span>
           </div>
