@@ -44,7 +44,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import TeachAgentModal from '../teaching/TeachAgentModal.jsx';
 import { buildSessionReaderPages } from '../teaching/SessionReaderModal.jsx';
 import { officeReaderPages } from '../../lib/officePages.js';
-import { recordDownloadUrl, extractOfficeRecord, getRecordExtraction, getSharedExtraction, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus, getAskHistory, askRecord, generateRecordTool, listRecordArtifacts, saveRecordArtifact, updateRecordArtifact, deleteRecordArtifact } from '../../services/recordsApi.js';
+import { recordDownloadUrl, extractOfficeRecord, getRecordExtraction, getSharedExtraction, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus, getAskHistory, askRecord, generateRecordTool, startRecordPodcast, getRecordPodcast, listRecordArtifacts, saveRecordArtifact, updateRecordArtifact, deleteRecordArtifact } from '../../services/recordsApi.js';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
@@ -157,6 +157,11 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
   // every item citing where it came from.
   const tools = useMemo(() => (askKey ? {
     generate: (tool, args) => generateRecordTool({ ...askTarget, tool, ...args }),
+    // Podcast episodes are made by the server after the request — start, then poll.
+    podcast: {
+      start: (args) => startRecordPodcast({ ...askTarget, ...args }),
+      get: (id) => getRecordPodcast(id),
+    },
   } : null), [askKey]);   // eslint-disable-line react-hooks/exhaustive-deps
   // Saved reader items: generated tabs, notes, annotations — restored on reopen.
   const artifacts = useMemo(() => (askKey ? {

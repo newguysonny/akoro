@@ -4,6 +4,7 @@ import { Icon } from "../common/Icons.jsx";
 import MediaPlayer from "../library/MediaPlayer.jsx";
 import ReaderDiscussion from "./ReaderDiscussion.jsx";
 import ReaderAsk from "./ReaderAsk.jsx";
+import ReaderPodcast from "./ReaderPodcast.jsx";
 import { citeLabel, toReaderCite } from "../../lib/askAnswer.js";
 import { TAB_KINDS, artifactToTab, marksFromArtifacts, tabContentPatch, tabToArtifact } from "../../lib/readerArtifacts.js";
 
@@ -55,6 +56,8 @@ const toolById = (id) => TOOL_DEFS.find((t) => t.id === id);
 /* Tools the opener can generate for real (the `tools` prop) — the rest stay
    derived in the browser. They gain a scope choice. */
 const SERVER_TOOLS = new Set(["summary", "quiz", "flashcards"]);
+/* Made by the server after the request (the reader polls the saved item). */
+const isServerPodcast = (tools, id) => id === "podcast" && !!tools?.podcast;
 const SCOPE_FIELD = { id: "scope", label: "From", type: "select", options: ["This page", "Whole document"] };
 
 const FORM_DEFS = {
@@ -62,7 +65,7 @@ const FORM_DEFS = {
     title: "Podcast", sub: "Turn this page into a short audio episode",
     fields: [
       { id: "focus", label: "Focus (optional)", type: "text", placeholder: "e.g. the key argument" },
-      { id: "length", label: "Length", type: "select", options: ["Short · 3–5 min", "Medium · 8–10 min", "Long · 15+ min"] },
+      { id: "length", label: "Length", type: "select", options: ["Short · 2–3 min", "Medium · 5–6 min", "Long · 8–10 min"] },
     ],
   },
   video: {
@@ -654,7 +657,9 @@ const whereFrom = (tab) => (tab.values?.scope === "Whole document" ? "whole docu
 
 function resultSub(tab) {
   switch (tab.toolId) {
-    case "podcast": return `${tab.values.length || "Medium · 8–10 min"} · from page ${tab.createdPage + 1} · preview`;
+    case "podcast": return tab.podcast
+      ? `${tab.values.length || "Medium · 5–6 min"} · ${whereFrom(tab)}`
+      : `${tab.values.length || "Medium · 5–6 min"} · from page ${tab.createdPage + 1} · preview`;
     case "video": return `${tab.values.style || "Animated"} · from page ${tab.createdPage + 1} · preview`;
     case "summary": return `${tab.values.depth || "Brief"} summary · ${whereFrom(tab)}`;
     case "quiz": return `${tab.values.count || "5"} questions · ${tab.values.difficulty || "Medium"} · ${whereFrom(tab)}`;
@@ -686,7 +691,7 @@ function EmptyResult({ reason }) {
   );
 }
 
-function ResultView({ tab, onUpdate, onCite }) {
+function ResultView({ tab, onUpdate, onCite, onRetryPodcast = null }) {
   const header = (
     <div className="mb-3.5">
       <div className="font-display text-base font-semibold mb-0.5" style={{ color: "var(--ak-text)" }}>{tab.title}</div>
@@ -706,6 +711,15 @@ function ResultView({ tab, onUpdate, onCite }) {
               <p className="text-sm leading-relaxed m-0" style={{ color: "var(--ak-text-sec)" }}>{p.text} <Citation cite={p.cite} onCite={onCite}/></p>
             </div>
           ))}
+        </div>
+      );
+    }
+
+    if (tab.toolId === "podcast" && tab.podcast) {
+      return (
+        <div>
+          {header}
+          <ReaderPodcast podcast={tab.podcast} onCite={onCite} onRetry={onRetryPodcast ? () => onRetryPodcast(tab) : null}/>
         </div>
       );
     }
@@ -1347,6 +1361,28 @@ export default function SessionReaderModal({
 
   function handleFormSubmit(values, done, fail) {
     const toolId = formTool;
+    // A real podcast episode: the server makes the saved item at once
+    // ("making") and fills it in a minute or two — the tab opens now and
+    // polls; the learner keeps reading meanwhile.
+    if (isServerPodcast(tools, toolId)) {
+      const createdPage = currentPage;
+      const { scope, ...podcastValues } = values;
+      tools.podcast.start({
+        scope: scope === "Whole document" ? "document" : "page",
+        pageNumber: createdPage + 1,
+        pageText: pages[createdPage]?.text || "",
+        values: podcastValues,
+      }).then((a) => {
+        if (!a?.id) throw new Error("Couldn't start the episode — try again.");
+        const tab = artifactToTab(a, "r" + nextResultId.current++);
+        setResultTabs((rt) => [...rt, tab]);
+        setFormTool(null);
+        setActiveTabId(tab.id);
+        setGenMenuOpen(false);
+        done();
+      }).catch((e) => fail?.(e?.message || "Couldn't start the episode — try again."));
+      return;
+    }
     // Real generation (library records): grounded in the document, every
     // item cited. The form shows "Building…" until it lands.
     if (tools && SERVER_TOOLS.has(toolId)) {
@@ -1415,7 +1451,7 @@ export default function SessionReaderModal({
   useEffect(() => {
     if (!artifacts) return;
     for (const tab of resultTabs) {
-      if (!tab.artifactId) continue;
+      if (!tab.artifactId || tab.podcast) continue;   // a server-made podcast: the server owns its content
       const body = JSON.stringify(tabContentPatch(tab));
       if (!lastSavedRef.current.has(tab.artifactId)) { lastSavedRef.current.set(tab.artifactId, body); continue; }
       if (lastSavedRef.current.get(tab.artifactId) === body) continue;
@@ -1440,12 +1476,41 @@ export default function SessionReaderModal({
 
   /** A new tab is saved as it opens; its artifact id lands on the tab. */
   function persistNewTab(tab) {
-    if (!artifacts || !TAB_KINDS.has(tab.toolId)) return;
+    // Podcasts are saved by the server (a preview outline isn't kept).
+    if (!artifacts || !TAB_KINDS.has(tab.toolId) || tab.toolId === "podcast") return;
     artifacts.save(tabToArtifact(tab)).then((a) => {
       if (!a?.id) return;
       lastSavedRef.current.set(a.id, JSON.stringify(tabContentPatch(tab)));
       setResultTabs((rt) => rt.map((t) => (t.id === tab.id ? { ...t, artifactId: a.id } : t)));
     }).catch(() => { /* unsaved: the tab still works for this visit */ });
+  }
+
+  /* Episodes being made: poll each until it's ready or failed. */
+  const makingIds = resultTabs
+    .filter((t) => t.toolId === "podcast" && t.podcast?.status === "making" && t.artifactId)
+    .map((t) => t.artifactId).join(",");
+  useEffect(() => {
+    if (!makingIds || !tools?.podcast) return undefined;
+    let alive = true;
+    const poll = () => makingIds.split(",").forEach((id) => {
+      tools.podcast.get(id).then((a) => {
+        const podcast = a?.content?.podcast;
+        if (!alive || !podcast || podcast.status === "making") return;
+        setResultTabs((rt) => rt.map((t) => (t.artifactId === id ? { ...t, podcast } : t)));
+      }).catch(() => { /* a hiccup — the next poll tries again */ });
+    });
+    const timer = setInterval(poll, 4000);
+    return () => { alive = false; clearInterval(timer); };
+  }, [makingIds, tools]);
+
+  /* A failed episode: drop it and reopen the form with the same focus. */
+  function retryPodcast(tab) {
+    setResultTabs((rt) => rt.filter((t) => t.id !== tab.id));
+    if (tab.artifactId) {
+      lastSavedRef.current.delete(tab.artifactId);
+      artifacts?.remove(tab.artifactId).catch(() => {});
+    }
+    openForm("podcast", tab.values?.focus || "");
   }
 
   function openSavedItem(a) {
@@ -1789,7 +1854,7 @@ export default function SessionReaderModal({
                 <div className="sreader-menu absolute right-0 top-full mt-2 w-72 rounded-lg z-50 overflow-hidden" style={{ maxHeight: "70vh", overflowY: "auto" }}>
                   {formTool ? (
                     <div className="p-3">
-                      <CreationForm key={formTool} toolId={formTool} initialFocus={prefillFocus} onBack={() => setFormTool(null)} onSubmit={handleFormSubmit} withScope={!!tools && SERVER_TOOLS.has(formTool)}/>
+                      <CreationForm key={formTool} toolId={formTool} initialFocus={prefillFocus} onBack={() => setFormTool(null)} onSubmit={handleFormSubmit} withScope={!!tools && (SERVER_TOOLS.has(formTool) || isServerPodcast(tools, formTool))}/>
                     </div>
                   ) : (
                     <GenerateGrid onPick={handleToolPick} discussion={discussion} askEnabled={!!ask}
@@ -1953,7 +2018,8 @@ export default function SessionReaderModal({
         {/* Result pane — shown when a generated tab (not "Original Content") is active. */}
         {activeTabId !== "reader" && activeTabId !== "qa" && activeTabId !== "discussion" && activeTabId !== "ask" && activeResultTab && (
           <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4" style={{ background: "var(--ak-bg)" }}>
-            <ResultView tab={activeResultTab} onUpdate={(patch) => updateResultTab(activeResultTab.id, patch)} onCite={citeJump}/>
+            <ResultView tab={activeResultTab} onUpdate={(patch) => updateResultTab(activeResultTab.id, patch)} onCite={citeJump}
+              onRetryPodcast={tools?.podcast ? retryPodcast : null}/>
           </div>
         )}
       </div>

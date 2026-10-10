@@ -220,6 +220,24 @@ export async function generateRecordTool({ recordId, contentKey, tool, scope = '
   return d?.data ?? {};
 }
 
+/** Start a podcast episode → its saved item ({ id, content: { podcast: { status: 'making' } } }).
+    The server writes, narrates and stores it; poll getRecordPodcast(id). */
+export async function startRecordPodcast({ recordId, contentKey, scope = 'page', pageNumber = null, pageText = '', values = {} }) {
+  const d = await apiPost('/api/records/podcast', {
+    ...(contentKey ? { contentKey } : { recordId }),
+    scope, ...(Number.isInteger(pageNumber) ? { pageNumber } : {}),
+    ...(pageText ? { pageText: String(pageText).slice(0, 8000) } : {}),
+    values,
+  });
+  return d?.data?.artifact ?? null;
+}
+
+/** One podcast item — status making | ready (with audioUrl) | failed. */
+export async function getRecordPodcast(id) {
+  const d = await apiGet(`/api/records/podcast/${encodeURIComponent(id)}`);
+  return d?.data?.artifact ?? null;
+}
+
 /* ── Saved reader items (generated tabs, notes, annotations) ─────────────── */
 
 const targetQuery = ({ recordId, contentKey }) => (contentKey ? `contentKey=${encodeURIComponent(contentKey)}` : `recordId=${encodeURIComponent(recordId)}`);

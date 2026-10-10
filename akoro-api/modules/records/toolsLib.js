@@ -177,7 +177,7 @@ export function buildToolMessages({ tool, docName = "this document", passages = 
 }
 
 /** Where a passage points, as a citation the app's jump understands. */
-function citeOf(p) {
+export function citeOf(p) {
   return { n: p.n, pageNumber: p.pageNumber ?? null, bbox: p.bbox ?? null, startMs: p.startMs ?? null, endMs: p.endMs ?? null, quote: clip(p.text, 200) };
 }
 
