@@ -15,7 +15,8 @@ import OpenAI, { toFile } from "openai";
 import multer            from "multer";
 import { authenticateToken } from "../auth/routes.js";
 import { transcribeBufferDeepgram, hasDeepgram, grantAgentToken } from "./deepgram.js";
-import { tutorSystemPrompt } from "../adaptive-learning/chat.js";
+import { tutorSystemPrompt, protegeDeps } from "../adaptive-learning/chat.js";
+import { loadTaughtKnowledge, renderTaughtContext } from "../adaptive-learning/protege.js";
 import { loadDoctrine } from "../agent-context/context-manager.js";
 import { coinsAvailable, debitCoins, InsufficientCoins } from "../../lib/coins.js";
 import { getAiBillTo } from "../../lib/aiContext.js";
@@ -163,6 +164,20 @@ router.post("/reply", authenticateToken, upload.single("audio"), async (req, res
    role-aware tutor prompt/greeting to configure that session.
    Returns: { access_token, prompt, greeting, agentName }
 ══════════════════════════════════════════════════════════════ */
+/**
+ * A learner's voice agent is their protégé too (policies/PROTEGE.md): it
+ * knows only the topics they taught it. The realtime session is set up once,
+ * so it carries the taught topics (not per-question notes) and no tools —
+ * for "teach me" and the teaching guide it points to the chat.
+ */
+async function protegeVoiceRules(studentId) {
+  const taught = await loadTaughtKnowledge({ studentId, query: "", deps: protegeDeps })
+    .catch(() => ({ chunks: [], topics: [], taughtAnything: false }));
+  return "\n\n" + (await loadDoctrine("policies/PROTEGE.md")) + renderTaughtContext(taught) +
+    "\nIn this voice call you cannot show a Teach me button or ask NaNa: when they want to teach you, or insist on something you weren't taught, " +
+    "say they can do it in the Agent Chat — typed or with the mic — and you'll pick it up there.";
+}
+
 router.post("/agent-token", authenticateToken, async (req, res) => {
   try {
     if (!hasDeepgram()) return res.status(503).json({ error: "Voice chat is not configured" });
@@ -192,7 +207,8 @@ router.post("/agent-token", authenticateToken, async (req, res) => {
       // akoro-agent/ workspace (tutorSystemPrompt is async now); the speech
       // channel rules live in channels/SPEECH.md.
       prompt: (await tutorSystemPrompt({ agentName: "Akoro", role }))
-        + " " + (await loadDoctrine("channels/SPEECH.md")),
+        + " " + (await loadDoctrine("channels/SPEECH.md"))
+        + (role === "student" ? await protegeVoiceRules(req.user.id) : ""),
     });
   } catch (err) {
     console.error("[voice/agent-token]", err.message);

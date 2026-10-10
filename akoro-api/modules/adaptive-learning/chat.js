@@ -21,7 +21,7 @@ import { loadTaughtKnowledge, renderTaughtContext, buildGuideMessages, shapeGuid
 import { loadDoctrine } from "../agent-context/context-manager.js";
 
 /* Where the protégé's taught knowledge comes from (edu.student_agents / agent_knowledge). */
-const protegeDeps = {
+export const protegeDeps = {
   findAgent: async (studentId) => {
     const { data } = await db.schema("edu").from("student_agents").select("id").eq("student_id", studentId).maybeSingle();
     return data || null;
