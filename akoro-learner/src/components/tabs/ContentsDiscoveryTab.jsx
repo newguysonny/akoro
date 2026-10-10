@@ -153,6 +153,7 @@ function Rail({ title, accent, count, loading, expanded, onToggle, children, emp
 function typeOf(it) {
   if (it.kind === 'paste') return 'note';
   if (it.fileType === 'text') return 'note';
+  if (it.fileType === 'docx' || it.fileType === 'pptx') return 'pdf';   // the documents rail
   return TYPES[it.fileType] ? it.fileType : null;
 }
 

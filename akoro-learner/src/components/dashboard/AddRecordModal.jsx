@@ -30,13 +30,15 @@ const MAX_FILES      = 4;
 const MAX_FILE_BYTES = 500 * 1024 * 1024;  // 500 MB per file
 const MAX_TEXT_CHARS = 20_000;
 
-// Any image, PDF, text file or audio/video: voice notes, recorded lessons,
-// downloaded tutorials. MIME wildcards first; explicit extensions so every
-// OS picker also matches by name.
-const ACCEPT = 'image/*,application/pdf,audio/*,video/*,.txt,.md,.csv,.mp3,.m4a,.aac,.wav,.ogg,.flac,.mp4,.m4v,.mov,.webm,.mkv';
+// Any image, PDF, Word / PowerPoint file, text file or audio/video: voice
+// notes, recorded lessons, lecture slides, downloaded tutorials. MIME
+// wildcards first; explicit extensions so every OS picker also matches by name.
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+const ACCEPT = `image/*,application/pdf,${DOCX_MIME},${PPTX_MIME},audio/*,video/*,.docx,.pptx,.txt,.md,.csv,.mp3,.m4a,.aac,.wav,.ogg,.flac,.mp4,.m4v,.mov,.webm,.mkv`;
 const isSupported = (f) =>
-  /^(image|audio|video)\//.test(f.type) || f.type === 'application/pdf' ||
-  /\.(txt|md|csv|mp3|m4a|aac|wav|ogg|flac|mp4|m4v|mov|webm|mkv)$/i.test(f.name);
+  /^(image|audio|video)\//.test(f.type) || f.type === 'application/pdf' || f.type === DOCX_MIME || f.type === PPTX_MIME ||
+  /\.(docx|pptx|txt|md|csv|mp3|m4a|aac|wav|ogg|flac|mp4|m4v|mov|webm|mkv)$/i.test(f.name);
 
 /* ── Media records (audio/video) ── */
 const AUDIO_EXT = /\.(mp3|m4a|aac|wav|ogg|flac)$/i;

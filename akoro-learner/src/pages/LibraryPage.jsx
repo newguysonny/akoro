@@ -51,6 +51,8 @@ const getStatus = (stat) => STATUS[stat] || STATUS.assigned;
 /* What each record IS — the icon says it before the name does. */
 const FILE_TYPE_META = {
   pdf:   { icon: 'ti-file-type-pdf', color: '#EF4444' },
+  docx:  { icon: 'ti-file-type-docx', color: '#2563EB' },
+  pptx:  { icon: 'ti-presentation',   color: '#EA580C' },
   audio: { icon: 'ti-music',         color: '#10B981' },
   video: { icon: 'ti-video',         color: '#6366F1' },
   image: { icon: 'ti-photo',         color: '#0EA5E9' },
@@ -381,7 +383,7 @@ export default function LibraryPage() {
       const ft = recordFileType(item);
       const kind = item.kind === 'link' ? 'link'
         : item.kind === 'paste' ? 'paste'
-        : ['pdf','audio','video','image','text'].includes(ft) ? ft : 'text';
+        : ['pdf','docx','pptx','audio','video','image','text'].includes(ft) ? ft : 'text';
       return { itemType: 'record', itemRef: String(item.id), title: item.name, sub: 'Your record', kind, link: null };
     }
     if (item.kind === 'blog') {

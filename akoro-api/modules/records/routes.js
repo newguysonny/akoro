@@ -67,6 +67,7 @@ import {
 } from "./askLib.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
 import { activePremiumUserIds, resolveContentAccess, resolveAskTargetFor } from "./access.js";
+import { officeKindOf, extractOfficeContent } from "./officeText.js";
 import { TOOL_IDS, TOOL_LIMITS, toolSchema, buildToolMessages, shapeToolResult, gatherToolPassages } from "./toolsLib.js";
 import {
   validateArtifactInput, validateArtifactPatch, listArtifacts, createArtifact, updateArtifact, deleteArtifact,
@@ -103,12 +104,12 @@ const MAX_COVER_BYTES    = 5 * 1024 * 1024;
    a bulk write over the user's own folder ids. */
 const MAX_FOLDER_ITEMS   = 200;
 const ITEM_TYPES         = new Set(["record", "pharmd_topic", "lesson", "library"]);
-const ITEM_KINDS         = new Set(["pdf", "audio", "video", "image", "text", "link", "paste", "blog", "course", "topic"]);
+const ITEM_KINDS         = new Set(["pdf", "docx", "pptx", "audio", "video", "image", "text", "link", "paste", "blog", "course", "topic"]);
 
 /* ── What the viewer can actually open ──────────────────────────────────────
-   Mirrors the app's picker: PDF, text, images, audio, video. Word docs are
-   uploadable in the future but stay unopenable in v1 — the viewer says
-   "download to view" instead of guessing. */
+   Mirrors the app's picker: PDF, text, images, audio, video, and Word /
+   PowerPoint files (.docx / .pptx) — the server reads their text into
+   pages at upload (officeText.js), so the reader opens them as text. */
 const AUDIO_EXT = /\.(mp3|m4a|aac|wav|ogg|flac)$/i;
 const VIDEO_EXT = /\.(mp4|m4v|mov|webm|mkv)$/i;
 const TEXT_EXT  = /\.(txt|md|csv)$/i;
@@ -119,7 +120,7 @@ const detectType = (mime = "", name = "") => {
   if (/^audio\//.test(mime) || AUDIO_EXT.test(name)) return "audio";
   if (/^video\//.test(mime) || VIDEO_EXT.test(name)) return "video";
   if (mime === "text/plain" || mime === "text/markdown" || mime === "text/csv" || TEXT_EXT.test(name)) return "text";
-  return null;
+  return officeKindOf(mime, name);   // "docx" | "pptx" | null
 };
 
 /* Row → API shape. Uploads with bytes get a fresh presigned URL; legacy
@@ -164,7 +165,7 @@ router.post("/upload-url", authenticateToken, asyncHandler(async (req, res) => {
     if (bytes > MAX_COVER_BYTES) return res400(res, "Folder covers are capped at 5 MB.");
   } else {
     if (bytes > MAX_FILE_BYTES) return res400(res, "Files are capped at 500 MB.");
-    if (!detectType(mime, name)) return res400(res, "Only PDFs, text files, images, audio or video can be uploaded.");
+    if (!detectType(mime, name)) return res400(res, "Only PDFs, Word or PowerPoint files, text files, images, audio or video can be uploaded.");
     // No R2 on this deployment? Files up to 5 MB ride the Supabase Storage
     // fallback (same signed-PUT protocol — the API still never proxies the
     // bytes); larger ones honestly need R2.
@@ -207,7 +208,7 @@ router.post("/", authenticateToken, asyncHandler(async (req, res) => {
     }
     if (!name || (!legacy && bytes <= 0)) return res400(res, "File details are missing.");
     if (bytes > MAX_FILE_BYTES) return res400(res, "Files are capped at 500 MB.");
-    if (!legacy && !detectType(body.mime, name)) return res400(res, "Only PDFs, text files, images, audio or video can be uploaded.");
+    if (!legacy && !detectType(body.mime, name)) return res400(res, "Only PDFs, Word or PowerPoint files, text files, images, audio or video can be uploaded.");
     row = {
       user_id: userId, kind: "upload", name,
       mime: String(body.mime || "") || null, size: bytes,
@@ -247,6 +248,15 @@ router.post("/", authenticateToken, asyncHandler(async (req, res) => {
   if (data.kind === "upload" && data.file_key && avEnabled() && autoTranscribeEnabled() && avKindOf(data.mime, data.name)) {
     void createPresignedDownload(data.file_key, { downloadName: data.name })
       .then((fileUrl) => autoTranscribeContent({
+        userId, contentKey: data.file_key, name: data.name, mime: data.mime, fileUrl,
+      }))
+      .catch(() => {});
+  }
+  // Word / PowerPoint: the server reads the text into pages right away —
+  // the reader, Ask and the tools all start from that extraction.
+  if (data.kind === "upload" && data.file_key && officeKindOf(data.mime, data.name)) {
+    void createPresignedDownload(data.file_key, { downloadName: data.name })
+      .then((fileUrl) => extractOfficeContent({
         userId, contentKey: data.file_key, name: data.name, mime: data.mime, fileUrl,
       }))
       .catch(() => {});
@@ -718,6 +728,27 @@ router.get("/extract/status", authenticateToken, asyncHandler(async (req, res) =
   // Search index for the pages this poll saved — never blocks the reply.
   if (saved.length) void indexByContentKey({ contentKey, pages: saved });
   okExtract(res, { contentKey, done, pages: saved, pending, failed });
+}));
+
+/*
+ * POST /extract/office { recordId | contentKey } — read a Word / PowerPoint
+ * file's text into pages (normally done at upload; this is the retry, and
+ * the path for files uploaded before it existed). Needs no GPU: it runs
+ * inline and answers with the extraction, or 202 while another run holds
+ * the file's claim. Reading a shared file's text fills the shared cache
+ * from the STORED bytes, never from anything the caller sends.
+ */
+router.post("/extract/office", authenticateToken, asyncHandler(async (req, res) => {
+  const id = await resolveAiContent(req);
+  if (id.status) return res.status(id.status).json({ success: false, message: id.message });
+  if (!officeKindOf(id.mime, id.name)) return res400(res, "Only Word (.docx) and PowerPoint (.pptx) files are read this way.");
+  const existing = await getExtraction(id.contentKey);
+  if (existing.pages.length) return okExtract(res, { ...existing, done: true });
+  const fileUrl = await createPresignedDownload(id.contentKey, { downloadName: id.name });
+  const out = await extractOfficeContent({ userId: req.user.id, contentKey: id.contentKey, name: id.name, mime: id.mime, fileUrl });
+  if (out.status === "running") return res.status(202).json({ success: true, data: { running: true, done: false, pages: [] } });
+  if (out.status === "failed") return res.status(422).json({ success: false, message: out.error || "Could not read this file." });
+  okExtract(res, { ...(await getExtraction(id.contentKey)), done: true });
 }));
 
 router.get("/extract/:recordId", authenticateToken, asyncHandler(async (req, res) => {

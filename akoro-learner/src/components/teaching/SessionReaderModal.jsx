@@ -397,6 +397,16 @@ const READER_CSS = `
 .doc-page .cover-sub{color:#78716c;font-size:.85rem;line-height:1.75;font-family:'Newsreader',serif;}
 .doc-page .doc-eyebrow{font-family:ui-monospace,Menlo,monospace;font-size:.68rem;letter-spacing:.1em;color:#a8a29e;margin-bottom:8px;}
 .doc-page .plan-topic{font-weight:600;color:#1c1917;}
+.doc-page h3{font-family:'Newsreader',serif;font-size:1.05rem;font-weight:600;margin:1.2rem 0 0.5rem;color:#1c1917;}
+.doc-page ul.doc-li{margin:0 0 0.35rem;list-style:disc;}
+.doc-page ul.doc-li li{margin-bottom:0;}
+.doc-page .doc-table-wrap{overflow-x:auto;margin:0 0 1rem;}
+.doc-page table.doc-table{border-collapse:collapse;width:100%;font-family:'Newsreader',serif;font-size:.9rem;color:#33403a;}
+.doc-page table.doc-table th,.doc-page table.doc-table td{border:1px solid #e7e5e4;padding:6px 9px;text-align:left;vertical-align:top;}
+.doc-page table.doc-table th{background:#f5f5f4;font-weight:600;color:#1c1917;}
+.doc-page blockquote{border-left:3px solid #e7e5e4;margin:0 0 0.9rem;padding:2px 0 2px 12px;font-family:'Newsreader',serif;color:#57534e;}
+.doc-page .doc-notes{background:#faf7ff;border-left:3px solid #6C3BFF;padding:8px 12px;border-radius:4px;font-size:.9rem;}
+.doc-page .doc-empty{color:#a8a29e;font-style:italic;}
 
 /* Chrome — dark session surface, Akoro purple accents. */
 .sreader-bg{background:var(--ak-bg);}
@@ -1052,7 +1062,8 @@ export default function SessionReaderModal({
      none of them and gets exactly the old behavior) ──
      renderPageContent: (pageIndex) => ReactNode — when set, each page div
        renders this instead of the page's HTML (pdf.js canvases, images,
-       honest download cards). Zoom, page nav, thumbnails and the
+       honest download cards); a null return keeps the page's HTML (text,
+       Word and PowerPoint pages). Zoom, page nav, thumbnails and the
        IntersectionObserver page tracking all keep working.
      media: { kind:'audio'|'video', src, title, onPosition } — when set, the
        reader pane becomes a media player: the ORIGINAL file plays, and the
@@ -1473,7 +1484,15 @@ export default function SessionReaderModal({
     requestAnimationFrame(() => {
       goToPage(Math.min(cite.page, pages.length - 1));
       setTimeout(() => {
-        const target = viewerRef.current?.querySelector(`[data-page-index="${cite.page}"] [data-cite="${cite.dataCite}"]`)
+        // Word / PowerPoint pages: the citation's box is [0, i, 1000, i+1] —
+        // i names the paragraph the page rendered with data-block="i".
+        const hasBox = Array.isArray(cite.bbox) && cite.bbox.length === 4;
+        const block = hasBox
+          ? viewerRef.current?.querySelector(`[data-page-index="${cite.page}"] [data-block="${Number(cite.bbox[1])}"]`)
+          : null;
+        if (block) block.scrollIntoView?.({ block: "center", behavior: "smooth" });
+        const target = block
+          || viewerRef.current?.querySelector(`[data-page-index="${cite.page}"] [data-cite="${cite.dataCite}"]`)
           || viewerRef.current?.querySelector(`[data-page-index="${cite.page}"]`);
         if (target) {
           target.classList.remove("cite-flash");
@@ -1483,7 +1502,7 @@ export default function SessionReaderModal({
         }
         // PDF pages: the citation carries the extraction block's bbox —
         // flash THAT region on the page, not the whole sheet.
-        if (Array.isArray(cite.bbox) && cite.bbox.length === 4) {
+        if (hasBox && !block) {
           const pageDiv = viewerRef.current?.querySelector(`[data-page-index="${cite.page}"]`);
           if (pageDiv) {
             const [x1, y1, x2, y2] = cite.bbox;
@@ -1865,9 +1884,10 @@ export default function SessionReaderModal({
                     ? "mb-1.5"
                     : "md:max-w-2xl mb-5 px-5 py-9 md:px-14 md:py-14"}`}
                 >
-                  {renderPageContent
-                    ? renderPageContent(i)
-                    : <div dangerouslySetInnerHTML={{ __html: buildPageHtml(p.html, i) }}/>}
+                  {/* The opener's renderer wins; a page it doesn't draw
+                      (returns null) falls back to the page's own HTML. */}
+                  {(renderPageContent && renderPageContent(i))
+                    || <div dangerouslySetInnerHTML={{ __html: buildPageHtml(p.html, i) }}/>}
                 </div>
               ))}
             </div>

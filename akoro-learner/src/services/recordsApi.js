@@ -179,6 +179,15 @@ export async function getExtractionStatus({ recordId, contentKey }) {
   return d?.data ?? { done: true, pages: [], pending: [], failed: [] };
 }
 
+/** Read a Word / PowerPoint file's text into pages (the server does it from
+    the stored file; normally already done at upload). → the extraction
+    ({ pages, done: true }), or { running: true } while another run holds it.
+    Throws with the server's message when the file can't be read. */
+export async function extractOfficeRecord({ recordId, contentKey }) {
+  const d = await apiPost('/api/records/extract/office', contentKey ? { contentKey } : { recordId });
+  return d?.data ?? { pages: [], running: false };
+}
+
 /* ── Ask: questions about ONE document, answered with citations ───────────── */
 
 const askTarget = ({ recordId, contentKey }) => (contentKey ? { contentKey } : { recordId });

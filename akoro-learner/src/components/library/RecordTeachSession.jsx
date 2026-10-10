@@ -43,7 +43,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import TeachAgentModal from '../teaching/TeachAgentModal.jsx';
 import { buildSessionReaderPages } from '../teaching/SessionReaderModal.jsx';
-import { recordDownloadUrl, getRecordExtraction, getSharedExtraction, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus, getAskHistory, askRecord, generateRecordTool, listRecordArtifacts, saveRecordArtifact, updateRecordArtifact, deleteRecordArtifact } from '../../services/recordsApi.js';
+import { officeReaderPages } from '../../lib/officePages.js';
+import { recordDownloadUrl, extractOfficeRecord, getRecordExtraction, getSharedExtraction, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus, getAskHistory, askRecord, generateRecordTool, listRecordArtifacts, saveRecordArtifact, updateRecordArtifact, deleteRecordArtifact } from '../../services/recordsApi.js';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
@@ -57,6 +58,8 @@ const AUDIO_RE = /^audio\//, VIDEO_RE = /^video\//, IMAGE_RE = /^image\//;
 const TEXT_MIME = new Set(['text/plain', 'text/markdown', 'text/csv']);
 const AUDIO_EXT = /\.(mp3|m4a|aac|wav|ogg|flac)$/i, VIDEO_EXT = /\.(mp4|m4v|mov|webm|mkv)$/i;
 const TEXT_EXT  = /\.(txt|md|csv)$/i;
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 
 export const recordFileType = (r) => {
   if (!r || r.kind !== 'upload') return null;
@@ -66,6 +69,8 @@ export const recordFileType = (r) => {
   if (VIDEO_RE.test(mime) || VIDEO_EXT.test(name)) return 'video';
   if (IMAGE_RE.test(mime)) return 'image';
   if (TEXT_MIME.has(mime) || TEXT_EXT.test(name)) return 'text';
+  if (mime === DOCX_MIME || /\.docx$/i.test(name)) return 'docx';
+  if (mime === PPTX_MIME || /\.pptx$/i.test(name)) return 'pptx';
   return 'other';
 };
 
@@ -86,7 +91,7 @@ function PlainCard({ icon, color, title, body, action }) {
   );
 }
 
-const BOX_ICON = { pdf: 'ti-file-text', text: 'ti-file-text', paste: 'ti-clipboard', image: 'ti-photo', audio: 'ti-headphones', video: 'ti-video', other: 'ti-file-download', missing: 'ti-cloud-off' };
+const BOX_ICON = { pdf: 'ti-file-text', docx: 'ti-file-text', pptx: 'ti-presentation', text: 'ti-file-text', paste: 'ti-clipboard', image: 'ti-photo', audio: 'ti-headphones', video: 'ti-video', other: 'ti-file-download', missing: 'ti-cloud-off' };
 
 /* sessionStorage continuation — one teaching thread per record, 24h. */
 const sidKey = (rid) => `akoro_teach_sid_${rid || 'x'}`;
@@ -122,6 +127,7 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
   const [extract, setExtract] = useState(null);
   const [pdfBlocks, setPdfBlocks] = useState(() => new Map());  // page → layout blocks (extraction overlay)
   const [avTranscript, setAvTranscript] = useState(null);       // { segments } — audio/video transcript
+  const [officeErr, setOfficeErr] = useState('');               // a Word / PowerPoint file the server couldn't read
   // The communities (of mine) this record is connected to — the reader's
   // gate for its community discussion. null = lookup not resolved yet
   // (reader keeps the previous behavior); [] = connected to none: the
@@ -262,6 +268,7 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
     setExtract(null);
     setPdfBlocks(new Map());
     setAvTranscript(null);
+    setOfficeErr('');
     textsRef.current = [];
     applyRef.current = null;
 
@@ -350,6 +357,36 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
             subject: 'Library record',
             reference: { name: record.name, text },
           }), null, text ? { name: record.name, text: text.slice(0, MAX_REFERENCE_CHARS) } : null);
+        } else if (type === 'docx' || type === 'pptx') {
+          // Word / PowerPoint: the server read the file's text into pages at
+          // upload. Older uploads (or a failed first read) are read now;
+          // while another open holds the job, wait for it briefly.
+          const read = () => (record.contentKey ? getSharedExtraction(record.contentKey) : getRecordExtraction(record.id));
+          const target = record.contentKey ? { contentKey: record.contentKey } : { recordId: record.id };
+          let saved = await read();
+          for (let attempt = 0; !cancelled && !(saved.pages || []).length && attempt < 30; attempt += 1) {
+            let out;
+            try { out = await extractOfficeRecord(target); }
+            catch (e) {
+              if (cancelled) return;
+              setOfficeErr(e?.message || 'This file could not be read.');
+              ready([{ html: '', text: '' }]);
+              return;
+            }
+            if ((out.pages || []).length) { saved = out; break; }
+            await new Promise((r) => setTimeout(r, 2000));   // another open is reading it
+            if (cancelled) return;
+            saved = await read();
+          }
+          if (cancelled) return;
+          const docPages = officeReaderPages(saved.pages || [], { kind: type, name: record.name });
+          if (!docPages.length) {
+            setOfficeErr('This file is still being read — reopen it in a moment.');
+            ready([{ html: '', text: '' }]);
+            return;
+          }
+          const md = docPages.map((p) => p.text).filter(Boolean).join('\n\n').trim();
+          ready(docPages, null, md ? { name: record.name, text: md.slice(0, MAX_REFERENCE_CHARS) } : null);
         } else if (type === 'image') {
           // An image never carries a text layer — the cache is checked and
           // otherwise the offer overlay goes up over the plain image page.
@@ -487,6 +524,20 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
         <PlainCard icon="ti-cloud-off" color="#F59E0B"
           title={t('records.file_missing_title')}
           body={t('records.file_missing_body')}/>
+      );
+    }
+    if ((type === 'docx' || type === 'pptx') && officeErr) {
+      return (
+        <PlainCard icon="ti-file-alert" color="#F59E0B"
+          title={record.name}
+          body={officeErr}
+          action={(
+            <a href={dlUrl} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 14,
+              background: `linear-gradient(135deg, ${BRAND}, #4C1DCC)`, color: '#fff', fontSize: 12.5, fontWeight: 800,
+              padding: '11px 20px', borderRadius: 100, textDecoration: 'none', fontFamily: "'Nunito',sans-serif" }}>
+              <Icon name="ti-download" size={14}/> {t('records.download')}
+            </a>
+          )}/>
       );
     }
     if (type === 'other') {
