@@ -1,0 +1,47 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import test from 'node:test';
+import { answerBlocks, citeLabel, inlinePieces, toReaderCite } from './askAnswer.js';
+
+const cites = [
+  { n: 1, pageNumber: 3, bbox: [50, 100, 950, 300], quote: 'Photosynthesis converts light…' },
+  { n: 2, startMs: 725000, endMs: 760000, quote: 'enzymes…' },
+];
+
+test('[n] markers become citation chips; unknown markers stay text; **bold** renders', () => {
+  const pieces = inlinePieces('Light becomes **chemical energy** [1]. Enzymes help [2][7].', cites);
+  assert.deepEqual(pieces.map((p) => p.type), ['text', 'bold', 'text', 'cite', 'text', 'cite', 'text', 'text']);
+  assert.equal(pieces.find((p) => p.type === 'cite').cite.pageNumber, 3);
+  assert.deepEqual(pieces.slice(-2).map((p) => p.text), ['[7]', '.'], 'a marker with no citation is left as text');
+});
+
+test('answers split into paragraphs and lists', () => {
+  const blocks = answerBlocks('## Key points\n- one [1]\n- two\n\n1. first\n2. second\nClosing line.', cites);
+  assert.deepEqual(blocks.map((b) => b.type), ['p', 'ul', 'ol', 'p']);
+  assert.equal(blocks[0].pieces[0].type, 'bold', 'headings read as bold lines');
+  assert.equal(blocks[1].items.length, 2);
+  assert.equal(blocks[1].items[0].find((p) => p.type === 'cite').n, 1);
+});
+
+test('chips say where they go, and map to the reader’s jump shape', () => {
+  assert.equal(citeLabel(cites[0]), 'p. 3');
+  assert.equal(citeLabel(cites[1]), '12:05');
+  assert.deepEqual(toReaderCite(cites[0]), { page: 2, bbox: [50, 100, 950, 300] }, '0-based page + the block box');
+  assert.deepEqual(toReaderCite(cites[1]), { startMs: 725000 });
+  assert.equal(toReaderCite({ n: 3 }), null, 'pasted text has nowhere to jump');
+});
+
+test('the reader wires Ask: tool, tab kept mounted, selection pin, seek for recordings', async () => {
+  const reader = await readFile(new URL('../components/teaching/SessionReaderModal.jsx', import.meta.url), 'utf8');
+  const session = await readFile(new URL('../components/library/RecordTeachSession.jsx', import.meta.url), 'utf8');
+  const modal = await readFile(new URL('../components/teaching/TeachAgentModal.jsx', import.meta.url), 'utf8');
+  assert.match(reader, /needsAsk: true/);
+  assert.match(reader, /askEnabled=\{!!ask\}/, 'Ask only appears when the opener can answer');
+  assert.match(reader, /display: activeTabId === "ask" \? "flex" : "none"/, 'a streaming answer survives switching tabs');
+  assert.match(reader, /handleSelectionAction\("ask"\)/);
+  assert.match(reader, /pageNumber: selection\.pageIndex \+ 1/, 'the pinned passage carries its page');
+  assert.match(reader, /playerApi\?\.seekTo\?\.\(cite\.startMs \/ 1000\)/, 'recording citations seek the player');
+  assert.match(session, /const ask = useMemo\(/, 'a stable ask object');
+  assert.match(session, /record\?\.contentKey\s*\? \{ contentKey: record\.contentKey \}/, 'shared files ask by content key');
+  assert.match(modal, /ask: content\.ask \|\| null/);
+});

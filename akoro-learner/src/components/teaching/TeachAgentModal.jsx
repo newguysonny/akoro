@@ -914,6 +914,8 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
     // connected to one of the learner's communities carries its chat
     // into the reader. Null (plain topic sessions) keeps the old reader.
     discussion: content.discussion || null,
+    // Ask (library records): whole-document Q&A with jump-to-source citations.
+    ask: content.ask || null,
     onClose: closeReader,
     onExplainSelection: explainSelection,
   } : {

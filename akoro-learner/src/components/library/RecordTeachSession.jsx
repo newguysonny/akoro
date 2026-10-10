@@ -40,10 +40,10 @@
  * shelf's progress bar honest via onProgress.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import TeachAgentModal from '../teaching/TeachAgentModal.jsx';
 import { buildSessionReaderPages } from '../teaching/SessionReaderModal.jsx';
-import { recordDownloadUrl, getRecordExtraction, getSharedExtraction, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus } from '../../services/recordsApi.js';
+import { recordDownloadUrl, getRecordExtraction, getSharedExtraction, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus, getAskHistory, askRecord } from '../../services/recordsApi.js';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
@@ -134,6 +134,19 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
   // running on (and setting state) after unmount.
   const aliveRef  = useRef(true);
   useEffect(() => { aliveRef.current = true; return () => { aliveRef.current = false; }; }, []);
+
+  // Ask — questions about this whole document, answered with citations.
+  // Uploads with a file (shared ones by their content key) and pastes;
+  // links and detail-only records have nothing to search. Memoized: the
+  // reader's Ask tab reloads its thread when this object changes.
+  const askTarget = record?.contentKey
+    ? { contentKey: record.contentKey }
+    : (record?.id && (record.kind === 'paste' || (record.kind === 'upload' && !record.fileMissing)) ? { recordId: record.id } : null);
+  const askKey = askTarget ? (askTarget.contentKey || askTarget.recordId) : null;
+  const ask = useMemo(() => (askKey ? {
+    load: () => getAskHistory(askTarget),
+    send: (opts) => askRecord({ ...askTarget, ...opts }),
+  } : null), [askKey]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const startExtraction = async () => {
     const apply = applyRef.current;
@@ -506,6 +519,8 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
     // this record is connected to (the discussion is owned by the
     // community; the record merely hosts it while open).
     discussion: discussionCommunities ? { communities: discussionCommunities } : null,
+    // Ask — the reader's whole-document Q&A with jump-to-source citations.
+    ask,
   };
 
   /* A remembered session id (24h) makes reopening a record CONTINUE its

@@ -37,6 +37,7 @@ export function featureForRequest(req) {
   if (p.includes("/teaching"))       return "teaching_tool";
   if (p.includes("/past-questions")) return "past_questions";
   if (p.includes("/curriculum"))     return "curriculum";
+  if (p.includes("/records"))        return "records";
   if (p.includes("/instructor"))     return "instructor_ai";
   if (p.includes("/school"))         return "school_ai";
   if (p.includes("/student"))        return "student_ai";

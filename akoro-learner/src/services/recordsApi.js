@@ -17,7 +17,7 @@
  * support, no auth headers needed.
  */
 
-import { API, apiGet, apiPost, apiPatch, apiDelete } from './api.js';
+import { API, apiGet, apiPost, apiPatch, apiDelete, streamPost } from './api.js';
 
 /** My shelf, newest first. Uploads carry fileUrl (presigned, 6h). */
 export async function listRecords() {
@@ -177,6 +177,27 @@ export async function getExtractionStatus({ recordId, contentKey }) {
   const q = contentKey ? `contentKey=${encodeURIComponent(contentKey)}` : `recordId=${encodeURIComponent(recordId)}`;
   const d = await apiGet(`/api/records/extract/status?${q}`);
   return d?.data ?? { done: true, pages: [], pending: [], failed: [] };
+}
+
+/* ── Ask: questions about ONE document, answered with citations ───────────── */
+
+const askTarget = ({ recordId, contentKey }) => (contentKey ? { contentKey } : { recordId });
+
+/** The learner's Ask thread for this document. */
+export async function getAskHistory({ recordId, contentKey }) {
+  const q = contentKey ? `contentKey=${encodeURIComponent(contentKey)}` : `recordId=${encodeURIComponent(recordId)}`;
+  const d = await apiGet(`/api/records/ask/history?${q}`);
+  return d?.data?.messages ?? [];
+}
+
+/** Ask a question; the answer streams to onDelta. Resolves { answer, citations, messageId }. */
+export async function askRecord({ recordId, contentKey, question, selection = null, onDelta, onStatus, signal }) {
+  let result = null;
+  const full = await streamPost('/api/records/ask?stream=1', { ...askTarget({ recordId, contentKey }), question, ...(selection ? { selection } : {}) }, {
+    onDelta, onStatus, signal,
+    onDone: (d) => { result = d; },
+  });
+  return result || { answer: full, citations: [] };
 }
 
 /** Semantic library search — hybrid (vector + keyword) over YOUR records'

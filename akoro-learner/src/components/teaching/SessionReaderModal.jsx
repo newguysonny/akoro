@@ -3,6 +3,7 @@ import { BRAND, GREEN, GOLD, RED } from "../../constants.js";
 import { Icon } from "../common/Icons.jsx";
 import MediaPlayer from "../library/MediaPlayer.jsx";
 import ReaderDiscussion from "./ReaderDiscussion.jsx";
+import ReaderAsk from "./ReaderAsk.jsx";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    SessionReaderModal — the Fortizo reader, adopted into the higher-ed
@@ -36,6 +37,9 @@ import ReaderDiscussion from "./ReaderDiscussion.jsx";
 /* ── Tool + form definitions (Fortizo's, icons swapped to tabler) ─────────── */
 
 const TOOL_DEFS = [
+  // Ask is listed only when the opener passes `ask` (a library record):
+  // answers from the whole document, with citations that jump.
+  { id: "ask",        label: "Ask",        icon: "ti-message-question", bg: "rgba(14,165,233,.16)", fg: "var(--ak-accent)", needsAsk: true },
   { id: "podcast",    label: "Podcast",    icon: "ti-headphones",    bg: "rgba(139,92,246,.16)", fg: "var(--ak-accent)" },
   { id: "video",      label: "Video",      icon: "ti-video",         bg: "rgba(99,102,241,.16)", fg: "var(--ak-accent)" },
   { id: "summary",    label: "Summary",    icon: "ti-align-left",    bg: "rgba(108,59,255,.16)", fg: "var(--ak-accent)" },
@@ -444,6 +448,7 @@ export function useIsMobileView() {
 function tabLabel(tab) {
   if (tab.id === "reader") return "Original Content";
   if (tab.id === "qa") return "Q&A";
+  if (tab.id === "ask") return "Ask";
   if (tab.id === "discussion") return "Discussion";
   return tab.title;
 }
@@ -477,8 +482,8 @@ function TabPill({ tab, active, onSelect, onClose }) {
 
 /* ── Generate grid + creation form (Fortizo) ───────────────────────────────── */
 
-function GenerateGrid({ onPick, discussion }) {
-  const generated = TOOL_DEFS.filter((t) => !t.community);
+function GenerateGrid({ onPick, discussion, askEnabled = false }) {
+  const generated = TOOL_DEFS.filter((t) => !t.community && (!t.needsAsk || askEnabled));
   // The Discussion card only features when this content is CONNECTED to
   // one of the learner's communities — that's when the messaging exists.
   // Q&A stays a session-local board either way.
@@ -1036,6 +1041,11 @@ export default function SessionReaderModal({
      the Discussion tab is the community's REAL persistent group chat
      (owned by the community, live over socket.io). */
   discussion = null,
+  /* ask — { load(), send({question, selection, onDelta, onStatus, signal}) }
+     from the opener (library records). Adds the Ask tool: questions about
+     the WHOLE document, answered with citations that jump here. Must be a
+     stable object (memoized) — the tab loads its thread when it changes. */
+  ask = null,
 }) {
   const isMobile = useIsMobileView();
   const split = !isMobile && !!chatNode;
@@ -1058,6 +1068,7 @@ export default function SessionReaderModal({
   const [qaThreads, setQaThreads] = useState([]);
   const [discussionThreads, setDiscussionThreads] = useState([]);
   const [communityTabsOpen, setCommunityTabsOpen] = useState([]);
+  const [askPin, setAskPin] = useState(null);   // { pageNumber, text } from "Ask about this"
 
   const [isPlaying, setIsPlaying] = useState(false);
 
@@ -1188,7 +1199,7 @@ export default function SessionReaderModal({
   }
 
   function closeTab(id) {
-    if (id === "qa" || id === "discussion") {
+    if (id === "qa" || id === "discussion" || id === "ask") {
       setCommunityTabsOpen((c) => c.filter((x) => x !== id));
     } else {
       setResultTabs((rt) => rt.filter((t) => t.id !== id));
@@ -1205,7 +1216,7 @@ export default function SessionReaderModal({
   }
 
   function handleToolPick(t) {
-    if (t.community) {
+    if (t.community || t.id === "ask") {
       openCommunityTab(t.id);
     } else {
       setFormTool(t.id);
@@ -1257,6 +1268,11 @@ export default function SessionReaderModal({
     if (!cite) return;
     setGenMenuOpen(false);
     setActiveTabId("reader");
+    // A recording citation: seek the player to the moment.
+    if (Number.isFinite(cite.startMs) && !Number.isInteger(cite.page)) {
+      playerApi?.seekTo?.(cite.startMs / 1000);
+      return;
+    }
     requestAnimationFrame(() => {
       goToPage(Math.min(cite.page, pages.length - 1));
       setTimeout(() => {
@@ -1304,7 +1320,8 @@ export default function SessionReaderModal({
     if (!closestPage(sel.anchorNode) || !closestPage(sel.focusNode)) return setSelection(null);
     const rect = sel.getRangeAt(0).getBoundingClientRect();
     if (!rect || (rect.width === 0 && rect.height === 0)) return setSelection(null);
-    setSelection({ text, rect: { left: rect.left, top: rect.top, bottom: rect.bottom, width: rect.width } });
+    const pageIndex = Number(closestPage(sel.anchorNode)?.dataset?.pageIndex);
+    setSelection({ text, pageIndex: Number.isInteger(pageIndex) ? pageIndex : null, rect: { left: rect.left, top: rect.top, bottom: rect.bottom, width: rect.width } });
   }, [activeTabId]);
 
   useLayoutEffect(() => {
@@ -1338,6 +1355,15 @@ export default function SessionReaderModal({
     const text = selection?.text || "";
     const truncated = text.length > 100 ? text.slice(0, 100) + "…" : text;
 
+    if (action === "ask") {
+      // The whole selection (not the 100-char preview) rides the question,
+      // with its page, so the answer is grounded in THAT passage.
+      setAskPin({ ...(Number.isInteger(selection?.pageIndex) ? { pageNumber: selection.pageIndex + 1 } : {}), text: text.slice(0, 1500) });
+      setSelection(null);
+      try { window.getSelection().removeAllRanges(); } catch {}
+      openCommunityTab("ask");
+      return;
+    }
     if (action === "redact") {
       setRedactions((r) => [...r, { id: "red-" + Date.now(), page: currentPage, text }]);
       setSelection(null);
@@ -1543,7 +1569,7 @@ export default function SessionReaderModal({
                       <CreationForm toolId={formTool} initialFocus={prefillFocus} onBack={() => setFormTool(null)} onSubmit={handleFormSubmit}/>
                     </div>
                   ) : (
-                    <GenerateGrid onPick={handleToolPick} discussion={discussion}/>
+                    <GenerateGrid onPick={handleToolPick} discussion={discussion} askEnabled={!!ask}/>
                   )}
                 </div>
               )}
@@ -1691,8 +1717,16 @@ export default function SessionReaderModal({
           </div>
         )}
 
+        {/* Ask — stays mounted while open, so an answer still streaming
+            survives a look at the page it cites. */}
+        {ask && communityTabsOpen.includes("ask") && (
+          <div className="flex-1 min-h-0 px-4 py-4" style={{ background: "var(--ak-bg)", display: activeTabId === "ask" ? "flex" : "none", flexDirection: "column" }}>
+            <ReaderAsk ask={ask} onCite={citeJump} pin={askPin} onPinClear={() => setAskPin(null)}/>
+          </div>
+        )}
+
         {/* Result pane — shown when a generated tab (not "Original Content") is active. */}
-        {activeTabId !== "reader" && activeTabId !== "qa" && activeTabId !== "discussion" && activeResultTab && (
+        {activeTabId !== "reader" && activeTabId !== "qa" && activeTabId !== "discussion" && activeTabId !== "ask" && activeResultTab && (
           <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4" style={{ background: "var(--ak-bg)" }}>
             <ResultView tab={activeResultTab} onUpdate={(patch) => updateResultTab(activeResultTab.id, patch)} onCite={citeJump}/>
           </div>
@@ -1722,6 +1756,11 @@ export default function SessionReaderModal({
             border: "1px solid var(--ak-border2)",
           }}
         >
+          {ask && (
+            <button onClick={() => handleSelectionAction("ask")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs hover:bg-black/10 whitespace-nowrap flex-shrink-0" style={{ color: "var(--ak-text)" }}>
+              <Icon name="ti-message-question" size={13} color="var(--ak-accent)"/> Ask about this
+            </button>
+          )}
           <button onClick={() => handleSelectionAction("explain")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs hover:bg-black/10 whitespace-nowrap flex-shrink-0" style={{ color: "var(--ak-text)" }}>
             <Icon name="ti-bulb" size={13} color="var(--ak-accent)"/> Ask the tutor
           </button>
