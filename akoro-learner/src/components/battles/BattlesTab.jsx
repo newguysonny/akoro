@@ -188,6 +188,13 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
         <button onClick={()=>setCreating(true)} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,fontSize:11.5,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}><Icon name="ti-swords" size={13} color="#fff"/>Start a battle</button>
         <button onClick={onViewChallenge} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:`1.5px solid ${RED}40`,background:`${RED}08`,fontSize:11.5,fontWeight:800,color:RED,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}><ZapIcon size={11} color={RED}/>{t('battles.find_challenges')}</button>
       </div>
+      {viewFilter==="scheduled"&&dailySeat?.status==="not_enough"&&(
+        <div style={{ margin:"10px 16px 0",display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:14,border:"1.5px solid rgba(239,68,68,.25)",background:"rgba(239,68,68,.05)" }}>
+          <Icon name="ti-coin" size={18} color={RED}/>
+          <span style={{ flex:1,fontSize:12,fontWeight:700,color:"var(--ak-text-sec)" }}>Not enough coins for the daily battle: about {dailySeat.requirements?.coins?.need} needed for your agent's answers, you have {dailySeat.requirements?.coins?.have}.</span>
+          <button onClick={()=>dailyAction(()=>joinDaily({}))} disabled={dailyBusy} style={{ padding:"6px 12px",borderRadius:20,border:`1.5px solid ${BRAND}40`,background:`${BRAND}0A`,color:BRAND,fontSize:11.5,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>Try again</button>
+        </div>
+      )}
       {viewFilter==="scheduled"&&dailySkipped&&(
         <div style={{ margin:"10px 16px 0",display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:14,border:"1.5px dashed var(--ak-border2)",background:"var(--ak-surface-hover)" }}>
           <Icon name="ti-calendar-repeat" size={18} color="var(--ak-text-muted)"/>
@@ -257,6 +264,7 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
                   <div style={{ background:diff.bg,borderRadius:5,padding:"1px 7px" }}><span style={{ fontSize:9.5,fontWeight:800,color:diff.color }}>{diff.label}</span></div>
                   <span style={{ fontSize:10.5,fontWeight:800,color:GOLD,display:"flex",alignItems:"center",gap:3 }}><ZapIcon size={10} color={GOLD}/>{b.xpPrize}</span>
                   <span style={{ fontSize:10.5,color:"var(--ak-text-muted)",fontWeight:600,display:"inline-flex",alignItems:"center",gap:4 }}><Icon name="ti-stopwatch" size={10} color="var(--ak-text-muted)"/>{b.timeLimit}</span>
+                  {b.entry?.minXp>0&&<span title="Minimum XP to join" style={{ fontSize:10.5,color:GOLD,fontWeight:700,display:"inline-flex",alignItems:"center",gap:4 }}><Icon name="ti-lock" size={10} color={GOLD}/>{b.entry.minXp}+ XP</span>}
                   {b.hpPerMiss!=null&&<span title="HP each agent loses per missed question" style={{ fontSize:10.5,color:RED,fontWeight:700,display:"inline-flex",alignItems:"center",gap:4 }}><Icon name="ti-heart" size={10} color={RED}/>−{b.hpPerMiss} HP/miss</span>}
                   {b.status==="live"&&b.startedAgo!=null&&<span style={{ fontSize:10,color:RED,fontWeight:700 }}>{t('battles.started_ago').replace('{min}',b.startedAgo)}</span>}
                   {b.status==="scheduled"&&b.startsIn&&<span style={{ fontSize:10,color:BRAND,fontWeight:700,display:"inline-flex",alignItems:"center",gap:4 }}><Icon name="ti-calendar" size={11} color={BRAND}/>{b.startsIn}</span>}

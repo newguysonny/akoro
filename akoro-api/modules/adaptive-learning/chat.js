@@ -468,6 +468,7 @@ export const CHAT_TOOLS = [
         difficulty: { type: "string", enum: ["easy", "intermediate", "hard"] },
         total_questions: { type: "number", description: "5–30 (default 10)." },
         hp_per_miss: { type: "number", description: "HP each agent loses per question it misses (0–50, default 10; 100 HP to start, 0 HP = out and unranked). The invitee sees it before accepting." },
+        min_xp: { type: "number", description: "Minimum XP an agent needs to accept (default 0 = open to all)." },
         scheduled_for: { type: "string" }, title: { type: "string" },
       },
       required: ["opponents", "subject"],

@@ -69,3 +69,17 @@ test("the creator sets HP per miss; every miss costs exactly that, and invitees 
   assert.equal((routes.match(/hp_per_miss: cleanHpPerMiss\(req\.body\?\.hp_per_miss\),/g) || []).length, 6);   // every creation path
   assert.match(routes, /hpPerMiss:     b\.hp_per_miss \?\? HP_PER_MISS_DEFAULT,/);                         // on every card / challenge
 });
+
+test("entry: enough coins for your agent's answers and the creator's minimum XP — reviews never gated on XP, and pay a free coin", async () => {
+  const entry = await read("./entry.js");
+  const { requirementsOf, coinsNeeded, coinsPerAnswer } = await import("./entry.js");
+  assert.equal(coinsNeeded(10), 10 * coinsPerAnswer());
+  assert.ok(coinsPerAnswer() >= 2);
+  assert.equal(requirementsOf({ battle_type: "review", total_questions: 5, min_xp: 500 }).minXp, 0);
+  assert.equal(requirementsOf({ battle_type: "classroom", total_questions: 5, min_xp: 500 }).minXp, 500);
+  assert.match(entry, /throw Object\.assign\(new Error\(r\.message\), \{ status: 402, code: "ENTRY_REQUIREMENTS"/);
+  const routes = await read("./routes.js");
+  assert.equal((routes.match(/code: "ENTRY_REQUIREMENTS"/g) || []).length, 6);   // accept, join, 4 creator checks
+  assert.match(routes, /router\.get\("\/battles\/:battleId\/entry"/);
+  assert.match(worker, /if \(isReview && REVIEW_REWARD_COINS > 0\) \{[\s\S]*?grantCoins\(\{ userId: p\.user_id, coins: REVIEW_REWARD_COINS, feature: "review_participation"/);
+});

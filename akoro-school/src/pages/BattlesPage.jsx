@@ -20,7 +20,7 @@ const BLANK = {
   questionSource: 'auto',    // 'auto' | 'bank' | 'ai'
   classId: '', subject: '',  // class battles only
   audience: BLANK_AUDIENCE,
-  totalQuestions: '15', duration: '15', xpPrize: '200', hpPerMiss: '10',
+  totalQuestions: '15', duration: '15', xpPrize: '200', hpPerMiss: '10', minXp: '0',
   difficulty: 'intermediate', scheduledAt: '', expiresInMinutes: '60',
 };
 
@@ -61,6 +61,7 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
         duration: String(editing.durationMin || 15),
         xpPrize: String(editing.xpPool || 200),
         hpPerMiss: String(editing.hpPerMiss ?? 10),
+        minXp: String(editing.entry?.minXp ?? 0),
         difficulty: editing.difficulty || 'intermediate',
         scheduledAt: editing.scheduledAt ? toLocalInput(editing.scheduledAt) : '',
       });
@@ -207,6 +208,10 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
           {/* What a miss costs — like marks per question. Learners see it before they accept. */}
           <Inp label="HP lost per miss" type="number" min="0" max="50" value={form.hpPerMiss} onChange={e => setField('hpPerMiss', e.target.value)} />
         </div>
+        {/* Entry requirement for a battle. A review checks knowledge — never gated on XP. */}
+        {form.kind !== 'review' && (
+          <Inp label="Minimum XP to join (0 = open to all)" type="number" min="0" value={form.minXp} onChange={e => setField('minXp', e.target.value)} />
+        )}
         <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT, marginTop: -6 }}>
           {(() => {
             const h = Math.min(50, Math.max(0, parseInt(form.hpPerMiss, 10) || 0));
@@ -674,6 +679,7 @@ export default function BattlesPage() {
         xp_prize: parseInt(form.xpPrize, 10) || 0,
         xp_pool:  parseInt(form.xpPrize, 10) || 0,
         hp_per_miss: form.hpPerMiss === '' ? undefined : parseInt(form.hpPerMiss, 10),
+        min_xp: form.kind === 'review' ? 0 : (parseInt(form.minXp, 10) || 0),
         scheduled_start: scheduledIso,
       });
       showToast('Battle updated');
@@ -692,6 +698,7 @@ export default function BattlesPage() {
         time_limit_seconds: (parseInt(form.duration, 10) || 15) * 60,
         xp_prize: parseInt(form.xpPrize, 10) || 200,
         hp_per_miss: form.hpPerMiss === '' ? undefined : parseInt(form.hpPerMiss, 10),
+        min_xp: form.kind === 'review' ? 0 : (parseInt(form.minXp, 10) || 0),
         expires_in_minutes: parseInt(form.expiresInMinutes, 10) || 60,
         scheduled_for: scheduledIso,
         // course | class | chosen learners — one helper so battles and self

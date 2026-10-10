@@ -54,6 +54,7 @@ import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
 import { cleanHpPerMiss, HP_PER_MISS_DEFAULT } from "./hp.js";
+import { entryCheck, requirementsOf } from "./entry.js";
 import { buildQuestions, perQuestionSeconds } from "./questionSource.js";
 import { InsufficientCoins } from "../../lib/coins.js";
 
@@ -317,8 +318,14 @@ router.post("/courses/:courseId/battles/challenge", authenticateToken, asyncHand
   // acceptDeadline: unscheduled invitations do not expire.
   const expiresAt   = isScheduled ? acceptDeadline(scheduled_for) : null;
 
+  // A learner who creates a battle plays in it: they need the coins for their own agent's answers.
+  {
+    const creatorEntry = await entryCheck(req.user.id, { battle_type: "battle", total_questions, min_xp: 0 });
+    if (!creatorEntry.ok) return res.status(402).json({ code: "ENTRY_REQUIREMENTS", error: creatorEntry.message.replace("to join", "to start it"), requirements: creatorEntry });
+  }
   const { data: battle, error } = await db.from("battles").insert({
     hp_per_miss: cleanHpPerMiss(req.body?.hp_per_miss),
+    min_xp: Math.max(0, Math.round(Number(req.body?.min_xp) || 0)),
     course_id: courseId, battle_type: "1v1", title, description: description ?? null,
     topic: topic ?? null, subject: subject ?? null, difficulty,
     total_questions, time_limit_seconds, xp_prize, xp_pool: xp_prize,
@@ -401,8 +408,14 @@ router.post("/courses/:courseId/battles/open", authenticateToken, asyncHandler(a
   // acceptDeadline: unscheduled invitations do not expire.
   const expiresAt   = isScheduled ? acceptDeadline(scheduled_for) : null;
 
+  // A learner who creates a battle plays in it: they need the coins for their own agent's answers.
+  {
+    const creatorEntry = await entryCheck(req.user.id, { battle_type: "battle", total_questions, min_xp: 0 });
+    if (!creatorEntry.ok) return res.status(402).json({ code: "ENTRY_REQUIREMENTS", error: creatorEntry.message.replace("to join", "to start it"), requirements: creatorEntry });
+  }
   const { data: battle, error } = await db.from("battles").insert({
     hp_per_miss: cleanHpPerMiss(req.body?.hp_per_miss),
+    min_xp: Math.max(0, Math.round(Number(req.body?.min_xp) || 0)),
     course_id: courseId, battle_type: "open", title, description: description ?? null,
     topic: topic ?? null, subject: subject ?? null, difficulty,
     total_questions, time_limit_seconds, xp_prize, xp_pool: xp_prize,
@@ -465,6 +478,7 @@ router.post("/courses/:courseId/battles/classroom", authenticateToken, requireRo
 
   const { data: battle, error } = await db.from("battles").insert({
     hp_per_miss: cleanHpPerMiss(req.body?.hp_per_miss),
+    min_xp: Math.max(0, Math.round(Number(req.body?.min_xp) || 0)),
     course_id: courseId, battle_type: "classroom", title, description: description ?? null,
     topic: topic ?? null, subject: subject ?? null, difficulty,
     total_questions, time_limit_seconds, xp_prize: xp_pool, xp_pool,
@@ -723,8 +737,14 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
   // acceptDeadline: unscheduled invitations do not expire.
   const expiresAt   = isScheduled ? acceptDeadline(scheduled_for) : null;
 
+  // A learner who creates a battle plays in it: they need the coins for their own agent's answers.
+  if (myRole !== "teacher" && !isReview) {
+    const creatorEntry = await entryCheck(req.user.id, { battle_type: "battle", total_questions, min_xp: 0 });
+    if (!creatorEntry.ok) return res.status(402).json({ code: "ENTRY_REQUIREMENTS", error: creatorEntry.message.replace("to join", "to start it"), requirements: creatorEntry });
+  }
   const { data: battle, error } = await db.from("battles").insert({
     hp_per_miss: cleanHpPerMiss(req.body?.hp_per_miss),
+    min_xp: Math.max(0, Math.round(Number(req.body?.min_xp) || 0)),
     course_id: null, classroom_id: classroomId,
     battle_type: isReview ? "review" : isDuel ? "1v1" : "classroom",
     title, description: description ?? null,
@@ -883,6 +903,8 @@ function toCard(b, extra = {}) {
     xpPool:        b.xp_pool ?? b.xp_prize ?? 0,
     // What a miss costs, set by the creator — on the challenge sheet before accepting.
     hpPerMiss:     b.hp_per_miss ?? HP_PER_MISS_DEFAULT,
+    // What it takes to join (battle/entry.js): coins for your agent's answers, and the creator's minimum XP.
+    entry:         requirementsOf(b),
     totalQuestions: b.total_questions ?? 0,
     timeLimit:     `${mins} min`,
     durationMin:   mins,
@@ -1332,8 +1354,14 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
   // A scheduled DUEL stays in 'lobby': /challenges/:id/accept only accepts from
   // lobby, and it already schedules the start itself once accepted. Marking it
   // 'scheduled' up front would make the invitation unacceptable.
+  // A learner who creates a battle plays in it: they need the coins for their own agent's answers.
+  if ((isDuel || !isInstructor)) {
+    const creatorEntry = await entryCheck(req.user.id, { battle_type: "battle", total_questions, min_xp: 0 });
+    if (!creatorEntry.ok) return res.status(402).json({ code: "ENTRY_REQUIREMENTS", error: creatorEntry.message.replace("to join", "to start it"), requirements: creatorEntry });
+  }
   const { data: battle, error } = await db.from("battles").insert({
     hp_per_miss: cleanHpPerMiss(req.body?.hp_per_miss),
+    min_xp: Math.max(0, Math.round(Number(req.body?.min_xp) || 0)),
     course_id: courseId, battle_type: isDuel ? "1v1" : "classroom",
     title, description: description ?? null,
     topic: topic ?? null, subject: subject ?? null, difficulty,
@@ -1534,6 +1562,13 @@ async function maybeStartEarly(battle) {
   return { started: true, invited, players };
 }
 
+/** GET /api/battle/battles/:battleId/entry — can I join it? (the challenge sheet asks before Accept) */
+router.get("/battles/:battleId/entry", authenticateToken, asyncHandler(async (req, res) => {
+  const { data: battle } = await db.from("battles").select("id, battle_type, total_questions, min_xp").eq("id", req.params.battleId).maybeSingle();
+  if (!battle) return res404(res, "Battle not found");
+  res200(res, await entryCheck(req.user.id, battle));
+}));
+
 router.post("/challenges/:challengeId/accept", authenticateToken, asyncHandler(async (req, res) => {
   // A teacher's battle sits in 'scheduled' until its start time, so restricting
   // this to 'lobby' would have made exactly the invitations we now send
@@ -1550,6 +1585,12 @@ router.post("/challenges/:challengeId/accept", authenticateToken, asyncHandler(a
     .eq("battle_id", battle.id).eq("user_id", req.user.id)
     .in("role", ["opponent", "participant"]).maybeSingle();
   if (!seat) return res.status(403).json({ error: "You are not the challenged person" });
+
+  // Enough coins for your agent's answers, and the creator's minimum XP (a
+  // review has no XP gate). Short of either, you can't take the seat — the
+  // challenge sheet already showed what it needs.
+  const entry = await entryCheck(req.user.id, battle);
+  if (!entry.ok) return res.status(402).json({ code: "ENTRY_REQUIREMENTS", error: entry.message, requirements: entry });
 
   // ── A group battle: take the seat, don't start the battle ────────────────
   // One learner accepting must not drag twenty others in. The battle keeps its
@@ -1684,6 +1725,9 @@ router.post("/battles/:battleId/join", authenticateToken, asyncHandler(async (re
 
   const myAgent = await resolveAgent(req.user.id);
   if (!myAgent) return res.status(400).json({ error: "Create your agent first" });
+
+  const entry = await entryCheck(req.user.id, battle);
+  if (!entry.ok) return res.status(402).json({ code: "ENTRY_REQUIREMENTS", error: entry.message, requirements: entry });
 
   const { data: alreadyIn } = await db.from("battle_participants").select("id")
     .eq("battle_id", battle.id).eq("user_id", req.user.id).single();
@@ -2145,7 +2189,7 @@ router.put("/battles/:battleId", authenticateToken, asyncHandler(async (req, res
   // never be fixed and re-used — you had to build it again from scratch.
   if (["live", "completed"].includes(battle.status)) return res400(res, `Cannot edit a ${battle.status} battle`);
 
-  const allowed = ["title", "description", "topic", "subject", "difficulty", "xp_prize", "xp_pool", "time_limit_seconds", "total_questions", "max_participants", "scheduled_start", "hp_per_miss"];
+  const allowed = ["title", "description", "topic", "subject", "difficulty", "xp_prize", "xp_pool", "time_limit_seconds", "total_questions", "max_participants", "scheduled_start", "hp_per_miss", "min_xp"];
   const updates = Object.fromEntries(Object.entries(req.body).filter(([k]) => allowed.includes(k)));
   if ("hp_per_miss" in updates) updates.hp_per_miss = cleanHpPerMiss(updates.hp_per_miss);
 
@@ -2286,6 +2330,7 @@ router.post("/courses/:courseId/battles/session", authenticateToken, requireRole
 
   const { data: battle, error } = await db.from("battles").insert({
     hp_per_miss: cleanHpPerMiss(req.body?.hp_per_miss),
+    min_xp: Math.max(0, Math.round(Number(req.body?.min_xp) || 0)),
     course_id: courseId, battle_type: "classroom", title,
     topic: topic ?? null, subject: subject ?? null, difficulty,
     total_questions, time_limit_seconds, xp_prize: xp_pool, xp_pool,

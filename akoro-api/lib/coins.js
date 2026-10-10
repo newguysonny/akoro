@@ -207,6 +207,17 @@ export async function refundCoins({ applied = [], feature, ref }) {
   return failed;
 }
 
+/** A free grant from the platform to a user's own wallet (e.g. taking part in a review). */
+export async function grantCoins({ userId, coins, feature, ref = null }) {
+  if (!userId || !(coins > 0)) return null;
+  const acc = await ensureAccount("user", userId);
+  const { data, error } = await db.rpc("coin_credit", {
+    p_account: acc.id, p_amount: coins, p_type: "grant", p_meta: { feature, ref },
+  });
+  if (error) { console.warn(`[coins] grant failed user=${userId} feature=${feature}:`, error.message); return null; }
+  return data;
+}
+
 /** Credit a top-up idempotently by its Paystack reference. */
 export async function creditTopup({ ownerType, ownerId, coins, ref, costUsd = null, by = null }) {
   const acc = await ensureAccount(ownerType, ownerId);

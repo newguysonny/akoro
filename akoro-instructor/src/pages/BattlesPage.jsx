@@ -421,6 +421,7 @@ export default function BattlesPage() {
         xp_prize: parseInt(form.xpPrize, 10) || 0,
         xp_pool:  parseInt(form.xpPrize, 10) || 0,
         hp_per_miss: form.hpPerMiss === '' ? undefined : parseInt(form.hpPerMiss, 10),
+        min_xp: form.kind === 'review' ? 0 : (parseInt(form.minXp, 10) || 0),
         scheduled_start: scheduledIso,
       });
       showToast('Battle updated');
@@ -439,6 +440,7 @@ export default function BattlesPage() {
         time_limit_seconds: (parseInt(form.duration, 10) || 15) * 60,
         xp_prize: parseInt(form.xpPrize, 10) || 200,
         hp_per_miss: form.hpPerMiss === '' ? undefined : parseInt(form.hpPerMiss, 10),
+        min_xp: form.kind === 'review' ? 0 : (parseInt(form.minXp, 10) || 0),
         expires_in_minutes: parseInt(form.expiresInMinutes, 10) || 60,
         scheduled_for: scheduledIso,
         // course | class | chosen learners — one helper so battles and self
