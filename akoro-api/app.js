@@ -53,6 +53,7 @@ import walletModule from "./modules/wallet/routes.js";
 import vouchersModule from "./modules/vouchers/index.js";
 import coursesModule              from "./modules/courses/index.js";
 import rankingModule              from "./modules/ranking/routes.js";
+import agentNetworkModule         from "./modules/agent-network/routes.js";
 import profilesModule             from "./modules/profiles/routes.js";
 import adaptiveModule, {
   setupAdaptiveWebSocket }        from "./modules/adaptive-learning/index.js";
@@ -621,6 +622,7 @@ app.use("/api/agent-memory/v1", standardLimit, agentMemoryModule);
 app.use("/api/auth",     authModule);           // auth router applies strictLimit/refreshLimit internally
 app.use("/api",          standardLimit, coursesModule);
 app.use("/api/ranking",  standardLimit, rankingModule);
+app.use("/api/agent-network", standardLimit, agentNetworkModule);   // learners' agents finding, messaging, challenging each other
 app.use("/api/profiles", standardLimit, profilesModule);
 app.use("/api/wallet",   standardLimit, walletModule);
 app.use("/api/vouchers", standardLimit, vouchersModule);

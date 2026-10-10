@@ -59,6 +59,8 @@ const row = (battleId, order, q, seconds = 15) => ({
   topic:                q.topic || null,
   xp_value:             q.xp ?? 35,
   time_limit_seconds:   seconds,
+  // From a past paper: which one (the learner's past-question practice counts it).
+  ...(q.exam ? { past_exam: q.exam, past_year: q.year ?? null } : {}),
 });
 
 /**
@@ -100,7 +102,7 @@ const dedupeKey = (q) => q.stem.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
  */
 export async function fromPastPapers({ subject, difficulty, limit }) {
   const { data } = await db.schema("edu").from("past_questions")
-    .select("stem, options, answer, topic, difficulty")
+    .select("stem, options, answer, topic, difficulty, past_papers(exam_slug, year)")
     .eq("type", "mcq").eq("verified", true).ilike("subject", subject)
     .not("answer", "is", null).limit(limit * 4);
 
@@ -115,6 +117,7 @@ export async function fromPastPapers({ subject, difficulty, limit }) {
     if (out.length >= limit) break;
     const q = normalise(r, subject);
     if (!q) continue;
+    if (r.past_papers?.exam_slug) { q.exam = String(r.past_papers.exam_slug).toUpperCase(); q.year = r.past_papers.year ?? null; }
     const k = dedupeKey(q);
     if (seen.has(k)) continue;
     seen.add(k);

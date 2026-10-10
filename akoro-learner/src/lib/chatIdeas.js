@@ -44,6 +44,8 @@ export function protegeMoves(executions) {
       out.guide = { name: String(x.guide.name || 'NaNa') };
       if (x.guide.teach?.topic && !out.teach) out.teach = { topic: String(x.guide.teach.topic), subject: String(x.guide.teach.subject || '') };
     }
+    // Agents an agent search found — shown as cards with Challenge / Ask.
+    if (Array.isArray(x?.agents) && x.agents.length) out.agents = x.agents.slice(0, 6);
   }
   return out;
 }
