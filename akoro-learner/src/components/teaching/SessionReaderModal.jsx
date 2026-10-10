@@ -4,6 +4,7 @@ import { Icon } from "../common/Icons.jsx";
 import MediaPlayer from "../library/MediaPlayer.jsx";
 import ReaderDiscussion from "./ReaderDiscussion.jsx";
 import ReaderAsk from "./ReaderAsk.jsx";
+import { citeLabel, toReaderCite } from "../../lib/askAnswer.js";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    SessionReaderModal — the Fortizo reader, adopted into the higher-ed
@@ -50,6 +51,10 @@ const TOOL_DEFS = [
   { id: "discussion", label: "Discussion", icon: "ti-messages",      bg: "rgba(217,70,239,.14)", fg: "var(--ak-accent)", community: true },
 ];
 const toolById = (id) => TOOL_DEFS.find((t) => t.id === id);
+/* Tools the opener can generate for real (the `tools` prop) — the rest stay
+   derived in the browser. They gain a scope choice. */
+const SERVER_TOOLS = new Set(["summary", "quiz", "flashcards"]);
+const SCOPE_FIELD = { id: "scope", label: "From", type: "select", options: ["This page", "Whole document"] };
 
 const FORM_DEFS = {
   podcast: {
@@ -533,23 +538,27 @@ function ToolHeader({ label, sub, onBack }) {
   );
 }
 
-function CreationForm({ toolId, initialFocus, onBack, onSubmit }) {
-  const def = FORM_DEFS[toolId];
+function CreationForm({ toolId, initialFocus, onBack, onSubmit, withScope = false }) {
+  const base = FORM_DEFS[toolId];
+  const def = withScope ? { ...base, fields: [SCOPE_FIELD, ...base.fields] } : base;
   const [values, setValues] = useState(() => {
     const v = {};
     def.fields.forEach((f) => { v[f.id] = f.type === "select" ? f.options[0] : (f.id === "focus" ? initialFocus || "" : ""); });
     return v;
   });
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
   function handleSubmit() {
     setSubmitting(true);
-    onSubmit(values, () => setSubmitting(false));
+    setError("");
+    // done() on success; fail(msg) keeps the form open with the reason.
+    onSubmit(values, () => setSubmitting(false), (msg) => { setSubmitting(false); setError(msg || "Couldn't build that — try again."); });
   }
 
   return (
     <div>
-      <ToolHeader label={def.title} sub={def.sub} onBack={onBack}/>
+      <ToolHeader label={def.title} sub={withScope && values.scope === "Whole document" ? def.sub.replace("this page", "the whole document") : def.sub} onBack={onBack}/>
       <div className="flex flex-col gap-3.5">
         {def.fields.map((f) => (
           <label key={f.id} className="flex flex-col gap-1.5">
@@ -575,6 +584,11 @@ function CreationForm({ toolId, initialFocus, onBack, onSubmit }) {
             )}
           </label>
         ))}
+        {error && (
+          <div role="alert" className="text-xs leading-relaxed rounded-lg p-2.5" style={{ color: "var(--ak-danger-text)", background: "rgba(239,68,68,.08)", border: "1px solid rgba(239,68,68,.25)" }}>
+            {error}
+          </div>
+        )}
         <button
           type="button"
           disabled={submitting}
@@ -595,13 +609,15 @@ function CreationForm({ toolId, initialFocus, onBack, onSubmit }) {
   );
 }
 
+const whereFrom = (tab) => (tab.values?.scope === "Whole document" ? "whole document" : `page ${tab.createdPage + 1}`);
+
 function resultSub(tab) {
   switch (tab.toolId) {
     case "podcast": return `${tab.values.length || "Medium · 8–10 min"} · from page ${tab.createdPage + 1} · preview`;
     case "video": return `${tab.values.style || "Animated"} · from page ${tab.createdPage + 1} · preview`;
-    case "summary": return `${tab.values.depth || "Brief"} summary · page ${tab.createdPage + 1}`;
-    case "quiz": return `${tab.values.count || "5"} questions · ${tab.values.difficulty || "Medium"} · page ${tab.createdPage + 1}`;
-    case "flashcards": return `${tab.values.count || "6"} cards · page ${tab.createdPage + 1}`;
+    case "summary": return `${tab.values.depth || "Brief"} summary · ${whereFrom(tab)}`;
+    case "quiz": return `${tab.values.count || "5"} questions · ${tab.values.difficulty || "Medium"} · ${whereFrom(tab)}`;
+    case "flashcards": return `${tab.values.count || "6"} cards · ${whereFrom(tab)}`;
     case "notes": return `Page ${tab.createdPage + 1}`;
     default: return "";
   }
@@ -609,10 +625,12 @@ function resultSub(tab) {
 
 function Citation({ cite, onCite }) {
   if (!cite) return null;
+  const isPage = Number.isInteger(cite.page);
+  if (!isPage && !Number.isFinite(cite.startMs)) return null;
   return (
-    <button type="button" onClick={() => onCite(cite)} className="folio-citation" title="Jump to source in the reader">
-      <Icon name="ti-file-text" size={10}/>
-      Page {cite.page + 1}
+    <button type="button" onClick={() => onCite(cite)} className="folio-citation" title={cite.quote ? `“${cite.quote}”` : "Jump to source in the reader"}>
+      <Icon name={isPage ? "ti-file-text" : "ti-player-play"} size={10}/>
+      {isPage ? `Page ${cite.page + 1}` : citeLabel({ startMs: cite.startMs })}
     </button>
   );
 }
@@ -773,6 +791,7 @@ function ResultView({ tab, onUpdate, onCite }) {
                 : selectedOpt?.correct
                 ? "Correct!"
                 : `Not quite — the correct answer is: ${correctOpt?.text}`}
+              {q.explanation && <div className="mt-1.5 leading-relaxed" style={{ color: "var(--ak-text-sec)" }}>{q.explanation}</div>}
             </div>
           )}
         </div>
@@ -784,7 +803,7 @@ function ResultView({ tab, onUpdate, onCite }) {
       if (!cards.length) return <>{header}<EmptyResult reason={tab.emptyReason || "No cards could be built from this page."}/></>;
       const cardIdx = Math.min(tab.cardIndex ?? 0, cards.length - 1);
       const card = cards[cardIdx];
-      const cardCite = sentenceCiteFor(tab.createdPage);
+      const cardCite = card.cite || sentenceCiteFor(tab.createdPage);
       return (
         <div>
           {header}
@@ -1046,6 +1065,10 @@ export default function SessionReaderModal({
      the WHOLE document, answered with citations that jump here. Must be a
      stable object (memoized) — the tab loads its thread when it changes. */
   ask = null,
+  /* tools — { generate(toolId, { scope, pageNumber, pageText, values }) } from
+     the opener (library records): Summary / Quiz / Flashcards generated from
+     the document with citations, instead of derived in the browser. */
+  tools = null,
   /* jumpTo — { cite, key } from the session chat's citation chips: when it
      changes, the reader jumps there (page + box flash, or a seek). */
   jumpTo = null,
@@ -1235,8 +1258,52 @@ export default function SessionReaderModal({
     setGenMenuOpen(true);
   }
 
-  function handleFormSubmit(values, done) {
+  /* Server result → the tab's content, with citations in the reader's jump
+     shape (0-based page + box, or a moment). */
+  function toTabContent(toolId, r) {
+    const cite = (c) => (c ? { ...toReaderCite(c), quote: c.quote } : null);
+    if (toolId === "summary") return { summaryPoints: (r.summaryPoints || []).map((p) => ({ text: p.text, cite: cite(p.cite) })) };
+    if (toolId === "quiz") {
+      const quizQuestions = (r.quizQuestions || []).map((q) => ({ ...q, cite: cite(q.cite) }));
+      return { quizQuestions, quizAnswers: quizQuestions.map(() => ({ selected: null, checked: false, dontKnow: false })) };
+    }
+    return { cardSet: (r.cardSet || []).map((c) => ({ ...c, cite: cite(c.cite) })) };
+  }
+
+  function openResultTab(toolId, values, createdPage, content) {
+    const tdef = toolById(toolId);
+    const focusLabel = (values.focus && values.focus.trim())
+      || (values.scope === "Whole document" ? "Whole document" : `Page ${createdPage + 1}`);
+    const id = "r" + nextResultId.current++;
+    setResultTabs((rt) => [...rt, {
+      id, toolId, values, createdPage,
+      title: `${tdef.label} · ${focusLabel.length > 22 ? focusLabel.slice(0, 22) + "…" : focusLabel}`,
+      cardIndex: 0, flipped: false, quizIndex: 0, quizHint: null, topic: docTitle,
+      ...content,
+    }]);
+    setFormTool(null);
+    setActiveTabId(id);
+    setGenMenuOpen(false);
+  }
+
+  function handleFormSubmit(values, done, fail) {
     const toolId = formTool;
+    // Real generation (library records): grounded in the document, every
+    // item cited. The form shows "Building…" until it lands.
+    if (tools && SERVER_TOOLS.has(toolId)) {
+      const createdPage = currentPage;
+      const { scope, ...toolValues } = values;
+      tools.generate(toolId, {
+        scope: scope === "Whole document" ? "document" : "page",
+        pageNumber: createdPage + 1,
+        pageText: pages[createdPage]?.text || "",
+        values: toolValues,
+      }).then((r) => {
+        openResultTab(toolId, values, createdPage, toTabContent(toolId, r));
+        done();
+      }).catch((e) => fail?.(e?.message || "Couldn't build that — try again."));
+      return;
+    }
     // Derive the result from the page's real text up front, so the content
     // is stable for the life of the tab (Fortizo stored its mock the same way).
     const derived = deriveToolContent(toolId, { pages, createdPage: currentPage, values, topic: docTitle, subject: sourceName, pageBlocks });
@@ -1575,7 +1642,7 @@ export default function SessionReaderModal({
                 <div className="sreader-menu absolute right-0 top-full mt-2 w-72 rounded-lg z-50 overflow-hidden" style={{ maxHeight: "70vh", overflowY: "auto" }}>
                   {formTool ? (
                     <div className="p-3">
-                      <CreationForm toolId={formTool} initialFocus={prefillFocus} onBack={() => setFormTool(null)} onSubmit={handleFormSubmit}/>
+                      <CreationForm key={formTool} toolId={formTool} initialFocus={prefillFocus} onBack={() => setFormTool(null)} onSubmit={handleFormSubmit} withScope={!!tools && SERVER_TOOLS.has(formTool)}/>
                     </div>
                   ) : (
                     <GenerateGrid onPick={handleToolPick} discussion={discussion} askEnabled={!!ask}/>

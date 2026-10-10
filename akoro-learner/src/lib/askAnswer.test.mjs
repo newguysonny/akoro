@@ -60,3 +60,18 @@ test('the teaching session sends the document and its protégé cites into the r
   assert.match(blocks, /block\.citations\?\.length\s+\? <CitedText/, 'only cited protégé messages get chips');
   assert.match(reader, /if \(jumpTo\?\.cite\) citeJump\(jumpTo\.cite\);/);
 });
+
+test('the reader generates Summary / Quiz / Flashcards for real when the opener can', async () => {
+  const reader = await readFile(new URL('../components/teaching/SessionReaderModal.jsx', import.meta.url), 'utf8');
+  const session = await readFile(new URL('../components/library/RecordTeachSession.jsx', import.meta.url), 'utf8');
+  const api = await readFile(new URL('../services/recordsApi.js', import.meta.url), 'utf8');
+  assert.match(reader, /const SERVER_TOOLS = new Set\(\["summary", "quiz", "flashcards"\]\)/);
+  assert.match(reader, /if \(tools && SERVER_TOOLS\.has\(toolId\)\) \{/);
+  assert.match(reader, /scope: scope === "Whole document" \? "document" : "page"/);
+  assert.match(reader, /\.catch\(\(e\) => fail\?\.\(e\?\.message/, 'a failure keeps the form open with the reason');
+  assert.match(reader, /const cite = \(c\) => \(c \? \{ \.\.\.toReaderCite\(c\), quote: c\.quote \} : null\)/, 'server citations map to the jump shape');
+  assert.match(reader, /q\.explanation &&/, 'quiz answers explain themselves');
+  assert.match(reader, /const cardCite = card\.cite \|\| sentenceCiteFor/);
+  assert.match(session, /generate: \(tool, args\) => generateRecordTool\(\{ \.\.\.askTarget, tool, \.\.\.args \}\)/);
+  assert.match(api, /apiPost\(`\/api\/records\/tools\/\$\{encodeURIComponent\(tool\)\}`/);
+});
