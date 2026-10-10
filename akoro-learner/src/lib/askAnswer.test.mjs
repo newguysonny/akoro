@@ -45,3 +45,18 @@ test('the reader wires Ask: tool, tab kept mounted, selection pin, seek for reco
   assert.match(session, /record\?\.contentKey\s*\? \{ contentKey: record\.contentKey \}/, 'shared files ask by content key');
   assert.match(modal, /ask: content\.ask \|\| null/);
 });
+
+test('the teaching session sends the document and its protégé cites into the reader', async () => {
+  const session = await readFile(new URL('../components/library/RecordTeachSession.jsx', import.meta.url), 'utf8');
+  const modal = await readFile(new URL('../components/teaching/TeachAgentModal.jsx', import.meta.url), 'utf8');
+  const chat = await readFile(new URL('../components/teaching/SessionChatView.jsx', import.meta.url), 'utf8');
+  const blocks = await readFile(new URL('../components/sessions/BlockRenderer.jsx', import.meta.url), 'utf8');
+  const reader = await readFile(new URL('../components/teaching/SessionReaderModal.jsx', import.meta.url), 'utf8');
+  assert.match(session, /\.\.\.\(askTarget \? \{ document: askTarget \} : \{\}\)/, 'the record session passes its document');
+  assert.match(modal, /document:\s+config\?\.document \|\| null/, 'and the socket start carries it');
+  assert.match(modal, /onCite=\{content \? jumpToCitation : null\}/);
+  assert.match(modal, /const closeReader\s+= \(\) => \{ setReaderOpen\(false\); setReaderJump\(null\); \}/, 'closing clears a pending jump');
+  assert.match(chat, /onCite=\{onCite\}/);
+  assert.match(blocks, /block\.citations\?\.length\s+\? <CitedText/, 'only cited protégé messages get chips');
+  assert.match(reader, /if \(jumpTo\?\.cite\) citeJump\(jumpTo\.cite\);/);
+});

@@ -21,6 +21,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const source = await readFile(new URL("./routes.js", import.meta.url), "utf8");
+const accessSrc = await readFile(new URL("./access.js", import.meta.url), "utf8");   // the premium helper moved here
 
 const LIST_START = 'router.get("/discover"';
 const OPEN_START = 'router.get("/discover/:id/open"';
@@ -41,10 +42,7 @@ test("the feed list excludes Premium subscribers' uploads", () => {
 });
 
 test("the premium helper targets the paid learner Premium tier's active subscriptions", () => {
-  const helper = source.slice(
-    source.indexOf("async function activePremiumUserIds()"),
-    source.indexOf(LIST_START),
-  );
+  const helper = accessSrc.slice(accessSrc.indexOf("export async function activePremiumUserIds()"));
   assert.match(helper, /\.eq\("platform", "learner"\)\.eq\("access", "paid"\)\.eq\("name", "Premium"\)/);
   assert.match(helper, /\.eq\("tier_id", tierId\)\.in\("status", \["active", "trial", "trialing"\]\)/);
 });

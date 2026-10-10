@@ -63,9 +63,10 @@ import {
 } from "./avTranscribeLib.js";
 import { indexRecord, indexByContentKey, searchRecordChunks } from "./searchLib.js";
 import {
-  ASK_LIMITS, askTargetForRecord, gatherPassages, buildAskMessages, extractCitations, loadAskHistory, saveAskTurn,
+  ASK_LIMITS, gatherPassages, buildAskMessages, extractCitations, loadAskHistory, saveAskTurn,
 } from "./askLib.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
+import { activePremiumUserIds, resolveContentAccess, resolveAskTargetFor } from "./access.js";
 
 const router = Router();
 
@@ -258,21 +259,6 @@ router.get("/", authenticateToken, asyncHandler(async (req, res) => {
   res200(res, await Promise.all((data || []).map(toApi)));
 }));
 
-/* ── The Contents/Materials discovery feed (Discover hub, higher-ed) ────────
-   Everyone's uploaded material — videos, audio, PDFs, images, text files
-   and pasted notes — discoverable by the whole community, with the one
-   exception the product draws: uploads owned by PREMIUM subscribers never
-   appear (their material stays private to them). */
-async function activePremiumUserIds() {
-  const { data: tierRows } = await edu().from("tiers")
-    .select("id").eq("platform", "learner").eq("access", "paid").eq("name", "Premium").limit(1);
-  const tierId = tierRows?.[0]?.id ?? null;
-  if (!tierId) return [];
-  const { data: subs } = await edu().from("subscriptions")
-    .select("user_id").eq("tier_id", tierId).in("status", ["active", "trial", "trialing"]);
-  return [...new Set((subs || []).map((s) => s.user_id).filter(Boolean))];
-}
-
 // ─── GET /api/records/search?q= — semantic library search ──────────────────
 // Hybrid RRF (vector + lexical) over the learner's OWN chunks — see
 // 2026-record-search.sql. Degrades to lexical-only when embeddings are
@@ -291,6 +277,12 @@ router.get("/search", authenticateToken, asyncHandler(async (req, res) => {
     res200(res, { results: [], query: q, error: "Search is unavailable right now." });
   }
 }));
+
+/* ── The Contents/Materials discovery feed (Discover hub, higher-ed) ────────
+   Everyone's uploaded material — videos, audio, PDFs, images, text files
+   and pasted notes — discoverable by the whole community, with the one
+   exception the product draws: uploads owned by PREMIUM subscribers never
+   appear (their material stays private to them; see access.js). */
 
 // ─── GET /api/records/discover — the feed list ─────────────────────────────
 // METADATA ONLY: browsing the feed costs this API no storage calls — no
@@ -586,29 +578,7 @@ const okExtract = (res, data) => res.json({ success: true, data });
 
 /* recordId | contentKey → { contentKey, name } | { status, message }. */
 async function resolveAiContent(req) {
-  const userId     = req.user.id;
-  const recordId   = String(req.body?.recordId || "");
-  const contentKey = String(req.body?.contentKey || "");
-  if (recordId) {
-    if (!/^[0-9a-f-]{36}$/i.test(recordId)) return { status: 400, message: "A valid recordId is required." };
-    const { data: rec, error } = await edu().from("records")
-      .select("id, user_id, name, mime, file_key").eq("id", recordId).maybeSingle();
-    if (error) throw error;
-    if (!rec || rec.user_id !== userId) return { status: 404, message: "Record not found." };
-    if (!rec.file_key) return { status: 400, message: "This record has no saved file — only its details were captured." };
-    return { contentKey: rec.file_key, name: rec.name, mime: rec.mime };
-  }
-  if (contentKey) {
-    // Shared content — the SAME rule the discovery feed opens under.
-    const { data: rec, error } = await edu().from("records")
-      .select("id, user_id, name, mime, file_key, kind").eq("file_key", contentKey).maybeSingle();
-    if (error) throw error;
-    if (!rec || rec.kind !== "upload") return { status: 404, message: "Content not found." };
-    const premiumIds = await activePremiumUserIds();
-    if (rec.user_id !== userId && premiumIds.includes(rec.user_id)) return { status: 404, message: "Content not found." };
-    return { contentKey, name: rec.name, mime: rec.mime };
-  }
-  return { status: 400, message: "A recordId or contentKey is required." };
+  return resolveContentAccess({ userId: req.user.id, recordId: req.body?.recordId, contentKey: req.body?.contentKey });
 }
 
 /*
@@ -762,28 +732,7 @@ router.get("/extract/content/:key", authenticateToken, asyncHandler(async (req, 
  * chunks answer: { recordId, ownerId, contentKey, name } or { status, message }.
  */
 async function resolveAskTarget(req, src) {
-  const userId     = req.user.id;
-  const recordId   = String(src?.recordId || "");
-  const contentKey = String(src?.contentKey || "");
-  if (recordId) {
-    if (!/^[0-9a-f-]{36}$/i.test(recordId)) return { status: 400, message: "A valid recordId is required." };
-    const { data: rec, error } = await edu().from("records")
-      .select("id, user_id, name, kind, file_key").eq("id", recordId).maybeSingle();
-    if (error) throw error;
-    if (!rec || rec.user_id !== userId) return { status: 404, message: "Record not found." };
-    return askTargetForRecord(rec);
-  }
-  if (contentKey) {
-    const id = await resolveAiContent({ ...req, body: { contentKey } });
-    if (id.status) return id;
-    const { data: rec, error } = await edu().from("records")
-      .select("id, user_id, name, kind, file_key").eq("file_key", contentKey)
-      .order("created_at", { ascending: true }).limit(1).maybeSingle();
-    if (error) throw error;
-    if (!rec) return { status: 404, message: "Content not found." };
-    return askTargetForRecord(rec);
-  }
-  return { status: 400, message: "A recordId or contentKey is required." };
+  return resolveAskTargetFor({ userId: req.user.id, recordId: src?.recordId, contentKey: src?.contentKey });
 }
 
 const cleanSelection = (sel) => {

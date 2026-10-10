@@ -24,6 +24,7 @@ import { decayEngine } from "./agents/student/decayEngine.js";
 import { resolveLadder, provenanceLabel } from "./lessonLadder.js";
 import { NaNaEsumai } from "./agents/nana-esumai/guide.js";
 import { normalizeSessionReference } from "./sessionReference.js";
+import { resolveSessionDocument, groundTurn, citationsForReply } from "./documentGrounding.js";
 import { serialiseTeachingEvidence } from "./teaching-evidence.js";
 import {
   createSessionRecord, ensureSessionRecord, appendSessionBlocks, completeSessionRecord,
@@ -470,6 +471,7 @@ export function setupWebSocket(io) {
       sessionId: prevSessionId,   // for continuation
       notificationId,             // for decay
       reference,                  // compact text returned by /teaching/reference
+      document,                   // { recordId } | { contentKey } — a library document to search per turn
       userId,
     }) => {
       if (!studentId || !topic)
@@ -551,6 +553,11 @@ export function setupWebSocket(io) {
         // Read by initialize() once the ladder is resolved, so the session
         // starts where the last one stopped rather than at step one.
         orchestrator.resumeFrom = resumeFrom;
+        // Whole-document grounding (documentGrounding.js): resolved against
+        // the AUTHENTICATED learner (caller is the token identity) with the
+        // reader's access rule. A promise, so the lesson opening never waits
+        // on it; the first teacher_message does.
+        orchestrator.documentTargetPromise = document ? resolveSessionDocument({ userId: caller, document }) : null;
 
         // Resolve the lesson ladder from the most trustworthy source available
         // (school scheme of work → exam-syllabus grounding → AI). Cached per
@@ -660,6 +667,18 @@ export function setupWebSocket(io) {
         socket.emit("typing_start");
         socket.emit("student_typing", { typing: true });
 
+        // Ground this turn in the document's passages most relevant to what
+        // the learner just said. Best-effort: no target / nothing indexed /
+        // a failure leaves the session's fixed reference in place.
+        let grounding = null;
+        if (orchestrator.documentTargetPromise) {
+          const target = await orchestrator.documentTargetPromise.catch(() => null);
+          grounding = target ? await groundTurn({ target, message }) : null;
+          if (orchestrator.studentAgent) {
+            orchestrator.studentAgent.referenceMaterial = grounding ? grounding.reference : orchestrator.referenceMaterial;
+          }
+        }
+
         const result = await orchestrator.processTeachingMessage(message, {
           onStudentChunk: (token) => socket.emit("student_token",  { token }),
           onStateUpdate:  (state) => socket.emit("state_update",   state),
@@ -674,6 +693,14 @@ export function setupWebSocket(io) {
 
         // Convert result to typed blocks (BlockRenderer-compatible)
         const blocks = resultToTypedBlocks(result, agentPairId);
+        // The [n] the protégé used → page + box (or a moment); the app turns
+        // them into chips that jump the reader. Saved with the block, so a
+        // resumed session keeps them.
+        if (grounding) {
+          const studentBlock = blocks.find((b) => b.type === "student-agent");
+          const citations = studentBlock ? citationsForReply(studentBlock.text, grounding.passages) : [];
+          if (citations.length) studentBlock.citations = citations;
+        }
 
         socket.emit("turn_complete", {
           type:           result.type === "drift_warning" ? "drift_warning" : "teaching_response",
@@ -849,6 +876,8 @@ export function setupWebSocket(io) {
           referenceMaterial: priorOrchestrator?.referenceMaterial || null,
           teachingEvidence: serialiseTeachingEvidence(priorOrchestrator?.teachingEvidence),
         });
+        // The document stays with the session across a guide switch.
+        orchestrator.documentTargetPromise = priorOrchestrator?.documentTargetPromise || null;
         if (priorOrchestrator?.session) {
           orchestrator.resumeFrom = {
             subtopicIdx: priorOrchestrator.session.mustKnowIndex || 0,

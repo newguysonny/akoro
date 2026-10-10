@@ -1046,6 +1046,9 @@ export default function SessionReaderModal({
      the WHOLE document, answered with citations that jump here. Must be a
      stable object (memoized) — the tab loads its thread when it changes. */
   ask = null,
+  /* jumpTo — { cite, key } from the session chat's citation chips: when it
+     changes, the reader jumps there (page + box flash, or a seek). */
+  jumpTo = null,
 }) {
   const isMobile = useIsMobileView();
   const split = !isMobile && !!chatNode;
@@ -1303,6 +1306,12 @@ export default function SessionReaderModal({
       }, 450);
     });
   }
+
+  // A citation chip in the session chat asked for a jump (the reader may
+  // have just opened for it — citeJump waits for the page to lay out).
+  useEffect(() => {
+    if (jumpTo?.cite) citeJump(jumpTo.cite);
+  }, [jumpTo?.key]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   /* text selection popover */
   const closestPage = (node) => {
