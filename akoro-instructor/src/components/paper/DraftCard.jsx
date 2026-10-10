@@ -22,12 +22,12 @@ const fmtDue = (iso) => {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
 };
 
-export default function DraftCard({ preview, state = null, label = 'Preview', onOpen }) {
+export default function DraftCard({ preview, state = null, label = 'Preview', onOpen, onDraft }) {
   const versioned = preview.type === 'assignment' && !!preview.version;
   const [draft, setDraft] = useState(null);
 
   useEffect(() => {
-    if (!versioned || state) return undefined;
+    if (state) return undefined;
     let dead = false;
     const started = Date.now();
     let timer = null;
@@ -35,12 +35,13 @@ export default function DraftCard({ preview, state = null, label = 'Preview', on
       if (dead) return;
       const next = d?.data?.draft ?? d?.draft ?? null;
       setDraft(next);
+      if (next) onDraft?.(next);
       const v = (next?.payload?.versions || []).find((x) => x.n === preview.version);
-      if (v?.status === 'drafting' && Date.now() - started < POLL_FOR_MS) timer = setTimeout(look, POLL_MS);
+      if (versioned && v?.status === 'drafting' && Date.now() - started < POLL_FOR_MS) timer = setTimeout(look, POLL_MS);
     }).catch(() => { if (!dead && Date.now() - started < POLL_FOR_MS) timer = setTimeout(look, POLL_MS * 2); });
     look();
     return () => { dead = true; clearTimeout(timer); };
-  }, [preview.id, preview.version, versioned, state]);
+  }, [preview.id, preview.version, versioned, state]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const v = (draft?.payload?.versions || []).find((x) => x.n === preview.version);
   const due = draft?.payload?.due_at ? fmtDue(draft.payload.due_at) : draft?.payload?.due_hint || '';
