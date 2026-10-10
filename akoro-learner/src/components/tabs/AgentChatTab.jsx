@@ -1052,11 +1052,14 @@ function AgentChatTab({
               ):(
                 <div style={{ textAlign:"center",padding:"28px 16px",color:"var(--ak-text-muted)" }}><Icon name="ti-message-circle" size={34} color="var(--ak-text-muted)" style={{opacity:.3}}/><p style={{ fontSize:12.5,fontWeight:700,marginTop:8 }}>{t('agent.no_chats')}</p></div>
               )
-            ):sessions.map((s, idx)=>{
+            ):sessions.map((s)=>{
               const active=s.id===sessionId;
-              const openUp=idx>=sessions.length-2;   // bottom rows open upward so the menu never clips
+              // The options menu opens IN the list, under its row — never floated
+              // above or below it, where the scrolling list clipped it (a short
+              // list on a phone cut the menu off entirely).
               return (
-                <div key={s.id} onClick={()=>openSession(s.id)} style={{ position:"relative",display:"flex",alignItems:"center",gap:8,padding:"10px 10px",borderRadius:10,cursor:renamingId===s.id?"default":"pointer",background:active?`${BRAND}12`:"transparent",border:`1px solid ${active?`${BRAND}30`:"transparent"}`,marginBottom:2 }}>
+                <div key={s.id} style={{ marginBottom:2 }}>
+                <div onClick={()=>openSession(s.id)} style={{ display:"flex",alignItems:"center",gap:8,padding:"10px 10px",borderRadius:10,cursor:renamingId===s.id?"default":"pointer",background:active?`${BRAND}12`:"transparent",border:`1px solid ${active?`${BRAND}30`:"transparent"}` }}>
                   {renamingId===s.id?(
                     <div data-session-menu onClick={(e)=>e.stopPropagation()} style={{ display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0 }}>
                       <input autoFocus value={renameDraft} onChange={(e)=>setRenameDraft(e.target.value)}
@@ -1077,14 +1080,15 @@ function AgentChatTab({
                       </button>
                     </>
                   )}
+                </div>
                   {menuFor===s.id&&renamingId!==s.id&&(
-                    <div data-session-menu onClick={(e)=>e.stopPropagation()} style={{ position:"absolute",right:6,top:openUp?undefined:46,bottom:openUp?46:undefined,width:154,background:"var(--ak-surface)",border:"1px solid var(--ak-border2)",borderRadius:12,boxShadow:"0 10px 30px rgba(15,23,42,.18)",padding:4,zIndex:60,animation:"drawer-in .16s ease" }}>
+                    <div data-session-menu role="menu" aria-label="Chat options" onClick={(e)=>e.stopPropagation()} style={{ margin:"4px 4px 8px",background:"var(--ak-surface)",border:"1px solid var(--ak-border2)",borderRadius:12,boxShadow:"0 6px 18px rgba(15,23,42,.14)",padding:4,animation:"drawer-in .16s ease" }}>
                       {[
                         { key:"copy",   icon:copiedId===s.id?"ti-check":"ti-copy",  label:copiedId===s.id?"Copied":"Copy chat", color:copiedId===s.id?GREEN:"var(--ak-text)", run:()=>{ setMenuFor(null); copySession(s); } },
                         { key:"rename", icon:"ti-pencil", label:"Rename", color:"var(--ak-text)", run:()=>{ setMenuFor(null); setRenamingId(s.id); setRenameDraft(s.title||""); } },
                         { key:"delete", icon:"ti-trash",  label:"Delete", color:RED, run:(e)=>{ setMenuFor(null); removeSession(s.id,e); } },
                       ].map(it=>(
-                        <button key={it.key} type="button" className="ak-sess-menu-item" onClick={(e)=>it.run(e)} style={{ display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 10px",borderRadius:8,border:"none",background:"none",cursor:"pointer",fontFamily:"'Nunito',sans-serif",textAlign:"left" }}>
+                        <button key={it.key} type="button" role="menuitem" className="ak-sess-menu-item" onClick={(e)=>it.run(e)} style={{ display:"flex",alignItems:"center",gap:9,width:"100%",padding:"11px 12px",borderRadius:8,border:"none",background:"none",cursor:"pointer",fontFamily:"'Nunito',sans-serif",textAlign:"left" }}>
                           <Icon name={it.icon} size={14} color={it.color}/>
                           <span style={{ fontSize:12.5,fontWeight:800,color:it.color }}>{it.label}</span>
                         </button>

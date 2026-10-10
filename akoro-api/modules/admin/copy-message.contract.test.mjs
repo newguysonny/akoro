@@ -43,7 +43,10 @@ test("the agent chat drawer's session rows carry a kebab options menu", () => {
   assert.match(learnerTab, /"Rename"/);
   assert.match(learnerTab, /"Delete"/);
   assert.match(learnerTab, /data-session-menu/, "menu + kebab share the outside-click guard");
-  assert.match(learnerTab, /openUp=idx>=sessions\.length-2/, "bottom rows open the menu upward so it never clips");
+  // The menu opens IN the list under its row — floated up or down, the
+  // scrolling list clipped it (one chat on a phone cut it off entirely).
+  assert.doesNotMatch(learnerTab, /openUp/, "no floating menu to clip");
+  assert.match(learnerTab, /<div data-session-menu role="menu" aria-label="Chat options" onClick=\{\(e\)=>e\.stopPropagation\(\)\} style=\{\{ margin:"4px 4px 8px"/);
 });
 
 test("the drawer's menu copies a WHOLE session for research", () => {
