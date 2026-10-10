@@ -309,7 +309,8 @@ export async function dailyRanking(meId, subject, day = lagosDay()) {
   if (!ids.length) return { day, subject: subj, status, players: 0, top: [], me: null };
   const { data } = await db.from("battle_participants").select("user_id, score, correct_answers, hp, joined_at, declined_at, role")
     .in("battle_id", ids).limit(2000);
-  const rows = (data || []).filter((r) => r.role !== "teacher" && r.joined_at && !r.declined_at)
+  // No HP, no ranking: an agent knocked out of its heat watched the rest.
+  const rows = (data || []).filter((r) => r.role !== "teacher" && r.joined_at && !r.declined_at && (r.hp ?? 100) > 0)
     .sort((a, b) => (b.correct_answers ?? b.score ?? 0) - (a.correct_answers ?? a.score ?? 0) || (b.hp ?? 0) - (a.hp ?? 0));
   const total = heats[0]?.total_questions ?? DAILY_Q;
   const top = rows.slice(0, 20);

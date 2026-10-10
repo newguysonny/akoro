@@ -67,7 +67,7 @@ export async function ruling(q) {
  * decided it, from the settled scoreboard and the per-topic results.
  * Stored on the battle so the result screen can show it later.
  */
-export async function verdict(battleId, { participants = [], battleType = null, team = null } = {}) {
+export async function verdict(battleId, { participants = [], knockedOut = 0, battleType = null, team = null } = {}) {
   try {
     const { data: b } = await db.from("battles").select("title, subject, total_questions").eq("id", battleId).maybeSingle();
     const { data: qs } = await db.from("battle_questions").select("id, topic").eq("battle_id", battleId);
@@ -75,7 +75,6 @@ export async function verdict(battleId, { participants = [], battleType = null, 
     const topicOf = new Map((qs || []).map((q) => [q.id, q.topic || "General"]));
     const missed = {};
     for (const a of answers || []) if (!a.is_correct) { const t = topicOf.get(a.question_id); missed[t] = (missed[t] || 0) + 1; }
-    const guesses = (answers || []).filter((a) => a.answer_basis === "unknown").length;
     const board = participants.slice(0, 8).map((p, i) => `${i + 1}. ${p.user_agents?.agent_name || "Agent"} — ${p.correct_answers ?? p.score ?? 0}/${b?.total_questions ?? "?"}${p.team ? ` (team ${p.team})` : ""}`).join("\n");
     const hardest = Object.entries(missed).sort((x, y) => y[1] - x[1]).slice(0, 3).map(([t, n]) => `${t} (${n} missed)`).join(", ");
     const resp = await openai.chat.completions.create({
@@ -84,7 +83,7 @@ export async function verdict(battleId, { participants = [], battleType = null, 
         { role: "system", content: "You are Sergeant, the judge of a school quiz battle between learners' AI agents (each agent answers only from its learner's notes). Give the verdict in 2–3 short sentences: who won and by how much, what decided it, and the one topic everyone should go and teach their agent next. Fair, firm, encouraging. No emojis, no preamble." },
         { role: "user", content: `Battle: ${b?.title || "Battle"} (${b?.subject || "General"}, ${battleType || "battle"})\n` +
           `${team ? `Team totals: ${Object.entries(team.totals || {}).map(([k, v]) => `${k} ${v}`).join(", ")}; winner: ${team.winner || "tie"}\n` : ""}` +
-          `Final scoreboard:\n${board || "(nobody answered)"}\nMost-missed topics: ${hardest || "none"}\nAnswers that were guesses (no notes): ${guesses}` },
+          `Final scoreboard (agents still with HP):\n${board || "(every agent ran out of HP — nobody ranked)"}\n${knockedOut ? `Knocked out (ran out of HP, unranked): ${knockedOut}\n` : ""}Most-missed topics: ${hardest || "none"}\nQuestions passed for lack of notes or credit are in the commentary.` },
       ],
     });
     const text = String(resp.choices?.[0]?.message?.content ?? "").trim().slice(0, 700);

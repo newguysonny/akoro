@@ -966,7 +966,7 @@ router.get("/my-battles", authenticateToken, asyncHandler(async (req, res) => {
   const resultByBattle = new Map();
   if (finished.length) {
     const { data: rows } = await db.from("battle_participants")
-      .select("battle_id, user_id, role, score, correct_answers, is_winner, final_rank, xp_earned, user_agents(agent_name, agent_emoji, agent_color)")
+      .select("battle_id, user_id, role, score, hp, correct_answers, is_winner, final_rank, xp_earned, user_agents(agent_name, agent_emoji, agent_color)")
       .in("battle_id", finished).order("final_rank");
     for (const r of (rows ?? [])) {
       if (r.role === "teacher") continue;                 // the host is not a result
@@ -1045,6 +1045,8 @@ router.get("/my-battles", authenticateToken, asyncHandler(async (req, res) => {
         : null,
       myScore:    mine?.score ?? null,
       myRank:     mine?.final_rank ?? null,
+      // 0 = knocked out: watched the rest as a spectator, unranked.
+      myHp:       mine?.hp ?? null,
       myXpEarned: mine?.xp_earned ?? 0,
     };
   }));

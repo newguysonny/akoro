@@ -37,7 +37,18 @@ test("Sergeant judges for free: every judge call is the platform's, and a review
   assert.doesNotMatch(judge, /is_correct:/);
 });
 
-test("a battle plays every question: no early end when one agent is left with HP", () => {
-  assert.doesNotMatch(worker, /lastStanding|aliveCount/);
-  assert.match(worker, /if \(questionOrder >= \(battleInfo\?\.total_questions \?\? 0\)\) \{\s*await battleQueue\.add\("end-battle"/);
+test("to answer an agent needs HP, token credit and knowledge — otherwise no answer, never a guess", async () => {
+  const player = await read("./agentPlayer.js");
+  assert.doesNotMatch(worker, /guess\(options\.length\)/);
+  assert.match(worker, /if \(\(p\.hp \?\? 100\) <= 0\) return;/);                         // spectator
+  assert.match(worker, /if \(broke \|\| picked == null\) \{[\s\S]*?"no_answer"/);
+  assert.match(player, /battle\.battle_type === "review" \|\| \(p\.hp \?\? 100\) > 0/);      // no HP, not scheduled to answer
+});
+
+test("no HP, no ranking; the battle runs every question while anyone can still answer", () => {
+  assert.match(worker, /const ranked = participants\.filter\(alive\);/);
+  assert.match(worker, /computeXpDistribution\(ranked, pool \?\? 0\)/);
+  assert.match(worker, /final_rank: r == null \? null :/);
+  assert.match(worker, /if \(questionOrder >= \(battleInfo\?\.total_questions \?\? 0\) \|\| stillIn === 0\) \{/);
+  assert.doesNotMatch(worker, /lastStanding/);
 });

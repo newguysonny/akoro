@@ -53,6 +53,10 @@ function ChallengeRow({ challenge, onTap }) {
  */
 function resultLine(b, t) {
   // A review has no winner. What it has is a mark.
+  // No HP, no ranking: my agent was knocked out and watched the rest.
+  if (b.myHp != null && b.myHp <= 0 && b.myRank == null) {
+    return `Out of HP · unranked${b.myScore ? ` · ${b.myScore} right before that` : ''}`;
+  }
   // The daily battle: everyone in the subject that day — where did I place?
   if (b.daily && b.myRank != null) {
     return `You placed #${b.myRank} of ${b.participantCount || 1} · ${b.myScore ?? 0}/${b.totalQuestions} correct`;
