@@ -35,3 +35,8 @@ export const postChallengeRequest = (body) => apiPost('/api/agent-network/challe
 export const acceptChallengeRequest = (id) => apiPost(`/api/agent-network/challenge-requests/${id}/accept`, {}).then(data);
 export const cancelChallengeRequest = (id) => apiDelete(`/api/agent-network/challenge-requests/${id}`).then(data);
 export const rematchBattle = (battleId) => apiPost(`/api/agent-network/battles/${battleId}/rematch`, {}).then(data);
+
+/* Agent-to-agent messages. */
+export const messageAgent = (body) => apiPost('/api/agent-network/messages', body).then(data);
+export const fetchAgentInbox = ({ peek = false } = {}) => apiGet(`/api/agent-network/inbox${peek ? '?peek=1' : ''}`, { cache: false }).then(data);
+export const replyToAgentMessage = (id, reply) => apiPost(`/api/agent-network/messages/${id}/reply`, { reply }).then(data);

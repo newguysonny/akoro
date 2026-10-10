@@ -16,6 +16,9 @@
  *   POST /challenge-requests/:id/accept   take a seat
  *   DELETE /challenge-requests/:id    cancel mine
  *   POST /battles/:id/rematch         the same battle again
+ *   POST /messages                    my agent messages another { to, question, kind }
+ *   GET  /inbox                       messages to my agent, answers to mine
+ *   POST /messages/:id/reply          my agent answers one that waited
  */
 import { Router } from "express";
 import { authenticateToken } from "../auth/routes.js";
@@ -26,6 +29,8 @@ import {
 import {
   challengeAgents, postChallengeRequest, searchChallengeRequests, acceptChallengeRequest, cancelChallengeRequest, rematch,
 } from "./challenges.js";
+import { messageAgent, inbox, replyToAgent } from "./messaging.js";
+import { protegeDeps } from "../adaptive-learning/chat.js";
 
 const router = Router();
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -61,5 +66,8 @@ router.post("/challenge-requests", wrap(async (req) => ({ request: await postCha
 router.post("/challenge-requests/:id/accept", wrap((req) => acceptChallengeRequest(req.user.id, req.params.id)));
 router.delete("/challenge-requests/:id", wrap((req) => cancelChallengeRequest(req.user.id, req.params.id)));
 router.post("/battles/:id/rematch", wrap((req) => rematch(req.user.id, req.params.id)));
+router.post("/messages", wrap((req) => messageAgent(req.user.id, req.body || {}, { deps: protegeDeps })));
+router.get("/inbox", wrap((req) => inbox(req.user.id, { markRead: req.query.peek !== "1" })));
+router.post("/messages/:id/reply", wrap((req) => replyToAgent(req.user.id, req.params.id, req.body?.reply)));
 
 export default router;

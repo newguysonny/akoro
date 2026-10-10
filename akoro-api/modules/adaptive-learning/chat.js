@@ -40,6 +40,7 @@ import config from "../../config/index.js";
 import { consultPeerAgents, PEER_QUESTION_MIN, PEER_QUESTION_MAX } from "./peerConsult.js";
 import { searchAgents, saveSettings as saveAgentNetworkSettings, block as blockAgent, report as reportAgent, logPastQuestions, pastQuestionSummary } from "../agent-network/network.js";
 import { challengeAgents, postChallengeRequest, searchChallengeRequests, acceptChallengeRequest, cancelChallengeRequest, rematch } from "../agent-network/challenges.js";
+import { messageAgent, inbox as agentInbox, replyToAgent, consultOnlineAgents, inboxBrief } from "../agent-network/messaging.js";
 import { searchBlogPosts, readBlogPost, BLOG_SEARCH_MAX_RESULTS } from "./blogResearch.js";
 import { listGoals, createGoal, updateGoal } from "../learner-goals/service.js";
 import { listMyBlogs, createBlogPost, updateBlogPost } from "../blogs/service.js";
@@ -516,6 +517,36 @@ export const CHAT_TOOLS = [
     featureGate: "agent_network",
     description: "Challenge the same agents to the same battle again (a finished battle's id, e.g. from find_battles or the learner's last battle) — ONLY when the learner asks for a rematch.",
     input_schema: { type: "object", properties: { battleId: { type: "string" } }, required: ["battleId"] },
+  },
+  {
+    name: "message_agent",
+    featureGate: "agent_network",
+    description: "Message another learner's agent — ALWAYS find them with search_agents first. kind 'consult' asks a question: if that agent is ONLINE it answers now, " +
+      "only from what its own learner taught it; if OFFLINE the question waits in its inbox and the answer comes later (check_agent_inbox). kind 'suggestion' leaves an idea. " +
+      "Use when the learner asks you to ask / tell another agent something, or for ideas from a specific agent. No contact details, links or personal info — they're blocked. " +
+      "Pass on an answer as coming from that learner's agent, by name.",
+    input_schema: {
+      type: "object",
+      properties: {
+        to: { type: "string", description: "The other learner's userId or @username (from search_agents)." },
+        question: { type: "string", description: "The message, 10–400 characters." },
+        kind: { type: "string", enum: ["consult", "suggestion"] },
+        subject: { type: "string" }, topic: { type: "string" },
+      },
+      required: ["to", "question"],
+    },
+  },
+  {
+    name: "check_agent_inbox",
+    featureGate: "agent_network",
+    description: "Open this agent's inbox: questions and ideas from other learners' agents (and how you answered), plus answers to questions you asked earlier. Marks them read.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "reply_to_agent",
+    featureGate: "agent_network",
+    description: "Answer a question another agent left in your inbox (messageId from check_agent_inbox) — write it with the learner, only from what they taught you. ONLY when the learner agrees to reply.",
+    input_schema: { type: "object", properties: { messageId: { type: "string" }, reply: { type: "string" } }, required: ["messageId", "reply"] },
   },
   {
     name: "ask_to_be_taught",
@@ -1486,6 +1517,13 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         return clarify("question", "Keep peer questions general — no contact details (emails, phone numbers or invite links) travel to other agents.", { action: "consult_peer_agents" });
       }
       try {
+        // Real agents first: up to two ONLINE agents answer from what their
+        // own learners taught them (the asker pays). Nobody online → the
+        // simulated peer ideas, as before.
+        if (agentNetworkEnabled) {
+          const live = await consultOnlineAgents(studentId, question, { topic: input?.topic || null, deps: protegeDeps }).catch(() => null);
+          if (live?.consulted) return { ...live, note: "These are real learners' agents online now — say each reply comes from that learner's agent, by name." };
+        }
         const consult = await consultPeerAgents({
           userId: studentId, question,
           topic: input?.topic,
@@ -1825,6 +1863,21 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       if (!input?.battleId) return clarify("battleId", "Which battle should I rematch?");
       try { const b = await rematch(studentId, input.battleId); return { rematch: true, battleId: b.battleId, invited: b.invited.length }; }
       catch (e) { return { rematch: false, error: e.message }; }
+    }
+    case "message_agent": {
+      if (role === "instructor") return { error: "The agent network is for learners." };
+      if (!input?.to) return clarify("to", "Which agent should I message? I can find them first.");
+      try { return { sent: true, ...(await messageAgent(studentId, input, { deps: protegeDeps })) }; }
+      catch (e) { return { sent: false, error: e.message }; }
+    }
+    case "check_agent_inbox": {
+      if (role === "instructor") return { error: "The agent network is for learners." };
+      return await agentInbox(studentId);
+    }
+    case "reply_to_agent": {
+      if (!input?.messageId) return clarify("messageId", "Which message should I answer? I'll open the inbox first.");
+      try { return await replyToAgent(studentId, input.messageId, input.reply); }
+      catch (e) { return { replied: false, error: e.message }; }
     }
     case "find_battles": {
       const { data: enrolled } = await db.from("enrollments")
@@ -3487,6 +3540,8 @@ router.post("/agent", async (req, res) => {
         : Promise.resolve(null),
     ]);
     const protegeCtx = taught ? `\n\n${await loadDoctrine("policies/PROTEGE.md")}${renderTaughtContext(taught)}` : "";
+    // Messages from other learners' agents waiting for this one.
+    const inboxCtx = role === "student" && agentNetworkEnabled ? await inboxBrief(req.user.id).catch(() => "") : "";
 
     let att = { visionParts: [], docContext: "", notes: [] };
     if (Array.isArray(rawAttachments) && rawAttachments.length) {
@@ -3515,7 +3570,7 @@ router.post("/agent", async (req, res) => {
       renderRelevantMemory(relevantMemories) +
       renderScratchpad(conversation?.scratchpad) +
       (goalsCtx || "") +
-      protegeCtx +
+      protegeCtx + inboxCtx +
       (syllabusCtx ? `\n\n${syllabusCtx}` : "") +
       (pastCtx ? `\n\n${pastCtx}` : "") +
       (curriculumCtx ? `\n\n${curriculumCtx}` : "") +
