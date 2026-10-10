@@ -17,7 +17,7 @@ import { useRef, useState } from 'react';
 import { ArrowUp, ArrowDown, ImagePlus, Trash2, Eye, Pencil, Plus } from 'lucide-react';
 import { INK, MUTED, MUTED2, BORDER, WHITE, LIGHT, GREEN, PURPLE, BLUE, RED, FONT } from '../../constants.js';
 import { letterOf, removeRef, imageFileToDataUrl } from '../../lib/paper.js';
-import PaperView, { Figure } from './PaperView.jsx';
+import PaperView, { Figure, FigureSlot } from './PaperView.jsx';
 
 export const MAX_OPTIONS = 5;   // A–E, as on the papers
 
@@ -38,14 +38,14 @@ export function previewDetails({ questions, sections, passages }) {
   return {
     sections, passages,
     questions: (questions || []).map((r) => ({
-      q: r.q, figure: r.figure || undefined, section: r.section, passage: r.passage, max_points: r.max_points,
+      q: r.q, figure: r.figure || undefined, figure_note: r.figure_note || undefined, section: r.section, passage: r.passage, max_points: r.max_points,
       ...(r.kind === 'mcq' ? { options: (r.options || []).map((o) => o || '…'), correct: r.correct } : {}),
     })),
   };
 }
 
-export default function PaperBuilder({ questions, sections, passages, onChange, assignment = false }) {
-  const [view, setView] = useState('edit');      // 'edit' | 'paper'
+export default function PaperBuilder({ questions, sections, passages, onChange, assignment = false, title = '', instructions = '', initialView = 'edit', embedded = false }) {
+  const [view, setView] = useState(initialView);   // 'edit' | 'paper'
   const [showKey, setShowKey] = useState(true);
   const [figErr, setFigErr] = useState({});      // row → message
   const fileRef = useRef(null);
@@ -73,7 +73,7 @@ export default function PaperBuilder({ questions, sections, passages, onChange, 
     setFigErr((m) => ({ ...m, [qi]: '' }));
     try {
       const src = await imageFileToDataUrl(file);
-      setRow(qi, { figure: { src, caption: questions[qi]?.figure?.caption || '' } });
+      setRow(qi, { figure: { src, caption: questions[qi]?.figure?.caption || '' }, figure_note: undefined });
     } catch (err) {
       setFigErr((m) => ({ ...m, [qi]: err?.message || 'Could not add that image.' }));
     }
@@ -93,10 +93,13 @@ export default function PaperBuilder({ questions, sections, passages, onChange, 
 
       {/* Toolbar: Edit | Paper preview, and the paper's furniture */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-        <div style={{ display: 'inline-flex', gap: 2, padding: 2, borderRadius: 10, background: LIGHT, border: `1px solid ${BORDER}` }}>
-          {seg('edit', Pencil, 'Edit')}
-          {seg('paper', Eye, 'Paper preview')}
-        </div>
+        {/* Embedded (a draft version), the host has its own Edit / Paper preview switch. */}
+        {!embedded && (
+          <div style={{ display: 'inline-flex', gap: 2, padding: 2, borderRadius: 10, background: LIGHT, border: `1px solid ${BORDER}` }}>
+            {seg('edit', Pencil, 'Edit')}
+            {seg('paper', Eye, 'Paper preview')}
+          </div>
+        )}
         {view === 'edit' ? (
           <div style={{ display: 'flex', gap: 12, marginLeft: 'auto' }}>
             <button type="button" style={LINK} onClick={() => onChange({ sections: [...sections, { title: sectionName(sections.length), instructions: '' }] })}><Plus size={12} /> Section</button>
@@ -111,7 +114,7 @@ export default function PaperBuilder({ questions, sections, passages, onChange, 
 
       {view === 'paper' ? (
         <>
-          <PaperView details={previewDetails({ questions, sections, passages })} showKey={showKey} />
+          <PaperView details={previewDetails({ questions, sections, passages })} title={title} instructions={instructions} showKey={showKey} />
           <div style={{ fontSize: 10.5, color: MUTED2, marginTop: 6 }}>How the paper reads. Learners answer one question at a time, each with its section's instructions, passage and figure.</div>
         </>
       ) : (
@@ -218,6 +221,12 @@ export default function PaperBuilder({ questions, sections, passages, onChange, 
                           <button type="button" style={{ ...LINK, color: RED }} onClick={() => setRow(qi, { figure: null })}><Trash2 size={12} /> Remove</button>
                         </div>
                         {row.figure.svg && <div style={{ fontSize: 10, color: MUTED2, marginTop: 4 }}>Drawn by the AI — check it matches the question, or replace it with your own image.</div>}
+                      </div>
+                    ) : row.figure_note ? (
+                      <div>
+                        <FigureSlot note={row.figure_note} style={{ margin: '0 0 4px' }} />
+                        <button type="button" style={LINK} onClick={() => pickFigure(qi)}><ImagePlus size={12} /> Upload the figure</button>
+                        <button type="button" style={{ ...LINK, color: MUTED, marginLeft: 12 }} onClick={() => setRow(qi, { figure_note: undefined })}>No figure needed</button>
                       </div>
                     ) : (
                       <button type="button" style={{ ...LINK, color: MUTED }} onClick={() => pickFigure(qi)}><ImagePlus size={12} /> Add figure</button>

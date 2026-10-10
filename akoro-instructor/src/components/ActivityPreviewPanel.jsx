@@ -17,7 +17,9 @@ import {
 } from 'lucide-react';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, RED, FONT } from '../constants.js';
-import { ActivityForm, byKey } from '../pages/ActivitiesPage.jsx';
+import { ActivityForm, byKey, rowsFromQuestions } from '../pages/ActivitiesPage.jsx';
+import DraftVersions, { versionsOf } from './paper/DraftVersions.jsx';
+import { apiPut } from '../services/api.js';
 import BattleForm from './battles/BattleForm.jsx';
 import { useBattlesAPI } from '../hooks/useBattlesAPI.js';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
@@ -33,8 +35,14 @@ const datetimeLocal = (iso) => {
 
 /* The draft payload, shaped for ActivityForm's `initial` — the SAME form the
    workbench renders, prefilled from what the agent prepared. */
-function prefillFrom(payload) {
+function prefillFrom(payload, version = null) {
+  const paper = version?.status === 'ready' ? version.paper : null;
   return {
+    // An assignment's questions come from the version on screen.
+    ...(paper ? {
+      questions: rowsFromQuestions(paper.questions), sections: paper.sections ?? [], passages: paper.passages ?? [],
+      totalPoints: String(version.summary?.totalPoints || ''), aiAutoAllocate: false,
+    } : {}),
     title: payload.title || '',
     subject: payload.subject || 'Basic Science',
     topic: payload.topic || '',
@@ -62,8 +70,11 @@ const Row = ({ label, children }) => (
   </div>
 );
 
-export default function ActivityPreviewPanel({ draftId, revision = 0, onClose, onResolved }) {
+export default function ActivityPreviewPanel({ draftId, revision = 0, initialVersion = null, onClose, onResolved }) {
   const [draft, setDraft] = useState(null);
+  const [vSel, setVSel] = useState(initialVersion);   // the version tab on screen (null = newest)
+  const [vEditing, setVEditing] = useState(false);
+  const [vBusy, setVBusy] = useState(false);
   const [phase, setPhase] = useState('loading');   // loading|ready|editing|assigning|assigned|discarded|error
   const [error, setError] = useState('');
   const [assignedCount, setAssignedCount] = useState(0);
@@ -83,6 +94,36 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, onClose, o
   }, [draftId]);
 
   useEffect(() => { load(); }, [load, revision]);   // revision bumps when the agent revises the draft in chat
+  // A new version made in chat opens on its tab; a card's Preview opens its own.
+  useEffect(() => { setVSel(initialVersion); setVEditing(false); }, [revision, initialVersion, draftId]);
+
+  /* While a version is drafting, look again every few seconds (quietly). */
+  const drafting = versionsOf(draft).some((v) => v.status === 'drafting');
+  useEffect(() => {
+    if (!drafting) return undefined;
+    const t = setInterval(() => {
+      apiGet(`/api/self-study/drafts/${draftId}`).then((d) => { const next = d?.data?.draft ?? d?.draft; if (next) setDraft(next); }).catch(() => {});
+    }, 4000);
+    return () => clearInterval(t);
+  }, [drafting, draftId]);
+
+  const saveVersion = async (n, body) => {
+    setVBusy(true);
+    try {
+      await apiPut(`/api/self-study/drafts/${draftId}/versions/${n}`, body);
+      const d = await apiGet(`/api/self-study/drafts/${draftId}`);
+      setDraft(d?.data?.draft ?? d?.draft ?? draft);
+    } finally { setVBusy(false); }
+  };
+  const retryVersion = async (n) => {
+    setVBusy(true); setError('');
+    try {
+      await apiPost(`/api/self-study/drafts/${draftId}/versions/${n}/retry`, {});
+      const d = await apiGet(`/api/self-study/drafts/${draftId}`);
+      setDraft(d?.data?.draft ?? d?.draft ?? draft);
+    } catch (e) { setError(e?.message || 'Could not retry.'); }
+    finally { setVBusy(false); }
+  };
 
   const markResolved = (state, count = 0) => {
     setAssignedCount(count);
@@ -97,7 +138,7 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, onClose, o
       markResolved('assigned', d?.data?.assigned ?? 0);
     } catch (e) {
       setError(e?.message || 'Could not assign it.');
-      setPhase(overrides ? 'editing' : 'ready');
+      setPhase(overrides && !('version' in overrides) ? 'editing' : 'ready');
     }
   };
 
@@ -168,6 +209,8 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, onClose, o
   const isLive = draft.type === 'live_course';
   const stages = payload.details?.stages || [];
   const audience = draft.audience || {};
+  const versions = versionsOf(draft);
+  const shown = versions.find((v) => v.n === vSel) || versions.at(-1) || null;
 
   if (phase === 'assigned') {
     return (
@@ -227,7 +270,7 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, onClose, o
         <div style={{ flex: 1, overflowY: 'auto', paddingRight: 2 }}>
           <ActivityForm
             type={draft.type}
-            initial={prefillFrom(payload)}
+            initial={prefillFrom(payload, shown)}
             savePayload={(pl) => apiPost(`/api/self-study/drafts/${draftId}/assign`, pl)}
             onAssigned={() => { /* the form shows its own banner; panel flips too */ }}
           />
@@ -285,11 +328,18 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, onClose, o
               <Chip color={GREEN} bg="#DCFCE7">set</Chip>
             </Row>
           )}
-          <Row label="Instructions to learners">{payload.instructions || <span style={{ color: MUTED2 }}>None</span>}</Row>
+          {!versions.length && <Row label="Instructions to learners">{payload.instructions || <span style={{ color: MUTED2 }}>None</span>}</Row>}
+          {versions.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <DraftVersions draft={draft} selected={shown?.n} onSelect={setVSel}
+                onSave={saveVersion} onRetry={retryVersion} busy={vBusy}
+                editing={vEditing} setEditing={setVEditing} />
+            </div>
+          )}
           {isLive && (
             <Row label="Holds on">{payload.details?.scheduled_hint || <span style={{ color: RED }}>Not set yet — add the exact date and time before assigning.</span>}</Row>
           )}
-          {!isLive && !isBattle && (
+          {!isLive && !isBattle && !versions.length && (
             <Row label={meta.planLabel || 'Plan'}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {(payload.subtopics || []).map((st, i) => (
@@ -323,14 +373,20 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, onClose, o
             style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '9px 13px', borderRadius: 11, border: `1px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
             <Trash2 size={13} /> Discard
           </button>
-          {(phase === 'ready') && !isJourney && (
+          {(phase === 'ready') && !isJourney && !vEditing && (!shown || shown.status === 'ready') && (
             <button onClick={() => setPhase('editing')}
+              title={shown ? `Title, due date, who it's for — with Version ${shown.n}'s questions` : undefined}
               style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '9px 13px', borderRadius: 11, border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-              <Pencil size={13} /> Edit
+              <Pencil size={13} /> {shown ? 'Edit details' : 'Edit'}
             </button>
           )}
           <div style={{ flex: 1 }} />
-          <button onClick={() => assign()} disabled={phase === 'assigning'}
+          {shown && (
+            <span style={{ fontSize: 11.5, color: MUTED, fontWeight: 700, fontFamily: FONT, textAlign: 'right' }}>
+              Assigns <b style={{ color: INK }}>Version {shown.n}</b>{audience.label ? <> to {audience.label}</> : null}
+            </span>
+          )}
+          <button onClick={() => assign(shown ? { version: shown.n } : null)} disabled={phase === 'assigning' || vEditing || (shown && shown.status !== 'ready')}
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 11, border: 'none', background: phase === 'assigning' ? BORDER : INK, color: WHITE, fontSize: 12.5, fontWeight: 900, cursor: phase === 'assigning' ? 'wait' : 'pointer', fontFamily: FONT }}>
             {phase === 'assigning' ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Send size={13} />}
             {phase === 'assigning' ? 'Assigning…' : 'Assign'}
