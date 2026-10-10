@@ -840,7 +840,7 @@ function AgentChatTab({
                     </div>
                   )}
                   {msg.text&&(
-                    <div style={{ fontSize:16,lineHeight:1.65,color:"var(--ak-text)",fontWeight:500,wordBreak:"break-word" }}><RichText text={msg.text}/>{msg.phase==="answering"&&<StreamCaret/>}</div>
+                    <div style={{ fontSize:16,lineHeight:1.65,color:"var(--ak-text)",fontWeight:500,wordBreak:"break-word" }}><RichText text={msg.text} size={16} lineHeight={1.65}/>{msg.phase==="answering"&&<StreamCaret/>}</div>
                   )}
                   {/* Not taught yet — the learner can teach it now. */}
                   {msg.teach&&onTeachTopic&&(
