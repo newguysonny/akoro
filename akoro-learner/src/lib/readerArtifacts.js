@@ -6,6 +6,7 @@
  * becomes `content`, and the learner's progress (quiz answers, card index)
  * rides `content.ui`. Annotations and hidden passages are artifacts too.
  */
+import { cleanRects } from './markRects.js';
 
 export const TAB_KINDS = new Set(['summary', 'quiz', 'flashcards', 'notes', 'podcast']);
 const CONTENT_KEYS = ['summaryPoints', 'quizQuestions', 'cardSet', 'notesValue', 'emptyReason', 'podcast', 'podcastBlurb'];
@@ -57,8 +58,10 @@ export function marksFromArtifacts(artifacts) {
     const page = Number.isInteger(a.pageNumber) ? a.pageNumber - 1 : 0;
     const text = String(a.content?.text || '');
     if (!text) continue;
-    if (a.kind === 'annotation') annotations.push({ id: `ann-${a.id}`, artifactId: a.id, page, text, note: String(a.content?.note || '') });
-    if (a.kind === 'redaction') redactions.push({ id: `red-${a.id}`, artifactId: a.id, page, text });
+    // rects: where the mark sits on a drawn page (PDF canvas / image), in percent.
+    const rects = cleanRects(a.content?.rects);
+    if (a.kind === 'annotation') annotations.push({ id: `ann-${a.id}`, artifactId: a.id, page, text, note: String(a.content?.note || ''), rects });
+    if (a.kind === 'redaction') redactions.push({ id: `red-${a.id}`, artifactId: a.id, page, text, rects });
   }
   return { annotations, redactions };
 }

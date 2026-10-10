@@ -162,7 +162,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
   //   content = { state:'loading'|'ready'|'error',
   //               box:{ icon, title, sub }, pct, err,
   //               docTitle, sourceName, media, pages,
-  //               renderPageContent, allowTextMarking }
+  //               renderPageContent }
   // ── Session reader (Fortizo split: reader left, this chat right) ─────────
   // Opened from the book control in the chat composer — or the content box.
   // Mobile gets a full-screen reader modal over the session; desktop/tablet
@@ -922,7 +922,6 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
     onTranscribe: content.onTranscribe || null,
     transcribeState: content.transcribeState || null,
     transcribeError: content.transcribeError || null,
-    allowTextMarking: content.allowTextMarking ?? true,
     // The community discussion attached to this content — every content
     // connected to one of the learner's communities carries its chat
     // into the reader. Null (plain topic sessions) keeps the old reader.

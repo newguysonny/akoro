@@ -49,6 +49,7 @@ import { Icon } from '../common/Icons.jsx';
 import { BRAND } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { rasterizePdfPages, rasterizeImageFile, runRecordExtraction } from './extractPages.js';
+import ImagePage from './ImagePage.jsx';
 import { fetchItemCommunities } from '../../services/communityApi.js';
 
 const MAX_TEXT_CHARS = 500_000;   // a 500k-char text file ≈ 190 reader pages — plenty
@@ -395,15 +396,19 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
         } else if (type === 'image') {
           // An image never carries a text layer — the cache is checked and
           // otherwise the offer overlay goes up over the plain image page.
-          const applyImage = (byPage) => {
+          // Its blocks become a selectable text layer over the picture.
+          const applyImage = (byPage, blocksByPage) => {
             const md = (byPage.get(1) || '').trim();
+            if (blocksByPage instanceof Map) setPdfBlocks(blocksByPage);
             ready([{ html: '', text: md }], null,
               md ? { name: record.name, text: md.slice(0, MAX_REFERENCE_CHARS) } : null);
           };
           const cached = record.contentKey ? await getSharedExtraction(record.contentKey) : await getRecordExtraction(record.id);
           if (cancelled) return;
-          const md = (cached.pages || []).find((p) => p.pageNumber === 1 && (p.markdown || '').trim())?.markdown;
+          const first = (cached.pages || []).find((p) => p.pageNumber === 1 && (p.markdown || '').trim());
+          const md = first?.markdown;
           if (md) {
+            if (Array.isArray(first.blocks) && first.blocks.length) setPdfBlocks(new Map([[1, first.blocks]]));
             ready([{ html: '', text: md }], null, { name: record.name, text: md.slice(0, MAX_REFERENCE_CHARS) });
             return;
           }
@@ -522,7 +527,7 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
       return <PdfCanvas pdf={pdfParts.pdf} pageNumber={i + 1} blocks={pdfBlocks.get(i + 1)}/>;
     }
     if (type === 'image') {
-      return <img src={fileUrl} alt={record.name} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }}/>;
+      return <ImagePage src={fileUrl} alt={record.name} blocks={pdfBlocks.get(1)}/>;
     }
     if (record.kind === 'upload' && record.fileMissing) {
       return (
@@ -576,7 +581,6 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
     pages,
     renderPageContent,
     rawPages: type === 'pdf',   // canvases carry their own margins; images/cards keep the padded card
-    allowTextMarking: type !== 'pdf' && type !== 'image',   // canvases/images can't carry HTML annotate/redact
     // Extraction blocks per page — generated summaries/quiz citations carry
     // the exact block bbox, and citeJump flashes that region on the scan.
     pageBlocks: pages.map((_, i) => pdfBlocks.get(i + 1) || null),
