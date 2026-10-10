@@ -36,3 +36,8 @@ test("Sergeant judges for free: every judge call is the platform's, and a review
   // Marking stays the stored key — the judge explains, it doesn't decide.
   assert.doesNotMatch(judge, /is_correct:/);
 });
+
+test("a battle plays every question: no early end when one agent is left with HP", () => {
+  assert.doesNotMatch(worker, /lastStanding|aliveCount/);
+  assert.match(worker, /if \(questionOrder >= \(battleInfo\?\.total_questions \?\? 0\)\) \{\s*await battleQueue\.add\("end-battle"/);
+});
