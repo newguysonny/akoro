@@ -116,16 +116,18 @@ test("the markdown copy carries the same work for machines — and no answer key
   assert.doesNotMatch(md, /correct/i);
 });
 
-test("routes: sniffed uploads to storage, submit locks after grading and prunes strays, the PDF route is shared", () => {
+test("routes: sniffed uploads to storage, submit locks after grading and after hand-in, the PDF route is shared", () => {
   assert.match(routes, /const sniffed = sniffSubmissionFile\(bytes, clean\);\n  if \(!sniffed\) return bad/);
   assert.match(routes, /storeSubmissionFile\(\{ learnerId: req\.user\.id/);
   assert.match(routes, /if \(target\.grade != null\) return res\.status\(409\)/);
-  assert.match(routes, /stray\.forEach\(\(f\) => void removeSubmissionObject/);
+  assert.match(routes, /This work was already handed in — your teacher has it\./);   // one hand-in only
+  assert.ok(!/const stray = /.test(routes), "every file on the target is handed in — nothing is pruned at submit");
   assert.match(routes, /buildSubmissionArtifacts\(target\.id\)\n    \.then/);
   assert.match(routes, /router\.get\(\/\^\\\/targets\\\/\(\[0-9a-f-\]\{36\}\)\\\/submission\\\.\(pdf\|md\)\$\/i/);
   assert.match(routes, /details:\s+briefForLearner\(a\.details, t\.grade != null\)/);
-  assert.match(routes, /if \(req\.body\.feedback !== undefined\) \{/);               // a score-only publish keeps feedback
+  assert.match(routes, /if \(sentFeedback == null\) \{/);               // a score-only publish keeps feedback
   assert.match(routes, /files:\s+\(filesByTarget\.get\(t\.id\) \?\? \[\]\)\.filter\(\(f\) => handedIn\.has\(f\.id\)\)/);
+  assert.match(routes, /router\.delete\("\/:id\/targets\/:studentId\/grade"/);   // unpublish
   assert.match(migration, /ADD COLUMN IF NOT EXISTS storage_key TEXT/);
   assert.match(migration, /ALTER COLUMN data DROP NOT NULL/);
   assert.match(migration, /ADD COLUMN IF NOT EXISTS submission_pdf JSONB/);

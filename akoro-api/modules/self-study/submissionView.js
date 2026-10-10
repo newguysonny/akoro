@@ -105,7 +105,9 @@ export function cleanQuestionMarks(questions, input) {
     if (!Number.isInteger(i) || i < 0 || i >= (questions || []).length || seen.has(i)) continue;
     seen.add(i);
     const max = questionPoints(questions[i]) ?? 5;
-    const raw = Number(m?.awarded);
+    // Not marked stays not marked (null) — never a silent 0.
+    const given = m?.awarded !== null && m?.awarded !== undefined && String(m.awarded).trim() !== "";
+    const raw = given ? Number(m.awarded) : NaN;
     const awarded = Number.isFinite(raw) ? Math.min(max, Math.max(0, Math.round(raw * 2) / 2)) : null;
     marks.push({ index: i, awarded, max, comment: String(m?.comment ?? "").trim().slice(0, 1000) });
   }

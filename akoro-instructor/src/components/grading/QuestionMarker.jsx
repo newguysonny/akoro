@@ -14,7 +14,7 @@ import { INK, MUTED, MUTED2, BORDER, WHITE, PURPLE, GREEN, RED, FONT } from '../
 import { questionContext, readChoice, letterOf } from '../../lib/paper.js';
 import { MathText, Figure, PassageBox } from '../paper/PaperView.jsx';
 import { FileCard } from '../paper/AnswerPaper.jsx';
-import { openActivityFile } from '../../services/api.js';
+import { openSubmittedFile } from './openFile.js';
 
 const AMBER_TXT = '#B45309';
 const qText = (q) => (typeof q === 'object' && q !== null ? String(q.q ?? '') : String(q ?? ''));
@@ -145,7 +145,7 @@ export default function QuestionMarker({ questions, paper = null, step, setStep,
           : <div style={{ fontSize: 13, color: INK, lineHeight: 1.6, whiteSpace: 'pre-wrap', maxHeight: 220, overflowY: 'auto' }}>{String(raw)}</div>}
         {qFiles.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: answered ? 8 : 0 }}>
-            {qFiles.map((f) => <FileCard key={f.id} file={f} onOpen={(x) => openActivityFile(x.id).catch(() => {})} sans={FONT} />)}
+            {qFiles.map((f) => <FileCard key={f.id} file={f} onOpen={openSubmittedFile} sans={FONT} />)}
           </div>
         )}
       </div>

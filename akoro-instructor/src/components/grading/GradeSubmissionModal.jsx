@@ -29,10 +29,11 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   ArrowLeft, ChevronLeft, ChevronRight, X, Check, Loader2, FileText, PenLine, ExternalLink, Download, AlertTriangle,
 } from 'lucide-react';
-import { apiGet, apiPatch, apiPost, apiPut, apiBlob, downloadActivityFile, openActivityFile, fetchSubmissionPdf } from '../../services/api.js';
+import { apiGet, apiPatch, apiPost, apiPut, apiDelete, apiBlob, downloadActivityFile, openActivityFile, fetchSubmissionPdf } from '../../services/api.js';
 import SubmissionMarkup from './SubmissionMarkup.jsx';
 import QuestionMarker, { QuestionRail, autoMarks, markTotals, pointsOf } from './QuestionMarker.jsx';
-import AnswerPaper, { FileCard } from '../paper/AnswerPaper.jsx';
+import AnswerPaper from '../paper/AnswerPaper.jsx';
+import { openSubmittedFile } from './openFile.js';
 import { Sparkles } from 'lucide-react';
 import { readChoice } from '../../lib/paper.js';
 import { saveDraft, loadDraft, clearDraft } from './gradingDrafts.js';
@@ -151,6 +152,9 @@ function SubmittedPaper({ current, brief, only = null }) {
   );
 }
 
+/* "2 h", "3 days" — how late. */
+const fmtLate = (mins) => (mins < 60 ? `${mins} min` : mins < 48 * 60 ? `${Math.round(mins / 60)} h` : `${Math.round(mins / 1440)} days`);
+
 /* A question paper's answers — the same paper-with-answers the learner
    reviewed and handed in: each answer (typed text, the option it reads as,
    its files) under its question, with the key and the marks so far. The
@@ -159,7 +163,6 @@ function PaperAnswers({ current, brief, marks, focus }) {
   const sub = current.submission ?? {};
   const questions = brief?.details?.questions || [];
   const files = sub.files?.length ? sub.files : (current.files ?? []);
-  const loose = files.filter((f) => f.question == null);
   const first = useRef(true);
   useEffect(() => {
     if (first.current) { first.current = false; return; }
@@ -168,7 +171,7 @@ function PaperAnswers({ current, brief, marks, focus }) {
   const rows = Object.entries(marks || {})
     .filter(([, m]) => m && m.awarded != null && m.awarded !== '')
     .map(([i, m]) => ({ index: Number(i), awarded: m.awarded, max: pointsOf(questions[Number(i)]), comment: m.comment || '' }));
-  const open = (f) => openActivityFile(f.id).catch(() => {});
+  const open = openSubmittedFile;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: .6, color: MUTED2 }}>WHAT THEY SUBMITTED {current.completedAt && <span style={{ fontWeight: 600 }}>· {fmtWhen(current.completedAt)}</span>}</div>
@@ -177,13 +180,8 @@ function PaperAnswers({ current, brief, marks, focus }) {
           <p style={{ margin: 0, fontSize: 13.5, color: INK, lineHeight: 1.65, whiteSpace: 'pre-wrap', fontFamily: FONT }}>{sub.text}</p>
         </div>
       )}
+      {sub.late && <div style={{ alignSelf: 'flex-start', fontSize: 11.5, fontWeight: 800, color: '#B45309', background: '#FEF3C7', borderRadius: 999, padding: '3px 10px' }}>Handed in late{sub.lateByMinutes ? ` · ${fmtLate(sub.lateByMinutes)} after the due date` : ''}</div>}
       <AnswerPaper details={brief.details} title={brief?.title || ''} answers={sub.answers || {}} files={files} marks={rows} showKey label="Answer" onOpenFile={open} sans={FONT} />
-      {loose.length > 0 && (
-        <div>
-          <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: .6, color: MUTED2, marginBottom: 6 }}>ATTACHED TO THE WHOLE ASSIGNMENT</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{loose.map((f) => <FileCard key={f.id} file={f} onOpen={open} sans={FONT} />)}</div>
-        </div>
-      )}
     </div>
   );
 }
@@ -283,10 +281,19 @@ function AiDraftCard({ ai, onApply, onRequest, requesting }) {
 }
 
 export default function GradeSubmissionModal({
-  assignment, students, initialIndex, onClose, onPublished, onMarkup, onAiGrade,
+  assignment, students, initialIndex, onClose, onPublished, onUnpublished, onMarkup, onAiGrade,
 }) {
   /* students: the gradeable queue [{ student:{id,name,username,emoji}, status, completedAt, grade }] */
-  const [index, setIndex] = useState(Math.min(Math.max(initialIndex ?? 0, 0), Math.max(students.length - 1, 0)));
+  // The learner on screen is kept by id, not position: the page re-sorts the
+  // queue after each publish (graded last), so a position would drift.
+  const [sid, setSid] = useState(() => students[Math.min(Math.max(initialIndex ?? 0, 0), Math.max(students.length - 1, 0))]?.student.id ?? null);
+  const found = students.findIndex((st) => st.student.id === sid);
+  const index = found > -1 ? found : 0;
+  const setIndex = (v) => {
+    const i = typeof v === 'function' ? v(index) : v;
+    const st = students[Math.max(0, Math.min(students.length - 1, i))];
+    if (st) setSid(st.student.id);
+  };
   const current = students[index];
   const brief = assignment ?? null;
 
@@ -352,7 +359,9 @@ export default function GradeSubmissionModal({
       await apiPost(`/api/self-study/${brief.id}/targets/${current.student.id}/ai-grade`, {});
       setAi({ status: 'making' });
     } catch (e) {
-      setAi({ status: 'failed', error: e?.message || 'Could not start the draft.' });
+      // 409 = a draft is already on its way (auto-grade after submit): wait for it.
+      if (e?.status === 409 || /already being drafted/i.test(e?.message || '')) setAi({ status: 'making' });
+      else setAi({ status: 'failed', error: e?.message || 'Could not start the draft.' });
     } finally { setAiRequesting(false); }
   };
 
@@ -376,7 +385,9 @@ export default function GradeSubmissionModal({
   /* Resume a draft (or seed from a published grade being revised). */
   useEffect(() => {
     if (!current) return;
-    const draft = loadDraft(brief?.id, current.student.id);
+    const saved = loadDraft(brief?.id, current.student.id);
+    // A grade published after this device's draft (another device, the gradebook) wins.
+    const draft = saved && current.gradedAt && Date.parse(current.gradedAt) > (saved.savedAt || 0) ? null : saved;
     // Question marks: the draft's, else what was published, else the key's.
     const fromRows = (rows) => Object.fromEntries((rows || []).filter((m) => Number.isInteger(m?.index)).map((m) => [m.index, { awarded: m.awarded ?? null, comment: m.comment || '' }]));
     const seeded = draft?.questions?.length ? fromRows(draft.questions)
@@ -390,9 +401,12 @@ export default function GradeSubmissionModal({
       setManualScore(draft.manualScore ?? '');
       setFeedbackText(draft.feedbackText || '');
     } else if (current.grade != null) {
-      // Revising a published grade: start from what was published.
+      // Revising a published grade: start from what was published, in the
+      // mode it was published in (so re-publishing keeps the same score).
       setManualScore(String(current.grade));
-      setMode(current.feedbackQuestions?.length ? 'questions' : 'manual');
+      const was = current.feedbackMode || (current.feedbackQuestions?.some((m) => m.awarded != null) ? 'questions' : 'manual');
+      setMode(was === 'rubric' && !(current.feedbackRubric || []).length ? 'manual' : was);
+      setRubric(RUBRIC.map((r) => (current.feedbackRubric || []).find((x) => x.name === r.name)?.level ?? null));
       setFeedbackText(current.feedbackText || '');
     } else {
       setMode(hasQuestions ? 'questions' : 'rubric'); setRubric(RUBRIC.map(() => null)); setManualScore(''); setFeedbackText('');
@@ -499,7 +513,9 @@ export default function GradeSubmissionModal({
           rubric: mode === 'rubric' ? RUBRIC.map((r, i) => ({ name: r.name, max: r.max, level: rubric[i] })) : [],
           // Each question's mark and comment (the learner sees them under
           // each question, and on the marked copy's grade page).
-          questions: hasQuestions ? qList.map((qq, i) => ({ index: i, awarded: qMarks[i]?.awarded ?? null, max: pointsOf(qq), comment: qMarks[i]?.comment || '' })) : [],
+          // Questions not marked (rubric / score modes) are left out, never sent as 0.
+          questions: hasQuestions ? qList.map((qq, i) => ({ index: i, awarded: qMarks[i]?.awarded ?? null, max: pointsOf(qq), comment: qMarks[i]?.comment || '' }))
+            .filter((m) => (m.awarded != null && m.awarded !== '') || m.comment.trim()) : [],
         },
       });
       clearDraft(brief.id, current.student.id);
@@ -507,9 +523,26 @@ export default function GradeSubmissionModal({
       // the page folds in keeps everyone else's grade valid here).
       const nextIdx = students.findIndex((st, i) => i > index && st.grade == null);
       if (nextIdx > -1) setIndex(nextIdx);
-      onPublished?.(current.student.id, finalScore);
+      onPublished?.(current.student.id, finalScore, {
+        text: feedbackText, mode,
+        rubric: mode === 'rubric' ? RUBRIC.map((r, i) => ({ name: r.name, max: r.max, level: rubric[i] })) : [],
+        questions: hasQuestions ? qList.map((qq, i) => ({ index: i, awarded: qMarks[i]?.awarded ?? null, max: pointsOf(qq), comment: qMarks[i]?.comment || '' })).filter((m) => m.awarded != null || m.comment) : [],
+      });
     } catch (e) {
       setError(e?.message || 'Could not publish — the draft is saved, try again.');
+    } finally { setPublishing(false); }
+  };
+
+  const unpublish = async () => {
+    if (publishing || !window.confirm(`Take back ${current.student.name}'s grade? They stop seeing it; your marks stay here as a draft.`)) return;
+    setPublishing(true); setError('');
+    try {
+      await apiDelete(`/api/self-study/${brief.id}/targets/${current.student.id}/grade`);
+      // Keep what was published as this device's draft, to re-publish later.
+      touch({});
+      onUnpublished?.(current.student.id);
+    } catch (e) {
+      setError(e?.message || 'Could not unpublish — try again.');
     } finally { setPublishing(false); }
   };
 
@@ -559,6 +592,12 @@ export default function GradeSubmissionModal({
             {published ? `Graded · ${current.grade}%` : 'Ungraded'}
           </span>
 
+          {published && (
+            <button onClick={unpublish} disabled={publishing} title="Take the grade back — the learner stops seeing it; your marks stay as a draft"
+              style={{ padding: '8px 12px', borderRadius: 10, border: `1px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12.5, fontWeight: 800, fontFamily: FONT, cursor: publishing ? 'default' : 'pointer' }}>
+              Unpublish
+            </button>
+          )}
           <button onClick={publish} disabled={finalScore == null || publishing}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 10, border: 'none', cursor: finalScore == null ? 'not-allowed' : 'pointer', background: finalScore == null ? BORDER : PURPLE, color: WHITE, fontSize: 13, fontWeight: 800, fontFamily: FONT, opacity: finalScore == null ? .75 : 1 }}>
             {publishing ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Check size={13} />}
@@ -640,11 +679,13 @@ export default function GradeSubmissionModal({
             <div style={{ padding: '16px 18px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
               {hasQuestions && <QuestionRail questions={qList} step={step} setStep={goStep} marks={qMarks} />}
 
+              {/* The AI draft is offered on every step, not only Review. */}
+              {submitted && <AiDraftCard ai={ai} onApply={applyAi} onRequest={requestAi} requesting={aiRequesting} />}
+
               {hasQuestions && step < qList.length ? (
                 <QuestionMarker questions={qList} paper={brief?.details} step={step} setStep={goStep} marks={qMarks} setMark={setMark}
                   answers={current.submission?.answers || {}} files={current.submission?.files || current.files || []} ai={ai} />
               ) : (<>
-              {submitted && <AiDraftCard ai={ai} onApply={applyAi} onRequest={requestAi} requesting={aiRequesting} />}
 
               {/* Review: every question's mark at a glance (tap to change one) */}
               {hasQuestions && (

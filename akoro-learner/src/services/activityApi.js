@@ -14,7 +14,7 @@
  * renders either way, and the cards appear the day the data exists without
  * any page changes.
  */
-import { apiGet, apiPost, apiPut, apiDelete, API } from './api.js';
+import { apiGet, apiPost, apiPut, apiDelete, API, refreshSession } from './api.js';
 
 /* Self study — what I, a learner, have been assigned. */
 async function fetchSelfStudy() {
@@ -114,6 +114,22 @@ export async function completeActivity(assignmentId, work = {}) {
   return d?.data ?? null;
 }
 
+/* A file fetch that survives an expired sign-in: refresh once, then retry. */
+async function authFetch(url) {
+  let r = await fetch(url, { credentials: 'include' });
+  if (r.status === 401) {
+    try { await refreshSession(); } catch { return r; }
+    r = await fetch(url, { credentials: 'include' });
+  }
+  return r;
+}
+
+/* The written answer of work without questions (autosaved; follows the learner). */
+export async function saveActivityText(assignmentId, text) {
+  const d = await apiPut(`/api/self-study/${assignmentId}/draft-text`, { text });
+  return d?.data ?? null;
+}
+
 /* Submit ONE question's answer (saved on the server; null clears it). */
 export async function saveActivityAnswer(assignmentId, index, value) {
   const d = await apiPut(`/api/self-study/${assignmentId}/draft/${index}`, { value });
@@ -149,7 +165,7 @@ export async function removeActivityFile(fileId) {
 /* Save my whole submission as one PDF — the copy my teacher grades, or
    (marked: true) the marked copy they sent back with my grade. */
 export async function downloadMySubmissionPdf(targetId, title, { marked = false } = {}) {
-  const r = await fetch(`${API}/api/self-study/targets/${targetId}/${marked ? 'marked' : 'submission'}.pdf?download=1`, { credentials: 'include' });
+  const r = await authFetch(`${API}/api/self-study/targets/${targetId}/${marked ? 'marked' : 'submission'}.pdf?download=1`);
   if (!r.ok) throw new Error('Could not get the PDF — try again in a moment.');
   const url = URL.createObjectURL(await r.blob());
   const a = document.createElement('a');
@@ -165,7 +181,7 @@ export async function downloadMySubmissionPdf(targetId, title, { marked = false 
    <a href> cannot carry it cross-origin — fetch the blob, then hand it to
    the browser as an object URL. */
 export async function downloadActivityFile(fileId, name) {
-  const r = await fetch(`${API}/api/self-study/files/${fileId}`, { credentials: 'include' });
+  const r = await authFetch(`${API}/api/self-study/files/${fileId}`);
   if (!r.ok) throw new Error('Could not fetch that file.');
   const blob = await r.blob();
   const url = URL.createObjectURL(blob);
@@ -180,7 +196,7 @@ export async function downloadActivityFile(fileId, name) {
 
 /* One of my files as bytes — the document editor reopens a saved .docx. */
 export async function fetchActivityFileBlob(fileId) {
-  const r = await fetch(`${API}/api/self-study/files/${fileId}`, { credentials: 'include' });
+  const r = await authFetch(`${API}/api/self-study/files/${fileId}`);
   if (!r.ok) throw new Error('Could not open that file.');
   return r.blob();
 }

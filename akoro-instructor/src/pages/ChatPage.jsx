@@ -367,10 +367,10 @@ export default function ChatPage() {
       // Human-in-the-loop: a successful prepare/revise execution rides
       // with the reply as a draft echo — render its Preview affordance.
       const previews = (data.toolExecutions || [])
-        .filter((x) => (x.tool === 'prepare_activity' && x.success || x.tool === 'revise_activity_draft' && x.revised) && x.draft)
+        .filter((x) => (x.tool === 'prepare_activity' && x.success || x.tool === 'revise_activity_draft' && x.success) && x.draft)
         .map((x) => x.draft);
       (data.toolExecutions || [])
-        .filter((x) => x.tool === 'revise_activity_draft' && x.revised && x.draft)
+        .filter((x) => x.tool === 'revise_activity_draft' && x.success && x.draft)
         .forEach((x) => {
           setDraftRevisions((prev) => ({ ...prev, [x.draft.id]: (prev[x.draft.id] || 0) + 1 }));
           if (x.draft.version) setPreviewVersion(null);   // an open preview jumps to the new version's tab

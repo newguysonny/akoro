@@ -25,7 +25,7 @@ import {
 } from "./createAssignment.js";
 import {
   updateDraftPayload, newVersion, runVersionJob, paperRequestFrom, versionAt, versionsOf, latestReady,
-  editedVersion, detailsFromVersion,
+  editedVersion, detailsFromVersion, expireStaleVersions,
 } from "./draftVersions.js";
 
 /** The model call behind an assignment draft's questions, billed to its instructor. */
@@ -400,6 +400,12 @@ export async function getActivityDraft(instructor, id) {
   const { data } = await db.from("activity_drafts").select("*").eq("id", id).maybeSingle();
   if (!data) throw invalid("Draft not found", 404);
   if (data.created_by !== instructor.id && instructor.role !== "admin") throw invalid("Not your draft", 403);
+  // A version cut off mid-draft (the server restarted) would wait forever:
+  // mark it failed so the preview offers Try again.
+  if (data.status === "draft" && expireStaleVersions(data.payload)) {
+    const payload = await updateDraftPayload(data.id, (p) => expireStaleVersions(p)).catch(() => null);
+    return { ...data, payload: payload || expireStaleVersions(data.payload) };
+  }
   return data;
 }
 
@@ -499,6 +505,25 @@ export async function reviseDraftPayload(instructor, id, changes) {
     payload.difficulty = c.difficulty; applied.push("difficulty");
   }
 
+  // When it's due — an exact instant, or the words as said (pinned at preview).
+  let audienceRow = null;
+  if (c.due_at) {
+    const d = new Date(c.due_at);
+    if (Number.isNaN(d.getTime())) throw invalid("That due date couldn't be read — say the day and time again.", "clarify");
+    if (d.getTime() < Date.now() - 60 * 1000) throw invalid("That due time is already past — when should it be due?", "clarify");
+    payload.due_at = d.toISOString(); applied.push("due date");
+  } else if (asText(c.due_hint, 120)) {
+    payload.due_hint = asText(c.due_hint, 120); payload.due_at = null; applied.push("due date");
+  }
+  // Who it's for — resolved exactly like prepare.
+  if (c.audience && typeof c.audience === "object") {
+    const a = await resolveAudience(instructor, c.audience);
+    if (a.notFound.length) throw invalid(`No account found for: ${a.notFound.join(", ")}`);
+    Object.assign(payload, a.body);
+    audienceRow = { label: a.label, class_name: a.className ?? null, resolved_count: a.resolvedCount, names: a.names ?? null, ...a.body };
+    applied.push("audience");
+  }
+
   const type = draft.type;
   if (type === "live_course") {
     const hint = asText(c.scheduled_hint, 120);
@@ -528,7 +553,10 @@ export async function reviseDraftPayload(instructor, id, changes) {
       const base = c.base_version ? versionAt(payload, c.base_version) : latestReady(payload);
       if (c.base_version && !base) throw invalid(`There is no version ${c.base_version} on this draft.`);
       if (list.length && (!base || base.status !== "ready")) {
-        throw invalid(`Version ${list.at(-1).n} is still being drafted — wait for it, then ask again.`, 409);
+        const last = list.at(-1);
+        throw invalid(last.status === "failed"
+          ? `Version ${last.n} couldn't be drafted — press Try again on it in the preview (or discard and start again).`
+          : `Version ${last.n} is still being drafted — wait for it, then ask again.`, 409);
       }
       try {
         const v = newVersion(payload, { request: asText(c.question_request, 1500), basedOn: base?.n ?? null });
@@ -553,12 +581,14 @@ export async function reviseDraftPayload(instructor, id, changes) {
 
   // Written under the draft's lock so a version landing meanwhile isn't
   // lost: this round's fields go over whatever the payload holds by then.
-  const CHANGED = ["title", "instructions", "difficulty", "details", "topic", "subtopics", "objectives", "last_change"];
+  const CHANGED = ["title", "instructions", "difficulty", "details", "topic", "subtopics", "objectives", "last_change",
+    "due_at", "due_hint", "usernames", "user_ids", "whole_class", "classroom_id"];
   await updateDraftPayload(draft.id, (p) => ({
     ...p,
     ...Object.fromEntries(CHANGED.filter((k) => k in payload && payload[k] !== draft.payload?.[k]).map((k) => [k, payload[k]])),
     ...(newVersionN ? { versions: [...versionsOf(p), payload.versions.at(-1)] } : {}),
   }));
+  if (audienceRow) await db.from("activity_drafts").update({ audience: audienceRow }).eq("id", draft.id);
   const { data, error } = await db.from("activity_drafts").select().eq("id", draft.id).single();
   if (error) throw invalid(error.message, 500);
   if (newVersionN) void runVersionJob(draft.id, newVersionN, { chat: questionChat(instructor.id) });
@@ -573,6 +603,18 @@ export async function reviseDraftPayload(instructor, id, changes) {
  */
 export async function assignActivityDraft({ instructor, id, overrides = null }) {
   const draft = await getActivityDraft(instructor, id);
+
+  // The due date: an exact one from the preview wins; a date the teacher only
+  // said in words ("Friday 1 PM") must be pinned down before learners get it.
+  if (overrides && typeof overrides === "object" && "due_at" in overrides && overrides.due_at != null) {
+    const d = new Date(overrides.due_at);
+    if (Number.isNaN(d.getTime())) throw invalid("That due date isn't a valid date.", 400);
+    overrides = { ...overrides, due_at: d.toISOString() };
+  }
+  const dueAfter = overrides && "due_at" in overrides ? overrides.due_at : draft.payload?.due_at;
+  if (!dueAfter && draft.payload?.due_hint && !["live_course", "battle", "multi_stage"].includes(draft.type)) {
+    throw invalid(`Set the exact due date for "${draft.payload.due_hint}" before assigning.`, 409);
+  }
 
   // Claim-first: win the draft atomically BEFORE creating anything, so two
   // rapid taps (or chat + the workbench strip) can never assign twice. The
@@ -687,7 +729,7 @@ export async function retryDraftVersion(instructor, id, n) {
   if (v.status !== "failed") throw invalid(`Version ${v.n} didn't fail — nothing to retry.`, 409);
   await updateDraftPayload(draft.id, (p) => {
     const i = versionsOf(p).findIndex((x) => x.n === v.n);
-    p.versions[i] = { ...p.versions[i], status: "drafting", error: null };
+    p.versions[i] = { ...p.versions[i], status: "drafting", error: null, startedAt: new Date().toISOString() };
     return p;
   });
   void runVersionJob(draft.id, v.n, { chat: questionChat(instructor.id) });

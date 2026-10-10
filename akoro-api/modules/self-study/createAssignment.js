@@ -151,7 +151,11 @@ export async function createAssignment(instructor, body) {
   const { error: tErr } = await edu().from("self_study_targets")
     .upsert(ids.map((student_id) => ({ assignment_id: assignment.id, student_id })),
             { onConflict: "assignment_id,student_id" });
-  if (tErr) throw invalid(tErr.message, 500);
+  if (tErr) {
+    // No learner list, no assignment: a half-made row would duplicate on retry.
+    await edu().from("self_study_assignments").delete().eq("id", assignment.id).then(() => {}, () => {});
+    throw invalid(tErr.message, 500);
+  }
 
   const announce = announceFor(type);
   await notifyAll(ids, {

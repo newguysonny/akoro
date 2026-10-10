@@ -54,6 +54,7 @@ function prefillFrom(payload, version = null) {
     audience: payload.whole_class
       ? { mode: 'class', classroomId: payload.classroom_id || null, selected: [], typed: '' }
       : { mode: 'picked', classroomId: payload.classroom_id || null, selected: payload.user_ids || [], typed: (payload.usernames || []).join(', ') },
+    dueAt: datetimeLocal(payload.due_at),
     scheduledAt: datetimeLocal(payload.details?.scheduled_at),
     durationMins: String(payload.details?.duration_mins || 60),
   };
@@ -78,6 +79,7 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
   const [phase, setPhase] = useState('loading');   // loading|ready|editing|assigning|assigned|discarded|error
   const [error, setError] = useState('');
   const [assignedCount, setAssignedCount] = useState(0);
+  const [dueLocal, setDueLocal] = useState(null);   // the due date picked here (datetime-local), null = as drafted
   const { createBattle } = useBattlesAPI();
   const { courses } = useCoursesAPI();
 
@@ -138,7 +140,7 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
       markResolved('assigned', d?.data?.assigned ?? 0);
     } catch (e) {
       setError(e?.message || 'Could not assign it.');
-      setPhase(overrides && !('version' in overrides) ? 'editing' : 'ready');
+      setPhase('ready');
     }
   };
 
@@ -211,6 +213,16 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
   const audience = draft.audience || {};
   const versions = versionsOf(draft);
   const shown = versions.find((v) => v.n === vSel) || versions.at(-1) || null;
+  // Assign waits for what learners can't do without: a figure the paper
+  // refers to, and an exact due date when the teacher said one in words.
+  const needsFigure = !!shown && (shown.paper?.questions || []).some((q) => q?.figure_note && !q.figure);
+  const dueValue = dueLocal ?? datetimeLocal(payload.due_at);
+  const dueUnset = !isLive && !isBattle && !isJourney && !!payload.due_hint && !dueValue;
+  const assignBlock = needsFigure ? 'Add the missing figure first (Edit on the version).' : dueUnset ? `Set the exact due date for “${payload.due_hint}” first.` : '';
+  const assignOverrides = () => ({
+    ...(shown ? { version: shown.n } : {}),
+    ...(dueLocal != null ? { due_at: dueLocal ? new Date(dueLocal).toISOString() : null } : {}),
+  });
 
   if (phase === 'assigned') {
     return (
@@ -272,7 +284,7 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
             type={draft.type}
             initial={prefillFrom(payload, shown)}
             savePayload={(pl) => apiPost(`/api/self-study/drafts/${draftId}/assign`, pl)}
-            onAssigned={() => { /* the form shows its own banner; panel flips too */ }}
+            onAssigned={(count) => markResolved('assigned', count)}
           />
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
             <Btn2 onClick={() => { setPhase('ready'); load(); }}>Back to preview</Btn2>
@@ -316,9 +328,13 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
             <Row label="Subject">{payload.subject || <span style={{ color: MUTED2 }}>—</span>}</Row>
             <Row label={isLive ? 'Session focus' : 'Topic'}>{payload.topic}</Row>
             <Row label="Due">
-              {payload.due_at
-                ? <>{new Date(payload.due_at).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} <Chip color={GREEN} bg="#DCFCE7">set</Chip></>
-                : payload.due_hint ? <>{payload.due_hint}</> : <span style={{ color: MUTED2 }}>No due date</span>}
+              {isLive ? (payload.due_hint || <span style={{ color: MUTED2 }}>—</span>) : (
+                <>
+                  <input type="datetime-local" value={dueValue} aria-label="Due date" onChange={(e) => setDueLocal(e.target.value)}
+                    style={{ padding: '5px 7px', borderRadius: 8, border: `1px solid ${dueUnset ? RED : BORDER}`, fontSize: 12, fontFamily: FONT, color: INK, maxWidth: '100%' }} />
+                  {payload.due_hint && !dueValue && <div style={{ fontSize: 11, color: RED, marginTop: 3 }}>You said “{payload.due_hint}” — pick the exact date and time.</div>}
+                </>
+              )}
             </Row>
           </div>
           <Row label="Who gets it">
@@ -361,7 +377,6 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
               </div>
             </Row>
           )}
-          {payload.due_hint && !payload.due_at && <div style={{ fontSize: 11, color: MUTED2, fontFamily: FONT, marginTop: -6, marginBottom: 10 }}>Due “{payload.due_hint}” as you said it — set the exact date in Edit details before assigning if it matters.</div>}
         </div>
       )}
 
@@ -386,13 +401,15 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
             </button>
           )}
           <div style={{ flex: 1 }} />
-          {shown && (
+          {assignBlock ? (
+            <span style={{ fontSize: 11.5, color: RED, fontWeight: 700, fontFamily: FONT, textAlign: 'right' }}>{assignBlock}</span>
+          ) : shown && (
             <span style={{ fontSize: 11.5, color: MUTED, fontWeight: 700, fontFamily: FONT, textAlign: 'right' }}>
               Assigns <b style={{ color: INK }}>Version {shown.n}</b>{audience.label ? <> to {audience.label}</> : null}
             </span>
           )}
-          <button onClick={() => assign(shown ? { version: shown.n } : null)} disabled={phase === 'assigning' || vEditing || (shown && shown.status !== 'ready')}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 11, border: 'none', background: phase === 'assigning' ? BORDER : INK, color: WHITE, fontSize: 12.5, fontWeight: 900, cursor: phase === 'assigning' ? 'wait' : 'pointer', fontFamily: FONT }}>
+          <button onClick={() => assign(assignOverrides())} disabled={phase === 'assigning' || vEditing || (shown && shown.status !== 'ready') || !!assignBlock}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 11, border: 'none', background: phase === 'assigning' || assignBlock ? BORDER : INK, color: WHITE, fontSize: 12.5, fontWeight: 900, cursor: phase === 'assigning' ? 'wait' : assignBlock ? 'not-allowed' : 'pointer', fontFamily: FONT }}>
             {phase === 'assigning' ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Send size={13} />}
             {phase === 'assigning' ? 'Assigning…' : 'Assign'}
           </button>

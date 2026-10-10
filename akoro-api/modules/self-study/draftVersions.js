@@ -51,6 +51,21 @@ export function updateDraftPayload(id, change) {
   });
 }
 
+/** A version still "drafting" this long after it started was cut off (a restart mid-job). */
+export const STALE_DRAFTING_MS = VERSION_TIMEOUT_MS + 60_000;
+export const isStaleDrafting = (v, now = Date.now()) =>
+  v?.status === "drafting" && (!v.createdAt || now - Date.parse(v.startedAt || v.createdAt) > STALE_DRAFTING_MS);
+
+/** Mark cut-off versions failed, so Try again works. → the payload, or null when nothing changed. */
+export function expireStaleVersions(payload, now = Date.now()) {
+  const list = Array.isArray(payload?.versions) ? payload.versions : [];
+  if (!list.some((v) => isStaleDrafting(v, now))) return null;
+  return {
+    ...payload,
+    versions: list.map((v) => (isStaleDrafting(v, now) ? { ...v, status: "failed", error: "Drafting was interrupted — try again." } : v)),
+  };
+}
+
 export const versionsOf = (payload) => (Array.isArray(payload?.versions) ? payload.versions : []);
 export const latestReady = (payload) => [...versionsOf(payload)].reverse().find((v) => v.status === "ready") || null;
 export const versionAt = (payload, n) => versionsOf(payload).find((v) => v.n === Number(n)) || null;
@@ -74,12 +89,14 @@ const classLevelOf = (draft) => String(draft?.audience?.class_name || draft?.aud
  * onto the version ("failed" + why) for the preview to offer a retry.
  */
 export async function runVersionJob(draftId, n, { chat }) {
+  let startedAt = null;
   const work = (async () => {
     const { data: draft } = await db.from("activity_drafts").select("*").eq("id", draftId).maybeSingle();
     if (!draft || draft.status !== "draft") return;
     const payload = draft.payload || {};
     const v = versionAt(payload, n);
     if (!v || v.status !== "drafting") return;
+    startedAt = v.startedAt || null;
     const common = { chat, topic: payload.topic || draft.topic, subject: payload.subject || draft.subject, classLevel: classLevelOf(draft) };
     let out;
     if (v.basedOn) {
@@ -95,7 +112,9 @@ export async function runVersionJob(draftId, n, { chat }) {
     await updateDraftPayload(draftId, (p, row) => {
       if (row.status !== "draft") return null;
       const i = versionsOf(p).findIndex((x) => x.n === n);
-      if (i < 0) return null;
+      // Only a version still waiting takes the result: one that timed out
+      // (failed) or was started again keeps its own state.
+      if (i < 0 || p.versions[i].status !== "drafting" || (startedAt && p.versions[i].startedAt && p.versions[i].startedAt !== startedAt)) return null;
       p.versions[i] = { ...p.versions[i], status: "ready", paper, summary: summarizePaper(paper), note: out.note, warning: out.warning || null, changes: out.changes || {}, error: null, readyAt: new Date().toISOString() };
       return p;
     });
