@@ -130,13 +130,16 @@ export async function buildMarkedCopy(targetId) {
     .select("id, assignment_id, student_id, grade, feedback, graded_at, markup, marked_pdf, submission, submission_pdf").eq("id", targetId).maybeSingle();
   if (!t) throw new Error("Submission not found.");
   const [{ data: a }, { data: u }] = await Promise.all([
-    edu().from("self_study_assignments").select("title").eq("id", t.assignment_id).maybeSingle(),
+    edu().from("self_study_assignments").select("title, details").eq("id", t.assignment_id).maybeSingle(),
     db.from("users").select("full_name, username").eq("id", t.student_id).maybeSingle(),
   ]);
   const submissionPdf = await readSubmissionArtifact(t, "pdf");
   const bytes = await buildMarkedPdf({
     submissionPdf, marks: t.markup?.marks || [],
-    grade: { score: t.grade, rubric: t.feedback?.rubric || [], feedback: t.feedback?.text || "", gradedAt: t.graded_at },
+    grade: {
+      score: t.grade, rubric: t.feedback?.rubric || [], feedback: t.feedback?.text || "", gradedAt: t.graded_at,
+      questions: (t.feedback?.questions || []).map((m) => ({ ...m, q: a?.details?.questions?.[m.index] })),
+    },
     title: a?.title || "Activity", learner: u?.full_name || u?.username || "Learner",
   });
   if (t.grade != null) {
