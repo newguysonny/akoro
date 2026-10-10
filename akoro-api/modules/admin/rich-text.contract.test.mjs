@@ -82,7 +82,7 @@ test("RichText has ONE span render path — list items can never render empty", 
 test("all three agent chat surfaces render RichText; user bubbles stay plain", () => {
   assert.match(instructorPage, /<RichText text=\{textPart\} color=\{INK\} \/>/);
   // …at the Agent Chat's reading size (RichText used to force 13.5px over it).
-  assert.match(learnerTab, /<RichText text=\{msg\.text\} size=\{16\} lineHeight=\{1\.65\}\/>/);
+  assert.match(learnerTab, /<RichText text=\{msg\.text\} size=\{14\.5\} lineHeight=\{1\.65\}\/>/);
   assert.match(sessionChat, /<RichText text=\{m\.text\} \/>/);
 });
 
