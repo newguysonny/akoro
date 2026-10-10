@@ -984,7 +984,7 @@ router.get("/my-battles", authenticateToken, asyncHandler(async (req, res) => {
   const ids = (data ?? []).map((b) => b.id);
   if (ids.length) {
     const { data: seatRows } = await db.from("battle_participants")
-      .select("battle_id, user_id, role, joined_at, declined_at, user_agents(agent_name)")
+      .select("battle_id, user_id, role, joined_at, declined_at, score, user_agents(agent_name, agent_emoji, agent_color, agent_bg)")
       .in("battle_id", ids);
     for (const r of (seatRows ?? [])) {
       if (r.role === "teacher" || r.declined_at) continue;
@@ -1001,9 +1001,19 @@ router.get("/my-battles", authenticateToken, asyncHandler(async (req, res) => {
     const lead = others.find((s) => s.user_id === b.created_by)
       ?? others.filter((s) => s.joined_at).sort((x, y) => new Date(x.joined_at) - new Date(y.joined_at))[0]
       ?? others[0];
+    const agent = (s) => s && {
+      name:  s.user_agents?.agent_name ?? "Agent",
+      emoji: s.user_agents?.agent_emoji ?? null,
+      color: s.user_agents?.agent_color ?? null,
+      bg:    s.user_agents?.agent_bg ?? null,
+      score: s.score ?? 0,
+    };
     return {
       myAgent:   me?.user_agents?.agent_name ?? null,
       leadAgent: lead?.user_agents?.agent_name ?? null,
+      me:        agent(me),
+      lead:      agent(lead),
+      iCreated:  b.created_by === req.user.id,
       others:    others.length,               // everyone but me
       total:     seats.length,
     };
