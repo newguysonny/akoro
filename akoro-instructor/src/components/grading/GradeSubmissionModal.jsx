@@ -7,16 +7,19 @@
  * stepper in the topbar, and an autosave label — because every change saves
  * locally until the one deliberate act: Publish grade.
  *
- * The paper shows what was actually asked (the activity's subtopics and
- * objectives) — the grading reference. Learner submission artifacts render
- * here once capture ships; the teacher grades the work against the brief
- * meanwhile. Honest, and the flow is the real one.
+ * The paper has two views of the work:
+ *   • Submission PDF — everything the learner handed in as ONE document
+ *     (built by the API at submit: their details, written answer, every
+ *     question with its answer, attachments merged in). Opens inline.
+ *   • Answers — question by question (the activity's real questions; for
+ *     briefs without questions, the subtopics and objectives).
+ * The rubric is the activity's own (details.rubric) when it has one.
  */
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
-  ArrowLeft, ChevronLeft, ChevronRight, X, Check, Loader2, FileText, PenLine,
+  ArrowLeft, ChevronLeft, ChevronRight, X, Check, Loader2, FileText, PenLine, ExternalLink, Download,
 } from 'lucide-react';
-import { apiPatch, downloadActivityFile } from '../../services/api.js';
+import { apiPatch, downloadActivityFile, openActivityFile, fetchSubmissionPdf } from '../../services/api.js';
 import { saveDraft, loadDraft, clearDraft } from './gradingDrafts.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../../constants.js';
 
@@ -28,7 +31,17 @@ const RUBRIC_DEF = [
   { name: 'Clarity & structure',      desc: 'Organised and easy to follow',       max: 3, labels: ['Unclear', 'Adequate', 'Clear', 'Model'] },
   { name: 'Effort & engagement',      desc: 'Evidence of real engagement',        max: 2, labels: ['Light', 'Solid', 'Thorough'] },
 ];
-const RUBRIC_MAX = RUBRIC_DEF.reduce((s, r) => s + r.max, 0);
+
+/* The activity's own rubric ([{ criterion, points, description? }]) as rows
+   the panel can score 0..points — else the default above. */
+export function rubricFor(brief) {
+  const own = Array.isArray(brief?.details?.rubric) ? brief.details.rubric : [];
+  const rows = own
+    .map((r) => ({ name: String(r?.criterion ?? r?.name ?? '').trim(), desc: String(r?.description ?? r?.desc ?? ''), max: Math.round(Number(r?.points ?? r?.max)) }))
+    .filter((r) => r.name && r.max > 0 && r.max <= 20)
+    .slice(0, 12);
+  return rows.length ? rows : RUBRIC_DEF;
+}
 
 const initialsOf = (name) => (name || '?').split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase();
 
@@ -54,10 +67,12 @@ const fmtSize = (bytes) => {
 /* The submitted work, question by question — the real artifacts the learner
    handed in (text, per-question answers, files), or an honest line when this
    activity predates submission capture. */
-function SubmittedPaper({ current, brief }) {
+function SubmittedPaper({ current, brief, only = null }) {
   const sub = current.submission ?? {};
   const questions = Array.isArray(brief?.details?.questions) ? brief.details.questions : [];
-  const answerKeys = Object.keys(sub.answers ?? {});
+  // With `only`, the paper shows that one question's answer (the stepper);
+  // the written answer and files ride every step.
+  const answerKeys = Object.keys(sub.answers ?? {}).filter((k) => only == null || Number(k) === only);
   const files = sub.files?.length ? sub.files : (current.files ?? []);
   const hasWork = (sub.text || '').trim() || answerKeys.length || files.length;
   if (!hasWork) {
@@ -85,7 +100,7 @@ function SubmittedPaper({ current, brief }) {
             const raw = sub.answers[k];
             const qMcq = !!q && Array.isArray(q.options);
             const chosen = qMcq ? (q.options[raw] ?? raw) : null;
-            const correct = qMcq && q.correct === raw;
+            const correct = qMcq && q.correct != null && Number(q.correct) === Number(raw);
             return (
               <div key={k} style={{ background: WHITE, border: `1px solid ${correct === false && qMcq ? 'rgba(239,68,68,.35)' : BORDER}`, borderRadius: 10, padding: '10px 13px' }}>
                 {q && <div style={{ fontSize: 11, fontWeight: 800, color: MUTED2, marginBottom: 4 }}>Q{Number(k) + 1}. {qText(q)}</div>}
@@ -102,17 +117,51 @@ function SubmittedPaper({ current, brief }) {
       {files.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {files.map((f) => (
-            <button key={f.id} onClick={() => downloadActivityFile(f.id, f.name)}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 10, border: `1px solid ${BORDER}`, background: WHITE, cursor: 'pointer', fontFamily: FONT }}>
+            <div key={f.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 6px 6px 12px', borderRadius: 10, border: `1px solid ${BORDER}`, background: WHITE, fontFamily: FONT }}>
               <span style={{ width: 26, height: 26, borderRadius: 8, background: `${PURPLE}14`, color: PURPLE, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><FileText size={13} /></span>
               <span style={{ textAlign: 'left' }}>
                 <span style={{ display: 'block', fontSize: 12, fontWeight: 800, color: INK, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
-                <span style={{ display: 'block', fontSize: 10, fontWeight: 700, color: MUTED2 }}>{fmtSize(f.size)} · download</span>
+                <span style={{ display: 'block', fontSize: 10, fontWeight: 700, color: MUTED2 }}>{fmtSize(f.size)}</span>
               </span>
-            </button>
+              <button onClick={() => openActivityFile(f.id).catch(() => {})} title="Open" aria-label={`Open ${f.name}`}
+                style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'transparent', color: PURPLE, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ExternalLink size={13} /></button>
+              <button onClick={() => downloadActivityFile(f.id, f.name).catch(() => {})} title="Download" aria-label={`Download ${f.name}`}
+                style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'transparent', color: MUTED, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Download size={13} /></button>
+            </div>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/* The whole submission as one PDF, inline. Fetched as a blob (cookie auth)
+   and shown in the browser's own viewer; open-in-tab and download beside. */
+function SubmissionPdfView({ targetId, version, name }) {
+  const [state, setState] = useState({ status: 'loading', url: null, error: '' });
+  useEffect(() => {
+    let alive = true, url = null;
+    setState({ status: 'loading', url: null, error: '' });
+    fetchSubmissionPdf(targetId)
+      .then((blob) => { url = URL.createObjectURL(blob); if (alive) setState({ status: 'ready', url, error: '' }); })
+      .catch((e) => { if (alive) setState({ status: 'error', url: null, error: e?.message || 'Could not load the PDF.' }); });
+    return () => { alive = false; if (url) URL.revokeObjectURL(url); };
+  }, [targetId, version]);
+
+  if (state.status === 'loading') {
+    return <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: MUTED, fontSize: 13, fontWeight: 700 }}><Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> Preparing the submission PDF…</div>;
+  }
+  if (state.status === 'error') {
+    return <div style={{ background: LIGHT, border: `1px dashed ${BORDER}`, borderRadius: 10, padding: '12px 14px', fontSize: 12.5, color: RED, fontWeight: 700 }}>{state.error} — the Answers tab still shows the work.</div>;
+  }
+  const fileName = `${(name || 'submission').replace(/[^\w .-]/g, '').trim() || 'submission'}.pdf`;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <a href={state.url} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: PURPLE, textDecoration: 'none' }}><ExternalLink size={12} /> Open in new tab</a>
+        <a href={state.url} download={fileName} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: MUTED, textDecoration: 'none' }}><Download size={12} /> Download</a>
+      </div>
+      <iframe title="Submission PDF" src={state.url} style={{ width: '100%', height: '78vh', border: `1px solid ${BORDER}`, borderRadius: 10, background: '#525659' }} />
     </div>
   );
 }
@@ -125,8 +174,17 @@ export default function GradeSubmissionModal({
   const current = students[index];
   const brief = assignment ?? null;
 
-  // Questions = the assigned subtopics (the paper reads one at a time).
+  // Questions = the activity's real questions when it has them (answers are
+  // keyed by their index); else the assigned subtopics and objectives.
   const questions = useMemo(() => {
+    const qs = Array.isArray(brief?.details?.questions) ? brief.details.questions : [];
+    if (qs.length) {
+      return qs.map((q, i) => ({
+        title: qText(q) || `Question ${i + 1}`,
+        points: typeof q === 'object' && q && Number(q.max_points ?? q.points) > 0 ? [`Worth ${Number(q.max_points ?? q.points)} points`] : [],
+        index: i,
+      }));
+    }
     const sts = brief?.subtopics ?? [];
     if (!sts.length) return [{ title: brief?.topic || 'The work', points: [] }];
     return sts.map(st => ({
@@ -135,10 +193,14 @@ export default function GradeSubmissionModal({
     }));
   }, [brief]);
   const [qIndex, setQIndex] = useState(0);
+  const RUBRIC = useMemo(() => rubricFor(brief), [brief]);
+  const RUBRIC_MAX = RUBRIC.reduce((s, r) => s + r.max, 0);
+  const submitted = !!current?.submission?.submittedAt;
+  const [view, setView] = useState('pdf');   // 'pdf' | 'answers'
 
   /* Grading state — autosaved locally on every change. */
   const [mode, setMode] = useState('rubric');                 // 'rubric' | 'manual'
-  const [rubric, setRubric] = useState(() => RUBRIC_DEF.map(() => null));
+  const [rubric, setRubric] = useState(() => RUBRIC.map(() => null));
   const [manualScore, setManualScore] = useState('');
   const [feedbackText, setFeedbackText] = useState('');
   const [saveState, setSaveState] = useState('idle');         // idle | saving | saved
@@ -152,7 +214,7 @@ export default function GradeSubmissionModal({
     const draft = loadDraft(brief?.id, current.student.id);
     if (draft) {
       setMode(draft.mode || 'rubric');
-      setRubric(RUBRIC_DEF.map((r, i) => draft.rubric?.[i]?.level ?? null));
+      setRubric(RUBRIC.map((r, i) => draft.rubric?.[i]?.level ?? null));
       setManualScore(draft.manualScore ?? '');
       setFeedbackText(draft.feedbackText || '');
     } else if (current.grade != null) {
@@ -161,9 +223,10 @@ export default function GradeSubmissionModal({
       setMode('manual');
       setFeedbackText(current.feedbackText || '');
     } else {
-      setMode('rubric'); setRubric(RUBRIC_DEF.map(() => null)); setManualScore(''); setFeedbackText('');
+      setMode('rubric'); setRubric(RUBRIC.map(() => null)); setManualScore(''); setFeedbackText('');
     }
     setQIndex(0); setError(''); setSaveState('idle');
+    setView(current?.submission?.submittedAt ? 'pdf' : 'answers');
   }, [current?.student?.id, brief?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Autosave — debounced, local only. Publish is the server event. */
@@ -182,7 +245,7 @@ export default function GradeSubmissionModal({
         status: current.status,
         questionIndex: qIndex,
         mode: next.mode ?? mode,
-        rubric: RUBRIC_DEF.map((r, i) => ({ name: r.name, max: r.max, level: (next.rubric ?? rubric)[i] })),
+        rubric: RUBRIC.map((r, i) => ({ name: r.name, max: r.max, level: (next.rubric ?? rubric)[i] })),
         manualScore: next.manualScore ?? manualScore,
         feedbackText: next.feedbackText ?? feedbackText,
       });
@@ -218,7 +281,7 @@ export default function GradeSubmissionModal({
         feedback: {
           text: feedbackText,
           mode,
-          rubric: mode === 'rubric' ? RUBRIC_DEF.map((r, i) => ({ name: r.name, max: r.max, level: rubric[i] })) : [],
+          rubric: mode === 'rubric' ? RUBRIC.map((r, i) => ({ name: r.name, max: r.max, level: rubric[i] })) : [],
         },
       });
       clearDraft(brief.id, current.student.id);
@@ -291,15 +354,30 @@ export default function GradeSubmissionModal({
         <div style={{ display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: 22, maxWidth: 1440, margin: '0 auto', alignItems: 'start' }}>
           {/* Paper — the work, question by question */}
           <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, boxShadow: '0 1px 2px rgba(33,31,53,.04), 0 12px 28px -12px rgba(33,31,53,.18)', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderBottom: `1px solid ${BORDER}`, background: '#F7F6F3' }}>
-              <span style={{ fontSize: 12.5, fontWeight: 800, color: MUTED }}>Question {Math.min(qIndex + 1, questions.length)} of {questions.length}</span>
-              <div style={{ display: 'flex', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 20px', borderBottom: `1px solid ${BORDER}`, background: '#F7F6F3' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} role="tablist">
+                {submitted && [['pdf', 'Submission PDF'], ['answers', 'Answers']].map(([id, label]) => (
+                  <button key={id} role="tab" aria-selected={view === id} onClick={() => setView(id)}
+                    style={{ padding: '5px 12px', borderRadius: 999, border: `1px solid ${view === id ? PURPLE : BORDER}`, background: view === id ? '#F1ECFF' : WHITE, color: view === id ? PURPLE : MUTED, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+                    {label}
+                  </button>
+                ))}
+                {(!submitted || view === 'answers') && (
+                  <span style={{ fontSize: 12.5, fontWeight: 800, color: MUTED, marginLeft: submitted ? 6 : 0 }}>Question {Math.min(qIndex + 1, questions.length)} of {questions.length}</span>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 6, visibility: submitted && view === 'pdf' ? 'hidden' : 'visible' }}>
                 <button onClick={() => setQIndex(i => Math.max(0, i - 1))} disabled={qIndex === 0}
                   style={{ width: 28, height: 28, borderRadius: 999, border: `1px solid ${BORDER}`, background: WHITE, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: qIndex === 0 ? 'not-allowed' : 'pointer', color: MUTED, opacity: qIndex === 0 ? .35 : 1 }}><ChevronLeft size={14} /></button>
                 <button onClick={() => setQIndex(i => Math.min(questions.length - 1, i + 1))} disabled={qIndex >= questions.length - 1}
                   style={{ width: 28, height: 28, borderRadius: 999, border: `1px solid ${BORDER}`, background: WHITE, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: qIndex >= questions.length - 1 ? 'not-allowed' : 'pointer', color: MUTED, opacity: qIndex >= questions.length - 1 ? .35 : 1 }}><ChevronRight size={14} /></button>
               </div>
             </div>
+            {submitted && view === 'pdf' ? (
+              <div style={{ padding: '14px 16px 18px' }}>
+                <SubmissionPdfView targetId={current.targetId} version={current.submission.submittedAt} name={`${current.student.name} — ${brief?.title || 'submission'}`} />
+              </div>
+            ) : (
             <div style={{ padding: '24px 28px 30px' }}>
               <h2 style={{ margin: '0 0 10px', fontSize: 19, fontWeight: 700, color: INK, fontFamily: 'Lora, Georgia, serif', lineHeight: 1.35 }}>{q.title}</h2>
               {q.points.length > 0 && (
@@ -312,8 +390,9 @@ export default function GradeSubmissionModal({
                   ))}
                 </div>
               )}
-              <SubmittedPaper current={current} brief={brief} />
+              <SubmittedPaper current={current} brief={brief} only={Number.isInteger(q.index) ? q.index : null} />
             </div>
+            )}
           </div>
 
           {/* Grading panel */}
@@ -346,7 +425,7 @@ export default function GradeSubmissionModal({
 
               {mode === 'rubric' ? (
                 <>
-                  {RUBRIC_DEF.map((crit, ci) => (
+                  {RUBRIC.map((crit, ci) => (
                     <div key={crit.name}>
                       <div style={{ marginBottom: 6 }}>
                         <span style={{ fontSize: 12.5, fontWeight: 800, color: INK }}>{crit.name}</span>
@@ -363,7 +442,7 @@ export default function GradeSubmissionModal({
                         ))}
                       </div>
                       <div style={{ fontSize: 11, fontWeight: 700, color: rubric[ci] != null ? PURPLE : 'transparent', marginTop: 4 }}>
-                        {rubric[ci] != null ? `${rubric[ci]} — ${crit.labels[rubric[ci]]}` : '·'}
+                        {rubric[ci] != null ? `${rubric[ci]} — ${crit.labels?.[rubric[ci]] ?? `${rubric[ci]} of ${crit.max}`}` : '·'}
                       </div>
                     </div>
                   ))}

@@ -27,12 +27,20 @@
  * Learner:
  *   GET    /mine               → what I've been assigned
  *   POST   /:id/start          → mark started + get the brief (session is made by the WS)\n *   POST   /:id/link           → record which adaptive session it became
- *   POST   /:id/files          → upload one submission attachment (base64, ≤5MB)
+ *   POST   /:id/files          → upload one submission attachment (base64, ≤5MB;
+ *                                PDF / JPEG / PNG / .docx / text, sniffed) — kept
+ *                                in object storage under the learner's prefix
  *   POST   /:id/complete       → submit: status complete + the work itself
- *                                ({ text, answers, fileIds } — stored on the target)
+ *                                ({ text, answers, fileIds } — stored on the target);
+ *                                the submission PDF + markdown are built after it.
+ *                                Refused once graded.
  *   DELETE /files/:fileId      → remove one of my files (owner only)
- *   GET    /files/:fileId      → download a file (owning learner, or the
+ *   GET    /files/:fileId      → open a file (owning learner, or the
  *                                teacher/school that owns the activity)
+ *
+ * Both:
+ *   GET    /targets/:targetId/submission.pdf → the whole submission as one PDF
+ *   GET    /targets/:targetId/submission.md  → the same as markdown (AI grading)
  */
 
 import { Router }                         from "express";
@@ -51,6 +59,14 @@ import {
   listRoutines, createRoutine, updateRoutine, deleteRoutine,
 } from "./routines.js";
 import { emitAutonomyEvent } from "../autonomy/triggers.js";
+import {
+  SUBMISSION_FILE_LIMITS, sniffSubmissionFile, storeSubmissionFile, readSubmissionFile,
+  removeSubmissionObject, contentDisposition,
+} from "./submissionFiles.js";
+import { buildSubmissionArtifactsLater, readSubmissionArtifact } from "./submissionArtifacts.js";
+import { briefForLearner, pdfMeta } from "./submissionView.js";
+
+
 
 const router = Router();
 const now    = () => new Date().toISOString();
@@ -358,7 +374,7 @@ router.get("/mine", asyncHandler(async (req, res) => {
         id:           a.id,
         targetId:     t.id,
         type:         a.type ?? "self_study",
-        details:      a.details ?? {},
+        details:      briefForLearner(a.details, t.grade != null),
         title:        a.title,
         subject:      a.subject,
         topic:        a.topic,
@@ -375,6 +391,7 @@ router.get("/mine", asyncHandler(async (req, res) => {
         // The work the learner turned in — text, per-question answers and
         // file metadata. Server copy wins once submitted.
         submission:   t.submission ?? null,
+        submissionPdf: pdfMeta(t),
         sessionId:    t.session_id,
         startedAt:    t.started_at,
         completedAt:  t.completed_at,
@@ -544,7 +561,7 @@ router.get("/:id", asyncHandler(async (req, res) => {
   const targetIds = (targets ?? []).map((t) => t.id);
   const { data: fileRows } = targetIds.length
     ? await edu().from("self_study_files")
-        .select("id, target_id, name, size, mime, created_at").in("target_id", targetIds)
+        .select("id, target_id, name, size, mime, kind, created_at").in("target_id", targetIds)
     : { data: [] };
   const filesByTarget = new Map();
   for (const f of (fileRows ?? [])) {
@@ -553,13 +570,19 @@ router.get("/:id", asyncHandler(async (req, res) => {
 
   ok(res, {
     ...assignment,
-    targets: (targets ?? []).map((t) => ({
-      ...t,
-      full_name: byId.get(t.student_id)?.full_name ?? "Unknown",
-      username:  byId.get(t.student_id)?.username ?? null,
-      emoji:     byId.get(t.student_id)?.avatar_emoji ?? null,
-      files:     filesByTarget.get(t.id) ?? [],
-    })),
+    targets: (targets ?? []).map(({ submission_pdf, ...t }) => {
+      // Only what was handed in: files uploaded and then left out of the
+      // submission (or still in progress) aren't the learner's work yet.
+      const handedIn = new Set((t.submission?.files ?? []).map((f) => f.id));
+      return {
+        ...t,
+        full_name: byId.get(t.student_id)?.full_name ?? "Unknown",
+        username:  byId.get(t.student_id)?.username ?? null,
+        emoji:     byId.get(t.student_id)?.avatar_emoji ?? null,
+        files:     (filesByTarget.get(t.id) ?? []).filter((f) => handedIn.has(f.id)),
+        submissionPdf: pdfMeta({ ...t, submission_pdf }),
+      };
+    }),
   });
 }));
 
@@ -637,17 +660,17 @@ router.patch("/:id/targets/:studentId/grade", requireRole(TEACHER_ROLES), asyncH
   if (!Number.isFinite(n) || n < 0 || n > 100) return bad(res, "grade must be a number from 0 to 100");
   if (feedback && typeof feedback !== "object") return bad(res, "feedback must be an object");
 
+  // A score-only publish (the gradebook) keeps the feedback already given.
+  const patch = { grade: Math.round(n), graded_at: now(), graded_by: req.user.id };
+  if (req.body.feedback !== undefined) {
+    patch.feedback = {
+      text: typeof feedback.text === "string" ? feedback.text.slice(0, 4000) : "",
+      rubric: Array.isArray(feedback.rubric) ? feedback.rubric.slice(0, 12) : [],
+      mode: feedback.mode === "manual" ? "manual" : "rubric",
+    };
+  }
   const { data: target, error: tErr } = await edu().from("self_study_targets")
-    .update({
-      grade: Math.round(n),
-      feedback: {
-        text: typeof feedback.text === "string" ? feedback.text.slice(0, 4000) : "",
-        rubric: Array.isArray(feedback.rubric) ? feedback.rubric.slice(0, 12) : [],
-        mode: feedback.mode === "manual" ? "manual" : "rubric",
-      },
-      graded_at: now(),
-      graded_by: req.user.id,
-    })
+    .update(patch)
     .eq("assignment_id", assignment.id).eq("student_id", studentId)
     .select().single();
   if (tErr || !target) return missing(res, "That learner is not assigned this activity");
@@ -692,9 +715,10 @@ router.delete("/:id", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) 
 
 /* ═════════════════════════ SUBMISSION FILES ═════════════════════════
    Attachments a learner uploads BEFORE completing — the work behind the
-   submission. Stored as base64 beside their target row; capped at 5MB and
-   5 files per target so rows stay small. Teachers reach them through the
-   activity they own; the learner through their own target. */
+   submission. Kept in object storage under the learner's prefix (rows from
+   before that still carry base64); capped at 5MB and 5 files per target.
+   Teachers reach them through the activity they own; the learner through
+   their own target. */
 
 /** The caller's target row for one assignment (learners). */
 async function myTargetOf(assignmentId, userId) {
@@ -707,26 +731,33 @@ async function myTargetOf(assignmentId, userId) {
 router.post("/:id/files", asyncHandler(async (req, res) => {
   const target = await myTargetOf(req.params.id, req.user.id);
   if (!target) return missing(res, "This assignment was not given to you");
+  if (target.status === "complete") return bad(res, "Already submitted — files can't be added now");
 
-  const { name, mime, size, data } = req.body ?? {};
+  const { name, data } = req.body ?? {};
   const clean = typeof name === "string" ? name.trim().slice(0, 200) : "";
   if (!clean) return bad(res, "A file needs a name");
-  const n = Number(size);
-  if (!Number.isFinite(n) || n < 0) return bad(res, "File size is required");
-  if (n > 5 * 1024 * 1024) return bad(res, "Files can be at most 5MB");
   if (typeof data !== "string" || !data) return bad(res, "File data is required (base64)");
-  // base64 inflates by ~4/3 — reject early so an oversized row never lands
-  if (data.length > Math.ceil(5 * 1024 * 1024 * 1.4)) return bad(res, "Files can be at most 5MB");
-  const cleanMime = typeof mime === "string" ? mime.slice(0, 120) : null;
+  // base64 inflates by ~4/3 — reject early, before decoding
+  if (data.length > Math.ceil(SUBMISSION_FILE_LIMITS.MAX_BYTES * 1.4)) return bad(res, "Files can be at most 5MB");
+  const bytes = Buffer.from(data, "base64");
+  if (!bytes.length) return bad(res, "That file is empty");
+  if (bytes.length > SUBMISSION_FILE_LIMITS.MAX_BYTES) return bad(res, "Files can be at most 5MB");
+  // What it IS, from its bytes — the browser's type is only a hint.
+  const sniffed = sniffSubmissionFile(bytes, clean);
+  if (!sniffed) return bad(res, "Upload a PDF, a photo (JPG or PNG), a Word .docx or a text file");
 
   const { count } = await edu().from("self_study_files")
     .select("id", { count: "exact", head: true }).eq("target_id", target.id);
-  if ((count ?? 0) >= 5) return bad(res, "At most 5 files per submission");
+  if ((count ?? 0) >= SUBMISSION_FILE_LIMITS.MAX_FILES) return bad(res, "At most 5 files per submission");
 
+  const stored = await storeSubmissionFile({ learnerId: req.user.id, targetId: target.id, name: clean, bytes, mime: sniffed.mime });
   const { data: file, error } = await edu().from("self_study_files")
-    .insert({ target_id: target.id, name: clean, mime: cleanMime, size: Math.round(n), data })
-    .select("id, name, size, mime").single();
-  if (error) throw new Error(error.message);
+    .insert({ target_id: target.id, name: clean, mime: sniffed.mime, kind: sniffed.kind, size: bytes.length, ...stored })
+    .select("id, name, size, mime, kind").single();
+  if (error) {
+    if (stored.storage_key) void removeSubmissionObject(stored.storage_key, req.user.id);
+    throw new Error(error.message);
+  }
   ok(res, file);
 }));
 
@@ -735,37 +766,63 @@ router.post("/:id/files", asyncHandler(async (req, res) => {
  *  record the teacher grades, so it stays exactly as handed in. */
 router.delete("/files/:fileId", asyncHandler(async (req, res) => {
   const { data: file } = await edu().from("self_study_files")
-    .select("id, target_id").eq("id", req.params.fileId).maybeSingle();
+    .select("id, target_id, storage_key").eq("id", req.params.fileId).maybeSingle();
   if (!file) return missing(res, "File not found");
   const { data: t } = await edu().from("self_study_targets")
     .select("student_id, status").eq("id", file.target_id).maybeSingle();
   if (!t || t.student_id !== req.user.id) return denied(res, "Not your file");
   if (t.status === "complete") return bad(res, "Already submitted — the teacher needs to see this file");
   await edu().from("self_study_files").delete().eq("id", file.id);
+  void removeSubmissionObject(file.storage_key, req.user.id);
   ok(res, { removed: true });
 }));
 
-/** GET /api/self-study/files/:fileId — download: owning learner, or the
- *  teacher/school that owns the activity (the grading workspace). */
+/** May the caller see this target's work? The learner it belongs to, or the
+ *  teacher / school that owns the activity. → { target } | { status, error } */
+async function viewableTarget(req, targetId) {
+  const { data: t } = await edu().from("self_study_targets")
+    .select("id, assignment_id, student_id, status, submission, submission_pdf").eq("id", targetId).maybeSingle();
+  if (!t) return { status: 404, error: "Not found" };
+  if (t.student_id === req.user.id) return { target: t };
+  if (TEACHER_ROLES.includes(req.user.role)) {
+    const { error } = await ownedAssignment(req, t.assignment_id);
+    if (!error) return { target: t };
+  }
+  return { status: 403, error: "Not yours to see" };
+}
+
+/** GET /api/self-study/files/:fileId — open (or ?download=1) one attachment:
+ *  owning learner, or the teacher/school that owns the activity. */
 router.get("/files/:fileId", asyncHandler(async (req, res) => {
   const { data: file } = await edu().from("self_study_files")
-    .select("*").eq("id", req.params.fileId).maybeSingle();
+    .select("id, target_id, name, mime, storage_key, data").eq("id", req.params.fileId).maybeSingle();
   if (!file) return missing(res, "File not found");
-  const { data: t } = await edu().from("self_study_targets")
-    .select("assignment_id, student_id").eq("id", file.target_id).maybeSingle();
-  if (!t) return missing(res, "File not found");
+  const seen = await viewableTarget(req, file.target_id);
+  if (seen.error) return res.status(seen.status).json({ success: false, error: seen.status === 404 ? "File not found" : "Not your file" });
 
-  let allowed = t.student_id === req.user.id;
-  if (!allowed && TEACHER_ROLES.includes(req.user.role)) {
-    const { error } = await ownedAssignment(req, t.assignment_id);
-    allowed = !error;
-  }
-  if (!allowed) return denied(res, "Not your file");
-
+  const bytes = await readSubmissionFile(file);
   res.setHeader("Content-Type", file.mime || "application/octet-stream");
-  res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(file.name)}"`);
+  res.setHeader("Content-Disposition", contentDisposition(file.name, req.query.download ? "attachment" : "inline"));
+  res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Cache-Control", "private, max-age=3600");
-  res.send(Buffer.from(file.data, "base64"));
+  res.send(bytes);
+}));
+
+/** GET /api/self-study/targets/:targetId/submission.pdf (or .md) — the whole
+ *  submission as one document. Built at submit; built now if it isn't there
+ *  yet (or the learner resubmitted since). ?download=1 saves it. */
+router.get(/^\/targets\/([0-9a-f-]{36})\/submission\.(pdf|md)$/i, asyncHandler(async (req, res) => {
+  const [targetId, ext] = [req.params[0], req.params[1].toLowerCase()];
+  const seen = await viewableTarget(req, targetId);
+  if (seen.error) return res.status(seen.status).json({ success: false, error: seen.error });
+  if (!seen.target.submission?.submittedAt) return bad(res, "Nothing has been submitted yet");
+
+  const bytes = await readSubmissionArtifact(seen.target, ext);
+  res.setHeader("Content-Type", ext === "pdf" ? "application/pdf" : "text/markdown; charset=utf-8");
+  res.setHeader("Content-Disposition", contentDisposition(`submission.${ext}`, req.query.download ? "attachment" : "inline"));
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Cache-Control", "private, no-cache");
+  res.send(bytes);
 }));
 
 /* ═══════════════════════════════ LEARNER ═══════════════════════════════ */
@@ -834,8 +891,10 @@ router.post("/:id/link", asyncHandler(async (req, res) => {
  */
 router.post("/:id/complete", asyncHandler(async (req, res) => {
   const { data: target } = await edu().from("self_study_targets")
-    .select("id").eq("assignment_id", req.params.id).eq("student_id", req.user.id).maybeSingle();
+    .select("id, grade").eq("assignment_id", req.params.id).eq("student_id", req.user.id).maybeSingle();
   if (!target) return missing(res, "This assignment was not given to you");
+  // Graded work is closed: a resubmission would sit under the old grade.
+  if (target.grade != null) return res.status(409).json({ success: false, error: "This work has been graded — it can't be changed now" });
 
   // ── The work itself: optional free text, per-question answers (keyed by
   //    question index), and the files uploaded for this target. Everything
@@ -862,6 +921,17 @@ router.post("/:id/complete", asyncHandler(async (req, res) => {
     .update({ status: "complete", completed_at: now(), submission })
     .eq("id", target.id).select().single();
   if (error) throw new Error(error.message);
+
+  // Files uploaded but left out of the submission aren't the work — drop them.
+  const keep = new Set(files.map((f) => f.id));
+  const { data: all } = await edu().from("self_study_files").select("id, storage_key").eq("target_id", target.id);
+  const stray = (all ?? []).filter((f) => !keep.has(f.id));
+  if (stray.length) {
+    await edu().from("self_study_files").delete().in("id", stray.map((f) => f.id));
+    stray.forEach((f) => void removeSubmissionObject(f.storage_key, req.user.id));
+  }
+  // The submission as one PDF (+ markdown) — built and stored in the background.
+  buildSubmissionArtifactsLater(target.id);
   // Event trigger: study work completed — fresh signal for the planner.
   emitAutonomyEvent(req.user.id, "self_study").catch(() => {});
   ok(res, data);

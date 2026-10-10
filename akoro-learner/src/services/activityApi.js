@@ -57,6 +57,8 @@ async function fetchSelfStudy() {
       completedAt: a.completedAt || null,
       briefDetails: a.details ?? null,   // brief details object (questions, etc.)
       submission: a.submission ?? null,  // the work the learner turned in
+      targetId:   a.targetId || null,
+      submissionPdf: a.submissionPdf ?? null,   // { ready, pages } — the work as one PDF
       };
     });
   } catch { return []; }
@@ -129,6 +131,20 @@ export async function uploadActivityFile(assignmentId, file) {
 /* Remove one of my uploaded files (before submitting). */
 export async function removeActivityFile(fileId) {
   await apiDelete(`/api/self-study/files/${fileId}`);
+}
+
+/* Save my whole submission as one PDF (the copy my teacher grades). */
+export async function downloadMySubmissionPdf(targetId, title) {
+  const r = await fetch(`${API}/api/self-study/targets/${targetId}/submission.pdf?download=1`, { credentials: 'include' });
+  if (!r.ok) throw new Error('Could not get the PDF — try again in a moment.');
+  const url = URL.createObjectURL(await r.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${String(title || 'submission').replace(/[^\w .-]/g, '').trim() || 'submission'}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
 /* Download a submission file. Auth rides the session cookie, so a plain

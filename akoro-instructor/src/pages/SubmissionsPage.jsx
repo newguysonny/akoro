@@ -75,6 +75,7 @@ export default function SubmissionsPage() {
   const queue = (detail?.targets ?? [])
     .filter(t => t.status === 'started' || t.status === 'complete')
     .map(t => ({
+      targetId:   t.id,
       student:    { id: t.student_id, name: t.full_name || 'Learner', username: t.username, emoji: t.avatar_emoji || '🧑‍🎓' },
       status:     t.status,
       completedAt: t.completed_at,
@@ -82,6 +83,7 @@ export default function SubmissionsPage() {
       feedbackText: t.feedback?.text || '',
       submission: t.submission ?? null,   // text + answers as handed in
       files:      t.files ?? [],          // attachments (metadata only)
+      submissionPdf: t.submissionPdf ?? null,   // the whole submission as one PDF
     }))
     .sort((x, y) => (x.grade != null) - (y.grade != null) || String(x.completedAt || '').localeCompare(String(y.completedAt || '')));
 
