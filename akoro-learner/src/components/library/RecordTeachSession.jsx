@@ -185,7 +185,12 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
       if (!segments?.length) throw new Error('No speech came out of this recording.');
       setAvTranscript({ segments });
       const text = segments.map((s) => (s.speaker ? `[${s.speaker}] ${s.text}` : s.text)).join('\n\n');
-      ready([{ html: '', text: '' }], null, { name: record.name, text: text.slice(0, MAX_REFERENCE_CHARS) });
+      // The transcript becomes the session's grounding. (This called the
+      // load effect's `ready` helper, which is not in scope here — every
+      // finished transcription threw "ready is not defined".)
+      setPages([{ html: '', text: '' }]);
+      setPdfParts(null);
+      setReference({ name: record.name, text: text.slice(0, MAX_REFERENCE_CHARS) });
       setExtract({ status: 'applied', done: segments.length, total: segments.length, error: null });
       setTimeout(() => setExtract((s) => (s?.status === 'applied' ? null : s)), 6000);
     } catch (e) {
@@ -326,7 +331,12 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
           if (segments?.length) {
             const text = segments.map((s) => (s.speaker ? `[${s.speaker}] ${s.text}` : s.text)).join('\n\n');
             setAvTranscript({ segments });
-            ready([{ html: '', text: '' }], null, { name: record.name, text: text.slice(0, MAX_REFERENCE_CHARS) });
+            // The transcript becomes the session's grounding. (This called the
+      // load effect's `ready` helper, which is not in scope here — every
+      // finished transcription threw "ready is not defined".)
+      setPages([{ html: '', text: '' }]);
+      setPdfParts(null);
+      setReference({ name: record.name, text: text.slice(0, MAX_REFERENCE_CHARS) });
             return;
           }
           setExtract({ status: 'offer', av: true, done: 0, total: 1 });

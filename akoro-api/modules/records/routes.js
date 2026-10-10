@@ -747,7 +747,7 @@ async function resolveLessonContent(lessonId, user, { requireVideo = true } = {}
  * The job downloads the ORIGINAL via presigned URL, extracts audio at the
  * STT-native rate (16 kHz mono — never the raw video), transcribes with
  * nova-2 (diarized, paragraph-timestamped), samples scene-change frames
- * for slide captions, and writes edu.record_transcripts (delete-then-
+ * for slide captions, and writes edu.content_transcripts (delete-then-
  * insert — re-running is idempotent). One job per record at a time.
  */
 const avJobs = new Map();   // recordId → { running, startedAt, finishedAt, log, result }

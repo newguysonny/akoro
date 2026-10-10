@@ -129,7 +129,8 @@ export async function embedMany(texts, { userId = null } = {}) {
  * keeps re-indexing idempotent (an extraction batch that re-runs a page must
  * not leave the page searchable twice).
  */
-export async function replaceRecordChunks({ userId, recordId, contentKey = null, kind, rows }) {
+export async function replaceRecordChunks({ userId, recordId, contentKey = null, kind, rows, pageNumbers = null }, deps = {}) {
+  const embed = deps.embedMany || embedMany;
   const clean = (Array.isArray(rows) ? rows : [])
     .map((r) => ({
       kind,
@@ -140,12 +141,23 @@ export async function replaceRecordChunks({ userId, recordId, contentKey = null,
     }))
     .filter((r) => r.text.length >= 3)
     .slice(0, 200);   // a malformed write must not be able to insert thousands
-  if (!clean.length) return 0;
+  // Pages arrive in batches (≤8 per extract request). A batch replaces ONLY
+  // its own pages — wiping every page chunk left a long PDF searchable on
+  // its last batch alone. Pages in the batch that came back empty are
+  // cleared too, so stale text cannot outlive a re-extraction.
+  const scopedPages = kind === "page" && Array.isArray(pageNumbers)
+    ? [...new Set(pageNumbers.filter(Number.isInteger))]
+    : null;
+  if (!clean.length && !scopedPages?.length) return 0;
 
-  const embeddings = await embedMany(clean.map((r) => r.text), { userId });
-  const db = await dbLazy();
-  await db.schema("edu").from("record_chunks").delete()
+  // Embed BEFORE deleting: a failed embed must leave the old chunks in place.
+  const embeddings = clean.length ? await embed(clean.map((r) => r.text), { userId }) : [];
+  const db = deps.db || await dbLazy();
+  let del = db.schema("edu").from("record_chunks").delete()
     .eq("record_id", recordId).eq("kind", kind);
+  if (scopedPages) del = del.in("page_number", scopedPages);
+  await del;
+  if (!clean.length) return 0;
 
   const now = new Date().toISOString();
   const insertRows = clean.map((r, i) => ({
@@ -187,6 +199,7 @@ export async function indexRecord({ userId, recordId, name, contentKey = null, p
     if (Array.isArray(pages) && pages.length) {
       n += await replaceRecordChunks({
         userId, recordId, contentKey, kind: "page",
+        pageNumbers: pages.map((p) => p?.pageNumber),
         rows: pages
           .filter((p) => String(p?.markdown || "").trim())
           .map((p) => ({ pageNumber: p.pageNumber, text: p.markdown })),

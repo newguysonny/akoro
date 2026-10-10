@@ -203,7 +203,10 @@ export async function replaceTranscript(userId, contentKey, segments, model) {
     text: s.text, model: s.model || model,
   }));
   for (let i = 0; i < rows.length; i += 100) {
-    const ins = await db.schema("edu").from("record_transcripts").insert(rows.slice(i, i + 100));
+    // The SAME table the delete above cleared and getTranscript reads. This
+    // used to write edu.record_transcripts — a table no migration creates —
+    // so every transcription deleted the old transcript, then failed here.
+    const ins = await db.schema("edu").from("content_transcripts").insert(rows.slice(i, i + 100));
     if (ins.error) throw ins.error;
   }
   return rows.length;

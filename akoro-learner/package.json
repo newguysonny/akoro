@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test:agent-actions": "node --test src/lib/agentChatEndpoint.test.mjs src/lib/agentChatTransport.contract.test.mjs src/lib/agentChatTrace.test.mjs src/lib/agentChatUi.contract.test.mjs",
     "check:header": "esbuild scripts/check-subtopic-header.mjs --bundle --platform=node --format=cjs --outfile=node_modules/.cache/csh.cjs --loader:.jsx=jsx --jsx=automatic && node node_modules/.cache/csh.cjs",
-    "check:dhub": "node scripts/check-dhub-hub.mjs && node scripts/check-dhub-search.mjs"
+    "check:dhub": "node scripts/check-dhub-hub.mjs && node scripts/check-dhub-search.mjs",
+    "lint:undef": "eslint src"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.17.6",
@@ -30,6 +31,8 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.0.0",
     "autoprefixer": "^10.4.0",
+    "eslint": "^10.1.0",
+    "globals": "^16.5.0",
     "postcss": "^8.4.0",
     "tailwindcss": "^3.4.0",
     "vite": "^5.0.0",

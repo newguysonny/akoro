@@ -93,6 +93,10 @@ export async function autoExtractUpload(record) {
     const isImage = /^image\//.test(record.mime || '');
     if (!isPdf && !isImage) return;   // text files read as-is; A/V is the API's lane
     if (isPdf) {
+      // Loaded the way the reader loads it: PdfPages.jsx also points pdf.js
+      // at its worker. (This used loadPdfDocument without importing it, so
+      // background extraction threw — silently — on every PDF upload.)
+      const { loadPdfDocument } = await import('./PdfPages.jsx');
       const { pdf } = await loadPdfDocument(record.fileUrl);
       const pages = await rasterizePdfPages(pdf);
       if (pages.length) await runRecordExtraction({ recordId: record.id, pages });
