@@ -80,7 +80,7 @@ export function buildAiGradeMessages({ assignment = {}, markdown = "", images = 
     `You are drafting marks for a teacher on a learner's submission for "${String(assignment.title || "an activity").slice(0, 160)}"${assignment.subject ? ` (${assignment.subject})` : ""}.`,
     "The teacher reviews and approves everything you produce. Be fair, specific and brief; never invent work the learner didn't submit.",
     open.length ? "Mark each listed question: `awarded` from 0 to its max points (halves allowed), `why` in one sentence citing what the learner wrote." : "",
-    open.length ? open.map(({ q, i }) => `Q${i + 1} (index ${i}, max ${pointsOf(q)}${Number.isInteger(q?.passage) && passages[q.passage] ? `, about passage ${q.passage + 1}` : ""}): ${qText(q)}${q?.figure ? " [has a diagram the learner saw]" : ""}${typeof q === "object" && q?.answer ? `\n  Model answer: ${q.answer}` : ""}`).join("\n") : "",
+    open.length ? open.map(({ q, i }) => `Q${i + 1} (index ${i}, max ${pointsOf(q)}${Number.isInteger(q?.passage) && passages[q.passage] ? `, about passage ${q.passage + 1}` : ""}): ${qText(q)}${q?.figure ? " [has a diagram the learner saw]" : ""}${typeof q === "object" && q?.answer ? `\n  Model answer: ${typeof q.answer === "object" ? Object.entries(q.answer).map(([k, v]) => `${k}: ${v}`).join("; ") : q.answer}` : ""}${q?.format === "label" ? " [the learner names each labelled part as \"P: …\" lines]" : ""}`).join("\n") : "",
     // A comprehension passage the open questions are about.
     open.some(({ q }) => Number.isInteger(q?.passage) && passages[q.passage])
       ? `Passages:\n${passages.map((p, n) => `Passage ${n + 1}${p.title ? ` — ${p.title}` : ""}:\n${String(p.text || "").slice(0, 6000)}`).join("\n\n")}` : "",

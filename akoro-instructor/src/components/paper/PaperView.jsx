@@ -88,14 +88,27 @@ function PaperQuestion({ q, i, showKey, change, versionLabel }) {
       <div style={{ display: 'flex', gap: 7, fontSize: 13.5, lineHeight: 1.5, color: INK }}>
         <b style={{ flexShrink: 0, minWidth: 20 }}>{i + 1}.</b>
         <span style={{ flex: 1 }}>
-          <MathText text={obj.q || ''} />
+          {obj.format === 'assertion_reason' && obj.assertion
+            ? <><b>Assertion:</b> <MathText text={obj.assertion} /><br /><b>Reason:</b> <MathText text={obj.reason || ''} /></>
+            : <span style={{ whiteSpace: 'pre-line' }}><MathText text={obj.q || ''} /></span>}
           {pts && <span style={{ fontSize: 11, color: MUTED2, whiteSpace: 'nowrap', fontFamily: FONT }}> [{pts} mark{pts === 1 ? '' : 's'}]</span>}
           {look && <span style={{ fontFamily: FONT, fontSize: 9.5, fontWeight: 900, color: look.fg, background: look.chipBg, borderRadius: 5, padding: '1px 6px', marginLeft: 6, whiteSpace: 'nowrap' }}>{look.chip}{versionLabel ? ` IN ${versionLabel}` : ''}</span>}
         </span>
       </div>
       <Figure figure={obj.figure} style={{ marginLeft: 27 }} />
       {!obj.figure && <FigureSlot note={obj.figure_note} style={{ marginLeft: 27 }} />}
-      {Array.isArray(obj.options) ? (
+      {obj.format === 'label' && Array.isArray(obj.labels) ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginLeft: 27, marginTop: 4 }}>
+          {obj.labels.map((l) => (
+            <div key={l} style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontSize: 13.5 }}>
+              <b style={{ minWidth: 22 }}>{l}</b>
+              {showKey && obj.answer?.[l]
+                ? <span style={{ color: GREEN, fontWeight: 700 }}>{obj.answer[l]} ✓</span>
+                : <span style={{ flex: 1, borderBottom: `1px dashed ${BORDER}`, height: 16 }} aria-hidden />}
+            </div>
+          ))}
+        </div>
+      ) : Array.isArray(obj.options) ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginLeft: 27, marginTop: obj.figure ? 0 : 4 }}>
           {obj.options.map((o, oi) => {
             const key = showKey && obj.correct != null && Number(obj.correct) === oi;

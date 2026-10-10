@@ -623,8 +623,8 @@ export const INSTRUCTOR_TOOLS = [
         question_request: { type: "string", description: "assignment only: the instructor's own words about the questions, verbatim — count, mix of types, diagrams, marks." },
         question_plan: { type: "object", description: "assignment only: the same request as structure. Only what the instructor said — leave the rest out.", properties: {
           total: { type: "number", description: "How many questions in all." },
-          mix: { type: "array", description: "Each kind of question and how many, e.g. [{label:'MCQ',kind:'mcq',count:3},{label:'Theory',kind:'open',count:2}]. 'direct theory', 'short answer', 'essay' are open.", items: { type: "object", properties: {
-            label: { type: "string" }, kind: { type: "string", enum: ["mcq", "open"] }, count: { type: "number" },
+          mix: { type: "array", description: "Each kind of question and how many, e.g. [{label:'MCQ',kind:'mcq',count:3},{label:'Theory',kind:'open',count:2}]. 'direct theory', 'short answer', 'essay' are open. Named kinds keep their shape — use these labels: 'True or false' (mcq), 'Assertion and reason' (mcq), 'Labelling' (label: name the marked parts of a diagram), 'Case study' (open: a scenario then its questions — count the questions).", items: { type: "object", properties: {
+            label: { type: "string" }, kind: { type: "string", enum: ["mcq", "open", "label"] }, count: { type: "number" },
           }, required: ["label", "kind", "count"] } },
           diagrams: { type: "number", description: "How many questions must have a diagram. 0 when they said no diagrams; omit when they didn't say." },
           options: { type: "number", enum: [4, 5], description: "Options per MCQ — 4 unless they asked for 5 (A–E)." },

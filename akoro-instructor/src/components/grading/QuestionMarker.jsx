@@ -100,7 +100,7 @@ export default function QuestionMarker({ questions, paper = null, step, setStep,
             <PassageBox passage={ctx.passage} style={{ marginTop: 6, maxHeight: 240, overflowY: 'auto' }} />
           </details>
         )}
-        <div style={{ fontSize: 14, fontWeight: 800, color: INK, lineHeight: 1.45 }}>{qText(q) ? <MathText text={qText(q)} /> : `Question ${step + 1}`}</div>
+        <div style={{ fontSize: 14, fontWeight: 800, color: INK, lineHeight: 1.45, whiteSpace: 'pre-line' }}>{qText(q) ? <MathText text={qText(q)} /> : `Question ${step + 1}`}</div>
         {q?.figure && <Figure figure={q.figure} maxHeight={180} />}
       </div>
 
@@ -119,6 +119,14 @@ export default function QuestionMarker({ questions, paper = null, step, setStep,
           })()
           : <div style={{ fontSize: 13, color: INK, lineHeight: 1.6, whiteSpace: 'pre-wrap', maxHeight: 220, overflowY: 'auto' }}>{String(raw)}</div>}
       </div>
+
+      {/* The key for a written answer: a labelling question's parts, or a model answer */}
+      {q?.answer && !isMcq(q) && (
+        <div style={{ fontSize: 12, color: INK, background: '#F3FBF6', border: `1px solid ${GREEN}33`, borderRadius: 10, padding: '8px 11px', lineHeight: 1.55 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: .5, color: GREEN }}>{typeof q.answer === 'object' ? 'KEY' : 'MODEL ANSWER'}</span>
+          <div style={{ whiteSpace: 'pre-wrap' }}>{typeof q.answer === 'object' ? Object.entries(q.answer).map(([k, v]) => `${k}: ${v}`).join('\n') : String(q.answer)}</div>
+        </div>
+      )}
 
       {/* The AI's suggestion for this question */}
       {aiQ && (

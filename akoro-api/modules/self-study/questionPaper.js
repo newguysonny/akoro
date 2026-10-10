@@ -30,7 +30,9 @@ const NUM = "(\\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|t
 export const MAX_QUESTIONS = 30;
 export const MAX_VERSIONS = 10;
 
-/* Question kinds a teacher names, and what each is. */
+/* Question kinds a teacher names, and what each is. `kind` is how it is
+   answered (mcq: pick an option · open: write · label: name each marked part);
+   `format` marks the kinds with a fixed shape. */
 const KINDS = [
   { re: /^(mcqs?|objectives?|objective questions?|multiple[- ]choice(?: questions?)?)$/i, label: "MCQ", kind: "mcq" },
   { re: /^(?:direct |short )?theory(?: questions?)?$/i, label: "Theory", kind: "open" },
@@ -38,12 +40,34 @@ const KINDS = [
   { re: /^structured(?: questions?)?$/i, label: "Structured", kind: "open" },
   { re: /^essays?(?: questions?)?$/i, label: "Essay", kind: "open" },
   { re: /^fill[- ]in[- ](?:the[- ])?(?:gaps?|blanks?)(?: questions?)?$/i, label: "Fill in the gap", kind: "open" },
-  { re: /^true\s*(?:\/|or)\s*false(?: questions?)?$/i, label: "True or false", kind: "mcq", options: 2 },
+  { re: /^true\s*(?:\/|or|-)\s*false(?: questions?| statements?)?$/i, label: "True or false", kind: "mcq", format: "true_false", options: 2,
+    loose: /\btrue\s*(?:\/|or|-)\s*false\b/i },
+  { re: /^(?:identification|labell?ing|label(?:led|ed)?[- ]diagrams?)(?: questions?)?$/i, label: "Labelling", kind: "label", format: "label",
+    loose: /\b(identification|labell?ing questions?|label(?:led|ed)? diagrams?|label the parts|name the (?:labell?ed )?parts)\b/i },
+  { re: /^assertion[- ](?:and|&)[- ]reason(?:ing)?(?: questions?)?$/i, label: "Assertion and reason", kind: "mcq", format: "assertion_reason", options: 4,
+    loose: /\bassertion[- ](?:and|&)[- ]reason/i },
+  { re: /^(?:case[- ]stud(?:y|ies)|scenarios?(?:[- ]based)?)(?: questions?)?$/i, label: "Case study", kind: "open", format: "case_study",
+    loose: /\b(case[- ]stud(?:y|ies)|scenario[- ]based)\b/i },
   { re: /^calculations?(?: questions?)?$/i, label: "Calculation", kind: "open" },
 ];
 const KIND_WORDS = "(?:direct |short )?theory(?: questions?)?|short[- ]answers?(?: questions?)?|structured(?: questions?)?|essays?(?: questions?)?|"
-  + "fill[- ]in[- ](?:the[- ])?(?:gaps?|blanks?)(?: questions?)?|true\\s*(?:\\/|or)\\s*false(?: questions?)?|calculations?(?: questions?)?|"
+  + "fill[- ]in[- ](?:the[- ])?(?:gaps?|blanks?)(?: questions?)?|true\\s*(?:\\/|or|-)\\s*false(?: questions?| statements?)?|calculations?(?: questions?)?|"
+  + "(?:identification|labell?ing|label(?:led|ed)?[- ]diagrams?)(?: questions?)?|assertion[- ](?:and|&)[- ]reason(?:ing)?(?: questions?)?|"
+  + "(?:case[- ]stud(?:y|ies)|scenarios?(?:[- ]based)?)(?: questions?)?|"
   + "mcqs?|objectives?(?: questions?)?|multiple[- ]choice(?: questions?)?";
+
+/** The kind a label names ("Assertion and reason" → its format and options). */
+export const kindFor = (label) => KINDS.find((k) => k.re.test(String(label || "").trim())) || null;
+
+/** The standard Assertion-and-Reason options, in this order, always. */
+export const AR_OPTIONS = Object.freeze([
+  "Both the assertion and the reason are true, and the reason correctly explains the assertion.",
+  "Both the assertion and the reason are true, but the reason does not explain the assertion.",
+  "The assertion is true, but the reason is false.",
+  "The assertion is false, but the reason is true.",
+]);
+export const TF_OPTIONS = Object.freeze(["True", "False"]);
+const FORMATS = ["true_false", "assertion_reason", "label", "case_study"];
 
 /**
  * The teacher's request → a plan. Anything not stated stays null (the model
@@ -52,26 +76,34 @@ const KIND_WORDS = "(?:direct |short )?theory(?: questions?)?|short[- ]answers?(
  */
 export function parseQuestionRequest(text) {
   const s = String(text || "").replace(/\s+/g, " ").trim();
-  const plan = { total: null, mix: [], diagrams: null, options: null, totalPoints: null, sections: false, passage: false };
+  const plan = { total: null, mix: [], wanted: [], diagrams: null, options: null, totalPoints: null, sections: false, passage: false };
   if (!s) return plan;
   const mixRe = new RegExp(`\\b${NUM}\\s+(${KIND_WORDS})\\b`, "gi");
   let m;
   while ((m = mixRe.exec(s))) {
-    const count = num(m[1]);
+    let count = num(m[1]);
     const k = KINDS.find((x) => x.re.test(m[2].trim()));
     if (!k || !count) continue;
+    // "1 case study with 3 questions" is 3 questions on one scenario.
+    const per = k.format === "case_study" ? new RegExp(`^\\s*(?:with|of|having)\\s+${NUM}\\s+questions?`, "i").exec(s.slice(mixRe.lastIndex)) : null;
+    if (per && num(per[1])) count *= num(per[1]);
     const have = plan.mix.find((x) => x.label === k.label);
     if (have) have.count += count;
-    else plan.mix.push({ label: k.label, kind: k.kind, count, ...(k.options ? { options: k.options } : {}) });
+    else plan.mix.push({ label: k.label, kind: k.kind, count, ...(k.format ? { format: k.format } : {}), ...(k.options ? { options: k.options } : {}) });
   }
+  // Kinds named without a count ("include a case study") — at least one each.
+  plan.wanted = KINDS.filter((k) => k.loose && k.loose.test(s) && !plan.mix.some((x) => x.label === k.label)).map((k) => k.label);
+  const mixSum = plan.mix.reduce((n, x) => n + x.count, 0);
+  // The counted kinds are the whole paper — unless others are named without a count.
+  if (!plan.total && mixSum && !plan.wanted.length) plan.total = mixSum;
   // "5 questions" — but not "3 MCQ questions" or "2 diagram questions" (those are parts).
   const totalRe = new RegExp(`\\b${NUM}\\s+(?:[a-z-]+\\s+){0,2}questions?\\b`, "gi");
   const partRe = new RegExp(`^${NUM}\\s+(?:of them\\s+)?(?:with\\s+)?(?:a\\s+)?(?:${KIND_WORDS}|diagrams?|figures?|graphs?|pictures?)`, "i");
-  const mixSum = plan.mix.reduce((n, x) => n + x.count, 0);
   for (const t of s.matchAll(totalRe)) {
+    // "…case study with 3 questions" counts that scenario's questions, not the paper's.
+    if (/\b(?:with|of|having)\s*$/i.test(s.slice(0, t.index))) continue;
     if (num(t[1]) && !partRe.test(t[0])) { plan.total = num(t[1]); break; }
   }
-  if (!plan.total && mixSum) plan.total = mixSum;
   if (plan.total) plan.total = Math.min(plan.total, MAX_QUESTIONS);
 
   const dq = new RegExp(`\\b${NUM}\\s+(?:of them\\s+)?(?:with\\s+)?(?:a\\s+)?(?:diagrams?|figures?|graphs?|pictures?)(?:\\s+questions?)?\\b`, "i").exec(s)
@@ -90,6 +122,7 @@ export function parseQuestionRequest(text) {
   }
   plan.sections = /\bsections?\b/i.test(s) && !/\b(no|without)\s+sections?\b/i.test(s);
   plan.passage = /\b(comprehension|passage)\b/i.test(s) && !/\b(no|without)\s+(comprehension|passages?)\b/i.test(s);
+  if (hasFormat(plan, "case_study")) plan.passage = true;   // a scenario is a passage the questions share
   return plan;
 }
 
@@ -99,8 +132,15 @@ export function mergePlan(parsed, given) {
   if (!given || typeof given !== "object") return out;
   if (Array.isArray(given.mix) && given.mix.length) {
     out.mix = given.mix
-      .map((x) => ({ label: String(x?.label || "").trim().slice(0, 40), kind: x?.kind === "mcq" ? "mcq" : "open", count: Math.max(0, Math.min(MAX_QUESTIONS, Number(x?.count) || 0)) }))
+      .map((x) => {
+        const label = String(x?.label || "").trim().slice(0, 40);
+        const k = kindFor(label);   // a kind we know keeps its own shape
+        return k
+          ? { label: k.label, kind: k.kind, count: Math.max(0, Math.min(MAX_QUESTIONS, Number(x?.count) || 0)), ...(k.format ? { format: k.format } : {}), ...(k.options ? { options: k.options } : {}) }
+          : { label, kind: ["mcq", "label"].includes(x?.kind) ? x.kind : "open", count: Math.max(0, Math.min(MAX_QUESTIONS, Number(x?.count) || 0)) };
+      })
       .filter((x) => x.label && x.count);
+    out.wanted = (out.wanted || []).filter((w) => !out.mix.some((x) => x.label === w));
   }
   const n = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : null);
   if (n(given.total)) out.total = Math.min(MAX_QUESTIONS, n(given.total));
@@ -112,7 +152,13 @@ export function mergePlan(parsed, given) {
   if (n(given.total_points ?? given.totalPoints)) out.totalPoints = n(given.total_points ?? given.totalPoints);
   if (typeof given.sections === "boolean") out.sections = given.sections;
   if (typeof given.passage === "boolean") out.passage = given.passage;
+  if (hasFormat(out, "case_study")) out.passage = true;
   return out;
+}
+
+/** Does the plan call for this format (counted or just named)? */
+export function hasFormat(plan, format) {
+  return (plan?.mix || []).some((x) => x.format === format) || (plan?.wanted || []).some((w) => kindFor(w)?.format === format);
 }
 
 /** One line for the chat card and the warning: "5 questions (3 MCQ · 2 Theory)". */
@@ -128,26 +174,36 @@ const FIGURE_RULES =
   "Give every figure an \"alt\": one sentence describing what it shows. " +
   "If a good line drawing isn't possible (a photo, a detailed organism, a map), give NO svg: put \"figure_note\" on the question saying what figure the teacher should add.";
 
+const FORMAT_RULES = {
+  true_false: 'A "True or false" question is ONE statement in "text" for the learner to judge (no question mark); set "format": "true_false", options exactly ["True", "False"], "correct" 0 when the statement is true, 1 when false. Mix true and false statements.',
+  assertion_reason: 'An "Assertion and reason" question sets "format": "assertion_reason" and gives "assertion" and "reason" — one sentence each, without the words Assertion/Reason. Leave "options" out: the standard four are added (0: both true and the reason explains the assertion · 1: both true but the reason does not explain it · 2: assertion true, reason false · 3: assertion false, reason true); "correct" is 0–3 in that order. Vary which one is right.',
+  label: `A "Labelling" question sets "format": "label": a diagram with 2–6 parts marked P, Q, R… by leader lines (the names are NOT written in it), "text" asks the learner to name the labelled parts, "labels": ["P", "Q", …] and "label_answers": { "P": "…", … }. ${"The figure follows the FIGURE rules"}; if a clean drawing isn't possible give "figure_note" describing the diagram and where each letter points instead.`,
+  case_study: 'A "Case study" is a realistic scenario of 80–200 words written ONCE in "passages" (title it "Case study: …"), then its open, analytical questions (apply, analyse, evaluate — not recall); each sets "format": "case_study" and "passage" to that scenario\'s 0-based index. At most 4 questions per scenario.',
+};
+
 function rulesFor(plan) {
   const r = [];
   const opts = plan.options || 4;
   if (plan.total) r.push(`Write EXACTLY ${plan.total} question${plan.total === 1 ? "" : "s"}.`);
   else r.push("Write 5 questions unless the request says otherwise (never more than 12 unless asked).");
   if (plan.mix.length) {
-    r.push(`The mix is a contract — exactly: ${plan.mix.map((x) => `${x.count} × "${x.label}" (${x.kind === "mcq" ? `multiple choice, ${x.options || opts} options` : "open answer, no options"})`).join("; ")}. ` +
+    r.push(`The mix is a contract — exactly: ${plan.mix.map((x) => `${x.count} × "${x.label}" (${x.format === "assertion_reason" ? "assertion and reason" : x.format === "true_false" ? "true or false" : x.kind === "mcq" ? `multiple choice, ${x.options || opts} options` : x.kind === "label" ? "name the labelled parts of a diagram" : "open answer, no options"})`).join("; ")}. ` +
       `Set each question's "type" to exactly one of those labels. Order: all of the first label, then the next, and so on.`);
   }
   r.push(`Multiple-choice questions have exactly ${opts} options (read as ${opts === 5 ? "A–E" : "A–D"}) and "correct", the 0-based index of the right one; open questions have no options. ` +
     "Options are short and parallel, never \"all of the above\" or \"none of the above\".");
-  if (plan.diagrams === 0) r.push("Use NO figures.");
+  if ((plan.wanted || []).length) r.push(`The request also asks for: ${plan.wanted.map((w) => `"${w}"`).join(", ")} — include at least one of each, with "type" set to that label.`);
+  for (const f of FORMATS) if (hasFormat(plan, f)) r.push(FORMAT_RULES[f]);
+  if (plan.diagrams === 0 && !hasFormat(plan, "label")) r.push("Use NO figures.");
   else if (typeof plan.diagrams === "number") r.push(`Exactly ${plan.diagrams} question${plan.diagrams === 1 ? "" : "s"} must use a figure. ${FIGURE_RULES}`);
   else if (plan.diagrams === true) r.push(`The request asks for diagrams or visuals: add a figure to the questions that are about one (at least 1, at most half the questions). ${FIGURE_RULES}`);
-  else r.push(`Use no figures unless a question cannot be asked without one (e.g. reading a graph). ${FIGURE_RULES}`);
+  else r.push(`Use no figures unless a question cannot be asked without one (e.g. reading a graph${hasFormat(plan, "label") ? ", or a Labelling question" : ""}). ${FIGURE_RULES}`);
   if (plan.totalPoints) r.push(`max_points across all questions sum EXACTLY to ${plan.totalPoints}.`);
   else r.push("Choose max_points per question (MCQ usually 1–2, open answers more) — harder and higher-order questions earn more.");
   if (plan.sections) r.push("Group the questions into the sections the request describes: \"sections\": [{ title, instructions }], each question's \"section\" is its 0-based index.");
   else r.push("Do NOT use sections — one plain numbered list.");
-  if (plan.passage) r.push("Write the passage ONCE in \"passages\": [{ title, text }]; the questions about it set \"passage\": 0 and say \"According to the passage…\".");
+  if (hasFormat(plan, "case_study")) { /* the case-study rule covers passages */ }
+  else if (plan.passage) r.push("Write the passage ONCE in \"passages\": [{ title, text }]; the questions about it set \"passage\": 0 and say \"According to the passage…\".");
   else r.push("No passages.");
   return r;
 }
@@ -156,7 +212,8 @@ const SHAPE =
   'Return JSON: { "instructions": string (ONE line for the top of the paper, e.g. "Answer all questions."), ' +
   '"sections"?: [{ "title", "instructions" }], "passages"?: [{ "title", "text" }], ' +
   '"questions": [ { "text", "type", "max_points", "difficulty" (Easy|Medium|Hard), "cognitive_level" (Recall|Understand|Apply|Analyze|Evaluate|Create), ' +
-  '"options"?: string[], "correct"?: number, "figure"?: { "svg", "caption", "alt" }, "figure_note"?: string, "section"?: number, "passage"?: number } ] }';
+  '"options"?: string[], "correct"?: number, "figure"?: { "svg", "caption", "alt" }, "figure_note"?: string, "section"?: number, "passage"?: number, ' +
+  '"format"?: "true_false"|"assertion_reason"|"label"|"case_study", "assertion"?: string, "reason"?: string, "labels"?: string[], "label_answers"?: { [label]: string } } ] }';
 
 const level = (lv) => (lv ? `\nClass / level: ${lv}` : "");
 
@@ -187,6 +244,10 @@ function paperForModel(base) {
     ...(Array.isArray(q.options) ? { options: q.options, correct: q.correct ?? null } : {}),
     ...(q.figure ? { has_figure: true, figure_alt: q.figure.alt || q.figure.caption || "" } : {}),
     ...(q.figure_note ? { figure_note: q.figure_note } : {}),
+    ...(q.format ? { format: q.format } : {}),
+    ...(q.format === "assertion_reason" ? { assertion: q.assertion, reason: q.reason } : {}),
+    ...(q.format === "label" ? { labels: q.labels, label_answers: q.answer || {} } : {}),
+    ...(Number.isInteger(q.passage) ? { passage: q.passage } : {}),
   }));
 }
 
@@ -200,11 +261,14 @@ export function buildRevisionMessages({ topic, subject, classLevel = null, reque
       "A question that is removed is simply left out. Keep a changed question's figure by setting \"keep_figure\": true instead of redrawing it.",
     `Multiple-choice questions have ${opts} options unless the follow-up says otherwise; open questions have no options.`,
     `When the follow-up asks for a diagram: ${FIGURE_RULES}`,
+    `Question kinds keep their shape when changed or added: ${Object.values(FORMAT_RULES).join(" ")}`,
+    "A new case-study scenario goes in \"passages\" (the full list, existing ones first, unchanged) and its questions point at it.",
     "Also return \"note\": ONE short line saying what changed, numbered as in the NEW list (e.g. \"Q4 made harder; new Q3 with a diagram\").",
     "Write maths with Unicode, never LaTeX.",
-    'Return JSON: { "note": string, "questions": [ ... ] } — question fields as: { "text", "type", "max_points", "difficulty", "cognitive_level", "options"?, "correct"?, "figure"?: { "svg", "caption", "alt" }, "figure_note"? }',
+    'Return JSON: { "note": string, "passages"?: [{ "title", "text" }], "questions": [ ... ] } — question fields as: { "text", "type", "max_points", "difficulty", "cognitive_level", "options"?, "correct"?, "figure"?: { "svg", "caption", "alt" }, "figure_note"?, "format"?, "assertion"?, "reason"?, "labels"?, "label_answers"?, "passage"? }',
   ].join("\n");
   const user = `Topic: ${topic}\nSubject: ${subject}` + level(classLevel) +
+    (base.passages?.length ? `\nThe current passages:\n${JSON.stringify(base.passages.map((p, i) => ({ index: i, title: p.title, text: String(p.text).slice(0, 1500) })))}` : "") +
     `\nThe current questions:\n${JSON.stringify(paperForModel(base))}\n\nThe teacher's follow-up: "${String(request || "").slice(0, 1500)}"`;
   const msgs = [{ role: "system", content: system }, { role: "user", content: user }];
   if (feedback && previous) {
@@ -219,7 +283,17 @@ const str = (v, max) => String(v ?? "").trim().slice(0, max);
 /** One model question → the stored shape. */
 function normalizeQuestion(q, { options = null } = {}) {
   if (!q || typeof q !== "object") return null;
-  const text = str(q.text ?? q.q, 2000);
+  const format = FORMATS.includes(q.format) ? q.format : kindFor(q.type)?.format || null;
+  let text = str(q.text ?? q.q, 2000);
+  let assertion = "", reason = "";
+  if (format === "assertion_reason") {
+    // Two sentences, the four options fixed. Older text "Assertion: … Reason: …" splits back.
+    const m = /assertion\s*[:\-–]\s*([\s\S]+?)\s*\n?\s*reason\s*[:\-–]\s*([\s\S]+)/i.exec(text);
+    assertion = str(q.assertion, 600) || str(m?.[1], 600);
+    reason = str(q.reason, 600) || str(m?.[2], 600);
+    if (!assertion || !reason) return null;
+    text = `Assertion: ${assertion}\nReason: ${reason}`;
+  }
   if (!text) return null;
   const out = {
     q: text,
@@ -227,18 +301,41 @@ function normalizeQuestion(q, { options = null } = {}) {
     max_points: Number(q.max_points) > 0 ? Math.round(Number(q.max_points) * 2) / 2 : null,
     difficulty: str(q.difficulty, 20),
     cognitive_level: str(q.cognitive_level, 20),
+    ...(format ? { format } : {}),
   };
-  if (Array.isArray(q.options)) {
+  if (format === "true_false") {
+    out.options = [...TF_OPTIONS];
+    const c = typeof q.correct === "boolean" ? (q.correct ? 0 : 1)
+      : /^(true|false)$/i.test(String(q.answer ?? "")) ? (/^true$/i.test(String(q.answer)) ? 0 : 1)
+      : Number(q.correct) === 1 ? 1 : 0;
+    out.correct = c;
+  } else if (format === "assertion_reason") {
+    out.assertion = assertion;
+    out.reason = reason;
+    out.options = [...AR_OPTIONS];
+    out.correct = Number.isInteger(q.correct) && q.correct >= 0 && q.correct < AR_OPTIONS.length ? q.correct : 0;
+  } else if (format === "label") {
+    // The parts to name, and the key (stripped for learners like any answer).
+    const labels = [...new Set((Array.isArray(q.labels) ? q.labels : []).map((l) => str(l, 12)).filter(Boolean))].slice(0, 8);
+    if (labels.length < 1) return null;
+    out.labels = labels;
+    const key = q.label_answers && typeof q.label_answers === "object" ? q.label_answers : q.answer && typeof q.answer === "object" ? q.answer : {};
+    const answer = Object.fromEntries(labels.map((l) => [l, str(key[l], 200)]).filter(([, v]) => v));
+    if (Object.keys(answer).length) out.answer = answer;
+  } else if (Array.isArray(q.options)) {
     const opts = q.options.map((o) => str(o, 300)).filter(Boolean).slice(0, options || 5);
     if (opts.length >= 2) {
       out.options = opts;
       out.correct = Number.isInteger(q.correct) && q.correct >= 0 && q.correct < opts.length ? q.correct : 0;
     }
   }
+  if (typeof q.answer === "string" && format !== "true_false" && str(q.answer, 2000)) out.answer = str(q.answer, 2000);
   const svg = q.figure && typeof q.figure.svg === "string" ? sanitizeSvg(q.figure.svg) : null;
   if (svg) {
     out.figure = { svg, ...(str(q.figure.caption, 200) ? { caption: str(q.figure.caption, 200) } : {}), ...(str(q.figure.alt, 300) ? { alt: str(q.figure.alt, 300) } : {}) };
-  } else if (q.figure && typeof q.figure === "object" && !svg && (q.figure.alt || q.figure.caption)) {
+  } else if (q.figure && typeof q.figure === "object" && q.figure.src) {
+    out.figure = q.figure;   // a teacher's upload, carried through a revision (cleaned again on save)
+  } else if (q.figure && typeof q.figure === "object" && (q.figure.alt || q.figure.caption)) {
     // A figure the model described but couldn't draw cleanly → a slot for the teacher.
     out.figure_note = str(q.figure.alt || q.figure.caption, 300);
   }
@@ -252,14 +349,15 @@ function normalizeQuestion(q, { options = null } = {}) {
 export function normalizePaper(json, plan = {}) {
   const j = json && typeof json === "object" ? json : {};
   const sections = (Array.isArray(j.sections) ? j.sections : []).slice(0, 12).map((s) => ({ title: str(s?.title, 120), instructions: str(s?.instructions, 1200) }));
-  const passages = (Array.isArray(j.passages) ? j.passages : []).slice(0, 8).map((p) => ({ title: str(p?.title, 160), text: str(p?.text, 8000) })).filter((p) => p.text);
+  // Kept in place (questions point at them by index); an empty one is dropped below.
+  const passages = (Array.isArray(j.passages) ? j.passages : []).slice(0, 8).map((p) => ({ title: str(p?.title, 160), text: str(p?.text, 8000) }));
   const mixOpts = new Map((plan.mix || []).filter((x) => x.options).map((x) => [x.label.toLowerCase(), x.options]));
   const questions = (Array.isArray(j.questions) ? j.questions : []).slice(0, MAX_QUESTIONS)
     .map((q) => normalizeQuestion(q, { options: mixOpts.get(String(q?.type || "").toLowerCase()) || plan.options || 5 }))
     .filter(Boolean)
     .map((q) => {
       if (Number.isInteger(q.section) && !sections[q.section]) delete q.section;
-      if (Number.isInteger(q.passage) && !passages[q.passage]) delete q.passage;
+      if (Number.isInteger(q.passage) && !passages[q.passage]?.text) delete q.passage;
       return q;
     });
   const usedS = questions.some((q) => Number.isInteger(q.section));
@@ -297,11 +395,20 @@ export function applyRevision(base, json) {
     changes[questions.length] = from ? "changed" : "new";
     questions.push(q);
   }
+  // Passages: the existing ones never change here; new scenarios are appended.
+  const passages = [...(base.passages || [])];
+  if (Array.isArray(j.passages)) {
+    for (const p of j.passages.slice(passages.length, 8)) {
+      const text = str(p?.text, 8000);
+      passages.push({ title: str(p?.title, 160), text });
+    }
+  }
+  for (const q of questions) if (Number.isInteger(q.passage) && !passages[q.passage]?.text) delete q.passage;
   const paper = {
     instructions: base.instructions || "Answer all questions.",
     questions,
     ...(base.sections ? { sections: base.sections } : {}),
-    ...(base.passages ? { passages: base.passages } : {}),
+    ...(questions.some((q) => Number.isInteger(q.passage)) ? { passages } : {}),
   };
   return { paper, changes, note: str(j.note, 200) };
 }
@@ -317,16 +424,26 @@ export function checkPaper(paper, plan = {}) {
   for (const x of plan.mix || []) {
     const these = qs.filter((q) => labelOf(q) === x.label.toLowerCase());
     if (these.length !== x.count) problems.push(`Asked for ${x.count} ${x.label}, got ${these.length}.`);
-    const wrongKind = these.filter((q) => (x.kind === "mcq") !== Array.isArray(q.options)).length;
-    if (wrongKind) problems.push(`${wrongKind} ${x.label} question${wrongKind === 1 ? " is" : "s are"} the wrong kind (${x.kind === "mcq" ? "needs options" : "must have no options"}).`);
+    const wrongKind = these.filter((q) => (x.format ? q.format !== x.format : (x.kind === "mcq") !== Array.isArray(q.options))).length;
+    if (wrongKind) problems.push(`${wrongKind} ${x.label} question${wrongKind === 1 ? " is" : "s are"} the wrong kind (${
+      x.format === "label" ? "needs a labelled diagram and labels" : x.format === "assertion_reason" ? "needs an assertion and a reason"
+        : x.format === "true_false" ? "must be a statement marked true or false" : x.format === "case_study" ? "must follow a scenario passage"
+        : x.kind === "mcq" ? "needs options" : "must have no options"}).`);
   }
+  for (const w of plan.wanted || []) {
+    if (!qs.some((q) => labelOf(q) === w.toLowerCase() || (kindFor(w)?.format && q.format === kindFor(w).format))) problems.push(`Asked for ${w} questions, got none.`);
+  }
+  const strays = qs.filter((q) => q.format === "case_study" && !Number.isInteger(q.passage)).length;
+  if (strays) problems.push(`${strays} case-study question${strays === 1 ? " has" : "s have"} no scenario passage.`);
+  const bare = qs.filter((q) => q.format === "label" && !q.figure && !q.figure_note).length;
+  if (bare) problems.push(`${bare} labelling question${bare === 1 ? " has" : "s have"} no diagram.`);
   const want = plan.options || 4;
-  const badOpts = qs.filter((q) => Array.isArray(q.options) && q.options.length !== want && !(plan.mix || []).some((x) => x.options && labelOf(q) === x.label.toLowerCase())).length;
+  const badOpts = qs.filter((q) => Array.isArray(q.options) && !q.format && q.options.length !== want && !(plan.mix || []).some((x) => x.options && labelOf(q) === x.label.toLowerCase())).length;
   if (badOpts) problems.push(`${badOpts} multiple-choice question${badOpts === 1 ? " doesn't" : "s don't"} have ${want} options.`);
-  const figs = qs.filter((q) => q.figure || q.figure_note).length;
+  const figs = qs.filter((q) => (q.figure || q.figure_note) && q.format !== "label").length + qs.filter((q) => q.format === "label" && (q.figure || q.figure_note)).length;
   if (typeof plan.diagrams === "number" && plan.diagrams > 0 && figs < plan.diagrams) problems.push(`Asked for ${plan.diagrams} question${plan.diagrams === 1 ? "" : "s"} with a diagram, got ${figs}.`);
   if (plan.diagrams === true && !figs) problems.push("Asked for diagrams, got none.");
-  if (plan.diagrams === 0 && figs) problems.push("Asked for no diagrams, but some questions have one.");
+  if (plan.diagrams === 0 && qs.some((q) => (q.figure || q.figure_note) && q.format !== "label")) problems.push("Asked for no diagrams, but some questions have one.");
   if (plan.totalPoints) {
     const sum = qs.reduce((n, q) => n + (Number(q.max_points) || 0), 0);
     if (sum !== plan.totalPoints) problems.push(`Marks should total ${plan.totalPoints}, got ${sum}.`);

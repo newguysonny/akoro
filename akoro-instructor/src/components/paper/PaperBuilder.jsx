@@ -16,7 +16,7 @@
 import { useRef, useState } from 'react';
 import { ArrowUp, ArrowDown, ImagePlus, Trash2, Eye, Pencil, Plus } from 'lucide-react';
 import { INK, MUTED, MUTED2, BORDER, WHITE, LIGHT, GREEN, PURPLE, BLUE, RED, FONT } from '../../constants.js';
-import { letterOf, removeRef, imageFileToDataUrl } from '../../lib/paper.js';
+import { letterOf, removeRef, imageFileToDataUrl, AR_OPTIONS, TF_OPTIONS } from '../../lib/paper.js';
 import PaperView, { Figure, FigureSlot } from './PaperView.jsx';
 
 export const MAX_OPTIONS = 5;   // A–E, as on the papers
@@ -33,6 +33,21 @@ const LINK = { border: 'none', background: 'none', color: PURPLE, cursor: 'point
 const ICON_BTN = { border: 'none', background: 'none', color: MUTED2, cursor: 'pointer', padding: '2px 4px', display: 'inline-flex', alignItems: 'center' };
 const sectionName = (i) => `Section ${letterOf(i)}`;
 
+/* The answer kinds the editor offers, and what switching to each sets up. */
+export const KIND_CHOICES = [
+  ['mcq', 'Multiple choice'], ['open', 'Open answer'], ['true_false', 'True / False'],
+  ['assertion_reason', 'Assertion & reason'], ['label', 'Labelling'],
+];
+export const kindValue = (row) => (['true_false', 'assertion_reason'].includes(row.format) ? row.format : row.kind === 'label' ? 'label' : row.kind);
+export function switchKind(row, value) {
+  const base = { ...row, format: row.format === 'case_study' && value === 'open' ? 'case_study' : undefined };
+  if (value === 'true_false') return { ...base, kind: 'mcq', format: 'true_false', options: [...TF_OPTIONS], correct: Math.min(row.correct ?? 0, 1), type: row.type || 'True or false' };
+  if (value === 'assertion_reason') return { ...base, kind: 'mcq', format: 'assertion_reason', options: [...AR_OPTIONS], correct: Math.min(row.correct ?? 0, 3), assertion: row.assertion || row.q || '', reason: row.reason || '', type: row.type || 'Assertion and reason' };
+  if (value === 'label') return { ...base, kind: 'label', format: 'label', labels: row.labels?.length ? row.labels : ['P', 'Q', 'R'], answer: row.answer && typeof row.answer === 'object' ? row.answer : {}, type: row.type || 'Labelling' };
+  const fresh = ['true_false', 'assertion_reason'].includes(row.format);
+  return { ...base, kind: value, ...(value === 'mcq' && fresh ? { options: ['', ''], correct: 0 } : {}) };
+}
+
 /** The builder's rows → what the paper preview reads. */
 export function previewDetails({ questions, sections, passages }) {
   return {
@@ -40,6 +55,9 @@ export function previewDetails({ questions, sections, passages }) {
     questions: (questions || []).map((r) => ({
       q: r.q, figure: r.figure || undefined, figure_note: r.figure_note || undefined, section: r.section, passage: r.passage, max_points: r.max_points,
       ...(r.kind === 'mcq' ? { options: (r.options || []).map((o) => o || '…'), correct: r.correct } : {}),
+      ...(r.format ? { format: r.format } : {}),
+      ...(r.format === 'assertion_reason' ? { assertion: r.assertion, reason: r.reason } : {}),
+      ...(r.kind === 'label' ? { labels: r.labels, answer: r.answer } : {}),
     })),
   };
 }
@@ -164,11 +182,23 @@ export default function PaperBuilder({ questions, sections, passages, onChange, 
                 <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: '10px 11px', background: WHITE }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 7 }}>
                     <span style={{ fontSize: 13, fontWeight: 900, color: INK, flexShrink: 0, minWidth: 20, paddingTop: 6 }}>{qi + 1}.</span>
-                    <textarea value={row.q} rows={2} onChange={(e) => setRow(qi, { q: e.target.value })}
-                      placeholder="The question learners will answer" style={{ ...INP, flex: 1, resize: 'vertical', lineHeight: 1.45, fontSize: 12.5 }} />
-                    <select value={row.kind} onChange={(e) => setRow(qi, { kind: e.target.value })} style={{ ...INP, width: 140, cursor: 'pointer' }}>
-                      <option value="mcq">Multiple choice</option>
-                      <option value="open">Open answer</option>
+                    {row.format === 'assertion_reason' ? (
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}>
+                        {[['assertion', 'Assertion', 'One statement'], ['reason', 'Reason', 'The statement offered as its explanation']].map(([k, label, ph]) => (
+                          <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                            <span style={{ width: 62, fontSize: 10.5, fontWeight: 900, color: MUTED, letterSpacing: .3 }}>{label.toUpperCase()}</span>
+                            <input value={row[k] || ''} onChange={(e) => setRow(qi, { [k]: e.target.value })} placeholder={ph} aria-label={`${label} for question ${qi + 1}`} style={{ ...INP, flex: 1, fontSize: 12.5 }} />
+                          </label>
+                        ))}
+                      </div>
+                    ) : (
+                      <textarea value={row.q} rows={2} onChange={(e) => setRow(qi, { q: e.target.value })}
+                        placeholder={row.format === 'true_false' ? 'A statement learners mark true or false' : row.kind === 'label' ? 'e.g. Name the parts labelled P, Q and R in the diagram.' : 'The question learners will answer'}
+                        style={{ ...INP, flex: 1, resize: 'vertical', lineHeight: 1.45, fontSize: 12.5 }} />
+                    )}
+                    <select value={kindValue(row)} onChange={(e) => onChange({ questions: questions.map((r, i) => (i === qi ? switchKind(r, e.target.value) : r)) })}
+                      aria-label={`Kind of question ${qi + 1}`} style={{ ...INP, width: 150, cursor: 'pointer' }}>
+                      {KIND_CHOICES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                     </select>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                       <button type="button" style={{ ...ICON_BTN, opacity: qi === 0 ? .3 : 1 }} disabled={qi === 0} onClick={() => move(qi, -1)} title="Move up"><ArrowUp size={12} /></button>
@@ -243,19 +273,52 @@ export default function PaperBuilder({ questions, sections, passages, onChange, 
                             onChange={() => setRow(qi, { correct: oi })}
                             title="Mark as the correct option" style={{ accentColor: GREEN, cursor: 'pointer', flexShrink: 0 }} />
                           <span style={{ fontSize: 12, fontWeight: 900, color: (row.correct ?? 0) === oi ? GREEN : MUTED, width: 14 }}>{letterOf(oi)}.</span>
-                          <input value={opt} onChange={(e) => setRow(qi, { options: row.options.map((o, j) => (j === oi ? e.target.value : o)) })}
-                            placeholder={`Option ${letterOf(oi)}`} style={{ flex: 1, ...INP }} />
-                          {(row.options ?? []).length > 2 && (
+                          {row.format === 'true_false' || row.format === 'assertion_reason'
+                            ? <span style={{ flex: 1, fontSize: 12, color: INK, lineHeight: 1.4, padding: '4px 0' }}>{opt}</span>
+                            : <input value={opt} onChange={(e) => setRow(qi, { options: row.options.map((o, j) => (j === oi ? e.target.value : o)) })}
+                              placeholder={`Option ${letterOf(oi)}`} style={{ flex: 1, ...INP }} />}
+                          {(row.options ?? []).length > 2 && !row.format && (
                             <button type="button" onClick={() => setRow(qi, { options: row.options.filter((_, j) => j !== oi), correct: Math.min(row.correct ?? 0, row.options.length - 2) })}
                               style={{ ...ICON_BTN, fontSize: 13 }} title="Remove option">×</button>
                           )}
                         </div>
                       ))}
-                      {(row.options ?? []).length < MAX_OPTIONS && (
+                      {(row.options ?? []).length < MAX_OPTIONS && !row.format && (
                         <button type="button" onClick={() => setRow(qi, { options: [...(row.options ?? []), ''] })}
                           style={{ ...LINK, paddingLeft: 21 }}>+ option {letterOf((row.options ?? []).length)}</button>
                       )}
-                      <div style={{ fontSize: 10, color: MUTED2, paddingLeft: 21 }}>The ticked option is marked correct when grading.</div>
+                      <div style={{ fontSize: 10, color: MUTED2, paddingLeft: 21 }}>
+                        {row.format === 'assertion_reason' ? 'The four standard options — tick the one that is right.' : row.format === 'true_false' ? 'Tick whether the statement is true or false.' : 'The ticked option is marked correct when grading.'}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Labelling: the marked parts, and what each is (the key) */}
+                  {row.kind === 'label' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5, paddingLeft: 28 }}>
+                      {(row.labels ?? []).map((l, li) => (
+                        <div key={li} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                          <input value={l} maxLength={12} aria-label={`Part ${li + 1} mark`}
+                            onChange={(e) => {
+                              const next = e.target.value;
+                              const answer = { ...(row.answer || {}) };
+                              if (l in answer) { answer[next] = answer[l]; delete answer[l]; }
+                              setRow(qi, { labels: row.labels.map((x, j) => (j === li ? next : x)), answer });
+                            }}
+                            style={{ ...INP, width: 52, textAlign: 'center', fontWeight: 900 }} />
+                          <input value={row.answer?.[l] || ''} placeholder="What it is (the key)" aria-label={`Answer for part ${l}`}
+                            onChange={(e) => setRow(qi, { answer: { ...(row.answer || {}), [l]: e.target.value } })} style={{ flex: 1, ...INP }} />
+                          {(row.labels ?? []).length > 1 && (
+                            <button type="button" style={{ ...ICON_BTN, fontSize: 13 }} title="Remove part"
+                              onClick={() => { const answer = { ...(row.answer || {}) }; delete answer[l]; setRow(qi, { labels: row.labels.filter((_, j) => j !== li), answer }); }}>×</button>
+                          )}
+                        </div>
+                      ))}
+                      {(row.labels ?? []).length < 8 && (
+                        <button type="button" style={{ ...LINK, paddingLeft: 0 }}
+                          onClick={() => setRow(qi, { labels: [...(row.labels ?? []), String.fromCharCode(80 + (row.labels ?? []).length)] })}>+ part</button>
+                      )}
+                      <div style={{ fontSize: 10, color: MUTED2 }}>Learners write what each marked part is. {row.figure ? '' : 'Add the diagram above.'}</div>
                     </div>
                   )}
                 </div>
