@@ -10,6 +10,12 @@
  *   POST /reports                     report an agent (also blocks it)
  *   GET  /past-questions              my past-question practice summary
  *   POST /past-questions              log practice { exam, subject, year, attempted, correct }
+ *   POST /challenges                  challenge agents { opponents, kind, subject, topic, scheduled_for… }
+ *   GET  /challenge-requests          open requests I may take (?subject&exam&kind&topic&mine)
+ *   POST /challenge-requests          post one
+ *   POST /challenge-requests/:id/accept   take a seat
+ *   DELETE /challenge-requests/:id    cancel mine
+ *   POST /battles/:id/rematch         the same battle again
  */
 import { Router } from "express";
 import { authenticateToken } from "../auth/routes.js";
@@ -17,12 +23,15 @@ import {
   heartbeat, onlineCount, searchAgents, profileFor, getSettings, saveSettings,
   blockedWith, block, unblock, report, logPastQuestions, pastQuestionSummary,
 } from "./network.js";
+import {
+  challengeAgents, postChallengeRequest, searchChallengeRequests, acceptChallengeRequest, cancelChallengeRequest, rematch,
+} from "./challenges.js";
 
 const router = Router();
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const ok = (res, data) => res.json({ success: true, data });
 const fail = (res, e) => {
-  if ([400, 403, 404, 409, 429].includes(e?.status)) return res.status(e.status).json({ success: false, error: e.message });
+  if ([400, 402, 403, 404, 409, 429].includes(e?.status)) return res.status(e.status).json({ success: false, error: e.message });
   throw e;
 };
 const wrap = (fn) => asyncHandler(async (req, res) => { try { ok(res, await fn(req)); } catch (e) { fail(res, e); } });
@@ -45,5 +54,12 @@ router.delete("/blocks/:userId", wrap((req) => unblock(req.user.id, req.params.u
 router.post("/reports", wrap((req) => report(req.user.id, req.body?.userId, req.body?.reason, req.body?.context || null)));
 router.get("/past-questions", wrap(async (req) => ({ summary: await pastQuestionSummary(req.user.id) })));
 router.post("/past-questions", wrap((req) => logPastQuestions(req.user.id, { ...req.body, source: "practice" })));
+
+router.post("/challenges", wrap((req) => challengeAgents(req.user.id, req.body || {})));
+router.get("/challenge-requests", wrap((req) => searchChallengeRequests(req.user.id, req.query)));
+router.post("/challenge-requests", wrap(async (req) => ({ request: await postChallengeRequest(req.user.id, req.body || {}) })));
+router.post("/challenge-requests/:id/accept", wrap((req) => acceptChallengeRequest(req.user.id, req.params.id)));
+router.delete("/challenge-requests/:id", wrap((req) => cancelChallengeRequest(req.user.id, req.params.id)));
+router.post("/battles/:id/rematch", wrap((req) => rematch(req.user.id, req.params.id)));
 
 export default router;

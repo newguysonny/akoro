@@ -28,6 +28,7 @@ import TraceBlocks from './agentChat/TraceBlocks.jsx';
 import { applyTraceEvent, blocksFromSavedTrace, promoteActivity, settleRunning } from '../../lib/agentChatTrace.js';
 import { CHAT_STARTERS, cleanIdeas, protegeMoves } from '../../lib/chatIdeas.js';
 import AgentCards from '../network/AgentCards.jsx';
+import ChallengeRequestCards from '../network/ChallengeRequestCards.jsx';
 import { useVoiceAnswer } from '../../hooks/useVoiceAnswer.js';
 import { useSpeakReply } from '../../hooks/useSpeakReply.js';
 
@@ -846,6 +847,7 @@ function AgentChatTab({
                     <div style={{ fontSize:16,lineHeight:1.6,color:"var(--ak-text)",fontWeight:500,wordBreak:"break-word" }}><RichText text={msg.text} size={16} lineHeight={1.6}/>{msg.phase==="answering"&&<StreamCaret/>}</div>
                   )}
                   {msg.agents?.length>0&&<AgentCards agents={msg.agents} onFill={applyIdea}/>}
+                  {msg.requests?.length>0&&<ChallengeRequestCards requests={msg.requests}/>}
                   {/* Not taught yet — the learner can teach it now. */}
                   {msg.teach&&onTeachTopic&&(
                     <div style={{ display:"flex",alignItems:"center",gap:10,marginTop:10,padding:"10px 12px",borderRadius:14,background:`${BRAND}0D`,border:`1px solid ${BRAND}33` }}>

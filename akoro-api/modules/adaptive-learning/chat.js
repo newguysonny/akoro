@@ -39,6 +39,7 @@ import db from "../../db.js";
 import config from "../../config/index.js";
 import { consultPeerAgents, PEER_QUESTION_MIN, PEER_QUESTION_MAX } from "./peerConsult.js";
 import { searchAgents, saveSettings as saveAgentNetworkSettings, block as blockAgent, report as reportAgent, logPastQuestions, pastQuestionSummary } from "../agent-network/network.js";
+import { challengeAgents, postChallengeRequest, searchChallengeRequests, acceptChallengeRequest, cancelChallengeRequest, rematch } from "../agent-network/challenges.js";
 import { searchBlogPosts, readBlogPost, BLOG_SEARCH_MAX_RESULTS } from "./blogResearch.js";
 import { listGoals, createGoal, updateGoal } from "../learner-goals/service.js";
 import { listMyBlogs, createBlogPost, updateBlogPost } from "../blogs/service.js";
@@ -429,6 +430,92 @@ export const CHAT_TOOLS = [
       },
       required: ["exam", "attempted"],
     },
+  },
+  {
+    name: "find_competitors",
+    featureGate: "agent_network",
+    description: "Find agents to battle: classmates, the same video course, the same live class, a community, or anyone — open to challenges, " +
+      "fairly matched by XP unless the learner asks for stronger or weaker opponents. Same filters as search_agents (source picks the scope). Read-only.",
+    input_schema: {
+      type: "object",
+      properties: {
+        source: { type: "string", enum: ["classmates", "course", "live_class", "community", "school", "everyone"] }, scope_id: { type: "string" },
+        subject: { type: "string" }, exam: { type: "string" }, online_only: { type: "boolean" }, fair_match: { type: "boolean" },
+        min_xp: { type: "number" }, max_xp: { type: "number" }, rank_max: { type: "number" }, min_win_rate: { type: "number" },
+        battle_time: { type: "string", enum: ["morning", "afternoon", "evening", "night", "weekend"] }, query: { type: "string" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "challenge_agent",
+    featureGate: "agent_network",
+    description: "Challenge other learners' agents to a battle — ONLY when the learner explicitly asks. Use userIds from search_agents / find_competitors " +
+      "(or @usernames). kind: 1v1 (one opponent), group (2–7 opponents), team (2v2: teammate + two opponents). Start now, or pass scheduled_for " +
+      "(ISO 8601 with +01:00, resolved against the current date and time) to schedule it. They get an invitation to accept. Questions come from past papers and AI.",
+    input_schema: {
+      type: "object",
+      properties: {
+        opponents: { type: "array", items: { type: "string" }, description: "userIds or @usernames of the opponents." },
+        kind: { type: "string", enum: ["1v1", "group", "team"] },
+        teammate: { type: "string", description: "team only: the userId/@username on the learner's side." },
+        subject: { type: "string" }, topic: { type: "string" }, exam: { type: "string" },
+        difficulty: { type: "string", enum: ["easy", "intermediate", "hard"] },
+        total_questions: { type: "number", description: "5–30 (default 10)." },
+        scheduled_for: { type: "string" }, title: { type: "string" },
+      },
+      required: ["opponents", "subject"],
+    },
+  },
+  {
+    name: "post_challenge_request",
+    featureGate: "agent_network",
+    description: "Post an open challenge request other agents can find and accept (\u201cJAMB Chemistry 1v1, 10 questions, tonight at 8\u201d) — ONLY when the learner explicitly asks. " +
+      "kind: 1v1 | team (2v2) | group (3–8, set max_players). scope: everyone | school | classmates | course | community (scope_id for one course/community). " +
+      "Optional XP range for fair matches, scheduled_for (ISO 8601 +01:00), expires_in_hours (default 24). The battle starts when the seats fill (or at its time).",
+    input_schema: {
+      type: "object",
+      properties: {
+        kind: { type: "string", enum: ["1v1", "team", "group"] }, max_players: { type: "number" },
+        subject: { type: "string" }, topic: { type: "string" }, exam: { type: "string" },
+        difficulty: { type: "string", enum: ["easy", "intermediate", "hard"] }, total_questions: { type: "number" },
+        scope: { type: "string", enum: ["everyone", "school", "classmates", "course", "community"] }, scope_id: { type: "string" },
+        min_xp: { type: "number" }, max_xp: { type: "number" }, scheduled_for: { type: "string" }, expires_in_hours: { type: "number" },
+        note: { type: "string" }, title: { type: "string" },
+      },
+      required: ["subject"],
+    },
+  },
+  {
+    name: "search_challenge_requests",
+    featureGate: "agent_network",
+    description: "Find open challenge requests this learner can take (filters: subject, exam, kind, topic, starting_within_hours), or their own (mine: true). Read-only.",
+    input_schema: {
+      type: "object",
+      properties: {
+        subject: { type: "string" }, exam: { type: "string" }, kind: { type: "string", enum: ["1v1", "team", "group"] },
+        topic: { type: "string" }, starting_within_hours: { type: "number" }, mine: { type: "boolean" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "accept_challenge_request",
+    featureGate: "agent_network",
+    description: "Take a seat on a challenge request (id from search_challenge_requests) — ONLY when the learner explicitly says to accept it. When the seats fill, the battle is made.",
+    input_schema: { type: "object", properties: { requestId: { type: "string" } }, required: ["requestId"] },
+  },
+  {
+    name: "cancel_challenge_request",
+    featureGate: "agent_network",
+    description: "Cancel one of the learner's own open challenge requests — ONLY when they explicitly ask.",
+    input_schema: { type: "object", properties: { requestId: { type: "string" } }, required: ["requestId"] },
+  },
+  {
+    name: "rematch_battle",
+    featureGate: "agent_network",
+    description: "Challenge the same agents to the same battle again (a finished battle's id, e.g. from find_battles or the learner's last battle) — ONLY when the learner asks for a rematch.",
+    input_schema: { type: "object", properties: { battleId: { type: "string" } }, required: ["battleId"] },
   },
   {
     name: "ask_to_be_taught",
@@ -1688,6 +1775,56 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         const logged = await logPastQuestions(studentId, { ...input, source: "agent" });
         return { logged: true, entry: logged, summary: await pastQuestionSummary(studentId) };
       } catch (e) { return { logged: false, error: e.message }; }
+    }
+    case "find_competitors": {
+      if (role === "instructor") return { error: "The agent network is for learners." };
+      const { source, ...rest } = input || {};
+      const r = await searchAgents(studentId, { ...rest, scope: source || "everyone", open_to_challenges: true, fair_match: rest.fair_match ?? (rest.min_xp == null && rest.max_xp == null && rest.rank_max == null), sort: "relevance" });
+      return {
+        agents: r.agents.map((a) => ({
+          userId: a.userId, name: a.name, username: `@${a.username}`, agent: `${a.agentEmoji} ${a.agentName}`, level: a.level, xp: a.xp, rank: a.rank,
+          winRate: a.winRate, presence: a.presence, available: a.available, shared: a.shared, battleTimes: a.battleTimes, openToChallenges: true, matches: a.matches,
+        })),
+        total: r.total,
+        note: r.total ? "Offer to challenge one (challenge_agent), or post a challenge request so others can take it." : "Nobody matches — offer to post a challenge request instead.",
+      };
+    }
+    case "challenge_agent": {
+      if (role === "instructor") return { error: "The agent network is for learners." };
+      if (!Array.isArray(input?.opponents) || !input.opponents.length) return clarify("opponents", "Who should I challenge? I can find opponents first.");
+      if (!input?.subject) return clarify("subject", "Which subject should the battle be on?");
+      try {
+        const b = await challengeAgents(studentId, input);
+        return { challenged: true, battleId: b.battleId, kind: b.kind, invited: b.invited.length, questions: b.placed, status: b.status,
+          note: b.status === "invited" ? "They've been sent the challenge — it starts when they accept (or at the scheduled time). It's in the Battles tab." : "Starting soon." };
+      } catch (e) { return { challenged: false, error: e.message }; }
+    }
+    case "post_challenge_request": {
+      if (role === "instructor") return { error: "The agent network is for learners." };
+      if (!input?.subject) return clarify("subject", "Which subject should the challenge be on?");
+      try {
+        const r = await postChallengeRequest(studentId, input);
+        return { posted: true, requestId: r.id, title: r.title, scope: r.scope, expiresAt: r.expires_at, scheduledFor: r.scheduled_for, seats: `1/${r.max_players}` };
+      } catch (e) { return { posted: false, error: e.message }; }
+    }
+    case "search_challenge_requests": {
+      if (role === "instructor") return { error: "The agent network is for learners." };
+      return await searchChallengeRequests(studentId, input || {});
+    }
+    case "accept_challenge_request": {
+      if (!input?.requestId) return clarify("requestId", "Which request should I accept? I can search the open ones.");
+      try { return { accepted: true, ...(await acceptChallengeRequest(studentId, input.requestId)) }; }
+      catch (e) { return { accepted: false, error: e.message }; }
+    }
+    case "cancel_challenge_request": {
+      if (!input?.requestId) return clarify("requestId", "Which of your requests should I cancel?");
+      try { return await cancelChallengeRequest(studentId, input.requestId); }
+      catch (e) { return { cancelled: false, error: e.message }; }
+    }
+    case "rematch_battle": {
+      if (!input?.battleId) return clarify("battleId", "Which battle should I rematch?");
+      try { const b = await rematch(studentId, input.battleId); return { rematch: true, battleId: b.battleId, invited: b.invited.length }; }
+      catch (e) { return { rematch: false, error: e.message }; }
     }
     case "find_battles": {
       const { data: enrolled } = await db.from("enrollments")
@@ -3091,7 +3228,8 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         // a Teach me button, and the teaching guide's mark on the answer.
         ...(tool === "ask_to_be_taught" && toolResult?.asked ? { teach: { topic: toolResult.topic, subject: toolResult.subject } } : {}),
         // Agent search results ride as cards the app can show (Challenge / Message buttons).
-        ...(tool === "search_agents" && Array.isArray(toolResult?.agents) ? { agents: toolResult.agents.slice(0, 6) } : {}),
+        ...((tool === "search_agents" || tool === "find_competitors") && Array.isArray(toolResult?.agents) ? { agents: toolResult.agents.slice(0, 6) } : {}),
+        ...(tool === "search_challenge_requests" && Array.isArray(toolResult?.requests) ? { requests: toolResult.requests.slice(0, 6) } : {}),
         ...(tool === "consult_teaching_guide" && toolResult?.consulted ? { guide: { name: toolResult.guide, ...(toolResult.teach ? { teach: toolResult.teach } : {}) } } : {}),
         ...((tool === "prepare_activity" && toolResult?.prepared
             || tool === "revise_activity_draft" && toolResult?.revised)

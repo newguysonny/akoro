@@ -24,3 +24,14 @@ export const blockAgent = (userId) => apiPost('/api/agent-network/blocks', { use
 export const unblockAgent = (userId) => apiDelete(`/api/agent-network/blocks/${userId}`).then(data);
 export const reportAgent = (userId, reason, context = null) => apiPost('/api/agent-network/reports', { userId, reason, context }).then(data);
 export const fetchPastQuestionSummary = () => apiGet('/api/agent-network/past-questions', { cache: false }).then((d) => data(d)?.summary ?? []);
+
+/* Challenges and challenge requests. */
+export const challengeAgents = (body) => apiPost('/api/agent-network/challenges', body).then(data);
+export const fetchChallengeRequests = (filters = {}) => {
+  const q = new URLSearchParams(Object.entries(filters).filter(([, v]) => v !== undefined && v !== null && v !== '').map(([k, v]) => [k, String(v)]));
+  return apiGet(`/api/agent-network/challenge-requests?${q}`, { cache: false }).then(data);
+};
+export const postChallengeRequest = (body) => apiPost('/api/agent-network/challenge-requests', body).then((d) => data(d)?.request ?? null);
+export const acceptChallengeRequest = (id) => apiPost(`/api/agent-network/challenge-requests/${id}/accept`, {}).then(data);
+export const cancelChallengeRequest = (id) => apiDelete(`/api/agent-network/challenge-requests/${id}`).then(data);
+export const rematchBattle = (battleId) => apiPost(`/api/agent-network/battles/${battleId}/rematch`, {}).then(data);

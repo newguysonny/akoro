@@ -558,10 +558,20 @@ async function endBattle(battleId) {
   // turning up would make a review the cheapest XP on the platform; paying
   // nothing would make it the only work that does not count.
   const isReview = battleInfo?.battle_type === "review";
+  // A TEAM battle (2v2): the team with more correct answers wins; every
+  // member of it is a winner. Ties share the result.
+  const isTeam = battleInfo?.battle_type === "team";
+  const teamTotals = {};
+  if (isTeam) for (const p of participants) teamTotals[p.team || "A"] = (teamTotals[p.team || "A"] || 0) + (p.score || 0);
+  const winTeam = isTeam ? (Object.entries(teamTotals).sort((a, b) => b[1] - a[1])[0] || [null])[0] : null;
+  const teamTie = isTeam && new Set(Object.values(teamTotals)).size === 1;
 
   const pool   = battleInfo?.battle_type === "classroom" ? battleInfo.xp_pool
                : battleInfo?.xp_prize;
-  const xpDist = isReview ? {} : computeXpDistribution(participants ?? [], pool ?? 0);
+  const xpDist = isReview ? {}
+    : isTeam ? Object.fromEntries(participants.map((p) => [p.id, teamTie ? Math.round((battleInfo?.xp_prize ?? 0) * 0.5)
+      : (p.team || "A") === winTeam ? (battleInfo?.xp_prize ?? 0) : Math.round((battleInfo?.xp_prize ?? 0) * 0.2)]))
+    : computeXpDistribution(participants ?? [], pool ?? 0);
 
   for (let i = 0; i < (participants ?? []).length; i++) {
     const p = participants[i];
@@ -574,8 +584,8 @@ async function endBattle(battleId) {
       // A rank of 1 in a field of one is not a boast, but it IS what every
       // "my battles" list and leaderboard join expects to find — leaving it
       // null kept reviews out of the learner's own history.
-      is_winner:  isReview ? false : i === 0,
-      final_rank: i + 1,
+      is_winner:  isReview ? false : isTeam ? (!teamTie && (p.team || "A") === winTeam) : i === 0,
+      final_rank: isTeam ? ((p.team || "A") === winTeam || teamTie ? 1 : 2) : i + 1,
       xp_earned:  xpEarned,
     }).eq("id", p.id);
     if (xpEarned > 0) {
@@ -609,6 +619,7 @@ async function endBattle(battleId) {
     // No winner in a review — sending participants[0] as one would have the
     // arena announce "X wins!" for a solo paper the moment it finished, before
     // the mark sheet arrived to say otherwise.
+    team: isTeam ? { totals: teamTotals, winner: teamTie ? null : winTeam } : null,
     winner: isReview ? null : { userId: winner?.user_id, agentName: winner?.user_agents?.agent_name, agentEmoji: winner?.user_agents?.agent_emoji, score: winner?.score, xpEarned: xpDist[winner?.id] },
     finalScores: (participants ?? []).map((p, i) => ({
       rank: i + 1, userId: p.user_id, agentName: p.user_agents?.agent_name,

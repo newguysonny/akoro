@@ -5,6 +5,8 @@ import BattleModal from './BattleModal.jsx';
 import { formatLeft } from './ChallengeModal.jsx';
 import CreateBattleSheet from './CreateBattleSheet.jsx';
 import ParticipantsSheet from './ParticipantsSheet.jsx';
+import OpenChallenges from '../network/OpenChallenges.jsx';
+import { rematchBattle } from '../../services/agentNetworkApi.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
 function ChallengeRow({ challenge, onTap }) {
@@ -77,6 +79,7 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
   const [watching,   setWatching]   = useState(null);
   const [rosterOf,   setRosterOf]   = useState(null);   // battle whose roster is open
   const [creating,   setCreating]   = useState(false);
+  const [rematchMsg, setRematchMsg] = useState({});
   // Only battles I am actually IN. An invitation I have not answered belongs in
   // Challenges — it was appearing in both places at once, so a learner saw the
   // same battle twice and Active implied they had joined something they had
@@ -101,7 +104,7 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
     completed:{label:"COMPLETED",bg:"rgba(16,185,129,.10)", color:GREEN, border:"rgba(16,185,129,.25)" },
     lobby:    {label:"WAITING",  bg:"rgba(245,158,11,.12)", color:GOLD,  border:"rgba(245,158,11,.28)" },
   };
-  const TABS=[{key:"active",label:t('battles.active'),icon:"ti-bolt",count:liveBattles.length+waitingBattles.length},{key:"scheduled",label:t('battles.scheduled'),icon:"ti-calendar",count:scheduledBattles.length},{key:"completed",label:t('battles.completed'),icon:"ti-trophy",count:completedBattles.length}];
+  const TABS=[{key:"active",label:t('battles.active'),icon:"ti-bolt",count:liveBattles.length+waitingBattles.length},{key:"scheduled",label:t('battles.scheduled'),icon:"ti-calendar",count:scheduledBattles.length},{key:"completed",label:t('battles.completed'),icon:"ti-trophy",count:completedBattles.length},{key:"open",label:"Open",icon:"ti-world",count:0}];
   return (
     <div style={{ flex:1,overflowY:"auto",background:"var(--ak-surface)",display:"flex",flexDirection:"column" }}>
       <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,padding:"12px 16px 10px",borderBottom:"1px solid var(--ak-border)" }}>
@@ -121,10 +124,11 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
         ))}
       </div>
       <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"8px 16px 6px",borderBottom:"1px solid var(--ak-border)" }}>
-        <button onClick={()=>setCreating(true)} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,fontSize:11.5,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>@@<Icon name="ti-swords" size={13} color="#fff"/>Start a battle</button>
+        <button onClick={()=>setCreating(true)} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,fontSize:11.5,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}><Icon name="ti-swords" size={13} color="#fff"/>Start a battle</button>
         <button onClick={onViewChallenge} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:`1.5px solid ${RED}40`,background:`${RED}08`,fontSize:11.5,fontWeight:800,color:RED,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}><ZapIcon size={11} color={RED}/>{t('battles.find_challenges')}</button>
       </div>
-      {mine.length===0&&(
+      {viewFilter==="open"&&<OpenChallenges onBattleCreated={onBattleCreated}/>}
+      {viewFilter!=="open"&&mine.length===0&&(
         <div style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,padding:"40px 24px" }}>
           <Icon name="ti-swords" size={52} color="var(--ak-text-muted)" style={{opacity:.2}}/>
           <p style={{ fontSize:15,fontWeight:800,color:"var(--ak-text-muted)",textAlign:"center" }}>{t('battles.empty')}</p>
@@ -132,14 +136,14 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
           <button onClick={onViewChallenge} style={{ padding:"10px 22px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",gap:7 }}><ZapIcon size={13} color="#fff"/>{t('battles.view_challenges')}</button>
         </div>
       )}
-      {mine.length>0&&displayed.length===0&&(
+      {viewFilter!=="open"&&mine.length>0&&displayed.length===0&&(
         <div style={{ textAlign:"center",padding:"36px 24px",color:"var(--ak-text-muted)" }}>
           <Icon name={viewFilter==="active"?"ti-bolt":viewFilter==="scheduled"?"ti-calendar":"ti-trophy"} size={36} color="var(--ak-text-muted)" style={{opacity:.3}}/>
           <p style={{ fontSize:13,fontWeight:700,marginTop:8 }}>{viewFilter==="active"?t('battles.none_live'):viewFilter==="scheduled"?t('battles.none_scheduled'):t('battles.none_completed')}</p>
         </div>
       )}
       <div style={{ padding:"10px 16px",display:"flex",flexDirection:"column",gap:10 }}>
-        {displayed.map(b=>{
+        {viewFilter!=="open"&&displayed.map(b=>{
           const bs=subjectStyle(b.subject),sc=bs.color,diff=difficultyStyle(b.difficulty),st=ST_STYLE[b.status]||ST_STYLE.scheduled,A=b.agentA,B=b.agentB;
           return (
             <div key={b.id} style={{ borderRadius:18,border:`1.5px solid ${b.status==="live"?"rgba(239,68,68,.30)":b.status==="scheduled"?"rgba(108,59,255,.25)":"var(--ak-border)"}`,background:b.status==="live"?"linear-gradient(140deg,#FFF5F5,#FFFCFC)":b.status==="scheduled"?"linear-gradient(140deg,#F5F3FF,#FCFCFF)":"var(--ak-surface)",overflow:"hidden" }}>
@@ -189,6 +193,7 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
                   {b.status==="live"&&<button onClick={()=>setWatching(b)} style={{ flex:1,padding:"10px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${RED},#DC2626)`,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}><Icon name="ti-player-play" size={14} color="#fff"/>{t('battles.watch_live')}</button>}
                   {b.status==="scheduled"&&<button onClick={()=>setWatching(b)} style={{ flex:1,padding:"10px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}><Icon name="ti-eye" size={14} color="#fff"/>{t('battles.preview')}</button>}
                   {b.status==="completed"&&<button onClick={()=>setWatching(b)} style={{ flex:1,padding:"10px",borderRadius:12,border:`1.5px solid var(--ak-border2)`,background:"var(--ak-surface-hover)",color:"var(--ak-text-sec)",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}><Icon name="ti-chart-bar" size={14} color="var(--ak-text-sub)"/>{t('battles.view_result')}</button>}
+                  {b.status==="completed"&&!b.review&&<button onClick={()=>{ setRematchMsg((m)=>({...m,[b.id]:'…'})); rematchBattle(b.id).then(()=>{ setRematchMsg((m)=>({...m,[b.id]:'Rematch sent'})); onBattleCreated?.(); }).catch((e)=>setRematchMsg((m)=>({...m,[b.id]:e?.message||'Could not rematch'}))); }} disabled={!!rematchMsg[b.id]} title={rematchMsg[b.id]||'Same battle, same agents'} style={{ padding:"10px 12px",borderRadius:12,border:`1.5px solid ${BRAND}40`,background:`${BRAND}0A`,color:BRAND,fontSize:11,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",gap:5 }}><Icon name="ti-refresh" size={13} color={BRAND}/>{rematchMsg[b.id]||'Rematch'}</button>}
                   <button onClick={()=>setRosterOf(b)} style={{ padding:"10px 14px",borderRadius:12,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",color:"var(--ak-text-muted)",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('battles.details')}</button>
                 </div>
               </div>
