@@ -18,7 +18,7 @@ const BLANK = {
   questionSource: 'auto',    // 'auto' | 'bank' | 'ai'
   classId: '', subject: '',  // class battles only
   audience: BLANK_AUDIENCE,
-  totalQuestions: '15', duration: '15', xpPrize: '200', hpPerMiss: '10',
+  totalQuestions: '15', duration: '15', xpPrize: '200', hpPerMiss: '10', minXp: '0',
   difficulty: 'intermediate', scheduledAt: '', expiresInMinutes: '60',
 };
 
@@ -66,6 +66,7 @@ export default function BattleForm({ onSubmit, onCancel, courses = [], editing =
         duration: String(editing.durationMin || 15),
         xpPrize: String(editing.xpPool || 200),
         hpPerMiss: String(editing.hpPerMiss ?? 10),
+        minXp: String(editing.entry?.minXp ?? 0),
         difficulty: editing.difficulty || 'intermediate',
         scheduledAt: editing.scheduledAt ? toLocalInput(editing.scheduledAt) : '',
       });
@@ -211,6 +212,10 @@ export default function BattleForm({ onSubmit, onCancel, courses = [], editing =
           {/* What a miss costs — like marks per question. Learners see it before they accept. */}
           <Inp label="HP lost per miss" type="number" min="0" max="50" value={form.hpPerMiss} onChange={e => setField('hpPerMiss', e.target.value)} />
         </div>
+        {/* Entry requirement for a battle. A review checks knowledge — never gated on XP. */}
+        {form.kind !== 'review' && (
+          <Inp label="Minimum XP to join (0 = open to all)" type="number" min="0" value={form.minXp} onChange={e => setField('minXp', e.target.value)} />
+        )}
         <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT, marginTop: -6 }}>
           {(() => {
             const h = Math.min(50, Math.max(0, parseInt(form.hpPerMiss, 10) || 0));

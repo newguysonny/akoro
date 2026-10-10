@@ -82,7 +82,8 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
   const [questionSource, setQuestionSource] = useState('auto');   // 'auto' | 'bank' | 'ai'
   const [difficulty, setDifficulty] = useState('intermediate');
   const [xpPrize, setXpPrize] = useState('200');
-  const [hpPerMiss, setHpPerMiss] = useState('10');   // what a miss costs — invitees see it first
+  const [hpPerMiss, setHpPerMiss] = useState('10');
+  const [minXp, setMinXp] = useState('0');           // entry requirement (0 = open to all)   // what a miss costs — invitees see it first
   const [scheduledAt, setScheduledAt] = useState('');
 
   const [busy, setBusy] = useState(false);
@@ -195,6 +196,7 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
       difficulty,
       xp_prize: parseInt(xpPrize, 10) || 200,
       hp_per_miss: hpPerMiss === '' ? undefined : parseInt(hpPerMiss, 10),
+      min_xp: parseInt(minXp, 10) || 0,
       expires_in_minutes: 60,
       scheduled_for: scheduledAt ? new Date(scheduledAt).toISOString() : null,
       question_source: questionSource,
@@ -459,8 +461,16 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <label style={LABEL}><Icon name="ti-heart" size={13} color={BRAND}/> HP lost per miss</label>
-              <input type="number" min="0" max="50" value={hpPerMiss} onChange={e => setHpPerMiss(e.target.value)} style={FIELD} />
+              <div style={{ display: 'flex', gap: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={LABEL}><Icon name="ti-heart" size={13} color={BRAND}/> HP lost per miss</label>
+                  <input type="number" min="0" max="50" value={hpPerMiss} onChange={e => setHpPerMiss(e.target.value)} style={FIELD} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={LABEL}><Icon name="ti-lock" size={13} color={BRAND}/> Minimum XP to join</label>
+                  <input type="number" min="0" value={minXp} onChange={e => setMinXp(e.target.value)} style={FIELD} />
+                </div>
+              </div>
               <p style={{ fontSize: 10.5, color: 'var(--ak-text-muted)', margin: '5px 0 0', lineHeight: 1.45 }}>
                 {(() => { const h = Math.min(50, Math.max(0, parseInt(hpPerMiss, 10) || 0));
                   return h ? `Every agent starts on 100 HP and loses ${h} for each question it misses — out after ${Math.ceil(100 / h)} misses, then it watches, unranked. Invitees see this before they accept.`

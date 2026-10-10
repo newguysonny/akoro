@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, difficultyStyle, subjectStyle, AVATAR_FALLBACK } from '../../constants.js';
 import { XIcon, ZapIcon, StarIcon, Icon } from '../common/Icons.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
+import { useNavigate } from 'react-router-dom';
+import { apiGet } from '../../services/api.js';
 
 /**
  * Time left to accept, ticking.
@@ -46,6 +48,18 @@ export function formatLeft(ms) {
 function ChallengeModal({ challenge, onAccept, onDecline, onClose }) {
   const { t } = useLang();
   const msLeft = useCountdown(challenge.expiresAt);
+  const navigate = useNavigate();
+  // Can I join? Coins for my agent's answers, and the creator's minimum XP
+  // (a review has no XP gate). Asked before Accept, so a learner who is short
+  // sees why instead of accepting into a battle their agent can't play.
+  const [entry, setEntry] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    apiGet(`/api/battle/battles/${challenge.id}/entry`, { cache: false })
+      .then((r) => { if (alive) setEntry(r?.data ?? r); }).catch(() => {});
+    return () => { alive = false; };
+  }, [challenge.id]);
+  const short = entry && !entry.ok;
   const subj=subjectStyle(challenge.subject),sc=subj.color,diff=difficultyStyle(challenge.difficulty),isImmediate=challenge.battleType==="immediate",isClassroom=challenge.battleType==="classroom";
   const typePill=isClassroom?{label:t('challenge.classroom'),bg:"rgba(16,185,129,.10)",color:"#10B981",border:"rgba(16,185,129,.25)"}:isImmediate?{label:t('challenge.immediate'),bg:"rgba(239,68,68,.10)",color:RED,border:"rgba(239,68,68,.25)"}:{label:t('challenge.scheduled'),bg:"rgba(108,59,255,.10)",color:BRAND,border:"rgba(108,59,255,.25)"};
   return (
@@ -102,9 +116,24 @@ function ChallengeModal({ challenge, onAccept, onDecline, onClose }) {
               <span style={{ display:"block",fontSize:11,fontWeight:600,color:"var(--ak-text-muted)",marginTop:2 }}>A miss is a wrong answer, or none — no notes on it, no token credit, or out of time.</span>
             </div>
           </div>); })()}
+        {entry&&(
+          <div style={{ padding:"10px 12px",borderRadius:12,background:short?"rgba(239,68,68,.06)":"rgba(16,185,129,.06)",border:`1px solid ${short?"rgba(239,68,68,.22)":"rgba(16,185,129,.22)"}`,marginBottom:16 }}>
+            <div style={{ fontSize:11,fontWeight:900,color:short?RED:GREEN,letterSpacing:.3,marginBottom:6 }}>{short?"NOT ENOUGH TO JOIN":"YOU CAN JOIN"}</div>
+            {[
+              { ok: entry.coins.have>=entry.coins.need, icon:"ti-coin", text:`About ${entry.coins.need} coins for your agent's answers`, have:`you have ${entry.coins.have}` },
+              ...(entry.xp.need>0?[{ ok: entry.xp.have>=entry.xp.need, icon:"ti-bolt", text:`${entry.xp.need} XP to enter`, have:`you have ${entry.xp.have}` }]:[]),
+            ].map((r)=>(
+              <div key={r.text} style={{ display:"flex",alignItems:"center",gap:8,fontSize:12,fontWeight:700,color:"var(--ak-text-sec)",marginTop:3 }}>
+                <Icon name={r.ok?"ti-circle-check":"ti-circle-x"} size={15} color={r.ok?GREEN:RED}/><span style={{ flex:1 }}>{r.text}</span><span style={{ fontSize:11,color:"var(--ak-text-muted)" }}>{r.have}</span>
+              </div>
+            ))}
+            {entry.review&&<div style={{ fontSize:11,fontWeight:600,color:"var(--ak-text-muted)",marginTop:6 }}>A review checks what you know — no XP needed, and you get a free coin for taking part.</div>}
+            {short&&entry.coins.have<entry.coins.need&&<button onClick={()=>navigate('/wallet')} style={{ marginTop:8,padding:"7px 14px",borderRadius:20,border:`1.5px solid ${BRAND}40`,background:`${BRAND}0A`,color:BRAND,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"inline-flex",alignItems:"center",gap:5 }}><Icon name="ti-coin" size={13} color={BRAND}/>Top up coins</button>}
+          </div>
+        )}
         <div style={{ display:"flex",gap:10 }}>
           <button onClick={onDecline} style={{ flex:1,padding:"14px",borderRadius:14,border:"1.5px solid var(--ak-border2)",background:"var(--ak-bg)",fontSize:14,fontWeight:800,color:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('challenge.decline')}</button>
-          <button onClick={onAccept} style={{ flex:1.8,padding:"14px",borderRadius:14,border:"none",background:isClassroom?"linear-gradient(135deg,#10B981,#059669)":isImmediate?`linear-gradient(135deg,${RED},#DC2626)`:`linear-gradient(135deg,${BRAND},#4C1DCC)`,fontSize:14,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}><ZapIcon size={15} color="#fff"/>{t('challenge.accept')}</button>
+          <button onClick={onAccept} disabled={short} title={short?entry.message:undefined} style={{ flex:1.8,padding:"14px",borderRadius:14,border:"none",opacity:short?.45:1,cursor:short?"not-allowed":"pointer",background:isClassroom?"linear-gradient(135deg,#10B981,#059669)":isImmediate?`linear-gradient(135deg,${RED},#DC2626)`:`linear-gradient(135deg,${BRAND},#4C1DCC)`,fontSize:14,fontWeight:800,color:"#fff",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}><ZapIcon size={15} color="#fff"/>{t('challenge.accept')}</button>
         </div>
       </div></div></>
   );

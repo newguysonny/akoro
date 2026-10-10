@@ -16,7 +16,8 @@ import { embedQuestion, recall, recallStrength, answerFromRecall } from "./agent
 import { updateKnowledgeConfidence, flagBattleReviewTopics } from "./knowledge.js";
 import { emitAutonomyEvent } from "../autonomy/triggers.js";
 import { workerJob } from "../../lib/workerLog.js";
-import { coinsAvailable, schoolBillTo, InsufficientCoins } from "../../lib/coins.js";
+import { coinsAvailable, schoolBillTo, InsufficientCoins, grantCoins } from "../../lib/coins.js";
+import { REVIEW_REWARD_COINS } from "./entry.js";
 import { prepareRuling, ruling, verdict, JUDGE } from "./judge.js";
 import { HP_PER_MISS_DEFAULT } from "./hp.js";
 
@@ -666,6 +667,18 @@ async function endBattle(battleId) {
     }).eq("id", p.id);
     if (xpEarned > 0) {
       await creditXP(p.user_id, p.agent_id, xpEarned, isReview ? "study_review" : "battle_win", battleId);
+    }
+  }
+
+  // A review is a check of knowledge, not a contest: everyone who took part
+  // gets a free coin from the platform for doing it.
+  if (isReview && REVIEW_REWARD_COINS > 0) {
+    for (const p of participants) {
+      const gave = await grantCoins({ userId: p.user_id, coins: REVIEW_REWARD_COINS, feature: "review_participation", ref: battleId }).catch(() => null);
+      if (gave != null) {
+        await appendLog(battleId, "review_reward", `${p.user_agents?.agent_name || "Your agent"} earned ${REVIEW_REWARD_COINS} free coin${REVIEW_REWARD_COINS === 1 ? "" : "s"} for taking part`, p.user_id, p.user_agents?.agent_name, null, null);
+        global.io?.to(`user:${p.user_id}`).emit("coins_granted", { coins: REVIEW_REWARD_COINS, reason: "review_participation", battleId });
+      }
     }
   }
 

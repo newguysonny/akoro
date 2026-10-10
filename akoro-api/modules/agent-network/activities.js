@@ -15,6 +15,7 @@
  */
 import db from "../../db.js";
 import { buildQuestions } from "../battle/questionSource.js";
+import { entryCheck, assertEntry } from "../battle/entry.js";
 import { createNetworkBattle } from "../battle/networkBattle.js";
 import { notifyUser } from "../notify.js";
 import { canMessage } from "./filters.js";
@@ -250,6 +251,7 @@ export async function joinDaily(meId, { subject = null, auto = false } = {}) {
   const [seat] = await myDailySeats(meId, { day, limit: 1 });
   if (seat) {
     if (seat.declined_at && !auto) {
+      await assertEntry(meId, { battle_type: "classroom", total_questions: seat.battles.total_questions || DAILY_Q, min_xp: 0 });
       await db.from("battle_participants").update({ declined_at: null, joined_at: new Date().toISOString() }).eq("id", seat.id);
       return { battleId: seat.battles.id, day, subject: seat.battles.subject, startsAt, status: "joined", rejoined: true };
     }
@@ -258,6 +260,13 @@ export async function joinDaily(meId, { subject = null, auto = false } = {}) {
   const subj = await dailySubjectFor(meId, subject);
   const { data: agent } = await db.from("user_agents").select("id").eq("user_id", meId).maybeSingle();
   if (!agent) throw fail("Create your agent first — it plays the daily battle for you.");
+  // Coins for the agent's answers. Opening Battles never errors over it — it
+  // just doesn't take the seat, and says why; asking to join does error.
+  const entry = await entryCheck(meId, { battle_type: "classroom", total_questions: DAILY_Q, min_xp: 0 });
+  if (!entry.ok) {
+    if (auto) return { day, subject: subj, startsAt, status: "not_enough", requirements: entry, message: entry.message };
+    throw Object.assign(fail(entry.message, 402), { code: "ENTRY_REQUIREMENTS" });
+  }
 
   const { data: heats } = await db.from("battles").select("id, status, total_participants, recurring_key")
     .like("recurring_key", `${dailyKey(day, subj)}%`).order("created_at", { ascending: true });
@@ -395,6 +404,7 @@ export async function joinCircle(meId, id) {
   if (blocked.has(c.created_by)) throw fail("That circle isn't open to you.", 403);
   const { count } = await edu().from("revision_circle_members").select("user_id", { count: "exact", head: true }).eq("circle_id", id);
   if ((count ?? 0) >= c.max_members) throw fail("That circle is full.", 409);
+  await assertEntry(meId, { battle_type: "classroom", total_questions: c.total_questions || 10, min_xp: 0 });
   const { error } = await edu().from("revision_circle_members").insert({ circle_id: id, user_id: meId });
   if (error && !/duplicate|pkey/i.test(error.message)) throw new Error(error.message);
   const n = (count ?? 0) + 1;

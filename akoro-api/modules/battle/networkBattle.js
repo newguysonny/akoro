@@ -18,6 +18,7 @@ import { buildQuestions } from "./questionSource.js";
 import { notifyUser } from "../notify.js";
 import { InsufficientCoins } from "../../lib/coins.js";
 import { cleanHpPerMiss } from "./hp.js";
+import { entryCheck } from "./entry.js";
 
 const now = () => new Date().toISOString();
 const EXPIRE_AFTER_START_MS = 10_000;
@@ -49,6 +50,7 @@ export function cleanBattleOptions(o = {}) {
     xp: Math.min(500, Math.max(50, Math.round(Number(o.xp_prize) || (kind === "1v1" ? 150 : 200)))),
     secondsPerQuestion: Math.min(60, Math.max(10, Math.round(Number(o.seconds_per_question) || 20))),
     hpPerMiss: cleanHpPerMiss(o.hp_per_miss),
+    minXp: Math.max(0, Math.round(Number(o.min_xp) || 0)),
   };
 }
 
@@ -88,6 +90,14 @@ export async function createNetworkBattle({ creatorId, opponents = [], joined = 
     .eq("created_by", creatorId).is("course_id", null).is("classroom_id", null).gte("created_at", dayStart.toISOString());
   if ((count ?? 0) >= NETWORK_LIMITS.PER_DAY) throw fail(`You've started ${NETWORK_LIMITS.PER_DAY} battles today — that's the daily limit.`, 429);
 
+  // The creator plays too: they need the coins for their own agent's answers.
+  const ce = await entryCheck(creatorId, { battle_type: "battle", total_questions: o.total, min_xp: 0 });
+  if (!ce.ok) {
+    // Started by someone else's yes (a request accepted, a circle filling)? Then it is the creator who is short, not you.
+    throw fail(["challenge", "rematch"].includes(source) ? ce.message.replace("to join", "to start it")
+      : "Its creator doesn't have enough coins for their agent's answers right now — try again later.", 402);
+  }
+
   const ids = [creatorId, ...others];
   const { data: agents } = await db.from("user_agents").select("id, user_id").in("user_id", ids);
   const agentOf = new Map((agents || []).map((a) => [a.user_id, a.id]));
@@ -111,7 +121,7 @@ export async function createNetworkBattle({ creatorId, opponents = [], joined = 
   const scheduled = !!o.scheduledFor;
   const { data: battle, error } = await db.from("battles").insert({
     course_id: null, classroom_id: null, battle_type: battleType,
-    title: o.title, description: source === "rematch" ? "Rematch" : null, hp_per_miss: o.hpPerMiss,
+    title: o.title, description: source === "rematch" ? "Rematch" : null, hp_per_miss: o.hpPerMiss, min_xp: o.minXp,
     topic: o.topic, subject: o.subject, difficulty: o.difficulty,
     total_questions: o.total, time_limit_seconds: o.total * o.secondsPerQuestion,
     xp_prize: o.xp, xp_pool: o.xp * (o.kind === "1v1" ? 1 : Math.ceil(ids.length / 2)),

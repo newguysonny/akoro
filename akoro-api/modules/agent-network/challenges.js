@@ -12,6 +12,7 @@
  * Who may be challenged follows their privacy (canFind) and "open to
  * challenges"; blocks hide both ways.
  */
+import { assertEntry, entryCheck } from "../battle/entry.js";
 import db from "../../db.js";
 import { createNetworkBattle, cleanBattleOptions } from "../battle/networkBattle.js";
 import { canFind } from "./filters.js";
@@ -80,6 +81,9 @@ const REQUEST_SCOPES = ["everyone", "school", "classmates", "course", "community
 export async function postChallengeRequest(meId, input = {}) {
   const kind = ["1v1", "team", "group"].includes(input.kind ?? input.battle_type) ? (input.kind ?? input.battle_type) : "1v1";
   const o = cleanBattleOptions({ ...input, kind });
+  // You play in what you post: the coins for your agent's answers, up front.
+  const ce = await entryCheck(meId, { battle_type: "battle", total_questions: o.total, min_xp: 0 });
+  if (!ce.ok) throw fail(ce.message.replace("to join", "to post it"), 402);
   const { count } = await edu().from("challenge_requests").select("id", { count: "exact", head: true })
     .eq("created_by", meId).eq("status", "open").gt("expires_at", new Date().toISOString());
   if ((count ?? 0) >= REQUEST_LIMITS.OPEN_PER_LEARNER) throw fail(`You have ${REQUEST_LIMITS.OPEN_PER_LEARNER} open requests — cancel one or wait for takers.`, 429);
@@ -175,6 +179,8 @@ export async function acceptChallengeRequest(meId, requestId) {
   ]);
   if (!meA) throw fail("Create your agent first.");
   if (!mayTake({ ...r, _school: owner?.school_name }, { id: meId, school: meU?.school_name, xp: meA.total_xp || 0 }, rel, blocked)) throw fail("This request isn't open to you.", 403);
+  // Coins for your agent's answers, and the request's minimum XP.
+  await assertEntry(meId, { battle_type: r.battle_type, total_questions: r.total_questions, min_xp: r.min_xp || 0 });
 
   const accepted = [...(r.accepted_by || []), meId];
   const full = 1 + accepted.length >= r.max_players;
