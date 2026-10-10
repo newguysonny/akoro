@@ -14,7 +14,9 @@
 import { putRecordObject, createPresignedDownload, removeRecordFile, ownsRecordFileKey } from "../records/lib/storage.js";
 import { downloadCapped } from "../records/officeText.js";
 
-export const SUBMISSION_FILE_LIMITS = Object.freeze({ MAX_BYTES: 5 * 1024 * 1024, MAX_FILES: 5 });
+// MAX_FILES: a submission without questions; PER_QUESTION: each question of
+// one with questions (a photo, a document, a whiteboard drawing).
+export const SUBMISSION_FILE_LIMITS = Object.freeze({ MAX_BYTES: 5 * 1024 * 1024, MAX_FILES: 5, PER_QUESTION: 3 });
 
 const MIME_OF = { pdf: "application/pdf", jpeg: "image/jpeg", png: "image/png", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", text: "text/plain" };
 

@@ -44,7 +44,7 @@ async function loadSubmission(targetId) {
   ]);
   const ids = (target.submission?.files || []).map((f) => f.id).filter(Boolean);
   const { data: rows } = ids.length
-    ? await edu().from("self_study_files").select("id, name, size, mime, kind, storage_key, data").eq("target_id", target.id).in("id", ids)
+    ? await edu().from("self_study_files").select("id, name, size, mime, kind, storage_key, data, question_index").eq("target_id", target.id).in("id", ids)
     : { data: [] };
   const byId = new Map((rows || []).map((r) => [r.id, r]));
   return { target, assignment: assignment || {}, learner: { name: learner?.full_name, username: learner?.username }, fileRows: ids.map((id) => byId.get(id)).filter(Boolean) };
@@ -66,9 +66,9 @@ export function buildSubmissionArtifacts(targetId) {
       try {
         const bytes = await readSubmissionFile(row);
         const kind = row.kind || sniffSubmissionFile(bytes, row.name)?.kind || "other";
-        files.push({ name: row.name, size: row.size || bytes.length, kind, bytes, text: await attachmentText(kind, bytes) });
+        files.push({ name: row.name, size: row.size || bytes.length, kind, bytes, text: await attachmentText(kind, bytes), question: row.question_index ?? undefined });
       } catch (e) {
-        files.push({ name: row.name, size: row.size || 0, kind: "missing", bytes: Buffer.alloc(0), text: null });
+        files.push({ name: row.name, size: row.size || 0, kind: "missing", bytes: Buffer.alloc(0), text: null, question: row.question_index ?? undefined });
       }
     }
     const input = { assignment, learner, submission: target.submission || {}, files };

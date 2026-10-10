@@ -17,10 +17,10 @@ const questions = [
   "Name a product.",
 ];
 
-test("one answer at a time: MCQ picks are option indexes, text is capped, empty clears, bad indexes refused", () => {
-  assert.deepEqual(cleanAnswer(questions, "0", "1"), { index: 0, value: 1 });
-  assert.match(cleanAnswer(questions, 0, 3).error, /options/);
-  assert.match(cleanAnswer(questions, 0, "B").error, /options/);
+test("one answer at a time: every answer is typed text (an older option index still works), capped, empty clears", () => {
+  assert.deepEqual(cleanAnswer(questions, "0", "B"), { index: 0, value: "B" });
+  assert.deepEqual(cleanAnswer(questions, 0, 1), { index: 0, value: 1 });
+  assert.match(cleanAnswer(questions, 0, 3).error, /No such option/);
   assert.deepEqual(cleanAnswer(questions, 1, "x".repeat(5000)).value.length, 4000);
   assert.deepEqual(cleanAnswer(questions, 2, 42), { index: 2, value: "42" });
   assert.deepEqual(cleanAnswer(questions, 1, "   "), { index: 1, value: null });
@@ -66,4 +66,29 @@ test("routes: answers are submitted per question, handed in from the review, mar
   assert.match(routes, /const qm = cleanQuestionMarks\(assignment\.details\?\.questions \|\| \[\], feedback\.questions\);/);
   assert.match(routes, /feedbackQuestions: t\.grade != null/);
   assert.ok(manifest.schema.includes("2026-submission-steps.sql"));
+});
+
+test("typed answers: the API and both apps read an MCQ answer the same way", async () => {
+  const { readChoice } = await import("./submissionView.js");
+  const learner = await import("../../../akoro-learner/src/lib/paper.js");
+  const instructor = await import("../../../akoro-instructor/src/lib/paper.js");
+  const q = { options: ["Oxygen", "Carbon dioxide", "Nitrogen", "Hydrogen"] };
+  const tf = { format: "true_false", options: ["True", "False"] };
+  const pq = { options: ["P", "Q", "R", "S"] };
+  const cases = [
+    [q, "B", 1], [q, "b.", 1], [q, "(B)", 1], [q, "Option B", 1], [q, "Answer: b", 1], [q, "B. Carbon dioxide", 1],
+    [q, "B Carbon dioxide", 1], [q, "carbon dioxide", 1], [q, "Carbon Dioxide.", 1], [q, 2, 2], [q, 7, null],
+    [q, "A plant needs water", null], [q, "E", null], [q, "", null], [q, "b) oxygen", null], [q, "Nitrogen gas", null],
+    [q, "B. because plants breathe it in", 1], [tf, "true", 0], [tf, "F", 1], [tf, "no", 1], [tf, "B", 1],
+    [pq, "R", 2], [pq, "C", 2], [{}, "B", null], [q, null, null],
+  ];
+  for (const [question, typed, want] of cases) {
+    assert.equal(readChoice(question, typed), want, `API: ${JSON.stringify(typed)}`);
+    assert.equal(learner.readChoice(question, typed), want, `learner: ${JSON.stringify(typed)}`);
+    assert.equal(instructor.readChoice(question, typed), want, `instructor: ${JSON.stringify(typed)}`);
+  }
+  assert.equal(learner.isAnswered("", 1), true, "a file answers the question");
+  assert.equal(learner.isAnswered("  ", 0), false);
+  assert.equal(learner.answerLabel(q, 1), "B · Carbon dioxide");
+  assert.equal(learner.answerLabel(q, "b"), "b");
 });
