@@ -57,3 +57,14 @@ test('removing a section keeps references in step', () => {
   assert.equal('section' in qs[0], false);
   assert.equal(letterOf(4), 'E');
 });
+
+test('labelling answers: one line per part, and back', async () => {
+  const { labelAnswerText, parseLabelAnswer, AR_OPTIONS, TF_OPTIONS } = await import('./paper.js');
+  const text = labelAnswerText(['P', 'Q', 'R'], { P: ' Chloroplast ', R: 'stoma\nopen' });
+  assert.equal(text, 'P: Chloroplast\nR: stoma open');
+  assert.deepEqual(parseLabelAnswer(['P', 'Q', 'R'], text), { P: 'Chloroplast', Q: '', R: 'stoma open' });
+  assert.deepEqual(parseLabelAnswer(['P'], 'X: nope\nP: yes: really'), { P: 'yes: really' });
+  assert.deepEqual(parseLabelAnswer(['P'], null), { P: '' });
+  assert.equal(AR_OPTIONS.length, 4);
+  assert.deepEqual([...TF_OPTIONS], ['True', 'False']);
+});

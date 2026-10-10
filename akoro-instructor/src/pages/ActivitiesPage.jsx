@@ -27,7 +27,7 @@ import AudiencePicker, { audienceBody, parseHandles, BLANK_AUDIENCE } from '../c
 import PlanEditor from '../components/PlanEditor.jsx';
 import PaperBuilder from '../components/paper/PaperBuilder.jsx';
 import PaperView from '../components/paper/PaperView.jsx';
-import { removeRef } from '../lib/paper.js';
+import { removeRef, AR_OPTIONS, TF_OPTIONS } from '../lib/paper.js';
 import BattleForm from '../components/battles/BattleForm.jsx';
 import { useBattlesAPI } from '../hooks/useBattlesAPI.js';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
@@ -147,7 +147,7 @@ export function cleanQuestions(raw) {
   return (raw ?? [])
     .map((row) => {
       const q = (row.q || '').trim();
-      if (!q) return null;
+      if (!q && row.format !== 'assertion_reason') return null;
       const extra = {
         ...(row.type ? { type: row.type } : {}),
         ...(row.max_points !== '' && row.max_points != null ? { max_points: Number(row.max_points) || 0 } : {}),
@@ -157,7 +157,23 @@ export function cleanQuestions(raw) {
         ...(Number.isInteger(row.passage) ? { passage: row.passage } : {}),
         ...(row.figure && (row.figure.src || row.figure.svg) ? { figure: row.figure } : {}),
         ...(!row.figure && row.figure_note ? { figure_note: row.figure_note } : {}),
+        ...(row.format === 'case_study' ? { format: 'case_study' } : {}),
+        ...(typeof row.answer === 'string' && row.answer.trim() ? { answer: row.answer.trim() } : {}),   // a model answer (graders see it, learners don't)
       };
+      // Kinds with a fixed shape (question.format).
+      if (row.format === 'assertion_reason') {
+        const assertion = (row.assertion || '').trim(), reason = (row.reason || '').trim();
+        if (!assertion || !reason) return null;
+        return { ...extra, q: `Assertion: ${assertion}\nReason: ${reason}`, format: 'assertion_reason', assertion, reason,
+          options: [...AR_OPTIONS], correct: Math.min(Math.max(Number(row.correct) || 0, 0), 3) };
+      }
+      if (row.format === 'true_false') return { q, ...extra, format: 'true_false', options: [...TF_OPTIONS], correct: Number(row.correct) === 1 ? 1 : 0 };
+      if (row.kind === 'label') {
+        const labels = [...new Set((row.labels ?? []).map(l => (l || '').trim()).filter(Boolean))];
+        if (!labels.length) return null;
+        const answer = Object.fromEntries(labels.map(l => [l, (row.answer?.[l] || '').trim()]).filter(([, v]) => v));
+        return { q, ...extra, format: 'label', labels, ...(Object.keys(answer).length ? { answer } : {}) };
+      }
       if (row.kind === 'mcq') {
         const options = (row.options ?? []).map(o => (o || '').trim()).filter(Boolean);
         if (options.length < 2) return null;
@@ -204,6 +220,10 @@ export function rowsFromQuestions(questions) {
       ...(Number.isInteger(obj.passage) ? { passage: obj.passage } : {}),
       figure: obj.figure || null,
       ...(obj.figure_note ? { figure_note: obj.figure_note } : {}),
+      ...(obj.format ? { format: obj.format } : {}),
+      ...(obj.format === 'assertion_reason' ? { assertion: obj.assertion || '', reason: obj.reason || '' } : {}),
+      ...(obj.format === 'label' ? { kind: 'label', labels: Array.isArray(obj.labels) ? obj.labels : [], answer: obj.answer && typeof obj.answer === 'object' ? obj.answer : {} } : {}),
+      ...(typeof obj.answer === 'string' ? { answer: obj.answer } : {}),
     };
   });
 }

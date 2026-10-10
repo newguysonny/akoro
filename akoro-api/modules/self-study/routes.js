@@ -62,7 +62,7 @@ import {
 import {
   createActivityDraft, assignActivityDraft, DRAFT_TYPES,
   listActivityDrafts, getActivityDraft, updateActivityDraft, discardActivityDraft,
-  saveDraftVersion, retryDraftVersion,
+  saveDraftVersion, retryDraftVersion, classroomName,
 } from "./drafts.js";
 import {
   listRoutines, createRoutine, updateRoutine, deleteRoutine,
@@ -223,7 +223,14 @@ router.get("/drafts", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) 
 
 /** GET /api/self-study/drafts/:id — one draft for the preview panel. */
 router.get("/drafts/:id", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
-  try { ok(res, { draft: await getActivityDraft(req.user, req.params.id) }); }
+  try {
+    const draft = await getActivityDraft(req.user, req.params.id);
+    // Drafts made before the class name was recorded: look it up for the preview.
+    if (draft.audience?.classroom_id && !draft.audience.class_name) {
+      draft.audience = { ...draft.audience, class_name: await classroomName(draft.audience.classroom_id) };
+    }
+    ok(res, { draft });
+  }
   catch (e) { if (e.status === 404) return missing(res, e.message); if (e.status === 403) return denied(res, e.message); throw e; }
 }));
 

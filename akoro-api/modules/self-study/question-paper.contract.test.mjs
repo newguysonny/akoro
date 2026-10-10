@@ -172,3 +172,63 @@ test("wiring: chat tools carry the request; drafts build versions in the backgro
   assert.match(routes, /await draftPaper\(\{/);
   assert.match(guide, /async generateAssignmentQuestions\(\{ messages, billing = \{\} \}\)/);
 });
+
+test("named kinds: true/false, labelling, assertion and reason, case study", async () => {
+  const p = qp.parseQuestionRequest("10 questions: 3 true/false, 2 assertion and reason, 1 labelling question, 1 case study with 4 questions");
+  assert.equal(p.total, 10);
+  assert.deepEqual(p.mix.map((x) => [x.label, x.kind, x.count, x.format]), [
+    ["True or false", "mcq", 3, "true_false"], ["Assertion and reason", "mcq", 2, "assertion_reason"], ["Labelling", "label", 1, "label"], ["Case study", "open", 4, "case_study"],
+  ]);
+  assert.equal(p.passage, true, "a case study is a shared scenario");
+  const loose = qp.parseQuestionRequest("5 MCQ and a case study on pollution, plus identification of the parts of a flower");
+  assert.equal(loose.total, null, "named-without-count kinds leave the total open");
+  assert.deepEqual(loose.wanted, ["Labelling", "Case study"]);
+  assert.equal(qp.parseQuestionRequest("2 MCQ, 1 case study with 3 questions").total, 5);
+  // The agent's labels map onto the same kinds.
+  assert.equal(qp.mergePlan(qp.parseQuestionRequest(""), { mix: [{ label: "Assertion and Reason", kind: "open", count: 2 }] }).mix[0].format, "assertion_reason");
+
+  const [sys] = qp.buildPaperMessages({ topic: "Plants", subject: "Biology", request: "x", plan: p });
+  for (const rule of [/A "True or false" question is ONE statement/, /"format": "assertion_reason"/, /parts marked P, Q, R… by leader lines/, /realistic scenario of 80–200 words/]) assert.match(sys.content, rule);
+
+  const paper = qp.normalizePaper({ passages: [{ title: "Case study: Ade", text: "Ade's maize leaves are turning yellow." }], questions: [
+    { text: "The sun is a star.", type: "True or false", format: "true_false", correct: true },
+    { text: "Water boils at 50 °C at sea level.", type: "True or false", answer: "False", options: ["Yes", "No", "Maybe"] },
+    { type: "Assertion and reason", format: "assertion_reason", assertion: "Leaves are green.", reason: "They contain chlorophyll.", correct: 0, options: ["junk"] },
+    { type: "Assertion and reason", text: "Assertion: Fish have gills.\nReason: Gills take oxygen from water.", correct: 1 },
+    { type: "Assertion and reason", text: "No parts here" },
+    { text: "Name the parts labelled P and Q.", type: "Labelling", format: "label", labels: ["P", "Q", "P"], label_answers: { P: "Petal", Q: "Sepal", Z: "x" }, figure_note: "A flower; P points at a petal, Q at a sepal." },
+    { text: "Suggest two causes.", type: "Case study", format: "case_study", passage: 0 },
+  ] });
+  const q = paper.questions;
+  assert.equal(q.length, 6, "an assertion-and-reason without both statements is dropped");
+  assert.deepEqual([q[0].options, q[0].correct, q[1].options, q[1].correct], [["True", "False"], 0, ["True", "False"], 1]);
+  assert.deepEqual(q[2].options, [...qp.AR_OPTIONS], "the four standard options, never the model's");
+  assert.equal(q[2].q, "Assertion: Leaves are green.\nReason: They contain chlorophyll.");
+  assert.deepEqual([q[3].assertion, q[3].reason, q[3].correct], ["Fish have gills.", "Gills take oxygen from water.", 1]);
+  assert.deepEqual([q[4].labels, q[4].answer, q[4].options], [["P", "Q"], { P: "Petal", Q: "Sepal" }, undefined]);
+  assert.equal(q[5].passage, 0);
+  assert.equal(paper.passages[0].title, "Case study: Ade");
+  assert.deepEqual(qp.checkPaper(paper, {}), [], "fixed-shape options aren't flagged as the wrong count");
+  assert.deepEqual(qp.checkPaper({ questions: [{ q: "x", type: "Case study", format: "case_study" }, { q: "y", type: "Labelling", format: "label", labels: ["P"] }] }, {}),
+    ["1 case-study question has no scenario passage.", "1 labelling question has no diagram."]);
+  assert.deepEqual(qp.checkPaper({ questions: [{ q: "x", type: "MCQ", options: ["a", "b", "c", "d"] }] }, { wanted: ["Case study"] }), ["Asked for Case study questions, got none."]);
+  assert.deepEqual(qp.checkPaper({ questions: [{ q: "x", type: "True or false", options: ["a", "b", "c", "d"] }] }, { mix: [{ label: "True or false", kind: "mcq", count: 1, format: "true_false", options: 2 }] }),
+    ["1 True or false question is the wrong kind (must be a statement marked true or false)."]);
+  // Learners never see the key; graders and the AI do.
+  const { briefForLearner } = await import("./submissionView.js");
+  assert.equal(briefForLearner({ questions: [q[4]] }, false).questions[0].answer, undefined);
+  const { buildAiGradeMessages } = await import("./aiGrade.js");
+  const [aiSys] = buildAiGradeMessages({ assignment: { details: { questions: [q[4]] } }, markdown: "" });
+  assert.match(aiSys.content, /Model answer: P: Petal; Q: Sepal/);
+});
+
+test("a follow-up can add a case study: existing passages kept, the new scenario appended", () => {
+  const base = { passages: [{ title: "Old", text: "Old scenario." }], questions: [{ q: "a", type: "Case study", format: "case_study", passage: 0 }] };
+  const { paper, changes } = qp.applyRevision(base, {
+    passages: [{ title: "Changed?", text: "Should not replace." }, { title: "Case study: New", text: "A new scenario." }],
+    questions: [{ from: 0 }, { text: "What next?", type: "Case study", format: "case_study", passage: 1 }],
+  });
+  assert.deepEqual(paper.passages.map((p) => p.title), ["Old", "Case study: New"]);
+  assert.equal(paper.questions[1].passage, 1);
+  assert.deepEqual(changes, { 1: "new" });
+});

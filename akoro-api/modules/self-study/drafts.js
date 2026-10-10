@@ -160,11 +160,21 @@ async function resolveAudience(instructor, audience) {
   if (user_ids.length && !usernames.length) bits.push(`${user_ids.length} learner${user_ids.length === 1 ? "" : "s"} by id`);
   return {
     body: { usernames, user_ids, whole_class, classroom_id: whole_class ? classroom_id : (classroom_id ?? null) },
+    className: a.classroom_name || (classroom_id ? await classroomName(classroom_id) : null),
     label: bits.join(" + ") || `${ids.length} learner${ids.length === 1 ? "" : "s"}`,
     resolvedCount: ids.length,
     names,
     notFound,
   };
+}
+
+/** A classroom's name (the preview's "Class" row) — null when it can't be read. */
+export async function classroomName(id) {
+  if (!id) return null;
+  try {
+    const { data } = await db.from("classrooms").select("name").eq("id", id).maybeSingle();
+    return data?.name || null;
+  } catch { return null; }
 }
 
 /** The plan generator behind POST /plan — the same one the workbench uses. */
@@ -353,7 +363,7 @@ export async function createActivityDraft({ instructor, input, sessionId = null,
     subject: payload.subject,
     topic: payload.topic,
     payload,
-    audience: { label: audienceLabel, resolved_count: audience.resolvedCount, names: audience.names ?? null, ...audience.body },
+    audience: { label: audienceLabel, class_name: audience.className ?? null, resolved_count: audience.resolvedCount, names: audience.names ?? null, ...audience.body },
     source,
     session_id: sessionId,
   }).select().single();

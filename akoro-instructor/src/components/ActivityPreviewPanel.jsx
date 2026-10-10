@@ -310,8 +310,20 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
         </div>
       ) : (
         <div style={{ flex: 1, overflowY: 'auto', paddingRight: 2 }}>
-          <Row label="Audience">
-            {audience.label || '—'}{audience.resolved_count ? <Chip color={GREEN} bg="#DCFCE7">{audience.resolved_count} resolved</Chip> : null}
+          {/* The brief at a glance: class, subject, topic, due — then who gets it. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0 14px' }}>
+            <Row label="Class">{audience.class_name || <span style={{ color: MUTED2 }}>Not set — choose one in Edit details</span>}</Row>
+            <Row label="Subject">{payload.subject || <span style={{ color: MUTED2 }}>—</span>}</Row>
+            <Row label={isLive ? 'Session focus' : 'Topic'}>{payload.topic}</Row>
+            <Row label="Due">
+              {payload.due_at
+                ? <>{new Date(payload.due_at).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} <Chip color={GREEN} bg="#DCFCE7">set</Chip></>
+                : payload.due_hint ? <>{payload.due_hint}</> : <span style={{ color: MUTED2 }}>No due date</span>}
+            </Row>
+          </div>
+          <Row label="Who gets it">
+            {audience.whole_class ? `Everyone in ${audience.class_name || 'the class'}` : (audience.label || '—')}
+            {audience.resolved_count ? <Chip color={GREEN} bg="#DCFCE7">{audience.resolved_count} learner{audience.resolved_count === 1 ? '' : 's'}</Chip> : null}
             {(audience.names || []).length > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
                 {audience.names.map((n) => <Chip key={n} color={INK} bg={LIGHT}>@{n}</Chip>)}
@@ -321,13 +333,6 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
               </div>
             )}
           </Row>
-          <Row label={isLive ? 'Session focus' : 'Topic'}>{payload.topic}</Row>
-          {payload.due_at && (
-            <Row label="Due">
-              {new Date(payload.due_at).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-              <Chip color={GREEN} bg="#DCFCE7">set</Chip>
-            </Row>
-          )}
           {!versions.length && <Row label="Instructions to learners">{payload.instructions || <span style={{ color: MUTED2 }}>None</span>}</Row>}
           {versions.length > 0 && (
             <div style={{ marginBottom: 14 }}>
@@ -356,7 +361,7 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
               </div>
             </Row>
           )}
-          {payload.due_hint && <Row label="Due (as you said it)">{payload.due_hint} <span style={{ color: MUTED2, fontSize: 11 }}>— set the exact date in Edit before assigning if it matters.</span></Row>}
+          {payload.due_hint && !payload.due_at && <div style={{ fontSize: 11, color: MUTED2, fontFamily: FONT, marginTop: -6, marginBottom: 10 }}>Due “{payload.due_hint}” as you said it — set the exact date in Edit details before assigning if it matters.</div>}
         </div>
       )}
 

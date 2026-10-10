@@ -127,3 +127,39 @@ export async function imageFileToDataUrl(file, { max = 1000, maxChars = 380_000 
     URL.revokeObjectURL(url);
   }
 }
+
+/* ── Question kinds with a fixed shape (question.format) ──────────────── */
+
+/** The standard Assertion-and-Reason options, always in this order (the server's too). */
+export const AR_OPTIONS = Object.freeze([
+  'Both the assertion and the reason are true, and the reason correctly explains the assertion.',
+  'Both the assertion and the reason are true, but the reason does not explain the assertion.',
+  'The assertion is true, but the reason is false.',
+  'The assertion is false, but the reason is true.',
+]);
+export const TF_OPTIONS = Object.freeze(['True', 'False']);
+export const FORMAT_NAMES = Object.freeze({
+  true_false: 'True or false', assertion_reason: 'Assertion and reason', label: 'Labelling', case_study: 'Case study',
+});
+
+/**
+ * A labelling answer travels as plain text, one part per line —
+ * "P: chloroplast\nQ: stoma" — so grading, the PDF and the AI read it as is.
+ */
+export function labelAnswerText(labels, values) {
+  return (labels || [])
+    .map((l) => [l, String(values?.[l] ?? '').replace(/\s+/g, ' ').trim()])
+    .filter(([, v]) => v)
+    .map(([l, v]) => `${l}: ${v}`)
+    .join('\n');
+}
+
+/** …and back into one field per part. */
+export function parseLabelAnswer(labels, text) {
+  const out = Object.fromEntries((labels || []).map((l) => [l, '']));
+  for (const line of String(text ?? '').split('\n')) {
+    const m = /^\s*([^:]{1,12}?)\s*:\s*(.*)$/.exec(line);
+    if (m && m[1] in out) out[m[1]] = m[2].trim();
+  }
+  return out;
+}

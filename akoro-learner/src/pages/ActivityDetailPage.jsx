@@ -9,6 +9,7 @@ import { BRAND, RED, GREEN, GOLD } from '../constants.js';
 import Spinner from '../components/common/Spinner.jsx';
 import { hasAnswer, stepStatuses, resumeStep, openingAnswers } from '../lib/questionSteps.js';
 import { MathText, QuestionFigure, QuestionContext } from '../components/activity/QuestionPaper.jsx';
+import { labelAnswerText, parseLabelAnswer } from '../lib/paper.js';
 
 /**
  * ActivityDetailPage — the full-screen detail view for one activity, ported
@@ -200,7 +201,7 @@ function Stepper({ questions, paper, work, setWork, saved, onSaveAnswer, mid, da
                   {mcq && <span style={{ fontSize: 9.5, fontWeight: 900, color: mid, background: `${mid}14`, padding: '2px 8px', borderRadius: 999, textTransform: 'capitalize' }}>{typeLabel(q.type) || 'Multiple choice'}</span>}
                   <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 900, color: look.fg, background: look.bg, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap' }}>{look.label}</span>
                 </div>
-                <p style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--ak-text)', lineHeight: 1.4, margin: 0, fontFamily: "'Nunito',sans-serif" }}><MathText text={qText(q)}/></p>
+                <p style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--ak-text)', lineHeight: 1.4, margin: 0, fontFamily: "'Nunito',sans-serif", whiteSpace: 'pre-line' }}><MathText text={qText(q)}/></p>
                 {mcq ? (
                   hasAnswer(q, ans) && (
                     <p style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', margin: '8px 0 0' }}>{letterOf(ans)}. <MathText text={q.options?.[ans] ?? ''}/></p>
@@ -245,7 +246,7 @@ function Stepper({ questions, paper, work, setWork, saved, onSaveAnswer, mid, da
           <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 900, color: look.fg, background: look.bg, padding: '2px 8px', borderRadius: 999 }}>{look.label}</span>
         </div>
         <QuestionContext key={idx} details={paper} index={idx} mid={mid}/>
-        <p style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--ak-text)', lineHeight: 1.4, margin: '0 0 14px', fontFamily: "'Nunito',sans-serif" }}>
+        <p style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--ak-text)', lineHeight: 1.4, margin: '0 0 14px', fontFamily: "'Nunito',sans-serif", whiteSpace: 'pre-line' }}>
           <MathText text={qText(q)}/>
         </p>
         {/* The figure sits between the question and its options, as on the paper. */}
@@ -269,6 +270,21 @@ function Stepper({ questions, paper, work, setWork, saved, onSaveAnswer, mid, da
                 </button>
               );
             })}
+          </div>
+        ) : q?.format === 'label' && Array.isArray(q.labels) ? (
+          /* Labelling: name each marked part of the diagram. */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {(() => {
+              const vals = parseLabelAnswer(q.labels, work.answers[idx]);
+              return q.labels.map((l) => (
+                <label key={l} style={{ display: 'flex', alignItems: 'center', gap: 10, fontFamily: "'Nunito',sans-serif" }}>
+                  <span style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12.5, fontWeight: 900, color: mid, background: `${mid}12`, border: `1.5px solid ${mid}40` }}>{l}</span>
+                  <input value={vals[l]} maxLength={200} aria-label={`Part ${l}`} placeholder={`What is ${l}?`}
+                    onChange={(e) => setAnswer(labelAnswerText(q.labels, { ...vals, [l]: e.target.value.replace(/\n/g, ' ') }) || '')}
+                    style={{ flex: 1, minWidth: 0, borderRadius: 11, border: '1.5px solid var(--ak-border)', padding: '10px 12px', fontFamily: "'Nunito',sans-serif", fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text)', outline: 'none', background: 'var(--ak-surface)' }}/>
+                </label>
+              ));
+            })()}
           </div>
         ) : (
           <textarea value={work.answers[idx] || ''} onChange={(e) => setAnswer(e.target.value)} aria-label={`Answer to question ${idx + 1}`}
@@ -319,7 +335,7 @@ function StaticQuestions({ questions, paper, answers = {}, marks = [] }) {
               )}
             </div>
             {opensGroup && <QuestionContext details={paper} index={i} mid={BRAND}/>}
-            <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--ak-text)', lineHeight: 1.4, margin: '0 0 10px', fontFamily: "'Nunito',sans-serif" }}><MathText text={qText(q)}/></p>
+            <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--ak-text)', lineHeight: 1.4, margin: '0 0 10px', fontFamily: "'Nunito',sans-serif", whiteSpace: 'pre-line' }}><MathText text={qText(q)}/></p>
             <QuestionFigure figure={q?.figure} compact/>
             {isMcq(q) ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>

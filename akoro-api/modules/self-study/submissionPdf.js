@@ -151,7 +151,9 @@ export function submissionMarkdown({ assignment = {}, learner = {}, submission =
       for (const { q, i } of block.items) {
         const raw = answers[String(i)] ?? answers[i];
         const answered = raw !== undefined && raw !== null && String(raw).trim() !== "";
-        out.push(`### Q${i + 1}. ${qText(q)}`, "");
+        // A heading is one line: an assertion-and-reason question's two lines join.
+        out.push(`### Q${i + 1}. ${qText(q).replace(/\n+/g, " · ")}`, "");
+        if (q?.format === "label" && Array.isArray(q.labels)) out.push(`_Name the labelled parts: ${q.labels.join(", ")}_`, "");
         if (q?.figure) out.push(`_[Figure${q.figure.caption ? `: ${q.figure.caption}` : ""} — see the PDF]_`, "");
         if (typeof q === "object" && q && Array.isArray(q.options)) {
           q.options.forEach((opt, oi) => out.push(`- ${answered && Number(raw) === oi ? "**[x]**" : "[ ]"} ${letterOf(oi)}. ${opt}`));
@@ -245,6 +247,8 @@ export async function buildSubmissionPdf({ assignment = {}, learner = {}, submis
           else notes.push(`Question ${i + 1}: its figure couldn't be drawn in the PDF.`);
           if (q.figure.caption) flow.text(q.figure.caption, { size: 9, color: MUTED, indent: 14, gap: 8 });
       }
+      if (!q?.figure && q?.figure_note) flow.text(`[Figure: ${q.figure_note}]`, { size: 9.5, color: MUTED, indent: 14, gap: 6 });
+      if (q?.format === "label" && Array.isArray(q.labels)) flow.text(`Name the labelled parts: ${q.labels.join(", ")}`, { size: 10, color: MUTED, indent: 14, gap: 4 });
       const raw = answers[String(i)] ?? answers[i];
       const answered = raw !== undefined && raw !== null && String(raw).trim() !== "";
       if (typeof q === "object" && q && Array.isArray(q.options)) {

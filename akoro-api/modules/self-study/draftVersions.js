@@ -67,7 +67,7 @@ export function newVersion(payload, { request, basedOn = null }) {
 }
 
 /** The class the work is for, as the model should pitch it ("JSS 2"). */
-const classLevelOf = (draft) => String(draft?.audience?.label || "").split(" + ")[0].slice(0, 60) || null;
+const classLevelOf = (draft) => String(draft?.audience?.class_name || draft?.audience?.label || "").split(" + ")[0].slice(0, 60) || null;
 
 /**
  * Build one version in the background. Never throws: a failure is written
