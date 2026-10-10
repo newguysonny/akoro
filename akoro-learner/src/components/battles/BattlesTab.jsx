@@ -257,6 +257,7 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
                   <div style={{ background:diff.bg,borderRadius:5,padding:"1px 7px" }}><span style={{ fontSize:9.5,fontWeight:800,color:diff.color }}>{diff.label}</span></div>
                   <span style={{ fontSize:10.5,fontWeight:800,color:GOLD,display:"flex",alignItems:"center",gap:3 }}><ZapIcon size={10} color={GOLD}/>{b.xpPrize}</span>
                   <span style={{ fontSize:10.5,color:"var(--ak-text-muted)",fontWeight:600,display:"inline-flex",alignItems:"center",gap:4 }}><Icon name="ti-stopwatch" size={10} color="var(--ak-text-muted)"/>{b.timeLimit}</span>
+                  {b.hpPerMiss!=null&&<span title="HP each agent loses per missed question" style={{ fontSize:10.5,color:RED,fontWeight:700,display:"inline-flex",alignItems:"center",gap:4 }}><Icon name="ti-heart" size={10} color={RED}/>−{b.hpPerMiss} HP/miss</span>}
                   {b.status==="live"&&b.startedAgo!=null&&<span style={{ fontSize:10,color:RED,fontWeight:700 }}>{t('battles.started_ago').replace('{min}',b.startedAgo)}</span>}
                   {b.status==="scheduled"&&b.startsIn&&<span style={{ fontSize:10,color:BRAND,fontWeight:700,display:"inline-flex",alignItems:"center",gap:4 }}><Icon name="ti-calendar" size={11} color={BRAND}/>{b.startsIn}</span>}
                   {b.status==="lobby"&&<span style={{ fontSize:10,color:GOLD,fontWeight:700,display:"inline-flex",alignItems:"center",gap:4 }}><Icon name="ti-hourglass" size={11} color={GOLD}/>Waiting for players to accept</span>}

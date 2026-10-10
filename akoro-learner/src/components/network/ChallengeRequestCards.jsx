@@ -38,7 +38,7 @@ export default function ChallengeRequestCards({ requests = [], mine = false, onC
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13.5, fontWeight: 900, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
               <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)' }}>
-                {KIND[r.kind || (r.battle_type === 'open' ? 'group' : r.battle_type)] || '1v1'} · {r.subject}{r.exam ? ` · ${r.exam}` : ''} · {r.questions ?? r.total_questions} questions
+                {KIND[r.kind || (r.battle_type === 'open' ? 'group' : r.battle_type)] || '1v1'} · {r.subject}{r.exam ? ` · ${r.exam}` : ''} · {r.questions ?? r.total_questions} questions · −{r.hpPerMiss ?? r.hp_per_miss ?? 10} HP/miss
                 {r.seats ? ` · ${r.seats} seats` : ''}
               </div>
             </div>

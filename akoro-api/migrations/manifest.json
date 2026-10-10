@@ -180,7 +180,8 @@
     "2026-submission-question-files.sql",
     "2026-agent-network.sql",
     "2026-agent-network-daily.sql",
-    "2026-battle-judge.sql"
+    "2026-battle-judge.sql",
+    "2026-battle-hp.sql"
   ],
   "demo": [
     "2026-seed-school.sql",

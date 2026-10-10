@@ -82,6 +82,7 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
   const [questionSource, setQuestionSource] = useState('auto');   // 'auto' | 'bank' | 'ai'
   const [difficulty, setDifficulty] = useState('intermediate');
   const [xpPrize, setXpPrize] = useState('200');
+  const [hpPerMiss, setHpPerMiss] = useState('10');   // what a miss costs — invitees see it first
   const [scheduledAt, setScheduledAt] = useState('');
 
   const [busy, setBusy] = useState(false);
@@ -193,6 +194,7 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
       topic: topic.trim() || null,
       difficulty,
       xp_prize: parseInt(xpPrize, 10) || 200,
+      hp_per_miss: hpPerMiss === '' ? undefined : parseInt(hpPerMiss, 10),
       expires_in_minutes: 60,
       scheduled_for: scheduledAt ? new Date(scheduledAt).toISOString() : null,
       question_source: questionSource,
@@ -454,6 +456,16 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
                 <label style={LABEL}>XP prize</label>
                 <input type="number" min="0" value={xpPrize} onChange={e => setXpPrize(e.target.value)} style={FIELD} />
               </div>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={LABEL}><Icon name="ti-heart" size={13} color={BRAND}/> HP lost per miss</label>
+              <input type="number" min="0" max="50" value={hpPerMiss} onChange={e => setHpPerMiss(e.target.value)} style={FIELD} />
+              <p style={{ fontSize: 10.5, color: 'var(--ak-text-muted)', margin: '5px 0 0', lineHeight: 1.45 }}>
+                {(() => { const h = Math.min(50, Math.max(0, parseInt(hpPerMiss, 10) || 0));
+                  return h ? `Every agent starts on 100 HP and loses ${h} for each question it misses — out after ${Math.ceil(100 / h)} misses, then it watches, unranked. Invitees see this before they accept.`
+                    : 'No HP lost for misses — nobody can be knocked out.'; })()}
+              </p>
             </div>
 
             <div style={{ marginBottom: 22 }}>

@@ -52,3 +52,20 @@ test("no HP, no ranking; the battle runs every question while anyone can still a
   assert.match(worker, /if \(questionOrder >= \(battleInfo\?\.total_questions \?\? 0\) \|\| stillIn === 0\) \{/);
   assert.doesNotMatch(worker, /lastStanding/);
 });
+
+test("the creator sets HP per miss; every miss costs exactly that, and invitees see it first", async () => {
+  const { cleanHpPerMiss, missesToKnockout } = await import("./hp.js");
+  assert.equal(cleanHpPerMiss(undefined), 10);
+  assert.equal(cleanHpPerMiss(""), 10);
+  assert.equal(cleanHpPerMiss(0), 0);            // no knockouts
+  assert.equal(cleanHpPerMiss(80), 50);
+  assert.equal(cleanHpPerMiss("abc"), 10);
+  assert.equal(missesToKnockout(10), 10);
+  assert.equal(missesToKnockout(15), 7);
+  assert.equal(missesToKnockout(0), null);
+  assert.match(worker, /hp: Math\.max\(0, \(p\.hp \?\? 100\) - hpPerMiss\)/);
+  assert.doesNotMatch(worker, /- 8\)/);
+  const routes = await read("./routes.js");
+  assert.equal((routes.match(/hp_per_miss: cleanHpPerMiss\(req\.body\?\.hp_per_miss\),/g) || []).length, 6);   // every creation path
+  assert.match(routes, /hpPerMiss:     b\.hp_per_miss \?\? HP_PER_MISS_DEFAULT,/);                         // on every card / challenge
+});
