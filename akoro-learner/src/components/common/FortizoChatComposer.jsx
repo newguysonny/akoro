@@ -8,7 +8,7 @@ import { Icon } from './Icons.jsx';
  * The host owns every action. In particular, a model option is never sent as
  * an arbitrary model identifier: the host maps it to a supported API mode.
  */
-function ComposerTool({ icon, label, onClick, disabled = false, active = false, dark = false }) {
+function ComposerTool({ icon, label, onClick, disabled = false, active = false, dark = false, toggle = false }) {
   const unavailable = disabled || !onClick;
   return (
     <button
@@ -18,6 +18,7 @@ function ComposerTool({ icon, label, onClick, disabled = false, active = false, 
       title={label}
       aria-label={label}
       aria-disabled={unavailable}
+      {...(toggle ? { 'aria-pressed': active } : {})}
       style={{
         width: 32, height: 32, padding: 0, borderRadius: '50%', border: 'none',
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
@@ -146,6 +147,8 @@ export default function FortizoChatComposer({
   audioActive = false,
   audioLabel = 'Record an audio note',
   audioUnavailable = false,
+  audioIcon = 'ti-wave-sine',   // a host can make this a switch (e.g. "always read aloud")
+  audioToggle = false,
   modelLabel = 'Adaptive',
   modelId = modelLabel,
   modelOptions = [],
@@ -212,8 +215,8 @@ export default function FortizoChatComposer({
           disabled={disabled || !voiceAction} active={voiceActive} dark={dark}/>
         <ComposerTool icon="ti-paperclip" label={attachmentLabel} onClick={attachmentAction}
           disabled={disabled || attachmentUnavailable || !attachmentAction} dark={dark}/>
-        <ComposerTool icon="ti-wave-sine" label={audioLabel} onClick={audioAction}
-          disabled={disabled || audioUnavailable || !audioAction} active={audioActive} dark={dark}/>
+        <ComposerTool icon={audioIcon} label={audioLabel} onClick={audioAction} toggle={audioToggle}
+          disabled={(disabled && !audioToggle) || audioUnavailable || !audioAction} active={audioActive} dark={dark}/>
 
         {!hideModelMenu && (
           <ModelSwitch modelId={modelId} modelLabel={modelLabel} modelOptions={modelOptions}

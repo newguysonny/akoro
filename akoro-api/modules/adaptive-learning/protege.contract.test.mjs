@@ -87,8 +87,12 @@ test("voice: the learner talks to the same protégé", async () => {
   // The mic feeds the same chat (so every protégé rule holds), and a reply to
   // something said aloud is read aloud.
   assert.match(learnerTab, /const mic=useVoiceAnswer\(\{ onTranscript:\(said\)=>\{ voiceTurnRef\.current=true; sendRef\.current\?\.\(said\); \} \}\);/);
-  assert.match(learnerTab, /if\(spokenTurn && finalReply && !controller\?\.signal\.aborted\) tts\.speak\(replyId, finalReply\);/);
   assert.doesNotMatch(learnerTab, /Voice input is not available in AI Chat yet/);
+  // "Always read replies aloud": the composer's audio switch, remembered on the device.
+  assert.match(learnerTab, /if\(\(spokenTurn\|\|readAloud\) && finalReply && !controller\?\.signal\.aborted\) tts\.speak\(replyId, finalReply\);/);
+  assert.match(learnerTab, /localStorage\.setItem\('ak_read_aloud', next\?'1':'0'\)/);
+  assert.match(learnerTab, /audioAction=\{toggleReadAloud\}/);
+  assert.doesNotMatch(learnerTab, /Audio notes are not available in AI Chat yet/);
   // A learner's realtime voice session carries the protégé rules and taught topics.
   assert.match(voice, /\+ \(role === "student" \? await protegeVoiceRules\(req\.user\.id\) : ""\)/);
   assert.match(voice, /loadDoctrine\("policies\/PROTEGE\.md"\)\) \+ renderTaughtContext\(taught\)/);
