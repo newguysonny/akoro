@@ -26,8 +26,9 @@ test("the handler EXECUTES end-to-end on stubbed libs — no NameError-class def
   assert.match(out, /EXEC-CHECK: all passed/);
 });
 
-test("the processor call carries the placeholder-bearing prompt variable", async () => {
+test("the processor gets the CHAT-formatted text, built right before the call", async () => {
   const handler = await readFile(join(here, "..", "handler.py"), "utf8");
-  assert.match(handler, /processor\(text=\[prompt\]/, "the prompt (with <|image_pad|>) goes to the processor");
-  assert.ok(!/processor\(text=\[text\]/.test(handler), "no reference to the removed 'text' variable");
+  // A bare prompt made the chat model end its turn at once (empty output,
+  // ~1 s). The text must come from build_chat_text, defined in this scope.
+  assert.match(handler, /text = build_chat_text\(processor, prompt\)\n\s+inputs = processor\(text=\[text\]/);
 });

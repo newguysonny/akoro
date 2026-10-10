@@ -53,8 +53,18 @@ test("the vision prompt uses Qwen3-VL's real placeholder — never the obsolete 
     "the processor expands <|image_pad|> to the exact visual token count");
   assert.ok(!handler.includes("PRODUCTION_PROMPT = \"<image>"),
     "the old prefix is literal text to Qwen3-VL — it caused tokens: 0 vs features 1122");
-  assert.match(handler, /"<\|image_pad\|>" not in prompt/, "operator-supplied placeholders survive");
+  assert.match(handler, /if "<\|im_start\|>" in prompt:\n\s+return prompt/, "operator-supplied chat markup survives");
   assert.match(handler, /dtype="auto"/, "the non-deprecated dtype kwarg");
+});
+
+test("the prompt goes in the model's chat format: a user turn, the assistant turn opened", () => {
+  assert.match(handler, /apply_chat_template\(messages, tokenize=False, add_generation_prompt=True\)/,
+    "the snapshot's own chat template is the source of truth");
+  assert.match(handler, /\{"type": "image"\}, \{"type": "text", "text": prompt\}/, "image first, then the instructions");
+  assert.match(handler, /<\|im_start\|>user\\n<\|vision_start\|><\|image_pad\|><\|vision_end\|>/,
+    "hand-built Qwen layout when the snapshot ships no template");
+  assert.match(handler, /<\|im_end\|>\\n<\|im_start\|>assistant\\n/, "…ending with the assistant turn opened");
+  assert.match(handler, /"generated_tokens": len\(new_tokens\)/, "an empty answer is diagnosable from the job output");
 });
 
 test("the endpoint contract is unchanged", () => {
