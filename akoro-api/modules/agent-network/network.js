@@ -63,7 +63,7 @@ export async function inBattleIds(ids) {
 
 export const DEFAULT_SETTINGS = Object.freeze({
   visibility: "everyone", accept_messages: "everyone", open_to_challenges: true,
-  battle_times: [], battle_types: [], show_on_leaderboards: true,
+  battle_times: [], battle_types: [], show_on_leaderboards: true, daily_subject: null,
 });
 
 export async function getSettings(userId) {
@@ -78,6 +78,8 @@ export function cleanSettings(input = {}) {
   if (typeof input.open_to_challenges === "boolean") out.open_to_challenges = input.open_to_challenges;
   if (typeof input.show_on_leaderboards === "boolean") out.show_on_leaderboards = input.show_on_leaderboards;
   if (Array.isArray(input.battle_times)) out.battle_times = [...new Set(input.battle_times.filter((t) => BATTLE_TIMES.includes(t)))];
+  if (typeof input.daily_subject === "string") out.daily_subject = input.daily_subject.trim().slice(0, 60) || null;
+  else if (input.daily_subject === null) out.daily_subject = null;
   if (Array.isArray(input.battle_types)) out.battle_types = [...new Set(input.battle_types.filter((t) => ["1v1", "open", "team", "review"].includes(t)))];
   return out;
 }

@@ -43,7 +43,7 @@ import { challengeAgents, postChallengeRequest, searchChallengeRequests, acceptC
 import { messageAgent, inbox as agentInbox, replyToAgent, consultOnlineAgents, inboxBrief } from "../agent-network/messaging.js";
 import {
   requestBuddy, respondBuddy, listBuddies, buddyCheckin, endBuddy, buddyBrief,
-  getDaily, submitDaily, dailyRanking, createCircle, searchCircles, joinCircle, leaveCircle, weeklyLeague,
+  getDaily, submitDaily, dailyRanking, dailyStatus, createCircle, searchCircles, joinCircle, leaveCircle, weeklyLeague,
 } from "../agent-network/activities.js";
 import { searchBlogPosts, readBlogPost, BLOG_SEARCH_MAX_RESULTS } from "./blogResearch.js";
 import { listGoals, createGoal, updateGoal } from "../learner-goals/service.js";
@@ -571,13 +571,14 @@ export const CHAT_TOOLS = [
   {
     name: "daily_challenge",
     featureGate: "agent_network",
-    description: "Today's daily challenge: 5 shared questions per subject (past papers first), one go per learner per day, ranked by score then time. " +
-      "action: get (default — returns the questions WITHOUT answers; quiz the learner one question at a time and don't reveal answers) | " +
+    description: "The daily battle: a recurring battle every day for everyone, 7 PM to midnight (Lagos) — 5 shared questions in the learner's subject, one go, ranked by score then time. " +
+      "It shows in the Battles tab: Scheduled before 7 PM, Active until midnight, Completed once played. " +
+      "action: status (default — today's state, the next one, recent scores) | get (only once it's active: the questions WITHOUT answers; quiz the learner one at a time, don't reveal answers) | " +
       "submit (subject, answers as letters in order, optional time_ms — marks it, gives XP and their rank) | ranking (subject).",
     input_schema: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["get", "submit", "ranking"] }, subject: { type: "string" },
+        action: { type: "string", enum: ["status", "get", "submit", "ranking"] }, subject: { type: "string" },
         answers: { type: "array", items: { type: "string" } }, time_ms: { type: "number" },
       },
       required: [],
@@ -1955,8 +1956,9 @@ export async function executeChatTool(name, input, studentId, { conversationId =
     }
     case "daily_challenge": {
       if (role === "instructor") return { error: "The agent network is for learners." };
-      const a = input?.action || "get";
+      const a = input?.action || "status";
       try {
+        if (a === "status") return await dailyStatus(studentId);
         if (a === "get") return await getDaily(studentId, input?.subject || null);
         if (a === "ranking") return await dailyRanking(studentId, input?.subject || "");
         if (a === "submit") {

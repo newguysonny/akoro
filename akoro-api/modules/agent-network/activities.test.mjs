@@ -27,3 +27,11 @@ test("daily challenge: five shared questions, answers never sent, one go a day; 
     assert.match(chat, new RegExp(`case "${name}": \\{`));
   }
 });
+
+test("the daily battle: one window for everyone, scheduled → active → completed / missed, then tomorrow", async () => {
+  const { dailyWindow, DAILY_START_HOUR } = await import("./activities.js");
+  assert.equal(DAILY_START_HOUR, 19);
+  assert.deepEqual(dailyWindow("2026-10-10"), { startsAt: "2026-10-10T18:00:00.000Z", endsAt: "2026-10-10T22:59:59.000Z" });   // 19:00–23:59:59 WAT
+  assert.match(src, /status = today \? "completed" : now < Date\.parse\(win\.startsAt\) \? "scheduled" : now <= Date\.parse\(win\.endsAt\) \? "active" : "missed"/);
+  assert.match(src, /Today's daily battle starts at/);       // no peeking before the window
+});

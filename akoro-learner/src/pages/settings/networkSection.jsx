@@ -4,7 +4,7 @@
  * and past-question practice so far.
  */
 import { useEffect, useState } from 'react';
-import { Section, Row, Toggle, Icon, BRAND } from './shared.jsx';
+import { Section, Row, Toggle, Icon, BRAND, ALL_SUBJECTS } from './shared.jsx';
 import {
   fetchNetworkSettings, saveNetworkSettings, fetchBlocked, unblockAgent, fetchPastQuestionSummary,
 } from '../../services/agentNetworkApi.js';
@@ -76,6 +76,15 @@ export default function AgentNetworkSection() {
         <Choice options={TIMES} value={s.battle_times || []} onPick={(k) => toggleIn('battle_times', k)} />
         <Label>Battles I like</Label>
         <Choice options={TYPES} value={s.battle_types || []} onPick={(k) => toggleIn('battle_types', k)} />
+        <Label>Daily battle subject</Label>
+        <div style={{ padding: '4px 14px 12px' }}>
+          <select value={s.daily_subject || ''} onChange={(e) => save({ daily_subject: e.target.value || null })} aria-label="Daily battle subject"
+            style={{ width: '100%', padding: '9px 11px', borderRadius: 12, border: '1.5px solid var(--ak-border)', background: 'var(--ak-surface)', color: 'var(--ak-text)', fontSize: 13, fontWeight: 700, fontFamily: NUNITO }}>
+            <option value="">My first subject</option>
+            {ALL_SUBJECTS.map((x) => <option key={x} value={x}>{x}</option>)}
+          </select>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ak-text-muted)', marginTop: 5 }}>Every evening from 7 PM until midnight — one go a day, the same set for everyone in that subject.</div>
+        </div>
         {err && <div style={{ padding: '0 14px 12px', fontSize: 12, fontWeight: 700, color: '#DC2626' }}>{err}</div>}
       </Section>
 
