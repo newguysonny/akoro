@@ -20,7 +20,7 @@ function Span({ s }) {
 const SpanRun = ({ spans }) => <>{spans.map((s, i) => <Span key={i} s={s} />)}</>;
 
 /* `size` / `lineHeight` let a host set the reading size — the Agent Chat's
-   replies are 14.5px; everything else keeps the compact 13.5px. */
+   replies are 16px; everything else keeps the compact 13.5px. */
 export default function RichText({ text, size = 13.5, lineHeight = 1.6 }) {
   const blocks = parseRich(text);
   if (!blocks.length) return null;
