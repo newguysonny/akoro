@@ -50,7 +50,7 @@ export default function ChallengeRequestCards({ requests = [], mine = false, onC
             )}
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6, fontSize: 11, fontWeight: 700, color: 'var(--ak-text-muted)' }}>
-            {r.by && <span>{r.by.online ? '🟢 ' : ''}{r.by.name} {r.by.username} · {r.by.agent} · Lv {r.by.level}</span>}
+            {r.by && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>{r.by.online && <span title="Online" style={{ width: 8, height: 8, borderRadius: '50%', background: '#10B981', display: 'inline-block' }} />}{r.by.name} {r.by.username} · {r.by.agent} · Lv {r.by.level}</span>}
             {(r.scheduledFor || r.scheduled_for) && <span style={{ color: BRAND }}><Icon name="ti-calendar" size={11} /> {when(r.scheduledFor || r.scheduled_for)}</span>}
             {mine && <span>{r.status}</span>}
           </div>

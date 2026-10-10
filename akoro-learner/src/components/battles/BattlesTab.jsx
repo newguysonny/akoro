@@ -6,6 +6,7 @@ import { formatLeft } from './ChallengeModal.jsx';
 import CreateBattleSheet from './CreateBattleSheet.jsx';
 import ParticipantsSheet from './ParticipantsSheet.jsx';
 import OpenChallenges from '../network/OpenChallenges.jsx';
+import DailyChallenge from '../network/DailyChallenge.jsx';
 import { rematchBattle } from '../../services/agentNetworkApi.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
@@ -104,7 +105,7 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
     completed:{label:"COMPLETED",bg:"rgba(16,185,129,.10)", color:GREEN, border:"rgba(16,185,129,.25)" },
     lobby:    {label:"WAITING",  bg:"rgba(245,158,11,.12)", color:GOLD,  border:"rgba(245,158,11,.28)" },
   };
-  const TABS=[{key:"active",label:t('battles.active'),icon:"ti-bolt",count:liveBattles.length+waitingBattles.length},{key:"scheduled",label:t('battles.scheduled'),icon:"ti-calendar",count:scheduledBattles.length},{key:"completed",label:t('battles.completed'),icon:"ti-trophy",count:completedBattles.length},{key:"open",label:"Open",icon:"ti-world",count:0}];
+  const TABS=[{key:"active",label:t('battles.active'),icon:"ti-bolt",count:liveBattles.length+waitingBattles.length},{key:"scheduled",label:t('battles.scheduled'),icon:"ti-calendar",count:scheduledBattles.length},{key:"completed",label:t('battles.completed'),icon:"ti-trophy",count:completedBattles.length},{key:"open",label:"Open",icon:"ti-world",count:0},{key:"daily",label:"Daily",icon:"ti-calendar-bolt",count:0}];
   return (
     <div style={{ flex:1,overflowY:"auto",background:"var(--ak-surface)",display:"flex",flexDirection:"column" }}>
       <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,padding:"12px 16px 10px",borderBottom:"1px solid var(--ak-border)" }}>
@@ -128,7 +129,8 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
         <button onClick={onViewChallenge} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:`1.5px solid ${RED}40`,background:`${RED}08`,fontSize:11.5,fontWeight:800,color:RED,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}><ZapIcon size={11} color={RED}/>{t('battles.find_challenges')}</button>
       </div>
       {viewFilter==="open"&&<OpenChallenges onBattleCreated={onBattleCreated}/>}
-      {viewFilter!=="open"&&mine.length===0&&(
+      {viewFilter==="daily"&&<DailyChallenge/>}
+      {!["open","daily"].includes(viewFilter)&&mine.length===0&&(
         <div style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,padding:"40px 24px" }}>
           <Icon name="ti-swords" size={52} color="var(--ak-text-muted)" style={{opacity:.2}}/>
           <p style={{ fontSize:15,fontWeight:800,color:"var(--ak-text-muted)",textAlign:"center" }}>{t('battles.empty')}</p>
@@ -136,14 +138,14 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
           <button onClick={onViewChallenge} style={{ padding:"10px 22px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",gap:7 }}><ZapIcon size={13} color="#fff"/>{t('battles.view_challenges')}</button>
         </div>
       )}
-      {viewFilter!=="open"&&mine.length>0&&displayed.length===0&&(
+      {!["open","daily"].includes(viewFilter)&&mine.length>0&&displayed.length===0&&(
         <div style={{ textAlign:"center",padding:"36px 24px",color:"var(--ak-text-muted)" }}>
           <Icon name={viewFilter==="active"?"ti-bolt":viewFilter==="scheduled"?"ti-calendar":"ti-trophy"} size={36} color="var(--ak-text-muted)" style={{opacity:.3}}/>
           <p style={{ fontSize:13,fontWeight:700,marginTop:8 }}>{viewFilter==="active"?t('battles.none_live'):viewFilter==="scheduled"?t('battles.none_scheduled'):t('battles.none_completed')}</p>
         </div>
       )}
       <div style={{ padding:"10px 16px",display:"flex",flexDirection:"column",gap:10 }}>
-        {viewFilter!=="open"&&displayed.map(b=>{
+        {!["open","daily"].includes(viewFilter)&&displayed.map(b=>{
           const bs=subjectStyle(b.subject),sc=bs.color,diff=difficultyStyle(b.difficulty),st=ST_STYLE[b.status]||ST_STYLE.scheduled,A=b.agentA,B=b.agentB;
           return (
             <div key={b.id} style={{ borderRadius:18,border:`1.5px solid ${b.status==="live"?"rgba(239,68,68,.30)":b.status==="scheduled"?"rgba(108,59,255,.25)":"var(--ak-border)"}`,background:b.status==="live"?"linear-gradient(140deg,#FFF5F5,#FFFCFC)":b.status==="scheduled"?"linear-gradient(140deg,#F5F3FF,#FCFCFF)":"var(--ak-surface)",overflow:"hidden" }}>

@@ -41,6 +41,10 @@ import { consultPeerAgents, PEER_QUESTION_MIN, PEER_QUESTION_MAX } from "./peerC
 import { searchAgents, saveSettings as saveAgentNetworkSettings, block as blockAgent, report as reportAgent, logPastQuestions, pastQuestionSummary } from "../agent-network/network.js";
 import { challengeAgents, postChallengeRequest, searchChallengeRequests, acceptChallengeRequest, cancelChallengeRequest, rematch } from "../agent-network/challenges.js";
 import { messageAgent, inbox as agentInbox, replyToAgent, consultOnlineAgents, inboxBrief } from "../agent-network/messaging.js";
+import {
+  requestBuddy, respondBuddy, listBuddies, buddyCheckin, endBuddy, buddyBrief,
+  getDaily, submitDaily, dailyRanking, createCircle, searchCircles, joinCircle, leaveCircle, weeklyLeague,
+} from "../agent-network/activities.js";
 import { searchBlogPosts, readBlogPost, BLOG_SEARCH_MAX_RESULTS } from "./blogResearch.js";
 import { listGoals, createGoal, updateGoal } from "../learner-goals/service.js";
 import { listMyBlogs, createBlogPost, updateBlogPost } from "../blogs/service.js";
@@ -547,6 +551,63 @@ export const CHAT_TOOLS = [
     featureGate: "agent_network",
     description: "Answer a question another agent left in your inbox (messageId from check_agent_inbox) — write it with the learner, only from what they taught you. ONLY when the learner agrees to reply.",
     input_schema: { type: "object", properties: { messageId: { type: "string" }, reply: { type: "string" } }, required: ["messageId", "reply"] },
+  },
+  {
+    name: "study_buddy",
+    featureGate: "agent_network",
+    description: "Study buddies: two agents keep each other on track with a weekly check-in (goal progress and the week's XP). " +
+      "action: list (default, read-only) | request (to = userId/@username from search_agents; optional goal, subject, exam) | respond (id, accept) | " +
+      "checkin (id, optional note — sends this learner's progress to the buddy) | end (id). Every action except list ONLY when the learner explicitly asks.",
+    input_schema: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["list", "request", "respond", "checkin", "end"] },
+        to: { type: "string" }, id: { type: "string" }, accept: { type: "boolean" },
+        goal: { type: "string" }, subject: { type: "string" }, exam: { type: "string" }, note: { type: "string" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "daily_challenge",
+    featureGate: "agent_network",
+    description: "Today's daily challenge: 5 shared questions per subject (past papers first), one go per learner per day, ranked by score then time. " +
+      "action: get (default — returns the questions WITHOUT answers; quiz the learner one question at a time and don't reveal answers) | " +
+      "submit (subject, answers as letters in order, optional time_ms — marks it, gives XP and their rank) | ranking (subject).",
+    input_schema: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["get", "submit", "ranking"] }, subject: { type: "string" },
+        answers: { type: "array", items: { type: "string" } }, time_ms: { type: "number" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "revision_circle",
+    featureGate: "agent_network",
+    description: "Revision circles: 3–8 agents revise one exam topic together; when it fills (or at its start time with 3+), a group battle on that topic starts for them. " +
+      "action: search (default, read-only: subject, exam, topic) | create (subject, topic, exam, max_members, scheduled_for ISO +01:00, invite: userIds/@usernames) | " +
+      "join (id) | leave (id). create / join / leave ONLY when the learner explicitly asks.",
+    input_schema: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["search", "create", "join", "leave"] }, id: { type: "string" },
+        subject: { type: "string" }, topic: { type: "string" }, exam: { type: "string" }, title: { type: "string" },
+        max_members: { type: "number" }, scheduled_for: { type: "string" }, invite: { type: "array", items: { type: "string" } },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_weekly_league",
+    featureGate: "agent_network",
+    description: "This week's league (Monday–Sunday): XP earned this week, ranked, top 20 and the learner's place. scope: classmates | school | subject (with subject) | exam (with exam) | everyone. Read-only.",
+    input_schema: {
+      type: "object",
+      properties: { scope: { type: "string", enum: ["classmates", "school", "subject", "exam", "everyone"] }, subject: { type: "string" }, exam: { type: "string" } },
+      required: [],
+    },
   },
   {
     name: "ask_to_be_taught",
@@ -1878,6 +1939,49 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       if (!input?.messageId) return clarify("messageId", "Which message should I answer? I'll open the inbox first.");
       try { return await replyToAgent(studentId, input.messageId, input.reply); }
       catch (e) { return { replied: false, error: e.message }; }
+    }
+    case "study_buddy": {
+      if (role === "instructor") return { error: "The agent network is for learners." };
+      const a = input?.action || "list";
+      try {
+        if (a === "list") return await listBuddies(studentId);
+        if (a === "request") { if (!input?.to) return clarify("to", "Who should be the study buddy? I can find them first."); return await requestBuddy(studentId, input); }
+        if (!input?.id) return clarify("id", "Which buddy? I'll list them first.");
+        if (a === "respond") return await respondBuddy(studentId, input.id, input.accept !== false);
+        if (a === "checkin") return await buddyCheckin(studentId, input.id, input.note || "");
+        if (a === "end") return await endBuddy(studentId, input.id);
+        return { error: "Unknown action." };
+      } catch (e) { return { error: e.message }; }
+    }
+    case "daily_challenge": {
+      if (role === "instructor") return { error: "The agent network is for learners." };
+      const a = input?.action || "get";
+      try {
+        if (a === "get") return await getDaily(studentId, input?.subject || null);
+        if (a === "ranking") return await dailyRanking(studentId, input?.subject || "");
+        if (a === "submit") {
+          if (!input?.subject) return clarify("subject", "Which subject's challenge are we marking?");
+          return await submitDaily(studentId, input);
+        }
+        return { error: "Unknown action." };
+      } catch (e) { return { error: e.message }; }
+    }
+    case "revision_circle": {
+      if (role === "instructor") return { error: "The agent network is for learners." };
+      const a = input?.action || "search";
+      try {
+        if (a === "search") return await searchCircles(studentId, input || {});
+        if (a === "create") { if (!input?.subject) return clarify("subject", "Which subject should the circle revise?"); return await createCircle(studentId, input); }
+        if (!input?.id) return clarify("id", "Which circle? I'll search first.");
+        if (a === "join") return await joinCircle(studentId, input.id);
+        if (a === "leave") return await leaveCircle(studentId, input.id);
+        return { error: "Unknown action." };
+      } catch (e) { return { error: e.message }; }
+    }
+    case "get_weekly_league": {
+      if (role === "instructor") return { error: "The agent network is for learners." };
+      try { return await weeklyLeague(studentId, input || {}); }
+      catch (e) { return { error: e.message }; }
     }
     case "find_battles": {
       const { data: enrolled } = await db.from("enrollments")
@@ -3541,7 +3645,9 @@ router.post("/agent", async (req, res) => {
     ]);
     const protegeCtx = taught ? `\n\n${await loadDoctrine("policies/PROTEGE.md")}${renderTaughtContext(taught)}` : "";
     // Messages from other learners' agents waiting for this one.
-    const inboxCtx = role === "student" && agentNetworkEnabled ? await inboxBrief(req.user.id).catch(() => "") : "";
+    const inboxCtx = role === "student" && agentNetworkEnabled
+      ? (await inboxBrief(req.user.id).catch(() => "")) + (await buddyBrief(req.user.id).catch(() => ""))
+      : "";
 
     let att = { visionParts: [], docContext: "", notes: [] };
     if (Array.isArray(rawAttachments) && rawAttachments.length) {
