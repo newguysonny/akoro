@@ -177,3 +177,22 @@ export async function downloadActivityFile(fileId, name) {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
+
+/* One of my files as bytes — the document editor reopens a saved .docx. */
+export async function fetchActivityFileBlob(fileId) {
+  const r = await fetch(`${API}/api/self-study/files/${fileId}`, { credentials: 'include' });
+  if (!r.ok) throw new Error('Could not open that file.');
+  return r.blob();
+}
+
+/* Save a Blob I made on this device (a copy of my document). */
+export function saveBlobAs(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name || 'file';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}

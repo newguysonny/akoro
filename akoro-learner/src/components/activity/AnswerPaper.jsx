@@ -37,6 +37,7 @@ const ICONS = {
   photo: ['M15 8h.01', 'M3 6a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v12a3 3 0 0 1 -3 3h-12a3 3 0 0 1 -3 -3v-12z', 'M3 16l5 -5c.928 -.893 2.072 -.893 3 0l5 5', 'M14 14l1 -1c.928 -.893 2.072 -.893 3 0l3 3'],
   pdf: ['M14 3v4a1 1 0 0 0 1 1h4', 'M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z', 'M9 13h6', 'M9 17h6'],
   file: ['M14 3v4a1 1 0 0 0 1 1h4', 'M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z'],
+  doc: ['M14 3v4a1 1 0 0 0 1 1h4', 'M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z', 'M9 9h1', 'M9 13h6', 'M9 17h6'],
   message: ['M8 9h8', 'M8 13h6', 'M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3h12z'],
   x: ['M18 6l-12 12', 'M6 6l12 12'],
   check: ['M5 12l5 5l10 -10'],
@@ -65,20 +66,22 @@ const ptsOf = (q) => {
 
 const fmtSize = (b) => (!b ? '' : b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / (1024 * 1024)).toFixed(1)} MB`);
 const isDrawing = (f) => /^drawing-q\d+\.png$/i.test(String(f?.name || ''));
+const isDocument = (f) => /^document-q\d+\.docx$/i.test(String(f?.name || ''));
 
 /** One attached file as a card — a drawing says so. */
 export function FileCard({ file, onOpen, onRemove, sans, busy = false }) {
   const drawing = isDrawing(file);
-  const glyph = drawing ? 'pencil' : file.kind === 'image' || /\.(png|jpe?g)$/i.test(file.name || '') ? 'photo' : file.kind === 'pdf' || /\.pdf$/i.test(file.name || '') ? 'pdf' : 'file';
+  const docFile = isDocument(file);
+  const glyph = drawing ? 'pencil' : docFile || file.kind === 'docx' || /\.docx$/i.test(file.name || '') ? 'doc' : file.kind === 'image' || /\.(png|jpe?g)$/i.test(file.name || '') ? 'photo' : file.kind === 'pdf' || /\.pdf$/i.test(file.name || '') ? 'pdf' : 'file';
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, maxWidth: '100%', padding: '6px 8px 6px 9px', borderRadius: 10, border: `1px solid ${LINE}`, background: '#fff', fontFamily: sans, opacity: busy ? 0.55 : 1 }}>
       <button type="button" onClick={onOpen ? () => onOpen(file) : undefined} disabled={!onOpen}
-        title={onOpen ? (drawing ? 'Open the drawing' : 'Open the file') : undefined}
+        title={onOpen ? (drawing ? 'Open the drawing' : docFile ? 'Open the document' : 'Open the file') : undefined}
         style={{ display: 'inline-flex', alignItems: 'center', gap: 7, minWidth: 0, padding: 0, border: 'none', background: 'none', cursor: onOpen ? 'pointer' : 'default', fontFamily: sans, textAlign: 'left' }}>
         <span style={{ width: 26, height: 26, borderRadius: 8, background: 'rgba(108,59,255,.09)', color: BRAND, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><PaperIcon name={glyph} size={14} /></span>
         <span style={{ minWidth: 0 }}>
-          <span style={{ display: 'block', fontSize: 12, fontWeight: 800, color: INK, maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{drawing ? 'Drawing' : file.name}</span>
-          <span style={{ display: 'block', fontSize: 10, fontWeight: 600, color: MUTED }}>{drawing ? file.name : fmtSize(file.size)}</span>
+          <span style={{ display: 'block', fontSize: 12, fontWeight: 800, color: INK, maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{drawing ? 'Drawing' : docFile ? 'Document' : file.name}</span>
+          <span style={{ display: 'block', fontSize: 10, fontWeight: 600, color: MUTED }}>{drawing || docFile ? file.name : fmtSize(file.size)}</span>
         </span>
       </button>
       {onRemove && (
