@@ -9,6 +9,8 @@ import { chatPicker, applyPick } from '../../lib/chatModels.js';
 
 /* One gutter for the conversation and the composer, so messages line up with the input box. */
 const CHAT_GUTTER = 16;
+/* Agent replies have no bubble, so they sit a little further in than the gutter. */
+const REPLY_INSET = 4;
 import RichText from '../common/RichText.jsx';
 import CopyMessageButton from '../common/CopyMessageButton.jsx';
 import { copyPlainText } from '../common/CopyMessageButton.jsx';
@@ -830,7 +832,7 @@ function AgentChatTab({
                 </div>
               );
               return (
-                <div key={msg.id} style={{ display:"flex",flexDirection:"column",alignItems:"stretch",minWidth:0 }}>
+                <div key={msg.id} style={{ display:"flex",flexDirection:"column",alignItems:"stretch",minWidth:0,paddingLeft:REPLY_INSET }}>
                   {msg.blocks?.length>0&&<TraceBlocks blocks={msg.blocks}/>}
                   {!msg.blocks?.length&&(msg.thinking||thinkingStream)&&<ThoughtBlock thinking={msg.thinking} streaming={thinkingStream}/>}
                   {/* An answer from the teaching guide, not from what the learner taught. */}
