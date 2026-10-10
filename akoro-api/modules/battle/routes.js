@@ -861,7 +861,7 @@ function toCard(b, extra = {}) {
     battleId:      b.id,
     courseId:      b.course_id,
     classroomId:   b.classroom_id ?? null,
-    scope:         b.course_id ? "course" : "class",
+    scope:         b.course_id ? "course" : b.classroom_id ? "class" : "network",
     title:         b.title,
     description:   b.description ?? null,
     topic:         b.topic ?? null,
