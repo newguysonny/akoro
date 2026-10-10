@@ -59,6 +59,7 @@ async function fetchSelfStudy() {
       submission: a.submission ?? null,  // the work the learner turned in
       targetId:   a.targetId || null,
       draft:      a.draft ?? null,            // answers submitted question by question
+      draftFiles: Array.isArray(a.draftFiles) ? a.draftFiles : [],   // files uploaded so far, each with its question
       feedbackQuestions: Array.isArray(a.feedbackQuestions) ? a.feedbackQuestions : [],
       submissionPdf: a.submissionPdf ?? null,   // { ready, pages } — the work as one PDF
       feedbackRubric: Array.isArray(a.feedbackRubric) ? a.feedbackRubric : [],   // [{name, max, level}] once graded
@@ -120,9 +121,10 @@ export async function saveActivityAnswer(assignmentId, index, value) {
 }
 
 /* Upload one attachment for an activity (before submitting). Base64 over
-   JSON — the API stores it beside the learner's target. Returns the file
-   metadata ({id, name, size, mime}) for the chip. */
-export async function uploadActivityFile(assignmentId, file) {
+   JSON — the API stores it beside the learner's target. `question` (index)
+   makes it part of that question's answer (at most 3 each). Returns the
+   file metadata ({id, name, size, mime, question}) for the card. */
+export async function uploadActivityFile(assignmentId, file, question = null) {
   const data = await new Promise((resolve, reject) => {
     const fr = new FileReader();
     fr.onload = () => resolve(String(fr.result).split(',')[1] || '');
@@ -134,6 +136,7 @@ export async function uploadActivityFile(assignmentId, file) {
     mime: file.type || 'application/octet-stream',
     size: file.size,
     data,
+    ...(Number.isInteger(question) ? { question } : {}),
   });
   return d?.data ?? null;
 }

@@ -119,3 +119,25 @@ test("wiring: the generator lays out a paper; saving cleans it; the apps render 
   assert.ok(detail.includes("<QuestionContext key={idx} details={paper}") && detail.includes("<QuestionFigure figure={q?.figure}/>"));
   assert.ok(marker.includes("questionContext(paper, step)"));
 });
+
+test("answering: an answer box per question, files and drawings per question, one paper-with-answers for learner and teacher", async () => {
+  const [learnerAnswerPaper, instructorAnswerPaper, activityApi, board, modal] = await Promise.all([
+    read("../../../akoro-learner/src/components/activity/AnswerPaper.jsx"), read("../../../akoro-instructor/src/components/paper/AnswerPaper.jsx"),
+    read("../../../akoro-learner/src/services/activityApi.js"), read("../../../akoro-learner/src/components/teaching/WhiteboardModal.jsx"),
+    read("../../../akoro-instructor/src/components/grading/GradeSubmissionModal.jsx"),
+  ]);
+  assert.equal(learnerAnswerPaper, instructorAnswerPaper, "AnswerPaper is the same in both apps");
+  assert.ok(learnerAnswerPaper.includes("readChoice(q, value)") && learnerAnswerPaper.includes("Not answered"));
+  // Learner: typed answers autosave; files and drawings belong to a question (≤3); no whole-assignment attach for a paper.
+  assert.ok(detail.includes("uploadActivityFile(row.assignmentId, file, i)"));
+  assert.ok(detail.includes("PER_QUESTION_FILES = 3"));
+  assert.ok(detail.includes("drawing-q${i + 1}.png"));
+  assert.ok(detail.includes("onAttach={attachDrawing}"));
+  assert.ok(detail.includes("<AnswerPaper details={paper}") && detail.includes("<LastCheck") && detail.includes("<Receipt"));
+  assert.ok(!detail.includes("ti-microphone"), "no mic in the answer box");
+  assert.ok(activityApi.includes("draftFiles:") && activityApi.includes("{ question }"));
+  assert.ok(board.includes("onAttach") && board.includes("initialStrokes") && board.includes("toBlob"));
+  // Teacher: the same paper, and the key marks typed answers it can read.
+  assert.ok(modal.includes("<AnswerPaper details={brief.details}"));
+  assert.ok(marker.includes("readChoice(q, a)") && marker.includes("if (answered && pick == null) return;"));
+});
