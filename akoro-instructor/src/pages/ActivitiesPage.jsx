@@ -25,6 +25,9 @@ import { Btn, Modal, Inp, Txa, Sel, Badge, Toast } from '../components/Primitive
 import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
 import AudiencePicker, { audienceBody, parseHandles, BLANK_AUDIENCE } from '../components/AudiencePicker.jsx';
 import PlanEditor from '../components/PlanEditor.jsx';
+import PaperBuilder from '../components/paper/PaperBuilder.jsx';
+import PaperView from '../components/paper/PaperView.jsx';
+import { removeRef } from '../lib/paper.js';
 import BattleForm from '../components/battles/BattleForm.jsx';
 import { useBattlesAPI } from '../hooks/useBattlesAPI.js';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
@@ -107,20 +110,17 @@ const Q_INP = {
   padding: '7px 10px', borderRadius: 8, border: `1px solid ${BORDER}`,
   fontFamily: FONT, fontSize: 12, fontWeight: 600, color: INK, outline: 'none', background: WHITE,
 };
-/* Chip for the AI-drafted question-level detail (type · difficulty ·
-   cognitive level) — display-only; the instructor overrides the words or
-   the points, everything else regenerates. */
-const META_CHIP = {
-  fontSize: 10, fontWeight: 800, color: BLUE, background: '#EFF6FF',
-  borderRadius: 100, padding: '2px 8px', fontFamily: FONT, whiteSpace: 'nowrap',
-};
 const BLANK = {
   title: '', subject: 'Basic Science', topic: '', instructions: '',
   difficulty: 'intermediate', dueAt: '', classId: '',
   audience: BLANK_AUDIENCE,
   scheduledAt: '', durationMins: '60',
   subtopics: [], objectives: {},
-  questions: [],   // optional: [{q, options?, correct?}] — learners answer on submit
+  questions: [],   // optional: [{q, options?, correct?, section?, passage?, figure?}] — learners answer on submit
+  // The paper layout (reference/question-layout-for-activity): sections
+  // with instructions and passages several questions share.
+  sections: [],    // [{ title, instructions }]
+  passages: [],    // [{ title, text }]
   // Assignment marking shape (reference: assignment generation and
   // creator.md). Only these are asked of the instructor; the question-level
   // fields (text, type, max_points, difficulty, cognitive level) are
@@ -152,6 +152,9 @@ function cleanQuestions(raw) {
         ...(row.max_points !== '' && row.max_points != null ? { max_points: Number(row.max_points) || 0 } : {}),
         ...(row.difficulty ? { difficulty: row.difficulty } : {}),
         ...(row.cognitive_level ? { cognitive_level: row.cognitive_level } : {}),
+        ...(Number.isInteger(row.section) ? { section: row.section } : {}),
+        ...(Number.isInteger(row.passage) ? { passage: row.passage } : {}),
+        ...(row.figure && (row.figure.src || row.figure.svg) ? { figure: row.figure } : {}),
       };
       if (row.kind === 'mcq') {
         const options = (row.options ?? []).map(o => (o || '').trim()).filter(Boolean);
@@ -163,6 +166,23 @@ function cleanQuestions(raw) {
     })
     .filter(Boolean)
     .slice(0, 20);
+}
+
+/* The paper layout that rides beside the questions: empty sections and
+   passages are dropped (references kept in step), and so is the whole
+   layout when no question uses it. → { questions, sections?, passages? } */
+function cleanPaper(form) {
+  let questions = form.questions ?? [];
+  let sections = (form.sections ?? []).map(s => ({ title: (s.title || '').trim(), instructions: (s.instructions || '').trim() }));
+  let passages = (form.passages ?? []).map(p => ({ title: (p.title || '').trim(), text: (p.text || '').trim() }));
+  for (let i = sections.length - 1; i >= 0; i--) if (!sections[i].title && !sections[i].instructions) { questions = removeRef(questions, 'section', i); sections = sections.filter((_, j) => j !== i); }
+  for (let i = passages.length - 1; i >= 0; i--) if (!passages[i].text) { questions = removeRef(questions, 'passage', i); passages = passages.filter((_, j) => j !== i); }
+  const clean = cleanQuestions(questions);
+  return {
+    questions: clean,
+    ...(sections.length && clean.some(q => Number.isInteger(q.section)) ? { sections } : {}),
+    ...(passages.length && clean.some(q => Number.isInteger(q.passage)) ? { passages } : {}),
+  };
 }
 
 /* A small on/off switch for the AI marking toggles — reads as a switch, not
@@ -260,14 +280,19 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
           correct: opts ? Math.min(Math.max(Number(q.correct) || 0, 0), opts.length - 1) : 0,
           type: q.type || '', max_points: q.max_points ?? null,
           difficulty: q.difficulty || '', cognitive_level: q.cognitive_level || '',
+          ...(Number.isInteger(q.section) ? { section: q.section } : {}),
+          ...(Number.isInteger(q.passage) ? { passage: q.passage } : {}),
+          figure: q.figure?.svg ? { svg: q.figure.svg, caption: q.figure.caption || '' } : null,
         };
       });
+      const sections = (d?.data?.sections ?? []).map(s => ({ title: s.title || '', instructions: s.instructions || '' }));
+      const passages = (d?.data?.passages ?? []).map(p => ({ title: p.title || '', text: p.text || '' }));
       if (!qs.length) throw new Error('The AI returned no questions — try again, or add them yourself.');
       setForm(f => {
         // No total set yet? Adopt the AI's allocation as the total.
         const sum = qs.reduce((n, q) => n + (Number(q.max_points) || 0), 0);
         return {
-          ...f, questions: qs,
+          ...f, questions: qs, sections, passages,
           title: f.title || `${f.topic.trim()} — ${meta.name.toLowerCase()}`,
           totalPoints: f.totalPoints || (sum ? String(sum) : f.totalPoints),
         };
@@ -332,7 +357,7 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
           ...(isLive
             ? { scheduled_at: new Date(form.scheduledAt).toISOString(), duration_mins: Number(form.durationMins) || 60 }
             : {}),
-          ...(!isLive && cleanQuestions(form.questions).length ? { questions: cleanQuestions(form.questions) } : {}),
+          ...(!isLive && cleanQuestions(form.questions).length ? cleanPaper(form) : {}),
           // The assignment's marking shape — only the necessary fields from
           // the workbench; question-level detail already rides on each
           // drafted question above.
@@ -556,65 +581,24 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
                 </Btn>
               )}
               <Btn size="sm" variant="secondary" type="button"
-                onClick={() => setForm(f => ({ ...f, questions: [...f.questions, { ...BLANK_QUESTION, options: ['', ''] }] }))}>
+                onClick={() => setForm(f => {
+                  // A new question joins the section (and passage) the last one is in.
+                  const last = f.questions[f.questions.length - 1];
+                  const at = {
+                    ...(Number.isInteger(last?.section) ? { section: last.section } : {}),
+                    ...(Number.isInteger(last?.passage) ? { passage: last.passage } : {}),
+                  };
+                  return { ...f, questions: [...f.questions, { ...BLANK_QUESTION, options: ['', ''], ...at }] };
+                })}>
                 <Plus size={13} /> Add question
               </Btn>
             </div>
           </div>
           {form.questions.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
-              {form.questions.map((row, qi) => (
-                <div key={qi} style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: '10px 11px', background: WHITE }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
-                    <span style={{ fontSize: 11, fontWeight: 900, color: MUTED2, flexShrink: 0 }}>Q{qi + 1}</span>
-                    <input value={row.q} onChange={e => setForm(f => ({ ...f, questions: f.questions.map((r, i) => i === qi ? { ...r, q: e.target.value } : r) }))}
-                      placeholder="The question learners will answer" style={{ flex: 1, ...Q_INP }} />
-                    <select value={row.kind} onChange={e => setForm(f => ({ ...f, questions: f.questions.map((r, i) => i === qi ? { ...r, kind: e.target.value } : r) }))}
-                      style={{ ...Q_INP, width: 130, cursor: 'pointer' }}>
-                      <option value="mcq">Multiple choice</option>
-                      <option value="open">Open answer</option>
-                    </select>
-                    <button type="button" onClick={() => setForm(f => ({ ...f, questions: f.questions.filter((_, i) => i !== qi) }))}
-                      style={{ border: 'none', background: 'none', color: MUTED2, cursor: 'pointer', fontSize: 15, padding: '2px 5px' }} title="Remove question">×</button>
-                  </div>
-                  {type === 'assignment' && !!(row.type || row.difficulty || row.cognitive_level || row.max_points != null) && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', paddingLeft: 26, marginBottom: row.kind === 'mcq' ? 7 : 0 }}>
-                      {row.type && <span style={META_CHIP}>{row.type}</span>}
-                      {row.difficulty && <span style={META_CHIP}>{row.difficulty}</span>}
-                      {row.cognitive_level && <span style={META_CHIP}>{row.cognitive_level}</span>}
-                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 700, color: MUTED2, marginLeft: 'auto', fontFamily: FONT }}>
-                        Points
-                        <input type="number" min={0} value={row.max_points == null ? '' : row.max_points}
-                          onChange={e => setForm(f => ({ ...f, questions: f.questions.map((r, i) => i === qi ? { ...r, max_points: e.target.value === '' ? null : Number(e.target.value) } : r) }))}
-                          title="Points for this question" style={{ ...Q_INP, width: 58, padding: '4px 7px' }} />
-                      </label>
-                    </div>
-                  )}
-                  {row.kind === 'mcq' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5, paddingLeft: 26 }}>
-                      {(row.options ?? []).map((opt, oi) => (
-                        <div key={oi} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                          <input type="radio" name={`q-correct-${qi}`} checked={(row.correct ?? 0) === oi}
-                            onChange={() => setForm(f => ({ ...f, questions: f.questions.map((r, i) => i === qi ? { ...r, correct: oi } : r) }))}
-                            title="Mark as the correct option" style={{ accentColor: GREEN, cursor: 'pointer', flexShrink: 0 }} />
-                          <input value={opt} onChange={e => setForm(f => ({ ...f, questions: f.questions.map((r, i) => i === qi ? { ...r, options: r.options.map((o, j) => j === oi ? e.target.value : o) } : r) }))}
-                            placeholder={`Option ${oi + 1}`} style={{ flex: 1, ...Q_INP }} />
-                          {(row.options ?? []).length > 2 && (
-                            <button type="button" onClick={() => setForm(f => ({ ...f, questions: f.questions.map((r, i) => i === qi ? { ...r, options: r.options.filter((_, j) => j !== oi), correct: Math.min(r.correct ?? 0, (r.options.length - 2)) } : r) }))}
-                              style={{ border: 'none', background: 'none', color: MUTED2, cursor: 'pointer', fontSize: 13 }} title="Remove option">×</button>
-                          )}
-                        </div>
-                      ))}
-                      {(row.options ?? []).length < 4 && (
-                        <button type="button" onClick={() => setForm(f => ({ ...f, questions: f.questions.map((r, i) => i === qi ? { ...r, options: [...(r.options ?? []), ''] } : r) }))}
-                          style={{ border: 'none', background: 'none', color: PURPLE, cursor: 'pointer', fontSize: 11, fontWeight: 800, fontFamily: FONT, padding: '2px 0 2px 26px', textAlign: 'left' }}>+ option</button>
-                      )}
-                      <div style={{ fontSize: 10, color: MUTED2, fontFamily: FONT, paddingLeft: 26 }}>The ticked option is marked correct when grading.</div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+            <PaperBuilder
+              questions={form.questions} sections={form.sections ?? []} passages={form.passages ?? []}
+              assignment={type === 'assignment'}
+              onChange={patch => setForm(f => ({ ...f, ...patch }))} />
           )}
         </div>
       )}
@@ -802,25 +786,7 @@ function DetailModal({ open, onClose, activity, onDeleted }) {
               <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: .5, color: MUTED2, marginBottom: 7 }}>
                 QUESTIONS · {(data.details.questions ?? []).length}
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                {(data.details.questions ?? []).map((q, i) => (
-                  <div key={i} style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: '8px 11px', background: WHITE }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>
-                      {i + 1}. {q.q}
-                      {Array.isArray(q.options) && <span style={{ fontSize: 10, fontWeight: 800, color: MUTED2, marginLeft: 7, background: LIGHT, borderRadius: 999, padding: '2px 8px' }}>multiple choice</span>}
-                    </div>
-                    {Array.isArray(q.options) && (
-                      <div style={{ paddingLeft: 26, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        {q.options.map((o, j) => (
-                          <div key={j} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: q.correct === j ? GREEN : MUTED, fontWeight: q.correct === j ? 800 : 500 }}>
-                            {q.correct === j ? <Check size={11} /> : <span style={{ width: 3.5, height: 3.5, borderRadius: '50%', background: MUTED2, flexShrink: 0 }} />}{o}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <PaperView details={data.details} showKey style={{ padding: '14px 16px' }} />
             </div>
           )}
 

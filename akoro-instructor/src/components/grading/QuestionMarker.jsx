@@ -11,6 +11,8 @@
  */
 import { Check, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import { INK, MUTED, MUTED2, BORDER, WHITE, PURPLE, GREEN, RED, FONT } from '../../constants.js';
+import { questionContext } from '../../lib/paper.js';
+import { MathText, Figure, PassageBox } from '../paper/PaperView.jsx';
 
 const qText = (q) => (typeof q === 'object' && q !== null ? String(q.q ?? '') : String(q ?? ''));
 const isMcq = (q) => typeof q === 'object' && q !== null && Array.isArray(q.options);
@@ -70,7 +72,7 @@ export function QuestionRail({ questions, step, setStep, marks }) {
   );
 }
 
-export default function QuestionMarker({ questions, step, setStep, marks, setMark, answers = {}, ai = null }) {
+export default function QuestionMarker({ questions, paper = null, step, setStep, marks, setMark, answers = {}, ai = null }) {
   const n = questions.length;
   const q = questions[step];
   const max = pointsOf(q);
@@ -80,6 +82,8 @@ export default function QuestionMarker({ questions, step, setStep, marks, setMar
   const aiQ = ai?.status === 'ready' ? (ai.questions || []).find((x) => x.index === step) : null;
   const marked = mark.awarded != null && mark.awarded !== '';
   const isLast = step === n - 1;
+  // The paper around this question: its section's instructions, its passage.
+  const ctx = questionContext(paper, step);
   const quick = max <= 10 ? Array.from({ length: max + 1 }, (_, i) => i) : [0, Math.round(max / 4), Math.round(max / 2), Math.round((3 * max) / 4), max];
 
   return (
@@ -89,7 +93,15 @@ export default function QuestionMarker({ questions, step, setStep, marks, setMar
           <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: .6, color: MUTED2 }}>QUESTION {step + 1} OF {n}</span>
           <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 800, color: MUTED2 }}>{max} pt{max === 1 ? '' : 's'}</span>
         </div>
-        <div style={{ fontSize: 14, fontWeight: 800, color: INK, lineHeight: 1.45 }}>{qText(q) || `Question ${step + 1}`}</div>
+        {ctx.section?.instructions && <div style={{ fontSize: 12, fontStyle: 'italic', color: MUTED, marginBottom: 6, lineHeight: 1.5 }}>{ctx.section.title ? <b style={{ fontStyle: 'normal' }}>{ctx.section.title}: </b> : null}{ctx.section.instructions}</div>}
+        {ctx.passage && (
+          <details style={{ marginBottom: 8 }}>
+            <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 800, color: PURPLE }}>{ctx.passage.title || 'The passage'} · {ctx.passageRange}</summary>
+            <PassageBox passage={ctx.passage} style={{ marginTop: 6, maxHeight: 240, overflowY: 'auto' }} />
+          </details>
+        )}
+        <div style={{ fontSize: 14, fontWeight: 800, color: INK, lineHeight: 1.45 }}>{qText(q) ? <MathText text={qText(q)} /> : `Question ${step + 1}`}</div>
+        {q?.figure && <Figure figure={q.figure} maxHeight={180} />}
       </div>
 
       {/* What the learner answered */}
@@ -100,7 +112,7 @@ export default function QuestionMarker({ questions, step, setStep, marks, setMar
             const right = q.correct != null && Number(q.correct) === Number(raw);
             return (
               <div style={{ fontSize: 13, fontWeight: 800, color: q.correct == null ? INK : right ? GREEN : RED }}>
-                {letterOf(raw)}. {q.options?.[Number(raw)] ?? ''}
+                {letterOf(raw)}. <MathText text={q.options?.[Number(raw)] ?? ''} />
                 {q.correct != null && <span style={{ fontWeight: 700, color: MUTED, marginLeft: 6 }}>{right ? '✓ correct' : `✗ key: ${letterOf(q.correct)}. ${q.options?.[Number(q.correct)] ?? ''}`}</span>}
               </div>
             );

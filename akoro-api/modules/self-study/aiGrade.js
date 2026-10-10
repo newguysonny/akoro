@@ -75,11 +75,15 @@ export function buildAiGradeMessages({ assignment = {}, markdown = "", images = 
   const questions = Array.isArray(assignment.details?.questions) ? assignment.details.questions : [];
   const open = openQuestions(questions);
   const rubric = rubricRows(assignment.details);
+  const passages = Array.isArray(assignment.details?.passages) ? assignment.details.passages : [];
   const system = [
     `You are drafting marks for a teacher on a learner's submission for "${String(assignment.title || "an activity").slice(0, 160)}"${assignment.subject ? ` (${assignment.subject})` : ""}.`,
     "The teacher reviews and approves everything you produce. Be fair, specific and brief; never invent work the learner didn't submit.",
     open.length ? "Mark each listed question: `awarded` from 0 to its max points (halves allowed), `why` in one sentence citing what the learner wrote." : "",
-    open.length ? open.map(({ q, i }) => `Q${i + 1} (index ${i}, max ${pointsOf(q)}): ${qText(q)}${typeof q === "object" && q?.answer ? `\n  Model answer: ${q.answer}` : ""}`).join("\n") : "",
+    open.length ? open.map(({ q, i }) => `Q${i + 1} (index ${i}, max ${pointsOf(q)}${Number.isInteger(q?.passage) && passages[q.passage] ? `, about passage ${q.passage + 1}` : ""}): ${qText(q)}${q?.figure ? " [has a diagram the learner saw]" : ""}${typeof q === "object" && q?.answer ? `\n  Model answer: ${q.answer}` : ""}`).join("\n") : "",
+    // A comprehension passage the open questions are about.
+    open.some(({ q }) => Number.isInteger(q?.passage) && passages[q.passage])
+      ? `Passages:\n${passages.map((p, n) => `Passage ${n + 1}${p.title ? ` — ${p.title}` : ""}:\n${String(p.text || "").slice(0, 6000)}`).join("\n\n")}` : "",
     rubric.length ? `Score each rubric criterion with an integer level from 0 to its max, \`why\` in one sentence:\n${rubric.map((r) => `- ${r.name} (max ${r.max})`).join("\n")}` : "There is no rubric: return an empty rubric list.",
     "Write `feedback` to the learner (2-4 sentences): what they did well, what to fix, one next step. Use the learner's language.",
     "Photos attached are the learner's own pages (e.g. handwriting) — read them as part of the submission.",

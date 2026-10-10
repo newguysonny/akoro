@@ -15,6 +15,7 @@
 
 import db from "../../db.js";
 import { NaNaEsumai } from "../adaptive-learning/agents/nana-esumai/guide.js";
+import { cleanPaperDetails } from "./paperLayout.js";
 
 export const nana = new NaNaEsumai();
 export const edu = () => db.schema("edu");
@@ -143,7 +144,7 @@ export async function createAssignment(instructor, body) {
     subtopics, objectives,
     instructions, difficulty,
     due_at, type,
-    details: details && typeof details === "object" && !Array.isArray(details) ? details : {},
+    details: details && typeof details === "object" && !Array.isArray(details) ? cleanPaperDetails(details) : {},
   }).select().single();
   if (error) throw invalid(error.message, 500);
 
