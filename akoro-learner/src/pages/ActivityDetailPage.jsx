@@ -7,9 +7,11 @@ import {
 import { Icon } from '../components/common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD } from '../constants.js';
 import Spinner from '../components/common/Spinner.jsx';
-import { hasAnswer, stepStatuses, resumeStep, openingAnswers } from '../lib/questionSteps.js';
+import { hasAnswer, stepStatuses, resumeStep, openingAnswers, shownAnswer, lastCheck } from '../lib/questionSteps.js';
 import { MathText, QuestionFigure, QuestionContext } from '../components/activity/QuestionPaper.jsx';
-import { labelAnswerText, parseLabelAnswer } from '../lib/paper.js';
+import AnswerPaper, { FileCard } from '../components/activity/AnswerPaper.jsx';
+import WhiteboardModal from '../components/teaching/WhiteboardModal.jsx';
+import { labelAnswerText, parseLabelAnswer, letterOf, readChoice, isAnswered, FORMAT_NAMES } from '../lib/paper.js';
 
 /**
  * ActivityDetailPage — the full-screen detail view for one activity, ported
@@ -23,11 +25,12 @@ import { labelAnswerText, parseLabelAnswer } from '../lib/paper.js';
  * action (POST /api/self-study/:id/complete — the same status flip the
  * teacher's class view reads).
  *
- * The reference's question stepper runs whenever the brief actually carries
- * questions (details.questions) — autosaved locally per activity, reviewed,
- * then submitted. The free-text answer box and the file dropzone are the
- * same flow for briefs without questions; answers and file names persist on
- * this device until their server endpoints land.
+ * The question stepper runs whenever the brief actually carries questions
+ * (details.questions): each question read-only on top, an answer box below
+ * (type, attach up to 3 files, draw on the whiteboard), autosaved to the
+ * server; then a review laid out like the paper with every answer under its
+ * question, a last check, and the receipt. Briefs without questions keep the
+ * free-text box and one attachment.
  */
 
 /* ── Type identity: gradient + icon + label (reference TYPE_META) ───────── */
@@ -62,7 +65,11 @@ function loadWork(id) {
   catch { return { answers: {}, text: '', fileId: null, fileName: '', fileSize: 0 }; }
 }
 function saveWork(id, w) {
-  try { localStorage.setItem(storeKey(id), JSON.stringify(w)); } catch { /* private mode */ }
+  try { localStorage.setItem(storeKey(id), JSON.stringify(w)); }
+  catch {
+    // Too big with the drawings' strokes — keep the answers at least.
+    try { localStorage.setItem(storeKey(id), JSON.stringify({ ...w, drawings: {} })); } catch { /* private mode */ }
+  }
 }
 function fmtSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -86,7 +93,6 @@ function Chip({ children, dot }) {
   );
 }
 
-/* ── Question stepper — one question at a time, autosaved (reference) ───── */
 /* ── Question shapes ────────────────────────────────────────────────────────
    A question rides as a plain string (older assignments) or an object:
    .q is the question text and the object may carry marking metadata
@@ -95,62 +101,137 @@ function Chip({ children, dot }) {
    short answer, essay, coding…) — decide per question, never per set. */
 const qText = (q) => (typeof q === 'object' && q !== null ? String(q.q ?? '') : String(q ?? ''));
 const isMcq = (q) => typeof q === 'object' && q !== null && Array.isArray(q.options);
-/* Option letters — A, B, C… so a pick reads "B. Mesophyll". */
-const letterOf = (i) => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Number(i)] ?? '';
 /* A question's type as a chip label — MCQs without a stored type still
    say what they are. */
-const typeLabel = (t) => String(t ?? '').replace(/[_-]+/g, ' ').trim();
+const typeLabel = (t) => { const s = String(t ?? '').replace(/[_-]+/g, ' ').trim(); return s ? s[0].toUpperCase() + s.slice(1) : ''; };
+const kindOf = (q) => FORMAT_NAMES[q?.format] || (isMcq(q) ? 'Multiple choice' : typeLabel(q?.type) || 'Written answer');
+const ptsOf = (q) => (typeof q === 'object' && q && Number(q.max_points ?? q.points) > 0 ? Number(q.max_points ?? q.points) : null);
+const PER_QUESTION_FILES = 3;
 
 /* ── The assignment, one question at a time ─────────────────────────────
    Q1 → "Submit answer & next" → Q2 → … → Review → "Submit assignment".
-   Each answer is submitted to the server as the learner moves on (so it
-   follows them across devices); the review shows the whole paper grouped
-   with what's submitted, and hands the assignment in. */
+   The question sits on top, read-only; below it an answer box like the
+   Agent Chat composer: type, 📎 attach (up to 3 files), ✏️ draw on the
+   whiteboard. What's typed autosaves to the server as the learner types
+   (so it follows them across devices); files upload as they're attached.
+   The review lays the whole paper out with every answer under its question. */
 const STEP_LOOK = {
-  saved:  { bg: 'rgba(16,185,129,.14)', fg: '#047857', border: 'rgba(16,185,129,.45)', label: 'Submitted' },
-  edited: { bg: 'rgba(245,158,11,.14)', fg: '#B45309', border: 'rgba(245,158,11,.5)', label: 'Changed — not submitted' },
+  saved:  { bg: 'rgba(16,185,129,.14)', fg: '#047857', border: 'rgba(16,185,129,.45)', label: 'Answered' },
+  edited: { bg: 'rgba(245,158,11,.14)', fg: '#B45309', border: 'rgba(245,158,11,.5)', label: 'Saving…' },
   empty:  { bg: 'var(--ak-surface)',    fg: 'var(--ak-text-muted)', border: 'var(--ak-border)', label: 'Not answered' },
 };
 
-function Stepper({ questions, paper, work, setWork, saved, onSaveAnswer, mid, dark, onSubmit, submitting, attachment }) {
+/* A round tool button — the chat composer's look. */
+function BoxTool({ icon, label, onClick, disabled }) {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} title={label} aria-label={label}
+      style={{ width: 32, height: 32, padding: 0, borderRadius: '50%', border: '1px solid var(--ak-border)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#526078', background: 'var(--ak-surface)', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.45 : 1 }}>
+      <Icon name={icon} size={16}/>
+    </button>
+  );
+}
+
+/* The answer box under the question. */
+function AnswerBox({ q, idx, value, onType, files, onPick, onRemove, onOpenFile, onDraw, uploading, removing, status, saveErr, onRetry, fileErr }) {
+  const fileRef = useRef(null);
+  const [focus, setFocus] = useState(false);
+  const full = files.length >= PER_QUESTION_FILES;
+  const mcq = isMcq(q);
+  const labelling = q?.format === 'label' && Array.isArray(q.labels);
+  const typed = typeof value === 'string' ? value.trim() : '';
+  const pick = mcq && typed ? readChoice(q, typed) : null;
+  const placeholder = q?.format === 'true_false' ? 'Type True or False'
+    : mcq ? `Type your answer — the letter (${letterOf(0)}–${letterOf(q.options.length - 1)}) or the option` : 'Type your answer…';
+  return (
+    <div style={{ marginTop: 14, padding: '12px 12px 10px', border: `1px solid ${focus ? BRAND : 'var(--ak-border)'}`, boxShadow: focus ? `0 0 0 3px ${BRAND}1C` : '0 4px 14px rgba(30,41,59,.055)', borderRadius: 22, background: 'var(--ak-surface)', transition: 'border-color .16s, box-shadow .16s' }}>
+      <div style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: '.05em', textTransform: 'uppercase', color: BRAND, margin: '0 3px 6px', fontFamily: "'Nunito',sans-serif" }}>Your answer</div>
+      {files.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '0 0 8px' }}>
+          {files.map((f) => <FileCard key={f.id} file={f} onOpen={onOpenFile} onRemove={onRemove} busy={removing === f.id} sans="'Nunito',sans-serif"/>)}
+        </div>
+      )}
+      {labelling ? (
+        /* Labelling: name each marked part of the diagram. */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
+          {(() => {
+            const vals = parseLabelAnswer(q.labels, value);
+            return q.labels.map((l) => (
+              <label key={l} style={{ display: 'flex', alignItems: 'center', gap: 10, fontFamily: "'Nunito',sans-serif" }}>
+                <span style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12.5, fontWeight: 900, color: BRAND, background: `${BRAND}12`, border: `1.5px solid ${BRAND}40` }}>{l}</span>
+                <input value={vals[l]} maxLength={200} aria-label={`Part ${l}`} placeholder={`What is ${l}?`}
+                  onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
+                  onChange={(e) => onType(labelAnswerText(q.labels, { ...vals, [l]: e.target.value.replace(/\n/g, ' ') }) || '')}
+                  style={{ flex: 1, minWidth: 0, borderRadius: 11, border: '1px solid var(--ak-border)', padding: '9px 11px', fontFamily: "'Nunito',sans-serif", fontSize: 14, fontWeight: 600, color: 'var(--ak-text)', outline: 'none', background: 'var(--ak-bg)' }}/>
+              </label>
+            ));
+          })()}
+        </div>
+      ) : (
+        <textarea value={value ?? ''} onChange={(e) => onType(e.target.value)} aria-label={`Answer to question ${idx + 1}`}
+          onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
+          placeholder={placeholder} maxLength={4000} rows={mcq ? 2 : 4}
+          style={{ display: 'block', width: '100%', minHeight: mcq ? 52 : 96, padding: '2px 3px 8px', border: 0, outline: 'none', resize: 'vertical', background: 'transparent', color: 'var(--ak-text)', fontSize: 15, lineHeight: 1.55, fontWeight: 600, fontFamily: "'Nunito',sans-serif", boxSizing: 'border-box' }}/>
+      )}
+      {mcq && typed && (
+        <div style={{ fontSize: 11.5, fontWeight: 800, margin: '0 3px 8px', color: pick != null ? '#047857' : '#B45309', fontFamily: "'Nunito',sans-serif" }}>
+          {pick != null ? `Read as ${letterOf(pick)} · ${q.options[pick]}` : 'Not one of the options — your teacher will read it. Type a letter to be marked straight away.'}
+        </div>
+      )}
+      <input ref={fileRef} type="file" multiple style={{ display: 'none' }} accept=".pdf,.jpg,.jpeg,.png,.docx,.txt"
+        onChange={(e) => { onPick(e.target.files); e.target.value = ''; }}/>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+        <BoxTool icon="ti-paperclip" label={full ? 'Up to 3 files per question' : 'Attach a file (PDF, photo, Word, text · 5MB)'} onClick={() => fileRef.current?.click()} disabled={full || uploading}/>
+        <BoxTool icon="ti-pencil" label="Draw it on the whiteboard" onClick={onDraw} disabled={uploading}/>
+        {uploading
+          ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 800, color: 'var(--ak-text-muted)', fontFamily: "'Nunito',sans-serif" }}><Spinner size={11}/> Uploading…</span>
+          : files.length > 0 && <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--ak-text-muted)', fontFamily: "'Nunito',sans-serif" }}>{files.length}/{PER_QUESTION_FILES} files</span>}
+        <span style={{ marginLeft: 'auto', fontSize: 11.5, fontWeight: 800, fontFamily: "'Nunito',sans-serif", display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+          {saveErr ? (
+            <button type="button" onClick={onRetry} style={{ border: 'none', background: 'none', padding: 0, color: RED, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: "'Nunito',sans-serif" }}>Not saved · Retry</button>
+          ) : status === 'edited' ? (
+            <span style={{ color: 'var(--ak-text-muted)', display: 'inline-flex', alignItems: 'center', gap: 5 }}><Spinner size={10}/> Saving…</span>
+          ) : status === 'saved' ? (
+            <span style={{ color: '#047857' }}>Saved ✓</span>
+          ) : null}
+        </span>
+      </div>
+      {fileErr && <div style={{ fontSize: 11.5, fontWeight: 700, color: RED, margin: '8px 3px 0', fontFamily: "'Nunito',sans-serif" }}>{fileErr}</div>}
+    </div>
+  );
+}
+
+function Stepper({ questions, paper, work, saved, files, fileCounts, onType, onFlush, saveErrs, onPick, onRemove, onOpenFile, onDraw, uploading, removing, fileErr, mid, dark, onHandIn, submitting, jumpRef }) {
   const total = questions.length;
-  const [idx, setIdx] = useState(() => resumeStep(questions, work.answers, saved));
-  const [saving, setSaving] = useState(false);
+  const [idx, setIdx] = useState(() => resumeStep(questions, work.answers, saved, fileCounts));
+  const [moving, setMoving] = useState(false);
   const [stepErr, setStepErr] = useState('');
-  const statuses = stepStatuses(questions, work.answers, saved);
-  const submittedCount = statuses.filter((st) => st === 'saved').length;
+  const topRef = useRef(null);
+  const statuses = stepStatuses(questions, work.answers, saved, fileCounts);
+  const answeredCount = statuses.filter((st) => st !== 'empty').length;
   const reviewing = idx >= total;
 
-  const go = (i) => { setStepErr(''); setIdx(Math.max(0, Math.min(total, i))); };
-  const setAnswer = (v) => setWork((w) => ({ ...w, answers: { ...w.answers, [idx]: v }, editedAt: new Date().toISOString() }));
+  const go = (i) => {
+    setStepErr('');
+    setIdx(Math.max(0, Math.min(total, i)));
+    topRef.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
+  };
+  // The last-check sheet's "Answer it" jumps here.
+  useEffect(() => { if (jumpRef) jumpRef.current = go; });
 
-  /* Submit this question's answer (if it changed), then move on. */
+  /* Save what's typed now (not waiting for the pause), then move on. */
   const submitAndNext = async () => {
     if (statuses[idx] === 'edited') {
-      setSaving(true); setStepErr('');
-      try { await onSaveAnswer(idx, work.answers[idx]); }
-      catch (e) { setStepErr(e?.message || 'Could not submit this answer — try again.'); setSaving(false); return; }
-      setSaving(false);
+      setMoving(true); setStepErr('');
+      try { await onFlush(idx); }
+      catch (e) { setStepErr(e?.message || 'Could not save this answer — try again.'); setMoving(false); return; }
+      setMoving(false);
     }
     go(idx + 1);
   };
 
-  /* Hand in: any answer changed but not submitted goes first. */
-  const handIn = async () => {
-    setStepErr('');
-    const pending = statuses.map((st, i) => (st === 'edited' ? i : -1)).filter((i) => i > -1);
-    if (pending.length) {
-      setSaving(true);
-      try { for (const i of pending) await onSaveAnswer(i, work.answers[i]); }
-      catch (e) { setStepErr(e?.message || 'Some answers could not be submitted — try again.'); setSaving(false); return; }
-      setSaving(false);
-    }
-    onSubmit();
-  };
-
   /* The step rail: 1 2 3 … Review — tap any step. */
   const rail = (
-    <div role="tablist" aria-label="Questions" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+    <div ref={topRef} role="tablist" aria-label="Questions" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14, scrollMarginTop: 12 }}>
       {questions.map((_, i) => {
         const look = STEP_LOOK[statuses[i]];
         const on = i === idx;
@@ -169,55 +250,40 @@ function Stepper({ questions, paper, work, setWork, saved, onSaveAnswer, mid, da
   );
 
   if (reviewing) {
-    /* The whole paper, grouped — every question with what's submitted. */
-    const allDone = submittedCount === total;
-    const changed = statuses.filter((st) => st === 'edited').length;
+    /* The whole paper, laid out like the teacher's preview, with every
+       answer under its question. */
+    const marks = questions.reduce((n, q) => n + (ptsOf(q) || 0), 0);
+    const loose = files.filter((f) => f.question == null);
+    const allDone = answeredCount === total;
     return (
       <div>
         {rail}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 40, height: 40, borderRadius: '50%', background: allDone ? 'rgba(16,185,129,.12)' : 'rgba(245,158,11,.12)', color: allDone ? '#047857' : '#B45309', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Icon name={allDone ? 'ti-circle-check' : 'ti-help'} size={20}/>
-          </div>
-          <div>
-            <h3 style={{ fontSize: 15.5, fontWeight: 900, margin: 0, color: 'var(--ak-text)', fontFamily: "'Nunito',sans-serif" }}>Review · {total} question{total === 1 ? '' : 's'}</h3>
-            <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--ak-text-muted)', margin: 0, fontFamily: "'Nunito',sans-serif" }}>
-              {allDone ? 'Every answer is submitted — hand the assignment in when you\'re ready.'
-                : `${submittedCount} of ${total} submitted${changed ? ` · ${changed} changed and not submitted yet` : ''} — tap a question to finish it.`}
-            </p>
-          </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '0 0 14px' }}>
+          {[
+            [`${total}`, `question${total === 1 ? '' : 's'}`],
+            ...(marks ? [[`${marks}`, 'marks']] : []),
+            [`${answeredCount}/${total}`, 'answered', allDone ? '#047857' : '#B45309'],
+            [`${files.length}`, `file${files.length === 1 ? '' : 's'}`],
+          ].map(([n, l, c]) => (
+            <div key={l} style={{ flex: '1 1 70px', background: 'var(--ak-surface)', borderRadius: 14, padding: '10px 12px', boxShadow: '0 2px 10px rgba(17,24,39,.06)', fontFamily: "'Nunito',sans-serif" }}>
+              <div style={{ fontSize: 17, fontWeight: 900, color: c || 'var(--ak-text)' }}>{n}</div>
+              <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--ak-text-muted)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{l}</div>
+            </div>
+          ))}
         </div>
-        <div style={{ margin: '14px 0 16px' }}>
-          {questions.map((q, i) => {
-            const mcq = isMcq(q);
-            const ans = work.answers[i];
-            const look = STEP_LOOK[statuses[i]];
-            const typed = typeof ans === 'string' ? ans.trim() : '';
-            return (
-              <button key={i} onClick={() => go(i)}
-                style={{ display: 'block', width: '100%', textAlign: 'left', padding: 14, marginBottom: 10, borderRadius: 14, border: `1.5px solid ${look.border}`, background: 'var(--ak-surface)', cursor: 'pointer', fontFamily: "'Nunito',sans-serif" }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 6px' }}>
-                  <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--ak-text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>Question {i + 1}</span>
-                  {mcq && <span style={{ fontSize: 9.5, fontWeight: 900, color: mid, background: `${mid}14`, padding: '2px 8px', borderRadius: 999, textTransform: 'capitalize' }}>{typeLabel(q.type) || 'Multiple choice'}</span>}
-                  <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 900, color: look.fg, background: look.bg, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap' }}>{look.label}</span>
-                </div>
-                <p style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--ak-text)', lineHeight: 1.4, margin: 0, fontFamily: "'Nunito',sans-serif", whiteSpace: 'pre-line' }}><MathText text={qText(q)}/></p>
-                {mcq ? (
-                  hasAnswer(q, ans) && (
-                    <p style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', margin: '8px 0 0' }}>{letterOf(ans)}. <MathText text={q.options?.[ans] ?? ''}/></p>
-                  )
-                ) : (typed && (
-                  <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ak-text)', margin: '10px 0 0', padding: '8px 11px', borderLeft: `3px solid ${mid}`, background: 'var(--ak-surface)', borderRadius: 8, whiteSpace: 'pre-wrap', maxHeight: 60, overflow: 'hidden', fontFamily: "'Nunito',sans-serif" }}>{typed.length > 160 ? `${typed.slice(0, 160)}…` : typed}</p>
-                ))}
-              </button>
-            );
-          })}
-        </div>
-        {attachment}
+        <AnswerPaper details={paper} answers={work.answers} files={files} onEdit={go} onOpenFile={onOpenFile} sans="'Nunito',sans-serif"/>
+        {loose.length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            <p style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--ak-text-muted)', margin: '0 0 6px', fontFamily: "'Nunito',sans-serif" }}>Attached to the whole assignment</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {loose.map((f) => <FileCard key={f.id} file={f} onOpen={onOpenFile} onRemove={onRemove} busy={removing === f.id} sans="'Nunito',sans-serif"/>)}
+            </div>
+          </div>
+        )}
         {stepErr && <div style={{ fontSize: 12, fontWeight: 700, color: RED, margin: '10px 0' }}>{stepErr}</div>}
-        <button onClick={handIn} disabled={submitting || saving}
-          style={{ width: '100%', marginTop: 14, padding: 12, borderRadius: 20, border: 'none', cursor: submitting || saving ? 'default' : 'pointer', background: `linear-gradient(135deg, ${mid}, ${dark})`, color: '#fff', fontSize: 13, fontWeight: 900, fontFamily: "'Nunito',sans-serif", display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 7 }}>
-          {submitting || saving ? <Spinner size={13}/> : <><Icon name="ti-send" size={14}/> Submit assignment</>}
+        <button onClick={onHandIn} disabled={submitting}
+          style={{ width: '100%', marginTop: 16, padding: 12, borderRadius: 20, border: 'none', cursor: submitting ? 'default' : 'pointer', background: `linear-gradient(135deg, ${mid}, ${dark})`, color: '#fff', fontSize: 13, fontWeight: 900, fontFamily: "'Nunito',sans-serif", display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 7 }}>
+          {submitting ? <Spinner size={13}/> : <><Icon name="ti-send" size={14}/> Submit assignment</>}
         </button>
         <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--ak-text-muted)', textAlign: 'center', margin: '8px 0 0' }}>
           Once you submit, your answers go to your teacher and can't be changed.
@@ -231,153 +297,140 @@ function Stepper({ questions, paper, work, setWork, saved, onSaveAnswer, mid, da
   const isLast = idx === total - 1;
   const status = statuses[idx];
   const look = STEP_LOOK[status];
-  const pts = typeof q === 'object' && q && Number(q.max_points ?? q.points) > 0 ? Number(q.max_points ?? q.points) : null;
-  const primary = status === 'edited'
-    ? (isLast ? 'Submit answer & review' : 'Submit answer & next')
-    : (isLast ? 'Review answers' : status === 'empty' ? 'Skip for now' : 'Next');
+  const pts = ptsOf(q);
+  const qFiles = files.filter((f) => f.question != null && Number(f.question) === idx);
+  const primary = status === 'empty' ? (isLast ? 'Review answers' : 'Skip for now') : (isLast ? 'Submit answer & review' : 'Submit answer & next');
   return (
     <div>
       {rail}
+      {/* The question — read-only, the whole of it. */}
       <div style={{ background: 'var(--ak-surface)', borderRadius: 16, padding: 16, boxShadow: '0 2px 10px rgba(17,24,39,.06)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 7px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 7px', flexWrap: 'wrap' }}>
           <p style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--ak-text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em', margin: 0, fontFamily: "'Nunito',sans-serif" }}>Question {idx + 1} of {total}</p>
-          {qMcq && <span style={{ fontSize: 9.5, fontWeight: 900, color: mid, background: `${mid}14`, padding: '2px 8px', borderRadius: 999, textTransform: 'capitalize' }}>{typeLabel(q.type) || 'Multiple choice'}</span>}
-          {pts && <span style={{ fontSize: 9.5, fontWeight: 900, color: 'var(--ak-text-muted)', background: 'var(--ak-bg, rgba(0,0,0,.04))', padding: '2px 8px', borderRadius: 999 }}>{pts} pt{pts === 1 ? '' : 's'}</span>}
+          <span style={{ fontSize: 9.5, fontWeight: 900, color: mid, background: `${mid}14`, padding: '2px 8px', borderRadius: 999 }}>{kindOf(q)}</span>
+          {pts && <span style={{ fontSize: 9.5, fontWeight: 900, color: 'var(--ak-text-muted)', background: 'var(--ak-bg, rgba(0,0,0,.04))', padding: '2px 8px', borderRadius: 999 }}>{pts} mark{pts === 1 ? '' : 's'}</span>}
           <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 900, color: look.fg, background: look.bg, padding: '2px 8px', borderRadius: 999 }}>{look.label}</span>
         </div>
         <QuestionContext key={idx} details={paper} index={idx} mid={mid}/>
-        <p style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--ak-text)', lineHeight: 1.4, margin: '0 0 14px', fontFamily: "'Nunito',sans-serif", whiteSpace: 'pre-line' }}>
-          <MathText text={qText(q)}/>
+        <p style={{ fontSize: 15, fontWeight: 800, color: 'var(--ak-text)', lineHeight: 1.5, margin: '0 0 14px', fontFamily: "'Nunito',sans-serif", whiteSpace: 'pre-line' }}>
+          {q?.format === 'assertion_reason' && q.assertion
+            ? <><b>Assertion:</b> <MathText text={q.assertion}/><br/><b>Reason:</b> <MathText text={q.reason || ''}/></>
+            : <MathText text={qText(q)}/>}
         </p>
         {/* The figure sits between the question and its options, as on the paper. */}
         <QuestionFigure figure={q?.figure}/>
-        {qMcq ? (
-          <div role="radiogroup" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {q.options.map((opt, oi) => {
-              const picked = hasAnswer(q, work.answers[idx]) && Number(work.answers[idx]) === oi;
-              return (
-                <button key={oi} role="radio" aria-checked={picked} onClick={() => setAnswer(oi)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 10, padding: '11px 13px', borderRadius: 12,
-                    border: `1.5px solid ${picked ? mid : 'var(--ak-border)'}`, background: picked ? `${mid}0C` : 'var(--ak-surface)',
-                    color: picked ? 'var(--ak-text)' : 'var(--ak-text-muted)', fontSize: 12.5, fontWeight: picked ? 800 : 700, cursor: 'pointer', textAlign: 'left',
-                    fontFamily: "'Nunito',sans-serif",
-                  }}>
-                  <span style={{ width: 22, height: 22, borderRadius: 7, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10.5, fontWeight: 900, fontFamily: "'Nunito',sans-serif", border: `1.5px solid ${picked ? mid : 'var(--ak-border)'}`, background: picked ? mid : 'transparent', color: picked ? '#fff' : 'var(--ak-text-muted)' }}>
-                    {letterOf(oi)}
-                  </span>
-                  <MathText text={opt}/>
-                </button>
-              );
-            })}
+        {qMcq && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {q.options.map((opt, oi) => (
+              <div key={oi} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 11px', borderRadius: 11, background: 'var(--ak-bg)', color: 'var(--ak-text)', fontSize: 14, fontWeight: 600, lineHeight: 1.45, fontFamily: "'Nunito',sans-serif" }}>
+                <b style={{ minWidth: 16, color: mid }}>{letterOf(oi)}.</b>
+                <span><MathText text={opt}/></span>
+              </div>
+            ))}
           </div>
-        ) : q?.format === 'label' && Array.isArray(q.labels) ? (
-          /* Labelling: name each marked part of the diagram. */
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {(() => {
-              const vals = parseLabelAnswer(q.labels, work.answers[idx]);
-              return q.labels.map((l) => (
-                <label key={l} style={{ display: 'flex', alignItems: 'center', gap: 10, fontFamily: "'Nunito',sans-serif" }}>
-                  <span style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12.5, fontWeight: 900, color: mid, background: `${mid}12`, border: `1.5px solid ${mid}40` }}>{l}</span>
-                  <input value={vals[l]} maxLength={200} aria-label={`Part ${l}`} placeholder={`What is ${l}?`}
-                    onChange={(e) => setAnswer(labelAnswerText(q.labels, { ...vals, [l]: e.target.value.replace(/\n/g, ' ') }) || '')}
-                    style={{ flex: 1, minWidth: 0, borderRadius: 11, border: '1.5px solid var(--ak-border)', padding: '10px 12px', fontFamily: "'Nunito',sans-serif", fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text)', outline: 'none', background: 'var(--ak-surface)' }}/>
-                </label>
-              ));
-            })()}
-          </div>
-        ) : (
-          <textarea value={work.answers[idx] || ''} onChange={(e) => setAnswer(e.target.value)} aria-label={`Answer to question ${idx + 1}`}
-            placeholder="Type your answer…" maxLength={4000}
-            style={{ width: '100%', minHeight: 110, borderRadius: 12, border: '1.5px solid var(--ak-border)', padding: '11px 13px', fontFamily: "'Nunito',sans-serif", fontSize: 12.5, fontWeight: 600, color: 'var(--ak-text)', resize: 'vertical', outline: 'none', boxSizing: 'border-box' }}/>
         )}
       </div>
+
+      <AnswerBox q={q} idx={idx} value={work.answers[idx]} onType={(v) => onType(idx, v)}
+        files={qFiles} onPick={(list) => onPick(idx, list)} onRemove={onRemove} onOpenFile={onOpenFile} onDraw={() => onDraw(idx)}
+        uploading={uploading === idx} removing={removing} status={status} saveErr={saveErrs[idx]} onRetry={() => onFlush(idx).catch(() => {})}
+        fileErr={fileErr?.index === idx ? fileErr.message : ''}/>
+
       {stepErr && <div style={{ fontSize: 12, fontWeight: 700, color: RED, marginTop: 10 }}>{stepErr}</div>}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14 }}>
-        <button onClick={() => go(idx - 1)} disabled={idx === 0 || saving}
+        <button onClick={() => go(idx - 1)} disabled={idx === 0 || moving}
           style={{ padding: '10px 18px', borderRadius: 20, border: '1px solid var(--ak-border)', background: 'var(--ak-surface)', color: 'var(--ak-text-muted)', fontSize: 12.5, fontWeight: 800, cursor: idx === 0 ? 'default' : 'pointer', opacity: idx === 0 ? 0.4 : 1, fontFamily: "'Nunito',sans-serif" }}>
           ← Back
         </button>
-        <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--ak-text-muted)', fontFamily: "'Nunito',sans-serif" }}>{submittedCount}/{total} submitted</span>
-        <button onClick={submitAndNext} disabled={saving}
-          style={{ marginLeft: 'auto', padding: '10px 18px', borderRadius: 20, border: status === 'edited' ? 'none' : '1px solid var(--ak-border)', background: status === 'edited' ? `linear-gradient(135deg, ${mid}, ${dark})` : 'var(--ak-surface)', color: status === 'edited' ? '#fff' : 'var(--ak-text)', fontSize: 12.5, fontWeight: 900, cursor: saving ? 'default' : 'pointer', fontFamily: "'Nunito',sans-serif", display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          {saving ? <Spinner size={12}/> : <>{primary} →</>}
+        <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--ak-text-muted)', fontFamily: "'Nunito',sans-serif" }}>{answeredCount}/{total} answered</span>
+        <button onClick={submitAndNext} disabled={moving}
+          style={{ marginLeft: 'auto', padding: '10px 18px', borderRadius: 20, border: status === 'empty' ? '1px solid var(--ak-border)' : 'none', background: status === 'empty' ? 'var(--ak-surface)' : `linear-gradient(135deg, ${mid}, ${dark})`, color: status === 'empty' ? 'var(--ak-text)' : '#fff', fontSize: 12.5, fontWeight: 900, cursor: moving ? 'default' : 'pointer', fontFamily: "'Nunito',sans-serif", display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          {moving ? <Spinner size={12}/> : <>{primary} →</>}
         </button>
       </div>
     </div>
   );
 }
 
-/* Read-only question list — how a graded activity shows its questions,
-   one after another: the learner's answer, the correct option (MCQ), and —
-   when the teacher marked question by question — each mark and comment. */
-function StaticQuestions({ questions, paper, answers = {}, marks = [] }) {
-  const markOf = new Map((marks || []).map((m) => [Number(m.index), m]));
+/* The last check before handing in — what's missing, what's attached. */
+function LastCheck({ check, total, questions, onAnswer, onSubmit, onClose, submitting, err, mid, dark }) {
+  const issues = check.unanswered.length + check.blanks.length;
   return (
-    <>
-      <p style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', margin: '0 0 12px', fontFamily: "'Nunito',sans-serif" }}>Questions</p>
-      {questions.map((q, i) => {
-        const mark = markOf.get(i);
-        const ans = answers?.[i] ?? answers?.[String(i)];
-        const picked = isMcq(q) && ans !== undefined && ans !== null && String(ans) !== '' ? Number(ans) : null;
-        const full = mark && mark.awarded != null && Number(mark.awarded) >= Number(mark.max);
-        // A section's instructions and a shared passage show once, above the first question that uses them.
-        const prev = questions[i - 1];
-        const opensGroup = !prev || prev?.section !== q?.section || prev?.passage !== q?.passage;
-        return (
-          <div key={i} style={{ background: 'var(--ak-surface)', borderRadius: 16, padding: 16, boxShadow: '0 2px 10px rgba(17,24,39,.06)', marginBottom: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 6px' }}>
-              <p style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--ak-text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em', margin: 0, fontFamily: "'Nunito',sans-serif" }}>Question {i + 1}</p>
-              {mark && (
-                <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 900, padding: '2px 9px', borderRadius: 999, color: full ? '#047857' : '#B45309', background: full ? 'rgba(16,185,129,.12)' : 'rgba(245,158,11,.14)', fontFamily: "'Nunito',sans-serif" }}>
-                  {mark.awarded ?? '–'} / {mark.max}
-                </span>
-              )}
-            </div>
-            {opensGroup && <QuestionContext details={paper} index={i} mid={BRAND}/>}
-            <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--ak-text)', lineHeight: 1.4, margin: '0 0 10px', fontFamily: "'Nunito',sans-serif", whiteSpace: 'pre-line' }}><MathText text={qText(q)}/></p>
-            <QuestionFigure figure={q?.figure} compact/>
-            {isMcq(q) ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                {q.options.map((opt, oi) => {
-                  const correct = q.correct != null && Number(q.correct) === oi;
-                  const wrongPick = picked === oi && !correct;
-                  const tone = correct ? '#047857' : wrongPick ? '#B91C1C' : null;
-                  return (
-                    <div key={oi} style={{
-                      display: 'flex', alignItems: 'center', gap: 9, padding: '9px 12px', borderRadius: 11,
-                      border: `1.5px solid ${correct ? 'rgba(16,185,129,.4)' : wrongPick ? 'rgba(239,68,68,.4)' : 'var(--ak-border)'}`,
-                      background: correct ? 'rgba(16,185,129,.07)' : wrongPick ? 'rgba(239,68,68,.06)' : 'var(--ak-surface)',
-                      fontSize: 12.5, fontWeight: picked === oi ? 900 : 700, color: tone || 'var(--ak-text-muted)',
-                      fontFamily: "'Nunito',sans-serif",
-                    }}>
-                      <span style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900, fontFamily: "'Nunito',sans-serif", border: `1.5px solid ${correct ? '#10B981' : wrongPick ? '#EF4444' : 'var(--ak-border)'}`, background: correct ? '#10B981' : wrongPick ? '#EF4444' : 'transparent', color: correct || wrongPick ? '#fff' : 'inherit' }}>
-                        {letterOf(oi)}
-                      </span>
-                      <MathText text={opt}/>
-                      <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 800 }}>
-                        {picked === oi ? (correct ? 'your answer · correct' : 'your answer') : correct ? 'correct' : ''}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p style={{ fontSize: 12.5, fontWeight: 600, color: ans ? 'var(--ak-text)' : 'var(--ak-text-muted)', margin: 0, padding: '9px 12px', borderLeft: '3px solid var(--ak-border)', background: 'var(--ak-surface)', borderRadius: 8, whiteSpace: 'pre-wrap', fontFamily: "'Nunito',sans-serif" }}>
-                {ans ? String(ans) : 'No answer'}
-              </p>
-            )}
-            {mark?.comment && (
-              <div style={{ display: 'flex', gap: 8, marginTop: 10, padding: '9px 12px', borderRadius: 10, background: 'rgba(108,59,255,.07)', fontSize: 12, fontWeight: 700, color: 'var(--ak-text)', lineHeight: 1.5, fontFamily: "'Nunito',sans-serif" }}>
-                <Icon name="ti-message-2" size={14} color={BRAND}/> <span>{mark.comment}</span>
-              </div>
-            )}
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(10,10,25,.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <div onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Hand in your assignment"
+        style={{ width: '100%', maxWidth: 520, background: 'var(--ak-surface)', borderRadius: '22px 22px 0 0', padding: '10px 20px calc(env(safe-area-inset-bottom, 0px) + 18px)', boxShadow: '0 -12px 32px rgba(17,24,39,.18)', fontFamily: "'Nunito',sans-serif", maxHeight: '85vh', overflowY: 'auto' }}>
+        <div style={{ width: 38, height: 4, borderRadius: 2, background: 'var(--ak-border)', margin: '0 auto 14px' }}/>
+        <h3 style={{ fontSize: 17, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 4px' }}>{issues ? 'Before you hand it in' : 'Ready to hand it in?'}</h3>
+        <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text-muted)', margin: '0 0 14px' }}>
+          {total - check.unanswered.length} of {total} answered · {check.files} file{check.files === 1 ? '' : 's'} attached
+          {check.pending.length ? ` · ${check.pending.length} answer${check.pending.length === 1 ? '' : 's'} still saving — we'll save ${check.pending.length === 1 ? 'it' : 'them'} first` : ''}
+        </p>
+        {check.unanswered.map((i) => (
+          <div key={`u${i}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 12, background: 'rgba(239,68,68,.07)', border: '1px solid rgba(239,68,68,.25)', marginBottom: 8 }}>
+            <Icon name="ti-alert-circle" size={15} color={RED}/>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Question {i + 1} · not answered <span style={{ fontWeight: 600, color: 'var(--ak-text-muted)' }}>— {qText(questions[i]).slice(0, 60)}</span></span>
+            <button type="button" onClick={() => onAnswer(i)} style={{ border: 'none', background: RED, color: '#fff', borderRadius: 9, padding: '5px 10px', fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: "'Nunito',sans-serif", flexShrink: 0 }}>Answer it</button>
           </div>
-        );
-      })}
-    </>
+        ))}
+        {check.blanks.map((b) => (
+          <div key={`b${b.index}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 12, background: 'rgba(245,158,11,.08)', border: '1px solid rgba(245,158,11,.3)', marginBottom: 8 }}>
+            <Icon name="ti-tag" size={15} color="#B45309"/>
+            <span style={{ flex: 1, fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)' }}>Question {b.index + 1} · part{b.parts.length === 1 ? '' : 's'} {b.parts.join(', ')} left blank</span>
+            <button type="button" onClick={() => onAnswer(b.index)} style={{ border: '1px solid rgba(245,158,11,.5)', background: 'transparent', color: '#B45309', borderRadius: 9, padding: '5px 10px', fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: "'Nunito',sans-serif", flexShrink: 0 }}>Fill in</button>
+          </div>
+        ))}
+        {!issues && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, background: 'rgba(16,185,129,.08)', border: '1px solid rgba(16,185,129,.3)', marginBottom: 8 }}>
+            <Icon name="ti-circle-check" size={16} color="#047857"/>
+            <span style={{ fontSize: 12.5, fontWeight: 800, color: '#047857' }}>Every question has an answer.</span>
+          </div>
+        )}
+        <p style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)', margin: '10px 0 14px' }}>Once you submit, your answers go to your teacher and can't be changed.</p>
+        {err && <div style={{ fontSize: 12, fontWeight: 700, color: RED, margin: '-6px 0 12px' }}>{err}</div>}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="button" onClick={onClose} disabled={submitting}
+            style={{ flex: 1, padding: 12, borderRadius: 20, border: '1px solid var(--ak-border)', background: 'var(--ak-surface)', color: 'var(--ak-text)', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: "'Nunito',sans-serif" }}>
+            Keep working
+          </button>
+          <button type="button" onClick={onSubmit} disabled={submitting}
+            style={{ flex: 1.3, padding: 12, borderRadius: 20, border: 'none', background: `linear-gradient(135deg, ${mid}, ${dark})`, color: '#fff', fontSize: 13, fontWeight: 900, cursor: submitting ? 'default' : 'pointer', fontFamily: "'Nunito',sans-serif", display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+            {submitting ? <Spinner size={13}/> : <><Icon name="ti-send" size={14}/> {issues ? 'Submit anyway' : 'Submit'}</>}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
+
+/* After handing in: what went in, and the paper with the answers. */
+function Receipt({ questions, submission, completedAt }) {
+  const answers = submission?.answers || {};
+  const files = submission?.files || [];
+  const counts = {};
+  files.forEach((f) => { if (f.question != null) counts[f.question] = (counts[f.question] || 0) + 1; });
+  const answered = questions.filter((q, i) => isAnswered(answers[i] ?? answers[String(i)], counts[i] || 0)).length;
+  const when = completedAt ? new Date(completedAt) : null;
+  return (
+    <div style={{ background: 'var(--ak-surface)', borderRadius: 16, padding: '18px 16px', boxShadow: '0 2px 10px rgba(17,24,39,.06)', marginBottom: 16, textAlign: 'center', fontFamily: "'Nunito',sans-serif" }}>
+      <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(16,185,129,.12)', color: '#047857', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
+        <Icon name="ti-circle-check" size={24}/>
+      </div>
+      <h3 style={{ fontSize: 16, fontWeight: 900, margin: '0 0 3px', color: 'var(--ak-text)' }}>Handed in</h3>
+      <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--ak-text-muted)', margin: '0 0 14px' }}>
+        {when && !Number.isNaN(when.getTime()) ? `${when.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })} · ` : ''}your teacher is marking it
+      </p>
+      <div style={{ display: 'flex', gap: 8 }}>
+        {[[`${answered}/${questions.length}`, 'answered'], [`${files.length}`, `file${files.length === 1 ? '' : 's'}`], ['—', 'marks · waiting']].map(([n, l]) => (
+          <div key={l} style={{ flex: 1, background: 'var(--ak-bg)', borderRadius: 12, padding: '9px 6px' }}>
+            <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--ak-text)' }}>{n}</div>
+            <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--ak-text-muted)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{l}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 
 /* The submitted work, read-only — what the learner actually handed in.
    Shown after submit and after grading; the server copy is the source. */
@@ -447,8 +500,23 @@ export default function ActivityDetailPage() {
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
-  const [saved, setSaved] = useState({});   // answers SUBMITTED per question (server)
+  const [saved, setSaved] = useState({});   // answers the server holds per question (autosaved)
+  const [files, setFiles] = useState([]);   // uploaded so far — each with its question
+  const [uploadingQ, setUploadingQ] = useState(null);
+  const [removing, setRemoving] = useState(null);
+  const [fileErr, setFileErr] = useState(null);   // { index, message }
+  const [saveErrs, setSaveErrs] = useState({});
+  const [board, setBoard] = useState(null);       // the question the whiteboard draws for
+  const [checking, setChecking] = useState(false);
   const fileRef = useRef(null);
+  // Autosave runs on timers, so it reads the latest row and answers here.
+  const rowRef = useRef(null); rowRef.current = row;
+  const stepperJump = useRef(null);
+  const sheetRef = useRef(null);
+  const workRef = useRef(null); workRef.current = work;
+  const timers = useRef({});
+  const chains = useRef({});
+  useEffect(() => () => Object.values(timers.current).forEach(clearTimeout), []);
 
   useEffect(() => {
     let dead = false;
@@ -462,8 +530,18 @@ export default function ActivityDetailPage() {
           // unless the server copy is newer (another device moved on).
           const local = loadWork(found.assignmentId);
           const server = found.draft?.answers || {};
+          const qs = found.briefDetails?.questions || [];
+          const opened = openingAnswers({ saved: server, savedAt: found.draft?.savedAt, local: local.answers, editedAt: local.editedAt });
+          // An older pick (option number) shows as its letter, as if typed.
+          const answers = Object.fromEntries(Object.entries(opened).map(([k, v]) => [k, shownAnswer(qs[k], v)]));
           setSaved(server);
-          setWork({ ...local, answers: openingAnswers({ saved: server, savedAt: found.draft?.savedAt, local: local.answers, editedAt: local.editedAt }) });
+          setFiles(found.draftFiles || []);
+          setWork({ ...local, answers });
+          // Typing this browser never got to save — save it now.
+          if (found.status !== 'complete' && Array.isArray(qs) && qs.length) {
+            const pending = stepStatuses(qs, answers, server).map((st, i) => (st === 'edited' ? i : -1)).filter((i) => i > -1);
+            if (pending.length) setTimeout(() => pending.forEach((i) => flushAnswer(i).catch(() => {})), 50);
+          }
         }
       })
       .catch(() => { if (!dead) setRow(null); })
@@ -478,6 +556,11 @@ export default function ActivityDetailPage() {
     return Array.isArray(q) && q.length ? q : null;
   }, [row]);
   const useStepper = !!questions && !row?.graded;
+  const fileCounts = useMemo(() => {
+    const out = {};
+    files.forEach((f) => { if (f.question != null) out[f.question] = (out[f.question] || 0) + 1; });
+    return out;
+  }, [files]);
 
   // Autosave only while there is outstanding work — once submitted, the
   // server copy owns the record and the local draft stays cleared.
@@ -489,15 +572,18 @@ export default function ActivityDetailPage() {
     setSubmitting(true);
     setSubmitErr('');
     try {
+      const typed = Object.fromEntries(Object.entries(workRef.current?.answers ?? {}).filter(([i, v]) => hasAnswer(questions?.[i], v)));
       const payload = {
-        text: work?.text ?? '',
-        answers: questions ? { ...(work?.answers ?? {}), ...saved } : {},
-        fileIds: work?.fileId ? [work.fileId] : [],
+        text: questions ? '' : (work?.text ?? ''),
+        answers: questions ? typed : {},
+        // Every file uploaded for this work is handed in (each with its question).
+        fileIds: !questions && work?.fileId ? [work.fileId] : [],
       };
       const target = await completeActivity(row.assignmentId, payload);
-      const files = target?.submission?.files
-        ?? [{ id: work?.fileId, name: work?.fileName, size: work?.fileSize, mime: null }].filter((f) => f.id);
-      setRow((r) => ({ ...r, status: 'complete', submission: { text: payload.text, answers: payload.answers, files } }));
+      const handed = target?.submission?.files
+        ?? (questions ? files : [{ id: work?.fileId, name: work?.fileName, size: work?.fileSize, mime: null }].filter((f) => f.id));
+      setRow((r) => ({ ...r, status: 'complete', completedAt: r.completedAt || new Date().toISOString(), submission: { text: payload.text, answers: target?.submission?.answers ?? payload.answers, files: handed, submittedAt: target?.submission?.submittedAt || new Date().toISOString() } }));
+      sheetRef.current?.scrollTo?.({ top: 0, behavior: 'smooth' });
       // The server now owns the work — the local draft is spent.
       try { localStorage.removeItem(storeKey(row.assignmentId)); } catch { /* private mode */ }
     } catch (e) {
@@ -507,15 +593,119 @@ export default function ActivityDetailPage() {
     }
   };
 
-  /* Submit one question's answer (the stepper's "Submit answer & next"). */
+  /* Save one question's answer on the server (null clears it). */
   const saveAnswer = async (index, value) => {
-    const q = questions?.[index];
-    const out = await saveActivityAnswer(row.assignmentId, index, hasAnswer(q, value) ? value : null);
+    const r = rowRef.current;
+    const q = r?.briefDetails?.questions?.[index];
+    const out = await saveActivityAnswer(r.assignmentId, index, hasAnswer(q, value) ? value : null);
     setSaved((s) => {
       const next = { ...s };
       if (out?.value === null || out?.value === undefined) delete next[index]; else next[index] = out.value;
       return next;
     });
+  };
+
+  /* Save what's typed for question i now — one save at a time per question,
+     always the latest text. */
+  function flushAnswer(i) {
+    clearTimeout(timers.current[i]);
+    delete timers.current[i];
+    const run = () => saveAnswer(i, workRef.current?.answers?.[i]).then(
+      () => setSaveErrs((e) => ({ ...e, [i]: '' })),
+      (e) => { setSaveErrs((x) => ({ ...x, [i]: e?.message || 'Not saved' })); throw e; });
+    const p = (chains.current[i] || Promise.resolve()).catch(() => {}).then(run);
+    chains.current[i] = p;
+    return p;
+  }
+
+  /* Typing autosaves after a short pause. */
+  const typeAnswer = (i, v) => {
+    setWork((w) => ({ ...w, answers: { ...w.answers, [i]: v }, editedAt: new Date().toISOString() }));
+    clearTimeout(timers.current[i]);
+    timers.current[i] = setTimeout(() => { flushAnswer(i).catch(() => {}); }, 900);
+  };
+
+  /* Files belong to a question — up to 3 each, 5MB, uploaded straight away. */
+  const pickFiles = async (i, list) => {
+    const picked = Array.from(list || []);
+    if (!picked.length || uploadingQ !== null) return;
+    setFileErr(null);
+    let count = files.filter((f) => f.question != null && Number(f.question) === i).length;
+    for (const file of picked) {
+      if (count >= PER_QUESTION_FILES) { setFileErr({ index: i, message: `Up to ${PER_QUESTION_FILES} files per question.` }); break; }
+      if (!FILE_OK.test(file.name)) { setFileErr({ index: i, message: `${file.name}: only PDF, JPG, PNG, Word (.docx) or text files.` }); continue; }
+      if (file.size > 5 * 1024 * 1024) { setFileErr({ index: i, message: `${file.name} is larger than 5MB.` }); continue; }
+      setUploadingQ(i);
+      try {
+        const meta = await uploadActivityFile(row.assignmentId, file, i);
+        if (!meta?.id) throw new Error('Upload failed.');
+        setFiles((fs) => [...fs, { ...meta, name: meta.name || file.name, size: meta.size || file.size, question: i }]);
+        count += 1;
+      } catch (e) {
+        setFileErr({ index: i, message: e?.message || 'Could not upload that file. Try again.' });
+      }
+    }
+    setUploadingQ(null);
+  };
+
+  const removeFile = async (f) => {
+    setRemoving(f.id); setFileErr(null);
+    try {
+      await removeActivityFile(f.id);
+      setFiles((fs) => fs.filter((x) => x.id !== f.id));
+      if (/^drawing-q\d+\.png$/i.test(f.name || '') && f.question != null) {
+        setWork((w) => { const d = { ...(w.drawings || {}) }; delete d[f.question]; return { ...w, drawings: d }; });
+      }
+    } catch (e) {
+      setFileErr({ index: f.question, message: e?.message || 'Could not remove that file.' });
+    } finally {
+      setRemoving(null);
+    }
+  };
+
+  /* A drawing reopens on the whiteboard while the work is open; anything else downloads. */
+  const openFile = (f) => {
+    if (row?.status !== 'complete' && !row?.graded && f.question != null && /^drawing-q\d+\.png$/i.test(f.name || '')) { setBoard(Number(f.question)); return; }
+    downloadActivityFile(f.id, f.name).catch((e) => setSubmitErr(e?.message || 'Could not open that file.'));
+  };
+
+  /* "Attach to answer": the drawing becomes that question's file — re-attaching replaces it. */
+  const attachDrawing = async (blob, strokes) => {
+    const i = board;
+    const file = new File([blob], `drawing-q${i + 1}.png`, { type: 'image/png' });
+    const old = files.find((f) => f.question != null && Number(f.question) === i && f.name === file.name);
+    const others = files.filter((f) => f.question != null && Number(f.question) === i && f.id !== old?.id).length;
+    if (others >= PER_QUESTION_FILES) { setFileErr({ index: i, message: `Up to ${PER_QUESTION_FILES} files per question — remove one to attach the drawing.` }); setBoard(null); return; }
+    if (file.size > 5 * 1024 * 1024) { setFileErr({ index: i, message: 'That drawing is larger than 5MB.' }); return; }
+    setFileErr(null); setUploadingQ(i);
+    try {
+      const meta = await uploadActivityFile(row.assignmentId, file, i);
+      if (!meta?.id) throw new Error('Upload failed.');
+      if (old) await removeActivityFile(old.id).catch(() => {});
+      setFiles((fs) => [...fs.filter((f) => f.id !== old?.id), { ...meta, name: meta.name || file.name, size: meta.size || file.size, question: i }]);
+      setWork((w) => ({ ...w, drawings: { ...(w.drawings || {}), [i]: strokes } }));
+      setBoard(null);
+    } catch (e) {
+      setFileErr({ index: i, message: e?.message || 'Could not attach the drawing. Try again.' });
+      setBoard(null);
+    } finally {
+      setUploadingQ(null);
+    }
+  };
+
+  /* Hand in: answers still saving go first. */
+  const handIn = async () => {
+    setSubmitErr('');
+    const pending = lastCheck(questions, workRef.current?.answers, saved, fileCounts).pending;
+    if (pending.length) {
+      setSubmitting(true);
+      try { for (const i of pending) await flushAnswer(i); }
+      catch { setSubmitErr('Some answers could not be saved — check your connection and try again.'); setSubmitting(false); return; }
+    }
+    Object.values(timers.current).forEach(clearTimeout);
+    timers.current = {};
+    await submit();
+    setChecking(false);
   };
 
   const dropFile = async (fileId) => {
@@ -652,7 +842,7 @@ export default function ActivityDetailPage() {
       </div>
 
       {/* ── Sheet ── */}
-      <div style={{ flex: 1, overflowY: 'auto', background: 'var(--ak-bg)', borderRadius: '24px 24px 0 0', marginTop: -18, position: 'relative', zIndex: 2 }}>
+      <div ref={sheetRef} style={{ flex: 1, overflowY: 'auto', background: 'var(--ak-bg)', borderRadius: '24px 24px 0 0', marginTop: -18, position: 'relative', zIndex: 2 }}>
         <div style={{ maxWidth: 760, margin: '0 auto', padding: '22px 20px 24px' }}>
           {(row.instructions || row.details) && (
             <p style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--ak-text-muted)', lineHeight: 1.6, margin: '0 0 20px' }}>
@@ -763,12 +953,21 @@ export default function ActivityDetailPage() {
             </>
           )}
 
-          {/* graded activities show their questions read-only, correct option marked */}
-          {row.graded && questions?.length > 0 && <StaticQuestions questions={questions} paper={row.briefDetails} answers={row.submission?.answers || {}} marks={row.feedbackQuestions || []} />}
+          {/* handed in, not marked yet: the receipt */}
+          {isDone && !row.graded && questions?.length > 0 && <Receipt questions={questions} submission={row.submission} completedAt={row.completedAt || row.submission?.submittedAt}/>}
 
-          {/* the work the learner handed in — server copy */}
-          {/* Once graded, the question list above already shows each answer with its mark. */}
-          {(isDone || row.graded) && !(row.graded && questions?.length) && <div style={{ marginBottom: 20 }}><SubmittedWork submission={row.submission} questions={questions}/></div>}
+          {/* a question paper once handed in: the paper with every answer under
+              its question — marked (key, each mark and comment) once graded */}
+          {(isDone || row.graded) && questions?.length > 0 && (
+            <div style={{ marginBottom: 20 }}>
+              <p style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', margin: '0 0 12px', fontFamily: "'Nunito',sans-serif" }}>{row.graded ? 'Your marked paper' : 'Your answers'}</p>
+              <AnswerPaper details={row.briefDetails} answers={row.submission?.answers || {}} files={row.submission?.files || []}
+                marks={row.graded ? row.feedbackQuestions || [] : []} showKey={!!row.graded} onOpenFile={openFile} sans="'Nunito',sans-serif"/>
+            </div>
+          )}
+
+          {/* the work the learner handed in — server copy (work without questions) */}
+          {(isDone || row.graded) && !questions?.length && <div style={{ marginBottom: 20 }}><SubmittedWork submission={row.submission} questions={questions}/></div>}
 
           {/* submitted before capture, or with nothing written: say so
               instead of showing a silent page */}
@@ -795,8 +994,8 @@ export default function ActivityDetailPage() {
             <div style={{ fontSize: 12, fontWeight: 700, color: RED, textAlign: 'center', marginBottom: 10 }}>{submitErr}</div>
           )}
 
-          {/* submitted confirmation */}
-          {isDone && !row.graded && (
+          {/* submitted confirmation (work without questions — a paper gets the receipt above) */}
+          {isDone && !row.graded && !questions?.length && (
             <div style={{ textAlign: 'center', padding: '10px 6px' }}>
               <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(16,185,129,.12)', color: '#047857', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
                 <Icon name="ti-circle-check" size={24}/>
@@ -815,13 +1014,11 @@ export default function ActivityDetailPage() {
                 {useStepper ? `Questions · ${questions.length}` : 'Your answer'}
               </p>
               {useStepper ? (
-                <Stepper questions={questions} paper={row.briefDetails} work={work} setWork={setWork} saved={saved} onSaveAnswer={saveAnswer} mid={t.mid} dark={t.dark} onSubmit={submit} submitting={submitting}
-                  attachment={(
-                    <div style={{ marginTop: 16 }}>
-                      <p style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', margin: '0 0 10px', fontFamily: "'Nunito',sans-serif" }}>Attachment <span style={{ color: 'var(--ak-text-muted)', fontWeight: 700 }}>— optional, for workings, diagrams or extra pages</span></p>
-                      {attachArea}
-                    </div>
-                  )}/>
+                <Stepper questions={questions} paper={row.briefDetails} work={work} saved={saved} files={files} fileCounts={fileCounts}
+                  onType={typeAnswer} onFlush={flushAnswer} saveErrs={saveErrs}
+                  onPick={pickFiles} onRemove={removeFile} onOpenFile={openFile} onDraw={(i) => { setFileErr(null); setBoard(i); }}
+                  uploading={uploadingQ} removing={removing} fileErr={fileErr}
+                  mid={t.mid} dark={t.dark} onHandIn={() => { setSubmitErr(''); setChecking(true); }} submitting={submitting} jumpRef={stepperJump}/>
               ) : (
                 <>
                   <textarea
@@ -837,6 +1034,19 @@ export default function ActivityDetailPage() {
           )}
         </div>
       </div>
+
+      {/* the last check before handing in */}
+      {checking && useStepper && !isDone && (
+        <LastCheck check={lastCheck(questions, work.answers, saved, fileCounts)} total={questions.length} questions={questions}
+          onAnswer={(i) => { setChecking(false); stepperJump.current?.(i); }}
+          onSubmit={handIn} onClose={() => !submitting && setChecking(false)} submitting={submitting} err={submitErr} mid={t.mid} dark={t.dark}/>
+      )}
+
+      {/* the whiteboard, drawing for one question's answer */}
+      {board !== null && (
+        <WhiteboardModal title={`✏️ Draw your answer · Question ${board + 1}`} topic={qText(questions?.[board]).slice(0, 90)} subject={row.subject || ''}
+          initialStrokes={work?.drawings?.[board] || null} onAttach={attachDrawing} onClose={() => setBoard(null)}/>
+      )}
 
       {/* ── Footer ── */}
       {(!useStepper || isDone) && (

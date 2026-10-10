@@ -32,7 +32,9 @@ import {
 import { apiGet, apiPatch, apiPost, apiPut, apiBlob, downloadActivityFile, openActivityFile, fetchSubmissionPdf } from '../../services/api.js';
 import SubmissionMarkup from './SubmissionMarkup.jsx';
 import QuestionMarker, { QuestionRail, autoMarks, markTotals, pointsOf } from './QuestionMarker.jsx';
+import AnswerPaper, { FileCard } from '../paper/AnswerPaper.jsx';
 import { Sparkles } from 'lucide-react';
+import { readChoice } from '../../lib/paper.js';
 import { saveDraft, loadDraft, clearDraft } from './gradingDrafts.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../../constants.js';
 
@@ -112,14 +114,15 @@ function SubmittedPaper({ current, brief, only = null }) {
             const q = questions[Number(k)];
             const raw = sub.answers[k];
             const qMcq = !!q && Array.isArray(q.options);
-            const chosen = qMcq ? (q.options[raw] ?? raw) : null;
-            const correct = qMcq && q.correct != null && Number(q.correct) === Number(raw);
+            const pick = qMcq ? readChoice(q, raw) : null;
+            const chosen = pick != null ? q.options[pick] : null;
+            const correct = qMcq && q.correct != null && pick != null && Number(q.correct) === pick;
             return (
               <div key={k} style={{ background: WHITE, border: `1px solid ${correct === false && qMcq ? 'rgba(239,68,68,.35)' : BORDER}`, borderRadius: 10, padding: '10px 13px' }}>
                 {q && <div style={{ fontSize: 11, fontWeight: 800, color: MUTED2, marginBottom: 4 }}>Q{Number(k) + 1}. {qText(q)}</div>}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 800, color: INK, fontFamily: FONT }}>
                   {qMcq && <span style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${correct ? GREEN : BORDER}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 9, color: GREEN }}>{correct ? '✓' : ''}</span>}
-                  {chosen != null ? `${letterOf(raw)}. ${chosen}` : String(raw)}
+                  {chosen != null ? `${letterOf(pick)}. ${chosen}` : String(raw)}
                   {qMcq && correct && <span style={{ fontSize: 10, fontWeight: 800, color: GREEN, background: '#E6F6EE', borderRadius: 999, padding: '2px 8px' }}>correct</span>}
                 </div>
               </div>
@@ -142,6 +145,43 @@ function SubmittedPaper({ current, brief, only = null }) {
                 style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'transparent', color: MUTED, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Download size={13} /></button>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* A question paper's answers — the same paper-with-answers the learner
+   reviewed and handed in: each answer (typed text, the option it reads as,
+   its files) under its question, with the key and the marks so far. The
+   question being marked scrolls into view. */
+function PaperAnswers({ current, brief, marks, focus }) {
+  const sub = current.submission ?? {};
+  const questions = brief?.details?.questions || [];
+  const files = sub.files?.length ? sub.files : (current.files ?? []);
+  const loose = files.filter((f) => f.question == null);
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    document.getElementById(`answer-paper-q${focus + 1}`)?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
+  }, [focus]);
+  const rows = Object.entries(marks || {})
+    .filter(([, m]) => m && m.awarded != null && m.awarded !== '')
+    .map(([i, m]) => ({ index: Number(i), awarded: m.awarded, max: pointsOf(questions[Number(i)]), comment: m.comment || '' }));
+  const open = (f) => openActivityFile(f.id).catch(() => {});
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: .6, color: MUTED2 }}>WHAT THEY SUBMITTED {current.completedAt && <span style={{ fontWeight: 600 }}>· {fmtWhen(current.completedAt)}</span>}</div>
+      {(sub.text || '').trim() && (
+        <div style={{ background: '#FBFAF8', border: `1px solid ${BORDER}`, borderLeft: `3px solid ${PURPLE}`, borderRadius: 10, padding: '12px 14px' }}>
+          <p style={{ margin: 0, fontSize: 13.5, color: INK, lineHeight: 1.65, whiteSpace: 'pre-wrap', fontFamily: FONT }}>{sub.text}</p>
+        </div>
+      )}
+      <AnswerPaper details={brief.details} title={brief?.title || ''} answers={sub.answers || {}} files={files} marks={rows} showKey label="Answer" onOpenFile={open} sans={FONT} />
+      {loose.length > 0 && (
+        <div>
+          <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: .6, color: MUTED2, marginBottom: 6 }}>ATTACHED TO THE WHOLE ASSIGNMENT</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{loose.map((f) => <FileCard key={f.id} file={f} onOpen={open} sans={FONT} />)}</div>
         </div>
       )}
     </div>
@@ -341,7 +381,7 @@ export default function GradeSubmissionModal({
     const fromRows = (rows) => Object.fromEntries((rows || []).filter((m) => Number.isInteger(m?.index)).map((m) => [m.index, { awarded: m.awarded ?? null, comment: m.comment || '' }]));
     const seeded = draft?.questions?.length ? fromRows(draft.questions)
       : current.feedbackQuestions?.length ? fromRows(current.feedbackQuestions)
-      : autoMarks(qList, current.submission?.answers || {});
+      : autoMarks(qList, current.submission?.answers || {}, current.submission?.files || []);
     setQMarks(seeded);
     setStep(Math.min(draft?.step ?? 0, qList.length));
     if (draft) {
@@ -557,6 +597,11 @@ export default function GradeSubmissionModal({
                   marks={marks} onMarks={onMarks} markState={markState} />
               </div>
             ) : (
+            hasQuestions && (Object.keys(current.submission?.answers || {}).length > 0 || (current.submission?.files || current.files || []).length > 0) ? (
+              <div style={{ padding: '18px 20px 24px' }}>
+                <PaperAnswers current={current} brief={brief} marks={qMarks} focus={qIndex} />
+              </div>
+            ) : (
             <div style={{ padding: '24px 28px 30px' }}>
               <h2 style={{ margin: '0 0 10px', fontSize: 19, fontWeight: 700, color: INK, fontFamily: 'Lora, Georgia, serif', lineHeight: 1.35 }}>{q.title}</h2>
               {q.points.length > 0 && (
@@ -571,7 +616,7 @@ export default function GradeSubmissionModal({
               )}
               <SubmittedPaper current={current} brief={brief} only={Number.isInteger(q.index) ? q.index : null} />
             </div>
-            )}
+            ))}
           </div>
 
           {/* Grading panel */}
@@ -597,7 +642,7 @@ export default function GradeSubmissionModal({
 
               {hasQuestions && step < qList.length ? (
                 <QuestionMarker questions={qList} paper={brief?.details} step={step} setStep={goStep} marks={qMarks} setMark={setMark}
-                  answers={current.submission?.answers || {}} ai={ai} />
+                  answers={current.submission?.answers || {}} files={current.submission?.files || current.files || []} ai={ai} />
               ) : (<>
               {submitted && <AiDraftCard ai={ai} onApply={applyAi} onRequest={requestAi} requesting={aiRequesting} />}
 

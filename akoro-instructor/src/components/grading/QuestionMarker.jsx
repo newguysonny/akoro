@@ -11,12 +11,14 @@
  */
 import { Check, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import { INK, MUTED, MUTED2, BORDER, WHITE, PURPLE, GREEN, RED, FONT } from '../../constants.js';
-import { questionContext } from '../../lib/paper.js';
+import { questionContext, readChoice, letterOf } from '../../lib/paper.js';
 import { MathText, Figure, PassageBox } from '../paper/PaperView.jsx';
+import { FileCard } from '../paper/AnswerPaper.jsx';
+import { openActivityFile } from '../../services/api.js';
 
+const AMBER_TXT = '#B45309';
 const qText = (q) => (typeof q === 'object' && q !== null ? String(q.q ?? '') : String(q ?? ''));
 const isMcq = (q) => typeof q === 'object' && q !== null && Array.isArray(q.options);
-const letterOf = (i) => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Number(i)] ?? '';
 
 /** A question's points (5 when it doesn't say) — the API's rule too. */
 export const pointsOf = (q) => {
@@ -24,14 +26,23 @@ export const pointsOf = (q) => {
   return Number.isFinite(n) && n > 0 ? n : 5;
 };
 
-/** Marks pre-filled where the key decides: an MCQ's pick against `correct`. */
-export function autoMarks(questions, answers = {}) {
+/**
+ * Marks pre-filled where the key decides: an MCQ (true/false too) whose
+ * typed answer reads as an option ("B", "(b)", "Carbon dioxide"…), checked
+ * against `correct`. An answer that doesn't read as an option, or a file
+ * for that question, is left for the teacher (or the AI) to read.
+ */
+export function autoMarks(questions, answers = {}, files = []) {
+  const withFiles = new Set((files || []).filter((f) => f?.question != null).map((f) => Number(f.question)));
   const out = {};
   (questions || []).forEach((q, i) => {
     if (!isMcq(q) || q.correct == null) return;
     const a = answers?.[i] ?? answers?.[String(i)];
-    const answered = a !== undefined && a !== null && String(a) !== '';
-    out[i] = { awarded: answered && Number(a) === Number(q.correct) ? pointsOf(q) : 0, comment: '', auto: true };
+    const answered = a !== undefined && a !== null && String(a).trim() !== '';
+    const pick = answered ? readChoice(q, a) : null;
+    if (answered && pick == null) return;
+    if (!answered && withFiles.has(i)) return;
+    out[i] = { awarded: pick != null && pick === Number(q.correct) ? pointsOf(q) : 0, comment: '', auto: true };
   });
   return out;
 }
@@ -72,13 +83,14 @@ export function QuestionRail({ questions, step, setStep, marks }) {
   );
 }
 
-export default function QuestionMarker({ questions, paper = null, step, setStep, marks, setMark, answers = {}, ai = null }) {
+export default function QuestionMarker({ questions, paper = null, step, setStep, marks, setMark, answers = {}, files = [], ai = null }) {
   const n = questions.length;
   const q = questions[step];
   const max = pointsOf(q);
   const mark = marks?.[step] ?? {};
   const raw = answers?.[step] ?? answers?.[String(step)];
   const answered = raw !== undefined && raw !== null && String(raw).trim() !== '';
+  const qFiles = (files || []).filter((f) => f?.question != null && Number(f.question) === step);
   const aiQ = ai?.status === 'ready' ? (ai.questions || []).find((x) => x.index === step) : null;
   const marked = mark.awarded != null && mark.awarded !== '';
   const isLast = step === n - 1;
@@ -107,17 +119,35 @@ export default function QuestionMarker({ questions, paper = null, step, setStep,
       {/* What the learner answered */}
       <div style={{ background: '#FBFAF8', border: `1px solid ${BORDER}`, borderLeft: `3px solid ${PURPLE}`, borderRadius: 10, padding: '10px 12px' }}>
         <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: .5, color: MUTED2, marginBottom: 4 }}>THEIR ANSWER</div>
-        {!answered ? <div style={{ fontSize: 13, color: MUTED, fontStyle: 'italic' }}>No answer</div>
+        {!answered && !qFiles.length ? <div style={{ fontSize: 13, color: MUTED, fontStyle: 'italic' }}>No answer</div>
+          : !answered ? null
           : isMcq(q) ? (() => {
-            const right = q.correct != null && Number(q.correct) === Number(raw);
+            const pick = readChoice(q, raw);
+            const typed = typeof raw === 'number' ? letterOf(raw) : String(raw).trim();
+            const keyLine = q.correct != null ? `key: ${letterOf(q.correct)}. ${q.options?.[Number(q.correct)] ?? ''}` : '';
+            if (pick == null) {
+              return (
+                <div style={{ fontSize: 13, color: INK, lineHeight: 1.55 }}>
+                  <div style={{ whiteSpace: 'pre-wrap' }}>{typed}</div>
+                  <div style={{ fontSize: 11.5, fontWeight: 700, color: AMBER_TXT, marginTop: 3 }}>Doesn't read as an option — your call{keyLine ? ` (${keyLine})` : ''}</div>
+                </div>
+              );
+            }
+            const right = q.correct != null && Number(q.correct) === pick;
             return (
               <div style={{ fontSize: 13, fontWeight: 800, color: q.correct == null ? INK : right ? GREEN : RED }}>
-                {letterOf(raw)}. <MathText text={q.options?.[Number(raw)] ?? ''} />
-                {q.correct != null && <span style={{ fontWeight: 700, color: MUTED, marginLeft: 6 }}>{right ? '✓ correct' : `✗ key: ${letterOf(q.correct)}. ${q.options?.[Number(q.correct)] ?? ''}`}</span>}
+                {typed !== letterOf(pick) && <span style={{ fontWeight: 600, color: MUTED }}>“{typed}” → </span>}
+                {letterOf(pick)}. <MathText text={q.options?.[pick] ?? ''} />
+                {q.correct != null && <span style={{ fontWeight: 700, color: MUTED, marginLeft: 6 }}>{right ? '✓ correct' : `✗ ${keyLine}`}</span>}
               </div>
             );
           })()
           : <div style={{ fontSize: 13, color: INK, lineHeight: 1.6, whiteSpace: 'pre-wrap', maxHeight: 220, overflowY: 'auto' }}>{String(raw)}</div>}
+        {qFiles.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: answered ? 8 : 0 }}>
+            {qFiles.map((f) => <FileCard key={f.id} file={f} onOpen={(x) => openActivityFile(x.id).catch(() => {})} sans={FONT} />)}
+          </div>
+        )}
       </div>
 
       {/* The key for a written answer: a labelling question's parts, or a model answer */}

@@ -6,23 +6,28 @@
  *
  * Pointer events (pen / touch / mouse) with pointer capture, stroke-stack
  * undo, and an eraser that truly erases (destination-out).
+ *
+ * An assignment's answer box opens it too, with onAttach: "Attach to answer"
+ * hands back the drawing as a PNG (board colour included) and its strokes,
+ * so reopening the attached drawing picks up where the learner left off.
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Undo2, Trash2, Pencil, Eraser } from 'lucide-react';
+import { X, Undo2, Trash2, Pencil, Eraser, Paperclip } from 'lucide-react';
 import { BRAND } from '../../constants.js';
 
 const PALETTE = ['#FFFFFF', BRAND, '#F59E0B', '#10B981', '#EF4444', '#EC4899'];
 const WIDTHS  = [2.5, 5, 9];
 const BOARD_BG = '#101225';
 
-export default function WhiteboardModal({ topic, subject, onClose }) {
+export default function WhiteboardModal({ topic, subject, onClose, title = '🎨 Whiteboard', initialStrokes = null, onAttach = null, attachLabel = 'Attach to answer' }) {
   const canvasRef = useRef(null);
   const wrapRef  = useRef(null);
   // One flat stack of strokes; erased areas are strokes with mode 'erase'.
-  const strokesRef = useRef([]);
+  const strokesRef = useRef(Array.isArray(initialStrokes) ? initialStrokes.map((st) => ({ ...st, points: [...st.points] })) : []);
   const liveRef    = useRef(null);   // the stroke in progress
   const [tool, setTool]   = useState({ mode: 'pen', color: PALETTE[0], width: WIDTHS[1] });
-  const [canUndo, setCanUndo] = useState(false);
+  const [canUndo, setCanUndo] = useState(strokesRef.current.length > 0);
+  const [attaching, setAttaching] = useState(false);
 
   /* Redraw everything — sized for the device pixel ratio so lines stay crisp. */
   const redraw = useCallback(() => {
@@ -107,6 +112,23 @@ export default function WhiteboardModal({ topic, subject, onClose }) {
     redraw();
   };
 
+  /* The drawing as a PNG on the board colour — what the teacher sees. */
+  const attach = () => {
+    const canvas = canvasRef.current;
+    if (!canvas || !onAttach || !strokesRef.current.length || attaching) return;
+    const out = document.createElement('canvas');
+    out.width = canvas.width; out.height = canvas.height;
+    const ctx = out.getContext('2d');
+    ctx.fillStyle = BOARD_BG;
+    ctx.fillRect(0, 0, out.width, out.height);
+    ctx.drawImage(canvas, 0, 0);
+    setAttaching(true);
+    out.toBlob((blob) => {
+      Promise.resolve(blob ? onAttach(blob, strokesRef.current.map((st) => ({ ...st, points: [...st.points] }))) : null)
+        .finally(() => setAttaching(false));
+    }, 'image/png');
+  };
+
   const toolBtn = (active) => ({
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
     width: 34, height: 34, borderRadius: 9, cursor: 'pointer', flexShrink: 0,
@@ -120,9 +142,9 @@ export default function WhiteboardModal({ topic, subject, onClose }) {
       {/* Header: what we're sketching about + the tools */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 900, color: '#fff' }}>🎨 Whiteboard</div>
+          <div style={{ fontSize: 13.5, fontWeight: 900, color: '#fff' }}>{title}</div>
           <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,.55)', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {subject ? `${subject} — ${topic}` : topic || 'Sketch it out'} · stays on your device
+            {subject ? `${subject} — ${topic}` : topic || 'Sketch it out'} · {onAttach ? 'attach it when it\'s ready' : 'stays on your device'}
           </div>
         </div>
 
@@ -160,6 +182,12 @@ export default function WhiteboardModal({ topic, subject, onClose }) {
           <button type="button" title="Clear the board" onClick={clear} style={toolBtn(false)}>
             <Trash2 size={15} />
           </button>
+          {onAttach && (
+            <button type="button" onClick={attach} disabled={!canUndo || attaching}
+              style={{ height: 34, padding: '0 13px', borderRadius: 9, border: 'none', background: BRAND, color: '#fff', fontSize: 12, fontWeight: 900, fontFamily: "'Nunito',sans-serif", cursor: canUndo && !attaching ? 'pointer' : 'default', opacity: canUndo ? 1 : 0.45, display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              <Paperclip size={14} /> {attaching ? 'Attaching…' : attachLabel}
+            </button>
+          )}
           <button type="button" title="Close the whiteboard" onClick={onClose} style={{ ...toolBtn(false), background: 'rgba(239,68,68,.15)' }}>
             <X size={16} />
           </button>
