@@ -2902,6 +2902,23 @@ router.post("/agent/stop", (req, res) => {
 // The one learner Agent Chat response authority. It owns direct tutoring,
 // attachments/grounding/modes and the authorised tool loop; the browser never
 // selects a response endpoint based on its own intent detection.
+/**
+ * GET /api/adaptive/chat/models — the model behind each chat mode, for the
+ * Agent Chat's model switch. Read-only: the app still sends a MODE
+ * ("default" | "think" | "research"), never a model id, so a browser can't
+ * ask for a model this deployment doesn't route. Names come from this
+ * server's own configuration (OPENAI_MODEL / _THINK_ / _RESEARCH_).
+ */
+export const chatModelMenu = () => ([
+  { id: "default",  model: OPENAI_MODEL,   kind: "Fast",     description: "Quick, grounded answers for everyday study." },
+  { id: "think",    model: THINK_MODEL,    kind: "Thinking", description: "Reasons step by step before answering — best for hard problems." },
+  { id: "research", model: RESEARCH_MODEL, kind: "Research", description: "A deeper pass with more syllabus and past-question references." },
+]);
+router.get("/models", (_req, res) => {
+  res.set("Cache-Control", "private, max-age=300");
+  res.json({ modes: chatModelMenu() });
+});
+
 router.post("/agent", async (req, res) => {
   const t0 = Date.now();
   const wantsStream = req.query.stream === "1" || req.query.stream === "true"
