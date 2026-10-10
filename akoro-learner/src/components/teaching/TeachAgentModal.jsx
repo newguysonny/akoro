@@ -185,7 +185,16 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
     [readerReference, config?.subtopics, session?.subtopics],
   );
   const openReader      = () => { if (!content || content.state === 'ready') setReaderOpen(true); };
-  const closeReader     = () => setReaderOpen(false);
+  // A citation chip on the protégé's message: open the reader on that page
+  // and flash the cited box (or seek the recording). The key re-fires a
+  // jump to the same place; closing clears it so a reopen doesn't replay it.
+  const [readerJump, setReaderJump] = useState(null);
+  const closeReader     = () => { setReaderOpen(false); setReaderJump(null); };
+  const jumpToCitation = (cite) => {
+    if (!cite || !content || content.state !== 'ready') return;
+    setReaderJump({ cite, key: Date.now() });
+    setReaderOpen(true);
+  };
   // With real material, desktop/tablet open the split the moment it lands
   // (once). Mobile keeps the chat-first flow with the content box — UNLESS
   // the caller passes config.readerFirst (the Pharm.D topic flow: the
@@ -260,6 +269,9 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
         // Higher-ed reference text is capped by the upload endpoint; only this
         // short-lived session receives it, never a local record or later session.
         reference:      config?.reference || null,
+        // { recordId } | { contentKey } — the server checks access, then
+        // grounds every turn in the passages most relevant to it.
+        document:       config?.document || null,
       });
 
       ws.on("connect", () => {
@@ -847,6 +859,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       onClose={onClose}
       embedded={embedded}
       onOpenReader={readerOpen ? closeReader : openReader}
+      onCite={content ? jumpToCitation : null}
       onOpenBoard={() => setBoardOpen(true)}
       materialBox={materialBox}
       chatMode={chatMode}
@@ -918,6 +931,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
     ask: content.ask || null,
     onClose: closeReader,
     onExplainSelection: explainSelection,
+    jumpTo: readerJump,
   } : {
     docTitle: `${subject} — ${topic}`,
     sourceName: readerReference?.name || "Session guide",

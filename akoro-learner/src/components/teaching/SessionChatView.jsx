@@ -193,6 +193,9 @@ function SessionChatView({
   // guide_token events. Non-null renders a live bubble with a caret.
   liveStudent = null,
   liveGuide = null,
+  // Citation chips on the protégé's messages (document-grounded sessions):
+  // called with the reader's jump shape. Absent → chips render inert.
+  onCite = null,
 }) {
   const { t } = useLang();
   const sc      = SUBJECT_COLORS[subject?.toLowerCase?.()] || BRAND;
@@ -376,7 +379,7 @@ function SessionChatView({
       <div ref={scrollRef} style={{ flex:1,overflowY:"auto",padding:"14px 16px",
         display:"flex",flexDirection:"column",gap:8 }}>
         {blocks.map((b,i) => (
-          <BlockRenderer key={i} block={b} agentName={agentName} agentEmoji={agentEmoji}/>
+          <BlockRenderer key={i} block={b} agentName={agentName} agentEmoji={agentEmoji} onCite={onCite}/>
         ))}
         {/* ── Streaming token feedback — the turn in flight, drawn as it is
             generated. Styles mirror BlockRenderer's protégé / guide bubbles

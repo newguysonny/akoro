@@ -624,6 +624,9 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
         topic: record.name,
         subject: 'General',
         reference,
+        // The whole document: the session searches it every turn and the
+        // protégé cites the passages it used (chips jump the reader).
+        ...(askTarget ? { document: askTarget } : {}),
         ...(priorSid ? { sessionId: priorSid, mode: 'continuation' } : {}),
       }}
       content={content}

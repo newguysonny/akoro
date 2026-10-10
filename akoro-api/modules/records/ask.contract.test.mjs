@@ -8,7 +8,8 @@ process.env.SUPABASE_SERVICE_KEY ||= "test-service-key";
 const {
   ASK_LIMITS, contentWords, selectPassages, buildAskMessages, extractCitations, passageWhere, gatherPassages,
 } = await import("./askLib.js");
-const routesSrc = await readFile(new URL("./routes.js", import.meta.url), "utf8");
+const routesSrc = await readFile(new URL("./routes.js", import.meta.url), "utf8")
+  + await readFile(new URL("./access.js", import.meta.url), "utf8");   // the access rule lives in access.js
 const migration = await readFile(new URL("../../migrations/2026-record-chat.sql", import.meta.url), "utf8");
 const manifest = await readFile(new URL("../../migrations/manifest.json", import.meta.url), "utf8");
 
@@ -112,7 +113,8 @@ test("gatherPassages searches the OWNER's chunks for the record and falls back t
 test("routes: auth, shared-file access rule, streaming answer, saved turn, history", () => {
   assert.match(routesSrc, /router\.post\("\/ask", authenticateToken/);
   assert.match(routesSrc, /router\.get\("\/ask\/history", authenticateToken/);
-  assert.match(routesSrc, /const id = await resolveAiContent\(\{ \.\.\.req, body: \{ contentKey \} \}\);/, "shared files use the extraction access rule");
+  assert.match(routesSrc, /const id = await resolveContentAccess\(\{ userId, contentKey \}\);/, "shared files use the extraction access rule");
+  assert.match(routesSrc, /resolveAskTargetFor\(\{ userId: req\.user\.id, recordId: src\?\.recordId, contentKey: src\?\.contentKey \}\)/);
   assert.match(routesSrc, /rec\.user_id !== userId\) return \{ status: 404/, "own records are owner-only");
   assert.match(routesSrc, /send\("delta", \{ text: delta \}\)/);
   assert.match(routesSrc, /extractCitations\(answer, passages\)/);

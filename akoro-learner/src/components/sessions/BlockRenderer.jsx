@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, AGENT_STYLES } from '../../constants.js';
 import { ZapIcon, ChevDownIcon, Icon } from '../common/Icons.jsx';
 import { AgentAvatar } from '../common/AgentAvatar.jsx';
+import { citeLabel, inlinePieces, toReaderCite } from '../../lib/askAnswer.js';
 
 /* Where a step sits in the arc of the topic. Four kinds, because that is the
    shape of learning something: name it, see how it works, use it, tie it
@@ -199,7 +200,30 @@ function AudioPlayer({ url, tint = BRAND, dark = false }) {
   );
 }
 
-function BlockRenderer({ block, agentName, agentEmoji }) {
+/* The protégé's text with [n] → citation chips (document-grounded sessions).
+   A chip jumps the reader to the page/box or the recording moment. */
+function CitedText({ text, citations, onCite, color }) {
+  const pieces = inlinePieces(text, citations);
+  return pieces.map((p, i) => {
+    if (p.type === "bold") return <strong key={i}>{p.text}</strong>;
+    if (p.type !== "cite") return <span key={i}>{p.text}</span>;
+    const target = toReaderCite(p.cite);
+    return (
+      <button key={i} type="button" disabled={!target || !onCite}
+        onClick={() => target && onCite?.(target)}
+        title={p.cite.quote ? `“${p.cite.quote}”` : "Source"}
+        aria-label={`Source ${p.cite.n}: ${citeLabel(p.cite)}`}
+        style={{ display:"inline-flex", alignItems:"center", gap:3, margin:"0 2px", padding:"0 6px", borderRadius:10,
+          border:`1px solid ${color}55`, background:`${color}1f`, color, fontSize:10.5, fontWeight:800,
+          cursor: target && onCite ? "pointer" : "default", verticalAlign:"baseline", lineHeight:1.6 }}>
+        <span className={`ti ${Number.isInteger(p.cite.pageNumber) ? "ti-file-text" : "ti-player-play"}`} aria-hidden="true" style={{ fontSize:10 }}/>
+        {citeLabel(p.cite)}
+      </button>
+    );
+  });
+}
+
+function BlockRenderer({ block, agentName, agentEmoji, onCite = null }) {
   const student = { ...AGENT_STYLES.student, name: agentName || "Agent", emoji: agentEmoji || "🤖" };
   const nana    = AGENT_STYLES.nana;
   const sarg    = AGENT_STYLES.sargeant;
@@ -269,7 +293,9 @@ function BlockRenderer({ block, agentName, agentEmoji }) {
         <div style={{ padding:"9px 13px", borderRadius:"4px 18px 18px 18px",
           background:student.bg, border:`0.5px solid ${student.ring}`,
           color:student.color, fontSize:13.5, lineHeight:1.6, whiteSpace:"pre-wrap", fontWeight:500 }}>
-          {block.text}
+          {block.citations?.length
+            ? <CitedText text={block.text} citations={block.citations} onCite={onCite} color={student.color}/>
+            : block.text}
           {block.audioUrl && <AudioPlayer url={block.audioUrl} tint={student.color} dark />}
         </div>
         {block.whyThisResponse && (

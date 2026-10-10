@@ -23,7 +23,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(join(here, p), "utf8");
 
 const [routesSrc, libSrc, appSrc, manifest, recordsMigration, teachSessionSrc, extractPagesSrc, recordsApiSrc, workerSrc, pdfPagesSrc, readerSrc, teachModalSrc] = await Promise.all([
-  read("routes.js"),
+  read("routes.js") + read("access.js"),   // the access rule lives in access.js
   read("extractLib.js"),
   read("../../app.js"),
   read("../../migrations/manifest.json"),
