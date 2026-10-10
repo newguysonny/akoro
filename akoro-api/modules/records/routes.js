@@ -68,6 +68,9 @@ import {
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
 import { activePremiumUserIds, resolveContentAccess, resolveAskTargetFor } from "./access.js";
 import { TOOL_IDS, TOOL_LIMITS, toolSchema, buildToolMessages, shapeToolResult, gatherToolPassages } from "./toolsLib.js";
+import {
+  validateArtifactInput, validateArtifactPatch, listArtifacts, createArtifact, updateArtifact, deleteArtifact,
+} from "./artifactsLib.js";
 
 const router = Router();
 
@@ -870,6 +873,44 @@ router.post("/tools/:tool", authenticateToken, asyncHandler(async (req, res) => 
     console.warn("[records-tools] failed:", String(err?.message || err).slice(0, 200));
     return res.status(502).json({ success: false, message: "Couldn't generate that right now — try again in a moment." });
   }
+}));
+
+// ─── Saved reader items: generated tabs, notes, annotations ─────────────────
+/* GET /api/records/artifacts?recordId=|contentKey= — the learner's items on this document. */
+router.get("/artifacts", authenticateToken, asyncHandler(async (req, res) => {
+  const target = await resolveAskTarget(req, req.query);
+  if (target.status) return res.status(target.status).json({ success: false, message: target.message });
+  res.json({ success: true, data: { artifacts: await listArtifacts({ userId: req.user.id, recordId: target.recordId }) } });
+}));
+
+/* POST /api/records/artifacts { recordId|contentKey, kind, pageNumber?, params?, content?, open? } */
+router.post("/artifacts", authenticateToken, asyncHandler(async (req, res) => {
+  const target = await resolveAskTarget(req, req.body);
+  if (target.status) return res.status(target.status).json({ success: false, message: target.message });
+  const v = validateArtifactInput(req.body);
+  if (v.error) return res400(res, v.error);
+  const out = await createArtifact({ userId: req.user.id, recordId: target.recordId, row: v.row });
+  if (out.error) return res.status(409).json({ success: false, message: out.error });
+  res.status(201).json({ success: true, data: { artifact: out.artifact } });
+}));
+
+/* PATCH /api/records/artifacts/:id { content?, params?, open? } — owner only. */
+router.patch("/artifacts/:id", authenticateToken, asyncHandler(async (req, res) => {
+  const id = String(req.params.id || "");
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return res400(res, "A valid artifact id is required.");
+  const v = validateArtifactPatch(req.body);
+  if (v.error) return res400(res, v.error);
+  const artifact = await updateArtifact({ userId: req.user.id, id, patch: v.patch });
+  if (!artifact) return res.status(404).json({ success: false, message: "Item not found." });
+  res.json({ success: true, data: { artifact } });
+}));
+
+/* DELETE /api/records/artifacts/:id — owner only. */
+router.delete("/artifacts/:id", authenticateToken, asyncHandler(async (req, res) => {
+  const id = String(req.params.id || "");
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return res400(res, "A valid artifact id is required.");
+  if (!(await deleteArtifact({ userId: req.user.id, id }))) return res.status(404).json({ success: false, message: "Item not found." });
+  res.json({ success: true });
 }));
 
 /* GET /api/records/ask/history?recordId=|contentKey= — the learner's thread. */

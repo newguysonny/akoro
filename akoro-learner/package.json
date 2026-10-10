@@ -11,7 +11,7 @@
     "check:header": "esbuild scripts/check-subtopic-header.mjs --bundle --platform=node --format=cjs --outfile=node_modules/.cache/csh.cjs --loader:.jsx=jsx --jsx=automatic && node node_modules/.cache/csh.cjs",
     "check:dhub": "node scripts/check-dhub-hub.mjs && node scripts/check-dhub-search.mjs",
     "lint:undef": "eslint src",
-    "test:reader": "node --test src/lib/extractRun.test.mjs src/lib/askAnswer.test.mjs"
+    "test:reader": "node --test src/lib/extractRun.test.mjs src/lib/askAnswer.test.mjs src/lib/readerArtifacts.test.mjs"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.17.6",

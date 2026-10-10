@@ -5,6 +5,7 @@ import MediaPlayer from "../library/MediaPlayer.jsx";
 import ReaderDiscussion from "./ReaderDiscussion.jsx";
 import ReaderAsk from "./ReaderAsk.jsx";
 import { citeLabel, toReaderCite } from "../../lib/askAnswer.js";
+import { TAB_KINDS, artifactToTab, marksFromArtifacts, tabContentPatch, tabToArtifact } from "../../lib/readerArtifacts.js";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    SessionReaderModal — the Fortizo reader, adopted into the higher-ed
@@ -487,7 +488,36 @@ function TabPill({ tab, active, onSelect, onClose }) {
 
 /* ── Generate grid + creation form (Fortizo) ───────────────────────────────── */
 
-function GenerateGrid({ onPick, discussion, askEnabled = false }) {
+function SavedList({ items, onOpen, onDelete }) {
+  if (!items?.length) return null;
+  return (
+    <>
+      <div className="font-display text-base font-semibold mb-2 mt-1" style={{ color: "var(--ak-text)" }}>Saved</div>
+      <div className="flex flex-col gap-1.5 mb-4">
+        {items.map((a) => {
+          const def = toolById(a.kind);
+          const title = artifactToTab(a, a.id).title;
+          return (
+            <div key={a.id} className="folio-gen-card flex items-center gap-2 px-2.5 py-1.5 border rounded-lg min-w-0">
+              <button type="button" onClick={() => onOpen(a)} className="flex-1 flex items-center gap-2 min-w-0 text-left" style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}>
+                <span className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: def?.bg }}>
+                  <Icon name={def?.icon || "ti-file-text"} size={13} color={def?.fg}/>
+                </span>
+                <span className="truncate text-sm" style={{ color: "var(--ak-text)" }}>{title}</span>
+              </button>
+              <button type="button" onClick={() => onDelete(a)} aria-label={`Delete ${title}`} title="Delete"
+                className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ak-text-sub)" }}>
+                <Icon name="ti-trash" size={13}/>
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function GenerateGrid({ onPick, discussion, askEnabled = false, saved = null }) {
   const generated = TOOL_DEFS.filter((t) => !t.community && (!t.needsAsk || askEnabled));
   // The Discussion card only features when this content is CONNECTED to
   // one of the learner's communities — that's when the messaging exists.
@@ -514,6 +544,7 @@ function GenerateGrid({ onPick, discussion, askEnabled = false }) {
     <div className="px-4 pt-3.5 pb-2 flex-shrink-0">
       <div className="font-display text-base font-semibold mb-2" style={{ color: "var(--ak-text)" }}>Generate</div>
       <div className="grid grid-cols-2 gap-2 mb-4">{generated.map(Card)}</div>
+      {saved && <SavedList items={saved.items} onOpen={saved.onOpen} onDelete={saved.onDelete}/>}
       {community.length > 0 && (
         <>
           <div className="font-display text-base font-semibold mb-2" style={{ color: "var(--ak-text)" }}>Community</div>
@@ -1069,6 +1100,10 @@ export default function SessionReaderModal({
      the opener (library records): Summary / Quiz / Flashcards generated from
      the document with citations, instead of derived in the browser. */
   tools = null,
+  /* artifacts — { list(), save(body), update(id, patch), remove(id) } from
+     the opener (library records): generated tabs, notes, annotations and
+     hidden passages are kept per learner per document and restored here. */
+  artifacts = null,
   /* jumpTo — { cite, key } from the session chat's citation chips: when it
      changes, the reader jumps there (page + box flash, or a seek). */
   jumpTo = null,
@@ -1095,6 +1130,7 @@ export default function SessionReaderModal({
   const [discussionThreads, setDiscussionThreads] = useState([]);
   const [communityTabsOpen, setCommunityTabsOpen] = useState([]);
   const [askPin, setAskPin] = useState(null);   // { pageNumber, text } from "Ask about this"
+  const [savedItems, setSavedItems] = useState([]);   // saved tabs not open right now
 
   const [isPlaying, setIsPlaying] = useState(false);
 
@@ -1195,7 +1231,11 @@ export default function SessionReaderModal({
 
   function saveAnnotation() {
     if (!annotateDraft || !annotateText.trim()) return;
-    setAnnotations((a) => [...a, { id: "ann-" + Date.now(), page: currentPage, text: annotateDraft.text, note: annotateText.trim() }]);
+    const ann = { id: "ann-" + Date.now(), page: currentPage, text: annotateDraft.text, note: annotateText.trim() };
+    setAnnotations((a) => [...a, ann]);
+    artifacts?.save({ kind: "annotation", pageNumber: ann.page + 1, content: { text: ann.text.slice(0, 2000), note: ann.note.slice(0, 4000) } })
+      .then((a) => a?.id && setAnnotations((list) => list.map((x) => (x.id === ann.id ? { ...x, artifactId: a.id } : x))))
+      .catch(() => {});
     setAnnotateDraft(null);
     setAnnotateText("");
     try { window.getSelection().removeAllRanges(); } catch {}
@@ -1228,6 +1268,12 @@ export default function SessionReaderModal({
     if (id === "qa" || id === "discussion" || id === "ask") {
       setCommunityTabsOpen((c) => c.filter((x) => x !== id));
     } else {
+      // A saved tab closes into the Saved list (reopen or delete it there).
+      const tab = resultTabs.find((t) => t.id === id);
+      if (tab?.artifactId && artifacts) {
+        setSavedItems((s) => [...s, { id: tab.artifactId, ...tabToArtifact(tab, { open: false }) }]);
+        artifacts.update(tab.artifactId, { open: false }).catch(() => {});
+      }
       setResultTabs((rt) => rt.filter((t) => t.id !== id));
     }
     if (activeTabId === id) switchTabTo("reader");
@@ -1275,12 +1321,14 @@ export default function SessionReaderModal({
     const focusLabel = (values.focus && values.focus.trim())
       || (values.scope === "Whole document" ? "Whole document" : `Page ${createdPage + 1}`);
     const id = "r" + nextResultId.current++;
-    setResultTabs((rt) => [...rt, {
+    const tab = {
       id, toolId, values, createdPage,
       title: `${tdef.label} · ${focusLabel.length > 22 ? focusLabel.slice(0, 22) + "…" : focusLabel}`,
       cardIndex: 0, flipped: false, quizIndex: 0, quizHint: null, topic: docTitle,
       ...content,
-    }]);
+    };
+    setResultTabs((rt) => [...rt, tab]);
+    persistNewTab(tab);
     setFormTool(null);
     setActiveTabId(id);
     setGenMenuOpen(false);
@@ -1320,11 +1368,90 @@ export default function SessionReaderModal({
         ...derived,
       };
       setResultTabs((rt) => [...rt, tab]);
+      persistNewTab(tab);
       setFormTool(null);
       setActiveTabId(id);
       setGenMenuOpen(false);
       done();
     }, 600);
+  }
+
+  /* ── Saved items (artifacts): load, save new, autosave edits ─────────── */
+  const lastSavedRef = useRef(new Map());   // artifactId → JSON of what the server has
+  const pendingRef = useRef(new Map());     // artifactId → { timer, body }
+
+  useEffect(() => {
+    if (!artifacts) return undefined;
+    let alive = true;
+    artifacts.list().then((list) => {
+      if (!alive) return;
+      const open = [];
+      const closed = [];
+      for (const a of list || []) if (TAB_KINDS.has(a.kind)) (a.open ? open : closed).push(a);
+      const tabs = open.map((a) => artifactToTab(a, "r" + nextResultId.current++));
+      tabs.forEach((t) => lastSavedRef.current.set(t.artifactId, JSON.stringify(tabContentPatch(t))));
+      setResultTabs((rt) => [...tabs, ...rt]);
+      setSavedItems(closed);
+      const marks = marksFromArtifacts(list);
+      setAnnotations((x) => [...marks.annotations, ...x]);
+      setRedactions((x) => [...marks.redactions, ...x]);
+    }).catch(() => { /* saved items are a convenience — the reader still works */ });
+    return () => { alive = false; };
+  }, [artifacts]);
+
+  // Edits (notes typing, quiz answers, card position) save ~0.8 s after the
+  // learner pauses; whatever is pending is flushed when the reader closes.
+  useEffect(() => {
+    if (!artifacts) return;
+    for (const tab of resultTabs) {
+      if (!tab.artifactId) continue;
+      const body = JSON.stringify(tabContentPatch(tab));
+      if (!lastSavedRef.current.has(tab.artifactId)) { lastSavedRef.current.set(tab.artifactId, body); continue; }
+      if (lastSavedRef.current.get(tab.artifactId) === body) continue;
+      const prev = pendingRef.current.get(tab.artifactId);
+      if (prev) clearTimeout(prev.timer);
+      const timer = setTimeout(() => {
+        pendingRef.current.delete(tab.artifactId);
+        lastSavedRef.current.set(tab.artifactId, body);
+        artifacts.update(tab.artifactId, JSON.parse(body)).catch(() => {});
+      }, 800);
+      pendingRef.current.set(tab.artifactId, { timer, body });
+    }
+  }, [resultTabs, artifacts]);
+
+  useEffect(() => () => {
+    for (const [artifactId, { timer, body }] of pendingRef.current) {
+      clearTimeout(timer);
+      artifacts?.update(artifactId, JSON.parse(body)).catch(() => {});
+    }
+    pendingRef.current.clear();
+  }, [artifacts]);
+
+  /** A new tab is saved as it opens; its artifact id lands on the tab. */
+  function persistNewTab(tab) {
+    if (!artifacts || !TAB_KINDS.has(tab.toolId)) return;
+    artifacts.save(tabToArtifact(tab)).then((a) => {
+      if (!a?.id) return;
+      lastSavedRef.current.set(a.id, JSON.stringify(tabContentPatch(tab)));
+      setResultTabs((rt) => rt.map((t) => (t.id === tab.id ? { ...t, artifactId: a.id } : t)));
+    }).catch(() => { /* unsaved: the tab still works for this visit */ });
+  }
+
+  function openSavedItem(a) {
+    const tab = artifactToTab(a, "r" + nextResultId.current++);
+    lastSavedRef.current.set(a.id, JSON.stringify(tabContentPatch(tab)));
+    setResultTabs((rt) => [...rt, tab]);
+    setSavedItems((s) => s.filter((x) => x.id !== a.id));
+    setFormTool(null);
+    setActiveTabId(tab.id);
+    setGenMenuOpen(false);
+    artifacts?.update(a.id, { open: true }).catch(() => {});
+  }
+
+  function deleteSavedItem(a) {
+    setSavedItems((s) => s.filter((x) => x.id !== a.id));
+    lastSavedRef.current.delete(a.id);
+    artifacts?.remove(a.id).catch(() => {});
   }
 
   function updateResultTab(id, patch) {
@@ -1442,6 +1569,7 @@ export default function SessionReaderModal({
     }
     if (action === "redact") {
       setRedactions((r) => [...r, { id: "red-" + Date.now(), page: currentPage, text }]);
+      artifacts?.save({ kind: "redaction", pageNumber: currentPage + 1, content: { text: text.slice(0, 2000) } }).catch(() => {});
       setSelection(null);
       try { window.getSelection().removeAllRanges(); } catch {}
       return;
@@ -1645,7 +1773,8 @@ export default function SessionReaderModal({
                       <CreationForm key={formTool} toolId={formTool} initialFocus={prefillFocus} onBack={() => setFormTool(null)} onSubmit={handleFormSubmit} withScope={!!tools && SERVER_TOOLS.has(formTool)}/>
                     </div>
                   ) : (
-                    <GenerateGrid onPick={handleToolPick} discussion={discussion} askEnabled={!!ask}/>
+                    <GenerateGrid onPick={handleToolPick} discussion={discussion} askEnabled={!!ask}
+                      saved={artifacts ? { items: savedItems, onOpen: openSavedItem, onDelete: deleteSavedItem } : null}/>
                   )}
                 </div>
               )}
@@ -1920,7 +2049,12 @@ export default function SessionReaderModal({
           <div className="flex items-center justify-end gap-3">
             <button
               type="button"
-              onClick={() => { setAnnotations((a) => a.filter((x) => x.id !== openAnnotation.id)); setOpenAnnotation(null); }}
+              onClick={() => {
+                const gone = annotations.find((x) => x.id === openAnnotation.id);
+                if (gone?.artifactId) artifacts?.remove(gone.artifactId).catch(() => {});
+                setAnnotations((a) => a.filter((x) => x.id !== openAnnotation.id));
+                setOpenAnnotation(null);
+              }}
               className="flex items-center gap-1 text-xs hover:opacity-80"
               style={{ color: RED }}
             >

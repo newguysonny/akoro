@@ -43,7 +43,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import TeachAgentModal from '../teaching/TeachAgentModal.jsx';
 import { buildSessionReaderPages } from '../teaching/SessionReaderModal.jsx';
-import { recordDownloadUrl, getRecordExtraction, getSharedExtraction, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus, getAskHistory, askRecord, generateRecordTool } from '../../services/recordsApi.js';
+import { recordDownloadUrl, getRecordExtraction, getSharedExtraction, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus, getAskHistory, askRecord, generateRecordTool, listRecordArtifacts, saveRecordArtifact, updateRecordArtifact, deleteRecordArtifact } from '../../services/recordsApi.js';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
@@ -151,6 +151,13 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
   // every item citing where it came from.
   const tools = useMemo(() => (askKey ? {
     generate: (tool, args) => generateRecordTool({ ...askTarget, tool, ...args }),
+  } : null), [askKey]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // Saved reader items: generated tabs, notes, annotations — restored on reopen.
+  const artifacts = useMemo(() => (askKey ? {
+    list: () => listRecordArtifacts(askTarget),
+    save: (body) => saveRecordArtifact(askTarget, body),
+    update: (id, patch) => updateRecordArtifact(id, patch),
+    remove: (id) => deleteRecordArtifact(id),
   } : null), [askKey]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const startExtraction = async () => {
@@ -528,6 +535,8 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
     ask,
     // Real Summary / Quiz / Flashcards over the document (cited).
     tools,
+    // Generated tabs, notes and annotations — kept across visits.
+    artifacts,
   };
 
   /* A remembered session id (24h) makes reopening a record CONTINUE its

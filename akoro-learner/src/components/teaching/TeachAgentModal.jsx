@@ -930,6 +930,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
     // Ask (library records): whole-document Q&A with jump-to-source citations.
     ask: content.ask || null,
     tools: content.tools || null,
+    artifacts: content.artifacts || null,
     onClose: closeReader,
     onExplainSelection: explainSelection,
     jumpTo: readerJump,
