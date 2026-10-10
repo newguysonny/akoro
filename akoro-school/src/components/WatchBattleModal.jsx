@@ -22,7 +22,7 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
-import { X, Trophy, Users, Radio, Square } from 'lucide-react';
+import { X, Trophy, Users, Radio, Square, Gavel } from 'lucide-react';
 import { apiGet, apiPost } from '../services/api.js';
 import { WS_URL } from '../constants.js';
 import { AMBER, INK, MUTED, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../constants.js';
@@ -107,6 +107,7 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
         },
         durationFormatted: r.durationFormatted ?? r.battle?.duration_formatted ?? null,
         finalScores: r.scoreboard ?? [],
+        verdict: r.judge?.verdict ?? null,
       }))
       .catch(() => {});
   }, [battleId, status, over]);
@@ -127,6 +128,8 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
     s.on('battle:question',  (q) => { setQuestion(q); setReveal(null); });
     s.on('battle:state',     (d) => setPeople((d.participants ?? []).map(mapP)));
     s.on('battle:reveal',    (d) => setReveal(d));
+    // Sergeant, the platform's judge, gives the verdict a moment after the end.
+    s.on('battle:verdict',   (d) => setOver((o) => (o ? { ...o, verdict: d?.verdict ?? null } : o)));
     s.on('battle:log',       (e) => push(e.message, e.timestamp));
     s.on('battle:over',      (d) => { setOver(d); setStatus('completed'); push('🏁 Battle complete'); });
     s.on('battle:cancelled', () => { setStatus('cancelled'); push('🚫 Battle cancelled — not enough players accepted'); });
@@ -273,6 +276,11 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
                 {over.durationFormatted && (
                   <div style={{ fontSize: 11.5, color: MUTED, marginTop: 2 }}>Lasted {over.durationFormatted}</div>
                 )}
+                {over.verdict && (
+                  <div style={{ fontSize: 12, color: INK, marginTop: 8, lineHeight: 1.5 }}>
+                    <Gavel size={11} style={{ marginRight: 4, verticalAlign: -1, color: AMBER }} /><b>Sergeant's verdict:</b> {over.verdict}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -316,6 +324,11 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
                     );
                   })}
                 </div>
+                {reveal?.judge && reveal.questionOrder === question.questionOrder && (
+                  <div style={{ marginTop: 9, fontSize: 11.5, color: INK, lineHeight: 1.45 }}>
+                    <Gavel size={11} style={{ marginRight: 4, verticalAlign: -1, color: AMBER }} /><b>Sergeant:</b> {reveal.judge.answer}{reveal.judge.why ? ` — ${reveal.judge.why}` : ''}
+                  </div>
+                )}
               </div>
             )}
 

@@ -24,7 +24,7 @@
 
 import db from "../../db.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
-import { chargeForAI, schoolBillTo, InsufficientCoins } from "../../lib/coins.js";
+import { chargeForAI, schoolBillTo, InsufficientCoins, coinsAvailable } from "../../lib/coins.js";
 
 /** One battle_questions row, however it was produced. */
 /**
@@ -61,6 +61,8 @@ const row = (battleId, order, q, seconds = 15) => ({
   time_limit_seconds:   seconds,
   // From a past paper: which one (the learner's past-question practice counts it).
   ...(q.exam ? { past_exam: q.exam, past_year: q.year ?? null } : {}),
+  // The writer's one-line reason, when it gave one: Sergeant uses it at the reveal.
+  ...(q.explanation ? { explanation: String(q.explanation).slice(0, 300) } : {}),
 });
 
 /**
@@ -89,7 +91,7 @@ function normalise(raw, fallbackTopic) {
   if (idx < 0 && Number.isInteger(raw.correct_answer_index)) idx = raw.correct_answer_index;
   if (idx < 0 || idx >= opts.length) return null;
 
-  return { stem, options: opts, correctIndex: idx, topic: raw.topic || fallbackTopic || null, xp: raw.xp_value ?? 35 };
+  return { stem, options: opts, correctIndex: idx, topic: raw.topic || fallbackTopic || null, xp: raw.xp_value ?? 35, ...(raw.explanation ? { explanation: String(raw.explanation).trim() } : {}) };
 }
 
 const dedupeKey = (q) => q.stem.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 90);
@@ -213,10 +215,19 @@ export async function generate({
     `JSON shape:\n` +
     `{"questions":[{"stem":"...","options":[{"label":"A","text":"..."}],"answer":"B","explanation":"one sentence","topic":"...","difficulty":"${difficulty}"}]}`;
 
+  // The CREATOR pays for the questions — checked before the call, so an empty
+  // wallet costs nothing. A platform-made battle (no creator) is the app's.
+  if (userId && feature !== "eval") {
+    const { ok, total } = await coinsAvailable({ userId, billTo: await schoolBillTo(userId).catch(() => null), min: 1 });
+    if (!ok) throw new InsufficientCoins(1, total);
+  }
   const resp = await openai.chat.completions.create({
     // Runs outside a request, so nothing sets the feature for it — without
     // this its cost lands in the unattributable "ai" bucket.
     __feature: feature,
+    // Charged explicitly below, to the creator. Without this the metered
+    // client ALSO charged whoever's request it ran in — the creator, twice.
+    __payer: "platform",
     model, max_tokens: Math.min(4000, 260 * count + 500), temperature: 0.7,
     messages: [{ role: "system", content: system }, { role: "user", content: user }],
   });
@@ -243,7 +254,7 @@ export async function generate({
   // works, and a wallet at zero would fail the suite for a reason that has
   // nothing to do with the model. The OpenAI cost is still recorded — the call
   // is tagged feature='eval', which is where the run's real cost comes from.
-  if (feature !== "eval") {
+  if (feature !== "eval" && userId) {
     try {
       const billTo = await schoolBillTo(userId);
       const r = await chargeForAI({

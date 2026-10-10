@@ -1885,6 +1885,8 @@ router.get("/battles/:battleId/results", authenticateToken, asyncHandler(async (
     battle: { ...battle, duration_formatted: fmtDuration(dur) },
     winner: { userId: winner?.userId, agentName: winner?.agentName, score: winner?.score, xpEarned: winner?.xpEarned },
     scoreboard,
+    // Sergeant, the platform's judge: the verdict once the battle is over.
+    judge: { name: "Sergeant", verdict: battle.judge_verdict ?? null },
   });
 }));
 

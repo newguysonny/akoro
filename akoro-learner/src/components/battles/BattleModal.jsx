@@ -53,6 +53,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
   const [tab,          setTab]          = useState('watch');
   const [notice,       setNotice]       = useState(null);
   const [battleType,   setBattleType]   = useState(initialBattle?.type ?? initialBattle?.battleType ?? null);
+  const [verdict,      setVerdict]      = useState(null);   // Sergeant's, when the battle ends
 
   const qStartRef  = useRef(0);
   const logRef     = useRef(null);
@@ -143,6 +144,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
       setQuestion((q) => { if (q && q.questionOrder === d.questionOrder) recordAnswered(q, d.correctIndex, selectedRef.current); return q; });
     });
     s.on('battle:log', (e) => pushLog(e.message, e.timestamp));
+    s.on('battle:verdict', (d) => { if (!d?.battleId || d.battleId === battleId) setVerdict(d?.verdict || null); });
     s.on('battle:over', (d) => { setOver(d); setStatus('completed'); pushLog('Battle complete!'); });
 
     // Deliberately silent: a heartbeat that misses is replaced by the next one
@@ -424,6 +426,12 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
                       ? (isReview ? 'Your agent is working through your review' : 'Your agent is answering — watch it play')
                       : 'You + APOS + re watching this battle'}
                   </div>
+                  {reveal?.judge && (
+                    <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'flex-start', padding: '8px 10px', borderRadius: 10, background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.12)' }}>
+                      <Icon name="ti-gavel" size={15} color={GOLD} />
+                      <div style={{ fontSize: 12, lineHeight: 1.45, color: '#E2E8F0' }}><b style={{ color: GOLD }}>{reveal.judge.judge || 'Sergeant'}</b> · {reveal.judge.answer}{reveal.judge.why ? ` — ${reveal.judge.why}` : ''}</div>
+                    </div>
+                  )}
                   {myResult && <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12.5, fontWeight: 800, color: myResult.is_correct ? '#4ADE80' : '#F87171' }}>{myResult.is_correct ? <><Icon name="ti-check" size={12} color="#4ADE80"/> Your agent got it — +${myResult.xp_gained} XP</> : <><Icon name="ti-x" size={12} color="#F87171"/> Your agent got it wrong</>}</div>}
                 </div>
               )}
@@ -486,6 +494,12 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
                   <div style={{ fontSize: 18, fontWeight: 900, color: '#F1F5F9', marginTop: 6 }}>{winner.agentName} wins!</div>
                   {over?.durationFormatted && <div style={{ fontSize: 12, color: 'rgba(255,255,255,.45)', marginTop: 2 }}>Duration {over.durationFormatted}</div>}
                   {myXp > 0 && <div style={{ display: 'inline-block', marginTop: 8, padding: '4px 14px', borderRadius: 20, background: 'rgba(232,136,74,.20)', color: '#E8884A', fontWeight: 800, fontSize: 13 }}>+{myXp} XP earned</div>}
+                  {(verdict || results?.judge?.verdict) && (
+                    <div style={{ marginTop: 12, textAlign: 'left', display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 12, background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.12)' }}>
+                      <Icon name="ti-gavel" size={16} color={GOLD} />
+                      <div style={{ fontSize: 12.5, lineHeight: 1.5, color: '#E2E8F0' }}><b style={{ color: GOLD }}>Sergeant's verdict</b><br />{verdict || results.judge.verdict}</div>
+                    </div>
+                  )}
                 </div>
               )}
             </>

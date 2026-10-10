@@ -51,12 +51,14 @@ const rawClient = new OpenAI({
  */
 async function meteredCreate(params = {}) {
   const store   = aiContext.getStore() || {};
-  const userId  = params.__userId  ?? store.userId  ?? null;
+  // __payer: "platform" — the app pays (e.g. Sergeant judging a battle), whoever's request it runs in.
+  const platform = params.__payer === "platform";
+  const userId  = platform ? null : params.__userId  ?? store.userId  ?? null;
   const feature = params.__feature ?? store.feature ?? "ai";
   const ref     = params.__ref     ?? null;
-  const billTo  = params.__billTo  ?? store.billTo  ?? null;   // e.g. school funds it
+  const billTo  = platform ? null : params.__billTo  ?? store.billTo  ?? null;   // e.g. school funds it
   const clean = { ...params };
-  delete clean.__userId; delete clean.__feature; delete clean.__ref; delete clean.__billTo;
+  delete clean.__userId; delete clean.__feature; delete clean.__ref; delete clean.__billTo; delete clean.__payer;
   delete clean.__timeoutMs; delete clean.__maxRetries;
   // Per-call SDK bounds (`__timeoutMs` / `__maxRetries`). The SDK's defaults
   // are a 10-MINUTE timeout with 2 retries — a single stalled provider call
@@ -186,12 +188,14 @@ export function responsesUsageToChat(usage) {
  */
 async function meteredResponses(params = {}) {
   const store   = aiContext.getStore() || {};
-  const userId  = params.__userId  ?? store.userId  ?? null;
+  // __payer: "platform" — the app pays (e.g. Sergeant judging a battle), whoever's request it runs in.
+  const platform = params.__payer === "platform";
+  const userId  = platform ? null : params.__userId  ?? store.userId  ?? null;
   const feature = params.__feature ?? store.feature ?? "ai";
   const ref     = params.__ref     ?? null;
-  const billTo  = params.__billTo  ?? store.billTo  ?? null;
+  const billTo  = platform ? null : params.__billTo  ?? store.billTo  ?? null;
   const clean = { ...params };
-  delete clean.__userId; delete clean.__feature; delete clean.__ref; delete clean.__billTo;
+  delete clean.__userId; delete clean.__feature; delete clean.__ref; delete clean.__billTo; delete clean.__payer;
 
   const bills = Boolean(userId || billTo);
   if (bills) {
@@ -257,10 +261,12 @@ async function meteredResponses(params = {}) {
 // Metered embeddings — charged by prompt tokens (cheap, but counted).
 async function meteredEmbeddings(params = {}) {
   const store   = aiContext.getStore() || {};
-  const userId  = params.__userId  ?? store.userId  ?? null;
+  // __payer: "platform" — the app pays (e.g. Sergeant judging a battle), whoever's request it runs in.
+  const platform = params.__payer === "platform";
+  const userId  = platform ? null : params.__userId  ?? store.userId  ?? null;
   const feature = params.__feature ?? store.feature ?? "embedding";
-  const billTo  = params.__billTo  ?? store.billTo  ?? null;
-  const clean = { ...params }; delete clean.__userId; delete clean.__feature; delete clean.__ref; delete clean.__billTo;
+  const billTo  = platform ? null : params.__billTo  ?? store.billTo  ?? null;
+  const clean = { ...params }; delete clean.__userId; delete clean.__feature; delete clean.__ref; delete clean.__billTo; delete clean.__payer;
   const res = await embeddingsBreaker.fire(clean);
   if ((userId || billTo) && res?.usage) {
     chargeForAI({ userId, feature, billTo, model: clean.model || "text-embedding-3-small", usage: { prompt_tokens: res.usage.prompt_tokens ?? res.usage.total_tokens ?? 0, completion_tokens: 0 } })
