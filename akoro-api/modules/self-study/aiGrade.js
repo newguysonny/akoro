@@ -25,6 +25,7 @@ export const AI_GRADE_LIMITS = Object.freeze({
 
 const qText = (q) => (typeof q === "object" && q !== null ? String(q.q ?? "") : String(q ?? ""));
 const isMcq = (q) => typeof q === "object" && q !== null && Array.isArray(q.options);
+import { readChoice } from "./submissionView.js";
 const pointsOf = (q) => {
   const n = Number(typeof q === "object" && q ? q.max_points ?? q.points : NaN);
   return Number.isFinite(n) && n > 0 ? n : AI_GRADE_LIMITS.DEFAULT_POINTS;
@@ -38,24 +39,38 @@ export function rubricRows(details) {
     .slice(0, 12);
 }
 
+/** Which questions have a file (photo, drawing, document) answering them. */
+export const fileQuestions = (submission) => new Set((submission?.files || [])
+  .map((f) => f?.question).filter((n) => Number.isInteger(n)));
+
+/** Is this MCQ marked from the key? Only when its typed answer names an
+ *  option (readChoice) — or there's no answer at all (0). A typed answer
+ *  that can't be read, or a file-only answer, goes to the model instead. */
+function keyed(q, raw, hasFile) {
+  if (!isMcq(q) || q.correct == null) return null;
+  const answered = raw !== undefined && raw !== null && String(raw).trim() !== "";
+  if (!answered) return hasFile ? null : { choice: null };
+  const choice = readChoice(q, raw);
+  return choice === null ? null : { choice };
+}
+
 /** MCQs scored from the key: [{ index, awarded, max, auto: true, why }]. */
-export function scoreMcqs(questions, answers = {}) {
+export function scoreMcqs(questions, answers = {}, files = new Set()) {
   const out = [];
   (questions || []).forEach((q, i) => {
-    if (!isMcq(q) || q.correct == null) return;
-    const raw = answers[String(i)] ?? answers[i];
+    const k = keyed(q, answers[String(i)] ?? answers[i], files.has(i));
+    if (!k) return;
     const max = pointsOf(q);
-    const answered = raw !== undefined && raw !== null && String(raw).trim() !== "";
-    const right = answered && Number(raw) === Number(q.correct);
+    const right = k.choice !== null && k.choice === Number(q.correct);
     out.push({ index: i, awarded: right ? max : 0, max, auto: true,
-      why: !answered ? "No answer." : right ? "Correct." : `Chose ${"ABCDEFGHIJ"[Number(raw)] ?? "?"}; the answer is ${"ABCDEFGHIJ"[Number(q.correct)] ?? "?"}.` });
+      why: k.choice === null ? "No answer." : right ? "Correct." : `Chose ${"ABCDEFGHIJ"[k.choice] ?? "?"}; the answer is ${"ABCDEFGHIJ"[Number(q.correct)] ?? "?"}.` });
   });
   return out;
 }
 
-/** The questions the model marks (not auto-scored MCQs). */
-export const openQuestions = (questions) =>
-  (questions || []).map((q, i) => ({ q, i })).filter(({ q }) => !(isMcq(q) && q.correct != null));
+/** The questions the model marks: everything the key didn't. */
+export const openQuestions = (questions, answers = {}, files = new Set()) =>
+  (questions || []).map((q, i) => ({ q, i })).filter(({ q, i }) => !keyed(q, answers[String(i)] ?? answers[i], files.has(i)));
 
 export function aiGradeSchema() {
   return {
@@ -71,16 +86,16 @@ export function aiGradeSchema() {
 }
 
 /** The model's messages: system rules + the submission (text and photos). */
-export function buildAiGradeMessages({ assignment = {}, markdown = "", images = [] }) {
+export function buildAiGradeMessages({ assignment = {}, markdown = "", images = [], answers = {}, files = new Set() }) {
   const questions = Array.isArray(assignment.details?.questions) ? assignment.details.questions : [];
-  const open = openQuestions(questions);
+  const open = openQuestions(questions, answers, files);
   const rubric = rubricRows(assignment.details);
   const passages = Array.isArray(assignment.details?.passages) ? assignment.details.passages : [];
   const system = [
     `You are drafting marks for a teacher on a learner's submission for "${String(assignment.title || "an activity").slice(0, 160)}"${assignment.subject ? ` (${assignment.subject})` : ""}.`,
     "The teacher reviews and approves everything you produce. Be fair, specific and brief; never invent work the learner didn't submit.",
     open.length ? "Mark each listed question: `awarded` from 0 to its max points (halves allowed), `why` in one sentence citing what the learner wrote." : "",
-    open.length ? open.map(({ q, i }) => `Q${i + 1} (index ${i}, max ${pointsOf(q)}${Number.isInteger(q?.passage) && passages[q.passage] ? `, about passage ${q.passage + 1}` : ""}): ${qText(q)}${q?.figure ? " [has a diagram the learner saw]" : ""}${typeof q === "object" && q?.answer ? `\n  Model answer: ${typeof q.answer === "object" ? Object.entries(q.answer).map(([k, v]) => `${k}: ${v}`).join("; ") : q.answer}` : ""}${q?.format === "label" ? " [the learner names each labelled part as \"P: …\" lines]" : ""}`).join("\n") : "",
+    open.length ? open.map(({ q, i }) => `Q${i + 1} (index ${i}, max ${pointsOf(q)}${Number.isInteger(q?.passage) && passages[q.passage] ? `, about passage ${q.passage + 1}` : ""}): ${qText(q)}${q?.figure ? " [has a diagram the learner saw]" : ""}${typeof q === "object" && q?.answer ? `\n  Model answer: ${typeof q.answer === "object" ? Object.entries(q.answer).map(([k, v]) => `${k}: ${v}`).join("; ") : q.answer}` : ""}${q?.format === "label" ? " [the learner names each labelled part as \"P: …\" lines]" : ""}${isMcq(q) ? `\n  Options: ${q.options.map((o, j) => `${"ABCDEFGHIJ"[j]}. ${o}`).join("; ")}${q.correct != null ? `\n  Key: ${"ABCDEFGHIJ"[Number(q.correct)]} — award full marks only if the learner's answer (typed or in their file) clearly picks it` : ""}` : ""}${files.has(i) ? " [answered with an attached file or drawing — read it]" : ""}`).join("\n") : "",
     // A comprehension passage the open questions are about.
     open.some(({ q }) => Number.isInteger(q?.passage) && passages[q.passage])
       ? `Passages:\n${passages.map((p, n) => `Passage ${n + 1}${p.title ? ` — ${p.title}` : ""}:\n${String(p.text || "").slice(0, 6000)}`).join("\n\n")}` : "",
@@ -101,9 +116,10 @@ export function buildAiGradeMessages({ assignment = {}, markdown = "", images = 
  */
 export function shapeAiGrade({ assignment = {}, submission = {}, json = {}, notes = [] }) {
   const questions = Array.isArray(assignment.details?.questions) ? assignment.details.questions : [];
-  const mcq = scoreMcqs(questions, submission.answers || {});
+  const files = fileQuestions(submission);
+  const mcq = scoreMcqs(questions, submission.answers || {}, files);
   const byIndex = new Map((Array.isArray(json?.questions) ? json.questions : []).map((q) => [Number(q?.index), q]));
-  const marked = openQuestions(questions).map(({ q, i }) => {
+  const marked = openQuestions(questions, submission.answers || {}, files).map(({ q, i }) => {
     const max = pointsOf(q);
     const got = byIndex.get(i);
     const awarded = Math.min(max, Math.max(0, Math.round(Number(got?.awarded) * 2) / 2));
@@ -137,8 +153,10 @@ export async function runAiGrade(targetId, deps) {
     const questions = Array.isArray(assignment.details?.questions) ? assignment.details.questions : [];
     let json = {};
     // Only MCQs and no rubric → nothing for the model to do.
-    if (openQuestions(questions).length || rubricRows(assignment.details).length || !questions.length) {
-      try { json = JSON.parse(await deps.chat(buildAiGradeMessages({ assignment, markdown, images })) || "{}"); }
+    const answers = submission?.answers || {};
+    const files = fileQuestions(submission);
+    if (openQuestions(questions, answers, files).length || rubricRows(assignment.details).length || !questions.length) {
+      try { json = JSON.parse(await deps.chat(buildAiGradeMessages({ assignment, markdown, images, answers, files })) || "{}"); }
       catch (e) {
         if (e?.name === "InsufficientCoins") throw new Error("Out of AI credit — top up to draft marks.");
         throw e;

@@ -29,6 +29,7 @@ import { PDFDocument, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { docxToPages } from "../records/officeText.js";
 import { paperBlocks, passageRange, figurePng } from "./paperLayout.js";
+import { readChoice } from "./submissionView.js";
 
 const require = createRequire(import.meta.url);
 const FONT_DIR = path.join(path.dirname(require.resolve("dejavu-fonts-ttf/package.json")), "ttf");
@@ -155,10 +156,14 @@ export function submissionMarkdown({ assignment = {}, learner = {}, submission =
         out.push(`### Q${i + 1}. ${qText(q).replace(/\n+/g, " · ")}`, "");
         if (q?.format === "label" && Array.isArray(q.labels)) out.push(`_Name the labelled parts: ${q.labels.join(", ")}_`, "");
         if (q?.figure) out.push(`_[Figure${q.figure.caption ? `: ${q.figure.caption}` : ""} — see the PDF]_`, "");
+        const qFiles = files.filter((f) => f.question === i);
         if (typeof q === "object" && q && Array.isArray(q.options)) {
-          q.options.forEach((opt, oi) => out.push(`- ${answered && Number(raw) === oi ? "**[x]**" : "[ ]"} ${letterOf(oi)}. ${opt}`));
-          out.push("", answered ? `Answer: ${letterOf(raw)}` : "_No answer_", "");
-        } else out.push(answered ? String(raw) : "_No answer_", "");
+          const choice = readChoice(q, raw);
+          q.options.forEach((opt, oi) => out.push(`- ${choice === oi ? "**[x]**" : "[ ]"} ${letterOf(oi)}. ${opt}`));
+          const typed = typeof raw === "number" ? letterOf(raw) : String(raw ?? "").trim();
+          out.push("", answered ? `Answer: ${typed}${choice !== null && typed.toUpperCase() !== letterOf(choice) ? ` (read as ${letterOf(choice)})` : choice === null ? " (not an option)" : ""}` : qFiles.length ? "_Answered with a file_" : "_No answer_", "");
+        } else out.push(answered ? String(raw) : qFiles.length ? "_Answered with a file_" : "_No answer_", "");
+        for (const f of qFiles) out.push(`_Attached: ${f.name}${f.kind === "image" ? " (a photo or drawing — see the PDF)" : ""}_`, "");
       }
     }
   }
@@ -249,17 +254,40 @@ export async function buildSubmissionPdf({ assignment = {}, learner = {}, submis
       }
       if (!q?.figure && q?.figure_note) flow.text(`[Figure: ${q.figure_note}]`, { size: 9.5, color: MUTED, indent: 14, gap: 6 });
       if (q?.format === "label" && Array.isArray(q.labels)) flow.text(`Name the labelled parts: ${q.labels.join(", ")}`, { size: 10, color: MUTED, indent: 14, gap: 4 });
+      // The learner's answer: what they typed (an MCQ's typed answer read
+      // as its option), then the files that answer this question — photos
+      // and whiteboard drawings drawn right here, documents at the end.
       const raw = answers[String(i)] ?? answers[i];
       const answered = raw !== undefined && raw !== null && String(raw).trim() !== "";
+      const qFiles = files.filter((f) => f.question === i);
       if (typeof q === "object" && q && Array.isArray(q.options)) {
+        const choice = readChoice(q, raw);
         q.options.forEach((opt, oi) => {
-          const picked = answered && Number(raw) === oi;
+          const picked = choice === oi;
           flow.text(`${picked ? "●" : "○"}  ${letterOf(oi)}. ${opt}`, { size: 10.5, bold: picked, color: picked ? INK : MUTED, indent: 14, gap: 0 });
         });
-        flow.text(answered ? `Answer: ${letterOf(raw)}` : "No answer", { size: 10, bold: true, color: answered ? ACCENT : MUTED, indent: 14, gap: 10 });
-      } else {
-        flow.text(answered ? String(raw) : "No answer", { size: 11, color: answered ? INK : MUTED, indent: 14, gap: 10 });
+        const typed = typeof raw === "number" ? letterOf(raw) : String(raw ?? "").trim();
+        if (answered) {
+          flow.text(`Answer: ${typed}${choice !== null && typed.toUpperCase() !== letterOf(choice) ? ` (read as ${letterOf(choice)})` : choice === null ? " (not an option — for the teacher to read)" : ""}`,
+            { size: 10, bold: true, color: ACCENT, indent: 14, gap: qFiles.length ? 4 : 10 });
+        }
+      } else if (answered) {
+        flow.text(String(raw), { size: 11, color: INK, indent: 14, gap: qFiles.length ? 4 : 10 });
       }
+      for (const f of qFiles) {
+        if (f.kind === "image" && f.bytes?.length) {
+          try {
+            const img = /^\x89PNG/.test(Buffer.from(f.bytes).subarray(0, 4).toString("latin1")) ? await doc.embedPng(f.bytes) : await doc.embedJpg(f.bytes);
+            flow.text(`Attached: ${f.name}`, { size: 9.5, color: MUTED, indent: 14, gap: 2 });
+            flow.image(img, { indent: 14, maxH: 300, gap: 8 });
+            f._inline = true;
+            continue;
+          } catch { /* drawn with the attachments instead */ }
+        }
+        flow.text(`Attached: ${f.name} — attachment ${files.indexOf(f) + 1}, at the end`, { size: 9.5, color: MUTED, indent: 14, gap: 4 });
+      }
+      if (!answered && !qFiles.length) flow.text("No answer", { size: 10, bold: true, color: MUTED, indent: 14, gap: 10 });
+      else flow.y -= 4;
       }
     }
   } else if (Object.keys(answers).length) {
@@ -273,15 +301,16 @@ export async function buildSubmissionPdf({ assignment = {}, learner = {}, submis
     flow.text("No written work or files were submitted.", { size: 11, color: MUTED });
   }
 
-  // 4. Attachments.
+  // 4. Attachments (photos already drawn under their question aren't repeated).
   let mergedPages = 0;
   files.forEach((f, i) => { f._n = i + 1; });
+  const rest = files.filter((f) => !f._inline);
   if (files.length) {
     flow.heading("Attachments");
-    for (const f of files) flow.text(`${f._n}. ${f.name} — ${fmtSize(f.size)}`, { size: 10, color: MUTED, gap: 1 });
+    for (const f of files) flow.text(`${f._n}. ${f.name}${Number.isInteger(f.question) ? ` (question ${f.question + 1})` : ""} — ${fmtSize(f.size)}${f._inline ? " · shown with its question" : ""}`, { size: 10, color: MUTED, gap: 1 });
   }
-  for (const f of files) {
-    const label = `Attachment ${f._n}: ${f.name}`;
+  for (const f of rest) {
+    const label = `Attachment ${f._n}${Number.isInteger(f.question) ? ` (question ${f.question + 1})` : ""}: ${f.name}`;
     try {
       if (f.kind === "pdf") {
         const src = await PDFDocument.load(f.bytes, { ignoreEncryption: true, updateMetadata: false });

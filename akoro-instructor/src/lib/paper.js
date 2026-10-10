@@ -163,3 +163,50 @@ export function parseLabelAnswer(labels, text) {
   }
   return out;
 }
+
+/* ── Typed answers (assignments are answered by typing, not tapping) ──── */
+
+/**
+ * A typed answer to a multiple-choice question → the option it names, or
+ * null when it can't be read (the teacher reads it). The SAME reader as the
+ * API's submissionView.readChoice — a contract test keeps them in step.
+ *   2 (an older option index)  "B"  "b."  "(B)"  "Option B"  "Answer: b"
+ *   "B. Carbon dioxide"  "B Carbon dioxide"  "carbon dioxide"
+ *   True / False: also "T", "F", "yes", "no"
+ */
+export function readChoice(q, value) {
+  const opts = q && typeof q === 'object' && Array.isArray(q.options) ? q.options : null;
+  if (!opts || value === null || value === undefined) return null;
+  if (typeof value === 'number') return Number.isInteger(value) && value >= 0 && value < opts.length ? value : null;
+  const s = String(value).trim();
+  if (!s) return null;
+  const norm = (x) => String(x).toLowerCase().replace(/\s+/g, ' ').replace(/[.!?]+$/, '').trim();
+  const at = (ch) => { const i = 'abcdefghijklmnopqrstuvwxyz'.indexOf(String(ch).toLowerCase()); return i >= 0 && i < opts.length ? i : null; };
+  const exact = opts.findIndex((o) => norm(o) === norm(s));
+  if (exact >= 0) return exact;
+  const tf = q.format === 'true_false' || (opts.length === 2 && norm(opts[0]) === 'true' && norm(opts[1]) === 'false');
+  if (tf && /^(t|yes|y|correct)$/i.test(norm(s))) return 0;
+  if (tf && /^(f|no|n|incorrect|wrong)$/i.test(norm(s))) return 1;
+  let m = /^(?:(?:option|answer|ans)\s*[:\-]?\s*)?\(?([a-z])\)?\s*[.):\-]?$/i.exec(s);
+  if (m) return at(m[1]);
+  m = /^\(?([a-z])\s*[.):\-]\s*(\S.*)$/i.exec(s);
+  if (m) {
+    const i = at(m[1]);
+    const other = opts.findIndex((o, j) => j !== i && norm(o) === norm(m[2]));
+    return other >= 0 ? null : i;
+  }
+  m = /^([a-z])\s+(.+)$/i.exec(s);
+  if (m) { const i = at(m[1]); if (i !== null && norm(m[2]) === norm(opts[i])) return i; }
+  return null;
+}
+
+/** Has this question been answered — typed text, or a file for it? */
+export const isAnswered = (value, fileCount = 0) =>
+  fileCount > 0 || (value !== undefined && value !== null && String(value).trim() !== '');
+
+/** An answer as the learner should see it back ("B" → "B · Carbon dioxide"). */
+export function answerLabel(q, value) {
+  if (value === undefined || value === null || String(value).trim() === '') return '';
+  if (typeof value === 'number' && Array.isArray(q?.options)) return `${letterOf(value)} · ${q.options[value] ?? ''}`;
+  return String(value);
+}

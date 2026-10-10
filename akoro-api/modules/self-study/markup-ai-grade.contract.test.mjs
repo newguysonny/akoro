@@ -71,8 +71,8 @@ const assignment = {
   },
 };
 
-test("MCQs are scored exactly from the key — string or number answers alike", () => {
-  assert.deepEqual(scoreMcqs(assignment.details.questions, { 0: "1", 2: 1 }), [
+test("MCQs are scored exactly from the key — typed answers (or an older option index)", () => {
+  assert.deepEqual(scoreMcqs(assignment.details.questions, { 0: "b", 2: 1 }), [
     { index: 0, awarded: 2, max: 2, auto: true, why: "Correct." },
     { index: 2, awarded: 0, max: 5, auto: true, why: "Chose B; the answer is A." },
   ]);

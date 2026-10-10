@@ -336,6 +336,16 @@ router.get("/mine", asyncHandler(async (req, res) => {
     .select("*").eq("student_id", req.user.id).order("created_at", { ascending: false }).limit(60);
 
   const ids = [...new Set((targets ?? []).map((t) => t.assignment_id))];
+  const openTargets = (targets ?? []).filter((t) => t.status !== "complete").map((t) => t.id);
+  const { data: openFiles } = openTargets.length
+    ? await edu().from("self_study_files").select("id, target_id, name, size, mime, kind, question_index").in("target_id", openTargets).order("created_at", { ascending: true }).limit(500)
+    : { data: [] };
+  const draftFilesBy = new Map();
+  for (const f of openFiles ?? []) {
+    const list = draftFilesBy.get(f.target_id) || [];
+    list.push({ id: f.id, name: f.name, size: f.size, mime: f.mime, kind: f.kind, ...(Number.isInteger(f.question_index) ? { question: f.question_index } : {}) });
+    draftFilesBy.set(f.target_id, list);
+  }
   const { data: assignments } = ids.length
     ? await edu().from("self_study_assignments").select("*").in("id", ids)
     : { data: [] };
@@ -445,6 +455,9 @@ router.get("/mine", asyncHandler(async (req, res) => {
         feedbackQuestions: t.grade != null && Array.isArray(t.feedback?.questions) ? t.feedback.questions : [],
         // Answers submitted question by question, not yet handed in.
         draft:        t.draft?.answers ? { answers: t.draft.answers, savedAt: t.draft.savedAt ?? null } : null,
+        // Files uploaded but not handed in yet — each with its question, so
+        // the work follows the learner to another device.
+        draftFiles:   t.status !== "complete" ? (draftFilesBy.get(t.id) || []) : [],
         markedPdf:    t.grade != null && !!t.submission?.submittedAt,
         // The work the learner turned in — text, per-question answers and
         // file metadata. Server copy wins once submitted.
@@ -838,8 +851,17 @@ router.post("/:id/files", asyncHandler(async (req, res) => {
   if (!target) return missing(res, "This assignment was not given to you");
   if (target.status === "complete") return bad(res, "Already submitted — files can't be added now");
 
-  const { name, data } = req.body ?? {};
+  const { name, data, question } = req.body ?? {};
   const clean = typeof name === "string" ? name.trim().slice(0, 200) : "";
+  // The question this file answers (assignments with questions): a real one,
+  // up to PER_QUESTION files each. Without one it belongs to the submission.
+  let qIndex = null;
+  if (question !== undefined && question !== null && question !== "") {
+    const { data: brief } = await edu().from("self_study_assignments").select("details").eq("id", req.params.id).maybeSingle();
+    const n = Number(question);
+    if (!Number.isInteger(n) || n < 0 || n >= (brief?.details?.questions || []).length) return bad(res, "No such question");
+    qIndex = n;
+  }
   if (!clean) return bad(res, "A file needs a name");
   if (typeof data !== "string" || !data) return bad(res, "File data is required (base64)");
   // base64 inflates by ~4/3 — reject early, before decoding
@@ -851,19 +873,21 @@ router.post("/:id/files", asyncHandler(async (req, res) => {
   const sniffed = sniffSubmissionFile(bytes, clean);
   if (!sniffed) return bad(res, "Upload a PDF, a photo (JPG or PNG), a Word .docx or a text file");
 
-  const { count } = await edu().from("self_study_files")
-    .select("id", { count: "exact", head: true }).eq("target_id", target.id);
-  if ((count ?? 0) >= SUBMISSION_FILE_LIMITS.MAX_FILES) return bad(res, "At most 5 files per submission");
+  let countQ = edu().from("self_study_files").select("id", { count: "exact", head: true }).eq("target_id", target.id);
+  countQ = qIndex === null ? countQ.is("question_index", null) : countQ.eq("question_index", qIndex);
+  const { count } = await countQ;
+  if (qIndex !== null && (count ?? 0) >= SUBMISSION_FILE_LIMITS.PER_QUESTION) return bad(res, `At most ${SUBMISSION_FILE_LIMITS.PER_QUESTION} files per question`);
+  if (qIndex === null && (count ?? 0) >= SUBMISSION_FILE_LIMITS.MAX_FILES) return bad(res, "At most 5 files per submission");
 
   const stored = await storeSubmissionFile({ learnerId: req.user.id, targetId: target.id, name: clean, bytes, mime: sniffed.mime });
   const { data: file, error } = await edu().from("self_study_files")
-    .insert({ target_id: target.id, name: clean, mime: sniffed.mime, kind: sniffed.kind, size: bytes.length, ...stored })
-    .select("id, name, size, mime, kind").single();
+    .insert({ target_id: target.id, name: clean, mime: sniffed.mime, kind: sniffed.kind, size: bytes.length, question_index: qIndex, ...stored })
+    .select("id, name, size, mime, kind, question_index").single();
   if (error) {
     if (stored.storage_key) void removeSubmissionObject(stored.storage_key, req.user.id);
     throw new Error(error.message);
   }
-  ok(res, file);
+  ok(res, { id: file.id, name: file.name, size: file.size, mime: file.mime, kind: file.kind, question: file.question_index });
 }));
 
 /** DELETE /api/self-study/files/:fileId — the owning learner removes a file.
@@ -1062,13 +1086,12 @@ router.post("/:id/complete", asyncHandler(async (req, res) => {
       answers[String(k).slice(0, 8)] = typeof v === "number" ? v : String(v ?? "").slice(0, 4000);
     }
   }
-  let files = [];
-  if (Array.isArray(body.fileIds) && body.fileIds.length) {
-    const ids = [...new Set(body.fileIds.map(String))].slice(0, 5);
-    const { data: rows } = await edu().from("self_study_files")
-      .select("id, name, size, mime").eq("target_id", target.id).in("id", ids);
-    files = rows ?? [];
-  }
+  // The files are the ones on this target — each with the question it
+  // answers. A client naming fileIds (older apps) hands in just those.
+  let fileQuery = edu().from("self_study_files").select("id, name, size, mime, kind, question_index").eq("target_id", target.id);
+  if (Array.isArray(body.fileIds) && body.fileIds.length) fileQuery = fileQuery.in("id", [...new Set(body.fileIds.map(String))].slice(0, 200));
+  const { data: fileRows } = await fileQuery.order("created_at", { ascending: true }).limit(200);
+  const files = (fileRows ?? []).map((f) => ({ id: f.id, name: f.name, size: f.size, mime: f.mime, kind: f.kind, ...(Number.isInteger(f.question_index) ? { question: f.question_index } : {}) }));
   const submission = { text, answers, files, submittedAt: now() };
 
   const { data, error } = await edu().from("self_study_targets")
