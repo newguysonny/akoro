@@ -81,6 +81,7 @@ export default function SubmissionsPage() {
       completedAt: t.completed_at,
       grade:      t.grade ?? null,
       feedbackText: t.feedback?.text || '',
+      feedbackQuestions: t.feedback?.questions ?? [],   // marks per question, when published that way
       submission: t.submission ?? null,   // text + answers as handed in
       files:      t.files ?? [],          // attachments (metadata only)
       submissionPdf: t.submissionPdf ?? null,   // the whole submission as one PDF

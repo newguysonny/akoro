@@ -48,7 +48,8 @@ test("grading is the reference workspace, honest about the paper", () => {
   assert.ok(modal.includes("No written submission was captured"), "honest when there is nothing to show");
   // Rubric with worded levels + a total, and a manual override.
   assert.ok(modal.includes("Understanding of concept"), "rubric criteria");
-  assert.ok(modal.includes("Enter score manually instead"), "manual toggle");
+  assert.ok(modal.includes("['manual', 'Manual']") && modal.includes("SCORE FROM"), "manual override in the score-from chooser");
+  assert.ok(modal.includes("['questions', 'Question marks']"), "question-by-question marks score the work when there are questions");
   assert.ok(modal.includes("pick a level in every row"), "total nudges completion");
   // Publish is the only server write.
   assert.ok(modal.includes("/grade`"), "publishes to the grade endpoint");

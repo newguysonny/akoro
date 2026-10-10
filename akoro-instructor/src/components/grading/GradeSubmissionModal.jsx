@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { apiGet, apiPatch, apiPost, apiPut, apiBlob, downloadActivityFile, openActivityFile, fetchSubmissionPdf } from '../../services/api.js';
 import SubmissionMarkup from './SubmissionMarkup.jsx';
+import QuestionMarker, { QuestionRail, autoMarks, markTotals, pointsOf } from './QuestionMarker.jsx';
 import { Sparkles } from 'lucide-react';
 import { saveDraft, loadDraft, clearDraft } from './gradingDrafts.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../../constants.js';
@@ -272,6 +273,8 @@ export default function GradeSubmissionModal({
   const RUBRIC_MAX = RUBRIC.reduce((s, r) => s + r.max, 0);
   const submitted = !!current?.submission?.submittedAt;
   const [view, setView] = useState('pdf');   // 'pdf' | 'answers'
+  // The left paper's question follows the step being marked (and back).
+  useEffect(() => { if (Array.isArray(brief?.details?.questions) && brief.details.questions.length && qIndex < brief.details.questions.length) setStep((s) => (s < brief.details.questions.length ? qIndex : s)); }, [qIndex]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Marks on the submission PDF — autosaved to the API (debounced). */
   const [marks, setMarks] = useState(() => current?.markup?.marks ?? []);
@@ -313,8 +316,15 @@ export default function GradeSubmissionModal({
     } finally { setAiRequesting(false); }
   };
 
+  /* Marked question by question (activities with questions): Q1 … Qn, then
+     Review. step === questions.length is the Review step. */
+  const qList = useMemo(() => (Array.isArray(brief?.details?.questions) ? brief.details.questions : []), [brief]);
+  const hasQuestions = qList.length > 0;
+  const [qMarks, setQMarks] = useState({});   // index → { awarded, comment, auto? }
+  const [step, setStep] = useState(0);
+
   /* Grading state — autosaved locally on every change. */
-  const [mode, setMode] = useState('rubric');                 // 'rubric' | 'manual'
+  const [mode, setMode] = useState('rubric');                 // 'questions' | 'rubric' | 'manual'
   const [rubric, setRubric] = useState(() => RUBRIC.map(() => null));
   const [manualScore, setManualScore] = useState('');
   const [feedbackText, setFeedbackText] = useState('');
@@ -327,20 +337,27 @@ export default function GradeSubmissionModal({
   useEffect(() => {
     if (!current) return;
     const draft = loadDraft(brief?.id, current.student.id);
+    // Question marks: the draft's, else what was published, else the key's.
+    const fromRows = (rows) => Object.fromEntries((rows || []).filter((m) => Number.isInteger(m?.index)).map((m) => [m.index, { awarded: m.awarded ?? null, comment: m.comment || '' }]));
+    const seeded = draft?.questions?.length ? fromRows(draft.questions)
+      : current.feedbackQuestions?.length ? fromRows(current.feedbackQuestions)
+      : autoMarks(qList, current.submission?.answers || {});
+    setQMarks(seeded);
+    setStep(Math.min(draft?.step ?? 0, qList.length));
     if (draft) {
-      setMode(draft.mode || 'rubric');
+      setMode(draft.mode || (hasQuestions ? 'questions' : 'rubric'));
       setRubric(RUBRIC.map((r, i) => draft.rubric?.[i]?.level ?? null));
       setManualScore(draft.manualScore ?? '');
       setFeedbackText(draft.feedbackText || '');
     } else if (current.grade != null) {
       // Revising a published grade: start from what was published.
       setManualScore(String(current.grade));
-      setMode('manual');
+      setMode(current.feedbackQuestions?.length ? 'questions' : 'manual');
       setFeedbackText(current.feedbackText || '');
     } else {
-      setMode('rubric'); setRubric(RUBRIC.map(() => null)); setManualScore(''); setFeedbackText('');
+      setMode(hasQuestions ? 'questions' : 'rubric'); setRubric(RUBRIC.map(() => null)); setManualScore(''); setFeedbackText('');
     }
-    setQIndex(0); setError(''); setSaveState('idle');
+    setQIndex(Math.min(draft?.step ?? 0, Math.max(0, qList.length - 1))); setError(''); setSaveState('idle');
     setView(current?.submission?.submittedAt ? 'pdf' : 'answers');
     clearTimeout(markTimer.current);
     setMarks(current?.markup?.marks ?? []); setMarkState('idle');
@@ -366,10 +383,24 @@ export default function GradeSubmissionModal({
         rubric: RUBRIC.map((r, i) => ({ name: r.name, max: r.max, level: (next.rubric ?? rubric)[i] })),
         manualScore: next.manualScore ?? manualScore,
         feedbackText: next.feedbackText ?? feedbackText,
+        questions: Object.entries(next.qMarks ?? qMarks).map(([i, m]) => ({ index: Number(i), awarded: m.awarded ?? null, comment: m.comment || '' })),
+        step: next.step ?? step,
       });
       setSaveState('saved');
     }, 600);
-  }, [current, brief, qIndex, mode, rubric, manualScore, feedbackText]);
+  }, [current, brief, qIndex, mode, rubric, manualScore, feedbackText, qMarks, step]);
+
+  /* One question's mark / comment (and the step the grader is on). */
+  const setMark = (i, patch) => {
+    const next = { ...qMarks, [i]: { ...(qMarks[i] || {}), ...patch, auto: false } };
+    setQMarks(next);
+    touch({ qMarks: next });
+  };
+  const goStep = (i) => {
+    const s2 = Math.max(0, Math.min(qList.length, i));
+    setStep(s2); touch({ step: s2 });
+    if (s2 < qList.length) { setQIndex(s2); }
+  };
 
   const setRubricLevel = (ci, level) => {
     const next = rubric.map((v, i) => (i === ci ? level : v));
@@ -388,6 +419,16 @@ export default function GradeSubmissionModal({
      every row of THIS rubric, else its score as a manual score; feedback too. */
   const applyAi = () => {
     if (!ai || ai.status !== 'ready') return;
+    if (hasQuestions && ai.questions?.length) {
+      // Marked question by question: the draft's marks fill each question
+      // (comments stay the grader's own); the score follows from them.
+      const next = { ...qMarks };
+      for (const aq of ai.questions) next[aq.index] = { ...(next[aq.index] || {}), awarded: aq.awarded, auto: false };
+      setQMarks(next); setMode('questions');
+      if (ai.feedback) setFeedbackText(ai.feedback);
+      touch({ qMarks: next, mode: 'questions', feedbackText: ai.feedback || feedbackText });
+      return;
+    }
     const levels = RUBRIC.map((r) => ai.rubric?.find((x) => x.name.toLowerCase() === r.name.toLowerCase())?.level ?? null);
     if (levels.every((v) => v != null) && ai.rubric?.length) {
       setRubric(levels); setMode('rubric'); touch({ rubric: levels, mode: 'rubric', feedbackText: ai.feedback || feedbackText });
@@ -399,9 +440,12 @@ export default function GradeSubmissionModal({
 
   const rubricTotal = rubric.reduce((s, v) => s + (v || 0), 0);
   const rubricPct = Math.round((rubricTotal / RUBRIC_MAX) * 100);
-  const finalScore = mode === 'manual'
-    ? (manualScore === '' ? null : Math.min(100, Number(manualScore || 0)))
-    : (rubric.every(v => v != null) ? rubricPct : null);
+  const totals = markTotals(qList, qMarks);
+  const finalScore = mode === 'questions'
+    ? (totals.complete ? totals.pct : null)
+    : mode === 'manual'
+      ? (manualScore === '' ? null : Math.min(100, Number(manualScore || 0)))
+      : (rubric.every(v => v != null) ? rubricPct : null);
 
   const publish = async () => {
     if (finalScore == null || publishing) return;
@@ -413,6 +457,9 @@ export default function GradeSubmissionModal({
           text: feedbackText,
           mode,
           rubric: mode === 'rubric' ? RUBRIC.map((r, i) => ({ name: r.name, max: r.max, level: rubric[i] })) : [],
+          // Each question's mark and comment (the learner sees them under
+          // each question, and on the marked copy's grade page).
+          questions: hasQuestions ? qList.map((qq, i) => ({ index: i, awarded: qMarks[i]?.awarded ?? null, max: pointsOf(qq), comment: qMarks[i]?.comment || '' })) : [],
         },
       });
       clearDraft(brief.id, current.student.id);
@@ -546,18 +593,59 @@ export default function GradeSubmissionModal({
             </div>
 
             <div style={{ padding: '16px 18px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {hasQuestions && <QuestionRail questions={qList} step={step} setStep={goStep} marks={qMarks} />}
+
+              {hasQuestions && step < qList.length ? (
+                <QuestionMarker questions={qList} step={step} setStep={goStep} marks={qMarks} setMark={setMark}
+                  answers={current.submission?.answers || {}} ai={ai} />
+              ) : (<>
               {submitted && <AiDraftCard ai={ai} onApply={applyAi} onRequest={requestAi} requesting={aiRequesting} />}
 
-              {/* Mode toggle */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: .6, color: MUTED2 }}>{mode === 'rubric' ? 'RUBRIC' : 'MANUAL SCORE'}</span>
-                <button onClick={() => { const m = mode === 'rubric' ? 'manual' : 'rubric'; setMode(m); touch({ mode: m }); }}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: PURPLE, fontSize: 11.5, fontWeight: 800, fontFamily: FONT }}>
-                  <PenLine size={11} /> {mode === 'rubric' ? 'Enter score manually instead' : 'Use rubric instead'}
-                </button>
+              {/* Review: every question's mark at a glance (tap to change one) */}
+              {hasQuestions && (
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: .6, color: MUTED2, marginBottom: 6 }}>REVIEW · MARKS BY QUESTION</div>
+                  <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, overflow: 'hidden' }}>
+                    {qList.map((qq, i) => {
+                      const m = qMarks[i];
+                      const done = m?.awarded != null && m.awarded !== '';
+                      return (
+                        <button key={i} type="button" onClick={() => goStep(i)}
+                          style={{ display: 'flex', alignItems: 'flex-start', gap: 10, width: '100%', textAlign: 'left', padding: '9px 12px', border: 'none', borderTop: i ? `1px solid ${BORDER}` : 'none', background: WHITE, cursor: 'pointer', fontFamily: FONT }}>
+                          <span style={{ fontSize: 12, fontWeight: 900, color: MUTED2, width: 26, flexShrink: 0 }}>Q{i + 1}</span>
+                          <span style={{ flex: 1, minWidth: 0 }}>
+                            <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: INK, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{(typeof qq === 'object' && qq ? qq.q : qq) || `Question ${i + 1}`}</span>
+                            {m?.comment && <span style={{ display: 'block', fontSize: 11.5, color: MUTED, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>“{m.comment}”</span>}
+                          </span>
+                          <span style={{ fontSize: 12.5, fontWeight: 900, color: done ? INK : '#E4572E', whiteSpace: 'nowrap' }}>{done ? `${m.awarded} / ${pointsOf(qq)}` : 'not marked'}</span>
+                        </button>
+                      );
+                    })}
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, padding: '10px 12px', background: '#F7F6F3', borderTop: `1px solid ${BORDER}` }}>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: MUTED2 }}>Total</span>
+                      <span style={{ marginLeft: 'auto', fontSize: 20, fontWeight: 900, color: totals.complete ? GREEN : INK, fontFamily: 'Lora, Georgia, serif' }}>{totals.got}</span>
+                      <span style={{ fontSize: 12.5, fontWeight: 700, color: MUTED2 }}>/ {totals.max}{totals.complete ? ` · ${totals.pct}%` : ' — mark every question'}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* How the score is set */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: .6, color: MUTED2, marginRight: 'auto' }}>SCORE FROM</span>
+                {[...(hasQuestions ? [['questions', 'Question marks']] : []), ['rubric', 'Rubric'], ['manual', 'Manual']].map(([id, label]) => (
+                  <button key={id} type="button" onClick={() => { setMode(id); touch({ mode: id }); }} aria-pressed={mode === id}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 999, border: `1.5px solid ${mode === id ? PURPLE : BORDER}`, background: mode === id ? '#F1ECFF' : WHITE, color: mode === id ? PURPLE : MUTED, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+                    {id === 'manual' && <PenLine size={10} />}{label}
+                  </button>
+                ))}
               </div>
 
-              {mode === 'rubric' ? (
+              {mode === 'questions' ? (
+                <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.5 }}>
+                  The score is the question marks: {totals.got} of {totals.max}{totals.complete ? ` = ${totals.pct}%` : ' — mark every question to publish'}.
+                </div>
+              ) : mode === 'rubric' ? (
                 <>
                   {RUBRIC.map((crit, ci) => (
                     <div key={crit.name}>
@@ -613,6 +701,7 @@ export default function GradeSubmissionModal({
               <div style={{ fontSize: 11, color: MUTED2, lineHeight: 1.55, display: 'flex', alignItems: 'center', gap: 5 }}>
                 <Check size={11} color={GREEN} /> Publishing notifies {current.student.name.split(' ')[0]} and files this under their graded work. Drafts stay on this device until then.
               </div>
+              </>)}
             </div>
           </div>
         </div>

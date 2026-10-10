@@ -133,6 +133,18 @@ export async function buildMarkedPdf({ submissionPdf, marks = [], grade = {}, ti
     for (const r of rubric) line(`${r.name}: ${r.level ?? "–"} / ${r.max}`, { size: 10.5, indent: 10, gap: 0 });
     y -= 10;
   }
+  // Marked question by question: each mark, and the grader's comment on it.
+  const qMarks = Array.isArray(grade.questions) ? grade.questions.filter((m) => Number.isInteger(m?.index)) : [];
+  if (qMarks.length) {
+    line("Marks by question", { size: 12, font: bold, gap: 2 });
+    for (const m of qMarks) {
+      const qt = typeof m.q === "object" && m.q ? String(m.q.q ?? "") : String(m.q ?? "");
+      line(`Q${m.index + 1}  ${m.awarded ?? "–"} / ${m.max}${qt ? `  ·  ${qt.slice(0, 70)}${qt.length > 70 ? "…" : ""}` : ""}`, { size: 10.5, font: bold, indent: 10, gap: 0 });
+      if (m.comment) line(m.comment, { size: 10, color: MUTED, indent: 24, gap: 2 });
+    }
+    const got = qMarks.reduce((s2, m) => s2 + (Number(m.awarded) || 0), 0), max = qMarks.reduce((s2, m) => s2 + (Number(m.max) || 0), 0);
+    line(`Total: ${got} / ${max}`, { size: 10.5, font: bold, indent: 10, gap: 10 });
+  }
   if (String(grade.feedback || "").trim()) {
     line("Feedback", { size: 12, font: bold, gap: 2 });
     line(String(grade.feedback), { size: 11, gap: 10 });

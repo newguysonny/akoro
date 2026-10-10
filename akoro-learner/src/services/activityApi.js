@@ -14,7 +14,7 @@
  * renders either way, and the cards appear the day the data exists without
  * any page changes.
  */
-import { apiGet, apiPost, apiDelete, API } from './api.js';
+import { apiGet, apiPost, apiPut, apiDelete, API } from './api.js';
 
 /* Self study — what I, a learner, have been assigned. */
 async function fetchSelfStudy() {
@@ -58,6 +58,8 @@ async function fetchSelfStudy() {
       briefDetails: a.details ?? null,   // brief details object (questions, etc.)
       submission: a.submission ?? null,  // the work the learner turned in
       targetId:   a.targetId || null,
+      draft:      a.draft ?? null,            // answers submitted question by question
+      feedbackQuestions: Array.isArray(a.feedbackQuestions) ? a.feedbackQuestions : [],
       submissionPdf: a.submissionPdf ?? null,   // { ready, pages } — the work as one PDF
       feedbackRubric: Array.isArray(a.feedbackRubric) ? a.feedbackRubric : [],   // [{name, max, level}] once graded
       markedPdf:  !!a.markedPdf,                // the teacher's marked copy is available
@@ -108,6 +110,12 @@ export async function completeActivity(assignmentId, work = {}) {
     answers: work.answers ?? {},
     fileIds: work.fileIds ?? [],
   });
+  return d?.data ?? null;
+}
+
+/* Submit ONE question's answer (saved on the server; null clears it). */
+export async function saveActivityAnswer(assignmentId, index, value) {
+  const d = await apiPut(`/api/self-study/${assignmentId}/draft/${index}`, { value });
   return d?.data ?? null;
 }
 

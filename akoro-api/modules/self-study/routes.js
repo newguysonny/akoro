@@ -27,6 +27,8 @@
  * Learner:
  *   GET    /mine               → what I've been assigned
  *   POST   /:id/start          → mark started + get the brief (session is made by the WS)\n *   POST   /:id/link           → record which adaptive session it became
+ *   PUT    /:id/draft/:index   → submit ONE question's answer (saved on the server;
+ *                                the assignment is handed in from the review step)
  *   POST   /:id/files          → upload one submission attachment (base64, ≤5MB;
  *                                PDF / JPEG / PNG / .docx / text, sniffed) — kept
  *                                in object storage under the learner's prefix
@@ -73,7 +75,7 @@ import {
   buildSubmissionArtifacts, readSubmissionArtifact, buildMarkedCopyLater, readMarkedCopy, aiGradeTarget,
 } from "./submissionArtifacts.js";
 import { validateMarks } from "./submissionMarkup.js";
-import { briefForLearner, pdfMeta } from "./submissionView.js";
+import { briefForLearner, pdfMeta, cleanAnswer, cleanQuestionMarks } from "./submissionView.js";
 
 
 
@@ -399,6 +401,9 @@ router.get("/mine", asyncHandler(async (req, res) => {
         feedbackText: t.feedback?.text || null,
         // Once graded: the rubric levels behind the score, and the marked copy.
         feedbackRubric: t.grade != null && Array.isArray(t.feedback?.rubric) ? t.feedback.rubric : [],
+        feedbackQuestions: t.grade != null && Array.isArray(t.feedback?.questions) ? t.feedback.questions : [],
+        // Answers submitted question by question, not yet handed in.
+        draft:        t.draft?.answers ? { answers: t.draft.answers, savedAt: t.draft.savedAt ?? null } : null,
         markedPdf:    t.grade != null && !!t.submission?.submittedAt,
         // The work the learner turned in — text, per-question answers and
         // file metadata. Server copy wins once submitted.
@@ -676,10 +681,14 @@ router.patch("/:id/targets/:studentId/grade", requireRole(TEACHER_ROLES), asyncH
   // A score-only publish (the gradebook) keeps the feedback already given.
   const patch = { grade: Math.round(n), graded_at: now(), graded_by: req.user.id };
   if (req.body.feedback !== undefined) {
+    // Marked question by question: each row is { index, awarded, max, comment }.
+    const qm = cleanQuestionMarks(assignment.details?.questions || [], feedback.questions);
+    if (qm.error) return bad(res, qm.error);
     patch.feedback = {
       text: typeof feedback.text === "string" ? feedback.text.slice(0, 4000) : "",
       rubric: Array.isArray(feedback.rubric) ? feedback.rubric.slice(0, 12) : [],
-      mode: feedback.mode === "manual" ? "manual" : "rubric",
+      questions: qm.marks,
+      mode: ["manual", "questions"].includes(feedback.mode) ? feedback.mode : "rubric",
     };
   }
   const { data: target, error: tErr } = await edu().from("self_study_targets")
@@ -910,6 +919,31 @@ router.get(/^\/targets\/([0-9a-f-]{36})\/marked\.pdf$/i, asyncHandler(async (req
  * creating a second here would leave an orphan row and a session id that points
  * at nothing. The client calls /link once the socket tells it the real id.
  */
+/**
+ * PUT /api/self-study/:id/draft/:index { value } — submit ONE question's
+ * answer. The assignment is answered a question at a time: each answer is
+ * saved here as it's submitted (an empty value clears it), then the review
+ * step hands the whole assignment in (POST /:id/complete).
+ */
+router.put("/:id/draft/:index", asyncHandler(async (req, res) => {
+  const { data: target } = await edu().from("self_study_targets")
+    .select("id, status, grade, draft").eq("assignment_id", req.params.id).eq("student_id", req.user.id).maybeSingle();
+  if (!target) return missing(res, "This assignment was not given to you");
+  if (target.grade != null || target.status === "complete") return res.status(409).json({ success: false, error: "Already handed in — answers can't change now" });
+  const { data: assignment } = await edu().from("self_study_assignments").select("details").eq("id", req.params.id).maybeSingle();
+  const c = cleanAnswer(assignment?.details?.questions || [], req.params.index, req.body?.value);
+  if (c.error) return bad(res, c.error);
+
+  const answers = { ...(target.draft?.answers || {}) };
+  if (c.value === null) delete answers[String(c.index)]; else answers[String(c.index)] = c.value;
+  const draft = { answers, savedAt: now() };
+  const { error } = await edu().from("self_study_targets")
+    .update({ draft, ...(target.status === "assigned" ? { status: "started", started_at: now() } : {}) })
+    .eq("id", target.id);
+  if (error) throw new Error(error.message);
+  ok(res, { index: c.index, value: c.value, savedAt: draft.savedAt, answered: Object.keys(answers).length });
+}));
+
 router.post("/:id/start", asyncHandler(async (req, res) => {
   const { data: target } = await edu().from("self_study_targets")
     .select("*").eq("assignment_id", req.params.id).eq("student_id", req.user.id).maybeSingle();
@@ -965,7 +999,7 @@ router.post("/:id/link", asyncHandler(async (req, res) => {
  */
 router.post("/:id/complete", asyncHandler(async (req, res) => {
   const { data: target } = await edu().from("self_study_targets")
-    .select("id, grade").eq("assignment_id", req.params.id).eq("student_id", req.user.id).maybeSingle();
+    .select("id, grade, draft").eq("assignment_id", req.params.id).eq("student_id", req.user.id).maybeSingle();
   if (!target) return missing(res, "This assignment was not given to you");
   // Graded work is closed: a resubmission would sit under the old grade.
   if (target.grade != null) return res.status(409).json({ success: false, error: "This work has been graded — it can't be changed now" });
@@ -977,8 +1011,12 @@ router.post("/:id/complete", asyncHandler(async (req, res) => {
   const body = req.body ?? {};
   const text = typeof body.text === "string" ? body.text.slice(0, 8000) : "";
   const answers = {};
-  if (body.answers && typeof body.answers === "object" && !Array.isArray(body.answers)) {
-    for (const [k, v] of Object.entries(body.answers).slice(0, 60)) {
+  // The answers submitted question by question are the work; answers sent
+  // with the hand-in (older clients) win where both exist.
+  const sent = body.answers && typeof body.answers === "object" && !Array.isArray(body.answers) ? body.answers : {};
+  const merged = { ...(target.draft?.answers || {}), ...sent };
+  if (Object.keys(merged).length) {
+    for (const [k, v] of Object.entries(merged).slice(0, 60)) {
       answers[String(k).slice(0, 8)] = typeof v === "number" ? v : String(v ?? "").slice(0, 4000);
     }
   }
