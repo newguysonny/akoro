@@ -5,7 +5,10 @@ import { useLang } from '../../contexts/LanguageContext.jsx';
 import { ZapIcon, BrainIcon, SparkleIcon, XIcon, Icon } from '../common/Icons.jsx';
 import { AgentAvatar } from '../common/AgentAvatar.jsx';
 import FortizoChatComposer, { ModelSwitch } from '../common/FortizoChatComposer.jsx';
-import { chatModelOptions } from '../../lib/chatModels.js';
+import { chatPicker, applyPick } from '../../lib/chatModels.js';
+
+/* One gutter for the conversation and the composer, so messages line up with the input box. */
+const CHAT_GUTTER = 16;
 import RichText from '../common/RichText.jsx';
 import CopyMessageButton from '../common/CopyMessageButton.jsx';
 import { copyPlainText } from '../common/CopyMessageButton.jsx';
@@ -117,10 +120,12 @@ function AgentChatTab({
   // sourced study-guide answer. The choice persists across messages until the
   // learner taps the pill again.
   const [thinkMode,    setThinkMode]    = useState(false);
-  const [serverModels, setServerModels] = useState(null);   // [{ id, model, kind, description }] from the API
+  // The model menu: the API's modes + model catalogue (GET /chat/models).
+  const [serverModels, setServerModels] = useState(null);
+  const [chatModelId, setChatModelId] = useState(() => { try { return localStorage.getItem('ak_chat_model') || null; } catch { return null; } });
   useEffect(() => {
     let alive = true;
-    apiGet('/api/adaptive/chat/models').then(d => { if (alive && Array.isArray(d?.modes)) setServerModels(d.modes); }).catch(() => {});
+    apiGet('/api/adaptive/chat/models').then(d => { if (alive && (Array.isArray(d?.modes) || Array.isArray(d?.models))) setServerModels(d); }).catch(() => {});
     return () => { alive = false; };
   }, []);
   const [researchMode, setResearchMode] = useState(false);
@@ -496,7 +501,9 @@ function AgentChatTab({
     // durable turn contract to repair a partial write without duplicate rows.
     const turnId = createAgentChatTurnId();
     turnIdRef.current = turnId;
-    const payload = { message: text, history: history.slice(-24), agentName, mode,
+    // The picked model rides the standard mode only (the server checks it).
+    const modelPick = mode === "default" && chatModelId ? { model: chatModelId } : {};
+    const payload = { message: text, history: history.slice(-24), agentName, mode, ...modelPick,
       conversationId: sid, turnId,
       ...(devView ? { developer: true } : {}),
       ...(attachmentsPayload.length ? { attachments: attachmentsPayload } : {}) };
@@ -680,13 +687,15 @@ function AgentChatTab({
   // choose a model in the browser: the API remains the authority that routes
   // the supported mode and any authorised tool work.
   const selectedChatMode = thinkMode ? "think" : researchMode ? "research" : "default";
-  // The model behind each mode, as this deployment configures it
-  // (GET /api/adaptive/chat/models); the switch shows real model names.
-  const chatModes = chatModelOptions(serverModels);
-  const selectedChatModeLabel = chatModes.find(option => option.id === selectedChatMode)?.label || chatModes[0]?.label || "Standard";
-  const chooseChatMode = mode => {
-    setThinkMode(mode === "think");
-    setResearchMode(mode === "research");
+  // Models (available ones, then "Coming soon") and the Thinking /
+  // Research modes, as this deployment is set up (GET /chat/models).
+  const picker = chatPicker(serverModels, { mode: selectedChatMode, modelId: chatModelId });
+  const choosePick = optionId => {
+    const next = applyPick(optionId, { mode: selectedChatMode, modelId: chatModelId }, serverModels);
+    setThinkMode(next.mode === "think");
+    setResearchMode(next.mode === "research");
+    setChatModelId(next.modelId);
+    try { if (next.modelId) localStorage.setItem('ak_chat_model', next.modelId); else localStorage.removeItem('ak_chat_model'); } catch { /* private mode */ }
   };
 
   return (
@@ -746,13 +755,13 @@ function AgentChatTab({
               thinking rows, tool rows/groups and text interleaved as the turn
               ran, then the reply (Grand Plan §13.4). */}
           <div style={{ flex:1,position:"relative",display:"flex",flexDirection:"column",minHeight:0 }}>
-          <div ref={feedRef} onScroll={onFeedScroll} style={{ flex:1,overflowY:"auto",padding:"14px 16px 14px 24px",display:"flex",flexDirection:"column",gap:14 }}>
+          <div ref={feedRef} onScroll={onFeedScroll} style={{ flex:1,overflowY:"auto",padding:`14px ${CHAT_GUTTER}px`,display:"flex",flexDirection:"column",gap:14 }}>
             {messages.map(msg=>{
               const isMe=msg.from==="me";
               const thinkingStream=!isMe&&msg.phase==="thinking";
               if(isMe) return (
                 <div key={msg.id} style={{ display:"flex",flexDirection:"column",alignItems:"flex-end" }}>
-                  <div style={{ maxWidth:"86%",padding:"10px 14px",borderRadius:14,background:"var(--ak-surface-hover)",border:"1px solid var(--ak-border)",color:"var(--ak-text)",fontSize:14,lineHeight:1.55,fontWeight:500,whiteSpace:"pre-wrap",wordBreak:"break-word" }}>{msg.text}</div>
+                  <div style={{ maxWidth:"86%",padding:"10px 14px",borderRadius:14,background:"var(--ak-surface-hover)",border:"1px solid var(--ak-border)",color:"var(--ak-text)",fontSize:15.5,lineHeight:1.55,fontWeight:500,whiteSpace:"pre-wrap",wordBreak:"break-word" }}>{msg.text}</div>
                   {msg.attachments?.length>0&&(
                     <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5,justifyContent:"flex-end" }}>
                       {msg.attachments.map((a,i)=>a.previewUrl
@@ -771,7 +780,7 @@ function AgentChatTab({
                   {msg.blocks?.length>0&&<TraceBlocks blocks={msg.blocks}/>}
                   {!msg.blocks?.length&&(msg.thinking||thinkingStream)&&<ThoughtBlock thinking={msg.thinking} streaming={thinkingStream}/>}
                   {msg.text&&(
-                    <div style={{ fontSize:14.5,lineHeight:1.65,color:"var(--ak-text)",fontWeight:500,wordBreak:"break-word" }}><RichText text={msg.text}/>{msg.phase==="answering"&&<StreamCaret/>}</div>
+                    <div style={{ fontSize:16,lineHeight:1.65,color:"var(--ak-text)",fontWeight:500,wordBreak:"break-word" }}><RichText text={msg.text}/>{msg.phase==="answering"&&<StreamCaret/>}</div>
                   )}
                   {msg.stopped&&(
                     <div style={{ display:"flex",alignItems:"center",gap:6,marginTop:4,fontSize:11.5,fontWeight:700,color:"var(--ak-text-muted)" }}>
@@ -818,7 +827,7 @@ function AgentChatTab({
             </button>
           )}
           </div>
-          <div style={{ padding:"10px 16px 12px",borderTop:"1px solid var(--ak-border)",background:"var(--ak-surface)",flexShrink:0 }}>
+          <div style={{ padding:`10px ${CHAT_GUTTER}px 12px`,borderTop:"1px solid var(--ak-border)",background:"var(--ak-surface)",flexShrink:0 }}>
             {attachError&&(
               <div style={{ display:"flex",alignItems:"center",gap:8,margin:"0 0 8px",padding:"7px 11px",borderRadius:10,background:"rgba(239,68,68,.10)",border:`1px solid ${RED}35` }}>
                 <span style={{ flex:1,fontSize:11,fontWeight:700,color:RED }}>{attachError}</span>
@@ -858,8 +867,8 @@ function AgentChatTab({
             />
             {/* The model switch — the LLM behind the next message. */}
             <div style={{ display:"flex",alignItems:"center",gap:6,marginTop:8 }}>
-              <ModelSwitch modelId={selectedChatMode} modelLabel={selectedChatModeLabel} modelOptions={chatModes}
-                onModelChange={chooseChatMode} disabled={running} icon="ti-cpu"/>
+              <ModelSwitch modelId={picker.selectedId} modelLabel={picker.label} modelOptions={picker.options}
+                onModelChange={choosePick} disabled={running} icon="ti-cpu"/>
             </div>
             <input ref={fileInputRef} type="file" multiple accept="image/*,application/pdf,.txt,.md,.csv" style={{ display:"none" }} onChange={e=>{addAttachments(e.target.files); e.target.value="";}}/>
           </div>

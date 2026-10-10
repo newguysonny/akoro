@@ -16,6 +16,7 @@ import { jsonbArray, jsonbObject } from "../../lib/jsonb.js";
 import { authenticateToken } from "../auth/routes.js";
 import pkg from "pg";
 import { OPENAI_MODEL, openai } from "../../lib/aiModel.js";
+import { publicModelList, resolveChatModel } from "../../lib/modelCatalogue.js";
 const { Pool } = pkg;
 import db from "../../db.js";
 import config from "../../config/index.js";
@@ -2444,9 +2445,9 @@ async function streamChat({ send, messages, model, max_tokens = 700, temperature
  * calls are assembled from their deltas. Returns the assistant message in
  * the chat-completions shape, or { aborted } when the learner stopped.
  */
-async function streamDecision({ messages, tools, toolChoice, onText = null, isAborted = () => false }) {
+async function streamDecision({ messages, tools, toolChoice, onText = null, isAborted = () => false, model = null }) {
   const stream = await openai.chat.completions.create({
-    model: OPENAI_MODEL,
+    model: model || OPENAI_MODEL,
     temperature: 0.6,
     max_tokens: 900,
     messages,
@@ -2748,7 +2749,7 @@ export function clarify(field, question, extra = {}) {
   return { needsClarification: true, missing: field, question, ...extra };
 }
 
-async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, status, tools = openAiChatTools(), requiredTool = null, role = "student", trace = null, isAborted = () => false, think = false, streamText = true }) {
+async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, status, tools = openAiChatTools(), requiredTool = null, role = "student", trace = null, isAborted = () => false, think = false, streamText = true, model = null }) {
   const executions = [];
   const transcript = [...messages];
   if (requiredTool && !tools.some((tool) => tool.function?.name === requiredTool)) {
@@ -2809,7 +2810,7 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
     if (!assistant) {
       const decision = await streamDecision({
         messages: [{ role: "system", content: systemContent }, ...transcript],
-        tools, toolChoice, onText, isAborted,
+        tools, toolChoice, onText, isAborted, model,
       });
       if (decision.aborted) return stoppedHere(decision.assistant);
       assistant = decision.assistant;
@@ -2916,7 +2917,10 @@ export const chatModelMenu = () => ([
 ]);
 router.get("/models", (_req, res) => {
   res.set("Cache-Control", "private, max-age=300");
-  res.json({ modes: chatModelMenu() });
+  // modes: the chat's modes and their models; models: the catalogue a
+  // learner may pick for the standard mode (Grand Plan §7.11) — each says
+  // whether this server can use it, or why not ("coming soon").
+  res.json({ modes: chatModelMenu(), models: publicModelList() });
 });
 
 router.post("/agent", async (req, res) => {
@@ -2990,6 +2994,10 @@ router.post("/agent", async (req, res) => {
     const mode = ["think", "research"].includes(rawMode) ? rawMode : "default";
     const isThink = mode === "think";
     const isResearch = mode === "research";
+    // The learner's model pick (a catalogue id) drives the standard mode's
+    // decisions and answer; Think and Research keep their own models. An
+    // unknown or unavailable pick is ignored — the default answers.
+    const chatModel = mode === "default" ? resolveChatModel(req.body?.model) : null;
     const role = ["instructor", "teacher", "school", "school_admin", "admin"].includes(req.user?.role)
       ? "instructor" : "student";
     const safeAgentName = typeof agentName === "string" ? agentName.replace(/[\r\n]+/g, " ").trim().slice(0, 80) : "Akoro";
@@ -3157,6 +3165,7 @@ router.post("/agent", async (req, res) => {
       isAborted,
       think: isThink,
       streamText: !isResearch,
+      model: chatModel,
     });
     const stopped = () => Boolean(prepared.aborted) || isAborted();
     const finalMessages = [{ role: "system", content: systemContent }, ...prepared.messages];
@@ -3171,12 +3180,12 @@ router.post("/agent", async (req, res) => {
       // the only authority that may invoke an Akoro tool.
       // Think mode: the reasoned last decision already is the answer; else
       // reason over the tool results (if any) for the answer.
-      if (prepared.finalText) { reply = prepared.finalText; usedModel = isThink ? THINK_MODEL : OPENAI_MODEL; }
+      if (prepared.finalText) { reply = prepared.finalText; usedModel = isThink ? THINK_MODEL : (chatModel || OPENAI_MODEL); }
       else if (isThink) {
         try { ({ reply, thinking } = await thinkOnce({ messages: finalMessages, model: THINK_MODEL, trace })); usedModel = THINK_MODEL; } catch { /* fallback below */ }
       }
       if (!reply) {
-        usedModel = isResearch ? RESEARCH_MODEL : "gpt-4o-mini";
+        usedModel = isResearch ? RESEARCH_MODEL : (chatModel || "gpt-4o-mini");
         const completion = await openai.chat.completions.create({
           model: usedModel,
           temperature: 0.6,
@@ -3190,7 +3199,7 @@ router.post("/agent", async (req, res) => {
       if (!stopped() && prepared.finalText) {
         // Already on screen when it streamed as the last step's words.
         reply = prepared.finalText;
-        usedModel = isThink ? THINK_MODEL : OPENAI_MODEL;
+        usedModel = isThink ? THINK_MODEL : (chatModel || OPENAI_MODEL);
         if (!prepared.promoted) send("delta", { text: reply });
       } else if (!stopped() && isThink) {
         status("thinking", "Thinking…");
@@ -3198,7 +3207,7 @@ router.post("/agent", async (req, res) => {
       }
       if (!reply && !stopped()) {
         if (isResearch) status("synthesis", "Writing it up…");
-        usedModel = isResearch ? RESEARCH_MODEL : "gpt-4o-mini";
+        usedModel = isResearch ? RESEARCH_MODEL : (chatModel || "gpt-4o-mini");
         try {
           reply = await streamChat({
             send,
@@ -3210,8 +3219,8 @@ router.post("/agent", async (req, res) => {
             isAborted,
           });
         } catch (error) {
-          if (!isResearch) throw error;
-          usedModel = "gpt-4o-mini";
+          if (!isResearch && !chatModel) throw error;
+          usedModel = "gpt-4o-mini";   // the chosen / research model failed — the default answers
           reply = await streamChat({ send, messages: finalMessages, model: usedModel, max_tokens: 900, tools, toolChoice: "none", isAborted });
         }
       }

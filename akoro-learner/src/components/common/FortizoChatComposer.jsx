@@ -36,9 +36,10 @@ function ComposerTool({ icon, label, onClick, disabled = false, active = false, 
 }
 
 /**
- * ModelSwitch — the chat's model chip and its menu. Each option is a chat
- * MODE the API supports ({ id, label, description, meta? }); the host maps
- * the id to the request — a browser never names a model. `up` opens the
+ * ModelSwitch — the chat's model chip and its menu. Each option is
+ * { id, label, description?, meta?, section?, disabled? }: `section` starts
+ * a group heading, a `disabled` option (e.g. "Coming soon") is shown but
+ * can't be picked. The host maps the id to its request. `up` opens the
  * menu above the chip (composer rails sit at the bottom of the screen).
  */
 export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelChange, disabled = false, dark = false, up = true, unavailableTitle = '', icon = 'ti-sparkles' }) {
@@ -77,30 +78,41 @@ export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelCha
 
       {open && (
         <div role="menu" aria-label="Models" style={{
-          position: 'absolute', zIndex: 20, ...(up ? { bottom: 42 } : { top: 40 }), left: 0, width: 250, padding: 5,
+          position: 'absolute', zIndex: 20, ...(up ? { bottom: 42 } : { top: 40 }), left: 0, width: 270, padding: 5,
+          maxHeight: 'min(70vh, 460px)', overflowY: 'auto',
           border: `1px solid ${dark ? 'rgba(255,255,255,.15)' : '#E2E5ED'}`, borderRadius: 13,
           color: dark ? '#E5EAFB' : 'var(--ak-text)', background: dark ? '#171827' : 'var(--ak-surface, #fff)',
           boxShadow: '0 13px 34px rgba(22,28,45,.24)',
         }}>
           {modelOptions.map((option) => {
             const selected = option.id === modelId;
+            const off = !!option.disabled;
             return (
-              <button key={option.id} type="button" role="menuitemradio" aria-checked={selected}
-                onClick={() => { onModelChange?.(option.id); setOpen(false); }} style={{
+              <div key={option.id}>
+              {option.section && (
+                <div style={{ padding: '8px 9px 3px', fontSize: 9.5, fontWeight: 900, letterSpacing: '.07em', textTransform: 'uppercase', color: dark ? '#7F8BA3' : '#98A1B2', fontFamily: "'Nunito',sans-serif" }}>{option.section}</div>
+              )}
+              <button type="button" role="menuitemradio" aria-checked={selected} aria-disabled={off}
+                title={off ? (option.note || 'Coming soon') : undefined}
+                onClick={() => { if (off) return; onModelChange?.(option.id); setOpen(false); }} style={{
                   width: '100%', padding: '8px 9px', border: 'none', borderRadius: 9,
-                  display: 'flex', alignItems: 'flex-start', gap: 7, textAlign: 'left', cursor: 'pointer',
+                  display: 'flex', alignItems: 'flex-start', gap: 7, textAlign: 'left', cursor: off ? 'not-allowed' : 'pointer',
                   color: selected ? BRAND : 'inherit', background: selected ? `${BRAND}14` : 'transparent',
+                  opacity: off ? .55 : 1,
                   fontFamily: "'Nunito',sans-serif",
                 }}>
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <span style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
                     <span style={{ fontSize: 12, fontWeight: selected ? 900 : 800 }}>{option.label}</span>
-                    {option.meta && <span style={{ fontSize: 9.5, fontWeight: 800, color: dark ? '#9BA8C1' : '#8791A3', textTransform: 'uppercase', letterSpacing: '.04em' }}>{option.meta}</span>}
+                    {option.meta && (off
+                      ? <span style={{ fontSize: 9, fontWeight: 900, color: '#B45309', background: 'rgba(245,158,11,.14)', borderRadius: 999, padding: '1px 7px', textTransform: 'uppercase', letterSpacing: '.04em', whiteSpace: 'nowrap' }}>{option.meta}</span>
+                      : <span style={{ fontSize: 9.5, fontWeight: 800, color: dark ? '#9BA8C1' : '#8791A3', textTransform: 'uppercase', letterSpacing: '.04em' }}>{option.meta}</span>)}
                   </span>
                   {option.description && <span style={{ display: 'block', marginTop: 1, color: dark ? '#9BA8C1' : '#8791A3', fontSize: 10, fontWeight: 500, lineHeight: 1.35 }}>{option.description}</span>}
                 </span>
                 {selected && <Icon name="ti-check" size={14} color={BRAND}/>}
               </button>
+              </div>
             );
           })}
         </div>
