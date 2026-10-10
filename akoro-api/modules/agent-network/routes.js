@@ -36,7 +36,7 @@ import {
 import { messageAgent, inbox, replyToAgent } from "./messaging.js";
 import {
   requestBuddy, respondBuddy, listBuddies, buddyCheckin, endBuddy,
-  getDaily, submitDaily, dailyRanking, createCircle, searchCircles, joinCircle, leaveCircle, weeklyLeague,
+  getDaily, submitDaily, dailyRanking, dailyStatus, createCircle, searchCircles, joinCircle, leaveCircle, weeklyLeague,
 } from "./activities.js";
 import { protegeDeps } from "../adaptive-learning/chat.js";
 
@@ -84,6 +84,7 @@ router.post("/buddies/:id/checkin", wrap((req) => buddyCheckin(req.user.id, req.
 router.delete("/buddies/:id", wrap((req) => endBuddy(req.user.id, req.params.id)));
 router.get("/daily", wrap((req) => getDaily(req.user.id, req.query.subject || null)));
 router.post("/daily", wrap((req) => submitDaily(req.user.id, req.body || {})));
+router.get("/daily/status", wrap((req) => dailyStatus(req.user.id)));
 router.get("/daily/ranking", wrap((req) => dailyRanking(req.user.id, req.query.subject || "")));
 router.get("/circles", wrap((req) => searchCircles(req.user.id, req.query)));
 router.post("/circles", wrap((req) => createCircle(req.user.id, req.body || {})));

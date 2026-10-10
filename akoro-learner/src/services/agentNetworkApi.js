@@ -49,3 +49,4 @@ export const fetchWeeklyLeague = (scope = 'everyone') => apiGet(`/api/agent-netw
 export const fetchBuddies = () => apiGet('/api/agent-network/buddies', { cache: false }).then(data);
 export const fetchCircles = (filters = {}) => apiGet(`/api/agent-network/circles?${new URLSearchParams(filters)}`, { cache: false }).then(data);
 export const joinCircle = (id) => apiPost(`/api/agent-network/circles/${id}/join`, {}).then(data);
+export const fetchDailyStatus = () => apiGet('/api/agent-network/daily/status', { cache: false }).then(data);

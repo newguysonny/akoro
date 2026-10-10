@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { BRAND, RED, GREEN, GOLD, difficultyStyle, subjectStyle, AVATAR_FALLBACK } from '../../constants.js';
 import { ZapIcon, StarIcon, Icon } from '../common/Icons.jsx';
 import BattleModal from './BattleModal.jsx';
 import { formatLeft } from './ChallengeModal.jsx';
 import CreateBattleSheet from './CreateBattleSheet.jsx';
 import ParticipantsSheet from './ParticipantsSheet.jsx';
-import DailyChallenge from '../network/DailyChallenge.jsx';
-import { rematchBattle } from '../../services/agentNetworkApi.js';
+import { DailyBattleCard, DailyPlay } from '../network/DailyBattle.jsx';
+import { rematchBattle, fetchDailyStatus } from '../../services/agentNetworkApi.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
 function ChallengeRow({ challenge, onTap }) {
@@ -80,6 +80,20 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
   const [rosterOf,   setRosterOf]   = useState(null);   // battle whose roster is open
   const [creating,   setCreating]   = useState(false);
   const [rematchMsg, setRematchMsg] = useState({});
+  // The daily battle recurs: scheduled until its window opens, active until
+  // midnight, then completed (or missed) — and tomorrow's is scheduled.
+  const [daily, setDaily] = useState(null);
+  const [playingDaily, setPlayingDaily] = useState(false);
+  const loadDaily = useCallback(() => { fetchDailyStatus().then(setDaily).catch(() => {}); }, []);
+  useEffect(() => { loadDaily(); }, [loadDaily]);
+  // Flip it over on its own when the window opens or closes.
+  useEffect(() => {
+    if (!daily) return undefined;
+    const edge = [daily.startsAt, daily.endsAt, daily.next?.startsAt].map((x) => Date.parse(x) - Date.now()).filter((ms) => ms > 0).sort((a, b) => a - b)[0];
+    if (!edge || edge > 2 ** 31 - 1) return undefined;
+    const id = setTimeout(loadDaily, edge + 1500);
+    return () => clearTimeout(id);
+  }, [daily, loadDaily]);
   // Only battles I am actually IN. An invitation I have not answered belongs in
   // Challenges — it was appearing in both places at once, so a learner saw the
   // same battle twice and Active implied they had joined something they had
@@ -94,6 +108,15 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
   const waitingBattles   = mine.filter(b=>b.status==="lobby");
   const scheduledBattles = mine.filter(b=>b.status==="scheduled");
   const completedBattles = mine.filter(b=>b.status==="completed");
+  const dailyScheduled = daily ? [daily.status==="scheduled"
+    ? { key:`daily-${daily.day}`, state:"scheduled", subject:daily.subject, startsAt:daily.startsAt, endsAt:daily.endsAt }
+    : { key:`daily-${daily.next.day}`, state:"scheduled", subject:daily.subject, startsAt:daily.next.startsAt, endsAt:daily.next.endsAt }] : [];
+  const dailyActive = daily?.status==="active" ? [{ key:`daily-${daily.day}`, state:"active", subject:daily.subject, startsAt:daily.startsAt, endsAt:daily.endsAt }] : [];
+  const dailyDone = daily ? [
+    ...(daily.status==="missed" ? [{ key:`daily-${daily.day}`, state:"missed", subject:daily.subject, startsAt:daily.startsAt, endsAt:daily.endsAt }] : []),
+    ...(daily.history||[]).slice(0,7).map(h=>({ key:`daily-${h.day}-${h.subject}`, state:"completed", subject:h.subject, startsAt:`${h.day}T12:00:00Z`, result:{ correct:h.correct, total:h.total, seconds:h.seconds } })),
+  ] : [];
+  const dailyShown = viewFilter==="active"?dailyActive:viewFilter==="scheduled"?dailyScheduled:dailyDone;
   const displayed = viewFilter==="active"?[...liveBattles,...waitingBattles]
                    :viewFilter==="scheduled"?scheduledBattles:completedBattles;
   const totalXP  = mine.reduce((s,b)=>s+(parseInt((b.xpPrize||"0").replace(/\D/g,""),10)||0),0);
@@ -104,11 +127,11 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
     completed:{label:"COMPLETED",bg:"rgba(16,185,129,.10)", color:GREEN, border:"rgba(16,185,129,.25)" },
     lobby:    {label:"WAITING",  bg:"rgba(245,158,11,.12)", color:GOLD,  border:"rgba(245,158,11,.28)" },
   };
-  const TABS=[{key:"active",label:t('battles.active'),icon:"ti-bolt",count:liveBattles.length+waitingBattles.length},{key:"scheduled",label:t('battles.scheduled'),icon:"ti-calendar",count:scheduledBattles.length},{key:"completed",label:t('battles.completed'),icon:"ti-trophy",count:completedBattles.length},{key:"daily",label:"Daily",icon:"ti-calendar-bolt",count:0}];
+  const TABS=[{key:"active",label:t('battles.active'),icon:"ti-bolt",count:liveBattles.length+waitingBattles.length+dailyActive.length},{key:"scheduled",label:t('battles.scheduled'),icon:"ti-calendar",count:scheduledBattles.length+dailyScheduled.length},{key:"completed",label:t('battles.completed'),icon:"ti-trophy",count:completedBattles.length+dailyDone.length}];
   return (
     <div style={{ flex:1,overflowY:"auto",background:"var(--ak-surface)",display:"flex",flexDirection:"column" }}>
       <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,padding:"12px 16px 10px",borderBottom:"1px solid var(--ak-border)" }}>
-        {[{val:liveBattles.length,label:t('battles.live'),color:RED,bg:`${RED}0a`},{val:scheduledBattles.length,label:t('battles.scheduled'),color:BRAND,bg:`${BRAND}0a`},{val:completedBattles.length,label:t('battles.completed'),color:GREEN,bg:"rgba(16,185,129,.07)"},{val:`+${totalXP}`,label:t('battles.xp_at_stake'),color:GOLD,bg:"rgba(245,158,11,.07)"}].map(({val,label,color,bg})=>(
+        {[{val:liveBattles.length+dailyActive.length,label:t('battles.live'),color:RED,bg:`${RED}0a`},{val:scheduledBattles.length+dailyScheduled.length,label:t('battles.scheduled'),color:BRAND,bg:`${BRAND}0a`},{val:completedBattles.length+dailyDone.length,label:t('battles.completed'),color:GREEN,bg:"rgba(16,185,129,.07)"},{val:`+${totalXP}`,label:t('battles.xp_at_stake'),color:GOLD,bg:"rgba(245,158,11,.07)"}].map(({val,label,color,bg})=>(
           <div key={label} style={{ textAlign:"center",background:bg,borderRadius:12,padding:"9px 4px",border:`1px solid ${color}25` }}>
             <div style={{ fontSize:17,fontWeight:900,color }}>{val}</div>
             <div style={{ fontSize:9.5,color:"var(--ak-text-muted)",marginTop:1,fontWeight:600 }}>{label}</div>
@@ -127,8 +150,7 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
         <button onClick={()=>setCreating(true)} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,fontSize:11.5,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}><Icon name="ti-swords" size={13} color="#fff"/>Start a battle</button>
         <button onClick={onViewChallenge} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:`1.5px solid ${RED}40`,background:`${RED}08`,fontSize:11.5,fontWeight:800,color:RED,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}><ZapIcon size={11} color={RED}/>{t('battles.find_challenges')}</button>
       </div>
-      {viewFilter==="daily"&&<DailyChallenge/>}
-      {!viewFilter==="daily"&&mine.length===0&&(
+      {mine.length===0&&dailyShown.length===0&&(
         <div style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,padding:"40px 24px" }}>
           <Icon name="ti-swords" size={52} color="var(--ak-text-muted)" style={{opacity:.2}}/>
           <p style={{ fontSize:15,fontWeight:800,color:"var(--ak-text-muted)",textAlign:"center" }}>{t('battles.empty')}</p>
@@ -136,14 +158,15 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
           <button onClick={onViewChallenge} style={{ padding:"10px 22px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",gap:7 }}><ZapIcon size={13} color="#fff"/>{t('battles.view_challenges')}</button>
         </div>
       )}
-      {!viewFilter==="daily"&&mine.length>0&&displayed.length===0&&(
+      {mine.length>0&&displayed.length===0&&dailyShown.length===0&&(
         <div style={{ textAlign:"center",padding:"36px 24px",color:"var(--ak-text-muted)" }}>
           <Icon name={viewFilter==="active"?"ti-bolt":viewFilter==="scheduled"?"ti-calendar":"ti-trophy"} size={36} color="var(--ak-text-muted)" style={{opacity:.3}}/>
           <p style={{ fontSize:13,fontWeight:700,marginTop:8 }}>{viewFilter==="active"?t('battles.none_live'):viewFilter==="scheduled"?t('battles.none_scheduled'):t('battles.none_completed')}</p>
         </div>
       )}
       <div style={{ padding:"10px 16px",display:"flex",flexDirection:"column",gap:10 }}>
-        {!viewFilter==="daily"&&displayed.map(b=>{
+        {dailyShown.map(o=><DailyBattleCard key={o.key} occ={o} onPlay={()=>setPlayingDaily(true)}/>)}
+        {displayed.map(b=>{
           const bs=subjectStyle(b.subject),sc=bs.color,diff=difficultyStyle(b.difficulty),st=ST_STYLE[b.status]||ST_STYLE.scheduled,A=b.agentA,B=b.agentB;
           return (
             <div key={b.id} style={{ borderRadius:18,border:`1.5px solid ${b.status==="live"?"rgba(239,68,68,.30)":b.status==="scheduled"?"rgba(108,59,255,.25)":"var(--ak-border)"}`,background:b.status==="live"?"linear-gradient(140deg,#FFF5F5,#FFFCFC)":b.status==="scheduled"?"linear-gradient(140deg,#F5F3FF,#FCFCFF)":"var(--ak-surface)",overflow:"hidden" }}>
@@ -204,6 +227,7 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
       {watching&&<BattleModal battle={watching} onClose={()=>setWatching(null)}/>}
       {creating&&<CreateBattleSheet onClose={()=>setCreating(false)} onCreated={onBattleCreated}/>}
       {rosterOf&&<ParticipantsSheet battle={rosterOf} onClose={()=>setRosterOf(null)}/>}
+      {playingDaily&&<DailyPlay onClose={()=>{ setPlayingDaily(false); loadDaily(); }} onDone={loadDaily}/>}
     </div>
   );
 }

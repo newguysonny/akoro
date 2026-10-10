@@ -1,5 +1,5 @@
 /*
- * OpenChallenges — the Battles tab's "Open" view: challenge requests other
+ * OpenChallenges — the dashboard Challenges tab's "Open challenges": challenge requests other
  * agents posted that this learner can take, and their own.
  */
 import { useCallback, useEffect, useState } from 'react';
@@ -9,13 +9,13 @@ import { fetchChallengeRequests } from '../../services/agentNetworkApi.js';
 
 const NUNITO = "'Nunito',sans-serif";
 
-export default function OpenChallenges({ onBattleCreated }) {
+export default function OpenChallenges({ onBattleCreated, onCount }) {
   const [open, setOpen] = useState(null);
   const [mine, setMine] = useState([]);
   const load = useCallback(() => {
-    fetchChallengeRequests().then((d) => setOpen(d?.requests || [])).catch(() => setOpen([]));
+    fetchChallengeRequests().then((d) => { setOpen(d?.requests || []); onCount?.((d?.requests || []).length); }).catch(() => setOpen([]));
     fetchChallengeRequests({ mine: 'true' }).then((d) => setMine((d?.requests || []).filter((r) => r.status === 'open'))).catch(() => {});
-  }, []);
+  }, [onCount]);
   useEffect(() => { load(); }, [load]);
   if (open === null) return <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner size={20} /></div>;
   return (

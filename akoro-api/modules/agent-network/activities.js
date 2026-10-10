@@ -152,14 +152,55 @@ export async function buddyBrief(meId) {
 export const DAILY_SIZE = 5;
 const publicQ = (q, i) => ({ n: i + 1, stem: q.stem, options: q.options, topic: q.topic || null, source: q.exam ? `${q.exam}${q.year ? ` ${q.year}` : ""}` : null });
 
-/** Today's set for a subject (made on first ask). → { day, subject, questions (no answers), attempted, result? } */
+/**
+ * The daily battle recurs every day in ONE window for everyone (so nobody sees
+ * the shared set early): from DAILY_BATTLE_HOUR (19:00 Lagos by default) to
+ * midnight. Before it: scheduled. In it: active. Played: completed. Not
+ * played by midnight: missed. Then tomorrow's is scheduled.
+ */
+export const DAILY_START_HOUR = Math.min(23, Math.max(0, Number(process.env.DAILY_BATTLE_HOUR ?? 19) || 0));
+/** "2026-10-10" → its window in UTC instants. */
+export function dailyWindow(day) {
+  const midnightLagos = Date.parse(`${day}T00:00:00Z`) - LAGOS_MS;
+  return { startsAt: new Date(midnightLagos + DAILY_START_HOUR * 3600_000).toISOString(), endsAt: new Date(midnightLagos + 24 * 3600_000 - 1000).toISOString() };
+}
+const nextDay = (day) => new Date(Date.parse(`${day}T12:00:00Z`) + 86400_000).toISOString().slice(0, 10);
+
+/** The learner's daily-battle subject: their choice, else their first subject, else Mathematics. */
+async function dailySubjectFor(meId, subject = null) {
+  if (subject) return String(subject).trim().slice(0, 60);
+  const settings = await getSettings(meId);
+  if (settings.daily_subject) return settings.daily_subject;
+  const { data: u } = await db.from("users").select("subjects").eq("id", meId).maybeSingle();
+  return (u?.subjects || [])[0] || "Mathematics";
+}
+
+/** Where today's daily battle stands, the next one, and recent results. */
+export async function dailyStatus(meId, now = Date.now()) {
+  const subject = await dailySubjectFor(meId);
+  const day = lagosDay(now);
+  const win = dailyWindow(day);
+  const { data: hist } = await edu().from("daily_challenge_attempts").select("day, subject, correct, total, time_ms, created_at")
+    .eq("user_id", meId).order("day", { ascending: false }).limit(14);
+  const today = (hist || []).find((h) => h.day === day) || null;
+  const status = today ? "completed" : now < Date.parse(win.startsAt) ? "scheduled" : now <= Date.parse(win.endsAt) ? "active" : "missed";
+  const next = status === "scheduled" ? win : dailyWindow(nextDay(day));
+  return {
+    subject, day, status, ...win,
+    ...(today ? { result: { correct: today.correct, total: today.total, seconds: today.time_ms != null ? Math.round(today.time_ms / 1000) : null } } : {}),
+    next: { day: status === "scheduled" ? day : nextDay(day), ...next },
+    history: (hist || []).map((h) => ({ day: h.day, subject: h.subject, correct: h.correct, total: h.total, seconds: h.time_ms != null ? Math.round(h.time_ms / 1000) : null })),
+  };
+}
+
+/** Today's set for a subject (made on first ask, only once its window opens). → { day, subject, questions (no answers), attempted, result? } */
 export async function getDaily(meId, subject = null) {
-  let subj = subject ? String(subject).trim().slice(0, 60) : null;
-  if (!subj) {
-    const { data: u } = await db.from("users").select("subjects").eq("id", meId).maybeSingle();
-    subj = (u?.subjects || [])[0] || "Mathematics";
-  }
+  const subj = await dailySubjectFor(meId, subject);
   const day = lagosDay();
+  const win = dailyWindow(day);
+  if (Date.now() < Date.parse(win.startsAt)) {
+    throw fail(`Today's daily battle starts at ${new Date(win.startsAt).toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit", timeZone: "Africa/Lagos" })}.`, 409);
+  }
   let { data: row } = await edu().from("daily_challenges").select("*").eq("day", day).ilike("subject", subj).maybeSingle();
   if (!row) {
     let qs = await fromPastPapers({ subject: subj, difficulty: "intermediate", limit: DAILY_SIZE * 3 }).catch(() => []);
@@ -181,8 +222,12 @@ export async function getDaily(meId, subject = null) {
 /** Mark one go at today's set. answers: [optionIndex | letter]. */
 export async function submitDaily(meId, { subject, answers = [], time_ms = null } = {}) {
   const day = lagosDay();
+  if (Date.now() < Date.parse(dailyWindow(day).startsAt)) throw fail("Today's daily battle hasn't started yet.", 409);
   const { data: row } = await edu().from("daily_challenges").select("*").eq("day", day).ilike("subject", String(subject || "")).maybeSingle();
   if (!row) throw fail("Open today's challenge first.", 404);
+  // One daily battle a day, whatever the subject (changing subject mid-day doesn't buy a second go).
+  const { data: done } = await edu().from("daily_challenge_attempts").select("subject").eq("day", day).eq("user_id", meId).limit(1);
+  if (done?.length) throw fail("You've already done today's daily battle — the next one is tomorrow.", 409);
   const qs = row.questions || [];
   const pick = (a, q) => (typeof a === "number" ? a : /^[A-Z]$/i.test(String(a || "").trim()) ? String(a).trim().toUpperCase().charCodeAt(0) - 65 : q.options.findIndex((o) => String(o.text).toLowerCase() === String(a || "").trim().toLowerCase()));
   const marks = qs.map((q, i) => ({ n: i + 1, chosen: pick(answers[i], q), correct: q.answer }));
@@ -212,12 +257,12 @@ export async function dailyRanking(meId, subject) {
     .eq("day", day).ilike("subject", String(subject || "")).order("correct", { ascending: false }).order("time_ms", { ascending: true, nullsFirst: false }).limit(500);
   const rows = data || [];
   const top = rows.slice(0, 10);
-  const { data: users } = top.length ? await db.from("users").select("id, full_name, username").in("id", top.map((r) => r.user_id)) : { data: [] };
+  const { data: users } = top.length ? await db.from("users").select("id, full_name, username, avatar_url").in("id", top.map((r) => r.user_id)) : { data: [] };
   const U = new Map((users || []).map((u) => [u.id, u]));
   const myIdx = rows.findIndex((r) => r.user_id === meId);
   return {
     day, subject, players: rows.length,
-    top: top.map((r, i) => ({ rank: i + 1, name: first(U.get(r.user_id)?.full_name, U.get(r.user_id)?.username), correct: r.correct, total: r.total, seconds: r.time_ms != null ? Math.round(r.time_ms / 1000) : null, you: r.user_id === meId })),
+    top: top.map((r, i) => ({ rank: i + 1, name: first(U.get(r.user_id)?.full_name, U.get(r.user_id)?.username), avatar: U.get(r.user_id)?.avatar_url || null, correct: r.correct, total: r.total, seconds: r.time_ms != null ? Math.round(r.time_ms / 1000) : null, you: r.user_id === meId })),
     me: myIdx >= 0 ? { rank: myIdx + 1, of: rows.length, correct: rows[myIdx].correct, total: rows[myIdx].total } : null,
   };
 }
@@ -351,13 +396,13 @@ export async function weeklyLeague(meId, { scope = "everyone", subject = null, e
   const optedOut = new Set(((await edu().from("agent_network_settings").select("user_id").eq("show_on_leaderboards", false).limit(5000)).data || []).map((r) => r.user_id));
   const ranked = [...totals.entries()].filter(([id]) => id === meId || !optedOut.has(id)).sort((a, b) => b[1] - a[1]);
   const top = ranked.slice(0, 20);
-  const { data: users } = top.length ? await db.from("users").select("id, full_name, username").in("id", top.map(([id]) => id)) : { data: [] };
+  const { data: users } = top.length ? await db.from("users").select("id, full_name, username, avatar_url").in("id", top.map(([id]) => id)) : { data: [] };
   const { data: agents } = top.length ? await db.from("user_agents").select("user_id, agent_name, agent_emoji").in("user_id", top.map(([id]) => id)) : { data: [] };
   const U = new Map((users || []).map((u) => [u.id, u])), A = new Map((agents || []).map((a) => [a.user_id, a]));
   const myIdx = ranked.findIndex(([id]) => id === meId);
   return {
     scope, weekStarting: since, players: ranked.length,
-    top: top.map(([id, xp], i) => ({ rank: i + 1, name: first(U.get(id)?.full_name, U.get(id)?.username), agent: `${A.get(id)?.agent_emoji || "🤖"} ${A.get(id)?.agent_name || ""}`.trim(), xp, you: id === meId })),
+    top: top.map(([id, xp], i) => ({ rank: i + 1, name: first(U.get(id)?.full_name, U.get(id)?.username), avatar: U.get(id)?.avatar_url || null, agent: `${A.get(id)?.agent_emoji || "🤖"} ${A.get(id)?.agent_name || ""}`.trim(), xp, you: id === meId })),
     me: myIdx >= 0 ? { rank: myIdx + 1, xp: ranked[myIdx][1] } : { rank: null, xp: 0 },
   };
 }

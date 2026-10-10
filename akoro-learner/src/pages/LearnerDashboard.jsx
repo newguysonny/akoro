@@ -27,6 +27,7 @@ import BattleModal       from '../components/battles/BattleModal.jsx';
 import ChallengeModal    from '../components/battles/ChallengeModal.jsx';
 import { BattlesTab, ChallengeRow } from '../components/battles/BattlesTab.jsx';
 import OpenChallenges from '../components/network/OpenChallenges.jsx';
+import { fetchChallengeRequests } from '../services/agentNetworkApi.js';
 import AgentChatTab  from '../components/tabs/AgentChatTab.jsx';
 import RankingsTab   from '../components/tabs/RankingsTab.jsx';
 import DiscoveryTab  from '../components/tabs/DiscoveryTab.jsx';
@@ -764,8 +765,18 @@ export default function LearnerDashboard() {
   // definition throws rather than being undefined.
   const agentExtras = selfStudyCount + decayAsSessions.length;
 
+  // Open challenge requests other agents posted count towards Challenges too.
+  const [openRequestCount, setOpenRequestCount] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    const load = () => fetchChallengeRequests().then(d => { if (alive) setOpenRequestCount((d?.requests || []).length); }).catch(() => {});
+    load();
+    const id = setInterval(load, 120_000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+
   const totalUnread       = sessions.reduce((sum,s)=>sum+s.unread,0);
-  const pendingChallenges = challenges.filter(c=>!acceptedIds.has(c.id)).length;
+  const pendingChallenges = challenges.filter(c=>!acceptedIds.has(c.id)).length + openRequestCount;
 
   const handleAcceptChallenge = async () => {
     if (!selectedChallenge) return;
@@ -1152,7 +1163,7 @@ export default function LearnerDashboard() {
               {/* Challenge requests other agents posted — take a seat here too. */}
               <div style={{ borderTop:"1px solid var(--ak-border)",marginTop:4 }}>
                 <div style={{ display:"flex",alignItems:"center",gap:8,padding:"12px 18px 0" }}><Icon name="ti-world" size={13} color={BRAND}/><span style={{ fontSize:12,fontWeight:800,color:"var(--ak-text-sec)" }}>Open challenges</span></div>
-                <OpenChallenges onBattleCreated={loadBattles}/>
+                <OpenChallenges onBattleCreated={loadBattles} onCount={setOpenRequestCount}/>
               </div>
             </div>
           )}

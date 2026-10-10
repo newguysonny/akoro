@@ -3,6 +3,9 @@ import { BRAND, RED, GREEN, GOLD, SUBJECT_COLORS, SUBJECTS, AVATAR_FALLBACK } fr
 import { apiGet } from '../../services/api.js';
 import { TrophyIcon, FlameIcon, StarIcon, ZapIcon, Icon } from '../common/Icons.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
+import { fetchWeeklyLeague, fetchDailyStatus, fetchDailyRanking } from '../../services/agentNetworkApi.js';
+
+const LEAGUE_SCOPES = [['classmates', 'Classmates'], ['school', 'School'], ['everyone', 'Everyone']];
 
 function RankingsTab() {
   const { t } = useLang();
@@ -13,7 +16,11 @@ function RankingsTab() {
   // so switching subject is a re-map, not another round trip.
   const [subjects, setSubjects] = useState([]);
   const [activeSubject, setActiveSubject] = useState(null);
-  const BOARD_TABS=[{key:"classroom",label:t('rankings.classroom'),icon:"ti-school"},{key:"courses",label:t('rankings.courses'),icon:"ti-book"},{key:"subjects",label:t('rankings.subjects'),icon:"ti-books"},{key:"interSchool",label:t('rankings.inter_schools'),icon:"ti-world"}];
+  // Weekly league (XP since Monday) and today's daily battle ranking.
+  const [leagueScope, setLeagueScope] = useState("classmates");
+  const [leagueMe, setLeagueMe] = useState(null);
+  const [daily, setDaily] = useState(null);
+  const BOARD_TABS=[{key:"classroom",label:t('rankings.classroom'),icon:"ti-school"},{key:"courses",label:t('rankings.courses'),icon:"ti-book"},{key:"subjects",label:t('rankings.subjects'),icon:"ti-books"},{key:"interSchool",label:t('rankings.inter_schools'),icon:"ti-world"},{key:"weekly",label:"Weekly",icon:"ti-calendar-week"},{key:"daily",label:"Daily",icon:"ti-calendar-repeat"}];
 
   const mapRow = (r) => ({
     rank:     r.rank,
@@ -34,6 +41,27 @@ function RankingsTab() {
     setData([]);
     setSubjects([]);
     setActiveSubject(null);
+    setLeagueMe(null);
+    setDaily(null);
+    if (boardType === 'weekly') {
+      fetchWeeklyLeague(leagueScope)
+        .then(res => {
+          if (!alive) return;
+          setData((res?.top || []).map(r => mapRow({ rank: r.rank, name: r.name, avatar: r.avatar, total_xp: r.xp, is_me: r.you })));
+          setLeagueMe(res?.me || null);
+        })
+        .catch(() => { if (alive) setData([]); })
+        .finally(() => { if (alive) setLoading(false); });
+      return () => { alive = false; };
+    }
+    if (boardType === 'daily') {
+      fetchDailyStatus()
+        .then(st => fetchDailyRanking(st.subject).then(r => ({ ...r, status: st.status, next: st.next, startsAt: st.startsAt })))
+        .then(r => { if (alive) setDaily(r); })
+        .catch(() => { if (alive) setDaily({ top: [], players: 0 }); })
+        .finally(() => { if (alive) setLoading(false); });
+      return () => { alive = false; };
+    }
     const endpoint = boardType === 'classroom' ? '/api/ranking/my-classroom'
       : boardType === 'courses'                ? '/api/ranking/courses'
       : boardType === 'subjects'               ? '/api/ranking/my-class-subjects'
@@ -58,7 +86,7 @@ function RankingsTab() {
       .catch(() => { if (alive) { setData([]); setSubjects([]); } })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [boardType]);
+  }, [boardType, leagueScope]);
 
   const pickSubject = (subject) => {
     setActiveSubject(subject);
@@ -72,13 +100,24 @@ function RankingsTab() {
   const changeColor=c=>c&&c.startsWith("+")?GREEN:c&&c.startsWith("-")?RED:"var(--ak-text-muted)";
   return (
     <div style={{ flex:1,overflowY:"auto",background:"var(--ak-surface)",display:"flex",flexDirection:"column" }}>
-      <div style={{ display:"flex",padding:"12px 16px 0",gap:8,borderBottom:"1px solid var(--ak-border)" }}>
+      <div style={{ display:"flex",padding:"12px 16px 0",gap:8,borderBottom:"1px solid var(--ak-border)",overflowX:"auto",scrollbarWidth:"none" }}>
         {BOARD_TABS.map(({key,label,icon})=>(
-          <button key={key} onClick={()=>setBoardType(key)} style={{ flex:1,padding:"8px 4px 10px",background:"none",border:"none",cursor:"pointer",fontSize:11.5,fontWeight:boardType===key?800:600,color:boardType===key?BRAND:"var(--ak-text-muted)",borderBottom:`2.5px solid ${boardType===key?BRAND:"transparent"}`,transition:"all .2s",fontFamily:"'Nunito',sans-serif",display:"flex",flexDirection:"column",alignItems:"center",gap:2 }}>
+          <button key={key} onClick={()=>setBoardType(key)} style={{ flex:"1 0 auto",minWidth:58,padding:"8px 4px 10px",whiteSpace:"nowrap",background:"none",border:"none",cursor:"pointer",fontSize:11.5,fontWeight:boardType===key?800:600,color:boardType===key?BRAND:"var(--ak-text-muted)",borderBottom:`2.5px solid ${boardType===key?BRAND:"transparent"}`,transition:"all .2s",fontFamily:"'Nunito',sans-serif",display:"flex",flexDirection:"column",alignItems:"center",gap:2 }}>
             <Icon name={icon} size={16} color={boardType===key?BRAND:"var(--ak-text-muted)"}/>{label}
           </button>
         ))}
       </div>
+      {boardType==='weekly'&&(
+        <div style={{ padding:"10px 16px",borderBottom:"1px solid var(--ak-border)" }}>
+          <div style={{ display:"flex",gap:7 }}>
+            {LEAGUE_SCOPES.map(([k,l])=>(
+              <button key={k} onClick={()=>setLeagueScope(k)} aria-pressed={leagueScope===k} style={{ padding:"6px 12px",borderRadius:999,border:`1.5px solid ${leagueScope===k?BRAND:"var(--ak-border2)"}`,background:leagueScope===k?`${BRAND}15`:"transparent",color:leagueScope===k?BRAND:"var(--ak-text-sub)",fontSize:11.5,fontWeight:leagueScope===k?800:600,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{l}</button>
+            ))}
+          </div>
+          <p style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-muted)",margin:"8px 0 0" }}>XP earned since Monday · resets every week{leagueMe?.rank?` · you're #${leagueMe.rank} with ${leagueMe.xp} XP`:''}</p>
+        </div>
+      )}
+      {boardType==='daily'&&<DailyBoard daily={daily} loading={loading}/>}
       {boardType==='subjects'&&subjects.length>0&&(
         <div style={{ display:"flex",gap:7,padding:"10px 16px",overflowX:"auto",borderBottom:"1px solid var(--ak-border)",scrollbarWidth:"none" }}>
           {subjects.map(s=>{
@@ -94,10 +133,10 @@ function RankingsTab() {
       {boardType==='subjects'&&!loading&&subjects.length===0&&(
         <div style={{ padding:"48px 24px",textAlign:"center",color:"var(--ak-text-muted)",fontSize:13,fontWeight:600 }}>{t('rankings.no_subject_xp')}</div>
       )}
-      {loading && data.length===0 && (
+      {loading && data.length===0 && boardType!=='daily' && (
         <div style={{ padding:"48px 24px",textAlign:"center",color:"var(--ak-text-muted)",fontSize:13,fontWeight:600 }}>Loading rankings…</div>
       )}
-      {!loading && data.length===0 && !(boardType==='subjects'&&subjects.length===0) && (
+      {!loading && data.length===0 && boardType!=='daily' && !(boardType==='subjects'&&subjects.length===0) && (
         <div style={{ padding:"48px 24px",display:"flex",flexDirection:"column",alignItems:"center",gap:10 }}>
           <Icon name="ti-trophy" size={52} color="var(--ak-text-muted)" style={{opacity:.2}}/>
           <p style={{ fontSize:15,fontWeight:800,color:"var(--ak-text-sub)" }}>{t('rankings.empty')}</p>
@@ -154,6 +193,39 @@ function RankingsTab() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* Today's daily battle: ranked by correct answers, then time. */
+function DailyBoard({ daily, loading }) {
+  if (loading || !daily) return <div style={{ padding:"48px 24px",textAlign:"center",color:"var(--ak-text-muted)",fontSize:13,fontWeight:600 }}>Loading rankings…</div>;
+  const at = (iso) => iso ? new Date(iso).toLocaleTimeString('en-GB', { hour:'numeric', minute:'2-digit' }) : '';
+  const head = daily.status === 'scheduled' ? `Today's battle starts at ${at(daily.startsAt)}`
+    : daily.status === 'active' ? `Live now · ${daily.players} played so far`
+    : `${daily.players} played today`;
+  return (
+    <div style={{ flex:1 }}>
+      <div style={{ padding:"14px 18px",background:`linear-gradient(160deg,${BRAND}12,${BRAND}04)`,borderBottom:"1px solid var(--ak-border)" }}>
+        <p style={{ fontSize:13.5,fontWeight:900,color:"var(--ak-text)",margin:0,display:"flex",alignItems:"center",gap:6 }}><Icon name="ti-calendar-repeat" size={15} color={BRAND}/>Daily battle{daily.subject?` · ${daily.subject}`:''}</p>
+        <p style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-muted)",margin:"4px 0 0" }}>{head}{daily.me?` · you're #${daily.me.rank} of ${daily.me.of}`:''}</p>
+      </div>
+      {(daily.top || []).length===0 ? (
+        <div style={{ padding:"48px 24px",display:"flex",flexDirection:"column",alignItems:"center",gap:10 }}>
+          <Icon name="ti-trophy" size={52} color="var(--ak-text-muted)" style={{opacity:.2}}/>
+          <p style={{ fontSize:13,fontWeight:700,color:"var(--ak-text-muted)",textAlign:"center",maxWidth:280,margin:0 }}>No one has played today's battle yet.</p>
+        </div>
+      ) : daily.top.map(r => (
+        <div key={r.rank} style={{ display:"flex",alignItems:"center",gap:12,padding:"11px 18px",borderBottom:"1px solid var(--ak-border)",background:r.you?`${BRAND}06`:"var(--ak-surface)" }}>
+          <div style={{ width:28,height:28,borderRadius:8,background:r.rank<=3?`${GOLD}22`:r.you?`${BRAND}15`:"var(--ak-border)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}><span style={{ fontSize:12,fontWeight:900,color:r.rank<=3?"#B45309":r.you?BRAND:"var(--ak-text-sub)" }}>{r.rank}</span></div>
+          <img src={r.avatar || AVATAR_FALLBACK} alt="" style={{ width:36,height:36,borderRadius:"50%",objectFit:"cover",border:`2px solid ${r.you?BRAND:"var(--ak-border2)"}`,flexShrink:0 }}/>
+          <span style={{ flex:1,minWidth:0,fontSize:13.5,fontWeight:800,color:r.you?BRAND:"var(--ak-text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{r.name}{r.you?' (you)':''}</span>
+          <div style={{ textAlign:"right",flexShrink:0 }}>
+            <div style={{ fontSize:13,fontWeight:900,color:GREEN }}>{r.correct}/{r.total}</div>
+            {r.seconds!=null&&<div style={{ fontSize:10,fontWeight:700,color:"var(--ak-text-muted)" }}>{r.seconds}s</div>}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
