@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   fetchMyActivities, completeActivity, uploadActivityFile, removeActivityFile, downloadActivityFile, downloadMySubmissionPdf,
-  saveActivityAnswer,
+  saveActivityAnswer, fetchActivityFileBlob, saveBlobAs,
 } from '../services/activityApi.js';
 import { Icon } from '../components/common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD } from '../constants.js';
@@ -11,6 +11,8 @@ import { hasAnswer, stepStatuses, resumeStep, openingAnswers, shownAnswer, lastC
 import { MathText, QuestionFigure, QuestionContext } from '../components/activity/QuestionPaper.jsx';
 import AnswerPaper, { FileCard } from '../components/activity/AnswerPaper.jsx';
 import WhiteboardModal from '../components/teaching/WhiteboardModal.jsx';
+// The document editor (TipTap + the .docx writer) loads only when opened.
+const WordEditor = lazy(() => import('../components/docs/WordEditor.jsx'));
 import { labelAnswerText, parseLabelAnswer, letterOf, readChoice, isAnswered, FORMAT_NAMES } from '../lib/paper.js';
 
 /**
@@ -56,6 +58,18 @@ function fmtDue(iso) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
   return d.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+/* A question's document draft on this device — { json, page, saved }. */
+const docKey = (assignmentId, i) => `ak_doc_${assignmentId}_q${i}`;
+const DRAWING_RE = /^drawing-q\d+\.png$/i;
+const DOC_RE = /^document-q\d+\.docx$/i;
+function loadDoc(assignmentId, i) {
+  try { return JSON.parse(localStorage.getItem(docKey(assignmentId, i)) || 'null'); } catch { return null; }
+}
+function storeDoc(assignmentId, i, doc) {
+  try { if (doc) localStorage.setItem(docKey(assignmentId, i), JSON.stringify(doc)); else localStorage.removeItem(docKey(assignmentId, i)); }
+  catch { /* too big for this device's storage — the attached .docx still has it */ }
 }
 
 /* Local autosave — answers and the attached file name, per activity. */
@@ -132,7 +146,7 @@ function BoxTool({ icon, label, onClick, disabled }) {
 }
 
 /* The answer box under the question. */
-function AnswerBox({ q, idx, value, onType, files, onPick, onRemove, onOpenFile, onDraw, uploading, removing, status, saveErr, onRetry, fileErr }) {
+function AnswerBox({ q, idx, value, onType, files, onPick, onRemove, onOpenFile, onDraw, onWrite, uploading, removing, status, saveErr, onRetry, fileErr }) {
   const fileRef = useRef(null);
   const [focus, setFocus] = useState(false);
   const full = files.length >= PER_QUESTION_FILES;
@@ -182,6 +196,7 @@ function AnswerBox({ q, idx, value, onType, files, onPick, onRemove, onOpenFile,
       <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
         <BoxTool icon="ti-paperclip" label={full ? 'Up to 3 files per question' : 'Attach a file (PDF, photo, Word, text · 5MB)'} onClick={() => fileRef.current?.click()} disabled={full || uploading}/>
         <BoxTool icon="ti-pencil" label="Draw it on the whiteboard" onClick={onDraw} disabled={uploading}/>
+        <BoxTool icon="ti-file-type-docx" label="Write it in a document (like Word)" onClick={onWrite} disabled={uploading}/>
         {uploading
           ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 800, color: 'var(--ak-text-muted)', fontFamily: "'Nunito',sans-serif" }}><Spinner size={11}/> Uploading…</span>
           : files.length > 0 && <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--ak-text-muted)', fontFamily: "'Nunito',sans-serif" }}>{files.length}/{PER_QUESTION_FILES} files</span>}
@@ -200,7 +215,7 @@ function AnswerBox({ q, idx, value, onType, files, onPick, onRemove, onOpenFile,
   );
 }
 
-function Stepper({ questions, paper, work, saved, files, fileCounts, onType, onFlush, saveErrs, onPick, onRemove, onOpenFile, onDraw, uploading, removing, fileErr, mid, dark, onHandIn, submitting, jumpRef }) {
+function Stepper({ questions, paper, work, saved, files, fileCounts, onType, onFlush, saveErrs, onPick, onRemove, onOpenFile, onDraw, onWrite, uploading, removing, fileErr, mid, dark, onHandIn, submitting, jumpRef }) {
   const total = questions.length;
   const [idx, setIdx] = useState(() => resumeStep(questions, work.answers, saved, fileCounts));
   const [moving, setMoving] = useState(false);
@@ -332,7 +347,7 @@ function Stepper({ questions, paper, work, saved, files, fileCounts, onType, onF
       </div>
 
       <AnswerBox q={q} idx={idx} value={work.answers[idx]} onType={(v) => onType(idx, v)}
-        files={qFiles} onPick={(list) => onPick(idx, list)} onRemove={onRemove} onOpenFile={onOpenFile} onDraw={() => onDraw(idx)}
+        files={qFiles} onPick={(list) => onPick(idx, list)} onRemove={onRemove} onOpenFile={onOpenFile} onDraw={() => onDraw(idx)} onWrite={() => onWrite(idx)}
         uploading={uploading === idx} removing={removing} status={status} saveErr={saveErrs[idx]} onRetry={() => onFlush(idx).catch(() => {})}
         fileErr={fileErr?.index === idx ? fileErr.message : ''}/>
 
@@ -507,6 +522,7 @@ export default function ActivityDetailPage() {
   const [fileErr, setFileErr] = useState(null);   // { index, message }
   const [saveErrs, setSaveErrs] = useState({});
   const [board, setBoard] = useState(null);       // the question the whiteboard draws for
+  const [doc, setDoc] = useState(null);           // the document being written: { index, initial, dirty } | { index, loading }
   const [checking, setChecking] = useState(false);
   const fileRef = useRef(null);
   // Autosave runs on timers, so it reads the latest row and answers here.
@@ -653,9 +669,10 @@ export default function ActivityDetailPage() {
     try {
       await removeActivityFile(f.id);
       setFiles((fs) => fs.filter((x) => x.id !== f.id));
-      if (/^drawing-q\d+\.png$/i.test(f.name || '') && f.question != null) {
+      if (DRAWING_RE.test(f.name || '') && f.question != null) {
         setWork((w) => { const d = { ...(w.drawings || {}) }; delete d[f.question]; return { ...w, drawings: d }; });
       }
+      if (DOC_RE.test(f.name || '') && f.question != null) storeDoc(row.assignmentId, Number(f.question), null);
     } catch (e) {
       setFileErr({ index: f.question, message: e?.message || 'Could not remove that file.' });
     } finally {
@@ -665,32 +682,74 @@ export default function ActivityDetailPage() {
 
   /* A drawing reopens on the whiteboard while the work is open; anything else downloads. */
   const openFile = (f) => {
-    if (row?.status !== 'complete' && !row?.graded && f.question != null && /^drawing-q\d+\.png$/i.test(f.name || '')) { setBoard(Number(f.question)); return; }
+    const editable = row?.status !== 'complete' && !row?.graded && f.question != null;
+    if (editable && DRAWING_RE.test(f.name || '')) { setBoard(Number(f.question)); return; }
+    if (editable && DOC_RE.test(f.name || '')) { openDoc(Number(f.question)); return; }
     downloadActivityFile(f.id, f.name).catch((e) => setSubmitErr(e?.message || 'Could not open that file.'));
+  };
+
+  /* A file this page made (a drawing, a document) becomes question i's file,
+     replacing the one it made before — that one doesn't count toward the 3. */
+  const replaceOwnFile = async (i, file) => {
+    const old = files.find((f) => f.question != null && Number(f.question) === i && f.name === file.name);
+    const others = files.filter((f) => f.question != null && Number(f.question) === i && f.id !== old?.id).length;
+    if (others >= PER_QUESTION_FILES) throw new Error(`Up to ${PER_QUESTION_FILES} files per question — remove one first.`);
+    if (file.size > 5 * 1024 * 1024) throw new Error(`${file.name} is larger than 5MB — use smaller pictures.`);
+    const meta = await uploadActivityFile(row.assignmentId, file, i);
+    if (!meta?.id) throw new Error('Upload failed.');
+    if (old) await removeActivityFile(old.id).catch(() => {});
+    setFiles((fs) => [...fs.filter((f) => f.id !== old?.id), { ...meta, name: meta.name || file.name, size: meta.size || file.size, question: i }]);
   };
 
   /* "Attach to answer": the drawing becomes that question's file — re-attaching replaces it. */
   const attachDrawing = async (blob, strokes) => {
     const i = board;
-    const file = new File([blob], `drawing-q${i + 1}.png`, { type: 'image/png' });
-    const old = files.find((f) => f.question != null && Number(f.question) === i && f.name === file.name);
-    const others = files.filter((f) => f.question != null && Number(f.question) === i && f.id !== old?.id).length;
-    if (others >= PER_QUESTION_FILES) { setFileErr({ index: i, message: `Up to ${PER_QUESTION_FILES} files per question — remove one to attach the drawing.` }); setBoard(null); return; }
-    if (file.size > 5 * 1024 * 1024) { setFileErr({ index: i, message: 'That drawing is larger than 5MB.' }); return; }
     setFileErr(null); setUploadingQ(i);
     try {
-      const meta = await uploadActivityFile(row.assignmentId, file, i);
-      if (!meta?.id) throw new Error('Upload failed.');
-      if (old) await removeActivityFile(old.id).catch(() => {});
-      setFiles((fs) => [...fs.filter((f) => f.id !== old?.id), { ...meta, name: meta.name || file.name, size: meta.size || file.size, question: i }]);
+      await replaceOwnFile(i, new File([blob], `drawing-q${i + 1}.png`, { type: 'image/png' }));
       setWork((w) => ({ ...w, drawings: { ...(w.drawings || {}), [i]: strokes } }));
-      setBoard(null);
     } catch (e) {
       setFileErr({ index: i, message: e?.message || 'Could not attach the drawing. Try again.' });
+    } finally {
+      setUploadingQ(null);
       setBoard(null);
+    }
+  };
+
+  /* The document editor: this device's draft first, else the attached .docx read back, else a blank page. */
+  const openDoc = async (i) => {
+    setFileErr(null);
+    const local = loadDoc(row.assignmentId, i);
+    if (local?.json) { setDoc({ index: i, initial: { json: local.json, page: local.page }, dirty: !local.saved }); return; }
+    const attached = files.find((f) => f.question != null && Number(f.question) === i && DOC_RE.test(f.name || ''));
+    if (!attached) { setDoc({ index: i, initial: {}, dirty: false }); return; }
+    setDoc({ index: i, loading: true });
+    try {
+      const [blob, mammoth] = await Promise.all([fetchActivityFileBlob(attached.id), import('mammoth')]);
+      const { value } = await (mammoth.default || mammoth).convertToHtml({ arrayBuffer: await blob.arrayBuffer() });
+      setDoc({ index: i, initial: { html: value }, dirty: false });
+    } catch (e) {
+      setDoc(null);
+      setFileErr({ index: i, message: e?.message || 'Could not open the document.' });
+    }
+  };
+  const docFileName = (i) => `document-q${i + 1}.docx`;
+  /* "Save to answer": a real Word file, attached to the question. */
+  const saveDoc = async (json, page) => {
+    const i = doc.index;
+    const { docxBlob } = await import('../lib/wordDoc.js');
+    const blob = await docxBlob(json, page, { title: `${row.title} — Question ${i + 1}` });
+    setUploadingQ(i);
+    try {
+      await replaceOwnFile(i, new File([blob], docFileName(i), { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }));
+      storeDoc(row.assignmentId, i, { json, page, saved: true });
     } finally {
       setUploadingQ(null);
     }
+  };
+  const downloadDoc = async (json, page) => {
+    const { docxBlob } = await import('../lib/wordDoc.js');
+    saveBlobAs(await docxBlob(json, page, { title: row.title }), docFileName(doc.index));
   };
 
   /* Hand in: answers still saving go first. */
@@ -1016,7 +1075,7 @@ export default function ActivityDetailPage() {
               {useStepper ? (
                 <Stepper questions={questions} paper={row.briefDetails} work={work} saved={saved} files={files} fileCounts={fileCounts}
                   onType={typeAnswer} onFlush={flushAnswer} saveErrs={saveErrs}
-                  onPick={pickFiles} onRemove={removeFile} onOpenFile={openFile} onDraw={(i) => { setFileErr(null); setBoard(i); }}
+                  onPick={pickFiles} onRemove={removeFile} onOpenFile={openFile} onDraw={(i) => { setFileErr(null); setBoard(i); }} onWrite={openDoc}
                   uploading={uploadingQ} removing={removing} fileErr={fileErr}
                   mid={t.mid} dark={t.dark} onHandIn={() => { setSubmitErr(''); setChecking(true); }} submitting={submitting} jumpRef={stepperJump}/>
               ) : (
@@ -1041,6 +1100,19 @@ export default function ActivityDetailPage() {
           onAnswer={(i) => { setChecking(false); stepperJump.current?.(i); }}
           onSubmit={handIn} onClose={() => !submitting && setChecking(false)} submitting={submitting} err={submitErr} mid={t.mid} dark={t.dark}/>
       )}
+
+      {/* the document editor, writing one question's answer */}
+      {doc && (doc.loading ? (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 3500, background: '#E6E6E6', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, fontFamily: "'Nunito',sans-serif" }}>
+          <Spinner size={22} color="#2B579A"/><span style={{ fontSize: 13, fontWeight: 700, color: '#444' }}>Opening {docFileName(doc.index)}…</span>
+        </div>
+      ) : (
+        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, zIndex: 3500, background: '#E6E6E6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={22} color="#2B579A"/></div>}>
+          <WordEditor key={doc.index} fileName={docFileName(doc.index)} subtitle={`Question ${doc.index + 1}`} initial={doc.initial} dirty={doc.dirty}
+            onSave={saveDoc} onDownload={downloadDoc} onClose={() => setDoc(null)}
+            onDraft={(json, page) => storeDoc(row.assignmentId, doc.index, { json, page, saved: false })}/>
+        </Suspense>
+      ))}
 
       {/* the whiteboard, drawing for one question's answer */}
       {board !== null && (

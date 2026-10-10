@@ -141,3 +141,16 @@ test("answering: an answer box per question, files and drawings per question, on
   assert.ok(modal.includes("<AnswerPaper details={brief.details}"));
   assert.ok(marker.includes("readChoice(q, a)") && marker.includes("if (answered && pick == null) return;"));
 });
+
+test("the answer box opens a Word-style document editor that hands in a real .docx", async () => {
+  const [editor, writer, pkg] = await Promise.all([
+    read("../../../akoro-learner/src/components/docs/WordEditor.jsx"), read("../../../akoro-learner/src/lib/wordDoc.js"), read("../../../akoro-learner/package.json"),
+  ]);
+  assert.ok(detail.includes('label="Write it in a document (like Word)"'));
+  assert.ok(detail.includes("lazy(() => import('../components/docs/WordEditor.jsx'))"), "the editor loads only when opened");
+  assert.ok(detail.includes("`document-q${i + 1}.docx`") && detail.includes("replaceOwnFile(i, new File([blob], docFileName(i)"));
+  for (const tab of ["['file', 'File']", "['home', 'Home']", "['insert', 'Insert']", "['layout', 'Layout']", "['view', 'View']"]) assert.ok(editor.includes(tab), tab);
+  assert.ok(editor.includes("Save changes to {fileName}?") && editor.includes("<Ruler box={box}") && editor.includes("Page {at} of {pages}"));
+  assert.ok(writer.includes("export function wordToDocx(") && writer.includes("PageOrientation.LANDSCAPE"));
+  assert.ok(pkg.includes('"docx": "9.5.0"') && pkg.includes('"@tiptap/react": "2.27.3"'), "editor packages pinned to one version");
+});
