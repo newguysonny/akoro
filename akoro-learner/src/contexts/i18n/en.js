@@ -724,6 +724,8 @@ export const EN = {
   'agent.voice_stop':            'Stop and send',
   'agent.voice_listening':       'Listening… tap the mic again to send',
   'agent.voice_transcribing':    'Turning your voice into words…',
+  'agent.read_aloud_off':        'Always read replies aloud (off)',
+  'agent.read_aloud_on':         'Always read replies aloud (on) — tap to turn off',
   'agent.listen':                'Listen',
   'agent.listen_stop':           'Stop reading',
   'agent.try_asking':            'Try asking',

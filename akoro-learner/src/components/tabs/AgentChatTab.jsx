@@ -483,6 +483,15 @@ function AgentChatTab({
   const voiceTurnRef=useRef(false);
   const mic=useVoiceAnswer({ onTranscript:(said)=>{ voiceTurnRef.current=true; sendRef.current?.(said); } });
   const tts=useSpeakReply({ voice:'nova' });
+  // "Always read replies aloud" — the composer's audio switch, remembered on
+  // this device. Off, only replies to something said aloud are spoken.
+  const [readAloud,setReadAloud]=useState(()=>{ try { return localStorage.getItem('ak_read_aloud')==='1'; } catch { return false; } });
+  const toggleReadAloud=()=>setReadAloud(on=>{
+    const next=!on;
+    try { localStorage.setItem('ak_read_aloud', next?'1':'0'); } catch { /* private mode — still works this session */ }
+    if(!next) tts.stop();
+    return next;
+  });
   const applyIdea=(fill)=>{
     setInput(fill);
     requestAnimationFrame(()=>{
@@ -623,8 +632,8 @@ function AgentChatTab({
         }
       }
     }
-    // Said aloud → answered aloud.
-    if(spokenTurn && finalReply && !controller?.signal.aborted) tts.speak(replyId, finalReply);
+    // Said aloud → answered aloud; with "always read aloud" on, every reply.
+    if((spokenTurn||readAloud) && finalReply && !controller?.signal.aborted) tts.speak(replyId, finalReply);
     // Suggestions for every reply: three follow-ups, asked for AFTER the
     // reply has arrived (it never waits on them); a failure is just no chips.
     if(finalReply && !controller?.signal.aborted){
@@ -959,7 +968,11 @@ function AgentChatTab({
               voiceAction={()=>{ if(mic.recording) mic.stop(); else { tts.stop(); mic.start(); } }}
               voiceActive={mic.recording}
               voiceLabel={mic.recording?t('agent.voice_stop'):mic.transcribing?t('agent.voice_transcribing'):t('agent.voice_start')}
-              audioLabel="Audio notes are not available in AI Chat yet"
+              audioAction={toggleReadAloud}
+              audioActive={readAloud}
+              audioToggle
+              audioIcon={readAloud?'ti-volume':'ti-volume-off'}
+              audioLabel={readAloud?t('agent.read_aloud_on'):t('agent.read_aloud_off')}
               hideModelMenu
               sendDisabled={!input.trim()&&!attachments.length}
             />
