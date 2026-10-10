@@ -76,6 +76,23 @@ function resultLine(b, t) {
     .replace('{b}', B.score);
 }
 
+/**
+ * Who it is against, by agent:
+ *   1v1    "Bolt vs Nova"                      (theirs vs mine)
+ *   group  "Bolt vs your agent and 23 more"
+ * Falls back to the challenger's name for an older payload without a lineup.
+ */
+export function matchup(b) {
+  const l = b.lineup;
+  if (!l || !l.total) return b.challenger ? `vs ${b.challenger}` : '';
+  const mine = l.myAgent || 'your agent';
+  if (!l.others) return b.daily ? `${mine} · waiting for more agents` : mine;
+  const lead = l.leadAgent || 'An agent';
+  if (l.total === 2) return `${lead} vs ${l.myAgent || 'your agent'}`;
+  const more = l.others - 1;
+  return `${lead} vs your agent${more > 0 ? ` and ${more} more` : ''}`;
+}
+
 function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
   const { t } = useLang();
   const [viewFilter, setViewFilter] = useState("active");
@@ -181,7 +198,7 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
                     {b.daily
                       ?<span style={{ width:40,height:40,borderRadius:12,background:`${BRAND}12`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}><Icon name="ti-calendar-repeat" size={20} color={BRAND}/></span>
                       :<img src={b.avatar || AVATAR_FALLBACK} alt="" style={{ width:40,height:40,borderRadius:"50%",objectFit:"cover",border:`2px solid ${sc}50`,flexShrink:0 }}/>}
-                    <div style={{ minWidth:0 }}><p style={{ fontSize:14,fontWeight:900,color:"var(--ak-text)",margin:"0 0 2px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{b.title}</p><p style={{ fontSize:11,color:"var(--ak-text-muted)",margin:0 }}>{b.daily?`Every day at ${b.scheduledFor?new Date(b.scheduledFor).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'7 PM'} · ${b.participantCount||1} agent${(b.participantCount||1)===1?"":"s"}`:`vs ${b.challenger}`}</p></div>
+                    <div style={{ minWidth:0 }}><p style={{ fontSize:14,fontWeight:900,color:"var(--ak-text)",margin:"0 0 2px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{b.title}</p><p style={{ fontSize:11,color:"var(--ak-text-muted)",margin:0 }}>{b.daily?`Every day at ${b.scheduledFor?new Date(b.scheduledFor).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'7 PM'} · `:''}{matchup(b)}</p></div>
                   </div>
                   <div style={{ background:st.bg,borderRadius:8,padding:"3px 9px",border:`1px solid ${st.border}`,flexShrink:0,display:"flex",alignItems:"center",gap:4 }}>
                     {b.status==="live"&&<div style={{ width:5,height:5,borderRadius:"50%",background:RED,animation:"pulse-dot 1s ease-in-out infinite" }}/>}

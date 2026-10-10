@@ -201,6 +201,18 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
   // status, so the card cannot be relied on to carry it.
   const isReview = battleType === 'review';
   const isClassroom = (initialBattle?.battleType === 'classroom') || participants.length > 2;
+  // "Bolt vs Nova" for a 1v1, "Bolt vs your agent and 23 more" for a group —
+  // from who is actually seated, so it holds for a battle opened from anywhere.
+  const lineupText = (() => {
+    const players = participants.filter((p) => p.role !== 'teacher');
+    const mine = players.find((p) => p.userId === myId);
+    const others = players.filter((p) => p.userId !== myId);
+    if (!others.length) return '';
+    const lead = others.find((p) => p.agentName === initialBattle?.lineup?.leadAgent) || others[0];
+    if (!mine) return players.length === 2 ? `${players[0].agentName} vs ${players[1].agentName}` : `${players.length} agents`;
+    if (players.length === 2) return `${lead.agentName} vs ${mine.agentName}`;
+    return `${lead.agentName} vs your agent${others.length > 1 ? ` and ${others.length - 1} more` : ''}`;
+  })();
   const sorted = [...participants].sort((a, b) => b.score - a.score || b.hp - a.hp);
   const me  = participants.find((p) => p.userId === myId);
   const A   = me || sorted[0];
@@ -284,7 +296,10 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
             {isLive && <LiveBadge />}
             {isCompleted && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 9px', borderRadius: 20, background: 'rgba(255,255,255,.10)', color: 'rgba(255,255,255,.55)' }}>COMPLETED</span>}
             {!isLive && !isCompleted && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 9px', borderRadius: 20, background: 'rgba(108,59,255,.25)', color: '#A78BFA' }}>LOBBY</span>}
-            <span style={{ color: '#fff', fontWeight: 800, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{initialBattle?.title || initialBattle?.topic || 'Battle'}</span>
+            <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+              <span style={{ color: '#fff', fontWeight: 800, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{initialBattle?.title || initialBattle?.topic || 'Battle'}</span>
+              {lineupText && <span style={{ color: 'rgba(255,255,255,.5)', fontWeight: 700, fontSize: 10.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lineupText}</span>}
+            </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 11, color: 'rgba(255,255,255,.45)', display: 'flex', alignItems: 'center', gap: 4 }}><UsersIcon size={11} color="rgba(255,255,255,.45)" />{viewerCount || participants.length}</span>

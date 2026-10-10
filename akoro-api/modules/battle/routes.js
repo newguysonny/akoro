@@ -976,10 +976,43 @@ router.get("/my-battles", authenticateToken, asyncHandler(async (req, res) => {
     }
   }
 
+  // Who is in each battle, by AGENT — the card reads "Bolt vs Nova" for a
+  // 1v1 and "Bolt vs your agent and 23 more" for a group. It used to read
+  // "vs <creator's name>", which named a person, and named ME on a battle I
+  // had created. One query for every listed battle.
+  const lineupOf = new Map();
+  const ids = (data ?? []).map((b) => b.id);
+  if (ids.length) {
+    const { data: seatRows } = await db.from("battle_participants")
+      .select("battle_id, user_id, role, joined_at, declined_at, user_agents(agent_name)")
+      .in("battle_id", ids);
+    for (const r of (seatRows ?? [])) {
+      if (r.role === "teacher" || r.declined_at) continue;
+      const l = lineupOf.get(r.battle_id) ?? [];
+      l.push(r);
+      lineupOf.set(r.battle_id, l);
+    }
+  }
+  const lineup = (b) => {
+    const seats = lineupOf.get(b.id) ?? [];
+    const me = seats.find((s) => s.user_id === req.user.id);
+    const others = seats.filter((s) => s.user_id !== req.user.id);
+    // "Agent 1": the creator's agent when that isn't me, else whoever said yes first.
+    const lead = others.find((s) => s.user_id === b.created_by)
+      ?? others.filter((s) => s.joined_at).sort((x, y) => new Date(x.joined_at) - new Date(y.joined_at))[0]
+      ?? others[0];
+    return {
+      myAgent:   me?.user_agents?.agent_name ?? null,
+      leadAgent: lead?.user_agents?.agent_name ?? null,
+      others:    others.length,               // everyone but me
+      total:     seats.length,
+    };
+  };
+
   res200(res, (data ?? []).map((b) => {
     const seat = mySeat.get(b.id);
     const card = {
-      ...toCard(b, { mine: b.created_by === req.user.id }),
+      ...toCard(b, { mine: b.created_by === req.user.id, lineup: lineup(b) }),
       // 'accepted' | 'declined' | 'invited' | null (not in it — I created it)
       myState: !seat ? null
              : seat.declined_at ? "declined"
