@@ -52,9 +52,17 @@ class _Model:
     def from_pretrained(*a, **k): return _Model()
     def eval(self): return self
     def generate(self, **k): return [[1, 2, 3, 4]]
+TEMPLATE = {"mode": "ok"}
 class _Proc:
     @staticmethod
     def from_pretrained(*a, **k): return _Proc()
+    def apply_chat_template(self, messages, tokenize=False, add_generation_prompt=False):
+        seen["messages"] = messages
+        seen["add_generation_prompt"] = add_generation_prompt
+        if TEMPLATE["mode"] == "missing":
+            raise ValueError("no chat template")
+        text = messages[0]["content"][1]["text"]
+        return f"<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>{text}<|im_end|>\n<|im_start|>assistant\n"
     def __call__(self, text=None, images=None, return_tensors=None):
         seen["text"] = text
         return _Inputs()
@@ -79,6 +87,19 @@ os.makedirs(snap, exist_ok=True)
 r = H.handler({"input": {"image_b64": "aGk="}})
 assert "error" not in r, r
 assert r["blocks"] == [{"bbox_2d": [1.0, 2.0, 3.0, 4.0], "text_content": "hi"}], r
-assert seen["text"] and seen["text"][0].startswith("<|vision_start|><|image_pad|><|vision_end|>"), seen
-print("EXEC-CHECK: full path → blocks out, prompt carries the placeholder ✓")
+assert r["generated_tokens"] == 0, r   # stub generate echoes the 4 prompt ids back
+sent = seen["text"][0]
+assert sent.startswith("<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Detect every BLOCK"), sent[:120]
+assert sent.endswith("<|im_end|>\n<|im_start|>assistant\n"), sent[-60:]
+assert seen["add_generation_prompt"] is True and seen["messages"][0]["content"][0] == {"type": "image"}, seen
+print("EXEC-CHECK: full path → blocks out, chat-formatted prompt with the assistant turn opened ✓")
+
+# 3 · a snapshot with no chat template → the hand-built Qwen layout
+TEMPLATE["mode"] = "missing"
+r = H.handler({"input": {"image_b64": "aGk="}})
+assert "error" not in r, r
+sent = seen["text"][0]
+assert sent.startswith("<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Detect every BLOCK"), sent[:120]
+assert sent.endswith("<|im_end|>\n<|im_start|>assistant\n"), sent[-60:]
+print("EXEC-CHECK: no template → hand-built Qwen chat layout ✓")
 print("EXEC-CHECK: all passed")

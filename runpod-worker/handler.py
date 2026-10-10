@@ -284,6 +284,34 @@ def _ensure_model():
         return _processor, _model, _gpu_name
 
 
+# ── Prompt → the model's chat format ─────────────────────────────────────
+def build_chat_text(processor, prompt: str) -> str:
+    """The fine-tune is a CHAT model: it answers a user turn, inside its
+    chat template, with the assistant turn opened. Fed the bare prompt (no
+    <|im_start|>user … <|im_start|>assistant), it ended its turn at once —
+    COMPLETED in ~1 s with empty output (live, 2026-10-10).
+
+    The processor's own chat template is the source of truth: it places the
+    image's <|vision_start|><|image_pad|><|vision_end|> run, which the
+    processor then expands to the EXACT visual-token count (a bare '<image>'
+    gave "tokens: 0" against N image features). If the snapshot ships no
+    template, the same Qwen layout is built by hand. A prompt that already
+    carries chat markup (operator override) is sent as-is."""
+    if "<|im_start|>" in prompt:
+        return prompt
+    messages = [{"role": "user", "content": [{"type": "image"}, {"type": "text", "text": prompt}]}]
+    try:
+        text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        if isinstance(text, str) and "<|image_pad|>" in text:
+            return text
+    except Exception as e:
+        print(f"[worker] chat template unavailable ({e}) — using the Qwen layout")
+    return (
+        "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>"
+        f"{prompt}<|im_end|>\n<|im_start|>assistant\n"
+    )
+
+
 # ── The handler ──────────────────────────────────────────────────────────
 def handler(job):
     job_input = job.get("input") or {}
@@ -311,30 +339,25 @@ def handler(job):
     img.save(buf, format="PNG")
     images = [Image.open(io.BytesIO(buf.getvalue()))]
 
-    # Qwen3-VL's processor expands <|image_pad|> into the EXACT number of
-    # visual tokens for the image. The old '<image>' prefix is literal text
-    # to it — generation then sees 0 image tokens against N features and
-    # raises "Image features and image tokens do not match: tokens: 0".
-    # Operators who already embed the placeholder are left alone.
-    if "<|image_pad|>" not in prompt:
-        prompt = f"<|vision_start|><|image_pad|><|vision_end|>\n{prompt}"
     try:
         processor, model, gpu_name = _ensure_model()
     except ModelUnavailable as e:
         # Readable per-job failure — the endpoint stays deployable and the
         # message names the fix (Model field / RUNPOD_ALLOW_DOWNLOAD).
         return {"error": f"Model unavailable: {e}"}
-    inputs = processor(text=[prompt], images=images, return_tensors="pt").to(model.device)
+    text = build_chat_text(processor, prompt)
+    inputs = processor(text=[text], images=images, return_tensors="pt").to(model.device)
 
     with torch.inference_mode():
         generated = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
 
-    raw = processor.decode(
-        generated[0][inputs["input_ids"].shape[1]:],
-        skip_special_tokens=True,
-    )
+    new_tokens = generated[0][inputs["input_ids"].shape[1]:]
+    raw = processor.decode(new_tokens, skip_special_tokens=True)
     return {
         "raw": raw,
+        # How many tokens the model produced: 1 with an empty `raw` means it
+        # ended its turn at once (a prompt-format problem), not an empty page.
+        "generated_tokens": len(new_tokens),
         "blocks": extract_blocks(raw),
         "image_size": list(img.size),
         "model": MODEL_ID,
