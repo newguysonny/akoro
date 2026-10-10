@@ -174,7 +174,8 @@
     "2026-content-page-size.sql",
     "2026-community-items.sql",
     "2026-community-discussions.sql",
-    "2026-submission-storage.sql"
+    "2026-submission-storage.sql",
+    "2026-submission-markup.sql"
   ],
   "demo": [
     "2026-seed-school.sql",

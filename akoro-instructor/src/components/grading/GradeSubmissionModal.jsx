@@ -14,12 +14,24 @@
  *   • Answers — question by question (the activity's real questions; for
  *     briefs without questions, the subtopics and objectives).
  * The rubric is the activity's own (details.rubric) when it has one.
+ *
+ * Marking: the PDF tab is a markup surface (ticks, crosses, comment pins,
+ * highlights — SubmissionMarkup), autosaved to the API. Publishing the
+ * grade sends the learner a marked copy: their PDF with the marks drawn
+ * in, opened by the grade page.
+ *
+ * AI draft: when the activity has AI auto-grade on (or the grader asks),
+ * the panel shows the AI's DRAFT marks — per question, per rubric row,
+ * with feedback. "Apply" copies them into the panel; nothing is published
+ * until the grader publishes.
  */
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   ArrowLeft, ChevronLeft, ChevronRight, X, Check, Loader2, FileText, PenLine, ExternalLink, Download,
 } from 'lucide-react';
-import { apiPatch, downloadActivityFile, openActivityFile, fetchSubmissionPdf } from '../../services/api.js';
+import { apiGet, apiPatch, apiPost, apiPut, apiBlob, downloadActivityFile, openActivityFile, fetchSubmissionPdf } from '../../services/api.js';
+import SubmissionMarkup from './SubmissionMarkup.jsx';
+import { Sparkles } from 'lucide-react';
 import { saveDraft, loadDraft, clearDraft } from './gradingDrafts.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../../constants.js';
 
@@ -135,18 +147,31 @@ function SubmittedPaper({ current, brief, only = null }) {
   );
 }
 
-/* The whole submission as one PDF, inline. Fetched as a blob (cookie auth)
-   and shown in the browser's own viewer; open-in-tab and download beside. */
-function SubmissionPdfView({ targetId, version, name }) {
-  const [state, setState] = useState({ status: 'loading', url: null, error: '' });
+/* The whole submission as one PDF — fetched as a blob (cookie auth) and
+   drawn by SubmissionMarkup, where the grader marks it up. The original
+   opens in a tab or downloads; the marked copy can be previewed. */
+function SubmissionPdfView({ targetId, version, name, marks, onMarks, markState }) {
+  const [state, setState] = useState({ status: 'loading', blob: null, url: null, error: '' });
+  const [previewing, setPreviewing] = useState(false);
   useEffect(() => {
     let alive = true, url = null;
-    setState({ status: 'loading', url: null, error: '' });
+    setState({ status: 'loading', blob: null, url: null, error: '' });
     fetchSubmissionPdf(targetId)
-      .then((blob) => { url = URL.createObjectURL(blob); if (alive) setState({ status: 'ready', url, error: '' }); })
-      .catch((e) => { if (alive) setState({ status: 'error', url: null, error: e?.message || 'Could not load the PDF.' }); });
+      .then((blob) => { url = URL.createObjectURL(blob); if (alive) setState({ status: 'ready', blob, url, error: '' }); })
+      .catch((e) => { if (alive) setState({ status: 'error', blob: null, url: null, error: e?.message || 'Could not load the PDF.' }); });
     return () => { alive = false; if (url) URL.revokeObjectURL(url); };
   }, [targetId, version]);
+
+  const previewMarked = async () => {
+    const tab = window.open('', '_blank');
+    setPreviewing(true);
+    try {
+      const u = URL.createObjectURL(await apiBlob(`/api/self-study/targets/${targetId}/marked.pdf`));
+      if (tab) tab.location.href = u; else window.location.assign(u);
+      setTimeout(() => URL.revokeObjectURL(u), 60_000);
+    } catch { tab?.close(); }
+    finally { setPreviewing(false); }
+  };
 
   if (state.status === 'loading') {
     return <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: MUTED, fontSize: 13, fontWeight: 700 }}><Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> Preparing the submission PDF…</div>;
@@ -156,18 +181,68 @@ function SubmissionPdfView({ targetId, version, name }) {
   }
   const fileName = `${(name || 'submission').replace(/[^\w .-]/g, '').trim() || 'submission'}.pdf`;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-        <a href={state.url} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: PURPLE, textDecoration: 'none' }}><ExternalLink size={12} /> Open in new tab</a>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', gap: 14, justifyContent: 'flex-end' }}>
+        <button type="button" onClick={previewMarked} disabled={previewing} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: PURPLE, background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT, padding: 0 }}>
+          {previewing ? <Loader2 size={12} style={{ animation: 'spin .8s linear infinite' }} /> : <FileText size={12} />} Preview marked copy
+        </button>
+        <a href={state.url} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: MUTED, textDecoration: 'none' }}><ExternalLink size={12} /> Original</a>
         <a href={state.url} download={fileName} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: MUTED, textDecoration: 'none' }}><Download size={12} /> Download</a>
       </div>
-      <iframe title="Submission PDF" src={state.url} style={{ width: '100%', height: '78vh', border: `1px solid ${BORDER}`, borderRadius: 10, background: '#525659' }} />
+      <SubmissionMarkup blob={state.blob} marks={marks} onChange={onMarks} saveState={markState} />
+    </div>
+  );
+}
+
+/* The AI's draft marks — shown for approval, never published by itself. */
+function AiDraftCard({ ai, onApply, onRequest, requesting }) {
+  const box = { border: `1px solid ${PURPLE}33`, background: '#FBFAFF', borderRadius: 10, padding: '11px 13px' };
+  const head = (extra) => <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 900, letterSpacing: .5, color: PURPLE }}><Sparkles size={12} /> AI DRAFT {extra}</div>;
+  if (!ai || ai.status === 'failed') {
+    return (
+      <div style={box}>
+        {head()}
+        {ai?.status === 'failed' && <div style={{ fontSize: 12, color: RED, fontWeight: 700, marginTop: 6 }}>{ai.error || 'The draft failed.'}</div>}
+        <div style={{ fontSize: 12, color: MUTED, margin: '6px 0 8px', lineHeight: 1.5 }}>Let AI suggest marks per answer, rubric levels and feedback. You approve them before anything is published.</div>
+        <button type="button" onClick={onRequest} disabled={requesting}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: 'none', background: PURPLE, color: WHITE, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+          {requesting ? <Loader2 size={12} style={{ animation: 'spin .8s linear infinite' }} /> : <Sparkles size={12} />} Draft marks with AI
+        </button>
+      </div>
+    );
+  }
+  if (ai.status === 'making') {
+    return <div style={box}>{head()}<div style={{ fontSize: 12, color: MUTED, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}><Loader2 size={12} style={{ animation: 'spin .8s linear infinite' }} /> Reading the submission and drafting marks…</div></div>;
+  }
+  return (
+    <div style={box}>
+      {head(ai.score != null ? <span style={{ marginLeft: 'auto', fontSize: 16, color: INK, letterSpacing: 0 }}>{ai.score}%</span> : null)}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 8 }}>
+        {(ai.questions || []).map((q) => (
+          <div key={q.index} style={{ fontSize: 12, color: INK, lineHeight: 1.45 }}>
+            <b>Q{q.index + 1}</b> {q.awarded}/{q.max}{q.auto ? <span style={{ color: MUTED2, fontWeight: 700 }}> · auto</span> : null} <span style={{ color: MUTED }}>— {q.why}</span>
+          </div>
+        ))}
+        {(ai.rubric || []).map((r) => (
+          <div key={r.name} style={{ fontSize: 12, color: INK, lineHeight: 1.45 }}>
+            <b>{r.name}</b> {r.level ?? '–'}/{r.max}{r.why ? <span style={{ color: MUTED }}> — {r.why}</span> : null}
+          </div>
+        ))}
+        {ai.feedback && <div style={{ fontSize: 12, color: MUTED, fontStyle: 'italic', lineHeight: 1.5 }}>“{ai.feedback}”</div>}
+        {(ai.notes || []).map((n, i) => <div key={i} style={{ fontSize: 11, color: '#B45309', fontWeight: 700 }}>⚠ {n}</div>)}
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 9 }}>
+        <button type="button" onClick={onApply}
+          style={{ padding: '6px 12px', borderRadius: 8, border: 'none', background: PURPLE, color: WHITE, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Apply to the panel</button>
+        <button type="button" onClick={onRequest} disabled={requesting}
+          style={{ padding: '6px 12px', borderRadius: 8, border: `1px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Redraft</button>
+      </div>
     </div>
   );
 }
 
 export default function GradeSubmissionModal({
-  assignment, students, initialIndex, onClose, onPublished,
+  assignment, students, initialIndex, onClose, onPublished, onMarkup, onAiGrade,
 }) {
   /* students: the gradeable queue [{ student:{id,name,username,emoji}, status, completedAt, grade }] */
   const [index, setIndex] = useState(Math.min(Math.max(initialIndex ?? 0, 0), Math.max(students.length - 1, 0)));
@@ -198,6 +273,46 @@ export default function GradeSubmissionModal({
   const submitted = !!current?.submission?.submittedAt;
   const [view, setView] = useState('pdf');   // 'pdf' | 'answers'
 
+  /* Marks on the submission PDF — autosaved to the API (debounced). */
+  const [marks, setMarks] = useState(() => current?.markup?.marks ?? []);
+  const [markState, setMarkState] = useState('idle');   // idle | saving | saved | error
+  const markTimer = useRef(null);
+  const onMarks = useCallback((next) => {
+    setMarks(next);
+    setMarkState('saving');
+    clearTimeout(markTimer.current);
+    const sid = current?.student?.id;
+    markTimer.current = setTimeout(() => {
+      apiPut(`/api/self-study/${brief.id}/targets/${sid}/markup`, { marks: next })
+        .then(() => { setMarkState('saved'); onMarkup?.(sid, next); })
+        .catch(() => setMarkState('error'));
+    }, 900);
+  }, [brief?.id, current?.student?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* The AI's draft for this learner (polled while it's being made). */
+  const [ai, setAi] = useState(current?.aiGrade ?? null);
+  const [aiRequesting, setAiRequesting] = useState(false);
+  useEffect(() => {
+    if (ai?.status !== 'making' || !brief?.id || !current) return undefined;
+    const sid = current.student.id;
+    const t = setInterval(() => {
+      apiGet(`/api/self-study/${brief.id}`).then((d) => {
+        const row = (d?.data?.targets ?? []).find((x) => x.student_id === sid);
+        if (row?.ai_grade && row.ai_grade.status !== 'making') { setAi(row.ai_grade); onAiGrade?.(sid, row.ai_grade); }
+      }).catch(() => {});
+    }, 4000);
+    return () => clearInterval(t);
+  }, [ai?.status, brief?.id, current?.student?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const requestAi = async () => {
+    setAiRequesting(true);
+    try {
+      await apiPost(`/api/self-study/${brief.id}/targets/${current.student.id}/ai-grade`, {});
+      setAi({ status: 'making' });
+    } catch (e) {
+      setAi({ status: 'failed', error: e?.message || 'Could not start the draft.' });
+    } finally { setAiRequesting(false); }
+  };
+
   /* Grading state — autosaved locally on every change. */
   const [mode, setMode] = useState('rubric');                 // 'rubric' | 'manual'
   const [rubric, setRubric] = useState(() => RUBRIC.map(() => null));
@@ -227,6 +342,9 @@ export default function GradeSubmissionModal({
     }
     setQIndex(0); setError(''); setSaveState('idle');
     setView(current?.submission?.submittedAt ? 'pdf' : 'answers');
+    clearTimeout(markTimer.current);
+    setMarks(current?.markup?.marks ?? []); setMarkState('idle');
+    setAi(current?.aiGrade ?? null);
   }, [current?.student?.id, brief?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Autosave — debounced, local only. Publish is the server event. */
@@ -264,6 +382,19 @@ export default function GradeSubmissionModal({
   };
   const onFeedback = (v) => {
     setFeedbackText(v); touch({ feedbackText: v });
+  };
+
+  /* Copy the AI draft into the panel: rubric levels when the draft scored
+     every row of THIS rubric, else its score as a manual score; feedback too. */
+  const applyAi = () => {
+    if (!ai || ai.status !== 'ready') return;
+    const levels = RUBRIC.map((r) => ai.rubric?.find((x) => x.name.toLowerCase() === r.name.toLowerCase())?.level ?? null);
+    if (levels.every((v) => v != null) && ai.rubric?.length) {
+      setRubric(levels); setMode('rubric'); touch({ rubric: levels, mode: 'rubric', feedbackText: ai.feedback || feedbackText });
+    } else if (ai.score != null) {
+      setManualScore(String(ai.score)); setMode('manual'); touch({ manualScore: String(ai.score), mode: 'manual', feedbackText: ai.feedback || feedbackText });
+    }
+    if (ai.feedback) setFeedbackText(ai.feedback);
   };
 
   const rubricTotal = rubric.reduce((s, v) => s + (v || 0), 0);
@@ -375,7 +506,8 @@ export default function GradeSubmissionModal({
             </div>
             {submitted && view === 'pdf' ? (
               <div style={{ padding: '14px 16px 18px' }}>
-                <SubmissionPdfView targetId={current.targetId} version={current.submission.submittedAt} name={`${current.student.name} — ${brief?.title || 'submission'}`} />
+                <SubmissionPdfView targetId={current.targetId} version={current.submission.submittedAt} name={`${current.student.name} — ${brief?.title || 'submission'}`}
+                  marks={marks} onMarks={onMarks} markState={markState} />
               </div>
             ) : (
             <div style={{ padding: '24px 28px 30px' }}>
@@ -414,6 +546,8 @@ export default function GradeSubmissionModal({
             </div>
 
             <div style={{ padding: '16px 18px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {submitted && <AiDraftCard ai={ai} onApply={applyAi} onRequest={requestAi} requesting={aiRequesting} />}
+
               {/* Mode toggle */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: .6, color: MUTED2 }}>{mode === 'rubric' ? 'RUBRIC' : 'MANUAL SCORE'}</span>
@@ -442,7 +576,7 @@ export default function GradeSubmissionModal({
                         ))}
                       </div>
                       <div style={{ fontSize: 11, fontWeight: 700, color: rubric[ci] != null ? PURPLE : 'transparent', marginTop: 4 }}>
-                        {rubric[ci] != null ? `${rubric[ci]} — ${crit.labels?.[rubric[ci]] ?? `${rubric[ci]} of ${crit.max}`}` : '·'}
+                        {rubric[ci] != null ? (crit.labels ? `${rubric[ci]} — ${crit.labels[rubric[ci]]}` : `${rubric[ci]} of ${crit.max}`) : '·'}
                       </div>
                     </div>
                   ))}

@@ -38,9 +38,15 @@
  *   GET    /files/:fileId      → open a file (owning learner, or the
  *                                teacher/school that owns the activity)
  *
+ * Teacher / school, grading:
+ *   PUT    /:id/targets/:sid/markup   → save the marks on the submission PDF
+ *   POST   /:id/targets/:sid/ai-grade → draft marks with AI (for approval)
+ *
  * Both:
  *   GET    /targets/:targetId/submission.pdf → the whole submission as one PDF
  *   GET    /targets/:targetId/submission.md  → the same as markdown (AI grading)
+ *   GET    /targets/:targetId/marked.pdf     → the marked copy (learner: once
+ *                                              graded; teacher: any time, as a preview)
  */
 
 import { Router }                         from "express";
@@ -63,7 +69,10 @@ import {
   SUBMISSION_FILE_LIMITS, sniffSubmissionFile, storeSubmissionFile, readSubmissionFile,
   removeSubmissionObject, contentDisposition,
 } from "./submissionFiles.js";
-import { buildSubmissionArtifactsLater, readSubmissionArtifact } from "./submissionArtifacts.js";
+import {
+  buildSubmissionArtifacts, readSubmissionArtifact, buildMarkedCopyLater, readMarkedCopy, aiGradeTarget,
+} from "./submissionArtifacts.js";
+import { validateMarks } from "./submissionMarkup.js";
 import { briefForLearner, pdfMeta } from "./submissionView.js";
 
 
@@ -388,6 +397,9 @@ router.get("/mine", asyncHandler(async (req, res) => {
         grade:        t.grade ?? null,                       // published 0–100, null until graded
         graded:       t.grade != null,
         feedbackText: t.feedback?.text || null,
+        // Once graded: the rubric levels behind the score, and the marked copy.
+        feedbackRubric: t.grade != null && Array.isArray(t.feedback?.rubric) ? t.feedback.rubric : [],
+        markedPdf:    t.grade != null && !!t.submission?.submittedAt,
         // The work the learner turned in — text, per-question answers and
         // file metadata. Server copy wins once submitted.
         submission:   t.submission ?? null,
@@ -570,7 +582,7 @@ router.get("/:id", asyncHandler(async (req, res) => {
 
   ok(res, {
     ...assignment,
-    targets: (targets ?? []).map(({ submission_pdf, ...t }) => {
+    targets: (targets ?? []).map(({ submission_pdf, marked_pdf, ...t }) => {
       // Only what was handed in: files uploaded and then left out of the
       // submission (or still in progress) aren't the learner's work yet.
       const handedIn = new Set((t.submission?.files ?? []).map((f) => f.id));
@@ -581,6 +593,7 @@ router.get("/:id", asyncHandler(async (req, res) => {
         emoji:     byId.get(t.student_id)?.avatar_emoji ?? null,
         files:     (filesByTarget.get(t.id) ?? []).filter((f) => handedIn.has(f.id)),
         submissionPdf: pdfMeta({ ...t, submission_pdf }),
+        markedPdf: marked_pdf?.key ? { ready: true, builtAt: marked_pdf.builtAt ?? null } : null,
       };
     }),
   });
@@ -683,8 +696,49 @@ router.patch("/:id/targets/:studentId/grade", requireRole(TEACHER_ROLES), asyncH
     link: "/activities",
   });
   global.io?.to(`user:${studentId}`).emit("activity_graded", { assignmentId: assignment.id, grade: Math.round(n) });
+  // The marked copy (the PDF with the grader's marks + the grade page) is
+  // what the learner gets back — built now, so it's ready when they look.
+  if (target.submission?.submittedAt) buildMarkedCopyLater(target.id);
 
   ok(res, { grade: target.grade, graded_at: target.graded_at });
+}));
+
+/** PUT /api/self-study/:id/targets/:studentId/markup { marks } — the
+ *  grader's marks on the submission PDF (autosaved while marking). They
+ *  reach the learner only inside the marked copy, after a grade is published. */
+router.put("/:id/targets/:studentId/markup", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
+  const { assignment, error } = await ownedAssignment(req, req.params.id);
+  if (error === "not_found") return missing(res, "Assignment not found");
+  if (error === "forbidden") return denied(res, "Not your assignment");
+  const v = validateMarks(req.body?.marks);
+  if (v.error) return bad(res, v.error);
+  const markup = { marks: v.marks, updatedAt: now(), by: req.user.id };
+  const { data: target, error: tErr } = await edu().from("self_study_targets")
+    .update({ markup }).eq("assignment_id", assignment.id).eq("student_id", req.params.studentId)
+    .select("id, grade, submission").maybeSingle();
+  if (tErr || !target) return missing(res, "That learner is not assigned this activity");
+  // Already graded: the learner's marked copy follows the new marks.
+  if (target.grade != null && target.submission?.submittedAt) buildMarkedCopyLater(target.id);
+  ok(res, { count: v.marks.length, updatedAt: markup.updatedAt });
+}));
+
+/** POST /api/self-study/:id/targets/:studentId/ai-grade — draft marks with
+ *  AI for this submission (the instructor approves; nothing is published).
+ *  Runs after the response; the draft lands on the target as ai_grade. */
+router.post("/:id/targets/:studentId/ai-grade", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
+  const { assignment, error } = await ownedAssignment(req, req.params.id);
+  if (error === "not_found") return missing(res, "Assignment not found");
+  if (error === "forbidden") return denied(res, "Not your assignment");
+  const { data: t } = await edu().from("self_study_targets")
+    .select("id, submission, ai_grade").eq("assignment_id", assignment.id).eq("student_id", req.params.studentId).maybeSingle();
+  if (!t) return missing(res, "That learner is not assigned this activity");
+  if (!t.submission?.submittedAt) return bad(res, "Nothing has been submitted yet");
+  const started = Date.parse(t.ai_grade?.at || "");
+  if (t.ai_grade?.status === "making" && Date.now() - started < 5 * 60_000) {
+    return res.status(409).json({ success: false, error: "Marks are already being drafted — they'll appear in a moment" });
+  }
+  void aiGradeTarget(t.id);
+  res.status(202).json({ success: true, data: { ai_grade: { status: "making", at: now() } } });
 }));
 
 router.delete("/:id/targets/:studentId", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
@@ -825,6 +879,26 @@ router.get(/^\/targets\/([0-9a-f-]{36})\/submission\.(pdf|md)$/i, asyncHandler(a
   res.send(bytes);
 }));
 
+/** GET /api/self-study/targets/:targetId/marked.pdf — the submission with the
+ *  grader's marks drawn in, opened by the grade page. The learner gets it
+ *  once graded; the teacher can preview it any time. ?download=1 saves it. */
+router.get(/^\/targets\/([0-9a-f-]{36})\/marked\.pdf$/i, asyncHandler(async (req, res) => {
+  const seen = await viewableTarget(req, req.params[0]);
+  if (seen.error) return res.status(seen.status).json({ success: false, error: seen.error });
+  if (!seen.target.submission?.submittedAt) return bad(res, "Nothing has been submitted yet");
+  const { data: full } = await edu().from("self_study_targets")
+    .select("id, student_id, grade, graded_at, markup, marked_pdf").eq("id", seen.target.id).maybeSingle();
+  const isLearner = seen.target.student_id === req.user.id;
+  if (isLearner && full?.grade == null) return res.status(409).json({ success: false, error: "Your teacher hasn't graded this yet" });
+
+  const bytes = await readMarkedCopy({ ...seen.target, ...full });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", contentDisposition("marked-submission.pdf", req.query.download ? "attachment" : "inline"));
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Cache-Control", "private, no-cache");
+  res.send(bytes);
+}));
+
 /* ═══════════════════════════════ LEARNER ═══════════════════════════════ */
 
 /**
@@ -930,8 +1004,13 @@ router.post("/:id/complete", asyncHandler(async (req, res) => {
     await edu().from("self_study_files").delete().in("id", stray.map((f) => f.id));
     stray.forEach((f) => void removeSubmissionObject(f.storage_key, req.user.id));
   }
-  // The submission as one PDF (+ markdown) — built and stored in the background.
-  buildSubmissionArtifactsLater(target.id);
+  // The submission as one PDF (+ markdown) — built and stored in the
+  // background; then, when the activity has "AI auto-grade" on, the AI
+  // drafts marks from it for the instructor to approve.
+  const { data: brief } = await edu().from("self_study_assignments").select("details").eq("id", req.params.id).maybeSingle();
+  buildSubmissionArtifacts(target.id)
+    .then(() => (brief?.details?.ai_auto_grade ? aiGradeTarget(target.id) : null))
+    .catch((e) => console.warn("[self-study] post-submit build failed (built on first open):", String(e?.message || e).slice(0, 160)));
   // Event trigger: study work completed — fresh signal for the planner.
   emitAutonomyEvent(req.user.id, "self_study").catch(() => {});
   ok(res, data);

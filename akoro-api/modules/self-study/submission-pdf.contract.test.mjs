@@ -121,7 +121,7 @@ test("routes: sniffed uploads to storage, submit locks after grading and prunes 
   assert.match(routes, /storeSubmissionFile\(\{ learnerId: req\.user\.id/);
   assert.match(routes, /if \(target\.grade != null\) return res\.status\(409\)/);
   assert.match(routes, /stray\.forEach\(\(f\) => void removeSubmissionObject/);
-  assert.match(routes, /buildSubmissionArtifactsLater\(target\.id\);/);
+  assert.match(routes, /buildSubmissionArtifacts\(target\.id\)\n    \.then/);
   assert.match(routes, /router\.get\(\/\^\\\/targets\\\/\(\[0-9a-f-\]\{36\}\)\\\/submission\\\.\(pdf\|md\)\$\/i/);
   assert.match(routes, /details:\s+briefForLearner\(a\.details, t\.grade != null\)/);
   assert.match(routes, /if \(req\.body\.feedback !== undefined\) \{/);               // a score-only publish keeps feedback

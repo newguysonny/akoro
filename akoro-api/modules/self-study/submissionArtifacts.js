@@ -117,3 +117,95 @@ export async function readSubmissionArtifact(target, which = "pdf") {
   const built = await buildSubmissionArtifacts(target.id);
   return which === "md" ? Buffer.from(built.markdown, "utf8") : Buffer.from(built.bytes);
 }
+
+/* ── The marked copy (after grading) ──────────────────────────────────── */
+
+const markedFor = (t) => `${t.graded_at || ""}|${t.markup?.updatedAt || ""}`;
+
+/** Build the marked copy for a target; store it when the work is graded.
+ *  → Uint8Array. A preview (not graded yet) is built but not stored. */
+export async function buildMarkedCopy(targetId) {
+  const { buildMarkedPdf } = await import("./submissionMarkup.js");
+  const { data: t } = await edu().from("self_study_targets")
+    .select("id, assignment_id, student_id, grade, feedback, graded_at, markup, marked_pdf, submission, submission_pdf").eq("id", targetId).maybeSingle();
+  if (!t) throw new Error("Submission not found.");
+  const [{ data: a }, { data: u }] = await Promise.all([
+    edu().from("self_study_assignments").select("title").eq("id", t.assignment_id).maybeSingle(),
+    db.from("users").select("full_name, username").eq("id", t.student_id).maybeSingle(),
+  ]);
+  const submissionPdf = await readSubmissionArtifact(t, "pdf");
+  const bytes = await buildMarkedPdf({
+    submissionPdf, marks: t.markup?.marks || [],
+    grade: { score: t.grade, rubric: t.feedback?.rubric || [], feedback: t.feedback?.text || "", gradedAt: t.graded_at },
+    title: a?.title || "Activity", learner: u?.full_name || u?.username || "Learner",
+  });
+  if (t.grade != null) {
+    try {
+      const key = await putRecordObject({ userId: t.student_id, name: `submissions/${t.id}/marked.pdf`, body: Buffer.from(bytes), contentType: "application/pdf" });
+      await edu().from("self_study_targets").update({ marked_pdf: { key, builtFor: markedFor(t), builtAt: new Date().toISOString() } }).eq("id", t.id);
+      if (t.marked_pdf?.key && t.marked_pdf.key !== key) void removeSubmissionObject(t.marked_pdf.key, t.student_id);
+    } catch (e) {
+      console.warn("[self-study/marked] could not store the marked copy:", String(e?.message || e).slice(0, 160));
+    }
+  }
+  return bytes;
+}
+
+export function buildMarkedCopyLater(targetId) {
+  buildMarkedCopy(targetId).catch((e) =>
+    console.warn("[self-study/marked] build failed (built on first open):", String(e?.message || e).slice(0, 160)));
+}
+
+/** The marked copy's bytes — the stored one when it matches the grade and marks, else built now. */
+export async function readMarkedCopy(target) {
+  if (target.grade != null && target.marked_pdf?.key && target.marked_pdf.builtFor === markedFor(target)) {
+    try { return await downloadCapped(await createPresignedDownload(target.marked_pdf.key), { maxBytes: 200 * 1024 * 1024 }); }
+    catch { /* gone — rebuild */ }
+  }
+  return Buffer.from(await buildMarkedCopy(target.id));
+}
+
+/* ── AI auto-grade (drafts for the instructor) ────────────────────────── */
+
+/** Draft marks for one submission, billed to the activity's owner. */
+export async function aiGradeTarget(targetId) {
+  const [{ runAiGrade }, { openai, OPENAI_MODEL }, { schoolBillTo }, { aiGradeSchema }] = await Promise.all([
+    import("./aiGrade.js"), import("../../lib/aiModel.js"), import("../../lib/coins.js"), import("./aiGrade.js"),
+  ]);
+  let owner = null;
+  return runAiGrade(targetId, {
+    save: async (id, ai) => { await edu().from("self_study_targets").update({ ai_grade: ai }).eq("id", id); },
+    load: async (id) => {
+      const { data: t } = await edu().from("self_study_targets")
+        .select("id, assignment_id, student_id, submission, submission_pdf").eq("id", id).maybeSingle();
+      if (!t?.submission?.submittedAt) throw new Error("Nothing has been submitted yet.");
+      const { data: assignment } = await edu().from("self_study_assignments")
+        .select("id, title, subject, details, created_by").eq("id", t.assignment_id).maybeSingle();
+      owner = assignment?.created_by || null;
+      const markdown = (await readSubmissionArtifact(t, "md")).toString("utf8");
+      const ids = (t.submission.files || []).map((f) => f.id);
+      const { data: rows } = ids.length
+        ? await edu().from("self_study_files").select("id, name, size, mime, kind, storage_key, data").in("id", ids)
+        : { data: [] };
+      const images = [];
+      const notes = [];
+      for (const r of rows || []) {
+        if (r.kind !== "image") continue;
+        if (images.length >= 4 || (r.size || 0) > 4 * 1024 * 1024) { notes.push(`${r.name}: not read by the AI — check it in the PDF.`); continue; }
+        try { images.push({ mime: r.mime || "image/jpeg", bytes: await readSubmissionFile(r) }); }
+        catch { notes.push(`${r.name}: couldn't be read — check it in the PDF.`); }
+      }
+      if (/No text could be read from this file/.test(markdown)) notes.push("A scanned or unreadable attachment wasn't read by the AI — check it in the PDF.");
+      return { assignment: assignment || {}, submission: t.submission, markdown, images, notes };
+    },
+    chat: async (messages) => {
+      const billTo = owner ? await schoolBillTo(owner).catch(() => null) : null;
+      const completion = await openai.chat.completions.create({
+        model: OPENAI_MODEL, temperature: 0.2, max_tokens: 2500, messages,
+        response_format: { type: "json_schema", json_schema: { name: "activity_ai_grade", strict: true, schema: aiGradeSchema() } },
+        ...(owner ? { __userId: owner } : {}), ...(billTo ? { __billTo: billTo } : {}), __feature: "activity_ai_grade",
+      });
+      return completion.choices?.[0]?.message?.content || "{}";
+    },
+  });
+}
