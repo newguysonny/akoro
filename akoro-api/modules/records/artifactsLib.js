@@ -95,9 +95,21 @@ export async function updateArtifact({ userId, id, patch }) {
   return data ? toApiArtifact(data) : null;
 }
 
+/** Owner-only read of one item (with its raw content — server use). */
+export async function getArtifactRow({ userId, id }) {
+  const { data, error } = await (await table()).select(`${COLS}, record_id`)
+    .eq("id", id).eq("user_id", userId).maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+/** Delete → the deleted row (kind + content, so a podcast's audio can go too), or null. */
 export async function deleteArtifact({ userId, id }) {
   const { data, error } = await (await table()).delete()
-    .eq("id", id).eq("user_id", userId).select("id");
+    .eq("id", id).eq("user_id", userId).select("id, kind, content");
   if (error) throw error;
-  return (data || []).length > 0;
+  return (data || [])[0] || null;
 }
+
+/** Podcasts are made by the server; the learner may only open/close them. */
+export const SERVER_MADE_KINDS = Object.freeze(["podcast"]);

@@ -156,6 +156,29 @@ export async function createPresignedDownload(fileKey, { downloadName } = {}) {
   return getSignedUrl(s3, cmd, { expiresIn: DOWNLOAD_TTL_SECONDS });  // 6h — outlasts a long study sit
 }
 
+/**
+ * Write bytes the SERVER made (a generated podcast episode) under the
+ * learner's own prefix → the key. R2 when configured, else the Supabase
+ * fallback (which refuses anything over its 5 MB cap). `name` is a short
+ * label, e.g. "podcasts/<id>.mp3".
+ */
+export async function putRecordObject({ userId, name, body, contentType }) {
+  const safe = String(name || "object").replace(/[^a-zA-Z0-9._/-]/g, "_").replace(/\.\.+/g, ".").slice(-160);
+  if (recordsStorageEnabled()) {
+    const key = `records/${userId}/${Date.now()}-${safe}`;
+    await r2Send(s3, new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: body, ContentType: contentType }));
+    return key;
+  }
+  if (body.length > MAX_FALLBACK_FILE_BYTES) {
+    throw new Error("This episode is too large for the built-in storage (5 MB) — choose a shorter length.");
+  }
+  const key = `${FALLBACK_PREFIX}${userId}/${Date.now()}-${safe}`;
+  await ensureFallbackBucket();
+  const { error } = await db.storage.from(FALLBACK_BUCKET).upload(key, body, { contentType, upsert: false });
+  if (error) throw new Error(`Supabase storage could not save the file: ${error.message}`);
+  return key;
+}
+
 /** Best-effort remove — a deleted record never blocks on storage. */
 export async function removeRecordFile(fileKey) {
   if (!fileKey) return;

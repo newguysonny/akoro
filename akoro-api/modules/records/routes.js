@@ -50,7 +50,7 @@ import db                   from "../../db.js";
 import { authenticateToken } from "../auth/routes.js";
 import {
   recordsStorageEnabled, createPresignedUpload, createPresignedDownload, removeRecordFile,
-  ownsRecordFileKey, isFallbackFileKey, MAX_FALLBACK_FILE_BYTES,
+  putRecordObject, ownsRecordFileKey, isFallbackFileKey, MAX_FALLBACK_FILE_BYTES,
 } from "./lib/storage.js";
 import {
   recordsExtractionEnabled, parsePageRunAsync, getParseJob, settleParseJob, saveExtractionPage, getExtraction,
@@ -71,7 +71,14 @@ import { officeKindOf, extractOfficeContent } from "./officeText.js";
 import { TOOL_IDS, TOOL_LIMITS, toolSchema, buildToolMessages, shapeToolResult, gatherToolPassages } from "./toolsLib.js";
 import {
   validateArtifactInput, validateArtifactPatch, listArtifacts, createArtifact, updateArtifact, deleteArtifact,
+  getArtifactRow, toApiArtifact, SERVER_MADE_KINDS,
 } from "./artifactsLib.js";
+import {
+  PODCAST_LIMITS, lengthOf, podcastSchema, podcastInFlight, podcastForClient, runPodcastJob,
+} from "./podcastLib.js";
+import { coinsAvailable, debitCoins } from "../../lib/coins.js";
+import { coinsForTtsChars } from "../../lib/aiPricing.js";
+import { getAiBillTo } from "../../lib/aiContext.js";
 
 const router = Router();
 
@@ -916,12 +923,105 @@ router.post("/tools/:tool", authenticateToken, asyncHandler(async (req, res) => 
   }
 }));
 
+// ─── Podcast: a two-voice study episode from the document ──────────────────
+/*
+ * A podcast item as the reader sees it: a lost job reads as failed, the
+ * storage key stays here, and a ready episode gets a fresh audio URL (only
+ * for a key under the learner's own prefix).
+ */
+async function withPodcastAudio(a, userId) {
+  if (a?.kind !== "podcast") return a;
+  const raw = a.content?.podcast || {};
+  const podcast = podcastForClient(a.content);
+  if (podcast.status === "ready" && raw.audioKey && ownsRecordFileKey(raw.audioKey, userId)) {
+    podcast.audioUrl = await createPresignedDownload(raw.audioKey).catch(() => null);
+  }
+  return { ...a, content: { ...a.content, podcast } };
+}
+
+/*
+ * POST /api/records/podcast { recordId|contentKey, scope, pageNumber?, pageText?, values:{ focus, length } }
+ * → 202 { artifact } — the item exists at once ("making"); the episode is
+ * written, narrated and stored after the response, and the reader polls
+ * GET /podcast/:id until it is ready (or failed).
+ */
+router.post("/podcast", authenticateToken, asyncHandler(async (req, res) => {
+  const target = await resolveAskTarget(req, req.body);
+  if (target.status) return res.status(target.status).json({ success: false, message: target.message });
+
+  const userId = req.user.id;
+  const billTo = getAiBillTo();
+  const { ok } = await coinsAvailable({ userId, billTo, min: 1 });
+  if (!ok) return res.status(402).json({ success: false, message: "You're out of AI credit — top up to make episodes.", code: "INSUFFICIENT_COINS" });
+
+  // One episode at a time per document: a second request while one is
+  // being made would only double the bill.
+  const existing = await listArtifacts({ userId, recordId: target.recordId });
+  if (existing.some((a) => a.kind === "podcast" && podcastInFlight(a.content))) {
+    return res.status(409).json({ success: false, message: "An episode for this document is already being made — it'll be ready in a minute or two." });
+  }
+
+  const scope = req.body?.scope === "document" ? "document" : "page";
+  const pageNumber = Number(req.body?.pageNumber);
+  const page = Number.isInteger(pageNumber) && pageNumber >= 1 ? pageNumber : null;
+  const pageText = typeof req.body?.pageText === "string" ? req.body.pageText.slice(0, TOOL_LIMITS.MAX_PAGE_TEXT_CHARS) : "";
+  const raw = req.body?.values && typeof req.body.values === "object" ? req.body.values : {};
+  const focus = typeof raw.focus === "string" ? raw.focus.slice(0, TOOL_LIMITS.MAX_FOCUS_CHARS) : "";
+  const length = lengthOf(raw.length);
+  const startedAt = new Date().toISOString();
+
+  const created = await createArtifact({
+    userId, recordId: target.recordId,
+    row: {
+      kind: "podcast", page_number: page, open: true,
+      params: { focus, length: typeof raw.length === "string" ? raw.length.slice(0, 40) : length.id, scope: scope === "document" ? "Whole document" : "This page" },
+      content: { podcast: { status: "making", length: length.id, startedAt } },
+    },
+  });
+  if (created.error) return res.status(409).json({ success: false, message: created.error });
+  const artifactId = created.artifact.id;
+  res.status(202).json({ success: true, data: { artifact: await withPodcastAudio(created.artifact, userId) } });
+
+  // After the response: script → narration → storage → the item is ready.
+  void runPodcastJob({ artifactId, target, scope, pageNumber: page, pageText, focus, length, startedAt }, {
+    gather: (args) => gatherToolPassages({ ...args, search: searchRecordChunks }),
+    chat: async (messages, len) => {
+      const completion = await openai.chat.completions.create({
+        model: OPENAI_MODEL, temperature: 0.7, max_tokens: len.maxTokens, messages,
+        response_format: { type: "json_schema", json_schema: { name: "reader_podcast", strict: true, schema: podcastSchema() } },
+        __userId: userId, __billTo: billTo, __feature: "reader_podcast",
+      });
+      return completion.choices?.[0]?.message?.content || "{}";
+    },
+    speak: async (input, voice) => {
+      const speech = await openai.audio.speech.create({ model: PODCAST_LIMITS.TTS_MODEL, voice, input, response_format: "mp3" });
+      return Buffer.from(await speech.arrayBuffer());
+    },
+    charge: (chars) => debitCoins({
+      userId, billTo, coins: coinsForTtsChars(PODCAST_LIMITS.TTS_MODEL, chars),
+      feature: "reader_podcast_tts", model: PODCAST_LIMITS.TTS_MODEL, ref: artifactId,
+    }),
+    store: (audio) => putRecordObject({ userId, name: `podcasts/${artifactId}.mp3`, body: audio, contentType: "audio/mpeg" }),
+    update: (id, content) => updateArtifact({ userId, id, patch: { content, updated_at: new Date().toISOString() } }),
+  });
+}));
+
+/* GET /api/records/podcast/:id — one podcast item (the reader polls it). */
+router.get("/podcast/:id", authenticateToken, asyncHandler(async (req, res) => {
+  const id = String(req.params.id || "");
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return res400(res, "A valid podcast id is required.");
+  const row = await getArtifactRow({ userId: req.user.id, id });
+  if (!row || row.kind !== "podcast") return res.status(404).json({ success: false, message: "Podcast not found." });
+  res.json({ success: true, data: { artifact: await withPodcastAudio(toApiArtifact(row), req.user.id) } });
+}));
+
 // ─── Saved reader items: generated tabs, notes, annotations ─────────────────
 /* GET /api/records/artifacts?recordId=|contentKey= — the learner's items on this document. */
 router.get("/artifacts", authenticateToken, asyncHandler(async (req, res) => {
   const target = await resolveAskTarget(req, req.query);
   if (target.status) return res.status(target.status).json({ success: false, message: target.message });
-  res.json({ success: true, data: { artifacts: await listArtifacts({ userId: req.user.id, recordId: target.recordId }) } });
+  const list = await listArtifacts({ userId: req.user.id, recordId: target.recordId });
+  res.json({ success: true, data: { artifacts: await Promise.all(list.map((a) => withPodcastAudio(a, req.user.id))) } });
 }));
 
 /* POST /api/records/artifacts { recordId|contentKey, kind, pageNumber?, params?, content?, open? } */
@@ -930,6 +1030,7 @@ router.post("/artifacts", authenticateToken, asyncHandler(async (req, res) => {
   if (target.status) return res.status(target.status).json({ success: false, message: target.message });
   const v = validateArtifactInput(req.body);
   if (v.error) return res400(res, v.error);
+  if (SERVER_MADE_KINDS.includes(v.row.kind)) return res400(res, "Podcasts are made with the Podcast tool.");
   const out = await createArtifact({ userId: req.user.id, recordId: target.recordId, row: v.row });
   if (out.error) return res.status(409).json({ success: false, message: out.error });
   res.status(201).json({ success: true, data: { artifact: out.artifact } });
@@ -941,16 +1042,26 @@ router.patch("/artifacts/:id", authenticateToken, asyncHandler(async (req, res) 
   if (!/^[0-9a-f-]{36}$/i.test(id)) return res400(res, "A valid artifact id is required.");
   const v = validateArtifactPatch(req.body);
   if (v.error) return res400(res, v.error);
+  // A server-made item (a podcast — its content names a stored file) can
+  // only be opened or closed; its content is never the client's to write.
+  if (v.patch.content !== undefined || v.patch.params !== undefined) {
+    const row = await getArtifactRow({ userId: req.user.id, id });
+    if (!row) return res.status(404).json({ success: false, message: "Item not found." });
+    if (SERVER_MADE_KINDS.includes(row.kind)) return res400(res, "This item can only be opened or closed.");
+  }
   const artifact = await updateArtifact({ userId: req.user.id, id, patch: v.patch });
   if (!artifact) return res.status(404).json({ success: false, message: "Item not found." });
-  res.json({ success: true, data: { artifact } });
+  res.json({ success: true, data: { artifact: await withPodcastAudio(artifact, req.user.id) } });
 }));
 
 /* DELETE /api/records/artifacts/:id — owner only. */
 router.delete("/artifacts/:id", authenticateToken, asyncHandler(async (req, res) => {
   const id = String(req.params.id || "");
   if (!/^[0-9a-f-]{36}$/i.test(id)) return res400(res, "A valid artifact id is required.");
-  if (!(await deleteArtifact({ userId: req.user.id, id }))) return res.status(404).json({ success: false, message: "Item not found." });
+  const gone = await deleteArtifact({ userId: req.user.id, id });
+  if (!gone) return res.status(404).json({ success: false, message: "Item not found." });
+  const audioKey = gone.kind === "podcast" ? gone.content?.podcast?.audioKey : null;
+  if (audioKey && ownsRecordFileKey(audioKey, req.user.id)) void removeRecordFile(audioKey);
   res.json({ success: true });
 }));
 
