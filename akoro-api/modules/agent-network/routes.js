@@ -19,6 +19,10 @@
  *   POST /messages                    my agent messages another { to, question, kind }
  *   GET  /inbox                       messages to my agent, answers to mine
  *   POST /messages/:id/reply          my agent answers one that waited
+ *   GET  /buddies  POST /buddies  POST /buddies/:id/respond  POST /buddies/:id/checkin  DELETE /buddies/:id
+ *   GET  /daily?subject  POST /daily  GET /daily/ranking?subject
+ *   GET  /circles  POST /circles  POST /circles/:id/join  DELETE /circles/:id/membership
+ *   GET  /league?scope&subject&exam
  */
 import { Router } from "express";
 import { authenticateToken } from "../auth/routes.js";
@@ -30,6 +34,10 @@ import {
   challengeAgents, postChallengeRequest, searchChallengeRequests, acceptChallengeRequest, cancelChallengeRequest, rematch,
 } from "./challenges.js";
 import { messageAgent, inbox, replyToAgent } from "./messaging.js";
+import {
+  requestBuddy, respondBuddy, listBuddies, buddyCheckin, endBuddy,
+  getDaily, submitDaily, dailyRanking, createCircle, searchCircles, joinCircle, leaveCircle, weeklyLeague,
+} from "./activities.js";
 import { protegeDeps } from "../adaptive-learning/chat.js";
 
 const router = Router();
@@ -69,5 +77,18 @@ router.post("/battles/:id/rematch", wrap((req) => rematch(req.user.id, req.param
 router.post("/messages", wrap((req) => messageAgent(req.user.id, req.body || {}, { deps: protegeDeps })));
 router.get("/inbox", wrap((req) => inbox(req.user.id, { markRead: req.query.peek !== "1" })));
 router.post("/messages/:id/reply", wrap((req) => replyToAgent(req.user.id, req.params.id, req.body?.reply)));
+router.get("/buddies", wrap((req) => listBuddies(req.user.id)));
+router.post("/buddies", wrap((req) => requestBuddy(req.user.id, req.body || {})));
+router.post("/buddies/:id/respond", wrap((req) => respondBuddy(req.user.id, req.params.id, req.body?.accept !== false)));
+router.post("/buddies/:id/checkin", wrap((req) => buddyCheckin(req.user.id, req.params.id, req.body?.note || "")));
+router.delete("/buddies/:id", wrap((req) => endBuddy(req.user.id, req.params.id)));
+router.get("/daily", wrap((req) => getDaily(req.user.id, req.query.subject || null)));
+router.post("/daily", wrap((req) => submitDaily(req.user.id, req.body || {})));
+router.get("/daily/ranking", wrap((req) => dailyRanking(req.user.id, req.query.subject || "")));
+router.get("/circles", wrap((req) => searchCircles(req.user.id, req.query)));
+router.post("/circles", wrap((req) => createCircle(req.user.id, req.body || {})));
+router.post("/circles/:id/join", wrap((req) => joinCircle(req.user.id, req.params.id)));
+router.delete("/circles/:id/membership", wrap((req) => leaveCircle(req.user.id, req.params.id)));
+router.get("/league", wrap((req) => weeklyLeague(req.user.id, req.query)));
 
 export default router;
