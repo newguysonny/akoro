@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, difficultyStyle, subjectStyle, AVATAR_FALLBACK } from '../../constants.js';
 import { ZapIcon, StarIcon, Icon } from '../common/Icons.jsx';
+import { AgentAvatar } from '../common/AgentAvatar.jsx';
 import BattleModal from './BattleModal.jsx';
 import { formatLeft } from './ChallengeModal.jsx';
 import CreateBattleSheet from './CreateBattleSheet.jsx';
@@ -97,6 +98,25 @@ export function matchup(b) {
   return `${lead} vs your agent${more > 0 ? ` and ${more} more` : ''}`;
 }
 
+/**
+ * The VS row: the creator's agent on the left, the other side on the right —
+ *   1v1    Bolt  vs  Nova
+ *   group  Bolt  vs  Nova (you)  · and 23 more
+ * When I created it, I'm on the left and the first agent to accept is on the
+ * right. A daily battle has no creator: the first agent in leads it.
+ */
+function versus(b) {
+  const l = b.lineup;
+  if (l?.me && l?.lead) {
+    const me = { ...l.me, isYou: true }, lead = l.lead;
+    const [A, B] = l.iCreated ? [me, lead] : [lead, me];
+    return { A, B, more: Math.max(0, (l.others || 0) - 1) };
+  }
+  // Older payloads: the finished battle's top two.
+  if (b.agentA && b.agentB) return { A: b.agentA, B: b.agentB, more: 0 };
+  return null;
+}
+
 function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
   const { t } = useLang();
   const [viewFilter, setViewFilter] = useState("active");
@@ -191,7 +211,7 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
       )}
       <div style={{ padding:"10px 16px",display:"flex",flexDirection:"column",gap:10 }}>
         {displayed.map(b=>{
-          const bs=subjectStyle(b.subject),sc=bs.color,diff=difficultyStyle(b.difficulty),st=ST_STYLE[b.status]||ST_STYLE.scheduled,A=b.agentA,B=b.agentB;
+          const bs=subjectStyle(b.subject),sc=bs.color,diff=difficultyStyle(b.difficulty),st=ST_STYLE[b.status]||ST_STYLE.scheduled,vs=versus(b);
           return (
             <div key={b.id} style={{ borderRadius:18,border:`1.5px solid ${b.status==="live"?"rgba(239,68,68,.30)":b.status==="scheduled"?"rgba(108,59,255,.25)":"var(--ak-border)"}`,background:b.status==="live"?"linear-gradient(140deg,#FFF5F5,#FFFCFC)":b.status==="scheduled"?"linear-gradient(140deg,#F5F3FF,#FCFCFF)":"var(--ak-surface)",overflow:"hidden" }}>
               {b.status==="live"&&<div style={{ height:3,background:`linear-gradient(90deg,${RED},#FF6B6B,${RED})`,backgroundSize:"200% 100%",animation:"shimmer 1.8s linear infinite" }}/>}
@@ -202,7 +222,7 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
                     {b.daily
                       ?<span style={{ width:40,height:40,borderRadius:12,background:`${BRAND}12`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}><Icon name="ti-calendar-repeat" size={20} color={BRAND}/></span>
                       :<img src={b.avatar || AVATAR_FALLBACK} alt="" style={{ width:40,height:40,borderRadius:"50%",objectFit:"cover",border:`2px solid ${sc}50`,flexShrink:0 }}/>}
-                    <div style={{ minWidth:0 }}><p style={{ fontSize:14,fontWeight:900,color:"var(--ak-text)",margin:"0 0 2px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{b.title}</p><p style={{ fontSize:11,color:"var(--ak-text-muted)",margin:0 }}>{b.daily?`Every day at ${b.scheduledFor?new Date(b.scheduledFor).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'7 PM'} · `:''}{matchup(b)}</p></div>
+                    <div style={{ minWidth:0 }}><p style={{ fontSize:14,fontWeight:900,color:"var(--ak-text)",margin:"0 0 2px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{b.title}</p><p style={{ fontSize:11,color:"var(--ak-text-muted)",margin:0 }}>{b.daily?`Every day at ${b.scheduledFor?new Date(b.scheduledFor).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'7 PM'}${vs?'':` · ${matchup(b)}`}`:(!vs&&matchup(b))}</p></div>
                   </div>
                   <div style={{ background:st.bg,borderRadius:8,padding:"3px 9px",border:`1px solid ${st.border}`,flexShrink:0,display:"flex",alignItems:"center",gap:4 }}>
                     {b.status==="live"&&<div style={{ width:5,height:5,borderRadius:"50%",background:RED,animation:"pulse-dot 1s ease-in-out infinite" }}/>}
@@ -215,16 +235,20 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
                     <div style={{ display:"flex",gap:5,flexWrap:"wrap",flex:1 }}>{b.participants.map(p=><div key={p.id} title={`${p.name} · ${p.owner}`} style={{ width:26,height:26,borderRadius:"50%",background:p.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,border:p.isYou?"2px solid #E8884A":"1px solid rgba(255,255,255,.3)",flexShrink:0 }}>{p.emoji}</div>)}</div>
                     <span style={{ fontSize:10,fontWeight:700,color:"rgba(255,255,255,.40)",flexShrink:0 }}>{b.participants.length} {t('battles.agents')}</span>
                   </div>
-                ):!b.daily&&A&&B&&(
+                ):vs&&(
                   <div style={{ display:"flex",alignItems:"center",gap:8,background:"rgba(0,0,0,.025)",borderRadius:12,padding:"10px 12px",marginBottom:10 }}>
-                    <div style={{ flex:1,display:"flex",alignItems:"center",gap:7 }}>
-                      <div style={{ width:32,height:32,borderRadius:"50%",background:A.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0 }}>{A.emoji}</div>
-                      <div><div style={{ fontSize:11.5,fontWeight:800,color:"var(--ak-text)" }}>{A.name}</div>{A.isYou&&<span style={{ fontSize:8.5,fontWeight:800,background:"#1A1A2E",color:"#fff",borderRadius:4,padding:"1px 5px" }}>{t('battles.you')}</span>}<div style={{ fontSize:14,fontWeight:900,color:A.color }}>{b.status==="scheduled"||b.status==="lobby"?"—":A.score}</div></div>
+                    <div style={{ flex:1,minWidth:0,display:"flex",alignItems:"center",gap:7 }}>
+                      <div style={{ width:32,height:32,borderRadius:"50%",background:vs.A.bg||`${BRAND}14`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}><AgentAvatar emoji={vs.A.emoji} size={22}/></div>
+                      <div style={{ minWidth:0 }}><div style={{ fontSize:11.5,fontWeight:800,color:"var(--ak-text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{vs.A.name}{vs.A.isYou&&<span style={{ marginLeft:4,fontSize:8.5,fontWeight:800,background:"#1A1A2E",color:"#fff",borderRadius:4,padding:"1px 5px" }}>{t('battles.you')}</span>}</div><div style={{ fontSize:14,fontWeight:900,color:vs.A.color||"var(--ak-text)" }}>{b.status==="scheduled"||b.status==="lobby"?"—":vs.A.score}</div></div>
                     </div>
                     <div style={{ width:28,height:28,borderRadius:"50%",background:"#1A1A2E",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:"#fff",flexShrink:0 }}>{t('battles.vs')}</div>
-                    <div style={{ flex:1,display:"flex",alignItems:"center",gap:7,justifyContent:"flex-end",flexDirection:"row-reverse" }}>
-                      <div style={{ width:32,height:32,borderRadius:"50%",background:B.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0 }}>{B.emoji}</div>
-                      <div style={{ textAlign:"right" }}><div style={{ fontSize:11.5,fontWeight:800,color:"var(--ak-text)" }}>{B.name}</div><div style={{ fontSize:14,fontWeight:900,color:B.color }}>{b.status==="scheduled"||b.status==="lobby"?"—":B.score}</div></div>
+                    <div style={{ flex:1,minWidth:0,display:"flex",alignItems:"center",gap:7,justifyContent:"flex-end",flexDirection:"row-reverse" }}>
+                      <div style={{ width:32,height:32,borderRadius:"50%",background:vs.B.bg||`${BRAND}14`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}><AgentAvatar emoji={vs.B.emoji} size={22}/></div>
+                      <div style={{ textAlign:"right",minWidth:0 }}>
+                        <div style={{ fontSize:11.5,fontWeight:800,color:"var(--ak-text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{vs.B.name}{vs.B.isYou&&<span style={{ marginLeft:4,fontSize:8.5,fontWeight:800,background:"#1A1A2E",color:"#fff",borderRadius:4,padding:"1px 5px" }}>{t('battles.you')}</span>}</div>
+                        <div style={{ fontSize:14,fontWeight:900,color:vs.B.color||"var(--ak-text)" }}>{b.status==="scheduled"||b.status==="lobby"?"—":vs.B.score}</div>
+                        {vs.more>0&&<div style={{ fontSize:9.5,fontWeight:700,color:"var(--ak-text-muted)" }}>and {vs.more} more</div>}
+                      </div>
                     </div>
                   </div>
                 )}
