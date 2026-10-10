@@ -27,6 +27,7 @@ export function buildSuggestionMessages({ role = "student", ask = "", reply = ""
     "Each must follow naturally from the assistant's last reply and be something the assistant can actually do. Make them different from each other: " +
       "one that goes deeper, one that changes or adds something, one practical next step.",
     "Never suggest assigning, sending or publishing anything — the user does that with a button.",
+    "Write them in the same language the user wrote in (English, Yoruba, Hausa, Igbo, Pidgin, French…).",
     ROLE_HINTS[role === "instructor" ? "instructor" : "student"],
     'Return JSON: { "suggestions": [string, string, string] }',
   ].join("\n");

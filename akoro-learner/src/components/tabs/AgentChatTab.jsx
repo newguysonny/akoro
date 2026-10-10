@@ -24,6 +24,7 @@ import StudyPrepChatCard from './studyPrep/StudyPrepChatCard.jsx';
 import { fetchActiveStudyPrepSession } from '../../services/studyPrepApi.js';
 import TraceBlocks from './agentChat/TraceBlocks.jsx';
 import { applyTraceEvent, blocksFromSavedTrace, promoteActivity, settleRunning } from '../../lib/agentChatTrace.js';
+import { CHAT_STARTERS, cleanIdeas } from '../../lib/chatIdeas.js';
 
 const QUICK_PROMPTS = [
   { text:"Create a task for me", key:"agent.qp_create" },
@@ -467,6 +468,17 @@ function AgentChatTab({
     return () => onChatActive?.(false);
   }, [innerTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // A suggestion chip puts its text in the message box — the learner can
+  // change it, then send. Nothing is sent for them.
+  const composerWrapRef=useRef(null);
+  const applyIdea=(fill)=>{
+    setInput(fill);
+    requestAnimationFrame(()=>{
+      const el=composerWrapRef.current?.querySelector('textarea,input[type="text"],input:not([type])');
+      if(el){ el.focus(); try { el.setSelectionRange(fill.length, fill.length); } catch { /* not a text field */ } }
+    });
+  };
+
   const sendMessage=async(overrideText)=>{
     // Attachments can be sent with an empty message — a friendly default text
     // stands in so the model (and the transcript) knows what's being asked.
@@ -596,6 +608,16 @@ function AgentChatTab({
           setMessages(prev=>[...prev,{id:replyId,from:"agent",text:t('agent.error_connection'),time:t2}]);
         }
       }
+    }
+    // Suggestions for every reply: three follow-ups, asked for AFTER the
+    // reply has arrived (it never waits on them); a failure is just no chips.
+    if(finalReply && !controller?.signal.aborted){
+      apiPost('/api/adaptive/chat/suggestions', { ask: text, reply: finalReply, role: 'student' })
+        .then((r)=>{
+          const ideas=cleanIdeas(r?.suggestions);
+          if(ideas.length) setMessages(prev=>prev.map(m=>m.id===replyId?{...m,ideas}:m));
+        })
+        .catch(()=>{});
     }
     // Attachments are consumed by this message; free the preview URLs.
     sentAttachments.forEach(a=>a.previewUrl&&URL.revokeObjectURL(a.previewUrl));
@@ -756,9 +778,14 @@ function AgentChatTab({
               ran, then the reply (Grand Plan §13.4). */}
           <div style={{ flex:1,position:"relative",display:"flex",flexDirection:"column",minHeight:0 }}>
           <div ref={feedRef} onScroll={onFeedScroll} style={{ flex:1,overflowY:"auto",padding:`14px ${CHAT_GUTTER}px`,display:"flex",flexDirection:"column",gap:14 }}>
-            {messages.map(msg=>{
+            {messages.map((msg,mi)=>{
               const isMe=msg.from==="me";
               const thinkingStream=!isMe&&msg.phase==="thinking";
+              // Chips under the newest reply only: starters on a fresh chat (they
+              // show what the agent can do), then each reply's follow-ups.
+              const chipIdeas=!isMe&&mi===messages.length-1&&!running
+                ? (messages.length===1 ? CHAT_STARTERS.map(c=>({ label:t(c.labelKey)||c.label, fill:t(c.fillKey)||c.fill })) : (msg.ideas||[]))
+                : [];
               if(isMe) return (
                 <div key={msg.id} style={{ display:"flex",flexDirection:"column",alignItems:"flex-end" }}>
                   <div style={{ maxWidth:"86%",padding:"10px 14px",borderRadius:14,background:"var(--ak-surface-hover)",border:"1px solid var(--ak-border)",color:"var(--ak-text)",fontSize:15.5,lineHeight:1.55,fontWeight:500,whiteSpace:"pre-wrap",wordBreak:"break-word" }}>{msg.text}</div>
@@ -806,6 +833,19 @@ function AgentChatTab({
                       ))}
                     </div>
                   )}
+                  {chipIdeas.length>0&&(
+                    <div aria-label={messages.length===1?t('agent.try_asking'):t('agent.try_next')} style={{ display:"flex",flexWrap:"wrap",alignItems:"center",gap:6,marginTop:10 }}>
+                      <span style={{ display:"inline-flex",alignItems:"center",gap:4,fontSize:11,fontWeight:800,color:"var(--ak-text-muted)" }}>
+                        <Icon name="ti-bulb" size={12}/> {messages.length===1?t('agent.try_asking'):t('agent.try_next')}
+                      </span>
+                      {chipIdeas.map(it=>(
+                        <button key={it.label} type="button" onClick={()=>applyIdea(it.fill)} title={t('agent.idea_hint')}
+                          style={{ padding:"7px 12px",borderRadius:20,border:`1.5px solid ${BRAND}40`,background:`${BRAND}0D`,color:BRAND,fontSize:12.5,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",textAlign:"left",lineHeight:1.3 }}>
+                          {it.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <div style={{ fontSize:10,color:"var(--ak-text-muted)",marginTop:3,display:"flex",alignItems:"center",gap:4 }}>
                     {msg.time}
                     {msg.text&&<CopyMessageButton text={msg.text} />}
@@ -849,6 +889,7 @@ function AgentChatTab({
                 ))}
               </div>
             )}
+            <div ref={composerWrapRef}>
             <FortizoChatComposer
               value={input}
               onChange={setInput}
@@ -865,6 +906,7 @@ function AgentChatTab({
               hideModelMenu
               sendDisabled={!input.trim()&&!attachments.length}
             />
+            </div>
             {/* The model switch — the LLM behind the next message. */}
             <div style={{ display:"flex",alignItems:"center",gap:6,marginTop:8 }}>
               <ModelSwitch modelId={picker.selectedId} modelLabel={picker.label} modelOptions={picker.options}
