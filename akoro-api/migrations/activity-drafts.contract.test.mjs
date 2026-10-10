@@ -14,6 +14,7 @@ import test from "node:test";
  * create path the activities workbench uses (targets, notifications, ding).
  */
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
+const draftCard = await read("../../akoro-instructor/src/components/paper/DraftCard.jsx");
 const [migration, manifest, service, drafts, routes, chat, chatDoctrine, hitlDoctrine, page, panel, chatPage, gateway, studentAgent, routinesMigration, routines, outcomes, appJs, instructorChatPage, classroomsMigration, guide, aiModel] = await Promise.all([
   read("./2026-activity-drafts.sql"),
   read("./manifest.json"),
@@ -108,8 +109,9 @@ test("all six workbench types are draftable; journeys stage through the shared p
 test("the chat hands the human a Preview button and a side-by-side panel", () => {
   // The button rides the real toolExecutions echo, not the model's prose.
   assert.match(chatPage, /x\.tool === 'prepare_activity' && x\.success \|\| x\.tool === 'revise_activity_draft' && x\.revised/);
-  assert.match(chatPage, /\{msg\.previews\.length > 1 \? `Preview \$\{pi \+ 1\}` : 'Preview'\} — \{d\.title\}/);
-  assert.match(chatPage, /Assigned ✓/);
+  // Each echo is a summary card (DraftCard) with its own Preview button.
+  assert.match(chatPage, /label=\{msg\.previews\.length > 1 \? `Preview \$\{pi \+ 1\}` : 'Preview'\}/);
+  assert.match(draftCard, /Assigned ✓/);
   // Side-by-side: the container widens and hosts the panel next to the chat.
   assert.match(chatPage, /previewDraft \? 'min\(1180px, 97vw\)' : 720/);
   assert.match(chatPage, /<ActivityPreviewPanel/);
@@ -119,7 +121,8 @@ test("the chat hands the human a Preview button and a side-by-side panel", () =>
   // narrow desktops while the chat column shrinks.
   assert.match(chatPage, /@media \(max-width: 767px\)/);
   assert.doesNotMatch(chatPage, /max-width: 1100px/);
-  assert.match(chatPage, /width: 430, maxWidth: '46vw', flexShrink: 0/);
+  // An assignment's paper needs more room than the other drafts.
+  assert.match(chatPage, /width: previewType === 'assignment' \? 600 : 430, maxWidth: previewType === 'assignment' \? '58vw' : '46vw', flexShrink: 0/);
 });
 
 test("the preview reuses the workbench's own forms — no forked editors", () => {
@@ -127,7 +130,7 @@ test("the preview reuses the workbench's own forms — no forked editors", () =>
   // the draft-assign approval instead of the bench.
   assert.match(page, /function ActivityForm\(\{ type, onAssigned, initial = null, savePayload = null \}\)/);
   assert.match(page, /savePayload \? await savePayload\(payload\) : await apiPost\('\/api\/self-study', payload\)/);
-  assert.match(panel, /<ActivityForm[\s\S]*?initial=\{prefillFrom\(payload\)\}[\s\S]*?savePayload=/);
+  assert.match(panel, /<ActivityForm[\s\S]*?initial=\{prefillFrom\(payload, shown\)\}[\s\S]*?savePayload=/);
   assert.match(panel, /\/api\/self-study\/drafts\/\$\{draftId\}\/assign/);
   // Battles go through the one shared BattleForm, embedded.
   assert.match(panel, /<BattleForm onSubmit=\{battleSubmit\}[^>]*embedded/);

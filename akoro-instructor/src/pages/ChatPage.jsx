@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Send, Plus, Brain, Edit3, CheckSquare, X, Paperclip, Camera,
   Upload, FileText, ScanLine, Loader, CheckCircle2,
-  Eye, History, Copy, Check,
+  History, Copy, Check,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, FileUploadZone, Toast } from '../components/Primitives.jsx';
@@ -14,6 +14,7 @@ import { useStatsAPI } from '../hooks/useStatsAPI.js';
 import { useInstructorSocket } from '../hooks/useWebSocket.js';
 import { apiGet, apiPost, apiDelete, API } from '../services/api.js';
 import ActivityPreviewPanel from '../components/ActivityPreviewPanel.jsx';
+import DraftCard from '../components/paper/DraftCard.jsx';
 import FortizoChatComposer from '../components/common/FortizoChatComposer.jsx';
 import RichText from '../components/common/RichText.jsx';
 
@@ -372,7 +373,10 @@ export default function ChatPage() {
         .map((x) => x.draft);
       (data.toolExecutions || [])
         .filter((x) => x.tool === 'revise_activity_draft' && x.revised && x.draft)
-        .forEach((x) => setDraftRevisions((prev) => ({ ...prev, [x.draft.id]: (prev[x.draft.id] || 0) + 1 })));
+        .forEach((x) => {
+          setDraftRevisions((prev) => ({ ...prev, [x.draft.id]: (prev[x.draft.id] || 0) + 1 }));
+          if (x.draft.version) setPreviewVersion(null);   // an open preview jumps to the new version's tab
+        });
       pushAgent(
         data.reply || data.response || "I'm here to help with teaching and your subjects — what would you like to explore?",
         previews.length ? { previews } : {},
@@ -493,6 +497,8 @@ export default function ChatPage() {
 
   // ── Human-in-the-loop preview — side-by-side with the chat ──────────────
   const [previewDraft, setPreviewDraft] = useState(null);   // draft id or null
+  const [previewVersion, setPreviewVersion] = useState(null);   // the assignment version the card opened
+  const [previewType, setPreviewType] = useState(null);
   const [aiStatus, setAiStatus] = useState('');             // live tool status ("Resolving your class…")
   const [draftStates, setDraftStates] = useState({});       // { [id]: 'assigned'|'discarded' }
   const [draftRevisions, setDraftRevisions] = useState({}); // { [id]: bump count }
@@ -673,22 +679,12 @@ export default function ChatPage() {
                       : <RichText text={textPart} color={INK} />)}
                   </div>
                   {!isMe && (msg.previews || []).length > 0 && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                      {msg.previews.map((d, pi) => {
-                        const st = draftStates[d.id];
-                        return (
-                          <button key={d.id} disabled={!!st} onClick={() => setPreviewDraft(d.id)}
-                            title={st ? undefined : 'Preview this draft — assigning is your call'}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 20, cursor: st ? 'default' : 'pointer', fontFamily: FONT, fontSize: 11, fontWeight: 800,
-                              border: st === 'assigned' ? '1px solid #BBF7D0' : st === 'discarded' ? `1px solid ${BORDER}` : '1px solid rgba(168,85,247,.45)',
-                              background: st === 'assigned' ? '#DCFCE7' : st === 'discarded' ? LIGHT : 'rgba(168,85,247,.08)',
-                              color: st === 'assigned' ? GREEN : st === 'discarded' ? MUTED2 : PURPLE }}>
-                            {st === 'assigned' ? <><CheckCircle2 size={12} /> Assigned ✓</>
-                              : st === 'discarded' ? <>Discarded</>
-                              : <><Eye size={12} /> {msg.previews.length > 1 ? `Preview ${pi + 1}` : 'Preview'} — {d.title}</>}
-                          </button>
-                        );
-                      })}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+                      {msg.previews.map((d, pi) => (
+                        <DraftCard key={`${d.id}-${d.version || 0}`} preview={d} state={draftStates[d.id]}
+                          label={msg.previews.length > 1 ? `Preview ${pi + 1}` : 'Preview'}
+                          onOpen={(id, version) => { setPreviewDraft(id); setPreviewVersion(version); setPreviewType(d.type); }} />
+                      ))}
                     </div>
                   )}
                   <div style={{ fontSize: 10, color: MUTED2, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
@@ -807,9 +803,10 @@ export default function ChatPage() {
         </div>
 
         {previewDraft && (
-          <div className="ci-preview-panel" style={{ width: 430, maxWidth: '46vw', flexShrink: 0, minHeight: 0 }}>
+          <div className="ci-preview-panel" style={{ width: previewType === 'assignment' ? 600 : 430, maxWidth: previewType === 'assignment' ? '58vw' : '46vw', flexShrink: 0, minHeight: 0 }}>
             <ActivityPreviewPanel
               draftId={previewDraft}
+              initialVersion={previewVersion}
               revision={draftRevisions[previewDraft] || 0}
               onClose={() => setPreviewDraft(null)}
               onResolved={resolveDraft}

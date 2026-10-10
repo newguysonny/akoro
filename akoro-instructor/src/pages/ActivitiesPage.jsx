@@ -116,6 +116,7 @@ const BLANK = {
   audience: BLANK_AUDIENCE,
   scheduledAt: '', durationMins: '60',
   subtopics: [], objectives: {},
+  questionRequest: '',   // the teacher's words: "5 questions, 3 MCQ, 2 direct theory"
   questions: [],   // optional: [{q, options?, correct?, section?, passage?, figure?}] — learners answer on submit
   // The paper layout (reference/question-layout-for-activity): sections
   // with instructions and passages several questions share.
@@ -142,7 +143,7 @@ const QUESTION_TYPES = ['MCQ', 'Short answer', 'Essay', 'Coding', 'Diagram'];
    Question-level marking fields (type, max_points, difficulty, cognitive
    level) ride along when present: the learner contract reads q/options,
    everything else is workbench + grading detail. */
-function cleanQuestions(raw) {
+export function cleanQuestions(raw) {
   return (raw ?? [])
     .map((row) => {
       const q = (row.q || '').trim();
@@ -155,6 +156,7 @@ function cleanQuestions(raw) {
         ...(Number.isInteger(row.section) ? { section: row.section } : {}),
         ...(Number.isInteger(row.passage) ? { passage: row.passage } : {}),
         ...(row.figure && (row.figure.src || row.figure.svg) ? { figure: row.figure } : {}),
+        ...(!row.figure && row.figure_note ? { figure_note: row.figure_note } : {}),
       };
       if (row.kind === 'mcq') {
         const options = (row.options ?? []).map(o => (o || '').trim()).filter(Boolean);
@@ -171,7 +173,7 @@ function cleanQuestions(raw) {
 /* The paper layout that rides beside the questions: empty sections and
    passages are dropped (references kept in step), and so is the whole
    layout when no question uses it. → { questions, sections?, passages? } */
-function cleanPaper(form) {
+export function cleanPaper(form) {
   let questions = form.questions ?? [];
   let sections = (form.sections ?? []).map(s => ({ title: (s.title || '').trim(), instructions: (s.instructions || '').trim() }));
   let passages = (form.passages ?? []).map(p => ({ title: (p.title || '').trim(), text: (p.text || '').trim() }));
@@ -183,6 +185,27 @@ function cleanPaper(form) {
     ...(sections.length && clean.some(q => Number.isInteger(q.section)) ? { sections } : {}),
     ...(passages.length && clean.some(q => Number.isInteger(q.passage)) ? { passages } : {}),
   };
+}
+
+/* Stored questions (details.questions, a draft version) → the builder's rows. */
+export function rowsFromQuestions(questions) {
+  return (questions ?? []).map((q) => {
+    const obj = q && typeof q === 'object' ? q : { q: String(q ?? '') };
+    const opts = Array.isArray(obj.options) && obj.options.length >= 2 ? obj.options : null;
+    return {
+      ...BLANK_QUESTION,
+      q: obj.q || obj.text || '',
+      kind: opts ? 'mcq' : 'open',
+      options: opts || ['', ''],
+      correct: opts ? Math.min(Math.max(Number(obj.correct) || 0, 0), opts.length - 1) : 0,
+      type: obj.type || '', max_points: obj.max_points ?? null,
+      difficulty: obj.difficulty || '', cognitive_level: obj.cognitive_level || '',
+      ...(Number.isInteger(obj.section) ? { section: obj.section } : {}),
+      ...(Number.isInteger(obj.passage) ? { passage: obj.passage } : {}),
+      figure: obj.figure || null,
+      ...(obj.figure_note ? { figure_note: obj.figure_note } : {}),
+    };
+  });
 }
 
 /* A small on/off switch for the AI marking toggles — reads as a switch, not
@@ -213,6 +236,7 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
   const [classesLoading, setClassesLoading] = useState(true);
   const [drafting, setDrafting] = useState(false);
   const [qDrafting, setQDrafting] = useState(false);          // AI drafting the questions
+  const [qWarning, setQWarning] = useState('');               // the draft missed the request (count / mix)
   const [rubricDrafting, setRubricDrafting] = useState(false); // AI drafting the rubric
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -266,27 +290,16 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
     try {
       const d = await apiPost('/api/self-study/assignment-draft/questions', {
         topic: form.topic.trim(), subject: form.subject,
+        request: (form.questionRequest || '').trim(),
         total_points: Number(form.totalPoints) || null,
         question_types: form.questionTypes,
         difficulty: form.difficulty,
         subtopics: form.subtopics.map(s => s.trim()).filter(Boolean),
       });
-      const qs = (d?.data?.questions ?? []).map(q => {
-        const opts = Array.isArray(q.options) && q.options.length >= 2 ? q.options : null;
-        return {
-          q: q.text || '',
-          kind: opts ? 'mcq' : 'open',
-          options: opts || ['', ''],
-          correct: opts ? Math.min(Math.max(Number(q.correct) || 0, 0), opts.length - 1) : 0,
-          type: q.type || '', max_points: q.max_points ?? null,
-          difficulty: q.difficulty || '', cognitive_level: q.cognitive_level || '',
-          ...(Number.isInteger(q.section) ? { section: q.section } : {}),
-          ...(Number.isInteger(q.passage) ? { passage: q.passage } : {}),
-          figure: q.figure?.svg ? { svg: q.figure.svg, caption: q.figure.caption || '' } : null,
-        };
-      });
+      const qs = rowsFromQuestions(d?.data?.questions);
       const sections = (d?.data?.sections ?? []).map(s => ({ title: s.title || '', instructions: s.instructions || '' }));
       const passages = (d?.data?.passages ?? []).map(p => ({ title: p.title || '', text: p.text || '' }));
+      setQWarning(d?.data?.warning || '');
       if (!qs.length) throw new Error('The AI returned no questions — try again, or add them yourself.');
       setForm(f => {
         // No total set yet? Adopt the AI's allocation as the total.
@@ -568,7 +581,7 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
                 {form.questions.length
                   ? `${cleanQuestions(form.questions).length} question${cleanQuestions(form.questions).length === 1 ? '' : 's'} will ride with this activity — learners answer them on submit.`
                   : type === 'assignment'
-                    ? 'Draft them with AI — it uses the total points and question types above — or add your own.'
+                    ? 'Say what you want below and draft them with AI — or add your own.'
                     : 'Add questions and learners answer them in the app instead of a free-text answer.'}
               </div>
             </div>
@@ -594,10 +607,23 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
               </Btn>
             </div>
           </div>
+          {/* The teacher's own words drive the draft: count, mix, diagrams, marks. */}
+          {type === 'assignment' && (
+            <input value={form.questionRequest || ''} onChange={e => setField('questionRequest', e.target.value)} maxLength={1500}
+              aria-label="Describe the questions"
+              placeholder="Describe the questions, e.g. 5 questions — 3 MCQ, 2 direct theory, one with a diagram"
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (!qDrafting) draftQuestions(); } }}
+              style={{ ...Q_INP, width: '100%', boxSizing: 'border-box', marginTop: 9, fontSize: 12.5 }} />
+          )}
+          {qWarning && (
+            <div style={{ marginTop: 8, padding: '7px 10px', borderRadius: 9, background: '#FFF7ED', border: '1px solid #FED7AA', fontSize: 11.5, fontWeight: 700, color: '#B45309', fontFamily: FONT }}>
+              ⚠ {qWarning} Edit below, or draft again.
+            </div>
+          )}
           {form.questions.length > 0 && (
             <PaperBuilder
               questions={form.questions} sections={form.sections ?? []} passages={form.passages ?? []}
-              assignment={type === 'assignment'}
+              assignment={type === 'assignment'} title={form.topic}
               onChange={patch => setForm(f => ({ ...f, ...patch }))} />
           )}
         </div>
