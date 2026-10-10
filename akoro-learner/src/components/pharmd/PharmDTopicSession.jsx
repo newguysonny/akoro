@@ -180,7 +180,6 @@ export default function PharmDTopicSession({ topic, course, onClose }) {
     pages,
     renderPageContent,
     rawPages: true,            // pdf.js canvases carry their own margins
-    allowTextMarking: false,   // canvases can't carry HTML annotate/redact
   };
 
   /* A remembered session id (24h) makes reopening a topic CONTINUE its

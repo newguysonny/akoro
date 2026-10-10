@@ -241,7 +241,6 @@ export default function AgentSessionViewer({ course, lesson, onClose }) {
     transcribeState: avState === 'failed' ? 'failed' : avState === 'running' ? 'running' : 'idle',
     transcribeError: avError,
     pages: [],
-    allowTextMarking: false,
   };
 
   /* A remembered session id (24h) makes reopening a lesson CONTINUE its

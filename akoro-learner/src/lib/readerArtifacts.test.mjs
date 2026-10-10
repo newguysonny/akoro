@@ -33,10 +33,11 @@ test('a saved artifact becomes the same tab again, progress restored', () => {
 test('annotations and hidden passages come back on their page', () => {
   const { annotations, redactions } = marksFromArtifacts([
     { id: 'a1', kind: 'annotation', pageNumber: 3, content: { text: 'Calvin cycle', note: 'learn this' } },
-    { id: 'a2', kind: 'redaction', pageNumber: 1, content: { text: 'answer key' } },
+    { id: 'a2', kind: 'redaction', pageNumber: 1, content: { text: 'answer key', rects: [{ x: 10, y: 20, w: 30, h: 2 }, { x: 'bad' }] } },
     { id: 'a3', kind: 'annotation', pageNumber: 2, content: {} },
     { id: 'a4', kind: 'quiz', pageNumber: 1, content: {} },
   ]);
-  assert.deepEqual(annotations, [{ id: 'ann-a1', artifactId: 'a1', page: 2, text: 'Calvin cycle', note: 'learn this' }]);
-  assert.deepEqual(redactions, [{ id: 'red-a2', artifactId: 'a2', page: 0, text: 'answer key' }]);
+  assert.deepEqual(annotations, [{ id: 'ann-a1', artifactId: 'a1', page: 2, text: 'Calvin cycle', note: 'learn this', rects: [] }]);
+  // A mark on a drawn page (PDF / image) keeps its boxes; bad ones are dropped.
+  assert.deepEqual(redactions, [{ id: 'red-a2', artifactId: 'a2', page: 0, text: 'answer key', rects: [{ x: 10, y: 20, w: 30, h: 2 }] }]);
 });

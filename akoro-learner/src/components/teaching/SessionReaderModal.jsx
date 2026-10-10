@@ -6,6 +6,7 @@ import ReaderDiscussion from "./ReaderDiscussion.jsx";
 import ReaderAsk from "./ReaderAsk.jsx";
 import ReaderPodcast from "./ReaderPodcast.jsx";
 import { citeLabel, toReaderCite } from "../../lib/askAnswer.js";
+import { selectionRects } from "../../lib/markRects.js";
 import { TAB_KINDS, artifactToTab, marksFromArtifacts, tabContentPatch, tabToArtifact } from "../../lib/readerArtifacts.js";
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -444,6 +445,10 @@ const READER_CSS = `
   100%{background:transparent;box-shadow:0 0 0 0 rgba(0,0,0,0);}
 }
 .folio-redaction{background:#1c1917;color:transparent;border-radius:3px;cursor:pointer;padding:0 2px;-webkit-user-select:none;user-select:none;box-decoration-break:clone;-webkit-box-decoration-break:clone;}
+.folio-mark-box{position:absolute;z-index:4;padding:0;border-radius:2px;pointer-events:auto;}
+.folio-annotation.folio-mark-box{background:rgba(108,59,255,.24);border-bottom:2px solid var(--ak-accent);}
+.folio-redaction.folio-mark-box{background:#1c1917;}
+.folio-redaction.folio-mark-box.revealed{background:transparent;outline:1.5px dashed #a8a29e;}
 .folio-redaction.revealed{background:transparent;color:inherit;outline:1.5px dashed #a8a29e;outline-offset:1px;-webkit-user-select:text;user-select:text;}
 .folio-annotation{background:rgba(108,59,255,.22);border-bottom:2px solid var(--ak-accent);cursor:pointer;border-radius:2px;padding:0 1px;box-decoration-break:clone;-webkit-box-decoration-break:clone;}
 `;
@@ -1082,15 +1087,14 @@ export default function SessionReaderModal({
      media: { kind:'audio'|'video', src, title, onPosition } — when set, the
        reader pane becomes a media player: the ORIGINAL file plays, and the
        toolbar swaps page nav/zoom for transport (±10s, play/pause, speed).
-     allowTextMarking: false hides Annotate/Hide in the selection popover
-       (they operate on HTML pages — canvases/images can't carry them).
+     Annotate / Hide work on every page: text pages mark the words, drawn
+       pages (canvases, images) draw the mark over the selection's boxes.
      rawPages: true — the pages are finished documents (pdf.js canvases):
        they carry their own margins, so the reader drops the inner page
        padding and the width cap, keeps ONE small margin around the page
        stack and a tight gap between pages — the document fills the pane. */
   renderPageContent = null,
   media = null,
-  allowTextMarking = true,
   rawPages = false,
   /* pageBlocks[i] — the AI extraction's layout blocks for PDF page i
      (bbox_2d normalized 0-1000). When present, generated summaries/quiz
@@ -1256,9 +1260,12 @@ export default function SessionReaderModal({
 
   function saveAnnotation() {
     if (!annotateDraft || !annotateText.trim()) return;
-    const ann = { id: "ann-" + Date.now(), page: currentPage, text: annotateDraft.text, note: annotateText.trim() };
+    const ann = {
+      id: "ann-" + Date.now(), page: Number.isInteger(annotateDraft.page) ? annotateDraft.page : currentPage,
+      text: annotateDraft.text, note: annotateText.trim(), rects: annotateDraft.rects || [],
+    };
     setAnnotations((a) => [...a, ann]);
-    artifacts?.save({ kind: "annotation", pageNumber: ann.page + 1, content: { text: ann.text.slice(0, 2000), note: ann.note.slice(0, 4000) } })
+    artifacts?.save({ kind: "annotation", pageNumber: ann.page + 1, content: { text: ann.text.slice(0, 2000), note: ann.note.slice(0, 4000), rects: ann.rects } })
       .then((a) => a?.id && setAnnotations((list) => list.map((x) => (x.id === ann.id ? { ...x, artifactId: a.id } : x))))
       .catch(() => {});
     setAnnotateDraft(null);
@@ -1568,7 +1575,9 @@ export default function SessionReaderModal({
         // PDF pages: the citation carries the extraction block's bbox —
         // flash THAT region on the page, not the whole sheet.
         if (hasBox && !block) {
-          const pageDiv = viewerRef.current?.querySelector(`[data-page-index="${cite.page}"]`);
+          // Over the page's content (not its padded frame), so the box lands on the words.
+          const pageDiv = viewerRef.current?.querySelector(`[data-page-index="${cite.page}"] [data-page-content]`)
+            || viewerRef.current?.querySelector(`[data-page-index="${cite.page}"]`);
           if (pageDiv) {
             const [x1, y1, x2, y2] = cite.bbox;
             const box = document.createElement("div");
@@ -1607,8 +1616,15 @@ export default function SessionReaderModal({
     if (!closestPage(sel.anchorNode) || !closestPage(sel.focusNode)) return setSelection(null);
     const rect = sel.getRangeAt(0).getBoundingClientRect();
     if (!rect || (rect.width === 0 && rect.height === 0)) return setSelection(null);
-    const pageIndex = Number(closestPage(sel.anchorNode)?.dataset?.pageIndex);
-    setSelection({ text, pageIndex: Number.isInteger(pageIndex) ? pageIndex : null, rect: { left: rect.left, top: rect.top, bottom: rect.bottom, width: rect.width } });
+    const pageEl = closestPage(sel.anchorNode);
+    const pageIndex = Number(pageEl?.dataset?.pageIndex);
+    // Where the selection sits on the page content (percent boxes) — how a
+    // mark is drawn back over a PDF canvas or an image.
+    const contentEl = pageEl?.querySelector("[data-page-content]");
+    const rects = contentEl && closestPage(sel.focusNode) === pageEl
+      ? selectionRects(sel.getRangeAt(0).getClientRects(), contentEl.getBoundingClientRect())
+      : [];
+    setSelection({ text, pageIndex: Number.isInteger(pageIndex) ? pageIndex : null, rects, rect: { left: rect.left, top: rect.top, bottom: rect.bottom, width: rect.width } });
   }, [activeTabId]);
 
   useLayoutEffect(() => {
@@ -1651,15 +1667,20 @@ export default function SessionReaderModal({
       openCommunityTab("ask");
       return;
     }
+    const page = Number.isInteger(selection?.pageIndex) ? selection.pageIndex : currentPage;
+    const rects = selection?.rects || [];
     if (action === "redact") {
-      setRedactions((r) => [...r, { id: "red-" + Date.now(), page: currentPage, text }]);
-      artifacts?.save({ kind: "redaction", pageNumber: currentPage + 1, content: { text: text.slice(0, 2000) } }).catch(() => {});
+      const red = { id: "red-" + Date.now(), page, text, rects };
+      setRedactions((r) => [...r, red]);
+      artifacts?.save({ kind: "redaction", pageNumber: page + 1, content: { text: text.slice(0, 2000), rects } })
+        .then((a) => a?.id && setRedactions((list) => list.map((x) => (x.id === red.id ? { ...x, artifactId: a.id } : x))))
+        .catch(() => {});
       setSelection(null);
       try { window.getSelection().removeAllRanges(); } catch {}
       return;
     }
     if (action === "annotate") {
-      setAnnotateDraft({ text, rect: selection.rect });
+      setAnnotateDraft({ text, rect: selection.rect, page, rects });
       setAnnotateText("");
       setSelection(null);
       return;
@@ -1950,9 +1971,27 @@ export default function SessionReaderModal({
                     : "md:max-w-2xl mb-5 px-5 py-9 md:px-14 md:py-14"}`}
                 >
                   {/* The opener's renderer wins; a page it doesn't draw
-                      (returns null) falls back to the page's own HTML. */}
-                  {(renderPageContent && renderPageContent(i))
-                    || <div dangerouslySetInnerHTML={{ __html: buildPageHtml(p.html, i) }}/>}
+                      (returns null) falls back to the page's own HTML.
+                      Drawn pages (canvases, images) get their annotations
+                      and hidden passages as boxes over the selection. */}
+                  {(() => {
+                    const drawn = renderPageContent && renderPageContent(i);
+                    if (!drawn) return <div data-page-content="" dangerouslySetInnerHTML={{ __html: buildPageHtml(p.html, i) }}/>;
+                    return (
+                      <div data-page-content="" style={{ position: "relative" }}>
+                        {drawn}
+                        {annotations.filter((a) => a.page === i && a.rects?.length).flatMap((a) => a.rects.map((r, k) => (
+                          <div key={`${a.id}-${k}`} className="folio-annotation folio-mark-box" data-ann-id={a.id} title={a.note}
+                            style={{ left: `${r.x}%`, top: `${r.y}%`, width: `${r.w}%`, height: `${r.h}%` }}/>
+                        )))}
+                        {redactions.filter((r) => r.page === i && r.rects?.length).flatMap((r) => r.rects.map((b, k) => (
+                          <div key={`${r.id}-${k}`} className={`folio-redaction folio-mark-box${revealedRedactions.has(r.id) ? " revealed" : ""}`} data-red-id={r.id}
+                            title={revealedRedactions.has(r.id) ? "Tap to hide again" : "Hidden — tap to reveal"}
+                            style={{ left: `${b.x}%`, top: `${b.y}%`, width: `${b.w}%`, height: `${b.h}%` }}/>
+                        )))}
+                      </div>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
@@ -2060,12 +2099,11 @@ export default function SessionReaderModal({
             <Icon name="ti-circle-check" size={13} color="var(--ak-accent)"/> Quiz me
           </button>
           <button onClick={() => handleSelectionAction("flashcards")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs hover:bg-black/10 whitespace-nowrap flex-shrink-0" style={{ color: "var(--ak-text)" }}>
-            <Icon name="ti-stack" size={13} color="var(--ak-accent)"/> Cards
+            <Icon name="ti-stack" size={13} color="var(--ak-accent)"/> Flashcards
           </button>
           <button onClick={() => handleSelectionAction("notes")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs hover:bg-black/10 whitespace-nowrap flex-shrink-0" style={{ color: "var(--ak-text)" }}>
             <Icon name="ti-pencil" size={13} color="var(--ak-accent)"/> Note
           </button>
-          {allowTextMarking && (<>
           <div className="w-px h-6 mx-0.5 flex-shrink-0" style={{ background: "var(--ak-tag-bg)" }}/>
           <button onClick={() => handleSelectionAction("annotate")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs hover:bg-black/10 whitespace-nowrap flex-shrink-0" style={{ color: "var(--ak-text)" }}>
             <Icon name="ti-highlight" size={13} color={GOLD}/> Annotate
@@ -2073,7 +2111,6 @@ export default function SessionReaderModal({
           <button onClick={() => handleSelectionAction("redact")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs hover:bg-black/10 whitespace-nowrap flex-shrink-0" style={{ color: "var(--ak-text)" }}>
             <Icon name="ti-eye-off" size={13} color="var(--ak-danger-text)"/> Hide
           </button>
-          </>)}
         </div>
       )}
 
