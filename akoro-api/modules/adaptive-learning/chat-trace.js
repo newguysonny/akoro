@@ -38,6 +38,8 @@ export const CHAT_TOOL_DISPLAY = Object.freeze({
   list_scheduled_chat_follow_ups: { category: "research", headline: "Checking your scheduled check-ins",   description: "Listing the follow-ups already planned" },
   cancel_scheduled_chat_follow_up:{ category: "action",   headline: "Cancelling a follow-up",              description: "Removing a planned check-in", done: "Cancelled a follow-up" },
   consult_peer_agents:            { category: "research", headline: "Asking other learners' agents",       description: "Collecting ideas from other study agents" },
+  ask_to_be_taught:               { category: "read",     headline: "Checking what you've taught me",      description: "Asking you to teach this topic" },
+  consult_teaching_guide:         { category: "read",     headline: "Asking NaNa, my teaching guide",      description: "Something you haven't taught me yet" },
   search_blog_posts:              { category: "read",     headline: "Searching the Akoro blog",            description: "Looking for articles on this topic" },
   read_blog_post:                 { category: "read",     headline: "Reading a blog article",              description: "Reading the article in full" },
   list_my_goals:                  { category: "research", headline: "Checking your goals",                 description: "Looking at your active study goals" },

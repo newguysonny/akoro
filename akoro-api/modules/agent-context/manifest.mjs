@@ -68,6 +68,13 @@ export const SETS = Object.freeze({
       "policies/AGENT_CHAT.md", "policies/TOOL_OBSERVATIONS.md", "memory/MEMORY.md", "memory/DURABLE_MEMORY.md",
     ]),
   }),
+  // The learner's Agent Chat speaks as their protégé (protege.js): appended
+  // after the student doctrine with the taught knowledge for the turn.
+  chat_protege: Object.freeze({
+    mode: "verbatim",
+    consumer: "agent chat /agent route — student role, protégé rules (taught knowledge, the teaching guide)",
+    files: Object.freeze(["policies/PROTEGE.md"]),
+  }),
   chat_instructor: Object.freeze({
     mode: "verbatim",
     consumer: "agent chat /agent route — instructor copilot",

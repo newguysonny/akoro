@@ -17,6 +17,22 @@ import { authenticateToken } from "../auth/routes.js";
 import pkg from "pg";
 import { OPENAI_MODEL, openai } from "../../lib/aiModel.js";
 import { buildSuggestionMessages, shapeSuggestions } from "./chatSuggestions.js";
+import { loadTaughtKnowledge, renderTaughtContext, buildGuideMessages, shapeGuideAnswer, teachRequest } from "./protege.js";
+import { loadDoctrine } from "../agent-context/context-manager.js";
+
+/* Where the protégé's taught knowledge comes from (edu.student_agents / agent_knowledge). */
+const protegeDeps = {
+  findAgent: async (studentId) => {
+    const { data } = await db.schema("edu").from("student_agents").select("id").eq("student_id", studentId).maybeSingle();
+    return data || null;
+  },
+  retrieve: (agentId, query, limit) => retrieveAgentKnowledge(agentId, query, limit),
+  listTopics: async (agentId) => {
+    const { data } = await db.schema("edu").from("agent_knowledge").select("topic, subject")
+      .eq("agent_id", agentId).order("last_seen_at", { ascending: false }).limit(200);
+    return data || [];
+  },
+};
 import { publicModelList, resolveChatModel } from "../../lib/modelCatalogue.js";
 const { Pool } = pkg;
 import db from "../../db.js";
@@ -338,6 +354,36 @@ export const CHAT_TOOLS = [
       properties: {
         question: { type: "string", description: "One focused, general question to the peer agents (10-300 characters)." },
         topic: { type: "string", enum: ["study_habits", "exam_prep", "streaks", "motivation", "goals", "subjects", "general"], description: "What the question is about." },
+      },
+      required: ["question"],
+    },
+  },
+  {
+    name: "ask_to_be_taught",
+    description: "You are the learner's protégé: use this when they ask you to explain, quiz or help with subject content you have NOT been taught " +
+      "(nothing under \"What the learner has taught you\" covers it). It shows them a Teach me button for that topic. Say honestly that you " +
+      "haven't been taught it and point to where they can read about it first. Do not explain the content yourself.",
+    input_schema: {
+      type: "object",
+      properties: {
+        topic: { type: "string", description: "The topic to be taught, short, e.g. 'Photosynthesis'." },
+        subject: { type: "string", description: "The school subject, e.g. 'Biology'. Omit when unclear." },
+      },
+      required: ["topic"],
+    },
+  },
+  {
+    name: "consult_teaching_guide",
+    description: "Ask NaNa Esumai, your teaching guide, about something you were NOT taught — ONLY after you told the learner you haven't been taught it " +
+      "and they insisted on an answer (\"just tell me\", \"I don't know it either\", \"ask your guide\"). Returns the guide's explanation. " +
+      "Pass it on opening with \"From NaNa, my teaching guide (you haven't taught me this):\" and invite them to teach it back to you. " +
+      "Never present it as something you were taught.",
+    input_schema: {
+      type: "object",
+      properties: {
+        question: { type: "string", description: "The learner's question, as they asked it." },
+        topic: { type: "string", description: "The topic, short." },
+        subject: { type: "string", description: "The school subject, if clear." },
       },
       required: ["question"],
     },
@@ -990,7 +1036,7 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         : String(process.env[key] || "").toLowerCase() === "true";
       return {
         sections: [
-          { title: "Study support", items: ["Explain concepts and work through problems", "Help draft and improve study notes, essays, and revision plans", "Generate practice questions and discuss answers", "Show safe study profile, learning overview, knowledge-map, saved-study-knowledge, guide-preference, and Online/Offline status when asked",
+          { title: "Study support", items: ["Explain and quiz you on what you have taught it — it is your protégé", "Tell you honestly what you haven\u2019t taught it yet, point you to sources and ask you to teach it", "Ask NaNa, its teaching guide, when you insist on something it wasn\u2019t taught (and say so)", "Help draft and improve study notes, essays, and revision plans", "Show safe study profile, learning overview, knowledge-map, saved-study-knowledge, guide-preference, and Online/Offline status when asked",
             // same default-on semantics as the tool's featureGate
             ...(String(process.env.AKORO_AGENT_PEER_CONSULT_ENABLED ?? "true").toLowerCase() !== "false"
               ? ["Ask other learners\u2019 study agents for fresh ideas when you\u2019re stuck \u2014 only your question travels, never your data"] : [])] },
@@ -1286,6 +1332,39 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         return consult; // { consulted, replies: [{agent, emoji, reply}], topic }
       } catch (error) {
         return { error: error.message || "The agent network is unavailable right now" };
+      }
+    }
+    // ── The protégé (protege.js, policies/PROTEGE.md) ─────────────────────
+    case "ask_to_be_taught": {
+      const teach = teachRequest(input);
+      if (!teach) return clarify("topic", "Which topic should the learner teach you?", { error: "topic_required" });
+      return { asked: true, ...teach, note: "The learner now sees a Teach me button for this topic. Say you haven't been taught it, point to where they can read about it first, and wait." };
+    }
+    case "consult_teaching_guide": {
+      const question = String(input?.question || "").trim();
+      if (!question) return clarify("question", "What should I ask my teaching guide?", { error: "question_required" });
+      try {
+        const query = [input?.topic, question].filter(Boolean).join(" — ");
+        const [taught, { context: syllabus }] = await Promise.all([
+          loadTaughtKnowledge({ studentId, query, deps: protegeDeps }).catch(() => ({ chunks: [] })),
+          getSyllabusGrounding(query, { limit: 3 }).catch(() => ({ context: "" })),
+        ]);
+        const completion = await openai.chat.completions.create({
+          model: process.env.OPENAI_GUIDE_MODEL || OPENAI_MODEL, temperature: 0.3, max_tokens: 700,
+          __timeoutMs: 30_000, __maxRetries: 1,
+          response_format: { type: "json_object" },
+          messages: buildGuideMessages({ question, topic: input?.topic, subject: input?.subject, taught: taught.chunks || [], syllabus }),
+          __userId: studentId, __feature: "teaching_guide",
+        });
+        const answer = shapeGuideAnswer(completion.choices?.[0]?.message?.content);
+        if (!answer.explanation) return { consulted: false, error: "The teaching guide had no answer this time." };
+        return {
+          consulted: true, guide: "NaNa Esumai", explanation: answer.explanation, teachNext: answer.teachNext,
+          ...(teachRequest(input) ? { teach: teachRequest(input) } : {}),
+          rule: "Open with \"From NaNa, my teaching guide (you haven't taught me this):\", pass the explanation on in your own voice, then invite them to teach it back to you.",
+        };
+      } catch (error) {
+        return { consulted: false, error: error.message || "The teaching guide is unavailable right now." };
       }
     }
     case "search_blog_posts": {
@@ -2894,6 +2973,10 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         sideEffecting: ["create_task", "suggest_help", "schedule_chat_follow_up", "cancel_scheduled_chat_follow_up", "submit_tool_request", "prepare_activity", "revise_activity_draft"].includes(tool),
         // A small echo so the chat UI can render the Preview affordance for
         // the human-in-the-loop approval without parsing the model's prose.
+        // The protégé's two moves ride the reply so the app can show them:
+        // a Teach me button, and the teaching guide's mark on the answer.
+        ...(tool === "ask_to_be_taught" && toolResult?.asked ? { teach: { topic: toolResult.topic, subject: toolResult.subject } } : {}),
+        ...(tool === "consult_teaching_guide" && toolResult?.consulted ? { guide: { name: toolResult.guide, ...(toolResult.teach ? { teach: toolResult.teach } : {}) } } : {}),
         ...((tool === "prepare_activity" && toolResult?.prepared
             || tool === "revise_activity_draft" && toolResult?.revised)
           && toolResult?.draftId
@@ -3134,13 +3217,22 @@ router.post("/agent", async (req, res) => {
       { context: syllabusCtx, refs: syllabusRefs },
       { context: pastCtx, refs: pastRefs },
       { context: curriculumCtx, refs: curriculumRefs },
+      taught,
     ] = await Promise.all([
       getSyllabusGrounding(userMessage, { limit: sylLimit }).catch(() => ({ context: "", refs: [] })),
       getPastQuestionGrounding(userMessage, { limit: pastLimit }).catch(() => ({ context: "", refs: [] })),
       wantsCurriculum
         ? getCurriculumGrounding(userMessage, { limit: 3 }).catch(() => ({ context: "", refs: [] }))
         : Promise.resolve({ context: "", refs: [] }),
+      // The learner's agent is their protégé: what they taught it is all it
+      // knows of the subject (protege.js). A lookup failure must not dim the
+      // chat — it reads as "nothing taught on this".
+      role === "student"
+        ? loadTaughtKnowledge({ studentId: req.user.id, query: userMessage, deps: protegeDeps })
+          .catch((e) => { console.warn("[/chat/agent] taught knowledge unavailable:", e.message); return { chunks: [], topics: [], taughtAnything: false }; })
+        : Promise.resolve(null),
     ]);
+    const protegeCtx = taught ? `\n\n${await loadDoctrine("policies/PROTEGE.md")}${renderTaughtContext(taught)}` : "";
 
     let att = { visionParts: [], docContext: "", notes: [] };
     if (Array.isArray(rawAttachments) && rawAttachments.length) {
@@ -3168,7 +3260,8 @@ router.post("/agent", async (req, res) => {
       (conversation?.summary ? `\n\n## Compact conversation summary\n${conversation.summary}` : "") +
       renderRelevantMemory(relevantMemories) +
       renderScratchpad(conversation?.scratchpad) +
-      (goalsCtx || undefined) +
+      (goalsCtx || "") +
+      protegeCtx +
       (syllabusCtx ? `\n\n${syllabusCtx}` : "") +
       (pastCtx ? `\n\n${pastCtx}` : "") +
       (curriculumCtx ? `\n\n${curriculumCtx}` : "") +

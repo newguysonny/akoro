@@ -30,3 +30,20 @@ export function cleanIdeas(list) {
   }
   return out;
 }
+
+/**
+ * The protégé's moves on a reply (from the API's toolExecutions):
+ *   teach  { topic, subject } — it hasn't been taught this; show "Teach me"
+ *   guide  { name }           — the answer came from the teaching guide
+ */
+export function protegeMoves(executions) {
+  const out = {};
+  for (const x of Array.isArray(executions) ? executions : []) {
+    if (x?.teach?.topic) out.teach = { topic: String(x.teach.topic), subject: String(x.teach.subject || '') };
+    if (x?.guide) {
+      out.guide = { name: String(x.guide.name || 'NaNa') };
+      if (x.guide.teach?.topic && !out.teach) out.teach = { topic: String(x.guide.teach.topic), subject: String(x.guide.teach.subject || '') };
+    }
+  }
+  return out;
+}
