@@ -67,6 +67,7 @@ import {
 } from "./askLib.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
 import { activePremiumUserIds, resolveContentAccess, resolveAskTargetFor } from "./access.js";
+import { TOOL_IDS, TOOL_LIMITS, toolSchema, buildToolMessages, shapeToolResult, gatherToolPassages } from "./toolsLib.js";
 
 const router = Router();
 
@@ -813,6 +814,61 @@ router.post("/ask", authenticateToken, asyncHandler(async (req, res) => {
     console.warn("[records-ask] failed:", String(err?.message || err).slice(0, 200));
     if (err?.name === "InsufficientCoins") return fail(402, "You're out of AI credit — top up to keep asking.");
     return fail(502, "Couldn't answer right now — try again in a moment.");
+  }
+}));
+
+/*
+ * POST /api/records/tools/:tool  (summary | quiz | flashcards)
+ * { recordId | contentKey, scope: "page"|"document", pageNumber?, pageText?, values }
+ * One structured model call over numbered passages; every point / question /
+ * card carries the citation of the passage it came from. pageText is the
+ * reader's own text for a page the server never extracted (capped).
+ */
+router.post("/tools/:tool", authenticateToken, asyncHandler(async (req, res) => {
+  const tool = String(req.params.tool || "");
+  if (!TOOL_IDS.includes(tool)) return res400(res, `tool must be one of: ${TOOL_IDS.join(", ")}.`);
+  const target = await resolveAskTarget(req, req.body);
+  if (target.status) return res.status(target.status).json({ success: false, message: target.message });
+
+  const scope = req.body?.scope === "document" ? "document" : "page";
+  const pageNumber = Number(req.body?.pageNumber);
+  const pageText = typeof req.body?.pageText === "string" ? req.body.pageText.slice(0, TOOL_LIMITS.MAX_PAGE_TEXT_CHARS) : "";
+  const raw = req.body?.values && typeof req.body.values === "object" ? req.body.values : {};
+  const values = {
+    focus: typeof raw.focus === "string" ? raw.focus.slice(0, TOOL_LIMITS.MAX_FOCUS_CHARS) : "",
+    depth: typeof raw.depth === "string" ? raw.depth.slice(0, 20) : "",
+    count: typeof raw.count === "string" || typeof raw.count === "number" ? String(raw.count).slice(0, 3) : "",
+    difficulty: typeof raw.difficulty === "string" ? raw.difficulty.slice(0, 10) : "",
+  };
+
+  const passages = await gatherToolPassages({
+    target, scope, pageNumber: Number.isInteger(pageNumber) && pageNumber >= 1 ? pageNumber : null,
+    pageText, focus: values.focus, search: searchRecordChunks,
+  });
+  if (!passages.length) {
+    return res.status(409).json({ success: false, message: scope === "page"
+      ? "This page has no readable text yet — extract the document's text first."
+      : "This document isn't readable yet — extract its text (or transcribe the recording) first." });
+  }
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: OPENAI_MODEL,
+      temperature: 0.3,
+      max_tokens: tool === "quiz" ? 2400 : 1600,
+      messages: buildToolMessages({ tool, docName: target.name, passages, values }),
+      response_format: { type: "json_schema", json_schema: { name: `reader_${tool}`, strict: true, schema: toolSchema(tool) } },
+    });
+    let json = null;
+    try { json = JSON.parse(completion.choices?.[0]?.message?.content || "{}"); } catch { json = {}; }
+    const result = shapeToolResult(tool, json, passages, values);
+    const items = result.summaryPoints || result.quizQuestions || result.cardSet || [];
+    if (!items.length) return res.status(502).json({ success: false, message: "Couldn't build that from this material — try a different page or focus." });
+    return res.json({ success: true, data: { tool, scope, ...result, passages: passages.length } });
+  } catch (err) {
+    if (err?.name === "InsufficientCoins") return res.status(402).json({ success: false, message: "You're out of AI credit — top up to keep generating." });
+    console.warn("[records-tools] failed:", String(err?.message || err).slice(0, 200));
+    return res.status(502).json({ success: false, message: "Couldn't generate that right now — try again in a moment." });
   }
 }));
 

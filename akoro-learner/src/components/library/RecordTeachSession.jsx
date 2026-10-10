@@ -43,7 +43,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import TeachAgentModal from '../teaching/TeachAgentModal.jsx';
 import { buildSessionReaderPages } from '../teaching/SessionReaderModal.jsx';
-import { recordDownloadUrl, getRecordExtraction, getSharedExtraction, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus, getAskHistory, askRecord } from '../../services/recordsApi.js';
+import { recordDownloadUrl, getRecordExtraction, getSharedExtraction, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus, getAskHistory, askRecord, generateRecordTool } from '../../services/recordsApi.js';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
@@ -146,6 +146,11 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
   const ask = useMemo(() => (askKey ? {
     load: () => getAskHistory(askTarget),
     send: (opts) => askRecord({ ...askTarget, ...opts }),
+  } : null), [askKey]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // Study tools (summary / quiz / flashcards) generated from the document,
+  // every item citing where it came from.
+  const tools = useMemo(() => (askKey ? {
+    generate: (tool, args) => generateRecordTool({ ...askTarget, tool, ...args }),
   } : null), [askKey]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const startExtraction = async () => {
@@ -521,6 +526,8 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
     discussion: discussionCommunities ? { communities: discussionCommunities } : null,
     // Ask — the reader's whole-document Q&A with jump-to-source citations.
     ask,
+    // Real Summary / Quiz / Flashcards over the document (cited).
+    tools,
   };
 
   /* A remembered session id (24h) makes reopening a record CONTINUE its

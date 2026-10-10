@@ -200,6 +200,17 @@ export async function askRecord({ recordId, contentKey, question, selection = nu
   return result || { answer: full, citations: [] };
 }
 
+/** Generate a study tool (summary | quiz | flashcards) from the document — grounded, cited. */
+export async function generateRecordTool({ recordId, contentKey, tool, scope = 'page', pageNumber = null, pageText = '', values = {} }) {
+  const d = await apiPost(`/api/records/tools/${encodeURIComponent(tool)}`, {
+    ...(contentKey ? { contentKey } : { recordId }),
+    scope, ...(Number.isInteger(pageNumber) ? { pageNumber } : {}),
+    ...(pageText ? { pageText: String(pageText).slice(0, 8000) } : {}),
+    values,
+  });
+  return d?.data ?? {};
+}
+
 /** Semantic library search — hybrid (vector + keyword) over YOUR records'
     content: what a paste SAYS, what a scanned PDF contains, what a recording
     was about. [] when offline/unconfigured — the shelf stays browsable. */
