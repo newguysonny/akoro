@@ -14,7 +14,8 @@
  * re-running only parses what's missing).
  */
 import * as pdfjsLib from 'pdfjs-dist';
-import { extractRecordPages } from '../../services/recordsApi.js';
+import { extractRecordPages, getExtractionStatus } from '../../services/recordsApi.js';
+import { runExtraction } from '../../lib/extractRun.js';
 
 export const MAX_RECORD_PAGES = 60;   // matches the API's cap
 
@@ -107,26 +108,7 @@ export async function autoExtractUpload(record) {
   } catch { /* silent — the reader still offers if this never finished */ }
 }
 
-/**
- * runRecordExtraction — rasterize → batch → merge. Resolves with
- * { pages: [{pageNumber, markdown}], error } where error is set when the
- * run stopped early (pages parsed before the failure are still returned —
- * they're already saved server-side).
- */
-export async function runRecordExtraction({ recordId, pages, onProgress } = {}) {
-  const BATCH = 8;
-  const collected = [];
-  let error = null;
-  for (let i = 0; i < pages.length && !error; i += BATCH) {
-    const batch = pages.slice(i, i + BATCH);
-    try {
-      const res = await extractRecordPages({ recordId, pages: batch });
-      collected.push(...(res?.pages || []));
-      if (res?.error) error = res.error;          // mid-batch page failure — keep what worked
-    } catch (e) {
-      error = e?.message || 'Extraction failed — try again in a moment.';
-    }
-    onProgress?.(Math.min(pages.length, i + batch.length), pages.length);
-  }
-  return { pages: collected, error };
+/** runRecordExtraction — see lib/extractRun.js; bound to the real API here. */
+export function runRecordExtraction(opts = {}) {
+  return runExtraction({ submit: extractRecordPages, poll: getExtractionStatus, ...opts });
 }

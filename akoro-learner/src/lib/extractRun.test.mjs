@@ -1,0 +1,96 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { runExtraction } from './extractRun.js';
+
+/**
+ * A fake API: POST queues a batch, each status poll finishes one page.
+ * `script(pageNumber)` decides each page's fate: 'ok' | 'fail'.
+ */
+function fakeApi({ script = () => 'ok', busyFirst = 0 } = {}) {
+  const calls = { submits: [], polls: 0 };
+  let queue = [];
+  let busy = busyFirst;   // 409s to answer before accepting
+  return {
+    calls,
+    submit: async ({ pages }) => {
+      if (busy > 0) {
+        busy -= 1;
+        queue = [{ pageNumber: 99, other: true }];   // another opener's batch
+        const e = new Error('busy'); e.status = 409; throw e;
+      }
+      calls.submits.push(pages.map((p) => p.pageNumber));
+      queue = pages.map((p) => ({ pageNumber: p.pageNumber }));
+      return { pending: queue.map((q) => q.pageNumber) };
+    },
+    poll: async () => {
+      calls.polls += 1;
+      const next = queue.shift();
+      const st = { done: queue.length === 0, pages: [], failed: [], pending: queue.map((q) => q.pageNumber) };
+      if (next && !next.other) {
+        if (script(next.pageNumber) === 'ok') st.pages.push({ pageNumber: next.pageNumber, markdown: `p${next.pageNumber}`, blocks: [] });
+        else st.failed.push({ pageNumber: next.pageNumber, error: 'empty answer' });
+      }
+      return st;
+    },
+  };
+}
+
+const pages = (n) => Array.from({ length: n }, (_, i) => ({ pageNumber: i + 1, imageBase64: 'x' }));
+const fast = { pollMs: 0, sleep: async () => {} };
+
+test('pages go up in batches of 8; each batch is polled to completion before the next', async () => {
+  const api = fakeApi();
+  const progress = [];
+  const res = await runExtraction({ ...api, ...fast, recordId: 'r', pages: pages(20), onProgress: (d, t) => progress.push([d, t]) });
+  assert.deepEqual(api.calls.submits, [[1, 2, 3, 4, 5, 6, 7, 8], [9, 10, 11, 12, 13, 14, 15, 16], [17, 18, 19, 20]]);
+  assert.deepEqual(res.pages.map((p) => p.pageNumber), Array.from({ length: 20 }, (_, i) => i + 1));
+  assert.equal(res.error, null);
+  assert.deepEqual(progress.at(-1), [20, 20]);
+});
+
+test('failed pages are reported with a readable error; saved pages are kept', async () => {
+  const api = fakeApi({ script: (n) => (n === 3 || n === 5 ? 'fail' : 'ok') });
+  const res = await runExtraction({ ...api, ...fast, recordId: 'r', pages: pages(6) });
+  assert.deepEqual(res.pages.map((p) => p.pageNumber), [1, 2, 4, 6]);
+  assert.deepEqual(res.failed.map((f) => f.pageNumber), [3, 5]);
+  assert.match(res.error, /2 pages could not be read \(pages 3, 5\)/);
+});
+
+test('a 409 means another batch holds the file: help finish it, then submit ours', async () => {
+  const api = fakeApi({ busyFirst: 1 });
+  const res = await runExtraction({ ...api, ...fast, contentKey: 'shared/key', pages: pages(3) });
+  assert.deepEqual(api.calls.submits, [[1, 2, 3]], 'our batch went up after the other one finished');
+  assert.deepEqual(res.pages.map((p) => p.pageNumber), [1, 2, 3]);
+});
+
+test('closing the reader stops polling at once', async () => {
+  const api = fakeApi();
+  let open = true;
+  const res = await runExtraction({
+    ...api, ...fast, recordId: 'r', pages: pages(8),
+    onProgress: () => { open = false; },
+    isCancelled: () => !open,
+  });
+  assert.equal(res.error, 'Stopped.');
+  assert.equal(api.calls.polls, 1);
+});
+
+test('a batch that never settles stops at the deadline instead of polling forever', async () => {
+  let t = 0;
+  const api = { submit: async () => ({ pending: [1] }), poll: async () => ({ done: false, pages: [], failed: [], pending: [1] }) };
+  const res = await runExtraction({ ...api, pollMs: 0, sleep: async () => { t += 60_000; }, now: () => t, recordId: 'r', pages: pages(1) });
+  assert.match(res.error, /taking too long/);
+});
+
+test('pages another opener saved are filled in from the saved extraction', async () => {
+  const api = {
+    submit: async () => ({ pending: [1, 2] }),
+    poll: async () => ({ done: true, pages: [{ pageNumber: 1, markdown: 'p1', blocks: [] }], failed: [], pending: [] }),
+  };
+  const res = await runExtraction({
+    ...api, ...fast, recordId: 'r', pages: pages(2),
+    readSaved: async () => ({ pages: [{ pageNumber: 1, markdown: 'p1' }, { pageNumber: 2, markdown: 'p2 (saved by someone else)' }, { pageNumber: 9, markdown: 'not ours' }] }),
+  });
+  assert.deepEqual(res.pages.map((p) => p.markdown), ['p1', 'p2 (saved by someone else)']);
+  assert.equal(res.error, null);
+});
