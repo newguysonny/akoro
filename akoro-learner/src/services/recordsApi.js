@@ -211,6 +211,27 @@ export async function generateRecordTool({ recordId, contentKey, tool, scope = '
   return d?.data ?? {};
 }
 
+/* ── Saved reader items (generated tabs, notes, annotations) ─────────────── */
+
+const targetQuery = ({ recordId, contentKey }) => (contentKey ? `contentKey=${encodeURIComponent(contentKey)}` : `recordId=${encodeURIComponent(recordId)}`);
+
+export async function listRecordArtifacts(target) {
+  const d = await apiGet(`/api/records/artifacts?${targetQuery(target)}`);
+  return d?.data?.artifacts ?? [];
+}
+export async function saveRecordArtifact(target, body) {
+  const d = await apiPost('/api/records/artifacts', { ...(target.contentKey ? { contentKey: target.contentKey } : { recordId: target.recordId }), ...body });
+  return d?.data?.artifact ?? null;
+}
+export async function updateRecordArtifact(id, patch) {
+  const d = await apiPatch(`/api/records/artifacts/${encodeURIComponent(id)}`, patch);
+  return d?.data?.artifact ?? null;
+}
+export async function deleteRecordArtifact(id) {
+  await apiDelete(`/api/records/artifacts/${encodeURIComponent(id)}`);
+  return true;
+}
+
 /** Semantic library search — hybrid (vector + keyword) over YOUR records'
     content: what a paste SAYS, what a scanned PDF contains, what a recording
     was about. [] when offline/unconfigured — the shelf stays browsable. */
