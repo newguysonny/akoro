@@ -4,7 +4,8 @@ import { apiGet, apiPost, apiPatch, apiDelete, streamPost } from '../../services
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { ZapIcon, BrainIcon, SparkleIcon, XIcon, Icon } from '../common/Icons.jsx';
 import { AgentAvatar } from '../common/AgentAvatar.jsx';
-import FortizoChatComposer from '../common/FortizoChatComposer.jsx';
+import FortizoChatComposer, { ModelSwitch } from '../common/FortizoChatComposer.jsx';
+import { chatModelOptions } from '../../lib/chatModels.js';
 import RichText from '../common/RichText.jsx';
 import CopyMessageButton from '../common/CopyMessageButton.jsx';
 import { copyPlainText } from '../common/CopyMessageButton.jsx';
@@ -116,6 +117,12 @@ function AgentChatTab({
   // sourced study-guide answer. The choice persists across messages until the
   // learner taps the pill again.
   const [thinkMode,    setThinkMode]    = useState(false);
+  const [serverModels, setServerModels] = useState(null);   // [{ id, model, kind, description }] from the API
+  useEffect(() => {
+    let alive = true;
+    apiGet('/api/adaptive/chat/models').then(d => { if (alive && Array.isArray(d?.modes)) setServerModels(d.modes); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
   const [researchMode, setResearchMode] = useState(false);
   const [attachments,  setAttachments]  = useState([]);   // {id, file, name, size, previewUrl}
   const [attachError,  setAttachError]  = useState("");
@@ -673,12 +680,10 @@ function AgentChatTab({
   // choose a model in the browser: the API remains the authority that routes
   // the supported mode and any authorised tool work.
   const selectedChatMode = thinkMode ? "think" : researchMode ? "research" : "default";
-  const chatModes = [
-    { id:"default", label:"Standard", description:"Balanced learning support" },
-    { id:"think", label:t('agent.mode_think'), description:t('agent.mode_think_hint') },
-    { id:"research", label:t('agent.mode_research'), description:t('agent.mode_research_hint') },
-  ];
-  const selectedChatModeLabel = chatModes.find(option => option.id === selectedChatMode)?.label || "Standard";
+  // The model behind each mode, as this deployment configures it
+  // (GET /api/adaptive/chat/models); the switch shows real model names.
+  const chatModes = chatModelOptions(serverModels);
+  const selectedChatModeLabel = chatModes.find(option => option.id === selectedChatMode)?.label || chatModes[0]?.label || "Standard";
   const chooseChatMode = mode => {
     setThinkMode(mode === "think");
     setResearchMode(mode === "research");
@@ -741,7 +746,7 @@ function AgentChatTab({
               thinking rows, tool rows/groups and text interleaved as the turn
               ran, then the reply (Grand Plan §13.4). */}
           <div style={{ flex:1,position:"relative",display:"flex",flexDirection:"column",minHeight:0 }}>
-          <div ref={feedRef} onScroll={onFeedScroll} style={{ flex:1,overflowY:"auto",padding:"14px 16px",display:"flex",flexDirection:"column",gap:14 }}>
+          <div ref={feedRef} onScroll={onFeedScroll} style={{ flex:1,overflowY:"auto",padding:"14px 16px 14px 24px",display:"flex",flexDirection:"column",gap:14 }}>
             {messages.map(msg=>{
               const isMe=msg.from==="me";
               const thinkingStream=!isMe&&msg.phase==="thinking";
@@ -848,28 +853,13 @@ function AgentChatTab({
               attachmentLabel={t('agent.attach_add')}
               voiceLabel="Voice input is not available in AI Chat yet"
               audioLabel="Audio notes are not available in AI Chat yet"
-              modelId={selectedChatMode}
-              modelLabel={selectedChatModeLabel}
-              modelOptions={chatModes}
-              onModelChange={chooseChatMode}
+              hideModelMenu
               sendDisabled={!input.trim()&&!attachments.length}
             />
-            {/* Think and Research now live in the Fortizo-style model menu.
-                The remaining learning/session actions stay in their familiar row. */}
-            <div style={{ display:"flex",alignItems:"center",gap:6,marginTop:9 }}>
-              <button type="button" onClick={()=>onStartExamPrep?.()} disabled={loading || !onStartExamPrep} title="Start generated exam-style practice" style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 10px",borderRadius:20,border:`1px solid ${GREEN}45`,background:`${GREEN}10`,fontSize:10.5,fontWeight:800,color:GREEN,cursor:loading?"not-allowed":"pointer",fontFamily:"'Nunito',sans-serif",flexShrink:0 }}>
-                <Icon name="ti-clipboard-check" size={12}/> Practice
-              </button>
-              <button type="button" onClick={()=>onOpenConceptTracker?.()} disabled={!onOpenConceptTracker} title="View learning tracker" style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 10px",borderRadius:20,border:`1px solid ${BRAND}35`,background:`${BRAND}0D`,fontSize:10.5,fontWeight:800,color:BRAND,cursor:"pointer",fontFamily:"'Nunito',sans-serif",flexShrink:0 }}>
-                <Icon name="ti-chart-bar" size={12}/> Progress
-              </button>
-              <button type="button" onClick={()=>onOpenAdaptiveControls?.()} disabled={!onOpenAdaptiveControls} title="Open adaptive learning controls" style={{ width:29,height:29,padding:0,borderRadius:"50%",border:"1px solid var(--ak-border2)",background:"var(--ak-surface-hover)",color:"var(--ak-text-muted)",cursor:"pointer",flexShrink:0 }}>
-                <Icon name="ti-adjustments" size={13}/>
-              </button>
-              <div style={{ flex:1 }}/>
-              <button onClick={()=>setTaskOpen(true)} style={{ display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:20,border:`1px solid ${GOLD}40`,background:`${GOLD}12`,fontSize:10.5,fontWeight:800,color:"#B45309",cursor:"pointer",fontFamily:"'Nunito',sans-serif",flexShrink:0 }}>
-                <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#B45309" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>{t('agent.task')}
-              </button>
+            {/* The model switch — the LLM behind the next message. */}
+            <div style={{ display:"flex",alignItems:"center",gap:6,marginTop:8 }}>
+              <ModelSwitch modelId={selectedChatMode} modelLabel={selectedChatModeLabel} modelOptions={chatModes}
+                onModelChange={chooseChatMode} disabled={running} icon="ti-cpu"/>
             </div>
             <input ref={fileInputRef} type="file" multiple accept="image/*,application/pdf,.txt,.md,.csv" style={{ display:"none" }} onChange={e=>{addAttachments(e.target.files); e.target.value="";}}/>
           </div>
