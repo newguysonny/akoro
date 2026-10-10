@@ -2,7 +2,7 @@
  * modules/records/av.contract.test.mjs
  *
  * Guards the audio/video transcription lane (ffmpeg 16k-mono → Deepgram →
- * edu.record_transcripts → the reader's transcript panel):
+ * edu.content_transcripts → the reader's transcript panel):
  *   • the pure shaping behaves (scene-time parsing, segment shaping with
  *     diarized paragraphs + frame captions, grounding text);
  *   • the ffmpeg contract carries the §5 optimizations (16 kHz mono,
