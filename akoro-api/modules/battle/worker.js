@@ -497,16 +497,14 @@ async function revealQuestion(battleId, questionOrder) {
     })),
   });
 
-  const { data: battleInfo } = await db.from("battles").select("total_questions, battle_type").eq("id", battleId).single();
-  const { count: aliveCount } = await db.from("battle_participants").select("id", { count: "exact", head: true }).eq("battle_id", battleId).gt("hp", 0);
+  const { data: battleInfo } = await db.from("battles").select("total_questions").eq("id", battleId).single();
 
-  // "One agent left standing" ends a contest. A REVIEW has one learner by
-  // definition, so that test is always true for it — the review would end after
-  // question one. It runs to the end of the paper instead.
-  const isReview   = battleInfo?.battle_type === "review";
-  const lastStanding = !isReview && (aliveCount ?? 0) <= 1;
-
-  if (questionOrder >= (battleInfo?.total_questions ?? 0) || lastStanding) {
+  // Every battle plays every question. HP is how a learner sees who is ahead,
+  // not a knockout: an agent on 0 HP still answers and still scores, and the
+  // battle ends only once the last question has been played. (Ending at "one
+  // agent left standing" cut contests short — and ended a one-agent daily
+  // battle after its first question.)
+  if (questionOrder >= (battleInfo?.total_questions ?? 0)) {
     await battleQueue.add("end-battle", { action: "end-battle", battleId }, { delay: 3000 });
   } else {
     await advanceQuestion(battleId, questionOrder + 1);
