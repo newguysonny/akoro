@@ -94,7 +94,7 @@ export async function postChallengeRequest(meId, input = {}) {
     min_xp: Number.isFinite(Number(input.min_xp)) ? Math.max(0, Math.round(Number(input.min_xp))) : null,
     max_xp: Number.isFinite(Number(input.max_xp)) ? Math.max(0, Math.round(Number(input.max_xp))) : null,
     scheduled_for: o.scheduledFor, note: input.note ? String(input.note).slice(0, 280) : null,
-    expires_at: expires.toISOString(),
+    expires_at: expires.toISOString(), hp_per_miss: o.hpPerMiss,
   };
   const { data, error } = await edu().from("challenge_requests").insert(row).select().single();
   if (error) throw new Error(error.message);
@@ -152,7 +152,7 @@ export async function searchChallengeRequests(meId, f = {}) {
     if (within && r.scheduled_for && Date.parse(r.scheduled_for) > within) continue;
     out.push({
       id: r.id, title: r.title, kind: kindOfRequest(r), subject: r.subject, topic: r.topic, exam: r.exam, difficulty: r.difficulty,
-      questions: r.total_questions, seats: `${1 + (r.accepted_by || []).length}/${r.max_players}`, scheduledFor: r.scheduled_for,
+      questions: r.total_questions, hpPerMiss: r.hp_per_miss ?? 10, seats: `${1 + (r.accepted_by || []).length}/${r.max_players}`, scheduledFor: r.scheduled_for,
       expiresAt: r.expires_at, note: r.note,
       by: { userId: u.id, name: (u.full_name || u.username).split(" ")[0], username: `@${u.username}`, agent: `${a.agent_emoji || "🤖"} ${a.agent_name}`, level: a.level || 1, xp: a.total_xp || 0,
         online: !!P.get(u.id) && Date.now() - Date.parse(P.get(u.id)) < 150_000 },
@@ -192,7 +192,7 @@ export async function acceptChallengeRequest(meId, requestId) {
   try {
     const battle = await createNetworkBattle({
       creatorId: r.created_by, opponents: accepted, joined: accepted, startNowIfReady: true, source: "request",
-      options: { kind: kindOfRequest(r), subject: r.subject, topic: r.topic, difficulty: r.difficulty, total_questions: r.total_questions, scheduled_for: r.scheduled_for, title: r.title },
+      options: { kind: kindOfRequest(r), subject: r.subject, topic: r.topic, difficulty: r.difficulty, total_questions: r.total_questions, scheduled_for: r.scheduled_for, title: r.title, hp_per_miss: r.hp_per_miss },
     });
     await edu().from("challenge_requests").update({ battle_id: battle.battleId }).eq("id", r.id);
     await notifyUser({ userId: r.created_by, type: "battle_accepted", title: "⚔️ Your challenge request was taken!",
@@ -215,7 +215,7 @@ export async function cancelChallengeRequest(meId, requestId) {
 /* ── Rematch ────────────────────────────────────────────────────────────── */
 
 export async function rematch(meId, battleId) {
-  const { data: b } = await db.from("battles").select("id, battle_type, title, subject, topic, difficulty, total_questions, status, recurring_key").eq("id", battleId).maybeSingle();
+  const { data: b } = await db.from("battles").select("id, battle_type, title, subject, topic, difficulty, total_questions, status, recurring_key, hp_per_miss").eq("id", battleId).maybeSingle();
   if (b?.recurring_key) throw fail("The daily battle comes round again tomorrow — no rematch needed.", 409);
   if (!b || !["completed", "expired"].includes(b.status)) throw fail("That battle isn't finished yet.", 409);
   const { data: seats } = await db.from("battle_participants").select("user_id, role, team").eq("battle_id", battleId);
@@ -229,6 +229,6 @@ export async function rematch(meId, battleId) {
   const teams = kind === "team" ? Object.fromEntries(players.filter((s) => s.user_id !== meId).map((s) => [s.user_id, s.team === myTeam ? "A" : "B"])) : {};
   return createNetworkBattle({
     creatorId: meId, opponents: others, teams, source: "rematch",
-    options: { kind, subject: b.subject || "General", topic: b.topic, difficulty: b.difficulty, total_questions: b.total_questions, title: `Rematch: ${b.title}`.slice(0, 120) },
+    options: { kind, subject: b.subject || "General", topic: b.topic, difficulty: b.difficulty, total_questions: b.total_questions, title: `Rematch: ${b.title}`.slice(0, 120), hp_per_miss: b.hp_per_miss },
   });
 }

@@ -53,6 +53,7 @@ import { Router }                         from "express";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
+import { cleanHpPerMiss, HP_PER_MISS_DEFAULT } from "./hp.js";
 import { buildQuestions, perQuestionSeconds } from "./questionSource.js";
 import { InsufficientCoins } from "../../lib/coins.js";
 
@@ -317,6 +318,7 @@ router.post("/courses/:courseId/battles/challenge", authenticateToken, asyncHand
   const expiresAt   = isScheduled ? acceptDeadline(scheduled_for) : null;
 
   const { data: battle, error } = await db.from("battles").insert({
+    hp_per_miss: cleanHpPerMiss(req.body?.hp_per_miss),
     course_id: courseId, battle_type: "1v1", title, description: description ?? null,
     topic: topic ?? null, subject: subject ?? null, difficulty,
     total_questions, time_limit_seconds, xp_prize, xp_pool: xp_prize,
@@ -365,6 +367,7 @@ router.post("/courses/:courseId/battles/challenge", authenticateToken, asyncHand
       difficulty,
       battleType:   isScheduled ? "scheduled" : "immediate",
       xpPrize:      `+${xp_prize} XP`,
+      hpPerMiss:    battle.hp_per_miss,
       timeLimit:    `${Math.round(time_limit_seconds / 60)} min`,
       expiresIn:    `${expires_in_minutes} min`,
       scheduledFor: scheduled_for ?? null,
@@ -399,6 +402,7 @@ router.post("/courses/:courseId/battles/open", authenticateToken, asyncHandler(a
   const expiresAt   = isScheduled ? acceptDeadline(scheduled_for) : null;
 
   const { data: battle, error } = await db.from("battles").insert({
+    hp_per_miss: cleanHpPerMiss(req.body?.hp_per_miss),
     course_id: courseId, battle_type: "open", title, description: description ?? null,
     topic: topic ?? null, subject: subject ?? null, difficulty,
     total_questions, time_limit_seconds, xp_prize, xp_pool: xp_prize,
@@ -460,6 +464,7 @@ router.post("/courses/:courseId/battles/classroom", authenticateToken, requireRo
   const expiresAt   = isScheduled ? acceptDeadline(scheduled_for) : null;
 
   const { data: battle, error } = await db.from("battles").insert({
+    hp_per_miss: cleanHpPerMiss(req.body?.hp_per_miss),
     course_id: courseId, battle_type: "classroom", title, description: description ?? null,
     topic: topic ?? null, subject: subject ?? null, difficulty,
     total_questions, time_limit_seconds, xp_prize: xp_pool, xp_pool,
@@ -719,6 +724,7 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
   const expiresAt   = isScheduled ? acceptDeadline(scheduled_for) : null;
 
   const { data: battle, error } = await db.from("battles").insert({
+    hp_per_miss: cleanHpPerMiss(req.body?.hp_per_miss),
     course_id: null, classroom_id: classroomId,
     battle_type: isReview ? "review" : isDuel ? "1v1" : "classroom",
     title, description: description ?? null,
@@ -822,6 +828,7 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
       title, subject, topic: topic ?? subject, difficulty,
       battleType: isScheduled ? "scheduled" : (isDuel ? "immediate" : "classroom"),
       xpPrize: `+${xp_prize} XP`, timeLimit: `${Math.round(time_limit_seconds / 60)} min`,
+      hpPerMiss: battle.hp_per_miss,
       expiresIn: `${expires_in_minutes} min`, scheduledFor: scheduled_for ?? null,
       classroomId, status: (isScheduled && !isDuel) ? "scheduled" : "lobby",
     });
@@ -874,6 +881,8 @@ function toCard(b, extra = {}) {
     daily:         String(b.recurring_key || "").startsWith("daily:"),
     xpPrize:       `+${b.xp_prize ?? b.xp_pool ?? 0} XP`,
     xpPool:        b.xp_pool ?? b.xp_prize ?? 0,
+    // What a miss costs, set by the creator — on the challenge sheet before accepting.
+    hpPerMiss:     b.hp_per_miss ?? HP_PER_MISS_DEFAULT,
     totalQuestions: b.total_questions ?? 0,
     timeLimit:     `${mins} min`,
     durationMin:   mins,
@@ -1324,6 +1333,7 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
   // lobby, and it already schedules the start itself once accepted. Marking it
   // 'scheduled' up front would make the invitation unacceptable.
   const { data: battle, error } = await db.from("battles").insert({
+    hp_per_miss: cleanHpPerMiss(req.body?.hp_per_miss),
     course_id: courseId, battle_type: isDuel ? "1v1" : "classroom",
     title, description: description ?? null,
     topic: topic ?? null, subject: subject ?? null, difficulty,
@@ -1427,6 +1437,7 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
       title, subject: subject ?? "science", topic: topic ?? title, difficulty,
       battleType: isScheduled ? "scheduled" : (isDuel ? "immediate" : "classroom"),
       xpPrize: `+${xp_prize} XP`, timeLimit: `${Math.round(time_limit_seconds / 60)} min`,
+      hpPerMiss: battle.hp_per_miss,
       expiresIn: `${expires_in_minutes} min`, scheduledFor: scheduled_for ?? null,
       courseId, status: isScheduled ? "scheduled" : "lobby",
     });
@@ -2134,8 +2145,9 @@ router.put("/battles/:battleId", authenticateToken, asyncHandler(async (req, res
   // never be fixed and re-used — you had to build it again from scratch.
   if (["live", "completed"].includes(battle.status)) return res400(res, `Cannot edit a ${battle.status} battle`);
 
-  const allowed = ["title", "description", "topic", "subject", "difficulty", "xp_prize", "xp_pool", "time_limit_seconds", "total_questions", "max_participants", "scheduled_start"];
+  const allowed = ["title", "description", "topic", "subject", "difficulty", "xp_prize", "xp_pool", "time_limit_seconds", "total_questions", "max_participants", "scheduled_start", "hp_per_miss"];
   const updates = Object.fromEntries(Object.entries(req.body).filter(([k]) => allowed.includes(k)));
+  if ("hp_per_miss" in updates) updates.hp_per_miss = cleanHpPerMiss(updates.hp_per_miss);
 
   if (!Object.keys(updates).length) return res400(res, "No valid fields to update");
   updates.updated_at = new Date().toISOString();
@@ -2273,6 +2285,7 @@ router.post("/courses/:courseId/battles/session", authenticateToken, requireRole
   const expiresAt = acceptDeadline(scheduled_for);
 
   const { data: battle, error } = await db.from("battles").insert({
+    hp_per_miss: cleanHpPerMiss(req.body?.hp_per_miss),
     course_id: courseId, battle_type: "classroom", title,
     topic: topic ?? null, subject: subject ?? null, difficulty,
     total_questions, time_limit_seconds, xp_prize: xp_pool, xp_pool,

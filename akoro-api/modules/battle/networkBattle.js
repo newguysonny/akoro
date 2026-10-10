@@ -17,6 +17,7 @@ import db from "../../db.js";
 import { buildQuestions } from "./questionSource.js";
 import { notifyUser } from "../notify.js";
 import { InsufficientCoins } from "../../lib/coins.js";
+import { cleanHpPerMiss } from "./hp.js";
 
 const now = () => new Date().toISOString();
 const EXPIRE_AFTER_START_MS = 10_000;
@@ -47,6 +48,7 @@ export function cleanBattleOptions(o = {}) {
     title: String(o.title || "").trim().slice(0, 120) || `${subject}${o.topic ? ` — ${String(o.topic).slice(0, 60)}` : ""} ${kind === "team" ? "team battle" : "battle"}`,
     xp: Math.min(500, Math.max(50, Math.round(Number(o.xp_prize) || (kind === "1v1" ? 150 : 200)))),
     secondsPerQuestion: Math.min(60, Math.max(10, Math.round(Number(o.seconds_per_question) || 20))),
+    hpPerMiss: cleanHpPerMiss(o.hp_per_miss),
   };
 }
 
@@ -109,7 +111,7 @@ export async function createNetworkBattle({ creatorId, opponents = [], joined = 
   const scheduled = !!o.scheduledFor;
   const { data: battle, error } = await db.from("battles").insert({
     course_id: null, classroom_id: null, battle_type: battleType,
-    title: o.title, description: source === "rematch" ? "Rematch" : null,
+    title: o.title, description: source === "rematch" ? "Rematch" : null, hp_per_miss: o.hpPerMiss,
     topic: o.topic, subject: o.subject, difficulty: o.difficulty,
     total_questions: o.total, time_limit_seconds: o.total * o.secondsPerQuestion,
     xp_prize: o.xp, xp_pool: o.xp * (o.kind === "1v1" ? 1 : Math.ceil(ids.length / 2)),
@@ -180,7 +182,7 @@ export async function createNetworkBattle({ creatorId, opponents = [], joined = 
       id: battle.id, challenger: me?.full_name ?? "A learner", avatar: me?.avatar_url ?? null,
       title: o.title, subject: o.subject, topic: o.topic ?? o.subject, difficulty: o.difficulty,
       battleType: o.scheduledFor ? "scheduled" : o.kind === "1v1" ? "immediate" : "classroom",
-      xpPrize: `+${o.xp} XP`, timeLimit: `${Math.round((o.total * o.secondsPerQuestion) / 60)} min`,
+      xpPrize: `+${o.xp} XP`, hpPerMiss: o.hpPerMiss, timeLimit: `${Math.round((o.total * o.secondsPerQuestion) / 60)} min`,
       scheduledFor: o.scheduledFor, status: o.scheduledFor && o.kind !== "1v1" ? "scheduled" : "lobby", scope: "network",
       ...(teamOf[id] ? { team: teamOf[id] } : {}),
     });

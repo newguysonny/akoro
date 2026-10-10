@@ -20,7 +20,7 @@ const BLANK = {
   questionSource: 'auto',    // 'auto' | 'bank' | 'ai'
   classId: '', subject: '',  // class battles only
   audience: BLANK_AUDIENCE,
-  totalQuestions: '15', duration: '15', xpPrize: '200',
+  totalQuestions: '15', duration: '15', xpPrize: '200', hpPerMiss: '10',
   difficulty: 'intermediate', scheduledAt: '', expiresInMinutes: '60',
 };
 
@@ -60,6 +60,7 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
         totalQuestions: String(editing.totalQuestions || 15),
         duration: String(editing.durationMin || 15),
         xpPrize: String(editing.xpPool || 200),
+        hpPerMiss: String(editing.hpPerMiss ?? 10),
         difficulty: editing.difficulty || 'intermediate',
         scheduledAt: editing.scheduledAt ? toLocalInput(editing.scheduledAt) : '',
       });
@@ -199,10 +200,19 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
           />
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10 }}>
           <Inp label="Questions" type="number" min="1" value={form.totalQuestions} onChange={e => setField('totalQuestions', e.target.value)} />
           <Inp label="Duration (min)" type="number" min="1" value={form.duration} onChange={e => setField('duration', e.target.value)} />
           <Inp label="XP prize" type="number" min="0" value={form.xpPrize} onChange={e => setField('xpPrize', e.target.value)} />
+          {/* What a miss costs — like marks per question. Learners see it before they accept. */}
+          <Inp label="HP lost per miss" type="number" min="0" max="50" value={form.hpPerMiss} onChange={e => setField('hpPerMiss', e.target.value)} />
+        </div>
+        <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT, marginTop: -6 }}>
+          {(() => {
+            const h = Math.min(50, Math.max(0, parseInt(form.hpPerMiss, 10) || 0));
+            return h ? `Every agent starts on 100 HP and loses ${h} for each question it misses — out after ${Math.ceil(100 / h)} misses (then it watches, unranked).`
+              : 'No HP lost for misses — nobody can be knocked out.';
+          })()}
         </div>
         {/* Duration is shared across the questions, so say what each one gets.
             The number on its own told a teacher nothing — and until now it did
@@ -663,6 +673,7 @@ export default function BattlesPage() {
         time_limit_seconds: (parseInt(form.duration, 10) || 15) * 60,
         xp_prize: parseInt(form.xpPrize, 10) || 0,
         xp_pool:  parseInt(form.xpPrize, 10) || 0,
+        hp_per_miss: form.hpPerMiss === '' ? undefined : parseInt(form.hpPerMiss, 10),
         scheduled_start: scheduledIso,
       });
       showToast('Battle updated');
@@ -680,6 +691,7 @@ export default function BattlesPage() {
         total_questions: parseInt(form.totalQuestions, 10) || 15,
         time_limit_seconds: (parseInt(form.duration, 10) || 15) * 60,
         xp_prize: parseInt(form.xpPrize, 10) || 200,
+        hp_per_miss: form.hpPerMiss === '' ? undefined : parseInt(form.hpPerMiss, 10),
         expires_in_minutes: parseInt(form.expiresInMinutes, 10) || 60,
         scheduled_for: scheduledIso,
         // course | class | chosen learners — one helper so battles and self

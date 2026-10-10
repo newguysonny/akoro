@@ -18,6 +18,7 @@ import { emitAutonomyEvent } from "../autonomy/triggers.js";
 import { workerJob } from "../../lib/workerLog.js";
 import { coinsAvailable, schoolBillTo, InsufficientCoins } from "../../lib/coins.js";
 import { prepareRuling, ruling, verdict, JUDGE } from "./judge.js";
+import { HP_PER_MISS_DEFAULT } from "./hp.js";
 
 // Agents already told they are out of coins this battle (one log line each, not one per question).
 const toldNoCoins = new Set();
@@ -426,8 +427,10 @@ async function revealQuestion(battleId, questionOrder) {
   const { data: participants } = await db.from("battle_participants").select("*").eq("battle_id", battleId);
   const options = JSON.parse(q.options_json);
 
-  const { data: btype } = await db.from("battles").select("battle_type").eq("id", battleId).maybeSingle();
+  const { data: btype } = await db.from("battles").select("battle_type, hp_per_miss").eq("id", battleId).maybeSingle();
   const isReviewBattle = btype?.battle_type === "review";
+  // What a miss costs: the creator set it, and invitees saw it before accepting.
+  const hpPerMiss = btype?.hp_per_miss ?? HP_PER_MISS_DEFAULT;
 
   // The teacher hosts the battle. Their agent used to appear in the commentary
   // — "⏰ Agent demo_teacher1 ran out of time!" on every question — and be
@@ -454,7 +457,6 @@ async function revealQuestion(battleId, questionOrder) {
       // loss is a contest mechanic, so a review keeps the count and drops the
       // damage. (isReviewBattle is read once, above the loop.)
       await db.from("battle_participants").update({
-        ...(isReviewBattle ? {} : { hp: Math.max(0, (p.hp ?? 100) - 8) }),
         wrong_answers: (p.wrong_answers ?? 0) + 1,
       }).eq("id", p.id);
       if (!passed.has(p.user_id)) {   // a pass was already explained when it happened
@@ -488,15 +490,15 @@ async function revealQuestion(battleId, questionOrder) {
     }
   }
 
-  // HP damage to wrong-answerers when opponents got it right. Skipped for a
-  // review: there is no opponent, and draining a learner's health bar for
-  // getting a question wrong turns a check of what they know into a punishment.
-  const correctCount = (answers ?? []).filter((a) => a.is_correct).length;
-  if (correctCount > 0 && !isReviewBattle) {
+  // HP: every question an agent didn't get right — a wrong answer, or no
+  // answer at all — costs the battle's hp_per_miss, whatever the others did.
+  // One rule, set by the creator, so a learner knows the cost before they
+  // accept. A review has no HP to lose.
+  if (!isReviewBattle && hpPerMiss > 0) {
     for (const p of players) {
       const ans = (answers ?? []).find((a) => a.battle_participants?.user_id === p.user_id);
       if (!ans?.is_correct) {
-        await db.from("battle_participants").update({ hp: Math.max(0, (p.hp ?? 100) - 8) }).eq("id", p.id);
+        await db.from("battle_participants").update({ hp: Math.max(0, (p.hp ?? 100) - hpPerMiss) }).eq("id", p.id);
       }
     }
   }

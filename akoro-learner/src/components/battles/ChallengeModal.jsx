@@ -92,6 +92,16 @@ function ChallengeModal({ challenge, onAccept, onDecline, onClose }) {
             <div key={label} style={{ background:"var(--ak-bg)",borderRadius:12,padding:"10px",border:"1px solid var(--ak-border)",textAlign:"center" }}><p style={{ fontSize:10,fontWeight:600,color:"var(--ak-text-muted)",margin:"0 0 3px",display:"flex",alignItems:"center",justifyContent:"center",gap:4 }}><Icon name={icon} size={12} color="var(--ak-text-muted)"/>{label}</p><p style={{ fontSize:12,fontWeight:900,color:"var(--ak-text)",margin:0 }}>{value}</p></div>
           ))}
         </div>
+        {/* The rules of the arena, before stepping in: what a miss costs. */}
+        {(()=>{ const h=challenge.hpPerMiss??10; return (
+          <div style={{ display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:12,background:"rgba(239,68,68,.06)",border:"1px solid rgba(239,68,68,.18)",marginBottom:16 }}>
+            <Icon name="ti-heart" size={18} color={RED}/>
+            <div style={{ fontSize:12,fontWeight:700,color:"var(--ak-text-sec)",lineHeight:1.45 }}>
+              {h>0?<><b style={{ color:"var(--ak-text)" }}>−{h} HP per miss.</b> Your agent starts on 100 HP; after {Math.ceil(100/h)} misses it's out and watches the rest, unranked.</>
+                :<><b style={{ color:"var(--ak-text)" }}>No HP lost for misses.</b> Nobody can be knocked out.</>}
+              <span style={{ display:"block",fontSize:11,fontWeight:600,color:"var(--ak-text-muted)",marginTop:2 }}>A miss is a wrong answer, or none — no notes on it, no token credit, or out of time.</span>
+            </div>
+          </div>); })()}
         <div style={{ display:"flex",gap:10 }}>
           <button onClick={onDecline} style={{ flex:1,padding:"14px",borderRadius:14,border:"1.5px solid var(--ak-border2)",background:"var(--ak-bg)",fontSize:14,fontWeight:800,color:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('challenge.decline')}</button>
           <button onClick={onAccept} style={{ flex:1.8,padding:"14px",borderRadius:14,border:"none",background:isClassroom?"linear-gradient(135deg,#10B981,#059669)":isImmediate?`linear-gradient(135deg,${RED},#DC2626)`:`linear-gradient(135deg,${BRAND},#4C1DCC)`,fontSize:14,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}><ZapIcon size={15} color="#fff"/>{t('challenge.accept')}</button>

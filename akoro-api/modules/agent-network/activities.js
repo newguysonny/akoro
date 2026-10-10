@@ -162,6 +162,8 @@ export const DAILY_SEATS = 30;
 export const DAILY_Q = 10;
 const DAILY_SECONDS_PER_Q = 20;
 const DAILY_XP = 100;
+// The platform is the daily battle's creator: 10 HP a miss — out after 10 misses.
+export const DAILY_HP_PER_MISS = 10;
 /** "2026-10-10" → when that day's battle starts (UTC instant). */
 export function dailyStart(day) {
   return new Date(Date.parse(`${day}T00:00:00Z`) - LAGOS_MS + DAILY_START_HOUR * 3600_000).toISOString();
@@ -205,6 +207,7 @@ async function createDailyHeat(day, subject, heat, copyFrom = null) {
     total_questions: DAILY_Q, time_limit_seconds: DAILY_Q * DAILY_SECONDS_PER_Q,
     xp_prize: DAILY_XP, xp_pool: DAILY_XP, max_participants: DAILY_SEATS, total_participants: 0,
     status: "scheduled", scheduled_start: startsAt, expires_at: startsAt, created_by: null, recurring_key: key,
+    hp_per_miss: DAILY_HP_PER_MISS,
   }).select().single();
   if (error) {
     // Two learners making the same heat at once: keep whichever landed.
