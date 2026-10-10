@@ -553,6 +553,28 @@ export default function ActivityDetailPage() {
               {row.feedbackText && (
                 <p style={{ fontSize: 12, fontWeight: 600, color: '#065F46', margin: '10px 0 0', lineHeight: 1.5 }}>{row.feedbackText}</p>
               )}
+              {/* the rubric behind the score */}
+              {row.feedbackRubric?.some((r) => r?.name) && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 10 }}>
+                  {row.feedbackRubric.filter((r) => r?.name).map((r) => (
+                    <div key={r.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, fontWeight: 700, color: '#065F46' }}>
+                      <span style={{ flex: 1, minWidth: 0 }}>{r.name}</span>
+                      <span style={{ width: 70, height: 5, borderRadius: 3, background: 'rgba(16,185,129,.18)', overflow: 'hidden', flexShrink: 0 }}>
+                        <span style={{ display: 'block', height: '100%', width: `${r.max ? Math.min(100, ((r.level ?? 0) / r.max) * 100) : 0}%`, background: '#10B981' }}/>
+                      </span>
+                      <span style={{ width: 34, textAlign: 'right', flexShrink: 0 }}>{r.level ?? '–'}/{r.max}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* the marked copy — the work with the teacher's ticks, crosses and comments */}
+              {row.markedPdf && row.targetId && (
+                <button type="button" disabled={pdfBusy}
+                  onClick={() => { setPdfBusy(true); setSubmitErr(''); downloadMySubmissionPdf(row.targetId, row.title, { marked: true }).catch((e) => setSubmitErr(e?.message || 'Could not get the marked copy.')).finally(() => setPdfBusy(false)); }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginTop: 12, padding: '8px 14px', borderRadius: 20, border: 'none', background: '#047857', color: '#fff', fontSize: 12, fontWeight: 800, cursor: pdfBusy ? 'default' : 'pointer', fontFamily: "'Nunito',sans-serif" }}>
+                  {pdfBusy ? <Spinner size={12}/> : <Icon name="ti-file-check" size={14}/>} Download marked copy (PDF)
+                </button>
+              )}
             </div>
           )}
 

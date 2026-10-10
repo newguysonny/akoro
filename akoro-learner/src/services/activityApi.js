@@ -59,6 +59,8 @@ async function fetchSelfStudy() {
       submission: a.submission ?? null,  // the work the learner turned in
       targetId:   a.targetId || null,
       submissionPdf: a.submissionPdf ?? null,   // { ready, pages } — the work as one PDF
+      feedbackRubric: Array.isArray(a.feedbackRubric) ? a.feedbackRubric : [],   // [{name, max, level}] once graded
+      markedPdf:  !!a.markedPdf,                // the teacher's marked copy is available
       };
     });
   } catch { return []; }
@@ -133,14 +135,15 @@ export async function removeActivityFile(fileId) {
   await apiDelete(`/api/self-study/files/${fileId}`);
 }
 
-/* Save my whole submission as one PDF (the copy my teacher grades). */
-export async function downloadMySubmissionPdf(targetId, title) {
-  const r = await fetch(`${API}/api/self-study/targets/${targetId}/submission.pdf?download=1`, { credentials: 'include' });
+/* Save my whole submission as one PDF — the copy my teacher grades, or
+   (marked: true) the marked copy they sent back with my grade. */
+export async function downloadMySubmissionPdf(targetId, title, { marked = false } = {}) {
+  const r = await fetch(`${API}/api/self-study/targets/${targetId}/${marked ? 'marked' : 'submission'}.pdf?download=1`, { credentials: 'include' });
   if (!r.ok) throw new Error('Could not get the PDF — try again in a moment.');
   const url = URL.createObjectURL(await r.blob());
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${String(title || 'submission').replace(/[^\w .-]/g, '').trim() || 'submission'}.pdf`;
+  a.download = `${String(title || 'submission').replace(/[^\w .-]/g, '').trim() || 'submission'}${marked ? ' (marked)' : ''}.pdf`;
   document.body.appendChild(a);
   a.click();
   a.remove();

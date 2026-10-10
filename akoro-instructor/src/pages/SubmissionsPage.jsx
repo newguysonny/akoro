@@ -84,6 +84,8 @@ export default function SubmissionsPage() {
       submission: t.submission ?? null,   // text + answers as handed in
       files:      t.files ?? [],          // attachments (metadata only)
       submissionPdf: t.submissionPdf ?? null,   // the whole submission as one PDF
+      markup:     t.markup ?? null,           // the grader's marks on that PDF
+      aiGrade:    t.ai_grade ?? null,         // AI draft marks (for approval)
     }))
     .sort((x, y) => (x.grade != null) - (y.grade != null) || String(x.completedAt || '').localeCompare(String(y.completedAt || '')));
 
@@ -97,6 +99,12 @@ export default function SubmissionsPage() {
         ? { ...t, grade, graded_at: new Date().toISOString() } : t),
     } : d);
   };
+
+  /* Saved marks and AI drafts fold into the roster, so moving between
+     learners in the workspace never shows stale ones. */
+  const foldTarget = (studentId, patch) => setDetail(d => d ? {
+    ...d, targets: d.targets.map(t => (t.student_id === studentId ? { ...t, ...patch } : t)),
+  } : d);
 
   const resumeDraft = (d) => {
     setKey(d.assignmentId);
@@ -268,6 +276,8 @@ export default function SubmissionsPage() {
           initialIndex={Math.min(grading.index ?? 0, queue.length - 1)}
           onClose={() => setGrading(null)}
           onPublished={onPublished}
+          onMarkup={(sid, marks) => foldTarget(sid, { markup: { marks, updatedAt: new Date().toISOString() } })}
+          onAiGrade={(sid, ai) => foldTarget(sid, { ai_grade: ai })}
         />
       )}
 
