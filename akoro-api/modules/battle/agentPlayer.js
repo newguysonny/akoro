@@ -61,8 +61,9 @@ export async function autoPlayers(battleId) {
   if (!battle || battle.status !== "live") return [];
 
   const { data: seats } = await db.from("battle_participants")
-    .select("id, user_id, agent_id, role, current_streak, max_streak, correct_answers, wrong_answers")
+    .select("id, user_id, agent_id, role, hp, current_streak, max_streak, correct_answers, wrong_answers")
     .eq("battle_id", battleId);
 
-  return (seats ?? []).filter((p) => p.role !== "teacher");
+  // No HP, no answer: a knocked-out agent is a spectator (a review never loses HP).
+  return (seats ?? []).filter((p) => p.role !== "teacher" && (battle.battle_type === "review" || (p.hp ?? 100) > 0));
 }

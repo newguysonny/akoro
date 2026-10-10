@@ -12,7 +12,7 @@ import db                from "../../db.js";
 import { redisConnectionOptions } from "../../lib/redisOptions.js";
 import { traceRedis } from "../../lib/redisTrace.js";
 import { thinkingTimeMs, autoPlayers } from "./agentPlayer.js";
-import { embedQuestion, recall, recallStrength, answerFromRecall, guess } from "./agentRecall.js";
+import { embedQuestion, recall, recallStrength, answerFromRecall } from "./agentRecall.js";
 import { updateKnowledgeConfidence, flagBattleReviewTopics } from "./knowledge.js";
 import { emitAutonomyEvent } from "../autonomy/triggers.js";
 import { workerJob } from "../../lib/workerLog.js";
@@ -230,6 +230,8 @@ async function agentAnswer(battleId, questionOrder, participantId, thinkingMs = 
   const { data: p } = await db.from("battle_participants")
     .select("*").eq("id", participantId).maybeSingle();
   if (!p) return;                                              // dropped before the start
+  // No HP, no answer: a knocked-out agent watches the rest as a spectator.
+  if ((p.hp ?? 100) <= 0) return;
 
   // Already answered — by the human at the keyboard, or by a retry of this very
   // job. Either way there is nothing to add.
@@ -239,19 +241,18 @@ async function agentAnswer(battleId, questionOrder, participantId, thinkingMs = 
 
   const options = JSON.parse(q.options_json);
 
-  // What the learner taught this agent about this question — nothing else.
+  // To answer, an agent needs three things: HP (checked above), token credit
+  // (its learner pays for its answers), and knowledge (its learner's notes must
+  // cover the question). Missing any of them it gives NO answer — never a
+  // guess — which the reveal marks wrong, with no XP and the usual HP loss.
   //
-  // This is a real recall, not a probability: the question is embedded, the
-  // learner's own notes are searched, and the model is shown ONLY those notes.
-  // A correct answer therefore means their notes contained the answer. When
-  // they do not, the agent says so and guesses, and the log says which it was.
-  //
-  // Each learner pays for their OWN agent's answers (the recall and the answer
-  // are billed to them). An empty wallet doesn't stall the battle: the agent
-  // guesses, and the log says why — once.
+  // What the learner taught this agent about this question — nothing else:
+  // the question is embedded, the learner's own notes are searched, and the
+  // model is shown ONLY those notes. A correct answer therefore means their
+  // notes contained the answer.
   const billTo = await schoolBillTo(p.user_id).catch(() => null);
   const wallet = await coinsAvailable({ userId: p.user_id, billTo, min: 1 }).catch(() => ({ ok: true }));
-  let picked, basis = "unknown", cited = null, why = "nothing in memory on this";
+  let picked = null, basis = "unknown", cited = null;
   let broke = !wallet.ok;
   if (!broke) {
     const embedding = await embedQuestion(`${q.topic ? q.topic + ": " : ""}${q.question_text}`);
@@ -266,7 +267,7 @@ async function agentAnswer(battleId, questionOrder, participantId, thinkingMs = 
       const ans = await answerFromRecall({
         question: q.question_text, options, notes, userId: p.user_id,
       });
-      basis = ans.basis; cited = ans.cited; why = ans.why;
+      basis = ans.basis; cited = ans.cited;
       picked = ans.index;
     } catch (e) {
       // A model failure is not knowledge the learner lacks, so it must not be
@@ -274,19 +275,29 @@ async function agentAnswer(battleId, questionOrder, participantId, thinkingMs = 
       // stalls on it.
       if (e instanceof InsufficientCoins) broke = true;
       else console.warn("[battle-worker] recall answer failed:", e.message);
-      basis = "unknown"; why = "could not reach my memory";
+      picked = null;
     }
   }
-  if (broke) {
-    why = "out of coins";
+  if (broke || picked == null) {
+    // No answer. Say why, once per question — the reveal reads this and marks
+    // it wrong rather than "ran out of time".
+    const { data: ag } = await db.from("user_agents").select("agent_name, agent_emoji").eq("id", p.agent_id).maybeSingle();
+    const name = ag?.agent_name || "An agent";
     const k = `${battleId}:${p.id}`;
-    if (!toldNoCoins.has(k)) {
-      toldNoCoins.add(k);
-      const { data: ag } = await db.from("user_agents").select("agent_name, agent_emoji").eq("id", p.agent_id).maybeSingle();
-      await appendLog(battleId, "out_of_coins", `${ag?.agent_name || "An agent"} is out of coins — guessing until its learner tops up`, p.user_id, ag?.agent_name, ag?.agent_emoji, questionOrder);
+    const msg = broke
+      ? (toldNoCoins.has(k) ? `${name} has no token credit — no answer` : `${name} is out of token credit — it can't answer until its learner tops up`)
+      : `${name} has nothing in its notes on this — no answer`;
+    if (broke) toldNoCoins.add(k);
+    await appendLog(battleId, "no_answer", msg, p.user_id, ag?.agent_name, ag?.agent_emoji, questionOrder, { reason: broke ? "no_tokens" : "no_knowledge" });
+    // Not knowing is something the learner is modelled as not knowing; no credit is not.
+    if (!broke) {
+      const { data: bT } = await db.from("battles").select("topic, title, subject").eq("id", battleId).maybeSingle();
+      const head = bT?.topic || bT?.title || q.subject || "General";
+      await updateKnowledgeConfidence(p.user_id, head, q.subject ?? bT?.subject, false, q.topic && q.topic !== head ? q.topic : "")
+        .catch(() => {});
     }
+    return;
   }
-  if (picked == null) picked = guess(options.length);
 
   const isCorrect   = picked === q.correct_answer_index;
   const newStreak   = isCorrect ? (p.current_streak ?? 0) + 1 : 0;
@@ -421,7 +432,12 @@ async function revealQuestion(battleId, questionOrder) {
   // The teacher hosts the battle. Their agent used to appear in the commentary
   // — "⏰ Agent demo_teacher1 ran out of time!" on every question — and be
   // scored alongside the learners in a battle they were only refereeing.
-  const players = (participants ?? []).filter((p) => p.role !== "teacher");
+  // Only agents with HP are still playing; a knocked-out agent is a spectator.
+  const players = (participants ?? []).filter((p) => p.role !== "teacher" && (isReviewBattle || (p.hp ?? 100) > 0));
+  // Agents that gave no answer this question, and why (logged when they passed).
+  const { data: passLog } = await db.from("battle_log").select("user_id").eq("battle_id", battleId)
+    .eq("question_order", questionOrder).eq("event_type", "no_answer");
+  const passed = new Set((passLog ?? []).map((r) => r.user_id));
 
   for (const p of players) {
     const ans     = (answers ?? []).find((a) => a.battle_participants?.user_id === p.user_id);
@@ -441,8 +457,10 @@ async function revealQuestion(battleId, questionOrder) {
         ...(isReviewBattle ? {} : { hp: Math.max(0, (p.hp ?? 100) - 8) }),
         wrong_answers: (p.wrong_answers ?? 0) + 1,
       }).eq("id", p.id);
-      const { data: agent } = await db.from("user_agents").select("agent_name, agent_emoji").eq("id", p.agent_id).single();
-      await appendLog(battleId, "answer_timeout", `⏰ ${agent?.agent_name} ran out of time!`, p.user_id, agent?.agent_name, agent?.agent_emoji, questionOrder);
+      if (!passed.has(p.user_id)) {   // a pass was already explained when it happened
+        const { data: agent } = await db.from("user_agents").select("agent_name, agent_emoji").eq("id", p.agent_id).single();
+        await appendLog(battleId, "answer_timeout", `⏰ ${agent?.agent_name} ran out of time!`, p.user_id, agent?.agent_name, agent?.agent_emoji, questionOrder);
+      }
     } else if (!correct) {
       await appendLog(battleId, "answer_wrong",
         guessed
@@ -499,12 +517,25 @@ async function revealQuestion(battleId, questionOrder) {
 
   const { data: battleInfo } = await db.from("battles").select("total_questions").eq("id", battleId).single();
 
-  // Every battle plays every question. HP is how a learner sees who is ahead,
-  // not a knockout: an agent on 0 HP still answers and still scores, and the
-  // battle ends only once the last question has been played. (Ending at "one
-  // agent left standing" cut contests short — and ended a one-agent daily
-  // battle after its first question.)
-  if (questionOrder >= (battleInfo?.total_questions ?? 0)) {
+  // Who just ran out of HP: from here they watch, unranked.
+  let stillIn = players.length;
+  if (!isReviewBattle) {
+    const { data: after } = await db.from("battle_participants").select("id, user_id, hp, agent_id, role").eq("battle_id", battleId);
+    stillIn = 0;
+    for (const a of (after ?? [])) {
+      if (a.role === "teacher") continue;
+      if ((a.hp ?? 100) > 0) { stillIn++; continue; }
+      if (players.some((p) => p.id === a.id)) {
+        const { data: ag } = await db.from("user_agents").select("agent_name, agent_emoji").eq("id", a.agent_id).maybeSingle();
+        await appendLog(battleId, "knocked_out", `${ag?.agent_name || "An agent"} is out of HP — it watches the rest as a spectator`, a.user_id, ag?.agent_name, ag?.agent_emoji, questionOrder);
+      }
+    }
+  }
+
+  // Every question is played while anyone still has HP to play it. A battle
+  // doesn't end because one agent is left standing — only after the last
+  // question, or when nobody is left who can answer.
+  if (questionOrder >= (battleInfo?.total_questions ?? 0) || stillIn === 0) {
     await battleQueue.add("end-battle", { action: "end-battle", battleId }, { delay: 3000 });
   } else {
     await advanceQuestion(battleId, questionOrder + 1);
@@ -563,12 +594,14 @@ async function endBattle(battleId) {
     tally.set(a.participant_id, t);
   }
   const { data: preSeats } = await db.from("battle_participants")
-    .select("id, role").eq("battle_id", battleId);
+    .select("id, role, wrong_answers").eq("battle_id", battleId);
   for (const p of (preSeats ?? [])) {
     if (p.role === "teacher") continue;
     const t = tally.get(p.id) ?? { correct: 0, wrong: 0 };
+    // A question with no answer (no knowledge, no credit, out of time) has no
+    // answer row but was counted wrong at its reveal — keep it counted.
     await db.from("battle_participants")
-      .update({ score: t.correct, correct_answers: t.correct, wrong_answers: t.wrong })
+      .update({ score: t.correct, correct_answers: t.correct, wrong_answers: Math.max(t.wrong, p.wrong_answers ?? 0) })
       .eq("id", p.id);
   }
 
@@ -598,15 +631,24 @@ async function endBattle(battleId) {
   const winTeam = isTeam ? (Object.entries(teamTotals).sort((a, b) => b[1] - a[1])[0] || [null])[0] : null;
   const teamTie = isTeam && new Set(Object.values(teamTotals)).size === 1;
 
+  // No HP, no ranking: an agent knocked out watched the rest as a spectator, so
+  // it is unranked, wins nothing and takes no share of the pool. (The XP it
+  // earned for right answers before that stays — it was earned.) A review has
+  // no HP to lose.
+  const alive  = (p) => isReview || (p.hp ?? 100) > 0;
+  const ranked = participants.filter(alive);
+  const rankOf = new Map(ranked.map((p, i) => [p.id, i]));
+
   const pool   = battleInfo?.battle_type === "classroom" ? battleInfo.xp_pool
                : battleInfo?.xp_prize;
   const xpDist = isReview ? {}
-    : isTeam ? Object.fromEntries(participants.map((p) => [p.id, teamTie ? Math.round((battleInfo?.xp_prize ?? 0) * 0.5)
+    : isTeam ? Object.fromEntries(ranked.map((p) => [p.id, teamTie ? Math.round((battleInfo?.xp_prize ?? 0) * 0.5)
       : (p.team || "A") === winTeam ? (battleInfo?.xp_prize ?? 0) : Math.round((battleInfo?.xp_prize ?? 0) * 0.2)]))
-    : computeXpDistribution(participants ?? [], pool ?? 0);
+    : computeXpDistribution(ranked, pool ?? 0);
 
   for (let i = 0; i < (participants ?? []).length; i++) {
     const p = participants[i];
+    const r = rankOf.get(p.id);
     const share = (p.correct_answers ?? 0) / Math.max(1, battleInfo?.total_questions ?? 0);
     const xpEarned = isReview
       ? Math.round((pool ?? 0) * Math.min(1, share))
@@ -616,8 +658,8 @@ async function endBattle(battleId) {
       // A rank of 1 in a field of one is not a boast, but it IS what every
       // "my battles" list and leaderboard join expects to find — leaving it
       // null kept reviews out of the learner's own history.
-      is_winner:  isReview ? false : isTeam ? (!teamTie && (p.team || "A") === winTeam) : i === 0,
-      final_rank: isTeam ? ((p.team || "A") === winTeam || teamTie ? 1 : 2) : i + 1,
+      is_winner:  r == null || isReview ? false : isTeam ? (!teamTie && (p.team || "A") === winTeam) : r === 0,
+      final_rank: r == null ? null : isTeam ? ((p.team || "A") === winTeam || teamTie ? 1 : 2) : r + 1,
       xp_earned:  xpEarned,
     }).eq("id", p.id);
     if (xpEarned > 0) {
@@ -634,15 +676,16 @@ async function endBattle(battleId) {
     emitAutonomyEvent(p.user_id, "battle").catch(() => {});
   }
 
-  const winner   = participants?.[0];
-  const runnerUp = participants?.[1];
+  const winner   = ranked[0];
+  const runnerUp = ranked[1];
   const mm = String(Math.floor(durSecs / 60)).padStart(2, "0");
   const ss = String(durSecs % 60).padStart(2, "0");
 
   await appendLog(battleId, "battle_end",
     isReview
       ? `📋 Review complete — ${winner?.score ?? 0} of ${battleInfo?.total_questions ?? 0} correct. Mark sheet ready.`
-      : `🏁 Battle complete! ${winner?.user_agents?.agent_name} wins ${winner?.score ?? 0}–${runnerUp?.score ?? 0}`,
+      : winner ? `🏁 Battle complete! ${winner.user_agents?.agent_name} wins ${winner.score ?? 0}–${runnerUp?.score ?? 0}`
+      : "🏁 Battle complete — every agent ran out of HP, so nobody is ranked",
     winner?.user_id, winner?.user_agents?.agent_name, winner?.user_agents?.agent_emoji, null,
     { finalScores: (participants ?? []).map((p, i) => ({ rank: i + 1, agentName: p.user_agents?.agent_name, score: p.score, xpEarned: xpDist[p.id] ?? 0 })) }
   );
@@ -652,9 +695,9 @@ async function endBattle(battleId) {
     // arena announce "X wins!" for a solo paper the moment it finished, before
     // the mark sheet arrived to say otherwise.
     team: isTeam ? { totals: teamTotals, winner: teamTie ? null : winTeam } : null,
-    winner: isReview ? null : { userId: winner?.user_id, agentName: winner?.user_agents?.agent_name, agentEmoji: winner?.user_agents?.agent_emoji, score: winner?.score, xpEarned: xpDist[winner?.id] },
-    finalScores: (participants ?? []).map((p, i) => ({
-      rank: i + 1, userId: p.user_id, agentName: p.user_agents?.agent_name,
+    winner: isReview || !winner ? null : { userId: winner?.user_id, agentName: winner?.user_agents?.agent_name, agentEmoji: winner?.user_agents?.agent_emoji, score: winner?.score, xpEarned: xpDist[winner?.id] },
+    finalScores: (participants ?? []).map((p) => ({
+      rank: rankOf.has(p.id) ? rankOf.get(p.id) + 1 : null, userId: p.user_id, agentName: p.user_agents?.agent_name,
       agentEmoji: p.user_agents?.agent_emoji, score: p.score, hp: p.hp, xpEarned: xpDist[p.id] ?? 0,
     })),
     durationSeconds: durSecs, durationFormatted: `${mm}:${ss}`,
@@ -668,7 +711,7 @@ async function endBattle(battleId) {
 
   // Sergeant's verdict (the app pays; not for a review, which has no contest).
   if (!isReview) {
-    const v = await verdict(battleId, { participants, battleType: battleInfo?.battle_type, team: isTeam ? { totals: teamTotals, winner: teamTie ? null : winTeam } : null });
+    const v = await verdict(battleId, { participants: ranked, knockedOut: participants.length - ranked.length, battleType: battleInfo?.battle_type, team: isTeam ? { totals: teamTotals, winner: teamTie ? null : winTeam } : null });
     if (v) {
       await appendLog(battleId, "judge_verdict", `${JUDGE.name}'s verdict: ${v}`, null, JUDGE.name, null, null);
       global.io?.to(`battle:${battleId}`).emit("battle:verdict", { battleId, judge: JUDGE.name, verdict: v });

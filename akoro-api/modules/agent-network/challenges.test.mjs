@@ -35,7 +35,7 @@ test("teams: creator on A, a named teammate joins A, the rest balance out", () =
 
 test("team battles are scored by team; requests fill seats with a lock; challenges respect privacy", () => {
   assert.match(worker, /const isTeam = battleInfo\?\.battle_type === "team";/);
-  assert.match(worker, /is_winner:  isReview \? false : isTeam \?/);
+  assert.match(worker, /is_winner:  r == null \|\| isReview \? false : isTeam \?/);
   assert.match(challenges, /\.eq\("accepted_by", `\{\$\{\(r\.accepted_by \|\| \[\]\)\.join\(","\)\}\}`\)/);
   assert.match(challenges, /isn't taking challenges right now/);
   for (const name of ["find_competitors", "challenge_agent", "post_challenge_request", "search_challenge_requests", "accept_challenge_request", "cancel_challenge_request", "rematch_battle"]) {

@@ -437,7 +437,9 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
                     })}
                   </div>
                   <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,.35)' }}>
-                    {iAmParticipant
+                    {iAmParticipant && !isReview && (me?.hp ?? 100) <= 0
+                      ? 'Your agent is out of HP — you are watching as a spectator'
+                      : iAmParticipant
                       ? (isReview ? 'Your agent is working through your review' : 'Your agent is answering — watch it play')
                       : 'You + APOS + re watching this battle'}
                   </div>
@@ -468,7 +470,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
                   }}>{results.score?.percent}%</div>
                   {(results.score?.unanswered > 0) && (
                     <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,.45)', marginTop: 3 }}>
-                      {results.score.unanswered} not answered in time
+                      {results.score.unanswered} not answered (no notes on it, no credit, or out of time)
                     </div>
                   )}
                   {results.battle?.duration_formatted && (
