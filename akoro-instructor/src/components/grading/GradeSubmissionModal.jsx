@@ -27,7 +27,7 @@
  */
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
-  ArrowLeft, ChevronLeft, ChevronRight, X, Check, Loader2, FileText, PenLine, ExternalLink, Download,
+  ArrowLeft, ChevronLeft, ChevronRight, X, Check, Loader2, FileText, PenLine, ExternalLink, Download, AlertTriangle,
 } from 'lucide-react';
 import { apiGet, apiPatch, apiPost, apiPut, apiBlob, downloadActivityFile, openActivityFile, fetchSubmissionPdf } from '../../services/api.js';
 import SubmissionMarkup from './SubmissionMarkup.jsx';
@@ -121,7 +121,7 @@ function SubmittedPaper({ current, brief, only = null }) {
               <div key={k} style={{ background: WHITE, border: `1px solid ${correct === false && qMcq ? 'rgba(239,68,68,.35)' : BORDER}`, borderRadius: 10, padding: '10px 13px' }}>
                 {q && <div style={{ fontSize: 11, fontWeight: 800, color: MUTED2, marginBottom: 4 }}>Q{Number(k) + 1}. {qText(q)}</div>}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 800, color: INK, fontFamily: FONT }}>
-                  {qMcq && <span style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${correct ? GREEN : BORDER}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 9, color: GREEN }}>{correct ? '✓' : ''}</span>}
+                  {qMcq && <span style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${correct ? GREEN : BORDER}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 9, color: GREEN }}>{correct ? <Check size={10} /> : null}</span>}
                   {chosen != null ? `${letterOf(pick)}. ${chosen}` : String(raw)}
                   {qMcq && correct && <span style={{ fontSize: 10, fontWeight: 800, color: GREEN, background: '#E6F6EE', borderRadius: 999, padding: '2px 8px' }}>correct</span>}
                 </div>
@@ -270,7 +270,7 @@ function AiDraftCard({ ai, onApply, onRequest, requesting }) {
           </div>
         ))}
         {ai.feedback && <div style={{ fontSize: 12, color: MUTED, fontStyle: 'italic', lineHeight: 1.5 }}>“{ai.feedback}”</div>}
-        {(ai.notes || []).map((n, i) => <div key={i} style={{ fontSize: 11, color: '#B45309', fontWeight: 700 }}>⚠ {n}</div>)}
+        {(ai.notes || []).map((n, i) => <div key={i} style={{ fontSize: 11, color: '#B45309', fontWeight: 700, display: 'flex', gap: 5, alignItems: 'flex-start' }}><AlertTriangle size={12} style={{ marginTop: 1, flexShrink: 0 }} /> {n}</div>)}
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 9 }}>
         <button type="button" onClick={onApply}
