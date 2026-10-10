@@ -43,7 +43,7 @@ import { challengeAgents, postChallengeRequest, searchChallengeRequests, acceptC
 import { messageAgent, inbox as agentInbox, replyToAgent, consultOnlineAgents, inboxBrief } from "../agent-network/messaging.js";
 import {
   requestBuddy, respondBuddy, listBuddies, buddyCheckin, endBuddy, buddyBrief,
-  getDaily, submitDaily, dailyRanking, dailyStatus, createCircle, searchCircles, joinCircle, leaveCircle, weeklyLeague,
+  joinDaily, skipDaily, dailyRanking, dailyStatus, createCircle, searchCircles, joinCircle, leaveCircle, weeklyLeague,
 } from "../agent-network/activities.js";
 import { searchBlogPosts, readBlogPost, BLOG_SEARCH_MAX_RESULTS } from "./blogResearch.js";
 import { listGoals, createGoal, updateGoal } from "../learner-goals/service.js";
@@ -571,15 +571,13 @@ export const CHAT_TOOLS = [
   {
     name: "daily_challenge",
     featureGate: "agent_network",
-    description: "The daily battle: a recurring battle every day for everyone, 7 PM to midnight (Lagos) — 5 shared questions in the learner's subject, one go, ranked by score then time. " +
-      "It shows in the Battles tab: Scheduled before 7 PM, Active until midnight, Completed once played. " +
-      "action: status (default — today's state, the next one, recent scores) | get (only once it's active: the questions WITHOUT answers; quiz the learner one at a time, don't reveal answers) | " +
-      "submit (subject, answers as letters in order, optional time_ms — marks it, gives XP and their rank) | ranking (subject).",
+    description: "The daily battle: a real battle that recurs every day at 7 PM (Lagos) in the learner's daily subject — their agent plays it from their notes, like any battle, and they watch it in the arena. " +
+      "It shows in the Battles tab: Scheduled before 7 PM, Active while it runs, Completed after; then tomorrow's is scheduled. Ranked across everyone in that subject that day. " +
+      "action: status (default — today's state, the next one, recent results) | join (take a seat in the next one; subject optional) | skip (sit out the next one) | ranking (subject).",
     input_schema: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["status", "get", "submit", "ranking"] }, subject: { type: "string" },
-        answers: { type: "array", items: { type: "string" } }, time_ms: { type: "number" },
+        action: { type: "string", enum: ["status", "join", "skip", "ranking"] }, subject: { type: "string" },
       },
       required: [],
     },
@@ -1959,12 +1957,9 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       const a = input?.action || "status";
       try {
         if (a === "status") return await dailyStatus(studentId);
-        if (a === "get") return await getDaily(studentId, input?.subject || null);
+        if (a === "join") return await joinDaily(studentId, { subject: input?.subject || null });
+        if (a === "skip") return await skipDaily(studentId);
         if (a === "ranking") return await dailyRanking(studentId, input?.subject || "");
-        if (a === "submit") {
-          if (!input?.subject) return clarify("subject", "Which subject's challenge are we marking?");
-          return await submitDaily(studentId, input);
-        }
         return { error: "Unknown action." };
       } catch (e) { return { error: e.message }; }
     }

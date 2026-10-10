@@ -83,7 +83,7 @@ export default function AgentNetworkSection() {
             <option value="">My first subject</option>
             {ALL_SUBJECTS.map((x) => <option key={x} value={x}>{x}</option>)}
           </select>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ak-text-muted)', marginTop: 5 }}>Every evening from 7 PM until midnight — one go a day, the same set for everyone in that subject.</div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ak-text-muted)', marginTop: 5 }}>A battle every evening at 7 PM — your agent plays it from your notes, against everyone in that subject. Applies from the next one you're seated in.</div>
         </div>
         {err && <div style={{ padding: '0 14px 12px', fontSize: 12, fontWeight: 700, color: '#DC2626' }}>{err}</div>}
       </Section>

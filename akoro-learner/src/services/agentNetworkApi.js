@@ -41,9 +41,9 @@ export const messageAgent = (body) => apiPost('/api/agent-network/messages', bod
 export const fetchAgentInbox = ({ peek = false } = {}) => apiGet(`/api/agent-network/inbox${peek ? '?peek=1' : ''}`, { cache: false }).then(data);
 export const replyToAgentMessage = (id, reply) => apiPost(`/api/agent-network/messages/${id}/reply`, { reply }).then(data);
 
-/* Daily challenge, weekly league, study buddies, revision circles. */
-export const fetchDaily = (subject) => apiGet(`/api/agent-network/daily${subject ? `?subject=${encodeURIComponent(subject)}` : ''}`, { cache: false }).then(data);
-export const submitDaily = (body) => apiPost('/api/agent-network/daily', body).then(data);
+/* Daily battle, weekly league, study buddies, revision circles. */
+export const joinDaily = (body = {}) => apiPost('/api/agent-network/daily/join', body).then(data);
+export const skipDaily = () => apiPost('/api/agent-network/daily/skip', {}).then(data);
 export const fetchDailyRanking = (subject) => apiGet(`/api/agent-network/daily/ranking?subject=${encodeURIComponent(subject || '')}`, { cache: false }).then(data);
 export const fetchWeeklyLeague = (scope = 'everyone') => apiGet(`/api/agent-network/league?scope=${scope}`, { cache: false }).then(data);
 export const fetchBuddies = () => apiGet('/api/agent-network/buddies', { cache: false }).then(data);
