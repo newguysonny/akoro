@@ -585,6 +585,16 @@ async function resolveAiContent(req) {
   return resolveContentAccess({ userId: req.user.id, recordId: req.body?.recordId, contentKey: req.body?.contentKey });
 }
 
+/* A page's real size from the reader ({ width, height, unit: "pt"|"px" }),
+   or null when absent / implausible. */
+function pageSizeOf(p) {
+  const width = Number(p?.width);
+  const height = Number(p?.height);
+  const unit = p?.unit === "px" ? "px" : p?.unit === "pt" ? "pt" : null;
+  if (!unit || !(width > 0 && width <= 100_000) || !(height > 0 && height <= 100_000)) return null;
+  return { width: Math.round(width * 100) / 100, height: Math.round(height * 100) / 100, unit };
+}
+
 /*
  * POST /extract — SUBMIT a batch (≤8 rendered pages) and return at once.
  * Each page becomes one async RunPod job; the job ids ride the single-flight
@@ -617,7 +627,7 @@ router.post("/extract", authenticateToken, asyncHandler(async (req, res) => {
     if (imageBase64.length > MAX_IMAGE_B64_CHARS) {
       return res400(res, `Page ${pageNumber}'s image is too large — re-render it smaller.`);
     }
-    work.push({ pageNumber, b64: imageBase64.replace(/^data:[^,]*,/, "") });   // tolerate data: URIs
+    work.push({ pageNumber, b64: imageBase64.replace(/^data:[^,]*,/, ""), size: pageSizeOf(p) });   // tolerate data: URIs
   }
 
   // Single flight: only one batch runs per file; latecomers poll.
@@ -629,10 +639,10 @@ router.post("/extract", authenticateToken, asyncHandler(async (req, res) => {
   const submittedAt = new Date().toISOString();
   const jobs = [];
   let submitError = null;
-  for (const { pageNumber, b64 } of work) {
+  for (const { pageNumber, b64, size } of work) {
     try {
       const { jobId } = await parsePageRunAsync({ imageBase64: b64 });
-      jobs.push({ pageNumber, jobId, state: "pending" });
+      jobs.push({ pageNumber, jobId, state: "pending", ...(size ? { size } : {}) });
     } catch (err) {
       submitError = { pageNumber, error: String(err?.message || err).slice(0, 200) };
       break;   // the endpoint is refusing work — don't keep hammering it
@@ -686,7 +696,7 @@ router.get("/extract/status", authenticateToken, asyncHandler(async (req, res) =
     if (settled.state === "pending") continue;
     changed = true;
     if (settled.state === "saved") {
-      await saveExtractionPage({ contentKey, pageNumber: entry.pageNumber, blocks: settled.blocks, markdown: settled.markdown, model: settled.model });
+      await saveExtractionPage({ contentKey, pageNumber: entry.pageNumber, blocks: settled.blocks, markdown: settled.markdown, model: settled.model, size: entry.size || null });
       entry.state = settled.blank ? "blank" : "saved";
       saved.push({ pageNumber: entry.pageNumber, markdown: settled.markdown, model: settled.model, blocks: settled.blocks, blank: settled.blank });
     } else {
