@@ -5,7 +5,7 @@ import test from "node:test";
 process.env.SUPABASE_URL ||= "http://localhost:59999";
 process.env.SUPABASE_SERVICE_KEY ||= "test-service-key";
 process.env.OPENAI_API_KEY ||= "test-openai-key";
-const { lagosDay, weekStart, DAILY_SIZE } = await import("./activities.js");
+const { lagosDay, weekStart, dailyStart, upcomingDay, dailyKey, DAILY_START_HOUR, DAILY_SEATS } = await import("./activities.js");
 const src = await readFile(new URL("./activities.js", import.meta.url), "utf8");
 const chat = await readFile(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
 
@@ -15,10 +15,7 @@ test("Lagos day and week boundaries", () => {
   assert.equal(weekStart(Date.parse("2026-10-11T22:30:00Z")), "2026-10-04T23:00:00.000Z");   // still Sunday in Lagos
 });
 
-test("daily challenge: five shared questions, answers never sent, one go a day; circles start once; leagues honour opt-out", () => {
-  assert.equal(DAILY_SIZE, 5);
-  assert.match(src, /const publicQ = \(q, i\) => \(\{ n: i \+ 1, stem: q\.stem, options: q\.options/);   // no answer key in what the learner gets
-  assert.match(src, /already done today's challenge/);
+test("circles start once; leagues honour opt-out; buddy check-ins carry no marks", () => {
   assert.match(src, /\.update\(\{ status: "running" \}\)\.eq\("id", c\.id\)\.in\("status", \["open", "full"\]\)\.is\("battle_id", null\)/);
   assert.match(src, /show_on_leaderboards", false/);
   assert.match(src, /never marks or messages/);    // a buddy check-in carries goal progress and XP only
@@ -28,10 +25,18 @@ test("daily challenge: five shared questions, answers never sent, one go a day; 
   }
 });
 
-test("the daily battle: one window for everyone, scheduled → active → completed / missed, then tomorrow", async () => {
-  const { dailyWindow, DAILY_START_HOUR } = await import("./activities.js");
+test("the daily battle: a real battle every day at 7 PM Lagos, seats roll over to tomorrow once it starts", () => {
   assert.equal(DAILY_START_HOUR, 19);
-  assert.deepEqual(dailyWindow("2026-10-10"), { startsAt: "2026-10-10T18:00:00.000Z", endsAt: "2026-10-10T22:59:59.000Z" });   // 19:00–23:59:59 WAT
-  assert.match(src, /status = today \? "completed" : now < Date\.parse\(win\.startsAt\) \? "scheduled" : now <= Date\.parse\(win\.endsAt\) \? "active" : "missed"/);
-  assert.match(src, /Today's daily battle starts at/);       // no peeking before the window
+  assert.equal(dailyStart("2026-10-10"), "2026-10-10T18:00:00.000Z");                        // 19:00 WAT
+  assert.equal(upcomingDay(Date.parse("2026-10-10T17:00:00Z")), "2026-10-10");               // 18:00 WAT → today's
+  assert.equal(upcomingDay(Date.parse("2026-10-10T17:59:30Z")), "2026-10-11");               // under a minute to go → tomorrow's
+  assert.equal(upcomingDay(Date.parse("2026-10-10T20:00:00Z")), "2026-10-11");
+  assert.equal(dailyKey("2026-10-10", " Mathematics ", 2), "daily:2026-10-10:mathematics:2");
+  assert.equal(DAILY_SEATS, 30);
+  // Played in the normal arena: a battles row the worker starts, not a separate quiz.
+  assert.match(src, /db\.from\("battles"\)\.insert\(\{[\s\S]*?recurring_key: key/);
+  assert.match(src, /battleQueue\.add\("start-battle"/);
+  assert.doesNotMatch(src, /daily_challenge_attempts/);
+  // An automatic join never undoes a skip.
+  assert.match(src, /if \(seat\.declined_at && !auto\)/);
 });

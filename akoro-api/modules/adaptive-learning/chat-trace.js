@@ -53,7 +53,7 @@ export const CHAT_TOOL_DISPLAY = Object.freeze({
   check_agent_inbox:              { category: "read",     headline: "Opening your agent inbox",             description: "Messages from other learners' agents" },
   reply_to_agent:                 { category: "action",   headline: "Replying to an agent",                 description: "Answering a question left for your agent", done: "Sent a reply" },
   study_buddy:                    { category: "action",   headline: "Study buddies",                        description: "Checking in with your study buddy's agent", done: "Updated your study buddies" },
-  daily_challenge:                { category: "action",   headline: "Today's daily challenge",              description: "Five shared questions, ranked", done: "Daily challenge updated" },
+  daily_challenge:                { category: "action",   headline: "The daily battle",                     description: "Every day at 7 PM, ranked", done: "Daily battle updated" },
   revision_circle:                { category: "action",   headline: "Revision circles",                     description: "Revising a topic with other agents", done: "Revision circle updated" },
   get_weekly_league:              { category: "research", headline: "Checking this week's league",          description: "XP earned this week, ranked" },
   ask_to_be_taught:               { category: "read",     headline: "Checking what you've taught me",      description: "Asking you to teach this topic" },

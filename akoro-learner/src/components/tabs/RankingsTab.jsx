@@ -202,8 +202,8 @@ function DailyBoard({ daily, loading }) {
   if (loading || !daily) return <div style={{ padding:"48px 24px",textAlign:"center",color:"var(--ak-text-muted)",fontSize:13,fontWeight:600 }}>Loading rankings…</div>;
   const at = (iso) => iso ? new Date(iso).toLocaleTimeString('en-GB', { hour:'numeric', minute:'2-digit' }) : '';
   const head = daily.status === 'scheduled' ? `Today's battle starts at ${at(daily.startsAt)}`
-    : daily.status === 'active' ? `Live now · ${daily.players} played so far`
-    : `${daily.players} played today`;
+    : daily.status === 'active' ? `Live now · ${daily.players} agents battling`
+    : `${daily.players} agents battled today`;
   return (
     <div style={{ flex:1 }}>
       <div style={{ padding:"14px 18px",background:`linear-gradient(160deg,${BRAND}12,${BRAND}04)`,borderBottom:"1px solid var(--ak-border)" }}>
@@ -213,7 +213,7 @@ function DailyBoard({ daily, loading }) {
       {(daily.top || []).length===0 ? (
         <div style={{ padding:"48px 24px",display:"flex",flexDirection:"column",alignItems:"center",gap:10 }}>
           <Icon name="ti-trophy" size={52} color="var(--ak-text-muted)" style={{opacity:.2}}/>
-          <p style={{ fontSize:13,fontWeight:700,color:"var(--ak-text-muted)",textAlign:"center",maxWidth:280,margin:0 }}>No one has played today's battle yet.</p>
+          <p style={{ fontSize:13,fontWeight:700,color:"var(--ak-text-muted)",textAlign:"center",maxWidth:280,margin:0 }}>Today's daily battle hasn't been played yet.</p>
         </div>
       ) : daily.top.map(r => (
         <div key={r.rank} style={{ display:"flex",alignItems:"center",gap:12,padding:"11px 18px",borderBottom:"1px solid var(--ak-border)",background:r.you?`${BRAND}06`:"var(--ak-surface)" }}>

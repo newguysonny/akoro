@@ -215,7 +215,8 @@ export async function cancelChallengeRequest(meId, requestId) {
 /* ── Rematch ────────────────────────────────────────────────────────────── */
 
 export async function rematch(meId, battleId) {
-  const { data: b } = await db.from("battles").select("id, battle_type, title, subject, topic, difficulty, total_questions, status").eq("id", battleId).maybeSingle();
+  const { data: b } = await db.from("battles").select("id, battle_type, title, subject, topic, difficulty, total_questions, status, recurring_key").eq("id", battleId).maybeSingle();
+  if (b?.recurring_key) throw fail("The daily battle comes round again tomorrow — no rematch needed.", 409);
   if (!b || !["completed", "expired"].includes(b.status)) throw fail("That battle isn't finished yet.", 409);
   const { data: seats } = await db.from("battle_participants").select("user_id, role, team").eq("battle_id", battleId);
   const players = (seats || []).filter((s) => s.role !== "teacher");

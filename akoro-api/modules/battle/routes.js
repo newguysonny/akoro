@@ -870,6 +870,8 @@ function toCard(b, extra = {}) {
     status:        b.status,
     battleType:    b.status === "scheduled" ? "scheduled" : (b.battle_type === "classroom" ? "classroom" : "immediate"),
     type:          b.battle_type,
+    // The daily battle: platform-made, recurs every day (agent-network/activities.js).
+    daily:         String(b.recurring_key || "").startsWith("daily:"),
     xpPrize:       `+${b.xp_prize ?? b.xp_pool ?? 0} XP`,
     xpPool:        b.xp_pool ?? b.xp_prize ?? 0,
     totalQuestions: b.total_questions ?? 0,

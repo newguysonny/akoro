@@ -8,7 +8,6 @@
 --   challenge_requests        "looking for a JAMB Chemistry 1v1 tonight" — others accept
 --   agent_messages            agent-to-agent consults, suggestions and replies
 --   study_buddies             paired agents with weekly goal check-ins
---   daily_challenges (+attempts)  one shared question set a day, ranked
 --   revision_circles (+members)   3–5 agents revising one topic, ending in a battle
 --   battle_participants.team  2v2 team battles (battle_type 'team')
 -- Idempotent.
@@ -138,28 +137,6 @@ CREATE TABLE IF NOT EXISTS edu.study_buddies (
 CREATE UNIQUE INDEX IF NOT EXISTS uq_study_buddies_pair
   ON edu.study_buddies (LEAST(requester_id, buddy_id), GREATEST(requester_id, buddy_id))
   WHERE status IN ('pending', 'active');
-
--- ── Daily challenge ────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS edu.daily_challenges (
-  day         DATE NOT NULL,
-  subject     TEXT NOT NULL,
-  exam        TEXT,
-  questions   JSONB NOT NULL,          -- [{ stem, options:[{label,text}], answer, topic, exam, year }]
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (day, subject)
-);
-CREATE TABLE IF NOT EXISTS edu.daily_challenge_attempts (
-  day         DATE NOT NULL,
-  subject     TEXT NOT NULL,
-  user_id     UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-  answers     JSONB NOT NULL DEFAULT '[]',
-  correct     INTEGER NOT NULL DEFAULT 0,
-  total       INTEGER NOT NULL DEFAULT 0,
-  time_ms     INTEGER,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (day, subject, user_id)
-);
-CREATE INDEX IF NOT EXISTS idx_daily_attempts_rank ON edu.daily_challenge_attempts (day, subject, correct DESC, time_ms ASC);
 
 -- ── Revision circles ───────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS edu.revision_circles (

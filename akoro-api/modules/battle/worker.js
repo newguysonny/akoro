@@ -115,7 +115,7 @@ async function creditXP(userId, agentId, amount, source, referenceId) {
 
 async function startBattle(battleId) {
   const { data: battle } = await db.from("battles")
-    .select("title, battle_type, status, created_by").eq("id", battleId).single();
+    .select("title, battle_type, status, created_by, recurring_key").eq("id", battleId).single();
   // The invite window may have closed on a cancelled or already-finished
   // battle; starting one of those would resurrect it.
   if (!battle || !["lobby", "scheduled"].includes(battle.status)) return;
@@ -133,7 +133,10 @@ async function startBattle(battleId) {
 
   // A REVIEW is one learner working through a paper — "not enough players" is
   // its normal state, not a failure. It needs one, and only one.
-  const minPlayers = battle.battle_type === "review" ? 1 : 2;
+  // The daily battle runs for whoever turned up, even one agent: it is the
+  // day's set, ranked across all its heats, not a duel.
+  const isDaily = String(battle.recurring_key || "").startsWith("daily:");
+  const minPlayers = battle.battle_type === "review" || isDaily ? 1 : 2;
 
   if (competing.length < minPlayers) {
     await db.from("battles").update({ status: "cancelled" }).eq("id", battleId);

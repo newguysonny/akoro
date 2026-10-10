@@ -4,9 +4,9 @@
  *   Study buddies     requestBuddy / respondBuddy / listBuddies / buddyCheckin / endBuddy
  *                     two agents keep each other on track: a weekly check-in carries
  *                     each learner's goal progress and week's XP to the other.
- *   Daily challenge   getDaily / submitDaily / dailyRanking — one shared set of 5
- *                     questions a day per subject (past papers first, AI to fill),
- *                     one go each, ranked by correct answers then time.
+ *   Daily battle      joinDaily / skipDaily / dailyStatus / dailyRanking — a real battle
+ *                     every day at 7 PM per subject, played in the normal arena by
+ *                     each learner's agent; ranked across heats; recurs daily.
  *   Revision circles  createCircle / searchCircles / joinCircle / leaveCircle / myCircles —
  *                     3–8 agents on one exam topic; when it fills (or at its time with
  *                     3+), a group battle on that topic is made for them.
@@ -14,11 +14,11 @@
  *                     classmates, school, a subject's agents, an exam's, or everyone.
  */
 import db from "../../db.js";
-import { fromPastPapers, generate } from "../battle/questionSource.js";
+import { buildQuestions } from "../battle/questionSource.js";
 import { createNetworkBattle } from "../battle/networkBattle.js";
 import { notifyUser } from "../notify.js";
 import { canMessage } from "./filters.js";
-import { relationsOf, blockedWith, getSettings, logPastQuestions } from "./network.js";
+import { relationsOf, blockedWith, getSettings } from "./network.js";
 
 const edu = () => db.schema("edu");
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
@@ -147,26 +147,35 @@ export async function buddyBrief(meId) {
     `${due ? `${due} weekly check-in${due === 1 ? "" : "s"} due — offer to send it (buddy_checkin).` : ""}`;
 }
 
-/* ── Daily challenge ────────────────────────────────────────────────────── */
+/* ── Daily battle ───────────────────────────────────────────────────────── */
+//
+// A real battle that recurs: every day at DAILY_BATTLE_HOUR (19:00 Lagos) one
+// battle per subject runs in the same arena as every other battle — each
+// learner's agent answers from their own notes, they watch it live, and it
+// settles XP like any group battle. Learners take a seat in the next one when
+// they open Battles (or ask their agent) and can skip a day. A busy subject is
+// split into heats of DAILY_SEATS that share one question set, so the day's
+// ranking across heats is fair. Once it is over, the next day's is scheduled.
 
-export const DAILY_SIZE = 5;
-const publicQ = (q, i) => ({ n: i + 1, stem: q.stem, options: q.options, topic: q.topic || null, source: q.exam ? `${q.exam}${q.year ? ` ${q.year}` : ""}` : null });
-
-/**
- * The daily battle recurs every day in ONE window for everyone (so nobody sees
- * the shared set early): from DAILY_BATTLE_HOUR (19:00 Lagos by default) to
- * midnight. Before it: scheduled. In it: active. Played: completed. Not
- * played by midnight: missed. Then tomorrow's is scheduled.
- */
 export const DAILY_START_HOUR = Math.min(23, Math.max(0, Number(process.env.DAILY_BATTLE_HOUR ?? 19) || 0));
-/** "2026-10-10" → its window in UTC instants. */
-export function dailyWindow(day) {
-  const midnightLagos = Date.parse(`${day}T00:00:00Z`) - LAGOS_MS;
-  return { startsAt: new Date(midnightLagos + DAILY_START_HOUR * 3600_000).toISOString(), endsAt: new Date(midnightLagos + 24 * 3600_000 - 1000).toISOString() };
+export const DAILY_SEATS = 30;
+export const DAILY_Q = 10;
+const DAILY_SECONDS_PER_Q = 20;
+const DAILY_XP = 100;
+/** "2026-10-10" → when that day's battle starts (UTC instant). */
+export function dailyStart(day) {
+  return new Date(Date.parse(`${day}T00:00:00Z`) - LAGOS_MS + DAILY_START_HOUR * 3600_000).toISOString();
 }
 const nextDay = (day) => new Date(Date.parse(`${day}T12:00:00Z`) + 86400_000).toISOString().slice(0, 10);
+/** The day whose battle a learner can still take a seat in: today's until a minute before it starts, then tomorrow's. */
+export function upcomingDay(now = Date.now()) {
+  const d = lagosDay(now);
+  return now < Date.parse(dailyStart(d)) - 60_000 ? d : nextDay(d);
+}
+/** recurring_key = daily:<day>:<subject>:<heat> */
+export const dailyKey = (day, subject, heat = null) => `daily:${day}:${String(subject).trim().toLowerCase()}:${heat ?? ""}`;
+const DAILY_STATUS = { lobby: "scheduled", scheduled: "scheduled", live: "active", completed: "completed", cancelled: "missed", expired: "missed" };
 
-/** The learner's daily-battle subject: their choice, else their first subject, else Mathematics. */
 async function dailySubjectFor(meId, subject = null) {
   if (subject) return String(subject).trim().slice(0, 60);
   const settings = await getSettings(meId);
@@ -175,95 +184,143 @@ async function dailySubjectFor(meId, subject = null) {
   return (u?.subjects || [])[0] || "Mathematics";
 }
 
-/** Where today's daily battle stands, the next one, and recent results. */
+/** My seats in daily battles (newest first). */
+async function myDailySeats(meId, { day = null, limit = 14 } = {}) {
+  const { data } = await db.from("battle_participants")
+    .select("id, joined_at, declined_at, score, correct_answers, final_rank, xp_earned, battles!inner(id, status, subject, recurring_key, scheduled_start, total_questions)")
+    .eq("user_id", meId).like("battles.recurring_key", day ? `daily:${day}:%` : "daily:%")
+    .limit(400);
+  // One seat a day; newest day first (the key carries the day).
+  return (data || []).filter((s) => s.battles)
+    .sort((x, y) => String(y.battles.recurring_key).localeCompare(String(x.battles.recurring_key))).slice(0, limit);
+}
+
+/** Make one heat of a day's battle: questions (heat 1) or a copy of heat 1's, and the start job. */
+async function createDailyHeat(day, subject, heat, copyFrom = null) {
+  const startsAt = dailyStart(day);
+  const key = dailyKey(day, subject, heat);
+  const { data: b, error } = await db.from("battles").insert({
+    course_id: null, classroom_id: null, battle_type: "classroom",
+    title: `Daily battle · ${subject}`, description: "Daily battle", subject, topic: null, difficulty: "intermediate",
+    total_questions: DAILY_Q, time_limit_seconds: DAILY_Q * DAILY_SECONDS_PER_Q,
+    xp_prize: DAILY_XP, xp_pool: DAILY_XP, max_participants: DAILY_SEATS, total_participants: 0,
+    status: "scheduled", scheduled_start: startsAt, expires_at: startsAt, created_by: null, recurring_key: key,
+  }).select().single();
+  if (error) {
+    // Two learners making the same heat at once: keep whichever landed.
+    if (/duplicate|unique/i.test(error.message)) {
+      const { data: won } = await db.from("battles").select("*").eq("recurring_key", key).maybeSingle();
+      if (won) return won;
+    }
+    throw new Error(error.message);
+  }
+  try {
+    if (copyFrom) {
+      const { data: qs } = await db.from("battle_questions").select("*").eq("battle_id", copyFrom).order("question_order");
+      if (!qs?.length) throw fail("Today's questions aren't ready — try again in a moment.");
+      await db.from("battle_questions").insert(qs.map(({ id: _id, created_at: _c, ...q }) => ({ ...q, battle_id: b.id })));
+      if (qs.length !== DAILY_Q) await db.from("battles").update({ total_questions: qs.length }).eq("id", b.id);
+    } else {
+      // The platform writes the day's set (past papers first): nobody is billed for a battle everyone shares.
+      const fill = await buildQuestions({ battleId: b.id, source: "auto", total: DAILY_Q, subject, difficulty: "intermediate", userId: null, durationSeconds: DAILY_Q * DAILY_SECONDS_PER_Q });
+      if ((fill?.placed ?? 0) < 5) throw fail(`Couldn't put together a ${subject} daily battle — pick another subject in Settings → Agent.`);
+      if (fill.placed !== DAILY_Q) await db.from("battles").update({ total_questions: fill.placed, time_limit_seconds: fill.placed * (fill.secondsPerQuestion || DAILY_SECONDS_PER_Q) }).eq("id", b.id);
+    }
+  } catch (e) {
+    await db.from("battles").delete().eq("id", b.id);
+    throw e;
+  }
+  const { battleQueue } = await import("../battle/worker.js");
+  await battleQueue.add("start-battle", { action: "start-battle", battleId: b.id },
+    { delay: Math.max(0, Date.parse(startsAt) - Date.now()), jobId: `start-${b.id}` });
+  return b;
+}
+
+/**
+ * Take a seat in the next daily battle. `auto` (the Battles tab opening) never
+ * undoes a skip; an explicit join does.
+ * → { battleId, day, subject, startsAt, status: joined | skipped }
+ */
+export async function joinDaily(meId, { subject = null, auto = false } = {}) {
+  const day = upcomingDay();
+  const startsAt = dailyStart(day);
+  const [seat] = await myDailySeats(meId, { day, limit: 1 });
+  if (seat) {
+    if (seat.declined_at && !auto) {
+      await db.from("battle_participants").update({ declined_at: null, joined_at: new Date().toISOString() }).eq("id", seat.id);
+      return { battleId: seat.battles.id, day, subject: seat.battles.subject, startsAt, status: "joined", rejoined: true };
+    }
+    return { battleId: seat.battles.id, day, subject: seat.battles.subject, startsAt, status: seat.declined_at ? "skipped" : "joined", already: true };
+  }
+  const subj = await dailySubjectFor(meId, subject);
+  const { data: agent } = await db.from("user_agents").select("id").eq("user_id", meId).maybeSingle();
+  if (!agent) throw fail("Create your agent first — it plays the daily battle for you.");
+
+  const { data: heats } = await db.from("battles").select("id, status, total_participants, recurring_key")
+    .like("recurring_key", `${dailyKey(day, subj)}%`).order("created_at", { ascending: true });
+  let b = (heats || []).find((h) => h.status === "scheduled" && (h.total_participants || 0) < DAILY_SEATS);
+  if (!b) b = await createDailyHeat(day, subj, (heats || []).length + 1, heats?.[0]?.id || null);
+
+  const { error } = await db.from("battle_participants").insert({ battle_id: b.id, user_id: meId, agent_id: agent.id, role: "participant", joined_at: new Date().toISOString() });
+  if (error && !/duplicate|unique/i.test(error.message)) throw new Error(error.message);
+  const { count } = await db.from("battle_participants").select("id", { count: "exact", head: true }).eq("battle_id", b.id);
+  // The pool grows with the field, as in any group battle.
+  await db.from("battles").update({ total_participants: count ?? 1, xp_pool: DAILY_XP * Math.max(1, Math.ceil((count ?? 1) / 2)) }).eq("id", b.id);
+  return { battleId: b.id, day, subject: subj, startsAt, status: "joined", joined: true };
+}
+
+/** Sit out the next daily battle (join again any time before it starts). */
+export async function skipDaily(meId) {
+  const day = upcomingDay();
+  const [seat] = await myDailySeats(meId, { day, limit: 1 });
+  if (!seat) return { day, status: "skipped" };
+  if (seat.battles.status !== "scheduled") throw fail("That daily battle has already started.", 409);
+  await db.from("battle_participants").update({ declined_at: new Date().toISOString() }).eq("id", seat.id);
+  return { battleId: seat.battles.id, day, status: "skipped" };
+}
+
+/** Where today's daily battle stands for me, the next one, and my recent results. */
 export async function dailyStatus(meId, now = Date.now()) {
   const subject = await dailySubjectFor(meId);
   const day = lagosDay(now);
-  const win = dailyWindow(day);
-  const { data: hist } = await edu().from("daily_challenge_attempts").select("day, subject, correct, total, time_ms, created_at")
-    .eq("user_id", meId).order("day", { ascending: false }).limit(14);
-  const today = (hist || []).find((h) => h.day === day) || null;
-  const status = today ? "completed" : now < Date.parse(win.startsAt) ? "scheduled" : now <= Date.parse(win.endsAt) ? "active" : "missed";
-  const next = status === "scheduled" ? win : dailyWindow(nextDay(day));
+  const seats = await myDailySeats(meId);
+  const dayOf = (s) => String(s.battles.recurring_key).split(":")[1];
+  const today = seats.find((s) => dayOf(s) === day) || null;
+  const startsAt = dailyStart(day);
+  const status = today ? (today.declined_at ? "skipped" : DAILY_STATUS[today.battles.status] || "scheduled")
+    : now < Date.parse(startsAt) ? "scheduled" : "missed";
+  const next = upcomingDay(now);
   return {
-    subject, day, status, ...win,
-    ...(today ? { result: { correct: today.correct, total: today.total, seconds: today.time_ms != null ? Math.round(today.time_ms / 1000) : null } } : {}),
-    next: { day: status === "scheduled" ? day : nextDay(day), ...next },
-    history: (hist || []).map((h) => ({ day: h.day, subject: h.subject, correct: h.correct, total: h.total, seconds: h.time_ms != null ? Math.round(h.time_ms / 1000) : null })),
+    subject: today?.battles.subject || subject, day, status, startsAt, battleId: today?.battles.id || null,
+    next: { day: next, startsAt: dailyStart(next) },
+    history: seats.filter((s) => s.battles.status === "completed").map((s) => ({
+      day: dayOf(s), subject: s.battles.subject, battleId: s.battles.id, score: s.correct_answers ?? s.score ?? 0,
+      total: s.battles.total_questions, rank: s.final_rank, xp: s.xp_earned || 0,
+    })),
   };
 }
 
-/** Today's set for a subject (made on first ask, only once its window opens). → { day, subject, questions (no answers), attempted, result? } */
-export async function getDaily(meId, subject = null) {
-  const subj = await dailySubjectFor(meId, subject);
-  const day = lagosDay();
-  const win = dailyWindow(day);
-  if (Date.now() < Date.parse(win.startsAt)) {
-    throw fail(`Today's daily battle starts at ${new Date(win.startsAt).toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit", timeZone: "Africa/Lagos" })}.`, 409);
-  }
-  let { data: row } = await edu().from("daily_challenges").select("*").eq("day", day).ilike("subject", subj).maybeSingle();
-  if (!row) {
-    let qs = await fromPastPapers({ subject: subj, difficulty: "intermediate", limit: DAILY_SIZE * 3 }).catch(() => []);
-    qs = qs.sort(() => Math.random() - 0.5).slice(0, DAILY_SIZE);
-    if (qs.length < DAILY_SIZE) {
-      const g = await generate({ subject: subj, difficulty: "intermediate", count: DAILY_SIZE - qs.length + 1, userId: meId, exemplars: qs, feature: "daily_challenge" }).catch(() => ({ questions: [] }));
-      qs = [...qs, ...(g.questions || [])].slice(0, DAILY_SIZE);
-    }
-    if (qs.length < 3) throw fail(`Couldn't put together a ${subj} daily challenge today — try another subject.`);
-    const stored = qs.map((q) => ({ stem: q.stem, options: q.options, answer: q.correctIndex, topic: q.topic || null, exam: q.exam || null, year: q.year ?? null }));
-    const ins = await edu().from("daily_challenges").insert({ day, subject: subj, questions: stored }).select().single();
-    // Two learners racing to make the same day's set: keep whichever landed.
-    row = ins.data || (await edu().from("daily_challenges").select("*").eq("day", day).ilike("subject", subj).maybeSingle()).data;
-  }
-  const { data: att } = await edu().from("daily_challenge_attempts").select("correct, total, time_ms").eq("day", day).eq("subject", row.subject).eq("user_id", meId).maybeSingle();
-  return { day, subject: row.subject, questions: (row.questions || []).map(publicQ), attempted: !!att, ...(att ? { result: att } : {}) };
-}
-
-/** Mark one go at today's set. answers: [optionIndex | letter]. */
-export async function submitDaily(meId, { subject, answers = [], time_ms = null } = {}) {
-  const day = lagosDay();
-  if (Date.now() < Date.parse(dailyWindow(day).startsAt)) throw fail("Today's daily battle hasn't started yet.", 409);
-  const { data: row } = await edu().from("daily_challenges").select("*").eq("day", day).ilike("subject", String(subject || "")).maybeSingle();
-  if (!row) throw fail("Open today's challenge first.", 404);
-  // One daily battle a day, whatever the subject (changing subject mid-day doesn't buy a second go).
-  const { data: done } = await edu().from("daily_challenge_attempts").select("subject").eq("day", day).eq("user_id", meId).limit(1);
-  if (done?.length) throw fail("You've already done today's daily battle — the next one is tomorrow.", 409);
-  const qs = row.questions || [];
-  const pick = (a, q) => (typeof a === "number" ? a : /^[A-Z]$/i.test(String(a || "").trim()) ? String(a).trim().toUpperCase().charCodeAt(0) - 65 : q.options.findIndex((o) => String(o.text).toLowerCase() === String(a || "").trim().toLowerCase()));
-  const marks = qs.map((q, i) => ({ n: i + 1, chosen: pick(answers[i], q), correct: q.answer }));
-  const correct = marks.filter((m) => m.chosen === m.correct).length;
-  const { error } = await edu().from("daily_challenge_attempts").insert({
-    day, subject: row.subject, user_id: meId, answers: marks.map((m) => m.chosen), correct, total: qs.length,
-    time_ms: Number.isFinite(Number(time_ms)) ? Math.max(0, Math.round(Number(time_ms))) : null,
-  });
-  if (error) throw fail(/duplicate|pkey/i.test(error.message) ? "You've already done today's challenge — come back tomorrow." : error.message, 409);
-  // XP for the day, and past-paper questions count as practice.
-  const { data: agent } = await db.from("user_agents").select("id, total_xp").eq("user_id", meId).maybeSingle();
-  const xp = correct * 10 + (correct === qs.length ? 20 : 0);
-  if (agent && xp) {
-    const total = (agent.total_xp || 0) + xp;
-    await db.from("user_agents").update({ total_xp: total }).eq("id", agent.id);
-    await db.from("xp_ledger").insert({ user_id: meId, agent_id: agent.id, amount: xp, source: "daily_challenge", reference_id: null, running_total: total }).then(() => {}, () => {});
-  }
-  const past = qs.filter((q) => q.exam);
-  if (past.length) await logPastQuestions(meId, { exam: past[0].exam, subject: row.subject, year: past[0].year, attempted: past.length, correct: marks.filter((m, i) => qs[i].exam && m.chosen === m.correct).length, source: "daily" }).catch(() => {});
-  const ranking = await dailyRanking(meId, row.subject);
-  return { correct, total: qs.length, xp, review: qs.map((q, i) => ({ n: i + 1, stem: q.stem, yourAnswer: q.options[marks[i].chosen]?.label || "—", answer: q.options[q.answer]?.label, right: marks[i].chosen === q.answer })), rank: ranking.me };
-}
-
-export async function dailyRanking(meId, subject) {
-  const day = lagosDay();
-  const { data } = await edu().from("daily_challenge_attempts").select("user_id, correct, total, time_ms")
-    .eq("day", day).ilike("subject", String(subject || "")).order("correct", { ascending: false }).order("time_ms", { ascending: true, nullsFirst: false }).limit(500);
-  const rows = data || [];
-  const top = rows.slice(0, 10);
+/** One day's ranking for a subject, across all its heats: correct answers, then HP. */
+export async function dailyRanking(meId, subject, day = lagosDay()) {
+  const subj = await dailySubjectFor(meId, subject || null);
+  const { data: heats } = await db.from("battles").select("id, status, total_questions").like("recurring_key", `${dailyKey(day, subj)}%`);
+  const ids = (heats || []).map((h) => h.id);
+  const status = (heats || []).some((h) => h.status === "live") ? "active" : (heats || []).some((h) => h.status === "completed") ? "completed" : "scheduled";
+  if (!ids.length) return { day, subject: subj, status, players: 0, top: [], me: null };
+  const { data } = await db.from("battle_participants").select("user_id, score, correct_answers, hp, joined_at, declined_at, role")
+    .in("battle_id", ids).limit(2000);
+  const rows = (data || []).filter((r) => r.role !== "teacher" && r.joined_at && !r.declined_at)
+    .sort((a, b) => (b.correct_answers ?? b.score ?? 0) - (a.correct_answers ?? a.score ?? 0) || (b.hp ?? 0) - (a.hp ?? 0));
+  const total = heats[0]?.total_questions ?? DAILY_Q;
+  const top = rows.slice(0, 20);
   const { data: users } = top.length ? await db.from("users").select("id, full_name, username, avatar_url").in("id", top.map((r) => r.user_id)) : { data: [] };
   const U = new Map((users || []).map((u) => [u.id, u]));
   const myIdx = rows.findIndex((r) => r.user_id === meId);
+  const correct = (r) => r.correct_answers ?? r.score ?? 0;
   return {
-    day, subject, players: rows.length,
-    top: top.map((r, i) => ({ rank: i + 1, name: first(U.get(r.user_id)?.full_name, U.get(r.user_id)?.username), avatar: U.get(r.user_id)?.avatar_url || null, correct: r.correct, total: r.total, seconds: r.time_ms != null ? Math.round(r.time_ms / 1000) : null, you: r.user_id === meId })),
-    me: myIdx >= 0 ? { rank: myIdx + 1, of: rows.length, correct: rows[myIdx].correct, total: rows[myIdx].total } : null,
+    day, subject: subj, status, players: rows.length,
+    top: top.map((r, i) => ({ rank: i + 1, name: first(U.get(r.user_id)?.full_name, U.get(r.user_id)?.username), avatar: U.get(r.user_id)?.avatar_url || null, correct: correct(r), total, you: r.user_id === meId })),
+    me: myIdx >= 0 ? { rank: myIdx + 1, of: rows.length, correct: correct(rows[myIdx]), total } : null,
   };
 }
 
