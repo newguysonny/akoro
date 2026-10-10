@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  fetchMyActivities, completeActivity, uploadActivityFile, removeActivityFile, downloadActivityFile,
+  fetchMyActivities, completeActivity, uploadActivityFile, removeActivityFile, downloadActivityFile, downloadMySubmissionPdf,
 } from '../services/activityApi.js';
 import { Icon } from '../components/common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD } from '../constants.js';
@@ -65,7 +65,8 @@ function fmtSize(bytes) {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
-const FILE_OK = /\.(pdf|jpe?g|png|docx?)$/i;
+// What the API accepts (it checks the bytes too): PDF, photos, Word .docx, text.
+const FILE_OK = /\.(pdf|jpe?g|png|docx|txt)$/i;
 
 /* ── Glass chip (hero meta) ─────────────────────────────────────────────── */
 function Chip({ children, dot }) {
@@ -338,6 +339,7 @@ export default function ActivityDetailPage() {
   const [work, setWork] = useState(null);
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
   const fileRef = useRef(null);
 
   useEffect(() => {
@@ -397,7 +399,7 @@ export default function ActivityDetailPage() {
 
   const pickFile = async (file) => {
     if (!file || uploading) return;
-    if (!FILE_OK.test(file.name)) { setSubmitErr('Only PDF, JPG, PNG or DOCX files.'); return; }
+    if (!FILE_OK.test(file.name)) { setSubmitErr('Only PDF, JPG, PNG, Word (.docx) or text files.'); return; }
     if (file.size > 5 * 1024 * 1024) { setSubmitErr('That file is larger than 5MB.'); return; }
     setSubmitErr('');
     setUploading(true);
@@ -449,13 +451,13 @@ export default function ActivityDetailPage() {
                         background: dragOver ? `${BRAND}0A` : 'var(--ak-surface)',
                       }}>
                       <input ref={fileRef} type="file" style={{ display: 'none' }}
-                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                        accept=".pdf,.jpg,.jpeg,.png,.docx,.txt"
                         onChange={(e) => pickFile(e.target.files?.[0])}/>
                       <div style={{ width: 34, height: 34, borderRadius: 10, background: `${BRAND}14`, color: BRAND, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px' }}>
                         <Icon name="ti-cloud-upload" size={16}/>
                       </div>
                       <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)' }}>Click to upload or drag and drop</div>
-                      <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--ak-text-muted)', marginTop: 3 }}>PDF, JPG, PNG, DOCX up to 5MB</div>
+                      <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--ak-text-muted)', marginTop: 3 }}>PDF, JPG, PNG, DOCX or TXT up to 5MB</div>
                     </div>
                   )}
     </>
@@ -628,6 +630,20 @@ export default function ActivityDetailPage() {
                 No written answer was captured for this submission — only the completion was recorded.
               </p>
             </div>
+          )}
+
+          {/* the whole submission as one PDF — the copy the teacher grades */}
+          {row.submission?.submittedAt && row.targetId && (
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
+              <button type="button" disabled={pdfBusy}
+                onClick={() => { setPdfBusy(true); setSubmitErr(''); downloadMySubmissionPdf(row.targetId, row.title).catch((e) => setSubmitErr(e?.message || 'Could not get the PDF.')).finally(() => setPdfBusy(false)); }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 20, border: '1px solid var(--ak-border)', background: 'var(--ak-surface)', color: 'var(--ak-text)', fontSize: 12.5, fontWeight: 800, cursor: pdfBusy ? 'default' : 'pointer', fontFamily: "'Nunito',sans-serif" }}>
+                {pdfBusy ? <Spinner size={12}/> : <Icon name="ti-file-type-pdf" size={14} color={RED}/>} Download my submission (PDF)
+              </button>
+            </div>
+          )}
+          {row.submission?.submittedAt && submitErr && isDone && (
+            <div style={{ fontSize: 12, fontWeight: 700, color: RED, textAlign: 'center', marginBottom: 10 }}>{submitErr}</div>
           )}
 
           {/* submitted confirmation */}
