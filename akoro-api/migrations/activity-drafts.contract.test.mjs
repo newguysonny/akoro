@@ -85,7 +85,7 @@ test("the agent prepares but never assigns — tools, gating, and honesty", () =
   // prepare-force never requires a tool that isn't armed.
   assert.match(chat, /const instructorTools = role === "student" \? \[\] : openAiInstructorTools\(\);/);
   assert.match(chat, /\}\) : instructorTools,/);
-  assert.match(chat, /"prepare_activity", "revise_activity_draft"\]\.includes\(tool\)/, "prepare + revise are side-effecting");
+  assert.match(chat, /sideEffecting: \[[^\]]*"prepare_activity", "revise_activity_draft"[^\]]*\]\.includes\(tool\)/, "prepare + revise are side-effecting");
   // HITL honesty guide replaces the learner observation guide for instructors.
   // P1: the guide loads from the workspace via assembleChatDoctrine.
   assert.match(chat, /assembleChatDoctrine/);

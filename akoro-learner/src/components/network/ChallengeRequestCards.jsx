@@ -3,6 +3,7 @@
  * tonight at 8") with Accept; the learner's own with Cancel. Used under an
  * Agent Chat reply and in the Battles tab's "Open" view.
  */
+import { splitAgent } from './AgentCards.jsx';
 import { useState } from 'react';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND } from '../../constants.js';
@@ -51,7 +52,7 @@ export default function ChallengeRequestCards({ requests = [], mine = false, joi
             )}
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6, fontSize: 11, fontWeight: 700, color: 'var(--ak-text-muted)' }}>
-            {r.by && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>{r.by.online && <span title="Online" style={{ width: 8, height: 8, borderRadius: '50%', background: '#10B981', display: 'inline-block' }} />}{r.by.name} {r.by.username} · {r.by.agent} · Lv {r.by.level}</span>}
+            {r.by && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>{r.by.online && <span title="Online" style={{ width: 8, height: 8, borderRadius: '50%', background: '#10B981', display: 'inline-block' }} />}{r.by.name} {r.by.username} · {splitAgent(r.by.agent).name || 'Agent'} · Lv {r.by.level}</span>}
             {(r.scheduledFor || r.scheduled_for) && <span style={{ color: BRAND }}><Icon name="ti-calendar" size={11} /> {when(r.scheduledFor || r.scheduled_for)}</span>}
             {mine && <span>{r.status}</span>}
           </div>

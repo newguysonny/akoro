@@ -137,7 +137,10 @@ export async function getKnowledgeMap(learnerId, input = {}) {
   const { agentId, subjects } = await learnerKnowledgeSubjects(learnerId);
   if (!agentId) return { subjects: [], topics: [], message: "No recorded study knowledge yet." };
   const allSubjects = subjects.map(publicKnowledgeSubject).filter((item) => !subject || item.subject.toLocaleLowerCase("en-US") === subject.toLocaleLowerCase("en-US"));
-  const requested = subject ? [subject] : allSubjects.map((item) => item.subject).slice(0, 6);
+  // The stored subject names (matched case-insensitively above), not the raw
+  // input — "biology" found the Biology row but fetched its topics with
+  // "biology" and got none.
+  const requested = allSubjects.map((item) => item.subject).slice(0, 6);
   const topicSets = await Promise.all(requested.map((name) => getTopicsBySubject(agentId, name)));
   const topics = topicSets.flat().map(publicKnowledgeTopic)
     .sort((left, right) => left.confidence - right.confidence)
@@ -160,7 +163,6 @@ export async function searchMyStudyKnowledge(learnerId, input = {}) {
       source: text(row.source, 40) || "study record",
       confidence: percent(row.confidence),
       excerpt: text(row.content, 700),
-      savedAt: row.updated_at || row.created_at || null,
     })).filter((item) => item.excerpt).slice(0, 6),
   };
 }
@@ -174,8 +176,10 @@ export async function getConceptTrackerSummary(learnerId, input = {}) {
   let conceptsQuery = db.schema("edu").from("learner_concept_tracker")
     .select("concept_id, learning_status, resume_point, updated_at, concept_catalog!inner(title, subject, topic_key)")
     .eq("learner_id", learnerId)
+    // Approved concepts only, as the tool promises (not pending review or retired).
+    .eq("concept_catalog.status", "approved")
     .order("updated_at", { ascending: false }).limit(16);
-  if (subject) conceptsQuery = conceptsQuery.eq("concept_catalog.subject", subject);
+  if (subject) conceptsQuery = conceptsQuery.ilike("concept_catalog.subject", subject);
   const { data: concepts, error } = await conceptsQuery;
   if (error) throw new Error("Concept tracker is unavailable");
   const ids = (concepts || []).map((row) => row.concept_id).filter(Boolean);
@@ -291,7 +295,10 @@ export async function getExamPrepStatus(learnerId) {
 
 /** Learner-clearable compact memory only; never an internal scratchpad or transcript export. */
 export async function getChatMemory(learnerId, { conversationId = null } = {}) {
-  if (!isEnabled("AKORO_AGENT_CHAT_DURABLE_CONTEXT_ENABLED")) {
+  // Same default as the gate that offers the tool (chat.js): ON unless set to
+  // false. The strict check here meant the tool was offered, then always said
+  // "not enabled".
+  if (!isEnabledByDefault("AKORO_AGENT_CHAT_DURABLE_CONTEXT_ENABLED")) {
     return { enabled: false, memories: [], conversationSummary: null, message: "Durable Agent Chat memory is not enabled for this learner." };
   }
   const memoriesResult = await db.schema("edu").from("learner_agent_memories")
@@ -310,11 +317,11 @@ export async function getChatMemory(learnerId, { conversationId = null } = {}) {
   return {
     enabled: true,
     conversationSummary,
-    memories: (memoriesResult.data || []).map((row) => ({
-      ...publicMemory(row),
-      createdAt: row.created_at || null,
-      updatedAt: row.updated_at || null,
-    })).filter(Boolean),
+    // Drop what publicMemory refuses (unknown kind, empty) BEFORE adding the
+    // dates — spreading a null left bare {createdAt, updatedAt} stubs.
+    memories: (memoriesResult.data || [])
+      .map((row) => { const m = publicMemory(row); return m ? { ...m, createdAt: row.created_at || null, updatedAt: row.updated_at || null } : null; })
+      .filter(Boolean),
     learnerControls: ["Memories and conversation summaries can be cleared in your Agent Chat controls."],
   };
 }

@@ -13,6 +13,7 @@ import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { SUITES, suiteByKey, EVAL_MODELS, estimateUsd } from "../../lib/evals/index.js";
 import { evalQueue } from "../../lib/evalWorker.js";
+import { assertQueueCapacity } from "../../lib/queueGuard.js";
 
 const router = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];

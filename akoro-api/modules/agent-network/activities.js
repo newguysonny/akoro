@@ -255,7 +255,13 @@ export async function joinDaily(meId, { subject = null, auto = false } = {}) {
       await db.from("battle_participants").update({ declined_at: null, joined_at: new Date().toISOString() }).eq("id", seat.id);
       return { battleId: seat.battles.id, day, subject: seat.battles.subject, startsAt, status: "joined", rejoined: true };
     }
-    return { battleId: seat.battles.id, day, subject: seat.battles.subject, startsAt, status: seat.declined_at ? "skipped" : "joined", already: true };
+    // Asked for a different subject before it starts: move the seat.
+    const wantOther = !auto && subject && String(subject).trim().toLowerCase() !== String(seat.battles.subject || "").toLowerCase();
+    if (!(wantOther && seat.battles.status === "scheduled")) {
+      return { battleId: seat.battles.id, day, subject: seat.battles.subject, startsAt, status: seat.declined_at ? "skipped" : "joined", already: true,
+        ...(wantOther ? { note: "That day's battle has already started — the subject can change from the next one." } : {}) };
+    }
+    await db.from("battle_participants").delete().eq("id", seat.id);
   }
   const subj = await dailySubjectFor(meId, subject);
   const { data: agent } = await db.from("user_agents").select("id").eq("user_id", meId).maybeSingle();
@@ -413,18 +419,25 @@ export async function joinCircle(meId, id) {
   const blocked = await blockedWith(meId);
   if (blocked.has(c.created_by)) throw fail("That circle isn't open to you.", 403);
   const { count } = await edu().from("revision_circle_members").select("user_id", { count: "exact", head: true }).eq("circle_id", id);
+  // Already in it: say so. A repeat join used to count as a new member and
+  // could mark a short circle "full", where it sat for good.
+  const { data: already } = await edu().from("revision_circle_members").select("user_id").eq("circle_id", id).eq("user_id", meId).maybeSingle();
+  if (already) return { joined: id, already: true, members: `${count ?? 0}/${c.max_members}` };
   if ((count ?? 0) >= c.max_members) throw fail("That circle is full.", 409);
   await assertEntry(meId, { battle_type: "classroom", total_questions: CIRCLE_QUESTIONS, min_xp: 0 });
   const { error } = await edu().from("revision_circle_members").insert({ circle_id: id, user_id: meId });
   if (error && !/duplicate|pkey/i.test(error.message)) throw new Error(error.message);
-  const n = (count ?? 0) + 1;
+  const { count: after } = await edu().from("revision_circle_members").select("user_id", { count: "exact", head: true }).eq("circle_id", id);
+  const n = after ?? (count ?? 0) + 1;
   if (n >= c.max_members) await edu().from("revision_circles").update({ status: "full" }).eq("id", id).eq("status", "open");
   const battleId = await startCircleIfReady({ ...c, status: n >= c.max_members ? "full" : c.status }).catch(() => null);
   return { joined: id, members: `${n}/${c.max_members}`, ...(battleId ? { battleId, note: "The circle is full — its battle is on." } : {}) };
 }
 
 export async function leaveCircle(meId, id) {
-  await edu().from("revision_circle_members").delete().eq("circle_id", id).eq("user_id", meId);
+  const { data: gone } = await edu().from("revision_circle_members").delete().eq("circle_id", id).eq("user_id", meId).select("user_id");
+  if (!gone?.length) throw fail("You're not in that circle.", 404);
+  // A seat came free: a full circle opens again.
   await edu().from("revision_circles").update({ status: "open" }).eq("id", id).eq("status", "full");
   return { left: id };
 }
@@ -461,10 +474,14 @@ export async function weeklyLeague(meId, { scope = "everyone", subject = null, e
     if (!me?.school_name) throw fail("Add your school in Settings to join your school's league.");
     const { data } = await db.from("users").select("id").ilike("school_name", me.school_name).limit(2000);
     ids = (data || []).map((r) => r.id);
-  } else if (scope === "subject" && subject) {
-    const { data } = await db.from("user_agents").select("user_id").contains("subjects", [subject]).limit(2000);
-    ids = [meId, ...(data || []).map((r) => r.user_id)];
-  } else if (scope === "exam" && exam) {
+  } else if (scope === "subject") {
+    if (!subject) throw fail("Which subject's league?");
+    // Case-insensitive: "chemistry" must find agents studying "Chemistry".
+    const want = String(subject).trim().toLowerCase();
+    const { data } = await db.from("user_agents").select("user_id, subjects").not("subjects", "is", null).limit(5000);
+    ids = [meId, ...(data || []).filter((r) => (r.subjects || []).some((x) => String(x).toLowerCase() === want)).map((r) => r.user_id)];
+  } else if (scope === "exam") {
+    if (!exam) throw fail("Which exam's league (WAEC, JAMB, NECO…)?");
     const { data } = await db.from("user_agents").select("user_id").ilike("exam_board", `%${exam}%`).limit(2000);
     ids = [meId, ...(data || []).map((r) => r.user_id)];
   }

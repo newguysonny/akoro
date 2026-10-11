@@ -91,6 +91,10 @@ export async function postChallengeRequest(meId, input = {}) {
   const expires = o.scheduledFor ? new Date(Date.parse(o.scheduledFor) - 60_000) : new Date(Date.now() + hours * 3600_000);
   const maxPlayers = kind === "1v1" ? 2 : kind === "team" ? 4 : Math.min(8, Math.max(3, Math.round(Number(input.max_players) || 4)));
   const scope = REQUEST_SCOPES.includes(input.scope) ? input.scope : "everyone";
+  // A course/community-only request needs to know WHICH one, or nobody can take it.
+  if (["course", "community"].includes(scope) && !input.scope_id) {
+    throw fail(`Which ${scope}? Give its id (scope_id), or post it to everyone, your classmates or your school.`);
+  }
   const row = {
     created_by: meId, battle_type: kind === "group" ? "open" : kind, title: o.title, subject: o.subject, topic: o.topic,
     exam: input.exam ? String(input.exam).toUpperCase().slice(0, 20) : null, difficulty: o.difficulty, total_questions: o.total,
@@ -108,10 +112,12 @@ export async function postChallengeRequest(meId, input = {}) {
 const kindOfRequest = (r) => (r.battle_type === "open" ? "group" : r.battle_type);
 
 /** May `me` take this request? (scope, XP bounds, blocks, not full, not mine) */
-function mayTake(r, me, rel, blocked) {
+function mayTake(r, me, rel, blocked, { checkMinXp = true } = {}) {
   if (r.created_by === me.id || blocked.has(r.created_by)) return false;
   if ((r.accepted_by || []).includes(me.id)) return false;
-  if (r.min_xp != null && me.xp < r.min_xp) return false;
+  // Accepting leaves the minimum XP to the entry check, which says exactly
+  // what is short ("needs 500 XP, you have 100") instead of "not open to you".
+  if (checkMinXp && r.min_xp != null && me.xp < r.min_xp) return false;
   if (r.max_xp != null && me.xp > r.max_xp) return false;
   switch (r.scope) {
     case "classmates": return rel.classmates.has(r.created_by) || rel.coursemates.has(r.created_by) || rel.liveMates.has(r.created_by);
@@ -203,7 +209,7 @@ export async function acceptChallengeRequest(meId, requestId) {
     db.from("users").select("school_name, full_name, username").eq("id", r.created_by).maybeSingle(),
   ]);
   if (!meA) throw fail("Create your agent first.");
-  if (!mayTake({ ...r, _school: owner?.school_name }, { id: meId, school: meU?.school_name, xp: meA.total_xp || 0 }, rel, blocked)) throw fail("This request isn't open to you.", 403);
+  if (!mayTake({ ...r, _school: owner?.school_name }, { id: meId, school: meU?.school_name, xp: meA.total_xp || 0 }, rel, blocked, { checkMinXp: false })) throw fail("This request isn't open to you.", 403);
   // Coins for your agent's answers, and the request's minimum XP.
   await assertEntry(meId, { battle_type: r.battle_type, total_questions: r.total_questions, min_xp: r.min_xp || 0 });
 

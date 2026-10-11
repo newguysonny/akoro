@@ -169,7 +169,7 @@ export async function messageAgent(fromId, input = {}, { deps } = {}) {
 export async function inbox(userId, { markRead = true, limit = 20 } = {}) {
   const [{ data: incoming }, { data: answers }] = await Promise.all([
     edu().from("agent_messages").select("*").eq("to_user", userId).order("created_at", { ascending: false }).limit(limit),
-    edu().from("agent_messages").select("*").eq("from_user", userId).not("answer", "is", null).is("read_at", null).order("answered_at", { ascending: false }).limit(10),
+    edu().from("agent_messages").select("*").eq("from_user", userId).not("answer", "is", null).is("answer_read_at", null).order("answered_at", { ascending: false }).limit(10),
   ]);
   const people = [...new Set([...(incoming || []).map((m) => m.from_user), ...(answers || []).map((m) => m.to_user)])];
   const [{ data: users }, { data: agents }] = people.length ? await Promise.all([
@@ -187,7 +187,9 @@ export async function inbox(userId, { markRead = true, limit = 20 } = {}) {
     const ids = [...(incoming || []).filter((m) => !m.read_at).map((m) => m.id)];
     const now = new Date().toISOString();
     if (ids.length) await edu().from("agent_messages").update({ read_at: now, ...{} }).in("id", ids);
-    if ((answers || []).length) await edu().from("agent_messages").update({ read_at: now }).in("id", answers.map((m) => m.id)).eq("from_user", userId);
+    // The asker's own "seen" mark. It used to share read_at with the recipient,
+    // so the recipient opening their inbox hid the answer from the asker for good.
+    if ((answers || []).length) await edu().from("agent_messages").update({ answer_read_at: now }).in("id", answers.map((m) => m.id)).eq("from_user", userId);
   }
   return out;
 }
@@ -197,9 +199,11 @@ export async function replyToAgent(userId, messageId, text) {
   const { data: m } = await edu().from("agent_messages").select("*").eq("id", messageId).eq("to_user", userId).maybeSingle();
   if (!m) throw fail("That message isn't in your agent's inbox.", 404);
   if (m.kind !== "consult") throw fail("That one was an idea, not a question — nothing to answer.");
+  // Already answered (by the agent, live): don't overwrite what the asker may have read.
+  if (m.answer) throw fail("Your agent already answered that one.", 409);
   const s = screenMessage(text, { min: 2, max: MESSAGE_LIMITS.ANSWER_MAX_CHARS });
   if (!s.ok) throw fail(SCREEN_REASON[s.reason] || "That reply can't be sent.");
-  await edu().from("agent_messages").update({ answer: s.question, answer_source: "learner", status: "answered", answered_at: new Date().toISOString() }).eq("id", m.id);
+  await edu().from("agent_messages").update({ answer: s.question, answer_source: "learner", status: "answered", answered_at: new Date().toISOString(), answer_read_at: null }).eq("id", m.id);
   const { data: me } = await db.from("users").select("full_name, username").eq("id", userId).maybeSingle();
   await notifyUser({ userId: m.from_user, type: "agent_message", title: `💬 ${first(me?.full_name, me?.username)}'s agent answered your agent`,
     content: s.question.slice(0, 140), relatedId: m.id, link: "/app?tab=agent" }).catch(() => {});
@@ -234,7 +238,7 @@ export async function consultOnlineAgents(userId, question, { topic = null, deps
 export async function inboxBrief(userId) {
   const [{ count: waiting }, { count: answers }] = await Promise.all([
     edu().from("agent_messages").select("id", { count: "exact", head: true }).eq("to_user", userId).is("read_at", null),
-    edu().from("agent_messages").select("id", { count: "exact", head: true }).eq("from_user", userId).not("answer", "is", null).is("read_at", null),
+    edu().from("agent_messages").select("id", { count: "exact", head: true }).eq("from_user", userId).not("answer", "is", null).is("answer_read_at", null),
   ]);
   if (!waiting && !answers) return "";
   return `\n\n## Your agent inbox\n${waiting ? `${waiting} message${waiting === 1 ? "" : "s"} from other learners' agents waiting. ` : ""}` +

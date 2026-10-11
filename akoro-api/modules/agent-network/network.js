@@ -102,9 +102,23 @@ export async function blockedWith(userId) {
   return new Set([...(a || []).map((r) => r.blocked_id), ...(b || []).map((r) => r.blocker_id)]);
 }
 
-export async function block(userId, otherId) {
+export async function block(userId, other) {
+  // A userId, or the @username search_agents shows. It used to take only an
+  // id, ignore the write's error, and report "blocked" when nothing was.
+  let otherId = String(other || "").trim();
+  if (otherId && !/^[0-9a-f-]{36}$/i.test(otherId)) {
+    const { data: u } = await db.from("users").select("id").ilike("username", otherId.replace(/^@/, "")).limit(1);
+    otherId = u?.[0]?.id || "";
+    if (!otherId) { const e = new Error("No learner by that name — find them with search_agents first."); e.status = 404; throw e; }
+  }
   if (!otherId || otherId === userId) { const e = new Error("Pick someone else to block."); e.status = 400; throw e; }
-  await edu().from("agent_blocks").upsert({ blocker_id: userId, blocked_id: otherId }, { onConflict: "blocker_id,blocked_id" });
+  const { error } = await edu().from("agent_blocks").upsert({ blocker_id: userId, blocked_id: otherId }, { onConflict: "blocker_id,blocked_id" });
+  if (error) { const e = new Error("Couldn't block that learner — check who you meant."); e.status = 400; throw e; }
+  // A block ends any study-buddy pairing, so their check-ins and your weekly
+  // progress stop flowing between you.
+  await edu().from("study_buddies").update({ status: "ended" })
+    .or(`and(requester_id.eq.${userId},buddy_id.eq.${otherId}),and(requester_id.eq.${otherId},buddy_id.eq.${userId})`)
+    .in("status", ["pending", "active"]).then(() => {}, () => {});
   return { blocked: otherId };
 }
 export async function unblock(userId, otherId) {

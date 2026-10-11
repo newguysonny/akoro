@@ -18,6 +18,7 @@ import { traceRedis } from "../../lib/redisTrace.js";
 import { workerJob } from "../../lib/workerLog.js";
 import { validateFollowUpId, validateFollowUpInput } from "./chat-follow-up-validation.js";
 import { guardWorker } from "../../lib/redisQuotaGuard.js";
+import { assertQueueCapacity } from "../../lib/queueGuard.js";
 
 const QUEUE_NAME = "agent-chat-follow-ups";
 const STALE_DELIVERY_MS = 5 * 60 * 1000;
