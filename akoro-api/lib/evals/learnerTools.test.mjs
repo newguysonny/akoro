@@ -42,7 +42,7 @@ test("case arguments exist in the tool's input schema", () => {
 });
 
 test("only read-only tools are executed — nothing that changes data runs in an eval", () => {
-  const m = chatSrc.match(/sideEffecting: \[([\s\S]*?)\]\.includes\(tool\)/);
+  const m = chatSrc.match(/SIDE_EFFECT_TOOLS = \[([\s\S]*?)\];/);
   const changing = new Set([...m[1].matchAll(/"([a-z_]+)"/g)].map((x) => x[1]));
   for (const c of data.cases.filter((x) => x.run)) {
     assert.ok(!changing.has(c.tool), `${c.tool} changes data — it must not have run:true`);

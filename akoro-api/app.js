@@ -14,6 +14,7 @@
 // Outbound meter FIRST: it patches global fetch, and every client library
 // (supabase-js, the OpenAI SDK) captures fetch when it is constructed —
 // importing this after them would measure nothing.
+import "./lib/logTap.js";          // keeps the last server log lines for the agent console
 import "./lib/outboundMeter.js";
 import "dotenv/config";
 import express                    from "express";
@@ -66,6 +67,7 @@ import selfStudyModule            from "./modules/self-study/routes.js";
 import pharmdModule              from "./modules/pharmd/routes.js";
 import hfMirrorModule            from "./modules/hfmirror/routes.js";
 import parseConsoleModule        from "./modules/records/parseConsole.js";
+import agentConsoleModule        from "./modules/agentConsole/routes.js";
 import { startRoutineScheduler }  from "./modules/self-study/routines.js";
 import communitiesModule, { COMMUNITIES_QUERY_TIMEOUT_MS } from "./modules/communities/routes.js";
 import { setupDiscussionSocket } from "./modules/communities/discussionSocket.js";
@@ -784,7 +786,8 @@ app.use("/api/self-study/plan", aiLimit);
 app.use("/api/self-study", standardLimit, selfStudyModule);
 app.use("/api/pharmd",      standardLimit, pharmdModule);          // PHARM.D programme catalogue
 app.use("/api/hf",          standardLimit, hfMirrorModule);        // Hugging Face model mirror console (key-guarded)
-app.use("/api/parse",       standardLimit, parseConsoleModule);   // parse-worker console (key-guarded browser tester)
+app.use("/api/parse",       standardLimit, parseConsoleModule);
+app.use("/api/agent-console", standardLimit, agentConsoleModule);   // learner Agent Chat test console (AGENT_CONSOLE_KEY)   // parse-worker console (key-guarded browser tester)
 app.use("/api/communities",  standardLimit, communitiesModule);  // higher-ed study groups
 app.use("/api/instructor/tools", standardLimit, instructorToolsModule);  // platform tools/assets catalog + purchase
 app.use("/api/teaching/tools",   aiLimit,       teachingToolsModule);  // teaching tool suite — LLM + TTS, so aiLimit
