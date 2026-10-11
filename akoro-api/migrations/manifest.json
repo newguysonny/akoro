@@ -218,6 +218,7 @@
     "2026-seed-voucher-products.sql",
     "2026-seed-voucher-media.sql",
     "2026-seed-jss1-battle-ready.sql",
-    "2026-seed-course-enrolments.sql"
+    "2026-seed-course-enrolments.sql",
+    "2026-seed-agent-testers.sql"
   ]
 }
