@@ -242,3 +242,8 @@ test("draft cards survive a reload — tool previews ride the persisted message 
   // The instructor client rebuilds the cards from that meta on restore.
   assert.match(instructorChatPage, /previews: m\.meta\.previews/);
 });
+
+test("the instructor chat opts out of the mobile TopBar — the conversation gets the room", () => {
+  assert.match(instructorChatPage, /hideTopBarOnMobile>/);
+  assert.match(instructorChatPage, /height: isMobile \? 'calc\(100vh - 86px\)' : 'calc\(100vh - 150px\)'/);
+});

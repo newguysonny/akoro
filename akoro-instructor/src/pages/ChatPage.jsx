@@ -5,7 +5,7 @@ import {
   Upload, FileText, ScanLine, Loader, CheckCircle2,
   History, Copy, Check, Lightbulb, MoreVertical, Pencil, Trash2, CloudOff,
 } from 'lucide-react';
-import { PageLayout } from '../components/Layout.jsx';
+import { PageLayout, useIsMobile } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, FileUploadZone, Toast } from '../components/Primitives.jsx';
 import TrainingProgress from '../components/TrainingProgress.jsx';
 import LiveRecorder from '../components/LiveRecorder.jsx';
@@ -633,10 +633,11 @@ export default function ChatPage() {
     return finalData;
   };
 
+  const isMobile = useIsMobile();
   const hasInput = taskChips.length > 0 || input.trim().length > 0;
 
   return (
-    <PageLayout title="Agent Chat" subtitle={`${agentName} · Lv ${agentLevel}`}>
+    <PageLayout title="Agent Chat" subtitle={`${agentName} · Lv ${agentLevel}`} hideTopBarOnMobile>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       <style>{`
@@ -664,7 +665,7 @@ export default function ChatPage() {
         }
       `}</style>
 
-      <div style={{ maxWidth: previewDraft ? 'min(1180px, 97vw)' : 720, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 150px)' }}>
+      <div style={{ maxWidth: previewDraft ? 'min(1180px, 97vw)' : 720, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', height: isMobile ? 'calc(100vh - 86px)' : 'calc(100vh - 150px)' }}>
         <div style={{ display: 'flex', gap: 14, flex: 1, minHeight: 0 }}>
         <div className="ci-chat-col" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
 

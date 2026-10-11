@@ -229,3 +229,10 @@ test("the instructor chat uses the learner app's Fortizo composer", () => {
     assert.match(src, /sendFromKeyboard/);
   });
 });
+
+test("the instructor chat reclaims the TopBar strip on phones", () => {
+  const src = layouts["akoro-instructor"];
+  assert.match(src, /export function useIsMobile/, "the hook is shared with pages");
+  assert.match(src, /hideTopBarOnMobile = false/, "PageLayout accepts the opt-out");
+  assert.match(src, /\{!hideTopBarOnMobile && \(/, "the mobile TopBar yields when a page opts out");
+});
