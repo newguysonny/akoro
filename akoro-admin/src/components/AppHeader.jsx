@@ -98,7 +98,7 @@ export default function AppHeader({
   return (
     <header className="akhdr akhdr-header">
       <button type="button" className="akhdr-btn akhdr-ghost" onClick={onMenu} aria-label="Open navigation" title="Open navigation">
-        <Menu size={22} strokeWidth={2} />
+        <Menu size={20} strokeWidth={2} />
       </button>
 
       <div className="akhdr-spacer" />

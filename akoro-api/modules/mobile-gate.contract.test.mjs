@@ -91,6 +91,46 @@ test("kpemu-business: same contract, shipped drawer-inside-Sidebar wiring", () =
   assert.match(src, /if \(e\.key === 'Escape'\) onClose\?\.\(\);/, "Escape closes it");
 });
 
+/* ── The undefined-icon guard ──────────────────────────────────────────────
+   A layout that uses `icon: SomeIcon` without importing it still BUILDS
+   (a free identifier is a runtime ReferenceError, not a build error) —
+   business.kpemu.com shipped exactly that crash (MessageCircleQuestion).
+   Parse every layout's lucide import block (multiline-aware) and require
+   every `icon: X` identifier to be imported exactly once. */
+function lucideImports(src) {
+  const m = src.match(/import\s*\{([^}]*)\}\s*from\s*'lucide-react';/s);
+  assert.ok(m, "lucide import block found");
+  const names = m[1].split(",").map((s) => s.trim().split(/\s+as\s+/)[0]).filter(Boolean);
+  const dups = names.filter((n, i) => names.indexOf(n) !== i);
+  assert.deepEqual(dups, [], `duplicate lucide imports: ${dups.join(", ")}`);
+  return names;
+}
+
+test("every header action icon is imported — no runtime ReferenceError class", () => {
+  for (const app of APPS) {
+    const src = layouts[app];
+    const names = lucideImports(src);
+    // Only action/menu object literals (`{ key: 'x', icon: Y, … }`) —
+    // destructured component params (`{ to, icon: Icon, label }`) are not
+    // lucide references.
+    const used = src.split("\n")
+      .filter((l) => /key: '/.test(l))
+      .flatMap((l) => [...l.matchAll(/icon:\s*([A-Z]\w+)/g)].map((m) => m[1]));
+    assert.ok(used.length > 0, `${app}: has icon references`);
+    const missing = [...new Set(used)].filter((n) => !names.includes(n));
+    assert.deepEqual(missing, [], `${app}: icons used but not imported — this deploys as a crash: ${missing.join(", ")}`);
+  }
+});
+
+test("mobile notifications live in the AppHeader — the page TopBar has none", () => {
+  for (const app of ["akoro-admin", "akoro-school", "akoro-instructor"]) {
+    const src = layouts[app];
+    assert.match(src, /key: 'notifications', icon: Bell,/, `${app}: the header carries the bell`);
+    assert.match(src, /showBell=\{false\} \/>/, `${app}: the mobile TopBar renders no second bell`);
+    assert.match(src, /showBell = true/, `${app}: desktop keeps its bell`);
+  }
+});
+
 test("the instructor chat uses the learner app's Fortizo composer", () => {
   const composer = readFile(
     new URL("../../akoro-instructor/src/components/common/FortizoChatComposer.jsx", import.meta.url), "utf8",
