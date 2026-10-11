@@ -116,7 +116,7 @@ export default function AppHeader({
             aria-label={label} title={title || label}
             onClick={onClick}
           >
-            {key === 'help' ? <MessageCircleQuestion size={20} strokeWidth={2} /> : <Icon size={20} strokeWidth={2} />}
+            <Icon size={20} strokeWidth={2} />
           </button>
         ))}
         <button
