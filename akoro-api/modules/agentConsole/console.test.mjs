@@ -37,3 +37,18 @@ test("the console key can arrive as Authorization: Bearer (cloud network secrets
   assert.match(src, /\/\^Bearer\\s\+\(\.\+\)\$\/i\.exec\(req\.get\("authorization"\)/);
   assert.match(src, /const got = req\.get\("x-agent-console-key"\) \|\| bearer \|\| req\.query\.key;/);
 });
+
+test("the tester cohort boot-seeds with the schemas — not behind an opt-in flag", async () => {
+  const manifest = JSON.parse(
+    await readFile(new URL("../../migrations/manifest.json", import.meta.url), "utf8"),
+  );
+  for (const f of ["2026-seed-school.sql", "2026-seed-agent-testers.sql"]) {
+    assert.ok(manifest.schema.includes(f), `${f} must be in the schema group (applies at backend boot)`);
+    assert.ok(!manifest.demo.includes(f), `${f} must not sit in the opt-in demo group`);
+  }
+  assert.match(app, /applyMigrations\(\{ url: mUrl, groups: \["schema"\]/, "backend boot applies the schema group");
+  const seed = await readFile(new URL("../../migrations/2026-seed-agent-testers.sql", import.meta.url), "utf8");
+  assert.match(seed, /FOR i IN 1\.\.50 LOOP/, "the seed creates tester01–tester50");
+  assert.match(seed, /'tester%s@demo\.akoro\.app'/, "demo.akoro.app emails — the AGENT_CONSOLE_LEARNERS shape");
+  assert.match(seed, /Akoro Demo Academy not found/, "the seed skips loudly when its school seed has not run");
+});
