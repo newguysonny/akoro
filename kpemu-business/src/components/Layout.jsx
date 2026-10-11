@@ -5,10 +5,11 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, KeyRound, Percent, Wallet, ClipboardList, Settings, LogOut, Building2, Ticket, FileText, ChevronsUpDown, Check, Plus, Settings2, PackageSearch, Webhook, Menu, X } from 'lucide-react';
+import { LayoutDashboard, KeyRound, Percent, Wallet, ClipboardList, Settings, LogOut, Building2, Ticket, FileText, ChevronsUpDown, Check, Plus, Settings2, PackageSearch, Webhook, X, MessageCircleQuestion } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useStartup } from '../contexts/StartupContext.jsx';
 import { INK, MUTED, MUTED2, BORDER, WHITE, ACCENT, FONT } from '../constants.js';
+import AppHeader from './AppHeader.jsx';
 
 const NAV = [
   { to: '/',              icon: LayoutDashboard, label: 'Dashboard' },
@@ -47,39 +48,9 @@ function useIsMobile() {
   return mobile;
 }
 
-// The mobile app header: hamburger | brand | username | Sign out.
-function MobileHeader({ onMenu, user, logout }) {
-  return (
-    <header style={{
-      display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
-      background: '#0F1115', color: '#fff', flexShrink: 0,
-    }}>
-      <button onClick={onMenu} aria-label="Open menu" title="Open menu" style={{
-        width: 36, height: 36, borderRadius: 9, border: '1px solid rgba(255,255,255,.12)',
-        background: 'rgba(255,255,255,.05)', color: '#fff', display: 'flex',
-        alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
-      }}>
-        <Menu size={17} />
-      </button>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-        <img src="/kpemu-mark.svg" alt="Kpemu" width={22} height={22} style={{ flexShrink: 0 }} />
-        <span style={{ fontSize: 14, fontWeight: 900, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Kpemu Business</span>
-      </div>
-      <span title={user?.fullName || user?.email || ''} style={{
-        fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,.75)',
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        maxWidth: 120, flex: '0 1 auto',
-      }}>{user?.fullName || user?.email || ''}</span>
-      <button onClick={logout} aria-label="Sign out" title="Sign out" style={{
-        display: 'flex', alignItems: 'center', gap: 6, padding: '7px 11px', borderRadius: 9,
-        border: '1px solid rgba(255,255,255,.12)', background: 'rgba(255,255,255,.06)',
-        color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, flexShrink: 0,
-      }}>
-        <LogOut size={13} /> Sign out
-      </button>
-    </header>
-  );
-}
+// The mobile app header is now the shared Akoro AppHeader (see AppHeader.jsx):
+// hamburger | spacer | help | avatar menu — the old dark bar (username +
+// Sign out inline) is gone; those live in the account menu.
 
 function BusinessSwitcher({ onNavigate }) {
   const navigate = useNavigate();
@@ -286,10 +257,18 @@ export function PageLayout({ title, subtitle, action, children }) {
       <Sidebar mobile={mobile} open={menuOpen} onClose={() => setMenuOpen(false)} />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         {mobile && (
-          <MobileHeader
+          <AppHeader
             onMenu={() => setMenuOpen(true)}
             user={user}
-            logout={logout}
+            actions={[
+              { key: 'help', icon: MessageCircleQuestion, label: 'Help & API docs', variant: 'circle', onClick: () => navigate('/docs') },
+            ]}
+            menuItems={[
+              { key: 'settings', label: 'All Settings', icon: Settings, to: '/settings' },
+              { key: 'docs',     label: 'API Docs',     icon: FileText,  to: '/docs' },
+              'divider',
+              { key: 'logout',   label: 'Log out',      icon: LogOut,    danger: true, onClick: logout },
+            ]}
           />
         )}
         <div style={{ padding: mobile ? '14px 16px' : '18px 26px', borderBottom: `1px solid ${BORDER}`, background: WHITE, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 10 }}>
