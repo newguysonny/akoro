@@ -247,3 +247,32 @@ test("the instructor chat opts out of the mobile TopBar — the conversation get
   assert.match(instructorChatPage, /hideTopBarOnMobile>/);
   assert.match(instructorChatPage, /height: isMobile \? 'calc\(100vh - 86px\)' : 'calc\(100vh - 150px\)'/);
 });
+
+test("the instructor composer is the learner composer, exactly — stop, menu, semantics", async () => {
+  const composer = await readFile(
+    new URL("../../../akoro-instructor/src/components/common/FortizoChatComposer.jsx", import.meta.url), "utf8",
+  );
+  // the learner's running→stop affordance: send arrow becomes a ■ stop button
+  assert.match(composer, /running = false,\s*\n\s*onStop,/);
+  assert.match(composer, /\{running && onStop \? \(/);
+  assert.match(composer, /borderRadius: 2, background: INK/);
+  // the learner ModelSwitch's exact model: sections, meta badges, disabled
+  // options with radio semantics, a scrolling 270px menu, aria-expanded chip
+  assert.match(composer, /aria-haspopup="menu"/);
+  assert.match(composer, /aria-expanded=\{open\}/);
+  assert.match(composer, /role="menuitemradio"/);
+  assert.match(composer, /option\.section &&/);
+  assert.match(composer, /maxHeight: 'min\(70vh, 460px\)', overflowY: 'auto'/);
+  assert.match(composer, /width: 270, padding: 5,/);
+  assert.match(composer, /maxWidth: 190, padding: '7px 10px',/);
+  // instructor-only extras survive
+  assert.match(composer, /taskAction/);
+  // the host wires it like the learner: running disables input, stop aborts
+  assert.match(instructorChatPage, /disabled=\{running\}/);
+  assert.match(instructorChatPage, /running=\{running\}/);
+  assert.match(instructorChatPage, /onStop=\{stopTurn\}/);
+  assert.match(instructorChatPage, /const stopTurn = \(\) => \{ abortRef\.current\?\.abort\(\); \};/);
+  assert.match(instructorChatPage, /signal,/);
+  // a Stop is user intent — never retried
+  assert.match(instructorChatPage, /if \(e\?\.name === 'AbortError'\)/);
+});

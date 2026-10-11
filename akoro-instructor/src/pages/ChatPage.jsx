@@ -416,6 +416,9 @@ export default function ChatPage() {
   // turn key is created ONCE per send and REUSED on the quiet retry, so the
   // server's durable-turn contract repairs a partial write instead of
   // writing the exchange twice.
+  // Stop = abort the in-flight stream (the learner composer's ■ affordance).
+  const stopTurn = () => { abortRef.current?.abort(); };
+
   const sendText = async (bodyText) => {
     const history = messages
       .map((m) => ({ role: m.from === 'me' ? 'user' : 'assistant', content: m.text }))
@@ -426,9 +429,11 @@ export default function ChatPage() {
       return;
     }
     const turnId = newTurnId();
+    setRunning(true);
+    abortRef.current = new AbortController();
     const attemptTurn = async () => {
       try {
-        return await sendStreaming({ message: bodyText, history, agentName, role: 'instructor', conversationId: sid, turnId, mode: chatMode }, setAiStatus);
+        return await sendStreaming({ message: bodyText, history, agentName, role: 'instructor', conversationId: sid, turnId, mode: chatMode }, setAiStatus, abortRef.current?.signal);
       } catch (streamErr) {
         console.warn('[chat] stream unavailable, using JSON reply:', streamErr.message);
         return await apiPost('/api/adaptive/chat/agent', { message: bodyText, history, agentName, role: 'instructor', conversationId: sid, turnId, mode: chatMode });
@@ -438,6 +443,14 @@ export default function ChatPage() {
     try {
       data = await attemptTurn();
     } catch (e) {
+      if (e?.name === 'AbortError') {
+        // The instructor pressed Stop — user intent, never retried. The turn
+        // key stays with the server: if the reply lands there anyway, history
+        // restores it; this view just ends the turn honestly.
+        setRunning(false); setAiStatus(''); abortRef.current = null;
+        pushAgent('Stopped.');
+        return;
+      }
       // One quiet retry with the SAME turn key — the server repairs the
       // partial turn instead of duplicating it (learner parity).
       try {
@@ -445,12 +458,13 @@ export default function ChatPage() {
         await new Promise((r) => setTimeout(r, 1200));
         data = await attemptTurn();
       } catch {
-        setAiStatus('');
+        setRunning(false); setAiStatus(''); abortRef.current = null;
         console.warn('[chat] tutor reply failed:', e.message);
         pushAgent('Sorry — I had trouble responding just now. Please try again.');
         return;
       }
     }
+    setRunning(false); abortRef.current = null;
       // Human-in-the-loop: a successful prepare/revise execution rides
       // with the reply as a draft echo — render its Preview affordance.
       const previews = (data.toolExecutions || [])
@@ -579,7 +593,9 @@ export default function ChatPage() {
   const [previewDraft, setPreviewDraft] = useState(null);   // draft id or null
   const [previewVersion, setPreviewVersion] = useState(null);   // the assignment version the card opened
   const [previewType, setPreviewType] = useState(null);
-  const [aiStatus, setAiStatus] = useState('');             // live tool status ("Resolving your class…")
+  const [aiStatus, setAiStatus] = useState('');
+  const [running, setRunning] = useState(false);   // a turn is in flight — the composer's send becomes a stop
+  const abortRef = useRef(null);                 // aborts the in-flight stream (user Stop)             // live tool status ("Resolving your class…")
   const [draftStates, setDraftStates] = useState({});       // { [id]: 'assigned'|'discarded' }
   const [draftsById, setDraftsById] = useState({});         // the draft each card loaded — its ideas read it
   const [draftRevisions, setDraftRevisions] = useState({}); // { [id]: bump count }
@@ -598,11 +614,12 @@ export default function ChatPage() {
   // tool loop runs — drafting plans, resolving classes). Falls back to the
   // plain JSON reply if the stream never starts; the reply handling after is
   // identical for both.
-  const sendStreaming = async (payload, onStatus) => {
+  const sendStreaming = async (payload, onStatus, signal) => {
     const res = await fetch(`${API}/api/adaptive/chat/agent?stream=1`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
+      signal,
       body: JSON.stringify(payload),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -844,6 +861,10 @@ export default function ChatPage() {
               onSend={send}
               inputRef={inputRef}
               placeholder={taskChips.length > 0 ? 'Add a note… (optional)' : `Ask ${agentName} anything…`}
+              disabled={running}
+              running={running}
+              onStop={stopTurn}
+              stopLabel="Stop"
               sendDisabled={!hasInput}
               taskAction={() => setIsTask((p) => !p)}
               taskActive={isTask}
