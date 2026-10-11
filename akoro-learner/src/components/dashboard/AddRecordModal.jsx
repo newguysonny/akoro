@@ -18,7 +18,7 @@ import {
   listRecords, presignRecordUpload, putFileTo, createRecord,
   setRecordProgress, deleteRecord,
 } from '../../services/recordsApi.js';
-import { autoExtractUpload } from '../library/extractPages.js';
+import { extractUpload } from '../library/extractPages.js';
 
 const BRAND = '#6C3BFF';
 const RED   = '#EF4444';
@@ -118,6 +118,11 @@ export default function AddRecordModal({ open, onClose, user, onOpenRecord, onRe
   const [busy, setBusy]         = useState(false);  // a save/upload is in flight
   const [pct,  setPct]          = useState(0);      // upload progress 0-100
   const fileInputRef            = useRef(null);
+  // Text extraction of the file just uploaded — runs HERE, in the sheet, so a
+  // failure is seen where it happened (with a retry), not later in the reader.
+  // { record, status: 'running'|'done'|'error', done, total, error }
+  const [ext, setExt]           = useState(null);
+  const extRunRef               = useRef(0);
   const uid = user?.id;
 
   const reload = useCallback(async () => {
@@ -179,15 +184,32 @@ export default function AddRecordModal({ open, onClose, user, onOpenRecord, onRe
       const { uploadUrl, fileKey } = await presignRecordUpload({ name: file.name, mime: file.type || '', size: file.size });
       await putFileTo(uploadUrl, file, setPct);
       const created = await createRecord({ kind: 'upload', fileKey, name: file.name, mime: file.type || '', size: file.size, duration: dur || undefined });
-      // "Always extract" — parse it NOW, in this tab, so the text (and the
-      // search index) is ready before anyone opens it. Silent, cancellable
-      // by simply closing the tab; the reader's offer covers the rest.
-      void autoExtractUpload(created);
       setFile(null); setDur(null); setPct(0);
       await reload();
+      // "Always extract" — parse it NOW, in the sheet, so the text (and the
+      // search index) is ready before anyone opens it.
+      void runExtract(created);
     } catch (e) {
       setErr(e?.message || t('records.upload_failed'));
     } finally { setBusy(false); }
+  };
+
+  const runExtract = async (record) => {
+    const run = ++extRunRef.current;
+    const mine = () => run === extRunRef.current;
+    setExt({ record, status: 'running', done: 0, total: 0, error: null });
+    let res;
+    try {
+      res = await extractUpload(record, {
+        onProgress: (done, total) => { if (mine()) setExt((x) => (x ? { ...x, done, total } : x)); },
+      });
+    } catch (e) {
+      res = { status: 'error', error: e?.message || 'Extraction failed.' };
+    }
+    if (!mine()) return;
+    if (res.status === 'skipped') { setExt(null); return; }
+    setExt((x) => ({ ...x, ...res }));
+    if (res.status === 'done') setTimeout(() => { if (mine()) setExt(null); }, 5000);
   };
 
   const saveLink = async () => {
@@ -282,6 +304,39 @@ export default function AddRecordModal({ open, onClose, user, onOpenRecord, onRe
         )}
 
         {err && <p style={{ fontSize:12, fontWeight:800, color:RED, margin:'10px 2px 0' }}>{err}</p>}
+
+        {/* Extraction of the file just uploaded — progress, then done or the error. */}
+        {ext && (
+          <div role="status" style={{ marginTop:12, padding:'11px 12px', borderRadius:12, border:`1px solid ${ext.status === 'error' ? `${RED}55` : 'var(--ak-border)'}`, background: ext.status === 'error' ? `${RED}0d` : 'var(--ak-surface-hover)' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              {ext.status === 'running'
+                ? <span className="ti ti-loader-2" style={{ fontSize:15, color:BRAND, animation:'spin 1s linear infinite' }}/>
+                : <Icon name={ext.status === 'error' ? 'ti-alert-triangle' : 'ti-circle-check'} size={15} color={ext.status === 'error' ? RED : GREEN}/>}
+              <p style={{ flex:1, minWidth:0, fontSize:12, fontWeight:800, color:'var(--ak-text)', margin:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                {ext.status === 'running' ? `Extracting text — ${ext.record?.name || 'file'}`
+                  : ext.status === 'error' ? "Extraction didn't finish"
+                  : `Text extracted — ${ext.done} page${ext.done === 1 ? '' : 's'}`}
+              </p>
+              {ext.status === 'running' && ext.total > 0 && <span style={{ fontSize:10.5, fontWeight:800, color:'var(--ak-text-muted)' }}>{ext.done}/{ext.total}</span>}
+            </div>
+            {ext.status === 'running' && ext.total > 0 && (
+              <div style={{ height:5, background:'var(--ak-border)', borderRadius:3, overflow:'hidden', marginTop:8 }}>
+                <div style={{ height:'100%', width:`${Math.max(6, Math.round((ext.done / ext.total) * 100))}%`, background:BRAND, borderRadius:3, transition:'width .3s' }}/>
+              </div>
+            )}
+            {ext.status === 'error' && (
+              <>
+                <p style={{ fontSize:11.5, color:'var(--ak-text-sub)', margin:'6px 0 0', lineHeight:1.45 }}>
+                  {ext.error}{ext.done ? ` ${ext.done} of ${ext.total} page${ext.total === 1 ? '' : 's'} were saved — a retry only reads the rest.` : ''}
+                </p>
+                <div style={{ display:'flex', gap:8, marginTop:9 }}>
+                  <button onClick={() => runExtract(ext.record)} style={{ padding:'7px 12px', borderRadius:10, border:'none', background:BRAND, color:'#fff', fontSize:12, fontWeight:800, cursor:'pointer', fontFamily:"'Nunito',sans-serif", display:'flex', alignItems:'center', gap:5 }}><Icon name="ti-refresh" size={12} color="#fff"/>Try again</button>
+                  <button onClick={() => setExt(null)} style={{ padding:'7px 12px', borderRadius:10, border:'1px solid var(--ak-border2)', background:'transparent', color:'var(--ak-text-sub)', fontSize:12, fontWeight:800, cursor:'pointer', fontFamily:"'Nunito',sans-serif" }}>Dismiss</button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         <button onClick={save} disabled={busy} style={{ width:'100%', marginTop:14, padding:'13px', borderRadius:14, border:'none', background:busy?'var(--ak-border)':`linear-gradient(135deg,${BRAND},#4C1DCC)`, color:'#fff', fontSize:13.5, fontWeight:800, cursor:busy?'default':'pointer', fontFamily:"'Nunito',sans-serif", boxShadow:busy?'none':`0 4px 14px ${BRAND}44`, display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
           {busy && tab==='upload' ? <><span className="ti ti-loader-2" style={{ fontSize:14, animation:'spin 1s linear infinite' }}/>{t('records.uploading')} {pct}%</> : t('records.save')}

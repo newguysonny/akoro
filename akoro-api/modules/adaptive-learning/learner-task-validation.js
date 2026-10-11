@@ -40,7 +40,9 @@ export function validateLearnerTaskInput(input = {}, { defaultTimezone = PLATFOR
     due: limitedText(input.due, "due", { max: 120 }),
     course: limitedText(input.course, "course", { max: 120 }),
     priority: ["high", "medium", "low"].includes(input.priority) ? input.priority : "medium",
-    dueAt: preciseDueAt(input.dueAt),
+    // "In 30 minutes" is precise: resolved here so the model needn't do clock maths.
+    dueAt: preciseDueAt(input.dueAt) ?? (Number(input.dueInMinutes) > 0 && Number(input.dueInMinutes) <= 525_600
+      ? new Date(Date.now() + Math.round(Number(input.dueInMinutes) * 60_000)).toISOString() : null),
     timezone,
   };
 }

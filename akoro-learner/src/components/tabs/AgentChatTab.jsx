@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
-import { apiGet, apiPost, apiPatch, apiDelete, streamPost } from '../../services/api.js';
+import { API, apiGet, apiPost, apiPatch, apiDelete, streamPost } from '../../services/api.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { ZapIcon, BrainIcon, SparkleIcon, XIcon, Icon } from '../common/Icons.jsx';
 import { AgentAvatar } from '../common/AgentAvatar.jsx';
@@ -272,6 +272,40 @@ function AgentChatTab({
       setHistoryError({ kind: "messages", sessionId: id });
     }
   };
+
+  // A scheduled or posted agent message landed in one of the learner's chats
+  // ("message me here in 10 minutes"). If it is the open chat, show it now —
+  // without a reload — and refresh the drawer either way.
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.io) return;
+    let socket;
+    try {
+      socket = window.io(API, { transports: ["websocket", "polling"], withCredentials: true });
+      const subscribe = () => socket.emit("subscribe-student", STUDENT_ID);
+      subscribe();
+      socket.on("connect", subscribe);
+      const onReady = async (data) => {
+        loadSessions().catch(() => {});
+        if (!data?.sessionId || data.sessionId !== sessionIdRef.current) return;
+        try {
+          const d = await apiGet(`${CHAT_BASE}/sessions/${data.sessionId}/messages`);
+          if (data.sessionId !== sessionIdRef.current) return;
+          setMessages((prev) => {
+            const ids = new Set(prev.map((m) => m.id));
+            const texts = new Set(prev.map((m) => m.text));
+            const fresh = (d?.messages ?? [])
+              .filter((m) => m.role !== "user" && !ids.has(m.id) && !texts.has(m.text))
+              .map((m) => ({ id: m.id, from: "agent", text: m.text,
+                time: new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }));
+            return fresh.length ? [...prev, ...fresh] : prev;
+          });
+        } catch { /* it is saved — opening the chat again shows it */ }
+      };
+      socket.on("chat_follow_up_ready", onReady);
+      return () => { socket.off("chat_follow_up_ready", onReady); socket.off("connect", subscribe); };
+    } catch { /* WS unavailable — the notification still links to the chat */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Retry the exact load that failed: the sessions list, or the one
   // conversation that could not be opened.

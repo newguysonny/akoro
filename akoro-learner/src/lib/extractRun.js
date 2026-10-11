@@ -18,6 +18,11 @@
  */
 export const EXTRACT_POLL_MS = 3000;
 export const EXTRACT_BATCH_DEADLINE_MS = 12 * 60_000;   // the API fails a page after 10 min
+// A 429 is "slow down", not "failed": the work is still running server-side.
+// Back off and carry on — this is exactly what surfaced as "Extraction didn't
+// finish — That's a lot at once" while the GPU was still parsing the pages.
+export const EXTRACT_RATE_LIMIT_BACKOFF_MS = 15_000;
+const MAX_RATE_LIMIT_RETRIES = 8;
 
 export async function runExtraction({
   submit, poll,
@@ -33,6 +38,7 @@ export async function runExtraction({
   const progress = () => onProgress?.(
     Math.min(pages.length, [...wanted].filter((n) => byPage.has(n) || failedByPage.has(n)).length), pages.length);
   const STOPPED = Symbol('stopped');
+  let limited = 0;   // 429s absorbed so far across this run
 
   // Poll the file's running batch until it settles. Returns STOPPED, an
   // error string, or null when done.
@@ -42,7 +48,13 @@ export async function runExtraction({
       if (isCancelled()) return STOPPED;
       await sleep(pollMs);
       if (isCancelled()) return STOPPED;
-      const st = await poll(target);
+      let st;
+      try { st = await poll(target); }
+      catch (e) {
+        if (e?.status !== 429 || ++limited > MAX_RATE_LIMIT_RETRIES) throw e;
+        await sleep(EXTRACT_RATE_LIMIT_BACKOFF_MS);
+        continue;
+      }
       for (const p of st?.pages || []) { byPage.set(p.pageNumber, p); failedByPage.delete(p.pageNumber); }
       for (const f of st?.failed || []) if (!byPage.has(f.pageNumber)) failedByPage.set(f.pageNumber, f);
       progress();
@@ -64,6 +76,11 @@ export async function runExtraction({
           for (const f of sub?.failed || []) failedByPage.set(f.pageNumber, f);
           submitted = true;
         } catch (e) {
+          if (e?.status === 429 && ++limited <= MAX_RATE_LIMIT_RETRIES) {
+            await sleep(EXTRACT_RATE_LIMIT_BACKOFF_MS);
+            attempt -= 1;          // a rate limit isn't one of the two 409 tries
+            continue;
+          }
           if (e?.status !== 409) throw e;
         }
         const r = await pollUntilDone();

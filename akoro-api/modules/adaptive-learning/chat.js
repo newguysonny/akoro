@@ -93,6 +93,7 @@ import { toResponsesInput, toResponsesTools } from "./responses-input.js";
 import { hasExplicitToolRequestConsent } from "./agent-tool-request-intent.js";
 import { getLearnerProfileContext } from "./learner-profile-context.js";
 import { validateLearnerTaskInput } from "./learner-task-validation.js";
+import { listChats, readChat, postToChat, ownedChatId } from "./chat-history-tools.js";
 import { createLearnerToolRequest } from "../agent-tool-requests/service.js";
 import {
   getAgentPreferenceSummary,
@@ -296,7 +297,7 @@ export const CHAT_TOOLS = [
   },
   {
     name: "create_task",
-    description: "Create one learner-owned study task or reminder after the learner explicitly asks. First call get_learner_context when the request contains a relative date/time or needs personalisation. Never infer a precise deadline from an incomplete time request.",
+    description: "Create one learner-owned study task (a to-do on their Tasks list) after the learner explicitly asks. If they want the AGENT TO SEND THEM A MESSAGE later ('message me in 10 minutes', 'remind me here at 5pm'), use schedule_chat_follow_up instead — a task does not send anything. For a relative time like 'in 30 minutes' use dueInMinutes; for 'tomorrow' alone ask for the time. First call get_learner_context when the request needs a clock date.",
     input_schema: {
       type: "object",
       properties: {
@@ -305,6 +306,7 @@ export const CHAT_TOOLS = [
         priority:    { type: "string", enum: ["high", "medium", "low"], description: "Use high only for an explicit urgency/deadline." },
         due:         { type: "string", description: "Optional human-friendly display label, e.g. 'Tomorrow at 1 PM'." },
         dueAt:       { type: "string", description: "Optional exact due instant in ISO 8601 format with Z or a numeric timezone offset. Call get_learner_context before resolving relative times. Supply this only when the learner stated a precise date and time; never infer it from 'tomorrow' alone." },
+        dueInMinutes: { type: "number", description: "Due this many minutes from now — use for relative times like 'in 10 minutes' or 'in 2 hours' (120) instead of working out dueAt." },
         timezone:    { type: "string", description: "Optional IANA timezone for display, e.g. Africa/Lagos. Defaults to the account timezone returned by get_learner_context." },
         course:      { type: "string", description: "Related course or subject (optional)" },
       },
@@ -326,16 +328,19 @@ export const CHAT_TOOLS = [
   },
   {
     name: "schedule_chat_follow_up",
-    description: "Schedule the agent to open a new chat and send the learner a message at a specific future time. Only use after the learner explicitly asks for the schedule. Call get_learner_context before resolving relative time; scheduledAt must be an ISO 8601 timestamp with a timezone offset, for example 2026-09-08T14:00:00+01:00.",
+    description: "Schedule the agent to SEND THE LEARNER A MESSAGE later — 'message me in 10 minutes', 'remind me here at 5pm', 'check on me tomorrow at 9'. Use this (not create_task) whenever they want to receive a message. Delivery: where='here' posts it into THIS chat (use when they say 'here' / 'in this chat'), where='chat' posts into the chat given by chatId (from list_chats), where='new' (default) opens a new chat. Timing: inMinutes for relative times ('in 10 minutes' = 10, 'in 2 hours' = 120), or scheduledAt for a clock time (call get_learner_context first; ISO 8601 with offset, e.g. 2026-09-08T14:00:00+01:00). At least 1 minute ahead.",
     input_schema: {
       type: "object",
       properties: {
-        message: { type: "string", description: "The exact helpful opening message the agent will send in the new chat." },
-        scheduledAt: { type: "string", description: "Future ISO 8601 timestamp including timezone offset." },
+        message: { type: "string", description: "The exact helpful message the agent will send." },
+        inMinutes: { type: "number", description: "Send this many minutes from now (relative requests). Use this OR scheduledAt." },
+        scheduledAt: { type: "string", description: "Future ISO 8601 timestamp including timezone offset (clock-time requests)." },
+        where: { type: "string", enum: ["here", "chat", "new"], description: "here = this chat; chat = the chat in chatId; new = a new chat (default)." },
+        chatId: { type: "string", description: "With where='chat': the chatId from list_chats." },
         timezone: { type: "string", description: "Optional IANA timezone for display, for example Africa/Lagos. Defaults to the account timezone returned by get_learner_context." },
         title: { type: "string", description: "Optional title for the new chat, for example 'Biology revision check-in'." },
       },
-      required: ["message", "scheduledAt"],
+      required: ["message"],
     },
   },
   {
@@ -352,6 +357,42 @@ export const CHAT_TOOLS = [
         followUpId: { type: "string", description: "The followUpId returned by list_scheduled_chat_follow_ups or schedule_chat_follow_up." },
       },
       required: ["followUpId"],
+    },
+  },
+  {
+    name: "list_chats",
+    description: "List the learner's Agent Chat conversations (newest first) with their chatId and title. Use when they refer to another chat ('the chat about fractions', 'my last chat'), or before read_chat / post_to_chat / schedule_chat_follow_up with where='chat'. isThisChat marks the current one.",
+    input_schema: {
+      type: "object",
+      properties: {
+        search: { type: "string", description: "Optional words to match in chat titles." },
+        limit: { type: "number", description: "How many (default 15, max 30)." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "read_chat",
+    description: "Read the latest messages of one of the learner's chats by chatId (from list_chats). Use to pick up what was said elsewhere — 'continue from my physics chat', 'what did you tell me about X in the other chat'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        chatId: { type: "string", description: "The chatId from list_chats." },
+        limit: { type: "number", description: "How many latest messages (default 30, max 60)." },
+      },
+      required: ["chatId"],
+    },
+  },
+  {
+    name: "post_to_chat",
+    description: "Drop a message from the agent into ANOTHER of the learner's chats right now (instructions, a summary, a note to pick up later) — only when they ask for it. For this chat just reply; to send it later use schedule_chat_follow_up. chatId comes from list_chats.",
+    input_schema: {
+      type: "object",
+      properties: {
+        chatId: { type: "string", description: "The chatId from list_chats." },
+        message: { type: "string", description: "The message to post (maximum 4000 characters)." },
+      },
+      required: ["chatId", "message"],
     },
   },
   {
@@ -1111,7 +1152,7 @@ async function resolveLearnerSchoolContext(studentId) {
  * flag the scratchpad, and by the agent console's DRY mode, which answers
  * these with what they WOULD do instead of doing it (lib/dryRunContext.js).
  */
-export const SIDE_EFFECT_TOOLS = ["create_task", "suggest_help", "schedule_chat_follow_up", "cancel_scheduled_chat_follow_up", "submit_tool_request", "prepare_activity", "revise_activity_draft",
+export const SIDE_EFFECT_TOOLS = ["create_task", "suggest_help", "schedule_chat_follow_up", "post_to_chat", "cancel_scheduled_chat_follow_up", "submit_tool_request", "prepare_activity", "revise_activity_draft",
           "create_goal", "update_goal_progress", "save_blog_draft", "publish_blog", "update_agent_network_settings", "block_agent", "log_past_question_practice",
           "challenge_agent", "post_challenge_request", "accept_challenge_request", "cancel_challenge_request", "rematch_battle", "message_agent", "reply_to_agent", "start_study_prep_session",
           "consult_peer_agents", "discard_activity_draft", "schedule_activity_routine", "cancel_activity_routine"];
@@ -1861,25 +1902,51 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       if (!input?.message || !String(input.message).trim()) {
         return clarify("message", "What should the future chat message say?", { action: "schedule_chat_follow_up" });
       }
-      if (!input?.scheduledAt) {
-        return clarify("scheduledAt", "When exactly should it be sent? Please give the date and time.", { action: "schedule_chat_follow_up" });
+      if (!input?.scheduledAt && !(Number(input?.inMinutes) > 0)) {
+        return clarify("scheduledAt", "When should it be sent? Say e.g. 'in 10 minutes' or give the date and time.", { action: "schedule_chat_follow_up" });
       }
       try {
+        const where = input.where === "here" || input.where === "chat" ? input.where : (input.chatId ? "chat" : "new");
+        let targetSessionId = null;
+        if (where === "here") {
+          if (!conversationId) return { error: "This chat is not saved yet, so a message can't be scheduled into it — send it to a new chat instead (where='new')." };
+          targetSessionId = conversationId;
+        } else if (where === "chat") {
+          targetSessionId = await ownedChatId(studentId, input.chatId);
+          if (!targetSessionId) return { error: "That chat wasn't found among the learner's chats — call list_chats for a valid chatId." };
+        }
         const context = await getLearnerProfileContext(studentId);
         const schedule = await scheduleChatFollowUp({
           userId: studentId,
           input,
           defaultTimezone: context.timeZone,
+          targetSessionId,
         });
         return {
           scheduled: true,
           ...schedule,
+          deliversTo: where === "new" ? "a new chat" : where === "here" ? "this chat" : "the chosen chat",
           timezoneSource: input.timezone ? "explicit_request" : context.timeZoneSource,
           localScheduledAt: localiseInstant(schedule.scheduledAt, schedule.timezone),
         };
       } catch (error) {
         return { error: error.message || "Could not schedule the chat follow-up" };
       }
+    }
+    case "list_chats": {
+      try { return await listChats(studentId, { search: input?.search, limit: input?.limit, currentChatId: conversationId }); }
+      catch (error) { return { error: error.message || "Could not load your chats" }; }
+    }
+    case "read_chat": {
+      if (!input?.chatId) return clarify("chatId", "Which chat should I read? I can list your chats.", { action: "read_chat" });
+      try { return await readChat(studentId, input.chatId, { limit: input.limit }); }
+      catch (error) { return { error: error.message || "Could not read that chat" }; }
+    }
+    case "post_to_chat": {
+      if (!input?.chatId) return clarify("chatId", "Which chat should I post it in? I can list your chats.", { action: "post_to_chat" });
+      if (!input?.message || !String(input.message).trim()) return clarify("message", "What should the message say?", { action: "post_to_chat" });
+      try { return await postToChat(studentId, { chatId: input.chatId, message: input.message, currentChatId: conversationId }); }
+      catch (error) { return { error: error.message || "Could not post the message" }; }
     }
     case "list_scheduled_chat_follow_ups": {
       try {

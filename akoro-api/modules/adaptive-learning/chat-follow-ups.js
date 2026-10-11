@@ -59,11 +59,13 @@ function chatFollowUpQueue() {
  * Schedule a new Agent Chat conversation for the authorised learner. The user
  * is always supplied by the verified gateway capability, never tool arguments.
  */
-export async function scheduleChatFollowUp({ userId, input, defaultTimezone }) {
+export async function scheduleChatFollowUp({ userId, input, defaultTimezone, targetSessionId = null }) {
   if (!userId) throw new Error("An authenticated learner is required");
   const validated = validateFollowUpInput(input, { defaultTimezone });
   const id = randomUUID();
-  const chatSessionId = randomUUID();
+  // Into an EXISTING chat of theirs ("send it here", or a chat they named), or
+  // a new one. The caller has checked the chat belongs to this learner.
+  const chatSessionId = targetSessionId || randomUUID();
   const chatMessageId = randomUUID();
   const row = {
     id,
@@ -230,6 +232,8 @@ export async function deliverChatFollowUp(followUpId) {
     created_at: now,
   }, { onConflict: "id", ignoreDuplicates: true });
   if (messageError) throw new Error("Could not create the follow-up chat message");
+  // Delivered into an existing chat: bring it to the top of their list.
+  await db.from("chat_sessions").update({ updated_at: now, last_message_at: now }).eq("id", followUp.chat_session_id).eq("user_id", followUp.user_id).then(() => {}, () => {});
 
   clearAgentActivity(followUp.user_id);
   const { data: delivered, error: statusError } = await db.schema("edu").from("scheduled_chat_follow_ups")

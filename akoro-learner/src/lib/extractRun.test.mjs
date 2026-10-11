@@ -94,3 +94,24 @@ test('pages another opener saved are filled in from the saved extraction', async
   assert.deepEqual(res.pages.map((p) => p.markdown), ['p1', 'p2 (saved by someone else)']);
   assert.equal(res.error, null);
 });
+
+test('a 429 on submit or poll backs off and carries on instead of failing the run', async () => {
+  const api = fakeApi();
+  let submit429 = 1, poll429 = 2;
+  const res = await runExtraction({
+    ...fast, recordId: 'r1', pages: pages(3),
+    submit: async (a) => { if (submit429-- > 0) { const e = new Error("That's a lot at once"); e.status = 429; throw e; } return api.submit(a); },
+    poll: async (a) => { if (poll429-- > 0) { const e = new Error('slow down'); e.status = 429; throw e; } return api.poll(a); },
+  });
+  assert.equal(res.error, null);
+  assert.deepEqual(res.pages.map((p) => p.pageNumber), [1, 2, 3]);
+});
+
+test('a rate limit that never lifts still ends with an error', async () => {
+  const res = await runExtraction({
+    ...fast, recordId: 'r1', pages: pages(1),
+    submit: async () => ({ pending: [1] }),
+    poll: async () => { const e = new Error("That's a lot at once"); e.status = 429; throw e; },
+  });
+  assert.match(res.error, /a lot at once/);
+});
