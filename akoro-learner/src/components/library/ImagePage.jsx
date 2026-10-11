@@ -13,6 +13,20 @@ import BlockTextLayer from './BlockTextLayer.jsx';
 export default function ImagePage({ src, alt = '', blocks = null }) {
   const imgRef = useRef(null);
   const [height, setHeight] = useState(0);   // rendered height — sizes the invisible type
+  // A CORS-readable copy of the picture: the text layer finds the printed
+  // lines in its pixels. The shown <img> stays plain, so a host without
+  // CORS still DISPLAYS; the layer then falls back to estimating.
+  const [pixels, setPixels] = useState(null);
+  useEffect(() => {
+    if (!src || !blocks?.length) { setPixels(null); return undefined; }
+    let live = true;
+    const im = new Image();
+    im.crossOrigin = 'anonymous';
+    im.onload = () => { if (live) setPixels(im); };
+    im.onerror = () => { if (live) setPixels(null); };
+    im.src = src;
+    return () => { live = false; };
+  }, [src, blocks]);
 
   useEffect(() => {
     const img = imgRef.current;
@@ -26,7 +40,7 @@ export default function ImagePage({ src, alt = '', blocks = null }) {
     <div style={{ position: 'relative', width: '100%' }}>
       <img ref={imgRef} src={src} alt={alt} onLoad={(e) => setHeight(e.currentTarget.clientHeight || 0)}
         style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }}/>
-      <BlockTextLayer blocks={blocks} height={height}/>
+      <BlockTextLayer blocks={blocks} height={height} surface={pixels} surfaceKey={pixels ? 1 : 0}/>
     </div>
   );
 }
