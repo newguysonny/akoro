@@ -140,11 +140,11 @@ export default function BattleForm({ onSubmit, onCancel, courses = [], editing =
             <div style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, marginBottom: 7 }}>Battle type *</div>
             <div style={{ display: 'flex', gap: 6 }}>
               {[
-                { key: 'course', label: '📘 Course battle', hint: courses.length ? "From a course's question bank" : 'No courses yet', off: !courses.length },
-                { key: 'class',  label: '🏫 Class battle',  hint: classesLoading ? 'Loading…' : classes.length ? 'From a class subject' : 'No classes yet', off: !classesLoading && !classes.length },
+                { key: 'course', label: 'Course battle', hint: courses.length ? "From a course's question bank" : 'No courses yet', off: !courses.length },
+                { key: 'class',  label: 'Class battle',  hint: classesLoading ? 'Loading…' : classes.length ? 'From a class subject' : 'No classes yet', off: !classesLoading && !classes.length },
                 // Not a contest: one learner, no opponent, no winner — a mark
                 // sheet at the end saying what they knew.
-                { key: 'review', label: '📋 Study review',  hint: classesLoading ? 'Loading…' : classes.length ? 'One learner, mark sheet' : 'No classes yet', off: !classesLoading && !classes.length },
+                { key: 'review', label: 'Study review',  hint: classesLoading ? 'Loading…' : classes.length ? 'One learner, mark sheet' : 'No classes yet', off: !classesLoading && !classes.length },
               ].map(o => (
                 <button key={o.key} type="button" disabled={o.off}
                   onClick={() => setField('kind', o.key)}

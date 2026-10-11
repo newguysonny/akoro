@@ -2,7 +2,7 @@
  * CoursesPage — composes the components from ./parts.jsx.
  */
 import { useState, useEffect } from 'react';
-import { Plus, Video, BookOpen, Users, Clock, Calendar, Trash2, Edit2, ChevronRight, Share2, Check } from 'lucide-react';
+import { Plus, Video, BookOpen, Users, Clock, Calendar, Trash2, Edit2, ChevronRight, Share2, Check , AlertTriangle } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import { Btn, Modal, Inp, Sel, StatusPill, PlatBadge, CoursTypeBadge, Toast } from '../../components/Primitives.jsx';
 import { useCoursesAPI } from '../../hooks/useCoursesAPI.js';
@@ -174,7 +174,7 @@ export default function CoursesPage() {
           padding: '11px 14px', borderRadius: 12,
           background: '#FEF3C7', border: '1px solid #FDE68A', fontFamily: FONT,
         }}>
-          <span style={{ fontSize: 16 }}>⚠️</span>
+          <span style={{ display: 'flex' }}><AlertTriangle size={16} color="#B45309" /></span>
           <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: '#92400E' }}>{loadError}</span>
           <button onClick={() => { setLoading(true); load(); }} style={{
             padding: '6px 13px', borderRadius: 9, border: '1px solid #FDE68A',

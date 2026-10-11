@@ -96,10 +96,10 @@ function ParticipantsModal({ open, onClose, battleId }) {
                   display: 'flex', alignItems: 'center', gap: 9, padding: '9px 11px',
                   border: `1px solid ${BORDER}`, borderRadius: 10, background: WHITE,
                 }}>
-                  <span style={{ fontSize: 16 }}>{p.emoji || '🧑‍🎓'}</span>
+                  <span style={{ fontSize: 14, fontWeight: 900, color: '#6B7280' }}>{(p.fullName || 'L').trim().charAt(0).toUpperCase()}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>
-                      {p.fullName}{p.isWinner && <span title="Winner"> 🏆</span>}
+                      {p.fullName}{p.isWinner && <Trophy size={12} color="#F59E0B" style={{ verticalAlign: '-2px', marginLeft: 4 }} />}
                     </div>
                     <div style={{ fontSize: 11, color: MUTED }}>@{p.username}</div>
                   </div>
@@ -280,7 +280,7 @@ function BattleCard({ battle, onStart, onEdit, onDelete, onViewParticipants, onW
           style={{ border: 'none', padding: 0, background: 'none', cursor: 'pointer' }}
         >
           <Badge color={BLUE} bg="#EFF6FF">
-            {isReview ? <>📋 Review</> : <><Users size={10} style={{ marginRight: 2 }} />{battle.participantCount}</>}
+            {isReview ? <><ClipboardList size={10} style={{ marginRight: 2, verticalAlign: '-1px' }} />Review</> : <><Users size={10} style={{ marginRight: 2 }} />{battle.participantCount}</>}
           </Badge>
         </button>
         <Badge color={MUTED} bg={LIGHT}><Clock size={10} style={{ marginRight: 2 }} />{battle.durationMin}min</Badge>

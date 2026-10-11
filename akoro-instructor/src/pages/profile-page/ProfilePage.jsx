@@ -40,7 +40,7 @@ export default function ProfilePage() {
         const a = d.agent ?? {};
         setProfile({
           id: d.id, email: d.email, username: d.username || d.email?.split('@')[0],
-          fullName: d.full_name || d.fullName, avatarUrl: d.avatar_url, avatarEmoji: '👩🏾‍🏫',
+          fullName: d.full_name || d.fullName, avatarUrl: d.avatar_url,
           bio: d.bio, phone: d.phone, country: d.country, school: d.school_name,
           schoolType: d.school_type, subjects: d.subjects || [],
           accentColor: d.accent_color || BRAND,
@@ -55,7 +55,7 @@ export default function ProfilePage() {
         setProfile({
           id: user?.id, email: user?.email,
           username: user?.username || user?.email?.split('@')[0],
-          fullName: user?.fullName, avatarEmoji: '👩🏾‍🏫', subjects: [], accentColor: BRAND,
+          fullName: user?.fullName, subjects: [], accentColor: BRAND,
         });
         setAgent({ name: 'My Agent', emoji: '🤖', color: BRAND, personality: '', level: 1, xpEarned: 0, streakDays: 0 });
         showToast('Offline — showing cached data');
@@ -119,7 +119,7 @@ export default function ProfilePage() {
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
         {/* Tabs */}
         <div style={{ display: 'flex', background: '#fff', borderRadius: 12, padding: 4, marginBottom: 24, border: `1px solid ${BORDER}`, gap: 4 }}>
-          {[['profile', '👤 Profile'], ['agent', `${agent?.emoji || '🤖'} Agent`]].map(([t, label]) => (
+          {[['profile', 'Profile'], ['agent', 'Agent']].map(([t, label]) => (
             <button key={t} onClick={() => setTab(t)} style={{
               flex: 1, padding: '9px 0', borderRadius: 9, border: 'none',
               background: tab === t ? BRAND : 'transparent',

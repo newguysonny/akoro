@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Scale, SlidersHorizontal } from 'lucide-react';
+import { Plus, Scale, SlidersHorizontal , LibraryBig, Inbox, Users } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Toast } from '../components/Primitives.jsx';
 import {
@@ -472,13 +472,13 @@ export default function GradebookPage() {
               {[1, 2, 3, 4].map((i) => <div key={i} style={{ height: 38, borderRadius: 10, background: LIGHT, marginBottom: 8, opacity: 0.6 }} />)}
             </div>
           ) : !classObj ? (
-            <EmptyState icon="📚" title="Pick a class" sub="Your classes appear in the rail on the left." />
+            <EmptyState icon={<LibraryBig size={36} color="#9490A0" />} title="Pick a class" sub="Your classes appear in the rail on the left." />
           ) : !assignments.length ? (
-            <EmptyState icon="📭" title="No activities in this class yet"
+            <EmptyState icon={<Inbox size={36} color="#9490A0" />} title="No activities in this class yet"
               sub="Assign work from the activities workbench and it lands here."
               action={<Btn size="sm" onClick={() => navigate('/activities')}><Plus size={13} /> Add Assignment</Btn>} />
           ) : !students.length ? (
-            <EmptyState icon="🧑‍🎓" title="No learners assigned yet"
+            <EmptyState icon={<Users size={36} color="#9490A0" />} title="No learners assigned yet"
               sub="This class's activities have no learners on them — assign them from the workbench." />
           ) : (
             <div style={{ background: WHITE, borderRadius: 16, border: `1px solid ${BORDER}`, boxShadow: '0 2px 10px rgba(26,26,46,0.05)', overflow: 'hidden' }}>

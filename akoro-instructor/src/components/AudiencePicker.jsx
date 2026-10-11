@@ -202,7 +202,7 @@ export default function AudiencePicker({
                     border: `1.5px solid ${on ? AMBER : BORDER}`, background: on ? AMBER : WHITE,
                     color: WHITE, fontSize: 11, fontWeight: 900, lineHeight: '16px', textAlign: 'center',
                   }}>{on ? '✓' : ''}</span>
-                  <span style={{ fontSize: 15 }}>{r.emoji || '🧑‍🎓'}</span>
+                  <span style={{ fontSize: 13, fontWeight: 900, color: '#6B7280', width: 16, textAlign: 'center' }}>{(r.full_name || r.username || 'L').trim().charAt(0).toUpperCase()}</span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: INK }}>{r.full_name}</span>
                     <span style={{ display: 'block', fontSize: 11, color: MUTED }}>@{r.username}</span>

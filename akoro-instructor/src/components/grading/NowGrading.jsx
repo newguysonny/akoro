@@ -46,7 +46,7 @@ export default function NowGrading({ onResume }) {
             boxShadow: '0 1px 6px rgba(33,31,53,.05)' }}
           onMouseEnter={e => { e.currentTarget.style.borderColor = AMBER; }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = `${AMBER}44`; }}>
-          <span style={{ fontSize: 20 }}>{d.emoji || '🧑‍🎓'}</span>
+          <span style={{ fontSize: 14, fontWeight: 900, color: '#6B7280' }}>{(d.studentName || 'L').trim().charAt(0).toUpperCase()}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 12.5, fontWeight: 800, color: INK }}>
               Now grading — {d.studentName}

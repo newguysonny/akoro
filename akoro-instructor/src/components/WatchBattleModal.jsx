@@ -22,7 +22,7 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
-import { X, Trophy, Users, Radio, Square, Gavel } from 'lucide-react';
+import { X, Trophy, Users, Radio, Square, Gavel , Flame, Swords, Flag, Ban, OctagonX } from 'lucide-react';
 import { apiGet, apiPost } from '../services/api.js';
 import { WS_URL } from '../constants.js';
 import { AMBER, INK, MUTED, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../constants.js';
@@ -105,7 +105,7 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
           ...r.winner,
           agentEmoji: r.winner?.agentEmoji
             ?? r.scoreboard?.find((p) => p.userId === r.winner?.userId)?.agentEmoji
-            ?? '🏆',
+            ?? 'trophy',
         } : null,
         durationFormatted: r.durationFormatted ?? r.battle?.duration_formatted ?? null,
         finalScores: r.scoreboard ?? [],
@@ -127,7 +127,7 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
     s.on('battle:started', (d) => {
       setStatus('live');
       setPeople((d.participants ?? []).map(mapP));
-      push('⚔️ Battle started');
+      push('Battle started');
     });
     s.on('battle:question',  (q) => { setQuestion(q); setReveal(null); });
     s.on('battle:state',     (d) => setPeople((d.participants ?? []).map(mapP)));
@@ -135,8 +135,8 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
     // Sergeant, the platform's judge, gives the verdict a moment after the end.
     s.on('battle:verdict',   (d) => setOver((o) => (o ? { ...o, verdict: d?.verdict ?? null } : o)));
     s.on('battle:log',       (e) => push(e.message, e.timestamp));
-    s.on('battle:over',      (d) => { setOver(d); setStatus('completed'); push('🏁 Battle complete'); });
-    s.on('battle:cancelled', () => { setStatus('cancelled'); push('🚫 Battle cancelled — not enough players accepted'); });
+    s.on('battle:over',      (d) => { setOver(d); setStatus('completed'); push('Battle complete'); });
+    s.on('battle:cancelled', () => { setStatus('cancelled'); push('Battle cancelled — not enough players accepted'); });
     s.on('viewer:count',     (d) => setViewers(d?.count ?? 0));
 
     return () => { try { s.emit('leave-battle', battleId); s.disconnect(); } catch { /* already gone */ } };
@@ -167,7 +167,7 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
     setEnding(true);
     try {
       await apiPost(`${B}/battles/${battleId}/end`, {});
-      push('🛑 Ended by you');
+      push('Ended by you');
       onEnded?.();
     } catch (e) { setError(e.message); }
     finally { setEnding(false); }
@@ -254,7 +254,7 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
                     background: i === 0 && leader > 0 ? '#FFFBEB' : WHITE,
                   }}>
                     <span style={{ fontSize: 11, fontWeight: 800, color: MUTED, width: 16 }}>{i + 1}</span>
-                    <span style={{ fontSize: 17 }}>{p.agentEmoji}</span>
+                    <span style={{ fontSize: 17 }}>{(() => { const I = p.agentEmoji === '🏆' ? Trophy : Users; return <I size={16} color={p.agentColor || AMBER} />; })()}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>{p.agentName}</div>
                       {/* HP is the learner-facing health bar; for a teacher it
@@ -263,7 +263,7 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
                         <div style={{ width: `${Math.max(0, Math.min(100, p.hp))}%`, height: '100%', background: p.hp > 40 ? GREEN : RED }} />
                       </div>
                     </div>
-                    {p.streak > 1 && <span style={{ fontSize: 10.5, fontWeight: 700, color: AMBER }}>🔥{p.streak}</span>}
+                    {p.streak > 1 && <span style={{ fontSize: 10.5, fontWeight: 700, color: AMBER, display: 'inline-flex', alignItems: 'center', gap: 2 }}><Flame size={11} color={AMBER} />{p.streak}</span>}
                     <span style={{ fontSize: 13, fontWeight: 900, color: p.agentColor }}>{p.score}</span>
                   </div>
                 ))}

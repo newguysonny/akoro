@@ -430,7 +430,7 @@ export default function GradeSubmissionModal({
         subject: brief?.subject || '',
         studentId: current.student.id,
         studentName: current.student.name,
-        emoji: current.student.emoji || '🧑‍🎓',
+        emoji: current.student.emoji || '',
         status: current.status,
         questionIndex: qIndex,
         mode: next.mode ?? mode,

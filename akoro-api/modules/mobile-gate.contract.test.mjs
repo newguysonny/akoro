@@ -236,3 +236,44 @@ test("the instructor chat reclaims the TopBar strip on phones", () => {
   assert.match(src, /hideTopBarOnMobile = false/, "PageLayout accepts the opt-out");
   assert.match(src, /\{!hideTopBarOnMobile && \(/, "the mobile TopBar yields when a page opts out");
 });
+
+/* ── The no-emoji guard ────────────────────────────────────────────────────
+   The instructor app renders no emoji anywhere: icons are lucide, avatars
+   are monograms or drawn SVGs. Emoji may still EXIST as stored DATA (the
+   agent_emoji field the learner/admin apps render, and the picker maps
+   that translate a chosen icon into that stored value) — so lines that are
+   pure data plumbing are allowed; anything rendered is not. */
+test("the instructor app renders no emoji — icons and SVGs only", async () => {
+  const { readdir } = await import("node:fs/promises");
+  const root = new URL("../../akoro-instructor/src", import.meta.url).pathname;
+  const pictograph = new RegExp(
+    "[" + String.fromCodePoint(0x1f000) + "-" + String.fromCodePoint(0x1faff)
+    + "\u2600-\u2712\u2716-\u27BF\u2B00-\u2BFF\uFE0F\u2B50]", "gu",
+  );
+  // ✓ ✔ ✕ ✗ are typographic marks (ticks, crosses), not emoji — allowed.
+  const TYPOGRAPHY = /[\u2713\u2714\u2715\u2717]/g;
+  // Data plumbing: emoji as STORED values, never rendered by this app.
+  const DATA_LINE = /AGENT_ICONS|GUIDE_ICONS|TYPE_ICON|KIND_META|useState\(|\?\?|emoji:|agentEmoji|selEmoji|guideEmoji|setEmoji|setAgentEmoji|setGuideEmoji|setSelEmoji|agent_emoji|emoji ===/;
+  async function* walk(dir) {
+    for (const e of await readdir(dir, { withFileTypes: true })) {
+      const p = `${dir}/${e.name}`;
+      if (e.isDirectory()) yield* walk(p);
+      else if (/\.(jsx|js)$/.test(e.name)) yield p;
+    }
+  }
+  const offenders = [];
+  for await (const file of walk(root)) {
+    const src = await readFile(file, "utf8");
+    src.split("\n").forEach((line, i) => {
+      const t = line.trim();
+      if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")) return;
+      pictograph.lastIndex = 0;
+      const raw = line.replace(TYPOGRAPHY, "");
+      if (!pictograph.test(raw)) return;
+      if (DATA_LINE.test(line)) return;
+      offenders.push(`${file.slice(file.indexOf("src/") + 4)}:${i + 1}: ${t.slice(0, 90)}`);
+    });
+  }
+  assert.deepEqual(offenders, [],
+    `rendered emoji found — replace with an icon or SVG:\n${offenders.join("\n")}`);
+});

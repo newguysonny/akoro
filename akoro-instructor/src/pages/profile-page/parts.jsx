@@ -6,8 +6,7 @@ import { PageLayout } from '../../components/Layout.jsx';
 import {
   User, AtSign, Mail, Phone, MapPin, Building2, GraduationCap, BookOpen,
   Pencil, Upload, Search, Bolt, Star, BarChart3, Palette,
-  Tag, Sparkles, Store, CheckCircle2, ChevronRight,
-} from 'lucide-react';
+  Tag, Sparkles, Store, CheckCircle2, ChevronRight,  Bot, Brain, Gamepad2, Bird, Zap, Wand2, Flower2, Target, Rocket, Lightbulb, Squirrel, Dog, Rabbit, Drama, Trophy, Gem } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import {
   getProfile, patchProfile, patchAgent,
@@ -30,7 +29,9 @@ const ALL_SUBJECTS = [
 ];
 const SCHOOL_TYPES = ['Primary School', 'Junior Secondary School', 'Senior Secondary School', 'Sixth Form', 'College', 'University', 'Tutoring Centre', 'Independent'];
 const COUNTRIES    = ['Nigeria', 'Ghana', 'Kenya', 'South Africa', 'Uganda', 'Tanzania', 'UK', 'USA', 'Canada', 'Other'];
-const EMOJI_LIST   = ['🤖', '🧠', '👾', '🦉', '🎓', '⚡', '🌟', '🔮', '🦋', '🎯', '🚀', '💡', '🦁', '🐺', '🦊', '🎭', '🏆', '💎'];
+/* Icon choices render as lucide icons; the paired emoji is what we store in
+   agent_emoji so the learner/admin apps (which still render emoji) stay in sync. */
+const AGENT_ICONS = [[Bot, '🤖'], [Brain, '🧠'], [Gamepad2, '👾'], [Bird, '🦉'], [GraduationCap, '🎓'], [Zap, '⚡'], [Sparkles, '🌟'], [Wand2, '🔮'], [Flower2, '🦋'], [Target, '🎯'], [Rocket, '🚀'], [Lightbulb, '💡'], [Squirrel, '🦁'], [Dog, '🐺'], [Rabbit, '🦊'], [Drama, '🎭'], [Trophy, '🏆'], [Gem, '💎']];
 const ACCENTS      = [AMBER, '#6C3BFF', '#3B82F6', '#10B981', '#EC4899', '#F59E0B', '#EF4444', '#8B5CF6'];
 
 /* ─── Micro-components ────────────────────────────────────────── */
@@ -79,11 +80,11 @@ function Row({ icon: Icon, label, value, sub, onClick, noArrow, children }) {
 }
 
 /* ─── Avatar circle ───────────────────────────────────────────── */
-function AvatarCircle({ photoUrl, emoji, color, size = 60, onPhotoClick }) {
+function AvatarCircle({ photoUrl, monogram, color, size = 60, onPhotoClick }) {
   return (
     <div style={{ position: 'relative', flexShrink: 0 }}>
       <div style={{ width: size, height: size, borderRadius: '50%', background: `${color}18`, border: `2px solid ${color}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer' }} onClick={onPhotoClick}>
-        {photoUrl ? <img src={photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ fontSize: size * 0.43 }}>{emoji}</span>}
+        {photoUrl ? <img src={photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />  : <span style={{ fontSize: size * 0.38, fontWeight: 900, color }}>{String(monogram || '?').trim().charAt(0).toUpperCase() || '?'}</span>}
       </div>
       <div style={{ position: 'absolute', bottom: 0, right: 0, width: 20, height: 20, borderRadius: '50%', background: color, border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} onClick={onPhotoClick}>
         <Pencil size={9} color="#fff" />
@@ -118,7 +119,7 @@ function AvatarPickerSheet({ current, onClose, onSavePhoto, onSaveEmoji, color }
   const fileRef = useRef(null);
   const [preview, setPreview] = useState(null);
   const [tab, setTab] = useState('emoji');
-  const [selEmoji, setSelEmoji] = useState(current.emoji || '🤖');
+  const [selEmoji, setSelEmoji] = useState(current.emoji || '🤖');   // stored value; rendered as its icon
   const handleFile = (e) => {
     const f = e.target.files[0]; if (!f) return;
     const reader = new FileReader();
@@ -129,15 +130,15 @@ function AvatarPickerSheet({ current, onClose, onSavePhoto, onSaveEmoji, color }
     <Sheet onClose={onClose}>
       <p style={{ fontSize: 16, fontWeight: 900, color: INK, margin: '0 0 16px' }}>Change Photo</p>
       <div style={{ display: 'flex', background: '#F3F4F6', borderRadius: 12, padding: 3, marginBottom: 20, gap: 3 }}>
-        {[['emoji', '🎭 Choose Emoji'], ['photo', '📷 Upload Photo']].map(([t, l]) => (
+        {[['emoji', 'Choose icon'], ['photo', 'Upload photo']].map(([t, l]) => (
           <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: '8px 0', borderRadius: 10, border: 'none', background: tab === t ? '#fff' : 'transparent', cursor: 'pointer', fontSize: 12.5, fontWeight: 800, fontFamily: FONTF, color: tab === t ? INK : MUTED, boxShadow: tab === t ? '0 1px 4px rgba(0,0,0,.08)' : 'none' }}>{l}</button>
         ))}
       </div>
       {tab === 'emoji' && (
         <>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
-            {EMOJI_LIST.map((em) => (
-              <div key={em} onClick={() => setSelEmoji(em)} style={{ width: 46, height: 46, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, cursor: 'pointer', background: selEmoji === em ? `${color}15` : LIGHT, border: `1.5px solid ${selEmoji === em ? color : BORDER}` }}>{em}</div>
+            {AGENT_ICONS.map(([Icon, em]) => (
+              <div key={em} onClick={() => setSelEmoji(em)} style={{ width: 46, height: 46, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: selEmoji === em ? `${color}15` : LIGHT, border: `1.5px solid ${selEmoji === em ? color : BORDER}` }}><Icon size={22} color={selEmoji === em ? color : MUTED} /></div>
             ))}
           </div>
           <SheetButtons onClose={onClose} onSave={() => { onSaveEmoji(selEmoji); onClose(); }} saveLabel="Save Emoji" />
@@ -282,10 +283,10 @@ function SubjectsRow({ subjects, onClick, color = BRAND }) {
 
 /* ─── Tool template defaults ──────────────────────────────────── */
 const TPL_TOOLS = [
-  { target: 'lesson_plan', label: 'Lesson Plan',       icon: '📝' },
-  { target: 'worksheet',   label: 'Worksheet',         icon: '📄' },
-  { target: 'report',      label: 'Report',            icon: '🗒️' },
-  { target: 'exam_prep',   label: 'Exam / Assessment', icon: '🎯' },
+  { target: 'lesson_plan', label: 'Lesson Plan' },
+  { target: 'worksheet',   label: 'Worksheet' },
+  { target: 'report',      label: 'Report' },
+  { target: 'exam_prep',   label: 'Exam / Assessment' },
 ];
 
 function ToolTemplatesSection() {
@@ -344,7 +345,7 @@ function ProfileTab({ profile, setProfile, stats, onSaveField }) {
     <div>
       {/* Header card */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#fff', marginBottom: 20, borderRadius: 18, padding: '18px 16px', border: `1px solid ${BORDER}`, boxShadow: '0 1px 6px rgba(0,0,0,.05)' }}>
-        <AvatarCircle photoUrl={profile.avatarUrl} emoji={profile.avatarEmoji || '👩🏾‍🏫'} color={color} size={60} onPhotoClick={() => setAvSheet(true)} />
+        <AvatarCircle photoUrl={profile.avatarUrl} monogram={profile.fullName} color={color} size={60} onPhotoClick={() => setAvSheet(true)} />
         <div style={{ flex: 1 }}>
           <p style={{ margin: '0 0 2px', fontSize: 15, fontWeight: 900, color: INK }}>{profile.fullName || '—'}</p>
           <p style={{ margin: '0 0 6px', fontSize: 12.5, color: MUTED }}>@{profile.username || profile.email?.split('@')[0]}</p>
@@ -414,7 +415,7 @@ function AgentTab({ agent, setAgent, profile, onSaveAgent, onPublish, onUnpublis
     <div>
       {/* Agent card */}
       <div style={{ background: '#fff', marginBottom: 16, borderRadius: 18, padding: '18px 16px', border: `1.5px solid ${color}25`, boxShadow: '0 1px 6px rgba(0,0,0,.04)', display: 'flex', alignItems: 'center', gap: 14 }}>
-        <AvatarCircle photoUrl={agent.photoUrl} emoji={agent.emoji || '🤖'} color={color} size={64} onPhotoClick={() => setAvSheet(true)} />
+        <AvatarCircle photoUrl={agent.photoUrl} monogram={agent.name} color={color} size={64} onPhotoClick={() => setAvSheet(true)} />
         <div style={{ flex: 1 }}>
           <p style={{ margin: '0 0 2px', fontSize: 17, fontWeight: 900, color: INK }}>{agent.name || 'My Agent'}</p>
           <p style={{ margin: '0 0 8px', fontSize: 12.5, color: MUTED }}>Your teaching AI agent</p>
@@ -436,7 +437,9 @@ function AgentTab({ agent, setAgent, profile, onSaveAgent, onPublish, onUnpublis
 
       <Section title="Agent Profile">
         <Row icon={Tag}      label="Agent Name"    value={agent.name} onClick={() => openSheet('name', 'Agent Name', 'text')} />
-        <Row icon={Sparkles} label="Agent Emoji"   value={agent.emoji || '🤖'} onClick={() => setAvSheet(true)} />
+        <Row icon={Sparkles} label="Agent Icon" onClick={() => setAvSheet(true)}>
+          <span style={{ display: 'flex', alignItems: 'center' }}>{(() => { const hit = AGENT_ICONS.find(([, em]) => em === (agent.emoji || '🤖')); const I = hit ? hit[0] : Bot; return <I size={16} color={MUTED} />; })()}</span>
+        </Row>
         <Row icon={Palette}  label="Agent Colour"  onClick={() => openSheet('color', 'Agent Colour', 'accent')}>
           <div style={{ width: 18, height: 18, borderRadius: '50%', background: color, marginRight: 6, flexShrink: 0 }} />
         </Row>
@@ -489,4 +492,4 @@ function LoadingSkeleton() {
 
 /* ─── Main page ───────────────────────────────────────────────── */
 
-export { BRAND, FONTF, ALL_SUBJECTS, SCHOOL_TYPES, COUNTRIES, EMOJI_LIST, ACCENTS, ProgressBar, SubjectChip, Section, rowBase, Row, AvatarCircle, Sheet, SheetButtons, AvatarPickerSheet, SubjectsSheet, GenericSheet, PublishSheet, SubjectsRow, TPL_TOOLS, ToolTemplatesSection, ProfileTab, AgentTab, LoadingSkeleton };
+export { BRAND, FONTF, ALL_SUBJECTS, SCHOOL_TYPES, COUNTRIES, AGENT_ICONS, ACCENTS, ProgressBar, SubjectChip, Section, rowBase, Row, AvatarCircle, Sheet, SheetButtons, AvatarPickerSheet, SubjectsSheet, GenericSheet, PublishSheet, SubjectsRow, TPL_TOOLS, ToolTemplatesSection, ProfileTab, AgentTab, LoadingSkeleton };

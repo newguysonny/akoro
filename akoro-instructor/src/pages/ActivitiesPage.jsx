@@ -18,8 +18,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   BookOpen, Pencil, FolderKanban, MonitorPlay, Swords, ListChecks, Plus, Users,
-  Clock, Trash2, ChevronRight, Sparkles, Loader2, CheckCircle2, Info, ArrowUp, ArrowDown, BarChart3, Check,
-} from 'lucide-react';
+  Clock, Trash2, ChevronRight, Sparkles, Loader2, CheckCircle2, Info, ArrowUp, ArrowDown, BarChart3, Check,  AlertTriangle } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, Badge, Toast } from '../components/Primitives.jsx';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
@@ -45,7 +44,7 @@ const SUBJECTS = [
 /* ── The activity types — the rail of the workbench ──────────────────────── */
 const ACTIVITY_TYPES = [
   {
-    key: 'self_study', emoji: '📖', name: 'Self study', icon: BookOpen, color: PURPLE,
+    key: 'self_study', name: 'Self study', icon: BookOpen, color: PURPLE,
     blurb: 'A topic each learner works through with their own AI agent.',
     note: ['Practice that adapts to each learner.',
       'Assign a topic; every learner gets their own agent session and goes at their own pace. Use it for revision, catch-up after an absence, or stretch work that should not wait for you.'],
@@ -53,7 +52,7 @@ const ACTIVITY_TYPES = [
     planHint: 'Subtopics the learner will move through, in order.',
   },
   {
-    key: 'assignment', emoji: '✏️', name: 'Assignment', icon: Pencil, color: BLUE,
+    key: 'assignment', name: 'Assignment', icon: Pencil, color: BLUE,
     blurb: 'Set work with a deadline and a clear task breakdown.',
     note: ['One measurable check for understanding.',
       'Questions or tasks every learner answers on their own. Use it right after a lesson, when you want evidence of what stuck — the AI drafts the task breakdown, you correct it before anything is sent.'],
@@ -61,7 +60,7 @@ const ACTIVITY_TYPES = [
     planHint: 'The tasks or question areas learners must complete.',
   },
   {
-    key: 'project', emoji: '🗂️', name: 'Project', icon: FolderKanban, color: GREEN,
+    key: 'project', name: 'Project', icon: FolderKanban, color: GREEN,
     blurb: 'A deliverable learners build over days, not minutes.',
     note: ['When depth matters more than speed.',
       'Research, an artefact, a presentation. Use it when the process is the point: the AI drafts milestones, you set the bar, and learners work toward a finished thing you can assess.'],
@@ -69,7 +68,7 @@ const ACTIVITY_TYPES = [
     planHint: 'The stages a finished project must pass through.',
   },
   {
-    key: 'live_course', emoji: '📺', name: 'Live course', icon: MonitorPlay, color: AMBER,
+    key: 'live_course', name: 'Live course', icon: MonitorPlay, color: AMBER,
     blurb: 'You, live, at a scheduled time with a join link.',
     note: ['First exposure belongs to a human.',
       'A scheduled session with a start time and a link. Use it for introducing something new, discussion, and anything learners cannot do alone — then let assignments and self study carry the practice.'],
@@ -77,7 +76,7 @@ const ACTIVITY_TYPES = [
     planHint: null,
   },
   {
-    key: 'battle', emoji: '⚔️', name: 'Battle', icon: Swords, color: RED,
+    key: 'battle', name: 'Battle', icon: Swords, color: RED,
     blurb: 'A timed quiz duel from your question bank — the same battle form.',
     note: ['Energy that makes recall competitive.',
       'Timed questions, an XP prize, a leaderboard moment. Use it to revise a finished topic — the competition surfaces who recalls what, faster than a quiz ever will.'],
@@ -85,7 +84,7 @@ const ACTIVITY_TYPES = [
     planHint: null,
   },
   {
-    key: 'multi_stage', emoji: '🧩', name: 'Multi stage', icon: ListChecks, color: '#A855F7',
+    key: 'multi_stage', name: 'Multi stage', icon: ListChecks, color: '#A855F7',
     blurb: 'Chain activities into one journey: learn, practise, compete.',
     note: ['One journey, several kinds of work.',
       'Chain self study, assignments, projects and battles into an ordered path — e.g. study the topic, then the assignment, then the battle. Learners see the roadmap; each step is real, tracked work.'],
@@ -637,7 +636,7 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
           )}
           {qWarning && (
             <div style={{ marginTop: 8, padding: '7px 10px', borderRadius: 9, background: '#FFF7ED', border: '1px solid #FED7AA', fontSize: 11.5, fontWeight: 700, color: '#B45309', fontFamily: FONT }}>
-              ⚠ {qWarning} Edit below, or draft again.
+              <AlertTriangle size={12} color="#B45309" style={{ verticalAlign: '-2px', marginRight: 3 }} />{qWarning} Edit below, or draft again.
             </div>
           )}
           {form.questions.length > 0 && (
@@ -748,7 +747,7 @@ function PastActivities({ type, refreshKey, onOpen }) {
                 onMouseLeave={(e) => { e.currentTarget.style.borderColor = overdue ? '#FECACA' : BORDER; }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                    <span style={{ fontSize: 14 }}>{meta.emoji}</span>
+                    <span style={{ display: 'flex', flexShrink: 0 }}><meta.icon size={14} color={meta.color} /></span>
                     <span style={{ fontSize: 12.5, fontWeight: 700, color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.title}</span>
                   </span>
                   <button onClick={(e) => remove(a, e)} title="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED2, padding: 0, flexShrink: 0 }}><Trash2 size={13} /></button>
@@ -805,7 +804,7 @@ function DetailModal({ open, onClose, activity, onDeleted }) {
         <div style={{ fontFamily: FONT }}>
           {/* The brief — same data the self-study detail shows, whatever the kind. */}
           <div style={{ fontSize: 12, color: MUTED, marginBottom: 10 }}>
-            {meta.emoji} {data.subject} · {data.topic}
+            <meta.icon size={12} color={meta.color} style={{ verticalAlign: '-2px', marginRight: 4 }} />{data.subject} · {data.topic}
             {data.difficulty ? ` · ${data.difficulty}` : ''}
           </div>
 
@@ -886,7 +885,7 @@ function DetailModal({ open, onClose, activity, onDeleted }) {
                     const st = STATUS[t.status] || STATUS.assigned;
                     return (
                       <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 11px', border: `1px solid ${BORDER}`, borderRadius: 10, background: WHITE }}>
-                        <span style={{ fontSize: 16 }}>{t.emoji || '🧑‍🎓'}</span>
+                        <span style={{ fontSize: 13, fontWeight: 900, color: '#6B7280' }}>{(t.full_name || 'L').trim().charAt(0).toUpperCase()}</span>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>{t.full_name}</div>
                           <div style={{ fontSize: 11, color: MUTED }}>@{t.username}</div>
@@ -990,7 +989,7 @@ function DraftsStrip({ refreshKey, onResolved }) {
         ))}
       </div>
       {openId && (
-        <Modal open onClose={() => setOpenId(null)} title="✨ AI-prepared activity — review & assign">
+        <Modal open onClose={() => setOpenId(null)} title="AI-prepared activity — review & assign">
           <div style={{ height: '72vh' }}>
             <ActivityPreviewPanel
               draftId={openId}
@@ -1036,7 +1035,7 @@ export default function ActivitiesPage() {
                 }}
                   onMouseEnter={(e) => { if (!on) e.currentTarget.style.background = LIGHT; }}
                   onMouseLeave={(e) => { if (!on) e.currentTarget.style.background = 'transparent'; }}>
-                  <span style={{ fontSize: 15, flexShrink: 0, marginTop: 1 }}>{t.emoji}</span>
+                  <span style={{ fontSize: 12, fontWeight: 900, flexShrink: 0, marginTop: 1, color: 'rgba(255,255,255,.85)' }}>{(t.name || 'T').trim().charAt(0).toUpperCase()}</span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: 'block' }}>{t.name}</span>
                     <span style={{ display: 'block', fontSize: 11, fontWeight: 600, lineHeight: 1.4, marginTop: 2, color: on ? 'rgba(255,255,255,.82)' : MUTED2 }}>{t.blurb}</span>
@@ -1176,7 +1175,7 @@ function BattlePastStrip({ refreshKey }) {
             return (
               <div key={b.id} style={{ flex: '0 0 auto', width: 224, scrollSnapAlign: 'start', border: `1px solid ${BORDER}`, borderRadius: 12, padding: '12px 13px', display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                  <span style={{ fontSize: 14 }}>⚔️</span>
+                  <span style={{ display: 'flex', flexShrink: 0 }}><Swords size={14} color="#DC2626" /></span>
                   <span style={{ fontSize: 12.5, fontWeight: 700, color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.title}</span>
                 </div>
                 <Badge color={st.color} bg={st.bg}>{st.label}</Badge>
@@ -1199,10 +1198,10 @@ function fmtWhen(iso) {
 
 /* ── Multi-stage composer — several activities chained as one journey ────── */
 const STAGE_KINDS = [
-  { key: 'self_study', label: 'Self study',  emoji: '📖' },
-  { key: 'assignment', label: 'Assignment',  emoji: '✏️' },
-  { key: 'project',    label: 'Project',     emoji: '🗂️' },
-  { key: 'battle',     label: 'Battle',      emoji: '⚔️' },
+  { key: 'self_study', label: 'Self study' },
+  { key: 'assignment', label: 'Assignment' },
+  { key: 'project',    label: 'Project' },
+  { key: 'battle',     label: 'Battle' },
 ];
 
 function MultiStageForm({ onAssigned }) {
@@ -1288,7 +1287,7 @@ function MultiStageForm({ onAssigned }) {
       const refs = [];
       for (const st of stages) {
         if (st.kind === 'battle') {
-          refs.push({ kind: 'battle', title: st.battle.title, emoji: '⚔️' });
+          refs.push({ kind: 'battle', title: st.battle.title });
           continue;
         }
         const clean = st.subtopics.map(x => x.trim()).filter(Boolean);
@@ -1304,7 +1303,7 @@ function MultiStageForm({ onAssigned }) {
           ...t,
           classroom_id: t.whole_class ? classId : null,
         });
-        refs.push({ kind: st.kind, refId: d?.data?.id ?? null, title: st.title.trim(), emoji: STAGE_KINDS.find(k => k.key === st.kind)?.emoji || '📌' });
+        refs.push({ kind: st.kind, refId: d?.data?.id ?? null, title: st.title.trim() });
       }
       const t = audienceBody(audience);
       await apiPost('/api/self-study', {
@@ -1362,7 +1361,7 @@ function MultiStageForm({ onAssigned }) {
               <div key={st.key} style={{ border: `1px solid ${BORDER}`, borderRadius: 12, padding: '12px 14px', background: WHITE }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: st.kind === 'battle' ? 0 : 10 }}>
                   <span style={{ width: 22, height: 22, borderRadius: 7, flexShrink: 0, background: '#A855F718', color: '#A855F7', fontSize: 11, fontWeight: 900, textAlign: 'center', lineHeight: '22px' }}>{i + 1}</span>
-                  <span style={{ fontSize: 12.5, fontWeight: 800, color: INK }}>{meta.emoji} {meta.label}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 800, color: INK }}>{meta.label}</span>
                   <span style={{ flex: 1 }} />
                   <button type="button" onClick={() => moveStage(i, -1)} disabled={i === 0} title="Move up"
                     style={{ background: 'none', border: 'none', cursor: i === 0 ? 'default' : 'pointer', color: i === 0 ? BORDER : MUTED, display: 'flex', padding: 2 }}><ArrowUp size={13} /></button>
@@ -1374,7 +1373,7 @@ function MultiStageForm({ onAssigned }) {
 
                 {st.kind === 'battle' ? (
                   st.battle
-                    ? <div style={{ fontSize: 12, fontWeight: 700, color: GREEN }}>⚔️ {st.battle.title} — battle is live for its audience</div>
+                    ? <div style={{ fontSize: 12, fontWeight: 700, color: GREEN }}>{st.battle.title} — battle is live for its audience</div>
                     : <Btn size="sm" variant="secondary" type="button" onClick={() => setBattleFor(st.key)}>
                         <Swords size={13} /> Create the battle for this stage
                       </Btn>
@@ -1412,7 +1411,7 @@ function MultiStageForm({ onAssigned }) {
           {STAGE_KINDS.map(k => (
             <button key={k.key} type="button" onClick={() => addStage(k.key)}
               style={{ padding: '7px 13px', borderRadius: 20, border: `1px solid ${BORDER}`, background: WHITE, cursor: 'pointer', fontSize: 11.5, fontWeight: 800, color: INK, fontFamily: FONT }}>
-              + {k.emoji} {k.label}
+              + {k.label}
             </button>
           ))}
         </div>

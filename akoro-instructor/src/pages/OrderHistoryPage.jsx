@@ -3,7 +3,7 @@
  * Tools & Assets marketplace. Backed by GET /api/instructor/tools/purchases.
  */
 import { useState, useEffect } from 'react';
-import { Receipt } from 'lucide-react';
+import { Receipt , Wrench } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Skeleton } from '../components/Primitives.jsx';
 import { apiGet } from '../services/api.js';
@@ -48,7 +48,7 @@ export default function OrderHistoryPage() {
               const tool = p.platform_tools || {};
               return (
                 <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '13px 14px', fontFamily: FONT }}>
-                  <span style={{ width: 40, height: 40, borderRadius: 11, flexShrink: 0, background: LIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>{tool.emoji || '🛠️'}</span>
+                  <span style={{ width: 40, height: 40, borderRadius: 11, flexShrink: 0, background: LIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Wrench size={20} color={AMBER} /></span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 800, color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tool.name || 'Tool'}</div>
                     <div style={{ fontSize: 12, color: MUTED, textTransform: 'capitalize' }}>{tool.kind || 'tool'} · {fmtDate(p.purchased_at)}</div>

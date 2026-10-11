@@ -1,3 +1,4 @@
+import { AlertTriangle, Ban, Bot, ClipboardList, Copyright, CreditCard, GraduationCap, Link2, Lock, LogOut, Mail, PencilLine, Ruler, Scale, ScrollText, Settings, ShieldCheck, User , Archive } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AMBER, INK, MUTED, BORDER, WHITE, LIGHT, FONT } from '../constants.js';
@@ -7,7 +8,7 @@ const A = AMBER;
 const SECTIONS = [
   {
     id: 'what-we-collect',
-    icon: '📋',
+    icon: ClipboardList,
     title: 'What We Collect',
     badge: 'Data Collection',
     badgeColor: '#6366F1',
@@ -20,7 +21,7 @@ const SECTIONS = [
   },
   {
     id: 'how-we-use',
-    icon: '⚙️',
+    icon: Settings,
     title: 'How We Use Your Data',
     badge: 'Purpose',
     badgeColor: '#7C3AED',
@@ -33,7 +34,7 @@ const SECTIONS = [
   },
   {
     id: 'student-data-access',
-    icon: '🎓',
+    icon: GraduationCap,
     title: 'Student Data Access',
     badge: 'Your Responsibilities',
     badgeColor: '#059669',
@@ -45,7 +46,7 @@ const SECTIONS = [
   },
   {
     id: 'ai-training',
-    icon: '🤖',
+    icon: Bot,
     title: 'AI Training Data',
     badge: 'Content You Upload',
     badgeColor: '#D97706',
@@ -57,7 +58,7 @@ const SECTIONS = [
   },
   {
     id: 'data-sharing',
-    icon: '🔗',
+    icon: Link2,
     title: 'Data Sharing',
     badge: 'Third Parties',
     badgeColor: '#6366F1',
@@ -69,7 +70,7 @@ const SECTIONS = [
   },
   {
     id: 'security',
-    icon: '🔒',
+    icon: Lock,
     title: 'Security',
     badge: 'Protection Measures',
     badgeColor: '#DC2626',
@@ -81,7 +82,7 @@ const SECTIONS = [
   },
   {
     id: 'retention',
-    icon: '🗄️',
+    icon: Archive,
     title: 'Data Retention',
     badge: 'How Long We Keep Data',
     badgeColor: '#6B7280',
@@ -93,7 +94,7 @@ const SECTIONS = [
   },
   {
     id: 'your-rights',
-    icon: '⚖️',
+    icon: Scale,
     title: 'Your Rights',
     badge: 'Data Subject Rights',
     badgeColor: '#7C3AED',
@@ -106,7 +107,7 @@ const SECTIONS = [
   },
 ];
 
-const TOC = SECTIONS.map(({ id, title, icon }) => ({ id, title, icon }));
+const TOC = SECTIONS.map(({ id, title, icon: Icon }) => ({ id, title, icon: Icon }));
 
 export default function PrivacyPolicyPage() {
   const navigate = useNavigate();
@@ -142,7 +143,7 @@ export default function PrivacyPolicyPage() {
 
       {/* Hero */}
       <div style={{ background: `linear-gradient(135deg, ${A} 0%, #C07020 100%)`, padding: '44px 24px 48px', textAlign: 'center' }}>
-        <div style={{ fontSize: 44, marginBottom: 10 }}>🔒</div>
+        <div style={{ marginBottom: 10 }}><Lock size={40} color={A} /></div>
         <h1 style={{ fontSize: 'clamp(22px,3.5vw,32px)', fontWeight: 700, color: WHITE, marginBottom: 12, fontFamily: FONT }}>Instructor Privacy Policy</h1>
         <p style={{ fontSize: 14, color: 'rgba(255,255,255,.85)', maxWidth: 520, margin: '0 auto 22px', lineHeight: 1.7, fontFamily: FONT }}>
           We collect only what we need to run the platform and pay you fairly. Your course content and your students' data are never sold.
@@ -159,13 +160,13 @@ export default function PrivacyPolicyPage() {
         {/* Summary cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 14, marginBottom: 32 }}>
           {[
-            { icon: '🚫', title: 'No data selling', desc: 'We never sell your data or your students\' data.' },
-            { icon: '🤖', title: 'AI content stays yours', desc: 'Training materials are only used for your courses.' },
-            { icon: '🔐', title: 'Encrypted', desc: 'TLS in transit, encrypted at rest.' },
-            { icon: '✏️', title: 'Full control', desc: 'Access, edit, export or delete any time.' },
-          ].map(({ icon, title, desc }) => (
+            { icon: Ban, title: 'No data selling', desc: 'We never sell your data or your students\' data.' },
+            { icon: Bot, title: 'AI content stays yours', desc: 'Training materials are only used for your courses.' },
+            { icon: Lock, title: 'Encrypted', desc: 'TLS in transit, encrypted at rest.' },
+            { icon: PencilLine, title: 'Full control', desc: 'Access, edit, export or delete any time.' },
+          ].map(({ icon: Icon, title, desc }) => (
             <div key={title} style={{ background: WHITE, borderRadius: 12, padding: '16px', border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <span style={{ fontSize: 24 }}>{icon}</span>
+              <span style={{ display: 'flex' }}><Icon size={24} color={A} /></span>
               <div style={{ fontSize: 13, fontWeight: 700, color: INK, fontFamily: FONT }}>{title}</div>
               <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.5, fontFamily: FONT }}>{desc}</div>
             </div>
@@ -179,10 +180,10 @@ export default function PrivacyPolicyPage() {
             <div style={{ background: WHITE, borderRadius: 12, padding: '14px', border: `1px solid ${BORDER}` }}>
               <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: MUTED, marginBottom: 10, fontFamily: FONT }}>Contents</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {TOC.map(({ id, title, icon }) => (
+                {TOC.map(({ id, title, icon: Icon }) => (
                   <button key={id} className="ip-toc-btn" onClick={() => scrollTo(id)}
                     style={{ background: active === id ? `${A}14` : 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', padding: '7px 10px', borderRadius: 8, fontSize: 12, fontWeight: active === id ? 700 : 500, color: active === id ? A : '#4B5563', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 8, transition: 'all .15s' }}>
-                    <span style={{ fontSize: 13 }}>{icon}</span>{title}
+                    <Icon size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />{title}
                   </button>
                 ))}
               </div>
@@ -201,7 +202,7 @@ export default function PrivacyPolicyPage() {
               <div key={id} id={id} className="ip-section"
                 style={{ background: WHITE, borderRadius: 14, overflow: 'hidden', border: `1px solid ${BORDER}` }}>
                 <div style={{ padding: '18px 22px 14px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                  <div style={{ width: 42, height: 42, borderRadius: 10, background: `${badgeColor}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{icon}</div>
+                  <div style={{ width: 42, height: 42, borderRadius: 10, background: `${badgeColor}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={20} color={A} /></div>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
                       <h2 style={{ fontSize: 15, fontWeight: 700, color: INK, fontFamily: FONT }}>{title}</h2>
@@ -222,7 +223,7 @@ export default function PrivacyPolicyPage() {
 
             {/* Contact */}
             <div style={{ background: `${A}10`, borderRadius: 14, padding: '26px 22px', border: `1px solid ${A}30`, textAlign: 'center' }}>
-              <div style={{ fontSize: 34, marginBottom: 10 }}>💌</div>
+              <div style={{ marginBottom: 10 }}><Mail size={30} color={A} /></div>
               <h3 style={{ fontSize: 16, fontWeight: 700, color: INK, marginBottom: 8, fontFamily: FONT }}>Questions about your data?</h3>
               <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.6, marginBottom: 18, fontFamily: FONT }}>We respond to all requests within 30 days.</p>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>

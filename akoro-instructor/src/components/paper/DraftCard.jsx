@@ -59,7 +59,7 @@ export default function DraftCard({ preview, state = null, label = 'Preview', on
           : v.status === 'failed' ? <span style={{ color: RED, display: 'inline-flex', alignItems: 'center', gap: 4 }}><AlertTriangle size={11} /> Couldn't draft the questions — open to try again</span>
           : <span>{[v.summary?.line, audience, due && `due ${due}`].filter(Boolean).join(' · ')}{v.basedOn && v.note ? <><br />{v.note}</> : null}</span>}
       </div>
-      {versioned && v?.warning && <div style={{ fontSize: 11, color: '#B45309', fontWeight: 700, marginTop: 4 }}>⚠ {v.warning}</div>}
+      {versioned && v?.warning && <div style={{ fontSize: 11, color: '#B45309', fontWeight: 700, marginTop: 4 }}><AlertTriangle size={11} style={{ verticalAlign: '-2px', marginRight: 3 }} />{v.warning}</div>}
       <div style={{ marginTop: 8 }}>
         <button type="button" disabled={!!state} onClick={() => onOpen(preview.id, versioned ? preview.version : null)}
           title={state ? undefined : 'Preview this draft — assigning is your call'}

@@ -1,3 +1,4 @@
+import { WifiOff, AlertTriangle } from 'lucide-react';
 /**
  * ConnectionBanner — the safety net under every swallowed request.
  *
@@ -46,7 +47,7 @@ export default function ConnectionBanner() {
       fontFamily: FONT, fontSize: 12.5, fontWeight: 700,
       boxShadow: '0 -4px 16px rgba(0,0,0,.18)',
     }}>
-      <span>{offline ? '📴' : '⚠️'}</span>
+      <span style={{ display: 'flex', alignItems: 'center' }}>{offline ? <WifiOff size={14} /> : <AlertTriangle size={14} />}</span>
       <span>
         {offline
           ? "You're offline — anything on this page may be out of date."

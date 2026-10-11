@@ -98,7 +98,7 @@ export default function MarketplacePage() {
         <div style={{ display: 'flex', background: '#fff', borderRadius: 12, padding: 4, marginBottom: 18, border: `1px solid ${BORDER}`, gap: 4 }}>
           {(() => {
             const ot = tools.filter((i) => i.owned).length, oa = assets.filter((i) => i.owned).length;
-            return [['tools', `🛠️ Tools${ot ? ` (${ot})` : ''}`], ['assets', `📚 Assets${oa ? ` (${oa})` : ''}`]];
+            return [['tools', `Tools${ot ? ` (${ot})` : ''}`], ['assets', `Assets${oa ? ` (${oa})` : ''}`]];
           })().map(([t, label]) => (
             <button key={t} onClick={() => setTab(t)} style={{
               flex: 1, padding: '9px 0', borderRadius: 9, border: 'none',
