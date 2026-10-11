@@ -20,7 +20,7 @@
  *   GET  /api/agent-console                the console page (?key=)
  *
  * Env:
- *   AGENT_CONSOLE_KEY       shared secret — arms the routes (header x-agent-console-key or ?key=)
+ *   AGENT_CONSOLE_KEY       shared secret — arms the routes (header x-agent-console-key, Authorization: Bearer, or ?key=)
  *   AGENT_CONSOLE_LEARNERS  optional comma list of @usernames/emails allowed as test learners
  *
  * Guard rails: the learner must be a LEARNER account (and on the allow-list
@@ -46,7 +46,10 @@ const chat = async () => (chatMod ||= await import("../adaptive-learning/chat.js
 const guard = (req, res, next) => {
   const want = process.env.AGENT_CONSOLE_KEY;
   if (!want) return res.status(501).json({ success: false, error: "Agent console not configured — set AGENT_CONSOLE_KEY on the server." });
-  const got = req.get("x-agent-console-key") || req.query.key;
+  // Bearer too: a cloud environment's network secret can inject
+  // "Authorization: Bearer <key>" but not a custom header.
+  const bearer = /^Bearer\s+(.+)$/i.exec(req.get("authorization") || "")?.[1]?.trim();
+  const got = req.get("x-agent-console-key") || bearer || req.query.key;
   if (got !== want) return res.status(401).json({ success: false, error: "Bad console key" });
   next();
 };

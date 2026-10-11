@@ -31,3 +31,9 @@ test("a learner must be a learner account, and the allow-list is honoured", () =
   assert.match(src, /\["student", "learner"\]\.includes\(String\(u\.role/);
   assert.match(src, /AGENT_CONSOLE_LEARNERS/);
 });
+
+test("the console key can arrive as Authorization: Bearer (cloud network secrets)", async () => {
+  const src = await readFile(new URL("./routes.js", import.meta.url), "utf8");
+  assert.match(src, /\/\^Bearer\\s\+\(\.\+\)\$\/i\.exec\(req\.get\("authorization"\)/);
+  assert.match(src, /const got = req\.get\("x-agent-console-key"\) \|\| bearer \|\| req\.query\.key;/);
+});
