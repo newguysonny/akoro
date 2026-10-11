@@ -1,3 +1,4 @@
+import { AlertTriangle, HelpCircle } from 'lucide-react';
 /**
  * ConfirmHost — a real confirmation dialog, replacing window.confirm().
  *
@@ -90,7 +91,7 @@ export default function ConfirmHost() {
             width: 38, height: 38, borderRadius: 11, flexShrink: 0, fontSize: 18,
             background: danger ? '#FEE2E2' : `${AMBER}18`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>{danger ? '⚠️' : '❓'}</div>
+          }}>{danger ? <AlertTriangle size={18} color="#DC2626" /> : <HelpCircle size={18} color="#B45309" />}</div>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 15, fontWeight: 800, color: INK, marginBottom: 4 }}>
               {req.title || (danger ? 'Are you sure?' : 'Please confirm')}

@@ -1,3 +1,4 @@
+import { Brain, Presentation, Users, GraduationCap, BookOpen, Lightbulb, Bird, Zap, Sparkles, Wand2, Rocket, Target } from 'lucide-react';
 import AkoroLogo from '../../components/common/AkoroLogo.jsx';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -8,7 +9,8 @@ const AMBER = '#E8884A';
 const RED   = '#EF4444';
 const SUBJECT_OPTIONS = ['Mathematics', 'Further Mathematics', 'Physics', 'Chemistry', 'Biology',
   'Computer Science', 'English Language', 'English Literature', 'Economics', 'Geography', 'History'];
-const GUIDE_EMOJIS = ['🧠', '👩‍🏫', '👨‍🏫', '🎓', '📚', '💡', '🦉', '⚡', '🌟', '🔮', '🚀', '🎯'];
+/* Icons render; the paired emoji is what the guide choice stores (cross-app compat). */
+const GUIDE_ICONS = [[Brain, '🧠'], [Presentation, '👩‍🏫'], [Users, '👨‍🏫'], [GraduationCap, '🎓'], [BookOpen, '📚'], [Lightbulb, '💡'], [Bird, '🦉'], [Zap, '⚡'], [Sparkles, '🌟'], [Wand2, '🔮'], [Rocket, '🚀'], [Target, '🎯']];
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
@@ -131,7 +133,7 @@ export default function OnboardingPage() {
 
         {step === 0 && (
           <>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>Welcome, tutor 👋</h1>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>Welcome, tutor</h1>
             <p style={{ fontSize: 13, color: '#6B6B80', margin: '0 0 22px' }}>Tell students a little about you.</p>
 
             <div style={{ marginBottom: 14 }}>
@@ -165,13 +167,13 @@ export default function OnboardingPage() {
 
         {step === 2 && (
           <>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>Your teaching guide 🧠</h1>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>Your teaching guide</h1>
             <p style={{ fontSize: 13, color: '#6B6B80', margin: '0 0 22px' }}>Name the AI guide that will help your students learn. You can always change this later.</p>
 
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
               <div style={{ width: 72, height: 72, borderRadius: 20, background: `linear-gradient(135deg, ${AMBER}, #D4651E)`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, boxShadow: `0 6px 20px ${AMBER}55` }}>
-                {guideEmoji}
+                {(() => { const hit = GUIDE_ICONS.find(([, em]) => em === guideEmoji); const I = hit ? hit[0] : Brain; return <I size={26} color={AMBER} />; })()}
               </div>
             </div>
 
@@ -183,13 +185,13 @@ export default function OnboardingPage() {
             <div>
               <label style={lbl}>Guide avatar</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {GUIDE_EMOJIS.map(em => (
+                {GUIDE_ICONS.map(([Icon, em]) => (
                   <button key={em} onClick={() => setGuideEmoji(em)} style={{
-                    width: 44, height: 44, borderRadius: 12, fontSize: 22, cursor: 'pointer',
+                    width: 44, height: 44, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
                     border: `2px solid ${guideEmoji === em ? AMBER : '#EDE8E1'}`,
                     background: guideEmoji === em ? `${AMBER}18` : '#FAF8F5',
                     fontFamily: "'DM Sans', sans-serif",
-                  }}>{em}</button>
+                  }}><Icon size={20} color={guideEmoji === em ? AMBER : '#6B7280'} /></button>
                 ))}
               </div>
             </div>

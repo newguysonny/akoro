@@ -1,3 +1,4 @@
+import { AlertTriangle, CheckCircle2, Lock, EyeOff, Eye } from 'lucide-react';
 import AkoroLogo from '../../components/common/AkoroLogo.jsx';
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -65,7 +66,7 @@ export default function ResetPasswordPage() {
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
       background: '#FAF8F5', fontFamily: "'DM Sans', sans-serif", padding: 24 }}>
       <div style={{ textAlign: 'center', maxWidth: 380 }}>
-        <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+        <div style={{ marginBottom: 16 }}><AlertTriangle size={40} color="#D97706" /></div>
         <h2 style={{ color: '#1A1A2E', marginBottom: 8 }}>Invalid reset link</h2>
         <p style={{ color: '#6B6B80', marginBottom: 24 }}>This link is missing or malformed. Please request a new password reset.</p>
         <button onClick={() => navigate('/forgot-password')} style={{ padding: '12px 28px',
@@ -96,7 +97,7 @@ export default function ResetPasswordPage() {
         <div style={{ width: 52, height: 52, borderRadius: 16,
           background: done ? `linear-gradient(135deg,${GREEN},#059669)` : `linear-gradient(135deg,${AMBER},#D4651E)`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 24, marginBottom: 20 }}>{done ? '✅' : '🔒'}</div>
+          marginBottom: 20 }}>{done ? <CheckCircle2 size={24} color="#10B981" /> : <Lock size={24} color="#1A1A2E" />}</div>
 
         {done ? (
           <>
@@ -134,7 +135,7 @@ export default function ResetPasswordPage() {
                   <button type="button" onClick={() => setShowPw(v => !v)}
                     style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
                       background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: '#9490A0' }}>
-                    {showPw ? '🙈' : '👁'}
+                    {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
                 {password && (

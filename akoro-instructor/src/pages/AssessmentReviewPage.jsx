@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Shield, AlertTriangle, Eye, X, Camera, CheckCircle2, XCircle } from 'lucide-react';
+import { Shield, AlertTriangle, Eye, X, Camera, CheckCircle2, XCircle , Lightbulb } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Modal } from '../components/Primitives.jsx';
 import { apiGet } from '../services/api.js';
@@ -242,9 +242,9 @@ function TranscriptBlock({ b }) {
       </div>
     );
   if (b.type === 'hint')
-    return <div style={{ fontSize: 12, color: AMBER, fontStyle: 'italic' }}>💡 {b.text}</div>;
+    return <div style={{ fontSize: 12, color: AMBER, fontStyle: 'italic' }}><Lightbulb size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />{b.text}</div>;
   if (b.type === 'proctor-flag')
-    return <div style={{ fontSize: 12, color: RED, fontWeight: 600 }}>⚠ {b.text}</div>;
+    return <div style={{ fontSize: 12, color: RED, fontWeight: 600 }}><AlertTriangle size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />{b.text}</div>;
   return null;
 }
 

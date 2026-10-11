@@ -9,7 +9,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ClipboardCheck, Users, CheckCircle2, Loader2, Info } from 'lucide-react';
+import { ClipboardCheck, Users, CheckCircle2, Loader2, Info , BookOpen, PencilLine, FolderKanban, MonitorPlay, ListChecks, Pin } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Badge } from '../components/Primitives.jsx';
 import { apiGet } from '../services/api.js';
@@ -18,7 +18,7 @@ import NowGrading from '../components/grading/NowGrading.jsx';
 import { loadDraft } from '../components/grading/gradingDrafts.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../constants.js';
 
-const TYPE_EMOJI = { self_study: '📖', assignment: '✏️', project: '🗂️', live_course: '📺', multi_stage: '🧩' };
+const TYPE_ICON = { self_study: BookOpen, assignment: PencilLine, project: FolderKanban, live_course: MonitorPlay, multi_stage: ListChecks };
 
 const fmtWhen = (iso) => {
   if (!iso) return null;
@@ -76,7 +76,7 @@ export default function SubmissionsPage() {
     .filter(t => t.status === 'started' || t.status === 'complete')
     .map(t => ({
       targetId:   t.id,
-      student:    { id: t.student_id, name: t.full_name || 'Learner', username: t.username, emoji: t.avatar_emoji || '🧑‍🎓' },
+      student:    { id: t.student_id, name: t.full_name || 'Learner', username: t.username, emoji: t.avatar_emoji || '' },
       status:     t.status,
       completedAt: t.completed_at,
       grade:      t.grade ?? null,
@@ -151,7 +151,7 @@ export default function SubmissionsPage() {
                 }}
                   onMouseEnter={(e) => { if (!on) e.currentTarget.style.background = LIGHT; }}
                   onMouseLeave={(e) => { if (!on) e.currentTarget.style.background = 'transparent'; }}>
-                  <span style={{ fontSize: 15, flexShrink: 0, marginTop: 1 }}>{TYPE_EMOJI[a.type] || '📌'}</span>
+                  <span style={{ display: 'flex', flexShrink: 0, marginTop: 1 }}>{(() => { const I = TYPE_ICON[a.type] || Pin; return <I size={14} color="#6B7280" />; })()}</span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.title}</span>
                     <span style={{ display: 'block', fontSize: 11, fontWeight: 600, lineHeight: 1.4, marginTop: 2, color: on ? 'rgba(255,255,255,.82)' : MUTED2 }}>
@@ -229,7 +229,7 @@ export default function SubmissionsPage() {
                     <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px',
                       border: `1px solid ${graded ? '#BBF7D0' : BORDER}`, borderRadius: 12,
                       background: graded ? '#F0FDF4' : WHITE, opacity: gradeable ? 1 : .75 }}>
-                      <span style={{ fontSize: 18 }}>{t.avatar_emoji || t.emoji || '🧑‍🎓'}</span>
+                      <span style={{ fontSize: 14, fontWeight: 900, color: '#6B7280' }}>{(t.full_name || 'L').trim().charAt(0).toUpperCase()}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 12.5, fontWeight: 800, color: INK }}>{t.full_name}</div>
                         <div style={{ fontSize: 11, color: MUTED2 }}>
