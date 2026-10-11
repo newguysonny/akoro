@@ -398,7 +398,7 @@ export function BottomNav() {
 // hamburger again, the backdrop, or Escape. Tablet/desktop keep the
 // permanent collapsible sidebar unchanged.
 const MOBILE_QUERY = '(max-width: 767px)';
-function useIsMobile() {
+export function useIsMobile() {
   const [mobile, setMobile] = useState(() => {
     try { return window.matchMedia(MOBILE_QUERY).matches; } catch { return false; }
   });
@@ -412,7 +412,7 @@ function useIsMobile() {
   return mobile;
 }
 
-export function PageLayout({ children, title, subtitle, action }) {
+export function PageLayout({ children, title, subtitle, action, hideTopBarOnMobile = false }) {
   const [collapsed, setCollapsed] = useState(false);
   const mobile = useIsMobile();
   const { user, logout } = useAuth();
@@ -457,7 +457,9 @@ export function PageLayout({ children, title, subtitle, action }) {
             { key: 'logout',   label: 'Log out',  icon: LogOut,     danger: true, onClick: logout },
           ]}
         />
-        <TopBar title={title} subtitle={subtitle} action={action} onToggleSidebar={null} showBell={false} />
+        {!hideTopBarOnMobile && (
+          <TopBar title={title} subtitle={subtitle} action={action} onToggleSidebar={null} showBell={false} />
+        )}
         <main style={{ flex: 1, overflowY: 'auto', padding: '16px 14px' }}>
           {children}
         </main>
