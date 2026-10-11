@@ -100,7 +100,10 @@ export default function EvalsPage() {
     if (!confirm) return;
     setBusy(true);
     try {
-      const res = await apiPost('/api/admin/evals/run', { suite: confirm.suite.key, model: confirm.model });
+      const res = await apiPost('/api/admin/evals/run', {
+        suite: confirm.suite.key, model: confirm.model,
+        ...(confirm.suite.needsLearner && confirm.learner?.trim() ? { learner: confirm.learner.trim() } : {}),
+      });
       setConfirm(null);
       setToast({ type: 'success', message: `Running ${confirm.suite.title} on ${confirm.model} — ${res.cases} cases` });
       await load();
@@ -167,7 +170,8 @@ export default function EvalsPage() {
       <RunTable runs={runs} onOpen={openDetail} onCancel={cancel} />
 
       {confirm && (
-        <ConfirmDialog c={confirm} busy={busy} onCancel={() => setConfirm(null)} onGo={start} />
+        <ConfirmDialog c={confirm} busy={busy} onCancel={() => setConfirm(null)} onGo={start}
+          onLearner={(learner) => setConfirm((c) => ({ ...c, learner }))} />
       )}
       {openRun && (
         <RunDrawer run={openRun.run} results={openRun.results} onClose={() => setOpenRun(null)} onCancel={cancel} />
@@ -247,7 +251,7 @@ function SuiteCard({ suite, models, onRun, disabled, activeNote }) {
 
 /* ------------------------------------------------------------------- confirm */
 
-function ConfirmDialog({ c, onCancel, onGo, busy }) {
+function ConfirmDialog({ c, onCancel, onGo, busy, onLearner }) {
   return (
     <div onClick={onCancel} style={{ position: 'fixed', inset: 0, background: '#0006', display: 'flex',
                                      alignItems: 'center', justifyContent: 'center', zIndex: 60, padding: 20 }}>
@@ -259,6 +263,21 @@ function ConfirmDialog({ c, onCancel, onGo, busy }) {
           {Math.round((c.suite.threshold ?? 1) * 100)}%.
           This calls the live model once per case and is billed to the platform.
         </div>
+        {c.suite.needsLearner && (
+          <div style={{ marginTop: 14 }}>
+            <label style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 700, color: INK }}>
+              Test learner <span style={{ fontWeight: 400, color: MUTED }}>(@username or email — optional)</span>
+            </label>
+            <input value={c.learner || ''} onChange={(e) => onLearner?.(e.target.value)} placeholder="@testlearner"
+              style={{ width: '100%', boxSizing: 'border-box', marginTop: 6, padding: '9px 11px', borderRadius: 8,
+                       border: `1px solid ${BORDER}`, fontFamily: FONT, fontSize: 13 }} />
+            <div style={{ fontFamily: FONT, fontSize: 11.5, color: MUTED2, marginTop: 5, lineHeight: 1.5 }}>
+              Read-only tools (their profile, progress, battles, inbox…) run as this learner to prove they work.
+              Tools that change things are only checked for the right choice — nothing is created, sent or changed.
+              Leave empty to check the choices only.
+            </div>
+          </div>
+        )}
         <div style={{ marginTop: 14, padding: '10px 12px', background: LIGHT, borderRadius: 8,
                       fontFamily: FONT, fontSize: 13, color: INK }}>
           Estimated cost: <b>{usd(c.estimate)}</b>
