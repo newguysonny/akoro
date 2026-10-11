@@ -7,7 +7,8 @@
  *
  *   • learner A/V upload → POST /api/records fires the transcription;
  *   • learner PDF/image upload → the uploader's browser rasterizes and
- *     parses immediately (AddRecordModal → autoExtractUpload);
+ *     parses immediately, in the sheet (AddRecordModal → extractUpload),
+ *     which shows progress and any failure with a retry;
  *   • course video → the lesson create/update hooks AND the encode
  *     worker's completion callback fire it for lesson:<id>.
  *
@@ -73,17 +74,20 @@ test("course videos transcribe themselves wherever video_url lands", () => {
 });
 
 test("learner PDF/image uploads parse themselves in the uploader's browser", () => {
-  assert.match(extractPagesSrc, /export async function autoExtractUpload\(/, "the headless extractor exists");
+  assert.match(extractPagesSrc, /export async function extractUpload\(record, \{ onProgress, isCancelled \} = \{\}\)/, "the reported extractor exists");
+  assert.match(extractPagesSrc, /export async function autoExtractUpload\(/, "and its silent wrapper");
   assert.match(extractPagesSrc, /record\.kind !== 'upload' \|\| !record\.fileUrl/, "only real uploads with a file");
   assert.match(extractPagesSrc, /const isPdf   = record\.mime === 'application\/pdf'/, "PDFs rasterize");
   assert.ok(extractPagesSrc.includes("const isImage = /^image\\//.test(record.mime || '')"), "images rasterize");
   assert.ok(extractPagesSrc.includes("const isPdf   = record.mime === 'application/pdf'"), "pdfs rasterize");
   assert.match(extractPagesSrc, /rasterizePdfPages\(pdf\)/, "the reader's own rasterizer, reused");
-  assert.match(extractPagesSrc, /runRecordExtraction\(\{ recordId: record\.id, pages \}\)/, "the reader's own batcher, reused");
+  assert.match(extractPagesSrc, /runRecordExtraction\(\{\s*recordId: record\.id, pages: toSend/, "the reader's own batcher, reused — only unsaved pages");
+  assert.match(extractPagesSrc, /return \{ status: 'error', error: res\.error, done, total \}/, "a failure is REPORTED to the sheet");
   assert.match(extractPagesSrc, /\} catch \{ \/\* silent/, "fails silent — the reader's offer remains");
   assert.match(modalSrc, /const created = await createRecord\(\{ kind: 'upload'/, "the upload modal keeps the created record");
-  assert.match(modalSrc, /void autoExtractUpload\(created\);/, "and fires extraction the moment it exists");
-  assert.match(modalSrc, /import \{ autoExtractUpload \} from '\.\.\/library\/extractPages\.js';/, "one pipeline, reused");
+  assert.match(modalSrc, /void runExtract\(created\);/, "and fires extraction the moment it exists");
+  assert.match(modalSrc, /import \{ extractUpload \} from '\.\.\/library\/extractPages\.js';/, "one pipeline, reused");
+  assert.match(modalSrc, /Extraction didn't finish[\s\S]{0,1600}onClick=\{\(\) => runExtract\(ext\.record\)\}/, "a failure shows in the sheet, with a retry");
 });
 
 test("the opt-out is documented, and nothing new needs registering", () => {

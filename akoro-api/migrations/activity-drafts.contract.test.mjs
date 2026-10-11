@@ -151,7 +151,7 @@ test("the no-guess rule is universal: every tool asks before it guesses", () => 
   // Side-effecting tools clarify instead of failing or inventing.
   assert.match(chat, /return clarify\("title", "What should the task be called\?"/);
   assert.match(chat, /return clarify\("message", "What should the future chat message say\?"/);
-  assert.match(chat, /return clarify\("scheduledAt", "When exactly should it be sent\? Please give the date and time\."/);
+  assert.match(chat, /return clarify\("scheduledAt", "When should it be sent\? Say e\.g\. 'in 10 minutes' or give the date and time\."/);
   assert.match(chat, /return clarify\("followUpId", "Which scheduled message should be cancelled\?/);
   assert.match(chat, /clarify\("details", error\.message,/);
   // The capability inventory admits the behaviour.

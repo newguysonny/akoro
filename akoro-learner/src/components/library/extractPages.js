@@ -14,7 +14,7 @@
  * re-running only parses what's missing).
  */
 import * as pdfjsLib from 'pdfjs-dist';
-import { extractRecordPages, getExtractionStatus } from '../../services/recordsApi.js';
+import { extractRecordPages, getExtractionStatus, getRecordExtraction } from '../../services/recordsApi.js';
 import { runExtraction } from '../../lib/extractRun.js';
 
 export const MAX_RECORD_PAGES = 60;   // matches the API's cap
@@ -94,28 +94,57 @@ export async function rasterizeImageFile(url) {
  * reader's offer remains as the manual retry for the rest.
  */
 export async function autoExtractUpload(record) {
+  try { await extractUpload(record); } catch { /* silent — the reader still offers if this never finished */ }
+}
+
+/**
+ * extractUpload — the same run, reported: the Add record sheet shows its
+ * progress and, when it fails, the error (with a retry) right where the
+ * learner uploaded, instead of them finding out later in the reader.
+ *
+ * Resolves { status: 'skipped' } (nothing to parse: text PDF, A/V, docs),
+ * { status: 'done', done, total } or { status: 'error', error, done, total }.
+ * Retrying only parses pages not saved yet (the API caches per page).
+ */
+export async function extractUpload(record, { onProgress, isCancelled } = {}) {
+  if (!record?.id || record.kind !== 'upload' || !record.fileUrl) return { status: 'skipped' };
+  const isPdf   = record.mime === 'application/pdf' || /\.pdf$/i.test(record.name || '');
+  const isImage = /^image\//.test(record.mime || '');
+  if (!isPdf && !isImage) return { status: 'skipped' };   // text files read as-is; A/V is the API's lane
+  let pages;
   try {
-    if (!record?.id || record.kind !== 'upload' || !record.fileUrl) return;
-    const isPdf   = record.mime === 'application/pdf' || /\.pdf$/i.test(record.name || '');
-    const isImage = /^image\//.test(record.mime || '');
-    if (!isPdf && !isImage) return;   // text files read as-is; A/V is the API's lane
     if (isPdf) {
       // Loaded the way the reader loads it: PdfPages.jsx also points pdf.js
-      // at its worker. (This used loadPdfDocument without importing it, so
-      // background extraction threw — silently — on every PDF upload.)
+      // at its worker.
       const { loadPdfDocument } = await import('./PdfPages.jsx');
       const { pdf, texts } = await loadPdfDocument(record.fileUrl);
       // A PDF with a real text layer is read by the server for free at
       // registration — only a scan needs the paid parse.
       const chars = (texts || []).join('').replace(/\s+/g, '').length;
-      if (chars >= 20 * Math.max(1, (texts || []).length)) return;
-      const pages = await rasterizePdfPages(pdf);
-      if (pages.length) await runRecordExtraction({ recordId: record.id, pages });
+      if (chars >= 20 * Math.max(1, (texts || []).length)) return { status: 'skipped' };
+      pages = await rasterizePdfPages(pdf);
     } else {
-      const pages = await rasterizeImageFile(record.fileUrl);
-      await runRecordExtraction({ recordId: record.id, pages });
+      pages = await rasterizeImageFile(record.fileUrl);
     }
-  } catch { /* silent — the reader still offers if this never finished */ }
+  } catch (e) {
+    return { status: 'error', error: e?.message || 'Could not open the file to read it.', done: 0, total: 0 };
+  }
+  if (!pages.length) return { status: 'skipped' };
+  // Pages already saved (an earlier run, or a retry) aren't sent again.
+  const saved = await getRecordExtraction(record.id).catch(() => ({ pages: [] }));
+  const have = new Set((saved?.pages || []).map((p) => p.pageNumber));
+  const toSend = pages.filter((p) => !have.has(p.pageNumber));
+  const total = pages.length;
+  onProgress?.(have.size, total);
+  if (!toSend.length) return { status: 'done', done: total, total };
+  const res = await runRecordExtraction({
+    recordId: record.id, pages: toSend, isCancelled,
+    onProgress: (done) => onProgress?.(have.size + done, total),
+    readSaved: () => getRecordExtraction(record.id),
+  });
+  const done = have.size + res.pages.length;
+  if (res.error && res.error !== 'Stopped.') return { status: 'error', error: res.error, done, total };
+  return { status: 'done', done, total };
 }
 
 /** runRecordExtraction — see lib/extractRun.js; bound to the real API here. */

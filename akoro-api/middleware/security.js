@@ -100,6 +100,26 @@ const BASE = {
   },
 };
 
+/**
+ * Count each request ONCE per limiter. app.js mounts catch-all routers with a
+ * limiter (`app.use("/api", standardLimit, coursesModule)`), and express runs
+ * that middleware for every /api request that passes by — so a request to a
+ * later mount like /api/records was counted three times against the same
+ * 100/min bucket. That is what turned a scan's 3-second extraction polling
+ * into "That's a lot at once" 429s. The flag makes repeat passes free.
+ */
+const once = (limiter) => {
+  const flag = Symbol('rate-limited');
+  const wrapped = (req, res, next) => {
+    if (req[flag]) return next();
+    req[flag] = true;
+    return limiter(req, res, next);
+  };
+  wrapped.resetKey = limiter.resetKey?.bind(limiter);
+  wrapped.getKey = limiter.getKey?.bind(limiter);
+  return wrapped;
+};
+
 /** Auth endpoints: login / register — 5 req / 15 min */
 export const strictLimit = rateLimit({
   ...BASE,
@@ -150,34 +170,34 @@ export const refreshLimit = rateLimit({
 });
 
 /** Standard read endpoints — 100 req / min */
-export const standardLimit = rateLimit({
+export const standardLimit = once(rateLimit({
   ...BASE,
   skip: isInternal,
   windowMs: 60 * 1000,
   max:      lim('STANDARD', 100),
   keyGenerator: userOrIpKey,
   message: { success: false, message: 'Rate limit exceeded. Please slow down.' },
-});
+}));
 
 /** Adaptive / teaching endpoints — 50 req / min */
-export const teachingLimit = rateLimit({
+export const teachingLimit = once(rateLimit({
   ...BASE,
   skip: isInternal,
   windowMs: 60 * 1000,
   max:      lim('TEACHING', 50),
   keyGenerator: userOrIpKey,
   message: { success: false, message: 'Teaching endpoint rate limit exceeded.' },
-});
+}));
 
 /** Resource-intensive AI operations — 10 req / min */
-export const aiLimit = rateLimit({
+export const aiLimit = once(rateLimit({
   ...BASE,
   skip: isInternal,
   windowMs: 60 * 1000,
   max:      lim('AI', 10),
   keyGenerator: userOrIpKey,
   message: { success: false, message: 'AI operation rate limit exceeded. Please wait.' },
-});
+}));
 
 /**
  * Background work, all callers pooled — 300 req / min.

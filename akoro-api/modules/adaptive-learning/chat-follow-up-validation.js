@@ -31,6 +31,12 @@ export function validateFollowUpInput(input = {}, { defaultTimezone = TIME_ZONE_
     throw new Error("timezone must be a valid IANA timezone");
   }
 
+  // "In 10 minutes": a relative delay is resolved here, so the agent never has
+  // to work out a clock time (that is where "message me in 10 minutes" broke).
+  const inMinutes = Number(input.inMinutes);
+  if (!input.scheduledAt && Number.isFinite(inMinutes) && inMinutes > 0) {
+    input = { ...input, scheduledAt: new Date(Date.now() + Math.round(inMinutes * 60_000)).toISOString() };
+  }
   const scheduledAt = limitedText(input.scheduledAt, "scheduledAt", { required: true, max: 64 });
   if (!ISO_WITH_OFFSET.test(scheduledAt)) {
     throw new Error("scheduledAt must be an ISO 8601 timestamp with a timezone offset");
