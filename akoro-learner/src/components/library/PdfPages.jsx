@@ -17,6 +17,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import BlockTextLayer from './BlockTextLayer.jsx';
+import './pdfTextLayer.css';
 import { BRAND } from '../../constants.js';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -52,6 +53,7 @@ export function PdfPage({ pdf, pageNumber, blocks = null }) {
   const [gone, setGone]     = useState(false);          // render failed — honest fallback
   const [showBlocks, setShowBlocks] = useState(false);  // the extraction overlay
   const [wrapW, setWrapW]   = useState(0);              // measured CSS width — sizes the extraction text layer
+  const [drawn, setDrawn]   = useState(0);              // bumps after each paint — the text layer reads the pixels
 
   useEffect(() => {
     let cancelled = false;
@@ -73,6 +75,7 @@ export function PdfPage({ pdf, pageNumber, blocks = null }) {
         canvas.style.height = 'auto';
         setAspect(base.height / base.width);
         await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+        if (!cancelled) setDrawn((n) => n + 1);
 
         // Text layer — transparent spans aligned to the glyphs, so selection
         // highlights the real words on the page. pdf.js sizes spans through a
@@ -136,7 +139,8 @@ export function PdfPage({ pdf, pageNumber, blocks = null }) {
           over its own bbox, so scans become selectable/searchable exactly
           like pdf.js text pages. Container ignores pointers; the spans
           capture only where text actually is. */}
-      {wrapW > 0 && <BlockTextLayer blocks={blockList} height={wrapW * aspect}/>}
+      {wrapW > 0 && <BlockTextLayer blocks={blockList} height={wrapW * aspect}
+        surface={drawn ? canvasRef.current : null} surfaceKey={drawn}/>}
       {blockList.length > 0 && (
         <button onClick={() => setShowBlocks((v) => !v)}
           style={{ position: 'absolute', top: 8, right: 8, zIndex: 3, border: '1px solid rgba(15,23,42,.12)',

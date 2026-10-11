@@ -1,0 +1,29 @@
+/* pdf.js text layer — the rules from pdfjs-dist/web/pdf_viewer.css that its
+   TextLayer depends on. pdf.js writes each span's left/top/font-size/scaleX
+   inline but leaves POSITIONING to this stylesheet; without it every span
+   fell into normal flow, piled up in the page's top-left corner, and a
+   selection (and any note or hidden passage made from it) landed far from
+   the printed words. Scoped to the reader's own class. */
+.pdf-text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  line-height: 1;
+  text-align: initial;
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  z-index: 0;
+}
+.pdf-text-layer :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+.pdf-text-layer > :not(.markedContent),
+.pdf-text-layer .markedContent span:not(.markedContent) { z-index: 1; }
+.pdf-text-layer span.markedContent { top: 0; height: 0; }
+.pdf-text-layer ::selection { background: rgba(76, 29, 204, .28); }
