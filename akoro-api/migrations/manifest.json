@@ -183,7 +183,8 @@
     "2026-battle-judge.sql",
     "2026-battle-hp.sql",
     "2026-battle-entry.sql",
-    "2026-eval-run-options.sql"
+    "2026-eval-run-options.sql",
+    "2026-follow-ups-into-existing-chat.sql"
   ],
   "demo": [
     "2026-seed-school.sql",
