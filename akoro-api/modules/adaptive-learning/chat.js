@@ -12,6 +12,7 @@
 // =============================================================
 
 import express from "express";
+import { isDryRun, runDry } from "../../lib/dryRunContext.js";
 import { jsonbArray, jsonbObject } from "../../lib/jsonb.js";
 import { authenticateToken } from "../auth/routes.js";
 import pkg from "pg";
@@ -113,6 +114,13 @@ import {
 } from "../agent-tools/conversation-context-routes.js";
 
 const router     = express.Router();
+// Agent console (modules/agentConsole): a turn sent with the console's key in
+// x-agent-console-dry runs in DRY mode — tools that change data are simulated.
+router.use((req, res, next) => {
+  const key = process.env.AGENT_CONSOLE_KEY;
+  if (key && req.get("x-agent-console-dry") === key) return runDry(() => next());
+  next();
+});
 // The one direct-Postgres pool in the API. Deliberately small: Supavisor (the
 // external proxy in front of Supabase Postgres) absorbs traffic spikes, so a
 // big pool here only adds idle connections and context-switch overhead on the
@@ -1098,11 +1106,30 @@ async function resolveLearnerSchoolContext(studentId) {
   return ctx;
 }
 
+/**
+ * Tools that change something (create, send, challenge, publish…). Used to
+ * flag the scratchpad, and by the agent console's DRY mode, which answers
+ * these with what they WOULD do instead of doing it (lib/dryRunContext.js).
+ */
+export const SIDE_EFFECT_TOOLS = ["create_task", "suggest_help", "schedule_chat_follow_up", "cancel_scheduled_chat_follow_up", "submit_tool_request", "prepare_activity", "revise_activity_draft",
+          "create_goal", "update_goal_progress", "save_blog_draft", "publish_blog", "update_agent_network_settings", "block_agent", "log_past_question_practice",
+          "challenge_agent", "post_challenge_request", "accept_challenge_request", "cancel_challenge_request", "rematch_battle", "message_agent", "reply_to_agent", "start_study_prep_session",
+          "consult_peer_agents", "discard_activity_draft", "schedule_activity_routine", "cancel_activity_routine"];
+/** The multi-action tools change things only on their writing actions. */
+export const isSideEffectingAction = (tool, input) =>
+  ["study_buddy", "daily_challenge", "revision_circle"].includes(tool) && !["list", "status", "ranking", "search", undefined, null, ""].includes(input?.action);
+export const isSideEffecting = (tool, input) => SIDE_EFFECT_TOOLS.includes(tool) || isSideEffectingAction(tool, input);
+
 /** A read helper that throws reaches the model as {error} naming what failed,
  *  not the loop's generic "could not be completed". */
 const asToolError = (what) => (e) => ({ error: `Couldn't load ${what} just now${e?.message ? ` (${String(e.message).slice(0, 120)})` : ""}.` });
 
 export async function executeChatTool(name, input, studentId, { conversationId = null, role = "student", channel = "ai_chat" } = {}) {
+  // Agent console, DRY mode: anything that would change data is answered with
+  // what it would have done — read-only tools still run for real.
+  if (isDryRun() && isSideEffecting(name, input)) {
+    return { dryRun: true, wouldDo: name, input, note: "DRY RUN — nothing was changed. Tell the learner exactly what you would have done." };
+  }
   switch (name) {
     // ── Instructor: activity creation, human-in-the-loop ──────────────────
     // These prepare drafts only. Assigning is the instructor's tap on the
@@ -3489,10 +3516,8 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         tool,
         success: observation.success,
         requestId: observation.request_id,
-        sideEffecting: ["create_task", "suggest_help", "schedule_chat_follow_up", "cancel_scheduled_chat_follow_up", "submit_tool_request", "prepare_activity", "revise_activity_draft",
-          "create_goal", "update_goal_progress", "save_blog_draft", "publish_blog", "update_agent_network_settings", "block_agent", "log_past_question_practice",
-          "challenge_agent", "post_challenge_request", "accept_challenge_request", "cancel_challenge_request", "rematch_battle", "message_agent", "reply_to_agent", "start_study_prep_session"].includes(tool)
-          || (["study_buddy", "daily_challenge", "revision_circle"].includes(tool) && !["list", "status", "ranking", "search", undefined].includes(input?.action)),
+        sideEffecting: SIDE_EFFECT_TOOLS.includes(tool)
+          || isSideEffectingAction(tool, input),
         // A small echo so the chat UI can render the Preview affordance for
         // the human-in-the-loop approval without parsing the model's prose.
         // The protégé's two moves ride the reply so the app can show them:
