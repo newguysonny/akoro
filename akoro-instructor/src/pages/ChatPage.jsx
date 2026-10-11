@@ -217,11 +217,15 @@ export default function ChatPage() {
     if (id === chatSessionRef.current) return;
     try {
       const d = await apiGet(`${CHAT_BASE}/sessions/${id}/messages`);
+      // Cards ride the persisted message meta — a reload rebuilds the same
+      // topic/draft previews the live reply rendered, not a flat transcript.
       const msgs = (d?.messages ?? []).map((m) => ({
         id: m.id,
         from: m.role === 'user' ? 'me' : 'agent',
         text: m.text,
         time: new Date(m.created_at).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' }),
+        ...(Array.isArray(m.meta?.previews) && m.meta.previews.length ? { previews: m.meta.previews } : {}),
+        ...(Array.isArray(m.meta?.tools) && m.meta.tools.length ? { tools: m.meta.tools } : {}),
       }));
       chatSessionRef.current = id;
       setMessages(msgs.length ? msgs : CHAT_INIT);

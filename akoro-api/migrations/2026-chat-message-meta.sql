@@ -1,0 +1,11 @@
+-- ============================================================================
+-- 2026-chat-message-meta.sql
+-- Agent Chat replies can carry preview affordances — topic/draft cards built
+-- from the tools that ran during the turn (prepare_activity /
+-- revise_activity_draft). Those previews rode only the live response, so a
+-- reload flattened the reply to plain text. `meta` stores exactly what a
+-- reload must rebuild: { previews: [draft…], tools: [name…] }. Nullable:
+-- older rows and older API builds simply have no meta. Never holds raw tool
+-- arguments or results — the same bounded draft payloads the reply showed.
+-- ============================================================================
+ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS meta jsonb;
