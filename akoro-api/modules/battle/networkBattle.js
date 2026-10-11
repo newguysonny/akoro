@@ -19,6 +19,9 @@ import { notifyUser } from "../notify.js";
 import { InsufficientCoins } from "../../lib/coins.js";
 import { cleanHpPerMiss } from "./hp.js";
 import { entryCheck } from "./entry.js";
+import { toCard } from "./card.js";
+
+const IDLE_HOURS = Math.max(1, Number(process.env.BATTLE_IDLE_HOURS ?? 48) || 48);
 
 const now = () => new Date().toISOString();
 const EXPIRE_AFTER_START_MS = 10_000;
@@ -127,7 +130,9 @@ export async function createNetworkBattle({ creatorId, opponents = [], joined = 
     xp_prize: o.xp, xp_pool: o.xp * (o.kind === "1v1" ? 1 : Math.ceil(ids.length / 2)),
     max_participants: ids.length, total_participants: ids.length,
     status: scheduled && o.kind !== "1v1" ? "scheduled" : "lobby",
-    scheduled_start: o.scheduledFor, expires_at: o.scheduledFor,
+    // Unscheduled invitations stay open BATTLE_IDLE_HOURS, then run with
+    // whoever accepted (if enough did) or expire — never wait for ever.
+    scheduled_start: o.scheduledFor, expires_at: o.scheduledFor || new Date(Date.now() + IDLE_HOURS * 3600_000).toISOString(),
     created_by: creatorId,
   }).select().single();
   if (error) throw new Error(error.message);
@@ -168,12 +173,18 @@ export async function createNetworkBattle({ creatorId, opponents = [], joined = 
   }
   // Everyone already said yes (a request or circle): start now or at its time.
   if (everyoneIn && (startNowIfReady || scheduled)) {
-    if (!scheduled) await db.from("battles").update({ status: "live" }).eq("id", battle.id);
-    else await db.from("battles").update({ status: "scheduled" }).eq("id", battle.id);
+    // Not "live" here: the start job only starts a battle that is waiting
+    // (lobby/scheduled) and flips it live itself. Marking it live first left
+    // a full request or circle stuck "live" with no questions ever asked.
+    if (scheduled) await db.from("battles").update({ status: "scheduled" }).eq("id", battle.id);
     await q.add("start-battle", { action: "start-battle", battleId: battle.id },
       { delay: scheduled ? Math.max(0, Date.parse(o.scheduledFor) - Date.now()) : 3000, jobId: `start-${battle.id}` });
     for (const id of ids) global.io?.to(`user:${id}`).emit("join_battle_room", { battleId: battle.id });
-  } else if (scheduled && o.kind !== "1v1") {
+  } else if (!scheduled) {
+    await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
+      { delay: IDLE_HOURS * 3600_000, jobId: `idle-${battle.id}` });
+  }
+  if (!(everyoneIn && (startNowIfReady || scheduled)) && scheduled && o.kind !== "1v1") {
     await q.add("start-battle", { action: "start-battle", battleId: battle.id },
       { delay: Math.max(0, Date.parse(o.scheduledFor) - Date.now()), jobId: `start-${battle.id}` });
   }
@@ -181,6 +192,8 @@ export async function createNetworkBattle({ creatorId, opponents = [], joined = 
   const { data: me } = await db.from("users").select("full_name, avatar_url").eq("id", creatorId).maybeSingle();
   const who = me?.full_name?.split(" ")[0] || "Someone";
   const invited = others.filter((id) => !joined.includes(id));
+  const { data: freshRow } = invited.length ? await db.from("battles").select("*").eq("id", battle.id).maybeSingle() : { data: null };
+  const fresh = freshRow && { ...freshRow, users: { full_name: me?.full_name ?? null, avatar_url: me?.avatar_url ?? null } };
   for (const id of invited) {
     await notifyUser({
       userId: id, type: "battle_challenge",
@@ -188,14 +201,22 @@ export async function createNetworkBattle({ creatorId, opponents = [], joined = 
       content: `${o.subject}${o.topic ? ` · ${o.topic}` : ""} · ${o.xp} XP${o.scheduledFor ? ` · ${new Date(o.scheduledFor).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" })}` : ""}`,
       relatedId: battle.id, link: "/app?tab=battles",
     }).catch(() => {});
-    global.io?.to(`user:${id}`).emit("new_challenge", {
-      id: battle.id, challenger: me?.full_name ?? "A learner", avatar: me?.avatar_url ?? null,
-      title: o.title, subject: o.subject, topic: o.topic ?? o.subject, difficulty: o.difficulty,
-      battleType: o.scheduledFor ? "scheduled" : o.kind === "1v1" ? "immediate" : "classroom",
-      xpPrize: `+${o.xp} XP`, hpPerMiss: o.hpPerMiss, timeLimit: `${Math.round((o.total * o.secondsPerQuestion) / 60)} min`,
-      scheduledFor: o.scheduledFor, status: o.scheduledFor && o.kind !== "1v1" ? "scheduled" : "lobby", scope: "network",
-      ...(teamOf[id] ? { team: teamOf[id] } : {}),
-    });
+    // The full card (deadline, questions, agents, HP rule, entry needs), the
+    // same shape GET /my-challenges returns.
+    if (fresh) global.io?.to(`user:${id}`).emit("new_challenge", { ...toCard(fresh), ...(teamOf[id] ? { team: teamOf[id] } : {}) });
   }
-  return { battleId: battle.id, status: everyoneIn ? (scheduled ? "scheduled" : "live") : "invited", invited, joined, placed: fill.placed, kind: o.kind, teams: teamOf };
+  // Everyone who had already said yes (a request's seat-takers, a circle's
+  // members) hears that their battle is on — not only its creator.
+  if (joined.length) {
+    for (const id of joined) {
+      await notifyUser({
+        userId: id, type: "battle_ready",
+        title: scheduled ? `📅 Your ${o.subject} battle is set` : `⚔️ Your ${o.subject} battle is starting`,
+        content: `${o.title}${scheduled ? ` · ${new Date(o.scheduledFor).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" })}` : ""}`,
+        relatedId: battle.id, link: "/app?tab=battles",
+      }).catch(() => {});
+      global.io?.to(`user:${id}`).emit("battle_ready", { battleId: battle.id, status: scheduled ? "scheduled" : "starting" });
+    }
+  }
+  return { battleId: battle.id, status: everyoneIn ? (scheduled ? "scheduled" : "starting") : "invited", invited, joined, placed: fill.placed, kind: o.kind, teams: teamOf };
 }

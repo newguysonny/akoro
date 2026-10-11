@@ -141,7 +141,16 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
     s.on('battle:state', (d) => setParticipants((d.participants || []).map(mapStateP)));
     s.on('battle:reveal', (d) => {
       setReveal(d);
-      setQuestion((q) => { if (q && q.questionOrder === d.questionOrder) recordAnswered(q, d.correctIndex, selectedRef.current); return q; });
+      // My agent's answer comes in the reveal — the learner never taps, so
+      // `selected` stays empty and the Questions tab showed no pick at all.
+      const mine = (d.answers || []).find((a) => a.userId === myIdRef.current);
+      const myPick = mine?.selectedIndex ?? selectedRef.current;
+      if (mine) {
+        setSelected(mine.selectedIndex);
+        setMyResult({ is_correct: !!mine.isCorrect, xp_gained: mine.xpGained || 0 });
+        if (mine.isCorrect && mine.xpGained) setMyXp((x) => x + mine.xpGained);
+      }
+      setQuestion((q) => { if (q && q.questionOrder === d.questionOrder) recordAnswered(q, d.correctIndex, myPick); return q; });
     });
     s.on('battle:log', (e) => pushLog(e.message, e.timestamp));
     s.on('battle:verdict', (d) => { if (!d?.battleId || d.battleId === battleId) setVerdict(d?.verdict || null); });
@@ -158,6 +167,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
 
   // Keep the latest values reachable from socket/interval closures.
   const selectedRef = useRef(null); selectedRef.current = selected;
+  const myIdRef = useRef(null); myIdRef.current = myId;
   const questionRef = useRef(null); questionRef.current = question;
   const revealRef   = useRef(null); revealRef.current = reveal;
 
@@ -213,23 +223,36 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
     if (players.length === 2) return `${lead.agentName} vs ${mine.agentName}`;
     return `${lead.agentName} vs your agent${others.length > 1 ? ` and ${others.length - 1} more` : ''}`;
   })();
-  const sorted = [...participants].sort((a, b) => b.score - a.score || b.hp - a.hp);
+  const isCompletedStatus = status === 'completed';
+  const sorted = [...participants].filter((p) => p.role !== 'teacher').sort((a, b) => b.score - a.score || b.hp - a.hp);
   const me  = participants.find((p) => p.userId === myId);
   const A   = me || sorted[0];
-  const Bp  = participants.find((p) => p.userId !== myId) || sorted[1];
+  const Bp  = participants.find((p) => p.userId !== myId && p.role !== 'teacher') || sorted[1];
   const teacher  = participants.find((p) => p.role === 'teacher');
-  const students = participants.filter((p) => p !== teacher).sort((a, b) => b.score - a.score || b.hp - a.hp);
+  // Final standings go by the rank the battle gave — a knocked-out agent is
+  // unranked and sits below everyone ranked, whatever its score.
+  const finalRank = new Map(((results?.scoreboard || over?.finalScores) || []).map((r) => [r.userId, r.rank]));
+  const byStanding = (a, b) => {
+    if (isCompletedStatus && finalRank.size) {
+      const ra = finalRank.get(a.userId) ?? Infinity, rb = finalRank.get(b.userId) ?? Infinity;
+      if (ra !== rb) return ra - rb;
+    }
+    return b.score - a.score || b.hp - a.hp;
+  };
+  const students = participants.filter((p) => p !== teacher).sort(byStanding);
   const curOrder = question?.questionOrder ?? (answered.length ? Math.max(...answered.map((a) => a.order)) : 0);
 
   const startBattle = async () => {
     try { await apiPost(`${B}/battles/${battleId}/start`, {}); setNotice('Starting…'); }
-    catch (e) { setNotice(/400/.test(e.message) ? 'Need at least 2 participants' : /404/.test(e.message) ? 'Only the creator can start' : 'Could not start'); }
+    catch (e) { setNotice(/404/.test(e.message) ? 'Only the creator can start' : e?.message || 'Could not start'); }
   };
 
   const isLive = status === 'live';
   const isCompleted = status === 'completed';
   const scoreboard = results?.scoreboard;
-  const winner = results?.winner || over?.winner;
+  // Only a real winner: none when every agent was knocked out, in a team tie, or a review.
+  const winner = (results?.winner?.agentName ? results.winner : null) || (over?.winner?.agentName ? over.winner : null);
+  const judgeVerdict = verdict || results?.judge?.verdict || null;
   const timerPct = totalQ ? (timer / Math.max(1, Math.round((question?.timeLimitMs || 15000) / 1000))) * 100 : 0;
   const timerColor = timer > 8 ? GREEN : timer > 4 ? GOLD : RED;
 
@@ -441,7 +464,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
                       ? 'Your agent is out of HP — you are watching as a spectator'
                       : iAmParticipant
                       ? (isReview ? 'Your agent is working through your review' : 'Your agent is answering — watch it play')
-                      : 'You + APOS + re watching this battle'}
+                      : "You're watching this battle"}
                   </div>
                   {reveal?.judge && (
                     <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'flex-start', padding: '8px 10px', borderRadius: 10, background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.12)' }}>
@@ -449,7 +472,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
                       <div style={{ fontSize: 12, lineHeight: 1.45, color: '#E2E8F0' }}><b style={{ color: GOLD }}>{reveal.judge.judge || 'Sergeant'}</b> · {reveal.judge.answer}{reveal.judge.why ? ` — ${reveal.judge.why}` : ''}</div>
                     </div>
                   )}
-                  {myResult && <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12.5, fontWeight: 800, color: myResult.is_correct ? '#4ADE80' : '#F87171' }}>{myResult.is_correct ? <><Icon name="ti-check" size={12} color="#4ADE80"/> Your agent got it — +${myResult.xp_gained} XP</> : <><Icon name="ti-x" size={12} color="#F87171"/> Your agent got it wrong</>}</div>}
+                  {myResult && <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12.5, fontWeight: 800, color: myResult.is_correct ? '#4ADE80' : '#F87171' }}>{myResult.is_correct ? <><Icon name="ti-check" size={12} color="#4ADE80"/> Your agent got it{myResult.xp_gained ? ` — +${myResult.xp_gained} XP` : ''}</> : <><Icon name="ti-x" size={12} color="#F87171"/> Your agent got it wrong</>}</div>}
                 </div>
               )}
 
@@ -498,9 +521,22 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
                       ))}
                     </div>
                   )}
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,.35)', marginTop: 10 }}>
-                    Every question is in the Questions tab
-                  </div>
+                  {/* The mark sheet: every question, what the agent chose, the answer. */}
+                  {results.markSheet?.length > 0 && (
+                    <div style={{ marginTop: 12, textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      {results.markSheet.map((m) => (
+                        <div key={m.order} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: '#E2E8F0', lineHeight: 1.4 }}>
+                          <Icon name={!m.answered ? 'ti-minus' : m.isCorrect ? 'ti-check' : 'ti-x'} size={13} color={!m.answered ? 'rgba(255,255,255,.4)' : m.isCorrect ? '#4ADE80' : '#F87171'} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <b>Q{m.order}.</b> {m.question}
+                            <div style={{ fontSize: 11, color: 'rgba(255,255,255,.5)' }}>
+                              {m.answered ? `Chose ${m.chosenAnswer}` : 'Not answered'}{!m.isCorrect ? ` · Answer: ${m.correctAnswer}` : ''}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -511,12 +547,25 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
                   <div style={{ fontSize: 18, fontWeight: 900, color: '#F1F5F9', marginTop: 6 }}>{winner.agentName} wins!</div>
                   {over?.durationFormatted && <div style={{ fontSize: 12, color: 'rgba(255,255,255,.45)', marginTop: 2 }}>Duration {over.durationFormatted}</div>}
                   {myXp > 0 && <div style={{ display: 'inline-block', marginTop: 8, padding: '4px 14px', borderRadius: 20, background: 'rgba(232,136,74,.20)', color: '#E8884A', fontWeight: 800, fontSize: 13 }}>+{myXp} XP earned</div>}
-                  {(verdict || results?.judge?.verdict) && (
-                    <div style={{ marginTop: 12, textAlign: 'left', display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 12, background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.12)' }}>
-                      <Icon name="ti-gavel" size={16} color={GOLD} />
-                      <div style={{ fontSize: 12.5, lineHeight: 1.5, color: '#E2E8F0' }}><b style={{ color: GOLD }}>Sergeant's verdict</b><br />{verdict || results.judge.verdict}</div>
-                    </div>
-                  )}
+                </div>
+              )}
+
+              {/* Nobody ranked (everyone knocked out) or a team tie: say so. */}
+              {isCompleted && !winner && !isReview && (
+                <div style={{ ...panel, textAlign: 'center' }}>
+                  <TrophyIcon size={30} color="rgba(255,255,255,.35)" />
+                  <div style={{ fontSize: 15, fontWeight: 900, color: '#F1F5F9', marginTop: 6 }}>
+                    {over?.team ? (over.team.winner ? `Team ${over.team.winner} wins!` : "It's a tie between the teams") : 'No winner — every agent ran out of HP'}
+                  </div>
+                  {myXp > 0 && <div style={{ display: 'inline-block', marginTop: 8, padding: '4px 14px', borderRadius: 20, background: 'rgba(232,136,74,.20)', color: '#E8884A', fontWeight: 800, fontSize: 13 }}>+{myXp} XP earned</div>}
+                </div>
+              )}
+
+              {/* Sergeant's verdict — for every finished battle, winner or not. */}
+              {isCompleted && !isReview && judgeVerdict && (
+                <div style={{ ...panel, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                  <Icon name="ti-gavel" size={16} color={GOLD} />
+                  <div style={{ fontSize: 12.5, lineHeight: 1.5, color: '#E2E8F0' }}><b style={{ color: GOLD }}>Sergeant's verdict</b><br />{judgeVerdict}</div>
                 </div>
               )}
             </>

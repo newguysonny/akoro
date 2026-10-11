@@ -53,8 +53,9 @@ import { Router }                         from "express";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
-import { cleanHpPerMiss, HP_PER_MISS_DEFAULT } from "./hp.js";
-import { entryCheck, requirementsOf } from "./entry.js";
+import { cleanHpPerMiss } from "./hp.js";
+import { entryCheck, minPlayersFor } from "./entry.js";
+import { toCard } from "./card.js";
 import { buildQuestions, perQuestionSeconds } from "./questionSource.js";
 import { InsufficientCoins } from "../../lib/coins.js";
 
@@ -172,13 +173,32 @@ const now = () => new Date().toISOString();
  */
 const EXPIRE_AFTER_START_MS = 10_000;
 
+/** How long an unscheduled invitation stays open (BATTLE_IDLE_HOURS, default 48h). */
+const IDLE_HOURS = Math.max(1, Number(process.env.BATTLE_IDLE_HOURS ?? 48) || 48);
+const idleDeadline = () => new Date(Date.now() + IDLE_HOURS * 3600_000).toISOString();
+async function queueIdleExpiry(battleId) {
+  await (await getBattleQueue()).add("expire-battle", { action: "expire-battle", battleId },
+    { delay: IDLE_HOURS * 3600_000, jobId: `idle-${battleId}` });
+}
+
+/**
+ * A battle invitation as the learner's challenge card shows it — the same
+ * shape as GET /my-challenges, so a card that arrives live has the deadline,
+ * question count, HP rule and entry requirements a reloaded one has.
+ */
+async function challengeCardFor(battleId, me) {
+  const { data: b } = await db.from("battles").select("*").eq("id", battleId).maybeSingle();
+  return b ? toCard({ ...b, users: { full_name: me?.full_name ?? null, avatar_url: me?.avatar_url ?? null } }) : null;
+}
+
 /**
  * When does an invitation stop being acceptable?
  *
  * A SCHEDULED battle: the moment it starts. There is nothing to accept after
  * that, and the start time is a deadline the teacher actually chose.
  *
- * An UNSCHEDULED battle: never. It used to be an hour, from a default parameter
+ * An UNSCHEDULED battle: after BATTLE_IDLE_HOURS (idleDeadline), when it runs
+ * with whoever accepted or expires. Before that it was never; and before that an hour, from a default parameter
  * no form exposed — so a battle set in the morning for an afternoon lesson had
  * its invitations expire before break, and the learners who had not opened the
  * app simply never saw it. An invitation with no fixed start has no natural
@@ -306,17 +326,24 @@ router.post("/courses/:courseId/battles/challenge", authenticateToken, asyncHand
   if (!myAgent)  return res.status(400).json({ error: "Create your agent first" });
   if (!oppAgent) return res.status(400).json({ error: "Opponent has no agent yet" });
 
-  // Prevent duplicate active battles
-  const { data: existing } = await db.from("battle_participants")
-    .select("battle_id, battles!inner(status)")
-    .eq("user_id", opponent_id)
-    .in("battles.status", ["lobby", "scheduled", "live"]).limit(1);
-  if (existing?.length) return res.status(409).json({ error: "Already have an active battle with this person" });
+  // One open duel per PAIR. This used to match any open seat the opponent
+  // held — including invitations they had never answered from anyone — so
+  // one ignored challenge blocked that learner from being challenged at all.
+  const { data: mineOpen } = await db.from("battle_participants")
+    .select("battle_id, battles!inner(status, battle_type)")
+    .eq("user_id", req.user.id).eq("battles.battle_type", "1v1")
+    .in("battles.status", ["lobby", "scheduled", "live"]).limit(100);
+  const myIds = (mineOpen ?? []).map((r) => r.battle_id);
+  if (myIds.length) {
+    const { data: shared } = await db.from("battle_participants").select("battle_id")
+      .in("battle_id", myIds).eq("user_id", opponent_id).is("declined_at", null).limit(1);
+    if (shared?.length) return res.status(409).json({ error: "You already have a battle open with this person — finish or cancel it first." });
+  }
 
   const isScheduled = !!scheduled_for && new Date(scheduled_for) > new Date();
   // A deadline only where there is a start time to be a deadline. See
-  // acceptDeadline: unscheduled invitations do not expire.
-  const expiresAt   = isScheduled ? acceptDeadline(scheduled_for) : null;
+  // acceptDeadline; an unscheduled one stays open BATTLE_IDLE_HOURS.
+  const expiresAt   = isScheduled ? acceptDeadline(scheduled_for) : idleDeadline();
 
   // A learner who creates a battle plays in it: they need the coins for their own agent's answers.
   {
@@ -335,6 +362,9 @@ router.post("/courses/:courseId/battles/challenge", authenticateToken, asyncHand
   }).select().single();
 
   if (error) throw new Error(error.message);
+  // Unscheduled invitations don't wait for ever: after BATTLE_IDLE_HOURS it
+  // runs with whoever accepted (if enough did) or expires.
+  if (!isScheduled) await queueIdleExpiry(battle.id);
 
   await db.from("battle_participants").insert([
     { battle_id: battle.id, user_id: req.user.id, agent_id: myAgent.id, role: "creator" },
@@ -357,30 +387,14 @@ router.post("/courses/:courseId/battles/challenge", authenticateToken, asyncHand
   const { data: me } = await db.from("users").select("full_name, avatar_url").eq("id", req.user.id).single();
   await notifyUser(opponent_id, "battle_challenge",
     `⚔️ ${me?.full_name} challenged you!`,
-    `${title} · ${xp_prize} XP · ${isScheduled ? "Scheduled: " + scheduled_for : `Expires in ${expires_in_minutes} min`}`,
+    `${title} · ${xp_prize} XP · ${isScheduled ? "Starts " + new Date(scheduled_for).toLocaleString("en-GB", { timeZone: "Africa/Lagos" }) : "Open for " + IDLE_HOURS + " hours"}`,
     battle.id
   );
 
   // ── WebSocket: push challenge card directly to opponent's session ─────────
   const io = req.app.get("io");
   if (io) {
-    io.to(`user:${opponent_id}`).emit("new_challenge", {
-      id:           battle.id,
-      challenger:   me?.full_name  ?? "Opponent",
-      avatar:       me?.avatar_url ?? null,
-      title,
-      subject:      req.body.subject ?? "science",
-      topic:        req.body.topic   ?? title,
-      difficulty,
-      battleType:   isScheduled ? "scheduled" : "immediate",
-      xpPrize:      `+${xp_prize} XP`,
-      hpPerMiss:    battle.hp_per_miss,
-      timeLimit:    `${Math.round(time_limit_seconds / 60)} min`,
-      expiresIn:    `${expires_in_minutes} min`,
-      scheduledFor: scheduled_for ?? null,
-      courseId,
-      status:       isScheduled ? "scheduled" : "lobby",
-    });
+    { const card = await challengeCardFor(battle.id, me); if (card) io.to(`user:${opponent_id}`).emit("new_challenge", card); }
   }
 
   res.status(201).json({ success: true, battle_id: battle.id, status: isScheduled ? "scheduled" : "lobby", expires_at: expiresAt });
@@ -405,8 +419,8 @@ router.post("/courses/:courseId/battles/open", authenticateToken, asyncHandler(a
 
   const isScheduled = !!scheduled_for && new Date(scheduled_for) > new Date();
   // A deadline only where there is a start time to be a deadline. See
-  // acceptDeadline: unscheduled invitations do not expire.
-  const expiresAt   = isScheduled ? acceptDeadline(scheduled_for) : null;
+  // acceptDeadline; an unscheduled one stays open BATTLE_IDLE_HOURS.
+  const expiresAt   = isScheduled ? acceptDeadline(scheduled_for) : idleDeadline();
 
   // A learner who creates a battle plays in it: they need the coins for their own agent's answers.
   {
@@ -424,6 +438,9 @@ router.post("/courses/:courseId/battles/open", authenticateToken, asyncHandler(a
     scheduled_start: scheduled_for ?? null, expires_at: expiresAt, created_by: req.user.id,
   }).select().single();
   if (error) throw new Error(error.message);
+  // Unscheduled invitations don't wait for ever: after BATTLE_IDLE_HOURS it
+  // runs with whoever accepted (if enough did) or expires.
+  if (!isScheduled) await queueIdleExpiry(battle.id);
 
   await db.from("battle_participants").insert({
     battle_id: battle.id, user_id: req.user.id, agent_id: myAgent.id, role: "creator", joined_at: now(),
@@ -473,8 +490,8 @@ router.post("/courses/:courseId/battles/classroom", authenticateToken, requireRo
 
   const isScheduled = !!scheduled_for && new Date(scheduled_for) > new Date();
   // A deadline only where there is a start time to be a deadline. See
-  // acceptDeadline: unscheduled invitations do not expire.
-  const expiresAt   = isScheduled ? acceptDeadline(scheduled_for) : null;
+  // acceptDeadline; an unscheduled one stays open BATTLE_IDLE_HOURS.
+  const expiresAt   = isScheduled ? acceptDeadline(scheduled_for) : idleDeadline();
 
   const { data: battle, error } = await db.from("battles").insert({
     hp_per_miss: cleanHpPerMiss(req.body?.hp_per_miss),
@@ -486,6 +503,9 @@ router.post("/courses/:courseId/battles/classroom", authenticateToken, requireRo
     scheduled_start: scheduled_for ?? null, expires_at: expiresAt, created_by: req.user.id,
   }).select().single();
   if (error) throw new Error(error.message);
+  // Unscheduled invitations don't wait for ever: after BATTLE_IDLE_HOURS it
+  // runs with whoever accepted (if enough did) or expires.
+  if (!isScheduled) await queueIdleExpiry(battle.id);
 
   await db.from("battle_participants").insert({
     battle_id: battle.id, user_id: req.user.id, agent_id: teacherAgent.id, role: "teacher", joined_at: now(),
@@ -734,8 +754,8 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
   }
   const isScheduled = !!scheduled_for && new Date(scheduled_for) > new Date();
   // A deadline only where there is a start time to be a deadline. See
-  // acceptDeadline: unscheduled invitations do not expire.
-  const expiresAt   = isScheduled ? acceptDeadline(scheduled_for) : null;
+  // acceptDeadline; an unscheduled one stays open BATTLE_IDLE_HOURS.
+  const expiresAt   = isScheduled ? acceptDeadline(scheduled_for) : idleDeadline();
 
   // A learner who creates a battle plays in it: they need the coins for their own agent's answers.
   if (myRole !== "teacher" && !isReview) {
@@ -756,6 +776,9 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
     created_by: req.user.id,
   }).select().single();
   if (error) throw new Error(error.message);
+  // Unscheduled invitations don't wait for ever: after BATTLE_IDLE_HOURS it
+  // runs with whoever accepted (if enough did) or expires.
+  if (!isScheduled) await queueIdleExpiry(battle.id);
 
   // Questions before anyone is told about it: a battle with none is worse than
   // no battle, so if we can't fill it, undo and say why.
@@ -843,15 +866,7 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
       isDuel ? `⚔️ ${me?.full_name ?? "A classmate"} challenged you!`
              : `⚔️ ${me?.full_name ?? "Someone"} invited you to a battle: ${title}`,
       `${subject} · ${xp_prize} XP`, battle.id);
-    global.io?.to(`user:${o.user_id}`).emit("new_challenge", {
-      id: battle.id, challenger: me?.full_name ?? "Classmate", avatar: me?.avatar_url ?? null,
-      title, subject, topic: topic ?? subject, difficulty,
-      battleType: isScheduled ? "scheduled" : (isDuel ? "immediate" : "classroom"),
-      xpPrize: `+${xp_prize} XP`, timeLimit: `${Math.round(time_limit_seconds / 60)} min`,
-      hpPerMiss: battle.hp_per_miss,
-      expiresIn: `${expires_in_minutes} min`, scheduledFor: scheduled_for ?? null,
-      classroomId, status: (isScheduled && !isDuel) ? "scheduled" : "lobby",
-    });
+    { const card = await challengeCardFor(battle.id, me); if (card) global.io?.to(`user:${o.user_id}`).emit("new_challenge", card); }
   }
 
   const skippedIds = [...skipped.not_in_class, ...skipped.no_agent];
@@ -879,68 +894,8 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
 // Course-independent lists. The learner dashboard and the instructor/school
 // Battles pages both need "everything I'm involved in" without knowing a course
 // id up front, and both render the same card shape the WebSocket push uses —
-// so the mapping lives here, once.
+// so the mapping lives in battle/card.js, once.
 
-function toCard(b, extra = {}) {
-  const mins = Math.round((b.time_limit_seconds ?? 900) / 60);
-  return {
-    id:            b.id,
-    battleId:      b.id,
-    courseId:      b.course_id,
-    classroomId:   b.classroom_id ?? null,
-    scope:         b.course_id ? "course" : b.classroom_id ? "class" : "network",
-    title:         b.title,
-    description:   b.description ?? null,
-    topic:         b.topic ?? null,
-    subject:       b.subject ?? "science",
-    difficulty:    b.difficulty ?? "intermediate",
-    status:        b.status,
-    battleType:    b.status === "scheduled" ? "scheduled" : (b.battle_type === "classroom" ? "classroom" : "immediate"),
-    type:          b.battle_type,
-    // The daily battle: platform-made, recurs every day (agent-network/activities.js).
-    daily:         String(b.recurring_key || "").startsWith("daily:"),
-    xpPrize:       `+${b.xp_prize ?? b.xp_pool ?? 0} XP`,
-    xpPool:        b.xp_pool ?? b.xp_prize ?? 0,
-    // What a miss costs, set by the creator — on the challenge sheet before accepting.
-    hpPerMiss:     b.hp_per_miss ?? HP_PER_MISS_DEFAULT,
-    // What it takes to join (battle/entry.js): coins for your agent's answers, and the creator's minimum XP.
-    entry:         requirementsOf(b),
-    totalQuestions: b.total_questions ?? 0,
-    timeLimit:     `${mins} min`,
-    durationMin:   mins,
-    maxParticipants: b.max_participants ?? null,
-    participantCount: b.total_participants ?? 0,
-    scheduledFor:  b.scheduled_start ?? null,
-    scheduledAt:   b.scheduled_start ?? null,
-    // The live card says "Started {min}m ago" and the scheduled one "{startsIn}",
-    // and neither field was ever sent — the same omission as agentA/agentB, so
-    // the card read "Started undefinedm ago". Both are derived here rather than
-    // in the client, which has no actual_start to work from.
-    startedAt:     b.actual_start ?? null,
-    startedAgo:    b.actual_start
-      ? Math.max(0, Math.round((Date.now() - new Date(b.actual_start)) / 60000))
-      : null,
-    startsIn:      b.scheduled_start
-      ? (() => {
-          const mins = Math.round((new Date(b.scheduled_start) - Date.now()) / 60000);
-          if (mins <= 0)  return "now";
-          if (mins < 60)  return `in ${mins} min`;
-          const hrs = Math.round(mins / 60);
-          return hrs < 24 ? `in ${hrs}h` : `in ${Math.round(hrs / 24)} day${hrs >= 48 ? "s" : ""}`;
-        })()
-      : null,
-    expiresAt:     b.expires_at ?? null,
-    // The UI counts down from expiresAt itself; this stays for older callers.
-    // null here means "no deadline", which is now the common case.
-    expiresIn:     b.expires_at
-      ? `${Math.max(0, Math.round((new Date(b.expires_at) - Date.now()) / 60000))} min`
-      : null,
-    createdBy:     b.created_by,
-    challenger:    b.users?.full_name ?? null,
-    avatar:        b.users?.avatar_url ?? null,
-    ...extra,
-  };
-}
 
 // GET /api/battle/my-battles — every battle I take part in or created
 router.get("/my-battles", authenticateToken, asyncHandler(async (req, res) => {
@@ -1050,6 +1005,22 @@ router.get("/my-battles", authenticateToken, asyncHandler(async (req, res) => {
     };
   };
 
+  // The daily battle ranks the whole day (every heat of that subject), not the
+  // one heat a learner sat in, and leaves knocked-out agents out.
+  const dailyPlaceOf = new Map();
+  const dailyDone = (data ?? []).filter((b) => b.status === "completed" && String(b.recurring_key || "").startsWith("daily:"));
+  if (dailyDone.length) {
+    const { dailyRanking } = await import("../agent-network/activities.js");
+    const seen = new Map();
+    for (const b of dailyDone.slice(0, 14)) {
+      const [, day, , ] = String(b.recurring_key).split(":");
+      const k = `${day}|${b.subject}`;
+      if (!seen.has(k)) seen.set(k, await dailyRanking(req.user.id, b.subject, day).catch(() => null));
+      const r = seen.get(k);
+      if (r) dailyPlaceOf.set(b.id, r.me ? { rank: r.me.rank, of: r.me.of } : { rank: null, of: r.players });
+    }
+  }
+
   res200(res, (data ?? []).map((b) => {
     const seat = mySeat.get(b.id);
     const card = {
@@ -1089,6 +1060,7 @@ router.get("/my-battles", authenticateToken, asyncHandler(async (req, res) => {
       // 0 = knocked out: watched the rest as a spectator, unranked.
       myHp:       mine?.hp ?? null,
       myXpEarned: mine?.xp_earned ?? 0,
+      ...(dailyPlaceOf.has(b.id) ? { dailyPlace: dailyPlaceOf.get(b.id) } : {}),
     };
   }));
 }));
@@ -1259,6 +1231,9 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
     usernames = [], user_ids = [], whole_class = false, classroom_id = null,
     question_source = "auto",          // 'bank' | 'ai' | 'auto'
   } = req.body;
+  // Reviews are set for one learner in a class (the class invite route). Here
+  // it would quietly become an ordinary battle — say so instead.
+  if (req.body?.mode === "review") return res400(res, "A study review is set from a class, for one learner.");
 
   if (!title) return res400(res, "title is required");
 
@@ -1348,8 +1323,8 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
   }
   const isScheduled = !!scheduled_for && new Date(scheduled_for) > new Date();
   // A deadline only where there is a start time to be a deadline. See
-  // acceptDeadline: unscheduled invitations do not expire.
-  const expiresAt   = isScheduled ? acceptDeadline(scheduled_for) : null;
+  // acceptDeadline; an unscheduled one stays open BATTLE_IDLE_HOURS.
+  const expiresAt   = isScheduled ? acceptDeadline(scheduled_for) : idleDeadline();
 
   // A scheduled DUEL stays in 'lobby': /challenges/:id/accept only accepts from
   // lobby, and it already schedules the start itself once accepted. Marking it
@@ -1372,6 +1347,9 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
     created_by: req.user.id,
   }).select().single();
   if (error) throw new Error(error.message);
+  // Unscheduled invitations don't wait for ever: after BATTLE_IDLE_HOURS it
+  // runs with whoever accepted (if enough did) or expires.
+  if (!isScheduled) await queueIdleExpiry(battle.id);
 
   await db.from("battle_participants").insert({
     battle_id: battle.id, user_id: req.user.id, agent_id: myAgent.id,
@@ -1452,7 +1430,7 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
     // Not "Starting shortly" any more — a group battle waits on its
     // invitations, so telling a learner it is about to start would be wrong in
     // exactly the case where they still have to accept it.
-    : `Accept within ${expires_in_minutes} min`;
+    : `Open for ${IDLE_HOURS} hours`;
 
   for (const o of opponents) {
     await notifyUser(o.user_id, "battle_challenge",
@@ -1460,15 +1438,7 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
              : `⚔️ ${me?.full_name ?? "Someone"} invited you to a battle: ${title}`,
       `${title} · ${xp_prize} XP · ${when}`, battle.id);
 
-    global.io?.to(`user:${o.user_id}`).emit("new_challenge", {
-      id: battle.id, challenger: me?.full_name ?? "Opponent", avatar: me?.avatar_url ?? null,
-      title, subject: subject ?? "science", topic: topic ?? title, difficulty,
-      battleType: isScheduled ? "scheduled" : (isDuel ? "immediate" : "classroom"),
-      xpPrize: `+${xp_prize} XP`, timeLimit: `${Math.round(time_limit_seconds / 60)} min`,
-      hpPerMiss: battle.hp_per_miss,
-      expiresIn: `${expires_in_minutes} min`, scheduledFor: scheduled_for ?? null,
-      courseId, status: isScheduled ? "scheduled" : "lobby",
-    });
+    { const card = await challengeCardFor(battle.id, me); if (card) global.io?.to(`user:${o.user_id}`).emit("new_challenge", card); }
   }
 
   res201(res, {
@@ -1576,9 +1546,11 @@ router.post("/challenges/:challengeId/accept", authenticateToken, asyncHandler(a
   const { data: battle } = await db.from("battles").select("*")
     .eq("id", req.params.challengeId).in("status", ["lobby", "scheduled"]).single();
   if (!battle) return res.status(404).json({ error: "Challenge not found or already resolved" });
+  // Too late to accept — for THIS learner. The battle itself is left alone:
+  // one late Accept used to mark the whole scheduled group battle expired,
+  // and its start job then found nothing to start.
   if (deadlinePassed(battle.expires_at)) {
-    await db.from("battles").update({ status: "expired" }).eq("id", battle.id);
-    return res.status(410).json({ error: "Challenge has expired" });
+    return res.status(410).json({ error: "Too late to accept — this battle's accept window has closed." });
   }
 
   const { data: seat } = await db.from("battle_participants").select("id, role")
@@ -1613,7 +1585,10 @@ router.post("/challenges/:challengeId/accept", authenticateToken, asyncHandler(a
   }
 
   const isScheduled = !!battle.scheduled_start && new Date(battle.scheduled_start) > new Date();
-  await db.from("battles").update({ status: isScheduled ? "scheduled" : "live" }).eq("id", battle.id);
+  // Only ever to "scheduled" here. The start job flips it to live when it
+  // actually starts — it ignores a battle already marked live, so setting
+  // "live" here meant every accepted duel sat live forever, never starting.
+  if (isScheduled) await db.from("battles").update({ status: "scheduled" }).eq("id", battle.id);
   await db.from("battle_participants").update({ joined_at: now() }).eq("battle_id", battle.id).eq("user_id", req.user.id);
 
   const q = await getBattleQueue();
@@ -1679,18 +1654,23 @@ router.post("/challenges/:challengeId/decline", authenticateToken, asyncHandler(
     await notifyUser(p.battles.created_by, "battle_declined",
       `❌ ${me?.full_name} declined ${p.battles.title}`,
       `${accepted} of ${seats.length} still in`, p.battle_id);
+    global.io?.to(`user:${p.battles.created_by}`).emit("battle_declined", { battleId: p.battle_id, by: me?.full_name ?? null });
     return res.json({ success: true, accepted, invited: seats.length });
   }
 
   await db.from("battles").update({ status: "cancelled" }).eq("id", req.params.challengeId);
   await notifyUser(p.battles.created_by, "battle_declined", `❌ ${me?.full_name} declined your challenge`, p.battles.title, req.params.challengeId);
+  // Live, so the creator's card doesn't sit on "Waiting" until a reload.
+  global.io?.to(`user:${p.battles.created_by}`).emit("battle_declined", { battleId: req.params.challengeId, by: me?.full_name ?? null, cancelled: true });
   res.json({ success: true });
 }));
 
 router.delete("/challenges/:challengeId", authenticateToken, asyncHandler(async (req, res) => {
-  const { error } = await db.from("battles").update({ status: "cancelled" })
-    .eq("id", req.params.challengeId).eq("created_by", req.user.id).in("status", ["lobby", "scheduled"]);
-  if (error) return res.status(404).json({ error: "Challenge not found or cannot be cancelled" });
+  // .select(): zero rows changed is not an error to PostgREST, so this always
+  // reported success — even for someone else's battle or one already running.
+  const { data: rows, error } = await db.from("battles").update({ status: "cancelled" })
+    .eq("id", req.params.challengeId).eq("created_by", req.user.id).in("status", ["lobby", "scheduled"]).select("id");
+  if (error || !rows?.length) return res.status(404).json({ error: "Challenge not found or cannot be cancelled" });
   res.json({ success: true });
 }));
 
@@ -1740,7 +1720,7 @@ router.post("/battles/:battleId/join", authenticateToken, asyncHandler(async (re
   await db.from("battles").update({ total_participants: (count ?? 0) + 1 }).eq("id", battle.id);
 
   global.io?.to(`battle:${battle.id}`).emit("battle:participant-joined", {
-    userId: req.user.id, agentName: myAgent.agent_name, agentEmoji: myAgent.agent_emoji,
+    battleId: battle.id, userId: req.user.id, agentName: myAgent.agent_name, agentEmoji: myAgent.agent_emoji,
     totalParticipants: (count ?? 0) + 1, maxParticipants: battle.max_participants,
   });
 
@@ -1827,7 +1807,8 @@ router.get("/battles/:battleId/state", authenticateToken, asyncHandler(async (re
   if (!battle) return res.status(404).json({ error: "Battle not found" });
 
   const { data: participants } = await db.from("battle_participants")
-    .select(`user_id, score, hp, current_streak, is_connected, user_agents(agent_name, agent_emoji, agent_color)`)
+    // role: so the arena can tell the hosting teacher from the competitors.
+    .select(`user_id, role, score, hp, current_streak, is_connected, user_agents(agent_name, agent_emoji, agent_color)`)
     .eq("battle_id", req.params.battleId).order("score", { ascending: false });
 
   const { count } = await db.from("battle_viewers").select("id", { count: "exact", head: true }).eq("battle_id", req.params.battleId);
@@ -1853,12 +1834,14 @@ router.post("/battles/:battleId/start", authenticateToken, asyncHandler(async (r
   const { data: seats } = await db.from("battle_participants")
     .select("role, joined_at, declined_at").eq("battle_id", battle.id);
   const players = (seats ?? []).filter((p) => p.role !== "teacher" && p.joined_at && !p.declined_at).length;
-  if (players < 2) {
+  // A review is one learner; a 2v2 needs all four; anything else two.
+  const need = minPlayersFor(battle);
+  if (players < need) {
     const waiting = (seats ?? []).filter((p) => p.role !== "teacher" && !p.joined_at && !p.declined_at).length;
     return res.status(400).json({
       error: waiting
-        ? `Only ${players} learner${players === 1 ? " has" : "s have"} accepted so far — ${waiting} still to answer. A battle needs two.`
-        : "A battle needs at least 2 learners who have accepted.",
+        ? `Only ${players} learner${players === 1 ? " has" : "s have"} accepted so far — ${waiting} still to answer. This needs ${need}.`
+        : `This needs at least ${need} learner${need === 1 ? "" : "s"} who have accepted.`,
     });
   }
 
@@ -1867,9 +1850,12 @@ router.post("/battles/:battleId/start", authenticateToken, asyncHandler(async (r
 }));
 
 router.post("/battles/:battleId/end", authenticateToken, asyncHandler(async (req, res) => {
-  const { data: battle } = await db.from("battles").select("created_by").eq("id", req.params.battleId).single();
+  const { data: battle } = await db.from("battles").select("created_by, status").eq("id", req.params.battleId).single();
   if (!battle) return res.status(404).json({ error: "Battle not found" });
   if (req.user.role !== "admin" && battle.created_by !== req.user.id) return res.status(403).json({ error: "Not authorised" });
+  // Only a battle that is running can be ended — ending one that never started
+  // would rank and pay invitees who never accepted. Cancel that one instead.
+  if (battle.status !== "live") return res.status(409).json({ error: `This battle is ${battle.status} — only a live battle can be ended.` });
   await (await getBattleQueue()).add("end-battle", { action: "end-battle", battleId: req.params.battleId }, { delay: 0 });
   res.json({ success: true });
 }));
@@ -1979,11 +1965,13 @@ router.get("/battles/:battleId/results", authenticateToken, asyncHandler(async (
     });
   }
 
-  const winner = scoreboard[0];
+  // The winner the battle actually named — not just the top row. With every
+  // agent knocked out, or a team tie, there is none.
+  const winner = battle.battle_type === "team" ? null : scoreboard.find((p) => p.isWinner) ?? null;
   const dur = battle.duration_seconds ?? 0;
   res.json({
     battle: { ...battle, duration_formatted: fmtDuration(dur) },
-    winner: { userId: winner?.userId, agentName: winner?.agentName, score: winner?.score, xpEarned: winner?.xpEarned },
+    winner: winner && { userId: winner.userId, agentName: winner.agentName, agentEmoji: winner.agentEmoji, score: winner.score, xpEarned: winner.xpEarned },
     scoreboard,
     // Sergeant, the platform's judge: the verdict once the battle is over.
     judge: { name: "Sergeant", verdict: battle.judge_verdict ?? null },
@@ -2192,6 +2180,16 @@ router.put("/battles/:battleId", authenticateToken, asyncHandler(async (req, res
   const allowed = ["title", "description", "topic", "subject", "difficulty", "xp_prize", "xp_pool", "time_limit_seconds", "total_questions", "max_participants", "scheduled_start", "hp_per_miss", "min_xp"];
   const updates = Object.fromEntries(Object.entries(req.body).filter(([k]) => allowed.includes(k)));
   if ("hp_per_miss" in updates) updates.hp_per_miss = cleanHpPerMiss(updates.hp_per_miss);
+  if ("min_xp" in updates) updates.min_xp = Math.max(0, Math.round(Number(updates.min_xp) || 0));
+  // The questions are already written for the count it was made with; a
+  // different count would leave the card and the paper disagreeing.
+  if ("total_questions" in updates) {
+    const { count: written } = await db.from("battle_questions").select("id", { count: "exact", head: true }).eq("battle_id", req.params.battleId);
+    if (written && Number(updates.total_questions) !== written) {
+      return res400(res, `This battle's ${written} questions are already written — make a new battle to change how many.`);
+    }
+    delete updates.total_questions;
+  }
 
   if (!Object.keys(updates).length) return res400(res, "No valid fields to update");
   updates.updated_at = new Date().toISOString();

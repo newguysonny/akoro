@@ -12,9 +12,11 @@ const NUNITO = "'Nunito',sans-serif";
 export default function OpenChallenges({ onBattleCreated, onCount }) {
   const [open, setOpen] = useState(null);
   const [mine, setMine] = useState([]);
+  const [joined, setJoined] = useState([]);   // seats I took that are waiting to fill
   const load = useCallback(() => {
     fetchChallengeRequests().then((d) => { setOpen(d?.requests || []); onCount?.((d?.requests || []).length); }).catch(() => setOpen([]));
     fetchChallengeRequests({ mine: 'true' }).then((d) => setMine((d?.requests || []).filter((r) => r.status === 'open'))).catch(() => {});
+    fetchChallengeRequests({ joined: 'true' }).then((d) => setJoined((d?.requests || []).filter((r) => r.status === 'open'))).catch(() => {});
   }, [onCount]);
   useEffect(() => { load(); }, [load]);
   if (open === null) return <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner size={20} /></div>;
@@ -24,6 +26,12 @@ export default function OpenChallenges({ onBattleCreated, onCount }) {
         <>
           <p style={{ fontSize: 12, fontWeight: 900, color: 'var(--ak-text-muted)', margin: '4px 0 0', textTransform: 'uppercase', letterSpacing: '.04em' }}>Your requests</p>
           <ChallengeRequestCards requests={mine} mine onChanged={load} />
+        </>
+      )}
+      {joined.length > 0 && (
+        <>
+          <p style={{ fontSize: 12, fontWeight: 900, color: 'var(--ak-text-muted)', margin: '14px 0 0', textTransform: 'uppercase', letterSpacing: '.04em' }}>You've joined — waiting to fill</p>
+          <ChallengeRequestCards requests={joined} joined onChanged={load} />
         </>
       )}
       <p style={{ fontSize: 12, fontWeight: 900, color: 'var(--ak-text-muted)', margin: '14px 0 0', textTransform: 'uppercase', letterSpacing: '.04em' }}>Open to you</p>

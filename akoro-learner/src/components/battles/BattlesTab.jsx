@@ -16,7 +16,8 @@ function ChallengeRow({ challenge, onTap }) {
   // expiresIn unconditionally, so an invitation that never expires still
   // advertised an hour and then disappeared when it ran out.
   const deadline=challenge.expiresAt?formatLeft(Math.max(0,new Date(challenge.expiresAt)-Date.now())):null;
-  const typePill=isClassroom?{label:t('battles.classroom'),bg:"rgba(16,185,129,.10)",color:"#10B981",border:"rgba(16,185,129,.25)"}:isImmediate?{label:t('battles.immediate'),bg:"rgba(239,68,68,.10)",color:RED,border:"rgba(239,68,68,.25)"}:{label:t('battles.scheduled'),bg:"rgba(108,59,255,.10)",color:BRAND,border:"rgba(108,59,255,.25)"};
+  const isReviewCard=challenge.battleType==="review";
+  const typePill=isReviewCard?{label:"Review",bg:"rgba(59,130,246,.10)",color:"#3B82F6",border:"rgba(59,130,246,.25)"}:isClassroom?{label:t('battles.classroom'),bg:"rgba(16,185,129,.10)",color:"#10B981",border:"rgba(16,185,129,.25)"}:isImmediate?{label:t('battles.immediate'),bg:"rgba(239,68,68,.10)",color:RED,border:"rgba(239,68,68,.25)"}:{label:t('battles.scheduled'),bg:"rgba(108,59,255,.10)",color:BRAND,border:"rgba(108,59,255,.25)"};
   return (
     <div onClick={()=>onTap(challenge)} style={{ display:"flex",alignItems:"center",gap:12,padding:"12px 18px",borderBottom:"1px solid var(--ak-border)",cursor:"pointer",background:"var(--ak-surface)",transition:"background .15s" }}>
       <div style={{ position:"relative",flexShrink:0 }}>
@@ -59,13 +60,21 @@ function resultLine(b, t) {
     return `Out of HP · unranked${b.myScore ? ` · ${b.myScore} right before that` : ''}`;
   }
   // The daily battle: everyone in the subject that day — where did I place?
+  // Ranked across the whole day (every heat), knocked-out agents left out.
+  if (b.daily && b.dailyPlace?.rank != null) {
+    return `You placed #${b.dailyPlace.rank} of ${b.dailyPlace.of} today · ${b.myScore ?? 0}/${b.totalQuestions} correct`;
+  }
   if (b.daily && b.myRank != null) {
-    return `You placed #${b.myRank} of ${b.participantCount || 1} · ${b.myScore ?? 0}/${b.totalQuestions} correct`;
+    return `You placed #${b.myRank} · ${b.myScore ?? 0}/${b.totalQuestions} correct`;
   }
   if (b.review) {
     return t('battles.review_result')
       .replace('{correct}', b.review.correct)
       .replace('{total}', b.review.total);
+  }
+  // A 2v2 is won by a team: the top two rows can be teammates.
+  if (b.type === 'team' && b.myRank != null) {
+    return `${b.myRank === 1 ? 'Your team won' : 'Your team lost'} · ${b.myScore ?? 0} right from your agent`;
   }
   const A = b.agentA, B = b.agentB;
   if (!A) return null;

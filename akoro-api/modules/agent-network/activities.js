@@ -371,6 +371,9 @@ export async function createCircle(meId, input = {}) {
   return { circle: c, invited: invited.length };
 }
 
+/** Questions in a revision circle's battle (the entry check uses the same number). */
+export const CIRCLE_QUESTIONS = 12;
+
 async function startCircleIfReady(c) {
   const { data: members } = await edu().from("revision_circle_members").select("user_id").eq("circle_id", c.id);
   const ids = (members || []).map((m) => m.user_id);
@@ -386,13 +389,20 @@ async function startCircleIfReady(c) {
   try {
     const b = await createNetworkBattle({
       creatorId: c.created_by, opponents: ids.filter((id) => id !== c.created_by), joined: ids.filter((id) => id !== c.created_by), startNowIfReady: true, source: "circle",
-      options: { kind: "group", subject: c.subject, topic: c.topic, total_questions: 12, title: c.title,
+      options: { kind: "group", subject: c.subject, topic: c.topic, total_questions: CIRCLE_QUESTIONS, title: c.title,
         scheduled_for: c.scheduled_for && Date.parse(c.scheduled_for) > Date.now() + 60_000 ? c.scheduled_for : null },
     });
     await edu().from("revision_circles").update({ battle_id: b.battleId }).eq("id", c.id);
     return b.battleId;
   } catch (e) {
-    await edu().from("revision_circles").update({ status: "open" }).eq("id", c.id);
+    // Its battle couldn't be made (questions, the creator's coins…). Putting it
+    // back to "open" with every seat taken left it stuck — full to newcomers,
+    // never retried. Cancel it and tell the members why.
+    await edu().from("revision_circles").update({ status: "cancelled" }).eq("id", c.id);
+    for (const uid of ids) {
+      await notifyUser({ userId: uid, type: "circle_cancelled", title: `Revision circle cancelled: ${c.title}`,
+        content: `Its battle couldn't start — ${e?.message || "try again later"}. Start a new circle any time.`, relatedId: c.id, link: "/app?tab=battles" }).catch(() => {});
+    }
     throw e;
   }
 }
@@ -404,7 +414,7 @@ export async function joinCircle(meId, id) {
   if (blocked.has(c.created_by)) throw fail("That circle isn't open to you.", 403);
   const { count } = await edu().from("revision_circle_members").select("user_id", { count: "exact", head: true }).eq("circle_id", id);
   if ((count ?? 0) >= c.max_members) throw fail("That circle is full.", 409);
-  await assertEntry(meId, { battle_type: "classroom", total_questions: c.total_questions || 10, min_xp: 0 });
+  await assertEntry(meId, { battle_type: "classroom", total_questions: CIRCLE_QUESTIONS, min_xp: 0 });
   const { error } = await edu().from("revision_circle_members").insert({ circle_id: id, user_id: meId });
   if (error && !/duplicate|pkey/i.test(error.message)) throw new Error(error.message);
   const n = (count ?? 0) + 1;

@@ -38,6 +38,7 @@ const mapP = (p) => ({
   score:      p.score ?? 0,
   hp:         p.hp ?? 100,
   streak:     p.current_streak ?? p.streak ?? 0,
+  role:       p.role ?? null,
 });
 
 export default function WatchBattleModal({ battle, onClose, onEnded }) {
@@ -99,15 +100,18 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
     if (!battleId || status !== 'completed' || over) return;
     apiGet(`${B}/battles/${battleId}/results`)
       .then((r) => setOver({
-        winner: {
+        // null when there is none: every agent knocked out, a team tie, or a review.
+        winner: r.winner ? {
           ...r.winner,
           agentEmoji: r.winner?.agentEmoji
             ?? r.scoreboard?.find((p) => p.userId === r.winner?.userId)?.agentEmoji
             ?? '🏆',
-        },
+        } : null,
         durationFormatted: r.durationFormatted ?? r.battle?.duration_formatted ?? null,
         finalScores: r.scoreboard ?? [],
         verdict: r.judge?.verdict ?? null,
+        // A review answers with a mark sheet, not a scoreboard.
+        review: r.type === 'review' ? { correct: r.score?.correct ?? 0, total: r.score?.total ?? 0, percent: r.score?.percent ?? 0, learner: r.learner?.fullName || r.learner?.agentName || null } : null,
       }))
       .catch(() => {});
   }, [battleId, status, over]);
@@ -171,7 +175,8 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
 
   if (!battleId) return null;
 
-  const ranked  = [...people].sort((a, b) => b.score - a.score);
+  // The hosting teacher is in the room, not in the standings.
+  const ranked  = [...people].filter((p) => p.role !== 'teacher').sort((a, b) => b.score - a.score || b.hp - a.hp);
   const leader  = ranked[0]?.score ?? 0;
   const isLive  = status === 'live';
   const waiting = ['lobby', 'scheduled'].includes(status);
@@ -271,7 +276,15 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
                   <Trophy size={11} style={{ marginRight: 4, verticalAlign: -1 }} />RESULT
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 800, color: INK }}>
-                  {over.winner?.agentEmoji} {over.winner?.agentName ?? '—'} won with {over.winner?.score ?? 0}
+                  {over.review
+                    ? `${over.review.learner ? `${over.review.learner}: ` : ''}${over.review.correct} of ${over.review.total} correct (${over.review.percent}%)`
+                    : over.reviewScore
+                    ? `${over.reviewScore.correct} of ${over.reviewScore.total} correct`
+                    : over.winner?.agentName
+                    ? `${over.winner.agentEmoji ?? ''} ${over.winner.agentName} won with ${over.winner.score ?? 0}`
+                    : over.team
+                    ? (over.team.winner ? `Team ${over.team.winner} won` : 'The teams tied')
+                    : 'No winner — every agent ran out of HP'}
                 </div>
                 {over.durationFormatted && (
                   <div style={{ fontSize: 11.5, color: MUTED, marginTop: 2 }}>Lasted {over.durationFormatted}</div>

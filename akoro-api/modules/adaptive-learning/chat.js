@@ -1913,6 +1913,7 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       return await searchChallengeRequests(studentId, input || {});
     }
     case "accept_challenge_request": {
+      if (role === "instructor") return { error: "The agent network is for learners." };
       if (!input?.requestId) return clarify("requestId", "Which request should I accept? I can search the open ones.");
       try { return { accepted: true, ...(await acceptChallengeRequest(studentId, input.requestId)) }; }
       catch (e) { return { accepted: false, error: e.message }; }
@@ -1923,6 +1924,7 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       catch (e) { return { cancelled: false, error: e.message }; }
     }
     case "rematch_battle": {
+      if (role === "instructor") return { error: "The agent network is for learners." };
       if (!input?.battleId) return clarify("battleId", "Which battle should I rematch?");
       try { const b = await rematch(studentId, input.battleId); return { rematch: true, battleId: b.battleId, invited: b.invited.length }; }
       catch (e) { return { rematch: false, error: e.message }; }

@@ -53,7 +53,12 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
     if (editing) {
       setForm({
         ...BLANK,
+        // Edit what it is: a class battle or review has no course, and keeping
+        // kind 'course' blocked Save with "Pick a course."
+        kind: editing.type === 'review' ? 'review' : (editing.scope === 'class' || editing.classroomId) ? 'class' : 'course',
         courseId: editing.courseId || '',
+        classId: editing.classroomId || '',
+        subject: editing.subject || '',
         title: editing.title || '',
         topic: editing.topic || '',
         description: editing.description || '',
@@ -92,7 +97,7 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
     if (!editing && (form.kind === 'class' || form.kind === 'review')) {
       if (!form.classId) return setError('Pick a class.');
       if (!form.subject) return setError('Pick a subject — the questions are drawn from one.');
-    } else if (!form.courseId) return setError('Pick a course.');
+    } else if (!editing && !form.courseId) return setError('Pick a course.');
     // A review is one learner being checked, not a group being set work.
     if (!editing && form.kind === 'review') {
       const picked = form.audience.selected.length + parseHandles(form.audience.typed).length;
@@ -154,14 +159,14 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
           </div>
         )}
 
-        {(form.kind === 'course' || editing) ? (
+        {(form.kind === 'course' || (editing && form.courseId)) ? (
           <Sel label="Course *" value={form.courseId} onChange={e => setField('courseId', e.target.value)} disabled={!!editing}>
             <option value="">Select a course…</option>
             {courses.map(c => <option key={c.id} value={c.id}>{c.title || c.name}</option>)}
           </Sel>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <Sel label="Class *" value={form.classId} onChange={e => setField('classId', e.target.value)}>
+            <Sel label="Class *" value={form.classId} onChange={e => setField('classId', e.target.value)} disabled={!!editing}>
               {classesLoading && <option value="">Loading classes…</option>}
               {classes.map(c => (
                 <option key={c.id} value={c.id}>
@@ -169,7 +174,8 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
                 </option>
               ))}
             </Sel>
-            <Sel label="Subject *" value={form.subject} onChange={e => setField('subject', e.target.value)}>
+            {/* Fixed once made: the questions are already written for this class and subject. */}
+            <Sel label="Subject *" value={form.subject} onChange={e => setField('subject', e.target.value)} disabled={!!editing}>
               {(chosenClass?.subjects ?? []).length === 0 && <option value="">No subjects set</option>}
               {(chosenClass?.subjects ?? []).map(sub => <option key={sub} value={sub}>{sub}</option>)}
             </Sel>
@@ -202,7 +208,7 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
         )}
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10 }}>
-          <Inp label="Questions" type="number" min="1" value={form.totalQuestions} onChange={e => setField('totalQuestions', e.target.value)} />
+          <Inp label="Questions" type="number" min="1" value={form.totalQuestions} onChange={e => setField('totalQuestions', e.target.value)} disabled={!!editing} title={editing ? 'The questions are already written — make a new battle to change how many.' : undefined} />
           <Inp label="Duration (min)" type="number" min="1" value={form.duration} onChange={e => setField('duration', e.target.value)} />
           <Inp label="XP prize" type="number" min="0" value={form.xpPrize} onChange={e => setField('xpPrize', e.target.value)} />
           {/* What a miss costs — like marks per question. Learners see it before they accept. */}
@@ -275,7 +281,7 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
           <Btn variant="secondary" type="button" onClick={onClose}>Cancel</Btn>
-          <Btn type="submit" disabled={loading || !form.title.trim() || (form.kind === 'course' && !form.courseId)}>
+          <Btn type="submit" disabled={loading || !form.title.trim() || (!editing && form.kind === 'course' && !form.courseId)}>
             {loading ? 'Saving…' : editing ? 'Save changes' : 'Create Battle'}
           </Btn>
         </div>
