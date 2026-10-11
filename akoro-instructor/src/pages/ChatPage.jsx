@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Send, Plus, Brain, Edit3, CheckSquare, X, Paperclip, Camera,
+  Send, Plus, Brain, CheckSquare, X, Paperclip, Camera,
   Upload, FileText, ScanLine, Loader, CheckCircle2,
-  History, Copy, Check, Lightbulb,
+  History, Copy, Check, Lightbulb, MoreVertical, Pencil, Trash2, CloudOff,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, FileUploadZone, Toast } from '../components/Primitives.jsx';
@@ -71,8 +71,6 @@ import {
 
 const bdr = (w, c) => `${w}px solid ${c}`;
 
-const AGENT_AVATARS = ['🤖', '🔮', '⚡', '🌀', '✨', '🔺', '🌙', '💎', '🦊', '🧠', '🚀', '🎯'];
-
 const CHAT_INIT = [
   { id: 1, from: 'agent', text: "Good morning! I'm ready to help — training, quizzes, reminders, or student reports. What do you need?", time: '8:01 AM' },
 ];
@@ -99,6 +97,17 @@ const REPLIES = [
 
 const now = () => new Date().toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' });
 
+// Compact relative time for the sessions drawer ("now", "5m", "3h", "2d") —
+// same wording as the learner app's drawer so both sides read the same.
+const relTime = (iso) => {
+  if (!iso) return '';
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60)    return 'now';
+  if (s < 3600)  return `${Math.floor(s / 60)}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  return `${Math.floor(s / 86400)}d`;
+};
+
 export default function ChatPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -119,7 +128,6 @@ export default function ChatPage() {
   const [agentId, setAgentId]       = useState(null);
 
   const [trainModal, setTrainModal]   = useState(false);
-  const [custModal, setCustModal]     = useState(false);
   const [taskModal, setTaskModal]     = useState(false);
   const [attachModal, setAttachModal] = useState(false);
   const [attachMenu, setAttachMenu]   = useState(false);
@@ -141,9 +149,6 @@ export default function ChatPage() {
   const [ocrError, setOcrError]     = useState('');
   const [attachFile, setAttachFile] = useState(null);
 
-  const [draftName, setDraftName]   = useState('');
-  const [draftEmoji, setDraftEmoji] = useState('🔮');
-
   const feedRef   = useRef(null);
   const attachRef = useRef(null);
   const inputRef  = useRef(null);
@@ -155,6 +160,19 @@ export default function ChatPage() {
   // this chat are stamped with its session.
   const [chatSessions, setChatSessions] = useState([]);
   const [drawerOpen, setDrawerOpen]     = useState(false);
+  // Drawer parity with the learner chat: loading ≠ error ≠ empty, and each
+  // row carries its own options (copy / rename / delete) instead of a bare X.
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [historyError, setHistoryError]       = useState(false);
+  const [copiedId, setCopiedId]               = useState(null);
+  // One kebab per session opens a small menu IN the list, under its row —
+  // never floated, where the scrolling list clipped it. renamingId = the
+  // session whose title is an inline editor; deleteArmId = the two-tap
+  // delete confirm (tap Delete → the item turns into "Tap again to delete").
+  const [menuFor, setMenuFor]       = useState(null);
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const [deleteArmId, setDeleteArmId] = useState(null);
   const chatSessionRef     = useRef(null);
   const creatingSessionRef = useRef(null);
   const CHAT_BASE = '/api/adaptive/chat';
@@ -213,6 +231,50 @@ export default function ChatPage() {
     if (chatSessionRef.current === id) newChat();
   };
 
+  // ── Drawer row options — the learner chat's exact machinery ────────────────
+  const saveRename = async (s) => {
+    const title = renameDraft.trim();
+    setRenamingId(null);
+    if (!title || title === s.title) return;
+    try {
+      const d = await apiPatch(`${CHAT_BASE}/sessions/${s.id}`, { title });
+      if (d?.session?.title) setChatSessions((prev) => prev.map((x) => (x.id === s.id ? { ...x, title: d.session.title } : x)));
+    } catch { /* keep the old title — a failed rename is silent, like delete */ }
+  };
+
+  const copySession = async (s) => {
+    try {
+      const d = await apiGet(`${CHAT_BASE}/sessions/${s.id}/messages`);
+      const msgs = d?.messages ?? [];
+      if (!msgs.length) return;
+      const stamp = (iso) => { try { return new Date(iso).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' }); } catch { return ''; } };
+      const body = msgs.map((m) => `${m.role === 'user' ? 'You' : 'Agent'} (${stamp(m.created_at)}):\n${m.text ?? ''}`).join('\n\n');
+      const out = `${s.title || 'Agent chat'}\n${msgs.length} message${msgs.length === 1 ? '' : 's'} · copied ${new Date().toLocaleString()}\n\n${body}`;
+      if (!(await copyPlainText(out))) return;
+      setCopiedId(s.id);
+      setTimeout(() => setCopiedId((cur) => (cur === s.id ? null : cur)), 1400);
+    } catch { /* leave the icon untouched — a failed copy never toasts */ }
+  };
+
+  // The options menu closes on any outside click; Escape also cancels an
+  // in-progress rename or armed delete. (Order matters: declared after the
+  // states above — the learner tab once crashed on exactly this TDZ.)
+  useEffect(() => {
+    if (!menuFor && !renamingId) return undefined;
+    const close = (e) => { if (!e.target.closest?.('[data-session-menu]')) { setMenuFor(null); setDeleteArmId(null); } };
+    const onKey = (e) => { if (e.key === 'Escape') { setMenuFor(null); setRenamingId(null); setDeleteArmId(null); } };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', onKey); };
+  }, [menuFor, renamingId]);
+
+  // An armed delete disarms itself — a stray tap can't leave a landmine.
+  useEffect(() => {
+    if (!deleteArmId) return undefined;
+    const t = setTimeout(() => setDeleteArmId(null), 2500);
+    return () => clearTimeout(t);
+  }, [deleteArmId]);
+
   // On mount: load the session list and resume the most recent conversation
   // so a refresh (or tomorrow's visit) picks up exactly where things stopped.
   useEffect(() => {
@@ -233,8 +295,6 @@ export default function ChatPage() {
           setAgentName(agent.agent_name ?? 'Your Agent');
           setAgentEmoji(agent.agent_emoji ?? '🔮');
           setAgentLevel(agent.level ?? agent.total_xp ? Math.floor((agent.total_xp ?? 0) / 500) + 1 : 1);
-          setDraftName(agent.agent_name ?? '');
-          setDraftEmoji(agent.agent_emoji ?? '🔮');
         }
       })
       .catch((e) => console.warn('[chat] profile load failed, using defaults:', e.message));
@@ -404,7 +464,7 @@ export default function ChatPage() {
       return;
     }
     if (!user?.id || !agentId) {
-      setToast({ message: 'Set up your agent (Edit) before training.', type: 'error' });
+      setToast({ message: 'Set up your agent in Profile → Agent before training.', type: 'error' });
       return;
     }
 
@@ -487,20 +547,6 @@ export default function ChatPage() {
     }
     setAttachModal(false); setOcrText(''); setOcrRunning(false); setOcrError(''); setAttachFile(null);
     setTimeout(() => pushAgent("Got it! I've received your attachment and I'm processing it now."), 700);
-  };
-
-  // ── Save agent customisation ──
-  const saveAgent = async () => {
-    setAgentName(draftName || agentName);
-    setAgentEmoji(draftEmoji);
-    setCustModal(false);
-    try {
-      await updateAgent({ agent_name: draftName || agentName, agent_emoji: draftEmoji });
-      setToast({ message: 'Agent updated', type: 'success' });
-    } catch (e) {
-      console.warn('[chat] agent update failed:', e.message);
-      setToast({ message: 'Saved locally (offline)', type: 'info' });
-    }
   };
 
   // ── Human-in-the-loop preview — side-by-side with the chat ──────────────
@@ -607,32 +653,8 @@ export default function ChatPage() {
               </div>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 6, position: 'relative' }}>
-            <Btn variant="secondary" size="sm" onClick={() => { setDraftName(agentName); setDraftEmoji(agentEmoji); setCustModal(true); }}><Edit3 size={13} />Edit</Btn>
+          <div style={{ display: 'flex', gap: 6 }}>
             <Btn variant="secondary" size="sm" onClick={() => setDrawerOpen((p) => !p)}><History size={13} />History</Btn>
-            <Btn variant="primary" size="sm" onClick={() => setTrainModal(true)}><Brain size={13} />Train</Btn>
-            {drawerOpen && (
-              <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', width: 300, maxHeight: 340, overflowY: 'auto', background: WHITE, border: bdr(1, BORDER), borderRadius: 14, boxShadow: '0 12px 32px rgba(23,23,23,.14)', padding: 6, zIndex: 40 }}>
-                <button onClick={newChat} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 10px', border: 'none', background: 'rgba(232,136,74,.08)', borderRadius: 10, cursor: 'pointer', fontSize: 12.5, fontWeight: 800, color: AMBER, fontFamily: FONT }}>
-                  <Plus size={13} /> New chat
-                </button>
-                {chatSessions.length > 0 && <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: .5, color: MUTED2, textTransform: 'uppercase', padding: '10px 10px 4px' }}>Past conversations</div>}
-                {chatSessions.map((sess) => (
-                  <div key={sess.id} onClick={() => openChatSession(sess.id)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 10, cursor: 'pointer' }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = LIGHT; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sess.title || 'New chat'}</div>
-                      <div style={{ fontSize: 10.5, color: MUTED2 }}>{new Date(sess.last_message_at).toLocaleDateString('en-NG', { month: 'short', day: 'numeric' })}</div>
-                    </div>
-                    <button onClick={(e) => { e.stopPropagation(); removeChatSession(sess.id); }} title="Delete conversation"
-                      style={{ border: 'none', background: 'none', cursor: 'pointer', color: MUTED2, padding: 4, display: 'flex' }}><X size={12} /></button>
-                  </div>
-                ))}
-                {chatSessions.length === 0 && <div style={{ padding: '10px', fontSize: 11.5, color: MUTED2 }}>Conversations you have with your agent will appear here.</div>}
-              </div>
-            )}
           </div>
         </div>
 
@@ -848,6 +870,109 @@ export default function ChatPage() {
       </div>
 
       {/* Task modal */}
+      {/* Sessions drawer — the learner chat's drawer, instructor-dressed:
+          full-height panel with backdrop, agent header, New chat, Train agent,
+          and a session list where loading ≠ error ≠ empty and every row has
+          copy / rename / delete under its own kebab. */}
+      {drawerOpen && (
+        <>
+          <div onClick={() => setDrawerOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(23,23,23,.5)', backdropFilter: 'blur(4px)' }} />
+          <div style={{ position: 'fixed', top: 0, bottom: 0, left: 0, zIndex: 2100, width: 'min(86vw, 320px)', background: WHITE, boxShadow: '6px 0 40px rgba(23,23,23,.2)', animation: 'ci-drawer-in .28s cubic-bezier(.32,1,.64,1)', fontFamily: FONT, display: 'flex', flexDirection: 'column' }}>
+            <style>{`@keyframes ci-drawer-in{from{transform:translateX(-100%)}to{transform:translateX(0)}}.ci-sess-item:hover{background:${LIGHT}}`}</style>
+            {/* Agent header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 16px 13px', borderBottom: bdr(1, BORDER), flexShrink: 0 }}>
+              <div style={{ width: 46, height: 46, borderRadius: '50%', background: '#FEF0E6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 23, boxShadow: `0 0 0 2px #fff, 0 0 0 3.5px ${AMBER}`, flexShrink: 0 }}>{agentEmoji}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 14.5, fontWeight: 900, color: INK, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{agentName}</p>
+                <div style={{ fontSize: 11, color: trainingInChat ? AMBER : GREEN, display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: trainingInChat ? AMBER : GREEN, display: 'inline-block', animation: trainingInChat ? 'pulse-dot 1.4s ease-in-out infinite' : 'none' }} />
+                  {trainingInChat ? 'Training in progress…' : `Online · Lv ${agentLevel}`}
+                </div>
+              </div>
+              <button onClick={() => setDrawerOpen(false)} title="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex' }}><X size={17} color={MUTED2} /></button>
+            </div>
+            {/* New chat + Train agent */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 16px', flexShrink: 0 }}>
+              <button onClick={newChat} style={{ width: '100%', padding: 11, borderRadius: 12, border: 'none', background: 'linear-gradient(135deg,#E8884A,#F0A04B)', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+                <Plus size={14} strokeWidth={2.6} /> New chat
+              </button>
+              <button onClick={() => { setTrainModal(true); }} disabled={trainingInChat} title={trainingInChat ? 'Training already in progress' : 'Train your agent on a lesson recording or document'}
+                style={{ width: '100%', padding: 11, borderRadius: 12, border: bdr(1.5, trainingInChat ? BORDER : `${AMBER}66`), background: trainingInChat ? LIGHT : 'rgba(232,136,74,.07)', color: trainingInChat ? MUTED2 : AMBER, fontSize: 13, fontWeight: 800, cursor: trainingInChat ? 'wait' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+                <Brain size={14} /> {trainingInChat ? 'Training in progress…' : 'Train agent'}
+              </button>
+            </div>
+            {/* Sessions */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px 6px', flexShrink: 0 }}>
+              <p style={{ fontSize: 11, fontWeight: 900, letterSpacing: .5, textTransform: 'uppercase', color: MUTED2, margin: 0 }}>Chats</p>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0 10px 16px' }}>
+              {sessionsLoading && chatSessions.length === 0 ? (
+                <p style={{ textAlign: 'center', fontSize: 12, color: MUTED2, padding: '20px 0' }}>Loading…</p>
+              ) : chatSessions.length === 0 ? (
+                historyError ? (
+                  <div style={{ textAlign: 'center', padding: '28px 16px', color: AMBER }}>
+                    <CloudOff size={34} style={{ opacity: .5 }} />
+                    <p style={{ fontSize: 12.5, fontWeight: 700, marginTop: 8, lineHeight: 1.5 }}>Couldn&apos;t load your chat history — check your connection. Your chats are safe.</p>
+                    <button onClick={retryHistoryLoad} style={{ marginTop: 10, border: 'none', background: 'rgba(232,136,74,.1)', color: AMBER, cursor: 'pointer', fontSize: 11, fontWeight: 900, padding: '6px 14px', borderRadius: 8, fontFamily: FONT }}>Try again</button>
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '28px 16px', color: MUTED2 }}>
+                    <History size={34} style={{ opacity: .3 }} />
+                    <p style={{ fontSize: 12.5, fontWeight: 700, marginTop: 8 }}>No chats yet. Conversations with your agent will appear here.</p>
+                  </div>
+                )
+              ) : chatSessions.map((s) => {
+                const active = s.id === chatSessionRef.current;
+                return (
+                  <div key={s.id} style={{ marginBottom: 2 }}>
+                    <div onClick={() => openChatSession(s.id)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 10px', borderRadius: 10, cursor: renamingId === s.id ? 'default' : 'pointer', background: active ? 'rgba(232,136,74,.12)' : 'transparent', border: bdr(1, active ? `${AMBER}30` : 'transparent') }}>
+                      {renamingId === s.id ? (
+                        <div data-session-menu onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
+                          <input autoFocus value={renameDraft} onChange={(e) => setRenameDraft(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') saveRename(s); else if (e.key === 'Escape') setRenamingId(null); }}
+                            maxLength={80} aria-label="Chat name"
+                            style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: INK, background: LIGHT, border: bdr(1.5, `${AMBER}55`), borderRadius: 8, padding: '6px 9px', outline: 'none', fontFamily: FONT }} />
+                          <button type="button" onClick={() => saveRename(s)} title="Save name" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', flexShrink: 0 }}><Check size={15} color={GREEN} /></button>
+                          <button type="button" onClick={() => setRenamingId(null)} title="Cancel" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', flexShrink: 0 }}><X size={15} color={MUTED2} /></button>
+                        </div>
+                      ) : (
+                        <>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ fontSize: 13, fontWeight: active ? 800 : 700, color: active ? AMBER : INK, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.title || 'New chat'}</p>
+                            <p style={{ fontSize: 10.5, color: MUTED2, margin: '2px 0 0' }}>{relTime(s.last_message_at)}</p>
+                          </div>
+                          <button data-session-menu onClick={(e) => { e.stopPropagation(); setMenuFor(menuFor === s.id ? null : s.id); setDeleteArmId(null); }} title="Chat options" aria-expanded={menuFor === s.id}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 5, display: 'flex', flexShrink: 0, opacity: .6 }}>
+                            <MoreVertical size={14} color={MUTED2} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    {menuFor === s.id && renamingId !== s.id && (
+                      <div data-session-menu role="menu" aria-label="Chat options" onClick={(e) => e.stopPropagation()} style={{ margin: '4px 4px 8px', background: WHITE, border: bdr(1, BORDER), borderRadius: 12, boxShadow: '0 6px 18px rgba(23,23,23,.14)', padding: 4, animation: 'ci-drawer-in .16s ease' }}>
+                        {[
+                          { key: 'copy',   icon: copiedId === s.id ? Check : Copy,   label: copiedId === s.id ? 'Copied' : 'Copy chat', color: copiedId === s.id ? GREEN : INK, run: () => { setMenuFor(null); copySession(s); } },
+                          { key: 'rename', icon: Pencil, label: 'Rename', color: INK, run: () => { setMenuFor(null); setRenamingId(s.id); setRenameDraft(s.title || ''); } },
+                          deleteArmId === s.id
+                            ? { key: 'delete', icon: Trash2, label: 'Tap again to delete', color: RED, run: () => { setMenuFor(null); setDeleteArmId(null); removeChatSession(s.id); } }
+                            : { key: 'delete', icon: Trash2, label: 'Delete', color: RED, run: () => setDeleteArmId(s.id) },
+                        ].map((it) => (
+                          <button key={it.key} type="button" role="menuitem" className="ci-sess-item" onClick={it.run}
+                            style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '11px 12px', borderRadius: 8, border: 'none', background: 'none', cursor: 'pointer', fontFamily: FONT, textAlign: 'left' }}>
+                            <it.icon size={14} color={it.color} />
+                            <span style={{ fontSize: 12.5, fontWeight: 800, color: it.color }}>{it.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
+
       <Modal open={taskModal} onClose={() => setTaskModal(false)} title="📋 Create Task for Agent">
         <Inp label="Task title" placeholder="e.g. Generate quiz for Module 3" value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} />
         <FileUploadZone label="Attach files (optional)" accept=".pdf,.doc,.docx,.pptx,.jpg,.png" />
@@ -926,20 +1051,6 @@ export default function ChatPage() {
           {['Mathematics', 'Chemistry', 'Physics', 'Biology', 'English', 'Economics', 'Computer Science', 'General'].map((s) => <option key={s} value={s}>{s}</option>)}
         </Sel>
         <Btn variant="primary" style={{ width: '100%' }} onClick={startTraining}><Brain size={14} />Start training {agentName}</Btn>
-      </Modal>
-
-      {/* Customise modal */}
-      <Modal open={custModal} onClose={() => setCustModal(false)} title="✨ Customise Your Agent">
-        <Inp label="Agent name" placeholder="e.g. Pythia" value={draftName} onChange={(e) => setDraftName(e.target.value)} />
-        <div style={{ marginBottom: 14 }}>
-          <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, display: 'block', marginBottom: 8 }}>Pick an avatar</label>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {AGENT_AVATARS.map((em) => (
-              <button key={em} onClick={() => setDraftEmoji(em)} style={{ width: 44, height: 44, borderRadius: 12, border: bdr(2, draftEmoji === em ? AMBER : BORDER), background: draftEmoji === em ? 'rgba(232,136,74,.1)' : LIGHT, fontSize: 22, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{em}</button>
-            ))}
-          </div>
-        </div>
-        <Btn variant="primary" style={{ width: '100%' }} onClick={saveAgent}><CheckCircle2 size={14} />Save agent</Btn>
       </Modal>
     </PageLayout>
   );
