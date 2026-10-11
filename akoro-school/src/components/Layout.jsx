@@ -6,12 +6,13 @@ import {
   ClipboardList, Layers, Laptop, UserCog, UserCheck, CalendarClock, NotebookPen,
   ClipboardCheck, QrCode, ShieldCheck, BookOpenCheck, Award, Megaphone, Coins,
   Library, Package, Bus, BedDouble, LifeBuoy, Boxes, BarChart3, CreditCard,
-  LayoutGrid, MessageSquare, LogOut, Bell, ChevronDown, Menu, Search,
+  LayoutGrid, MessageSquare, LogOut, Bell, ChevronDown, Menu, Search, X, UserCircle, Settings,
   User, ShieldQuestion,
   BookOpen, Presentation, Swords, ListTodo, FileCheck, Store,
   PanelsTopLeft,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import AppHeader from './AppHeader.jsx';
 import { apiGet } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, WHITE, FONT } from '../constants.js';
 
@@ -358,7 +359,7 @@ function Group({ item, collapsed, open, onToggle }) {
   );
 }
 
-export function Sidebar({ collapsed }) {
+export function Sidebar({ collapsed, onClose }) {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState({});
   const [query, setQuery] = useState('');
@@ -435,6 +436,11 @@ export function Sidebar({ collapsed }) {
               <div style={{ fontSize: 10, color: MUTED2, fontFamily: FONT }}>School Portal</div>
             </div>
           )}
+          {onClose && (
+            <button onClick={onClose} aria-label="Close menu" title="Close menu" style={{ marginLeft: 'auto', width: 34, height: 34, borderRadius: 9, border: '1px solid rgba(255,255,255,.12)', background: 'rgba(255,255,255,.05)', color: WHITE, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+              <X size={16} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -459,7 +465,7 @@ export function Sidebar({ collapsed }) {
 
       {/* Nav — min-height:0 lets this flex child scroll internally instead of
           growing to its content height and pushing the account row off-screen. */}
-      <nav style={{ flex: 1, minHeight: 0, padding: '8px 0', overflowY: 'auto', scrollbarWidth: 'thin' }}>
+      <nav onClickCapture={onClose ? (e) => { if (e.target.closest?.('a')) onClose(); } : undefined} style={{ flex: 1, minHeight: 0, padding: '8px 0', overflowY: 'auto', scrollbarWidth: 'thin' }}>
         {sections.map((sec) => (
           <div key={sec.section} style={{ marginBottom: 6 }}>
             {!collapsed && <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 1.2, color: 'rgba(255,255,255,.35)', padding: '10px 20px 4px', fontFamily: FONT }}>{sec.section}</div>}
@@ -516,10 +522,13 @@ export function TopBar({ title, subtitle, action, onToggleSidebar }) {
   return (
     <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'rgba(250,248,245,.95)', backdropFilter: 'blur(8px)', borderBottom: `1px solid ${BORDER}`, padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-        {/* Hamburger — collapses the sidebar to icons-only */}
-        <button onClick={onToggleSidebar} title="Toggle sidebar" style={{ background: WHITE, border: `1.5px solid ${BORDER}`, borderRadius: 10, padding: '8px', cursor: 'pointer', color: INK, display: 'flex', alignItems: 'center' }}>
-          <Menu size={17} />
-        </button>
+        {/* Hamburger — collapses the sidebar to icons-only (desktop; on mobile
+            the AppHeader hamburger owns the drawer) */}
+        {onToggleSidebar && (
+          <button onClick={onToggleSidebar} title="Toggle sidebar" style={{ background: WHITE, border: `1.5px solid ${BORDER}`, borderRadius: 10, padding: '8px', cursor: 'pointer', color: INK, display: 'flex', alignItems: 'center' }}>
+            <Menu size={17} />
+          </button>
+        )}
         <div>
           <h1 style={{ fontSize: 19, fontWeight: 700, color: INK, margin: 0, fontFamily: FONT }}>{title}</h1>
           {subtitle && <p style={{ fontSize: 13, color: MUTED, margin: '2px 0 0', fontFamily: FONT }}>{subtitle}</p>}
@@ -535,8 +544,84 @@ export function TopBar({ title, subtitle, action, onToggleSidebar }) {
 
 export function BottomNav() { return null; }
 
+// Phones (below 768px) get the app-shaped shell: the shared Akoro AppHeader
+// (hamburger | spacer | actions | avatar menu) and full-width pages — the
+// sidebar exists ONLY as a drawer the hamburger opens, closed by its X, the
+// hamburger again, the backdrop, or Escape. Tablet/desktop keep the
+// permanent collapsible sidebar unchanged.
+const MOBILE_QUERY = '(max-width: 767px)';
+function useIsMobile() {
+  const [mobile, setMobile] = useState(() => {
+    try { return window.matchMedia(MOBILE_QUERY).matches; } catch { return false; }
+  });
+  useEffect(() => {
+    let mq;
+    try { mq = window.matchMedia(MOBILE_QUERY); } catch { return; }
+    const onChange = (e) => setMobile(e.matches);
+    mq.addEventListener?.('change', onChange);
+    return () => mq.removeEventListener?.('change', onChange);
+  }, []);
+  return mobile;
+}
+
 export function PageLayout({ children, title, subtitle, action }) {
   const [collapsed, setCollapsed] = useState(false);
+  const mobile = useIsMobile();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Scroll lock while the drawer is open; never carry it back to desktop.
+  useEffect(() => {
+    if (!mobile) { setDrawerOpen(false); return; }
+    if (!drawerOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [mobile, drawerOpen]);
+
+  // Escape closes the drawer.
+  useEffect(() => {
+    if (!mobile || !drawerOpen) return;
+    const onKey = (e) => { if (e.key === 'Escape') setDrawerOpen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [mobile, drawerOpen]);
+
+  if (mobile) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+        <AppHeader
+          onMenu={() => setDrawerOpen((o) => !o)}
+          user={user}
+          actions={[
+            { key: 'chat', icon: MessageSquare, label: 'AI Chat', variant: 'square', onClick: () => navigate('/chat') },
+          ]}
+          menuItems={[
+            { key: 'profile',  label: 'Profile',  icon: UserCircle, to: '/profile' },
+            { key: 'settings', label: 'Settings', icon: Settings,   to: '/settings' },
+            'divider',
+            { key: 'logout',   label: 'Log out',  icon: LogOut,     danger: true, onClick: logout },
+          ]}
+        />
+        <TopBar title={title} subtitle={subtitle} action={action} onToggleSidebar={null} />
+        <main style={{ flex: 1, overflowY: 'auto', padding: '16px 14px' }}>{children}</main>
+        {drawerOpen && (
+          <div onClick={() => setDrawerOpen(false)} aria-hidden="true" style={{ position: 'fixed', inset: 0, zIndex: 1090, background: 'rgba(0,0,0,.45)' }} />
+        )}
+        <aside role="navigation" aria-label="Main menu" aria-hidden={!drawerOpen} style={{
+          position: 'fixed', top: 0, left: 0, bottom: 0, width: 288, zIndex: 1100,
+          transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
+          visibility: drawerOpen ? 'visible' : 'hidden',
+          transition: 'transform .22s ease, visibility .22s',
+          boxShadow: drawerOpen ? '12px 0 32px rgba(0,0,0,.35)' : 'none',
+        }}>
+          <Sidebar collapsed={false} onClose={() => setDrawerOpen(false)} />
+        </aside>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <Sidebar collapsed={collapsed} />
