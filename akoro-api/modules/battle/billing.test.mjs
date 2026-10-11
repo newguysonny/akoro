@@ -67,7 +67,7 @@ test("the creator sets HP per miss; every miss costs exactly that, and invitees 
   assert.doesNotMatch(worker, /- 8\)/);
   const routes = await read("./routes.js");
   assert.equal((routes.match(/hp_per_miss: cleanHpPerMiss\(req\.body\?\.hp_per_miss\),/g) || []).length, 6);   // every creation path
-  assert.match(routes, /hpPerMiss:     b\.hp_per_miss \?\? HP_PER_MISS_DEFAULT,/);                         // on every card / challenge
+  assert.match(await read("./card.js"), /hpPerMiss:     b\.hp_per_miss \?\? HP_PER_MISS_DEFAULT,/);       // on every card / challenge
 });
 
 test("entry: enough coins for your agent's answers and the creator's minimum XP — reviews never gated on XP, and pay a free coin", async () => {
@@ -82,4 +82,20 @@ test("entry: enough coins for your agent's answers and the creator's minimum XP 
   assert.equal((routes.match(/code: "ENTRY_REQUIREMENTS"/g) || []).length, 6);   // accept, join, 4 creator checks
   assert.match(routes, /router\.get\("\/battles\/:battleId\/entry"/);
   assert.match(worker, /if \(isReview && REVIEW_REWARD_COINS > 0\) \{[\s\S]*?grantCoins\(\{ userId: p\.user_id, coins: REVIEW_REWARD_COINS, feature: "review_participation"/);
+});
+
+test("start and end are claimed once; a question is revealed once and late answers don't count", async () => {
+  assert.match(worker, /\.eq\("id", battleId\)\.in\("status", \["lobby", "scheduled"\]\)\.select\("id"\);\s*if \(!claimed\?\.length\) return;/);
+  assert.match(worker, /\.eq\("id", battleId\)\.eq\("status", "live"\)\.select\("id"\);\s*if \(!ended\?\.length\) return;/);
+  assert.match(worker, /update\(\{ revealed_at: now\(\) \}\)[\s\S]*?\.is\("revealed_at", null\)/);
+  assert.match(worker, /if \(still\?\.revealed_at\) return;/);
+  assert.match(worker, /wrong_answers: \(p\.wrong_answers \?\? 0\) \+ 1, current_streak: 0/);     // a miss breaks the streak
+  const routes = await read("./routes.js");
+  assert.doesNotMatch(routes, /update\(\{ status: isScheduled \? "scheduled" : "live" \}\)/);     // accepting never marks it live
+  assert.doesNotMatch(await read("./networkBattle.js"), /update\(\{ status: "live" \}\)/);
+});
+
+test("reviews pay once at the end; knocked-out members stop counting for their team", () => {
+  assert.match(worker, /const xpGained    = isReviewBattle \? 0 :/);
+  assert.match(worker, /if \(\(p\.hp \?\? 100\) > 0\) teamTotals\[p\.team \|\| "A"\] \+= \(p\.score \|\| 0\);/);
 });

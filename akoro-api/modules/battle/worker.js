@@ -17,12 +17,20 @@ import { updateKnowledgeConfidence, flagBattleReviewTopics } from "./knowledge.j
 import { emitAutonomyEvent } from "../autonomy/triggers.js";
 import { workerJob } from "../../lib/workerLog.js";
 import { coinsAvailable, schoolBillTo, InsufficientCoins, grantCoins } from "../../lib/coins.js";
-import { REVIEW_REWARD_COINS } from "./entry.js";
+import { REVIEW_REWARD_COINS, minPlayersFor } from "./entry.js";
 import { prepareRuling, ruling, verdict, JUDGE } from "./judge.js";
 import { HP_PER_MISS_DEFAULT } from "./hp.js";
 
 // Agents already told they are out of coins this battle (one log line each, not one per question).
 const toldNoCoins = new Set();
+// Each question's embedding, computed once when it goes out and reused by every
+// agent's answer job (the platform pays for it — once, not once per agent).
+const questionVectors = new Map();
+const rememberVector = (qid, v) => {
+  if (!qid || !v) return;
+  questionVectors.set(qid, v);
+  if (questionVectors.size > 500) questionVectors.delete(questionVectors.keys().next().value);
+};
 
 const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "battle-worker" }));
 redis.on("error", (err) => console.error("[battle-worker/redis]", err.message));
@@ -142,8 +150,7 @@ async function startBattle(battleId) {
   // its normal state, not a failure. It needs one, and only one.
   // The daily battle runs for whoever turned up, even one agent: it is the
   // day's set, ranked across all its heats, not a duel.
-  const isDaily = String(battle.recurring_key || "").startsWith("daily:");
-  const minPlayers = battle.battle_type === "review" || isDaily ? 1 : 2;
+  const minPlayers = minPlayersFor(battle);
 
   if (competing.length < minPlayers) {
     await db.from("battles").update({ status: "cancelled" }).eq("id", battleId);
@@ -178,9 +185,13 @@ async function startBattle(battleId) {
   }
 
   const participants = [...runners, ...competing];
-  await db.from("battles").update({
+  // Claim the start: only one run may flip a waiting battle live. Start jobs
+  // can be queued more than once (at creation, on accept, by Start now); a
+  // second run used to broadcast Q1 and schedule every agent's answers again.
+  const { data: claimed } = await db.from("battles").update({
     status: "live", actual_start: now(), total_participants: participants.length,
-  }).eq("id", battleId);
+  }).eq("id", battleId).in("status", ["lobby", "scheduled"]).select("id");
+  if (!claimed?.length) return;
 
   for (const p of (participants ?? [])) {
     await db.from("battle_viewers").upsert({ battle_id: battleId, user_id: p.user_id, is_participant: true }, { onConflict: "battle_id,user_id" });
@@ -257,7 +268,7 @@ async function agentAnswer(battleId, questionOrder, participantId, thinkingMs = 
   let picked = null, basis = "unknown", cited = null;
   let broke = !wallet.ok;
   if (!broke) {
-    const embedding = await embedQuestion(`${q.topic ? q.topic + ": " : ""}${q.question_text}`);
+    const embedding = questionVectors.get(q.id) ?? await embedQuestion(`${q.topic ? q.topic + ": " : ""}${q.question_text}`);
     const notes = await recall({
       studentId: p.user_id, embedding, topic: q.topic,
       // The question drives the lexical half of the search, and the subject
@@ -300,6 +311,13 @@ async function agentAnswer(battleId, questionOrder, participantId, thinkingMs = 
     }
     return;
   }
+
+  // Too late? Recall and the answer take time; if the question has been
+  // revealed meanwhile, this answer doesn't count — the reveal already marked
+  // the miss and took the HP. (Counting it afterwards scored a point the
+  // reveal had already called wrong.)
+  const { data: still } = await db.from("battle_questions").select("revealed_at").eq("id", q.id).maybeSingle();
+  if (still?.revealed_at) return;
 
   const isCorrect   = picked === q.correct_answer_index;
   const newStreak   = isCorrect ? (p.current_streak ?? 0) + 1 : 0;
@@ -361,12 +379,12 @@ async function agentAnswer(battleId, questionOrder, participantId, thinkingMs = 
   // Push the running scoreboard so anyone watching sees it move as they answer,
   // rather than everything jumping at the reveal.
   const { data: rows } = await db.from("battle_participants")
-    .select(`user_id, score, hp, current_streak, user_agents(agent_name, agent_emoji, agent_color)`)
+    .select(`user_id, role, score, hp, current_streak, user_agents(agent_name, agent_emoji, agent_color)`)
     .eq("battle_id", battleId).order("score", { ascending: false });
   global.io?.to(`battle:${battleId}`).emit("battle:state", {
     questionOrder,
     participants: (rows ?? []).map((r) => ({
-      userId: r.user_id, agentName: r.user_agents?.agent_name, agentEmoji: r.user_agents?.agent_emoji,
+      userId: r.user_id, role: r.role, agentName: r.user_agents?.agent_name, agentEmoji: r.user_agents?.agent_emoji,
       score: r.score, hp: r.hp, streak: r.current_streak,
     })),
   });
@@ -383,6 +401,7 @@ async function scheduleAgentAnswers(battleId, q) {
   // One embedding for the question, shared by every agent searching against it.
   // Per agent it would be the same vector computed N times and billed N times.
   const embedding = await embedQuestion(`${q.topic ? q.topic + ": " : ""}${q.question_text}`);
+  rememberVector(q.id, embedding);
   for (const p of players) {
     // Pacing only. An agent with notes on the topic answers sooner, so the log
     // still reads like a race — but what it ANSWERS is decided later, by
@@ -411,8 +430,14 @@ async function revealQuestion(battleId, questionOrder) {
   const { data: liveCheck } = await db.from("battles").select("status").eq("id", battleId).maybeSingle();
   if (liveCheck?.status !== "live") return;
 
-  const { data: q } = await db.from("battle_questions").select("*").eq("battle_id", battleId).eq("question_order", questionOrder).single();
-  if (!q) return endBattle(battleId);
+  const { data: q0 } = await db.from("battle_questions").select("*").eq("battle_id", battleId).eq("question_order", questionOrder).single();
+  if (!q0) return endBattle(battleId);
+  // Claim the reveal: once, however often the job is retried or queued, and
+  // from this moment no late answer is accepted for the question.
+  const { data: claimedQ } = await db.from("battle_questions").update({ revealed_at: now() })
+    .eq("id", q0.id).is("revealed_at", null).select("*");
+  if (!claimedQ?.length) return;
+  const q = claimedQ[0];
 
   // The agent has to be reached THROUGH the participant. battle_answers has no
   // agent_id, so embedding user_agents directly asked PostgREST for a foreign
@@ -457,24 +482,29 @@ async function revealQuestion(battleId, questionOrder) {
       // A missed question still counts as wrong on the mark sheet; only the HP
       // loss is a contest mechanic, so a review keeps the count and drops the
       // damage. (isReviewBattle is read once, above the loop.)
+      // A miss breaks the streak, however the miss happened.
       await db.from("battle_participants").update({
-        wrong_answers: (p.wrong_answers ?? 0) + 1,
+        wrong_answers: (p.wrong_answers ?? 0) + 1, current_streak: 0,
       }).eq("id", p.id);
       if (!passed.has(p.user_id)) {   // a pass was already explained when it happened
         const { data: agent } = await db.from("user_agents").select("agent_name, agent_emoji").eq("id", p.agent_id).single();
         await appendLog(battleId, "answer_timeout", `⏰ ${agent?.agent_name} ran out of time!`, p.user_id, agent?.agent_name, agent?.agent_emoji, questionOrder);
       }
     } else if (!correct) {
+      // Counted here, like a no-answer — the reveal is the one tally of misses.
+      await db.from("battle_participants").update({ wrong_answers: (p.wrong_answers ?? 0) + 1 }).eq("id", p.id);
       await appendLog(battleId, "answer_wrong",
         guessed
           ? `❓ ${agentOf(ans)?.agent_name} had nothing on this — guessed ${options[ans.selected_index]}`
           : `❌ ${agentOf(ans)?.agent_name} answered wrong — chose ${options[ans.selected_index]}${from}`,
         p.user_id, agentOf(ans)?.agent_name, agentOf(ans)?.agent_emoji, questionOrder);
     } else {
-      const streakBonus = Math.floor((ans.streak_at_time ?? 0) * 5);
-      const xpGained    = q.xp_value + streakBonus;
+      // A review pays once, at the end (pool × share of the paper) — no XP per
+      // question. A battle pays per right answer as it goes, plus the pool.
+      const streakBonus = isReviewBattle ? 0 : Math.floor((ans.streak_at_time ?? 0) * 5);
+      const xpGained    = isReviewBattle ? 0 : q.xp_value + streakBonus;
       await db.from("battle_participants").update({ score: (p.score ?? 0) + 1, correct_answers: (p.correct_answers ?? 0) + 1 }).eq("id", p.id);
-      await creditXP(p.user_id, p.agent_id, xpGained, "battle_correct", battleId);
+      if (xpGained > 0) await creditXP(p.user_id, p.agent_id, xpGained, "battle_correct", battleId);
       await db.from("battle_answers").update({ xp_gained: xpGained }).eq("id", ans.id);
       await appendLog(battleId, "answer_correct",
         guessed
@@ -482,7 +512,7 @@ async function revealQuestion(battleId, questionOrder) {
           : `✅ ${agentOf(ans)?.agent_name} answered correctly — ${options[q.correct_answer_index]}${from}`,
         p.user_id, agentOf(ans)?.agent_name, agentOf(ans)?.agent_emoji, questionOrder,
         { xpGained, streak: ans.streak_at_time, responseMs: ans.response_time_ms });
-      if ((ans.streak_at_time ?? 0) >= 2) {
+      if (!isReviewBattle && (ans.streak_at_time ?? 0) >= 2) {
         await appendLog(battleId, "streak",
           `🔥 ${agentOf(ans)?.agent_name} is on a ${ans.streak_at_time}× streak! +${streakBonus} bonus XP`,
           p.user_id, agentOf(ans)?.agent_name, agentOf(ans)?.agent_emoji, questionOrder,
@@ -535,6 +565,19 @@ async function revealQuestion(battleId, questionOrder) {
     }
   }
 
+  // The scoreboard as the reveal left it — score and HP only change here, so
+  // without this the arena lagged until its next poll.
+  const { data: board } = await db.from("battle_participants")
+    .select(`user_id, role, score, hp, current_streak, user_agents(agent_name, agent_emoji, agent_color)`)
+    .eq("battle_id", battleId).order("score", { ascending: false });
+  global.io?.to(`battle:${battleId}`).emit("battle:state", {
+    questionOrder,
+    participants: (board ?? []).map((r) => ({
+      userId: r.user_id, role: r.role, agentName: r.user_agents?.agent_name, agentEmoji: r.user_agents?.agent_emoji,
+      score: r.score, hp: r.hp, streak: r.current_streak,
+    })),
+  });
+
   // Every question is played while anyone still has HP to play it. A battle
   // doesn't end because one agent is left standing — only after the last
   // question, or when nobody is left who can answer.
@@ -567,10 +610,13 @@ async function advanceQuestion(battleId, questionOrder) {
 // ─── end-battle ───────────────────────────────────────────────────────────────
 
 async function endBattle(battleId) {
-  const { data: current } = await db.from("battles").select("status").eq("id", battleId).single();
-  if (current?.status === "completed") return;
-
-  await db.from("battles").update({ status: "completed", actual_end: now() }).eq("id", battleId);
+  // Claim the end: only a LIVE battle ends, and only once. "End now" and the
+  // last reveal's queued end could both pass a read-then-write check and pay
+  // the XP pool (and a review's coins) twice; and ending a battle that never
+  // started ranked and paid invitees who had never accepted.
+  const { data: ended } = await db.from("battles").update({ status: "completed", actual_end: now() })
+    .eq("id", battleId).eq("status", "live").select("id");
+  if (!ended?.length) return;
 
   const { data: battleInfo } = await db.from("battles").select("xp_prize, xp_pool, battle_type, course_id, actual_start, actual_end, total_questions").eq("id", battleId).single();
   const durSecs = battleInfo?.actual_start && battleInfo?.actual_end
@@ -589,22 +635,26 @@ async function endBattle(battleId) {
   // sheet followed the wrong number. battle_answers is the record of what was
   // actually answered, so the final tally comes from there.
   const { data: settle } = await db.from("battle_answers")
-    .select("participant_id, is_correct").eq("battle_id", battleId);
+    .select("participant_id, question_id, is_correct").eq("battle_id", battleId);
+  const { data: revealedQs } = await db.from("battle_questions").select("id").eq("battle_id", battleId).not("revealed_at", "is", null);
+  const revealed = new Set((revealedQs ?? []).map((r) => r.id));
   const tally = new Map();
   for (const a of (settle ?? [])) {
-    const t = tally.get(a.participant_id) ?? { correct: 0, wrong: 0 };
-    a.is_correct ? t.correct++ : t.wrong++;
+    const t = tally.get(a.participant_id) ?? { correct: 0, unrevealedWrong: 0 };
+    if (a.is_correct) t.correct++;
+    else if (!revealed.has(a.question_id)) t.unrevealedWrong++;   // the reveal already counted the rest
     tally.set(a.participant_id, t);
   }
   const { data: preSeats } = await db.from("battle_participants")
     .select("id, role, wrong_answers").eq("battle_id", battleId);
   for (const p of (preSeats ?? [])) {
     if (p.role === "teacher") continue;
-    const t = tally.get(p.id) ?? { correct: 0, wrong: 0 };
-    // A question with no answer (no knowledge, no credit, out of time) has no
-    // answer row but was counted wrong at its reveal — keep it counted.
+    const t = tally.get(p.id) ?? { correct: 0, unrevealedWrong: 0 };
+    // Misses: every one the reveals counted (wrong answers AND no answers —
+    // no notes, no credit, out of time), plus wrong answers on a question
+    // "End now" cut off before its reveal.
     await db.from("battle_participants")
-      .update({ score: t.correct, correct_answers: t.correct, wrong_answers: Math.max(t.wrong, p.wrong_answers ?? 0) })
+      .update({ score: t.correct, correct_answers: t.correct, wrong_answers: (p.wrong_answers ?? 0) + t.unrevealedWrong })
       .eq("id", p.id);
   }
 
@@ -630,7 +680,12 @@ async function endBattle(battleId) {
   // member of it is a winner. Ties share the result.
   const isTeam = battleInfo?.battle_type === "team";
   const teamTotals = {};
-  if (isTeam) for (const p of participants) teamTotals[p.team || "A"] = (teamTotals[p.team || "A"] || 0) + (p.score || 0);
+  // A knocked-out member's points stop counting for the team — they are out.
+  // Both teams are on the board even if one has nobody left (it scores 0).
+  if (isTeam) {
+    for (const p of participants) teamTotals[p.team || "A"] ??= 0;
+    for (const p of participants) if ((p.hp ?? 100) > 0) teamTotals[p.team || "A"] += (p.score || 0);
+  }
   const winTeam = isTeam ? (Object.entries(teamTotals).sort((a, b) => b[1] - a[1])[0] || [null])[0] : null;
   const teamTie = isTeam && new Set(Object.values(teamTotals)).size === 1;
 
@@ -649,6 +704,7 @@ async function endBattle(battleId) {
       : (p.team || "A") === winTeam ? (battleInfo?.xp_prize ?? 0) : Math.round((battleInfo?.xp_prize ?? 0) * 0.2)]))
     : computeXpDistribution(ranked, pool ?? 0);
 
+  const earnedXp = new Map();
   for (let i = 0; i < (participants ?? []).length; i++) {
     const p = participants[i];
     const r = rankOf.get(p.id);
@@ -656,6 +712,7 @@ async function endBattle(battleId) {
     const xpEarned = isReview
       ? Math.round((pool ?? 0) * Math.min(1, share))
       : (xpDist[p.id] ?? 0);
+    earnedXp.set(p.id, xpEarned);
 
     await db.from("battle_participants").update({
       // A rank of 1 in a field of one is not a boast, but it IS what every
@@ -702,7 +759,7 @@ async function endBattle(battleId) {
       : winner ? `🏁 Battle complete! ${winner.user_agents?.agent_name} wins ${winner.score ?? 0}–${runnerUp?.score ?? 0}`
       : "🏁 Battle complete — every agent ran out of HP, so nobody is ranked",
     winner?.user_id, winner?.user_agents?.agent_name, winner?.user_agents?.agent_emoji, null,
-    { finalScores: (participants ?? []).map((p, i) => ({ rank: i + 1, agentName: p.user_agents?.agent_name, score: p.score, xpEarned: xpDist[p.id] ?? 0 })) }
+    { finalScores: (participants ?? []).map((p) => ({ rank: rankOf.has(p.id) ? rankOf.get(p.id) + 1 : null, agentName: p.user_agents?.agent_name, score: p.score, xpEarned: earnedXp.get(p.id) ?? 0 })) }
   );
 
   getIO().to(`battle:${battleId}`).emit("battle:over", {
@@ -713,7 +770,7 @@ async function endBattle(battleId) {
     winner: isReview || !winner ? null : { userId: winner?.user_id, agentName: winner?.user_agents?.agent_name, agentEmoji: winner?.user_agents?.agent_emoji, score: winner?.score, xpEarned: xpDist[winner?.id] },
     finalScores: (participants ?? []).map((p) => ({
       rank: rankOf.has(p.id) ? rankOf.get(p.id) + 1 : null, userId: p.user_id, agentName: p.user_agents?.agent_name,
-      agentEmoji: p.user_agents?.agent_emoji, score: p.score, hp: p.hp, xpEarned: xpDist[p.id] ?? 0,
+      agentEmoji: p.user_agents?.agent_emoji, score: p.score, hp: p.hp, xpEarned: earnedXp.get(p.id) ?? 0,
     })),
     durationSeconds: durSecs, durationFormatted: `${mm}:${ss}`,
     // So the arena can switch to the mark-sheet panel without waiting for the
@@ -785,13 +842,14 @@ async function logBattlePastQuestions(battleId, participants) {
  * real work. If there are enough players, start it instead.
  */
 async function expireBattle(battleId) {
-  const { data: battle } = await db.from("battles").select("status").eq("id", battleId).maybeSingle();
+  const { data: battle } = await db.from("battles").select("status, battle_type, recurring_key").eq("id", battleId).maybeSingle();
   if (!battle || !["lobby", "scheduled"].includes(battle.status)) return;
 
   const { data: seats } = await db.from("battle_participants")
     .select("role, joined_at, declined_at").eq("battle_id", battleId);
   const players = (seats ?? []).filter((p) => p.role !== "teacher" && p.joined_at && !p.declined_at).length;
-  if (players >= 2) return startBattle(battleId);
+  // Enough said yes → run it with them (a review or daily battle needs only one).
+  if (players >= minPlayersFor(battle)) return startBattle(battleId);
 
   const { data } = await db.from("battles").update({ status: "expired" })
     .in("status", ["lobby", "scheduled"]).eq("id", battleId).select("id").maybeSingle();

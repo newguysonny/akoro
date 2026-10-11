@@ -506,6 +506,8 @@ export default function LearnerDashboard() {
     }
   }, [agentAutonomyLoaded, agentAutonomySaving, agentOnline]);
 
+  // The latest loadBattles, for socket handlers registered once on mount.
+  const reloadBattles = useRef(null);
   useEffect(()=>{
     // User profile — name, avatar, year group, XP for the header
     apiGet("/api/profiles/me")
@@ -620,19 +622,23 @@ export default function LearnerDashboard() {
           setSessions(prev => prev.filter(s => s.id !== sessionId));
         });
 
-        // New challenge from peer
+        // New challenge from peer — the full card (same shape as a reload).
+        // De-duplicated: a battle re-announced must not appear twice.
         socket.on("new_challenge", challenge => {
-          setToast(`${challenge.challenger} challenged you!`);
-          setChallenges(prev => [challenge, ...prev]);
+          setToast(`${challenge.challenger || "Someone"} challenged you!`);
+          setChallenges(prev => [challenge, ...prev.filter(c => c.id !== challenge.id)]);
           goTab("challenges");
         });
 
-        // Gap 2 fix: correct battle event name from backend
-        socket.on("battle:participant-joined", data => {
-          setBattles(prev => prev.map(b =>
-            b.id === data.battleId ? { ...b, status:"live" } : b
-          ));
-        });
+        // Someone took a seat in an open battle: refresh, don't guess. (This
+        // used to flip the battle to "live" on any join.)
+        socket.on("battle:participant-joined", () => reloadBattles.current?.());
+
+        // Anything that changes a battle's state reloads the lists, so a card
+        // never sits on a stale status until a full page reload.
+        for (const ev of ["battle:started", "battle:cancelled", "battle:over", "battle_declined", "battle_ready"]) {
+          socket.on(ev, () => reloadBattles.current?.());
+        }
 
         // Gap 3: challenger notified their battle was accepted
         socket.on("battle_accepted", data => {
@@ -647,6 +653,7 @@ export default function LearnerDashboard() {
         // Gap 3: join battle room when told to
         socket.on("join_battle_room", ({ battleId }) => {
           socket.emit("join-battle", battleId);
+          reloadBattles.current?.();
         });
 
         // Gap 4 fix: topic-level decay alert from decayEngine cron
@@ -801,6 +808,9 @@ export default function LearnerDashboard() {
       } else {
         setToast({msg:'Battle scheduled — find it in Battles › Scheduled.',color:BRAND});
       }
+      // The stub above shows at once; the real card (lineup, start time, HP
+      // rule…) replaces it as soon as the lists reload.
+      loadBattles();
     } catch (e) {
       setAcceptedIds(prev => { const n = new Set(prev); n.delete(c.id); return n; });
       // The server says WHY — expired, already resolved, not your challenge.
@@ -813,8 +823,16 @@ export default function LearnerDashboard() {
     const c = selectedChallenge;
     setSelectedChallenge(null);
     setAcceptedIds(prev => new Set([...prev, c.id]));   // hide it from the pending list
-    try { await apiPost(`/api/battle/challenges/${c.id}/decline`, {}); }
-    catch { /* non-fatal — the challenger just won't get the decline notice */ }
+    try {
+      await apiPost(`/api/battle/challenges/${c.id}/decline`, {});
+      setToast('Challenge declined.');
+      loadBattles();
+    } catch (e) {
+      // It didn't go through — put it back and say so, rather than letting
+      // the card vanish while the battle still waits on this learner.
+      setAcceptedIds(prev => { const n = new Set(prev); n.delete(c.id); return n; });
+      setToast(e?.message || 'Could not decline — please try again.');
+    }
   };
 
   // Join a live class: the backend returns the meeting URL only once the
@@ -836,9 +854,10 @@ export default function LearnerDashboard() {
   };
 
   const loadBattles = useCallback(() => {
-    apiGet("/api/battle/my-challenges").then(d=>setChallenges(d?.data ?? [])).catch(()=>{});
-    apiGet("/api/battle/my-battles").then(d=>setBattles(d?.data ?? [])).catch(()=>{});
+    apiGet("/api/battle/my-challenges", { cache: false }).then(d=>setChallenges(d?.data ?? [])).catch(()=>{});
+    apiGet("/api/battle/my-battles", { cache: false }).then(d=>setBattles(d?.data ?? [])).catch(()=>{});
   }, []);
+  reloadBattles.current = loadBattles;
 
   // Bottom-nav destinations. No icon field any more: the key IS the
   // NavIcon name (NavIcons.jsx) — the same icon set the AppShell

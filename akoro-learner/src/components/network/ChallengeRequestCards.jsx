@@ -15,7 +15,7 @@ const when = (iso) => {
 };
 const KIND = { '1v1': '1v1', team: '2v2 team', group: 'Group' };
 
-export default function ChallengeRequestCards({ requests = [], mine = false, onChanged }) {
+export default function ChallengeRequestCards({ requests = [], mine = false, joined = false, onChanged }) {
   const [busy, setBusy] = useState(null);
   const [msg, setMsg] = useState({});
   if (!requests.length) return null;
@@ -39,10 +39,11 @@ export default function ChallengeRequestCards({ requests = [], mine = false, onC
               <div style={{ fontSize: 13.5, fontWeight: 900, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
               <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)' }}>
                 {KIND[r.kind || (r.battle_type === 'open' ? 'group' : r.battle_type)] || '1v1'} · {r.subject}{r.exam ? ` · ${r.exam}` : ''} · {r.questions ?? r.total_questions} questions · −{r.hpPerMiss ?? r.hp_per_miss ?? 10} HP/miss
-                {r.seats ? ` · ${r.seats} seats` : ''}
+                {r.seats ? ` · ${r.seats} seats` : (joined || mine) && r.max_players ? ` · ${1 + (r.accepted_by || []).length}/${r.max_players} seats` : ''}
               </div>
             </div>
-            {!msg[r.id] && (mine ? r.status === 'open' : true) && (
+            {joined && <span style={{ fontSize: 11, fontWeight: 800, color: BRAND, flexShrink: 0 }}>You're in</span>}
+            {!joined && !msg[r.id] && (mine ? r.status === 'open' : true) && (
               <button type="button" disabled={busy === r.id} onClick={() => act(r)}
                 style={{ padding: '6px 12px', borderRadius: 999, border: mine ? '1px solid var(--ak-border)' : 'none', background: mine ? 'var(--ak-surface)' : BRAND, color: mine ? 'var(--ak-text)' : '#fff', fontSize: 12, fontWeight: 900, cursor: 'pointer', fontFamily: NUNITO, flexShrink: 0 }}>
                 {busy === r.id ? '…' : mine ? 'Cancel' : 'Accept'}

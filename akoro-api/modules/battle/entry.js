@@ -24,6 +24,15 @@ export const coinsPerAnswer = () => coinsForUsage(ANSWER_MODEL, 1500, 60) + 1;
 export const coinsNeeded = (totalQuestions) => Math.max(1, Math.round(Number(totalQuestions) || 10)) * coinsPerAnswer();
 export const REVIEW_REWARD_COINS = Math.max(0, Math.round(Number(process.env.REVIEW_REWARD_COINS ?? 1) || 0));
 
+/**
+ * How many players a battle needs to run: a review is one learner, a daily
+ * battle runs for whoever turned up, a 2v2 needs all four, anything else two.
+ */
+export function minPlayersFor(b) {
+  if (b?.battle_type === "review" || String(b?.recurring_key || "").startsWith("daily:")) return 1;
+  return b?.battle_type === "team" ? 4 : 2;
+}
+
 /** The requirements as the card shows them. */
 export function requirementsOf(b) {
   const isReview = b?.battle_type === "review";

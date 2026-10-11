@@ -565,48 +565,27 @@ router.post("/:taskId/create-challenge", async (req, res) => {
     const task = await TaskDB.findById(req.params.taskId);
     if (!task || task.creator_id !== req.user.id) return res.status(404).json({ error: "Task not found" });
 
-    const { opponentId, xpPrize = 100, timeLimitSeconds = 600 } = req.body;
+    const { opponentId, xpPrize = 100, hp_per_miss, min_xp, total_questions } = req.body;
     if (!opponentId) return res.status(400).json({ error: "opponentId required" });
 
-    const db = (await import("../../db.js")).default;
-
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-
-    const { data: battle, error } = await db.from("battles").insert({
-      course_id:           task.course_id ?? null,
-      battle_type:         "1v1",
-      title:               task.title,
-      description:         task.description ?? "",
-      subject:             task.payload?.subject ?? "General",
-      difficulty:          task.payload?.difficulty ?? "medium",
-      xp_prize:            xpPrize,
-      xp_pool:             xpPrize,
-      time_limit_seconds:  timeLimitSeconds,
-      status:              "scheduled",
-      peak_viewers:        0,
-      scheduled_start:     new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-      expires_at:          expiresAt,
-      created_by:          req.user.id,
-    }).select("id").single();
-
-    if (error) throw new Error(error.message);
-
-    // Add creator and opponent as participants
-    const { data: myAgent } = await db.from("user_agents").select("id").eq("user_id", req.user.id).eq("is_active", true).maybeSingle();
-    const { data: oppAgent } = await db.from("user_agents").select("id").eq("user_id", opponentId).eq("is_active", true).maybeSingle();
-
-    await db.from("battle_participants").insert([
-      { battle_id: battle.id, user_id: req.user.id, agent_id: myAgent?.id ?? null, role: "creator", score: 0, hp: 100 },
-      { battle_id: battle.id, user_id: opponentId,  agent_id: oppAgent?.id ?? null, role: "opponent", score: 0, hp: 100 },
-    ]);
-
-    // Emit notification to opponent via socket if available
-    global.io?.to(`user:${opponentId}`).emit("new_challenge", {
-      battleId: battle.id, title: task.title, challengerName: req.user.full_name ?? "Someone",
+    // The one battle path: questions written and paid for by the creator, both
+    // seats set up, the opponent notified with the full challenge card, entry
+    // gate and HP/XP rules. This route used to insert a battle with no
+    // questions, which ended the moment it started.
+    const { createNetworkBattle } = await import("../battle/networkBattle.js");
+    const difficulty = { easy: "easy", medium: "intermediate", intermediate: "intermediate", hard: "hard" }[String(task.payload?.difficulty ?? "medium").toLowerCase()] || "intermediate";
+    const result = await createNetworkBattle({
+      creatorId: req.user.id, opponents: [opponentId], source: "challenge",
+      options: {
+        kind: "1v1", subject: task.payload?.subject ?? task.subject ?? "General", topic: task.title,
+        difficulty, total_questions, xp_prize: xpPrize, hp_per_miss, min_xp, title: String(task.title || "Challenge").slice(0, 120),
+      },
     });
+    const battle = { id: result.battleId };
 
     res.status(201).json({ success: true, battleId: battle.id });
   } catch (err) {
+    if ([400, 402, 403, 404, 409, 429].includes(err?.status)) return res.status(err.status).json({ error: err.message });
     console.error("[tasks/create-challenge]", err.message);
     res.status(500).json({ error: err.message });
   }

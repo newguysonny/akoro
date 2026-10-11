@@ -11,6 +11,7 @@
  *   loadDynamicToolsForUser(userId) → array of built config tools the user can use
  */
 
+import { createNetworkBattle } from "../../battle/networkBattle.js";
 import db               from "../../../db.js";
 import { TaskDB, TaskOutputDB } from "../lib/db.js";
 import { openai, OPENAI_MODEL } from "../../../lib/aiModel.js";
@@ -177,42 +178,23 @@ async function runCreateBattle(row, input, ctx) {
   const userId = task?.creator_id;
   if (!input.opponentId) throw new Error("opponentId is required");
 
-  const now            = Date.now();
-  const scheduledStart = new Date(now + 5 * 60 * 1000).toISOString();
-  const expiresAt      = new Date(now + 24 * 60 * 60 * 1000).toISOString();
-
-  const { data: battle, error } = await db.from("battles").insert({
-    course_id:          null,
-    battle_type:        "1v1",
-    title:              `Challenge: ${input.topic ?? cfg.defaultTopic ?? "Quiz"}`,
-    description:        fillTemplate(cfg.descriptionTemplate ?? "1v1 battle on {{topic}}", input),
-    subject:            input.subject ?? cfg.subject ?? "General",
-    difficulty:         input.difficulty ?? cfg.difficulty ?? "medium",
-    xp_prize:           cfg.xpPrize ?? 100,
-    xp_pool:            cfg.xpPrize ?? 100,
-    time_limit_seconds: cfg.timeLimitSeconds ?? 600,
-    status:             "scheduled",
-    peak_viewers:       0,
-    scheduled_start:    scheduledStart,
-    expires_at:         expiresAt,
-    created_by:         userId ?? null,
-  }).select().single();
-
-  if (error) throw new Error(error.message);
-
-  const [{ data: myAgent }, { data: oppAgent }] = await Promise.all([
-    db.from("user_agents").select("id").eq("user_id", userId).eq("is_active", true).maybeSingle(),
-    db.from("user_agents").select("id").eq("user_id", input.opponentId).eq("is_active", true).maybeSingle(),
-  ]);
-
-  await db.from("battle_participants").insert([
-    { battle_id: battle.id, user_id: userId,           agent_id: myAgent?.id ?? null,  role: "creator",  score: 0, hp: 100 },
-    { battle_id: battle.id, user_id: input.opponentId, agent_id: oppAgent?.id ?? null, role: "opponent", score: 0, hp: 100 },
-  ]);
-
-  global.io?.to(`user:${input.opponentId}`).emit("new_challenge", {
-    battleId: battle.id, title: battle.title,
+  if (!userId) throw new Error("create_battle: could not resolve the challenger");
+  // Through the one battle path (battle/networkBattle.js): questions written
+  // and paid for by the creator, both seats set up, the opponent notified with
+  // the full challenge card, the entry gate and HP/XP rules applied. This used
+  // to insert a bare battle with NO questions — it ended the moment it started.
+  const difficulty = { easy: "easy", medium: "intermediate", intermediate: "intermediate", hard: "hard" }[String(input.difficulty ?? cfg.difficulty ?? "medium").toLowerCase()] || "intermediate";
+  const result = await createNetworkBattle({
+    creatorId: userId, opponents: [input.opponentId], source: "challenge",
+    options: {
+      kind: "1v1", subject: input.subject ?? cfg.subject ?? "General", topic: input.topic ?? cfg.defaultTopic ?? null, difficulty,
+      total_questions: input.totalQuestions ?? cfg.totalQuestions, xp_prize: cfg.xpPrize ?? 100,
+      hp_per_miss: input.hpPerMiss ?? cfg.hpPerMiss, min_xp: input.minXp ?? cfg.minXp,
+      title: `Challenge: ${input.topic ?? cfg.defaultTopic ?? "Quiz"}`.slice(0, 120),
+      scheduled_for: cfg.startInMinutes ? new Date(Date.now() + cfg.startInMinutes * 60_000).toISOString() : null,
+    },
   });
+  const battle = { id: result.battleId };
 
   await TaskOutputDB.create({
     runId:      ctx.runId,

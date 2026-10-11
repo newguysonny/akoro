@@ -123,11 +123,36 @@ function mayTake(r, me, rel, blocked) {
 }
 
 /** Open requests the viewer may take. f: { subject, exam, kind, topic, starting_within_hours, mine } */
+/**
+ * Requests whose time ran out half-filled: mark them expired (once) and tell
+ * the poster and everyone who had taken a seat, instead of leaving them
+ * waiting on a battle that will never be made.
+ */
+async function expireStale(rows) {
+  const out = [];
+  for (const r of rows) {
+    if (r.status === "open" && Date.parse(r.expires_at) < Date.now()) {
+      const { data: done } = await edu().from("challenge_requests").update({ status: "expired" }).eq("id", r.id).eq("status", "open").select("id");
+      if (done?.length) {
+        for (const uid of [r.created_by, ...(r.accepted_by || [])]) {
+          await notifyUser({ userId: uid, type: "challenge_request_expired", title: `Challenge request expired: ${r.title || r.subject}`,
+            content: `Only ${1 + (r.accepted_by || []).length} of ${r.max_players} seats filled in time, so no battle was made.`, relatedId: r.id, link: "/app?tab=challenges" }).catch(() => {});
+        }
+      }
+      out.push({ ...r, status: "expired" });
+    } else out.push(r);
+  }
+  return out;
+}
+
 export async function searchChallengeRequests(meId, f = {}) {
   const nowIso = new Date().toISOString();
-  if (f.mine) {
-    const { data } = await edu().from("challenge_requests").select("*").eq("created_by", meId).order("created_at", { ascending: false }).limit(20);
-    return { requests: data || [] };
+  if (f.mine || f.joined) {
+    // Mine (I posted it) or joined (I took a seat and am waiting for it to fill).
+    let mq = edu().from("challenge_requests").select("*").order("created_at", { ascending: false }).limit(20);
+    mq = f.joined ? mq.contains("accepted_by", [meId]).eq("status", "open") : mq.eq("created_by", meId);
+    const { data } = await mq;
+    return { requests: await expireStale(data || []) };
   }
   let q = edu().from("challenge_requests").select("*").eq("status", "open").gt("expires_at", nowIso).order("created_at", { ascending: false }).limit(200);
   if (f.subject) q = q.ilike("subject", `%${String(f.subject).slice(0, 60)}%`);
@@ -198,7 +223,7 @@ export async function acceptChallengeRequest(meId, requestId) {
   try {
     const battle = await createNetworkBattle({
       creatorId: r.created_by, opponents: accepted, joined: accepted, startNowIfReady: true, source: "request",
-      options: { kind: kindOfRequest(r), subject: r.subject, topic: r.topic, difficulty: r.difficulty, total_questions: r.total_questions, scheduled_for: r.scheduled_for, title: r.title, hp_per_miss: r.hp_per_miss },
+      options: { kind: kindOfRequest(r), subject: r.subject, topic: r.topic, difficulty: r.difficulty, total_questions: r.total_questions, scheduled_for: r.scheduled_for, title: r.title, hp_per_miss: r.hp_per_miss, min_xp: r.min_xp || 0 },
     });
     await edu().from("challenge_requests").update({ battle_id: battle.battleId }).eq("id", r.id);
     await notifyUser({ userId: r.created_by, type: "battle_accepted", title: "⚔️ Your challenge request was taken!",
@@ -221,7 +246,7 @@ export async function cancelChallengeRequest(meId, requestId) {
 /* ── Rematch ────────────────────────────────────────────────────────────── */
 
 export async function rematch(meId, battleId) {
-  const { data: b } = await db.from("battles").select("id, battle_type, title, subject, topic, difficulty, total_questions, status, recurring_key, hp_per_miss").eq("id", battleId).maybeSingle();
+  const { data: b } = await db.from("battles").select("id, battle_type, title, subject, topic, difficulty, total_questions, status, recurring_key, hp_per_miss, min_xp").eq("id", battleId).maybeSingle();
   if (b?.recurring_key) throw fail("The daily battle comes round again tomorrow — no rematch needed.", 409);
   if (!b || !["completed", "expired"].includes(b.status)) throw fail("That battle isn't finished yet.", 409);
   const { data: seats } = await db.from("battle_participants").select("user_id, role, team").eq("battle_id", battleId);
@@ -235,6 +260,6 @@ export async function rematch(meId, battleId) {
   const teams = kind === "team" ? Object.fromEntries(players.filter((s) => s.user_id !== meId).map((s) => [s.user_id, s.team === myTeam ? "A" : "B"])) : {};
   return createNetworkBattle({
     creatorId: meId, opponents: others, teams, source: "rematch",
-    options: { kind, subject: b.subject || "General", topic: b.topic, difficulty: b.difficulty, total_questions: b.total_questions, title: `Rematch: ${b.title}`.slice(0, 120), hp_per_miss: b.hp_per_miss },
+    options: { kind, subject: b.subject || "General", topic: b.topic, difficulty: b.difficulty, total_questions: b.total_questions, title: `Rematch: ${b.title}`.slice(0, 120), hp_per_miss: b.hp_per_miss, min_xp: b.min_xp || 0 },
   });
 }

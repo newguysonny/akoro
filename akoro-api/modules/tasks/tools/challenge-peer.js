@@ -3,25 +3,8 @@
 
 import { z }                    from "zod";
 import { TaskDB, TaskOutputDB } from "../lib/db.js";
-import db                       from "../../../db.js";
-import { resolveMcq }           from "./mcq.js";
-import { openai, OPENAI_MODEL } from "../../../lib/aiModel.js";
+import { createNetworkBattle } from "../../battle/networkBattle.js";
 
-
-// Generate a small set of gradable MCQs for a 1v1 topic battle.
-async function generatePeerQuestions(topic, subject, difficulty, count = 8) {
-  const prompt = `Generate exactly ${count} ${difficulty} multiple-choice questions on "${topic}" (${subject}) for a 1v1 student battle.
-Respond with JSON only (no fences): {"questions":[{"question":"...","options":["A ...","B ...","C ...","D ..."],"answer":"<full text of correct option>","concept":"...","points":35}]}`;
-  const response = await openai.chat.completions.create({
-    model: OPENAI_MODEL, max_tokens: 3000,
-    messages: [{ role: "user", content: prompt }],
-  });
-  const raw = (response.choices?.[0]?.message?.content ?? "").replace(/```json|```/g, "").trim();
-  const parsed = JSON.parse(raw);
-  return (parsed.questions ?? [])
-    .map((q) => { const m = resolveMcq(q); return m ? { ...q, ...m } : null; })
-    .filter(Boolean);
-}
 
 export const challengePeerDefinition = {
   name: "challenge_peer",
@@ -51,6 +34,9 @@ export const challengePeerDefinition = {
         type: "number",
         description: "XP prize for the winner (default: 100)",
       },
+      totalQuestions: { type: "number", description: "5–30 questions (default 10)" },
+      hpPerMiss: { type: "number", description: "HP lost per missed question, 0–50 (default 10)" },
+      minXp: { type: "number", description: "Minimum XP the opponent needs to accept (default 0)" },
     },
     required: ["opponentId", "topic"],
   },
@@ -62,6 +48,9 @@ const paramsSchema = z.object({
   subject:    z.string().default("General"),
   difficulty: z.string().default("medium"),
   xpPrize:    z.number().min(0).default(100),
+  totalQuestions: z.number().int().min(5).max(30).optional(),
+  hpPerMiss:  z.number().int().min(0).max(50).optional(),
+  minXp:      z.number().int().min(0).optional(),
 });
 
 export async function executeChallengePeer(rawInput, ctx) {
@@ -71,71 +60,23 @@ export async function executeChallengePeer(rawInput, ctx) {
   const studentId = task?.creator_id ?? ctx.teacherId;
   if (!studentId) throw new Error("challenge_peer: could not resolve the challenger");
 
-  // Both sides need an active agent (battle_participants.agent_id is NOT NULL).
-  const creatorAgentId  = await resolveAgentId(studentId);
-  const opponentAgentId = await resolveAgentId(input.opponentId);
-  if (!creatorAgentId)  throw new Error("challenge_peer: you need an active agent before challenging");
-  if (!opponentAgentId) throw new Error("challenge_peer: that peer has no active agent yet");
-
-  // Generate the questions up front so the battle can actually run once accepted.
-  const graded = await generatePeerQuestions(input.topic, input.subject, input.difficulty);
-  if (!graded.length) throw new Error("challenge_peer: could not generate battle questions");
-
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-
-  const { data: battle, error } = await db.from("battles").insert({
-    course_id:          ctx.courseId ?? null,
-    battle_type:        "1v1",
-    title:              `Challenge: ${input.topic}`,
-    description:        `1v1 battle on ${input.topic}`,
-    subject:            input.subject,
-    difficulty:         input.difficulty,
-    total_questions:    graded.length,
-    xp_prize:           input.xpPrize,
-    xp_pool:            input.xpPrize,
-    time_limit_seconds: 30,
-    status:             "lobby",
-    peak_viewers:       0,
-    scheduled_start:    null,
-    expires_at:         expiresAt,
-    created_by:         studentId,
-  }).select().single();
-
-  if (error) throw new Error(error.message);
-
-  await db.from("battle_questions").insert(graded.map((q, i) => ({
-    battle_id: battle.id, question_order: i + 1,
-    question_text: q.question, options_json: JSON.stringify(q.options),
-    correct_answer_index: q.correctIndex, topic: q.concept ?? input.topic,
-    xp_value: q.points ?? 35, time_limit_seconds: 30,
-  })));
-
-  await db.from("battle_participants").insert([
-    {
-      battle_id: battle.id,
-      user_id:   studentId ?? null,
-      agent_id:  creatorAgentId,
-      role:      "creator",
-      score:     0,
-      hp:        100,
+  // The same path as every other learner battle: the creator pays for the
+  // questions (past papers first), both seats are set up properly, the
+  // opponent is notified and sees the challenge card, the entry gate and the
+  // creator's HP/XP rules apply. This tool used to write its own battle —
+  // unpaid AI questions, a creator seat nobody had joined, no notification —
+  // and an accepted duel never started.
+  const difficulty = { easy: "easy", medium: "intermediate", intermediate: "intermediate", hard: "hard" }[String(input.difficulty).toLowerCase()] || "intermediate";
+  const result = await createNetworkBattle({
+    creatorId: studentId, opponents: [input.opponentId], source: "challenge",
+    options: {
+      kind: "1v1", subject: input.subject, topic: input.topic, difficulty,
+      total_questions: input.totalQuestions, xp_prize: input.xpPrize,
+      hp_per_miss: input.hpPerMiss, min_xp: input.minXp,
+      title: `Challenge: ${input.topic}`.slice(0, 120),
     },
-    {
-      battle_id: battle.id,
-      user_id:   input.opponentId,
-      agent_id:  opponentAgentId,
-      role:      "opponent",
-      score:     0,
-      hp:        100,
-    },
-  ]);
-
-  if (global.io) {
-    global.io.to("user:" + input.opponentId).emit("new_challenge", {
-      battleId: battle.id,
-      topic:    input.topic,
-      from:     studentId,
-    });
-  }
+  });
+  const battle = { id: result.battleId };
 
   await TaskOutputDB.create({
     runId:      ctx.runId,
@@ -150,14 +91,4 @@ export async function executeChallengePeer(rawInput, ctx) {
   });
 
   return { success: true, battleId: battle.id };
-}
-
-async function resolveAgentId(userId) {
-  if (!userId) return null;
-  const { data } = await db.from("user_agents")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("is_active", true)
-    .maybeSingle();
-  return data?.id ?? null;
 }
