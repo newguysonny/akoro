@@ -436,7 +436,7 @@ function AgentTab({ agent, setAgent, profile, onSaveAgent, onPublish, onUnpublis
 
       <Section title="Agent Profile">
         <Row icon={Tag}      label="Agent Name"    value={agent.name} onClick={() => openSheet('name', 'Agent Name', 'text')} />
-        <Row icon={Sparkles} label="Personality"   sub={(agent.personality || 'Not set').slice(0, 40) + (agent.personality?.length > 40 ? '…' : '')} onClick={() => openSheet('personality', 'Agent Personality', 'textarea')} />
+        <Row icon={Sparkles} label="Agent Emoji"   value={agent.emoji || '🤖'} onClick={() => setAvSheet(true)} />
         <Row icon={Palette}  label="Agent Colour"  onClick={() => openSheet('color', 'Agent Colour', 'accent')}>
           <div style={{ width: 18, height: 18, borderRadius: '50%', background: color, marginRight: 6, flexShrink: 0 }} />
         </Row>

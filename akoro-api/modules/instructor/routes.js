@@ -306,13 +306,13 @@ const updateNotifications = asyncHandler(async (req, res) => {
 
 const updateAgent = asyncHandler(async (req, res) => {
   try {
-    const allowed = ["agent_name", "agent_emoji"];
+    const allowed = ["agent_name", "agent_emoji", "agent_color"];
     const updates = Object.fromEntries(
       Object.entries(req.body).filter(([k]) => allowed.includes(k)),
     );
 
     if (Object.keys(updates).length === 0)
-      return err400(res, "No valid fields provided. Allowed: agent_name, agent_emoji");
+      return err400(res, "No valid fields provided. Allowed: agent_name, agent_emoji, agent_color");
 
     updates.updated_at = now();
 

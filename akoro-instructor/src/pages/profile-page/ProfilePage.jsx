@@ -47,7 +47,7 @@ export default function ProfilePage() {
         });
         setAgent({
           name: a.agent_name || 'My Agent', emoji: a.agent_emoji || '🤖', photoUrl: null,
-          color: BRAND, personality: a.personality || '',
+          color: a.agent_color || BRAND, personality: a.personality || '',
           level: a.level || 1, xpEarned: a.xp || 0, streakDays: a.streak_days || 0,
         });
       })

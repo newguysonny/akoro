@@ -19,6 +19,7 @@ export const patchAgent = (agentPatch) => {
   const body = {};
   if (agentPatch.name  != null) body.agent_name  = agentPatch.name;
   if (agentPatch.emoji != null) body.agent_emoji = agentPatch.emoji;
+  if (agentPatch.color != null) body.agent_color = agentPatch.color;
   return apiPatch('/api/instructor/profile/agent', body);
 };
 
