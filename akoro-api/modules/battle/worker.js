@@ -20,6 +20,7 @@ import { coinsAvailable, schoolBillTo, InsufficientCoins, grantCoins } from "../
 import { REVIEW_REWARD_COINS, minPlayersFor } from "./entry.js";
 import { prepareRuling, ruling, verdict, JUDGE } from "./judge.js";
 import { HP_PER_MISS_DEFAULT } from "./hp.js";
+import { guardWorker } from "../../lib/redisQuotaGuard.js";
 
 // Agents already told they are out of coins this battle (one log line each, not one per question).
 const toldNoCoins = new Set();
@@ -64,8 +65,10 @@ const worker = new Worker("battles", async (job) => {
   // Reduce idle Redis traffic on per-request-billed providers (Upstash):
   // block the poll longer and check for stalled jobs far less often.
   drainDelay:  60,                          // seconds the blocking poll waits when idle
-  settings:    { stalledInterval: 300_000 }, // 5 min between stalled-job scans
+  stalledInterval: 300_000,   // 5 min between stalled-job scans. Top level: BullMQ ignores it inside `settings`, which left every worker scanning every 30 s.
 });
+// Quota errors pause every worker instead of a 100 ms retry storm (lib/redisQuotaGuard.js).
+guardWorker(worker, "battle worker");
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

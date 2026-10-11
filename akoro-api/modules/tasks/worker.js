@@ -23,6 +23,7 @@ import { hasCoins } from "../../lib/coins.js";
 import { runAgentLoop } from "./lib/agentLoop.js";
 import { reportAgentActivity, agentToolActivity, clearAgentActivity } from "../../lib/agentActivity.js";
 import { workerJob }                        from "../../lib/workerLog.js";
+import { guardWorker } from "../../lib/redisQuotaGuard.js";
 
 const MODEL = OPENAI_MODEL;
 
@@ -130,8 +131,10 @@ export const taskWorker = new Worker("task-runner", async (job) => {
   // Reduce idle Redis traffic on per-request-billed providers (Upstash):
   // block the poll longer and check for stalled jobs far less often.
   drainDelay:  60,                          // seconds the blocking poll waits when idle
-  settings:    { stalledInterval: 300_000 }, // 5 min between stalled-job scans
+  stalledInterval: 300_000,   // 5 min between stalled-job scans. Top level: BullMQ ignores it inside `settings`, which left every worker scanning every 30 s.
 });
+// Quota errors pause every worker instead of a 100 ms retry storm (lib/redisQuotaGuard.js).
+guardWorker(taskWorker, "tasks worker");
 
 taskWorker.on("completed", (job) => {
   console.log(`[tasks/worker] ✅ Job ${job.id} done`);

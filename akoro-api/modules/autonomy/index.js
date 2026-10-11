@@ -17,6 +17,7 @@ import { traceRedis } from "../../lib/redisTrace.js";
 import { workerTick, workerJob } from "../../lib/workerLog.js";
 import { runAutonomyCycleForUser } from "./cycle.js";
 import { autonomyCadence, fmtMs, inNightlyWindow, minCycleCutoff, minCycleMs, weeklyRunsCap } from "./cadence.js";
+import { guardWorker } from "../../lib/redisQuotaGuard.js";
 
 // Re-exported so the module's public surface (and the contract tests) keep
 // finding inNightlyWindow here; the logic itself lives in cadence.js.
@@ -101,9 +102,11 @@ export function startAutonomyCycleWorker() {
   }, {
     connection: workerConnection(),
     concurrency: 2,
-    drainDelay: 60_000,
-    settings: { stalledInterval: 300_000 },
+    drainDelay: 60,   // seconds (60_000 was 16 hours)
+    stalledInterval: 300_000,   // 5 min between stalled-job scans. Top level: BullMQ ignores it inside `settings`, which left every worker scanning every 30 s.
   });
+  // Quota errors pause every worker instead of a 100 ms retry storm (lib/redisQuotaGuard.js).
+  guardWorker(worker, "autonomy cycle worker");
   worker.on("completed", (job, result) =>
     workerJob("autonomy-cycle", "done", job, { skipped: result?.skipped ?? null })
   );

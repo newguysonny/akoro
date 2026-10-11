@@ -416,7 +416,7 @@ const worker = new Worker(
     // lock renewals). Same treatment as the battle worker: block longer,
     // scan stalled jobs far less often.
     drainDelay:  60,                            // seconds the idle poll blocks
-    settings:    { stalledInterval: 300_000 },  // 5 min between stalled scans
+    stalledInterval: 300_000,   // 5 min between stalled scans (top level — BullMQ ignores it inside `settings`)
   }
 );
 
