@@ -81,9 +81,10 @@ test("RichText has ONE span render path — list items can never render empty", 
 
 test("all three agent chat surfaces render RichText; user bubbles stay plain", () => {
   assert.match(instructorPage, /<RichText text=\{textPart\} color=\{INK\} \/>/);
-  // …at the Agent Chat's reading size (dropped 16→14 with the 2026-10 type
-  // tightening; RichText cascades to bold/lists inside replies).
-  assert.match(learnerTab, /<RichText text=\{msg\.text\} size=\{14\} lineHeight=\{1\.55\}\/>/);
+  // …at the Agent Chat's reading size (16 → 14 → 14.5 after the 2026-10
+  // tightening, bumped on review; RichText cascades to bold/lists inside
+  // replies). Learner bubbles sit at 14.
+  assert.match(learnerTab, /<RichText text=\{msg\.text\} size=\{14\.5\} lineHeight=\{1\.55\}\/>/);
   assert.match(sessionChat, /<RichText text=\{m\.text\} \/>/);
 });
 
