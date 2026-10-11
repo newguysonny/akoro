@@ -518,7 +518,7 @@ function BellButton() {
   );
 }
 
-export function TopBar({ title, subtitle, action, onToggleSidebar }) {
+export function TopBar({ title, subtitle, action, onToggleSidebar, showBell = true }) {
   return (
     <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'rgba(250,248,245,.95)', backdropFilter: 'blur(8px)', borderBottom: `1px solid ${BORDER}`, padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -536,7 +536,7 @@ export function TopBar({ title, subtitle, action, onToggleSidebar }) {
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         {action}
-        <BellButton />
+        {showBell && <BellButton />}
       </div>
     </div>
   );
@@ -595,7 +595,9 @@ export function PageLayout({ children, title, subtitle, action }) {
           onMenu={() => setDrawerOpen((o) => !o)}
           user={user}
           actions={[
-            { key: 'chat', icon: MessageSquare, label: 'AI Chat', variant: 'square', onClick: () => navigate('/chat') },
+            { key: 'chat',          icon: MessageSquare, label: 'AI Chat',        variant: 'square', onClick: () => navigate('/chat') },
+            { key: 'notifications', icon: Bell,          label: 'Notifications',  variant: 'square', onClick: () => navigate('/notifications') },
+            { key: 'help',          icon: LifeBuoy,      label: 'Help & support', variant: 'circle', onClick: () => { window.location.href = 'mailto:support@akoro.app'; } },
           ]}
           menuItems={[
             { key: 'profile',  label: 'Profile',  icon: UserCircle, to: '/profile' },
@@ -604,7 +606,7 @@ export function PageLayout({ children, title, subtitle, action }) {
             { key: 'logout',   label: 'Log out',  icon: LogOut,     danger: true, onClick: logout },
           ]}
         />
-        <TopBar title={title} subtitle={subtitle} action={action} onToggleSidebar={null} />
+        <TopBar title={title} subtitle={subtitle} action={action} onToggleSidebar={null} showBell={false} />
         <main style={{ flex: 1, overflowY: 'auto', padding: '16px 14px' }}>{children}</main>
         {drawerOpen && (
           <div onClick={() => setDrawerOpen(false)} aria-hidden="true" style={{ position: 'fixed', inset: 0, zIndex: 1090, background: 'rgba(0,0,0,.45)' }} />

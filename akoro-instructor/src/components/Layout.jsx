@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import AkoroLogo from './common/AkoroLogo.jsx';
-import { Home, BookOpen, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings, UserCircle, ShieldCheck, Store, Library, LayoutGrid, FileText, ClipboardList, ClipboardCheck, ListChecks, BookMarked, CalendarDays, CalendarClock, GraduationCap, Menu, Search, ChevronDown, Wallet, BookOpenCheck, X } from 'lucide-react';
+import { Home, BookOpen, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings, UserCircle, ShieldCheck, Store, Library, LayoutGrid, FileText, ClipboardList, ClipboardCheck, ListChecks, BookMarked, CalendarDays, CalendarClock, GraduationCap, Menu, Search, ChevronDown, Wallet, BookOpenCheck, X, LifeBuoy } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import AppHeader from './AppHeader.jsx';
 import { useInstructorSocket } from '../hooks/useWebSocket.js';
@@ -325,7 +325,7 @@ function BellButton() {
   );
 }
 
-export function TopBar({ title, subtitle, action, onToggleSidebar }) {
+export function TopBar({ title, subtitle, action, onToggleSidebar, showBell = true }) {
   return (
     <div style={{
       position: 'sticky', top: 0, zIndex: 10,
@@ -349,7 +349,7 @@ export function TopBar({ title, subtitle, action, onToggleSidebar }) {
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         {action}
-        <BellButton />
+        {showBell && <BellButton />}
       </div>
     </div>
   );
@@ -437,7 +437,9 @@ export function PageLayout({ children, title, subtitle, action }) {
           onMenu={() => setDrawerOpen((o) => !o)}
           user={user}
           actions={[
-            { key: 'chat', icon: MessageSquare, label: 'AI Chat', variant: 'square', onClick: () => navigate('/chat') },
+            { key: 'chat',          icon: MessageSquare, label: 'AI Chat',        variant: 'square', onClick: () => navigate('/chat') },
+            { key: 'notifications', icon: Bell,          label: 'Notifications',  variant: 'square', onClick: () => navigate('/notifications') },
+            { key: 'help',          icon: LifeBuoy,      label: 'Help & support', variant: 'circle', onClick: () => { window.location.href = 'mailto:support@akoro.app'; } },
           ]}
           menuItems={[
             { key: 'profile',  label: 'Profile',  icon: UserCircle, to: '/profile' },
@@ -446,7 +448,7 @@ export function PageLayout({ children, title, subtitle, action }) {
             { key: 'logout',   label: 'Log out',  icon: LogOut,     danger: true, onClick: logout },
           ]}
         />
-        <TopBar title={title} subtitle={subtitle} action={action} onToggleSidebar={null} />
+        <TopBar title={title} subtitle={subtitle} action={action} onToggleSidebar={null} showBell={false} />
         <main style={{ flex: 1, overflowY: 'auto', padding: '16px 14px' }}>
           {children}
         </main>

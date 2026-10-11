@@ -5,7 +5,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, KeyRound, Percent, Wallet, ClipboardList, Settings, LogOut, Building2, Ticket, FileText, ChevronsUpDown, Check, Plus, Settings2, PackageSearch, Webhook, X, MessageCircleQuestion } from 'lucide-react';
+import { LayoutDashboard, KeyRound, Percent, Wallet, ClipboardList, Settings, LogOut, Building2, Ticket, FileText, ChevronsUpDown, Check, Plus, Settings2, PackageSearch, Webhook, X, LifeBuoy } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useStartup } from '../contexts/StartupContext.jsx';
 import { INK, MUTED, MUTED2, BORDER, WHITE, ACCENT, FONT } from '../constants.js';
@@ -261,7 +261,7 @@ export function PageLayout({ title, subtitle, action, children }) {
             onMenu={() => setMenuOpen(true)}
             user={user}
             actions={[
-              { key: 'help', icon: MessageCircleQuestion, label: 'Help & API docs', variant: 'circle', onClick: () => navigate('/docs') },
+              { key: 'help', icon: LifeBuoy, label: 'Help & API docs', variant: 'circle', onClick: () => navigate('/docs') },
             ]}
             menuItems={[
               { key: 'settings', label: 'All Settings', icon: Settings, to: '/settings' },

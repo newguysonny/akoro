@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import AkoroLogo from './common/AkoroLogo.jsx';
-import { LayoutDashboard, Users, GraduationCap, BookOpen, BookMarked, LayoutTemplate, FileText, Briefcase, Bell, Settings, LogOut, BarChart2, CreditCard, Star, Tag, DollarSign, FileBarChart, Inbox, Megaphone, Building2, Bot, ChevronDown, Menu, Store, Library, Cpu, FlaskConical, Wrench, Layers, School, History, Repeat, Receipt, Ticket, RefreshCw, X} from 'lucide-react';
+import { LayoutDashboard, Users, GraduationCap, BookOpen, BookMarked, LayoutTemplate, FileText, Briefcase, Bell, Settings, LogOut, BarChart2, CreditCard, Star, Tag, DollarSign, FileBarChart, Inbox, Megaphone, Building2, Bot, ChevronDown, Menu, Store, Library, Cpu, FlaskConical, Wrench, Layers, School, History, Repeat, Receipt, Ticket, RefreshCw, X, LifeBuoy} from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import AppHeader from './AppHeader.jsx';
 import { apiGet } from '../services/api.js';
@@ -345,7 +345,7 @@ function BellButton() {
   );
 }
 
-export function TopBar({ title, subtitle, action, onToggleSidebar }) {
+export function TopBar({ title, subtitle, action, onToggleSidebar, showBell = true }) {
   return (
     <div style={{
       position: 'sticky', top: 0, zIndex: 10,
@@ -369,7 +369,7 @@ export function TopBar({ title, subtitle, action, onToggleSidebar }) {
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         {action}
-        <BellButton />
+        {showBell && <BellButton />}
       </div>
     </div>
   );
@@ -443,6 +443,7 @@ export function PageLayout({ children, title, subtitle, action }) {
   });
   const mobile = useIsMobile();
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Scroll lock while the drawer is open; never carry it back to desktop.
@@ -468,6 +469,10 @@ export function PageLayout({ children, title, subtitle, action }) {
         <AppHeader
           onMenu={() => setDrawerOpen((o) => !o)}
           user={user}
+          actions={[
+            { key: 'notifications', icon: Bell,     label: 'Notifications',  variant: 'square', onClick: () => navigate('/notifications') },
+            { key: 'help',          icon: LifeBuoy, label: 'Help & support', variant: 'circle', onClick: () => { window.location.href = 'mailto:support@akoro.app'; } },
+          ]}
           menuItems={[
             { key: 'settings', label: 'All Settings', icon: Settings,  to: '/settings' },
             { key: 'wallet',   label: 'Wallet',       icon: CreditCard, to: '/wallet' },
@@ -475,7 +480,7 @@ export function PageLayout({ children, title, subtitle, action }) {
             { key: 'logout',   label: 'Log out',      icon: LogOut,    danger: true, onClick: logout },
           ]}
         />
-        <TopBar title={title} subtitle={subtitle} action={action} onToggleSidebar={null} />
+        <TopBar title={title} subtitle={subtitle} action={action} onToggleSidebar={null} showBell={false} />
         <main style={{ flex: 1, overflowY: 'auto', padding: '16px 14px' }}>
           {children}
         </main>
