@@ -2932,7 +2932,10 @@ router.get("/sessions/:id/messages", async (req, res) => {
       .order("created_at", { ascending: true });
     // The reply trace column may not exist yet during a rolling deploy —
     // fall back to the plain transcript rather than failing the history load.
-    let { data, error } = await loadMessages("id, role, text, created_at, trace");
+    let { data, error } = await loadMessages("id, role, text, created_at, trace, meta");
+    // Rolling-deploy fallbacks: an older build may pre-date the meta column,
+    // and either column may pre-date trace.
+    if (error && /meta/i.test(String(error.message || ""))) ({ data, error } = await loadMessages("id, role, text, created_at, trace"));
     if (error && /trace/i.test(String(error.message || ""))) ({ data, error } = await loadMessages("id, role, text, created_at"));
     if (error) throw new Error(error.message);
     res.json({ success: true, messages: data ?? [] });
@@ -3412,15 +3415,31 @@ async function appendBasicChatTurn({ conversationId, userId, userMessage, assist
 }
 
 /**
- * Store a reply's bounded trace (thinking / tool / activity blocks) so a
- * reloaded chat shows the same steps. Best effort: a missing column during a
- * rolling deploy or a write hiccup never touches the saved reply itself.
+ * The preview affordances a reload must rebuild: drafts the tools created
+ * during this reply (topic previews, assignment/quiz draft cards) plus which
+ * tools ran. Null when the reply executed nothing preview-worthy — the same
+ * shape the live reply attaches client-side.
+ */
+function previewMetaFrom(toolExecutions) {
+  const execs = Array.isArray(toolExecutions) ? toolExecutions : [];
+  const previews = execs
+    .filter((x) => (x.tool === "prepare_activity" || x.tool === "revise_activity_draft") && x.success && x.draft)
+    .map((x) => x.draft);
+  if (!previews.length) return null;
+  return { previews, tools: execs.map((x) => x.tool) };
+}
+
+/**
+ * Store a reply's bounded trace (thinking / tool / activity blocks) and its
+ * preview meta (draft cards) so a reloaded chat shows the same steps AND the
+ * same cards. Best effort: a missing column during a rolling deploy or a
+ * write hiccup never touches the saved reply itself.
  */
 let warnedTraceColumn = false;
-async function saveMessageTrace({ messageId, userId, trace }) {
+async function saveMessageTrace({ messageId, userId, trace, meta = null }) {
   if (!messageId || !Array.isArray(trace) || !trace.length) return;
   try {
-    const { error } = await db.from("chat_messages").update({ trace })
+    const { error } = await db.from("chat_messages").update({ trace, ...(meta ? { meta } : {}) })
       .eq("id", messageId).eq("user_id", userId).eq("role", "agent");
     if (error) throw error;
   } catch (error) {
@@ -4028,18 +4047,18 @@ router.post("/agent", async (req, res) => {
             memories: safeMemoryUpdates(userMessage),
           });
           turnSaved = true;
-          await saveMessageTrace({ messageId: persisted?.assistantMessageId, userId: req.user.id, trace: traceBlocks });
+          await saveMessageTrace({ messageId: persisted?.assistantMessageId, userId: req.user.id, trace: traceBlocks, meta: previewMetaFrom(prepared.toolExecutions) });
         } catch (persistError) {
           // The reply already happened — never lose the transcript to a
           // durable-write hiccup. Fall back to the plain two-row append.
           console.error("[/chat/agent] durable persist failed — appending basic transcript:", persistError.message);
           await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply })
-            .then(async (saved) => { turnSaved = true; await saveMessageTrace({ messageId: saved?.assistantMessageId, userId: req.user.id, trace: traceBlocks }); })
+            .then(async (saved) => { turnSaved = true; await saveMessageTrace({ messageId: saved?.assistantMessageId, userId: req.user.id, trace: traceBlocks, meta: previewMetaFrom(prepared.toolExecutions) }); })
             .catch((e) => console.error("[/chat/agent] basic transcript append failed:", e.message));
         }
       } else {
         await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply })
-          .then(async (saved) => { turnSaved = true; await saveMessageTrace({ messageId: saved?.assistantMessageId, userId: req.user.id, trace: traceBlocks }); })
+          .then(async (saved) => { turnSaved = true; await saveMessageTrace({ messageId: saved?.assistantMessageId, userId: req.user.id, trace: traceBlocks, meta: previewMetaFrom(prepared.toolExecutions) }); })
           .catch((e) => console.error("[/chat/agent] basic transcript append failed:", e.message));
       }
     } else if (!warnedUnsavedTurn) {

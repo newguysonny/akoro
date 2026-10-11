@@ -221,3 +221,24 @@ test("learning-session history is its own tool — never answered with the schoo
     assert.doesNotMatch(sel, /email|phone|username|password|guardian/i, `history case selects private columns: ${sel}`);
   }
 });
+
+test("draft cards survive a reload — tool previews ride the persisted message meta", async () => {
+  // The migration exists and ships in the schema group (applies at boot).
+  const manifest = JSON.parse(
+    await readFile(new URL("../../migrations/manifest.json", import.meta.url), "utf8"),
+  );
+  assert.ok(manifest.schema.includes("2026-chat-message-meta.sql"), "meta migration must be in the schema group");
+  const migration = await readFile(new URL("../../migrations/2026-chat-message-meta.sql", import.meta.url), "utf8");
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS meta jsonb/);
+  // The server derives preview meta from the turn's tool executions …
+  assert.match(source, /function previewMetaFrom\(/);
+  assert.match(source, /prepare_activity|revise_activity_draft/);
+  // … saves it beside the trace …
+  assert.match(source, /trace: traceBlocks, meta: previewMetaFrom\(prepared\.toolExecutions\)/);
+  assert.match(source, /update\(\{ trace, \.\.\.\(meta \? \{ meta \} : \{\}\) \}\)/);
+  // … and serves it with a rolling-deploy fallback.
+  assert.match(source, /loadMessages\("id, role, text, created_at, trace, meta"\)/);
+  assert.match(source, /\/meta\/i\.test\(String\(error\.message \|\| ""\)\)/);
+  // The instructor client rebuilds the cards from that meta on restore.
+  assert.match(instructorChatPage, /previews: m\.meta\.previews/);
+});
