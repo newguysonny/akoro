@@ -874,7 +874,7 @@ function AgentChatTab({
                 : [];
               if(isMe) return (
                 <div key={msg.id} style={{ display:"flex",flexDirection:"column",alignItems:"flex-end" }}>
-                  <div style={{ maxWidth:"86%",padding:"10px 14px",borderRadius:14,background:"var(--ak-surface-hover)",border:"1px solid var(--ak-border)",color:"var(--ak-text)",fontSize:13.5,lineHeight:1.55,fontWeight:500,whiteSpace:"pre-wrap",wordBreak:"break-word" }}>{msg.text}</div>
+                  <div style={{ maxWidth:"86%",padding:"10px 14px",borderRadius:14,background:"var(--ak-surface-hover)",border:"1px solid var(--ak-border)",color:"var(--ak-text)",fontSize:14,lineHeight:1.55,fontWeight:500,whiteSpace:"pre-wrap",wordBreak:"break-word" }}>{msg.text}</div>
                   {msg.attachments?.length>0&&(
                     <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5,justifyContent:"flex-end" }}>
                       {msg.attachments.map((a,i)=>a.previewUrl
@@ -899,7 +899,7 @@ function AgentChatTab({
                     </div>
                   )}
                   {msg.text&&(
-                    <div style={{ fontSize:14,lineHeight:1.55,color:"var(--ak-text)",fontWeight:500,wordBreak:"break-word" }}><RichText text={msg.text} size={14} lineHeight={1.55}/>{msg.phase==="answering"&&<StreamCaret/>}</div>
+                    <div style={{ fontSize:14.5,lineHeight:1.55,color:"var(--ak-text)",fontWeight:500,wordBreak:"break-word" }}><RichText text={msg.text} size={14.5} lineHeight={1.55}/>{msg.phase==="answering"&&<StreamCaret/>}</div>
                   )}
                   {msg.agents?.length>0&&<AgentCards agents={msg.agents} onFill={applyIdea}/>}
                   {msg.requests?.length>0&&<ChallengeRequestCards requests={msg.requests} mine={!!msg.requestsMine}/>}
