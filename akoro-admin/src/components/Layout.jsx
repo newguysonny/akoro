@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import AkoroLogo from './common/AkoroLogo.jsx';
-import { LayoutDashboard, Users, GraduationCap, BookOpen, BookMarked, LayoutTemplate, FileText, Briefcase, Bell, Settings, LogOut, BarChart2, CreditCard, Star, Tag, DollarSign, FileBarChart, Inbox, Megaphone, Building2, Bot, ChevronDown, Menu, Store, Library, Cpu, FlaskConical, Wrench, Layers, School, History, Repeat, Receipt, Ticket, RefreshCw, X, LifeBuoy, MessageSquare} from 'lucide-react';
+import { LayoutDashboard, Users, GraduationCap, BookOpen, BookMarked, LayoutTemplate, FileText, Briefcase, Bell, Settings, LogOut, BarChart2, CreditCard, Star, Tag, DollarSign, FileBarChart, Inbox, Megaphone, Building2, Bot, ChevronDown, Menu, Store, Library, Cpu, FlaskConical, Wrench, Layers, School, History, Repeat, Receipt, Ticket, RefreshCw, X, MessageCircleQuestion, MessageSquare} from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
-import AppHeader from './AppHeader.jsx';
+import AppHeader, { ReferenceChatIcon } from './AppHeader.jsx';
 
 /* Setup progress for the header ring — a fraction of the profile that is
    actually filled in (plus an app-specific extra, e.g. a created business).
@@ -477,9 +477,9 @@ export function PageLayout({ children, title, subtitle, action }) {
           onMenu={() => setDrawerOpen((o) => !o)}
           user={user}
           actions={[
-            { key: 'messages',      icon: MessageSquare, label: 'Messages',       variant: 'square', onClick: () => navigate('/messages') },
+            { key: 'messages',      icon: ReferenceChatIcon, label: 'Messages',     variant: 'square', onClick: () => navigate('/messages') },
             { key: 'notifications', icon: Bell,          label: 'Notifications',  variant: 'square', onClick: () => navigate('/notifications') },
-            { key: 'help',          icon: LifeBuoy,      label: 'Help & support', variant: 'circle', onClick: () => { window.location.href = 'mailto:support@akoro.app'; } },
+            { key: 'help',          icon: MessageCircleQuestion, label: 'Help & support', variant: 'circle', onClick: () => { window.location.href = 'mailto:support@akoro.app'; } },
           ]}
           progress={setupProgressOf(user)}
           onSetup={() => navigate('/settings')}

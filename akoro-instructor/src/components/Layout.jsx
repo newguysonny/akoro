@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import AkoroLogo from './common/AkoroLogo.jsx';
-import { Home, BookOpen, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings, UserCircle, ShieldCheck, Store, Library, LayoutGrid, FileText, ClipboardList, ClipboardCheck, ListChecks, BookMarked, CalendarDays, CalendarClock, GraduationCap, Menu, Search, ChevronDown, Wallet, BookOpenCheck, X, LifeBuoy } from 'lucide-react';
+import { Home, BookOpen, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings, UserCircle, ShieldCheck, Store, Library, LayoutGrid, FileText, ClipboardList, ClipboardCheck, ListChecks, BookMarked, CalendarDays, CalendarClock, GraduationCap, Menu, Search, ChevronDown, Wallet, BookOpenCheck, X, MessageCircleQuestion } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
-import AppHeader from './AppHeader.jsx';
+import AppHeader, { ReferenceChatIcon } from './AppHeader.jsx';
 
 /* Setup progress for the header ring — a fraction of the profile that is
    actually filled in (plus an app-specific extra, e.g. a created business).
@@ -444,9 +444,9 @@ export function PageLayout({ children, title, subtitle, action, hideTopBarOnMobi
           onMenu={() => setDrawerOpen((o) => !o)}
           user={user}
           actions={[
-            { key: 'chat',          icon: MessageSquare, label: 'AI Chat',        variant: 'square', onClick: () => navigate('/chat') },
+            { key: 'chat',          icon: ReferenceChatIcon, label: 'AI Chat',      variant: 'square', onClick: () => navigate('/chat') },
             { key: 'notifications', icon: Bell,          label: 'Notifications',  variant: 'square', onClick: () => navigate('/notifications') },
-            { key: 'help',          icon: LifeBuoy,      label: 'Help & support', variant: 'circle', onClick: () => { window.location.href = 'mailto:support@akoro.app'; } },
+            { key: 'help',          icon: MessageCircleQuestion, label: 'Help & support', variant: 'circle', onClick: () => { window.location.href = 'mailto:support@akoro.app'; } },
           ]}
           progress={setupProgressOf(user)}
           onSetup={() => navigate('/profile')}

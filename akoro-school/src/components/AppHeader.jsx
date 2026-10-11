@@ -15,7 +15,6 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Menu } from 'lucide-react';
 import './AppHeader.css';
 
 const ICON_STROKE = { fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' };
@@ -31,6 +30,33 @@ function ProgressRing({ value }) {
     </svg>
   );
 }
+
+
+/* The reference header's exact glyphs (reference/Akoro app header.md):
+   the hamburger is three rounded bars, the chat bubble carries its text
+   lines — both hand-drawn to the reference's own path data, rendered at
+   the reference's sizes (menu 22, everything else 20). */
+function ReferenceMenuIcon({ size = 22 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="3.5" width="18" height="4.5" rx="1.6" />
+      <rect x="3" y="9.75" width="18" height="4.5" rx="1.6" />
+      <rect x="3" y="16" width="18" height="4.5" rx="1.6" />
+    </svg>
+  );
+}
+function ReferenceChatIcon({ size = 20, strokeWidth = 2 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      <path d="M8 9h8" />
+      <path d="M8 13h5" />
+    </svg>
+  );
+}
+export { ReferenceChatIcon };
 
 export default function AppHeader({
   onMenu,
@@ -97,7 +123,7 @@ export default function AppHeader({
   return (
     <header className="akhdr akhdr-header">
       <button type="button" className="akhdr-btn akhdr-ghost" onClick={onMenu} aria-label="Open navigation" title="Open navigation">
-        <Menu size={20} strokeWidth={2} />
+        <ReferenceMenuIcon size={22} />
       </button>
 
       <div className="akhdr-spacer" />
