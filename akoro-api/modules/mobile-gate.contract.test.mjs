@@ -100,7 +100,7 @@ test("kpemu-business: same contract, shipped drawer-inside-Sidebar wiring", () =
 function lucideImports(src) {
   const m = src.match(/import\s*\{([^}]*)\}\s*from\s*'lucide-react';/s);
   assert.ok(m, "lucide import block found");
-  const names = m[1].split(",").map((s) => s.trim().split(/\s+as\s+/)[0]).filter(Boolean);
+  const names = m[1].split(",").map((s) => s.trim().split(/\s+as\s+/).pop()).filter(Boolean);
   const dups = names.filter((n, i) => names.indexOf(n) !== i);
   assert.deepEqual(dups, [], `duplicate lucide imports: ${dups.join(", ")}`);
   return names;
@@ -119,6 +119,76 @@ test("every header action icon is imported — no runtime ReferenceError class",
     assert.ok(used.length > 0, `${app}: has icon references`);
     const missing = [...new Set(used)].filter((n) => !names.includes(n));
     assert.deepEqual(missing, [], `${app}: icons used but not imported — this deploys as a crash: ${missing.join(", ")}`);
+  }
+});
+
+/* ── The undefined-identifier guard (whole src tree) ───────────────────────
+   Production shipped this crash class TWICE: a component/icon used but not
+   imported still BUILDS (a free identifier is a runtime ReferenceError, not
+   a build error) — business.kpemu.com and instructors.akoro.name.ng both
+   went down with "MessageCircleQuestion is not defined". For EVERY source
+   file in every console app: collect the file's import bindings, local
+   definitions, and destructured bindings, then require every JSX component
+   (<Name/>) and every `icon: Name` reference to be in that set. */
+test("no source file uses a component or icon it never imports — the production-crash class", async () => {
+  const { readdir } = await import("node:fs/promises");
+  const root = new URL("../../", import.meta.url).pathname;
+  async function* walk(dir) {
+    for (const e of await readdir(dir, { withFileTypes: true })) {
+      const p = `${dir}/${e.name}`;
+      if (e.isDirectory()) yield* walk(p);
+      else if (/\.(jsx|js)$/.test(e.name)) yield p;
+    }
+  }
+  for (const app of APPS) {
+    for await (const file of walk(`${root}${app}/src`)) {
+      const src = await readFile(file, "utf8");
+      const known = new Set();
+      // import defaults, namespaces, and named bindings (multiline-aware)
+      for (const m of src.matchAll(/import\s+([\w$]+)?\s*,?\s*(?:\{([^}]*)\})?\s*from\s*["'][^"']+["']/g)) {
+        if (m[1]) known.add(m[1]);
+        for (let spec of (m[2] ?? "").split(",")) {
+          spec = spec.trim();
+          if (spec) known.add(spec.split(/\s+as\s+/).pop().trim());
+        }
+      }
+      // local definitions and destructured bindings ({ key, icon: Icon, … })
+      for (const m of src.matchAll(/(?:function|class)\s+([A-Z]\w*)/g)) known.add(m[1]);
+      for (const m of src.matchAll(/(?:const|let|var)\s+([A-Z]\w*)\s*=/g)) known.add(m[1]);
+      for (const m of src.matchAll(/\(\s*\{([^()]*?)\}\s*[,)]/g))
+        for (const p of m[1].split(",")) {
+          const alias = p.trim().match(/^(\w+)\s*:\s*([A-Z]\w*)$/);
+          if (alias) known.add(alias[2]);
+          else if (/^\s*[A-Z]\w*\s*$/.test(p)) known.add(p.trim());
+        }
+      // positional parameters are bindings too: (onClick, Icon, title) => …
+      for (const m of src.matchAll(/\(([^()]*)\)\s*=>/g))
+        for (const p of m[1].split(","))
+          if (/^\s*[A-Z]\w*\s*$/.test(p)) known.add(p.trim());
+      // array destructuring: .map(([url, Icon], k) => …) / const [a, B] = …
+      for (const m of src.matchAll(/\(\s*\[([^[\]()]*)\]/g))
+        for (const p of m[1].split(","))
+          if (/^\s*[A-Z]\w*\s*$/.test(p.trim())) known.add(p.trim());
+      for (const m of src.matchAll(/(?:const|let|var)\s*\[([^[\]]*)\]\s*=/g))
+        for (const p of m[1].split(","))
+          if (/^\s*[A-Z]\w*\s*$/.test(p.trim())) known.add(p.trim());
+      // statement object destructuring: const { icon: Icon, color } = …
+      for (const m of src.matchAll(/(?:const|let|var)\s*\{([^{}]*)\}\s*=/g)) {
+        for (const p of m[1].split(",")) {
+          const alias = p.trim().match(/^(\w+)\s*:\s*([A-Z]\w*)$/);
+          if (alias) known.add(alias[2]);
+          else if (/^\s*[A-Z]\w*\s*$/.test(p)) known.add(p.trim());
+        }
+      }
+      // usages: JSX components (dotted members like <Ctx.Provider> skipped —
+      // the namespace itself is what must be imported) and icon: props
+      const used = new Set();
+      for (const m of src.matchAll(/<([A-Z]\w*)([.\s/>])/g)) if (m[2] !== ".") used.add(m[1]);
+      for (const m of src.matchAll(/\bicon:\s*([A-Z]\w*)/g)) used.add(m[1]);
+      const missing = [...used].filter((n) => !known.has(n));
+      assert.deepEqual(missing, [],
+        `${app}/${file.slice(file.indexOf("/src/") + 5)}: uses ${missing.join(", ")} without importing — this deploys as a runtime crash`);
+    }
   }
 });
 
