@@ -108,6 +108,16 @@ const relTime = (iso) => {
   return `${Math.floor(s / 86400)}d`;
 };
 
+// Quick commands — the learner chat's header chips: one tap sends the
+// prompt straight to the agent; they never touch the composer.
+const QUICK_COMMANDS = [
+  'Draft a quiz for my class',
+  'Prepare an assignment',
+  'How did the last assignment go?',
+  "Plan this week's revision",
+  'Summarise my submissions',
+];
+
 export default function ChatPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -390,40 +400,54 @@ export default function ChatPage() {
         pushAgent(REPLIES[Math.floor(Math.random() * REPLIES.length)]);
       }
     } else {
-      // Normal AI chat — the unified agent endpoint, streamed for live status.
-      const history = [...messages, { from: 'me', text: bodyText }]
-        .map((m) => ({ role: m.from === 'me' ? 'user' : 'assistant', content: m.text }))
-        .slice(-8);
-      // Durable turn: an owned session plus an idempotent turn key — the same
-      // key on the JSON fallback lets the server repair a partial write
-      // instead of duplicating the exchange.
-      const sid = await ensureChatSession(bodyText);
-      const attemptTurn = async (turnId) => {
-        try {
-          return await sendStreaming({ message: bodyText, history, agentName, role: 'instructor', conversationId: sid, turnId, mode: chatMode }, setAiStatus);
-        } catch (streamErr) {
-          console.warn('[chat] stream unavailable, using JSON reply:', streamErr.message);
-          return await apiPost('/api/adaptive/chat/agent', { message: bodyText, history, agentName, role: 'instructor', conversationId: sid, turnId, mode: chatMode });
-        } finally { setAiStatus(''); }
-      };
-      let data;
+      // Normal AI chat — the unified agent endpoint (sendText below).
+      await sendText(bodyText);
+    }
+  };
+
+  // ── The AI turn — the learner chat's exact contract ──────────────────────
+  // A failed session create STOPS the send (a null conversationId used to
+  // ride through and the exchange was silently never persisted); history is
+  // the mapped conversation window (slice(-24), like the learners — the new
+  // message rides in `message`, never duplicated into history); and the
+  // turn key is created ONCE per send and REUSED on the quiet retry, so the
+  // server's durable-turn contract repairs a partial write instead of
+  // writing the exchange twice.
+  const sendText = async (bodyText) => {
+    const history = messages
+      .map((m) => ({ role: m.from === 'me' ? 'user' : 'assistant', content: m.text }))
+      .slice(-24);
+    const sid = await ensureChatSession(bodyText);
+    if (!sid) {
+      pushAgent('I could not save this conversation — check your connection and try again.');
+      return;
+    }
+    const turnId = newTurnId();
+    const attemptTurn = async () => {
       try {
-        data = await attemptTurn(newTurnId());
-      } catch (e) {
-        // One quiet retry on a fresh turn key — a dropped stream or a cold
-        // model call is usually transient. The failed turn can have applied
-        // nothing durably, so a fresh key cannot double-apply anything.
-        try {
-          setAiStatus('Thinking…');
-          await new Promise((r) => setTimeout(r, 1200));
-          data = await attemptTurn(newTurnId());
-        } catch {
-          setAiStatus('');
-          console.warn('[chat] tutor reply failed:', e.message);
-          pushAgent('Sorry — I had trouble responding just now. Please try again.');
-          return;
-        }
+        return await sendStreaming({ message: bodyText, history, agentName, role: 'instructor', conversationId: sid, turnId, mode: chatMode }, setAiStatus);
+      } catch (streamErr) {
+        console.warn('[chat] stream unavailable, using JSON reply:', streamErr.message);
+        return await apiPost('/api/adaptive/chat/agent', { message: bodyText, history, agentName, role: 'instructor', conversationId: sid, turnId, mode: chatMode });
+      } finally { setAiStatus(''); }
+    };
+    let data;
+    try {
+      data = await attemptTurn();
+    } catch (e) {
+      // One quiet retry with the SAME turn key — the server repairs the
+      // partial turn instead of duplicating it (learner parity).
+      try {
+        setAiStatus('Thinking…');
+        await new Promise((r) => setTimeout(r, 1200));
+        data = await attemptTurn();
+      } catch {
+        setAiStatus('');
+        console.warn('[chat] tutor reply failed:', e.message);
+        pushAgent('Sorry — I had trouble responding just now. Please try again.');
+        return;
       }
+    }
       // Human-in-the-loop: a successful prepare/revise execution rides
       // with the reply as a draft echo — render its Preview affordance.
       const previews = (data.toolExecutions || [])
@@ -449,7 +473,6 @@ export default function ChatPage() {
           })
           .catch(() => { /* no chips this time */ });
       }
-    }
   };
 
   // ── Training — real backend pipeline (/api/adaptive/training) ──
@@ -641,21 +664,20 @@ export default function ChatPage() {
         <div style={{ display: 'flex', gap: 14, flex: 1, minHeight: 0 }}>
         <div className="ci-chat-col" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
 
-        {/* Agent header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: WHITE, borderRadius: 16, border: bdr(1, BORDER), marginBottom: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 42, height: 42, borderRadius: '50%', background: '#FEF0E6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 21, boxShadow: `0 0 0 2px #fff, 0 0 0 3.5px ${AMBER}` }}>{agentEmoji}</div>
-            <div>
-              <div style={{ fontWeight: 800, color: INK, fontSize: 15 }}>{agentName}</div>
-              <div style={{ fontSize: 11, color: trainingInChat ? AMBER : GREEN, display: 'flex', alignItems: 'center', gap: 4, marginTop: 1 }}>
-                <span style={{ width: 5, height: 5, borderRadius: '50%', background: trainingInChat ? AMBER : GREEN, display: 'inline-block' }} />
-                {trainingInChat ? 'Training in progress…' : `Online · Lv ${agentLevel}`}
-              </div>
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <Btn variant="secondary" size="sm" onClick={() => setDrawerOpen((p) => !p)}><History size={13} />History</Btn>
-          </div>
+        {/* The learner chat's header row: the hamburger opens the sessions
+            drawer (the list reloads on every open — never stale) and the
+            quick-command chips scroll. Agent identity lives in the drawer;
+            the conversation gets the room. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 14px 8px', overflowX: 'auto', scrollbarWidth: 'none', borderBottom: `1px solid ${BORDER}`, flexShrink: 0, background: WHITE }}>
+          <button onClick={() => { loadChatSessions(); setDrawerOpen(true); }} title="Chats" aria-label="Chats"
+            style={{ flexShrink: 0, width: 30, height: 30, borderRadius: 9, border: `1px solid ${BORDER}`, background: LIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}>
+            <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke={MUTED} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
+          </button>
+          <div style={{ width: 1, height: 18, background: BORDER, flexShrink: 0 }} />
+          {QUICK_COMMANDS.map((p) => (
+            <button key={p} onClick={() => sendText(p)}
+              style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, border: `1px solid ${AMBER}30`, background: `${AMBER}08`, color: AMBER, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>{p}</button>
+          ))}
         </div>
 
         {/* Tool commands — only the instructor's UNLOCKED Tools & Assets show
