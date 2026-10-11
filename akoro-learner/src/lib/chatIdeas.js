@@ -47,7 +47,7 @@ export function protegeMoves(executions) {
     // Agents an agent search found — shown as cards with Challenge / Ask.
     if (Array.isArray(x?.agents) && x.agents.length) out.agents = x.agents.slice(0, 6);
     // Challenge requests found — shown with Accept.
-    if (Array.isArray(x?.requests) && x.requests.length) out.requests = x.requests.slice(0, 6);
+    if (Array.isArray(x?.requests) && x.requests.length) { out.requests = x.requests.slice(0, 6); out.requestsMine = !!x.requestsMine; }
   }
   return out;
 }

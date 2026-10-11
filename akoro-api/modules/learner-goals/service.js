@@ -79,7 +79,12 @@ export async function updateGoal(userId, id, patch = {}) {
     update.title = title;
   }
   for (const f of ["category", "metric", "exam", "progress_note"]) {
-    if (patch[f] !== undefined) update[f] = clean(patch[f], f === "metric" ? 160 : f === "progress_note" ? 500 : 40);
+    if (patch[f] === undefined) continue;
+    const max = f === "metric" ? 160 : f === "progress_note" ? 500 : 40;
+    // Too long is cut to fit — it used to come back null and WIPE the saved
+    // value while reporting success. Clearing it on purpose ("" or null) still works.
+    const empty = patch[f] === null || String(patch[f]).trim() === "";
+    update[f] = empty ? null : clean(String(patch[f]).trim().slice(0, max), max);
   }
   if (patch.target_date !== undefined) {
     if (patch.target_date === null || patch.target_date === "") update.target_date = null;

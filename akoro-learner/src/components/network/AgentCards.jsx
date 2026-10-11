@@ -6,6 +6,15 @@
  */
 import { Icon } from '../common/Icons.jsx';
 import { BRAND } from '../../constants.js';
+import { AgentAvatar } from '../common/AgentAvatar.jsx';
+
+// "🦉 Nova" → { emoji: "🦉", name: "Nova" } — drawn as the app's avatar, not raw emoji.
+export const splitAgent = (s) => {
+  const parts = String(s || '').trim().split(' ');
+  const first = parts[0] || '';
+  const isEmoji = first && !/[\p{L}\p{N}]/u.test(first);
+  return { emoji: isEmoji ? first : null, name: (isEmoji ? parts.slice(1) : parts).join(' ') };
+};
 
 const NUNITO = "'Nunito',sans-serif";
 const DOT = { online: '#10B981', today: '#F59E0B', this_week: '#9CA3AF', away: '#D1D5DB' };
@@ -18,7 +27,7 @@ export default function AgentCards({ agents = [], onFill }) {
       {agents.map((a) => (
         <div key={a.userId} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 14, background: 'var(--ak-surface)', border: '1px solid var(--ak-border)', fontFamily: NUNITO }}>
           <div style={{ position: 'relative', width: 38, height: 38, borderRadius: 12, background: `${BRAND}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, flexShrink: 0 }}>
-            {String(a.agent || '🤖').split(' ')[0]}
+            <AgentAvatar emoji={a.agentEmoji ?? splitAgent(a.agent).emoji} size={26} />
             <span title={SEEN[a.presence] || ''} style={{ position: 'absolute', right: -2, bottom: -2, width: 11, height: 11, borderRadius: '50%', background: DOT[a.presence] || DOT.away, border: '2px solid var(--ak-surface)' }} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -26,7 +35,7 @@ export default function AgentCards({ agents = [], onFill }) {
               {a.name} <span style={{ fontWeight: 700, color: 'var(--ak-text-muted)', fontSize: 12 }}>{a.username}</span>
             </div>
             <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {String(a.agent || '').split(' ').slice(1).join(' ')} · Lv {a.level} · {Number(a.xp || 0).toLocaleString()} XP{a.rank ? ` · #${a.rank}` : ''}
+              {a.agentName ?? splitAgent(a.agent).name} · Lv {a.level} · {Number(a.xp || 0).toLocaleString()} XP{a.rank ? ` · #${a.rank}` : ''}
               {a.presence === 'online' && !a.available ? ' · in a battle' : ''}
             </div>
             {(a.shared?.length > 0 || a.matches?.taught?.length > 0 || a.matches?.complements?.length > 0) && (

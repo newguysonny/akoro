@@ -88,9 +88,9 @@ test("the study-prep flags ship DEFAULT-ON (kill switches), like peer consult", 
 });
 
 test("study-prep sessions ride the reply as a session echo (the activity-draft pattern)", () => {
-  assert.match(chat, /start_study_prep_session" && toolResult\?\.sessionId/);
-  assert.match(chat, /get_study_prep_session" && toolResult\?\.sessions\?\.\[0\]\?\.sessionId/);
-  assert.match(chat, /\? \{ session: \{ id: toolResult\.sessionId \|\| toolResult\.sessions\[0\]\.sessionId \} \}/);
+  assert.match(chat, /tool === "start_study_prep_session" && toolResult\?\.sessionId && live\(toolResult\)\) return \{ session: \{ id: toolResult\.sessionId \} \}/);
+  // only a session with a plan that is still going gets a card (not a plan-less leftover)
+  assert.match(chat, /tool === "get_study_prep_session"\) \{ const s0 = \(toolResult\?\.sessions \|\| \[\]\)\.find\(live\)/);
 });
 
 test("the plan-card endpoints exist: confirm, adjust, teach-back gate, pause/resume/cancel", () => {

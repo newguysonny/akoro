@@ -134,7 +134,7 @@ export function chatToolResultLine(toolResult) {
   if (typeof toolResult !== "object") return { ok: true, result: "Done" };
   if (toolResult.needsClarification) return { ok: true, result: "Needs one detail from you" };
   if (toolResult.success === false || toolResult.error) return { ok: false, result: "Couldn't complete this step" };
-  if (toolResult.disabled) return { ok: true, result: "Not available yet" };
+  if (toolResult.disabled || toolResult.enabled === false) return { ok: true, result: "Not available yet" };
   const count = primaryCount(toolResult);
   if (count !== null) return { ok: true, result: count === 0 ? "Nothing found" : `${count} found` };
   return { ok: true, result: "Done" };
@@ -186,7 +186,9 @@ export function chatToolChange(tool, toolResult, input = {}) {
   const done = CHAT_TOOL_DISPLAY[String(tool || "")]?.done;
   if (!done) return null;
   if (!toolResult || typeof toolResult !== "object") return null;
-  if (toolResult.success === false || toolResult.error || toolResult.needsClarification || toolResult.disabled) return null;
+  if (toolResult.success === false || toolResult.error || toolResult.needsClarification || toolResult.disabled || toolResult.enabled === false) return null;
+  // Read-only actions of the multi-action tools change nothing — no "Updated…" row.
+  if (["study_buddy", "daily_challenge", "revision_circle"].includes(String(tool)) && ["list", "status", "ranking", "search", undefined, null, ""].includes(input?.action)) return null;
   const sources = [toolResult, toolResult.task, toolResult.goal, toolResult.post, toolResult.session, input].filter((v) => v && typeof v === "object");
   const pick = (key) => sources.map((source) => source[key]).find((value) => typeof value === "string" || typeof value === "number");
   const title = pick("title") ?? pick("message") ?? "";

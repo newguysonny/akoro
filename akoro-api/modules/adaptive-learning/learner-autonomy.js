@@ -19,6 +19,7 @@ import { traceRedis } from "../../lib/redisTrace.js";
 import { workerJob } from "../../lib/workerLog.js";
 import { buildAutonomyTaskMessage } from "./learner-autonomy-policy.js";
 import { guardWorker } from "../../lib/redisQuotaGuard.js";
+import { assertQueueCapacity } from "../../lib/queueGuard.js";
 
 const QUEUE_NAME = "learner-agent-autonomy";
 const STALE_DELIVERY_MS = 5 * 60 * 1000;

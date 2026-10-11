@@ -582,6 +582,15 @@ function AgentChatTab({
     const controller=typeof AbortController!=="undefined"?new AbortController():null;
     abortRef.current=controller;
     let finalReply="";
+    let gotDone=false;
+    // A turn that started but never got its "done" (the stream errored or the
+    // connection closed mid-way): stop the spinners, say what happened, and
+    // keep what already arrived. It used to stay "thinking" for ever.
+    const settleBroken=(message)=>{
+      setMessages(prev=>prev.map(m=>m.id===replyId?{...m,phase:"done",interrupted:true,
+        blocks:settleRunning(m.blocks,Date.now(),{ stopped:true }),
+        text:(m.text?`${m.text}\n\n`:"")+`_${message}_`}:m));
+    };
     try {
       finalReply = await streamPost(agentChatEndpoint({ stream: true }), payload, {
         signal: controller?.signal,
@@ -589,7 +598,8 @@ function AgentChatTab({
         onDelta: appendDelta,
         onThinking: appendThinking,
         onStatus: (s)=>{ if(!started) setStatusLabel(t(statusKey[s?.step]||"") || s?.label || ""); },
-        onDone: ({ reply, syllabus, pastQuestions, thinking, toolExecutions, trace })=>{
+        onDone: ({ reply, syllabus, pastQuestions, thinking, toolExecutions, trace, stopped })=>{
+          gotDone=true;
           ensureBubble(); setStatusLabel("");
           // Settle every step; if the live steps never arrived (an older API),
           // fall back to the saved trace the done event carries.
@@ -597,7 +607,7 @@ function AgentChatTab({
           // Study-prep sessions ride the reply as a session echo (the
           // activity-draft pattern) — render the interactive session card.
           const studyPrepSession = (toolExecutions || []).find((entry) => entry?.session?.id && entry?.success)?.session || null;
-          setMessages(prev=>prev.map(m=>m.id===replyId?{...m,...(reply!=null?{text:reply}:{}),thinking:thinking||m.thinking,syllabus:syllabus||[],pastQuestions:pastQuestions||[],phase:"done",...(studyPrepSession?{studyPrepSessionId:studyPrepSession.id}:{}),...protegeMoves(toolExecutions)}:m));
+          setMessages(prev=>prev.map(m=>m.id===replyId?{...m,...(reply!=null?{text:reply}:{}),thinking:thinking||m.thinking,syllabus:syllabus||[],pastQuestions:pastQuestions||[],phase:"done",...(stopped?{stopped:true}:{}),...(studyPrepSession?{studyPrepSessionId:studyPrepSession.id}:{}),...protegeMoves(toolExecutions)}:m));
           if ((toolExecutions || []).some((entry) => entry?.tool === "create_task" && entry?.success)) refetchTasks();
           if ((toolExecutions || []).some((entry) => entry?.tool === "suggest_help" && entry?.success)) refetchSuggestions();
         },
@@ -605,8 +615,13 @@ function AgentChatTab({
       if(!started){ // stream produced nothing — show fallback text
         finalReply=t('agent.fallback');
         setMessages(prev=>[...prev,{id:replyId,from:"agent",text:finalReply,time:t2}]);
+      } else if(!gotDone){
+        // The connection closed before the end. The server still saves the
+        // full reply — it shows when the chat is reopened.
+        settleBroken("The connection dropped before the reply finished — reopen this chat to see the rest.");
+        finalReply="";
       }
-    } catch {
+    } catch (err) {
       setStatusLabel("");
       if(controller?.signal.aborted){
         // ■ Stop: keep what already streamed, mark the turn stopped. Never
@@ -614,6 +629,12 @@ function AgentChatTab({
         ensureBubble();
         setMessages(prev=>prev.map(m=>m.id===replyId?{...m,phase:"done",stopped:true,
           blocks:settleRunning(m.blocks,Date.now(),{ stopped:true })}:m));
+      }
+      // Failed part-way (the server sent an error event): say so instead of
+      // leaving the reply spinning.
+      else if(started && !gotDone){
+        settleBroken(err?.message || t('agent.error_connection'));
+        finalReply="";
       }
       // Streaming failed before any token — retry the same idempotent turn in
       // normal JSON form, then show a connection error only if that also fails.
@@ -847,7 +868,7 @@ function AgentChatTab({
                     <div style={{ fontSize:16,lineHeight:1.6,color:"var(--ak-text)",fontWeight:500,wordBreak:"break-word" }}><RichText text={msg.text} size={16} lineHeight={1.6}/>{msg.phase==="answering"&&<StreamCaret/>}</div>
                   )}
                   {msg.agents?.length>0&&<AgentCards agents={msg.agents} onFill={applyIdea}/>}
-                  {msg.requests?.length>0&&<ChallengeRequestCards requests={msg.requests}/>}
+                  {msg.requests?.length>0&&<ChallengeRequestCards requests={msg.requests} mine={!!msg.requestsMine}/>}
                   {/* Not taught yet — the learner can teach it now. */}
                   {msg.teach&&onTeachTopic&&(
                     <div style={{ display:"flex",alignItems:"center",gap:10,marginTop:10,padding:"10px 12px",borderRadius:14,background:`${BRAND}0D`,border:`1px solid ${BRAND}33` }}>

@@ -576,7 +576,8 @@ export const CHAT_TOOLS = [
     featureGate: "agent_network",
     description: "The daily battle: a real battle that recurs every day at 7 PM (Lagos) in the learner's daily subject — their agent plays it from their notes, like any battle, and they watch it in the arena. " +
       "It shows in the Battles tab: Scheduled before 7 PM, Active while it runs, Completed after; then tomorrow's is scheduled. Ranked across everyone in that subject that day. " +
-      "action: status (default — today's state, the next one, recent results) | join (take a seat in the next one; subject optional) | skip (sit out the next one) | ranking (subject).",
+      "action: status (default — today's state, the next one, recent results) | join (take a seat in the next one; subject optional — a different subject moves the seat) | skip (sit out the next one) | ranking (subject). " +
+      "join and skip ONLY when the learner explicitly asks (joining needs coins for their agent's answers).",
     input_schema: {
       type: "object",
       properties: {
@@ -748,12 +749,12 @@ export const CHAT_TOOLS = [
   },
   {
     name: "find_battles",
-    description: "Find active and upcoming battles in courses the student is enrolled in.",
+    description: "Find the learner's active and upcoming battles: ones they're in or invited to, battles in their courses and classes, and the next daily battle. Each has when it starts, subject, XP prize, HP lost per miss and minimum XP to join.",
     input_schema: { type: "object", properties: {}, required: [] },
   },
   {
     name: "get_ranking",
-    description: "Get the student's XP, rank, streak and leaderboard position.",
+    description: "Get the student's total XP and rank (overall, and in their courses/classes), and battles won.",
     input_schema: { type: "object", properties: {}, required: [] },
   },
   {
@@ -1058,6 +1059,8 @@ async function resolveLearnerSchoolContext(studentId) {
   const ctx = { schoolId: null, school: null, classId: null, className: null, sectionName: null, classrooms: [] };
   const { data: roster } = await db.schema("mgmt").from("students")
     .select("school_id, class_id, section_id").eq("user_id", studentId)
+    // The school they're at NOW — not a past school (alumni / inactive).
+    .eq("status", "active")
     .not("school_id", "is", null).limit(1).maybeSingle();
   if (roster?.school_id) {
     ctx.schoolId = roster.school_id;
@@ -1094,6 +1097,10 @@ async function resolveLearnerSchoolContext(studentId) {
   }
   return ctx;
 }
+
+/** A read helper that throws reaches the model as {error} naming what failed,
+ *  not the loop's generic "could not be completed". */
+const asToolError = (what) => (e) => ({ error: `Couldn't load ${what} just now${e?.message ? ` (${String(e.message).slice(0, 120)})` : ""}.` });
 
 export async function executeChatTool(name, input, studentId, { conversationId = null, role = "student", channel = "ai_chat" } = {}) {
   switch (name) {
@@ -1303,8 +1310,18 @@ export async function executeChatTool(name, input, studentId, { conversationId =
             // same default-on semantics as the tool's featureGate
             ...(String(process.env.AKORO_AGENT_PEER_CONSULT_ENABLED ?? "true").toLowerCase() !== "false"
               ? ["Ask other learners\u2019 study agents for fresh ideas when you\u2019re stuck \u2014 only your question travels, never your data"] : [])] },
+          { title: "School", items: ["Show your school and class, its subjects, and your teachers — and find a teacher by name or subject"] },
+          ...(agentNetworkEnabled ? [{ title: "Battles and other agents", items: [
+            "Find your battles and the daily battle, and show your XP and rank",
+            "Search for other learners' agents (online now, by subject, school, exam…) and their challenge requests",
+            "Challenge agents, post or accept a challenge request, rematch — only when you ask",
+            "Message or consult other agents, check your agent's inbox, and reply — only when you ask",
+            "Study buddies, the daily battle, revision circles and the weekly league",
+          ] }] : []),
           { title: "Organisation", items: ["Create learner-owned study tasks when explicitly asked", "Schedule a future chat message when explicitly asked", "Show due tasks and recorded learning progress", "Save, update and track study goals when explicitly asked", "Show the suggestions from its background reviews waiting in the inbox", "Draft, save and publish the learner\u2019s blog posts when explicitly asked"] },
           { title: "Learning tools", items: [
+            ...(enabled("AKORO_STUDY_PREP_ENABLED") ? ["Plan a study-prep session for a test or exam — a plan card you approve before anything starts"] : []),
+            "Show your past and recent learning sessions",
             ...(enabled("AKORO_EXAM_PREP_CONFIDENCE_ENABLED") ? ["Show generated exam-style practice and workflow status; these are not historical past papers"] : []),
             ...(enabled("AKORO_CONCEPT_TRACKER_ENABLED") ? ["Show approved-concept progress, resume points, and clearable confusion notes"] : []),
             ...(enabled("AKORO_LEARNER_INSIGHTS_ENABLED") ? ["Explain a bounded, expiry-aware learning-insights summary"] : []),
@@ -1317,13 +1334,14 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       };
     }
     case "get_learner_context":
-      return getLearnerProfileContext(studentId);
+      return getLearnerProfileContext(studentId).catch(asToolError("your profile"));
     case "check_progress": {
       const { data: enrollments } = await db.from("enrollments")
         .select("course_id, progress, courses!inner(title, subject)")
         .eq("user_id", studentId).eq("status", "active");
+      // The OVERALL row — the table has one per scope (global/course/classroom).
       const { data: xpRow } = await db.from("xp_leaderboard")
-        .select("total_xp, rank").eq("user_id", studentId).limit(1);
+        .select("total_xp, rank").eq("user_id", studentId).eq("scope", "global").limit(1);
       return {
         courses:  (enrollments ?? []).map(e => ({ title: e.courses?.title, subject: e.courses?.subject, progress: e.progress ?? 0 })),
         total_xp: xpRow?.[0]?.total_xp ?? 0,
@@ -1510,7 +1528,9 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         // The learning sessions themselves (the protégé teaching sessions).
         const { data: sessions, error: sErr } = await db.schema("edu").from("adaptive_sessions")
           .select("subject, topic, status, current_phase, started_at, completed_at")
-          .eq("student_id", studentId).order("started_at", { ascending: false }).limit(8);
+          // Never-started sessions have no started_at — nulls last, or they
+          // fill every "recent" slot ahead of the real ones.
+          .eq("student_id", studentId).order("started_at", { ascending: false, nullsFirst: false }).limit(8);
         if (sErr) return { error: "Could not load your learning sessions: " + sErr.message };
         // What the most recent sessions actually achieved.
         const { data: deltas } = await db.schema("edu").from("session_knowledge_delta")
@@ -1546,7 +1566,10 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       try {
         const context = await getLearnerProfileContext(studentId);
         const taskInput = validateLearnerTaskInput(input, { defaultTimezone: context.timeZone });
-        const { data: agentRow } = await db.from("user_agents").select("id").eq("user_id", studentId).single();
+        const { data: agentRow } = await db.from("user_agents").select("id").eq("user_id", studentId).maybeSingle();
+        // tasks.agent_id is required — a learner who hasn't made their agent yet
+        // got a raw database error here.
+        if (!agentRow?.id) return { error: "Create your agent first (Agent tab) — tasks are kept by your agent." };
         const { data: task, error } = await db.from("tasks").insert({
           creator_id: studentId, agent_id: agentRow?.id,
           title: taskInput.title, description: taskInput.description, priority: taskInput.priority,
@@ -1596,7 +1619,9 @@ export async function executeChatTool(name, input, studentId, { conversationId =
             consulted: 0, replies: [],
             note: consult.note === "no_peers_yet"
               ? "No other agents are active on the network yet — answer from your own knowledge instead."
-              : "The question was rejected by the privacy guard — rephrase it generally.",
+              : consult.note === "contact_details"
+              ? "The question was rejected by the privacy guard — rephrase it generally."
+              : "No peer agent could answer just now — answer from your own knowledge instead.",
           };
         }
         return consult; // { consulted, replies: [{agent, emoji, reply}], topic }
@@ -1750,6 +1775,14 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         return clarify("body", "Give me the blog text to save — draft the wording with me first if you like.", { action: "save_blog_draft" });
       }
       try {
+        // Editing a PUBLISHED post would put the edit live at once — this tool
+        // promises a draft, so it refuses and points at publish_blog.
+        if (input?.blogId) {
+          const { data: existing } = await db.schema("edu").from("blogs").select("status").eq("id", input.blogId).eq("user_id", studentId).maybeSingle();
+          if (existing?.status === "published") {
+            return { error: "That post is already published — saving would put the edit live. Ask the learner whether to publish the change (publish_blog) or save it as a new draft (no blogId)." };
+          }
+        }
         const result = input?.blogId
           ? await updateBlogPost(studentId, input.blogId, { title: input.title, body: input.body })
           : await createBlogPost(studentId, { title: input.title, body: input.body, status: "draft" });
@@ -1839,11 +1872,17 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       }
     }
     case "list_tasks": {
-      const { data } = await db.from("tasks")
-        .select("id, title, priority, status, payload, due_at")
+      const { data, error } = await db.from("tasks")
+        .select("id, title, priority, status, payload, due_at, created_at")
         .eq("creator_id", studentId).eq("status", "pending")
-        .order("created_at", { ascending: false }).limit(10);
-      return { tasks: data ?? [], count: data?.length ?? 0 };
+        .order("created_at", { ascending: false }).limit(50);
+      if (error) return { error: "Couldn't load your tasks just now." };
+      // Sorted by priority (as described), then soonest due — over all pending
+      // tasks, not just the 10 newest.
+      const rank = { urgent: 0, high: 1, medium: 2, low: 3 };
+      const tasks = (data ?? []).sort((a, b) => (rank[a.priority] ?? 2) - (rank[b.priority] ?? 2)
+        || String(a.due_at || "9999").localeCompare(String(b.due_at || "9999"))).slice(0, 10);
+      return { tasks, count: data?.length ?? 0 };
     }
     case "search_agents": {
       if (role === "instructor") return { error: "The agent network is for learners." };
@@ -1864,6 +1903,7 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       catch (e) { return { saved: false, error: e.message }; }
     }
     case "block_agent": {
+      if (role === "instructor") return { error: "The agent network is for learners." };
       if (!input?.userId) return clarify("userId", "Which agent should I block? Find them with search_agents first.");
       try {
         if (input.report_reason) await reportAgent(studentId, input.userId, input.report_reason, { via: "agent_chat" });
@@ -1872,6 +1912,7 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       } catch (e) { return { blocked: false, error: e.message }; }
     }
     case "log_past_question_practice": {
+      if (role === "instructor") return { error: "The agent network is for learners." };
       try {
         const logged = await logPastQuestions(studentId, { ...input, source: "agent" });
         return { logged: true, entry: logged, summary: await pastQuestionSummary(studentId) };
@@ -1919,6 +1960,7 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       catch (e) { return { accepted: false, error: e.message }; }
     }
     case "cancel_challenge_request": {
+      if (role === "instructor") return { error: "The agent network is for learners." };
       if (!input?.requestId) return clarify("requestId", "Which of your requests should I cancel?");
       try { return await cancelChallengeRequest(studentId, input.requestId); }
       catch (e) { return { cancelled: false, error: e.message }; }
@@ -1940,6 +1982,7 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       return await agentInbox(studentId);
     }
     case "reply_to_agent": {
+      if (role === "instructor") return { error: "The agent network is for learners." };
       if (!input?.messageId) return clarify("messageId", "Which message should I answer? I'll open the inbox first.");
       try { return await replyToAgent(studentId, input.messageId, input.reply); }
       catch (e) { return { replied: false, error: e.message }; }
@@ -1986,42 +2029,90 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       catch (e) { return { error: e.message }; }
     }
     case "find_battles": {
-      const { data: enrolled } = await db.from("enrollments")
-        .select("course_id").eq("user_id", studentId).eq("status", "active");
-      const ids = (enrolled ?? []).map(e => e.course_id);
-      if (!ids.length) return { battles: [] };
-      const { data } = await db.from("battles")
-        .select("id, title, status, battle_type, xp_pool, courses!inner(title)")
-        .in("course_id", ids).in("status", ["live", "scheduled", "lobby"]).limit(5);
-      return { battles: (data ?? []).map(b => ({ id: b.id, title: b.title, status: b.status, course: b.courses?.title, xp_pool: b.xp_pool })) };
+      // Every battle the learner could be in: ones they hold a seat in (incl.
+      // network and daily battles), their courses' and classes' battles, and
+      // the next daily battle. It used to look only at course battles, so a
+      // learner with no course enrolment always heard "no battles".
+      const OPEN = ["live", "scheduled", "lobby"];
+      const COLS = "id, title, status, battle_type, subject, topic, scheduled_start, xp_prize, xp_pool, hp_per_miss, min_xp, recurring_key, course_id, classroom_id, courses(title)";
+      const [{ data: enrolled }, { data: classes }, { data: seats }] = await Promise.all([
+        db.from("enrollments").select("course_id").eq("user_id", studentId).eq("status", "active"),
+        db.from("classroom_students").select("classroom_id").eq("user_id", studentId).eq("status", "active"),
+        db.from("battle_participants").select("battle_id, joined_at, declined_at").eq("user_id", studentId).limit(200),
+      ]);
+      const courseIds = (enrolled ?? []).map((e) => e.course_id);
+      const classIds = (classes ?? []).map((c) => c.classroom_id);
+      const seatOf = new Map((seats ?? []).map((s) => [s.battle_id, s]));
+      const { upcomingDay } = await import("../agent-network/activities.js");
+      const lists = await Promise.all([
+        seatOf.size ? db.from("battles").select(COLS).in("id", [...seatOf.keys()].slice(0, 200)).in("status", OPEN) : { data: [] },
+        courseIds.length ? db.from("battles").select(COLS).in("course_id", courseIds).in("status", OPEN).limit(10) : { data: [] },
+        classIds.length ? db.from("battles").select(COLS).in("classroom_id", classIds).in("status", OPEN).limit(10) : { data: [] },
+        db.from("battles").select(COLS).like("recurring_key", `daily:${upcomingDay()}:%`).in("status", OPEN).limit(5),
+      ]);
+      const byId = new Map();
+      for (const l of lists) for (const b of (l.data ?? [])) byId.set(b.id, b);
+      const battles = [...byId.values()]
+        .sort((a, b) => (a.status === "live" ? -1 : 0) - (b.status === "live" ? -1 : 0) || String(a.scheduled_start || "").localeCompare(String(b.scheduled_start || "")))
+        .slice(0, 10)
+        .map((b) => {
+          const seat = seatOf.get(b.id);
+          return {
+            id: b.id, title: b.title, status: b.status, subject: b.subject, topic: b.topic,
+            kind: String(b.recurring_key || "").startsWith("daily:") ? "daily" : b.battle_type,
+            startsAt: b.scheduled_start, course: b.courses?.title ?? null,
+            xpPrize: b.xp_prize ?? b.xp_pool, hpPerMiss: b.hp_per_miss ?? 10, minXp: b.min_xp ?? 0,
+            me: !seat ? "not invited" : seat.declined_at ? "declined" : seat.joined_at ? "in" : "invited — answer it in the Challenges tab",
+          };
+        });
+      return battles.length ? { battles } : { battles: [], note: "No open battles right now. The daily battle is scheduled each evening — opening the Battles tab takes a seat." };
     }
     case "get_ranking": {
-      const { data } = await db.from("xp_leaderboard")
-        .select("total_xp, rank, scope, battles_won, win_rate")
-        .eq("user_id", studentId).limit(3);
-      return { entries: data ?? [] };
+      const { data, error } = await db.from("xp_leaderboard")
+        .select("total_xp, rank, scope, course_id, battles_won, win_rate")
+        .eq("user_id", studentId).limit(20);
+      if (error) return { error: "Couldn't load your ranking just now." };
+      const rows = data ?? [];
+      const overall = rows.find((r) => r.scope === "global") ?? null;
+      if (!rows.length) return { totalXp: 0, rank: null, note: "No XP yet — finish a session or a battle to get on the leaderboard." };
+      return {
+        totalXp: overall?.total_xp ?? Math.max(...rows.map((r) => r.total_xp ?? 0)),
+        rank: overall?.rank ?? null,
+        battlesWon: overall?.battles_won ?? null,
+        other: rows.filter((r) => r.scope !== "global").map((r) => ({ scope: r.scope, rank: r.rank, totalXp: r.total_xp })),
+      };
     }
     case "get_weak_topics": {
       const { data: agentRow } = await db.schema("edu").from("student_agents")
         .select("id").eq("student_id", studentId).single();
       if (!agentRow) return { weak_topics: [], message: "No knowledge profile yet — start a session!" };
-      let q = db.schema("edu").from("student_knowledge")
-        .select("topic, subject, confidence, priority")
-        .eq("agent_id", agentRow.id).order("confidence");
-      if (input.subject) q = q.eq("subject", input.subject);
-      const { data } = await q.limit(8);
-      return { weak_topics: (data ?? []).filter(t => t.confidence < 0.5).map(t => ({ topic: t.topic, subject: t.subject, confidence: Math.round((t.confidence ?? 0) * 100) + "%", priority: t.priority })) };
+      // What the learner has taught their agent (agent_knowledge — the same
+      // store as the knowledge map and learning sessions), weakest first. It
+      // read the learner's saved notes instead, where confidence defaults to
+      // 60%, so "my weak topics" came back empty next to a map showing some.
+      let q = db.schema("edu").from("agent_knowledge")
+        .select("topic, subject, confidence")
+        .eq("agent_id", agentRow.id).order("confidence", { ascending: true }).limit(60);
+      if (input.subject) q = q.ilike("subject", String(input.subject).trim());
+      const { data, error } = await q;
+      if (error) return { error: "Couldn't load your topics just now." };
+      const seen = new Set();
+      const weak = (data ?? []).filter((t) => (Number(t.confidence) || 0) < 0.6)
+        .filter((t) => { const k = `${t.subject}|${String(t.topic || "").toLowerCase().trim()}`; if (seen.has(k)) return false; seen.add(k); return true; })
+        .slice(0, 8)
+        .map((t) => ({ topic: t.topic, subject: t.subject, confidence: Math.round((Number(t.confidence) || 0) * 100) + "%" }));
+      return weak.length ? { weak_topics: weak } : { weak_topics: [], message: (data ?? []).length ? "Nothing weak right now — every topic you've taught is above 60%." : "Nothing taught yet in that subject." };
     }
     case "get_learning_overview":
-      return getLearningOverview(studentId);
+      return getLearningOverview(studentId).catch(asToolError("your learning overview"));
     case "get_knowledge_map":
-      return getKnowledgeMap(studentId, input);
+      return getKnowledgeMap(studentId, input).catch(asToolError("your knowledge map"));
     case "search_my_study_knowledge":
-      return searchMyStudyKnowledge(studentId, input);
+      return searchMyStudyKnowledge(studentId, input).catch(asToolError("your saved study knowledge"));
     case "get_concept_tracker_summary":
-      return getConceptTrackerSummary(studentId, input);
+      return getConceptTrackerSummary(studentId, input).catch(asToolError("the concept tracker"));
     case "get_learning_insights_summary":
-      return getLearningInsightsSummary(studentId);
+      return getLearningInsightsSummary(studentId).catch(asToolError("your learning insights"));
     case "get_exam_prep_status":
       return getExamPrepStatus(studentId);
     case "get_chat_memory":
@@ -2067,10 +2158,24 @@ export async function executeChatTool(name, input, studentId, { conversationId =
           note: "Plan proposed — nothing is charged until the learner approves it on the plan card.",
         };
       }
+      // A session already under way (studying, replanning, paused): one at a
+      // time. Starting another was refused deep in the harness and reached the
+      // learner as a generic failure.
+      const running = (summary.sessions || []).find((session) => ["topic_active", "replanning", "paused"].includes(session.status));
+      if (running) {
+        return {
+          enabled: true, sessionId: running.sessionId, status: running.status, plan: running.plan,
+          note: `A study-prep session is already ${running.status === "paused" ? "paused" : "under way"}${running.subject ? ` (${running.subject})` : ""} — offer to continue it; a new one can start once it's finished or ended.`,
+        };
+      }
+      const goal = String(input?.goal || "").trim();
+      const subject = String(input?.subject || "").trim();
+      if (goal.length < 3) return clarify("goal", "What's the goal — which test or exam, and when?", { action: "start_study_prep_session" });
+      if (!subject) return clarify("subject", "Which subject is the test in?", { action: "start_study_prep_session" });
       const view = await startStudyPrepSession({
         learnerId: studentId,
-        goal: String(input?.goal || "").slice(0, 300),
-        subject: String(input?.subject || "").slice(0, 180),
+        goal: goal.slice(0, 300),
+        subject: subject.slice(0, 180),
         classLevel: String(input?.classLevel || "JSS1").slice(0, 40),
         examBoard: String(input?.examBoard || "WAEC").slice(0, 80),
       });
@@ -2085,7 +2190,11 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       return getStudyPrepSessionSummary(studentId);
     }
     case "submit_tool_request": {
-      const request = await createLearnerToolRequest({ learnerId: studentId, body: input });
+      let request;
+      // Say WHY it was refused (too short, contact details…) so the agent can
+      // fix it and retry, instead of the generic "could not be completed".
+      try { request = await createLearnerToolRequest({ learnerId: studentId, body: input }); }
+      catch (e) { return { submitted: false, error: e?.message || "Could not send the request." }; }
       return {
         submitted: request.createdNew,
         duplicate: !request.createdNew,
@@ -3380,7 +3489,10 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         tool,
         success: observation.success,
         requestId: observation.request_id,
-        sideEffecting: ["create_task", "suggest_help", "schedule_chat_follow_up", "cancel_scheduled_chat_follow_up", "submit_tool_request", "prepare_activity", "revise_activity_draft"].includes(tool),
+        sideEffecting: ["create_task", "suggest_help", "schedule_chat_follow_up", "cancel_scheduled_chat_follow_up", "submit_tool_request", "prepare_activity", "revise_activity_draft",
+          "create_goal", "update_goal_progress", "save_blog_draft", "publish_blog", "update_agent_network_settings", "block_agent", "log_past_question_practice",
+          "challenge_agent", "post_challenge_request", "accept_challenge_request", "cancel_challenge_request", "rematch_battle", "message_agent", "reply_to_agent", "start_study_prep_session"].includes(tool)
+          || (["study_buddy", "daily_challenge", "revision_circle"].includes(tool) && !["list", "status", "ranking", "search", undefined].includes(input?.action)),
         // A small echo so the chat UI can render the Preview affordance for
         // the human-in-the-loop approval without parsing the model's prose.
         // The protégé's two moves ride the reply so the app can show them:
@@ -3388,7 +3500,8 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         ...(tool === "ask_to_be_taught" && toolResult?.asked ? { teach: { topic: toolResult.topic, subject: toolResult.subject } } : {}),
         // Agent search results ride as cards the app can show (Challenge / Message buttons).
         ...((tool === "search_agents" || tool === "find_competitors") && Array.isArray(toolResult?.agents) ? { agents: toolResult.agents.slice(0, 6) } : {}),
-        ...(tool === "search_challenge_requests" && Array.isArray(toolResult?.requests) ? { requests: toolResult.requests.slice(0, 6) } : {}),
+        // `requestsMine`: the learner's OWN requests get Cancel, not Accept.
+        ...(tool === "search_challenge_requests" && Array.isArray(toolResult?.requests) ? { requests: toolResult.requests.slice(0, 6), requestsMine: !!input?.mine } : {}),
         ...(tool === "consult_teaching_guide" && toolResult?.consulted ? { guide: { name: toolResult.guide, ...(toolResult.teach ? { teach: toolResult.teach } : {}) } } : {}),
         ...((tool === "prepare_activity" && toolResult?.prepared
             || tool === "revise_activity_draft" && toolResult?.revised)
@@ -3399,10 +3512,14 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         // tab render the interactive session card (plan card, human gates)
         // without parsing the model's prose. Plan-only — the card's buttons
         // hit the harness REST endpoints, never the model.
-        ...((tool === "start_study_prep_session" && toolResult?.sessionId
-            || tool === "get_study_prep_session" && toolResult?.sessions?.[0]?.sessionId)
-          ? { session: { id: toolResult.sessionId || toolResult.sessions[0].sessionId } }
-          : {}),
+        // Only a session with a plan to show and still going — not a plan-less
+        // "planning" leftover or a finished one (the card would load nothing).
+        ...(() => {
+          const live = (x) => x && Array.isArray(x.plan) && x.plan.length > 0 && !["completed", "abandoned", "cancelled", "ended", "failed"].includes(x.status);
+          if (tool === "start_study_prep_session" && toolResult?.sessionId && live(toolResult)) return { session: { id: toolResult.sessionId } };
+          if (tool === "get_study_prep_session") { const s0 = (toolResult?.sessions || []).find(live); if (s0) return { session: { id: s0.sessionId } }; }
+          return {};
+        })(),
       });
       transcript.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(observation) });
     }

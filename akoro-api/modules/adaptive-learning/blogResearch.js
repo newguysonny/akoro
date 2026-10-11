@@ -67,7 +67,7 @@ export async function readBlogPost({ slug } = {}) {
   if (!clean) return { error: "Which post? Pass the slug from search_blog_posts." };
 
   const { data: post, error } = await contentDb.from("blog_posts")
-    .select("slug,title,excerpt,category,author,author_role,read_min,published_at,body")
+    .select("id,slug,title,excerpt,category,author,author_role,read_min,published_at,body")
     .eq("slug", clean).eq("status", "published")
     .maybeSingle();
   if (error) return { error: "The blog is unavailable right now." };
