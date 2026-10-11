@@ -17,6 +17,7 @@ import VouchersGeneratedPage from './pages/VouchersGeneratedPage.jsx';
 import WalletPage from './pages/WalletPage.jsx';
 import RedemptionsPage from './pages/RedemptionsPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
+import NotificationsPage from './pages/NotificationsPage.jsx';
 import DocsPage from './pages/DocsPage.jsx';
 import WebhooksPage from './pages/WebhooksPage.jsx';
 
@@ -47,6 +48,7 @@ function AppRoutes() {
       <Route path="/wallet"         element={<ProtectedRoute><WalletPage /></ProtectedRoute>} />
       <Route path="/redemptions"    element={<ProtectedRoute><RedemptionsPage /></ProtectedRoute>} />
       <Route path="/settings"       element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+      <Route path="/notifications"  element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
       <Route path="/auth/callback"  element={<AuthCallback />} />
       <Route path="/signin"         element={<GuestRoute><SigninPage /></GuestRoute>} />
       <Route path="/signup"         element={<GuestRoute><SignupPage /></GuestRoute>} />
