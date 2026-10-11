@@ -192,13 +192,31 @@ test("no source file uses a component or icon it never imports — the productio
   }
 });
 
-test("mobile notifications live in the AppHeader — the page TopBar has none", () => {
-  for (const app of ["akoro-admin", "akoro-school", "akoro-instructor"]) {
+test("every header carries the FULL reference set — ring · chat/messages · bell · help", async () => {
+  for (const app of APPS) {
     const src = layouts[app];
     assert.match(src, /key: 'notifications', icon: Bell,/, `${app}: the header carries the bell`);
-    assert.match(src, /showBell=\{false\} \/>/, `${app}: the mobile TopBar renders no second bell`);
-    assert.match(src, /showBell = true/, `${app}: desktop keeps its bell`);
+    assert.match(src, /key: 'help',\s*icon: LifeBuoy,/, `${app}: the header carries help`);
+    assert.match(src, /progress=\{setupProgressOf\(/, `${app}: the setup ring renders from real progress`);
+    assert.match(src, /onSetup=\{\(\) => navigate\('/, `${app}: the ring navigates to a setup surface`);
   }
+  // chat surfaces where the app has one (reference order: ring · chat · bell · help)
+  assert.match(layouts["akoro-instructor"], /key: 'chat',\s*icon: MessageSquare/, "instructor: agent chat");
+  assert.match(layouts["akoro-school"], /key: 'chat',\s*icon: MessageSquare/, "school: agent chat");
+  assert.match(layouts["akoro-admin"], /key: 'messages',\s*icon: MessageSquare/, "admin: messages");
+  // the consoles keep the page-TopBar bell OFF on mobile — the header is the only bell
+  for (const app of ["akoro-admin", "akoro-school", "akoro-instructor"]) {
+    assert.match(layouts[app], /showBell=\{false\} \/>/, `${app}: the mobile TopBar renders no second bell`);
+    assert.match(layouts[app], /showBell = true/, `${app}: desktop keeps its bell`);
+  }
+  // kpemu: the bell has a real destination — route + page exist — and the
+  // shared ring button is actually clickable.
+  const appJs = await read("kpemu-business", "App.jsx");
+  assert.match(appJs, /path="\/notifications"/, "kpemu: /notifications route");
+  const notifPage = await read("kpemu-business", "pages/NotificationsPage.jsx");
+  assert.match(notifPage, /all caught up/, "kpemu: notifications page exists");
+  const headerSrc = await read("kpemu-business", "components/AppHeader.jsx");
+  assert.match(headerSrc, /onClick=\{onSetup\}/, "the ring button navigates");
 });
 
 test("the instructor chat uses the learner app's Fortizo composer", () => {

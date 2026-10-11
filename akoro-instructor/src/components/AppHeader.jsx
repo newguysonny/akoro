@@ -3,12 +3,10 @@
  * reference ("Akoro app [header]"): hamburger | spacer | [progress ring ·
  * agent chat · notifications · help] · avatar with an account menu.
  *
- * The reference is config-driven per role, and so is this: `progress` and
- * `actions` are optional — a role renders only what it has a real
- * destination for. Kpemu Business has no chat / notifications / setup-
- * progress surfaces, so it passes none of those; help → /docs and the
- * account menu carry Profile/settings/logout. The admin / school /
- * instructor apps can switch the rest on by passing them.
+ * The reference is config-driven per role, and so is this: every console
+ * now passes the full set — `progress` + `onSetup` (the ring navigates to
+ * the app's setup surface), the actions it has a real destination for
+ * (chat / messages, notifications, help), and the account menu.
  *
  * Keyboard + a11y are the reference's, exactly: the menu opens focused on
  * its first enabled item, ArrowUp/Down/Home/End move through it, Escape
@@ -38,6 +36,7 @@ export default function AppHeader({
   onMenu,
   user,
   progress = null,          // 0–1 → renders the ring button; null → omitted
+  onSetup,                  // ring click → the app's setup surface
   actions = [],             // [{ key, icon: Icon, label, title, variant: 'circle'|'square'|'ghost', onClick }]
   menuItems = [],           // [{ key, label, icon: Icon, danger?, disabled?, badge?, to?, onClick? }]
 }) {
@@ -105,7 +104,7 @@ export default function AppHeader({
 
       <div className="akhdr-actions">
         {progress != null && (
-          <button type="button" className="akhdr-btn akhdr-circle" aria-label="Setup progress" title="Setup progress">
+          <button type="button" className="akhdr-btn akhdr-circle" aria-label="Setup progress" title="Setup progress" onClick={onSetup}>
             <ProgressRing value={progress} />
           </button>
         )}

@@ -13,6 +13,13 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import AppHeader from './AppHeader.jsx';
+
+/* Setup progress for the header ring — a fraction of the profile that is
+   actually filled in (plus an app-specific extra, e.g. a created business).
+   Derived from real data; never a hard-coded number. */
+const setupProgressOf = (u, extra = null) =>
+  [u?.fullName || u?.name, u?.email, u?.phone, extra].filter(Boolean).length / 4;
+
 import { apiGet } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, WHITE, FONT } from '../constants.js';
 
@@ -599,6 +606,8 @@ export function PageLayout({ children, title, subtitle, action }) {
             { key: 'notifications', icon: Bell,          label: 'Notifications',  variant: 'square', onClick: () => navigate('/notifications') },
             { key: 'help',          icon: LifeBuoy,      label: 'Help & support', variant: 'circle', onClick: () => { window.location.href = 'mailto:support@akoro.app'; } },
           ]}
+          progress={setupProgressOf(user)}
+          onSetup={() => navigate('/profile')}
           menuItems={[
             { key: 'profile',  label: 'Profile',  icon: UserCircle, to: '/profile' },
             { key: 'settings', label: 'Settings', icon: Settings,   to: '/settings' },

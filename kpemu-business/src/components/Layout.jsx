@@ -5,11 +5,18 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, KeyRound, Percent, Wallet, ClipboardList, Settings, LogOut, Building2, Ticket, FileText, ChevronsUpDown, Check, Plus, Settings2, PackageSearch, Webhook, X, LifeBuoy } from 'lucide-react';
+import { LayoutDashboard, KeyRound, Percent, Wallet, ClipboardList, Settings, LogOut, Building2, Ticket, FileText, ChevronsUpDown, Check, Plus, Settings2, PackageSearch, Webhook, X, LifeBuoy, Bell } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useStartup } from '../contexts/StartupContext.jsx';
 import { INK, MUTED, MUTED2, BORDER, WHITE, ACCENT, FONT } from '../constants.js';
 import AppHeader from './AppHeader.jsx';
+
+/* Setup progress for the header ring — a fraction of the profile that is
+   actually filled in (plus an app-specific extra, e.g. a created business).
+   Derived from real data; never a hard-coded number. */
+const setupProgressOf = (u, extra = null) =>
+  [u?.fullName || u?.name, u?.email, u?.phone, extra].filter(Boolean).length / 4;
+
 
 const NAV = [
   { to: '/',              icon: LayoutDashboard, label: 'Dashboard' },
@@ -215,7 +222,7 @@ const dropdownActionBtn = {
 };
 
 export function PageLayout({ title, subtitle, action, children }) {
-  const { startups, loading, error } = useStartup();
+  const { startups, loading, error, current } = useStartup();
   const { logout, user } = useAuth();
   const navigate = useNavigate();
   const mobile = useIsMobile();
@@ -261,8 +268,11 @@ export function PageLayout({ title, subtitle, action, children }) {
             onMenu={() => setMenuOpen(true)}
             user={user}
             actions={[
-              { key: 'help', icon: LifeBuoy, label: 'Help & API docs', variant: 'circle', onClick: () => navigate('/docs') },
+              { key: 'notifications', icon: Bell,     label: 'Notifications',   variant: 'square', onClick: () => navigate('/notifications') },
+              { key: 'help',          icon: LifeBuoy, label: 'Help & API docs', variant: 'circle', onClick: () => navigate('/docs') },
             ]}
+            progress={setupProgressOf(user, current)}
+            onSetup={() => navigate('/settings')}
             menuItems={[
               { key: 'settings', label: 'All Settings', icon: Settings, to: '/settings' },
               { key: 'docs',     label: 'API Docs',     icon: FileText,  to: '/docs' },
