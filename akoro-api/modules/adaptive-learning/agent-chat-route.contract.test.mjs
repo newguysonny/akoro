@@ -100,10 +100,24 @@ test("the instructor chat is durable and uses the shared Fortizo composer", () =
   // Prompt chips fill the composer — they never auto-send.
   assert.match(instructorChatPage, /setInput\(chip\.fill\)/);
   assert.doesNotMatch(instructorChatPage, /onClick=\{\(\) => send\(chip/);
-  // A transient failure gets one quiet retry on a FRESH turn key before the
-  // honest error bubble — a dropped stream must not dead-end the instructor.
-  assert.match(instructorChatPage, /const attemptTurn = async \(turnId\) =>/);
-  assert.match(instructorChatPage, /data = await attemptTurn\(newTurnId\(\)\);\s*\n\s*\} catch \(e\) \{/);
+  // The learner chat's durable-turn contract: the turn key is created ONCE
+  // per send and the one quiet retry REUSES it — the server repairs a
+  // partial write instead of writing the exchange twice.
+  assert.match(instructorChatPage, /const turnId = newTurnId\(\);/);
+  assert.match(instructorChatPage, /const attemptTurn = async \(\) =>/);
+  assert.match(instructorChatPage, /data = await attemptTurn\(\);\s*\n\s*\} catch \(e\) \{/);
+  // A failed session create STOPS the send — a null conversationId never
+  // rides through (that exchange used to be silently never persisted).
+  assert.match(instructorChatPage, /if \(!sid\) \{/);
+  // Learner history window: the last 24 mapped turns ride as history; the
+  // new message itself rides in `message`, never duplicated into history.
+  assert.match(instructorChatPage, /\.slice\(-24\);/);
+  assert.doesNotMatch(instructorChatPage, /\[\.\.\.messages, \{ from: 'me', text: bodyText \}\]/);
+  // The learner chat's header row: the hamburger opens the sessions drawer
+  // with a FRESH list (never stale), and quick commands send directly.
+  assert.match(instructorChatPage, /onClick=\{\(\) => \{ loadChatSessions\(\); setDrawerOpen\(true\); \}\}/);
+  assert.match(instructorChatPage, /onClick=\{\(\) => sendText\(p\)\}/);
+  assert.match(instructorChatPage, /const QUICK_COMMANDS = \[/);
 });
 
 test("school/class/teacher directory tools are privacy-bounded and forced for identity questions", () => {
