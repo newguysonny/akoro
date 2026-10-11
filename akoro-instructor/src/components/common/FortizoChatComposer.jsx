@@ -1,8 +1,10 @@
 /**
  * FortizoChatComposer — the instructor console's copy of the learner app's
- * shared composer (akoro-learner/src/components/common/FortizoChatComposer.jsx).
- * Same layout and behaviour — compact input row over a second-row tool rail —
- * adapted to this app's system: lucide icons, DM Sans, the amber brand.
+ * shared composer (akoro-learner/src/components/common/FortizoChatComposer.jsx),
+ * refined to its exact behaviour: the same input row over a second-row tool
+ * rail, the same model menu (sections, meta badges, disabled options), and
+ * the same running→stop affordance (send arrow becomes a ■ stop button).
+ * Adapted to this app's system only in chrome: lucide icons, DM Sans, amber.
  *
  * The host owns every action. A model option is never sent as an arbitrary
  * model identifier: the host maps it to a supported API mode. `taskAction`
@@ -18,29 +20,114 @@ const RAIL_BORDER = '#DFE3ED';
 const MUTED_RAIL = '#526078';
 
 function ComposerTool({ icon: Icon, label, onClick, disabled = false, active = false }) {
-  const unavailable = disabled || !onClick;
+  const unavailable = disabled && !active;
   return (
     <button
       type="button"
-      onClick={onClick}
-      disabled={unavailable}
       title={label}
       aria-label={label}
-      aria-disabled={unavailable}
+      {...(active ? { 'aria-pressed': true } : {})}
+      onClick={onClick}
+      disabled={unavailable}
       style={{
-        width: 32, height: 32, padding: 0, borderRadius: '50%', border: 'none',
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        width: 33, height: 33, flexShrink: 0, display: 'inline-flex', alignItems: 'center',
+        justifyContent: 'center', border: 'none', borderRadius: 10, cursor: unavailable ? 'default' : 'pointer',
+        transition: 'background .16s, color .16s, transform .16s',
         color: active ? '#fff' : MUTED_RAIL,
         background: active ? AMBER : '#fff',
-        cursor: unavailable ? 'not-allowed' : 'pointer',
-        opacity: unavailable ? .48 : 1,
-        transition: 'background .16s, color .16s, transform .16s',
+        boxShadow: '0 1px 4px rgba(30,41,59,.06)',
       }}
       onMouseEnter={e => { if (!unavailable && !active) { e.currentTarget.style.background = AMBER; e.currentTarget.style.color = '#fff'; e.currentTarget.style.transform = 'translateY(-1px)'; } }}
       onMouseLeave={e => { if (!unavailable && !active) { e.currentTarget.style.background = '#fff'; e.currentTarget.style.color = MUTED_RAIL; e.currentTarget.style.transform = 'none'; } }}
     >
       <Icon size={16} />
     </button>
+  );
+}
+
+/**
+ * The chat-mode chip and its menu — the learner ModelSwitch's exact model:
+ * each option is { id, label, description?, meta?, section?, disabled? };
+ * `section` starts a group heading, a `disabled` option (e.g. "Coming soon")
+ * is shown but can't be picked. The menu scrolls, opens above the rail, and
+ * carries the full radio semantics.
+ */
+function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelChange, disabled = false, unavailableTitle = '' }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const selectable = !disabled && modelOptions.length > 0 && typeof onModelChange === 'function';
+
+  useEffect(() => {
+    const close = event => { if (!ref.current?.contains(event.target)) setOpen(false); };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, []);
+
+  return (
+    <div ref={ref} style={{ position: 'relative', marginLeft: 2, minWidth: 0 }}>
+      <button
+        type="button"
+        onClick={() => selectable && setOpen(o => !o)}
+        disabled={!selectable}
+        title={selectable ? 'Choose a supported chat mode' : (unavailableTitle || modelLabel)}
+        aria-label={selectable ? `Mode: ${modelLabel}. Choose a mode` : modelLabel}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 5, maxWidth: 190, padding: '7px 10px',
+          border: 'none', borderRadius: 17, cursor: selectable ? 'pointer' : 'default',
+          color: '#4B5871', background: '#fff',
+          fontSize: 11, fontWeight: 800, fontFamily: FONT, whiteSpace: 'nowrap', overflow: 'hidden',
+          opacity: selectable ? 1 : .78,
+        }}
+      >
+        <Sparkles size={13} color={AMBER} />
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{modelLabel}</span>
+        {selectable && <ChevronDown size={12} color="#8792A7" />}
+      </button>
+
+      {open && (
+        <div role="menu" aria-label="Supported chat modes" style={{
+          position: 'absolute', zIndex: 20, bottom: 42, left: 0, width: 270, padding: 5,
+          maxHeight: 'min(70vh, 460px)', overflowY: 'auto',
+          border: '1px solid #E2E5ED', borderRadius: 13,
+          color: INK, background: '#fff',
+          boxShadow: '0 13px 34px rgba(22,28,45,.24)',
+        }}>
+          {modelOptions.map(option => {
+            const selected = option.id === modelId;
+            const off = !!option.disabled;
+            return (
+              <div key={option.id}>
+                {option.section && (
+                  <div style={{ padding: '8px 9px 3px', fontSize: 9.5, fontWeight: 900, letterSpacing: '.07em', textTransform: 'uppercase', color: '#98A1B2', fontFamily: FONT }}>{option.section}</div>
+                )}
+                <button type="button" role="menuitemradio" aria-checked={selected} aria-disabled={off}
+                  title={off ? (option.note || 'Coming soon') : undefined}
+                  onClick={() => { if (off) return; onModelChange?.(option.id); setOpen(false); }} style={{
+                    width: '100%', padding: '8px 9px', border: 'none', borderRadius: 9,
+                    display: 'flex', alignItems: 'flex-start', gap: 7, textAlign: 'left', cursor: off ? 'not-allowed' : 'pointer',
+                    color: selected ? AMBER : 'inherit', background: selected ? `${AMBER}14` : 'transparent',
+                    opacity: off ? .55 : 1,
+                    fontFamily: FONT,
+                  }}>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: selected ? 900 : 800 }}>{option.label}</span>
+                      {option.meta && (off
+                        ? <span style={{ fontSize: 9, fontWeight: 900, color: '#B45309', background: 'rgba(245,158,11,.14)', borderRadius: 999, padding: '1px 7px', textTransform: 'uppercase', letterSpacing: '.04em', whiteSpace: 'nowrap' }}>{option.meta}</span>
+                        : <span style={{ fontSize: 9.5, fontWeight: 800, color: '#8791A3', textTransform: 'uppercase', letterSpacing: '.04em' }}>{option.meta}</span>)}
+                    </span>
+                    {option.description && <span style={{ display: 'block', marginTop: 1, color: '#8791A3', fontSize: 10, fontWeight: 500, lineHeight: 1.35 }}>{option.description}</span>}
+                  </span>
+                  {selected && <Check size={14} color={AMBER} />}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -69,31 +156,22 @@ export default function FortizoChatComposer({
   modelOptions = [],
   onModelChange,
   modelLabelDescription = '',
+  hideModelMenu = false,
   sendDisabled = false,
+  // While a reply streams, the send arrow becomes a ■ stop button — the
+  // learner composer's exact affordance. Hosts without onStop are unchanged.
+  running = false,
+  onStop,
+  stopLabel = 'Stop',
 }) {
-  const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const composerRef = useRef(null);
   const canSend = !disabled && !sendDisabled;
-  const hasSelectableModels = !disabled && modelOptions.length > 0 && typeof onModelChange === 'function';
-
-  useEffect(() => {
-    const closeOnOutsideClick = event => {
-      if (!composerRef.current?.contains(event.target)) setModelMenuOpen(false);
-    };
-    document.addEventListener('mousedown', closeOnOutsideClick);
-    return () => document.removeEventListener('mousedown', closeOnOutsideClick);
-  }, []);
 
   const sendFromKeyboard = event => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       if (canSend) onSend?.();
     }
-  };
-
-  const selectModel = option => {
-    onModelChange?.(option.id);
-    setModelMenuOpen(false);
   };
 
   return (
@@ -131,71 +209,46 @@ export default function FortizoChatComposer({
         <ComposerTool icon={AudioLines} label={audioLabel} onClick={audioAction}
           disabled={disabled || audioUnavailable || !audioAction} active={audioActive} />
 
-        <div style={{ position: 'relative', marginLeft: 2, minWidth: 0 }}>
-          <button
-            type="button"
-            onClick={() => hasSelectableModels && setModelMenuOpen(open => !open)}
-            disabled={!hasSelectableModels}
-            title={hasSelectableModels ? 'Choose a supported chat mode' : (modelLabelDescription || modelLabel)}
-            aria-label={hasSelectableModels ? 'Choose a supported chat mode' : modelLabel}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 5, maxWidth: 136, padding: '7px 9px',
-              border: 'none', borderRadius: 17, cursor: hasSelectableModels ? 'pointer' : 'default',
-              color: '#4B5871', background: '#fff',
-              fontSize: 10.5, fontWeight: 800, fontFamily: FONT, whiteSpace: 'nowrap', overflow: 'hidden',
-              opacity: hasSelectableModels ? 1 : .78,
-            }}
-          >
-            <Sparkles size={13} color={AMBER} />
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{modelLabel}</span>
-            {hasSelectableModels && <ChevronDown size={12} color="#8792A7" />}
-          </button>
-
-          {modelMenuOpen && (
-            <div role="menu" aria-label="Supported chat modes" style={{
-              position: 'absolute', zIndex: 20, bottom: 42, left: 0, width: 205, padding: 5,
-              border: '1px solid #E2E5ED', borderRadius: 13,
-              color: INK, background: '#fff',
-              boxShadow: '0 13px 34px rgba(22,28,45,.24)',
-            }}>
-              {modelOptions.map(option => {
-                const selected = option.id === modelId;
-                return (
-                  <button key={option.id} type="button" role="menuitem" onClick={() => selectModel(option)} style={{
-                    width: '100%', padding: '8px 9px', border: 'none', borderRadius: 9,
-                    display: 'flex', alignItems: 'flex-start', gap: 7, textAlign: 'left', cursor: 'pointer',
-                    color: selected ? AMBER : 'inherit', background: selected ? `${AMBER}14` : 'transparent',
-                    fontFamily: FONT,
-                  }}>
-                    <span style={{ flex: 1 }}>
-                      <span style={{ display: 'block', fontSize: 11.5, fontWeight: selected ? 800 : 700 }}>{option.label}</span>
-                      {option.description && <span style={{ display: 'block', marginTop: 1, color: '#8791A3', fontSize: 9.5, fontWeight: 500, lineHeight: 1.35 }}>{option.description}</span>}
-                    </span>
-                    {selected && <Check size={14} color={AMBER} />}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        {!hideModelMenu && (
+          <ModelSwitch modelId={modelId} modelLabel={modelLabel} modelOptions={modelOptions}
+            onModelChange={onModelChange} disabled={disabled}
+            unavailableTitle={modelLabelDescription || 'Choose a supported chat mode'} />
+        )}
 
         <div style={{ flex: 1 }} />
-        <button
-          type="button"
-          onClick={() => canSend && onSend?.()}
-          disabled={!canSend}
-          title="Send message"
-          aria-label="Send message"
-          style={{
-            width: 33, height: 33, padding: 0, border: 'none', borderRadius: 10, display: 'inline-flex',
-            alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#fff',
-            background: canSend ? AMBER : BORDER,
-            boxShadow: canSend ? `0 5px 13px ${AMBER}42` : 'none', cursor: canSend ? 'pointer' : 'not-allowed',
-            transition: 'background .16s, transform .16s',
-          }}
-        >
-          <ArrowUp size={17} color={canSend ? '#fff' : '#9490A0'} />
-        </button>
+        {running && onStop ? (
+          <button
+            type="button"
+            onClick={() => onStop()}
+            title={stopLabel}
+            aria-label={stopLabel}
+            style={{
+              width: 33, height: 33, padding: 0, borderRadius: 10, display: 'inline-flex',
+              alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer',
+              border: '1.5px solid #DFE3ED',
+              background: '#fff',
+            }}
+          >
+            <span style={{ width: 11, height: 11, borderRadius: 2, background: INK, display: 'block' }} />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => canSend && onSend?.()}
+            disabled={!canSend}
+            title="Send message"
+            aria-label="Send message"
+            style={{
+              width: 33, height: 33, padding: 0, border: 'none', borderRadius: 10, display: 'inline-flex',
+              alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#fff',
+              background: canSend ? AMBER : BORDER,
+              boxShadow: canSend ? `0 5px 13px ${AMBER}42` : 'none', cursor: canSend ? 'pointer' : 'not-allowed',
+              transition: 'background .16s, transform .16s',
+            }}
+          >
+            <ArrowUp size={17} color={canSend ? '#fff' : '#9490A0'} />
+          </button>
+        )}
       </div>
     </div>
   );
