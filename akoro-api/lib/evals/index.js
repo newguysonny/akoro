@@ -13,8 +13,9 @@ import { routingSuite }   from "./routing.js";
 import { agentSuite }     from "./agent.js";
 import { recallSuite }    from "./recall.js";
 import { ladderSuite }    from "./ladder.js";
+import { learnerToolsSuite } from "./learnerTools.js";
 
-export const SUITES = [questionsSuite, routingSuite, agentSuite, recallSuite, ladderSuite];
+export const SUITES = [questionsSuite, routingSuite, agentSuite, recallSuite, ladderSuite, learnerToolsSuite];
 export const suiteByKey = (key) => SUITES.find((s) => s.key === key) ?? null;
 
 /**
@@ -28,7 +29,9 @@ export function estimateUsd(suite, model) {
   // Order-of-magnitude only: ~1.2k in / ~1.2k out for a generation case, far
   // less for a routing case. Presented as "about", never as a quote.
   const perCall = { "gpt-4o-mini": 0.0009, "gpt-4.1-mini": 0.0024, "gpt-4o": 0.015, "gpt-4.1": 0.012 };
-  return Number(((perCall[model] ?? 0.002) * (suite.estimatedCalls ?? suite.cases.length)).toFixed(4));
+  // costFactor: a suite whose every call carries a big prompt (the whole learner
+  // tool catalogue) costs more per call than a routing case.
+  return Number(((perCall[model] ?? 0.002) * (suite.costFactor ?? 1) * (suite.estimatedCalls ?? suite.cases.length)).toFixed(4));
 }
 
 /**
@@ -41,7 +44,7 @@ export function estimateUsd(suite, model) {
  * A case that throws is a FAILED case, not a failed run. One model refusing one
  * prompt should not destroy the other nine results.
  */
-export async function runSuite({ suite, model, runId, userId = null, onCase = null }) {
+export async function runSuite({ suite, model, runId, userId = null, options = {}, onCase = null }) {
   const started = Date.now();
   let passed = 0, failed = 0;
 
@@ -59,7 +62,7 @@ export async function runSuite({ suite, model, runId, userId = null, onCase = nu
     const t0 = Date.now();
     let result;
     try {
-      result = await c.run({ model, userId });
+      result = await c.run({ model, userId, options });
     } catch (e) {
       result = { passed: false, expected: "a result", actual: "threw", detail: e.message?.slice(0, 300) ?? String(e) };
     }

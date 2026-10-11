@@ -40,6 +40,8 @@ router.get("/evals/suites", adminOnly, asyncHandler(async (req, res) => {
     suites: SUITES.map((s) => ({
       key: s.key, title: s.title, purpose: s.purpose,
       cases: s.cases.length,
+      // The page asks for a test learner (read-only tools run as them).
+      needsLearner: !!s.needsLearner,
       // The bar, and why it is where it is. Shown on the card so nobody has to
       // guess whether 9/10 is a pass for this suite.
       threshold: s.threshold ?? 1,
@@ -87,9 +89,27 @@ router.post("/evals/run", adminOnly, asyncHandler(async (req, res) => {
     });
   }
 
+  // A suite that runs tools for a learner: who. @username, email or id of a
+  // LEARNER account — read-only tools run as them; nothing is changed.
+  let options = {};
+  if (suite.needsLearner && req.body?.learner) {
+    const raw = String(req.body.learner).trim();
+    const q = /^[0-9a-f-]{36}$/i.test(raw) ? db.from("users").select("id, full_name, username, role").eq("id", raw)
+      : raw.includes("@") && !raw.startsWith("@") ? db.from("users").select("id, full_name, username, role").ilike("email", raw)
+      : db.from("users").select("id, full_name, username, role").ilike("username", raw.replace(/^@/, ""));
+    const { data: found } = await q.limit(1);
+    const u = found?.[0];
+    if (!u) return res.status(400).json({ success: false, error: `No account found for "${raw}".` });
+    if (!["student", "learner"].includes(String(u.role || "").toLowerCase())) {
+      return res.status(400).json({ success: false, error: `${u.full_name || u.username} isn't a learner account — pick a test learner.` });
+    }
+    options = { learnerId: u.id, learnerName: u.full_name || u.username };
+  }
+
   const { data: run, error } = await db.schema("edu").from("eval_runs").insert({
     suite: suite.key, model, status: "queued",
     cases_total: suite.cases.length, created_by: req.user.id,
+    ...(Object.keys(options).length ? { options } : {}),
   }).select().single();
   if (error) throw new Error(error.message);
 

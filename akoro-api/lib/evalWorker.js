@@ -55,7 +55,7 @@ export function startEvalWorker() {
       .eq("id", runId);
 
     try {
-      const res = await runSuite({ suite, model: run.model, runId, userId: run.created_by });
+      const res = await runSuite({ suite, model: run.model, runId, userId: run.created_by, options: run.options || {} });
       if (res.cancelled) {
         // Already marked cancelled by the endpoint; record what it managed.
         await finish(runId, { cases_passed: res.passed, cases_failed: res.failed, cost_usd: res.costUsd, ms: res.ms });
