@@ -43,7 +43,7 @@ test("no console gates phones any more — and the learner app never did", () =>
 
 test("every console shell renders the shared Akoro AppHeader on mobile", () => {
   for (const app of APPS) {
-    assert.match(layouts[app], /import AppHeader from '\.\/AppHeader\.jsx';/, `${app}: imports AppHeader`);
+    assert.match(layouts[app], /import AppHeader(, \{ ReferenceChatIcon \})? from '\.\/AppHeader\.jsx';/, `${app}: imports AppHeader`);
     assert.match(layouts[app], /<AppHeader/, `${app}: renders it`);
     assert.match(layouts[app], /max-width: 767px/, `${app}: phones only — tablets keep the desktop shell`);
     // The header component itself is the reference port, everywhere: the
@@ -109,15 +109,19 @@ function lucideImports(src) {
 test("every header action icon is imported — no runtime ReferenceError class", () => {
   for (const app of APPS) {
     const src = layouts[app];
-    const names = lucideImports(src);
+    const names = new Set(lucideImports(src));
+    // Named imports from ANY module count too (e.g. ReferenceChatIcon from
+    // AppHeader) — an imported identifier can never be a free reference.
+    for (const m of src.matchAll(/import\s*(?:\w+\s*,)?\s*\{([^}]*)\}\s*from/g))
+      for (let s of m[1].split(",")) { s = s.trim().split(/\s+as\s+/).pop().trim(); if (s) names.add(s); }
     // Only action/menu object literals (`{ key: 'x', icon: Y, … }`) —
     // destructured component params (`{ to, icon: Icon, label }`) are not
-    // lucide references.
+    // icon references.
     const used = src.split("\n")
       .filter((l) => /key: '/.test(l))
       .flatMap((l) => [...l.matchAll(/icon:\s*([A-Z]\w+)/g)].map((m) => m[1]));
     assert.ok(used.length > 0, `${app}: has icon references`);
-    const missing = [...new Set(used)].filter((n) => !names.includes(n));
+    const missing = [...new Set(used)].filter((n) => !names.has(n));
     assert.deepEqual(missing, [], `${app}: icons used but not imported — this deploys as a crash: ${missing.join(", ")}`);
   }
 });
@@ -196,14 +200,14 @@ test("every header carries the FULL reference set — ring · chat/messages · b
   for (const app of APPS) {
     const src = layouts[app];
     assert.match(src, /key: 'notifications', icon: Bell,/, `${app}: the header carries the bell`);
-    assert.match(src, /key: 'help',\s*icon: LifeBuoy,/, `${app}: the header carries help`);
+    assert.match(src, /key: 'help',\s*icon: MessageCircleQuestion/, `${app}: the header carries help (the reference's glyph)`);
     assert.match(src, /progress=\{setupProgressOf\(/, `${app}: the setup ring renders from real progress`);
     assert.match(src, /onSetup=\{\(\) => navigate\('/, `${app}: the ring navigates to a setup surface`);
   }
   // chat surfaces where the app has one (reference order: ring · chat · bell · help)
-  assert.match(layouts["akoro-instructor"], /key: 'chat',\s*icon: MessageSquare/, "instructor: agent chat");
-  assert.match(layouts["akoro-school"], /key: 'chat',\s*icon: MessageSquare/, "school: agent chat");
-  assert.match(layouts["akoro-admin"], /key: 'messages',\s*icon: MessageSquare/, "admin: messages");
+  assert.match(layouts["akoro-instructor"], /key: 'chat',\s*icon: ReferenceChatIcon/, "instructor: agent chat");
+  assert.match(layouts["akoro-school"], /key: 'chat',\s*icon: ReferenceChatIcon/, "school: agent chat");
+  assert.match(layouts["akoro-admin"], /key: 'messages',\s*icon: ReferenceChatIcon/, "admin: messages");
   // the consoles keep the page-TopBar bell OFF on mobile — the header is the only bell
   for (const app of ["akoro-admin", "akoro-school", "akoro-instructor"]) {
     assert.match(layouts[app], /showBell=\{false\} \/>/, `${app}: the mobile TopBar renders no second bell`);
@@ -276,4 +280,24 @@ test("the instructor app renders no emoji — icons and SVGs only", async () => 
   }
   assert.deepEqual(offenders, [],
     `rendered emoji found — replace with an icon or SVG:\n${offenders.join("\n")}`);
+});
+
+test("the header uses the reference's exact glyphs — drawn, not approximated", async () => {
+  for (const app of APPS) {
+    const src = await read(app, "components/AppHeader.jsx");
+    // the reference's hamburger: three rounded bars, at the reference's 22px
+    assert.match(src, /<rect x="3" y="3\.5" width="18" height="4\.5" rx="1\.6" \/>/, `${app}: reference hamburger bars`);
+    assert.match(src, /<ReferenceMenuIcon size=\{22\} \/>/, `${app}: hamburger at the reference's 22px`);
+    // the reference's chat bubble carries its two text lines
+    assert.match(src, /<path d="M8 9h8" \/>/);
+    assert.match(src, /<path d="M8 13h5" \/>/);
+  }
+  // help is the reference's MessageCircleQuestion — lucide-exact
+  for (const app of APPS) {
+    assert.match(layouts[app], /key: 'help',\s*icon: MessageCircleQuestion/, `${app}: reference help glyph`);
+  }
+  // chat surfaces use the drawn reference bubble
+  assert.match(layouts["akoro-instructor"], /key: 'chat',\s*icon: ReferenceChatIcon/);
+  assert.match(layouts["akoro-school"], /key: 'chat',\s*icon: ReferenceChatIcon/);
+  assert.match(layouts["akoro-admin"], /key: 'messages',\s*icon: ReferenceChatIcon/);
 });
