@@ -147,7 +147,7 @@ const worker = new Worker(
     limiter:     { max: 100, duration: 60_000 },  // 100 jobs/min rate cap
     // Reduce idle Redis traffic on per-request-billed providers (Upstash).
     drainDelay:  60,
-    settings:    { stalledInterval: 300_000 },
+    stalledInterval: 300_000,   // top level — BullMQ ignores it inside `settings`
   }
 );
 

@@ -18,6 +18,7 @@ import { redisConnectionOptions } from "../../lib/redisOptions.js";
 import { traceRedis } from "../../lib/redisTrace.js";
 import { workerJob } from "../../lib/workerLog.js";
 import { buildAutonomyTaskMessage } from "./learner-autonomy-policy.js";
+import { guardWorker } from "../../lib/redisQuotaGuard.js";
 
 const QUEUE_NAME = "learner-agent-autonomy";
 const STALE_DELIVERY_MS = 5 * 60 * 1000;
@@ -371,8 +372,10 @@ export function startLearnerAutonomyWorker() {
     connection: workerConnection(),
     concurrency: 5,
     drainDelay: 60,
-    settings: { stalledInterval: 300_000 },
+    stalledInterval: 300_000,   // 5 min between stalled-job scans. Top level: BullMQ ignores it inside `settings`, which left every worker scanning every 30 s.
   });
+  // Quota errors pause every worker instead of a 100 ms retry storm (lib/redisQuotaGuard.js).
+  guardWorker(worker, "learner-autonomy worker");
   worker.on("completed", (job, result) => {
     console.log(`[learner-autonomy] completed job ${job.id}`);
     workerJob("learner-autonomy", "done", job, { skipped: result?.skipped ?? false, delivered: result?.delivered ?? false });

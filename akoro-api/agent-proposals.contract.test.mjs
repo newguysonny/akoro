@@ -113,7 +113,7 @@ test("step 3 · nightly scheduler is quota-cheap and worker starts at boot", () 
   assert.match(cadence, /AKORO_AUTONOMY_WINDOW_END_HOUR", 22/);
   assert.match(cadence, /export function inNightlyWindow/);
   // drainDelay/stalledInterval tuned like the other workers (Redis-quota lesson)
-  assert.match(autonomyIndex, /drainDelay:\s*60_000/);
+  assert.match(autonomyIndex, /drainDelay:\s*60,/);   // SECONDS in BullMQ (60_000 was 16 h)
   assert.match(autonomyIndex, /stalledInterval:\s*300_000/);
   // the worker MUST carry the traced REDIS_URL connection — BullMQ's
   // 127.0.0.1:6379 default silently killed the planner on remote-Redis

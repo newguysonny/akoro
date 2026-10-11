@@ -25,6 +25,7 @@ import cors                       from "cors";
 import helmet                     from "helmet";
 import compression                from "compression";
 import { skipJob as sharedSkipJob } from "./lib/jobsGate.js";
+import { redisQuotaStatus }       from "./lib/redisQuotaGuard.js";
 import { outboundSummary }        from "./lib/outboundMeter.js";
 import cookieParser               from "cookie-parser";
 import path                       from "path";
@@ -444,6 +445,8 @@ app.get("/health", async (req, res) => {
       outboundTopHosts: outboundSummary().hosts.slice(0, 3).map((h) => ({ host: h.host, bytes: h.bytes, requests: h.requests })),
     },
     checks: { database: dbOk ? "ok" : "error", redis: redisOk ? "ok" : "error" },
+    // Whether background workers are paused because the Redis quota ran out (lib/redisQuotaGuard.js).
+    redisQuota: redisQuotaStatus(),
     // RunPod parse-worker setup: config presence is always visible (cheap,
     // no round-trip — set RUNPOD_API_KEY + RUNPOD_PARSE_ENDPOINT_ID on this
     // service and `configured` flips here). `probe` appears only after a

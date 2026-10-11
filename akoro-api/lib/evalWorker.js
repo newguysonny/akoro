@@ -18,6 +18,7 @@ import { redisConnectionOptions } from "./redisOptions.js";
 import { SUITES, suiteByKey, runSuite } from "./evals/index.js";
 import { traceRedis } from "./redisTrace.js";
 import { workerJob } from "./workerLog.js";
+import { guardWorker } from "./redisQuotaGuard.js";
 
 const connection = traceRedis(new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "eval-worker" })), "eval-worker");
 connection.on("error", (e) => console.error("[evals/redis]", e.message));
@@ -85,8 +86,10 @@ export function startEvalWorker() {
     // House Upstash tuning (per-command-billed Redis): block longer between
     // idle polls and scan for stalled jobs far less often than the defaults.
     drainDelay: 60,
-    settings: { stalledInterval: 300_000 },
+    stalledInterval: 300_000,   // 5 min between stalled-job scans. Top level: BullMQ ignores it inside `settings`, which left every worker scanning every 30 s.
   });
+  // Quota errors pause every worker instead of a 100 ms retry storm (lib/redisQuotaGuard.js).
+  guardWorker(worker, "eval worker");
 
   worker.on("completed", (job) => workerJob("evals", "done", job, { runId: job.data?.runId }));
   worker.on("failed",    (job, err) => workerJob("evals", "failed", job, { runId: job?.data?.runId, error: err?.message }));
