@@ -18,7 +18,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   BookOpen, Pencil, FolderKanban, MonitorPlay, Swords, ListChecks, Plus, Users,
-  Clock, Trash2, ChevronRight, Sparkles, Loader2, CheckCircle2, Info, ArrowUp, ArrowDown, BarChart3, Check,  AlertTriangle } from 'lucide-react';
+  Clock, Trash2, ChevronRight, Sparkles, Loader2, CheckCircle2, Info, ArrowUp, ArrowDown, BarChart3, Check,  AlertTriangle, Download } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, Badge, Toast } from '../components/Primitives.jsx';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
@@ -27,6 +27,7 @@ import PlanEditor from '../components/PlanEditor.jsx';
 import PaperBuilder from '../components/paper/PaperBuilder.jsx';
 import PaperView from '../components/paper/PaperView.jsx';
 import { removeRef, AR_OPTIONS, TF_OPTIONS } from '../lib/paper.js';
+import { downloadActivityPdf } from '../lib/activityPdf.js';
 import BattleForm from '../components/battles/BattleForm.jsx';
 import { useBattlesAPI } from '../hooks/useBattlesAPI.js';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
@@ -795,6 +796,36 @@ export function DetailPage({ activity, onDeleted, onClose }) {
     if (!await confirmDialog(`Delete “${activity.title}”? Learners keep any session they already started.`)) return;
     try { await apiDelete(`/api/self-study/${activity.id}`); onDeleted(); onClose(); } catch { /* leave it */ }
   };
+  const [pdfErr, setPdfErr] = useState(false);
+  const questions = data?.details?.questions ?? [];
+  const isJourney = (data?.type || activity?.type) === 'multi_stage';
+  const canPdf = !!data && (isJourney || questions.length > 0 || (data.subtopics ?? []).length > 0);
+  // Same sheet the preview prints: the paper with its answer key, or the
+  // plan/stages when the activity never had questions.
+  const downloadPdf = () => {
+    try {
+      downloadActivityPdf({
+        draft: {
+          title: data.title,
+          type: data.type,
+          payload: {
+            subject: data.subject,
+            topic: data.topic,
+            difficulty: data.difficulty,
+            due_at: data.due_at,
+            instructions: data.instructions,
+            subtopics: data.subtopics,
+            objectives: data.objectives,
+            details: data.details,
+          },
+        },
+        meta: byKey(data.type || activity?.type || 'self_study') || {},
+        shown: questions.length ? { status: 'ready', paper: data.details } : null,
+        audience: {},
+      });
+      setPdfErr(false);
+    } catch { setPdfErr(true); }
+  };
   if (!activity?.id) return (
     <PageLayout title="Activity" subtitle="Details">
       <div style={{ fontFamily: FONT, color: MUTED }}>This activity is no longer available.</div>
@@ -913,8 +944,19 @@ export function DetailPage({ activity, onDeleted, onClose }) {
             );
           })()}
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 14 }}>
-            <Btn size="sm" variant="secondary" onClick={del}><Trash2 size={13} /> Delete activity</Btn>
+          {pdfErr && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 11px', borderRadius: 10, background: '#FEF2F2', border: '1px solid #FECACA', fontSize: 12, fontWeight: 700, color: RED, fontFamily: FONT, marginTop: 12 }}>
+              <AlertTriangle size={13} /> Couldn't build the PDF — try again.
+            </div>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginTop: 14 }}>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Btn size="sm" variant="secondary" onClick={downloadPdf} disabled={!canPdf}
+                title="Download this activity as a PDF">
+                <Download size={13} /> Download PDF
+              </Btn>
+              <Btn size="sm" variant="secondary" onClick={del}><Trash2 size={13} /> Delete activity</Btn>
+            </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <Btn size="sm" variant="secondary" onClick={() => navigate(`/self-study/${activity.id}/analytics`)}>
                 <BarChart3 size={13} /> Analytics
