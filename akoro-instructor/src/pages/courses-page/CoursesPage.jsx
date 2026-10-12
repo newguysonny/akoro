@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Video, BookOpen, Users, Clock, Calendar, Trash2, Edit2, ChevronRight, Share2, Check , AlertTriangle } from 'lucide-react';
-import { PageLayout } from '../../components/Layout.jsx';
+import { PageLayout, useIsMobile } from '../../components/Layout.jsx';
 import { Btn, Modal, Inp, Sel, StatusPill, PlatBadge, CoursTypeBadge, Toast } from '../../components/Primitives.jsx';
 import { useCoursesAPI } from '../../hooks/useCoursesAPI.js';
 import LiveClassWizard from '../../components/LiveClassWizard.jsx';
@@ -18,6 +18,7 @@ import { confirmDialog } from '../../components/ConfirmHost.jsx';
 
 export default function CoursesPage() {
   const navigate = useNavigate();
+  const mobile = useIsMobile();
   const [sp] = useSearchParams();
   const flow = sp.get('flow');
   const flowId = sp.get('id');
@@ -187,19 +188,6 @@ export default function CoursesPage() {
     <PageLayout
       title="Courses"
       subtitle="Manage your live and on-demand courses"
-      action={
-        <div style={{ display: 'flex', gap: 8 }}>
-          <Btn size="sm" variant="secondary" onClick={() => navigate('/courses/schedule')}>
-            <Calendar size={14} /> Schedule Session
-          </Btn>
-          <Btn size="sm" variant="secondary" onClick={() => navigate('/courses/new-ondemand')}>
-            <BookOpen size={14} /> New On-Demand
-          </Btn>
-          <Btn size="sm" onClick={() => navigate('/courses/new-live')}>
-            <Plus size={14} /> New Live Class
-          </Btn>
-        </div>
-      }
     >
       {loadError && (
         <div style={{
@@ -216,6 +204,25 @@ export default function CoursesPage() {
           }}>Retry</button>
         </div>
       )}
+      {/* Quick actions — live in the body so they breathe on mobile */}
+      <div style={{
+        display: 'flex',
+        flexDirection: mobile ? 'column' : 'row',
+        flexWrap: 'wrap',
+        gap: 10,
+        marginBottom: 28,
+      }}>
+        <Btn variant="secondary" onClick={() => navigate('/courses/schedule')} style={mobile ? { width: '100%' } : undefined}>
+          <Calendar size={15} /> Schedule Session
+        </Btn>
+        <Btn variant="secondary" onClick={() => navigate('/courses/new-ondemand')} style={mobile ? { width: '100%' } : undefined}>
+          <BookOpen size={15} /> New On-Demand
+        </Btn>
+        <Btn onClick={() => navigate('/courses/new-live')} style={mobile ? { width: '100%' } : undefined}>
+          <Plus size={15} /> New Live Class
+        </Btn>
+      </div>
+
       {/* Courses grid */}
       <div style={{ marginBottom: 32 }}>
         <h2 style={{ fontSize: 16, fontWeight: 700, color: INK, margin: '0 0 16px', fontFamily: FONT }}>
