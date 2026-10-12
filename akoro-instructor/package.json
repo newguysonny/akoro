@@ -10,6 +10,7 @@
     "check:tools": "esbuild scripts/check-tool-output.mjs --bundle --platform=node --format=cjs --outfile=node_modules/.cache/cto.cjs --loader:.jsx=jsx --jsx=automatic --define:import.meta.env='{\"VITE_API_URL\":\"http://x\"}' && node node_modules/.cache/cto.cjs"
   },
   "dependencies": {
+    "jspdf": "^4.2.1",
     "lucide-react": "^0.344.0",
     "pdfjs-dist": "^4.10.38",
     "react": "^18.2.0",
