@@ -271,6 +271,12 @@ test("the instructor composer is the learner composer, exactly — stop, menu, s
   assert.match(instructorChatPage, /disabled=\{running\}/);
   assert.match(instructorChatPage, /running=\{running\}/);
   assert.match(instructorChatPage, /onStop=\{stopTurn\}/);
+  // …and the learner's LAYOUT: the model chip rides its own row BELOW the
+  // composer (hideModelMenu + exported ModelSwitch), like AgentChatTab.
+  assert.match(composer, /export function ModelSwitch/);
+  assert.match(instructorChatPage, /import FortizoChatComposer, \{ ModelSwitch \} from/);
+  assert.match(instructorChatPage, /hideModelMenu\n/);
+  assert.match(instructorChatPage, /marginTop: 8 \}\}>\s*\n\s*<ModelSwitch/);
   assert.match(instructorChatPage, /const stopTurn = \(\) => \{ abortRef\.current\?\.abort\(\); \};/);
   assert.match(instructorChatPage, /signal,/);
   // a Stop is user intent — never retried

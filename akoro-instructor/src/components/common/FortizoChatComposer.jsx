@@ -52,7 +52,7 @@ function ComposerTool({ icon: Icon, label, onClick, disabled = false, active = f
  * is shown but can't be picked. The menu scrolls, opens above the rail, and
  * carries the full radio semantics.
  */
-function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelChange, disabled = false, unavailableTitle = '' }) {
+export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelChange, disabled = false, unavailableTitle = '', icon: ChipIcon }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const selectable = !disabled && modelOptions.length > 0 && typeof onModelChange === 'function';
@@ -81,7 +81,7 @@ function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelChange, di
           opacity: selectable ? 1 : .78,
         }}
       >
-        <Sparkles size={13} color={AMBER} />
+        {ChipIcon ? <ChipIcon size={13} color={AMBER} /> : <Sparkles size={13} color={AMBER} />}
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{modelLabel}</span>
         {selectable && <ChevronDown size={12} color="#8792A7" />}
       </button>

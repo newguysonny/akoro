@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Send, Plus, Brain, CheckSquare, X, Paperclip, Camera,
   Upload, FileText, ScanLine, Loader, CheckCircle2,
-  History, Copy, Check, Lightbulb, MoreVertical, Pencil, Trash2, CloudOff,  Bot, Lock } from 'lucide-react';
+  History, Copy, Check, Lightbulb, MoreVertical, Pencil, Trash2, CloudOff,  Bot, Lock , Cpu } from 'lucide-react';
 import { PageLayout, useIsMobile } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, FileUploadZone, Toast } from '../components/Primitives.jsx';
 import TrainingProgress from '../components/TrainingProgress.jsx';
@@ -15,7 +15,7 @@ import { apiGet, apiPost, apiDelete, API } from '../services/api.js';
 import ActivityPreviewPanel from '../components/ActivityPreviewPanel.jsx';
 import DraftCard from '../components/paper/DraftCard.jsx';
 import { chatIdeas, STARTERS } from '../lib/chatIdeas.js';
-import FortizoChatComposer from '../components/common/FortizoChatComposer.jsx';
+import FortizoChatComposer, { ModelSwitch } from '../components/common/FortizoChatComposer.jsx';
 import RichText from '../components/common/RichText.jsx';
 
 /* Subtle per-message copy affordance: copies the exact text, flips to a
@@ -878,7 +878,20 @@ export default function ChatPage() {
               modelOptions={CHAT_MODES}
               onModelChange={setChatMode}
               modelLabelDescription="Choose a supported chat mode"
+              hideModelMenu
             />
+            {/* The chat-mode switch — the learner chat's layout: the chip sits
+                on its own row BELOW the composer, opening its menu upwards. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+              <ModelSwitch
+                modelId={chatMode}
+                modelLabel={CHAT_MODES.find((o) => o.id === chatMode)?.label || 'Standard'}
+                modelOptions={CHAT_MODES}
+                onModelChange={setChatMode}
+                disabled={running}
+                icon={<Cpu size={13} />}
+              />
+            </div>
             {attachMenu && (
               <div className="ci-attach-menu">
                   {[
