@@ -104,6 +104,10 @@ function AppRoutes() {
       {/* Protected */}
       <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
       <Route path="/courses" element={<ProtectedRoute><CoursesPage /></ProtectedRoute>} />
+      <Route path="/courses/new-live"    element={<ProtectedRoute><CoursesPage /></ProtectedRoute>} />
+      <Route path="/courses/new-ondemand" element={<ProtectedRoute><CoursesPage /></ProtectedRoute>} />
+      <Route path="/courses/schedule"    element={<ProtectedRoute><CoursesPage /></ProtectedRoute>} />
+      <Route path="/courses/manage"      element={<ProtectedRoute><CoursesPage /></ProtectedRoute>} />
       <Route path="/sales" element={<ProtectedRoute><SalesPage /></ProtectedRoute>} />
       <Route path="/orders" element={<ProtectedRoute><OrderHistoryPage /></ProtectedRoute>} />
       {/* Students now live under Management → My Students. */}
@@ -112,6 +116,9 @@ function AppRoutes() {
       <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
       <Route path="/self-study" element={<ProtectedRoute><SelfStudyPage /></ProtectedRoute>} />
       <Route path="/activities" element={<ProtectedRoute><ActivitiesPage /></ProtectedRoute>} />
+      {/* Dedicated pages for flows that used to be modals */}
+      <Route path="/activities/detail" element={<ProtectedRoute><ActivitiesPage /></ProtectedRoute>} />
+      <Route path="/activities/draft"  element={<ProtectedRoute><ActivitiesPage /></ProtectedRoute>} />
       <Route path="/submissions" element={<ProtectedRoute><SubmissionsPage /></ProtectedRoute>} />
       <Route path="/self-study/:id/analytics" element={<ProtectedRoute><SelfStudyAnalyticsPage /></ProtectedRoute>} />
       <Route path="/wallet" element={<ProtectedRoute><WalletPage /></ProtectedRoute>} />

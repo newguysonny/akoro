@@ -775,15 +775,15 @@ function PastActivities({ type, refreshKey, onOpen }) {
 }
 
 /* ── Per-learner progress modal — same brief view the self-study page uses ── */
-function DetailModal({ open, onClose, activity, onDeleted }) {
+export function DetailPage({ activity, onDeleted, onClose }) {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const meta = byKey(activity?.type || 'self_study');
 
   useEffect(() => {
-    if (!open || !activity?.id) { setData(null); return; }
+    if (!activity?.id) { setData(null); return; }
     apiGet(`/api/self-study/${activity.id}`).then(d => setData(d?.data ?? null)).catch(() => setData(null));
-  }, [open, activity?.id]);
+  }, [activity?.id]);
 
   const STATUS = {
     assigned: { color: MUTED,  bg: LIGHT,     label: 'Not started' },
@@ -795,9 +795,20 @@ function DetailModal({ open, onClose, activity, onDeleted }) {
     if (!await confirmDialog(`Delete “${activity.title}”? Learners keep any session they already started.`)) return;
     try { await apiDelete(`/api/self-study/${activity.id}`); onDeleted(); onClose(); } catch { /* leave it */ }
   };
+  if (!activity?.id) return (
+    <PageLayout title="Activity" subtitle="Details">
+      <div style={{ fontFamily: FONT, color: MUTED }}>This activity is no longer available.</div>
+      <div style={{ marginTop: 14 }}><Btn onClick={() => onClose()}>Back to activities</Btn></div>
+    </PageLayout>
+  );
 
   return (
-    <Modal open={open} onClose={onClose} title={activity?.title || 'Activity'} width={500}>
+    <PageLayout title={data?.title || activity?.title || 'Activity'} subtitle="Activity details">
+      <div style={{ maxWidth: 640, margin: '0 auto', fontFamily: FONT }}>
+        <button onClick={onClose} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 14, background: 'none', border: 'none', cursor: 'pointer', color: MUTED, fontSize: 12.5, fontWeight: 700, fontFamily: FONT, padding: 0 }}>
+          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          Back to activities
+        </button>
       {!data ? (
         <div style={{ fontSize: 13, color: MUTED, fontFamily: FONT, padding: '10px 0' }}>Loading…</div>
       ) : (
@@ -913,7 +924,8 @@ function DetailModal({ open, onClose, activity, onDeleted }) {
           </div>
         </div>
       )}
-    </Modal>
+      </div>
+    </PageLayout>
   );
 }
 
@@ -925,7 +937,7 @@ function DetailModal({ open, onClose, activity, onDeleted }) {
 function DraftsStrip({ refreshKey, onResolved }) {
   const [drafts, setDrafts]     = useState([]);
   const [routines, setRoutines] = useState([]);
-  const [openId, setOpenId]     = useState(null);
+  const navigate = useNavigate();
   const [loading, setLoading]   = useState(true);
 
   const load = useCallback(() => {
@@ -975,7 +987,7 @@ function DraftsStrip({ refreshKey, onResolved }) {
       )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
         {drafts.map(d => (
-          <button key={d.id} onClick={() => setOpenId(d.id)}
+          <button key={d.id} onClick={() => navigate(`/activities?draft=${d.id}`)}
             title="Preview this draft — assigning is your call"
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 20,
               border: '1px solid rgba(168,85,247,.45)', background: WHITE, color: PURPLE,
@@ -988,25 +1000,41 @@ function DraftsStrip({ refreshKey, onResolved }) {
           </button>
         ))}
       </div>
-      {openId && (
-        <Modal open onClose={() => setOpenId(null)} title="AI-prepared activity — review & assign">
-          <div style={{ height: '72vh' }}>
-            <ActivityPreviewPanel
-              draftId={openId}
-              onClose={() => setOpenId(null)}
-              onResolved={(id, state) => { setOpenId(null); load(); onResolved?.(); }}
-            />
-          </div>
-        </Modal>
       )}
     </div>
   );
 }
 
 export default function ActivitiesPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [sp] = useSearchParams();
+  const draftId = sp.get('draft');
+  const detailId = sp.get('detail');
+
+  // The AI-prepared draft opens as a DEDICATED PAGE (its own URL), not a modal.
+  if (draftId) {
+    return (
+      <PageLayout title="AI-prepared activity" subtitle="Review & assign — human-in-the-loop">
+        <div style={{ height: 'calc(100vh - 190px)', minHeight: 460 }}>
+          <ActivityPreviewPanel
+            draftId={draftId}
+            onClose={() => navigate(-1)}
+            onResolved={() => { navigate('/activities'); onResolved?.(); }}
+          />
+        </div>
+      </PageLayout>
+    );
+  }
+
+  // Past-activity details — a dedicated page (its own URL), not a modal.
+  if (detailId) {
+    const fromState = (location.state || {}).activity;
+    return <DetailPage activity={fromState || { id: detailId }} onDeleted={() => navigate('/activities')} onClose={() => navigate(-1)} />;
+  }
+
   const [key, setKey] = useState('self_study');
   const [refreshKey, setRefreshKey] = useState(0);
-  const [detail, setDetail] = useState(null);
   const [toast, setToast] = useState(null);
 
   const meta = byKey(key);
@@ -1069,9 +1097,7 @@ export default function ActivitiesPage() {
 
       {key === 'battle'
         ? <BattlePastStrip refreshKey={refreshKey} />
-        : <PastActivities type={key} refreshKey={refreshKey} onOpen={(a) => setDetail(a)} />}
-      <DetailModal open={!!detail} activity={detail} onClose={() => setDetail(null)}
-        onDeleted={() => { setRefreshKey(k => k + 1); setToast({ message: 'Activity deleted', type: 'success' }); }} />
+        : <PastActivities type={key} refreshKey={refreshKey} onOpen={(a) => navigate('/activities/detail', { state: { activity: a } })} />}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </PageLayout>
   );

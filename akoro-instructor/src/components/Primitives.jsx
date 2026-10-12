@@ -98,8 +98,29 @@ export function Sel({ label, error, style, containerStyle, children, ...props })
 }
 
 /* ── Modal ──────────────────────────────────────────────────────────── */
-export function Modal({ open, onClose, title, children, width = 520, style }) {
+export function Modal({ open, onClose, title, children, width = 520, style, asPage = false }) {
   if (!open) return null;
+  if (asPage) {
+    // Dedicated-page mode: the same card, inline — no overlay. A flow that
+    // used to be a modal can then live at its own URL unchanged.
+    return (
+      <div onClick={() => {}} style={{
+        background: WHITE, borderRadius: 20, width: '100%', maxWidth: Math.max(width, 640),
+        margin: '0 auto', padding: '24px 24px 28px', boxShadow: '0 4px 18px rgba(0,0,0,.05)', ...style,
+      }}>
+        {title && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 0 14px' }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: INK, margin: 0 }}>{title}</h2>
+            <button onClick={onClose} aria-label="Close"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: 4, borderRadius: 6 }}>
+              <X size={18} />
+            </button>
+          </div>
+        )}
+        {children}
+      </div>
+    );
+  }
   return (
     <div
       onClick={onClose}

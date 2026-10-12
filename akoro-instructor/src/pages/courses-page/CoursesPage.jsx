@@ -2,6 +2,7 @@
  * CoursesPage — composes the components from ./parts.jsx.
  */
 import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Video, BookOpen, Users, Clock, Calendar, Trash2, Edit2, ChevronRight, Share2, Check , AlertTriangle } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import { Btn, Modal, Inp, Sel, StatusPill, PlatBadge, CoursTypeBadge, Toast } from '../../components/Primitives.jsx';
@@ -16,6 +17,38 @@ import { ScheduleSessionModal, EditCourseModal, LEARNER_URL, CourseCard, Session
 import { confirmDialog } from '../../components/ConfirmHost.jsx';
 
 export default function CoursesPage() {
+  const navigate = useNavigate();
+  const [sp] = useSearchParams();
+  const flow = sp.get('flow');
+  const flowId = sp.get('id');
+
+  // Creation/scheduling flows live at their own URLs — dedicated pages, not
+  // modals. The same handlers, the same components (Modal asPage), one URL each.
+  if (flow === 'new-live' || flow === 'new-ondemand') {
+    const live = flow === 'new-live';
+    return (
+      <PageLayout title={live ? 'New Live Class' : 'New On-Demand Course'} subtitle={live ? 'Create a live, scheduled course' : 'Create a self-paced course'}>
+        {live
+          ? <LiveClassWizard open asPage onClose={() => navigate('/courses')} onSubmit={handleCreateLive} />
+          : <OnDemandWizard open asPage onClose={() => navigate('/courses')} onSubmit={handleCreateOnDemand} />}
+      </PageLayout>
+    );
+  }
+  if (flow === 'schedule') {
+    return (
+      <PageLayout title="Schedule Session" subtitle="Put a live class on the calendar">
+        <ScheduleSessionModal open asPage courses={courses} onSubmit={handleCreateSession} onClose={() => navigate('/courses')} />
+      </PageLayout>
+    );
+  }
+  if (flow === 'manage') {
+    const course = courses.find((c) => c.id === flowId) || null;
+    return (
+      <PageLayout title="Manage course" subtitle={course?.title || 'Curriculum, pricing and publishing'}>
+        <CourseCurriculum open asPage course={course} onClose={() => navigate('/courses')} onToast={showToast} />
+      </PageLayout>
+    );
+  }
   const { getCourses, createCourse, updateCourse, deleteCourse, getSessions, createSession, deleteSession, commitSchedule, commitCurriculum } = useCoursesAPI();
   const [courses,  setCourses]  = useState([]);
   const [sessions, setSessions] = useState([]);
@@ -156,13 +189,13 @@ export default function CoursesPage() {
       subtitle="Manage your live and on-demand courses"
       action={
         <div style={{ display: 'flex', gap: 8 }}>
-          <Btn size="sm" variant="secondary" onClick={() => setScheduleModal(true)}>
+          <Btn size="sm" variant="secondary" onClick={() => navigate('/courses/schedule')}>
             <Calendar size={14} /> Schedule Session
           </Btn>
-          <Btn size="sm" variant="secondary" onClick={() => setOnDemandModal(true)}>
+          <Btn size="sm" variant="secondary" onClick={() => navigate('/courses/new-ondemand')}>
             <BookOpen size={14} /> New On-Demand
           </Btn>
-          <Btn size="sm" onClick={() => setLiveWizard(true)}>
+          <Btn size="sm" onClick={() => navigate('/courses/new-live')}>
             <Plus size={14} /> New Live Class
           </Btn>
         </div>
@@ -194,7 +227,7 @@ export default function CoursesPage() {
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
-            {courses.map(c => <CourseCard key={c.id} course={c} onManage={setCurriculumFor} onEdit={setEditCourse} onDelete={handleDeleteCourse} />)}
+            {courses.map(c => <CourseCard key={c.id} course={c} onManage={(c) => navigate(`/courses/manage?id=${c.id}`)} onEdit={setEditCourse} onDelete={handleDeleteCourse} />)}
             {courses.length === 0 && (
               <div style={{
                 gridColumn: '1 / -1', background: WHITE, border: `1px dashed ${BORDER}`,
@@ -202,7 +235,7 @@ export default function CoursesPage() {
               }}>
                 <BookOpen size={32} color={MUTED} style={{ marginBottom: 12 }} />
                 <p style={{ fontSize: 14, color: MUTED, margin: '0 0 16px', fontFamily: FONT }}>No courses yet</p>
-                <Btn onClick={() => setLiveWizard(true)}><Plus size={14} /> Create your first course</Btn>
+                <Btn onClick={() => navigate('/courses/new-live')}><Plus size={14} /> Create your first course</Btn>
               </div>
             )}
           </div>
@@ -224,7 +257,7 @@ export default function CoursesPage() {
             {sessions.length === 0 && (
               <div style={{ background: WHITE, border: `1px dashed ${BORDER}`, borderRadius: 12, padding: '32px', textAlign: 'center' }}>
                 <p style={{ fontSize: 14, color: MUTED, margin: '0 0 12px', fontFamily: FONT }}>No sessions scheduled</p>
-                <Btn size="sm" variant="secondary" onClick={() => setScheduleModal(true)}>
+                <Btn size="sm" variant="secondary" onClick={() => navigate('/courses/schedule')}>
                   <Calendar size={14} /> Schedule one
                 </Btn>
               </div>
@@ -234,10 +267,6 @@ export default function CoursesPage() {
       </div>
 
       <EditCourseModal open={!!editCourse} course={editCourse} onClose={() => setEditCourse(null)} onSave={handleSaveCourse} />
-      <CourseCurriculum open={!!curriculumFor} course={curriculumFor} onClose={() => { setCurriculumFor(null); load(); }} onToast={showToast} />
-      <LiveClassWizard open={liveWizard} onClose={() => setLiveWizard(false)} onSubmit={handleCreateLive} />
-      <OnDemandWizard open={onDemandModal} onClose={() => setOnDemandModal(false)} onSubmit={handleCreateOnDemand} />
-      <ScheduleSessionModal open={scheduleModal} onClose={() => setScheduleModal(false)} onSubmit={handleCreateSession} courses={courses} />
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </PageLayout>

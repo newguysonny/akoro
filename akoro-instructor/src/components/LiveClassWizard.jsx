@@ -200,7 +200,7 @@ function ModuleCard({ mod, mi, onChange, onRemove }) {
 }
 
 /* ── Main wizard ────────────────────────────────────────────────────── */
-export default function LiveClassWizard({ open, onClose, onSubmit }) {
+export default function LiveClassWizard({ open, onClose, onSubmit , asPage = false }) {
   const [step, setStep] = useState(0);
   const [info, setInfo] = useState({ title: '', description: '', maxStudents: '30', thumbnail: null });
   const [spec, setSpec] = useState({ frequency: '3x_weekly', daysOfWeek: [1, 3, 5], time: '16:00', durationMin: 60, startDate: '', weeks: 4, platform: 'zoom' });
@@ -228,7 +228,7 @@ export default function LiveClassWizard({ open, onClose, onSubmit }) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="New Live Course" width={620}>
+    <Modal open={open} onClose={onClose} title="New Live Course" width={620} asPage={asPage}>
       <WizardSteps steps={['Course Info', 'Schedule', 'Modules & Topics', 'Review']} current={step} />
 
       {step === 0 && (

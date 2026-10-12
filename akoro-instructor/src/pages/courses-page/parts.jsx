@@ -28,7 +28,7 @@ const MOCK_SESSIONS = [
 
 
 /* ── Schedule Session Modal ─────────────────────────────────────────── */
-function ScheduleSessionModal({ open, onClose, onSubmit, courses }) {
+function ScheduleSessionModal({ open, onClose, onSubmit, courses, asPage = false }) {
   const [form, setForm] = useState({ courseId: '', title: '', date: '', time: '', platform: 'zoom', duration: '60', meetingLink: '' });
   const [loading, setLoading] = useState(false);
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -45,7 +45,7 @@ function ScheduleSessionModal({ open, onClose, onSubmit, courses }) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Schedule Session" width={480}>
+    <Modal open={open} onClose={onClose} title="Schedule Session" width={480} asPage={asPage}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <Sel label="Course" value={form.courseId} onChange={e => setField('courseId', e.target.value)}>
           <option value="">Select a course…</option>

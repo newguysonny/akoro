@@ -207,7 +207,7 @@ function ModuleCard({ module: mod, courseId, api, onChanged, onToast }) {
 }
 
 /* ── Main curriculum modal ──────────────────────────────────────────── */
-export default function CourseCurriculum({ open, course, onClose, onToast }) {
+export default function CourseCurriculum({ open, course, onClose, onToast , asPage = false }) {
   const api = useCoursesAPI();
   const [modules, setModules] = useState(null);
   const [newModule, setNewModule] = useState('');
@@ -229,7 +229,7 @@ export default function CourseCurriculum({ open, course, onClose, onToast }) {
   const totalTopics = (modules ?? []).reduce((n, m) => n + m.sessions.length, 0);
 
   return (
-    <Modal open={open} onClose={onClose} title={course ? `${course.title} — Curriculum` : 'Curriculum'} width={640}>
+    <Modal open={open} onClose={onClose} title={course ? `${course.title} — Curriculum` : 'Curriculum'} width={640} asPage={asPage}>
       {modules === null ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {[0, 1, 2].map((i) => <div key={i} className="skeleton" style={{ height: 70, borderRadius: 12 }} />)}
