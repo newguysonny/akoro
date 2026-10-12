@@ -80,7 +80,7 @@ function SectionCard({ section, si, onChange, onRemove }) {
 }
 
 /* ── Main wizard ────────────────────────────────────────────────────── */
-export default function OnDemandWizard({ open, onClose, onSubmit }) {
+export default function OnDemandWizard({ open, onClose, onSubmit , asPage = false }) {
   const [step, setStep] = useState(0);
   const [info, setInfo] = useState({ title: '', description: '', category: '', level: 'all', thumbnail: null });
   const [sections, setSections] = useState([{ title: 'Section 1', lessons: [{ title: '', videoUrl: null, duration: '', preview: false }] }]);
@@ -115,7 +115,7 @@ export default function OnDemandWizard({ open, onClose, onSubmit }) {
   };
 
   return (
-    <Modal open={open} onClose={close} title="New On-Demand Course" width={620}>
+    <Modal open={open} onClose={close} title="New On-Demand Course" width={620} asPage={asPage}>
       <WizardSteps steps={['Basics', 'Curriculum', 'Pricing', 'Publish']} current={step} />
 
       {/* ── Step 1 · Basics ─────────────────────────────────────────── */}
