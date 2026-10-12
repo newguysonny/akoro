@@ -13,8 +13,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Eye, Pencil, Send, Trash2, CheckCircle2, Loader2, X,
-  ClipboardList, Sparkles, ExternalLink, AlertTriangle,
+  ClipboardList, Sparkles, ExternalLink, AlertTriangle, Download,
 } from 'lucide-react';
+import { downloadActivityPdf } from '../lib/activityPdf.js';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, RED, FONT } from '../constants.js';
 import { ActivityForm, byKey, rowsFromQuestions } from '../pages/ActivitiesPage.jsx';
@@ -212,6 +213,7 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
   const stages = payload.details?.stages || [];
   const audience = draft.audience || {};
   const versions = versionsOf(draft);
+  const questionsExist = versions.some((v) => (v.paper?.questions || []).length > 0);
   const shown = versions.find((v) => v.n === vSel) || versions.at(-1) || null;
   // Assign waits for what learners can't do without: a figure the paper
   // refers to, and an exact due date when the teacher said one in words.
@@ -219,6 +221,13 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
   const dueValue = dueLocal ?? datetimeLocal(payload.due_at);
   const dueUnset = !isLive && !isBattle && !isJourney && !!payload.due_hint && !dueValue;
   const assignBlock = needsFigure ? 'Add the missing figure first (Edit on the version).' : dueUnset ? `Set the exact due date for “${payload.due_hint}” first.` : '';
+  const [pdfErr, setPdfErr] = useState(false);
+  const downloadPdf = () => {
+    try {
+      downloadActivityPdf({ draft, meta, shown, audience });
+      setPdfErr(false);
+    } catch { setPdfErr(true); }
+  };
   const assignOverrides = () => ({
     ...(shown ? { version: shown.n } : {}),
     ...(dueLocal != null ? { due_at: dueLocal ? new Date(dueLocal).toISOString() : null } : {}),
@@ -389,6 +398,11 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
       {/* Footer — the human decision. Assign is the ONLY path to learners. */}
       {phase !== 'editing' && !isBattle && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 12, borderTop: `1px solid ${BORDER}`, marginTop: 12 }}>
+          <button onClick={downloadPdf} disabled={!isJourney && !questionsExist && !(payload.subtopics || []).length}
+            title="Download this activity as a PDF"
+            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '9px 13px', borderRadius: 11, border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+            <Download size={13} /> PDF
+          </button>
           <button onClick={discard}
             style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '9px 13px', borderRadius: 11, border: `1px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
             <Trash2 size={13} /> Discard
