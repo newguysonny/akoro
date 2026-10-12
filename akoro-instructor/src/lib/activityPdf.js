@@ -129,5 +129,6 @@ export function downloadActivityPdf({ draft, meta = {}, shown = null, audience =
     doc.text(`Page ${p} of ${total}`, PAGE_W - MARGIN, 812, { align: 'right' });
   }
 
-  doc.save(`${slug(draft?.title)}${shown ? `-v${shown.n}` : ''}.pdf`);
+  const v = shown?.n ? `-v${shown.n}` : '';
+  doc.save(`${slug(draft?.title)}${v}.pdf`);
 }
