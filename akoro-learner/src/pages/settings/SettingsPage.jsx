@@ -20,6 +20,7 @@ import {
 import {
   BRAND, RED, ORANGE, Icon,
 } from './shared.jsx';
+import { Settings as SettingsIcon, MoreHorizontal, Pencil, LogOut } from 'lucide-react';
 import { LogoutModal } from './sheets.jsx';
 import { DrawnAvatar } from '../../components/common/AgentAvatar.jsx';
 import { UserTab } from './userTab.jsx';
@@ -53,6 +54,10 @@ export default function SettingsPage() {
   const [agent,       setAgent]       = useState(null);
   const [loading,     setLoading]     = useState(true);
   const [showLogout,  setShowLogout]  = useState(false);
+  const [moreOpen,    setMoreOpen]    = useState(false);
+  const [hint,        setHint]        = useState('');
+  const moreRef       = useRef(null);
+  const hintTimer     = useRef(null);
   const [guides,      setGuides]      = useState([]);   // display labels for the picker
   const [guideMap,    setGuideMap]    = useState({});   // label → { pairId, name, emoji }
 
@@ -208,6 +213,24 @@ export default function SettingsPage() {
   const handleSaveAgent       = useCallback(a => putAgent(a), []);
   const handleLogoutConfirm   = useCallback(() => { setShowLogout(false); logout(); }, [logout]);
 
+  // Surfaces the user a small toast at the bottom of the screen, which will automatically disappear after a moment.
+  const showHint = useCallback((msg) => {
+    setHint(msg);
+    clearTimeout(hintTimer.current);
+    hintTimer.current = setTimeout(() => setHint(''), 1600);
+  }, []);
+  const showComingSoon = useCallback(() => { setMoreOpen(false); showHint('Coming soon'); }, [showHint]);
+
+  // The more-menu closes on outside click or Escape, just like the reference account menu.
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onDown = (e) => { if (!moreRef.current?.contains(e.target)) setMoreOpen(false); };
+    const onKey  = (e) => { if (e.key === 'Escape') setMoreOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [moreOpen]);
+
   const color = accentColor;
 
   return (
@@ -259,13 +282,37 @@ export default function SettingsPage() {
           </p>
           <p style={{ fontSize:11,color:'var(--ak-text-muted)',margin:0 }}>@{profile?.username || user?.username || '…'}</p>
         </div>
-        <button onClick={()=>setShowLogout(true)}
-          style={{ display:'flex',alignItems:'center',gap:6,background:'var(--ak-tag-bg)',
-            border:'1px solid var(--ak-border2)',borderRadius:8,padding:'6px 12px',
-            cursor:'pointer',fontFamily:"'Nunito',sans-serif",
-            fontSize:12,fontWeight:700,color:'var(--ak-text-sub)',flexShrink:0 }}>
-          <Icon name="ti-logout" size={15} color="var(--ak-text-sub)"/> {t('common.signout')}
-        </button>
+        <div ref={moreRef} style={{ display:'flex',alignItems:'center',gap:7,flexShrink:0,position:'relative' }}>
+          <button onClick={()=>showComingSoon()} title="Settings" aria-label="Settings"
+            style={{ width:34,height:34,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',
+              background:'var(--ak-tag-bg)',border:'1px solid var(--ak-border2)',cursor:'pointer',padding:0 }}>
+            <SettingsIcon size={15} color="var(--ak-text-sub)"/>
+          </button>
+          <button onClick={()=>setMoreOpen(o=>!o)} title="More" aria-label="More options"
+            aria-haspopup="menu" aria-expanded={moreOpen}
+            style={{ width:34,height:34,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',
+              background:'var(--ak-tag-bg)',border:'1px solid var(--ak-border2)',cursor:'pointer',padding:0 }}>
+            <MoreHorizontal size={15} color="var(--ak-text-sub)"/>
+          </button>
+          {moreOpen&&(
+            <div role="menu" aria-label="More options" style={{ position:'absolute',top:'calc(100% + 6px)',right:0,zIndex:30,
+              minWidth:190,padding:'8px 0',background:'var(--ak-surface)',border:'1px solid var(--ak-border2)',
+              borderRadius:16,boxShadow:'0 16px 40px rgba(17,24,39,.14), 0 2px 8px rgba(17,24,39,.06)' }}>
+              <button role="menuitem" onClick={showComingSoon}
+                style={{ display:'flex',alignItems:'center',gap:12,width:'100%',padding:'12px 16px',border:'none',
+                  background:'none',color:'var(--ak-text-sec)',fontFamily:"'Nunito',sans-serif",
+                  fontSize:13.5,fontWeight:700,textAlign:'left',cursor:'pointer' }}>
+                <Pencil size={16} color="var(--ak-text-sec)"/> Edit Profile
+              </button>
+              <button role="menuitem" onClick={()=>{ setMoreOpen(false); setShowLogout(true); }}
+                style={{ display:'flex',alignItems:'center',gap:12,width:'100%',padding:'12px 16px',border:'none',
+                  background:'none',color:'var(--ak-danger-text, #B91C1C)',fontFamily:"'Nunito',sans-serif",
+                  fontSize:13.5,fontWeight:700,textAlign:'left',cursor:'pointer' }}>
+                <LogOut size={16} color="var(--ak-danger-text, #B91C1C)"/> Logout
+              </button>
+            </div>
+          )}
+        </div>
       </header>
 
       {/* Tabs */}
@@ -310,6 +357,13 @@ export default function SettingsPage() {
 
       {showLogout&&(
         <LogoutModal onClose={()=>setShowLogout(false)} onConfirm={handleLogoutConfirm}/>
+      )}
+      {hint&&(
+        <div role="status" style={{ position:'fixed',left:'50%',bottom:24,transform:'translateX(-50%)',zIndex:60,
+          padding:'10px 16px',borderRadius:999,background:'var(--ak-text)',color:'var(--ak-surface)',
+          fontWeight:800,fontSize:13,fontFamily:"'Nunito',sans-serif",boxShadow:'0 8px 22px rgba(17,24,39,.28)' }}>
+          {hint}
+        </div>
       )}
     </div>
     </AppShell>
