@@ -889,7 +889,7 @@ export default function ChatPage() {
                 modelOptions={CHAT_MODES}
                 onModelChange={setChatMode}
                 disabled={running}
-                icon={<Cpu size={13} />}
+                icon={Cpu}
               />
             </div>
             {attachMenu && (
