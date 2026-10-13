@@ -282,6 +282,11 @@ test("the instructor composer is the learner composer, exactly — stop, menu, s
   // React error #130 (element object used as an element type).
   assert.match(instructorChatPage, /icon=\{Cpu\}/, 'ChatPage passes the Cpu component, not an element');
   assert.doesNotMatch(instructorChatPage, /icon=\{<Cpu/, 'ChatPage must not pass a JSX element as the ModelSwitch icon');
+  // The icon branch must use React.isValidElement — lucide icons are
+  // forwardRef OBJECTS, so a typeof check misroutes components into child
+  // position and the page dies with React #31.
+  assert.match(composer, /isValidElement\(ChipIcon\)/, 'ModelSwitch branches on isValidElement');
+  assert.doesNotMatch(composer, /typeof ChipIcon/, 'ModelSwitch must not branch on typeof');
   assert.match(instructorChatPage, /const stopTurn = \(\) => \{ abortRef\.current\?\.abort\(\); \};/);
   assert.match(instructorChatPage, /signal,/);
   // a Stop is user intent — never retried
