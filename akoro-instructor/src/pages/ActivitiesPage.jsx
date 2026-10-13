@@ -1047,34 +1047,45 @@ function DraftsStrip({ refreshKey, onResolved }) {
   );
 }
 
+/* URL shell — the draft/detail pages are their own COMPONENTS, so navigating
+   list → detail → list never changes one component's hook count (hooks were
+   previously declared after these early returns: opening a card crashed the
+   page with "rendered fewer hooks than expected"). */
 export default function ActivitiesPage() {
-  const navigate = useNavigate();
-  const location = useLocation();
   const [sp] = useSearchParams();
   const draftId = sp.get('draft');
   const detailId = sp.get('detail');
+  if (draftId) return <DraftRoute draftId={draftId} />;
+  if (detailId) return <DetailRoute detailId={detailId} />;
+  return <ActivitiesHome />;
+}
 
-  // The AI-prepared draft opens as a DEDICATED PAGE (its own URL), not a modal.
-  if (draftId) {
-    return (
-      <PageLayout title="AI-prepared activity" subtitle="Review & assign — human-in-the-loop">
-        <div style={{ height: 'calc(100vh - 190px)', minHeight: 460 }}>
-          <ActivityPreviewPanel
-            draftId={draftId}
-            onClose={() => navigate(-1)}
-            onResolved={() => { navigate('/activities'); onResolved?.(); }}
-          />
-        </div>
-      </PageLayout>
-    );
-  }
+/* The AI-prepared draft opens as a DEDICATED PAGE (its own URL), not a modal. */
+function DraftRoute({ draftId }) {
+  const navigate = useNavigate();
+  return (
+    <PageLayout title="AI-prepared activity" subtitle="Review & assign — human-in-the-loop">
+      <div style={{ height: 'calc(100vh - 190px)', minHeight: 460 }}>
+        <ActivityPreviewPanel
+          draftId={draftId}
+          onClose={() => navigate(-1)}
+          onResolved={() => navigate('/activities')}
+        />
+      </div>
+    </PageLayout>
+  );
+}
 
-  // Past-activity details — a dedicated page (its own URL), not a modal.
-  if (detailId) {
-    const fromState = (location.state || {}).activity;
-    return <DetailPage activity={fromState || { id: detailId }} onDeleted={() => navigate('/activities')} onClose={() => navigate(-1)} />;
-  }
+/* Past-activity details — a dedicated page (its own URL), not a modal. */
+function DetailRoute({ detailId }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const fromState = (location.state || {}).activity;
+  return <DetailPage activity={fromState || { id: detailId }} onDeleted={() => navigate('/activities')} onClose={() => navigate(-1)} />;
+}
 
+function ActivitiesHome() {
+  const navigate = useNavigate();
   const [key, setKey] = useState('self_study');
   const [refreshKey, setRefreshKey] = useState(0);
   const [toast, setToast] = useState(null);
