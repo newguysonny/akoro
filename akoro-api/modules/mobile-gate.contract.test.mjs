@@ -366,3 +366,36 @@ test("no console calls a framework hook it never imports — the runtime-Referen
     assert.deepEqual(bad, [], `${app}: missing framework-hook imports:\n${bad.join("\n")}`);
   }
 });
+
+test("console-facing notification composers carry no emoji", async () => {
+  // The notification pages render whatever the API composes — titles like
+  // "New sale 🎉" sailed past the app guards as data. The composers that feed
+  // the consoles stay clean; server logs (console.*) and email/Telegram
+  // bodies are out of scope.
+  const files = [
+    "modules/notifications/events.js",
+    "modules/battle/routes.js",
+    "modules/battle/networkBattle.js",
+    "modules/battle/worker.js",
+    "modules/courses/scheduler.js",
+    "modules/courses/live-sessions.js",
+    "modules/courses/peer-sessions.js",
+    "modules/courses/qa-announcements.js",
+  ];
+  const offenders = [];
+  for (const f of files) {
+    const src2 = await readFile(new URL(`../../akoro-api/${f}`, import.meta.url), "utf8");
+    src2.split("\n").forEach((line, i) => {
+      const t = line.trim();
+      if (line.includes("console.")) return;
+      if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")) return;
+      if (!pictographRe().test(line)) return;
+      // emoji as STORED payload data (e.g. a challenge card carrying the
+      // agent's agent_emoji) is plumbing, not rendered chrome.
+      if (/\bemoji\s*[:=]/.test(line)) return;
+      offenders.push(`${f}:${i + 1}: ${t.slice(0, 90)}`);
+    });
+  }
+  assert.deepEqual(offenders, [],
+    `emoji in console-facing notification composers:\n${offenders.join("\n")}`);
+});

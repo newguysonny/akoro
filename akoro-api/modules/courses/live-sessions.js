@@ -612,7 +612,7 @@ const participantHandlers = {
 
     // Also broadcast to course chat room
     io?.to(`chat:${session.course_id}`).emit("system-alert", {
-      text: `🔴 "${session.title}" is now LIVE! Join now →`,
+      text: `"${session.title}" is now LIVE! Join now →`,
       meetingUrl: session.join_url,
     });
 

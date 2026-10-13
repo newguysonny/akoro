@@ -171,7 +171,7 @@ const qaHandlers = {
         title:        "New reply to your question",
         content:      content.slice(0, 120),
         relatedId:    questionId,
-        emailSubject: `💬 New reply to: "${question.title}"`,
+        emailSubject: `New reply to: "${question.title}"`,
         emailHtml:    `<p>${req.user.full_name ?? "Someone"} replied to your question <strong>"${question.title}"</strong>:<br/><em>${content}</em></p>`,
         smsBody:      `Piabam: New reply to your question "${question.title}". Check the app.`,
       }).catch((e) => console.warn("[qa] notification failed:", e.message));
@@ -357,7 +357,7 @@ const announcementHandlers = {
           title,
           content:      content.slice(0, 120),
           relatedId:    data.id,
-          emailSubject: `📢 ${title}`,
+          emailSubject: `${title}`,
           emailHtml:    `<p><strong>${title}</strong></p><p>${content}</p>`,
           smsBody:      `Piabam: New announcement in your course: "${title}"`,
         }).catch(() => {});
@@ -366,7 +366,7 @@ const announcementHandlers = {
 
     // Broadcast via Socket.io to course chat room
     req.app.get("io")?.to(`chat:${courseId}`).emit("system-alert", {
-      text: `📢 New announcement: ${title}`,
+      text: `New announcement: ${title}`,
     });
 
     res201(res, data);

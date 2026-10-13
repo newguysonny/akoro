@@ -40,7 +40,7 @@ export const notify = {
   // ── Commerce: seller (instructor) ──────────────────────────────────────────
   newSale: ({ instructorId, courseTitle, netNgn, link = "/sales" }) => safe({
     userId: instructorId, type: "sale_new", link,
-    title: "New sale 🎉",
+    title: "New sale",
     content: `Someone enrolled in “${courseTitle}”. You earned ${ngn(netNgn)}.`,
   }),
 
@@ -80,13 +80,13 @@ export const notify = {
   newReview: ({ instructorId, courseTitle, rating, link = "/reviews" }) => safe({
     userId: instructorId, type: "review_new", link,
     title: "New review",
-    content: `Your course “${courseTitle}” received a ${rating}★ review.`,
+    content: `Your course “${courseTitle}” received a ${rating}-star review.`,
   }),
 
   // ── Course lifecycle (moderation) ──────────────────────────────────────────
   courseApproved: ({ instructorId, courseTitle, link = "/courses" }) => safe({
     userId: instructorId, type: "course_approved", link,
-    title: "Course approved ✅",
+    title: "Course approved",
     content: `“${courseTitle}” is now live and available to learners.`,
   }),
 
@@ -118,7 +118,7 @@ export const notify = {
   // ── School ─────────────────────────────────────────────────────────────────
   schoolVerified: ({ userId, schoolName, link = "/dashboard" }) => safe({
     userId, type: "school_verified", link,
-    title: "School approved ✅",
+    title: "School approved",
     content: `“${schoolName}” has been verified. Your full dashboard is now unlocked.`,
   }),
 

@@ -197,7 +197,7 @@ export async function createNetworkBattle({ creatorId, opponents = [], joined = 
   for (const id of invited) {
     await notifyUser({
       userId: id, type: "battle_challenge",
-      title: o.kind === "1v1" ? `⚔️ ${who} challenged your agent!` : `⚔️ ${who} invited you to a ${o.kind === "team" ? "2v2 team" : "group"} battle`,
+      title: o.kind === "1v1" ? `${who} challenged your agent!` : `${who} invited you to a ${o.kind === "team" ? "2v2 team" : "group"} battle`,
       content: `${o.subject}${o.topic ? ` · ${o.topic}` : ""} · ${o.xp} XP${o.scheduledFor ? ` · ${new Date(o.scheduledFor).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" })}` : ""}`,
       relatedId: battle.id, link: "/app?tab=battles",
     }).catch(() => {});
@@ -211,7 +211,7 @@ export async function createNetworkBattle({ creatorId, opponents = [], joined = 
     for (const id of joined) {
       await notifyUser({
         userId: id, type: "battle_ready",
-        title: scheduled ? `📅 Your ${o.subject} battle is set` : `⚔️ Your ${o.subject} battle is starting`,
+        title: scheduled ? `Your ${o.subject} battle is set` : `Your ${o.subject} battle is starting`,
         content: `${o.title}${scheduled ? ` · ${new Date(o.scheduledFor).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" })}` : ""}`,
         relatedId: battle.id, link: "/app?tab=battles",
       }).catch(() => {});
