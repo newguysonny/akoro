@@ -398,7 +398,7 @@ const handlers = {
 
     // Notify course chat room
     req.app.get("io")?.to(`chat:${session.course_id}`).emit("system-alert", {
-      text: `📚 Peer revision session "${session.title}" is now live!`,
+      text: `Peer revision session "${session.title}" is now live!`,
     });
 
     res200(res, { status: "live", message: "Session started" });

@@ -319,7 +319,7 @@ const activateSession = async (session) => {
     joinUrl: session.join_url ?? session.meeting_url ?? null,
   });
   await notifyParticipantsDB(session.course_id, {
-    type: "live_class", title: "🔴 Live class started",
+    type: "live_class", title: "Live class started",
     content: `${session.title} is live now — tap Join Live to enter.`,
     relatedId: session.id,
   });
@@ -391,7 +391,7 @@ const ensureDemoSessions = async () => {
       if (have.has(iso)) continue;
       rows.push({
         course_id: rapid.id, instructor_id: rapid.instructor_id,
-        title: "⚡ Rapid Demo Session", topic: "Live flow test", subject: rapid.subject,
+        title: "Rapid Demo Session", topic: "Live flow test", subject: rapid.subject,
         description: "A fast-turnaround demo session for the live-class flow. Join to see the lobby, the going-live transition, and the in-class experience end to end. We'll run through a short worked example and take questions live.",
         session_type: "class", platform: "meet",
         scheduled_start: iso, scheduled_end: new Date(first + k * TEN_MIN_MS + TEN_MIN_MS).toISOString(),

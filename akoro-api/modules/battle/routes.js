@@ -386,7 +386,7 @@ router.post("/courses/:courseId/battles/challenge", authenticateToken, asyncHand
 
   const { data: me } = await db.from("users").select("full_name, avatar_url").eq("id", req.user.id).single();
   await notifyUser(opponent_id, "battle_challenge",
-    `⚔️ ${me?.full_name} challenged you!`,
+    `${me?.full_name} challenged you!`,
     `${title} · ${xp_prize} XP · ${isScheduled ? "Starts " + new Date(scheduled_for).toLocaleString("en-GB", { timeZone: "Africa/Lagos" }) : "Open for " + IDLE_HOURS + " hours"}`,
     battle.id
   );
@@ -463,7 +463,7 @@ router.post("/courses/:courseId/battles/open", authenticateToken, asyncHandler(a
   const { data: students } = await db.from("enrollments").select("user_id")
     .eq("course_id", courseId).eq("status", "active").neq("user_id", req.user.id);
   for (const s of (students ?? [])) {
-    await notifyUser(s.user_id, "open_battle", `⚔️ Open battle: ${title}`,
+    await notifyUser(s.user_id, "open_battle", `Open battle: ${title}`,
       `${xp_prize} XP · ${difficulty} · Join now!`, battle.id);
   }
 
@@ -520,7 +520,7 @@ router.post("/courses/:courseId/battles/classroom", authenticateToken, requireRo
     await db.from("battle_participants").upsert({
       battle_id: battle.id, user_id: s.user_id, agent_id: s.user_agents.id, role: "participant", joined_at: now(),
     }, { onConflict: "battle_id,user_id" });
-    await notifyUser(s.user_id, "classroom_battle", `🏫 Class battle: ${title}`,
+    await notifyUser(s.user_id, "classroom_battle", `Class battle: ${title}`,
       `Your agent is competing! ${isScheduled ? "Starts: " + scheduled_for : "Starting soon!"}`, battle.id);
   }
 
@@ -863,8 +863,8 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
   const { data: me } = await db.from("users").select("full_name, avatar_url").eq("id", req.user.id).single();
   for (const o of opponents) {
     await notifyUser(o.user_id, "battle_challenge",
-      isDuel ? `⚔️ ${me?.full_name ?? "A classmate"} challenged you!`
-             : `⚔️ ${me?.full_name ?? "Someone"} invited you to a battle: ${title}`,
+      isDuel ? `${me?.full_name ?? "A classmate"} challenged you!`
+             : `${me?.full_name ?? "Someone"} invited you to a battle: ${title}`,
       `${subject} · ${xp_prize} XP`, battle.id);
     { const card = await challengeCardFor(battle.id, me); if (card) global.io?.to(`user:${o.user_id}`).emit("new_challenge", card); }
   }
@@ -1434,8 +1434,8 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
 
   for (const o of opponents) {
     await notifyUser(o.user_id, "battle_challenge",
-      isDuel ? `⚔️ ${me?.full_name ?? "Someone"} challenged you!`
-             : `⚔️ ${me?.full_name ?? "Someone"} invited you to a battle: ${title}`,
+      isDuel ? `${me?.full_name ?? "Someone"} challenged you!`
+             : `${me?.full_name ?? "Someone"} invited you to a battle: ${title}`,
       `${title} · ${xp_prize} XP · ${when}`, battle.id);
 
     { const card = await challengeCardFor(battle.id, me); if (card) global.io?.to(`user:${o.user_id}`).emit("new_challenge", card); }
@@ -1576,7 +1576,7 @@ router.post("/challenges/:challengeId/accept", authenticateToken, asyncHandler(a
 
     const { data: me } = await db.from("users").select("full_name").eq("id", req.user.id).single();
     await notifyUser(battle.created_by, "battle_accepted",
-      `✅ ${me?.full_name} joined ${battle.title}`,
+      `${me?.full_name} joined ${battle.title}`,
       `${accepted} of ${seats.length} accepted`, battle.id);
     req.app.get("io")?.to(`user:${req.user.id}`).emit("join_battle_room", { battleId: battle.id });
 
@@ -1597,7 +1597,7 @@ router.post("/challenges/:challengeId/accept", authenticateToken, asyncHandler(a
 
   const { data: me } = await db.from("users").select("full_name, avatar_url").eq("id", req.user.id).single();
   await notifyUser(battle.created_by, "battle_accepted",
-    `✅ ${me?.full_name} accepted your challenge!`,
+    `${me?.full_name} accepted your challenge!`,
     `${battle.title} · ${isScheduled ? "Scheduled: " + battle.scheduled_start : "Starting now!"}`, battle.id);
 
   // WebSocket — notify challenger their battle was accepted
@@ -1652,14 +1652,14 @@ router.post("/challenges/:challengeId/decline", authenticateToken, asyncHandler(
       await db.from("battles").update({ status: "cancelled" }).eq("id", p.battle_id);
     }
     await notifyUser(p.battles.created_by, "battle_declined",
-      `❌ ${me?.full_name} declined ${p.battles.title}`,
+      `${me?.full_name} declined ${p.battles.title}`,
       `${accepted} of ${seats.length} still in`, p.battle_id);
     global.io?.to(`user:${p.battles.created_by}`).emit("battle_declined", { battleId: p.battle_id, by: me?.full_name ?? null });
     return res.json({ success: true, accepted, invited: seats.length });
   }
 
   await db.from("battles").update({ status: "cancelled" }).eq("id", req.params.challengeId);
-  await notifyUser(p.battles.created_by, "battle_declined", `❌ ${me?.full_name} declined your challenge`, p.battles.title, req.params.challengeId);
+  await notifyUser(p.battles.created_by, "battle_declined", `${me?.full_name} declined your challenge`, p.battles.title, req.params.challengeId);
   // Live, so the creator's card doesn't sit on "Waiting" until a reload.
   global.io?.to(`user:${p.battles.created_by}`).emit("battle_declined", { battleId: req.params.challengeId, by: me?.full_name ?? null, cancelled: true });
   res.json({ success: true });

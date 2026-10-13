@@ -207,8 +207,8 @@ async function startBattle(battleId) {
   // `competing`, not `participants` — the teacher is in the room, not the fight.
   await appendLog(battleId, "battle_start",
     battle.battle_type === "review"
-      ? `📋 Study review started — ${competing.length} learner working through the questions.`
-      : `⚔️ Battle started! ${competing.length} agents competing.`);
+      ? `Study review started — ${competing.length} learner working through the questions.`
+      : `Battle started! ${competing.length} agents competing.`);
 
   const { data: firstQ } = await db.from("battle_questions").select("*").eq("battle_id", battleId).eq("question_order", 1).single();
   if (!firstQ) return endBattle(battleId);
@@ -491,15 +491,15 @@ async function revealQuestion(battleId, questionOrder) {
       }).eq("id", p.id);
       if (!passed.has(p.user_id)) {   // a pass was already explained when it happened
         const { data: agent } = await db.from("user_agents").select("agent_name, agent_emoji").eq("id", p.agent_id).single();
-        await appendLog(battleId, "answer_timeout", `⏰ ${agent?.agent_name} ran out of time!`, p.user_id, agent?.agent_name, agent?.agent_emoji, questionOrder);
+        await appendLog(battleId, "answer_timeout", `${agent?.agent_name} ran out of time!`, p.user_id, agent?.agent_name, agent?.agent_emoji, questionOrder);
       }
     } else if (!correct) {
       // Counted here, like a no-answer — the reveal is the one tally of misses.
       await db.from("battle_participants").update({ wrong_answers: (p.wrong_answers ?? 0) + 1 }).eq("id", p.id);
       await appendLog(battleId, "answer_wrong",
         guessed
-          ? `❓ ${agentOf(ans)?.agent_name} had nothing on this — guessed ${options[ans.selected_index]}`
-          : `❌ ${agentOf(ans)?.agent_name} answered wrong — chose ${options[ans.selected_index]}${from}`,
+          ? `${agentOf(ans)?.agent_name} had nothing on this — guessed ${options[ans.selected_index]}`
+          : `${agentOf(ans)?.agent_name} answered wrong — chose ${options[ans.selected_index]}${from}`,
         p.user_id, agentOf(ans)?.agent_name, agentOf(ans)?.agent_emoji, questionOrder);
     } else {
       // A review pays once, at the end (pool × share of the paper) — no XP per
@@ -511,13 +511,13 @@ async function revealQuestion(battleId, questionOrder) {
       await db.from("battle_answers").update({ xp_gained: xpGained }).eq("id", ans.id);
       await appendLog(battleId, "answer_correct",
         guessed
-          ? `🍀 ${agentOf(ans)?.agent_name} guessed ${options[q.correct_answer_index]} — and got lucky`
-          : `✅ ${agentOf(ans)?.agent_name} answered correctly — ${options[q.correct_answer_index]}${from}`,
+          ? `${agentOf(ans)?.agent_name} guessed ${options[q.correct_answer_index]} — and got lucky`
+          : `${agentOf(ans)?.agent_name} answered correctly — ${options[q.correct_answer_index]}${from}`,
         p.user_id, agentOf(ans)?.agent_name, agentOf(ans)?.agent_emoji, questionOrder,
         { xpGained, streak: ans.streak_at_time, responseMs: ans.response_time_ms });
       if (!isReviewBattle && (ans.streak_at_time ?? 0) >= 2) {
         await appendLog(battleId, "streak",
-          `🔥 ${agentOf(ans)?.agent_name} is on a ${ans.streak_at_time}× streak! +${streakBonus} bonus XP`,
+          `${agentOf(ans)?.agent_name} is on a ${ans.streak_at_time}× streak! +${streakBonus} bonus XP`,
           p.user_id, agentOf(ans)?.agent_name, agentOf(ans)?.agent_emoji, questionOrder,
           { streak: ans.streak_at_time, bonusXp: streakBonus });
       }
@@ -758,9 +758,9 @@ async function endBattle(battleId) {
 
   await appendLog(battleId, "battle_end",
     isReview
-      ? `📋 Review complete — ${winner?.score ?? 0} of ${battleInfo?.total_questions ?? 0} correct. Mark sheet ready.`
-      : winner ? `🏁 Battle complete! ${winner.user_agents?.agent_name} wins ${winner.score ?? 0}–${runnerUp?.score ?? 0}`
-      : "🏁 Battle complete — every agent ran out of HP, so nobody is ranked",
+      ? `Review complete — ${winner?.score ?? 0} of ${battleInfo?.total_questions ?? 0} correct. Mark sheet ready.`
+      : winner ? `Battle complete! ${winner.user_agents?.agent_name} wins ${winner.score ?? 0}–${runnerUp?.score ?? 0}`
+      : "Battle complete — every agent ran out of HP, so nobody is ranked",
     winner?.user_id, winner?.user_agents?.agent_name, winner?.user_agents?.agent_emoji, null,
     { finalScores: (participants ?? []).map((p) => ({ rank: rankOf.has(p.id) ? rankOf.get(p.id) + 1 : null, agentName: p.user_agents?.agent_name, score: p.score, xpEarned: earnedXp.get(p.id) ?? 0 })) }
   );
@@ -857,7 +857,7 @@ async function expireBattle(battleId) {
   const { data } = await db.from("battles").update({ status: "expired" })
     .in("status", ["lobby", "scheduled"]).eq("id", battleId).select("id").maybeSingle();
   if (data) {
-    global.io?.to(`battle:${battleId}`).emit("battle:log", { eventType: "system", message: "⏰ This battle expired before it could start.", timestamp: new Date().toLocaleTimeString() });
+    global.io?.to(`battle:${battleId}`).emit("battle:log", { eventType: "system", message: "This battle expired before it could start.", timestamp: new Date().toLocaleTimeString() });
   }
 }
 
