@@ -2,7 +2,7 @@
  * CoursesPage — composes the components from ./parts.jsx.
  */
 import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { Plus, Video, BookOpen, Users, Clock, Calendar, Trash2, Edit2, ChevronRight, Share2, Check , AlertTriangle } from 'lucide-react';
 import { PageLayout, useIsMobile } from '../../components/Layout.jsx';
 import { Btn, Modal, Inp, Sel, StatusPill, PlatBadge, CoursTypeBadge, Toast } from '../../components/Primitives.jsx';
@@ -21,8 +21,12 @@ import { confirmDialog } from '../../components/ConfirmHost.jsx';
    branches previously returned before the hooks were declared, and read
    state that did not exist yet on those renders). */
 export default function CoursesPage() {
+  const location = useLocation();
   const [sp] = useSearchParams();
-  const flow = sp.get('flow');
+  // The flow pages are PATHS (/courses/new-live, /courses/schedule, …) —
+  // branch on the last path segment, not the query. (A query-driven shell
+  // made every button a no-op: the route matched and the list re-rendered.)
+  const flow = location.pathname.replace(/\/+$/, '').split('/').pop();
   const flowId = sp.get('id');
   if (flow === 'new-live' || flow === 'new-ondemand') return <CourseFlow kind={flow === 'new-live' ? 'live' : 'ondemand'} />;
   if (flow === 'schedule') return <ScheduleFlow />;

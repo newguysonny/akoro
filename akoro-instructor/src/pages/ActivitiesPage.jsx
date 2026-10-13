@@ -1052,17 +1052,32 @@ function DraftsStrip({ refreshKey, onResolved }) {
    previously declared after these early returns: opening a card crashed the
    page with "rendered fewer hooks than expected"). */
 export default function ActivitiesPage() {
+  const location = useLocation();
   const [sp] = useSearchParams();
+  // The dedicated pages are PATHS (/activities/detail, /activities/draft) —
+  // branch on the pathname, falling back to the query for ?draft=?detail=
+  // links. (Branching on the query alone made every card click a no-op: the
+  // route matched, the shell fell through, and the list just re-rendered.)
+  const onDetail = location.pathname.endsWith('/detail');
+  const onDraft = location.pathname.endsWith('/draft');
   const draftId = sp.get('draft');
-  const detailId = sp.get('detail');
-  if (draftId) return <DraftRoute draftId={draftId} />;
-  if (detailId) return <DetailRoute detailId={detailId} />;
+  const detailId = sp.get('detail') || (onDetail ? ((location.state || {}).activity || {}).id : null);
+  if (onDraft || draftId) return <DraftRoute draftId={draftId} />;
+  if (onDetail || detailId) return <DetailRoute detailId={detailId} />;
   return <ActivitiesHome />;
 }
 
 /* The AI-prepared draft opens as a DEDICATED PAGE (its own URL), not a modal. */
 function DraftRoute({ draftId }) {
   const navigate = useNavigate();
+  if (!draftId) {
+    return (
+      <PageLayout title="AI-prepared activity" subtitle="Review & assign — human-in-the-loop">
+        <div style={{ fontFamily: FONT, color: MUTED }}>No draft was specified.</div>
+        <div style={{ marginTop: 14 }}><Btn onClick={() => navigate('/activities')}>Back to activities</Btn></div>
+      </PageLayout>
+    );
+  }
   return (
     <PageLayout title="AI-prepared activity" subtitle="Review & assign — human-in-the-loop">
       <div style={{ height: 'calc(100vh - 190px)', minHeight: 460 }}>
