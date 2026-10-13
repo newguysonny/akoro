@@ -92,7 +92,7 @@ export default function DashboardPage() {
           />
           <StatCard
             icon={Star} label="Avg Rating" color={AMBER}
-            value={loading ? '—' : avgRating != null ? `★ ${Number(avgRating).toFixed(1)}` : '—'}
+            value={loading ? '—' : avgRating != null ? Number(avgRating).toFixed(1) : '—'}
             sub="avg course rating"
             loading={loading}
           />

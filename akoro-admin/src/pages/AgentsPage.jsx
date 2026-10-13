@@ -107,7 +107,7 @@ export default function AgentsPage() {
                   <tr key={a.id}>
                     <td style={{ ...TD, fontWeight: 700 }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 9 }}>
-                        <span style={{ width: 30, height: 30, borderRadius: 8, background: `${a.color || AMBER}1F`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>{a.emoji || '🤖'}</span>
+                        <span style={{ width: 30, height: 30, borderRadius: 8, background: `${a.color || AMBER}1F`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}><Bot size={16} color={a.color || AMBER} /></span>
                         {a.name || 'Unnamed agent'}
                       </span>
                     </td>

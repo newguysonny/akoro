@@ -15,13 +15,14 @@
  *   <NoAgentModal open={!!noAgent} onClose={() => setNoAgent(null)} onCreated={noAgent} />
  */
 import { useState, useEffect } from 'react';
-import { Sparkles } from 'lucide-react';
+import { Sparkles , Bot, Bird, Brain, BookOpen, Microscope, GraduationCap, Zap, Compass, Bug } from 'lucide-react';
 import { Btn, Modal, Inp } from './Primitives.jsx';
 import { apiPut } from '../services/api.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, RED, FONT } from '../constants.js';
 
-const EMOJIS = ['🤖', '🦉', '🧠', '📚', '🔬', '🎓', '⚡', '🌟', '🧭', '🐝'];
+/* Icons render; the paired emoji is what agent_emoji stores (cross-app compat). */
+const AGENT_ICONS = [[Bot, '🤖'], [Bird, '🦉'], [Brain, '🧠'], [BookOpen, '📚'], [Microscope, '🔬'], [GraduationCap, '🎓'], [Zap, '⚡'], [Sparkles, '🌟'], [Compass, '🧭'], [Bug, '🐝']];
 
 /**
  * True when a failure is "you have no agent yet" rather than a real error.
@@ -92,17 +93,17 @@ export default function NoAgentModal({ open, onClose, onCreated, context = 'this
         <Inp label="Agent name" value={name} onChange={e => setName(e.target.value)} placeholder="My Agent" />
 
         <div style={{ marginTop: 14 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: INK, marginBottom: 8 }}>Avatar</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: INK, marginBottom: 8 }}>Icon</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-            {EMOJIS.map(em => (
+            {AGENT_ICONS.map(([Icon, em]) => (
               <button
-                key={em} type="button" onClick={() => setEmoji(em)}
+                key={em} type="button" onClick={() => setEmoji(em)} aria-label={`Icon ${em}`}
                 style={{
-                  width: 40, height: 40, borderRadius: 10, fontSize: 19, cursor: 'pointer',
+                  width: 40, height: 40, borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
                   border: `2px solid ${emoji === em ? AMBER : BORDER}`,
                   background: emoji === em ? `${AMBER}12` : WHITE,
                 }}
-              >{em}</button>
+              ><Icon size={19} color={emoji === em ? AMBER : MUTED2} /></button>
             ))}
           </div>
         </div>

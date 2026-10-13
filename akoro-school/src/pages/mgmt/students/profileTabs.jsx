@@ -4,14 +4,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  Users, UserCheck, UserX, Home, Tags, ShieldAlert, Loader2, Save, ClipboardCheck,
-  Eye, Pencil, Trash2, UserPlus, Search, ArrowLeft, Phone, Mail, MapPin, Droplet,
-  Cake, CreditCard, ShieldCheck, CircleDot, X, Copy, Printer, Columns, Image,
-  FileUp, Upload, Sheet, Download, CheckSquare, FileText,
-  FolderOpen, Key, HeartPulse, Bus, Bed, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, RefreshCw,
-  ClipboardList, ThumbsUp, ThumbsDown, Plus,
-} from 'lucide-react';
+import {Users, UserCheck, UserX, Home, Tags, ShieldAlert, Loader2, Save, ClipboardCheck, Eye, Pencil, Trash2, UserPlus, Search, ArrowLeft, Phone, Mail, MapPin, Droplet, Cake, CreditCard, ShieldCheck, CircleDot, X, Copy, Printer, Columns, Image, FileUp, Upload, Sheet, Download, CheckSquare, FileText, FolderOpen, Key, HeartPulse, Bus, Bed, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, RefreshCw, ClipboardList, ThumbsUp, ThumbsDown, Plus, Smile } from 'lucide-react';
 import { PageLayout } from '../../../components/Layout.jsx';
 import ResourcePage, { inputStyle } from '../../../components/mgmt/ResourcePage.jsx';
 import { API, apiGet, apiPost, apiPut, apiDelete } from '../../../services/api.js';
@@ -353,7 +346,7 @@ function BehaviorTab({ studentId, showToast }) {
       </div>
       {data.records.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '24px 0', color: MUTED2 }}>
-          <div style={{ fontSize: 26, marginBottom: 6 }}>😊</div>
+          <div style={{ marginBottom: 6, display: 'flex', justifyContent: 'center' }}><Smile size={26} /></div>
           <p style={{ fontSize: 12.5, margin: 0 }}>No behavior incidents recorded this session.</p>
         </div>
       ) : (

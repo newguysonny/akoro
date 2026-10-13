@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Lock } from 'lucide-react';
 import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
 import GlobalStyles from './components/GlobalStyles.jsx';
 import VerificationGate, { useSchoolVerification } from './components/VerificationGate.jsx';
@@ -146,7 +147,7 @@ function AiSigninError({ reason }) {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, fontFamily: 'Inter, system-ui, sans-serif', background: '#FAF8F5' }}>
       <div style={{ maxWidth: 420, textAlign: 'center', background: '#fff', border: '1px solid #EDE8E1', borderRadius: 18, padding: '28px 24px', boxShadow: '0 2px 10px rgba(0,0,0,.05)' }}>
-        <div style={{ fontSize: 40, marginBottom: 10 }}>🔒</div>
+        <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center' }}><Lock size={40} /></div>
         <h2 style={{ fontSize: 18, fontWeight: 800, color: '#1A1A2E', margin: '0 0 8px' }}>We couldn’t complete your sign-in</h2>
         <p style={{ fontSize: 14, color: '#6B6B80', lineHeight: 1.6, margin: '0 0 10px' }}>
           {reason || 'Your session didn’t start — your browser may be blocking cross-site cookies.'}

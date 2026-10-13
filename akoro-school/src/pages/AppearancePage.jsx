@@ -1,8 +1,5 @@
 import { useState, useEffect } from 'react';
-import {
-  Star, Info, Search, Braces, Droplet, Share2, Layers, Save, Loader2, GripVertical,
-  Facebook, Twitter, Instagram, Youtube, Linkedin, MessageCircle,
-} from 'lucide-react';
+import {Star, Info, Search, Braces, Droplet, Share2, Layers, Save, Loader2, GripVertical, Facebook, Twitter, Instagram, Youtube, Linkedin, MessageCircle, Palette } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { apiGet, apiPut, apiPost } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
@@ -137,7 +134,7 @@ export default function AppearancePage() {
           <div style={{ flex: '1 1 380px', minWidth: 320, maxWidth: 480, maxHeight: 'calc(100vh - 170px)', overflowY: 'auto', paddingRight: 4 }}>
             {templateActive && (
               <div style={{ background: `${BLUE}0C`, border: `1px solid ${BLUE}33`, borderRadius: 12, padding: '13px 16px', marginBottom: 14, fontFamily: FONT }}>
-                <div style={{ fontSize: 12.5, fontWeight: 800, color: INK, marginBottom: 4 }}>🎨 A template is powering your site</div>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: INK, marginBottom: 4 }}><Palette size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />A template is powering your site</div>
                 <p style={{ fontSize: 12, color: MUTED, margin: 0, lineHeight: 1.6 }}>
                   Your pages come from the active template, so the theme's Hero, About, Sections and Colors don't apply —
                   edit your pages in <b>Website Builder → Pages</b> instead. Tracking scripts and Custom CSS below are

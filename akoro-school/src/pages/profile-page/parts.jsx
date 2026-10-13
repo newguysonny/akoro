@@ -3,11 +3,7 @@
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { PageLayout } from '../../components/Layout.jsx';
-import {
-  User, AtSign, Mail, Phone, MapPin, Building2, GraduationCap, BookOpen,
-  Pencil, Upload, Search, Bolt, Star, BarChart3, Palette,
-  Tag, Sparkles, Store, CheckCircle2, ChevronRight,
-} from 'lucide-react';
+import {User, AtSign, Mail, Phone, MapPin, Building2, GraduationCap, BookOpen, Pencil, Upload, Search, Bolt, Star, BarChart3, Palette, Tag, Sparkles, Store, CheckCircle2, ChevronRight, Bot, Brain, Gamepad2, Bird, Zap, Eye, Flower2, Target, Rocket, Lightbulb, PawPrint, Dog, Cat, Drama, Trophy, Gem, NotebookPen, FileText, StickyNote, Camera } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import {
   getProfile, patchProfile, patchAgent,
@@ -30,7 +26,9 @@ const ALL_SUBJECTS = [
 ];
 const SCHOOL_TYPES = ['Primary School', 'Junior Secondary School', 'Senior Secondary School', 'Sixth Form', 'College', 'University', 'Tutoring Centre', 'Independent'];
 const COUNTRIES    = ['Nigeria', 'Ghana', 'Kenya', 'South Africa', 'Uganda', 'Tanzania', 'UK', 'USA', 'Canada', 'Other'];
-const EMOJI_LIST   = ['🤖', '🧠', '👾', '🦉', '🎓', '⚡', '🌟', '🔮', '🦋', '🎯', '🚀', '💡', '🦁', '🐺', '🦊', '🎭', '🏆', '💎'];
+/* Icons render; the paired emoji is what the avatar stores (cross-app compat). */
+const EMOJI_ICONS = [[Bot, '🤖'], [Brain, '🧠'], [Gamepad2, '👾'], [Bird, '🦉'], [GraduationCap, '🎓'], [Zap, '⚡'], [Sparkles, '🌟'], [Eye, '🔮'], [Flower2, '🦋'], [Target, '🎯'], [Rocket, '🚀'], [Lightbulb, '💡'], [PawPrint, '🦁'], [Dog, '🐺'], [Cat, '🦊'], [Drama, '🎭'], [Trophy, '🏆'], [Gem, '💎']];
+const EMOJI_LIST   = EMOJI_ICONS.map(([, em]) => em);
 const ACCENTS      = [AMBER, '#6C3BFF', '#3B82F6', '#10B981', '#EC4899', '#F59E0B', '#EF4444', '#8B5CF6'];
 
 /* ─── Micro-components ────────────────────────────────────────── */
@@ -80,10 +78,11 @@ function Row({ icon: Icon, label, value, sub, onClick, noArrow, children }) {
 
 /* ─── Avatar circle ───────────────────────────────────────────── */
 function AvatarCircle({ photoUrl, emoji, color, size = 60, onPhotoClick }) {
+  const AV = EMOJI_ICONS.find(([, em]) => em === emoji)?.[0] || GraduationCap;
   return (
     <div style={{ position: 'relative', flexShrink: 0 }}>
       <div style={{ width: size, height: size, borderRadius: '50%', background: `${color}18`, border: `2px solid ${color}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer' }} onClick={onPhotoClick}>
-        {photoUrl ? <img src={photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ fontSize: size * 0.43 }}>{emoji}</span>}
+        {photoUrl ? <img src={photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ fontSize: size * 0.43 }}><AV size={Math.round(size * 0.42)} color={color} /></span>}
       </div>
       <div style={{ position: 'absolute', bottom: 0, right: 0, width: 20, height: 20, borderRadius: '50%', background: color, border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} onClick={onPhotoClick}>
         <Pencil size={9} color="#fff" />
@@ -129,15 +128,15 @@ function AvatarPickerSheet({ current, onClose, onSavePhoto, onSaveEmoji, color }
     <Sheet onClose={onClose}>
       <p style={{ fontSize: 16, fontWeight: 900, color: INK, margin: '0 0 16px' }}>Change Photo</p>
       <div style={{ display: 'flex', background: '#F3F4F6', borderRadius: 12, padding: 3, marginBottom: 20, gap: 3 }}>
-        {[['emoji', '🎭 Choose Emoji'], ['photo', '📷 Upload Photo']].map(([t, l]) => (
+        {[['emoji', 'Choose Emoji'], ['photo', 'Upload Photo']].map(([t, l]) => (
           <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: '8px 0', borderRadius: 10, border: 'none', background: tab === t ? '#fff' : 'transparent', cursor: 'pointer', fontSize: 12.5, fontWeight: 800, fontFamily: FONTF, color: tab === t ? INK : MUTED, boxShadow: tab === t ? '0 1px 4px rgba(0,0,0,.08)' : 'none' }}>{l}</button>
         ))}
       </div>
       {tab === 'emoji' && (
         <>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
-            {EMOJI_LIST.map((em) => (
-              <div key={em} onClick={() => setSelEmoji(em)} style={{ width: 46, height: 46, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, cursor: 'pointer', background: selEmoji === em ? `${color}15` : LIGHT, border: `1.5px solid ${selEmoji === em ? color : BORDER}` }}>{em}</div>
+            {EMOJI_ICONS.map(([Icon, em]) => (
+              <div key={em} onClick={() => setSelEmoji(em)} style={{ width: 46, height: 46, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, cursor: 'pointer', background: selEmoji === em ? `${color}15` : LIGHT, border: `1.5px solid ${selEmoji === em ? color : BORDER}` }}><Icon size={22} color={selEmoji === em ? color : MUTED2} /></div>
             ))}
           </div>
           <SheetButtons onClose={onClose} onSave={() => { onSaveEmoji(selEmoji); onClose(); }} saveLabel="Save Emoji" />
@@ -282,10 +281,10 @@ function SubjectsRow({ subjects, onClick, color = BRAND }) {
 
 /* ─── Tool template defaults ──────────────────────────────────── */
 const TPL_TOOLS = [
-  { target: 'lesson_plan', label: 'Lesson Plan',       icon: '📝' },
-  { target: 'worksheet',   label: 'Worksheet',         icon: '📄' },
-  { target: 'report',      label: 'Report',            icon: '🗒️' },
-  { target: 'exam_prep',   label: 'Exam / Assessment', icon: '🎯' },
+  { target: 'lesson_plan', label: 'Lesson Plan',       icon: NotebookPen },
+  { target: 'worksheet',   label: 'Worksheet',         icon: FileText },
+  { target: 'report',      label: 'Report',            icon: StickyNote },
+  { target: 'exam_prep',   label: 'Exam / Assessment', icon: Target },
 ];
 
 function ToolTemplatesSection() {
@@ -305,12 +304,12 @@ function ToolTemplatesSection() {
 
   return (
     <Section title="Tool Templates">
-      {TPL_TOOLS.map(({ target, label, icon }) => {
+      {TPL_TOOLS.map(({ target, label, icon: Icon }) => {
         const opts = templates.filter((t) => t.tool_target === target);
         const val  = defaults[target] || '';
         return (
           <div key={target} style={{ ...rowBase, alignItems: 'center' }}>
-            <span style={{ width: 28, flexShrink: 0, fontSize: 16 }}>{icon}</span>
+            <span style={{ width: 28, flexShrink: 0, display: 'flex', justifyContent: 'center' }}><Icon size={16} color={BRAND} /></span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ fontSize: 13.5, fontWeight: 700, margin: 0, color: INK }}>{label}</p>
               <p style={{ fontSize: 11.5, color: val ? GREEN : MUTED2, margin: '2px 0 0', fontWeight: val ? 700 : 400 }}>

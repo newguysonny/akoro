@@ -157,7 +157,7 @@ export function SearchDueFeesPage() {
       {rows && (
         <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden' }}>
           {visible.length === 0 ? (
-            <div style={{ padding: '30px', textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT }}>No outstanding dues 🎉</div>
+            <div style={{ padding: '30px', textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT }}>No outstanding dues</div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT }}>
               <thead><tr style={{ background: LIGHT }}>

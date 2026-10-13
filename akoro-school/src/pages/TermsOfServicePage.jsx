@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { AlertTriangle, Ban, Copyright, CreditCard, DoorOpen, GraduationCap, Lock, Mail, Ruler, Scale, ScrollText, ShieldCheck, Timer, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { AMBER, INK, MUTED, BORDER, WHITE, LIGHT, FONT } from '../constants.js';
 
@@ -7,7 +7,7 @@ const A = AMBER;
 const SECTIONS = [
   {
     id: 'acceptance',
-    icon: '✅',
+    icon: ShieldCheck,
     title: 'Acceptance of Terms',
     badge: 'Agreement',
     badgeColor: '#6366F1',
@@ -19,7 +19,7 @@ const SECTIONS = [
   },
   {
     id: 'service',
-    icon: '🎓',
+    icon: GraduationCap,
     title: 'The Akoro Instructor Platform',
     badge: 'What We Offer',
     badgeColor: '#7C3AED',
@@ -31,7 +31,7 @@ const SECTIONS = [
   },
   {
     id: 'accounts',
-    icon: '👤',
+    icon: User,
     title: 'Your Account',
     badge: 'Registration & Security',
     badgeColor: '#059669',
@@ -43,7 +43,7 @@ const SECTIONS = [
   },
   {
     id: 'instructor-responsibilities',
-    icon: '📐',
+    icon: Ruler,
     title: 'Instructor Responsibilities',
     badge: 'Your Obligations',
     badgeColor: '#D97706',
@@ -60,7 +60,7 @@ const SECTIONS = [
   },
   {
     id: 'ip',
-    icon: '©️',
+    icon: Copyright,
     title: 'Intellectual Property',
     badge: 'Ownership',
     badgeColor: '#6366F1',
@@ -72,7 +72,7 @@ const SECTIONS = [
   },
   {
     id: 'payments',
-    icon: '💳',
+    icon: CreditCard,
     title: 'Subscriptions & Revenue',
     badge: 'Billing & Earnings',
     badgeColor: '#DC2626',
@@ -85,7 +85,7 @@ const SECTIONS = [
   },
   {
     id: 'student-data',
-    icon: '🔐',
+    icon: Lock,
     title: 'Student Data Obligations',
     badge: 'Data Processor Role',
     badgeColor: '#059669',
@@ -98,7 +98,7 @@ const SECTIONS = [
   },
   {
     id: 'disclaimers',
-    icon: '⚠️',
+    icon: AlertTriangle,
     title: 'Disclaimers & Liability',
     badge: 'Limitations',
     badgeColor: '#B45309',
@@ -109,7 +109,7 @@ const SECTIONS = [
   },
   {
     id: 'termination',
-    icon: '🚪',
+    icon: DoorOpen,
     title: 'Termination',
     badge: 'Account Closure',
     badgeColor: '#DC2626',
@@ -121,7 +121,7 @@ const SECTIONS = [
   },
   {
     id: 'governing-law',
-    icon: '⚖️',
+    icon: Scale,
     title: 'Governing Law',
     badge: 'Legal Jurisdiction',
     badgeColor: '#374151',
@@ -168,13 +168,13 @@ export default function TermsOfServicePage() {
 
       {/* Hero */}
       <div style={{ background: 'linear-gradient(135deg, #1A1A2E 0%, #2D1B6E 100%)', padding: '44px 24px 48px', textAlign: 'center' }}>
-        <div style={{ fontSize: 44, marginBottom: 10 }}>📜</div>
+        <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center' }}><ScrollText size={44} /></div>
         <h1 style={{ fontSize: 'clamp(22px,3.5vw,32px)', fontWeight: 700, color: WHITE, marginBottom: 12, fontFamily: FONT }}>Instructor Terms of Service</h1>
         <p style={{ fontSize: 14, color: 'rgba(255,255,255,.80)', maxWidth: 520, margin: '0 auto 22px', lineHeight: 1.7, fontFamily: FONT }}>
           Plain-language terms governing your use of the Akoro Instructor platform, your responsibilities as an educator, and how we work together.
         </p>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,.12)', borderRadius: 20, padding: '8px 18px' }}>
-          <span style={{ fontSize: 13, color: 'rgba(255,255,255,.9)', fontWeight: 700, fontFamily: FONT }}>⏱ About 5 min read · Last updated: 1 June 2025</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'rgba(255,255,255,.9)', fontWeight: 700, fontFamily: FONT }}><Timer size={13} />About 5 min read · Last updated: 1 June 2025</span>
         </div>
       </div>
 
@@ -183,13 +183,13 @@ export default function TermsOfServicePage() {
         {/* Summary cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 14, marginBottom: 32 }}>
           {[
-            { icon: '✅', title: 'Plain language', desc: 'Written to be read, not avoided.' },
-            { icon: '🎓', title: 'Educator-first', desc: 'Built around how teaching actually works.' },
-            { icon: '🚫', title: 'No surprises', desc: '14 days\' notice on material changes.' },
-            { icon: '⚖️', title: 'Fair disputes', desc: 'Good-faith resolution before arbitration.' },
-          ].map(({ icon, title, desc }) => (
+            { icon: ShieldCheck, title: 'Plain language', desc: 'Written to be read, not avoided.' },
+            { icon: GraduationCap, title: 'Educator-first', desc: 'Built around how teaching actually works.' },
+            { icon: Ban, title: 'No surprises', desc: '14 days\' notice on material changes.' },
+            { icon: Scale, title: 'Fair disputes', desc: 'Good-faith resolution before arbitration.' },
+          ].map(({ icon: Icon, title, desc }) => (
             <div key={title} style={{ background: WHITE, borderRadius: 12, padding: '16px', border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <span style={{ fontSize: 24 }}>{icon}</span>
+              <span style={{ display: 'flex' }}><Icon size={24} /></span>
               <div style={{ fontSize: 13, fontWeight: 700, color: INK, fontFamily: FONT }}>{title}</div>
               <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.5, fontFamily: FONT }}>{desc}</div>
             </div>
@@ -203,10 +203,10 @@ export default function TermsOfServicePage() {
             <div style={{ background: WHITE, borderRadius: 12, padding: '14px', border: `1px solid ${BORDER}` }}>
               <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: MUTED, marginBottom: 10, fontFamily: FONT }}>Contents</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {TOC.map(({ id, title, icon }) => (
+                {TOC.map(({ id, title, icon: Icon }) => (
                   <button key={id} className="it-toc-btn" onClick={() => scrollTo(id)}
                     style={{ background: active === id ? `${A}14` : 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', padding: '7px 10px', borderRadius: 8, fontSize: 12, fontWeight: active === id ? 700 : 500, color: active === id ? A : '#4B5563', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 8, transition: 'all .15s' }}>
-                    <span style={{ fontSize: 13 }}>{icon}</span>{title}
+                    <Icon size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />{title}
                   </button>
                 ))}
               </div>
@@ -221,11 +221,11 @@ export default function TermsOfServicePage() {
               </p>
             </div>
 
-            {SECTIONS.map(({ id, icon, title, badge, badgeColor, body }) => (
+            {SECTIONS.map(({ id, icon: Icon, title, badge, badgeColor, body }) => (
               <div key={id} id={id} className="it-section"
                 style={{ background: WHITE, borderRadius: 14, overflow: 'hidden', border: `1px solid ${BORDER}` }}>
                 <div style={{ padding: '18px 22px 14px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                  <div style={{ width: 42, height: 42, borderRadius: 10, background: `${badgeColor}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{icon}</div>
+                  <div style={{ width: 42, height: 42, borderRadius: 10, background: `${badgeColor}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={20} /></div>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
                       <h2 style={{ fontSize: 15, fontWeight: 700, color: INK, fontFamily: FONT }}>{title}</h2>
@@ -246,7 +246,7 @@ export default function TermsOfServicePage() {
 
             {/* Contact */}
             <div style={{ background: `${A}10`, borderRadius: 14, padding: '26px 22px', border: `1px solid ${A}30`, textAlign: 'center' }}>
-              <div style={{ fontSize: 34, marginBottom: 10 }}>📩</div>
+              <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center' }}><Mail size={34} /></div>
               <h3 style={{ fontSize: 16, fontWeight: 700, color: INK, marginBottom: 8, fontFamily: FONT }}>Questions about these Terms?</h3>
               <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.6, marginBottom: 18, fontFamily: FONT }}>We'd rather clarify now than resolve disputes later.</p>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>

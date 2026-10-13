@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Facebook, Instagram, CheckCircle2, RefreshCw, Send, Info,
-  ShieldCheck, XCircle, Loader2,
-} from 'lucide-react';
+import {Facebook, Instagram, CheckCircle2, RefreshCw, Send, Info, ShieldCheck, XCircle, Loader2, Megaphone, Calendar, Image, Bot, Camera } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import BackButton from '../components/BackButton.jsx';
 import { apiGet, apiPatch } from '../services/api.js';
@@ -15,9 +12,9 @@ const PROVIDER_META = {
 };
 
 const CONTENT_TYPES = [
-  { key: 'notices',  label: 'School Notices',  emoji: '📢', fb: 'Text Post',    ig: '— Text only — no image' },
-  { key: 'events',   label: 'Events & Holidays', emoji: '📅', fb: 'Text Post',  ig: '— Text only — no image' },
-  { key: 'gallery',  label: 'Gallery Albums',  emoji: '🖼️', fb: 'Photo Post',   ig: 'Photo Post' },
+  { key: 'notices',  label: 'School Notices',  icon: Megaphone, fb: 'Text Post',    ig: '— Text only — no image' },
+  { key: 'events',   label: 'Events & Holidays', icon: Calendar, fb: 'Text Post',  ig: '— Text only — no image' },
+  { key: 'gallery',  label: 'Gallery Albums',  icon: Image, fb: 'Photo Post',   ig: 'Photo Post' },
 ];
 
 function StepList() {
@@ -137,7 +134,7 @@ export default function SocialMediaPage() {
           {/* Autopost behavior */}
           <div style={{ background: WHITE, border: `1.5px solid ${BLUE}33`, borderRadius: 14, padding: '18px 20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <span style={{ fontSize: 15 }}>🤖</span>
+              <span style={{ display: 'flex' }}><Bot size={15} /></span>
               <span style={{ fontSize: 13.5, fontWeight: 800, color: INK, fontFamily: FONT }}>Autopost Behavior</span>
             </div>
             <p style={{ fontSize: 12.5, color: MUTED, margin: '0 0 14px', lineHeight: 1.6, fontFamily: FONT }}>
@@ -156,7 +153,7 @@ export default function SocialMediaPage() {
                 <tbody>
                   {CONTENT_TYPES.map((c) => (
                     <tr key={c.key} style={{ borderTop: `1px solid ${BORDER}` }}>
-                      <td style={{ padding: '9px 10px', fontSize: 12.5, color: INK, fontWeight: 600 }}>{c.emoji} {c.label}</td>
+                      <td style={{ padding: '9px 10px', fontSize: 12.5, color: INK, fontWeight: 600 }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><c.icon size={13} color={BRAND} /> {c.label}</span></td>
                       <td style={{ padding: '9px 10px', fontSize: 12, color: GREEN, fontWeight: 700 }}>✓ {c.fb}</td>
                       <td style={{ padding: '9px 10px', fontSize: 12, color: c.ig.startsWith('—') ? MUTED2 : GREEN, fontWeight: c.ig.startsWith('—') ? 500 : 700 }}>{c.ig.startsWith('—') ? c.ig : `✓ ${c.ig}`}</td>
                     </tr>
@@ -184,7 +181,7 @@ export default function SocialMediaPage() {
             <StepList />
             <div style={{ height: 1, background: BORDER, margin: '16px 0' }} />
             <p style={{ fontSize: 12, color: MUTED, lineHeight: 1.6, margin: 0, fontFamily: FONT }}>
-              <b style={{ color: INK }}>📷 Instagram:</b> Your Facebook Page must have a linked <a href="#" style={{ color: AMBER, fontWeight: 700, textDecoration: 'none' }}>Instagram Business Account</a> for IG posting to work.
+              <b style={{ color: INK, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Camera size={13} /> Instagram:</b> Your Facebook Page must have a linked <a href="#" style={{ color: AMBER, fontWeight: 700, textDecoration: 'none' }}>Instagram Business Account</a> for IG posting to work.
             </p>
           </div>
 

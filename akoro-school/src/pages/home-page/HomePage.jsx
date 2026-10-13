@@ -3,7 +3,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, BookOpen, Plus, Eye, Clock, Video, Bot, ChevronRight, Zap, Wallet, Layers, Flame, CheckCircle2, Swords, GraduationCap } from 'lucide-react';
+import {Users, BookOpen, Plus, Eye, Clock, Video, Bot, ChevronRight, Zap, Wallet, Layers, Flame, CheckCircle2, Swords, GraduationCap, AlertTriangle } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import { Btn, Toast, Skeleton, Modal, Inp } from '../../components/Primitives.jsx';
 import { useStatsAPI } from '../../hooks/useStatsAPI.js';
@@ -100,7 +100,7 @@ export default function HomePage() {
 
   return (
     <PageLayout
-      title={`${greeting()}, ${user?.fullName?.split(' ')[0] || 'Instructor'} 👋`}
+      title={`${greeting()}, ${user?.fullName?.split(' ')[0] || 'Instructor'}`}
       subtitle="Here's what's happening today"
     >
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
@@ -112,7 +112,7 @@ export default function HomePage() {
             padding: '11px 14px', borderRadius: 12,
             background: '#FEF3C7', border: '1px solid #FDE68A', fontFamily: FONT,
           }}>
-            <span style={{ fontSize: 16 }}>⚠️</span>
+            <span style={{ display: 'flex' }}><AlertTriangle size={16} color="#B45309" /></span>
             <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: '#92400E' }}>
               {loadError} These figures may be incomplete.
             </span>
@@ -130,7 +130,7 @@ export default function HomePage() {
           gap: 16, marginBottom: 28,
         }}>
           <div onClick={() => navigate('/wallet')} style={{ cursor: 'pointer' }} title="View wallet & top up">
-            <StatCard icon={Wallet} label="Coin Balance" value={coins == null ? '—' : `🪙 ${coins.toLocaleString()}`} sub="tap to top up" color={AMBER} loading={coins == null} />
+            <StatCard icon={Wallet} label="Coin Balance" value={coins == null ? '—' : coins.toLocaleString()} sub="tap to top up" color={AMBER} loading={coins == null} />
           </div>
           <StatCard icon={Users}          label="Students"    value={(stats?.total_students ?? 0).toLocaleString()} sub="across the school" color={BLUE}   loading={loading} />
           <StatCard icon={GraduationCap}  label="Instructors" value={stats?.total_instructors ?? 0}                 sub="teaching staff"    color={AMBER}  loading={loading} />

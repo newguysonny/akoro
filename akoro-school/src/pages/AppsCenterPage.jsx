@@ -106,7 +106,7 @@ function AppCard({ item, busy, onBuy, onOpen }) {
       }}
     >
       <div style={{ width: 60, height: 60, borderRadius: 16, background: `${AMBER}14`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, marginBottom: 14 }}>
-        {item.emoji || (item._kind === 'tool' ? '🛠️' : '📚')}
+        {(() => { const I = item._kind === 'tool' ? Wrench : BookOpen; return <I size={28} color={AMBER} />; })()}
       </div>
 
       <h3 style={{ fontSize: 15.5, fontWeight: 800, color: INK, margin: '0 0 7px' }}>{item.name}</h3>

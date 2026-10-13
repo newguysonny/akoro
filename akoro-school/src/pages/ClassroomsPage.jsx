@@ -22,7 +22,7 @@ function CreateModal({ open, onClose, onDone, instructors }) {
     finally { setLoading(false); }
   };
   return (
-    <Modal open={open} onClose={onClose} title="🏫 Create a class">
+    <Modal open={open} onClose={onClose} title="Create a class">
       <form onSubmit={submit}>
         <Inp label="Class name" placeholder="e.g. SS2 Further Maths" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
         <Inp label="Description (optional)" placeholder="What is this class about?" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />

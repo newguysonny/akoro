@@ -51,7 +51,7 @@ export default function WalletPage() {
     <div style={{ maxWidth: 720, fontFamily: FONT }}>
       <div style={{ background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, borderRadius: 18, padding: '22px 20px', color: WHITE, marginBottom: 18 }}>
         <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.9, display: 'flex', alignItems: 'center', gap: 6 }}><WalletIcon size={15} /> Your balance</div>
-        <div style={{ fontSize: 40, fontWeight: 900, marginTop: 4 }}>🪙 {fmt(data?.balance)} <span style={{ fontSize: 16, fontWeight: 700, opacity: 0.9 }}>coins</span></div>
+        <div style={{ fontSize: 40, fontWeight: 900, marginTop: 4 }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Coins size={22} color={AMBER} /> {fmt(data?.balance)}</span> <span style={{ fontSize: 16, fontWeight: 700, opacity: 0.9 }}>coins</span></div>
       </div>
 
       <AdminOverview showToast={showToast} />

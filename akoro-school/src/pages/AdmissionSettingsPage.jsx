@@ -1,9 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Wallet, ListChecks, HelpCircle, Plus, Pencil, Trash2, Save, Loader2,
-  Share2, Copy, ExternalLink, Info, Download, QrCode as QrCodeIcon,
-} from 'lucide-react';
+import {Wallet, ListChecks, HelpCircle, Plus, Pencil, Trash2, Save, Loader2, Share2, Copy, ExternalLink, Info, Download, QrCode as QrCodeIcon, School } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { apiGet, apiPut, apiPost, apiDelete } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
@@ -248,7 +245,7 @@ export default function AdmissionSettingsPage() {
           <div style={{ flex: '1 1 260px', maxWidth: 300 }}>
             <p style={{ fontSize: 12.5, fontWeight: 700, color: INK, textAlign: 'center', margin: '0 0 10px', fontFamily: FONT }}>Digital Admission Card</p>
             <div style={{ background: `linear-gradient(160deg, #4338CA, #7C3AED)`, borderRadius: 16, padding: '20px 18px', textAlign: 'center' }}>
-              <div style={{ width: 44, height: 44, borderRadius: '50%', background: WHITE, margin: '0 auto 10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900, color: '#7C3AED' }}>🏫</div>
+              <div style={{ width: 44, height: 44, borderRadius: '50%', background: WHITE, margin: '0 auto 10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900, color: '#7C3AED' }}><School size={18} color="#7C3AED" /></div>
               <p style={{ fontSize: 15, fontWeight: 800, color: WHITE, margin: '0 0 2px', fontFamily: FONT }}>Akoro Demo Academy</p>
               <p style={{ fontSize: 11, color: 'rgba(255,255,255,.75)', margin: '0 0 16px', fontFamily: FONT }}>Admissions Open 2026-27</p>
               <div style={{ background: WHITE, borderRadius: 10, padding: 12, display: 'inline-block', marginBottom: 12 }}>

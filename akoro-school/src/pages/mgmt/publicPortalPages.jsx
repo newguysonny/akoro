@@ -47,7 +47,7 @@ export function OnlineAdmissionsPage() {
       const r = await apiPost(`${BASE}/admissions/${view.id}/admit`, admit);
       // The admission number is the one thing they need to write down, so it
       // stays on the page rather than behind an alert they must dismiss.
-      setOkMsg(`Admitted 🎉 Admission number: ${r.data.admission_no}`);
+      setOkMsg(`Admitted — Admission number: ${r.data.admission_no}`);
       setView(null); setAdmit({ class_id: '', admission_no: '' }); load();
     } catch (e) { setErr(e.message); }
     setBusy(false);
@@ -157,7 +157,7 @@ export function ResultPinsPage() {
     setBusy(true); setMsg('');
     try {
       const r = await apiPost(`${BASE}/result-pins/generate`, gen);
-      setMsg(r.generated ? `Generated ${r.generated} PIN${r.generated === 1 ? '' : 's'}. 🎉` : (r.message || 'Nothing to generate.'));
+      setMsg(r.generated ? `Generated ${r.generated} PIN${r.generated === 1 ? '' : 's'}.` : (r.message || 'Nothing to generate.'));
       setReload((n) => n + 1);
     } catch (e) { setMsg(e.message); }
     setBusy(false);
@@ -187,7 +187,7 @@ export function ResultPinsPage() {
         <button onClick={generate} disabled={busy} style={{ padding: '11px 22px', borderRadius: 9, border: 'none', background: AMBER, color: WHITE, fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'inline-flex', gap: 8, alignItems: 'center', opacity: busy ? .6 : 1 }}>
           <KeyRound size={15} /> {busy ? 'Generating…' : 'Generate PINs'}
         </button>
-        {msg && <div style={{ fontSize: 12.5, fontWeight: 700, color: msg.includes('🎉') ? GREEN : PURPLE, width: '100%' }}>{msg}</div>}
+        {msg && <div style={{ fontSize: 12.5, fontWeight: 700, color: msg.startsWith('Generated') ? GREEN : PURPLE, width: '100%' }}>{msg}</div>}
       </div>
       <ResourcePage key={reload} embedded title="" resource="result-pins" canCreate={false} canEdit={false}
         columns={[

@@ -352,7 +352,7 @@ export default function AiChatPage() {
       <Modal
         open={attachModal}
         onClose={() => setAttachModal(false)}
-        title={attachType === 'ocr' ? '📷 Photo / Image OCR' : attachType === 'doc' ? '📄 Upload Document' : '📎 Upload File'}
+        title={attachType === 'ocr' ? 'Photo / Image OCR' : attachType === 'doc' ? 'Upload Document' : 'Upload File'}
       >
         {attachType === 'ocr' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

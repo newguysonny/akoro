@@ -1,4 +1,4 @@
-import { AlertTriangle, Ban, Bot, ClipboardList, Copyright, CreditCard, GraduationCap, Link2, Lock, LogOut, Mail, Ruler, Scale, ScrollText, Settings, ShieldCheck, User , PencilLine , Archive } from 'lucide-react';
+import { AlertTriangle, Timer, Ban, Bot, ClipboardList, Copyright, CreditCard, GraduationCap, Link2, Lock, LogOut, Mail, Ruler, Scale, ScrollText, Settings, ShieldCheck, User , PencilLine , Archive } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AMBER, INK, MUTED, BORDER, WHITE, LIGHT, FONT } from '../constants.js';
@@ -175,7 +175,7 @@ export default function TermsOfServicePage() {
           Plain-language terms governing your use of the Akoro Instructor platform, your responsibilities as an educator, and how we work together.
         </p>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,.12)', borderRadius: 20, padding: '8px 18px' }}>
-          <span style={{ fontSize: 13, color: 'rgba(255,255,255,.9)', fontWeight: 700, fontFamily: FONT }}>⏱ About 5 min read · Last updated: 1 June 2025</span>
+          <span style={{ fontSize: 13, color: 'rgba(255,255,255,.9)', fontWeight: 700, fontFamily: FONT }}><Timer size={13} />About 5 min read · Last updated: 1 June 2025</span>
         </div>
       </div>
 

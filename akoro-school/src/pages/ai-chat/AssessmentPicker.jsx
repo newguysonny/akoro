@@ -73,7 +73,7 @@ export default function AssessmentPicker({ onClose, onStart }) {
                       {o.syllabus?.length > 0 && (
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
                           {o.syllabus.map((s, j) => (
-                            <span key={j} style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: '#F3F1F7', color: MUTED }}>📘 {s.topic}</span>
+                            <span key={j} style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: '#F3F1F7', color: MUTED }}>{s.topic}</span>
                           ))}
                         </div>
                       )}

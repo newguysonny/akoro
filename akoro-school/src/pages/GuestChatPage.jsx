@@ -9,7 +9,7 @@ import { API } from '../services/api.js';
 
 const FONT = "'Nunito', sans-serif";
 const BRAND = '#6C3BFF';
-const GREETING = "Hi! 👋 I'm the admissions assistant. Ask me anything about the school — programmes, fees, admissions — or I can book you a campus tour. How can I help?";
+const GREETING = "Hi! I'm the admissions assistant. Ask me anything about the school — programmes, fees, admissions — or I can book you a campus tour. How can I help?";
 const CHIPS = ['What grades do you offer?', 'How much is tuition?', 'Book a campus tour', 'How do I apply?'];
 
 export default function GuestChatPage() {

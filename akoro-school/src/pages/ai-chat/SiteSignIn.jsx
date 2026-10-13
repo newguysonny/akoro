@@ -13,7 +13,7 @@
  * proxy or a trailing-slash redirect to drop.
  */
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import {Loader2, Bot } from 'lucide-react';
 import { API } from '../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, RED, FONT } from '../../constants.js';
 
@@ -64,7 +64,7 @@ export default function SiteSignIn({ onSignedIn }) {
 
   return (
     <form onSubmit={submit} style={card}>
-      <div style={{ fontSize: 34, textAlign: 'center' }}>🤖</div>
+      <div style={{ display: 'flex', justifyContent: 'center' }}><Bot size={34} /></div>
       <h1 style={{ fontSize: 18, fontWeight: 800, color: INK, textAlign: 'center', margin: '8px 0 4px' }}>
         AI Study Assistant
       </h1>

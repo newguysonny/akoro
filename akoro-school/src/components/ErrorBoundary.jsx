@@ -1,3 +1,4 @@
+import { Frown } from 'lucide-react';
 /**
  * ErrorBoundary — the difference between "something broke" and a white screen.
  *
@@ -62,7 +63,7 @@ export default class ErrorBoundary extends Component {
 
     return (
       <div style={wrap}>
-        <div style={{ fontSize: 44 }}>😕</div>
+        <div><Frown size={44} color="#9490A0" /></div>
         <h1 style={{ fontSize: 19, fontWeight: 800, color: INK, margin: '4px 0 0' }}>
           This page ran into a problem
         </h1>

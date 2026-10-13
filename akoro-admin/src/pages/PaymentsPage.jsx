@@ -95,7 +95,7 @@ function TraceModal({ reference, onClose, onRefunded }) {
           }}>
             {data.reconciled
               ? '✓ Reconciled — our record and Paystack both show success'
-              : '⚠ Not reconciled — verify DB status against Paystack below'}
+              : 'Not reconciled — verify DB status against Paystack below'}
           </div>
 
           {/* Reference + Paystack live */}

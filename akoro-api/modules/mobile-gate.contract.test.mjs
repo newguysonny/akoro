@@ -247,17 +247,21 @@ test("the instructor chat reclaims the TopBar strip on phones", () => {
    agent_emoji field the learner/admin apps render, and the picker maps
    that translate a chosen icon into that stored value) — so lines that are
    pure data plumbing are allowed; anything rendered is not. */
-test("the instructor app renders no emoji — icons and SVGs only", async () => {
-  const { readdir } = await import("node:fs/promises");
-  const root = new URL("../../akoro-instructor/src", import.meta.url).pathname;
-  const pictograph = new RegExp(
+/* The pictograph ranges every console guard walks: the Misc Symbols and
+   Dingbats blocks, the emoji-only ranges, AND the small pictographs
+   (\u231A-\u23FF: watch, clock, hourglass…) that render as emoji on most
+   platforms even without a variation selector. */
+function pictographRe() {
+  return new RegExp(
     "[" + String.fromCodePoint(0x1f000) + "-" + String.fromCodePoint(0x1faff)
-    + "\u2600-\u2712\u2716-\u27BF\u2B00-\u2BFF\uFE0F\u2B50]", "gu",
+    + "\\u2600-\\u2712\\u231A-\\u23FF\\u203C\\u2049\\u2139\\u2716-\\u27BF\\u2B00-\\u2BFF\\u2934\\u2935\\u3030\\u303D\\u3297\\u3299\\uFE0F\\u2B50]", "gu",
   );
+}
+async function emojiOffenders(app, DATA_LINE) {
+  const { readdir } = await import("node:fs/promises");
+  const root = new URL(`../../${app}/src`, import.meta.url).pathname;
   // ✓ ✔ ✕ ✗ are typographic marks (ticks, crosses), not emoji — allowed.
   const TYPOGRAPHY = /[\u2713\u2714\u2715\u2717]/g;
-  // Data plumbing: emoji as STORED values, never rendered by this app.
-  const DATA_LINE = /AGENT_ICONS|GUIDE_ICONS|TYPE_ICON|KIND_META|useState\(|\?\?|emoji:|agentEmoji|selEmoji|guideEmoji|setEmoji|setAgentEmoji|setGuideEmoji|setSelEmoji|agent_emoji|emoji ===/;
   async function* walk(dir) {
     for (const e of await readdir(dir, { withFileTypes: true })) {
       const p = `${dir}/${e.name}`;
@@ -271,13 +275,41 @@ test("the instructor app renders no emoji — icons and SVGs only", async () => 
     src.split("\n").forEach((line, i) => {
       const t = line.trim();
       if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")) return;
-      pictograph.lastIndex = 0;
       const raw = line.replace(TYPOGRAPHY, "");
-      if (!pictograph.test(raw)) return;
+      if (!pictographRe().test(raw)) return;
       if (DATA_LINE.test(line)) return;
       offenders.push(`${file.slice(file.indexOf("src/") + 4)}:${i + 1}: ${t.slice(0, 90)}`);
     });
   }
+  return offenders;
+}
+
+test("the instructor app renders no emoji — icons and SVGs only", async () => {
+  const pictograph = pictographRe();
+  // ✓ ✔ ✕ ✗ are typographic marks (ticks, crosses), not emoji — allowed.
+  const TYPOGRAPHY = /[\u2713\u2714\u2715\u2717]/g;
+  // Data plumbing: emoji as STORED values, never rendered by this app.
+  const DATA_LINE = /AGENT_ICONS|GUIDE_ICONS|TYPE_ICON|KIND_META|useState\(|\?\?|emoji:|agentEmoji|selEmoji|guideEmoji|setEmoji|setAgentEmoji|setGuideEmoji|setSelEmoji|agent_emoji|emoji ===/;
+  assert.deepEqual(await emojiOffenders("akoro-instructor", DATA_LINE), [],
+    "rendered emoji found — replace with an icon or SVG");
+});
+
+test("the school app renders no emoji — icons and SVGs only", async () => {
+  // Same rule as the instructor console: icons are lucide or drawn SVGs.
+  // Emoji may still EXIST as stored data — agent/teacher avatar picks, the
+  // website builder's per-card emoji (user content rendered on their public
+  // site), and the dashboard-theme names whose spellings are stored prefs.
+  const offenders = await emojiOffenders("akoro-school",
+    /AGENT_ICONS|GUIDE_ICONS|GUIDE_EMOJIS|AGENT_AVATARS|EMOJI_ICONS|EMOJI_LIST|KIND_META|THEMES|Classic Dashboard|Mac OS Style|Futuristic Command|Analytics Pro|Executive Pro|useState\(|\?\?|emoji:|agentEmoji|agent_emoji|avatarEmoji|selEmoji|draftEmoji|setEmoji|setAgentEmoji|setDraftEmoji|setSelEmoji|emoji ===|\.emoji\b|placeholder/);
+  assert.deepEqual(offenders, [],
+    `rendered emoji found — replace with an icon or SVG:\n${offenders.join("\n")}`);
+});
+
+test("the admin app renders no emoji — icons and SVGs only", async () => {
+  // Same rule. Emoji survives only as the stored app/agent emoji the admin
+  // forms edit (rendered by other surfaces), never as this console's chrome.
+  const offenders = await emojiOffenders("akoro-admin",
+    /useState\(|\?\?|emoji:|\.emoji\b/);
   assert.deepEqual(offenders, [],
     `rendered emoji found — replace with an icon or SVG:\n${offenders.join("\n")}`);
 });
