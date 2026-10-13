@@ -11,7 +11,7 @@
  * (instructor-only) follows the component's own pattern: a tool renders only
  * when the host provides it.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, isValidElement } from 'react';
 import { Mic, Paperclip, ArrowUp, Sparkles, ChevronDown, Check, CheckSquare, AudioLines } from 'lucide-react';
 import { AMBER, INK, BORDER, FONT } from '../../constants.js';
 
@@ -81,11 +81,14 @@ export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelCha
           opacity: selectable ? 1 : .78,
         }}
       >
-        {typeof ChipIcon === 'function'
-          ? <ChipIcon size={13} color={AMBER} />
-          : (ChipIcon && typeof ChipIcon === 'object')
-            ? ChipIcon /* already an element (carries its own props) — never render it as a type */
-            : <Sparkles size={13} color={AMBER} />}
+        {/* icon is the COMPONENT (a lucide icon is a forwardRef OBJECT — never
+            branch on typeof); an element renders as-is, carrying its own
+            props. Rendering a component object as a child is React #31. */}
+        {ChipIcon == null
+          ? <Sparkles size={13} color={AMBER} />
+          : isValidElement(ChipIcon)
+            ? ChipIcon
+            : <ChipIcon size={13} color={AMBER} />}
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{modelLabel}</span>
         {selectable && <ChevronDown size={12} color="#8792A7" />}
       </button>

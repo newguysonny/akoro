@@ -333,3 +333,36 @@ test("the header uses the reference's exact glyphs — drawn, not approximated",
   assert.match(layouts["akoro-school"], /key: 'chat',\s*icon: ReferenceChatIcon/);
   assert.match(layouts["akoro-admin"], /key: 'messages',\s*icon: ReferenceChatIcon/);
 });
+
+test("no console calls a framework hook it never imports — the runtime-ReferenceError class", async () => {
+  // useLocation etc. resolve at RUNTIME; a bundler happily ships the call and
+  // the page dies on open (this exact crash shipped once). React and
+  // react-router hook names are safe to pin: nobody defines them locally.
+  const { readdir } = await import("node:fs/promises");
+  const HOOKS = ["useState","useEffect","useRef","useMemo","useCallback","useContext","useReducer",
+    "useLayoutEffect","useNavigate","useLocation","useSearchParams","useParams","useMatch","useResolvedPath"];
+  for (const app of APPS) {
+    const root = new URL(`../../${app}/src`, import.meta.url).pathname;
+    async function* walk(dir) {
+      for (const e of await readdir(dir, { withFileTypes: true })) {
+        const p2 = `${dir}/${e.name}`;
+        if (e.isDirectory()) yield* walk(p2);
+        else if (/\.(jsx|js)$/.test(e.name)) yield p2;
+      }
+    }
+    const bad = [];
+    for await (const file of walk(root)) {
+      const src2 = await readFile(file, "utf8");
+      const imported = new Set();
+      for (const m of src2.matchAll(/import\s*\{([^}]*)\}\s*from/g))
+        m[1].split(",").forEach((x) => { const n = x.trim(); if (n) imported.add(n); });
+      for (const m of src2.matchAll(/import\s+(\w+)\s+from/g)) imported.add(m[1]);
+      const body = src2.replace(/^import[^\n]*\n/gm, "");
+      for (const h of HOOKS) {
+        if (new RegExp(`(?<![.\\w])${h}\\s*\\(`).test(body) && !imported.has(h))
+          bad.push(`${file.slice(file.indexOf("src/") + 4)}: calls ${h} but never imports it`);
+      }
+    }
+    assert.deepEqual(bad, [], `${app}: missing framework-hook imports:\n${bad.join("\n")}`);
+  }
+});

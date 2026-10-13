@@ -1,4 +1,5 @@
 import { AlertTriangle, Ban, Copyright, CreditCard, DoorOpen, GraduationCap, Lock, Mail, Ruler, Scale, ScrollText, ShieldCheck, Timer, User } from 'lucide-react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AMBER, INK, MUTED, BORDER, WHITE, LIGHT, FONT } from '../constants.js';
 
