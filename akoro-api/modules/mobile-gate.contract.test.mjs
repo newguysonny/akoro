@@ -417,7 +417,11 @@ test("URL flow shells stay hook-free — the early-return crash class", async ()
     for (const part of parts) assert.ok(src2.includes(part), `${file}: missing ${part}`);
     const shell = src2.slice(src2.indexOf("export default function"), src2.indexOf("return <ActivitiesHome") !== -1
       ? src2.indexOf("return <ActivitiesHome") : src2.indexOf("return <CourseFlow"));
-    assert.ok(!/useState|useEffect|useNavigate|useLocation/.test(shell),
-      `${file}: the URL shell declares hooks — split the flow pages into components`);
+    assert.ok(!/useState|useEffect|useNavigate/.test(shell),
+      `${file}: the shell declares state/effect/navigate hooks — split the flow pages into components`);
+    // The branches must read the PATH (the flows are dedicated routes), not
+    // the query string — a query-only shell made every click a no-op.
+    assert.match(shell, /useLocation\(\)/, `${file}: the shell must read the location`);
+    assert.match(shell, /pathname/, `${file}: routing must branch on the pathname`);
   }
 });
