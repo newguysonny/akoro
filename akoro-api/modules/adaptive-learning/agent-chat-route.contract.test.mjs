@@ -277,6 +277,11 @@ test("the instructor composer is the learner composer, exactly — stop, menu, s
   assert.match(instructorChatPage, /import FortizoChatComposer, \{ ModelSwitch \} from/);
   assert.match(instructorChatPage, /hideModelMenu\n/);
   assert.match(instructorChatPage, /marginTop: 8 \}\}>\s*\n\s*<ModelSwitch/);
+  // The chip icon must be the COMPONENT (ModelSwitch renders it with its own
+  // size/colour). Passing a JSX element here crashes the whole AI chat with
+  // React error #130 (element object used as an element type).
+  assert.match(instructorChatPage, /icon=\{Cpu\}/, 'ChatPage passes the Cpu component, not an element');
+  assert.doesNotMatch(instructorChatPage, /icon=\{<Cpu/, 'ChatPage must not pass a JSX element as the ModelSwitch icon');
   assert.match(instructorChatPage, /const stopTurn = \(\) => \{ abortRef\.current\?\.abort\(\); \};/);
   assert.match(instructorChatPage, /signal,/);
   // a Stop is user intent — never retried

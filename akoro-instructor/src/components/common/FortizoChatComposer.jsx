@@ -81,7 +81,11 @@ export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelCha
           opacity: selectable ? 1 : .78,
         }}
       >
-        {ChipIcon ? <ChipIcon size={13} color={AMBER} /> : <Sparkles size={13} color={AMBER} />}
+        {typeof ChipIcon === 'function'
+          ? <ChipIcon size={13} color={AMBER} />
+          : (ChipIcon && typeof ChipIcon === 'object')
+            ? ChipIcon /* already an element (carries its own props) — never render it as a type */
+            : <Sparkles size={13} color={AMBER} />}
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{modelLabel}</span>
         {selectable && <ChevronDown size={12} color="#8792A7" />}
       </button>
