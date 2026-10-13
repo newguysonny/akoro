@@ -5,10 +5,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Upload, Download, FileUp, Image as ImageIcon, Loader2, CheckCircle2,
-  XCircle, Info, ChevronDown, ChevronUp, FileArchive, History, Server, Users,
-} from 'lucide-react';
+import {Upload, Download, FileUp, Image as ImageIcon, Loader2, CheckCircle2, XCircle, Info, ChevronDown, ChevronUp, FileArchive, History, Server, Users, Lightbulb } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import BackButton from '../../components/BackButton.jsx';
 import { inputStyle } from '../../components/mgmt/ResourcePage.jsx';
@@ -146,7 +143,7 @@ function ImportHistory({ kind, reloadKey }) {
     <Card icon={History} title="Recent Import History" color={PURPLE}>
       {rows === null ? <Loader2 size={16} style={{ animation: 'spin .8s linear infinite' }} /> : rows.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '22px 0', color: MUTED2 }}>
-          <div style={{ fontSize: 22, marginBottom: 6 }}>📥</div>
+          <div style={{ marginBottom: 6, display: 'flex', justifyContent: 'center' }}><Upload size={22} /></div>
           <p style={{ fontSize: 12.5, margin: 0 }}>No recent imports. Upload a file to get started.</p>
         </div>
       ) : (
@@ -474,7 +471,7 @@ export function BulkDocumentUploadPage() {
           </div>
         </div>
         <div style={{ background: `${BLUE}0C`, border: `1px solid ${BLUE}33`, borderRadius: 8, padding: '8px 12px', fontSize: 11.5, color: MUTED, marginBottom: 10 }}>
-          💡 <b>Tip:</b> One student can have multiple documents. Just add more rows in the CSV with the same admission number.
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Lightbulb size={13} color={AMBER} /> <b>Tip:</b></span> One student can have multiple documents. Just add more rows in the CSV with the same admission number.
         </div>
         <div>
           <span style={{ fontSize: 11, fontWeight: 800, color: INK }}>Supported Formats: </span>

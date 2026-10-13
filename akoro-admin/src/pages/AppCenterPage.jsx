@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Store, Plus, Edit2, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
+import {Store, Plus, Edit2, Trash2, ToggleLeft, ToggleRight, Wrench, BookOpen } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Toast, Skeleton, Inp } from '../components/Primitives.jsx';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
@@ -158,7 +158,7 @@ export default function AppCenterPage() {
             <tbody>
               {filtered.map((it) => (
                 <tr key={it.id} style={{ borderTop: `1px solid ${BORDER}`, opacity: it.isActive ? 1 : 0.55 }}>
-                  <td style={{ ...td, fontSize: 20 }}>{it.emoji}</td>
+                  <td style={{ ...td, fontSize: 20 }}>{(() => { const I = it.kind === 'tool' ? Wrench : BookOpen; return <I size={20} color={AMBER} />; })()}</td>
                   <td style={{ ...td, fontWeight: 700, color: INK }}>
                     {it.name}
                     {it.description && <div style={{ fontSize: 11.5, color: MUTED2, fontWeight: 400, marginTop: 2, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.description}</div>}

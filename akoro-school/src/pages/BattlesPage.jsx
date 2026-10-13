@@ -136,11 +136,11 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
             <div style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, marginBottom: 7 }}>Battle type *</div>
             <div style={{ display: 'flex', gap: 6 }}>
               {[
-                { key: 'course', label: '📘 Course battle', hint: courses.length ? "From a course's question bank" : 'No courses yet', off: !courses.length },
-                { key: 'class',  label: '🏫 Class battle',  hint: classesLoading ? 'Loading…' : classes.length ? 'From a class subject' : 'No classes yet', off: !classesLoading && !classes.length },
+                { key: 'course', label: 'Course battle', hint: courses.length ? "From a course's question bank" : 'No courses yet', off: !courses.length },
+                { key: 'class',  label: 'Class battle',  hint: classesLoading ? 'Loading…' : classes.length ? 'From a class subject' : 'No classes yet', off: !classesLoading && !classes.length },
                 // Not a contest: one learner, no opponent, no winner — a mark
                 // sheet at the end saying what they knew.
-                { key: 'review', label: '📋 Study review',  hint: classesLoading ? 'Loading…' : classes.length ? 'One learner, mark sheet' : 'No classes yet', off: !classesLoading && !classes.length },
+                { key: 'review', label: 'Study review',  hint: classesLoading ? 'Loading…' : classes.length ? 'One learner, mark sheet' : 'No classes yet', off: !classesLoading && !classes.length },
               ].map(o => (
                 <button key={o.key} type="button" disabled={o.off}
                   onClick={() => setField('kind', o.key)}
@@ -361,10 +361,10 @@ function ParticipantsModal({ open, onClose, battleId }) {
                   display: 'flex', alignItems: 'center', gap: 9, padding: '9px 11px',
                   border: `1px solid ${BORDER}`, borderRadius: 10, background: WHITE,
                 }}>
-                  <span style={{ fontSize: 16 }}>{p.emoji || '🧑‍🎓'}</span>
+                  <span style={{ width: 22, height: 22, borderRadius: '50%', background: LIGHT, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900, color: MUTED }}>{(p.fullName || 'P').trim().charAt(0).toUpperCase()}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>
-                      {p.fullName}{p.isWinner && <span title="Winner"> 🏆</span>}
+                      {p.fullName}{p.isWinner && <span title="Winner" style={{ display: 'inline-flex', verticalAlign: '-2px', marginLeft: 4 }}><Trophy size={11} color={AMBER} /></span>}
                     </div>
                     <div style={{ fontSize: 11, color: MUTED }}>@{p.username}</div>
                   </div>
@@ -545,7 +545,7 @@ function BattleCard({ battle, onStart, onEdit, onDelete, onViewParticipants, onW
           style={{ border: 'none', padding: 0, background: 'none', cursor: 'pointer' }}
         >
           <Badge color={BLUE} bg="#EFF6FF">
-            {isReview ? <>📋 Review</> : <><Users size={10} style={{ marginRight: 2 }} />{battle.participantCount}</>}
+            {isReview ? <><ClipboardList size={10} style={{ marginRight: 2 }} />Review</> : <><Users size={10} style={{ marginRight: 2 }} />{battle.participantCount}</>}
           </Badge>
         </button>
         <Badge color={MUTED} bg={LIGHT}><Clock size={10} style={{ marginRight: 2 }} />{battle.durationMin}min</Badge>

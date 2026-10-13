@@ -2,10 +2,7 @@
  * StudentsPage — constants + child components.
  */
 import { useState, useEffect, useRef } from 'react';
-import {
-  Search, Plus, X, User, Mail, Calendar, BookOpen, TrendingUp,
-  Trash2, ChevronRight, Copy, Check, Upload, Download, Link2, UserPlus,
-} from 'lucide-react';
+import {Search, Plus, X, User, Mail, Calendar, BookOpen, TrendingUp, Trash2, ChevronRight, Copy, Check, Upload, Download, Link2, UserPlus, PencilLine, ClipboardList } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { PageLayout } from '../../components/Layout.jsx';
 import { Btn, Modal, Inp, StatusPill, Toast } from '../../components/Primitives.jsx';
@@ -290,13 +287,13 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
       {/* Tab bar */}
       <div style={{ display: 'flex', background: LIGHT, borderRadius: 10, padding: 4, marginBottom: 20, gap: 2 }}>
         <button style={TAB_STYLE(tab === 'manual')} onClick={() => { setTab('manual'); reset(); }}>
-          ✏️ Manual Entry
+          <PencilLine size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />Manual Entry
         </button>
         <button style={TAB_STYLE(tab === 'invite')} onClick={() => { setTab('invite'); reset(); }}>
-          📧 Invite Link
+          <Mail size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />Invite Link
         </button>
         <button style={TAB_STYLE(tab === 'csv')} onClick={() => { setTab('csv'); reset(); }}>
-          📋 Bulk CSV
+          <ClipboardList size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />Bulk CSV
         </button>
       </div>
 

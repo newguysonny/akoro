@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { BookMarked, Upload, FileText, Table2, PenLine, Trash2, Plus } from 'lucide-react';
+import {BookMarked, Upload, FileText, Table2, PenLine, Trash2, Plus, AlertTriangle } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Toast, Skeleton } from '../components/Primitives.jsx';
 import SyllabusEditor from './syllabus/SyllabusEditor.jsx';
@@ -242,7 +242,7 @@ export default function SyllabusPage() {
             </label>
             {notice && (
               <div style={{ marginTop: 12, padding: '11px 13px', borderRadius: 10, background: '#FEF3C7', border: '1px solid #FDE68A', color: '#92400E', fontSize: 12.5, fontWeight: 600, lineHeight: 1.55, fontFamily: FONT }}>
-                <div style={{ fontWeight: 800, marginBottom: 3 }}>⚠️ This PDF looks scanned</div>
+                <div style={{ fontWeight: 800, marginBottom: 3, display: 'flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={13} color="#D97706" /> This PDF looks scanned</div>
                 {notice}
               </div>
             )}

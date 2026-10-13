@@ -5,7 +5,7 @@
  * layout, but shows only the boards that rank PEOPLE — see BOARDS below.
  */
 import { useState, useEffect } from 'react';
-import { X, Zap } from 'lucide-react';
+import {X, Zap, School, Trophy, BookOpen, Medal, Crown, Users } from 'lucide-react';
 import { apiGet } from '../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GOLD, FONT } from '../../constants.js';
 
@@ -14,11 +14,11 @@ import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GOLD, FONT } from '../
 // those rank courses and schools against each other — a student opening them
 // never appears in the list, which is confusing on their own school's site.
 const BOARDS = [
-  { key: 'classroom', label: 'My class',  icon: '🏫', endpoint: '/api/ranking/my-classroom',
+  { key: 'classroom', label: 'My class',  icon: School, endpoint: '/api/ranking/my-classroom',
     empty: 'No one in your class has earned XP yet.' },
-  { key: 'school',    label: 'My school',  icon: '🏆', endpoint: '/api/ranking/my-school',
+  { key: 'school',    label: 'My school',  icon: Trophy, endpoint: '/api/ranking/my-school',
     empty: 'No one in your school has earned XP yet.' },
-  { key: 'subjects',  label: 'Subjects',   icon: '📚', endpoint: '/api/ranking/my-class-subjects',
+  { key: 'subjects',  label: 'Subjects',   icon: BookOpen, endpoint: '/api/ranking/my-class-subjects',
     empty: 'No subject XP in your class yet.' },
 ];
 
@@ -96,7 +96,7 @@ export default function RankingSheet({ onClose }) {
         <style>{`@keyframes rank-up{from{transform:translateY(100%)}to{transform:translateY(0)}}`}</style>
 
         <div style={{ display: 'flex', alignItems: 'center', padding: '14px 16px 8px', borderBottom: `1px solid ${BORDER}` }}>
-          <div style={{ fontSize: 15.5, fontWeight: 900, color: INK }}>🏆 Rankings</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 15.5, fontWeight: 900, color: INK }}><Trophy size={15} color={AMBER} /> Rankings</div>
           <button onClick={onClose} aria-label="Close" style={{ marginLeft: 'auto', width: 30, height: 30, borderRadius: '50%', border: 'none', background: LIGHT, color: MUTED, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <X size={16} />
           </button>
@@ -139,7 +139,7 @@ export default function RankingSheet({ onClose }) {
             <div style={{ padding: '40px 24px', textAlign: 'center', color: MUTED2, fontSize: 13, fontWeight: 600 }}>Loading rankings…</div>
           ) : rows.length === 0 ? (
             <div style={{ padding: '40px 24px', textAlign: 'center' }}>
-              <div style={{ fontSize: 46, opacity: .2 }}>🏆</div>
+              <div style={{ opacity: .25, display: 'flex', justifyContent: 'center' }}><Trophy size={46} color={MUTED} /></div>
               <p style={{ fontSize: 14.5, fontWeight: 800, color: MUTED, margin: '10px 0 4px' }}>No rankings yet</p>
               <p style={{ fontSize: 12, color: MUTED2, margin: 0 }}>{BOARDS.find((b) => b.key === board)?.empty} Earn XP from lessons and assessments to climb the board.</p>
             </div>
@@ -147,14 +147,14 @@ export default function RankingSheet({ onClose }) {
             <>
               {/* Podium */}
               <div style={{ padding: '16px 16px 12px', background: `linear-gradient(160deg, ${AMBER}12, ${AMBER}04)`, borderBottom: `1px solid ${BORDER}` }}>
-                <p style={{ fontSize: 10, fontWeight: 800, color: AMBER, letterSpacing: .5, margin: '0 0 12px', textAlign: 'center' }}>🏆 TOP LEADERBOARD</p>
+                <p style={{ fontSize: 10, fontWeight: 800, color: AMBER, letterSpacing: .5, margin: '0 0 12px', textAlign: 'center' }}>TOP LEADERBOARD</p>
                 <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 10 }}>
                   {podium[1] && (
                     <div style={col}>
                       <Avatar r={podium[1]} size={46} ring={SILVER} />
                       <span style={nameSm}>{podium[1].name}</span>
                       <div style={{ ...plinth, width: 58, background: SILVER }}>
-                        <span style={{ fontSize: 16 }}>🥈</span>
+                        <Medal size={16} color={SILVER} />
                         <p style={xpSm}>{podium[1].xp.toLocaleString()}</p><p style={xpLbl}>XP</p>
                       </div>
                     </div>
@@ -163,11 +163,11 @@ export default function RankingSheet({ onClose }) {
                     <div style={{ ...col, marginBottom: -4 }}>
                       <div style={{ position: 'relative' }}>
                         <Avatar r={podium[0]} size={58} ring={GOLD} />
-                        <div style={{ position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)', fontSize: 18 }}>👑</div>
+                        <div style={{ position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)' }}><Crown size={18} color={GOLD} /></div>
                       </div>
                       <span style={{ ...nameSm, fontWeight: 900, color: INK, maxWidth: 80 }}>{podium[0].name}</span>
                       <div style={{ ...plinth, width: 68, background: `linear-gradient(135deg, ${GOLD}, #D97706)` }}>
-                        <span style={{ fontSize: 18 }}>🥇</span>
+                        <Medal size={18} color={GOLD} />
                         <p style={{ ...xpSm, fontSize: 11 }}>{podium[0].xp.toLocaleString()}</p><p style={xpLbl}>XP</p>
                       </div>
                     </div>
@@ -177,7 +177,7 @@ export default function RankingSheet({ onClose }) {
                       <Avatar r={podium[2]} size={40} ring={BRONZE} />
                       <span style={{ ...nameSm, maxWidth: 60 }}>{podium[2].name}</span>
                       <div style={{ ...plinth, width: 52, background: BRONZE }}>
-                        <span style={{ fontSize: 14 }}>🥉</span>
+                        <Medal size={14} color={BRONZE} />
                         <p style={xpSm}>{podium[2].xp.toLocaleString()}</p><p style={xpLbl}>XP</p>
                       </div>
                     </div>
@@ -198,7 +198,7 @@ export default function RankingSheet({ onClose }) {
                     {(r.subject || r.students !== undefined) && (
                       <div style={{ fontSize: 10.5, color: MUTED2, fontWeight: 600, marginTop: 2 }}>
                         {r.subject && <>{r.subject}</>}
-                        {r.students !== undefined && <> 👥 {r.students} students</>}
+                        {r.students !== undefined && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><Users size={11} /> {r.students} students</span>}
                       </div>
                     )}
                   </div>

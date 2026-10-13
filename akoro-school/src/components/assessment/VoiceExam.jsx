@@ -1,4 +1,5 @@
 /**
+import {Bot, Mic } from 'lucide-react';
  * VoiceExam — the exam phase as a voice-agent experience.
  * A small proctor ring avatar (top-left) whose border reflects face presence +
  * the server proctor result; a large central agent orb that reacts to
@@ -73,7 +74,7 @@ export default function VoiceExam({
           <div style={{ width: 132, height: 132, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 54, background: `radial-gradient(circle at 50% 35%, ${BRAND}, #2A0E66)`,
             boxShadow: `0 0 46px ${orbGlow}`, transform: `scale(${orbScale})`, transition: 'transform .18s ease' }}>
-            {agentEmoji}
+            <Bot size={26} color="#fff" />
           </div>
         </div>
 
@@ -109,7 +110,7 @@ export default function VoiceExam({
           )}
         </button>
         <div style={{ fontSize: 12, color: '#64748B', fontWeight: 700 }}>{listening ? 'Tap to send your answer' : 'Hold a quiet space · stay in frame'}</div>
-        {voiceError && <div style={{ fontSize: 12, color: '#FCA5A5', fontWeight: 700, maxWidth: 420, textAlign: 'center' }}>🎙 {voiceError} — you can type your answer below instead.</div>}
+        {voiceError && <div style={{ fontSize: 12, color: '#FCA5A5', fontWeight: 700, maxWidth: 420, textAlign: 'center' }}><Mic size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />{voiceError} — you can type your answer below instead.</div>}
 
         <button onClick={() => setShowType(s => !s)} style={{ background: 'none', border: 'none', color: '#64748B', fontSize: 12, fontWeight: 800, cursor: 'pointer', textDecoration: 'underline' }}>
           {showType ? 'Hide typing' : 'Type instead'}

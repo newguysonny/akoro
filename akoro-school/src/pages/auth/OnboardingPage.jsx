@@ -1,4 +1,5 @@
 import AkoroLogo from '../../components/common/AkoroLogo.jsx';
+import { Brain, GraduationCap, BookOpen, Bot, Lightbulb, Bird, Zap, Sparkles, Eye, Rocket, Target, Ban } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext.jsx';
@@ -13,7 +14,9 @@ const CURRICULA        = ['Nigerian (WAEC/NECO)', 'British / Cambridge', 'Montes
 const GENDER_TYPES     = ['Mixed', 'Boys only', 'Girls only'];
 const BOARDING_TYPES   = ['Day only', 'Boarding only', 'Day & Boarding'];
 const STUDENT_BANDS    = ['1 – 100', '101 – 300', '301 – 600', '601 – 1,000', '1,000+'];
-const GUIDE_EMOJIS     = ['🧠', '🎓', '📚', '🤖', '💡', '🦉', '⚡', '🌟', '🔮', '🚀', '🎯', '📘'];
+/* Icons render; the paired emoji is what agent_emoji stores (cross-app compat). */
+const GUIDE_ICONS      = [[Brain, '🧠'], [GraduationCap, '🎓'], [BookOpen, '📚'], [Bot, '🤖'], [Lightbulb, '💡'], [Bird, '🦉'], [Zap, '⚡'], [Sparkles, '🌟'], [Eye, '🔮'], [Rocket, '🚀'], [Target, '🎯'], [Ban, '📘']];
+const GUIDE_EMOJIS     = GUIDE_ICONS.map(([, em]) => em);
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
@@ -130,7 +133,7 @@ export default function OnboardingPage() {
       <div style={{ width: '100%', maxWidth: 460, background: '#fff', borderRadius: 24, padding: '28px 26px', boxShadow: '0 4px 32px rgba(0,0,0,.07)', border: '1px solid #EDE8E1' }}>
         {step === 0 && (
           <>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>Welcome 👋</h1>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>Welcome</h1>
             <p style={{ fontSize: 13, color: '#6B6B80', margin: '0 0 22px' }}>Tell us about your school.</p>
             <div style={{ marginBottom: 14 }}>
               <label style={lbl}>School name</label>
@@ -234,7 +237,7 @@ export default function OnboardingPage() {
 
         {step === 2 && (
           <>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>Your school assistant 🤖</h1>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>Your school assistant</h1>
             <p style={{ fontSize: 13, color: '#6B6B80', margin: '0 0 20px' }}>Give your school's AI assistant a name and face. It helps students learn and answers their questions.</p>
 
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
@@ -248,8 +251,8 @@ export default function OnboardingPage() {
 
             <label style={lbl}>Pick an avatar</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 2 }}>
-              {GUIDE_EMOJIS.map((em) => (
-                <button key={em} type="button" onClick={() => setAgentEmoji(em)} style={{ width: 46, height: 46, borderRadius: 12, fontSize: 22, cursor: 'pointer', background: agentEmoji === em ? '#FFF3EA' : '#fff', border: `1.5px solid ${agentEmoji === em ? AMBER : '#EDE8E1'}` }}>{em}</button>
+              {GUIDE_ICONS.map(([Icon, em]) => (
+                <button key={em} type="button" onClick={() => setAgentEmoji(em)} style={{ width: 46, height: 46, borderRadius: 12, fontSize: 22, cursor: 'pointer', background: agentEmoji === em ? '#FFF3EA' : '#fff', border: `1.5px solid ${agentEmoji === em ? AMBER : '#EDE8E1'}` }}><Icon size={22} color={agentEmoji === em ? AMBER : MUTED2} /></button>
               ))}
             </div>
           </>

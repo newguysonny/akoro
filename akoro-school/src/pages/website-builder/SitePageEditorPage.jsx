@@ -4,11 +4,7 @@
  */
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  Plus, Pencil, Trash2, RotateCcw, Save, Loader2, FileText, X,
-  ChevronUp, ChevronDown, Link2, Menu as MenuIcon, Image as ImageIcon, UploadCloud,
-  Sparkles, Type, LayoutGrid, Minus, Code, GripVertical,
-} from 'lucide-react';
+import {Plus, Pencil, Trash2, RotateCcw, Save, Loader2, FileText, X, ChevronUp, ChevronDown, Link2, Menu as MenuIcon, Image as ImageIcon, UploadCloud, Sparkles, Type, LayoutGrid, Minus, Code, GripVertical, PencilLine, Image } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import BackButton from '../../components/BackButton.jsx';
 import ResourcePage, { inputStyle } from '../../components/mgmt/ResourcePage.jsx';
@@ -220,8 +216,8 @@ export function SitePageEditorPage() {
                   </div>
                 )}
                 <p style={{ fontSize: 11.5, color: MUTED2, fontFamily: FONT, lineHeight: 1.55, margin: '0 0 12px' }}>
-                  ✏️ Click any text on the page and type to change it.<br />
-                  🖼️ Double-click an image to replace it from the library.
+                  <PencilLine size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />Click any text on the page and type to change it.<br />
+                  <Image size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />Double-click an image to replace it from the library.
                 </p>
                 <button onClick={() => setShowCode((v) => !v)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: `1.5px solid ${BORDER}`, background: showCode ? LIGHT : WHITE, color: MUTED, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
                   <Code size={12} /> {showCode ? 'Back to visual editing' : 'Edit HTML (advanced)'}

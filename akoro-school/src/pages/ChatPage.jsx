@@ -1,9 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Send, Plus, Brain, Edit3, CheckSquare, X, Paperclip, Camera,
-  Upload, FileText, ScanLine, Loader, CheckCircle2,
-} from 'lucide-react';
+import {Send, Plus, Brain, Edit3, CheckSquare, X, Paperclip, Camera, Upload, FileText, ScanLine, Loader, CheckCircle2, Bot, Eye, Zap, Orbit, Sparkles, Triangle, Moon, Gem, Rocket, Target, Bird, Unlock } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, FileUploadZone, Toast } from '../components/Primitives.jsx';
 import TrainingProgress from '../components/TrainingProgress.jsx';
@@ -19,7 +16,8 @@ import {
 
 const bdr = (w, c) => `${w}px solid ${c}`;
 
-const AGENT_AVATARS = ['🤖', '🔮', '⚡', '🌀', '✨', '🔺', '🌙', '💎', '🦊', '🧠', '🚀', '🎯'];
+/* Icons render; the paired emoji is what agent_emoji stores (cross-app compat). */
+const AGENT_AVATARS = [[Bot, '🤖'], [Eye, '🔮'], [Zap, '⚡'], [Orbit, '🌀'], [Sparkles, '✨'], [Triangle, '🔺'], [Moon, '🌙'], [Gem, '💎'], [Bird, '🦊'], [Brain, '🧠'], [Rocket, '🚀'], [Target, '🎯']];
 
 const CHAT_INIT = [
   { id: 1, from: 'agent', text: "Good morning! I'm ready to help — training, quizzes, reminders, or student reports. What do you need?", time: '8:01 AM' },
@@ -114,7 +112,7 @@ export default function ChatPage() {
   // ── WebSocket: agent task completion pushes a reply ──
   useEffect(() => {
     const handler = (evt) => {
-      pushAgent(evt?.message ?? evt?.text ?? '✅ Task completed.');
+      pushAgent(evt?.message ?? evt?.text ?? 'Task completed.');
     };
     on('task.completed', handler);
     return () => off('task.completed', handler);
@@ -124,7 +122,7 @@ export default function ChatPage() {
   useEffect(() => {
     const handler = (evt) => {
       loadMyTools();
-      if (evt?.toolName) setToast({ message: `🔓 ${evt.toolName} unlocked`, type: 'success' });
+      if (evt?.toolName) setToast({ message: `${evt.toolName} unlocked`, type: 'success' });
     };
     on('tool_unlocked', handler);
     return () => off('tool_unlocked', handler);
@@ -239,7 +237,7 @@ export default function ChatPage() {
       console.warn('[chat] training upload failed:', e.message);
       setTrainingInChat(false);
       setTrainFile(null);
-      pushAgent(`⚠️ Training couldn't start: ${e.message}. Please try again.`);
+      pushAgent(`Training couldn't start: ${e.message}. Please try again.`);
     }
   };
 
@@ -247,12 +245,12 @@ export default function ChatPage() {
     setTrainingInChat(false);
     setTrainRunId(null);
     setTrainFile(null);
-    if (!summary) { pushAgent(`🎓 Training complete! ${agentName} has absorbed your material.`); return; }
+    if (!summary) { pushAgent(`Training complete! ${agentName} has absorbed your material.`); return; }
 
     const seg = summary.segmentBreakdown || {};
     const segLines = Object.entries(seg).map(([k, v]) => `• ${v} ${k.replace(/_/g, ' ')}`).join('\n');
     pushAgent(
-      `🎓 Training complete!\n\n${agentName} learned from ${summary.fileOriginal || 'your recording'} on ${summary.subject || trainSubj}.\n\n` +
+      `Training complete!\n\n${agentName} learned from ${summary.fileOriginal || 'your recording'} on ${summary.subject || trainSubj}.\n\n` +
       `• ${summary.chunksStored ?? 0} knowledge chunks embedded\n` +
       (segLines ? segLines + '\n' : '') +
       `• Teaching style: ${summary.styleProfile?.pattern || 'captured'} · ${summary.styleProfile?.tone || ''}\n` +
@@ -265,7 +263,7 @@ export default function ChatPage() {
     setTrainingInChat(false);
     setTrainRunId(null);
     setTrainFile(null);
-    pushAgent('⚠️ Training run failed during processing. Please check the file and try again.');
+    pushAgent('Training run failed during processing. Please check the file and try again.');
   };
 
   // ── Attachment / OCR ──
@@ -291,11 +289,11 @@ export default function ChatPage() {
 
   const sendAttachment = () => {
     if (attachType === 'ocr' && ocrText) {
-      pushMe('📷 Scanned image · OCR result:\n\n' + ocrText);
+      pushMe('Scanned image · OCR result:\n\n' + ocrText);
     } else if (attachFile) {
-      pushMe(`📎 Attachment sent · ${attachFile.fileName}`);
+      pushMe(`Attachment sent · ${attachFile.fileName}`);
     } else {
-      pushMe('📎 Attachment sent');
+      pushMe('Attachment sent');
     }
     setAttachModal(false); setOcrText(''); setOcrRunning(false); setOcrError(''); setAttachFile(null);
     setTimeout(() => pushAgent("Got it! I've received your attachment and I'm processing it now."), 700);
@@ -343,7 +341,7 @@ export default function ChatPage() {
         {/* Agent header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: WHITE, borderRadius: 16, border: bdr(1, BORDER), marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 42, height: 42, borderRadius: '50%', background: '#FEF0E6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 21, boxShadow: `0 0 0 2px #fff, 0 0 0 3.5px ${AMBER}` }}>{agentEmoji}</div>
+            <div style={{ width: 42, height: 42, borderRadius: '50%', background: '#FEF0E6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 21, boxShadow: `0 0 0 2px #fff, 0 0 0 3.5px ${AMBER}` }}><Bot size={21} color={AMBER} /></div>
             <div>
               <div style={{ fontWeight: 800, color: INK, fontSize: 15 }}>{agentName}</div>
               <div style={{ fontSize: 11, color: trainingInChat ? AMBER : GREEN, display: 'flex', alignItems: 'center', gap: 4, marginTop: 1 }}>
@@ -372,7 +370,7 @@ export default function ChatPage() {
             })
           ) : (
             <button className="ci-qp" onClick={() => navigate('/marketplace')} title="Unlock tools & assets for your agent">
-              🔒 Unlock tools
+              <Unlock size={13} /> Unlock tools
             </button>
           )}
         </div>
@@ -385,7 +383,7 @@ export default function ChatPage() {
             const textPart = chips.length ? msg.text.replace(chips.join(' · '), '').replace(/^\n/, '').trim() : msg.text;
             return (
               <div key={msg.id} style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: 8 }}>
-                {!isMe && <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#FEF0E6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}>{agentEmoji}</div>}
+                {!isMe && <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#FEF0E6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}><Bot size={15} color={AMBER} /></div>}
                 <div style={{ maxWidth: '80%' }}>
                   {isMe && msg.isTask && (
                     <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
@@ -433,7 +431,7 @@ export default function ChatPage() {
 
           {!trainingInChat && messages[messages.length - 1]?.from === 'me' && !messages[messages.length - 1]?.isTask && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#FEF0E6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>{agentEmoji}</div>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#FEF0E6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}><Bot size={15} color={AMBER} /></div>
               <div style={{ padding: '10px 15px', borderRadius: '17px 17px 17px 4px', background: '#F0ECE6', display: 'flex', gap: 2 }}>
                 <span className="ci-typing" /><span className="ci-typing" style={{ animationDelay: '.2s' }} /><span className="ci-typing" style={{ animationDelay: '.4s' }} />
               </div>
@@ -504,20 +502,20 @@ export default function ChatPage() {
       </div>
 
       {/* Task modal */}
-      <Modal open={taskModal} onClose={() => setTaskModal(false)} title="📋 Create Task for Agent">
+      <Modal open={taskModal} onClose={() => setTaskModal(false)} title="Create Task for Agent">
         <Inp label="Task title" placeholder="e.g. Generate quiz for Module 3" value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} />
         <FileUploadZone label="Attach files (optional)" accept=".pdf,.doc,.docx,.pptx,.jpg,.png" />
         <Txa label="Description" placeholder="Describe what you want the agent to do…" value={taskDesc} onChange={(e) => setTaskDesc(e.target.value)} rows={3} />
         <Sel label="Priority" value={taskPri} onChange={(e) => setTaskPri(e.target.value)}>
-          <option value="high">🔴 High</option>
-          <option value="medium">🟡 Medium</option>
-          <option value="low">🟢 Low</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
         </Sel>
         <div style={{ display: 'flex', gap: 8 }}>
           <Btn variant="secondary" style={{ flex: 1 }} onClick={() => setTaskModal(false)}>Cancel</Btn>
           <Btn variant="primary" style={{ flex: 1 }} onClick={async () => {
             if (!taskTitle.trim()) return;
-            pushMe('📋 Task: ' + taskTitle + (taskDesc ? '\n' + taskDesc : ''), true);
+            pushMe('Task: ' + taskTitle + (taskDesc ? '\n' + taskDesc : ''), true);
             const title = taskTitle, desc = taskDesc, pri = taskPri;
             setTaskModal(false); setTaskTitle(''); setTaskDesc('');
             try {
@@ -532,7 +530,7 @@ export default function ChatPage() {
       </Modal>
 
       {/* Attach modal */}
-      <Modal open={attachModal} onClose={() => { setAttachModal(false); setOcrText(''); setOcrRunning(false); setOcrError(''); setAttachFile(null); }} title={attachType === 'ocr' ? '📷 Photo / Image OCR' : attachType === 'doc' ? '📄 Upload Document' : '📎 Upload File'}>
+      <Modal open={attachModal} onClose={() => { setAttachModal(false); setOcrText(''); setOcrRunning(false); setOcrError(''); setAttachFile(null); }} title={attachType === 'ocr' ? 'Photo / Image OCR' : attachType === 'doc' ? 'Upload Document' : 'Upload File'}>
         {attachType === 'ocr' ? (
           <div>
             <FileUploadZone label="Upload an image to scan" accept="image/*" onUploaded={handleOcrUploaded} />
@@ -558,10 +556,10 @@ export default function ChatPage() {
       </Modal>
 
       {/* Train modal */}
-      <Modal open={trainModal} onClose={() => setTrainModal(false)} title="🧠 Train Your Agent">
+      <Modal open={trainModal} onClose={() => setTrainModal(false)} title="Train Your Agent">
         <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.55, marginBottom: 16 }}>Upload content for {agentName} to learn from.</p>
         <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-          {[['audio', '🎙 Audio', 'Voice & lectures'], ['video', '📹 Video', 'Recordings'], ['live', '📡 Live', 'Stream from device']].map(([k, l, d]) => (
+          {[['audio', 'Audio', 'Voice & lectures'], ['video', 'Video', 'Recordings'], ['live', 'Live', 'Stream from device']].map(([k, l, d]) => (
             <button key={k} onClick={() => { setTrainType(k); setTrainFile(null); }} style={{ flex: 1, padding: '10px 6px', borderRadius: 12, border: bdr(1.5, trainType === k ? AMBER : BORDER), background: trainType === k ? 'rgba(232,136,74,.08)' : WHITE, cursor: 'pointer', textAlign: 'center', fontFamily: FONT }}>
               <div style={{ fontSize: 16, marginBottom: 3 }}>{l.split(' ')[0]}</div>
               <div style={{ fontSize: 11, fontWeight: 700, color: trainType === k ? AMBER : INK }}>{l.split(' ').slice(1).join(' ')}</div>
@@ -585,13 +583,13 @@ export default function ChatPage() {
       </Modal>
 
       {/* Customise modal */}
-      <Modal open={custModal} onClose={() => setCustModal(false)} title="✨ Customise Your Agent">
+      <Modal open={custModal} onClose={() => setCustModal(false)} title="Customise Your Agent">
         <Inp label="Agent name" placeholder="e.g. Pythia" value={draftName} onChange={(e) => setDraftName(e.target.value)} />
         <div style={{ marginBottom: 14 }}>
           <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, display: 'block', marginBottom: 8 }}>Pick an avatar</label>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {AGENT_AVATARS.map((em) => (
-              <button key={em} onClick={() => setDraftEmoji(em)} style={{ width: 44, height: 44, borderRadius: 12, border: bdr(2, draftEmoji === em ? AMBER : BORDER), background: draftEmoji === em ? 'rgba(232,136,74,.1)' : LIGHT, fontSize: 22, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{em}</button>
+            {AGENT_AVATARS.map(([Icon, em]) => (
+              <button key={em} onClick={() => setDraftEmoji(em)} style={{ width: 44, height: 44, borderRadius: 12, border: bdr(2, draftEmoji === em ? AMBER : BORDER), background: draftEmoji === em ? 'rgba(232,136,74,.1)' : LIGHT, fontSize: 22, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon size={22} color={draftEmoji === em ? AMBER : MUTED2} /></button>
             ))}
           </div>
         </div>

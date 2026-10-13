@@ -15,15 +15,15 @@ const FONT = "'Nunito', sans-serif";
 const BRAND = '#6C3BFF', MUTED = '#6B6B80', BORDER = '#EDE8E1', INK = '#1A1A2E';
 
 const LESSON_TYPES = [
-  { k: 'lesson_plan', label: '📋 Lesson plan' },
-  { k: 'worksheet',   label: '📝 Worksheet' },
-  { k: 'quiz',        label: '❓ Quiz' },
+  { k: 'lesson_plan', label: 'Lesson plan' },
+  { k: 'worksheet',   label: 'Worksheet' },
+  { k: 'quiz',        label: 'Quiz' },
 ];
 const WEB_TYPES = [
-  { k: 'newsletter',  label: '📰 Newsletter' },
-  { k: 'event_recap', label: '🎉 Event recap' },
-  { k: 'social_post', label: '📣 Social post' },
-  { k: 'event_page',  label: '📅 Event page' },
+  { k: 'newsletter',  label: 'Newsletter' },
+  { k: 'event_recap', label: 'Event recap' },
+  { k: 'social_post', label: 'Social post' },
+  { k: 'event_page',  label: 'Event page' },
 ];
 
 export default function TeacherToolSheet({ kind, host, onClose, onInsert }) {
@@ -139,7 +139,7 @@ function LegacyToolSheet({ kind, host, onClose, onInsert }) {
           )}
 
           <button onClick={generate} disabled={busy} style={{ width: '100%', background: busy ? '#C9BEFF' : BRAND, color: '#fff', border: 'none', borderRadius: 12, padding: '12px', fontSize: 14, fontWeight: 800, cursor: busy ? 'default' : 'pointer', fontFamily: FONT }}>
-            {busy ? 'Generating…' : '✨ Generate'}
+            {busy ? 'Generating…' : <><Sparkles size={14} style={{ verticalAlign: '-2px', marginRight: 4 }} />Generate</>}
           </button>
           {error && <div style={{ color: '#EF4444', fontSize: 12.5, fontWeight: 700, marginTop: 8 }}>{error}</div>}
 

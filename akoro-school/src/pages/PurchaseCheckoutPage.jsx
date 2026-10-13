@@ -10,7 +10,7 @@
  */
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Loader2, Lock } from 'lucide-react';
+import {Loader2, Lock, Coins } from 'lucide-react';
 import { apiPost } from '../services/api.js';
 import { PageLayout } from '../components/Layout.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, WHITE, GREEN, RED, FONT } from '../constants.js';
@@ -50,7 +50,7 @@ export default function PurchaseCheckoutPage() {
             <div>
               <div style={{ fontSize: 15.5, fontWeight: 900, color: INK }}>{title || 'Purchase'}</div>
               {subtitle && <div style={{ fontSize: 12.5, color: MUTED, marginTop: 2 }}>{subtitle}</div>}
-              {coins != null && <div style={{ fontSize: 12.5, color: '#B45309', fontWeight: 700, marginTop: 4 }}>🪙 {fmt(coins)} coins</div>}
+              {coins != null && <div style={{ fontSize: 12.5, color: '#B45309', fontWeight: 700, marginTop: 4 }}><Coins size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />{fmt(coins)} coins</div>}
             </div>
             <div style={{ fontSize: 20, fontWeight: 900, color: INK, whiteSpace: 'nowrap' }}>{free ? 'Free' : `₦${fmt(amountNaira)}`}</div>
           </div>

@@ -333,7 +333,7 @@ function DetailModal({ open, onClose, assignmentId }) {
                   display: 'flex', alignItems: 'center', gap: 9, padding: '9px 11px',
                   border: `1px solid ${BORDER}`, borderRadius: 10, background: WHITE,
                 }}>
-                  <span style={{ fontSize: 16 }}>{t.emoji || '🧑‍🎓'}</span>
+                  <span style={{ width: 24, height: 24, borderRadius: '50%', background: LIGHT, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, color: MUTED }}>{(t.name || t.full_name || 'L').trim().charAt(0).toUpperCase()}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>{t.full_name}</div>
                     <div style={{ fontSize: 11, color: MUTED }}>@{t.username}</div>

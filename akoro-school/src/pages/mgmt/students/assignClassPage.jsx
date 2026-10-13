@@ -85,7 +85,7 @@ export function AssignClassPage() {
         <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden' }}>
           {students.length === 0 ? (
             <div style={{ padding: '30px', textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT }}>
-              {filterClass === '__null__' ? 'No unassigned students — everyone has a class. 🎉' : 'No active students matched.'}
+              {filterClass === '__null__' ? 'No unassigned students — everyone has a class.' : 'No active students matched.'}
             </div>
           ) : (<>
             <label style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer', fontFamily: FONT, background: LIGHT }}>

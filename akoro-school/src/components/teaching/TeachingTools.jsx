@@ -15,10 +15,7 @@
  * passes `onInsert` to drop the result into the conversation.
  */
 import { useState, useEffect, useRef } from 'react';
-import { Sparkles, Copy, Check, Printer, Loader2, ArrowLeft, Volume2, Play, Pause, MessageSquarePlus,
-  SkipBack, SkipForward, Download, RotateCcw,
-  AlertCircle, CheckCircle2, HelpCircle, Lightbulb, Briefcase, Link2, Clock, Package, Target,
-  ListChecks, MessageCircle, GraduationCap, Users, FileText, Award } from 'lucide-react';
+import {Sparkles, Copy, Check, Printer, Loader2, ArrowLeft, Volume2, Play, Pause, MessageSquarePlus, SkipBack, SkipForward, Download, RotateCcw, AlertCircle, CheckCircle2, HelpCircle, Lightbulb, Briefcase, Link2, Clock, Package, Target, ListChecks, MessageCircle, GraduationCap, Users, FileText, Award, Lock } from 'lucide-react';
 import { apiGet, apiPost } from '../../services/api.js';
 
 const FONT = "'Nunito', sans-serif";
@@ -182,7 +179,7 @@ function Flashcards({ data }) {
           <>
             <div style={{ fontSize: 14, color: INK, fontWeight: 600, lineHeight: 1.55 }}>{c.definition}</div>
             {c.example && <div style={{ fontSize: 12.5, color: MUTED, fontStyle: 'italic', marginTop: 10 }}>{c.example}</div>}
-            {c.tip && <div style={{ fontSize: 12, color: AMBER, fontWeight: 700, marginTop: 8 }}>💡 {c.tip}</div>}
+            {c.tip && <div style={{ fontSize: 12, color: AMBER, fontWeight: 700, marginTop: 8, display: 'flex', alignItems: 'center', gap: 5 }}><Lightbulb size={12} /> {c.tip}</div>}
           </>
         )}
         <div style={{ fontSize: 10.5, color: MUTED2, marginTop: 14 }}>{flipped ? 'Tap to hide' : 'Tap to reveal'}</div>
@@ -464,7 +461,7 @@ export default function TeachingTools({ onInsert, compact = false }) {
             style={{ ...toolCard, opacity: t.locked ? .55 : 1, cursor: t.locked ? 'default' : 'pointer' }}>
             <span style={{ fontSize: 22 }}>{t.emoji}</span>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 800, color: INK }}>{t.name}{t.locked ? ' 🔒' : ''}</div>
+              <div style={{ fontSize: 13.5, fontWeight: 800, color: INK }}>{t.name}{t.locked && <span title="Locked" style={{ display: 'inline-flex', verticalAlign: '-2px', marginLeft: 4 }}><Lock size={11} color={MUTED2} /></span>}</div>
               <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.45, marginTop: 2 }}>
                 {t.locked ? 'Unlock this in Tools & Assets' : t.blurb}
               </div>

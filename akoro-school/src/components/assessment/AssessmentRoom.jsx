@@ -7,7 +7,7 @@ import { useProctoring } from '../../hooks/useProctoring.js';
 import { useVoiceSession } from '../../hooks/useVoiceSession.js';
 import { useVoiceAnswer } from '../../hooks/useVoiceAnswer.js';
 import VoiceExam from './VoiceExam.jsx';
-import { X as XIcon } from 'lucide-react';
+import {X as XIcon, AlertTriangle } from 'lucide-react';
 
 /**
  * AssessmentRoom — the proctored Session Assessment Gateway.
@@ -249,7 +249,7 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, st
       {terminated && (
         <div style={{ background:"rgba(248,113,113,.12)", border:"1px solid rgba(248,113,113,.3)", borderRadius:12,
           padding:"10px 14px", marginBottom:12, fontSize:12.5, fontWeight:700, color:"#FCA5A5", textAlign:"center" }}>
-          ⚠ {terminated.reason} This attempt has been flagged for review.
+          <AlertTriangle size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />{terminated.reason} This attempt has been flagged for review.
         </div>
       )}
       <VoiceExam

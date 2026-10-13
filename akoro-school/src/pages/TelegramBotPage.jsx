@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Send, SlidersHorizontal, CheckCircle2, Info, Bell, AlertTriangle, Loader2,
-} from 'lucide-react';
+import {Send, SlidersHorizontal, CheckCircle2, Info, Bell, AlertTriangle, Loader2, CreditCard, GraduationCap, ClipboardList, NotebookPen, KeyRound, BarChart3 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import BackButton from '../components/BackButton.jsx';
 import { apiGet, apiPut, apiPost } from '../services/api.js';
@@ -22,13 +20,13 @@ function Toggle({ on, onChange }) {
 }
 
 const ALERTS = [
-  { emoji: '💳', label: 'Fee collections (real-time)' },
-  { emoji: '✅', label: 'Attendance summaries' },
-  { emoji: '🎓', label: 'New student admissions' },
-  { emoji: '📋', label: 'Leave requests' },
-  { emoji: '📝', label: 'Homework assignments' },
-  { emoji: '🔑', label: 'Staff logins' },
-  { emoji: '📊', label: 'Daily summary (9 PM)' },
+  { icon: CreditCard, label: 'Fee collections (real-time)' },
+  { icon: CheckCircle2, label: 'Attendance summaries' },
+  { icon: GraduationCap, label: 'New student admissions' },
+  { icon: ClipboardList, label: 'Leave requests' },
+  { icon: NotebookPen, label: 'Homework assignments' },
+  { icon: KeyRound, label: 'Staff logins' },
+  { icon: BarChart3, label: 'Daily summary (9 PM)' },
 ];
 
 export default function TelegramBotPage() {
@@ -178,7 +176,7 @@ export default function TelegramBotPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {ALERTS.map((a) => (
                 <span key={a.label} style={{ fontSize: 12, color: MUTED, fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span>{a.emoji}</span>{a.label}
+                  <span style={{ display: 'flex' }}><a.icon size={14} color={BRAND} /></span>{a.label}
                 </span>
               ))}
             </div>

@@ -3,11 +3,7 @@
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { PageLayout } from '../../components/Layout.jsx';
-import {
-  User, AtSign, Mail, Phone, MapPin, Building2, GraduationCap, BookOpen,
-  Pencil, Upload, Search, Bolt, Star, BarChart3, Palette,
-  Tag, Sparkles, Store, CheckCircle2, ChevronRight,
-} from 'lucide-react';
+import {User, AtSign, Mail, Phone, MapPin, Building2, GraduationCap, BookOpen, Pencil, Upload, Search, Bolt, Star, BarChart3, Palette, Tag, Sparkles, Store, CheckCircle2, ChevronRight, Bot } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import {
   getProfile, patchProfile, patchAgent,
@@ -119,7 +115,7 @@ export default function ProfilePage() {
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
         {/* Tabs */}
         <div style={{ display: 'flex', background: '#fff', borderRadius: 12, padding: 4, marginBottom: 24, border: `1px solid ${BORDER}`, gap: 4 }}>
-          {[['profile', '👤 Profile'], ['agent', `${agent?.emoji || '🤖'} Agent`]].map(([t, label]) => (
+          {[['profile', 'Profile'], ['agent', 'Agent']].map(([t, label, Ico]) => (
             <button key={t} onClick={() => setTab(t)} style={{
               flex: 1, padding: '9px 0', borderRadius: 9, border: 'none',
               background: tab === t ? BRAND : 'transparent',

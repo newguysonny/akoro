@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { ShieldCheck, Users, BookOpen, CreditCard, BarChart3 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import AkoroLogo from '../../components/common/AkoroLogo.jsx';
@@ -44,9 +45,9 @@ export default function OnboardingPage() {
           width: 64, height: 64, borderRadius: '50%',
           background: `linear-gradient(135deg, ${AMBER}, #D4651E)`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 28, margin: '0 auto 20px',
+          margin: '0 auto 20px',
         }}>
-          🛡️
+          <ShieldCheck size={28} color="#fff" />
         </div>
 
         <h1 style={{ fontSize: 26, fontWeight: 800, color: '#1A1A2E', margin: '0 0 10px', fontFamily: "'Instrument Serif', serif" }}>
@@ -60,16 +61,16 @@ export default function OnboardingPage() {
           display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 32,
         }}>
           {[
-            ['👥', 'Users & Instructors', 'Manage accounts and permissions'],
-            ['📚', 'Courses & Content', 'Review and moderate all content'],
-            ['💳', 'Payments', 'Track revenue and process refunds'],
-            ['📊', 'Analytics', 'Monitor platform growth'],
-          ].map(([emoji, title, desc]) => (
+            [Users, 'Users & Instructors', 'Manage accounts and permissions'],
+            [BookOpen, 'Courses & Content', 'Review and moderate all content'],
+            [CreditCard, 'Payments', 'Track revenue and process refunds'],
+            [BarChart3, 'Analytics', 'Monitor platform growth'],
+          ].map(([Icon, title, desc]) => (
             <div key={title} style={{
               background: '#FAF8F5', borderRadius: 12, padding: '14px 12px',
               border: '1px solid #EDE8E1', textAlign: 'left',
             }}>
-              <div style={{ fontSize: 22, marginBottom: 6 }}>{emoji}</div>
+              <div style={{ marginBottom: 6, color: AMBER }}><Icon size={22} /></div>
               <div style={{ fontSize: 12, fontWeight: 700, color: '#1A1A2E', marginBottom: 2 }}>{title}</div>
               <div style={{ fontSize: 11, color: '#9490A0' }}>{desc}</div>
             </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { FileText, ClipboardList, UserCheck, GraduationCap, Presentation, NotebookPen, Library as LibraryIcon } from 'lucide-react';
+import {FileText, ClipboardList, UserCheck, GraduationCap, Presentation, NotebookPen, Library as LibraryIcon, Dices, HelpCircle } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Modal } from '../components/Primitives.jsx';
 import { apiGet } from '../services/api.js';
@@ -9,13 +9,13 @@ const FONTF = FONT;
 
 /* kind → display config */
 const KINDS = [
-  { key: 'all',        label: 'All',          icon: LibraryIcon,    emoji: '📚' },
-  { key: 'lesson_plan',label: 'Lesson Plans', icon: NotebookPen,    emoji: '📝' },
-  { key: 'worksheet',  label: 'Worksheets',   icon: FileText,       emoji: '📄' },
-  { key: 'report',     label: 'Reports',      icon: ClipboardList,  emoji: '🗒️' },
-  { key: 'assessment', label: 'Assessments',  icon: GraduationCap,  emoji: '🎯' },
-  { key: 'attendance', label: 'Attendance',   icon: UserCheck,      emoji: '📋' },
-  { key: 'interactive',label: 'Interactive',  icon: Presentation,   emoji: '🎬' },
+  { key: 'all',        label: 'All',          icon: LibraryIcon },
+  { key: 'lesson_plan',label: 'Lesson Plans', icon: NotebookPen },
+  { key: 'worksheet',  label: 'Worksheets',   icon: FileText },
+  { key: 'report',     label: 'Reports',      icon: ClipboardList },
+  { key: 'assessment', label: 'Assessments',  icon: GraduationCap },
+  { key: 'attendance', label: 'Attendance',   icon: UserCheck },
+  { key: 'interactive',label: 'Interactive',  icon: Presentation },
 ];
 const KIND_META = Object.fromEntries(KINDS.map((k) => [k.key, k]));
 
@@ -121,8 +121,8 @@ function ArtifactDetail({ output }) {
             <div key={i} style={{ marginBottom: 10, padding: '10px 12px', background: LIGHT, borderRadius: 10 }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: INK }}>{s.n}. {s.heading}</div>
               {s.bullets?.length > 0 && <List items={s.bullets} />}
-              {s.activity && <div style={{ fontSize: 12, color: MUTED, marginTop: 4 }}>🎲 {s.activity}</div>}
-              {s.checkQuestion && <div style={{ fontSize: 12, color: MUTED2, marginTop: 2 }}>❓ {s.checkQuestion}</div>}
+              {s.activity && <div style={{ fontSize: 12, color: MUTED, marginTop: 4, display: 'flex', alignItems: 'center', gap: 5 }}><Dices size={12} /> {s.activity}</div>}
+              {s.checkQuestion && <div style={{ fontSize: 12, color: MUTED2, marginTop: 2, display: 'flex', alignItems: 'center', gap: 5 }}><HelpCircle size={12} /> {s.checkQuestion}</div>}
             </div>
           ))}
         </div>
@@ -194,14 +194,14 @@ export default function LibraryPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {items.map((row) => {
-              const meta = KIND_META[row.kind] || { emoji: '📄', label: row.kind };
+              const meta = KIND_META[row.kind] || { icon: FileText, label: row.kind };
               return (
                 <button key={row.id} onClick={() => openArtifact(row)} style={{
                   display: 'flex', alignItems: 'center', gap: 13, textAlign: 'left', width: '100%',
                   background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 14, padding: '13px 15px',
                   cursor: 'pointer', fontFamily: FONTF, boxShadow: '0 1px 4px rgba(0,0,0,.04)',
                 }}>
-                  <div style={{ width: 42, height: 42, flexShrink: 0, borderRadius: 11, background: `${AMBER}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>{meta.emoji}</div>
+                  <div style={{ width: 42, height: 42, flexShrink: 0, borderRadius: 11, background: `${AMBER}12`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><meta.icon size={20} color={AMBER} /></div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 800, color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.title || meta.label}</div>
                     <div style={{ fontSize: 12, color: MUTED2, marginTop: 2 }}>{meta.label}{row.subject ? ` · ${row.subject}` : ''} · {fmtDate(row.created_at)}</div>

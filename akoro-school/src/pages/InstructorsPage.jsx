@@ -28,7 +28,7 @@ function InviteModal({ open, onClose, onDone }) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="👩🏾‍🏫 Invite an instructor">
+    <Modal open={open} onClose={onClose} title="Invite an instructor">
       <form onSubmit={submit}>
         <Inp label="Instructor email" type="email" placeholder="teacher@school.edu" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
         <Inp label="Full name (optional)" placeholder="e.g. Mrs. Adaeze Nwosu" value={form.fullName} onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))} />

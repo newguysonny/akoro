@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Search, Trash2, ShieldCheck } from 'lucide-react';
+import {Search, Trash2, ShieldCheck, Star } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Toast, Skeleton } from '../components/Primitives.jsx';
 import { apiGet, apiPatch, apiDelete } from '../services/api.js';
@@ -10,7 +10,7 @@ function Stars({ rating }) {
     <span style={{ fontSize: 14, letterSpacing: 1 }}>
       {[1,2,3,4,5].map(i => (
         <span key={i} style={{ color: i <= rating ? AMBER : MUTED2 }}>
-          {i <= rating ? '★' : '☆'}
+          <Star size={13} color={i <= rating ? AMBER : MUTED2} fill={i <= rating ? AMBER : 'none'} />
         </span>
       ))}
     </span>
