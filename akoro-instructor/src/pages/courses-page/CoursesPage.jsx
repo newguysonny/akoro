@@ -16,40 +16,157 @@ import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, F
 import { ScheduleSessionModal, EditCourseModal, LEARNER_URL, CourseCard, SessionRow } from './parts.jsx';
 import { confirmDialog } from '../../components/ConfirmHost.jsx';
 
+/* URL shell — the creation/scheduling/manage pages are their own COMPONENTS,
+   so navigating list ↔ flow never changes one component's hook count (the
+   branches previously returned before the hooks were declared, and read
+   state that did not exist yet on those renders). */
 export default function CoursesPage() {
-  const navigate = useNavigate();
-  const mobile = useIsMobile();
   const [sp] = useSearchParams();
   const flow = sp.get('flow');
   const flowId = sp.get('id');
+  if (flow === 'new-live' || flow === 'new-ondemand') return <CourseFlow kind={flow === 'new-live' ? 'live' : 'ondemand'} />;
+  if (flow === 'schedule') return <ScheduleFlow />;
+  if (flow === 'manage') return <ManageFlow flowId={flowId} />;
+  return <CoursesHome />;
+}
 
-  // Creation/scheduling flows live at their own URLs — dedicated pages, not
-  // modals. The same handlers, the same components (Modal asPage), one URL each.
-  if (flow === 'new-live' || flow === 'new-ondemand') {
-    const live = flow === 'new-live';
-    return (
-      <PageLayout title={live ? 'New Live Class' : 'New On-Demand Course'} subtitle={live ? 'Create a live, scheduled course' : 'Create a self-paced course'}>
-        {live
-          ? <LiveClassWizard open asPage onClose={() => navigate('/courses')} onSubmit={handleCreateLive} />
-          : <OnDemandWizard open asPage onClose={() => navigate('/courses')} onSubmit={handleCreateOnDemand} />}
-      </PageLayout>
-    );
-  }
-  if (flow === 'schedule') {
-    return (
-      <PageLayout title="Schedule Session" subtitle="Put a live class on the calendar">
-        <ScheduleSessionModal open asPage courses={courses} onSubmit={handleCreateSession} onClose={() => navigate('/courses')} />
-      </PageLayout>
-    );
-  }
-  if (flow === 'manage') {
-    const course = courses.find((c) => c.id === flowId) || null;
-    return (
-      <PageLayout title="Manage course" subtitle={course?.title || 'Curriculum, pricing and publishing'}>
+const flowToast = (setToast) => (message, type = 'success') => {
+  setToast({ message, type });
+  setTimeout(() => setToast(null), 3500);
+};
+
+/* New Live Class / New On-Demand — the wizards at their own URLs. */
+function CourseFlow({ kind }) {
+  const navigate = useNavigate();
+  const { createCourse, commitSchedule, commitCurriculum } = useCoursesAPI();
+  const [toast, setToast] = useState(null);
+  const showToast = flowToast(setToast);
+  const live = kind === 'live';
+
+  const handleCreateLive = async ({ info, spec, modules }) => {
+    const course = await createCourse({
+      title: info.title, description: info.description, type: 'live',
+      maxStudents: parseInt(info.maxStudents), thumbnail: info.thumbnail,
+    }).catch((e) => { console.warn('createCourse failed:', e); return null; });
+    const courseId = course?.data?.id;
+    if (!courseId) { showToast('Could not create course.', 'error'); return; }
+    try {
+      await commitSchedule(courseId, {
+        scheduleConfig: spec,
+        modules: modules.map((m, mi) => ({
+          title: m.title, orderIndex: mi,
+          sessions: m.sessions.map((s, si) => ({
+            title: s.title, scheduled_start: s.scheduled_start, scheduled_end: s.scheduled_end,
+            duration_min: Number(s.duration_min) || 60, platform: s.platform, order_index: si,
+            materials: (s.materials || []).filter((x) => x.title || x.url || x.body),
+          })),
+        })),
+      });
+      showToast('Course & schedule created!');
+    } catch (e) {
+      console.warn('commitSchedule failed:', e);
+      showToast('Course created, but schedule failed to save.', 'error');
+    }
+  };
+
+  const handleCreateOnDemand = async ({ info, sections, pricing, published }) => {
+    const course = await createCourse({
+      title: info.title, description: info.description, type: 'on-demand',
+      subject: info.category, level: info.level, thumbnail: info.thumbnail,
+      price: pricing.isFree ? 0 : Number(pricing.price) || 0,
+      discountPrice: pricing.isFree ? null : (pricing.discountPrice ? Number(pricing.discountPrice) : null),
+      isFree: pricing.isFree,
+      status: published ? 'active' : 'draft',
+    }).catch((e) => { console.warn('createCourse failed:', e); return null; });
+    const courseId = course?.data?.id;
+    if (!courseId) { showToast('Could not create course.', 'error'); return; }
+    try {
+      await commitCurriculum(courseId, {
+        sections: sections.map((s, si) => ({
+          title: s.title, orderIndex: si,
+          lessons: s.lessons.map((l, li) => ({
+            title: l.title, orderIndex: li,
+            videoUrl: l.videoUrl,
+            duration: Number(l.duration) || 0,   // minutes; backend converts to seconds
+            preview: !!l.preview,
+          })),
+        })),
+      });
+      showToast(published ? 'On-demand course published!' : 'Draft saved!');
+    } catch (e) {
+      console.warn('commitCurriculum failed:', e);
+      showToast('Course saved, but the curriculum failed to commit.', 'error');
+    }
+  };
+
+  return (
+    <PageLayout title={live ? 'New Live Class' : 'New On-Demand Course'} subtitle={live ? 'Create a live, scheduled course' : 'Create a self-paced course'}>
+      {live
+        ? <LiveClassWizard open asPage onClose={() => navigate('/courses')} onSubmit={handleCreateLive} />
+        : <OnDemandWizard open asPage onClose={() => navigate('/courses')} onSubmit={handleCreateOnDemand} />}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+    </PageLayout>
+  );
+}
+
+/* Schedule Session — needs the course list for its picker. */
+function ScheduleFlow() {
+  const navigate = useNavigate();
+  const { getCourses, createSession } = useCoursesAPI();
+  const [courses, setCourses] = useState([]);
+  const [toast, setToast] = useState(null);
+  const showToast = flowToast(setToast);
+
+  useEffect(() => { getCourses().then((r) => setCourses(r?.data ?? [])).catch(() => {}); }, []);
+
+  const handleCreateSession = async (form) => {
+    await createSession(form).catch(console.warn);
+    showToast('Session scheduled!');
+  };
+
+  return (
+    <PageLayout title="Schedule Session" subtitle="Put a live class on the calendar">
+      <ScheduleSessionModal open asPage courses={courses} onSubmit={handleCreateSession} onClose={() => navigate('/courses')} />
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+    </PageLayout>
+  );
+}
+
+/* Manage course / Curriculum — the card's Manage affordance lands here. */
+function ManageFlow({ flowId }) {
+  const navigate = useNavigate();
+  const { getCourses } = useCoursesAPI();
+  const [courses, setCourses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState(null);
+  const showToast = flowToast(setToast);
+
+  useEffect(() => {
+    getCourses().then((r) => setCourses(r?.data ?? [])).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  const course = courses.find((c) => String(c.id) === String(flowId)) || null;
+
+  return (
+    <PageLayout title="Manage course" subtitle={course?.title || 'Curriculum, pricing and publishing'}>
+      {loading ? (
+        <div style={{ fontFamily: FONT, color: MUTED, padding: '20px 0' }}>Loading…</div>
+      ) : course ? (
         <CourseCurriculum open asPage course={course} onClose={() => navigate('/courses')} onToast={showToast} />
-      </PageLayout>
-    );
-  }
+      ) : (
+        <div style={{ fontFamily: FONT, color: MUTED }}>
+          That course is no longer available.
+          <div style={{ marginTop: 14 }}><Btn onClick={() => navigate('/courses')}>Back to courses</Btn></div>
+        </div>
+      )}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+    </PageLayout>
+  );
+}
+
+function CoursesHome() {
+  const navigate = useNavigate();
+  const mobile = useIsMobile();
   const { getCourses, createCourse, updateCourse, deleteCourse, getSessions, createSession, deleteSession, commitSchedule, commitCurriculum } = useCoursesAPI();
   const [courses,  setCourses]  = useState([]);
   const [sessions, setSessions] = useState([]);

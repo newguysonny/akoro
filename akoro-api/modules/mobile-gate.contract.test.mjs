@@ -399,3 +399,25 @@ test("console-facing notification composers carry no emoji", async () => {
   assert.deepEqual(offenders, [],
     `emoji in console-facing notification composers:\n${offenders.join("\n")}`);
 });
+
+test("URL flow shells stay hook-free — the early-return crash class", async () => {
+  // ActivitiesPage and CoursesPage route ?draft/?detail/?flow to full pages.
+  // The branches used to return BEFORE the page hooks were declared, so the
+  // first navigation changed the component's hook count and React killed the
+  // render ("rendered fewer hooks than expected"). The shell must declare no
+  // hooks beyond useSearchParams, and each flow must be its own component.
+  const shells = [
+    ["akoro-instructor/src/pages/ActivitiesPage.jsx",
+     ["function DraftRoute(", "function DetailRoute(", "function ActivitiesHome("]],
+    ["akoro-instructor/src/pages/courses-page/CoursesPage.jsx",
+     ["function CourseFlow(", "function ScheduleFlow(", "function ManageFlow(", "function CoursesHome("]],
+  ];
+  for (const [file, parts] of shells) {
+    const src2 = await readFile(new URL(`../../${file}`, import.meta.url), "utf8");
+    for (const part of parts) assert.ok(src2.includes(part), `${file}: missing ${part}`);
+    const shell = src2.slice(src2.indexOf("export default function"), src2.indexOf("return <ActivitiesHome") !== -1
+      ? src2.indexOf("return <ActivitiesHome") : src2.indexOf("return <CourseFlow"));
+    assert.ok(!/useState|useEffect|useNavigate|useLocation/.test(shell),
+      `${file}: the URL shell declares hooks — split the flow pages into components`);
+  }
+});
