@@ -1,4 +1,5 @@
 import { Archive, Ban, Bot, ClipboardList, GraduationCap, Link2, Lock, Mail, PencilLine, Scale, Settings } from 'lucide-react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AMBER, INK, MUTED, BORDER, WHITE, LIGHT, FONT } from '../constants.js';
 

@@ -31,7 +31,7 @@ import { downloadActivityPdf } from '../lib/activityPdf.js';
 import BattleForm from '../components/battles/BattleForm.jsx';
 import { useBattlesAPI } from '../hooks/useBattlesAPI.js';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../constants.js';
 import { confirmDialog } from '../components/ConfirmHost.jsx';
 import ActivityPreviewPanel from '../components/ActivityPreviewPanel.jsx';
