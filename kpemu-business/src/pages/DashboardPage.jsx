@@ -122,15 +122,17 @@ const ADS = [
   { cls: 'a4', tag: 'Ad', h: 'Advertise on this dashboard', p: 'Put your product in front of thousands of developers and businesses.', cta: 'Advertise with us' },
 ];
 
-/* ── Updates — verbatim from the reference ───────────────────────────────── */
-const CUBE_SVG = 'M21 8 12 3 3 8v8l9 5 9-5zM3 8l9 5 9-5M12 13v8';
+/* ── Updates — the Kpemu Business changelog, in the reference's layout:
+      circular icon, small recency label, bold title, one-line description.
+      Every entry is a real platform feature (the same surface this app
+      ships), newest first. ── */
 const UPDATES = [
-  { ago: '5 days ago', t: 'Decisions API', d: 'Turn text and images into decisions your application can use, 10x faster than the Responses API.', icon: <path d={CUBE_SVG} /> },
-  { ago: '13 days ago', t: 'GPT-6.1 Sol', d: 'GPT-6.1 Sol brings near-Astra intelligence to Sol pricing for cost-efficient API workloads.', icon: <path d={CUBE_SVG} /> },
-  { ago: '20 days ago', t: 'GPT-6 Astra, Sol, and Luna', d: 'Following the release of GPT Astra, meet GPT-6 Sol for complex coding and agentic workflows, and GPT-6 Luna for efficient, high-volume tasks.', icon: <path d={CUBE_SVG} /> },
-  { ago: 'last month', t: 'Agents API', d: 'Build durable cloud agents with a managed Codex harness with the Agents API.', icon: <><rect x="4" y="7" width="16" height="12" rx="3" /><path d="M12 7V3M9 12h.01M15 12h.01M9 16h6M2 12v3M22 12v3" /></> },
-  { ago: 'last month', t: 'GPT-Live', d: 'Build voice agents with GPT-Live, it handles a spoken conversation while a backend agent looks up information, uses tools, and completes tasks.', icon: <path d={CUBE_SVG} /> },
-  { ago: 'last month', t: 'GPT Image 2.5', d: 'GPT-Image-2.5 Flare and GPT-Image-2.5 Sunburst launched in the API with faster generation and more precise editing.', icon: <><rect x="3" y="3" width="18" height="18" rx="3" /><circle cx="9" cy="9" r="1.5" /><path d="m21 15-5-5L5 21" /></> },
+  { ago: '5 days ago', t: 'Voucher validation API', d: 'One call to validate any code. Your backend sends the voucher code with an API key — Kpemu stays the source of truth.', icon: <><path d="M12 3l7 3v5c0 4.6-3 7.6-7 9-4-1.4-7-4.4-7-9V6l7-3z" /><path d="M9 12l2 2 4-4" /></> },
+  { ago: '13 days ago', t: 'Webhook deliveries', d: 'Voucher events now reach your endpoint automatically — signed deliveries with retries, secret rotation, and one-click test from the dashboard.', icon: <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z" /> },
+  { ago: '20 days ago', t: 'Withdraw to your bank', d: 'Move your wallet balance to your bank account in minutes, and track every transfer under Balance & Withdraw.', icon: <><path d="M3 9.5 12 4l9 5.5" /><path d="M5 10v8M9.7 10v8M14.3 10v8M19 10v8M3 21h18" /></> },
+  { ago: 'last month', t: 'Per-key request logs', d: 'Every API key keeps its own log — status, latency and payload for each validate call, right next to the key that made it.', icon: <><path d="M8 6h13M8 12h13M8 18h13" /><path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01" /></> },
+  { ago: 'last month', t: 'Discount tiers', d: 'Offer volume pricing on any product — define the tiers once, and every redemption is charged the right amount automatically.', icon: <><path d="M19 5 5 19" /><circle cx="7" cy="7" r="2.5" /><circle cx="17" cy="17" r="2.5" /></> },
+  { ago: 'last month', t: 'Batch generation', d: 'Generate vouchers in batches with cover art and expiry, then hand them out or sell them on the Kpemu marketplace.', icon: <><path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4V8z" /><path d="M13 7v10" strokeDasharray="2.5 2.5" /></> },
 ];
 
 /* ── Recommended platforms and services — verbatim from the reference ────── */
