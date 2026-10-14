@@ -926,11 +926,15 @@ const authHandlers = {
     res200(res, req.user);
   }),
 
-  // POST /api/auth/change-password — verify current password, set new one
+  // POST /api/auth/change-password — verify current password, set new one.
+  // OAuth accounts may have NO password on file (password_hash is null):
+  // for them this is "set password" — no current password exists to verify,
+  // so only the new password is required. Once a password exists, the
+  // current one must always be supplied and verified.
   changePassword: asyncHandler(async (req, res) => {
     const { currentPassword, newPassword } = req.body;
-    if (!currentPassword || !newPassword)
-      return res400(res, "currentPassword and newPassword are required");
+    if (!newPassword)
+      return res400(res, "newPassword is required");
     if (newPassword.length < 8)
       return res400(res, "New password must be at least 8 characters");
 
@@ -938,8 +942,13 @@ const authHandlers = {
       .select("id,password_hash").eq("id", req.user.id).maybeSingle();
     if (!user) return res401(res, "User not found");
 
-    const valid = await bcrypt.compare(currentPassword, user.password_hash || "");
-    if (!valid) return res.status(403).json({ success: false, message: "Current password is incorrect" });
+    const hasPassword = !!user.password_hash;
+    if (hasPassword) {
+      if (!currentPassword)
+        return res400(res, "currentPassword is required");
+      const valid = await bcrypt.compare(currentPassword, user.password_hash);
+      if (!valid) return res.status(403).json({ success: false, message: "Current password is incorrect" });
+    }
 
     const newHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
     await db.from("users").update({ password_hash: newHash, updated_at: new Date().toISOString() }).eq("id", user.id);
@@ -960,7 +969,7 @@ const authHandlers = {
       signinUrl: signinUrlChg,
     }).catch(() => {});
 
-    res200(res, { passwordChanged: true });
+    res200(res, { passwordChanged: true, passwordSet: !hasPassword });
   }),
 };
 

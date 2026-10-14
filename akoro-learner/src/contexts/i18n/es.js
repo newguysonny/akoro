@@ -153,6 +153,8 @@ export const ES = {
   'settings.notifications':  'Notificaciones',
   'settings.privacy':        'Privacidad y seguridad',
   'settings.change_password':'Cambiar contraseña',
+  'settings.set_password': 'Crear contraseña',
+  'settings.set_pw_note': 'Iniciaste sesión con Google, así que esta cuenta aún no tiene contraseña. Crea una para poder entrar también con tu correo.',
   'settings.two_factor':     'Autenticación de dos factores',
   'settings.deactivate':     'Desactivar cuenta',
   'settings.delete':         'Eliminar cuenta',

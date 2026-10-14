@@ -153,6 +153,8 @@ export const YO = {
   'settings.notifications':  'Àwọn Ìfitọ́nilétí',
   'settings.privacy':        'Àṣírí & Ààbò',
   'settings.change_password':'Yí Ọ̀rọ̀ Àṣínà Padà',
+  'settings.set_password': 'Ṣètò Ọ̀rọ̀ Àṣínà',
+  'settings.set_pw_note': 'O fi Google wọlé, nítorí náà àkáǹtì yìí kò tíì ní ọ̀rọ̀ àṣínà. Ṣẹ̀dá ọ̀kan kí o lè fi ímeèlì rẹ wọlé pẹ̀lú.',
   'settings.two_factor':     'Ìfẹ̀tẹ̀-Méjì',
   'settings.deactivate':     'Mú Àkàǹtì Kúrò Níṣẹ́',
   'settings.delete':         'Pa Àkàǹtì Rẹ́',

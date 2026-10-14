@@ -138,6 +138,8 @@ export const HA = {
   'settings.notifications':  'Sanarwa',
   'settings.privacy':        'Sirri & Tsaro',
   'settings.change_password':'Canza Kalmar Sirri',
+  'settings.set_password': 'Saita Kalmar Sirri',
+  'settings.set_pw_note': 'Ka shiga da Google, don haka wannan asusun ba shi da kalmar sirri tukuna. Ƙirƙiri ɗaya don ka iya shiga da imel ɗinka ma.',
   'settings.two_factor':     'Tabbatarwa Mai Matakai Biyu',
   'settings.deactivate':     'Kashe Asusu',
   'settings.delete':         'Share Asusu',

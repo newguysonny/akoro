@@ -153,6 +153,8 @@ export const PT = {
   'settings.notifications':  'Notificações',
   'settings.privacy':        'Privacidade e Segurança',
   'settings.change_password':'Alterar Senha',
+  'settings.set_password': 'Criar Senha',
+  'settings.set_pw_note': 'Você entrou com o Google, então esta conta ainda não tem senha. Crie uma para também entrar com seu e-mail.',
   'settings.two_factor':     'Autenticação em Duas Etapas',
   'settings.deactivate':     'Desativar Conta',
   'settings.delete':         'Excluir Conta',

@@ -828,6 +828,7 @@ const PROFILE_SELECT = [
   "country","city","school_name","school_type","year_group","study_level",
   "language","display_mode","accent_color","teaching_guide","guide_emoji",
   "subjects","two_factor_enabled","onboarding_completed","created_at",
+  "password_hash",   // presence only — surfaced as hasPassword, never returned
 ].join(",");
 
 // Fallback select without columns added by pending migrations
@@ -835,7 +836,7 @@ const PROFILE_SELECT_BASE = [
   "id","email","username","full_name","avatar_url","phone","role",
   "country","school_name","school_type","year_group","study_level",
   "language","display_mode","accent_color","teaching_guide","guide_emoji",
-  "subjects","two_factor_enabled","created_at",
+  "subjects","two_factor_enabled","created_at","password_hash",
 ].join(",");
 
 /** GET /api/profiles/me — full profile + agent + notification prefs */
@@ -881,6 +882,10 @@ router.get("/me", authenticateToken, asyncHandler(async (req, res) => {
     guideEmoji:      user.guide_emoji,
     subjects:        user.subjects        || [],
     twoFactorEnabled:user.two_factor_enabled || false,
+    // OAuth accounts may have no password on file — the settings page shows
+    // "Set password" (new + confirm only) instead of "Change password".
+    // Only the presence leaves the API, never the hash.
+    hasPassword:     !!user.password_hash,
     onboardingCompleted: user.onboarding_completed ?? false,
     memberSince:     new Date(user.created_at).toLocaleDateString("en-GB",{ month:"long", year:"numeric" }),
     agent: agent ? {
