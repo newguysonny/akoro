@@ -129,6 +129,12 @@ function Home() {
   const pubI = ov.publishedMaterials ?? 0;
   const pctM = ov.materials ? Math.round((pubI / ov.materials) * 100) : 0;
   const pctC = ov.courses ? Math.round(((ov.publishedCourses ?? 0) / ov.courses) * 100) : 0;
+  // Older API deployments returned the raw Supabase query result here
+  // ({ data, error, ... }). Normalize both response shapes so a bad/stale
+  // payload cannot crash the whole Program Courses page.
+  const updates = Array.isArray(ov.log)
+    ? ov.log
+    : Array.isArray(ov.log?.data) ? ov.log.data : [];
 
   return (
     <>
@@ -192,7 +198,7 @@ function Home() {
 
       <section>
         <h2 style={{ marginBottom: 18 }}>Updates</h2>
-        {(ov.log ?? []).map((l) => (
+        {updates.map((l) => (
           <div className="item" key={l.id}>
             <div className="ico"><I k="info" /></div>
             <div>
@@ -202,7 +208,7 @@ function Home() {
             </div>
           </div>
         ))}
-        {(ov.log ?? []).length === 0 && <p className="lead">Nothing yet — create something and it will show up here.</p>}
+        {updates.length === 0 && <p className="lead">Nothing yet — create something and it will show up here.</p>}
       </section>
       {reload ? null : null}
     </>

@@ -58,7 +58,7 @@ async function logLine(headline, detail) {
 
 /* ── Overview — the home page's stats grid + updates ──────────────────── */
 router.get("/overview", asyncHandler(async (_req, res) => {
-  const [programs, courses, materials, publishedMaterials, publishedCourses, drafts, log] = await Promise.all([
+  const [programs, courses, materials, publishedMaterials, publishedCourses, drafts, logResult] = await Promise.all([
     edu().from("programmes").select("id", { count: "exact", head: true }),
     edu().from("programme_courses").select("id", { count: "exact", head: true }),
     edu().from("programme_materials").select("id", { count: "exact", head: true }),
@@ -76,7 +76,9 @@ router.get("/overview", asyncHandler(async (_req, res) => {
     publishedCourses: publishedCourses?.count ?? 0,
     drafts: drafts?.count ?? 0,
     instructors: new Set((inst ?? []).map((r) => r.instructor)).size,
-    log: log ?? [],
+    // Supabase returns a query-result object; expose only its rows so the
+    // frontend contract is always an array (never { data, error, ... }).
+    log: Array.isArray(logResult?.data) ? logResult.data : [],
   });
 }));
 
