@@ -118,6 +118,17 @@ test("admin: section names go through the styled modal, never a browser prompt",
   assert.ok(sectionCss.includes(".mcard"), "modal card css");
 });
 
+test("admin: every read unwraps the { success, data } envelope", () => {
+  // apiGet returns the raw envelope; the section funnels ALL reads through
+  // the get() helper. A direct read hands React an object where it expects
+  // an array — the crash that blanked every page but home.
+  assert.ok(section.includes("const get = async (path)"), "unwrap helper");
+  const direct = section.split("\n").filter((l) => l.includes("apiGet(") && !l.includes("await apiGet(path)"));
+  assert.deepEqual(direct, [], "apiGet is only called inside the helper");
+  // Phone shell: the section goes full-width below 768px (the header is the mobile surface).
+  assert.ok(sectionCss.includes("max-width:768px"), "small-screen adoption");
+});
+
 /* ── No-emoji guard: the new section renders drawn SVGs only ────────────── */
 const EMOJI = /[\u{1F000}-\u{1FAFF}]|[\u{2600}-\u{27BF}]|[\u{FE00}-\u{FE0F}]|[\u{1F1E6}-\u{1F1FF}]/u;
 
