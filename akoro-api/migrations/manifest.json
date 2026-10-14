@@ -160,6 +160,7 @@
     "2026-records.sql",
     "2026-tiers-pilot-applications.sql",
     "2026-pilot-schools-cohorts.sql",
+    "2026-pilot-login.sql",
     "2026-tenant-quota.sql",
     "2026-billing-core.sql",
     "2026-coupons-gateway.sql",

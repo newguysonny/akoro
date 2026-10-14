@@ -26,6 +26,9 @@ import { Router } from "express";
 import cron from "node-cron";
 import { registerTick, cronSource } from "../../lib/cronTicks.js";
 import db from "../../db.js";
+import crypto from "crypto";
+import bcrypt from "bcrypt";
+import { sendPasswordResetEmail } from "../auth/emails.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { validatePilotSchoolInput, buildPilotPatch, todayStr } from "../../lib/pilotModel.js";
 import { fillTemplate } from "../../lib/messageModel.js";
@@ -35,6 +38,79 @@ const router    = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];
 const ok        = (res, data, meta = {}) => res.json({ success: true, data, ...meta });
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+/* ── Login provisioning — the pilot partner becomes a real school ────────────
+ * Find-or-create the school admin account, create the school_profiles row in
+ * the 'pilot' stage, link it from the roster row, and email the contact a
+ * set-password link (the same token flow as forgot-password). The generated
+ * starter password is kept on the roster row so the admin Credentials panel
+ * can show it until the school sets their own. Idempotent: once the roster
+ * row carries a login + profile link, calls only resend the email.
+ */
+const SCHOOL_PORTAL_URL = process.env.SCHOOL_FRONTEND_URL || "https://school.akoro.app";
+const RESET_TTL_MS      = 60 * 60 * 1000; // 1 hour, same as forgot-password
+const hashToken         = (raw) => crypto.createHash("sha256").update(raw).digest("hex");
+
+async function sendSetPasswordEmail(email) {
+  const { data: user } = await db.from("users").select("id, full_name").eq("email", email).maybeSingle();
+  if (!user) return;
+  // One live token at a time, mirroring forgot-password.
+  await db.from("password_reset_tokens").update({ used_at: new Date().toISOString() })
+    .eq("user_id", user.id).is("used_at", null);
+  const rawToken = crypto.randomUUID();
+  await db.from("password_reset_tokens").insert({
+    user_id: user.id, token_hash: hashToken(rawToken),
+    expires_at: new Date(Date.now() + RESET_TTL_MS).toISOString(),
+  });
+  await sendPasswordResetEmail({
+    to: email, name: user.full_name || "there",
+    resetUrl: `${SCHOOL_PORTAL_URL}/reset-password?token=${rawToken}`,
+  }).catch(() => {}); // email hiccups never fail provisioning
+}
+
+async function provisionPilotLogin({ req, school }) {
+  const email = (school.contact_email || "").toLowerCase().trim();
+  if (!email) return { provisioned: false, reason: "no_contact_email" };
+
+  if (school.school_profile_id && school.login_email) {
+    await sendSetPasswordEmail(email);
+    return { provisioned: true, created: false, resent: true };
+  }
+
+  let tempPassword = null;
+  let { data: user } = await db.from("users").select("id, full_name, email").eq("email", email).maybeSingle();
+  if (!user) {
+    // Same starter-password style as the school portal's invites.
+    tempPassword = crypto.randomBytes(8).toString("base64").slice(0, 10);
+    const passwordHash = await bcrypt.hash(tempPassword, 10);
+    const base = (email.split("@")[0] || "school").replace(/[^a-zA-Z0-9_]/g, "_");
+    const { data: created, error } = await db.from("users").insert({
+      email, username: `${base}_${Math.floor(Math.random() * 9000) + 1000}`,
+      password_hash: passwordHash, full_name: school.contact_name || null,
+      role: "school_admin", is_active: true, must_change_password: true,
+    }).select("id, full_name, email").single();
+    if (error) throw new Error(`user insert: ${error.message}`);
+    user = created;
+  }
+
+  const { data: profile, error: profileErr } = await db.from("school_profiles").insert({
+    admin_user_id: user.id, name: school.name, phone: school.contact_phone || null,
+    verification_status: "pilot",
+  }).select("id").single();
+  if (profileErr) throw new Error(`school profile insert: ${profileErr.message}`);
+
+  const now = new Date().toISOString();
+  await db.from("pilot_schools").update({
+    school_profile_id: profile.id, login_email: email,
+    ...(tempPassword ? { login_temp_password: tempPassword } : {}),
+    login_provisioned_at: now, updated_at: now,
+  }).eq("id", school.id);
+
+  await sendSetPasswordEmail(email);
+  await audit({ req, action: "pilot_school.provisioned", entityType: "pilot_school", entityId: school.id,
+    after: { login: email, stage: "pilot", portal: SCHOOL_PORTAL_URL } });
+  return { provisioned: true, created: Boolean(tempPassword), tempPassword };
+}
 
 /* ── Audit (works for both request context and the cron job) ───────────────── */
 async function audit({ req = null, action, entityType, entityId, before = null, after = null }) {
@@ -52,7 +128,7 @@ async function audit({ req = null, action, entityType, entityId, before = null, 
 const COHORT_SELECT =
   "id, school_id, start_date, end_date, student_cap, instructor_cap, status, archived, " +
   "source_application_id, created_at, updated_at, " +
-  "pilot_schools!pilot_cohorts_school_id_fkey(id, name, contact_name, contact_email, contact_phone, school_profile_id), " +
+  "pilot_schools!pilot_cohorts_school_id_fkey(id, name, contact_name, contact_email, contact_phone, school_profile_id, login_email, login_temp_password, login_provisioned_at), " +
   "pilot_applications!pilot_cohorts_source_application_id_fkey(est_students, state_city)";
 
 const shape = (row) => {
@@ -75,6 +151,9 @@ const shape = (row) => {
     archived: row.archived,
     est_students: app?.est_students ?? null,
     state_city: app?.state_city ?? null,
+    login_email: school.login_email ?? null,
+    login_temp_password: school.login_temp_password ?? null,
+    login_provisioned_at: school.login_provisioned_at ?? null,
     source_application_id: row.source_application_id ?? null,
     created_at: row.created_at,
   };
@@ -121,9 +200,13 @@ router.post("/pilot-schools", ...adminOnly, asyncHandler(async (req, res) => {
     return res.status(500).json({ success: false, message: "School added but the pilot window could not be created." });
   }
 
+  let login = null;
+  try { login = await provisionPilotLogin({ req, school }); }
+  catch (e) { console.error("[admin:pilot-schools] auto-provision failed:", e.message); }
+
   await audit({ req, action: "pilot_school.created", entityType: "pilot_cohort", entityId: cohort.id,
     after: { school: values.name, start: values.start_date, end: values.end_date, student_cap: values.student_cap, instructor_cap: values.instructor_cap } });
-  return res.status(201).json({ success: true, data: shape(cohort) });
+  return res.status(201).json({ success: true, data: { ...shape(cohort), login_provisioned: !!login?.provisioned, temp_password: login?.tempPassword ?? null } });
 }));
 
 /* ── PATCH /pilot-schools/:id — edit cohort and/or school fields ───────────── */
@@ -167,6 +250,28 @@ router.patch("/pilot-schools/:id", ...adminOnly, asyncHandler(async (req, res) =
     before: { start: before.start_date, end: before.end_date, student_cap: before.student_cap, instructor_cap: before.instructor_cap, status: before.status, archived: before.archived, contact: before.contact },
     after:  { start: after.start_date,  end: after.end_date,  student_cap: after.student_cap,  instructor_cap: after.instructor_cap,  status: after.status,  archived: after.archived,  contact: after.contact } });
   return ok(res, after);
+}));
+
+/* ── POST /pilot-schools/:id/credentials — the admin Credentials panel ───────
+ * First call provisions the login (school admin account + pilot-stage school
+ * profile + set-password email); later calls resend the set-password link.
+ * Returns the refreshed roster row plus created/resent flags and portal_url.
+ */
+router.post("/pilot-schools/:id/credentials", ...adminOnly, asyncHandler(async (req, res) => {
+  const { data: row, error: fetchErr } = await db.from("pilot_schools").select("*").eq("id", req.params.id).maybeSingle();
+  if (fetchErr) return res.status(500).json({ success: false, message: fetchErr.message });
+  if (!row) return res.status(404).json({ success: false, code: "not_found", message: "Pilot school not found." });
+
+  try {
+    const result = await provisionPilotLogin({ req, school: row });
+    const { data: fresh, error: freshErr } = await db.from("pilot_cohorts")
+      .select(COHORT_SELECT).eq("id", req.params.id).maybeSingle();
+    if (freshErr) throw new Error(freshErr.message);
+    return ok(res, { ...shape(fresh ?? row), created: !!result.created, resent: !!result.resent, portal_url: SCHOOL_PORTAL_URL });
+  } catch (e) {
+    console.error("[admin:pilot-schools] credentials failed:", e.message);
+    return res.status(500).json({ success: false, message: "Could not provision the login — check the contact email." });
+  }
 }));
 
 /* ── POST /pilot-applications/:id/approve — approve & create the pilot ─────── */
@@ -221,10 +326,14 @@ router.post("/pilot-applications/:id/approve", ...adminOnly, asyncHandler(async 
     .eq("id", app.id);
   if (appErr) console.error("[admin:pilot-schools] approve status update failed:", appErr.message);
 
+  let login = null;
+  try { login = await provisionPilotLogin({ req, school: { ...school, school_profile_id: null } }); }
+  catch (e) { console.error("[admin:pilot-schools] auto-provision failed:", e.message); }
+
   await audit({ req, action: "application.approved", entityType: "pilot_application", entityId: app.id,
     before: { status: "pending", school: app.school_name },
     after: { status: "approved", school: values.name, pilot: `${values.start_date} → ${values.end_date}` } });
-  return res.status(201).json({ success: true, data: shape(cohort) });
+  return res.status(201).json({ success: true, data: { ...shape(cohort), login_provisioned: !!login?.provisioned, temp_password: login?.tempPassword ?? null } });
 }));
 
 /* ── POST /pilot-applications/:id/reject — reject with a reason ────────────── */
