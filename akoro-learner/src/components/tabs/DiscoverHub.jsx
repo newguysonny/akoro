@@ -23,22 +23,73 @@
  * Gated by isHigherEdUI() in LearnerDashboard — school learners keep
  * the current DiscoveryTab feed directly.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BRAND, GOLD } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { Icon } from '../common/Icons.jsx';
 import Toast from '../common/Toast.jsx';
 import DiscoverSearchPage from './DiscoverSearchPage.jsx';
 import { TYPES, matchTypes, FONT } from './dhubTypes.js';
+import { fetchProgrammeCatalogue } from '../../services/programmesApi.js';
 
-export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord, onOpenBattles, onOpenPharmd, onOpenRail, onOpenContents, onOpenCommunity, onOpenFolder, onOpenAgent, onOpenPharmdCourse, userId, initialQuery = '' }) {
+/* Gradient washes for programme cards without a cover image — the same
+   colour-block energy as the type cards, cycled per programme. */
+const PROG_GRADS = [
+  'linear-gradient(140deg,#4C8DF0,#2E62D9)', 'linear-gradient(140deg,#7C5CE6,#5B3FD1)',
+  'linear-gradient(140deg,#14B8A6,#0C7E72)', 'linear-gradient(140deg,#F28C52,#DE5F26)',
+  'linear-gradient(140deg,#EF4E78,#C92A54)',
+];
+
+/* The tilted glass corner tile. A card with a cover image shows the image
+   in the tile; no cover — or a cover that fails to load — falls back to
+   the icon (programme cards use the book). */
+function CornerArt({ cover, icon }) {
+  const [imgOk, setImgOk] = useState(true);
+  return (
+    <span aria-hidden="true" style={{ position: 'absolute', right: -9, bottom: -11, width: 60, height: 60,
+      borderRadius: 16, transform: 'rotate(-14deg)', overflow: 'hidden',
+      background: 'rgba(255,255,255,.18)', border: '1.5px solid rgba(255,255,255,.35)',
+      boxShadow: '0 6px 14px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.35)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, pointerEvents: 'none' }}>
+      {cover && imgOk
+        ? <img src={cover} alt="" onError={() => setImgOk(false)}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+        : (icon?.startsWith('ti-') ? <Icon name={icon} size={28}/> : icon)}
+    </span>
+  );
+}
+
+export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord, onOpenBattles, onOpenPharmd, onOpenProgramme, onOpenRail, onOpenContents, onOpenCommunity, onOpenFolder, onOpenAgent, onOpenPharmdCourse, userId, initialQuery = '' }) {
   const { t } = useLang();
   const [query, setQuery] = useState(initialQuery);
   const [searchOpen, setSearchOpen] = useState(false);
   const [toast, setToast] = useState(null);
 
+  /* The published programme catalogue (admin's Program Courses).
+     Best-effort: the hub renders its type cards either way. */
+  const [programmes, setProgrammes] = useState([]);
+  useEffect(() => {
+    let on = true;
+    fetchProgrammeCatalogue().then((rows) => { if (on) setProgrammes(rows); }).catch(() => {});
+    return () => { on = false; };
+  }, []);
+
+  /* The Pharm.D catalogue entry rides the existing Pharm D card (same
+     special experience); every other published programme gets its own
+     card in the same layout, opening the generic programme page. */
+  const pharmdEntry = programmes.find((p) => p.source === 'pharmd') || null;
+  const q = query.trim().toLowerCase();
+  const progCards = programmes
+    .filter((p) => p.source !== 'pharmd')
+    .filter((p) => !q || `${p.name} ${p.code || ''} ${p.description || ''} programme program materials`.toLowerCase().includes(q));
+
   const all = TYPES(t);
-  const visible = matchTypes(t, query);
+  const visible = matchTypes(t, query).map((ty) => (ty.key === 'pharmd' && pharmdEntry
+    ? { ...ty,
+        label: pharmdEntry.name,
+        desc: `${pharmdEntry.course_count} ${pharmdEntry.course_count === 1 ? 'course' : 'courses'} · ${ty.desc}`,
+        cover: pharmdEntry.cover_url || null }
+    : ty));
 
   const activate = (ty, qOverride) => {
     const q = qOverride ?? query.trim();
@@ -118,8 +169,10 @@ export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord,
         </div>
       </div>
 
-      {/* Type cards grid — colour-block tiles */}
-      {visible.length > 0 ? (
+      {/* Type cards grid — colour-block tiles. Published programmes ride
+          the SAME layout: name as the title, description as "… program
+          materials", cover image in the corner tile (book icon fallback). */}
+      {(visible.length + progCards.length) > 0 ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, padding: '12px 16px 0' }}>
           <style>{`.dhub-card{transition:transform .15s ease,box-shadow .15s ease}.dhub-card:hover{transform:translateY(-2px)}.dhub-card:active{transform:scale(.97)}`}</style>
           {visible.map((ty) => (
@@ -131,14 +184,7 @@ export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord,
               {/* Depth arc */}
               <span aria-hidden="true" style={{ position: 'absolute', right: -26, bottom: -32, width: 112, height: 112,
                 borderRadius: '50%', border: '1.5px solid rgba(255,255,255,.16)', pointerEvents: 'none' }} />
-              {/* Tilted glass study-tile — our take on the corner art */}
-              <span aria-hidden="true" style={{ position: 'absolute', right: -9, bottom: -11, width: 60, height: 60,
-                borderRadius: 16, transform: 'rotate(-14deg)',
-                background: 'rgba(255,255,255,.18)', border: '1.5px solid rgba(255,255,255,.35)',
-                boxShadow: '0 6px 14px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.35)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, pointerEvents: 'none' }}>
-                {ty.icon?.startsWith('ti-') ? <Icon name={ty.icon} size={28}/> : ty.icon}
-              </span>
+              <CornerArt cover={ty.cover} icon={ty.icon} />
               {ty.soon && (
                 <span style={{ position: 'absolute', top: 10, right: 10, fontSize: 8.5, fontWeight: 900, letterSpacing: .4,
                   padding: '3px 8px', borderRadius: 99, background: 'rgba(0,0,0,.28)', color: 'rgba(255,255,255,.92)',
@@ -158,6 +204,26 @@ export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord,
                   <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                 </span>
               )}
+            </div>
+          ))}
+          {progCards.map((p, i) => (
+            <div key={p.id} onClick={() => onOpenProgramme?.(p)} role="button" aria-label={p.name} className="dhub-card"
+              style={{ position: 'relative', cursor: 'pointer', borderRadius: 20, padding: '13px 14px',
+                background: PROG_GRADS[i % PROG_GRADS.length], color: '#fff', overflow: 'hidden', minHeight: 122,
+                boxShadow: '0 4px 14px rgba(15,23,42,.16)', display: 'flex', flexDirection: 'column' }}>
+              {/* Depth arc */}
+              <span aria-hidden="true" style={{ position: 'absolute', right: -26, bottom: -32, width: 112, height: 112,
+                borderRadius: '50%', border: '1.5px solid rgba(255,255,255,.16)', pointerEvents: 'none' }} />
+              <CornerArt cover={p.cover_url} icon="ti-book" />
+              <p style={{ fontSize: 14.5, fontWeight: 900, margin: 0, lineHeight: 1.2, maxWidth: '76%',
+                textShadow: '0 1px 2px rgba(0,0,0,.12)' }}>{p.name}</p>
+              <p style={{ fontSize: 10.5, fontWeight: 700, margin: '4px 0 0', lineHeight: 1.35,
+                color: 'rgba(255,255,255,.78)', maxWidth: '82%' }}>{(p.description || p.name)} program materials</p>
+              <span style={{ marginTop: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10,
+                fontWeight: 900, padding: '4px 10px', borderRadius: 99, background: 'rgba(255,255,255,.22)',
+                color: '#fff', alignSelf: 'flex-start' }}>
+                {p.course_count} {p.course_count === 1 ? 'course' : 'courses'}{p.duration_label ? ` · ${p.duration_label}` : ''}
+              </span>
             </div>
           ))}
         </div>
