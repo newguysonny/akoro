@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation, Link } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
 import AkoroLogo from './components/common/AkoroLogo.jsx';
+import { PageLayout } from './components/Layout.jsx';
 
 import DashboardPage        from './pages/DashboardPage.jsx';
 import UsersPage            from './pages/UsersPage.jsx';
@@ -110,8 +111,14 @@ export default function App() {
           <Route path="/instructors"       element={<AdminRoute><InstructorsPage /></AdminRoute>} />
           <Route path="/schools"           element={<AdminRoute><SchoolsPage /></AdminRoute>} />
           <Route path="/courses"           element={<AdminRoute><CoursesPage /></AdminRoute>} />
-          {/* Program Courses — the prototype section (home / programs / courses / contents) */}
-          <Route path="/program-courses/*" element={<AdminRoute><ProgramCoursesSection /></AdminRoute>} />
+          {/* Program Courses — keep the same header/sidebar shell as every admin page. */}
+          <Route path="/program-courses/*" element={
+            <AdminRoute>
+              <PageLayout title="Program Courses" subtitle="Build and manage programs and learning content">
+                <ProgramCoursesSection />
+              </PageLayout>
+            </AdminRoute>
+          } />
           <Route path="/app-center"        element={<AdminRoute><AppCenterPage /></AdminRoute>} />
           <Route path="/agents"            element={<AdminRoute><AgentsPage /></AdminRoute>} />
           <Route path="/syllabus"          element={<AdminRoute><SyllabusPage /></AdminRoute>} />
