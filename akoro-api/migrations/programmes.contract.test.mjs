@@ -76,6 +76,7 @@ test("api: /api/programmes is the admin-only CRUD the section drives", () => {
   ]) {
     assert.ok(routes.includes(ep), `endpoint ${ep}`);
   }
+  assert.ok(routes.includes('log: Array.isArray(logResult?.data) ? logResult.data : []'), "overview exposes log rows as an array");
   // Every write lands in the activity log via the logWrite helper.
   assert.ok(routes.includes('from("programme_log").insert'), "logWrite inserts into programme_log");
   assert.ok((routes.match(/logLine\(/g) || []).length >= 6, "writes append to programme_log");
@@ -85,6 +86,7 @@ test("admin: the Program Courses section is routed, navigable and 1:1", () => {
   // App.jsx: the section route + its import.
   assert.ok(appJsx.includes('path="/program-courses/*"'), "section route");
   assert.ok(appJsx.includes("pages/programmes-page/index.jsx"), "section import");
+  assert.ok(appJsx.includes('<PageLayout title="Program Courses"'), "section uses the shared header/sidebar shell");
   // Layout: the sidebar group with the prototype's four destinations.
   assert.ok(layoutJsx.includes("'Program Courses'"), "nav group");
   for (const to of ["/program-courses", "/program-courses/programs", "/program-courses/courses", "/program-courses/contents"]) {
@@ -125,6 +127,8 @@ test("admin: every read unwraps the { success, data } envelope", () => {
   assert.ok(section.includes("const get = async (path)"), "unwrap helper");
   const direct = section.split("\n").filter((l) => l.includes("apiGet(") && !l.includes("await apiGet(path)"));
   assert.deepEqual(direct, [], "apiGet is only called inside the helper");
+  assert.ok(section.includes("const updates = Array.isArray(ov.log)"), "overview updates tolerate old Supabase result envelopes");
+  assert.ok(section.includes("updates.map((l) => ("), "updates render from the normalized array");
   // Phone shell: the section goes full-width below 768px (the header is the mobile surface).
   assert.ok(sectionCss.includes("max-width:768px"), "small-screen adoption");
 });
