@@ -189,10 +189,14 @@ test("catalogue: published programmes reach the learner app, published-only at e
   assert.ok(learnerHub.includes("CornerArt"), "cover image rides the corner tile, icon fallback");
   assert.ok(learnerShell.includes('v === "programme"'), "?view=programme routes in the shell");
   assert.ok(learnerShell.includes("<ProgrammePage"), "the programme page mounts in-tab");
-  // The golden-path empty states, verbatim.
+  // The golden-path empty states (section wording matches Pharm.D's).
   assert.ok(learnerPage.includes("No sections or courses yet"), "programme-level empty state");
-  assert.ok(learnerPage.includes("Courses for this section are coming soon."), "section-level empty state");
+  assert.ok(learnerPage.includes("Courses for {s.name} are coming soon."), "section-level empty state");
   assert.ok(learnerPage.includes("Published learning materials for this course will appear here."), "course-level empty state");
+  // Identical arrangement to the Pharm.D pages: the same pd-* skeleton.
+  for (const cls of ["pd-hero", "pd-section", "pd-row", "pd-card", "pd-art", "pd-folder-art", "pd-author-row", "pd-action-row", "pd-topic-list", "pd-topic-row"]) {
+    assert.ok(learnerPage.includes(cls), `Pharm.D layout class ${cls}`);
+  }
   // A material with a resource URL opens for the learner.
   assert.ok(learnerPage.includes("window.open(m.url"), "resource URL opens");
 });
