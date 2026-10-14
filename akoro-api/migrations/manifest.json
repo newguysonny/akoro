@@ -165,6 +165,7 @@
     "2026-coupons-gateway.sql",
     "2026-billing-messaging.sql",
     "2026-pharmd-courses.sql",
+    "2026-programmes.sql",
     "2026-hot-path-indexes.sql",
     "2026-library-folders.sql",
     "2026-library-folder-items.sql",

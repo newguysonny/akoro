@@ -1,0 +1,124 @@
+/*
+ * pc.css — the Program Courses section, ported 1:1 from
+ * reference/Kpemu Admin (1).html. Classes carry a pc- prefix and everything
+ * is scoped under .pcroot so nothing leaks into the admin shell; the
+ * reference's light-theme variables are pinned (this console has no dark
+ * mode). Only structural adoption: the root is a centred column inside the
+ * admin PageLayout, and the sub-480px collapses match the reference.
+ */
+.pcroot{
+  --bg:#fff;--text:#0d0d0d;--muted:#6e6e6e;--border:#e8e8e8;--pill:#f3f3f3;--pillon:#fff;
+  --icon:#efeaff;--fg:#6c3cff;--btn:#fff;--track:#f1f1f1;--ok:#16a34a;--warn:#c2740c;
+  color:var(--text);font:15px/1.5 Inter,system-ui,-apple-system,'Segoe UI',sans-serif;
+  max-width:720px;margin:0 auto;padding:28px 20px 70px}
+.pcroot *{box-sizing:border-box}
+.pcroot button,.pcroot input,.pcroot select,.pcroot textarea{font:inherit;color:inherit}
+.pcroot svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.pcroot h1{margin:0 0 6px;font-size:28px;font-weight:500;letter-spacing:-.01em}
+.pcroot h2{margin:0;font-size:17px;font-weight:600}
+.pcroot .lead{margin:0 0 22px;color:var(--muted)}
+.pcroot .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.pcroot .sp{flex:1}
+.pcroot .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:1px solid var(--border);border-radius:6px;background:var(--btn);font-size:14px;font-weight:500;cursor:pointer}
+.pcroot .btn:hover{background:var(--pill)}.pcroot .btn.p{background:var(--text);color:var(--bg);border-color:var(--text)}.pcroot .btn.d{color:#d6336c}
+.pcroot .btn:focus-visible,.pcroot button:focus-visible,.pcroot a:focus-visible,.pcroot input:focus-visible,.pcroot select:focus-visible,.pcroot textarea:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.pcroot .back{color:var(--muted);cursor:pointer;display:inline-block;margin-bottom:10px;font-size:14px;background:none;border:0;padding:0}
+.pcroot .chip{display:inline-block;font-size:13px;padding:1px 8px;border-radius:99px;background:var(--pill);color:var(--muted)}
+.pcroot .chip.pub{background:#dcf5e5;color:#12803d}.pcroot .chip.dr{background:#fdf0d5;color:var(--warn)}
+.pcroot .banner{position:relative;height:140px;border-radius:12px;overflow:hidden;color:#fff;margin-bottom:26px}
+.pcroot .track{display:flex;height:100%;transition:transform .6s cubic-bezier(.65,0,.35,1)}
+.pcroot .ad{flex:0 0 100%;padding:30px 24px 0}
+.pcroot .ad.a1{background:radial-gradient(circle at 88% 20%,rgba(255,255,255,.14) 0 44px,transparent 45px),linear-gradient(130deg,#6c3cff,#2d1b6e)}
+.pcroot .ad.a2{background:radial-gradient(circle at 82% 88%,rgba(255,255,255,.14) 0 50px,transparent 51px),linear-gradient(130deg,#0f6b34,#08331a)}
+.pcroot .ad.a3{background:radial-gradient(circle at 90% 15%,rgba(255,255,255,.18) 0 36px,transparent 37px),linear-gradient(130deg,#d9822b,#7a3a0c)}
+.pcroot .banner h3{margin:0 0 4px;font-size:17px;font-weight:600}.pcroot .banner p{margin:0 0 12px;max-width:64%;font-size:13px;color:rgba(255,255,255,.8)}
+.pcroot .banner .try{background:#fff;color:#111;border:0;border-radius:6px;padding:6px 12px;font-size:13px;font-weight:500;cursor:pointer}
+.pcroot .prog{position:absolute;left:0;right:0;bottom:0;height:3px;background:rgba(255,255,255,.15)}
+.pcroot .prog i{display:block;height:100%;background:rgba(255,255,255,.85);transform:scaleX(0);transform-origin:left;animation:pcpg 5s linear forwards}
+@keyframes pcpg{to{transform:scaleX(1)}}
+.pcroot .grid{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:40px}
+.pcroot .cell{padding:16px 14px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);min-height:108px}
+.pcroot .cell:nth-child(2n){border-right:0}.pcroot .cell:nth-last-child(-n+2){border-bottom:0}
+.pcroot .lbl{font-size:13px;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
+.pcroot .lbl.go{cursor:pointer}.pcroot .lbl.go:hover{color:var(--text)}
+.pcroot .val{margin:6px 0 10px;font-size:17px;font-weight:600}
+.pcroot .chart{display:block;width:100%;height:36px}
+.pcroot .mr{margin:10px 0 4px;display:flex;justify-content:space-between;font-size:13px}.pcroot .mr span:first-child{color:var(--muted)}
+.pcroot .meter{height:8px;border-radius:2px;background:var(--track);overflow:hidden}.pcroot .meter i{display:block;height:100%;background:var(--ok)}
+.pcroot .sec{margin-bottom:40px}
+.pcroot .cards{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.pcroot .card{display:flex;flex-direction:column;min-height:112px;padding:16px;border:1px solid var(--border);border-radius:10px;cursor:pointer;background:var(--bg);text-align:left;transition:transform .2s}
+.pcroot .card:hover{transform:translateY(-2px)}
+.pcroot .card.dark{border-color:#2d1b6e;color:#fff;background:linear-gradient(130deg,#6c3cff,#2d1b6e)}.pcroot .card.dark .d{color:rgba(255,255,255,.78)}
+.pcroot .ci{width:32px;height:32px;border-radius:8px;background:var(--pill);display:grid;place-items:center;margin-bottom:10px}.pcroot .card.dark .ci{background:rgba(255,255,255,.16)}
+.pcroot .card b{font-size:14px;font-weight:600}.pcroot .card .d{font-size:13px;color:var(--muted)}
+.pcroot .item{display:flex;gap:14px;margin-bottom:22px}
+.pcroot .ico{flex:none;width:30px;height:30px;border-radius:50%;background:var(--icon);color:var(--fg);display:grid;place-items:center}.pcroot .ico svg{width:15px;height:15px}
+.pcroot .item small{display:block;font-size:13px;color:var(--muted)}.pcroot .item b{display:block;font-size:13.5px;font-weight:600;margin:2px 0}.pcroot .item p{margin:0;font-size:13.5px;color:var(--muted)}
+.pcroot .tools{display:flex;gap:10px;margin:20px 0 18px;flex-wrap:wrap;align-items:center}
+.pcroot .sbox{position:relative;flex:1 1 240px;max-width:380px}
+.pcroot .sbox svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted);width:18px;height:18px;pointer-events:none}
+.pcroot .sbox input{padding-left:42px;padding-right:38px;border-radius:99px;background:var(--pill);border-color:transparent}
+.pcroot .sbox input:focus{background:var(--bg);border-color:var(--fg)}
+.pcroot .sx{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:24px;height:24px;border:0;border-radius:50%;background:var(--border);color:var(--text);cursor:pointer;font-size:12px;line-height:1;padding:0}
+.pcroot .tools select{width:auto;max-width:200px;border-radius:99px;background:var(--pill);border-color:transparent}
+.pcroot input,.pcroot select,.pcroot textarea{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);font-size:15px}
+.pcroot .list{border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:26px}
+.pcroot .li{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--border)}.pcroot .li:last-child{border:0}
+.pcroot .li.click{cursor:pointer}.pcroot .li.click:hover{background:var(--pill)}
+.pcroot .li .t{flex:1;min-width:0}.pcroot .li .t b{display:block;font-weight:600;font-size:15px;overflow-wrap:anywhere}.pcroot .li .t span{color:var(--muted);font-size:14px}
+.pcroot .tile{width:36px;height:36px;border-radius:8px;color:#fff;font-size:12px;font-weight:600;display:grid;place-items:center;flex:none;text-align:center;line-height:1.1}
+.pcroot .num{width:20px;color:var(--muted);text-align:center;flex:none}
+.pcroot .mini{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+.pcroot .mini button{border:1px solid var(--border);background:var(--btn);border-radius:6px;min-width:28px;height:28px;padding:0 8px;font-size:14px;cursor:pointer}
+.pcroot .mini button:disabled{opacity:.35;cursor:default}
+.pcroot .empty{border:1px dashed var(--border);border-radius:12px;padding:22px;text-align:center;color:var(--muted);margin-bottom:26px}
+.pcroot label{display:block;font-size:13px;font-weight:500;margin:12px 0 4px;color:var(--muted)}
+.pcroot .sw{display:flex;gap:8px}.pcroot .sw i{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid transparent;outline:1px solid var(--border)}.pcroot .sw i.on{border-color:var(--bg);outline:2px solid var(--text)}
+.pcroot .drop{border:1px dashed var(--border);border-radius:8px;padding:14px;text-align:center;color:var(--muted);cursor:pointer}
+.pcroot .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:8px 16px;border-radius:99px;z-index:5000;font-weight:500}
+.pcroot .form{max-width:520px}.pcroot .form .row{margin-top:22px}
+.pcroot .cover{position:relative;aspect-ratio:16/7;border:1px dashed var(--border);border-radius:12px;overflow:hidden;display:grid;place-items:center;color:var(--muted);cursor:pointer;background:var(--pill);text-align:center;padding:10px}
+.pcroot .cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.pcroot .cover svg{width:22px;height:22px;margin:0 auto 6px;display:block}
+.pcroot .cvact{position:absolute;right:8px;bottom:8px;display:flex;gap:6px}
+.pcroot .phero{height:150px;border-radius:12px;background-size:cover;background-position:center;margin-bottom:16px}
+.pcroot .thumb{width:36px;height:36px;border-radius:8px;background-size:cover;background-position:center;flex:none}
+.pcroot .sgrid,.pcroot .cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:26px}
+.pcroot .scard{display:flex;flex-direction:column;min-height:120px;padding:16px;border:1px solid var(--border);border-radius:12px;cursor:pointer;transition:transform .2s}
+.pcroot .scard:hover,.pcroot .ccard:hover{transform:translateY(-2px)}
+.pcroot .scard b{font-weight:600;font-size:15px}.pcroot .scard .d{color:var(--muted);font-size:14px}
+.pcroot .sarr{margin-top:auto;padding-top:10px;justify-content:flex-start}
+.pcroot .ccard{border:1px solid var(--border);border-radius:12px;overflow:hidden;cursor:pointer;display:flex;flex-direction:column;transition:transform .2s}
+.pcroot .cban{height:84px;color:#fff;font-weight:600;font-size:18px;padding:10px 14px;display:flex;align-items:flex-end}
+.pcroot .cbody{padding:12px 14px;flex:1}.pcroot .cbody b{display:block;font-weight:600}.pcroot .cbody span{color:var(--muted);font-size:14px}
+.pcroot .cact{padding:0 14px 12px;justify-content:flex-start}
+.pcroot .clist{margin:0 0 26px}
+.pcroot .crow{display:flex;align-items:center;gap:14px;padding:16px 2px}
+.pcroot .cn{width:26px;text-align:center;color:var(--muted);font-weight:600;font-size:17px;flex:none}
+.pcroot .ccd{display:flex;align-items:center;gap:14px;background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px}
+.pcroot .cth{position:relative;flex:none}
+.pcroot .th{width:92px;height:62px;border-radius:9px;background:var(--pill) center/cover no-repeat;display:grid;place-items:center;color:var(--fg)}
+.pcroot .th .tic{width:26px;height:26px}
+.pcroot .cnb{position:absolute;top:4px;left:4px;background:var(--text);color:var(--bg);border-radius:6px;font-size:12px;font-weight:600;padding:0 5px;line-height:16px}
+.pcroot .cct{flex:1;min-width:0}
+.pcroot .cct b{display:block;font-size:17px;font-weight:600;line-height:1.35;overflow-wrap:anywhere}
+.pcroot .cct span{display:block;margin-top:3px;font-size:14px;color:var(--muted)}
+.pcroot .cct em{font-style:normal;font-weight:600;color:var(--fg)}
+.pcroot .cm{border:0;background:none;width:32px;height:32px;border-radius:8px;display:grid;place-items:center;cursor:pointer;color:var(--muted);flex:none}
+.pcroot .cm:hover{background:var(--pill)}
+.pcroot .menu{display:flex;flex-direction:column;gap:4px;margin-top:10px}
+.pcroot .menu button{border:0;background:none;text-align:left;padding:10px 8px;border-radius:8px;cursor:pointer;font-size:15px}
+.pcroot .menu button:hover:not(:disabled){background:var(--pill)}
+.pcroot .menu button:disabled{opacity:.35;cursor:default}
+.pcroot .menu .d{color:#d6336c}
+.pcroot .ccd .rb{border:1px solid var(--border);background:var(--btn);color:var(--text);width:30px;height:30px;border-radius:8px;cursor:pointer}
+.pcroot .ccd .rb:disabled{opacity:.35;cursor:default}
+.pcroot [draggable="true"]{cursor:grab}
+@media (max-width:480px){
+  .pcroot .cards,.pcroot .grid{grid-template-columns:1fr}
+  .pcroot .cell{border-right:0!important;border-bottom:1px solid var(--border)!important}
+  .pcroot .cell:last-child{border-bottom:0!important}
+  .pcroot .banner p{max-width:90%}
+  .pcroot .th{width:76px;height:54px}
+}
+@media (prefers-reduced-motion:reduce){.pcroot .track,.pcroot .card{transition:none}.pcroot .prog{display:none}}
