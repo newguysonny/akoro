@@ -247,6 +247,41 @@ function ProgramsList() {
   );
 }
 
+/* ── A small styled modal — the prototype's dialog pattern ─────────────── */
+function NameModal({ title, label, initial = '', confirmLabel = 'Save', placeholder = '', onClose, onSubmit }) {
+  const [name, setName] = useState(initial);
+  const ref = useRef(null);
+  useEffect(() => { ref.current?.focus(); ref.current?.select(); }, []);
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  const submit = () => {
+    const v = name.trim();
+    if (v) onSubmit(v);
+  };
+  return (
+    <div className="mroot" onClick={onClose} role="presentation">
+      <div className="mcard" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
+        <h3>{title}</h3>
+        <label>{label}</label>
+        <input
+          ref={ref}
+          value={name}
+          placeholder={placeholder}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
+        />
+        <div className="row" style={{ marginTop: 20, justifyContent: 'flex-end' }}>
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn p" disabled={!name.trim()} onClick={submit}>{confirmLabel}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Program detail (+ sections) ────────────────────────────────────────── */
 function ProgramDetail() {
   const { pid } = useParams();
@@ -255,6 +290,8 @@ function ProgramDetail() {
   const [p, reload] = useData(() => apiGet(`/api/programmes/programs/${pid}`), [pid]);
   const [ro, setRo] = useState(false);
   const [dragI, setDragI] = useState(null);
+  // Section add/rename runs through the styled modal, never a browser prompt.
+  const [modal, setModal] = useState(null); // null | { mode: 'add' } | { mode: 'rename', section }
 
   if (!p) return null;
   const sections = p.sections ?? [];
@@ -270,17 +307,16 @@ function ProgramDetail() {
     toast('Program deleted');
     navigate('/program-courses/programs');
   };
-  const addSection = async () => {
-    const name = window.prompt('New section name (e.g. First Year)');
-    if (!name?.trim()) return;
-    await apiPost(`/api/programmes/programs/${p.id}/sections`, { name: name.trim() });
-    toast('Section added');
-    reload();
-  };
-  const renameSection = async (s) => {
-    const name = window.prompt('Rename section', s.name);
-    if (!name?.trim() || name.trim() === s.name) return;
-    await apiPatch(`/api/programmes/sections/${s.id}`, { name: name.trim() });
+  const saveModal = async (name) => {
+    if (modal?.mode === 'rename') {
+      if (name === modal.section.name) { setModal(null); return; }
+      await apiPatch(`/api/programmes/sections/${modal.section.id}`, { name });
+      toast('Section renamed');
+    } else {
+      await apiPost(`/api/programmes/programs/${p.id}/sections`, { name });
+      toast('Section added');
+    }
+    setModal(null);
     reload();
   };
   const delSection = async (s) => {
@@ -313,7 +349,7 @@ function ProgramDetail() {
       <div className="row"><h1>{p.name}</h1><Chip s={p.status} /></div>
       <p className="lead" style={{ marginBottom: 14 }}>{p.description || ''}{p.description && p.duration_label ? ' · ' : ''}{p.duration_label || ''}</p>
       <div className="row" style={{ marginBottom: 26 }}>
-        <button className="btn p" onClick={addSection}><I k="plus" />Add section</button>
+        <button className="btn p" onClick={() => setModal({ mode: 'add' })}><I k="plus" />Add section</button>
         <button className="btn" onClick={() => navigate(`/program-courses/programs/${p.id}/edit`)}>Edit</button>
         <button className="btn" onClick={() => toast(`${p.name} — students see ${sections.length} section(s) and ${(sections ?? []).reduce((n, s) => n + s.course_count, 0)} course(s)`)}>Preview</button>
         <button className="btn" onClick={toggle}>{p.status === 'published' ? 'Unpublish' : 'Publish'}</button>
@@ -346,7 +382,7 @@ function ProgramDetail() {
               )}
               {!ro && (
                 <div className="mini sarr">
-                  <button onClick={(e) => { e.stopPropagation(); renameSection(s); }}>Rename</button>
+                  <button onClick={(e) => { e.stopPropagation(); setModal({ mode: 'rename', section: s }); }}>Rename</button>
                   <button className="d" onClick={(e) => { e.stopPropagation(); delSection(s); }} style={{ color: '#d6336c' }}>Delete</button>
                 </div>
               )}
@@ -354,6 +390,18 @@ function ProgramDetail() {
           ))}
         </div>
       ) : <div className="empty">No sections yet. Add a section to start adding courses.</div>}
+
+      {modal && (
+        <NameModal
+          title={modal.mode === 'rename' ? 'Rename section' : 'Add section'}
+          label="Section name"
+          initial={modal.mode === 'rename' ? modal.section.name : ''}
+          confirmLabel={modal.mode === 'rename' ? 'Save' : 'Add section'}
+          placeholder="e.g. First Year"
+          onClose={() => setModal(null)}
+          onSubmit={saveModal}
+        />
+      )}
     </>
   );
 }

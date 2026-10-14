@@ -122,3 +122,9 @@
   .pcroot .th{width:76px;height:54px}
 }
 @media (prefers-reduced-motion:reduce){.pcroot .track,.pcroot .card{transition:none}.pcroot .prog{display:none}}
+
+/* ── The styled modal (section add / rename) ─────────────────────────── */
+.pcroot .mroot{position:fixed;inset:0;background:rgba(13,13,13,.44);display:grid;place-items:center;z-index:4000;padding:20px}
+.pcroot .mcard{width:100%;max-width:400px;background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;box-shadow:0 18px 50px rgba(0,0,0,.18)}
+.pcroot .mcard h3{margin:0;font-size:17px;font-weight:600}
+.pcroot .mcard label{margin-top:14px}

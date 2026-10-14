@@ -109,6 +109,15 @@ test("admin: the Program Courses section is routed, navigable and 1:1", () => {
   assert.ok(sectionCss.includes("width:720px"), "the reference's 720px column");
 });
 
+test("admin: section names go through the styled modal, never a browser prompt", () => {
+  assert.ok(section.includes("function NameModal"), "styled modal component");
+  assert.ok(!section.includes("window.prompt"), "no window.prompt anywhere");
+  assert.ok(section.includes("mode: 'rename'"), "rename opens the modal");
+  assert.ok(section.includes("setModal({ mode: 'add' })"), "add opens the modal");
+  assert.ok(sectionCss.includes(".mroot"), "overlay css");
+  assert.ok(sectionCss.includes(".mcard"), "modal card css");
+});
+
 /* ── No-emoji guard: the new section renders drawn SVGs only ────────────── */
 const EMOJI = /[\u{1F000}-\u{1FAFF}]|[\u{2600}-\u{27BF}]|[\u{FE00}-\u{FE0F}]|[\u{1F1E6}-\u{1F1FF}]/u;
 
