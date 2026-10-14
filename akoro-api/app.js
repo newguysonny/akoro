@@ -65,6 +65,7 @@ import battleModule               from "./modules/battle/routes.js";
 import tasksModule                from "./modules/tasks/routes.js";
 import selfStudyModule            from "./modules/self-study/routes.js";
 import pharmdModule              from "./modules/pharmd/routes.js";
+import programmesModule          from "./modules/programmes/routes.js";
 import hfMirrorModule            from "./modules/hfmirror/routes.js";
 import parseConsoleModule        from "./modules/records/parseConsole.js";
 import agentConsoleModule        from "./modules/agentConsole/routes.js";
@@ -785,6 +786,7 @@ app.use("/api/tasks",      aiLimit,       tasksModule);
 app.use("/api/self-study/plan", aiLimit);
 app.use("/api/self-study", standardLimit, selfStudyModule);
 app.use("/api/pharmd",      standardLimit, pharmdModule);          // PHARM.D programme catalogue
+app.use("/api/programmes",  standardLimit, programmesModule);  // Program Courses (admin)
 app.use("/api/hf",          standardLimit, hfMirrorModule);        // Hugging Face model mirror console (key-guarded)
 app.use("/api/parse",       standardLimit, parseConsoleModule);
 app.use("/api/agent-console", standardLimit, agentConsoleModule);   // learner Agent Chat test console (AGENT_CONSOLE_KEY)   // parse-worker console (key-guarded browser tester)

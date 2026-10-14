@@ -208,8 +208,11 @@ test("the agent can read and revise its drafts — and the loop closes in chat",
 test("assignment feedback reaches the conversation; previews stay live", () => {
   // Q1: resolving a draft is pushed into the chat, so the transcript — and
   // next turn's history — carry the outcome the agent can speak about.
-  assert.match(chatPage, /'✅ Assigned — the learners on this draft have been notified and it is on their Activities feed\.'/);
-  assert.match(chatPage, /'🗑️ Draft discarded — nothing was sent to anyone\.'/);
+  // The console renders emoji-free (2026-10 sweep): the feedback lines are
+  // plain text now — pin the clean strings AND the absence of emoji.
+  assert.match(chatPage, /'Assigned — the learners on this draft have been notified and it is on their Activities feed\.'/);
+  assert.match(chatPage, /Draft discarded — nothing was sent to anyone\./);
+  assert.ok(!/✅|🗑️/.test(chatPage), 'ChatPage renders no emoji');
   // Q2: a revise echo bumps the draft's revision counter and re-renders Preview.
   assert.match(chatPage, /x\.tool === 'revise_activity_draft' && x\.success/);
   assert.match(chatPage, /setDraftRevisions\(\(prev\) => \(\{ \.\.\.prev, \[x\.draft\.id\]: \(prev\[x\.draft\.id\] \|\| 0\) \+ 1 \}\)\)/);
