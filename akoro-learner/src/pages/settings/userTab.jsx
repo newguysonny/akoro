@@ -195,14 +195,18 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
       return;
     }
 
-    /* Change password — separate API endpoint */
+    /* Change password — separate API endpoint. With no password on file
+       (OAuth sign-up) this is "set password": no current password exists,
+       so none is sent — the API only verifies one when one is stored. */
     if (field === 'password') {
+      const setting = profile.hasPassword === false;
       try {
-        const res = await changePassword({ currentPassword: val.current, newPassword: val.next });
-        if (!res.success) { showToast(res.message || 'Failed to change password'); return; }
-        showToast('Password changed — please sign in again');
+        const res = await changePassword({ currentPassword: val.current || undefined, newPassword: val.next });
+        if (!res.success) { showToast(res.message || (setting ? 'Failed to set password' : 'Failed to change password')); return; }
+        showToast(setting ? 'Password set — please sign in again' : 'Password changed — please sign in again');
+        setProfile(p => ({ ...p, hasPassword: true }));
         setTimeout(() => onLogout?.(), 1800);
-      } catch { showToast('Failed to change password'); }
+      } catch { showToast(setting ? 'Failed to set password' : 'Failed to change password'); }
       return;
     }
 
@@ -495,8 +499,13 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
       </Section>
 
       <Section title={t('settings.privacy')}>
-        <Row icon="ti-key" label={t('settings.change_password')}
-          onClick={()=>openSheet('password',t('settings.change_password'),'change-password')}/>
+        {/* OAuth accounts may have no password on file: the row reads
+            "Set password" and the sheet skips the current-password field. */}
+        <Row icon="ti-key"
+          label={profile.hasPassword===false ? t('settings.set_password') : t('settings.change_password')}
+          onClick={()=>profile.hasPassword===false
+            ? openSheet('password',t('settings.set_password'),'set-password')
+            : openSheet('password',t('settings.change_password'),'change-password')}/>
         <div style={{ ...rowBase,cursor:'pointer' }}
           onMouseEnter={e=>e.currentTarget.style.background='var(--ak-surface-hover)'}
           onMouseLeave={e=>e.currentTarget.style.background='var(--ak-surface)'}

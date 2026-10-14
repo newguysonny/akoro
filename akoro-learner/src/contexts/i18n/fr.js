@@ -138,6 +138,8 @@ export const FR = {
   'settings.notifications':  'Notifications',
   'settings.privacy':        'Confidentialité et sécurité',
   'settings.change_password':'Modifier le mot de passe',
+  'settings.set_password': 'Définir le mot de passe',
+  'settings.set_pw_note': "Vous vous êtes connecté avec Google, ce compte n'a donc pas encore de mot de passe. Créez-en un pour pouvoir aussi vous connecter avec votre e-mail.",
   'settings.two_factor':     'Authentification à deux facteurs',
   'settings.deactivate':     'Désactiver le compte',
   'settings.delete':         'Supprimer le compte',

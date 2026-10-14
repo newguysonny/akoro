@@ -152,6 +152,8 @@ export const PCM = {
   'settings.notifications':  'Notification dem',
   'settings.privacy':        'Privacy & Security',
   'settings.change_password':'Change Password',
+  'settings.set_password': 'Set Password',
+  'settings.set_pw_note': 'You take Google sign in, so this account never get password. Create one make you fit sign in with your email too.',
   'settings.two_factor':     'Two-Factor Auth',
   'settings.deactivate':     'Off Account',
   'settings.delete':         'Delete Account',
