@@ -2,231 +2,325 @@
  * ProgrammePage.jsx
  * ─────────────────────────────────────────────────────────────
  * The generic published-programme experience the Discover hub's
- * programme cards open — the admin console's Program Courses tree
- * as learners see it, on REAL data via /api/programmes/catalogue
- * (services/programmesApi.js). Published-only at every level: the
- * API never returns draft programmes, courses or materials.
+ * programme cards open — IDENTICAL layout and arrangement to the
+ * PHARM.D pages (PharmDProgram.jsx): the same hero, the same
+ * horizontal year/section rows of 132px course cards, the same
+ * course folder (art banner, author row, action row, numbered
+ * topic list). Only the content differs — it reads the admin
+ * console's Program Courses tree via /api/programmes/catalogue
+ * (services/programmesApi.js), published-only at every level,
+ * and a cover image (programme or course) replaces the gradient
+ * wherever the admin supplied one.
  *
  * Two views, like PharmDProgram:
- *   browse — programme hero (cover image or gradient fallback,
- *            name, description, duration, published-course count)
- *            and the section rows with their course cards (cover
- *            image or the admin's colour gradient).
- *   folder — one course: banner, instructor line, then "Course
- *            content" with the published materials. A material
- *            with a resource URL opens in a new tab.
+ *   browse — programme hero + section rows of course cards.
+ *   folder — one course: art, author, action row, materials list.
+ *     A material with a resource URL opens in a new tab.
  *
  * Empty states (the golden-path audit's three questions):
  *   · no sections at all → "No sections or courses yet — programme
  *     content is coming soon."
- *   · a section with no published course → "Courses for this
- *     section are coming soon."
+ *   · a section with no published course → "Courses for {section}
+ *     are coming soon." (the Pharm.D wording)
  *   · a course with no published material → "Published learning
  *     materials for this course will appear here."
  *
  * Mounted in-tab by LearnerDashboard (?view=programme&programme=ID,
  * plus ?pcourse=ID for the open course) so the browser Back/Forward
- * walk hub > browse > folder like the Pharm.D chain does.
+ * walk hub > browse > folder exactly like the Pharm.D chain. On
+ * mobile it is the full-screen takeover, in-tab on tablet/desktop —
+ * the same .pd-page / .pd-inline split as PharmDProgram.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { BRAND } from '../../constants.js';
 import { Icon } from '../common/Icons.jsx';
+import Toast from '../common/Toast.jsx';
 import Spinner from '../common/Spinner.jsx';
+import { useIsMobileView } from '../teaching/SessionReaderModal.jsx';
+import { AUTHOR } from '../pharmd/pharmdData.js';
 import { fetchProgramme, fetchProgrammeCourse } from '../../services/programmesApi.js';
-import { FONT } from '../tabs/dhubTypes.js';
 
-/* The admin console's six course-card gradients — same vocabulary. */
+/* The admin console's six course-card gradients — the colour the admin
+   picked for each course, used wherever there is no cover image. */
 export const COURSE_G = [
   'linear-gradient(145deg,#ff6b52,#8a2c20)', 'linear-gradient(145deg,#6c3cff,#2d1b6e)',
   'linear-gradient(145deg,#14b8a0,#0b6b60)', 'linear-gradient(145deg,#4a8af0,#2652b5)',
   'linear-gradient(145deg,#ee4a73,#a11d45)', 'linear-gradient(145deg,#f0894a,#c0501a)',
 ];
-const PROGRAMME_G = 'linear-gradient(140deg,#4C8DF0,#2E62D9)';
 
-const TYPE_ICON = {
-  pdf: 'ti-file-text', video: 'ti-video', audio: 'ti-headphones',
-  note: 'ti-notes', link: 'ti-link', slides: 'ti-presentation',
-};
 const TYPE_LABEL = { pdf: 'PDF', video: 'Video', audio: 'Audio', note: 'Note', link: 'Link', slides: 'Slides' };
 
-const Back = ({ label, onClick }) => (
-  <button onClick={onClick} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, margin: '12px 16px 0',
-    padding: '7px 12px', borderRadius: 99, border: '1px solid var(--ak-border3)', background: 'var(--ak-surface)',
-    color: 'var(--ak-text)', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-    <Icon name="ti-arrow-left" size={14} />{label}
-  </button>
-);
+/* Art for a course tile/banner: the cover image when the admin set one,
+   the admin-picked gradient when not (the Pharm.D ::after wash keeps the
+   code legible over both). */
+const artFor = (c) => (c?.cover_url
+  ? { backgroundImage: `url(${c.cover_url})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+  : { background: COURSE_G[c?.color || 0] });
 
-const EmptyNote = ({ children }) => (
-  <div style={{ margin: '10px 16px 0', padding: '22px 18px', borderRadius: 14, border: '1px dashed var(--ak-border2)',
-    background: 'var(--ak-surface)', textAlign: 'center' }}>
-    <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text-sec, #6B7280)' }}>{children}</p>
-  </div>
-);
+/* One line under a material: honest about what the data has. */
+const materialMeta = (m) => [TYPE_LABEL[m.type] || 'PDF', m.meta || null].filter(Boolean).join(' · ');
 
-/* One course card in a section row. */
-function CourseCard({ c, onOpen }) {
-  return (
-    <div onClick={() => onOpen(c)} role="button" aria-label={c.title || c.code}
-      style={{ cursor: 'pointer', borderRadius: 16, overflow: 'hidden', background: 'var(--ak-surface)',
-        border: '1px solid var(--ak-border3)' }}>
-      <div style={{ height: 76, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: '#fff', fontWeight: 900, fontSize: 15, letterSpacing: .4,
-        ...(c.cover_url
-          ? { backgroundImage: `url(${c.cover_url})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-          : { background: COURSE_G[c.color || 0] }) }}>
-        {c.cover_url ? '' : (c.code || '').slice(0, 10)}
-      </div>
-      <div style={{ padding: '9px 11px 11px' }}>
-        <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: 'var(--ak-text)', lineHeight: 1.25 }}>{c.title || c.code}</p>
-        <p style={{ margin: '3px 0 0', fontSize: 11, fontWeight: 700, color: 'var(--ak-text-sub)' }}>
-          by {c.instructor || 'Akoro'} · {c.materials_count} {c.materials_count === 1 ? 'resource' : 'resources'}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-/* ── The course folder view ───────────────────────────────────── */
-function CourseFolder({ courseId, onBack }) {
-  const [course, setCourse] = useState(undefined); // undefined = loading, null = missing
-  useEffect(() => {
-    let on = true;
-    setCourse(undefined);
-    fetchProgrammeCourse(courseId).then((c) => { if (on) setCourse(c); }).catch(() => { if (on) setCourse(null); });
-    return () => { on = false; };
-  }, [courseId]);
-
-  if (course === undefined) return <div style={{ padding: 60, display: 'flex', justifyContent: 'center' }}><Spinner /></div>;
-  if (!course) return (
-    <>
-      <Back label="Programme" onClick={onBack} />
-      <EmptyNote>This course is not available right now.</EmptyNote>
-    </>
-  );
-
-  const materials = course.materials ?? [];
-  return (
-    <div style={{ fontFamily: FONT, paddingBottom: 90 }}>
-      <Back label={course.programme?.name || 'Programme'} onClick={onBack} />
-      <div style={{ margin: '12px 16px 0', borderRadius: 18, overflow: 'hidden', border: '1px solid var(--ak-border3)' }}>
-        <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: '#fff', fontWeight: 900, fontSize: 22, letterSpacing: .5,
-          ...(course.cover_url
-            ? { backgroundImage: `url(${course.cover_url})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-            : { background: COURSE_G[course.color || 0] }) }}>
-          {course.cover_url ? '' : course.code}
-        </div>
-        <div style={{ padding: '12px 14px 14px', background: 'var(--ak-surface)' }}>
-          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 900, color: 'var(--ak-text)' }}>{course.title || course.code}</h2>
-          <p style={{ margin: '4px 0 0', fontSize: 12, fontWeight: 700, color: 'var(--ak-text-sub)' }}>
-            by {course.instructor || 'Akoro'}{course.section?.name ? ` · ${course.section.name}` : ''}
-          </p>
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '18px 16px 6px' }}>
-        <h3 style={{ margin: 0, fontSize: 14.5, fontWeight: 900, color: 'var(--ak-text)' }}>Course content</h3>
-        <span style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--ak-text-sub)' }}>
-          {materials.length} {materials.length === 1 ? 'resource' : 'resources'}
-        </span>
-      </div>
-
-      {materials.length ? materials.map((m, n) => (
-        <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 11, margin: '8px 16px 0',
-          padding: '11px 12px', borderRadius: 14, background: 'var(--ak-surface)', border: '1px solid var(--ak-border3)' }}>
-          <span style={{ width: 38, height: 38, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'var(--ak-tag-bg, #F3F4F6)', flexShrink: 0,
-            ...(m.thumb_url ? { backgroundImage: `url(${m.thumb_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}) }}>
-            {m.thumb_url ? null : <Icon name={TYPE_ICON[m.type] || 'ti-file-text'} size={17} color="var(--ak-text-sec, #6B7280)" />}
-          </span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: 'var(--ak-text)', lineHeight: 1.3 }}>{n + 1}. {m.title}</p>
-            <p style={{ margin: '2px 0 0', fontSize: 11, fontWeight: 700, color: 'var(--ak-text-sub)' }}>
-              {TYPE_LABEL[m.type] || 'PDF'}{m.meta ? ` · ${m.meta}` : ''}
-            </p>
-          </div>
-          {m.url && (
-            <button onClick={() => window.open(m.url, '_blank', 'noopener')} aria-label={`Open ${m.title}`}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 12px', borderRadius: 99,
-                border: 'none', background: 'var(--ak-text)', color: 'var(--ak-surface)', fontSize: 11.5, fontWeight: 800,
-                cursor: 'pointer', fontFamily: FONT, flexShrink: 0 }}>
-              Open<Icon name="ti-external-link" size={12} />
-            </button>
-          )}
-        </div>
-      )) : (
-        <EmptyNote>Published learning materials for this course will appear here.</EmptyNote>
-      )}
-    </div>
-  );
-}
-
-/* ── The programme browse view (default export) ───────────────── */
 export default function ProgrammePage({ programmeId, onClose,
-  courseRoute = null,   // the course id the URL says is open (null = browse)
+  courseRoute = null,   // the course id the URL says is open (null = browse view)
   onCourseRoute,        // (id|null) — mirror a course transition into the URL
 }) {
-  const [p, setP] = useState(undefined); // undefined = loading, null = missing
+  const isMobile = useIsMobileView();       // mobile keeps the takeover; the rest render in-tab
+  const inline = !isMobile;
+  const [view, setView] = useState(courseRoute ? 'folder' : 'browse');  // browse | folder
+  const [courseId, setCourseId] = useState(courseRoute);  // the open course id
+  const [toast, setToast] = useState(null);
+
+  /* Real data: the programme tree and the open course. */
+  const [p, setP] = useState(null);               // null = still loading
+  const [loadErr, setLoadErr] = useState(false);
+  const [loadTick, setLoadTick] = useState(0);    // Try again
+  const [courseData, setCourseData] = useState(null);
+  const [courseLoading, setCourseLoading] = useState(false);
+  const scrollRef = useRef(null);
+
+  const materials = courseData?.materials ?? [];
+  const sections = p?.sections ?? [];
+  /* The open course's tree entry — art and colour while the folder loads. */
+  const treeCourse = sections.flatMap((s) => s.courses ?? []).find((c) => c.id === courseId) || null;
+  const folderCourse = courseData || treeCourse;
+
+  /* The programme, once per open (and on Try again). */
   useEffect(() => {
-    let on = true;
-    setP(undefined);
-    fetchProgramme(programmeId).then((d) => { if (on) setP(d); }).catch(() => { if (on) setP(null); });
-    return () => { on = false; };
-  }, [programmeId]);
+    let alive = true;
+    (async () => {
+      try {
+        const d = await fetchProgramme(programmeId);
+        if (!alive) return;
+        setP(d);
+        setLoadErr(!d);
+      } catch {
+        if (alive) setLoadErr(true);
+      }
+    })();
+    return () => { alive = false; };
+  }, [programmeId, loadTick]);
 
-  if (courseRoute) return <CourseFolder courseId={courseRoute} onBack={() => onCourseRoute?.(null)} />;
+  /* Every view change starts at the top (the Pharm.D behaviour) — the
+     phone column's own scroll on mobile, the tab container's when in-tab. */
+  useEffect(() => {
+    scrollRef.current?.scrollTo(0, 0);
+    scrollRef.current?.closest('.ak-dash-scroll')?.scrollTo(0, 0);
+  }, [view, courseId]);
 
-  if (p === undefined) return <div style={{ padding: 60, display: 'flex', justifyContent: 'center' }}><Spinner /></div>;
-  if (!p) return (
-    <>
-      <Back label="Discover" onClick={onClose} />
-      <EmptyNote>This programme is not available right now.</EmptyNote>
-    </>
-  );
+  const soon = (label) => setToast({ msg: `${label} — coming soon`, color: BRAND });
 
-  const sections = p.sections ?? [];
+  /* Open a course — or, with null, go back to the browse view. Our own
+     transitions mirror into the URL (?pcourse=ID) so Back/Forward walk
+     the hub > browse > folder chain; the sync effect below follows the
+     entries we did NOT push (the history buttons). */
+  const lastRouteRef = useRef(courseRoute);
+  const openCourse = async (id) => {
+    if (id !== courseRoute) {
+      lastRouteRef.current = id;
+      onCourseRoute?.(id);
+    }
+    setCourseId(id);
+    setView(id ? 'folder' : 'browse');
+    setCourseData(null);
+    if (!id) return;
+    setCourseLoading(true);
+    try {
+      setCourseData(await fetchProgrammeCourse(id));
+    } catch {
+      setToast({ msg: 'Could not load that course — check your connection.', color: BRAND });
+    } finally {
+      setCourseLoading(false);
+    }
+  };
+
+  /* The URL moved without us (browser Back/Forward, deep link): follow. */
+  useEffect(() => {
+    if (courseRoute === lastRouteRef.current) return;
+    lastRouteRef.current = courseRoute;
+    if (courseRoute) openCourse(courseRoute);
+    else { setView('browse'); setCourseId(null); }
+  }, [courseRoute]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* A deep link / refresh straight into a course folder: land open. */
+  useEffect(() => { if (courseRoute) openCourse(courseRoute); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* A material opens its resource URL; without one it is on its way. */
+  const openMaterial = (m) => {
+    if (m?.url) window.open(m.url, '_blank', 'noopener');
+    else setToast({ msg: 'This material has no file yet — check back soon.', color: BRAND });
+  };
+
+  /* Start where the learner left off — the first openable material. */
+  const startLearning = () => {
+    const first = materials.find((m) => m.url) || materials[0];
+    if (first) openMaterial(first);
+  };
+
+  const code = folderCourse?.code || '';
+  const heroStyle = p?.cover_url
+    ? { backgroundImage: `linear-gradient(160deg, rgba(37,21,99,.78) 0%, rgba(46,26,110,.85) 75%), url(${p.cover_url})`,
+        backgroundSize: 'cover', backgroundPosition: 'center' }
+    : undefined;
 
   return (
-    <div style={{ fontFamily: FONT, paddingBottom: 90 }}>
-      <Back label="Discover" onClick={onClose} />
+    <div role={inline ? undefined : 'dialog'} aria-modal={inline ? undefined : 'true'}
+      aria-label={inline ? undefined : (p?.name || 'Programme')}
+      className={inline ? 'pd-inline' : 'pd-page'}>
+      <style>{`
+        .pd-page{position:fixed;inset:0;z-index:1500;background:var(--ak-bg,#FAFAFC);display:flex;justify-content:center;font-family:'Nunito',system-ui,sans-serif;color:var(--ak-text,#111827)}
+        /* Desktop/tablet — in-tab inside the app shell: plain flow content,
+           the tab's own scroll container scrolls it, the shell chrome stays. */
+        .pd-inline{width:100%;display:flex;justify-content:center;font-family:'Nunito',system-ui,sans-serif;color:var(--ak-text,#111827)}
+        .pd-phone.pd-phone-inline{width:100%;max-width:none;height:auto;overflow:visible;background:transparent}
+        .pd-phone{width:100%;max-width:430px;height:100%;overflow-y:auto;position:relative;background:var(--ak-bg,#FAFAFC);padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+        .pd-back{width:36px;height:36px;border-radius:50%;border:none;background:rgba(255,255,255,0.14);color:#fff;font-size:1.1rem;font-weight:700;cursor:pointer;margin-bottom:20px;font-family:inherit}
+        /* Browse */
+        .pd-hero{background:linear-gradient(160deg, ${BRAND} 0%, #2E1A6E 75%);padding:20px 22px 28px}
+        .pd-hero h1{font-size:2.1rem;font-weight:900;margin:0;color:#fff}
+        .pd-hero .pd-sub{color:rgba(255,255,255,0.75);font-weight:700;font-size:.85rem;margin-top:6px}
+        .pd-section{padding:22px 0 4px}
+        .pd-section h2{font-size:1.15rem;font-weight:800;margin:0 0 14px;padding:0 22px;color:var(--ak-text,#111827)}
+        .pd-row{display:flex;gap:14px;overflow-x:auto;padding:0 22px 10px;scrollbar-width:none}
+        .pd-row::-webkit-scrollbar{display:none}
+        .pd-card{flex:0 0 132px;cursor:pointer;background:none;border:none;padding:0;text-align:left;font-family:inherit;color:inherit}
+        .pd-card .pd-art{width:132px;height:132px;border-radius:14px;display:flex;flex-direction:column;justify-content:flex-end;padding:12px;position:relative;overflow:hidden}
+        .pd-card .pd-art::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 40%,rgba(0,0,0,0.35) 100%)}
+        .pd-card .pd-code{position:relative;z-index:1;font-weight:900;font-size:1.05rem;color:#fff}
+        .pd-card .pd-name{font-size:.85rem;font-weight:700;margin-top:8px;color:var(--ak-text,#111827)}
+        .pd-card .pd-meta{font-size:.74rem;color:var(--ak-text-sub,#6B7280);font-weight:600;margin-top:2px}
+        .pd-card .pd-reads{font-size:.74rem;color:var(--ak-text-sub,#6B7280);font-weight:600;margin-top:1px}
+        .pd-empty{padding:18px 22px;flex:0 0 auto;width:100%}
+        .pd-empty-card{border:1.5px dashed var(--ak-border2,#E5E7EB);border-radius:14px;padding:18px;text-align:center;color:var(--ak-text-sub,#6B7280);font-weight:700;font-size:.85rem}
+        /* Folder */
+        .pd-folder-hero{padding:20px 22px 24px;position:relative}
+        .pd-folder-art{width:100%;aspect-ratio:1.6;border-radius:16px;display:flex;align-items:center;justify-content:center;margin:18px 0 20px;position:relative;overflow:hidden}
+        .pd-phone.pd-phone-inline .pd-folder-art{max-height:280px}
+        .pd-code-big{font-size:2.6rem;font-weight:900;color:rgba(255,255,255,0.92);letter-spacing:.02em}
+        .pd-folder-title{font-size:1.5rem;font-weight:900;margin:0 0 4px;color:var(--ak-text,#111827)}
+        .pd-author-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+        .pd-author-avatar{width:24px;height:24px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:900;color:#fff}
+        .pd-author-name{font-size:.86rem;font-weight:800;color:var(--ak-text,#111827)}
+        .pd-folder-meta{color:var(--ak-text-sub,#6B7280);font-weight:700;font-size:.85rem;margin:0 0 20px}
+        .pd-action-row{display:flex;align-items:center;gap:14px;margin-bottom:8px}
+        .pd-start{flex:1;padding:13px;border-radius:100px;border:none;background:${BRAND};color:#fff;font-family:inherit;font-weight:800;font-size:.95rem;cursor:pointer}
+        .pd-icon-btn{width:44px;height:44px;border-radius:50%;border:1px solid var(--ak-border2,#E5E7EB);background:var(--ak-surface,#fff);color:var(--ak-text,#111827);font-size:1.1rem;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;font-family:inherit;text-decoration:none}
+        .pd-topic-list{padding:18px 10px 30px}
+        .pd-topic-row{display:flex;align-items:center;gap:14px;padding:13px 12px;border-radius:12px;cursor:pointer}
+        .pd-topic-row:hover{background:var(--ak-surface,#fff)}
+        .pd-topic-num{width:30px;text-align:center;color:var(--ak-text-sub,#6B7280);font-weight:800;font-size:.9rem;flex-shrink:0}
+        .pd-t-name{font-weight:700;font-size:.95rem;color:var(--ak-text,#111827)}
+        .pd-t-meta{font-size:.76rem;color:var(--ak-text-sub,#6B7280);font-weight:600;margin-top:2px}
+        .pd-more{background:none;border:none;color:var(--ak-text-sub,#6B7280);padding:6px 4px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:inherit}
+        /* Loading / error states */
+        .pd-state{padding:36px 22px;display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--ak-text-sub,#6B7280);font-weight:700;font-size:.85rem}
+      `}</style>
 
-      {/* Hero — cover image when supplied, gradient wash when not. */}
-      <div style={{ margin: '12px 16px 0', borderRadius: 20, overflow: 'hidden', position: 'relative',
-        minHeight: 132, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
-        ...(p.cover_url
-          ? { backgroundImage: `url(${p.cover_url})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-          : { background: PROGRAMME_G }) }}>
-        <div style={{ padding: '38px 16px 14px', background: 'linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.55))' }}>
-          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#fff', textShadow: '0 1px 3px rgba(0,0,0,.3)' }}>{p.name}</h1>
-          <p style={{ margin: '4px 0 0', fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,.85)' }}>
-            {[p.description, p.duration_label].filter(Boolean).join(' · ')}
-          </p>
-          <p style={{ margin: '4px 0 0', fontSize: 11.5, fontWeight: 800, color: 'rgba(255,255,255,.75)' }}>
-            {p.published_courses} published {p.published_courses === 1 ? 'course' : 'courses'}
-          </p>
-        </div>
+      <div className={inline ? 'pd-phone pd-phone-inline' : 'pd-phone'} ref={scrollRef}>
+
+        {/* ── View 1: Browse ── */}
+        {view === 'browse' && (
+          <div>
+            <div className="pd-hero" style={heroStyle}>
+              <button className="pd-back" aria-label="Back to Discover" onClick={onClose}>←</button>
+              <h1>{p?.name || '\u00A0'}</h1>
+              <div className="pd-sub">{[p?.description, p?.duration_label].filter(Boolean).join(' · ')}</div>
+            </div>
+            {p === null && !loadErr && (
+              <div className="pd-state"><Spinner size={18} color={BRAND}/> Loading the programme…</div>
+            )}
+            {loadErr && (
+              <div className="pd-state">
+                <div>Could not load the programme — check your connection.</div>
+                <button onClick={() => { setP(null); setLoadErr(false); setLoadTick((t) => t + 1); }}
+                  style={{ padding: '9px 18px', borderRadius: 20, border: 'none', background: BRAND, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  Try again
+                </button>
+              </div>
+            )}
+            {p && !loadErr && !sections.length && (
+              <div className="pd-empty"><div className="pd-empty-card">No sections or courses yet — programme content is coming soon.</div></div>
+            )}
+            {sections.map((s) => (
+              <div className="pd-section" key={s.id}>
+                <h2>{s.name}</h2>
+                {s.courses?.length ? (
+                  <div className="pd-row">
+                    {s.courses.map((c) => (
+                      <div key={c.id} className="pd-card" role="button" tabIndex={0}
+                        onClick={() => openCourse(c.id)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openCourse(c.id); } }}>
+                        <span className="pd-art" style={artFor(c)}>
+                          <span className="pd-code">{c.code}</span>
+                        </span>
+                        <div className="pd-name">{c.title || c.code}</div>
+                        <div className="pd-meta">Course. by {c.instructor || AUTHOR}</div>
+                        <div className="pd-reads">{c.materials_count} topic{c.materials_count === 1 ? '' : 's'}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="pd-empty"><div className="pd-empty-card">Courses for {s.name} are coming soon.</div></div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── View 2: Folder (course) ── */}
+        {view === 'folder' && courseId && (
+          <div>
+            <div className="pd-folder-hero">
+              <button className="pd-back" aria-label="Back to programme" onClick={() => openCourse(null)}>←</button>
+              <div className="pd-folder-art" style={artFor(folderCourse)}>
+                {!folderCourse?.cover_url && <span className="pd-code-big">{code}</span>}
+              </div>
+              <h2 className="pd-folder-title">{folderCourse?.title || code}</h2>
+              <div className="pd-author-row">
+                <span className="pd-author-avatar" style={{ background: COURSE_G[folderCourse?.color || 0] }}>{(folderCourse?.instructor || AUTHOR).charAt(0)}</span>
+                <span className="pd-author-name">{folderCourse?.instructor || AUTHOR}</span>
+              </div>
+              <p className="pd-folder-meta">{materials.length} topic{materials.length === 1 ? '' : 's'} · {p?.name || ''}</p>
+              <div className="pd-action-row">
+                <button className="pd-start" onClick={startLearning} disabled={!materials.length}>Start learning</button>
+                <button className="pd-icon-btn" aria-label="Download all topics" onClick={() => soon('Offline downloads')}><Icon name="ti-download" size={18}/></button>
+                <button className="pd-icon-btn" aria-label="More" onClick={() => soon('More actions')}><Icon name="ti-dots-vertical" size={20}/></button>
+              </div>
+            </div>
+            <div className="pd-topic-list">
+              {courseLoading && <div className="pd-state"><Spinner size={16} color={BRAND}/> Loading topics…</div>}
+              {!courseLoading && !courseData && (
+                <div className="pd-state">
+                  <div>Could not load the topics.</div>
+                  <button onClick={() => openCourse(courseId)}
+                    style={{ padding: '9px 18px', borderRadius: 20, border: 'none', background: BRAND, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Try again
+                  </button>
+                </div>
+              )}
+              {!courseLoading && courseData && !materials.length && (
+                <div className="pd-empty"><div className="pd-empty-card">Published learning materials for this course will appear here.</div></div>
+              )}
+              {materials.map((m, i) => (
+                <div key={m.id || i} className="pd-topic-row" role="button" tabIndex={0}
+                  onClick={() => openMaterial(m)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openMaterial(m); } }}>
+                  <div className="pd-topic-num">{i + 1}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="pd-t-name">{m.title}</div>
+                    <div className="pd-t-meta">{materialMeta(m)}</div>
+                  </div>
+                  <button className="pd-more" aria-label={`Open ${m.title}`}
+                    onClick={(e) => { e.stopPropagation(); openMaterial(m); }}>
+                    <Icon name={m.url ? 'ti-external-link' : 'ti-dots-vertical'} size={16}/>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Sections → course cards. */}
-      {sections.length ? sections.map((s) => (
-        <div key={s.id}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '18px 16px 8px' }}>
-            <h3 style={{ margin: 0, fontSize: 14.5, fontWeight: 900, color: 'var(--ak-text)' }}>{s.name}</h3>
-            <span style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--ak-text-sub)' }}>
-              {(s.courses ?? []).length} {(s.courses ?? []).length === 1 ? 'course' : 'courses'}
-            </span>
-          </div>
-          {(s.courses ?? []).length ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 11, padding: '0 16px' }}>
-              {s.courses.map((c) => <CourseCard key={c.id} c={c} onOpen={(x) => onCourseRoute?.(x.id)} />)}
-            </div>
-          ) : (
-            <EmptyNote>Courses for this section are coming soon.</EmptyNote>
-          )}
-        </div>
-      )) : (
-        <EmptyNote>No sections or courses yet — programme content is coming soon.</EmptyNote>
-      )}
+      {toast && <Toast msg={toast.msg} color={toast.color} onDone={() => setToast(null)} />}
     </div>
   );
 }
