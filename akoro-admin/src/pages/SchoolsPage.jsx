@@ -106,7 +106,7 @@ export default function SchoolsPage() {
               outline: 'none', fontSize: 13, fontFamily: FONT, color: INK, background: WHITE, boxSizing: 'border-box' }} />
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          {['pending', 'verified', 'rejected', 'all'].map(s => (
+          {['pending', 'pilot', 'verified', 'rejected', 'all'].map(s => (
             <button key={s} style={CHIP(statusFilter === s)} onClick={() => setStatusFilter(s)}>
               {s.charAt(0).toUpperCase() + s.slice(1)}
             </button>

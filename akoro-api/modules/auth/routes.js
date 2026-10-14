@@ -1195,7 +1195,7 @@ router.post("/reset-password", strictLimit,
         .update({ used_at: new Date().toISOString() })
         .eq("id", record.id),
       db.from("users")
-        .update({ password_hash: passwordHash, updated_at: new Date().toISOString() })
+        .update({ password_hash: passwordHash, must_change_password: false, updated_at: new Date().toISOString() })
         .eq("id", record.user_id),
     ]);
 

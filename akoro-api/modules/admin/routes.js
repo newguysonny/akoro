@@ -233,7 +233,7 @@ router.get("/schools", adminOnly, asyncHandler(async (req, res) => {
     let q = db.from("school_profiles").select(cols, { count: "exact" })
       .order("created_at", { ascending: false })
       .range(off, off + lim - 1);
-    if (["pending", "verified", "rejected"].includes(status)) q = q.eq("verification_status", status);
+    if (["pending", "pilot", "verified", "rejected"].includes(status)) q = q.eq("verification_status", status);
     if (search) { const s = String(search).replace(/[,()%*:\\]/g, " "); q = q.or(`name.ilike.%${s}%,website.ilike.%${s}%,address.ilike.%${s}%`); }
     return q;
   };

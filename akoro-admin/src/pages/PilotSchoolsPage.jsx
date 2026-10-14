@@ -61,6 +61,8 @@ export default function PilotSchoolsPage() {
   const [nameDraft, setNameDraft]   = useState('');
   const [messages, setMessages]   = useState([]);
   const [msgContext, setMsgContext] = useState(null);
+  const [cred, setCred] = useState(false);          // credentials modal open
+  const [credBusy, setCredBusy] = useState(false);
 
   const [addOpen, setAddOpen]       = useState(false);
   const [addForm, setAddForm]       = useState(null);
@@ -201,6 +203,22 @@ export default function PilotSchoolsPage() {
     }
   };
 
+  /* ── credentials — provision or resend the school login ─────────────────── */
+  const sendCredentials = async () => {
+    setCredBusy(true);
+    try {
+      const res = await apiPost(`/api/admin/pilot-schools/${selected.id}/credentials`, {});
+      await load();
+      if (res?.data) setSelected(res.data);
+      showToast(res?.data?.created ? 'Login created — set-password email sent' : 'Set-password email sent');
+      setCred(false);
+    } catch (e) {
+      showToast(e.message || 'Could not send the set-password email.');
+    } finally {
+      setCredBusy(false);
+    }
+  };
+
   /* ── add pilot school ───────────────────────────────────────────────────── */
   const openAddModal = () => setAddForm({
     name: '', start_date: todayStr(), end_date: '', student_cap: 200, instructor_cap: 400,
@@ -302,6 +320,7 @@ export default function PilotSchoolsPage() {
                 <p className="ak-sub !mt-1.5 !mb-0">{detailStatusText(selected)}</p>
               </div>
               <div className="ak-detail-actions">
+                <button className="ak-btn ak-btn-small" onClick={() => setCred(true)}>Credentials</button>
                 <button className="ak-btn ak-btn-small" onClick={() => setMsgContext({ kind: 'school', school: { id: selected.school_id, name: selected.name, contact: selected.contact, end_date: selected.end_date } })}>Message school</button>
                 <button className="ak-btn ak-btn-ghost ak-btn-small" onClick={() => { setRenaming(true); setNameDraft(selected.name); }}>Rename</button>
                 <button className="ak-btn ak-btn-ghost ak-btn-small" onClick={endPilotNow}>End pilot now</button>
@@ -484,6 +503,48 @@ export default function PilotSchoolsPage() {
               </>
             )}
           </>
+        )}
+
+        {/* ── Credentials modal ── */}
+        {cred && selected && (
+          <Modal onClose={() => setCred(false)}>
+            <h2>Login credentials</h2>
+            {selected.login_email ? (
+              <>
+                <div className="ak-field">
+                  <label>Sign-in email</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <code style={{ flex: 1, padding: '8px 10px', background: '#F6F5F2', borderRadius: 8, fontSize: 13 }}>{selected.login_email}</code>
+                    <button className="ak-btn ak-btn-small" onClick={() => { navigator.clipboard?.writeText(selected.login_email); showToast('Email copied'); }}>Copy</button>
+                  </div>
+                </div>
+                <div className="ak-field">
+                  <label>Starter password — valid until the school sets their own</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <code style={{ flex: 1, padding: '8px 10px', background: '#F6F5F2', borderRadius: 8, fontSize: 13 }}>{selected.login_temp_password || 'Existing account — none generated'}</code>
+                    {selected.login_temp_password && (
+                      <button className="ak-btn ak-btn-small" onClick={() => { navigator.clipboard?.writeText(selected.login_temp_password); showToast('Password copied'); }}>Copy</button>
+                    )}
+                  </div>
+                </div>
+                <p style={{ fontSize: 12.5, color: '#6E6A62', margin: '10px 0 0' }}>
+                  Provisioned {(selected.login_provisioned_at || '').slice(0, 10) || 'just now'}. The school signs in at the school portal
+                  with the email above; the pilot stage behaves like verified there. Resend emails a fresh set-password link.
+                </p>
+              </>
+            ) : (
+              <p style={{ fontSize: 13.5, color: '#6E6A62', margin: '6px 0 0' }}>
+                No login yet. Creating one makes a school admin account for this school, adds its school profile in the pilot stage,
+                and emails{selected.contact?.email ? ` ${selected.contact.email}` : ' the contact'} a set-password link.
+              </p>
+            )}
+            <div className="ak-modal-actions">
+              <button className="ak-btn ak-btn-ghost" onClick={() => setCred(false)}>Close</button>
+              <button className="ak-btn" disabled={credBusy || (!selected.login_email && !selected.contact?.email)} onClick={sendCredentials}>
+                {selected.login_email ? 'Resend set-password email' : 'Create login & email set-password link'}
+              </button>
+            </div>
+          </Modal>
         )}
 
         {/* ── Add pilot school modal ── */}
