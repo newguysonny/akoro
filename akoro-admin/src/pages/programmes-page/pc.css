@@ -128,3 +128,6 @@
 .pcroot .mcard{width:100%;max-width:400px;background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;box-shadow:0 18px 50px rgba(0,0,0,.18)}
 .pcroot .mcard h3{margin:0;font-size:17px;font-weight:600}
 .pcroot .mcard label{margin-top:14px}
+
+/* Inside the console shell the frame already pads on phones — go full-width. */
+@media (max-width:768px){.pcroot{padding:18px 2px 60px}}

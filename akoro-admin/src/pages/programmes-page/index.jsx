@@ -18,6 +18,12 @@ import { apiGet, apiPost, apiPatch, apiDelete } from '../../services/api.js';
 import { confirmDialog } from '../../components/ConfirmHost.jsx';
 import './pc.css';
 
+/* The API answers { success, data } — unwrap once, tolerate both shapes. */
+const get = async (path) => {
+  const r = await apiGet(path);
+  return r && typeof r === 'object' && 'data' in r ? r.data : r;
+};
+
 /* ── The reference's vocabulary ─────────────────────────────────────────── */
 export const G = [
   'linear-gradient(145deg,#ff6b52,#8a2c20)', 'linear-gradient(145deg,#6c3cff,#2d1b6e)',
@@ -111,7 +117,7 @@ const usePc = () => useContext(PcCtx);
 function Home() {
   const navigate = useNavigate();
   const { toast } = usePc();
-  const [ov, reload] = useData(() => apiGet('/api/programmes/overview'), []);
+  const [ov, reload] = useData(() => get('/api/programmes/overview'), []);
   const [slide, setSlide] = useState(0);
 
   useEffect(() => {
@@ -216,7 +222,7 @@ export function SBox({ placeholder, q, setQ }) {
 
 function ProgramsList() {
   const navigate = useNavigate();
-  const [programs, reload] = useData(() => apiGet('/api/programmes/programs'), []);
+  const [programs, reload] = useData(() => get('/api/programmes/programs'), []);
   const [q, setQ] = useState('');
   if (!programs) return null;
   const l = programs.filter((p) => `${p.name}${p.code || ''}`.toLowerCase().includes(q.toLowerCase()));
@@ -287,7 +293,7 @@ function ProgramDetail() {
   const { pid } = useParams();
   const navigate = useNavigate();
   const { toast } = usePc();
-  const [p, reload] = useData(() => apiGet(`/api/programmes/programs/${pid}`), [pid]);
+  const [p, reload] = useData(() => get(`/api/programmes/programs/${pid}`), [pid]);
   const [ro, setRo] = useState(false);
   const [dragI, setDragI] = useState(null);
   // Section add/rename runs through the styled modal, never a browser prompt.
@@ -410,8 +416,8 @@ function ProgramDetail() {
 function SectionDetail() {
   const { pid, sid } = useParams();
   const navigate = useNavigate();
-  const [p] = useData(() => apiGet(`/api/programmes/programs/${pid}`), [pid]);
-  const [courses] = useData(() => apiGet('/api/programmes/courses'), []);
+  const [p] = useData(() => get(`/api/programmes/programs/${pid}`), [pid]);
+  const [courses] = useData(() => get('/api/programmes/courses'), []);
   const [ro, setRo] = useState(false);
 
   const section = p?.sections?.find((s) => s.id === sid);
@@ -474,8 +480,8 @@ function SectionDetail() {
 /* ── Courses list (all programmes) ──────────────────────────────────────── */
 function CoursesList() {
   const navigate = useNavigate();
-  const [courses] = useData(() => apiGet('/api/programmes/courses'), []);
-  const [programs] = useData(() => apiGet('/api/programmes/programs'), []);
+  const [courses] = useData(() => get('/api/programmes/courses'), []);
+  const [programs] = useData(() => get('/api/programmes/programs'), []);
   const [q, setQ] = useState('');
   const [f, setF] = useState('');
   if (!courses || !programs) return null;
@@ -515,7 +521,7 @@ function CourseDetail() {
   const { cid } = useParams();
   const navigate = useNavigate();
   const { toast } = usePc();
-  const [c, reload] = useData(() => apiGet(`/api/programmes/courses/${cid}`), [cid]);
+  const [c, reload] = useData(() => get(`/api/programmes/courses/${cid}`), [cid]);
   const [ro, setRo] = useState(false);
   const [menu, setMenu] = useState(null);
 
@@ -605,7 +611,7 @@ function CourseDetail() {
 function ContentsList() {
   const navigate = useNavigate();
   const [sp] = useSearchParams();
-  const [materials] = useData(() => apiGet('/api/programmes/materials'), []);
+  const [materials] = useData(() => get('/api/programmes/materials'), []);
   const [q, setQ] = useState('');
   const [ty, setTy] = useState('');
   const [f, setF] = useState(sp.get('status') || '');
@@ -698,7 +704,7 @@ function ProgramForm({ edit = false }) {
   const { pid } = useParams();
   const navigate = useNavigate();
   const { toast } = usePc();
-  const [p] = useData(() => (edit ? apiGet(`/api/programmes/programs/${pid}`) : Promise.resolve(null)), [edit, pid]);
+  const [p] = useData(() => (edit ? get(`/api/programmes/programs/${pid}`) : Promise.resolve(null)), [edit, pid]);
   const [cover, setCover] = useState(null);
   const [busy, setBusy] = useState(false);
   const formRef = useRef(null);
@@ -770,13 +776,13 @@ function CourseForm({ edit = false }) {
   const [sp] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = usePc();
-  const [programs] = useData(() => apiGet('/api/programmes/programs'), []);
+  const [programs] = useData(() => get('/api/programmes/programs'), []);
   const [c, setC] = useState(edit ? null : { color: 0 });
   const [busy, setBusy] = useState(false);
   const formRef = useRef(null);
 
   useEffect(() => {
-    if (edit && cid) apiGet(`/api/programmes/courses/${cid}`).then(setC).catch(() => setC(null));
+    if (edit && cid) get(`/api/programmes/courses/${cid}`).then(setC).catch(() => setC(null));
   }, [edit, cid]);
 
   if (!programs || (edit && !c)) return null;
@@ -842,7 +848,7 @@ function ItemForm({ edit = false }) {
   const [sp] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = usePc();
-  const [courses] = useData(() => apiGet('/api/programmes/courses'), []);
+  const [courses] = useData(() => get('/api/programmes/courses'), []);
   const [m, setM] = useState(edit ? null : { type: 'pdf' });
   const [thumb, setThumb] = useState(null);
   const [fileLabel, setFileLabel] = useState('');
@@ -850,7 +856,7 @@ function ItemForm({ edit = false }) {
   const formRef = useRef(null);
 
   useEffect(() => {
-    if (edit && mid) apiGet('/api/programmes/materials').then((all) => {
+    if (edit && mid) get('/api/programmes/materials').then((all) => {
       setM((all ?? []).find((x) => x.id === mid) ?? null);
     }).catch(() => setM(null));
   }, [edit, mid]);
