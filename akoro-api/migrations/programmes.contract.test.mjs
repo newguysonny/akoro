@@ -13,7 +13,8 @@ import test from "node:test";
  */
 
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [migration, manifest, routes, app, section, sectionCss, appJsx, layoutJsx] = await Promise.all([
+const [migration, manifest, routes, app, section, sectionCss, appJsx, layoutJsx,
+  coverMigration, learnerApi, learnerPage, learnerHub, learnerShell] = await Promise.all([
   read("2026-programmes.sql"),
   read("manifest.json"),
   read("../modules/programmes/routes.js"),
@@ -22,6 +23,11 @@ const [migration, manifest, routes, app, section, sectionCss, appJsx, layoutJsx]
   read("../../akoro-admin/src/pages/programmes-page/pc.css"),
   read("../../akoro-admin/src/App.jsx"),
   read("../../akoro-admin/src/components/Layout.jsx"),
+  read("2026-programme-course-covers.sql"),
+  read("../../akoro-learner/src/services/programmesApi.js"),
+  read("../../akoro-learner/src/components/programmes/ProgrammePage.jsx"),
+  read("../../akoro-learner/src/components/tabs/DiscoverHub.jsx"),
+  read("../../akoro-learner/src/pages/LearnerDashboard.jsx"),
 ]);
 
 test("migration: the programme tree, sections, courses, materials and log", () => {
@@ -151,6 +157,44 @@ test("admin+api: the new Program Courses files render no emoji", async () => {
       assert.ok(!EMOJI.test(line), `${name}:${i + 1} contains an emoji: ${line.trim().slice(0, 60)}`);
     }
   }
+});
+
+test("catalogue: published programmes reach the learner app, published-only at every level", () => {
+  // The public /catalogue routes exist and sit BEFORE the admin guard.
+  for (const ep of ['"/catalogue"', '"/catalogue/:id"', '"/catalogue/courses/:id"']) {
+    assert.ok(routes.includes(ep), `endpoint ${ep}`);
+  }
+  assert.ok(routes.indexOf('"/catalogue"') < routes.indexOf("router.use(adminOnly)"),
+    "catalogue routes are public — registered before the admin guard");
+  // Draft rows never leave: every catalogue read filters on published.
+  const catalogue = routes.slice(routes.indexOf('"/catalogue"'), routes.indexOf("router.use(adminOnly)"));
+  assert.ok((catalogue.match(/eq\("status", "published"\)/g) || []).length >= 4,
+    "programmes, courses and materials all filter to published");
+  assert.ok(catalogue.includes('status === "published"'), "course counts are published-only");
+  // Course covers: the migration adds the column, the manifest runs it
+  // after 2026-programmes.sql, and the admin CRUD round-trips it.
+  assert.ok(coverMigration.includes("ADD COLUMN IF NOT EXISTS cover_url"), "course cover column");
+  const m = JSON.parse(manifest);
+  const covers = m.schema.indexOf("2026-programme-course-covers.sql");
+  assert.ok(covers > m.schema.indexOf("2026-programmes.sql"), "cover migration runs after the tree it alters");
+  assert.ok(section.includes("'pc-ccvf'"), "Add/Edit Course has the cover picker");
+  assert.ok(section.includes("cover_url: cover"), "course form saves the cover");
+  assert.ok(section.includes('data-k="url"'), "material form has the resource URL field");
+  // The learner side: the catalogue seam, the programme page, the hub's
+  // programme cards (same card layout, cover-or-gradient), the shell route.
+  assert.ok(learnerApi.includes("/api/programmes/catalogue"), "learner reads the public catalogue");
+  assert.ok(learnerHub.includes("fetchProgrammeCatalogue"), "hub fetches published programmes");
+  assert.ok(learnerHub.includes("onOpenProgramme"), "programme cards open the programme page");
+  assert.ok(learnerHub.includes("program materials"), "cards carry the … program materials line");
+  assert.ok(learnerHub.includes("CornerArt"), "cover image rides the corner tile, icon fallback");
+  assert.ok(learnerShell.includes('v === "programme"'), "?view=programme routes in the shell");
+  assert.ok(learnerShell.includes("<ProgrammePage"), "the programme page mounts in-tab");
+  // The golden-path empty states, verbatim.
+  assert.ok(learnerPage.includes("No sections or courses yet"), "programme-level empty state");
+  assert.ok(learnerPage.includes("Courses for this section are coming soon."), "section-level empty state");
+  assert.ok(learnerPage.includes("Published learning materials for this course will appear here."), "course-level empty state");
+  // A material with a resource URL opens for the learner.
+  assert.ok(learnerPage.includes("window.open(m.url"), "resource URL opens");
 });
 
 test("admin: hook discipline — every page component declares hooks before any return", () => {

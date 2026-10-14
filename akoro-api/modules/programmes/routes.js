@@ -18,7 +18,7 @@
  *   PATCH  /sections/:id                    rename {name}
  *   DELETE /sections/:id
  *   GET    /courses?programme=&q=           all courses (+programme/section/material counts)
- *   POST   /courses                         create {programme_id,section_id,code,title,instructor,color,status}
+ *   POST   /courses                         create {programme_id,section_id,code,title,instructor,color,status,cover_url}
  *   GET    /courses/:id                     course + programme + section + materials
  *   PATCH  /courses/:id
  *   POST   /courses/:id/move                {dir:'up'|'down'} — swap within its section
@@ -33,7 +33,15 @@
  * Every write appends a line to edu.programme_log, which the home page
  * renders as its Updates list. Mounted at /api/programmes (app.js), admin
  * only — the same authenticateToken + requireRole(['admin']) guard as the
- * rest of the admin API.
+ * rest of the admin API — EXCEPT the /catalogue routes below, which are
+ * the learner app's published view (public, like /api/pharmd/programme):
+ *
+ *   GET /catalogue              published programmes (+published course counts)
+ *   GET /catalogue/:id          one published programme → sections → published courses
+ *   GET /catalogue/courses/:id  one published course → its published materials
+ *
+ * The catalogue filters by status at EVERY level: draft programmes,
+ * draft courses and draft materials never leave the API.
  */
 import { Router }            from "express";
 import db                    from "../../db.js";
@@ -42,7 +50,6 @@ import { authenticateToken, requireRole } from "../auth/routes.js";
 const edu = () => db.schema("edu");
 const router = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];
-router.use(adminOnly);
 
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const ok      = (res, data) => res.json({ success: true, data });
@@ -55,6 +62,75 @@ const clean = (v) => (typeof v === "string" ? v.trim() : v ?? null);
 async function logLine(headline, detail) {
   await edu().from("programme_log").insert({ headline, detail });
 }
+
+/* ── Published catalogue — the learner app's view (public) ─────────────────
+   Registered BEFORE the admin guard: a published course catalogue is
+   browseable, like /api/pharmd/programme. Only published rows ever leave. */
+
+router.get("/catalogue", asyncHandler(async (_req, res) => {
+  const { data: rows } = await edu().from("programmes")
+    .select("id, name, code, description, duration_label, cover_url, source, programme_courses(id, status)")
+    .eq("status", "published")
+    .order("created_at", { ascending: true });
+  ok(res, (rows ?? []).map((p) => ({
+    id: p.id, name: p.name, code: p.code, description: p.description,
+    duration_label: p.duration_label, cover_url: p.cover_url, source: p.source,
+    course_count: (p.programme_courses ?? []).filter((c) => c.status === "published").length,
+  })));
+}));
+
+router.get("/catalogue/:id", asyncHandler(async (req, res) => {
+  const { data: p } = await edu().from("programmes")
+    .select("id, name, code, description, duration_label, cover_url, source")
+    .eq("id", req.params.id).eq("status", "published").maybeSingle();
+  if (!p) return missing(res, "That programme is not published");
+  const [{ data: sections }, { data: courses }] = await Promise.all([
+    edu().from("programme_sections").select("id, name, position")
+      .eq("programme_id", p.id).order("position"),
+    edu().from("programme_courses")
+      .select("id, section_id, code, title, instructor, color, cover_url, position, programme_materials(id, status)")
+      .eq("programme_id", p.id).eq("status", "published")
+      .order("position").order("created_at"),
+  ]);
+  const pub = (courses ?? []).map((c) => ({
+    id: c.id, section_id: c.section_id, code: c.code, title: c.title,
+    instructor: c.instructor, color: c.color, cover_url: c.cover_url,
+    materials_count: (c.programme_materials ?? []).filter((m) => m.status === "published").length,
+  }));
+  ok(res, {
+    ...p,
+    published_courses: pub.length,
+    sections: (sections ?? []).map((s) => ({
+      id: s.id, name: s.name, position: s.position,
+      courses: pub.filter((c) => c.section_id === s.id),
+    })),
+  });
+}));
+
+router.get("/catalogue/courses/:id", asyncHandler(async (req, res) => {
+  const { data: c } = await edu().from("programme_courses")
+    .select("id, programme_id, section_id, code, title, instructor, color, cover_url")
+    .eq("id", req.params.id).eq("status", "published").maybeSingle();
+  if (!c) return missing(res, "That course is not published");
+  const [{ data: p }, { data: s }, { data: materials }] = await Promise.all([
+    edu().from("programmes").select("id, name, status").eq("id", c.programme_id).maybeSingle(),
+    edu().from("programme_sections").select("id, name").eq("id", c.section_id).maybeSingle(),
+    edu().from("programme_materials")
+      .select("id, title, type, meta, url, thumb_url, position")
+      .eq("course_id", c.id).eq("status", "published")
+      .order("position").order("created_at"),
+  ]);
+  if (!p || p.status !== "published") return missing(res, "That course is not published");
+  ok(res, {
+    ...c,
+    programme: { id: p.id, name: p.name },
+    section: s ? { id: s.id, name: s.name } : null,
+    materials: materials ?? [],
+  });
+}));
+
+/* Everything below is the admin console. */
+router.use(adminOnly);
 
 /* ── Overview — the home page's stats grid + updates ──────────────────── */
 router.get("/overview", asyncHandler(async (_req, res) => {
@@ -242,7 +318,7 @@ router.get("/courses", asyncHandler(async (req, res) => {
 }));
 
 router.post("/courses", asyncHandler(async (req, res) => {
-  const { programme_id, section_id, code, title, instructor, color, status } = req.body ?? {};
+  const { programme_id, section_id, code, title, instructor, color, status, cover_url } = req.body ?? {};
   if (!programme_id || !section_id) return bad(res, "Programme and section are required");
   if (!clean(code)) return bad(res, "Course code is required");
   const { data: last } = await edu().from("programme_courses").select("position").eq("section_id", section_id).order("position", { ascending: false }).limit(1);
@@ -250,6 +326,7 @@ router.post("/courses", asyncHandler(async (req, res) => {
     programme_id, section_id,
     code: clean(code), title: clean(title), instructor: clean(instructor),
     color: Number.isInteger(color) ? Math.max(0, Math.min(5, color)) : 0,
+    cover_url: clean(cover_url) || null,
     status: status === "published" ? "published" : "draft",
     position: ((last ?? [])[0]?.position ?? -1) + 1,
   }).select().single();
@@ -278,13 +355,14 @@ router.get("/courses/:id", asyncHandler(async (req, res) => {
 router.patch("/courses/:id", asyncHandler(async (req, res) => {
   const c = await getCourse(req.params.id);
   if (!c) return missing(res, "That course no longer exists");
-  const { section_id, code, title, instructor, color, status } = req.body ?? {};
+  const { section_id, code, title, instructor, color, status, cover_url } = req.body ?? {};
   const patch = {};
   if (section_id !== undefined) patch.section_id = section_id;
   if (code !== undefined) patch.code = clean(code);
   if (title !== undefined) patch.title = clean(title);
   if (instructor !== undefined) patch.instructor = clean(instructor);
   if (color !== undefined) patch.color = Math.max(0, Math.min(5, Number(color) || 0));
+  if (cover_url !== undefined) patch.cover_url = clean(cover_url) || null;
   if (status !== undefined) patch.status = status === "published" ? "published" : "draft";
   const { error } = await edu().from("programme_courses").update(patch).eq("id", c.id);
   if (error) return bad(res, error.message);
