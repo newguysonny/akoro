@@ -397,7 +397,7 @@ function ProgramDetail() {
           label="Section name"
           initial={modal.mode === 'rename' ? modal.section.name : ''}
           confirmLabel={modal.mode === 'rename' ? 'Save' : 'Add section'}
-          placeholder="e.g. First Year"
+          placeholder="Past knowledge"
           onClose={() => setModal(null)}
           onSubmit={saveModal}
         />
