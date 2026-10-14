@@ -5,6 +5,19 @@
       "destination": "/index.html"
     }
   ],
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "akoro-admin.vercel.app"
+        }
+      ],
+      "destination": "https://business.kpemu.com/$1",
+      "permanent": false
+    }
+  ],
   "git": {
     "deploymentEnabled": {
       "main": true,
