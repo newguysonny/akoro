@@ -14,7 +14,7 @@
           "value": "akoro-admin.vercel.app"
         }
       ],
-      "destination": "https://business.kpemu.com/$1",
+      "destination": "https://admin.akoro.name.ng/$1",
       "permanent": false
     }
   ],
