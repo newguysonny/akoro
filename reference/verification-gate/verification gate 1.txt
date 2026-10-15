@@ -1,0 +1,445 @@
+‎Yes. This is absolutely possible, and you can build it for Akoro Arena. The architecture you've described is a practical way to give a coding agent the ability to verify that the software it builds actually works—not just that the code compiles or the tests pass.
+‎
+‎The key is to treat the verification gate as an independent system that checks real application behavior.
+‎
+‎1. How it would work with Akoro Arena
+‎
+‎You already have an application with a backend, database, AI agents, learning workflows, and exam-preparation features. Rather than giving a coding agent unrestricted access to all your endpoints, you can build a verification layer between the agent and Akoro Arena.
+‎
+‎The architecture would look like this:
+‎
+‎CODING AGENT
+‎        (Claude Code, etc.)
+‎                 |
+‎                 | MCP tools
+‎                 |
+‎                 v
+‎     ┌────────────────────────┐
+‎     │  AKORO VERIFICATION    │
+‎     │         GATE           │
+‎     │                        │
+‎     │  1. Scenario Registry  │
+‎     │  2. Test Orchestrator  │
+‎     │  3. Assertion Engine   │
+‎     │  4. Evidence Collector │
+‎     │  5. Safety Policies    │
+‎     └────────────┬───────────┘
+‎                  |
+‎                  v
+‎     ┌────────────────────────┐
+‎     │   AKORO ARENA SANDBOX   │
+‎     │                        │
+‎     │  API endpoints         │
+‎     │  Authentication        │
+‎     │  Database              │
+‎     │  AI agent workflows    │
+‎     │  Exam-prep system      │
+‎     └────────────┬───────────┘
+‎                  |
+‎                  v
+‎     ┌────────────────────────┐
+‎     │  VERIFICATION RESULTS  │
+‎     │                        │
+‎     │  PASS / FAIL / BLOCKED │
+‎     │  Assertions            │
+‎     │  HTTP traces           │
+‎     │  Database evidence     │
+‎     └────────────────────────┘
+‎
+‎The coding agent doesn't need to know every API endpoint. It needs to know what behavior it must verify and how to request that verification.
+‎
+‎For example, it calls:
+‎
+‎verify_scenario("learner_session_completion")
+‎
+‎The gate executes the scenario against the real application and returns the result.
+‎
+‎Important distinction: MCP provides the tool interface. Your verification gate provides the testing logic, safety rules, and evidence. They are separate components working together.
+‎
+‎
+‎---
+‎
+‎2. What could it verify in Akoro Arena?
+‎
+‎This is where the design becomes particularly useful.
+‎
+‎Instead of creating a scenario for every endpoint, you create scenarios around actual user outcomes.
+‎
+‎Akoro Arena featureVerification scenarioWhat the gate checks
+‎
+‎Authenticationlogin_logout_flowLogin succeeds, session is valid, logout invalidates the session.
+‎Learner profileslearner_profile_flowProfile creation, persistence, and retrieval work correctly.
+‎Syllabussyllabus_retrieval_flowThe requested subject and topics come from the database.
+‎Exam preparationexam_prep_start_flowThe session is created with valid topics and states.
+‎Session confirmationsession_confirmation_flowNo session spending occurs before learner confirmation.
+‎Credit economicscredit_enforcement_flowUsage is measured, limits are enforced, and exhausted accounts are handled correctly.
+‎Adaptive learningadaptive_learning_flowThe system selects the next activity according to defined learner-state rules.
+‎Knowledge trackingknowledge_state_flowEvidence updates the appropriate concept state.
+‎Past questionspast_question_flowQuestions originate from the expected question bank and are correctly returned.
+‎AI agent executionagent_tool_execution_flowTool calls are authorized, executed, and recorded correctly.
+‎
+‎
+‎These are proposed scenarios, not claims that the features currently pass or that every required behavior is already implemented.
+‎
+‎For Akoro, I'd begin with exam-preparation session creation, learner confirmation, and credit enforcement. Those flows touch important business rules, database state, and financial controls.
+‎
+‎Example: Verify an exam-preparation session
+‎
+‎Suppose a coding agent modifies Akoro's exam-preparation workflow.
+‎
+‎The agent should not be able to declare success simply because the API returned HTTP 200.
+‎
+‎Instead, the gate executes a complete scenario.
+‎
+‎Step 1 — Create a test learner
+‎
+‎Create an isolated learner with a known starting balance.
+‎
+‎Step 2 — Request an exam-preparation plan
+‎
+‎Request a session for a subject such as JSS1 Basic Science.
+‎
+‎Step 3 — Inspect the proposed plan
+‎
+‎Check that the plan contains valid syllabus topics, the expected session state, and a calculated cost.
+‎
+‎Step 4 — Verify the pre-confirmation state
+‎
+‎Check that the learner has not been charged before confirming the plan.
+‎
+‎Step 5 — Confirm the session
+‎
+‎Simulate the learner pressing the confirmation button.
+‎
+‎Step 6 — Verify the resulting state
+‎
+‎Check that the session transitions to the expected state and that credit deductions match the defined billing rules.
+‎
+‎Step 7 — Inspect the database
+‎
+‎Confirm that the persisted session, learner balance, and relevant transaction records agree with the observed API responses.
+‎
+‎Step 8 — Clean up
+‎
+‎Remove disposable test records or reset the isolated test environment.
+‎
+‎The gate returns a structured result showing which assertions passed and which failed.
+‎
+‎For example:
+‎
+‎{
+‎  "status": "fail",
+‎  "scenario": "exam_prep_confirmation",
+‎  "assertions": [
+‎    {
+‎      "name": "plan_created",
+‎      "passed": true
+‎    },
+‎    {
+‎      "name": "no_charge_before_confirmation",
+‎      "passed": true
+‎    },
+‎    {
+‎      "name": "credits_deducted_after_confirmation",
+‎      "passed": false,
+‎      "expected": 7,
+‎      "actual": 0
+‎    }
+‎  ]
+‎}
+‎
+‎The values above are illustrative, not actual Akoro test results.
+‎
+‎The coding agent now has actionable evidence: the plan was created, pre-confirmation spending was prevented, but the expected credit deduction did not occur.
+‎
+‎It can investigate, modify the implementation, and run the verification again.
+‎
+‎
+‎---
+‎
+‎3. Can the gate verify the database, not just the API?
+‎
+‎Yes, and this is one of the most important design decisions.
+‎
+‎Your gate should have two independent ways of collecting evidence.
+‎
+‎Layer A: Black-box verification
+‎
+‎Interact with Akoro through its actual API, just as the application would.
+‎
+‎For example:
+‎
+‎POST /exam-prep/sessions
+‎GET  /exam-prep/sessions/:id
+‎POST /exam-prep/sessions/:id/confirm
+‎
+‎These are illustrative endpoints; the gate must use the routes that actually exist in your codebase.
+‎
+‎This verifies externally observable behavior.
+‎
+‎Layer B: Database verification
+‎
+‎Inspect the resulting database state using a restricted test-only database connection or trusted test instrumentation.
+‎
+‎For example:
+‎
+‎Expected:
+‎- Session exists.
+‎- Session has the correct learner ID.
+‎- Session state is awaiting_confirmation.
+‎- No credit transaction exists before confirmation.
+‎
+‎After confirmation:
+‎- Session transitions correctly.
+‎- Credit transaction is recorded.
+‎- Balance reflects the transaction.
+‎
+‎The gate should not accept a successful API response as proof that the underlying state is correct.
+‎
+‎For Akoro's Supabase architecture, database verification could use read-only queries against test data, with tightly controlled permissions for any cleanup operations.
+‎
+‎Security rule: Never give the coding agent unrestricted database credentials. The gate should control database access, and destructive testing should happen only in an isolated environment.
+‎
+‎
+‎---
+‎
+‎4. How do you connect this to a coding agent?
+‎
+‎You expose a small MCP interface.
+‎
+‎I would start with two tools.
+‎
+‎Tool 1: list_scenarios
+‎
+‎The agent discovers which verification scenarios exist.
+‎
+‎Example result:
+‎
+‎{
+‎  "scenarios": [
+‎    {
+‎      "name": "login_logout_flow",
+‎      "description": "Verify session creation and invalidation"
+‎    },
+‎    {
+‎      "name": "exam_prep_confirmation",
+‎      "description": "Verify session confirmation and credit rules"
+‎    },
+‎    {
+‎      "name": "credit_enforcement",
+‎      "description": "Verify credit limits and exhausted balances"
+‎    }
+‎  ]
+‎}
+‎
+‎Tool 2: verify_scenario
+‎
+‎The agent requests execution of a scenario.
+‎
+‎Input:
+‎
+‎{
+‎  "scenario": "exam_prep_confirmation",
+‎  "params": {
+‎    "subject": "Basic Science",
+‎    "level": "JSS1"
+‎  }
+‎}
+‎
+‎Output:
+‎
+‎{
+‎  "status": "pass",
+‎  "scenario": "exam_prep_confirmation",
+‎  "run_id": "verify_01",
+‎  "duration_ms": 1250,
+‎  "assertions": [
+‎    {
+‎      "name": "session_created",
+‎      "passed": true
+‎    },
+‎    {
+‎      "name": "confirmation_required",
+‎      "passed": true
+‎    },
+‎    {
+‎      "name": "credit_transaction_correct",
+‎      "passed": true
+‎    }
+‎  ],
+‎  "evidence": {
+‎    "http_requests_recorded": 4,
+‎    "database_checks_passed": 3,
+‎    "cleanup_completed": true
+‎  }
+‎}
+‎
+‎Again, this is an example of the intended contract, not a result from a running implementation.
+‎
+‎The gate maintains its internal scenario registry. The agent sees only approved scenarios and their documented parameters.
+‎
+‎Later, you could add a third tool for read-only exploratory API requests, but I wouldn't include it in the first version.
+‎
+‎
+‎---
+‎
+‎5. What technology would you use?
+‎
+‎For Akoro Arena, I'd choose the following architecture.
+‎
+‎ComponentSuggested implementationPurpose
+‎
+‎MCP serverTypeScript with the official MCP SDKExpose verification tools to coding agents.
+‎Scenario registryTypeScript modulesDefine approved test flows and their parameters.
+‎HTTP clientShared typed clientCall the real Akoro API and capture request/response evidence.
+‎AssertionsExplicit, deterministic checksDecide whether actual behavior matches expectations.
+‎Database verificationRestricted Supabase test accessInspect persisted state.
+‎Browser testingPlaywright, where requiredVerify the actual user interface and browser interactions.
+‎Test executionIsolated test runnerExecute scenarios without polluting production.
+‎Evidence storageStructured JSON results and retained logsSupport debugging, auditing, and reproducibility.
+‎CI integrationYour existing deployment pipelineRun verification before accepting or deploying changes.
+‎
+‎
+‎You do not need to introduce every component immediately.
+‎
+‎Start with the MCP server, a shared HTTP client, a scenario registry, and three deterministic scenarios. Add browser automation and richer evidence collection as needed.
+‎
+‎
+‎---
+‎
+‎6. One important limitation: the gate cannot automatically verify everything
+‎
+‎There is a subtle but critical distinction between observing behavior and knowing the correct behavior.
+‎
+‎Suppose the gate calls an AI learning endpoint and receives a plausible answer.
+‎
+‎That doesn't prove the AI taught the learner correctly.
+‎
+‎You need different verification strategies for different types of behavior.
+‎
+‎BehaviorAppropriate verification
+‎
+‎Login and logoutExact, deterministic assertions
+‎Credit deductionsExact arithmetic and database invariants
+‎Session transitionsState-machine rules
+‎Syllabus retrievalDatabase-backed expectations
+‎Question selectionQuestion-bank provenance and selection rules
+‎Adaptive topic selectionDefined learner-state and prerequisite constraints
+‎AI-generated explanationsRubrics, factual checks, and carefully designed evaluations
+‎UI interactionsBrowser automation and observable state changes
+‎
+‎
+‎For AI-generated content, a gate may need a rubric or independent evaluator. Even then, an evaluator's judgment is not infallible.
+‎
+‎The gate should distinguish between a deterministic pass, a failed assertion, an inconclusive evaluation, and an infrastructure problem.
+‎
+‎This prevents a plausible-looking AI response from being treated as proof of correctness.
+‎
+‎
+‎---
+‎
+‎7. The most important part: make it fail closed
+‎
+‎Your coding agent should follow a rule like this:
+‎
+‎IF verification status == PASS:
+‎    The verified scenario may be reported as passing.
+‎
+‎IF verification status == FAIL:
+‎    Report the failed assertions and investigate.
+‎
+‎IF verification status == BLOCKED:
+‎    Report that verification could not be completed.
+‎
+‎IF verification status == ERROR:
+‎    Report the verification infrastructure or execution error.
+‎
+‎IF no verification result exists:
+‎    Do not claim the scenario has been verified.
+‎
+‎A PASS should mean that all required assertions passed and the evidence was successfully collected.
+‎
+‎A BLOCKED result could mean that the sandbox is unavailable or a prerequisite service cannot be reached.
+‎
+‎An ERROR could mean that the gate itself encountered an unexpected execution failure.
+‎
+‎Neither BLOCKED nor ERROR should be treated as a successful verification.
+‎
+‎There is one further distinction: the agent's instructions are not the security boundary. The gate must independently enforce permissions, environment restrictions, scenario allowlists, timeouts, and execution limits.
+‎
+‎You can then integrate the gate into the development workflow:
+‎
+‎Coding agent modifies Akoro
+‎          |
+‎          v
+‎       Build passes?
+‎          |
+‎          v
+‎    Automated tests pass?
+‎          |
+‎          v
+‎   Verification gate passes?
+‎          |
+‎          v
+‎     Review evidence
+‎          |
+‎          v
+‎   Eligible for deployment
+‎
+‎A passing gate should be necessary for deployment, not sufficient on its own. Code review, security checks, and any required human approval remain separate safeguards.
+‎
+‎
+‎---
+‎
+‎8. What makes this especially useful for Akoro?
+‎
+‎Your exam-preparation architecture already relies on explicit session states, learner confirmation, credit controls, database-backed learner knowledge, and deterministic transitions.
+‎
+‎Those are excellent candidates for verification because they have observable rules that can be tested.
+‎
+‎For example, you could establish invariants such as:
+‎
+‎A learner cannot be charged for a plan that has not been confirmed.
+‎
+‎A session cannot transition from planning directly to completed unless an explicitly permitted transition exists.
+‎
+‎A learner cannot spend credits beyond the applicable enforcement rules.
+‎
+‎A failed AI call cannot silently produce a successful learning record.
+‎
+‎An adaptive-learning decision cannot bypass required prerequisites.
+‎
+‎A successful session completion must correspond to persisted evidence of the required work.
+‎
+‎
+‎These are proposed invariants that must be reconciled with your actual implementation and product rules before being enforced.
+‎
+‎Once encoded in the gate, they become reusable checks. A coding agent can refactor the application while the gate continues to test whether the critical behavior remains correct.
+‎
+‎The verification system would not replace Akoro's existing application tests. It would add an independent layer that checks whether the real system satisfies its defined behavioral contracts.
+‎
+‎
+‎---
+‎
+‎My recommendation
+‎
+‎Build an Akoro Verification Gate as a separate MCP-enabled testing service, starting with three real end-to-end scenarios.
+‎
+‎I'd implement them in this order:
+‎
+‎1. Credit enforcement: Verify that usage limits are actually enforced by the backend, not merely displayed in the dashboard.
+‎
+‎
+‎2. Exam-preparation confirmation: Verify that planning, confirmation, session state, and credit transactions agree.
+‎
+‎
+‎3. Learner-state integrity: Verify that completed learning activities produce the correct persisted evidence and knowledge-state updates.
+‎
+‎
+‎
+‎Before implementation, inspect the current Akoro Arena routes, Supabase schema, session state machine, and credit-enforcement code. The gate should test the system that exists, rather than assume that the illustrative endpoints and behaviors already exist.
+‎
+‎Then build the MCP interface, registry, shared client, evidence schema, and first scenario against the real codebase.
+‎
+‎The end goal is straightforward: when your coding agent says it has fixed something in Akoro, you can ask for evidence that the actual application behaves correctly—not merely trust its explanation.
+‎

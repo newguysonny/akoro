@@ -1,0 +1,171 @@
+‎Exactly — the sandbox is not an AI simulation and it's not a special service you have to buy.
+‎
+‎It's an environment that we create and configure ourselves.
+‎
+‎Think of it like creating a second, isolated installation of Akoro specifically for testing.
+‎
+‎In your case
+‎
+‎You would create:
+‎
+‎AKORO
+‎                   │
+‎        ┌──────────┴──────────┐
+‎        │                     │
+‎   PRODUCTION              SANDBOX
+‎        │                     │
+‎        │                     │
+‎   akoro-api              akoro-api
+‎        │                     │
+‎        ▼                     ▼
+‎Production DB            Test DB
+‎
+‎The sandbox is therefore basically:
+‎
+‎> A test deployment of your Akoro backend + a test database + test configuration/data.
+‎
+‎
+‎
+‎It can be hosted on the same infrastructure you're already using.
+‎
+‎For example, if your production API is deployed on Render:
+‎
+‎Render
+‎
+‎akoro-api
+‎    ↓
+‎Production Supabase
+‎
+‎
+‎akoro-api-sandbox
+‎    ↓
+‎Sandbox Supabase
+‎
+‎The sandbox API is running the same Akoro code, but its environment variables point to the test database.
+‎
+‎
+‎---
+‎
+‎Then where does the Verification Gate fit?
+‎
+‎The Verification Gate is a separate service we build.
+‎
+‎So you'd have:
+‎
+‎Coding Agent
+‎                      │
+‎                      │ MCP
+‎                      ▼
+‎             Verification Gate
+‎                      │
+‎                      │ HTTP
+‎                      ▼
+‎             Akoro API Sandbox
+‎                      │
+‎                      ▼
+‎                Test Supabase
+‎
+‎The agent says:
+‎
+‎> "Verify exam preparation."
+‎
+‎
+‎
+‎The gate then actually interacts with the sandbox Akoro application.
+‎
+‎It might:
+‎
+‎Create test learner
+‎       ↓
+‎Start exam-prep session
+‎       ↓
+‎Generate plan
+‎       ↓
+‎Check cost
+‎       ↓
+‎Confirm session
+‎       ↓
+‎Check credit deduction
+‎       ↓
+‎Check database state
+‎       ↓
+‎Cleanup
+‎       ↓
+‎PASS / FAIL
+‎
+‎That's real execution, not an AI pretending that it happened.
+‎
+‎
+‎---
+‎
+‎Why not just simulate it?
+‎
+‎We could create a mock/simulation:
+‎
+‎Agent
+‎ ↓
+‎Fake API
+‎ ↓
+‎Fake database
+‎
+‎But that wouldn't prove much.
+‎
+‎The whole point of your idea is:
+‎
+‎> "Did the actual Akoro system work?"
+‎
+‎
+‎
+‎So we want:
+‎
+‎Agent
+‎ ↓
+‎Verification Gate
+‎ ↓
+‎REAL Akoro API code
+‎ ↓
+‎REAL test database
+‎
+‎That's much stronger.
+‎
+‎
+‎---
+‎
+‎And we don't have to create the sandbox first
+‎
+‎This is important.
+‎
+‎We can build the Verification Gate locally first and point it at your current development API:
+‎
+‎AKORO_API_BASE_URL=http://localhost:3000
+‎
+‎Once the gate works, we create the proper isolated environment:
+‎
+‎Local development
+‎       ↓
+‎Sandbox
+‎       ↓
+‎Staging
+‎       ↓
+‎Production
+‎
+‎So I would not start by creating a complicated infrastructure setup.
+‎
+‎We can first build:
+‎
+‎akoro-verification-gate/
+‎
+‎with:
+‎
+‎MCP server
+‎Scenario registry
+‎HTTP client
+‎Assertions
+‎Evidence collector
+‎
+‎and test it against your existing local Akoro API.
+‎
+‎Then we create the sandbox when we're ready to let the agent perform destructive/realistic verification safely.
+‎
+‎So in one sentence: the sandbox is a real, isolated copy of the Akoro application environment that we create—not an AI simulation and not a third-party service.
+‎
