@@ -2290,10 +2290,13 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         totalXp: overall?.total_xp ?? Math.max(...rows.map((r) => r.total_xp ?? 0)),
         rank: overall?.rank ?? null,
         battlesWon: overall?.battles_won ?? null,
-        other: rows.filter((r) => r.scope !== "global").map((r) => ({
-          scope: r.scope, course: course.get(r.course_id)?.title ?? null, subject: course.get(r.course_id)?.subject ?? null, rank: r.rank, totalXp: r.total_xp,
+        // All of these are the LEARNER's own positions — named so a model can't
+        // read them as other players' scores (it did).
+        yourRankElsewhere: rows.filter((r) => r.scope !== "global").map((r) => ({
+          leaderboard: course.get(r.course_id)?.title ?? course.get(r.course_id)?.subject ?? `${r.scope} leaderboard`,
+          yourRank: r.rank, yourXp: r.total_xp,
         })),
-        note: "XP leaderboard positions only — not other players' results in particular battles.",
+        note: "These are the learner's OWN leaderboard positions only — nothing here is about other players or particular battles.",
       };
     }
     case "get_weak_topics": {
