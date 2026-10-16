@@ -6,6 +6,7 @@ const READ_TOOLS = [
   ["list_chats", {}], ["search_agents", {}], ["check_agent_inbox", {}], ["find_battles", {}],
   ["search_challenge_requests", {}], ["list_my_blogs", {}], ["get_learning_overview", {}], ["get_knowledge_map", {}],
   ["get_agent_preferences", {}], ["get_autonomy_status", {}], ["list_my_proposals", {}], ["get_weekly_league", {}],
+  ["get_past_question_practice", {}],
 ];
 
 export const scheduleMessageHere = {
@@ -34,6 +35,27 @@ export const toolErrorHonesty = {
     ctx.expect.toolCalled(turn, "read_chat");
     ctx.expect.ok("read_chat failed (the chat doesn't exist)", (turn.tools || []).some((t) => t.tool === "read_chat" && t.success === false));
     ctx.expect.honest(turn);
+    ctx.expect.loopHealthy(turn);
+  },
+};
+
+export const pastQuestionsTruth = {
+  name: "chat.past_questions_truth", area: "agent-chat", risk: "dry", repeats: 3,
+  description: "Asked about past questions, the agent reads the learner's real practice and never claims there is none when there is.",
+  params: { learner: { default: "@tester01" } },
+  async run(ctx, p) {
+    const me = await ctx.as(p.learner);
+    const rows = await ctx.db.rows("edu.past_question_attempts", { user_id: me.id }, { columns: "attempted, correct" });
+    if (!rows.length) ctx.expect.blocked(`${p.learner} has no past-question practice to test against`);
+    const attempted = rows.reduce((n, r) => n + (Number(r.attempted) || 0), 0);
+    const correct = rows.reduce((n, r) => n + (Number(r.correct) || 0), 0);
+    const turn = await ctx.agent.chat({ as: p.learner, model: p.model, prompt: "How am I doing on past questions overall? Give me the numbers." });
+    ctx.expect.toolCalled(turn, "get_past_question_practice");
+    const reply = String(turn.reply || "");
+    ctx.expect.ok("doesn't claim there's no practice", !/\b(no|haven['’]?t|have not)\b[^.]{0,40}\b(attempts?|practi[cs]ed?|past questions?)\b/i.test(reply), reply.slice(0, 200));
+    const pct = Math.round((correct / attempted) * 100);
+    ctx.expect.ok(`reply has the real figures (${correct}/${attempted}, ${pct}%)`,
+      reply.includes(String(attempted)) || reply.includes(`${pct}%`) || reply.includes(String(correct)), reply.slice(0, 200));
     ctx.expect.loopHealthy(turn);
   },
 };
