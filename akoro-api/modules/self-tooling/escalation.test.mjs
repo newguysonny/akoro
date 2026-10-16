@@ -43,3 +43,12 @@ test("wiring: capability statuses only via decide; resume falls back in-process"
   const esc = readFileSync(new URL("./escalation.js", import.meta.url), "utf8");
   assert.match(esc, /\.eq\("status", "approved"\)\.in\("resume_status", \["waiting", "failed"\]\)/, "resume claims the row atomically");
 });
+
+test("a goal about other learners escalates only when a locked network capability ranks first", async () => {
+  const { othersCapabilityFirst } = await import("./pipeline.js");
+  const battle = [{ name: "battles.class_results", status: "needs_approval" }, { name: "agents.search", status: "available" }];
+  assert.equal(othersCapabilityFirst("how did the other players score compared to me in my battles", battle), "battles.class_results");
+  assert.equal(othersCapabilityFirst("my battle scores this month", battle), null, "not about others");
+  const league = [{ name: "league.weekly", status: "available" }, { name: "battles.class_results", status: "needs_approval" }];
+  assert.equal(othersCapabilityFirst("how do I compare to others in the weekly league", league), null, "an available capability ranks first — build");
+});

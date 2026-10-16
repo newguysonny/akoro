@@ -33,6 +33,18 @@ async function logEvent(row) {
   if (error) console.warn("[self-tooling] event not logged:", error.message);
 }
 
+const ABOUT_OTHERS = /\b(other (players?|learners?|students?|people)|others|classmates?|opponents?|everyone else|the rest of (my|the) class)\b/i;
+/**
+ * For a goal about other learners: the lookup's TOP-ranked capability, when it
+ * is a locked one over other learners' data (an available capability ranked
+ * above it — e.g. the weekly league — may answer it, so then build). → name | null
+ */
+export function othersCapabilityFirst(goal, ranked) {
+  if (!ABOUT_OTHERS.test(String(goal || ""))) return null;
+  const top = ranked[0];
+  return top?.status === "needs_approval" && CAPABILITIES[top.name]?.scope === "network" ? top.name : null;
+}
+
 /** Run a definition once, timed; never throws. */
 async function tryRun(def, params, input, ctx) {
   const t0 = Date.now();
@@ -132,6 +144,11 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   if (!resumed) {
     const hinted = await lockedIn([].concat(hint.capabilities || []));
     if (hinted.length) return toEscalate(hinted[0]);
+    // About OTHER learners, and the best match for that is a locked network
+    // capability: the learner's own views can't answer it, and a build from
+    // them passed the learner's own scores off as "the other players'".
+    const others = othersCapabilityFirst(goal, lookup.capabilities || []);
+    if (others && locked.includes(others)) return toEscalate(others);
   }
   if (!slice.views.length && !slice.capabilities.length) {
     if (locked.length && !resumed) return toEscalate(locked[0]);
