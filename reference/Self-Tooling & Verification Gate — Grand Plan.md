@@ -190,9 +190,9 @@ even if its tests pass. They extend Grand Plan §2 (rules 1–24 still apply).
 | S5 | Who can use a created tool? | **The learner who created it**, across their chats. Admins see all tools and can **promote** one to every learner after a gate run. | **User decision** |
 | S6 | Can created tools change data? | **Read-only in v1.** Writes come in phase S6, composed only from write capabilities, each step confirmed by the learner. | **User decision** |
 | S7 | Sandbox for stage 3 | **QuickJS compiled to WebAssembly, in a worker thread inside akoro-api**: no network, no filesystem, no imports, memory and CPU limits, a single capability bridge. External sandboxes (E2B / Daytona) stay an option if code tools ever need packages. | Proposed |
-| S8 | Where do escalations go? | **The existing "Agent requests" flow**, extended: `edu.agent_tool_requests` gains a `kind = capability` with the resume ticket; the existing admin page gains a capability tab. | Proposed (reuse) |
+| S8 | Where do escalations go? | **The existing "Agent requests" flow**, extended: `edu.agent_tool_requests` gains a `kind = capability` with the resume ticket; the existing admin page gains a capability tab. | **Built (S3)** |
 | S10 | Who gets an approved capability? | **Everyone.** An admin approval turns the capability on for all learners (optional expiry); there is no per-learner grant. Every waiting request for the same capability resumes. | **User decision** |
-| S9 | How does work resume? | **Event-driven**: an admin decision enqueues a job that re-runs the stored `create_tool` as that learner and posts the outcome into the original chat (the delivery path built for scheduled messages), plus a notification. No polling. | Proposed |
+| S9 | How does work resume? | **Event-driven**: an admin decision enqueues a job that re-runs the stored `create_tool` as that learner and posts the outcome into the original chat (the delivery path built for scheduled messages), plus a notification. No polling. | **Built (S3)** — plus a 15-min sweep for lost jobs |
 | V1 | What is the gate for? | **Both** the coding agent verifying its changes **and** `create_tool` verifying new tools. One engine. | Proposed |
 | V2 | Where does the gate run? | **Inside akoro-api as `modules/verify/`**, mounted at `/api/verify`, behind the console key. Reason: DB evidence and tool traces live there; scenarios are code-reviewed and versioned in the repo. **A separate service comes later** (phase V3, with the MCP wrapper, §8.10). | **User decision** |
 | V3 | How does the coding agent reach it? | **The cloud environment's network secret** (Bearer on `api.akoro.name.ng`) already set up for the agent console. Same key, `Authorization: Bearer`. The coding agent never sees the key. | ✅ reachable today |
@@ -1168,7 +1168,36 @@ Planned scope:
 - **Exit:** suite `self-tooling` (compose, spec, scope, forbidden, dry, revoke)
   PASS on testers.
 
-### Phase S3 — Escalation + resume
+### Phase S3 — Escalation + resume ✅ built 2026-10-16
+
+As built (`modules/self-tooling/escalation.js`, `resumeQueue.js`,
+`capRuntime.js`, migration `2026-self-tooling-escalation.sql`): create_tool
+stage 4 escalates when a locked READ capability is named in the hint, is the
+only thing that fits, or the builder says the available data can't express
+the goal. One request per learner + capability + goal (a repeat returns the
+open one, a closed one re-opens), at most 5 open per learner, `escalated`
+only after the row exists, dry runs make no request; locked writes are
+refused until S6 (no request a grant couldn't satisfy). Admin
+`POST /api/admin/agent-tool-requests/:id/decide` approve | deny | plan:
+approve writes one grant for everyone (optional expiry), audit-logs it and
+resumes every waiting request for that capability; deny/plan post the note
+into the learner's chat. `GET /api/admin/capability-grants` and
+`POST …/:id/revoke`. Resume runs as a BullMQ job (`self-tool-resumes`) or —
+when a deployment runs without that worker — in-process; an atomic claim on
+the row makes either safe to repeat. It rebuilds as the learner (platform
+pays — open question 3), posts the answer into the original chat (a new
+chat if that one is gone) and notifies. A 15-minute sweep
+(`self-tool-resume-sweep` tick) re-queues lost resumes and expires
+requests after 14 days with a message to the learner. `battles.class_results`
+runs (other players' results in battles the learner played; blocked
+learners left out); `verify.probe` is a hidden, harmless capability for the
+gate. Learner `GET /api/self-tooling/requests` + withdraw; Settings →
+Agent shows permission requests. Admin page: Permissions tab (decide) and
+Granted tab (revoke). Gate: `selftool.escalate_and_resume` PASS on
+production (run 427cad6d) — request, dedupe, approval, resume into the same
+chat, notification, revoke stops the saved tool.
+
+Planned scope:
 - Requests table extension, admin Capabilities tab with decide endpoint and
   audit log, grants, resume job posting into the original chat + notify,
   expiry job, learner view of requests.
