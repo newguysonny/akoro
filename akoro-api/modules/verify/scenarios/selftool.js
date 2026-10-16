@@ -382,3 +382,55 @@ export const promotePlatform = {
     ctx.expect.ok("revoked platform tool stops", !after?.rows, after);
   },
 };
+
+// ── Phase S5: sandboxed code (stage 3) ───────────────────────────────────
+export const sandboxContained = {
+  name: "selftool.sandbox_contained", area: "self-tooling", risk: "read",
+  description: "On the deployed server the code sandbox runs plain code and contains escape attempts: no network or host objects, infinite loops and memory bombs stopped, prototype tampering confined to one run.",
+  async run(ctx) {
+    const { runCode, staticCheck, CODE_LIMITS } = await import("../../self-tooling/sandbox/index.js");
+    const ok = await runCode("function run(input, data){ return data.a.map(function (r) { return { x: r.x * 2 }; }); }", { input: {}, data: { a: [{ x: 1 }, { x: 2 }] }, akoro: {} });
+    ctx.expect.ok("plain code runs", ok.ok && ok.value?.[1]?.x === 4, ok);
+    const hostless = await runCode("function run(){ return [typeof fetch, typeof XMLHttpRequest, typeof std, typeof os].join(','); }", {});
+    ctx.expect.eq("no network or host objects", hostless.value, "undefined,undefined,undefined,undefined");
+    const t0 = Date.now();
+    const loop = await runCode("function run(){ for (;;) {} }", {});
+    ctx.expect.ok("infinite loop stopped", !loop.ok && /too long/.test(loop.error), loop);
+    ctx.expect.lte("stopped within the wall limit (ms)", Date.now() - t0, CODE_LIMITS.wallMs + 1500);
+    const bomb = await runCode("function run(){ var s = 'x'; for (var i = 0; i < 60; i++) s = s + s; return s.length; }", {});
+    ctx.expect.ok("memory bomb stopped", !bomb.ok, bomb);
+    const tamper = await runCode("function run(){ Array.isArray = null; return 1; }", {});
+    const after = await runCode("function run(){ return typeof Array.isArray; }", {});
+    ctx.expect.ok("tampering stays in one run", tamper.ok && after.value === "function", { tamper, after });
+    ctx.expect.ok("escape routes refused before running", staticCheck("function run(){ return [].constructor.constructor('return process')() }").length > 0);
+  },
+};
+
+export const codeToolBuilt = {
+  name: "selftool.code_tool", area: "self-tooling", risk: "dry",
+  description: "A goal only code can express (spread my weakest topics over the days before an exam, two a day, weakest first, no Sundays) is built as a sandboxed code tool, verified, and its plan obeys every rule on the learner's real topics.",
+  params: { learner: { default: "@tester21" } },
+  async run(ctx, p) {
+    await needCreate(ctx);
+    const { codeEnabled } = await import("../../self-tooling/sandbox/index.js");
+    if (!codeEnabled()) ctx.expect.blocked("AKORO_SELF_TOOLING_CODE_ENABLED is off on this server");
+    const exam = new Date(Date.now() + 21 * 86_400_000).toISOString().slice(0, 10);
+    const r = await ctx.agent.tool({ as: p.learner, tool: "create_tool", mode: "dry", input: {
+      goal: `Spread my weak topics over the days until my exam on ${exam}: two topics a day, weakest first, skipping Sundays`,
+      name: "weak_topic_plan", label: "Weak-topic plan", run: {} } });
+    ctx.expect.eq("created", r?.status, "created");
+    ctx.note(`mode ${r?.mode}; ${JSON.stringify(r?.definition || null).slice(0, 400)}`);
+    ctx.expect.eq("built as code (recipes and specs can't schedule)", r?.mode, "code");
+    const rows = r?.result?.rows || [];
+    ctx.expect.gte("plan has days", rows.length, 1);
+    const perDay = new Map();
+    for (const row of rows) {
+      const d = String(row.date || row.day || "");
+      perDay.set(d, (perDay.get(d) || 0) + 1);
+    }
+    ctx.expect.ok("every row has a date", rows.every((x) => /^\d{4}-\d{2}-\d{2}$/.test(String(x.date || x.day || ""))), rows.slice(0, 3));
+    ctx.expect.ok("at most two topics a day", [...perDay.values()].every((n) => n <= 2), Object.fromEntries(perDay));
+    ctx.expect.ok("no Sundays", [...perDay.keys()].every((d) => new Date(`${d}T00:00:00Z`).getUTCDay() !== 0), [...perDay.keys()]);
+    ctx.expect.ok("all before the exam", [...perDay.keys()].every((d) => d < exam), exam);
+  },
+};
