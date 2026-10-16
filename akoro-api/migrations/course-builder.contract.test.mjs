@@ -12,7 +12,8 @@ import test from "node:test";
  */
 
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [migration, manifest, routes, app, section, sectionCss, appJsx, layoutJsx] = await Promise.all([
+const [migration, manifest, routes, app, section, sectionCss, appJsx, layoutJsx,
+  adminSection, adminCss, adminAppJsx, adminLayoutJsx] = await Promise.all([
   read("2026-course-builder.sql"),
   read("manifest.json"),
   read("../modules/course-builder/routes.js"),
@@ -21,6 +22,10 @@ const [migration, manifest, routes, app, section, sectionCss, appJsx, layoutJsx]
   read("../../akoro-instructor/src/pages/course-creator/cc.css"),
   read("../../akoro-instructor/src/App.jsx"),
   read("../../akoro-instructor/src/components/Layout.jsx"),
+  read("../../akoro-admin/src/pages/course-approvals/index.jsx"),
+  read("../../akoro-admin/src/pages/course-approvals/ca.css"),
+  read("../../akoro-admin/src/App.jsx"),
+  read("../../akoro-admin/src/components/Layout.jsx"),
 ]);
 
 test("migration: the builder tree — courses, sections, lessons", () => {
@@ -103,6 +108,47 @@ test("section: every page of the prototype is ported", () => {
   assert.ok(section.includes("confirmDialog"), "styled confirm");
   // No emoji in the ported UI (the reference uses drawn SVGs).
   assert.ok(!/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(section.replace(/[\u2713\u2715\u2039\u203A\u2191\u2193]/g, "")), "no emoji");
+});
+
+test("admin app: the Course Approvals section is wired in", () => {
+  assert.ok(adminAppJsx.includes('path="/course-approvals/*"'), "route registered");
+  assert.ok(adminAppJsx.includes("course-approvals/index.jsx"), "section imported");
+  assert.ok(adminAppJsx.includes("<AdminRoute>"), "behind the admin guard");
+  assert.ok(adminLayoutJsx.includes("'/course-approvals'"), "sidebar nav entry");
+  assert.ok(adminLayoutJsx.includes("'Course Approvals'"), "sidebar label");
+});
+
+test("admin approvals: queue, all-courses and inspection drive the same flow", () => {
+  for (const page of ["function Queue", "function AllCourses", "function CourseView", "function PreviewModal"]) {
+    assert.ok(adminSection.includes(page), page);
+  }
+  // Same live API and the one shared status endpoint — no second flow.
+  assert.ok(adminSection.includes("/api/course-builder/courses"), "live API");
+  assert.ok(adminSection.includes("/status"), "status endpoint");
+  // The prototype's admin actions all exist.
+  for (const a of ["Approve and publish", "Request changes", "Unpublish", "Tell the instructor what to fix"]) {
+    assert.ok(adminSection.includes(a), `action ${a}`);
+  }
+  // The publish checklist travels with the course to the admin side.
+  assert.ok(adminSection.includes("const checksOf ="), "checklist ported");
+  assert.ok(adminSection.includes("Ready to publish?"), "checklist rendered");
+  // Styled dialogs only; approvals are read-only inspection, never a prompt.
+  assert.ok(adminSection.includes("confirmDialog"), "styled confirm");
+  assert.ok(!/window\.(prompt|confirm|alert)/.test(adminSection), "no browser prompts");
+  assert.ok(!adminSection.includes("localStorage.setItem"), "no localStorage state");
+  // The six gradients, exactly.
+  assert.equal((adminSection.match(/linear-gradient\(145deg/g) || []).length, 6, "six gradients");
+});
+
+test("admin approvals css: scoped under .caroot so nothing leaks into the shell", () => {
+  const rules = adminCss.split("\n").filter((l) => /^[.a-zA-Z@\[]/.test(l.trim()) && l.includes("{"));
+  for (const r of rules) {
+    assert.ok(r.startsWith(".caroot") || r.startsWith("@"), `scoped: ${r.slice(0, 48)}`);
+  }
+  assert.ok(adminCss.includes(".caroot{"), "root block");
+  for (const cls of [".pv", ".ps", ".pr", ".chk", ".ck", ".note", ".facts"]) {
+    assert.ok(adminCss.includes(`.caroot ${cls}`), `class ${cls}`);
+  }
 });
 
 test("section css: scoped under .ccroot so nothing leaks into the shell", () => {
