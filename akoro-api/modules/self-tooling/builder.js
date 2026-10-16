@@ -7,17 +7,17 @@
  * is never trusted or executed as code.
  */
 import { openai } from "../../lib/aiModel.js";
-import { DATA_VIEWS, describeView } from "./views.js";
-import { CAPABILITIES } from "./capabilities.js";
+import { DATA_VIEWS, describeView, audienceOf } from "./views.js";
+import { CAPABILITIES, capAudience } from "./capabilities.js";
 
 export const BUILDER_MODEL = () => process.env.AKORO_SELF_TOOLING_MODEL || "gpt-4.1-mini";
 // Code is the hardest stage (and the rarest): a stronger model writes it.
 export const CODE_MODEL = () => process.env.AKORO_SELF_TOOLING_CODE_MODEL || "gpt-4.1";
 
-const COMMON = `You build ONE small read-only data tool for a learner on Akoro, as JSON DATA (never code).
+const COMMON = `You build ONE small data tool for a learner or an instructor on Akoro, as JSON DATA.
 Rules:
 - Use ONLY the views and capabilities listed below, and only their listed fields.
-- Every view is already limited to this learner's own data (or published content) — never add an owner filter.
+- Every view is already limited to the caller's own data (a learner's own rows, or an instructor's own classes and activities) or published content — never add an owner filter.
 - Filter ops: eq neq lt lte gt gte in contains startsWith isNull notNull within ("30d","12h","6m","1y") year (a year number or "this") month ("2026-03" or "this").
 - Never hard-code dates: "this year" is {"op":"year","value":"this"} (or "$year" from a param), "this month" is {"op":"month","value":"this"}.
 - Use only the steps you need; every step must be used by a from or join.
@@ -60,9 +60,10 @@ Example — spread my weakest topics over the days until $examDate, $perDay a da
 const FORMATS = { spec: SPEC_FORMAT, recipe: RECIPE_FORMAT, code: CODE_FORMAT };
 
 /** The registry slice the builder may use: views (with fields) + capabilities (with returns). */
-export function registrySlice(lookup, hint = {}) {
-  const viewNames = new Set([...(lookup?.views || []).map((v) => v.name), ...[].concat(hint.views || []).filter((v) => v in DATA_VIEWS)]);
-  const capNames = new Set([...(lookup?.capabilities || []).filter((c) => c.status === "available").map((c) => c.name), ...[].concat(hint.capabilities || []).filter((c) => c in CAPABILITIES)]);
+export function registrySlice(lookup, hint = {}, audience = "learner") {
+  // Hints can't reach across audiences: an instructor's tool never gets learner views, and vice versa.
+  const viewNames = new Set([...(lookup?.views || []).map((v) => v.name), ...[].concat(hint.views || []).filter((v) => v in DATA_VIEWS && audienceOf(DATA_VIEWS[v]) === audience)]);
+  const capNames = new Set([...(lookup?.capabilities || []).filter((c) => c.status === "available").map((c) => c.name), ...[].concat(hint.capabilities || []).filter((c) => c in CAPABILITIES && capAudience(CAPABILITIES[c]) === audience)]);
   // Write capabilities the lookup found ON (granted) and that a tool can target (S6).
   const writeNames = [...capNames].filter((n) => CAPABILITIES[n]?.kind === "write" && CAPABILITIES[n].target);
   for (const n of writeNames) viewNames.add(CAPABILITIES[n].target);

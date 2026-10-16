@@ -122,7 +122,7 @@ async function verifyTool(def, params, samples, ctx) {
  * resume job after an admin approval — no daily limit, a taken name gets a
  * suffix, and the platform pays (it was our gap).
  */
-export async function createTool({ learnerId, input, dry = false, builtIn = new Set(), callCapability, conversationId = null, resumed = false }) {
+export async function createTool({ learnerId, input, dry = false, builtIn = new Set(), callCapability, conversationId = null, resumed = false, audience = "learner" }) {
   const t0 = Date.now();
   const goal = String(input?.goal || "").trim().slice(0, 300);
   let name = String(input?.name || "").trim();
@@ -164,8 +164,9 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   }
 
   // What could it use?
-  const lookup = await schemaLookup(goal);
-  const slice = registrySlice(lookup, hint);
+  // learnerId is the OWNER: a learner, or an instructor for instructor tools (S7).
+  const lookup = await schemaLookup(goal, { audience });
+  const slice = registrySlice(lookup, hint, audience);
   const lockedIn = async (names) => {
     const out = [];
     for (const c of names) if (CAPABILITIES[c]?.status === "locked" && (await capabilityStatus(c)) === "locked") out.push(c);
@@ -175,7 +176,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   // ── 4. escalate (§7.8) — a locked capability named in the hint, or the only thing that fits.
   const toEscalate = async (capability, why) => {
     const out = await escalate({ learnerId, capability, goal, dry, conversationId,
-      proposed: { name, label, params, hint: { views: [].concat(hint.views || []), capabilities: [capability] }, run: input?.run && typeof input.run === "object" ? input.run : {} } });
+      proposed: { name, label, params, audience, hint: { views: [].concat(hint.views || []), capabilities: [capability] }, run: input?.run && typeof input.run === "object" ? input.run : {} } });
     ev.stages_tried.push("escalate"); ev.capabilities = [capability]; ev.request_id = out.requestId || null;
     return finish(out.status === "escalated" ? (dry ? "dry" : "escalated") : "rejected", { ...out, ...(why ? { why } : {}) });
   };
@@ -217,7 +218,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       if (built.notExpressible) { lastProblem = built.notExpressible; inexpressible = true; break; }
       if (!built.definition) { feedback = built.error || "no definition"; lastProblem = feedback; continue; }
       if (built.definition.kind !== stage) built.definition.kind = stage === "spec" && built.definition.from ? "spec" : built.definition.kind;
-      const v = await validateDefinition(built.definition, params);
+      const v = await validateDefinition(built.definition, params, { audience });
       if (v.ok && built.definition.kind === "code") v.errors.push(...inventedDates(built.definition.source, goal, params));
       if (v.errors.length) v.ok = false;
       if (!v.ok) { feedback = v.errors.slice(0, 6).join("; "); lastProblem = feedback; continue; }
@@ -255,7 +256,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
           : { rows: runNow.rows, total: runNow.total, truncated: runNow.truncated }) : { error: runNow.error },
         note: "DRY RUN — the tool was built and verified but NOT saved. Answer the learner from `result`." + droppedNote };
     }
-    const { data: row, error } = await edu().from("agent_tools").insert({ owner_id: learnerId, scope: "learner", ...def, usage_count: runNow.ok ? 1 : 0, last_used_at: new Date().toISOString() }).select("id").single();
+    const { data: row, error } = await edu().from("agent_tools").insert({ owner_id: learnerId, scope: "learner", audience, ...def, usage_count: runNow.ok ? 1 : 0, last_used_at: new Date().toISOString() }).select("id").single();
     if (error) return finish("failed", reject(`Couldn't save the tool: ${error.message}`));
     ev.tool_id = row.id;
     await finish("created", {});
@@ -284,22 +285,23 @@ export function toolDef(t) {
  * tools an admin promoted to everyone (most used first). The learner's own
  * tool wins a name clash; built-in names never reach here (§7.10).
  */
-export async function learnerToolDefs(learnerId) {
+export async function learnerToolDefs(learnerId, audience = "learner") {
   const [{ data: mine }, { data: platform }] = await Promise.all([
     edu().from("agent_tools").select("name, label, goal, params_schema, scope")
       .eq("owner_id", learnerId).eq("status", "active").order("last_used_at", { ascending: false, nullsFirst: false }).limit(LIMITS.inCatalogue),
     edu().from("agent_tools").select("name, label, goal, params_schema, scope")
-      .eq("scope", "platform").eq("status", "active").order("usage_count", { ascending: false }).limit(LIMITS.inCatalogue),
+      .eq("scope", "platform").eq("audience", audience).eq("status", "active").order("usage_count", { ascending: false }).limit(LIMITS.inCatalogue),
   ]);
   const own = new Set((mine || []).map((t) => t.name));
   return [...(mine || []), ...(platform || []).filter((t) => !own.has(t.name))].map(toolDef);
 }
 
 /** Run a saved tool — the learner's own, else a platform one. → result, or null when there's no such tool. */
-export async function runLearnerTool(name, input, learnerId, { callCapability, conversationId = null, dry = false }) {
+export async function runLearnerTool(name, input, learnerId, { callCapability, conversationId = null, dry = false, audience = "learner" }) {
   if (!NAME.test(String(name || ""))) return null;
   let { data: t } = await edu().from("agent_tools").select("*").eq("owner_id", learnerId).eq("name", name).in("status", ["active", "disabled"]).maybeSingle();
-  if (!t) ({ data: t } = await edu().from("agent_tools").select("*").eq("scope", "platform").eq("name", name).in("status", ["active", "disabled"]).maybeSingle());
+  if (!t) ({ data: t } = await edu().from("agent_tools").select("*").eq("scope", "platform").eq("audience", audience).eq("name", name).in("status", ["active", "disabled"]).maybeSingle());
+  if (t && (t.audience || "learner") !== audience) return null;   // never run another audience's tool
   if (!t) return null;
   const platform = t.scope === "platform";
   if (t.status !== "active") return { error: platform ? "This Akoro tool is turned off for now." : "This tool is turned off — rebuild it or turn it back on in Settings → Agent → My tools." };

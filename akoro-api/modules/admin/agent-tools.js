@@ -55,7 +55,9 @@ router.post("/agent-tools/:id/promote", adminOnly, asyncHandler(async (req, res)
     id: req.params.id, name: req.body?.name, label: req.body?.label, goal: req.body?.goal,
     replaces: Array.isArray(req.body?.replaces) ? req.body.replaces.filter((x) => UUID.test(String(x))) : [],
     admin: adminActor(req), builtIn: selfToolDeps(null).builtIn,
-    runGate: async (toolId) => startRun({ scenario: "selftool.promotion_check", params: { toolId }, actor: "admin" }).done,
+    // An instructor tool is checked on the instructor testers, as an instructor (S7).
+    runGate: async (toolId, audience) => startRun({ scenario: "selftool.promotion_check", actor: "admin",
+      params: { toolId, ...(audience === "instructor" ? { testers: ["@tester51", "@tester52"] } : {}) } }).done,
   });
   res.json({ success: true, ...out });
 }));

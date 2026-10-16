@@ -84,7 +84,7 @@ test("library: similar goals over the same data group; analytics summarise", asy
 
 test("catalogue: platform tools join the learner's own; own wins a name clash; platform never auto-disables", () => {
   const src = readFileSync(new URL("./pipeline.js", import.meta.url), "utf8");
-  assert.match(src, /\.eq\("scope", "platform"\)\.eq\("status", "active"\)/);
+  assert.match(src, /\.eq\("scope", "platform"\)\.eq\("audience", audience\)\.eq\("status", "active"\)/);
   assert.match(src, /filter\(\(t\) => !own\.has\(t\.name\)\)/);
   assert.match(src, /fail >= 3 && !platform \? \{ status: "disabled" \}/);
 });
@@ -138,6 +138,24 @@ test("questions about other players in battles force create_tool; others don't",
   for (const q of ["How many battles have I won?", "Find me a battle to join", "How did the other players do in the weekly league?",
     "Compare my accuracy by subject"]) assert.ok(!asksAboutOthersInBattles(q), q);
   const chat = readFileSync(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
-  assert.match(chat, /const forceSelfTool = selfToolOn \? await forcedSelfTool\(req\.user\.id, userMessage\)/);
+  assert.match(chat, /const forceSelfTool = selfToolOn && role === "student" \? await forcedSelfTool\(req\.user\.id, userMessage\)/);
   assert.match(chat, /: forceSelfTool \? "create_tool"/);
+});
+
+test("instructor views: owned (directly or through their activity), names only, and never mixed with learner tools", async () => {
+  const { DATA_VIEWS, audienceOf, selectColumns } = await import("./views.js");
+  const { validateDefinition } = await import("./interpreters.js");
+  const inst = Object.entries(DATA_VIEWS).filter(([, v]) => audienceOf(v) === "instructor").map(([n]) => n);
+  assert.deepEqual(inst.sort(), ["my_activities", "my_activity_drafts", "my_activity_results", "my_class_students", "my_classes"]);
+  const results = selectColumns(DATA_VIEWS.my_activity_results);
+  assert.match(results, /self_study_assignments!inner\([^)]*created_by/);
+  assert.match(results, /\bstudent_id\b/);
+  assert.doesNotMatch(results, /email|phone/);
+  const asLearner = await validateDefinition({ kind: "spec", from: "my_activity_results" }, {});
+  assert.ok(asLearner.errors.some((e) => /isn't available to learner tools/.test(e)));
+  const asInstructor = await validateDefinition({ kind: "spec", from: "my_tasks" }, {}, { audience: "instructor" });
+  assert.ok(asInstructor.errors.some((e) => /isn't available to instructor tools/.test(e)));
+  const ok = await validateDefinition({ kind: "spec", from: "my_activity_results", where: [{ field: "status", op: "eq", value: "complete" }],
+    group: { by: ["activity"], avg: ["grade"], count: true }, sort: [{ by: "avg_grade", dir: "desc" }] }, {}, { audience: "instructor" });
+  assert.deepEqual(ok.errors, []);
 });

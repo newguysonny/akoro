@@ -27,7 +27,10 @@ const STATUS = {
 const when = (v) => (v ? new Date(v).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
 const pill = (text, color, bg, key) => <span key={key || text} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 999, background: bg, color, fontFamily: FONT, fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>{text}</span>;
 const statusPill = (s) => { const x = STATUS[s] || STATUS.active; return pill(x.label, x.color, x.bg, s); };
-const scopePill = (scope) => (scope === 'platform' ? pill('Everyone', PURPLE, '#F5F3FF', 'scope') : pill('Learner', BLUE, '#EFF6FF', 'scope'));
+const scopePill = (scope, audience) => {
+  const who = audience === 'instructor' ? 'Instructor' : 'Learner';
+  return scope === 'platform' ? pill(`Every ${who.toLowerCase()}`, PURPLE, '#F5F3FF', 'scope') : pill(who, audience === 'instructor' ? AMBER : BLUE, audience === 'instructor' ? '#FFF7ED' : '#EFF6FF', 'scope');
+};
 const owner = (t) => (t.owner ? (t.owner.name || t.owner.username || 'Learner') : 'Akoro');
 
 export default function AgentToolsPage() {
@@ -117,7 +120,7 @@ function ToolRow({ t, onOpen, extra }) {
         <span>·</span><span>{when(t.createdAt)}</span>{extra}
       </div>
     </div>
-    <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', flexWrap: 'wrap', justifyContent: 'flex-end' }}>{scopePill(t.scope)}{statusPill(t.status)}</div>
+    <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', flexWrap: 'wrap', justifyContent: 'flex-end' }}>{scopePill(t.scope, t.audience)}{statusPill(t.status)}</div>
   </button>;
 }
 
@@ -174,7 +177,7 @@ function ToolModal({ id, onClose, onToast, onChanged }) {
   const row = (label, value) => <div><div style={{ color: MUTED2, marginBottom: 3 }}>{label}</div><div style={{ color: INK, fontWeight: 600, overflowWrap: 'anywhere' }}>{value}</div></div>;
   return <Modal open={!!id} onClose={busy ? () => {} : onClose} title={t ? t.label : 'Tool'} width={780}>
     {!t ? <Skeleton height={220} /> : <>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>{scopePill(t.scope)}{statusPill(t.status)}{t.verified && pill(`Verified: ${t.verified}`, GREEN, '#ECFDF5', 'v')}{t.promotion && pill(`Promotion check: ${t.promotion.verdict}`, PURPLE, '#F5F3FF', 'p')}</div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>{scopePill(t.scope, t.audience)}{statusPill(t.status)}{t.verified && pill(`Verified: ${t.verified}`, GREEN, '#ECFDF5', 'v')}{t.promotion && pill(`Promotion check: ${t.promotion.verdict}`, PURPLE, '#F5F3FF', 'p')}</div>
       <p style={{ margin: '0 0 14px', color: INK, fontFamily: FONT, fontSize: 13.5, lineHeight: 1.6 }}>{t.goal}</p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, padding: 12, background: LIGHT, borderRadius: 10, marginBottom: 14, fontFamily: FONT, fontSize: 12 }}>
         {row('Owner', owner(t))}{row('Name', <code>{t.name}</code>)}{row('Mode', t.mode)}{row('Used', `${t.uses}×`)}

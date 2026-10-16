@@ -7,8 +7,8 @@
  * isn't an allowlisted view field (rule 25).
  */
 import db from "../../db.js";
-import { CAPABILITIES, FORBIDDEN, forbiddenFor } from "./capabilities.js";
-import { DATA_VIEWS, describeView } from "./views.js";
+import { CAPABILITIES, FORBIDDEN, forbiddenFor, capAudience } from "./capabilities.js";
+import { DATA_VIEWS, describeView, audienceOf } from "./views.js";
 
 let grantsCache = { at: 0, active: new Set() };
 const GRANTS_TTL_MS = 30_000;
@@ -48,15 +48,15 @@ function score(goalWords, goalText, item) {
  * The views and capabilities relevant to a goal. Read-only metadata.
  * → { views:[…], capabilities:[{name, does, status}], notAllowed:[…], note }
  */
-export async function schemaLookup(goal, { limit = 6 } = {}) {
+export async function schemaLookup(goal, { limit = 6, audience = "learner" } = {}) {
   const goalText = ` ${String(goal || "").toLowerCase()} `;
   const goalWords = words(goal).filter((w) => !STOP.has(w));
   const forbidden = forbiddenFor(goal);
 
-  const rankedViews = Object.entries(DATA_VIEWS)
+  const rankedViews = Object.entries(DATA_VIEWS).filter(([, v]) => audienceOf(v) === audience)
     .map(([name, v]) => ({ name, v, s: score(goalWords, goalText, v) }))
     .filter((x) => x.s > 0).sort((a, b) => b.s - a.s).slice(0, limit);
-  const rankedCaps = Object.entries(CAPABILITIES).filter(([, c]) => !c.hidden)
+  const rankedCaps = Object.entries(CAPABILITIES).filter(([, c]) => !c.hidden && capAudience(c) === audience)
     .map(([name, c]) => ({ name, c, s: score(goalWords, goalText, c) }))
     .filter((x) => x.s > 0).sort((a, b) => b.s - a.s).slice(0, limit);
 

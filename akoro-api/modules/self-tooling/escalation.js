@@ -224,7 +224,7 @@ export async function resumeRequest(requestId, { createTool }) {
   await activeGrants({ fresh: true });   // the grant may have been made on another instance
   let out;
   try {
-    out = await createTool({ learnerId: claimed.requester_id, resumed: true, conversationId: claimed.conversation_id,
+    out = await createTool({ learnerId: claimed.requester_id, resumed: true, conversationId: claimed.conversation_id, audience: p.audience || "learner",
       input: { goal: claimed.goal, name: p.name, label, params: p.params || {}, run: p.run || {}, hint: { ...(p.hint || {}), capabilities: [...new Set([...[].concat(p.hint?.capabilities || []), claimed.requested_capability])] } } });
   } catch (e) {
     out = { status: "failed", reason: e.message };

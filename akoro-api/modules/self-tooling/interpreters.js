@@ -15,8 +15,8 @@
  *   save: name the current rows so a later join can use them.
  *   join: current rows (or `left`) ⋈ `right` on keys.
  */
-import { DATA_VIEWS } from "./views.js";
-import { CAPABILITIES } from "./capabilities.js";
+import { DATA_VIEWS, audienceOf } from "./views.js";
+import { CAPABILITIES, capAudience } from "./capabilities.js";
 import { CAP_RUNNERS } from "./capRuntime.js";
 import { runCode, staticCheck, asRows, codeEnabled } from "./sandbox/index.js";
 import { capabilityStatus } from "./registry.js";
@@ -176,7 +176,7 @@ async function checkSteps(errors, steps, uses) {
 }
 
 /** → { ok, errors, uses: { views:[], capabilities:[] } } */
-export async function validateDefinition(def, params) {
+export async function validateDefinition(def, params, { audience = "learner" } = {}) {
   const errors = [];
   const uses = { views: [], capabilities: [] };
   if (!def || typeof def !== "object") return { ok: false, errors: ["definition must be an object"], uses };
@@ -250,6 +250,9 @@ export async function validateDefinition(def, params) {
       else if (o?.op !== "write") errors.push(`${label}: unknown op ${o?.op}`);
     }
   } else errors.push(`kind must be "spec", "recipe" or "code" (got ${def.kind})`);
+  // One audience per tool (S7): learner tools read learner data, instructor tools instructor data.
+  for (const v of new Set(uses.views)) if (DATA_VIEWS[v] && audienceOf(DATA_VIEWS[v]) !== audience) errors.push(`${v} isn't available to ${audience} tools`);
+  for (const c of new Set(uses.capabilities)) if (CAPABILITIES[c] && capAudience(CAPABILITIES[c]) !== audience) errors.push(`${c} isn't available to ${audience} tools`);
   return { ok: !errors.length, errors, uses };
 }
 

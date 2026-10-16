@@ -1221,12 +1221,16 @@ export const isSideEffecting = (tool, input) => SIDE_EFFECT_TOOLS.includes(tool)
 const asToolError = (what) => (e) => ({ error: `Couldn't load ${what} just now${e?.message ? ` (${String(e.message).slice(0, 120)})` : ""}.` });
 
 /** What create_tool needs from the chat: built-in names (never shadowed) and a runner for capabilities. */
-export function selfToolDeps(studentId) {
+/** `role`: "student" (learner tools) or "instructor" (instructor tools, S7) — capabilities run as that role. */
+export function selfToolDeps(userId, role = "student") {
   return {
-    builtIn: new Set(CHAT_TOOLS.map((t) => t.name)),
-    callCapability: (tool, args) => executeChatTool(tool, args, studentId, { role: "student", channel: "self_tooling" }),
+    builtIn: new Set([...CHAT_TOOLS, ...INSTRUCTOR_TOOLS].map((t) => t.name)),
+    callCapability: (tool, args) => executeChatTool(tool, args, userId, { role, channel: "self_tooling" }),
   };
 }
+/** Which tools a role's agent builds (S7): instructors build instructor tools; everyone else learner tools. */
+const toolAudience = (role) => (role === "instructor" ? "instructor" : "learner");
+const SELF_TOOLING_ROLES = new Set(["student", "instructor"]);
 
 export async function executeChatTool(name, input, studentId, { conversationId = null, role = "student", channel = "ai_chat" } = {}) {
   // Agent console, DRY mode: anything that would change data is answered with
@@ -2030,17 +2034,18 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       } catch (error) { return asToolError("your past-question practice")(error); }
     }
     case "schema_lookup": {
-      if (role === "instructor") return { error: "Self-tooling is for learners." };
+      if (!SELF_TOOLING_ROLES.has(role)) return { error: "Building tools is for learners and instructors." };
       if (!(await selfToolingAllowedFor(studentId))) return { error: "Building new tools isn't turned on for this account yet." };
       if (!input?.goal || !String(input.goal).trim()) return clarify("goal", "What would you like the new tool to find out or do?", { action: "schema_lookup" });
-      try { return await schemaLookup(String(input.goal).slice(0, 300)); }
+      try { return await schemaLookup(String(input.goal).slice(0, 300), { audience: toolAudience(role) }); }
       catch (error) { return { error: error.message || "Couldn't check what's available right now" }; }
     }
     case "create_tool": {
-      if (role === "instructor") return { error: "Self-tooling is for learners." };
+      if (!SELF_TOOLING_ROLES.has(role)) return { error: "Building tools is for learners and instructors." };
       if (!(await selfToolingAllowedFor(studentId))) return { error: "Building new tools isn't turned on for this account yet." };
       try {
-        return await createTool({ learnerId: studentId, input: input || {}, dry: isDryRun(), conversationId, ...selfToolDeps(studentId) });
+        return await createTool({ learnerId: studentId, input: input || {}, dry: isDryRun(), conversationId,
+          audience: toolAudience(role), ...selfToolDeps(studentId, role === "instructor" ? "instructor" : "student") });
       } catch (error) {
         console.warn("[self-tooling] create_tool failed:", error?.stack || error?.message || error);
         return { status: "rejected", reason: "Building the tool failed unexpectedly — try again." };
@@ -2423,10 +2428,10 @@ export async function executeChatTool(name, input, studentId, { conversationId =
     }
     default: {
       // A tool the learner's agent built (self-tooling) — read-only, re-checked every call.
-      if (role !== "instructor" && (await selfToolingAllowedFor(studentId))) {
+      if (SELF_TOOLING_ROLES.has(role) && (await selfToolingAllowedFor(studentId))) {
         const out = await runLearnerTool(name, input, studentId, {
-          callCapability: (tool, args) => executeChatTool(tool, args, studentId, { role: "student", channel: "self_tooling" }),
-          conversationId, dry: isDryRun(),
+          callCapability: (tool, args) => executeChatTool(tool, args, studentId, { role, channel: "self_tooling" }),
+          conversationId, dry: isDryRun(), audience: toolAudience(role),
         });
         if (out) return out;
       }
@@ -4048,9 +4053,11 @@ router.post("/agent", async (req, res) => {
     // Self-tooling: without this the model tours unrelated tools and says
     // "I don't have that data" instead of building the tool (verify run
     // 1a8cb552, 2 of 3 repeats).
-    const selfToolOn = role === "student" && await selfToolingAllowedFor(req.user.id);
-    const forceSelfTool = selfToolOn ? await forcedSelfTool(req.user.id, userMessage).catch(() => null) : null;
-    const selfToolCtx = selfToolOn
+    const selfToolOn = (role === "student" || role === "instructor") && await selfToolingAllowedFor(req.user.id);
+    const forceSelfTool = selfToolOn && role === "student" ? await forcedSelfTool(req.user.id, userMessage).catch(() => null) : null;
+    const selfToolCtx = selfToolOn && role === "instructor"
+      ? "\n\n## Building tools (preview)\nWhen the instructor asks for something none of your tools gives directly — a total, average, count, ranking or breakdown over THEIR OWN classes and activities (average grade per activity, who hasn't started, completion by class, students below a mark) — call create_tool (schema_lookup first if unsure what it can use) and answer from its result; don't say you don't have the data. Tools only ever see this instructor's own classes and the work set in them — students by name only, never another teacher's class or a learner's private chats or notes. Only say it can't be done after create_tool is rejected, and say why."
+      : selfToolOn
       ? "\n\n## Building tools (preview)\nWhen the learner asks for something none of your tools gives directly — a total, average, count or breakdown over their own data (hours of sessions per month, tasks finished per week, accuracy by year) — don't say you don't have the data and don't piece it together from unrelated tools. Call create_tool (schema_lookup first if unsure what it can use), then answer from its result. The same goes for comparisons with other learners (how others scored in battles they played together): create_tool either builds it or, if it needs a permission, asks an admin and the answer comes back in this chat — tell the learner that plainly. Only say it can't be done after create_tool is rejected, and say why."
       : "";
     const systemContent = (await assembleChatDoctrine({
@@ -4078,7 +4085,11 @@ router.post("/agent", async (req, res) => {
     // Draft tools can be kill-switched off entirely; a required tool that
     // isn't in the catalogue would throw inside the loop — so the prepare
     // force below only arms when the instructor catalogue is non-empty.
-    const instructorTools = role === "student" ? [] : openAiInstructorTools();
+    // Instructors' agents build tools too (S7): their two self-tooling tools and their saved tools join the list.
+    const instructorTools = role === "student" ? [] : openAiInstructorTools().concat(role === "instructor" && selfToolOn
+      ? [...openAiChatTools({ allowToolRequest: false, selfTooling: true }).filter((t) => t.function.name === "schema_lookup" || t.function.name === "create_tool"),
+        ...await learnerToolDefs(req.user.id, "instructor").catch(() => [])]
+      : []);
     const prepared = await runAgentToolLoop({
       systemContent,
       messages: [...dialogue, { role: "user", content: userContent }],
