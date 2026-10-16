@@ -9,6 +9,7 @@ import ForgotPasswordPage from './pages/auth/ForgotPasswordPage.jsx';
 import ResetPasswordPage  from './pages/auth/ResetPasswordPage.jsx';
 import HomePage     from './pages/HomePage.jsx';
 import CoursesPage  from './pages/CoursesPage.jsx';
+import CourseCreatorPage from './pages/course-creator/index.jsx';
 import SalesPage     from './pages/SalesPage.jsx';
 import OrderHistoryPage from './pages/OrderHistoryPage.jsx';
 import StudentsPage from './pages/StudentsPage.jsx';
@@ -108,6 +109,8 @@ function AppRoutes() {
       <Route path="/courses/new-ondemand" element={<ProtectedRoute><CoursesPage /></ProtectedRoute>} />
       <Route path="/courses/schedule"    element={<ProtectedRoute><CoursesPage /></ProtectedRoute>} />
       <Route path="/courses/manage"      element={<ProtectedRoute><CoursesPage /></ProtectedRoute>} />
+      {/* Course Creator — the marketplace course builder (sections, lessons, review flow). */}
+      <Route path="/course-creator/*" element={<ProtectedRoute><CourseCreatorPage /></ProtectedRoute>} />
       <Route path="/sales" element={<ProtectedRoute><SalesPage /></ProtectedRoute>} />
       <Route path="/orders" element={<ProtectedRoute><OrderHistoryPage /></ProtectedRoute>} />
       {/* Students now live under Management → My Students. */}

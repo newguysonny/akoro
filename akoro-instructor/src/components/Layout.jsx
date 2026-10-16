@@ -18,6 +18,7 @@ import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT } from '../consta
 const NAV = [
   { to: '/',         icon: Home,          label: 'Home' },
   { to: '/courses',  icon: BookOpen,      label: 'Courses' },
+  { to: '/course-creator', icon: BookMarked, label: 'Course Creator' },
   { to: '/sales',    icon: Wallet,        label: 'Sales & Earnings' },
   { to: '/battles',  icon: Swords,        label: 'Battles' },
   { to: '/tasks',    icon: CheckSquare,   label: 'Tasks' },
