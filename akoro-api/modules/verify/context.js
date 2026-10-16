@@ -33,7 +33,9 @@ const table = (name) => {
   return schema === "public" ? db.from(t) : db.schema(schema).from(t);
 };
 
-export function createContext({ scenario, sink, evidence, realUsers }) {
+export function createContext({ scenario, sink, evidence, realUsers, runId = "local" }) {
+  // Everything a write scenario creates carries this, so leftovers are findable.
+  const marker = `[verify:${String(runId).slice(0, 8)}]`;
   const accounts = new Map();
   const cleanups = [];
   const risk = scenario.risk;
@@ -141,9 +143,28 @@ export function createContext({ scenario, sink, evidence, realUsers }) {
       evidence.db.push({ table: name, filters: redact(filters), rows: (data || []).length });
       return data || [];
     },
+    /**
+     * Cleanup only: delete rows a write scenario created. The owner must be a
+     * TEST learner acting in this run, and at least one narrowing filter
+     * besides the owner is required — this can never sweep an account.
+     */
+    async deleteOwned(name, { ownerColumn, ownerId, filters = {} }) {
+      if (risk !== "write") throw new PolicyError("Only write scenarios clean up.");
+      const owner = [...accounts.values()].find((a) => a.id === ownerId);
+      if (!owner?.tester) throw new PolicyError("deleteOwned: the owner isn't a test learner in this run.");
+      if (!ownerColumn || !Object.keys(filters).length) throw new PolicyError("deleteOwned needs an owner column and a narrowing filter.");
+      let q = table(name).delete().eq(ownerColumn, ownerId);
+      for (const [k, v] of Object.entries(filters)) q = v && typeof v === "object" && v.like ? q.like(k, v.like) : q.eq(k, v);
+      const { data, error } = await q.select("*");
+      if (error) throw new Error(`cleanup on ${name} failed: ${error.message}`);
+      evidence.db.push({ table: name, cleanup: true, deleted: (data || []).length });
+      return (data || []).length;
+    },
     async count(name, filters = {}) {
       let q = table(name).select("*", { count: "exact", head: true });
-      for (const [k, v] of Object.entries(filters)) q = v && typeof v === "object" && Array.isArray(v.in) ? q.in(k, v.in) : q.eq(k, v);
+      for (const [k, v] of Object.entries(filters)) {
+        q = v && typeof v === "object" && Array.isArray(v.in) ? q.in(k, v.in) : v && typeof v === "object" && v.like ? q.like(k, v.like) : q.eq(k, v);
+      }
       const { count, error } = await q;
       if (error) throw new BlockedError(`Evidence count on ${name} failed: ${error.message}`);
       evidence.db.push({ table: name, filters: redact(filters), count });
@@ -151,8 +172,20 @@ export function createContext({ scenario, sink, evidence, realUsers }) {
     },
   };
 
+  /** Poll until fn() returns a truthy value, or give up after timeoutMs. */
+  async function until(fn, { timeoutMs = 90_000, everyMs = 3_000 } = {}) {
+    const end = Date.now() + timeoutMs;
+    for (;;) {
+      const v = await fn();
+      if (v) return v;
+      if (Date.now() + everyMs > end) return null;
+      await new Promise((r) => setTimeout(r, everyMs));
+    }
+  }
+
   return {
     scenario: scenario.name,
+    marker, until,
     as, http,
     agent: { chat: agentChat, tool: agentTool },
     db: dbApi,

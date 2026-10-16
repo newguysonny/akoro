@@ -9,6 +9,7 @@
  *   real users (any other learner)                read · dry only — never a real change (rule 35)
  */
 import db from "../../db.js";
+import { BlockedError } from "./assertions.js";
 
 export const RISKS = ["read", "dry", "write"];
 export const TARGET = ["production", "local", "sandbox"].includes(process.env.VERIFY_TARGET) ? process.env.VERIFY_TARGET : "production";
@@ -17,7 +18,8 @@ export const LIMITS = {
   runTimeoutMs: Math.max(5_000, Number(process.env.VERIFY_RUN_TIMEOUT_MS) || 120_000),
   maxRepeats: 5,
 };
-export const writesAllowed = () => String(process.env.VERIFY_ALLOW_WRITES || "").toLowerCase() === "true";
+// Production: writes only when VERIFY_ALLOW_WRITES=true. Local/sandbox are disposable.
+export const writesAllowed = () => TARGET !== "production" || String(process.env.VERIFY_ALLOW_WRITES || "").toLowerCase() === "true";
 
 /** Same key as the agent console: Authorization: Bearer, x-agent-console-key or ?key=. */
 export function guard(req, res, next) {
@@ -45,7 +47,8 @@ export async function resolveAccount(handle) {
     : s.includes("@") && !s.startsWith("@") ? db.from("users").select(cols).ilike("email", s)
     : db.from("users").select(cols).ilike("username", s.replace(/^@/, ""));
   const { data, error } = await q.limit(1);
-  if (error) throw new Error(`Account lookup failed: ${error.message}`);
+  // The database not answering is a missing precondition, not a gate fault.
+  if (error) throw new BlockedError(`Account lookup failed (database unreachable?): ${error.message}`);
   const u = data?.[0];
   if (!u) throw new PolicyError(`No account found for "${s}".`);
   if (u.deactivated_at || u.deleted_at) throw new PolicyError(`${u.username} is deactivated.`);

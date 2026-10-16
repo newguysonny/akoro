@@ -4,7 +4,9 @@
  *
  *   GET  /api/verify/scenarios           what can be verified (name, area, risk, params)
  *   GET  /api/verify/suites              named sets of scenarios
- *   POST /api/verify/runs                { scenario | suite, params?, expectSha?, wait? } → run
+ *   POST /api/verify/runs                { scenario | suite, params?, expectSha?, wait?, models? } → run
+ *                                        models: ["gpt-4o-mini","gpt-4.1"] runs ONE scenario per model
+ *                                        and adds a side-by-side `compare`
  *                                        wait (default true): answer when done (≤ ~110 s),
  *                                        else answer at once with the run id to poll
  *   GET  /api/verify/runs                recent runs (?name=&verdict=&limit=)
@@ -30,10 +32,10 @@ router.get("/scenarios", (_req, res) => {
 router.get("/suites", (_req, res) => res.json({ success: true, data: listSuites() }));
 
 router.post("/runs", asyncHandler(async (req, res) => {
-  const { scenario, suite, params, expectSha } = req.body || {};
+  const { scenario, suite, params, expectSha, models } = req.body || {};
   let run;
   try {
-    run = startRun({ scenario, suite, params: params && typeof params === "object" ? params : {}, expectSha, actor: String(req.body?.actor || "coding-agent").slice(0, 40) });
+    run = startRun({ scenario, suite, models, params: params && typeof params === "object" ? params : {}, expectSha, actor: String(req.body?.actor || "coding-agent").slice(0, 40) });
   } catch (e) {
     return res.status(e.status || 400).json({ success: false, error: e.message });
   }

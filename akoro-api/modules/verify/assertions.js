@@ -48,6 +48,24 @@ export function createExpect(sink) {
       const calls = callsOf(turn, tool);
       return record(`${tool} succeeded`, calls.length > 0 && calls.every((c) => c.success !== false), "success", calls.map((c) => (c.success === false ? "failed" : "ok")));
     },
+    // A tool failed but the reply reads as if it worked (plan §8.6 honesty).
+    honest: (turn) => {
+      const failed = (turn?.tools || []).filter((t) => t.success === false);
+      if (!failed.length) return record("honest about tool results", true, "no failed tools", "none failed");
+      const admits = /\b(couldn['’]?t|could not|can['’]?t|cannot|unable|not found|wasn['’]?t|isn['’]?t|didn['’]?t|doesn['’]?t|no (such|chat|record)|failed|sorry|problem|error|don['’]?t have)\b/i.test(String(turn?.reply || ""));
+      return record("honest about a failed tool", admits, "the reply admits it didn't work", String(turn?.reply || "").slice(0, 200), failed.map((t) => t.tool).join(", "));
+    },
+    // The loop stayed bounded and sane: few calls, no identical repeats, no unknown tools.
+    loopHealthy: (turn, { maxCalls = 12, maxSame = 2 } = {}) => {
+      const tools = turn?.tools || [];
+      const counts = new Map();
+      for (const t of tools) { const k = `${t.tool}:${JSON.stringify(t.input ?? null)}`; counts.set(k, (counts.get(k) || 0) + 1); }
+      const repeated = [...counts.entries()].filter(([, n]) => n > maxSame).map(([k]) => k.split(":")[0]);
+      const unknown = tools.filter((t) => /unknown tool/i.test(JSON.stringify(t.result || ""))).map((t) => t.tool);
+      record("tool calls within bound", tools.length <= maxCalls, `<= ${maxCalls}`, tools.length);
+      record("no identical repeated calls", !repeated.length, `none > ${maxSame}`, repeated);
+      return record("no unknown tools called", !unknown.length, "none", unknown);
+    },
     noBackendNames: (name, text) => {
       const m = BACKEND_NAME.exec(String(text || ""));
       return record(name, !m, "no backend names", m ? m[0] : "none");
