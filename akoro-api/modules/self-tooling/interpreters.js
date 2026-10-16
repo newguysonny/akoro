@@ -101,7 +101,11 @@ export function normalizeDefinition(def) {
 const NUMERIC = new Set(["number", "integer"]);
 const viewTypes = (view) => new Map(Object.entries(view.fields).map(([k, f]) => [k, f.type]));
 function flowOp(errors, o, cur, label) {
-  const need = (f, what) => { if (cur && typeof f === "string" && !f.startsWith("$") && !cur.has(f)) errors.push(`${label}: ${what} ${f} isn't a field here (have: ${[...cur.keys()].join(", ")})`); };
+  const need = (f, what) => {
+    if (cur && typeof f === "string" && !f.startsWith("$") && !cur.has(f)) {
+      errors.push(`${label}: ${what} ${f} isn't a field here (have: ${[...cur.keys()].join(", ")})${/^count_/.test(f) && cur.has("count") ? ' — a group\'s count is named "count"' : ""}`);
+    }
+  };
   const needNum = (f, what) => { need(f, what); const t = cur?.get(f); if (t && !NUMERIC.has(t)) errors.push(`${label}: ${what} ${f} is a ${t}, not a number${t === "timestamp" ? " — use compute minutesBetween first" : ""}`); };
   switch (o.op) {
     case "filter": for (const w of [].concat(o.where || [])) need(w?.field, "filter field"); return cur;

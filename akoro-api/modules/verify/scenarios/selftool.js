@@ -600,7 +600,12 @@ export const instructorAgentBuilds = {
     ctx.expect.ok("agent called create_tool", !!built, (turn.tools || []).map((t) => t.tool));
     ctx.expect.eq("tool built", built?.result?.status, "created");
     const rows = built?.result?.result?.rows || [];
-    for (const a of truth) ctx.expect.ok(`"${a.title}" average ${a.avg.toFixed(1)} in the tool's answer`, hasNumberNear(rowFor(rows, a.title), a.avg), rows.slice(0, 4));
+    for (const a of truth) {
+      const row = rowFor(rows, a.title);
+      ctx.expect.ok(`"${a.title}" average ${a.avg.toFixed(1)} in the tool's answer`, hasNumberNear(row, a.avg), rows.slice(0, 4));
+      // Graded students, not everyone assigned (an answer once said 5 when 3 were graded).
+      ctx.expect.ok(`"${a.title}" ${a.graded} graded in the tool's answer`, hasNumberNear(row, a.graded, 0.01), row);
+    }
     ctx.expect.noBackendNames("reply has no backend names", turn.reply);
     ctx.expect.loopHealthy(turn);
   },
