@@ -188,6 +188,7 @@
     "2026-battle-hp.sql",
     "2026-battle-entry.sql",
     "2026-eval-run-options.sql",
+    "2026-course-builder.sql",
     "2026-follow-ups-into-existing-chat.sql",
     "2026-seed-school.sql",
     "2026-seed-agent-testers.sql"
