@@ -2,16 +2,18 @@
  * cc.css — the Course Creator section, ported 1:1 from
  * reference/Kpemu Course Builder.html. Classes keep the reference's names
  * and everything is scoped under .ccroot so nothing leaks into the
- * instructor shell; the reference's light-theme variables are pinned (this
- * dashboard has no dark mode). Only structural adoption: the root is a
- * centred column inside the instructor PageLayout (the reference's own
- * 760px main), the prototype's sidebar becomes the .ccnav pill row, and
- * the sub-480px behaviour matches the reference.
+ * instructor shell. Same cards, same components, same layout as the
+ * reference — only the brand changed: the Kpemu purple/Inter palette is
+ * swapped for the Akoro instructor brand (amber #E8884A accent on ink
+ * #1A1A2E text, DM Sans, the dashboard's warm border and pill tones).
+ * Structural adoption: the root is a centred column inside the instructor
+ * PageLayout (the reference's own 760px main) and navigation lives in the
+ * dashboard sidebar's "Course Creator" group.
  */
 .ccroot{
-  --bg:#fff;--text:#0d0d0d;--muted:#6e6e6e;--border:#e8e8e8;--pill:#f3f3f3;
-  --fg:#6c3cff;--btn:#fff;--warn:#c2740c;--ok:#16a34a;
-  color:var(--text);font:15px/1.5 Inter,system-ui,-apple-system,'Segoe UI',sans-serif;
+  --bg:#fff;--text:#1A1A2E;--muted:#6B6B80;--border:#EDE8E1;--pill:#FAF8F5;
+  --fg:#E8884A;--btn:#fff;--warn:#c2740c;--ok:#10B981;
+  color:var(--text);font:15px/1.5 'DM Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
   max-width:760px;margin:0 auto;padding:28px 20px 80px}
 .ccroot *{box-sizing:border-box}
 .ccroot button,.ccroot input,.ccroot select,.ccroot textarea{font:inherit;color:inherit}
@@ -27,10 +29,6 @@
 .ccroot .chip{font-size:13px;padding:1px 9px;border-radius:99px;background:var(--pill);color:var(--muted)}
 .ccroot input,.ccroot select,.ccroot textarea{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);font-size:15px}
 .ccroot label{display:block;font-size:13px;font-weight:500;margin:14px 0 5px;color:var(--muted)}.ccroot .form{max-width:540px}
-.ccroot .ccnav{display:flex;gap:6px;margin:0 0 22px;flex-wrap:wrap}
-.ccroot .ccnav a{display:flex;align-items:center;gap:8px;padding:8px 13px;border-radius:99px;color:var(--muted);cursor:pointer;font-weight:500;font-size:14px;text-decoration:none}
-.ccroot .ccnav a:hover,.ccroot .ccnav a.on{background:var(--pill)}.ccroot .ccnav a.on{color:var(--text);font-weight:600}
-.ccroot .ccnav small{background:var(--fg);color:#fff;border-radius:99px;padding:0 7px;font-size:12px}
 .ccroot .tools{display:flex;gap:10px;margin:20px 0 18px;flex-wrap:wrap;align-items:center}.ccroot .tools select{width:auto;border-radius:99px;background:var(--pill);border-color:transparent}
 .ccroot .sbox{position:relative;flex:1 1 240px;max-width:380px}.ccroot .sbox svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
 .ccroot .sbox input{padding-left:42px;padding-right:38px;border-radius:99px;background:var(--pill);border-color:transparent}.ccroot .sbox input:focus{background:var(--bg);border-color:var(--fg)}
@@ -62,7 +60,7 @@
 .ccroot .hgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
 .ccroot .stat{border:1px solid var(--border);border-radius:12px;padding:14px}.ccroot .stat span{display:block;color:var(--muted);font-size:14px}.ccroot .stat b{font-size:26px;font-weight:600}
 .ccroot .pv{background:#f5f4f0;color:#16132b;border-radius:18px;padding:16px;max-height:68vh;overflow:auto;margin-top:12px}
-.ccroot .pv .top{color:#8a8895;font-size:14px;margin:2px 2px 14px}.ccroot .pv .top b{color:#6c3cff;font-weight:600}
+.ccroot .pv .top{color:#8a8895;font-size:14px;margin:2px 2px 14px}.ccroot .pv .top b{color:#E8884A;font-weight:600}
 .ccroot .ps{background:#fff;border:1px solid #e8e6e1;border-radius:22px;margin-bottom:12px;overflow:hidden}
 .ccroot .ps summary{list-style:none;display:flex;align-items:center;gap:12px;padding:16px;cursor:pointer}.ccroot .ps summary::-webkit-details-marker{display:none}
 .ccroot .pn{width:40px;height:40px;border-radius:12px;background:#ece9e4;color:#6b6870;display:grid;place-items:center;font-weight:600;flex:none}
@@ -71,10 +69,10 @@
 .ccroot .chv{color:#8a8895;transition:transform .2s;flex:none}.ccroot details[open] .chv{transform:rotate(180deg)}
 .ccroot .pr{display:flex;align-items:center;gap:12px;padding:13px 16px;border-top:1px solid #ece9e4;font-size:15px}
 .ccroot .pr .no{width:28px;height:28px;border-radius:50%;background:#ece9e4;color:#6b6870;display:grid;place-items:center;font-size:12px;flex:none}
-.ccroot .pr svg{color:#6c3cff;width:18px;height:18px;flex:none}.ccroot .pr.lk{color:#9a98a3}.ccroot .pr.lk svg{color:#b5b3bd}
+.ccroot .pr svg{color:#E8884A;width:18px;height:18px;flex:none}.ccroot .pr.lk{color:#9a98a3}.ccroot .pr.lk svg{color:#b5b3bd}
 .ccroot .pr .tt{flex:1;min-width:0}.ccroot .pr i{font-style:normal;color:#8a8895;font-size:14px}.ccroot .pr .tt small{display:block;color:#8a8895;font-size:13px}
-.ccroot .pb{display:flex;align-items:center;gap:6px;flex:none;color:#4b1fd1;font-weight:500}
-.ccroot .pbc{width:26px;height:26px;border-radius:50%;background:#1d1d2b;display:grid;place-items:center}.ccroot .pr .pbc svg{color:#fff;fill:#fff;stroke:none;width:13px;height:13px}
-.ccroot .pb u{text-decoration:none;border-bottom:2px solid #a78bfa;line-height:1.2}
+.ccroot .pb{display:flex;align-items:center;gap:6px;flex:none;color:#B4530A;font-weight:500}
+.ccroot .pbc{width:26px;height:26px;border-radius:50%;background:#1A1A2E;display:grid;place-items:center}.ccroot .pr .pbc svg{color:#fff;fill:#fff;stroke:none;width:13px;height:13px}
+.ccroot .pb u{text-decoration:none;border-bottom:2px solid #F3C9A8;line-height:1.2}
 .ccroot .lnk{color:var(--fg);cursor:pointer;text-decoration:underline;text-underline-offset:2px;background:none;border:0;padding:0;font-size:inherit}
 @media (prefers-reduced-motion:reduce){.ccroot .ccard,.ccroot .scard,.ccroot .chv{transition:none}}

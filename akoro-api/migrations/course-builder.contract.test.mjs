@@ -81,8 +81,15 @@ test("api: /api/course-builder is the instructor-scoped CRUD the section drives"
 test("instructor app: the Course Creator section is wired in", () => {
   assert.ok(appJsx.includes('path="/course-creator/*"'), "route registered");
   assert.ok(appJsx.includes("course-creator/index.jsx"), "section imported");
-  assert.ok(layoutJsx.includes("'/course-creator'"), "sidebar nav entry");
-  assert.ok(layoutJsx.includes("'Course Creator'"), "sidebar label");
+  // The reference's sidebar pages, as an expandable group — the same
+  // pattern as Student Information / the admin app's Program Courses.
+  assert.ok(layoutJsx.includes("'Course Creator'"), "sidebar group label");
+  assert.ok(layoutJsx.includes("to: '/course-creator', end: true"), "Home child");
+  assert.ok(layoutJsx.includes("'/course-creator/courses'"), "My Courses child");
+  assert.ok(layoutJsx.includes("'/course-creator/library'"), "Content Library child");
+  // Review Queue only ever appears for admin sessions.
+  assert.ok(layoutJsx.includes("'/course-creator/review'"), "Review Queue child");
+  assert.ok(/user\?\.role === 'admin'[\s\S]{0,300}Review Queue/.test(layoutJsx), "review queue is admin-only");
 });
 
 test("section: every page of the prototype is ported", () => {
@@ -161,4 +168,14 @@ test("section css: scoped under .ccroot so nothing leaks into the shell", () => 
   for (const cls of [".pv", ".ps", ".pn", ".pf", ".chv", ".pr", ".pb", ".pbc"]) {
     assert.ok(sectionCss.includes(`.ccroot ${cls}`), `preview class ${cls}`);
   }
+  // Same components, Akoro instructor brand: amber accent on ink text,
+  // DM Sans — no Kpemu purple left anywhere.
+  assert.ok(sectionCss.includes("--fg:#E8884A"), "amber accent");
+  assert.ok(sectionCss.includes("--text:#1A1A2E"), "ink text");
+  assert.ok(sectionCss.includes("'DM Sans'"), "brand font");
+  for (const purple of ["#6c3cff", "#9a7dff", "#4b1fd1", "#a78bfa"]) {
+    assert.ok(!sectionCss.includes(purple), `no reference purple ${purple}`);
+  }
+  // Navigation lives in the dashboard sidebar now — no in-page pill nav.
+  assert.ok(!sectionCss.includes(".ccnav"), "pill nav gone");
 });
