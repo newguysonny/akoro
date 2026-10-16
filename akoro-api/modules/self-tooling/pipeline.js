@@ -52,6 +52,26 @@ export function inventedDates(source, goal, params = {}) {
 }
 
 const ABOUT_OTHERS = /\b(other (players?|learners?|students?|people)|others|classmates?|opponents?|everyone else|the rest of (my|the) class)\b/i;
+const BATTLE_WORDS = /\b(battles?|duels?|challenges?|matches)\b/i;
+const OTHERS_WORDS = /\b(other (players?|learners?|students?|people)|others|opponents?|classmates?|everyone else|the rest|compared? (to|with)|versus|vs\.?|who (beat|won)|beat me|than me)\b/i;
+/** "How did the other players do in my battles?" — about other learners' battle results. */
+export const asksAboutOthersInBattles = (message) => BATTLE_WORDS.test(String(message || "")) && OTHERS_WORDS.test(String(message || ""));
+
+/**
+ * The forced first step (iteration 0) for that question: create_tool, so the
+ * agent reaches "this needs an admin's permission" (or builds it, once granted)
+ * instead of answering "I can't see that" from unrelated tools — which it did
+ * about 1 time in 10–15 on every model tried. Not forced when the learner (or
+ * everyone) already has a tool for it: then the agent just calls that tool.
+ * → "create_tool" | null
+ */
+export async function forcedSelfTool(learnerId, message) {
+  if (!asksAboutOthersInBattles(message)) return null;
+  const { data } = await edu().from("agent_tools").select("id").eq("status", "active")
+    .or(`owner_id.eq.${learnerId},scope.eq.platform`).contains("capabilities", ["battles.class_results"]).limit(1);
+  return data?.length ? null : "create_tool";
+}
+
 /**
  * For a goal about other learners: the lookup's TOP-ranked capability, when it
  * is a locked one over other learners' data (an available capability ranked
