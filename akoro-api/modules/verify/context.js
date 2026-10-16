@@ -117,12 +117,13 @@ export function createContext({ scenario, sink, evidence, realUsers, runId = "lo
     return turn;
   }
 
-  async function agentTool({ as: who, tool, input = {}, mode = "dry" } = {}) {
+  async function agentTool({ as: who, tool, input = {}, mode = "dry", learnerTool = false } = {}) {
     const acct = await as(who);
     const live = mode === "live";
     if (live && (risk !== "write" || !acct.tester)) throw new PolicyError("Live tool calls are for write scenarios on test learners only.");
     const { executeChatTool, getLearnerChatTools } = await chat();
-    if (!getLearnerChatTools().some((t) => t.name === tool)) throw new BlockedError(`"${tool}" isn't an enabled learner tool on this server.`);
+    // learnerTool: a tool the learner's agent built (self-tooling), not a built-in.
+    if (!learnerTool && !getLearnerChatTools().some((t) => t.name === tool)) throw new BlockedError(`"${tool}" isn't an enabled learner tool on this server.`);
     const t0 = Date.now();
     const go = () => executeChatTool(tool, input, acct.id, { role: "student", channel: "verify" });
     let result;

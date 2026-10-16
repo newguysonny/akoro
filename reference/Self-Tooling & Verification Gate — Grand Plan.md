@@ -1135,7 +1135,24 @@ Planned scope:
 - **Exit:** `schema_lookup` returns only allowlisted views/fields; gate
   scenario proves no table or forbidden name ever appears.
 
-### Phase S2 — `create_tool`: compose + spec + verify + register
+### Phase S2 — `create_tool`: compose + spec + verify + register ✅ built 2026-10-16
+As built: `ops.js` (filter/compute/group with day-week-month-year buckets/sort/
+limit/pick/rename/dedupe/join — pure, no expressions), `viewRuntime.js` (owner
+filter forced + every returned row re-checked: a foreign row stops the tool),
+`interpreters.js` (validate + run recipes — steps over views/capabilities with
+`from`/`save`/`join` — and specs), `bind.js` (param subset + `$refs`),
+`builder.js` (fixed prompt, registry slice only, JSON out; learner-billed,
+platform-billed in dry runs), `pipeline.js` (stage 0 checks incl. forbidden
+goals, 5/day + 20 max, recipe → spec with one repair each, verify-before-
+register via the gate's assertion engine, save, run at once and return the
+answer; runtime re-checks capabilities every call; 3 failures → disabled),
+`routes.js` (`/api/self-tooling/tools` list/rename/turn off/delete), learner
+Settings → Agent → My tools. Agent Chat: `create_tool` tool; built tools join
+the learner's catalogue (8 most recent) and become callable in the same turn;
+dry runs build + verify but never save. Escalation (stage 4) is still a
+`rejected … needs a permission` answer until S3; code (stage 3) waits for S5.
+
+Planned scope:
 - Pipeline stages 0–2, tool builder prompt, recipe and spec interpreters
   (pure, unit-tested), verify-before-register (§7.9), `edu.agent_tools`,
   catalogue injection, runtime with re-checks, trace rows, dry-run behaviour,

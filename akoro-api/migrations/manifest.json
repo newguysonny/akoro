@@ -190,6 +190,7 @@
     "2026-follow-ups-into-existing-chat.sql",
     "2026-verify-gate.sql",
     "2026-self-tooling-grants.sql",
+    "2026-self-tooling-tools.sql",
     "2026-seed-school.sql",
     "2026-seed-agent-testers.sql"
   ],

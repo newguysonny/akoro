@@ -84,7 +84,8 @@ test("the agent prepares but never assigns — tools, gating, and honesty", () =
   // The catalogue resolves once, through the kill-switch guard, so the
   // prepare-force never requires a tool that isn't armed.
   assert.match(chat, /const instructorTools = role === "student" \? \[\] : openAiInstructorTools\(\);/);
-  assert.match(chat, /\}\) : instructorTools,/);
+  // Learners' own built tools (self-tooling) are appended to the student catalogue.
+  assert.match(chat, /\}\)(?:\.concat\([^\n]*\))? : instructorTools,/);
   assert.match(chat, /SIDE_EFFECT_TOOLS = \[[^\]]*"prepare_activity", "revise_activity_draft"[^\]]*\]/, "prepare + revise are side-effecting");
   assert.match(chat, /sideEffecting: SIDE_EFFECT_TOOLS\.includes\(tool\)/);
   // HITL honesty guide replaces the learner observation guide for instructors.
