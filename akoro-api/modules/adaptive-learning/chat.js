@@ -370,7 +370,7 @@ export const CHAT_TOOLS = [
   },
   {
     name: "get_past_question_practice",
-    description: "The learner's own past-question practice: per exam and subject — questions attempted, correct, accuracy, years practised, last practised — plus totals. Use for 'how am I doing on past questions', accuracy by subject, or combining with weak topics. Exam-prep runs are a different thing (get_exam_prep_status).",
+    description: "The learner's own past-question practice: per exam and subject — questions attempted, correct, accuracy, years practised, last practised — plus totals. Use for 'how am I doing on past questions', accuracy by subject, or combining with weak topics. For an OVERALL answer call it ONCE with no filters — the result already covers every exam and subject with totals; never guess subjects to filter by. Exam-prep runs are a different thing (get_exam_prep_status).",
     input_schema: {
       type: "object",
       properties: {
