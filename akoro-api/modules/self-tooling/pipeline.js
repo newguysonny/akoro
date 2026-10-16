@@ -166,12 +166,10 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   // What could it use?
   // learnerId is the OWNER: a learner, or an instructor for instructor tools (S7).
   const lookup = await schemaLookup(goal, { audience });
-  // A resume after an approval builds from exactly what was asked for and
-  // approved (the hint) — a gate run once 'resumed' into a tool that answered
-  // from an unrelated view instead of the granted capability.
-  const slice = resumed && [].concat(hint.capabilities || []).length
-    ? registrySlice({ views: [], capabilities: [] }, hint, audience)
-    : registrySlice(lookup, hint, audience);
+  const slice = registrySlice(lookup, hint, audience);
+  // A resume after an approval must USE what was approved — a gate run once
+  // 'resumed' into a tool that answered from an unrelated view instead.
+  const mustUse = resumed ? [].concat(hint.capabilities || []).filter((c) => c in CAPABILITIES) : [];
   const lockedIn = async (names) => {
     const out = [];
     for (const c of names) if (CAPABILITIES[c]?.status === "locked" && (await capabilityStatus(c)) === "locked") out.push(c);
@@ -225,6 +223,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       if (built.definition.kind !== stage) built.definition.kind = stage === "spec" && built.definition.from ? "spec" : built.definition.kind;
       const v = await validateDefinition(built.definition, params, { audience });
       if (v.ok && built.definition.kind === "code") v.errors.push(...inventedDates(built.definition.source, goal, params));
+      for (const c of mustUse) if (!v.uses.capabilities.includes(c)) v.errors.push(`use the approved capability ${c} (a step {"id":"x","cap":"${c}"} — returns ${JSON.stringify(CAPABILITIES[c].returns || [])})`);
       if (v.errors.length) v.ok = false;
       if (!v.ok) { feedback = v.errors.slice(0, 6).join("; "); lastProblem = feedback; continue; }
       const check = await verifyTool(built.definition, params, built.samples || [], ctx);
