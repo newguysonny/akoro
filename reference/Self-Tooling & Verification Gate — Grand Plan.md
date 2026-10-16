@@ -1253,8 +1253,16 @@ then a fresh QuickJS (WebAssembly) runtime in a fresh worker thread per run —
 recipe → spec → code (when `AKORO_SELF_TOOLING_CODE_ENABLED=true`) →
 escalate. Escape test pack (`sandbox.test.mjs`, 8 tests) and gate
 `selftool.sandbox_contained` PASS on production (regression run 31449b8f).
-`selftool.code_tool` (build a scheduling tool, check its plan obeys every
-rule) needs the flag on.
+Flag turned on in production 2026-10-16: `selftool.code_tool` PASS 3/3
+(run 8fbd34d5) — "spread my weak topics over the days until my exam, two a
+day, weakest first, skipping Sundays" is built as code and its plan obeys
+every rule (dates, ≤ 2 a day, no Sundays, before the exam, none in the past,
+weakest first) on the learner's real topics. Learned on the way: a spec
+"built" for it returned the topics unscheduled and passed shape checks, so
+scheduling goals now try code first and recipes/specs must say
+notExpressible; one generated plan put a topic on exam day, so code is
+written by gpt-4.1 (`AKORO_SELF_TOOLING_CODE_MODEL`) with explicit date
+rules.
 
 Planned scope:
 - QuickJS worker, capability bridge, static checks, limits; flag
