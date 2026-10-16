@@ -52,3 +52,39 @@ test("a goal about other learners escalates only when a locked network capabilit
   const league = [{ name: "league.weekly", status: "available" }, { name: "battles.class_results", status: "needs_approval" }];
   assert.equal(othersCapabilityFirst("how do I compare to others in the weekly league", league), null, "an available capability ranks first — build");
 });
+
+test("library: similar goals over the same data group; analytics summarise", async () => {
+  const { goalSimilarity, groupSimilar, summarise } = await import("./library.js");
+  assert.ok(goalSimilarity("How many tasks I have by status", "count my tasks by status") >= 0.4);
+  assert.ok(goalSimilarity("How many tasks I have by status", "hours of learning sessions per month") < 0.2);
+  const t = (id, goal, views, owner, scope = "learner") => ({ id, goal, views, capabilities: [], owner_id: owner, scope, usage_count: 1 });
+  const groups = groupSimilar([
+    t("a", "How many tasks I have by status", ["my_tasks"], "u1"),
+    t("b", "count my tasks by status", ["my_tasks"], "u2"),
+    t("c", "tasks by status", ["my_goals"], "u3"),
+    t("d", "session hours per month", ["my_learning_sessions"], "u4"),
+  ]);
+  assert.equal(groups.length, 1);
+  assert.deepEqual(groups[0].tools.map((x) => x.id).sort(), ["a", "b"]);
+  assert.equal(groups[0].owners, 2);
+  const s = summarise({ days: 2, now: Date.parse("2026-10-16T12:00:00Z"),
+    events: [{ user_id: "u1", outcome: "created", mode: "recipe", builder_calls: 2, ms: 900, created_at: "2026-10-16T10:00:00Z" },
+      { user_id: "u2", outcome: "rejected", reason: "Couldn't build it safely: 3 errors", ms: 400, created_at: "2026-10-15T10:00:00Z" }],
+    requests: [{ requester_id: "u1", requested_capability: "battles.class_results", status: "new" }, { requester_id: "u2", requested_capability: "battles.class_results", status: "new" }],
+    tools: [{ id: "x", label: "X", scope: "platform", status: "active", usage_count: 5, fail_streak: 1 }] });
+  assert.equal(s.goals.total, 2);
+  assert.deepEqual(s.goals.byOutcome, { created: 1, rejected: 1 });
+  assert.equal(s.goals.daily.length, 2);
+  assert.equal(s.goals.daily[1].created, 1);
+  assert.equal(s.requests.topCapabilities[0].learners, 2);
+  assert.equal(s.tools.platform, 1);
+  assert.equal(s.tools.failing.length, 1);
+  assert.match(s.goals.topRejections[0].key, /#/);
+});
+
+test("catalogue: platform tools join the learner's own; own wins a name clash; platform never auto-disables", () => {
+  const src = readFileSync(new URL("./pipeline.js", import.meta.url), "utf8");
+  assert.match(src, /\.eq\("scope", "platform"\)\.eq\("status", "active"\)/);
+  assert.match(src, /filter\(\(t\) => !own\.has\(t\.name\)\)/);
+  assert.match(src, /fail >= 3 && !platform \? \{ status: "disabled" \}/);
+});

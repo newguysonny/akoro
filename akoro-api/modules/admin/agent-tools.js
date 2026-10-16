@@ -1,0 +1,67 @@
+/**
+ * Admin tool library for self-tooling (plan §7.12, phase S4).
+ *
+ *   GET  /api/admin/agent-tools?scope=&status=&mode=&search=&limit=&offset=
+ *   GET  /api/admin/agent-tools/similar          merge candidates
+ *   GET  /api/admin/agent-tools/:id              definition + verification
+ *   POST /api/admin/agent-tools/:id/status       { status: active|disabled|revoked }
+ *   POST /api/admin/agent-tools/:id/promote      { name?, label?, goal?, replaces?: [ids] }
+ *   GET  /api/admin/self-tooling/analytics?days=
+ *
+ * Promotion runs the gate scenario selftool.promotion_check first and only
+ * goes through on PASS; the run id is stored with the platform tool.
+ */
+import { Router } from "express";
+
+import { authenticateToken, requireRole } from "../auth/routes.js";
+import { listTools, getTool, setToolStatus, promoteTool, similarTools, analytics } from "../self-tooling/library.js";
+
+const router = Router();
+const adminOnly = [authenticateToken, requireRole(["admin"])];
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch((e) => {
+  if (e.status) return res.status(e.status).json({ success: false, error: e.message, ...(e.runId ? { runId: e.runId, verdict: e.verdict } : {}) });
+  return next(e);
+});
+const adminActor = (req) => ({ id: req.user?.id ?? null, label: req.user?.full_name || req.user?.email || "admin" });
+const badId = (res) => res.status(422).json({ success: false, error: "id is invalid" });
+
+router.get("/agent-tools", adminOnly, asyncHandler(async (req, res) => {
+  const out = await listTools({
+    scope: req.query.scope, status: req.query.status, mode: req.query.mode, search: req.query.search,
+    limit: Number.parseInt(req.query.limit, 10) || 50, offset: Math.max(0, Number.parseInt(req.query.offset, 10) || 0),
+  });
+  res.json({ success: true, ...out });
+}));
+
+router.get("/agent-tools/similar", adminOnly, asyncHandler(async (_req, res) => {
+  res.json({ success: true, groups: await similarTools() });
+}));
+
+router.get("/agent-tools/:id", adminOnly, asyncHandler(async (req, res) => {
+  if (!UUID.test(req.params.id)) return badId(res);
+  res.json({ success: true, tool: await getTool(req.params.id) });
+}));
+
+router.post("/agent-tools/:id/status", adminOnly, asyncHandler(async (req, res) => {
+  if (!UUID.test(req.params.id)) return badId(res);
+  res.json({ success: true, tool: await setToolStatus({ id: req.params.id, status: String(req.body?.status || ""), admin: adminActor(req) }) });
+}));
+
+router.post("/agent-tools/:id/promote", adminOnly, asyncHandler(async (req, res) => {
+  if (!UUID.test(req.params.id)) return badId(res);
+  const [{ startRun }, { selfToolDeps }] = await Promise.all([import("../verify/runner.js"), import("../adaptive-learning/chat.js")]);
+  const out = await promoteTool({
+    id: req.params.id, name: req.body?.name, label: req.body?.label, goal: req.body?.goal,
+    replaces: Array.isArray(req.body?.replaces) ? req.body.replaces.filter((x) => UUID.test(String(x))) : [],
+    admin: adminActor(req), builtIn: selfToolDeps(null).builtIn,
+    runGate: async (toolId) => startRun({ scenario: "selftool.promotion_check", params: { toolId }, actor: "admin" }).done,
+  });
+  res.json({ success: true, ...out });
+}));
+
+router.get("/self-tooling/analytics", adminOnly, asyncHandler(async (req, res) => {
+  res.json({ success: true, analytics: await analytics({ days: req.query.days }) });
+}));
+
+export default router;

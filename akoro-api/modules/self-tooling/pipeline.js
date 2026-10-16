@@ -229,35 +229,61 @@ export function toolDef(t) {
     ...(Array.isArray(p.enum) ? { type: typeof p.enum[0] === "number" ? "number" : "string", enum: p.enum } : { type: p.type }),
     ...(p.description ? { description: String(p.description).slice(0, 200) } : {}),
   }]));
-  return { type: "function", function: { name: t.name, description: `${t.label} — ${t.goal} (a tool the learner's agent built; read-only)`, parameters: { type: "object", properties: props, required: [] } } };
+  const origin = t.scope === "platform" ? "an Akoro tool for every learner, runs on this learner's own data" : "a tool the learner's agent built";
+  return { type: "function", function: { name: t.name, description: `${t.label} — ${t.goal} (${origin}; read-only)`, parameters: { type: "object", properties: props, required: [] } } };
 }
 
-/** The learner's saved tools for the catalogue (most recently used first). */
+/**
+ * The catalogue: the learner's own tools (most recently used first) and the
+ * tools an admin promoted to everyone (most used first). The learner's own
+ * tool wins a name clash; built-in names never reach here (§7.10).
+ */
 export async function learnerToolDefs(learnerId) {
-  const { data } = await edu().from("agent_tools").select("name, label, goal, params_schema")
-    .eq("owner_id", learnerId).eq("status", "active").order("last_used_at", { ascending: false, nullsFirst: false }).limit(LIMITS.inCatalogue);
-  return (data || []).map(toolDef);
+  const [{ data: mine }, { data: platform }] = await Promise.all([
+    edu().from("agent_tools").select("name, label, goal, params_schema, scope")
+      .eq("owner_id", learnerId).eq("status", "active").order("last_used_at", { ascending: false, nullsFirst: false }).limit(LIMITS.inCatalogue),
+    edu().from("agent_tools").select("name, label, goal, params_schema, scope")
+      .eq("scope", "platform").eq("status", "active").order("usage_count", { ascending: false }).limit(LIMITS.inCatalogue),
+  ]);
+  const own = new Set((mine || []).map((t) => t.name));
+  return [...(mine || []), ...(platform || []).filter((t) => !own.has(t.name))].map(toolDef);
 }
 
-/** Run a saved tool. → result, or null when `name` isn't one of the learner's tools. */
+/** Run a saved tool — the learner's own, else a platform one. → result, or null when there's no such tool. */
 export async function runLearnerTool(name, input, learnerId, { callCapability }) {
   if (!NAME.test(String(name || ""))) return null;
-  const { data: t } = await edu().from("agent_tools").select("*").eq("owner_id", learnerId).eq("name", name).in("status", ["active", "disabled"]).maybeSingle();
+  let { data: t } = await edu().from("agent_tools").select("*").eq("owner_id", learnerId).eq("name", name).in("status", ["active", "disabled"]).maybeSingle();
+  if (!t) ({ data: t } = await edu().from("agent_tools").select("*").eq("scope", "platform").eq("name", name).in("status", ["active", "disabled"]).maybeSingle());
   if (!t) return null;
-  if (t.status !== "active") return { error: "This tool is turned off — rebuild it or turn it back on in Settings → Agent → My tools." };
+  const platform = t.scope === "platform";
+  if (t.status !== "active") return { error: platform ? "This Akoro tool is turned off for now." : "This tool is turned off — rebuild it or turn it back on in Settings → Agent → My tools." };
   // Re-check on EVERY call: a revoked grant or removed view takes effect at once (§7.10).
   for (const c of t.capabilities || []) {
     if ((await capabilityStatus(c)) !== "enabled" || CAPABILITIES[c]?.kind !== "read") return { error: "This tool uses something that's no longer allowed, so it can't run." };
   }
   for (const v of t.views || []) if (!DATA_VIEWS[v]) return { error: "This tool uses data that's no longer available." };
+  // Always as THIS learner: views are forced to their own rows (viewRuntime).
   const r = await tryRun(t.definition, t.params_schema, input || {}, { learnerId, callCapability });
   const fail = r.ok ? 0 : (t.fail_streak || 0) + 1;
+  // A learner's tool turns itself off after 3 failures in a row; a platform tool
+  // never does on one learner's failures — admins see its fail streak instead.
   await edu().from("agent_tools").update({
     usage_count: (t.usage_count || 0) + 1, last_used_at: new Date().toISOString(), fail_streak: fail,
-    ...(fail >= 3 ? { status: "disabled" } : {}), updated_at: new Date().toISOString(),
+    ...(fail >= 3 && !platform ? { status: "disabled" } : {}), updated_at: new Date().toISOString(),
   }).eq("id", t.id);
-  if (!r.ok) return { error: fail >= 3 ? "This tool failed three times in a row and was turned off — rebuild it." : `The tool couldn't run: ${r.error}` };
+  if (!r.ok) return { error: fail >= 3 && !platform ? "This tool failed three times in a row and was turned off — rebuild it." : `The tool couldn't run: ${r.error}` };
   return { tool: t.label, rows: r.rows, total: r.total, truncated: r.truncated };
+}
+
+/** Learner tools unused for `days` days are archived (§7.10 health). Platform tools are the admins' call. */
+export async function archiveUnusedTools(days = 60) {
+  const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();
+  const now = new Date().toISOString();
+  const { data, error } = await edu().from("agent_tools").update({ status: "archived", updated_at: now })
+    .eq("scope", "learner").in("status", ["active", "disabled"])
+    .or(`last_used_at.lt.${cutoff},and(last_used_at.is.null,created_at.lt.${cutoff})`).select("id");
+  if (error) throw new Error(`archive failed: ${error.message}`);
+  return { archived: (data || []).length };
 }
 
 export async function listMyTools(learnerId) {
