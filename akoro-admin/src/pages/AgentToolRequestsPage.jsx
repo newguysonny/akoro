@@ -300,7 +300,8 @@ function DecideModal({ request, busy, onClose, onDecide }) {
       <div style={{ padding: '10px 12px', background: '#FFFBEB', border: `1px solid ${BORDER}`, borderRadius: 9, marginTop: 14, fontFamily: FONT, fontSize: 12, color: INK, lineHeight: 1.5 }}>
         <KeyRound size={13} color={AMBER} style={{ verticalAlign: '-2px', marginRight: 6 }} />
         Approving turns this on for <strong>every learner</strong> and finishes every waiting request for it — each learner gets the answer in their chat.
-        {!c.risk?.grantable && <> This one can't be approved yet (tools are read-only for now) — plan or decline it.</>}
+        {c.risk?.writes && c.risk?.grantable && <> Tools using it can change learners' data — every change still waits for the learner to confirm it on a card.</>}
+        {!c.risk?.grantable && <> This one can't be approved yet (no tool can make this kind of change) — plan or decline it.</>}
       </div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
         <Btn variant="secondary" onClick={onClose} disabled={busy}>Cancel</Btn>
