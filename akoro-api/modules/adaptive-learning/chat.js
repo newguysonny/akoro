@@ -855,7 +855,7 @@ export const CHAT_TOOLS = [
   },
   {
     name: "get_ranking",
-    description: "Get the student's total XP and rank (overall, and in their courses/classes), and battles won.",
+    description: "Get the student's total XP and leaderboard rank (overall, and in their courses/classes), and battles won. Not for how other players did in battles the learner played — that needs create_tool.",
     input_schema: { type: "object", properties: {}, required: [] },
   },
   {
@@ -2282,11 +2282,18 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       const rows = data ?? [];
       const overall = rows.find((r) => r.scope === "global") ?? null;
       if (!rows.length) return { totalXp: 0, rank: null, note: "No XP yet — finish a session or a battle to get on the leaderboard." };
+      // Name each scoped ranking — without it the model wrote "Subject 1, Subject 2".
+      const courseIds = [...new Set(rows.map((r) => r.course_id).filter(Boolean))];
+      const { data: courses } = courseIds.length ? await db.from("courses").select("id, title, subject").in("id", courseIds) : { data: [] };
+      const course = new Map((courses ?? []).map((c) => [c.id, c]));
       return {
         totalXp: overall?.total_xp ?? Math.max(...rows.map((r) => r.total_xp ?? 0)),
         rank: overall?.rank ?? null,
         battlesWon: overall?.battles_won ?? null,
-        other: rows.filter((r) => r.scope !== "global").map((r) => ({ scope: r.scope, rank: r.rank, totalXp: r.total_xp })),
+        other: rows.filter((r) => r.scope !== "global").map((r) => ({
+          scope: r.scope, course: course.get(r.course_id)?.title ?? null, subject: course.get(r.course_id)?.subject ?? null, rank: r.rank, totalXp: r.total_xp,
+        })),
+        note: "XP leaderboard positions only — not other players' results in particular battles.",
       };
     }
     case "get_weak_topics": {
