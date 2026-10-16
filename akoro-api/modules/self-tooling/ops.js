@@ -5,7 +5,8 @@
  *
  *   filter  where: [{ field, op, value }]   op: eq neq lt lte gt gte in contains startsWith isNull notNull within year month
  *   compute { as, fn, a, b }                fn: divide multiply add subtract round percent minutesBetween daysBetween
- *   group   { by: [field | {field, bucket}], count?, sum?, avg?, min?, max? }   bucket: day week month year
+ *   group   { by: [field | {field, bucket}], count?, counts?, sum?, avg?, min?, max? }   bucket: day week month year
+ *           count → rows per group; counts: [f] → count_<f>, rows where f has a value
  *   sort    { by, dir }        limit { n }        pick { fields }        rename { from, to }
  *   join    { left, right, on: [keys], type: inner|left }
  *   dedupe  { fields }
@@ -97,7 +98,7 @@ export function bucketOf(v, bucket) {
   return `week of ${mon.toISOString().slice(0, 10)}`;
 }
 
-export function group(rows, { by = [], count = false, sum = [], avg = [], min = [], max = [] }) {
+export function group(rows, { by = [], count = false, counts = [], sum = [], avg = [], min = [], max = [] }) {
   const keys = by.map((b) => (typeof b === "string" ? { field: b } : b));
   const map = new Map();
   for (const r of rows) {
@@ -111,6 +112,8 @@ export function group(rows, { by = [], count = false, sum = [], avg = [], min = 
     const g = {};
     keys.forEach(({ field, bucket }, i) => { g[bucket ? `${field}_${bucket}` : field] = key[i]; });
     if (count) g.count = rs.length;
+    // counts: rows that HAVE a value (e.g. graded students: counts ["grade"] → count_grade).
+    for (const f of [].concat(counts || [])) g[`count_${f}`] = rs.filter((r) => r[f] != null && r[f] !== "").length;
     for (const f of sum) g[`sum_${f}`] = rs.reduce((n, r) => n + (num(r[f]) || 0), 0);
     for (const f of avg) { const xs = rs.map((r) => num(r[f])).filter((x) => x != null); g[`avg_${f}`] = xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 1000) / 1000 : null; }
     for (const f of min) g[`min_${f}`] = rs.map((r) => r[f]).filter((x) => x != null).sort(cmp)[0] ?? null;

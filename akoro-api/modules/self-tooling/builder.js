@@ -23,8 +23,8 @@ Rules:
 - Use only the steps you need; every step must be used by a from or join.
 - compute: { as, fn, a, b } with fn divide|multiply|add|subtract|round|percent|minutesBetween|daysBetween; a/b are field names or numbers (never nested — chain computes: first minutesBetween as "minutes", then divide "minutes" by 60).
 - Declared params you don't need can be ignored; never filter on a param just because it exists.
-- group's count field is always named "count" (never count_<x>). To count only some rows (e.g. graded students), filter them first ({"field":"grade","op":"notNull"}).
-- group: { by: [field | {field, bucket: day|week|month|year}] (ALWAYS a list), count, sum:[fields], avg:[fields], min:[fields], max:[fields] } → output fields: the by-fields (a bucketed one is named <field>_<bucket>, e.g. started_at_month), count, sum_<f>, avg_<f>, min_<f>, max_<f>.
+- In a group, count:true gives "count" (every row). To count only rows that HAVE a value — e.g. graded students — use counts:["grade"], which gives "count_grade". avg/sum/min/max already ignore missing values.
+- group: { by: [field | {field, bucket: day|week|month|year}] (ALWAYS a list), count, counts:[fields], sum:[fields], avg:[fields], min:[fields], max:[fields] } → output fields: the by-fields (a bucketed one is named <field>_<bucket>, e.g. started_at_month), count, count_<f>, sum_<f>, avg_<f>, min_<f>, max_<f>.
 - sort: { by, dir: asc|desc }. limit ≤ 100. Use "$paramName" to use a declared param.
 - Also give 2 realistic sample inputs ("samples": [ {…}, {…} ]) matching the params.
 - A recipe or spec can only filter, compute per row, group, sort and join rows that EXIST. If the goal asks to make something new from them — a plan or schedule over dates, spreading items across days, "N per day", "skip Sundays", rules that depend on earlier choices — a recipe/spec can't do it: answer {"notExpressible": "needs scheduling logic"} rather than returning the rows unchanged.
