@@ -1151,10 +1151,11 @@ Settings → Agent → My tools. Agent Chat: `create_tool` tool; built tools joi
 the learner's catalogue (8 most recent) and become callable in the same turn;
 dry runs build + verify but never save. Validation follows each field and
 its type through every op (unknown fields, sums of timestamps, missing join
-keys, unused steps and part-param strings like `"$year-$month"` are
+keys, unused steps, nested compute operands, object filter values, and part-param strings like `"$year-$month"` are
 rejected and fed back as repair hints); single items where lists belong are
 wrapped; `year`/`month` filters (`"this"` or a value) replace hard-coded
-dates; a filter on an optional param that wasn't given is skipped.
+dates; a filter on an optional param that wasn't given is skipped. The
+builder defaults to gpt-4.1-mini (`AKORO_SELF_TOOLING_MODEL` overrides).
 Escalation (stage 4) is still a
 `rejected … needs a permission` answer until S3; code (stage 3) waits for S5.
 

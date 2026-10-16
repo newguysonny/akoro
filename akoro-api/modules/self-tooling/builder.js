@@ -10,7 +10,7 @@ import { openai } from "../../lib/aiModel.js";
 import { DATA_VIEWS, describeView } from "./views.js";
 import { CAPABILITIES } from "./capabilities.js";
 
-export const BUILDER_MODEL = () => process.env.AKORO_SELF_TOOLING_MODEL || "gpt-4o-mini";
+export const BUILDER_MODEL = () => process.env.AKORO_SELF_TOOLING_MODEL || "gpt-4.1-mini";
 
 const COMMON = `You build ONE small read-only data tool for a learner on Akoro, as JSON DATA (never code).
 Rules:
@@ -19,7 +19,8 @@ Rules:
 - Filter ops: eq neq lt lte gt gte in contains startsWith isNull notNull within ("30d","12h","6m","1y") year (a year number or "this") month ("2026-03" or "this").
 - Never hard-code dates: "this year" is {"op":"year","value":"this"} (or "$year" from a param), "this month" is {"op":"month","value":"this"}.
 - Use only the steps you need; every step must be used by a from or join.
-- compute: { as, fn, a, b } with fn divide|multiply|add|subtract|round|percent|minutesBetween|daysBetween; a/b are field names or numbers.
+- compute: { as, fn, a, b } with fn divide|multiply|add|subtract|round|percent|minutesBetween|daysBetween; a/b are field names or numbers (never nested — chain computes: first minutesBetween as "minutes", then divide "minutes" by 60).
+- Declared params you don't need can be ignored; never filter on a param just because it exists.
 - group: { by: [field | {field, bucket: day|week|month|year}] (ALWAYS a list), count, sum:[fields], avg:[fields], min:[fields], max:[fields] } → output fields: the by-fields (a bucketed one is named <field>_<bucket>, e.g. started_at_month), count, sum_<f>, avg_<f>, min_<f>, max_<f>.
 - sort: { by, dir: asc|desc }. limit ≤ 100. Use "$paramName" to use a declared param.
 - Also give 2 realistic sample inputs ("samples": [ {…}, {…} ]) matching the params.
