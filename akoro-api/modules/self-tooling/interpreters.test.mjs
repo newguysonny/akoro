@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as O from "./ops.js";
-import { validateDefinition, runDefinition, normalizeDefinition } from "./interpreters.js";
+import { validateDefinition, runDefinition, normalizeDefinition, dropUnsetFilters } from "./interpreters.js";
 import { validateParams, coerceInput, bind } from "./bind.js";
 
 const rows = [
@@ -120,4 +120,26 @@ test("calendar filters: year and month", () => {
   assert.equal(O.filter(rows, [{ field: "t", op: "year", value: "this" }]).length, 1);
   assert.equal(O.filter(rows, [{ field: "t", op: "year", value: y - 1 }]).length, 1);
   assert.equal(O.filter(rows, [{ field: "t", op: "month", value: `${y}-03` }]).length, 1);
+});
+
+test("types and keys: no sums of timestamps, join keys must exist, params are whole values", async () => {
+  const sess = { id: "sessions", view: "my_learning_sessions" };
+  const sumTimes = await validateDefinition({ kind: "recipe", steps: [sess], then: [{ op: "group", by: [{ field: "started_at", bucket: "month" }], sum: ["completed_at"] }] }, {});
+  assert.ok(sumTimes.errors.some((e) => /completed_at is a timestamp, not a number/.test(e)), sumTimes.errors.join("; "));
+  const badJoin = await validateDefinition({ kind: "recipe", steps: [sess, { id: "pq", view: "my_past_questions" }],
+    then: [{ op: "from", ref: "sessions" }, { op: "join", right: "pq", on: ["started_at_month"] }] }, {});
+  assert.ok(badJoin.errors.some((e) => /join key started_at_month/.test(e)), badJoin.errors.join("; "));
+  const mixed = await validateDefinition({ kind: "spec", from: "my_learning_sessions", where: [{ field: "started_at", op: "month", value: "$year-$month" }] },
+    { year: { type: "integer" }, month: { type: "integer" } });
+  assert.ok(mixed.errors.some((e) => /whole value/.test(e)), mixed.errors.join("; "));
+  const opObj = await validateDefinition({ kind: "spec", from: "my_learning_sessions", where: [{ field: "started_at", op: { year: "this" } }] }, {});
+  assert.ok(opObj.errors.some((e) => /\{"year":"this"\}/.test(e)), opObj.errors.join("; "));
+});
+
+test("a filter on an optional param that wasn't given is skipped", () => {
+  const def = { kind: "recipe", steps: [{ id: "s", view: "my_learning_sessions", where: [{ field: "started_at", op: "year", value: "$year" }] }],
+    then: [{ op: "filter", where: [{ field: "started_at_month", op: "eq", value: "$month" }] }] };
+  const out = dropUnsetFilters(def, { year: 2026 });
+  assert.equal(out.steps[0].where.length, 1);
+  assert.equal(out.then[0].where.length, 0);
 });

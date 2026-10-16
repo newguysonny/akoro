@@ -29,7 +29,7 @@ function checkWhere(errors, where, fields, label) {
   for (const w of where) {
     if (!w || typeof w !== "object") { errors.push(`${label}: bad filter`); continue; }
     if (fields && !(w.field in fields)) errors.push(`${label}: unknown field ${w.field}`);
-    if (!valid.op(w.op)) errors.push(`${label}: unknown filter op ${w.op}`);
+    if (!valid.op(w.op)) errors.push(`${label}: unknown filter op ${typeof w.op === "string" ? w.op : JSON.stringify(w.op)} — op is one name, e.g. {"field":"started_at","op":"year","value":"this"}`);
     if (w.op === "within" && typeof w.value === "string" && !w.value.startsWith("$") && O.withinMs(w.value) == null) errors.push(`${label}: within needs e.g. "30d"`);
   }
 }
@@ -82,29 +82,50 @@ export function normalizeDefinition(def) {
 }
 
 /**
- * Follow which fields the rows carry through the ops, so a filter, sort or
- * pick on a field that isn't there (a hard-coded template name, a field
- * dropped by a group) fails validation instead of quietly returning nothing.
- * `cur` is a Set of field names, or null when unknown (capability rows).
+ * Follow which fields — and their types — the rows carry through the ops, so
+ * a filter, sort or pick on a field that isn't there (a hard-coded template
+ * name, a field dropped by a group) or a sum of timestamps fails validation
+ * instead of quietly returning nothing. `cur` is a Map name → type ("number",
+ * "integer", "string", "timestamp", "date", "boolean", or null when unknown),
+ * or null when the fields themselves are unknown (capability rows).
  */
+const NUMERIC = new Set(["number", "integer"]);
+const viewTypes = (view) => new Map(Object.entries(view.fields).map(([k, f]) => [k, f.type]));
 function flowOp(errors, o, cur, label) {
-  const need = (f, what) => { if (cur && typeof f === "string" && !f.startsWith("$") && !cur.has(f)) errors.push(`${label}: ${what} ${f} isn't a field here (have: ${[...cur].join(", ")})`); };
+  const need = (f, what) => { if (cur && typeof f === "string" && !f.startsWith("$") && !cur.has(f)) errors.push(`${label}: ${what} ${f} isn't a field here (have: ${[...cur.keys()].join(", ")})`); };
+  const needNum = (f, what) => { need(f, what); const t = cur?.get(f); if (t && !NUMERIC.has(t)) errors.push(`${label}: ${what} ${f} is a ${t}, not a number${t === "timestamp" ? " — use compute minutesBetween first" : ""}`); };
   switch (o.op) {
     case "filter": for (const w of [].concat(o.where || [])) need(w?.field, "filter field"); return cur;
-    case "compute": need(o.a, "compute input"); if (o.fn !== "round") need(o.b, "compute input"); return cur && o.as ? new Set([...cur, o.as]) : cur;
+    case "compute": {
+      const timeFn = o.fn === "minutesBetween" || o.fn === "daysBetween";
+      (timeFn ? need : needNum)(o.a, "compute input");
+      if (o.fn !== "round" && typeof o.b === "string") (timeFn ? need : needNum)(o.b, "compute input");
+      return cur && o.as ? new Map([...cur, [o.as, "number"]]) : cur;
+    }
     case "group": {
       const by = [].concat(o.by || []).map((b) => (typeof b === "string" ? { field: b } : b || {}));
       by.forEach((b) => need(b.field, "group field"));
-      for (const k of ["sum", "avg", "min", "max"]) for (const f of [].concat(o[k] || [])) need(f, `${k} field`);
-      return new Set([...by.map((b) => (b.bucket ? `${b.field}_${b.bucket}` : b.field)), ...(o.count ? ["count"] : []),
-        ...["sum", "avg", "min", "max"].flatMap((k) => [].concat(o[k] || []).map((f) => `${k}_${f}`))]);
+      for (const k of ["sum", "avg"]) for (const f of [].concat(o[k] || [])) needNum(f, `${k} field`);
+      for (const k of ["min", "max"]) for (const f of [].concat(o[k] || [])) need(f, `${k} field`);
+      return new Map([
+        ...by.map((b) => (b.bucket ? [`${b.field}_${b.bucket}`, "string"] : [b.field, cur?.get(b.field) ?? null])),
+        ...(o.count ? [["count", "integer"]] : []),
+        ...["sum", "avg"].flatMap((k) => [].concat(o[k] || []).map((f) => [`${k}_${f}`, "number"])),
+        ...["min", "max"].flatMap((k) => [].concat(o[k] || []).map((f) => [`${k}_${f}`, cur?.get(f) ?? null])),
+      ]);
     }
     case "sort": need(o.by, "sort field"); return cur;
-    case "pick": for (const f of [].concat(o.fields || [])) need(f, "pick field"); return new Set([].concat(o.fields || []));
-    case "rename": need(o.from, "rename field"); return cur ? new Set([...[...cur].filter((f) => f !== o.from), o.to]) : cur;
+    case "pick": for (const f of [].concat(o.fields || [])) need(f, "pick field"); return cur ? new Map([].concat(o.fields || []).map((f) => [f, cur.get(f) ?? null])) : null;
+    case "rename": need(o.from, "rename field"); return cur ? new Map([...[...cur].filter(([f]) => f !== o.from), [o.to, cur.get(o.from) ?? null]]) : cur;
     case "dedupe": for (const f of [].concat(o.fields || [])) need(f, "dedupe field"); return cur;
     default: return cur;
   }
+}
+/** A string that mixes a param into other text ("$year-$month") never binds — say so. */
+function checkMixedRefs(errors, value) {
+  if (typeof value === "string") { if (value.includes("$") && !/^\$[a-zA-Z][a-zA-Z0-9_]*$/.test(value)) errors.push(`"${value.slice(0, 40)}": a param must be a whole value ("$name"), not combined with other text`); }
+  else if (Array.isArray(value)) value.forEach((v) => checkMixedRefs(errors, v));
+  else if (value && typeof value === "object") Object.values(value).forEach((v) => checkMixedRefs(errors, v));
 }
 
 /** → { ok, errors, uses: { views:[], capabilities:[] } } */
@@ -115,6 +136,7 @@ export async function validateDefinition(def, params) {
   normalizeDefinition(def);
   if (JSON.stringify(def).length > 8000) errors.push("definition too large");
   checkRefs(errors, def, params);
+  checkMixedRefs(errors, def);
 
   if (def.kind === "spec") {
     const view = DATA_VIEWS[def.from];
@@ -127,7 +149,7 @@ export async function validateDefinition(def, params) {
     if (def.limit != null && !(Number(def.limit) > 0)) errors.push("spec.limit");
     if (def.select != null && !Array.isArray(def.select)) errors.push("spec.select must be a list");
     if (fields) {
-      let cur = new Set(Object.keys(fields));
+      let cur = viewTypes(view);
       for (const c of [].concat(def.compute || [])) cur = flowOp(errors, { op: "compute", ...c }, cur, "spec.compute");
       if (def.group) cur = flowOp(errors, { op: "group", ...def.group }, cur, "spec.group");
       for (const st of [].concat(def.sort || [])) flowOp(errors, { op: "sort", ...st }, cur, "spec.sort");
@@ -155,15 +177,20 @@ export async function validateDefinition(def, params) {
     }
     const then = Array.isArray(def.then) ? def.then : [];
     if (then.length > MAX_THEN) errors.push(`at most ${MAX_THEN} then-ops`);
-    const tables = new Map(steps.filter((st) => st?.id).map((st) => [st.id, st.view && DATA_VIEWS[st.view] ? new Set(Object.keys(DATA_VIEWS[st.view].fields)) : null]));
+    const tables = new Map(steps.filter((st) => st?.id).map((st) => [st.id, st.view && DATA_VIEWS[st.view] ? viewTypes(DATA_VIEWS[st.view]) : null]));
     let cur = steps.length === 1 ? tables.get(steps[0]?.id) ?? null : null;
     const used = new Set(steps.length === 1 ? [steps[0]?.id] : []);
-    const union = (a, b) => (a && b ? new Set([...a, ...b]) : null);
+    const union = (a, b) => (a && b ? new Map([...b, ...a]) : null);
     for (const [i, o] of then.entries()) {
       if (!o || typeof o !== "object") continue;
       if (o.op === "from") { used.add(o.ref); cur = tables.get(o.ref) ?? null; }
       else if (o.op === "save") { if (o.as) tables.set(o.as, cur); }
-      else if (o.op === "join") { used.add(o.right); if (o.left) used.add(o.left); cur = union(o.left ? tables.get(o.left) : cur, tables.get(o.right)); }
+      else if (o.op === "join") {
+        used.add(o.right); if (o.left) used.add(o.left);
+        const left = o.left ? tables.get(o.left) : cur, right = tables.get(o.right);
+        for (const k of [].concat(o.on || [])) for (const [side, t] of [["left", left], ["right", right]]) if (t && !t.has(k)) errors.push(`then[${i}]: join key ${k} isn't a field of the ${side} rows (have: ${[...t.keys()].join(", ")})`);
+        cur = union(left, right);
+      }
       else if (OUT_OPS.has(o.op)) cur = flowOp(errors, o, cur, `then[${i}]`);
     }
     for (const st of steps) if (st?.id && !used.has(st.id)) errors.push(`step ${st.id} is never used — remove it`);
@@ -202,8 +229,18 @@ const pathGet = (obj, path) => (path ? String(path).split(".").reduce((o, k) => 
  * an existing learner tool as that learner (injected: chat.js executeChatTool).
  * → { rows, total, truncated }
  */
+/** A filter on an optional param the caller didn't give is skipped, not matched against null. */
+export function dropUnsetFilters(value, input) {
+  if (Array.isArray(value)) {
+    return value.filter((w) => !(w && typeof w === "object" && "field" in w && "op" in w && typeof w.value === "string"
+      && /^\$[a-zA-Z][a-zA-Z0-9_]*$/.test(w.value) && input[w.value.slice(1)] == null)).map((v) => dropUnsetFilters(v, input));
+  }
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, dropUnsetFilters(v, input)]));
+  return value;
+}
+
 export async function runDefinition(def, input, { learnerId, callCapability }) {
-  const d = bind(normalizeDefinition(def), input);
+  const d = bind(dropUnsetFilters(normalizeDefinition(def), input), input);
   let rows;
   if (d.kind === "spec") {
     rows = await readView(d.from, learnerId, { where: d.where || [] });
