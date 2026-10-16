@@ -35,6 +35,10 @@ async function logEvent(row) {
   if (error) console.warn("[self-tooling] event not logged:", error.message);
 }
 
+const SCHEDULING = /\b(spread|schedule|timetable|plan (out|my)|(per|a|each|every) (day|week)|skip(ping)? (sundays?|saturdays?|weekends?)|over the (next|coming) \d*\s*(days|weeks)|until (my|the) (exam|test))\b/i;
+/** Goals only code can express (plans over dates, N per day, skip days). */
+export const needsCode = (goal) => SCHEDULING.test(String(goal || ""));
+
 const ABOUT_OTHERS = /\b(other (players?|learners?|students?|people)|others|classmates?|opponents?|everyone else|the rest of (my|the) class)\b/i;
 /**
  * For a goal about other learners: the lookup's TOP-ranked capability, when it
@@ -159,7 +163,10 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
 
   // ── 1. recipe, 2. spec ─────────────────────────────────────────────────
   // Cheapest and safest first; sandboxed code (stage 3) only when the flag is on.
-  const order = [...(hint.mode === "spec" ? ["spec", "recipe"] : ["recipe", "spec"]), ...(codeEnabled() ? ["code"] : [])];
+  // A goal that reads as planning/scheduling goes to code first — a recipe or
+  // spec "built" for it returned the rows unsorted into days and still passed.
+  const base = hint.mode === "spec" ? ["spec", "recipe"] : ["recipe", "spec"];
+  const order = codeEnabled() ? (hint.mode === "code" || needsCode(goal) ? ["code", ...base] : [...base, "code"]) : base;
   const ctx = { learnerId, callCapability };
   let lastProblem = null;
   let inexpressible = false;   // the builder said what's available can't express it
