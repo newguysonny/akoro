@@ -1040,7 +1040,8 @@ Retention: verify runs 90 days; self-tool events 180 days.
 | Name | Default | Purpose |
 |---|---|---|
 | `AKORO_SELF_TOOLING_ENABLED` | **false** | `schema_lookup` / `create_tool` / learner tools in the catalogue |
-| `AKORO_SELF_TOOLING_LEARNERS` | — | optional allow-list (start with testers) |
+| `AKORO_SELF_TOOLING_REAL_USERS` | **false** | when the feature is on, also every real learner (test learners always have it) |
+| `AKORO_SELF_TOOLING_LEARNERS` | — | when on, also these named real accounts (`@username` / email) |
 | `AKORO_SELF_TOOLING_CODE_ENABLED` | **false** | stage 3 |
 | `AKORO_SELF_TOOLING_WRITES_ENABLED` | **false** | phase S6 |
 | `AKORO_SELF_TOOLING_MODEL` | `gpt-4o-mini` | tool builder model |
@@ -1118,7 +1119,8 @@ As built: `modules/self-tooling/` — `views.js` (13 Data Views: 12 learner-scop
 network/public through their tools' privacy rules; 5 locked; 5 forbidden
 patterns), `registry.js` (grants for everyone with 30 s cache, keyword-ranked
 `schemaLookup`), `access.js` (`AKORO_SELF_TOOLING_ENABLED`, default off, +
-`AKORO_SELF_TOOLING_LEARNERS` allow-list, checked in the chat route AND the
+test learners automatically, `AKORO_SELF_TOOLING_REAL_USERS` for everyone else,
+`AKORO_SELF_TOOLING_LEARNERS` for named real accounts — checked in the chat route AND the
 tool). Migration `2026-self-tooling-grants.sql`. Gate: `selftool.views_match_schema`
 (in `regression`), `selftool.schema_lookup_safe`, `selftool.agent_uses_schema_lookup`
 (suite `self-tooling`). Verified locally: views match the schema, lookup is
