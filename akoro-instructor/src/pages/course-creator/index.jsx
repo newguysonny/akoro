@@ -11,14 +11,18 @@
  *
  * Same UI, adopted to this dashboard: the pages render inside the
  * instructor PageLayout as a centred 760px column (the reference's own
- * width), the prototype's sidebar becomes the .ccnav pill row, the
- * "Viewing as" selector is gone — the signed-in user IS the instructor
+ * width), the prototype's sidebar links live in the dashboard sidebar as
+ * the expandable "Course Creator" group (Home / My Courses / Content
+ * Library, plus Review Queue for admins — the same pattern as Student
+ * Information and the admin app's Program Courses), the colors are the
+ * Akoro instructor brand (amber on ink, DM Sans) instead of Kpemu purple,
+ * the "Viewing as" selector is gone — the signed-in user IS the instructor
  * (admins get the reference's admin view: every course + the review
  * queue) — and each page is its own component with its hooks ahead of any
  * early return. The reference's drawn SVGs are kept as drawn SVGs.
  */
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Routes, Route, NavLink, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../../services/api.js';
 import { confirmDialog } from '../../components/ConfirmHost.jsx';
 import { useAuth } from '../../contexts/AuthContext.jsx';
@@ -157,7 +161,6 @@ export function CourseCreatorSection() {
   return (
     <CcCtx.Provider value={ctx}>
       <div className="ccroot">
-        <CcNav />
         <Routes>
           <Route index element={<Home />} />
           <Route path="courses" element={<CoursesList />} />
@@ -173,21 +176,6 @@ export function CourseCreatorSection() {
         {toastMsg && <div className="toast">{toastMsg}</div>}
       </div>
     </CcCtx.Provider>
-  );
-}
-
-/* The prototype's sidebar, as a pill row under the instructor header. */
-function CcNav() {
-  const { courses, adm } = useCc();
-  const rq = (courses || []).filter((c) => c.status === 'review').length;
-  const cls = ({ isActive }) => (isActive ? 'on' : undefined);
-  return (
-    <nav className="ccnav" aria-label="Course Creator">
-      <NavLink to={BASE} end className={cls}><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h14V10" /></svg>Home</NavLink>
-      <NavLink to={`${BASE}/courses`} className={cls}><svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM4 19V5M9 7h6" /></svg>{adm ? 'All courses' : 'My courses'}</NavLink>
-      <NavLink to={`${BASE}/library`} className={cls}><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5" /></svg>Content library</NavLink>
-      {adm && <NavLink to={`${BASE}/review`} className={cls}><svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10" /></svg>Review queue{rq ? <small>{rq}</small> : null}</NavLink>}
-    </nav>
   );
 }
 

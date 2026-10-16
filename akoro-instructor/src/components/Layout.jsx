@@ -18,7 +18,15 @@ import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT } from '../consta
 const NAV = [
   { to: '/',         icon: Home,          label: 'Home' },
   { to: '/courses',  icon: BookOpen,      label: 'Courses' },
-  { to: '/course-creator', icon: BookMarked, label: 'Course Creator' },
+  // Course Creator — the marketplace course builder, as an expandable group
+  // (same pattern as Student Information / the admin app's Program Courses):
+  // its children are the reference's sidebar pages. The admin-only Review
+  // Queue is appended in Sidebar for admin sessions.
+  { label: 'Course Creator', icon: BookMarked, children: [
+    { label: 'Home',            to: '/course-creator', end: true },
+    { label: 'My Courses',      to: '/course-creator/courses' },
+    { label: 'Content Library', to: '/course-creator/library' },
+  ] },
   { to: '/sales',    icon: Wallet,        label: 'Sales & Earnings' },
   { to: '/battles',  icon: Swords,        label: 'Battles' },
   { to: '/tasks',    icon: CheckSquare,   label: 'Tasks' },
@@ -136,7 +144,7 @@ function Group({ item, collapsed, open, onToggle, badges = {} }) {
       {open && !collapsed && (
         <div style={{ margin: '2px 8px 6px 8px', paddingLeft: 22, borderLeft: '1px solid rgba(255,255,255,.08)' }}>
           {item.children.map((c) => (
-            <NavLink key={c.label} to={c.to} end={c.to === '/'}
+            <NavLink key={c.label} to={c.to} end={c.to === '/' || !!c.end}
               style={({ isActive }) => ({ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '7px 10px', textDecoration: 'none', fontFamily: FONT, fontSize: 12.5, color: isActive ? WHITE : MUTED2, background: isActive ? `${AMBER}22` : 'transparent', borderRadius: 8 })}>
               <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />
               <span style={{ flex: 1 }}>{c.label}</span>
@@ -163,7 +171,18 @@ export function Sidebar({ collapsed = false, onClose }) {
   const badges = { joinRequests: joinRequestCount };
 
   const q = query.trim().toLowerCase();
-  const navItems   = q ? NAV.filter((i) => i.label.toLowerCase().includes(q)) : NAV;
+  // Admin sessions get the Course Creator's Review Queue (the reference's
+  // admin view); instructors only ever see their own three pages.
+  const navBase = user?.role === 'admin'
+    ? NAV.map((i) => (i.label === 'Course Creator'
+        ? { ...i, children: [...i.children, { label: 'Review Queue', to: '/course-creator/review' }] }
+        : i))
+    : NAV;
+  const navItems = q
+    ? navBase
+        .map((i) => (i.children ? { ...i, children: i.children.filter((c) => c.label.toLowerCase().includes(q)) } : i))
+        .filter((i) => (i.children ? (i.children.length || i.label.toLowerCase().includes(q)) : i.label.toLowerCase().includes(q)))
+    : navBase;
   const mgmtGroups = q
     ? MGMT_NAV.map((g) => ({ ...g, children: g.children.filter((c) => c.label.toLowerCase().includes(q)) })).filter((g) => g.children.length || g.label.toLowerCase().includes(q))
     : MGMT_NAV;
@@ -216,7 +235,10 @@ export function Sidebar({ collapsed = false, onClose }) {
 
       {/* Nav */}
       <nav onClickCapture={onClose ? (e) => { if (e.target.closest?.('a')) onClose(); } : undefined} style={{ flex: 1, padding: '8px 0', overflowY: 'auto' }}>
-        {navItems.map(item => <NavItem key={item.to} {...item} compact={compact} />)}
+        {navItems.map(item => (item.children
+          ? <Group key={item.label} item={item} collapsed={compact} badges={badges}
+              open={q ? true : !!openGroups[item.label]} onToggle={() => toggleGroup(item.label)} />
+          : <NavItem key={item.to} {...item} compact={compact} />))}
         {mgmtGroups.map((g) => (
           <Group key={g.label} item={g} collapsed={compact} badges={badges}
             open={q ? true : !!openGroups[g.label]} onToggle={() => toggleGroup(g.label)} />
@@ -373,7 +395,7 @@ export function BottomNav() {
     }}
     className="bottom-nav"
     >
-      {NAV.map(({ to, icon: Icon, label }) => (
+      {NAV.flatMap((i) => (i.children ? [{ to: i.children[0].to, icon: i.icon, label: i.label }] : [i])).map(({ to, icon: Icon, label }) => (
         <NavLink
           key={to}
           to={to}
