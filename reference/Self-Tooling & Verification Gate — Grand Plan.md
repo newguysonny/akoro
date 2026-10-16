@@ -1384,7 +1384,10 @@ everyone).
   (fully cleaned up, nothing sent to other people, no coins spent) can be
   approved. Cleanup is verified (`writes.no_residue` for that account) and a
   failed cleanup is reported to the admin at once.
-- Optional: notify the account owner afterwards ("a test ran on your account").
+- **The account owner is always notified (decided 2026-10-16):** after every
+  real-user write run, an in-app notification plus email and SMS on the
+  account's channels, saying a test ran on their account, what it changed,
+  and that it was cleaned up.
 
 ### Phase S7 — Instructor self-tooling ✅ built 2026-10-16
 
@@ -1405,6 +1408,9 @@ the sandbox): `instructor_scope` and `instructor_tool_matches_db` PASS;
 `instructor_agent_builds` PASS 5/5 alone, 2/3 in the latest suite — about 1
 in 5 builds still counts every assigned student where "graded" was asked.
 Runs with write scenarios now queue one at a time.
+Instructor app: **Settings → AI agent → My agent tools** (`/agent-tools`) —
+turn tools on/off, rename, delete, and withdraw waiting permission requests
+(same `/api/self-tooling` routes as the learner app, per account).
 
 Proposed design (as planned):
 - Same pipeline (lookup → recipe/spec/code → verify → save; escalation;
