@@ -122,3 +122,11 @@ test("a row's private id survives pick but never leaves the server", async () =>
   assert.deepEqual(O.stripRefs(O.pick(rows, { fields: ["title"] })), [{ title: "A" }]);
   assert.equal("_ref" in O.group(rows, { by: ["status"], count: true })[0], false);
 });
+
+test("code may only hard-code dates the learner gave", async () => {
+  const { inventedDates } = await import("./pipeline.js");
+  const goal = "Spread my weak topics until my exam on 2026-11-06";
+  assert.deepEqual(inventedDates("var end = new Date('2026-11-06T00:00:00Z'); var d = new Date(akoro.today);", goal), []);
+  assert.match(inventedDates("var day = new Date('2026-10-01T00:00:00Z'); var end = '2026-11-06';", goal)[0], /2026-10-01/);
+  assert.deepEqual(inventedDates("var e = input.examDate || '2026-12-01';", "plan until my exam", { examDate: { type: "string", default: "2026-12-01" } }), []);
+});

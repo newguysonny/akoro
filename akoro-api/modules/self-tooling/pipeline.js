@@ -40,6 +40,17 @@ const SCHEDULING = /\b(spread|schedule|timetable|plan (out|my)|(per|a|each|every
 /** Goals only code can express (plans over dates, N per day, skip days). */
 export const needsCode = (goal) => SCHEDULING.test(String(goal || ""));
 
+/**
+ * Code may only hard-code a date the learner gave (in the goal or a param
+ * default). A generated plan once started on an invented "2026-10-01"
+ * instead of akoro.today, so half of it was in the past.
+ */
+export function inventedDates(source, goal, params = {}) {
+  const given = `${goal} ${JSON.stringify(params)}`;
+  const found = [...new Set(String(source || "").match(/(?<!\d)\d{4}-\d{2}-\d{2}(?!\d)/g) || [])].filter((d) => !given.includes(d));
+  return found.length ? [`code: don't hard-code ${found.join(", ")} — start from akoro.today (dates the learner gave are fine)`] : [];
+}
+
 const ABOUT_OTHERS = /\b(other (players?|learners?|students?|people)|others|classmates?|opponents?|everyone else|the rest of (my|the) class)\b/i;
 /**
  * For a goal about other learners: the lookup's TOP-ranked capability, when it
@@ -187,6 +198,8 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       if (!built.definition) { feedback = built.error || "no definition"; lastProblem = feedback; continue; }
       if (built.definition.kind !== stage) built.definition.kind = stage === "spec" && built.definition.from ? "spec" : built.definition.kind;
       const v = await validateDefinition(built.definition, params);
+      if (v.ok && built.definition.kind === "code") v.errors.push(...inventedDates(built.definition.source, goal, params));
+      if (v.errors.length) v.ok = false;
       if (!v.ok) { feedback = v.errors.slice(0, 6).join("; "); lastProblem = feedback; continue; }
       const check = await verifyTool(built.definition, params, built.samples || [], ctx);
       if (check.verdict !== "PASS") {
