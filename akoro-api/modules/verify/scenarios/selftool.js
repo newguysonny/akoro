@@ -246,3 +246,26 @@ export const escalateAndResume = {
     }
   },
 };
+
+export const agentEscalates = {
+  name: "selftool.agent_escalates", area: "self-tooling", risk: "dry", repeats: 3,
+  description: "Asked about other players' results in battles they played (a locked capability), the agent goes through create_tool, which comes back escalated, and tells the learner it needs an admin's permission — no request is made in a dry run.",
+  params: { learner: { default: "@tester41" } },
+  async run(ctx, p) {
+    await needCreate(ctx);
+    const { capabilityStatus } = await import("../../self-tooling/registry.js");
+    if ((await capabilityStatus("battles.class_results")) === "enabled") ctx.expect.blocked("battles.class_results is granted on this server — nothing to escalate");
+    const me = await ctx.as(p.learner);
+    const before = await ctx.db.count("edu.agent_tool_requests", { requester_id: me.id });
+    const turn = await ctx.agent.chat({ as: p.learner, model: p.model,
+      prompt: "In the battles I played, how did the other players score compared to me?" });
+    ctx.expect.eq("turn answered", turn.status, 200);
+    const built = (turn.tools || []).filter((t) => t.tool === "create_tool").at(-1);
+    ctx.expect.ok("agent called create_tool", !!built, (turn.tools || []).map((t) => t.tool));
+    ctx.expect.eq("create_tool escalated", built?.result?.status, "escalated");
+    ctx.expect.ok("reply says it needs permission", /permission|admin|approv/i.test(turn.reply || ""), (turn.reply || "").slice(0, 200));
+    ctx.expect.noBackendNames("reply has no backend names", turn.reply);
+    ctx.expect.eq("dry run made no request", await ctx.db.count("edu.agent_tool_requests", { requester_id: me.id }), before);
+    ctx.expect.loopHealthy(turn);
+  },
+};
