@@ -92,3 +92,32 @@ test("single items where lists belong are wrapped, not crashed on", async () => 
   assert.deepEqual(r.then[0].by, ["status"]);
   assert.deepEqual(r.then[1].fields, ["status"]);
 });
+
+test("field flow: unknown fields after a group, and unused steps, fail validation", async () => {
+  const sess = { id: "sessions", view: "my_learning_sessions", where: [{ field: "started_at", op: "year", value: "this" }] };
+  const tail = [{ op: "from", ref: "sessions" }, { op: "compute", as: "duration", fn: "minutesBetween", a: "started_at", b: "completed_at" },
+    { op: "group", by: [{ field: "started_at", bucket: "month" }], sum: ["duration"] }];
+  // Seen on production: a template name picked after the group, and a step nothing reads.
+  const bad = await validateDefinition({ kind: "recipe", steps: [sess, { id: "notes", view: "my_study_notes" }],
+    then: [...tail, { op: "sort", by: "field_bucket" }, { op: "pick", fields: ["field_bucket", "sum_duration"] }] }, {});
+  assert.ok(bad.errors.some((e) => /field_bucket isn't a field/.test(e)), bad.errors.join("; "));
+  assert.ok(bad.errors.some((e) => /step notes is never used/.test(e)), bad.errors.join("; "));
+  const good = await validateDefinition({ kind: "recipe", steps: [sess],
+    then: [...tail, { op: "sort", by: "started_at_month" }, { op: "pick", fields: ["started_at_month", "sum_duration"] }] }, {});
+  assert.deepEqual(good.errors, []);
+  // The builder prompt's own examples stay valid.
+  const spec = await validateDefinition({ kind: "spec", from: "my_past_questions", where: [{ field: "created_at", op: "within", value: "1y" }], group: { by: ["subject"], sum: ["attempted", "correct"] }, compute: [], sort: [{ by: "sum_attempted", dir: "desc" }] }, {});
+  assert.deepEqual(spec.errors, []);
+  const recipe = await validateDefinition({ kind: "recipe", steps: [{ id: "weak", view: "my_weak_topics", where: [{ field: "confidence", op: "lt", value: 0.5 }] }, { id: "pq", view: "my_past_questions" }],
+    then: [{ op: "from", ref: "pq" }, { op: "group", by: ["subject"], sum: ["attempted", "correct"] }, { op: "compute", as: "accuracy", fn: "divide", a: "sum_correct", b: "sum_attempted" }, { op: "filter", where: [{ field: "accuracy", op: "lt", value: "$maxAccuracy" }] }, { op: "save", as: "acc" },
+      { op: "from", ref: "weak" }, { op: "join", right: "acc", on: ["subject"] }, { op: "sort", by: "confidence", dir: "asc" }, { op: "pick", fields: ["subject", "topic", "confidence", "accuracy"] }] }, { maxAccuracy: { type: "number" } });
+  assert.deepEqual(recipe.errors, []);
+});
+
+test("calendar filters: year and month", () => {
+  const y = new Date().getUTCFullYear();
+  const rows = [{ t: `${y}-03-04T10:00:00Z` }, { t: `${y - 1}-03-04T10:00:00Z` }, { t: null }];
+  assert.equal(O.filter(rows, [{ field: "t", op: "year", value: "this" }]).length, 1);
+  assert.equal(O.filter(rows, [{ field: "t", op: "year", value: y - 1 }]).length, 1);
+  assert.equal(O.filter(rows, [{ field: "t", op: "month", value: `${y}-03` }]).length, 1);
+});
