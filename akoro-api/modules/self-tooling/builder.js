@@ -11,6 +11,8 @@ import { DATA_VIEWS, describeView } from "./views.js";
 import { CAPABILITIES } from "./capabilities.js";
 
 export const BUILDER_MODEL = () => process.env.AKORO_SELF_TOOLING_MODEL || "gpt-4.1-mini";
+// Code is the hardest stage (and the rarest): a stronger model writes it.
+export const CODE_MODEL = () => process.env.AKORO_SELF_TOOLING_CODE_MODEL || "gpt-4.1";
 
 const COMMON = `You build ONE small read-only data tool for a learner on Akoro, as JSON DATA (never code).
 Rules:
@@ -49,6 +51,8 @@ const CODE_FORMAT = `Format (CODE — only when a recipe or spec can't express i
 - input = the declared params; akoro = { today: "YYYY-MM-DD" (Africa/Lagos), now: ISO time, timezone }.
 - Plain JavaScript (ES2020) only. NOT allowed: eval, Function, import, require, this, globalThis, prototypes/constructor, async/await, timers, network, template literals with \${…} (join with +). Under 8 KB; must finish fast.
 - Return an array of flat objects (the rows the learner sees), at most 100.
+- Dates: work FORWARD from akoro.today. An end date ("until my exam on X") is exclusive — nothing on or after it. Compare dates as "YYYY-MM-DD" strings or UTC Date objects; getUTCDay() 0 is Sunday. Put dates the learner gives in params (e.g. $examDate) when the goal allows; otherwise use the date from the goal.
+- Sort data yourself inside run() when order matters (steps don't sort).
 Example — spread my weakest topics over the days until $examDate, $perDay a day, weakest first, skipping Sundays:
 {"definition":{"kind":"code","steps":[{"id":"weak","view":"my_weak_topics"}],"source":"function run(input, data, akoro) {\n  var topics = data.weak.slice().sort(function (a, b) { return a.confidence - b.confidence; });\n  var day = new Date(akoro.today + 'T00:00:00Z'), end = new Date(input.examDate + 'T00:00:00Z'), out = [], i = 0;\n  while (i < topics.length && day < end) {\n    if (day.getUTCDay() !== 0) { for (var k = 0; k < input.perDay && i < topics.length; k++, i++) out.push({ date: day.toISOString().slice(0, 10), subject: topics[i].subject, topic: topics[i].topic }); }\n    day.setUTCDate(day.getUTCDate() + 1);\n  }\n  return out;\n}"},"samples":[{"examDate":"2026-12-01","perDay":2},{"examDate":"2026-11-20","perDay":1}]}`;
 
@@ -76,7 +80,7 @@ export async function buildDefinition({ stage, goal, params, slice, feedback = n
   ];
   if (feedback) messages.push({ role: "user", content: `Your previous attempt failed: ${feedback}\nFix it and answer again with ONE JSON object.` });
   const resp = await openai.chat.completions.create({
-    model: BUILDER_MODEL(), temperature: 0, max_tokens: stage === "code" ? 2000 : 1200,
+    model: stage === "code" ? CODE_MODEL() : BUILDER_MODEL(), temperature: 0, max_tokens: stage === "code" ? 2000 : 1200,
     response_format: { type: "json_object" },
     messages,
     __feature: "self_tooling", ...(platformPays ? { __payer: "platform" } : { __userId: learnerId }),
