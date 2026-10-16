@@ -24,5 +24,7 @@ export const SUITES = {
   "self-tooling-writes": ["selftool.register_reuse_disable", "writes.no_residue"],
   // Self-tooling scenarios that need the feature on stay in their own suite
   // (BLOCKED while the flag is off); the schema check runs everywhere.
-  regression: ALL.filter((s) => s.risk !== "write" && (!s.name.startsWith("selftool.") || s.name === "selftool.views_match_schema")).map((s) => s.name),
+  // One dry build (create_spec_matches_db) exercises the whole create_tool
+  // path — a broken save path once slipped past every other scenario.
+  regression: ALL.filter((s) => s.risk !== "write" && (!s.name.startsWith("selftool.") || ["selftool.views_match_schema", "selftool.create_spec_matches_db"].includes(s.name))).map((s) => s.name),
 };
