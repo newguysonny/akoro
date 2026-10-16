@@ -41,7 +41,7 @@ function checkOp(errors, o, label, fields) {
       return;
     case "group":
       if (!Array.isArray(o.by)) errors.push(`${label}: group.by must be a list`);
-      for (const b of o.by || []) if (b && typeof b === "object" && b.bucket && !valid.bucket(b.bucket)) errors.push(`${label}: bucket ${b.bucket}`);
+      for (const b of [].concat(o.by || [])) if (b && typeof b === "object" && b.bucket && !valid.bucket(b.bucket)) errors.push(`${label}: bucket ${b.bucket}`);
       return;
     case "sort": if (!o.by) errors.push(`${label}: sort.by`); return;
     case "limit": if (!(Number(o.n) > 0)) errors.push(`${label}: limit.n`); return;
@@ -56,11 +56,37 @@ function checkRefs(errors, def, params) {
   for (const r of refsIn(def)) if (!declared.has(r)) errors.push(`$${r} is not a declared param`);
 }
 
+const asList = (x) => (x == null ? x : Array.isArray(x) ? x : [x]);
+function normOp(o) {
+  if (!o || typeof o !== "object") return o;
+  if (o.where != null) o.where = asList(o.where);
+  if (o.op === "group") o.by = asList(o.by) || [];
+  for (const k of ["sum", "avg", "min", "max", "fields", "on"]) if (o[k] != null) o[k] = asList(o[k]);
+  return o;
+}
+/**
+ * The builder model often writes one item where a list belongs (group.by as
+ * a single {field, bucket}, sum as one field name). Wrap those in lists, in
+ * place, so validation and running see one shape. Idempotent.
+ */
+export function normalizeDefinition(def) {
+  if (!def || typeof def !== "object") return def;
+  if (def.where != null) def.where = asList(def.where);
+  if (def.group && typeof def.group === "object") { def.group.by = asList(def.group.by) || []; for (const k of ["sum", "avg", "min", "max"]) if (def.group[k] != null) def.group[k] = asList(def.group[k]); }
+  if (def.compute != null) def.compute = asList(def.compute);
+  if (def.sort != null) def.sort = asList(def.sort);
+  if (typeof def.select === "string") def.select = [def.select];
+  if (Array.isArray(def.steps)) for (const st of def.steps) if (st && st.where != null) st.where = asList(st.where);
+  if (Array.isArray(def.then)) def.then.forEach(normOp);
+  return def;
+}
+
 /** → { ok, errors, uses: { views:[], capabilities:[] } } */
 export async function validateDefinition(def, params) {
   const errors = [];
   const uses = { views: [], capabilities: [] };
   if (!def || typeof def !== "object") return { ok: false, errors: ["definition must be an object"], uses };
+  normalizeDefinition(def);
   if (JSON.stringify(def).length > 8000) errors.push("definition too large");
   checkRefs(errors, def, params);
 
@@ -132,7 +158,7 @@ const pathGet = (obj, path) => (path ? String(path).split(".").reduce((o, k) => 
  * → { rows, total, truncated }
  */
 export async function runDefinition(def, input, { learnerId, callCapability }) {
-  const d = bind(def, input);
+  const d = bind(normalizeDefinition(def), input);
   let rows;
   if (d.kind === "spec") {
     rows = await readView(d.from, learnerId, { where: d.where || [] });

@@ -153,18 +153,23 @@ export const registerReuseDisable = {
 
 export const agentBuildsTool = {
   name: "selftool.agent_builds_tool", area: "self-tooling", risk: "dry", repeats: 3,
-  description: "Asked something no tool answers, the agent builds a tool and answers from its result — in plain words.",
+  description: "Asked something no tool answers (learning-session hours per month), the agent builds a tool, it is verified, and the answer comes from its result — in plain words.",
   params: { learner: { default: "@tester21" } },
   async run(ctx, p) {
     await needCreate(ctx);
+    const me = await ctx.as(p.learner);
+    const year = String(new Date().getUTCFullYear());
+    const sessions = (await ctx.db.rows("edu.adaptive_sessions", { student_id: me.id }, { columns: "started_at, completed_at" }))
+      .filter((r) => r.started_at && r.completed_at && String(r.started_at).startsWith(year));
     const turn = await ctx.agent.chat({ as: p.learner, model: p.model,
-      prompt: "How many past-question questions have I attempted in each subject, and what's my accuracy in each? Work it out for me." });
+      // No existing tool totals session time — it needs a new one.
+      prompt: "How many hours did my learning sessions take in total each month this year? Work it out for me." });
     ctx.expect.eq("turn answered", turn.status, 200);
-    const used = (turn.tools || []).map((t) => t.tool);
-    // Either the built tool or the existing past-question tool answers it — what matters is real data, not a guess.
-    ctx.expect.ok("answered from data (create_tool or the past-question tool)", used.includes("create_tool") || used.includes("get_past_question_practice"), used);
     const built = (turn.tools || []).find((t) => t.tool === "create_tool");
-    if (built) ctx.expect.eq("tool built", built.result?.status, "created");
+    ctx.expect.ok("agent called create_tool", !!built, (turn.tools || []).map((t) => t.tool));
+    ctx.expect.eq("tool built and verified", built?.result?.status, "created");
+    if (sessions.length) ctx.expect.gte("tool returned this learner's months", (built?.result?.result?.rows || []).length, 1);
+    ctx.note(`${sessions.length} finished sessions this year in the database`);
     ctx.expect.noBackendNames("reply has no backend names", turn.reply);
     ctx.expect.loopHealthy(turn);
   },

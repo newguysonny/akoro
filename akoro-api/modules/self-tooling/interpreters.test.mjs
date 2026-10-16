@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as O from "./ops.js";
-import { validateDefinition, runDefinition } from "./interpreters.js";
+import { validateDefinition, runDefinition, normalizeDefinition } from "./interpreters.js";
 import { validateParams, coerceInput, bind } from "./bind.js";
 
 const rows = [
@@ -78,4 +78,17 @@ test("recipe runs capability steps through the injected tool runner, with from/s
   const out = await runDefinition(def, { max: 0.6 }, { learnerId: "u1", callCapability });
   assert.deepEqual(out.rows, [{ subject: "Physics", topic: "Waves", accuracy: 0.4 }]);
   assert.deepEqual(calls, ["get_weak_topics", "get_past_question_practice"]);
+});
+
+test("single items where lists belong are wrapped, not crashed on", async () => {
+  const def = { kind: "spec", from: "my_learning_sessions", group: { by: { field: "started_at", bucket: "month" }, sum: "subject" }, sort: { by: "started_at_month", dir: "asc" } };
+  const v = await validateDefinition(def, {});
+  assert.ok(!v.errors.some((e) => /group\.by/.test(e)), v.errors.join("; "));
+  assert.deepEqual(def.group.by, [{ field: "started_at", bucket: "month" }]);
+  assert.deepEqual(def.group.sum, ["subject"]);
+  assert.ok(Array.isArray(def.sort));
+  const r = normalizeDefinition({ kind: "recipe", steps: [{ id: "a", view: "my_tasks", where: { field: "status", op: "eq", value: "done" } }], then: [{ op: "group", by: "status", count: true }, { op: "pick", fields: "status" }] });
+  assert.deepEqual(r.steps[0].where.length, 1);
+  assert.deepEqual(r.then[0].by, ["status"]);
+  assert.deepEqual(r.then[1].fields, ["status"]);
 });
