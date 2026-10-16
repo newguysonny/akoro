@@ -4,6 +4,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { DATA_VIEWS, describeView, viewColumns } from "./views.js";
 import { CAPABILITIES, FORBIDDEN, forbiddenFor } from "./capabilities.js";
+import { decideAccess } from "./access.js";
 
 const chatSrc = readFileSync(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
 const toolNames = new Set([...chatSrc.matchAll(/^\s{4}name: "([a-z_]+)",$/gm)].map((m) => m[1]));
@@ -66,11 +67,29 @@ test("forbidden goals are caught; the learner's own data is not", () => {
 
 test("wiring: off by default, allow-listed, gated in the catalogue and in the tool", () => {
   const access = readFileSync(new URL("./access.js", import.meta.url), "utf8");
-  assert.match(access, /String\(process\.env\.AKORO_SELF_TOOLING_ENABLED \|\| ""\)\.toLowerCase\(\) === "true"/);
+  assert.match(access, /export const selfToolingEnabled = \(\) => on\("AKORO_SELF_TOOLING_ENABLED"\);/);
+  assert.match(access, /export const selfToolingRealUsers = \(\) => on\("AKORO_SELF_TOOLING_REAL_USERS"\);/);
   assert.match(chatSrc, /self_tooling: selfToolingEnabled\(\) && selfTooling,/);
   assert.match(chatSrc, /selfTooling: await selfToolingAllowedFor\(req\.user\.id\),/);
   assert.match(chatSrc, /case "schema_lookup": \{\n\s+if \(role === "instructor"\)[^\n]*\n\s+if \(!\(await selfToolingAllowedFor\(studentId\)\)\)/);
   const sql = readFileSync(new URL("../../migrations/2026-self-tooling-grants.sql", import.meta.url), "utf8");
   assert.match(sql, /revoked_at\s+timestamptz/);
   assert.doesNotMatch(sql, /user_id/, "grants are for everyone (decision S10)");
+});
+
+test("access: off unless enabled; testers always; real users by switch or by name", () => {
+  const tester = { username: "tester07", email: "tester07@demo.akoro.app" };
+  const fake = { username: "tester07", email: "someone@gmail.com" };       // looks like a tester, isn't
+  const real = { username: "ada", email: "ada@gmail.com" };
+  const off = { enabled: false, realUsers: true, named: ["ada"] };
+  assert.equal(decideAccess(tester, off), false, "master switch off → nobody");
+  assert.equal(decideAccess(real, off), false);
+  const testersOnly = { enabled: true, realUsers: false, named: [] };
+  assert.equal(decideAccess(tester, testersOnly), true);
+  assert.equal(decideAccess(real, testersOnly), false);
+  assert.equal(decideAccess(fake, testersOnly), false, "the email must be @demo.akoro.app too");
+  assert.equal(decideAccess(real, { enabled: true, realUsers: false, named: ["ada"] }), true, "named account");
+  assert.equal(decideAccess(real, { enabled: true, realUsers: false, named: ["ada@gmail.com"] }), true, "named by email");
+  assert.equal(decideAccess(real, { enabled: true, realUsers: true, named: [] }), true, "all real users");
+  assert.equal(decideAccess(tester, { enabled: true, realUsers: true, named: [] }), true, "testers keep it");
 });

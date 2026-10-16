@@ -26,7 +26,7 @@ export const schemaLookupSafe = {
   params: { learner: { default: "@tester01" } },
   async run(ctx, p) {
     const { getLearnerChatTools } = await import("../../adaptive-learning/chat.js");
-    if (!getLearnerChatTools().some((t) => t.name === "schema_lookup")) ctx.expect.blocked("self-tooling is off — set AKORO_SELF_TOOLING_ENABLED=true (and AKORO_SELF_TOOLING_LEARNERS to the testers)");
+    if (!getLearnerChatTools().some((t) => t.name === "schema_lookup")) ctx.expect.blocked("self-tooling is off — set AKORO_SELF_TOOLING_ENABLED=true (test learners get it automatically)");
     const goals = [
       ["Which of my weak topics are in subjects where my past-question accuracy is low?", { expectViews: ["my_weak_topics", "my_past_questions"] }],
       ["How many battles did I win this month, by subject?", { expectViews: ["my_battles"] }],
