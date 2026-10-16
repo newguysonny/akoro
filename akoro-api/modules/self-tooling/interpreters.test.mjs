@@ -143,3 +143,18 @@ test("a filter on an optional param that wasn't given is skipped", () => {
   assert.equal(out.steps[0].where.length, 1);
   assert.equal(out.then[0].where.length, 0);
 });
+
+test("value shapes seen on production are rejected with a hint", async () => {
+  const v = await validateDefinition({ kind: "spec", from: "my_learning_sessions",
+    where: [{ field: "started_at", op: "within", value: { op: "year", value: "this" } }, { field: "completed_at", op: "isNull", value: false }],
+    compute: [{ as: "h", fn: "divide", a: { fn: "minutesBetween", a: "started_at", b: "completed_at" }, b: 60 }] }, {});
+  const all = v.errors.join("; ");
+  assert.match(all, /within needs a duration/);
+  assert.match(all, /isNull takes no value/);
+  assert.match(all, /never|nest by adding another compute/);
+  const ok = await validateDefinition({ kind: "spec", from: "my_learning_sessions",
+    where: [{ field: "started_at", op: "year", value: "this" }, { field: "completed_at", op: "notNull" }],
+    compute: [{ as: "minutes", fn: "minutesBetween", a: "started_at", b: "completed_at" }, { as: "hours", fn: "divide", a: "minutes", b: 60 }],
+    group: { by: [{ field: "started_at", bucket: "month" }], sum: ["hours"] }, sort: [{ by: "started_at_month" }] }, {});
+  assert.deepEqual(ok.errors, []);
+});

@@ -30,7 +30,10 @@ function checkWhere(errors, where, fields, label) {
     if (!w || typeof w !== "object") { errors.push(`${label}: bad filter`); continue; }
     if (fields && !(w.field in fields)) errors.push(`${label}: unknown field ${w.field}`);
     if (!valid.op(w.op)) errors.push(`${label}: unknown filter op ${typeof w.op === "string" ? w.op : JSON.stringify(w.op)} — op is one name, e.g. {"field":"started_at","op":"year","value":"this"}`);
-    if (w.op === "within" && typeof w.value === "string" && !w.value.startsWith("$") && O.withinMs(w.value) == null) errors.push(`${label}: within needs e.g. "30d"`);
+    if (w.op === "within" && !(typeof w.value === "string" && (w.value.startsWith("$") || O.withinMs(w.value) != null))) errors.push(`${label}: within needs a duration like "30d" (for a calendar year use op "year")`);
+    if ((w.op === "year" || w.op === "month") && !(w.value === "this" || typeof w.value === "number" || (typeof w.value === "string" && (w.value.startsWith("$") || /^\d{4}(-\d{2})?$/.test(w.value))))) errors.push(`${label}: ${w.op} needs "this", a number or a "$param"`);
+    if ((w.op === "isNull" || w.op === "notNull") && w.value != null && w.value !== true) errors.push(`${label}: ${w.op} takes no value (to keep rows that HAVE ${w.field}, use notNull)`);
+    if (w.value && typeof w.value === "object" && !Array.isArray(w.value)) errors.push(`${label}: a filter value is a plain value or "$param", not an object`);
   }
 }
 function checkOp(errors, o, label, fields) {
@@ -38,6 +41,7 @@ function checkOp(errors, o, label, fields) {
     case "filter": return checkWhere(errors, o.where, fields, label);
     case "compute":
       if (!o.as || !valid.fn(o.fn)) errors.push(`${label}: compute needs as + fn (${o.fn})`);
+      for (const x of [o.a, o.b]) if (x != null && typeof x !== "string" && typeof x !== "number") errors.push(`${label}: compute a/b are field names or numbers — nest by adding another compute step`);
       return;
     case "group":
       if (!Array.isArray(o.by)) errors.push(`${label}: group.by must be a list`);
