@@ -720,6 +720,22 @@ if (process.env.REDIS_URL && !skipJob("battle worker")) {
     console.error("[chat-follow-ups] worker failed to start:", e.message);
   }
 
+  // Self-tooling (S3): an admin approval resumes the learner's tool build in
+  // their chat. Durable jobs + a 15-minute sweep for lost ones and expiry.
+  // Without the worker, approvals resume in-process (resumeQueue.enqueueResume).
+  {
+    const withWorker = !skipJob("self-tool resumes worker");
+    const withSweep = withWorker || !skipJob("self-tool resume sweep");
+    if (withWorker || withSweep) {
+      import("./modules/self-tooling/resumeQueue.js")
+        .then((m) => {
+          if (withWorker) { m.startResumeWorker(); console.log("[self-tool-resumes] worker started at boot"); }
+          else { m.armSweep(); console.log("[self-tool-resumes] sweep only (resumes run in-process)"); }
+        })
+        .catch((e) => console.error("[self-tool-resumes] failed to start:", e.message));
+    }
+  }
+
   // The learner's persisted opt-in, not a browser state, authorizes every
   // autonomous due-task nudge. Recovery only restores delayed due-time jobs;
   // it never enables autonomy for a learner.

@@ -56,7 +56,7 @@ export async function schemaLookup(goal, { limit = 6 } = {}) {
   const rankedViews = Object.entries(DATA_VIEWS)
     .map(([name, v]) => ({ name, v, s: score(goalWords, goalText, v) }))
     .filter((x) => x.s > 0).sort((a, b) => b.s - a.s).slice(0, limit);
-  const rankedCaps = Object.entries(CAPABILITIES)
+  const rankedCaps = Object.entries(CAPABILITIES).filter(([, c]) => !c.hidden)
     .map(([name, c]) => ({ name, c, s: score(goalWords, goalText, c) }))
     .filter((x) => x.s > 0).sort((a, b) => b.s - a.s).slice(0, limit);
 
@@ -74,7 +74,7 @@ export async function schemaLookup(goal, { limit = 6 } = {}) {
       ? "Nothing in the registry matches this goal — it can't be built from what's available."
       : forbidden.length
         ? "Part of this goal isn't allowed (see notAllowed) — tell the learner plainly; don't try to build it."
-        : "Views can be filtered, sorted and counted; capabilities are existing operations. Next: call create_tool with this goal to build the tool and answer from its result. A tool can only use what's listed here as available; needs_approval means an admin must allow it first. These names are internal — tell the learner in plain words (\"your learning sessions\"), never the names.",
+        : "Views can be filtered, sorted and counted; capabilities are existing operations. Next: call create_tool with this goal to build the tool and answer from its result. A tool can only use what's listed here as available; needs_approval means an admin must allow it first — if the goal needs one, call create_tool with it in hint.capabilities and it will ask an admin for you. These names are internal — tell the learner in plain words (\"your learning sessions\"), never the names.",
   };
 }
 

@@ -1,9 +1,9 @@
 /**
  * modules/self-tooling/pipeline.js — create_tool and the learner-tool runtime
- * (plan §7.4, §7.9, §7.10). Phase S2: stages 1 (recipe) and 2 (spec);
- * sandboxed code (S5) and admin escalation (S3) come later.
+ * (plan §7.4, §7.9, §7.10). Stages 1 (recipe), 2 (spec) and 4 (escalate to
+ * an admin, escalation.js); sandboxed code (S5) comes later.
  *
- *   createTool  → { status: created|rejected, … }   one call in, one status out
+ *   createTool  → { status: created|escalated|rejected, … }   one call in, one status out
  *   runLearnerTool / learnerToolDefs / listMyTools / setMyToolStatus
  */
 import db from "../../db.js";
@@ -14,6 +14,7 @@ import { validateDefinition, runDefinition } from "./interpreters.js";
 import { validateParams, coerceInput, paramProps, wellFormedParams } from "./bind.js";
 import { buildDefinition, registrySlice } from "./builder.js";
 import { createExpect, repeatVerdict } from "../verify/assertions.js";
+import { escalate } from "./escalation.js";
 
 const edu = () => db.schema("edu");
 const NAME = /^[a-z][a-z0-9_]{2,47}$/;
@@ -66,10 +67,15 @@ async function verifyTool(def, params, samples, ctx) {
 }
 
 /** create_tool (§7.1). `builtIn`: names of built-in tools (never shadowed). */
-export async function createTool({ learnerId, input, dry = false, builtIn = new Set(), callCapability }) {
+/**
+ * `conversationId`: the chat a resume answers into. `resumed`: re-run by the
+ * resume job after an admin approval — no daily limit, a taken name gets a
+ * suffix, and the platform pays (it was our gap).
+ */
+export async function createTool({ learnerId, input, dry = false, builtIn = new Set(), callCapability, conversationId = null, resumed = false }) {
   const t0 = Date.now();
   const goal = String(input?.goal || "").trim().slice(0, 300);
-  const name = String(input?.name || "").trim();
+  let name = String(input?.name || "").trim();
   const label = String(input?.label || "").trim().slice(0, 60);
   const given = input?.params && typeof input.params === "object" && !Array.isArray(input.params) ? paramProps(input.params) : {};
   const { params, dropped: droppedParams } = wellFormedParams(given);
@@ -91,7 +97,12 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   const forbidden = forbiddenFor(goal);
   if (forbidden.length) return finish("rejected", reject(`Not allowed: ${forbidden.map((f) => f.description).join(" ")}`));
 
-  if (!dry) {
+  if (!dry && resumed) {
+    const { data: taken } = await edu().from("agent_tools").select("name").eq("owner_id", learnerId).in("status", ["active", "disabled"]).like("name", `${name}%`);
+    const names = new Set((taken || []).map((t) => t.name));
+    for (let i = 2; names.has(name) && i < 50; i++) name = `${String(input?.name).slice(0, 44)}_${i}`;
+  }
+  if (!dry && !resumed) {
     const since = new Date(Date.now() - 86_400_000).toISOString();
     // Tools saved in the last day, any status (a learner deleting a tool archives it, so it still counts).
     const { count: today } = await edu().from("agent_tools").select("*", { count: "exact", head: true })
@@ -105,17 +116,33 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   // What could it use?
   const lookup = await schemaLookup(goal);
   const slice = registrySlice(lookup, hint);
-  const locked = (lookup.capabilities || []).filter((c) => c.status === "needs_approval").map((c) => c.name);
+  const lockedIn = async (names) => {
+    const out = [];
+    for (const c of names) if (CAPABILITIES[c]?.status === "locked" && (await capabilityStatus(c)) === "locked") out.push(c);
+    return out;
+  };
+  const locked = await lockedIn((lookup.capabilities || []).filter((c) => c.status === "needs_approval").map((c) => c.name));
+  // ── 4. escalate (§7.8) — a locked capability named in the hint, or the only thing that fits.
+  const toEscalate = async (capability, why) => {
+    const out = await escalate({ learnerId, capability, goal, dry, conversationId,
+      proposed: { name, label, params, hint: { views: [].concat(hint.views || []), capabilities: [capability] }, run: input?.run && typeof input.run === "object" ? input.run : {} } });
+    ev.stages_tried.push("escalate"); ev.capabilities = [capability]; ev.request_id = out.requestId || null;
+    return finish(out.status === "escalated" ? (dry ? "dry" : "escalated") : "rejected", { ...out, ...(why ? { why } : {}) });
+  };
+  if (!resumed) {
+    const hinted = await lockedIn([].concat(hint.capabilities || []));
+    if (hinted.length) return toEscalate(hinted[0]);
+  }
   if (!slice.views.length && !slice.capabilities.length) {
-    return finish("rejected", reject(locked.length
-      ? `This needs a permission that isn't on yet (${locked.join(", ")}). Asking an admin for it is coming soon.`
-      : "Nothing available matches this goal, so it can't be built.", locked.length ? { needsApproval: locked } : {}));
+    if (locked.length && !resumed) return toEscalate(locked[0]);
+    return finish("rejected", reject(locked.length ? "This needs a permission that isn't on." : "Nothing available matches this goal, so it can't be built."));
   }
 
   // ── 1. recipe, 2. spec ─────────────────────────────────────────────────
   const order = hint.mode === "spec" ? ["spec", "recipe"] : ["recipe", "spec"];
   const ctx = { learnerId, callCapability };
   let lastProblem = null;
+  let inexpressible = false;   // the builder said what's available can't express it
   for (const stage of order) {
     ev.stages_tried.push(stage);
     let feedback = null;
@@ -123,12 +150,12 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     for (let attempt = 1; attempt <= 3 && ev.builder_calls < LIMITS.builderCalls; attempt++) {
       ev.builder_calls++;
       let built;
-      try { built = await buildDefinition({ stage, goal, params, slice, feedback, learnerId, platformPays: dry }); }
+      try { built = await buildDefinition({ stage, goal, params, slice, feedback, learnerId, platformPays: dry || resumed }); }
       catch (e) {
         if (/coin|balance/i.test(String(e?.message))) return finish("rejected", reject("Not enough coins to build a tool."));
         lastProblem = `builder failed: ${e.message}`; break;
       }
-      if (built.notExpressible) { lastProblem = built.notExpressible; break; }
+      if (built.notExpressible) { lastProblem = built.notExpressible; inexpressible = true; break; }
       if (!built.definition) { feedback = built.error || "no definition"; lastProblem = feedback; continue; }
       if (built.definition.kind !== stage) built.definition.kind = stage === "spec" && built.definition.from ? "spec" : built.definition.kind;
       const v = await validateDefinition(built.definition, params);
@@ -148,6 +175,8 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     }
     if (fallback) return register({ stage, ...fallback });
   }
+  // Nothing available could express it, but a locked capability might.
+  if (locked.length && !resumed && inexpressible) return toEscalate(locked[0], lastProblem);
   return finish("rejected", reject(`Couldn't build it safely: ${String(lastProblem || "no stage could express it").slice(0, 240)}`));
 
   async function register({ stage, built, v, check }) {
