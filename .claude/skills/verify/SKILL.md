@@ -31,12 +31,14 @@ curl -s $B/suites | jq
 3. Run the affected suite (or scenario), pinned to that commit:
    ```bash
    SHA=$(git rev-parse HEAD)
-   curl -s -X POST $B/runs -H 'Content-Type: application/json' \
-     -d "{\"suite\":\"regression\",\"expectSha\":\"$SHA\"}" \
-     | jq '.data | {id, verdict, reason, scenarios: [.scenarios[] | {name, verdict, repeats, failed: [.failed[] | {name, expected, actual}]}]}'
+   ID=$(curl -s -X POST $B/runs -H 'Content-Type: application/json' \
+     -d "{\"suite\":\"regression\",\"expectSha\":\"$SHA\",\"wait\":false}" | jq -r .data.id)
+   # poll (the outbound proxy cuts requests held open ~60 s+, so never wait inline)
+   until [ "$(curl -s $B/runs/$ID | jq -r .data.status)" = done ]; do sleep 10; done
+   curl -s $B/runs/$ID | jq '.data | {id, verdict, sha, reason, scenarios: [.scenarios[] | {name, verdict, repeats, failed: [.failed[] | {name, expected, actual}]}]}'
    ```
-   One scenario: `{"scenario":"chat.schedule_message_here","params":{"learner":"@tester01"}}`.
-   Long runs: add `"wait":false`, then `GET $B/runs/<id>`.
+   One scenario: `{"scenario":"chat.schedule_message_here","params":{"learner":"@tester01"},"wait":false}`.
+   The full regression suite takes about a minute.
 4. Report: verdict, run id, commit, and every failed assertion with expected/actual.
 5. FAIL → fix and repeat. BLOCKED → say exactly what blocked it (stale deploy,
    fixture drift, flag off…). ERROR → it's a gate problem; say so.
