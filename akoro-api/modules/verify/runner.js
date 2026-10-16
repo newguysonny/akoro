@@ -27,6 +27,12 @@ const slot = () => new Promise((resolve) => {
 });
 const release = () => { const next = waiting.shift(); if (next) next(); else running--; };
 
+// Runs with write scenarios go one at a time: they share the test accounts
+// (and the gate's probe grants), so two at once undo each other's work —
+// one run's cleanup deleted the other's rows mid-check.
+let writeChain = Promise.resolve();
+const writeTurn = () => { let done; const mine = new Promise((r) => { done = r; }); const wait = writeChain; writeChain = wait.then(() => mine); return wait.then(() => done); };
+
 export const buildSha = () => process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || null;
 const shaMatches = (want, have) => !want || (!!have && (have.startsWith(want) || want.startsWith(have)));
 
@@ -147,6 +153,8 @@ export function startRun({ scenario, suite, params = {}, expectSha = null, actor
   if (live.size > 200) live.delete(live.keys().next().value);
 
   run.done = (async () => {
+    const writes = names.some((n) => SCENARIOS[n]?.risk === "write");
+    const endWriteTurn = writes && !nested ? await writeTurn() : null;
     if (!nested) await slot();
     const t0 = Date.now();
     run.status = "running";
@@ -187,6 +195,7 @@ export function startRun({ scenario, suite, params = {}, expectSha = null, actor
       run.finishedAt = new Date().toISOString();
       await persistEnd(run).catch(() => {});
       if (!nested) release();
+      endWriteTurn?.();
       console.log(`[verify] ${run.kind} ${run.name} → ${run.verdict} (${run.ms} ms, run ${run.id})`);
     }
     return run;
