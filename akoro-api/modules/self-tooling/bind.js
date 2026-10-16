@@ -7,6 +7,19 @@ import { ToolError } from "./ops.js";
 export const PARAM_TYPES = new Set(["string", "number", "integer", "boolean"]);
 export const MAX_PARAMS = 6;
 
+/**
+ * Keep only well-formed params (the agent sometimes passes data as a param:
+ * a list of sessions, a nested object). → { params, dropped: [names] }
+ */
+export function wellFormedParams(params) {
+  const kept = {}, dropped = [];
+  for (const [k, p] of Object.entries(params || {})) {
+    if (p && typeof p === "object" && !Array.isArray(p) && (PARAM_TYPES.has(p.type) || Array.isArray(p.enum))) kept[k] = p;
+    else dropped.push(k);
+  }
+  return { params: kept, dropped };
+}
+
 /** Validate a params schema: { name: { type, description?, enum?, default? } }. → errors[] */
 export function validateParams(params) {
   const errors = [];

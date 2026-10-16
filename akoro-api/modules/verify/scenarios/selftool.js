@@ -167,7 +167,8 @@ export const agentBuildsTool = {
       // No existing tool totals session time — it needs a new one.
       prompt: "How many hours did my learning sessions take in total each month this year? Work it out for me." });
     ctx.expect.eq("turn answered", turn.status, 200);
-    const built = (turn.tools || []).find((t) => t.tool === "create_tool");
+    // The agent may retry after a rejection — judge its last build.
+    const built = (turn.tools || []).filter((t) => t.tool === "create_tool").at(-1);
     ctx.expect.ok("agent called create_tool", !!built, (turn.tools || []).map((t) => t.tool));
     ctx.expect.eq("tool built and verified", built?.result?.status, "created");
     const rows = built?.result?.result?.rows || [];

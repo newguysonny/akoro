@@ -404,7 +404,7 @@ export const CHAT_TOOLS = [
         goal:   { type: "string", description: "What the tool should work out, in plain language (≤ 300 chars), e.g. 'total hours of my learning sessions per month this year'." },
         name:   { type: "string", description: "snake_case name, e.g. session_hours_by_month." },
         label:  { type: "string", description: "Learner-facing name, e.g. 'Study hours by month'." },
-        params: { type: "object", description: "Optional inputs: { paramName: { type: string|number|integer|boolean, description, default } } (≤ 6)." },
+        params: { type: "object", description: "Optional inputs the learner might change next time (a year, a subject): { paramName: { type: string|number|integer|boolean, description, default } } (≤ 6). Never data — the tool reads the learner's data itself. Usually none or one." },
         run:    { type: "object", description: "Values for the params to answer THIS request with." },
         hint:   { type: "object", description: "Optional: { views: [...], capabilities: [...] } from schema_lookup." },
       },

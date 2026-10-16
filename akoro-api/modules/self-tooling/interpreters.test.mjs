@@ -158,3 +158,10 @@ test("value shapes seen on production are rejected with a hint", async () => {
     group: { by: [{ field: "started_at", bucket: "month" }], sum: ["hours"] }, sort: [{ by: "started_at_month" }] }, {});
   assert.deepEqual(ok.errors, []);
 });
+
+test("params that carry data are dropped, simple ones kept", async () => {
+  const { wellFormedParams } = await import("./bind.js");
+  const r = wellFormedParams({ year: { type: "integer", default: 2026 }, sessions: [{ session_duration: 60 }], blob: { nested: { type: "x" } } });
+  assert.deepEqual(Object.keys(r.params), ["year"]);
+  assert.deepEqual(r.dropped, ["sessions", "blob"]);
+});
