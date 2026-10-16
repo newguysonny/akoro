@@ -73,6 +73,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   const label = String(input?.label || "").trim().slice(0, 60);
   const given = input?.params && typeof input.params === "object" && !Array.isArray(input.params) ? paramProps(input.params) : {};
   const { params, dropped: droppedParams } = wellFormedParams(given);
+  const droppedNote = droppedParams.length ? ` (Ignored params that weren't simple values: ${droppedParams.join(", ")} — the tool reads the data itself.)` : "";
   const hint = input?.hint && typeof input.hint === "object" ? input.hint : {};
   const ev = { user_id: learnerId, goal: goal || "(none)", stages_tried: [], capabilities: [], builder_calls: 0 };
   const finish = async (outcome, out) => {
@@ -149,7 +150,6 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   }
   return finish("rejected", reject(`Couldn't build it safely: ${String(lastProblem || "no stage could express it").slice(0, 240)}`));
 
-  const droppedNote = droppedParams.length ? ` (Ignored params that weren't simple values: ${droppedParams.join(", ")} — the tool reads the data itself.)` : "";
   async function register({ stage, built, v, check }) {
     ev.mode = stage;
     ev.capabilities = v.uses.capabilities;
