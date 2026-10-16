@@ -123,8 +123,10 @@ even if its tests pass. They extend Grand Plan §2 (rules 1–24 still apply).
 34. **The gate's policy is the security boundary, not the agent's
     instructions.** Targets, accounts, writes, timeouts and budgets are
     enforced in code.
-35. **Production writes touch test accounts only** (the seeded testers), and
-    every write registers its own cleanup.
+35. **Real users are read-only to the gate.** The gate may run `read` and
+    `dry` scenarios as real users; real changes (`write` scenarios) touch the
+    seeded test learners only, and every write registers its own cleanup.
+    Every run as a real user is audit-logged and its evidence is minimised.
 
 **Privacy and display**
 36. **No backend names in learner UI** (rule 12): a created tool has a
@@ -185,15 +187,16 @@ even if its tests pass. They extend Grand Plan §2 (rules 1–24 still apply).
 | S2 | How is the tool built? | **Auto-escalating pipeline: compose → spec (DSL) → sandboxed code → request capability.** Cheapest and safest first; the first stage that succeeds wins. | **User decision** |
 | S3 | Who writes the recipe/spec/code? | **The tool builder** (a separate LLM call with a fixed prompt and the registry as context), not the chat agent. Output is validated by code. | Proposed |
 | S4 | Does the agent read the database schema? | **No.** `schema_lookup` returns Data Views and capabilities from the registry, never `information_schema`. | Proposed (rule 25) |
-| S5 | Who can use a created tool? | **The learner who created it**, across their chats. Admins see all tools and can **promote** one to every learner after a gate run. | Proposed — confirm |
-| S6 | Can created tools change data? | **Read-only in v1.** Writes come in phase S6, composed only from write capabilities, each step confirmed by the learner. | Proposed — confirm |
+| S5 | Who can use a created tool? | **The learner who created it**, across their chats. Admins see all tools and can **promote** one to every learner after a gate run. | **User decision** |
+| S6 | Can created tools change data? | **Read-only in v1.** Writes come in phase S6, composed only from write capabilities, each step confirmed by the learner. | **User decision** |
 | S7 | Sandbox for stage 3 | **QuickJS compiled to WebAssembly, in a worker thread inside akoro-api**: no network, no filesystem, no imports, memory and CPU limits, a single capability bridge. External sandboxes (E2B / Daytona) stay an option if code tools ever need packages. | Proposed |
 | S8 | Where do escalations go? | **The existing "Agent requests" flow**, extended: `edu.agent_tool_requests` gains a `kind = capability` with the resume ticket; the existing admin page gains a capability tab. | Proposed (reuse) |
+| S10 | Who gets an approved capability? | **Everyone.** An admin approval turns the capability on for all learners (optional expiry); there is no per-learner grant. Every waiting request for the same capability resumes. | **User decision** |
 | S9 | How does work resume? | **Event-driven**: an admin decision enqueues a job that re-runs the stored `create_tool` as that learner and posts the outcome into the original chat (the delivery path built for scheduled messages), plus a notification. No polling. | Proposed |
 | V1 | What is the gate for? | **Both** the coding agent verifying its changes **and** `create_tool` verifying new tools. One engine. | Proposed |
-| V2 | Where does the gate run? | **Inside akoro-api as `modules/verify/`**, mounted at `/api/verify`, behind the console key. Reason: DB evidence and tool traces live there; scenarios are code-reviewed and versioned in the repo. The reference's separate service is kept as a later option (an MCP wrapper, §8.10). | Proposed — confirm |
+| V2 | Where does the gate run? | **Inside akoro-api as `modules/verify/`**, mounted at `/api/verify`, behind the console key. Reason: DB evidence and tool traces live there; scenarios are code-reviewed and versioned in the repo. **A separate service comes later** (phase V3, with the MCP wrapper, §8.10). | **User decision** |
 | V3 | How does the coding agent reach it? | **The cloud environment's network secret** (Bearer on `api.akoro.name.ng`) already set up for the agent console. Same key, `Authorization: Bearer`. The coding agent never sees the key. | ✅ reachable today |
-| V4 | Which target first? | **Production, test accounts only** (tester01–50), dry by default, writes only on testers with cleanup. **Local** (the golden-path stack in the container) for pre-deploy checks. **Sandbox** (second Render service + Supabase) later. | Proposed — confirm |
+| V4 | Which target first? | **Production, with test learners and real users.** Test learners (tester01–50): all risk classes, writes with cleanup. **Real users: `read` and `dry` scenarios only** — never a real change to their data, never a message to them (§8.5). **Local** (golden-path stack) for pre-deploy checks; **sandbox** later. | **User decision** (real users in), writes kept to testers — see §16 |
 | V5 | How are LLM behaviours judged? | Deterministic assertions on tool calls, arguments, state and DB first. Open-ended text only by rubric with repeats; disagreement is `INCONCLUSIVE`, never PASS. | Proposed |
 
 ---
@@ -389,7 +392,7 @@ output (62 tools → ~40 read capabilities). **Write capabilities** are declared
 movement, role/tier changes, deleting accounts, mass messaging.
 
 **Grants** (`edu.capability_grants`): an admin turns a `locked` capability on
-for `all` or for one learner, with an expiry option. `forbidden` cannot be
+**for everyone** (decision S10), with an optional expiry. `forbidden` cannot be
 granted (enforced in code). A capability not in the registry does not exist —
 approving a request for one means "planned", i.e. developer work.
 
@@ -556,8 +559,8 @@ capability you don't have"):
 3. The agent tells the learner; the chat shows a learner-language change row:
    "Asked for permission to look at shared battle history".
 
-Admin decides (§7.12): **Approve** (grant for all / this learner, optional
-expiry), **Deny** (with a note shown to the learner), or **Plan** (capability
+Admin decides (§7.12): **Approve** (turns it on for everyone, optional
+expiry; every open request for that capability resumes), **Deny** (with a note shown to the learner), or **Plan** (capability
 doesn't exist yet — developer work). Requests expire after 14 days.
 
 ### 7.9 Verify before register 🆕 (uses the Gate engine, §9)
@@ -608,9 +611,10 @@ Every stage's output is verified before it is registered:
 ### 7.11 Resume after approval 🆕
 
 ```
-admin approves request R
-  → grant written (+ audit log)
-  → BullMQ job "resume-tool-request" {requestId}
+admin approves request R (capability C)
+  → grant for everyone written (+ audit log)
+  → one BullMQ job "resume-tool-request" per open request for C
+    (R and every other learner who asked for C)
        → claim R (status approved → resuming), idempotent
        → re-run create_tool(R.proposed_tool) as R.requester
        → created  → run the tool once with the stored inputs
@@ -631,8 +635,8 @@ approved — here are your weak topics that you also missed in past questions:
 - **Agent requests page** (existing) gets a **Capabilities** tab: request,
   learner, goal, the capability, the agent's context (last learner message,
   redacted), how many learners asked for the same capability, risk flags
-  (touches other learners' data, writes, bulk). Actions: Approve (all / this
-  learner / expiry), Deny (note), Plan. Every decision → `admin_audit_log`
+  (touches other learners' data, writes, bulk). Actions: Approve (everyone,
+  optional expiry), Deny (note), Plan. Every decision → `admin_audit_log`
   (new shared `auditAdmin()` helper).
 - **Agent tools page** 🆕: all created tools, filter by mode / status / usage;
   view definition + verification; disable or revoke; **Promote to platform**
@@ -784,14 +788,31 @@ coding agent's reports.
 
 | Target | What it is | Writes |
 |---|---|---|
-| `production` | The live API (`api.akoro.name.ng`). **Only tester accounts**: in `AGENT_CONSOLE_LEARNERS` **and** `@demo.akoro.app` **and** username `tester__`. | Only `write` scenarios, only with `VERIFY_ALLOW_WRITES=true`, only on testers, cleanup mandatory |
+| `production` · test learners | The live API (`api.akoro.name.ng`), accounts `tester01–50` (`@demo.akoro.app`). | `write` scenarios allowed with `VERIFY_ALLOW_WRITES=true`; cleanup mandatory |
+| `production` · real users | The live API, any learner account (decision V4) | **Never.** `read` and `dry` only: tools that change data are simulated, nothing is saved to their chats, nothing is sent to anyone |
 | `local` | The golden-path stack in the coding agent's container (API + PostgREST + Postgres + Redis, mock or real model) | Free (disposable) |
 | `sandbox` (later) | Second Render service + Supabase project, built from migrations + demo seeds | Free |
 
+**Running as a real user** (privacy rules):
+- Who: the run names the learner (`@username`, email or id); the gate resolves
+  it server-side. `AGENT_CONSOLE_LEARNERS` no longer limits the gate; it keeps
+  limiting the console's `live` mode.
+- Mode: forced `dry`; a `write` scenario naming a real user is refused
+  (`BLOCKED: real users are read-only`).
+- Nothing persists for them: no chat session, no memory, no follow-up, no
+  notification; agent-chat turns run without a `conversationId`.
+- Evidence is minimised: tool names, arguments, verdicts and counts are kept;
+  tool results and replies are stored truncated with emails, phones and names
+  redacted; message bodies are never stored. Real-user runs are kept 14 days
+  (testers 90).
+- Every real-user run writes `admin_audit_log` (who ran it, which learner,
+  which scenario, when).
+- Cost is platform-paid (`__feature: "verify"`), never the learner's coins.
+
 Always enforced: per-run timeout (default 120 s), max 2 concurrent runs,
 per-run and per-day model budget (platform-paid, `__feature: "verify"`),
-rate limit per key, redaction, no access to non-test accounts' data in
-evidence (DB helpers filter by the run's testers).
+rate limit per key, redaction, and DB evidence helpers filter to the run's
+own learner(s) only.
 
 ### 8.6 Verifying the agentic system
 
@@ -931,7 +952,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_agent_tools_owner_name_active
 CREATE TABLE IF NOT EXISTS edu.capability_grants (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   capability  text NOT NULL,
-  user_id     uuid REFERENCES public.users(id) ON DELETE CASCADE,   -- null = everyone
   granted_by  uuid NOT NULL REFERENCES public.users(id),
   request_id  uuid,
   expires_at  timestamptz,
@@ -1002,7 +1022,7 @@ Retention: verify runs 90 days; self-tool events 180 days.
 
 **Admin**
 - `GET /api/admin/agent-tool-requests?kind=capability` (existing route, new filter)
-- `POST /api/admin/agent-tool-requests/:id/decide` `{decision: approve|deny|plan, grant: {scope: all|user, expiresAt?}, note}`
+- `POST /api/admin/agent-tool-requests/:id/decide` `{decision: approve|deny|plan, expiresAt?, note}`
 - `GET /api/admin/agent-tools` · `POST /api/admin/agent-tools/:id/{disable|revoke|promote}`
 - `GET /api/admin/self-tooling/analytics`
 - `GET /api/admin/capability-grants` · `POST …/:id/revoke`
@@ -1112,7 +1132,8 @@ later phase is verified by it.
 | Sandbox escape (stage 3) | QuickJS in WASM, worker isolation, no bridge to writes, escape test pack, flag off by default |
 | Request spam / social engineering | Daily caps, dedupe, identical-request counts in admin, forbidden list cannot be approved |
 | Lost resumes | Durable BullMQ job + request `resume_status`; idempotent claim |
-| Gate damages production | Tester-only policy, writes off by default, mandatory cleanup, budget and concurrency caps |
+| Gate damages production | Real users read/dry only; writes only on testers, off by default, mandatory cleanup; budget and concurrency caps |
+| Gate exposes real users' data | Minimised, redacted evidence; 14-day retention; audit log per run; key-guarded API |
 | Gate gives false confidence | Fail-closed verdicts; INCONCLUSIVE for LLM disagreement; evidence from DB, not responses; SHA pinning |
 | LLM flakiness makes scenarios noisy | Deterministic checks first; repeats with pass rate; separate INCONCLUSIVE |
 | Contract tests pin chat source | Update pinned tests in the same change (known list in §6.1) |
@@ -1136,22 +1157,28 @@ later phase is verified by it.
 6. The coding agent can run any scenario/suite over HTTPS with the
    environment secret and get a persisted verdict with evidence and build SHA;
    FAIL / BLOCKED / ERROR / INCONCLUSIVE are never reported as verified.
-7. Production runs touch only tester accounts; every write is cleaned up and
-   cleanup failures are reported.
+7. Runs as real users never change their data or send anything, are
+   audit-logged and keep only minimised evidence; writes touch only test
+   learners, every write is cleaned up and cleanup failures are reported.
 
 ---
 
 ## 16. Open questions
 
-1. **S5 Tool reach** — confirm: learner-private with admin promotion?
-2. **S6 Writes** — confirm read-only for v1?
-3. **V2 Gate location** — confirm inside akoro-api (vs a separate service now)?
-4. **V4 Target** — confirm production-with-testers first, sandbox in V3?
-5. Should grants default to **all learners** or **only the requester** when an
-   admin approves a capability?
-6. Should a learner be able to **share** a tool with their study buddy or
+Decided 2026-10-16: S5 (private + admin promotion), S6 (read-only v1), V2
+(gate inside the API, separate service later), V4 (production with test
+learners **and real users**), S10 (approval turns a capability on for
+everyone).
+
+1. **Writes on real users.** The plan keeps real users read/dry only. Real
+   writes on a real account (e.g. actually scheduling a message, accepting a
+   challenge, spending coins) would change their data and could notify other
+   people. If that is ever needed, the proposal is: per-run opt-in by an admin
+   in the admin app, one named account, with cleanup — not available to the
+   coding agent's key.
+2. Should a learner be able to **share** a tool with their study buddy or
    class before admin promotion?
-7. Budget: who pays for **resumed** builds after approval — the learner (as
-   now) or the platform (it was our gap)?
-8. Do instructors get self-tooling for their own agent (instructor tools) in
-   a later phase, using the same registry with instructor-scoped views?
+3. Who pays for **resumed** builds after approval — the learner (as now) or the
+   platform (it was our gap)?
+4. Do instructors get self-tooling for their own agent in a later phase, using
+   the same registry with instructor-scoped views?
