@@ -22,7 +22,7 @@ export const LIMITS = {
   maxTools: Math.max(1, Number(process.env.SELF_TOOLING_MAX_TOOLS) || 20),
   inCatalogue: 8,
   runMs: 3_000,
-  builderCalls: 4,
+  builderCalls: 5,
 };
 
 const reject = (reason, extra = {}) => ({ status: "rejected", reason, ...extra });
@@ -118,7 +118,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     ev.stages_tried.push(stage);
     let feedback = null;
     let fallback = null;   // a verified build that returned nothing for every sample — kept if the repair is no better
-    for (let attempt = 1; attempt <= 2 && ev.builder_calls < LIMITS.builderCalls; attempt++) {
+    for (let attempt = 1; attempt <= 3 && ev.builder_calls < LIMITS.builderCalls; attempt++) {
       ev.builder_calls++;
       let built;
       try { built = await buildDefinition({ stage, goal, params, slice, feedback, learnerId, platformPays: dry }); }

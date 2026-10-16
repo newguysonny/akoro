@@ -675,7 +675,7 @@ approved — here are your weak topics that you also missed in past questions:
 | `create_tool` per learner per day | 5 |
 | Active learner tools | 20 (catalogue shows ≤ 8) |
 | Open capability requests per learner | 3 |
-| Builder model calls per `create_tool` | ≤ 6 (≤ 2 per stage incl. repair) |
+| Builder model calls per `create_tool` | ≤ 5 (≤ 3 per stage incl. repairs) |
 | Tool call runtime | recipe/spec 1.5 s, code 2 s |
 
 - **Billing**: builder calls are charged to the learner like chat
@@ -1143,13 +1143,19 @@ filter forced + every returned row re-checked: a foreign row stops the tool),
 `from`/`save`/`join` — and specs), `bind.js` (param subset + `$refs`),
 `builder.js` (fixed prompt, registry slice only, JSON out; learner-billed,
 platform-billed in dry runs), `pipeline.js` (stage 0 checks incl. forbidden
-goals, 5/day + 20 max, recipe → spec with one repair each, verify-before-
+goals, 5/day + 20 max, recipe → spec with up to two repairs each (≤ 5 builder calls), verify-before-
 register via the gate's assertion engine, save, run at once and return the
 answer; runtime re-checks capabilities every call; 3 failures → disabled),
 `routes.js` (`/api/self-tooling/tools` list/rename/turn off/delete), learner
 Settings → Agent → My tools. Agent Chat: `create_tool` tool; built tools join
 the learner's catalogue (8 most recent) and become callable in the same turn;
-dry runs build + verify but never save. Escalation (stage 4) is still a
+dry runs build + verify but never save. Validation follows each field and
+its type through every op (unknown fields, sums of timestamps, missing join
+keys, unused steps and part-param strings like `"$year-$month"` are
+rejected and fed back as repair hints); single items where lists belong are
+wrapped; `year`/`month` filters (`"this"` or a value) replace hard-coded
+dates; a filter on an optional param that wasn't given is skipped.
+Escalation (stage 4) is still a
 `rejected … needs a permission` answer until S3; code (stage 3) waits for S5.
 
 Planned scope:
