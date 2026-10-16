@@ -1367,6 +1367,35 @@ Decided 2026-10-16: S5 (private + admin promotion), S6 (read-only v1), V2
 learners **and real users**), S10 (approval turns a capability on for
 everyone).
 
+**Decided 2026-10-16 (owner):**
+- **Real users may get real writes in gate runs — YES**, under the design in
+  1 below (phase **V4**).
+- **Sharing a tool with a study buddy / class before promotion — NO.** Tools
+  stay private to their learner until an admin promotes them (S4).
+- **Instructors get self-tooling — YES**, as phase **S7** (below).
+
+### Phase V4 — Real-user writes (proposed design)
+- Only an **admin**, in the admin app, can start one: a single named real
+  account, one write scenario, one run. The coding agent's key can never do
+  it (the gate API refuses real-user writes without an admin approval token).
+- The approval is short-lived (e.g. 15 min), single-use and audit-logged
+  (who, which account, which scenario, why).
+- Scenarios declare what they write; only scenarios marked `realUserSafe`
+  (fully cleaned up, nothing sent to other people, no coins spent) can be
+  approved. Cleanup is verified (`writes.no_residue` for that account) and a
+  failed cleanup is reported to the admin at once.
+- Optional: notify the account owner afterwards ("a test ran on your account").
+
+### Phase S7 — Instructor self-tooling (proposed design)
+- Same pipeline (lookup → recipe/spec/code → verify → save; escalation;
+  confirm-before-write), with **instructor-scoped Data Views**: their classes,
+  students' submissions and grades in their classes, activities, attendance —
+  never another instructor's classes, never a learner's private chats or notes.
+- Instructor capabilities wrap the existing instructor chat tools; writes
+  (e.g. bulk feedback, rescheduling) stay locked and need confirmation.
+- Gate: an instructor tester account + scenarios mirroring the learner ones,
+  plus scope tests (no other instructor's class, no private learner data).
+
 1. **Writes on real users.** The plan keeps real users read/dry only. Real
    writes on a real account (e.g. actually scheduling a message, accepting a
    challenge, spending coins) would change their data and could notify other
