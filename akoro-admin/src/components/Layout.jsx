@@ -40,6 +40,7 @@ const NAV_GROUPS = [
     { to: '/ai-spend',  icon: Cpu,          label: 'AI spend' },
     { to: '/evals',     icon: FlaskConical, label: 'Evals' },
     { to: '/agent-tool-requests', icon: Wrench, label: 'Agent requests' },
+    { to: '/agent-tools', icon: Layers, label: 'Agent tools' },
   ] },
   { label: 'People', icon: Users, children: [
     { to: '/users',       icon: Users,         label: 'Users' },
