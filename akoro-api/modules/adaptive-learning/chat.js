@@ -4060,8 +4060,22 @@ router.post("/agent", async (req, res) => {
       : selfToolOn
       ? "\n\n## Building tools (preview)\nWhen the learner asks for something none of your tools gives directly — a total, average, count or breakdown over their own data (hours of sessions per month, tasks finished per week, accuracy by year) — don't say you don't have the data and don't piece it together from unrelated tools. Call create_tool (schema_lookup first if unsure what it can use), then answer from its result. The same goes for comparisons with other learners (how others scored in battles they played together): create_tool either builds it or, if it needs a permission, asks an admin and the answer comes back in this chat — tell the learner that plainly. Only say it can't be done after create_tool is rejected, and say why."
       : "";
+    // Who this learner's agent is (their protégé): its name, level and
+    // sessions from edu.student_agents, and the learner's first name.
+    const protege = role === "student" ? await (async () => {
+      const [{ data: a }, { data: u }] = await Promise.all([
+        db.schema("edu").from("student_agents").select("name, level, total_sessions").eq("student_id", req.user.id).limit(1).maybeSingle(),
+        db.from("users").select("full_name, username").eq("id", req.user.id).maybeSingle(),
+      ]);
+      return {
+        agentName: (a?.name || safeAgentName || "Akoro").replace(/[\r\n]+/g, " ").slice(0, 80),
+        learnerName: String(u?.full_name || u?.username || "your learner").split(" ")[0].slice(0, 40),
+        level: Number(a?.level) || 1, sessions: Number(a?.total_sessions) || 0,
+      };
+    })().catch(() => null) : null;
     const systemContent = (await assembleChatDoctrine({
       agentName: safeAgentName || "Akoro",
+      protege,
       role,
       think: isThink,
       research: isResearch,

@@ -133,3 +133,31 @@ export const dryRunNoWrites = {
     ctx.expect.eq("database unchanged", after, before);
   },
 };
+
+export const protegeIdentity = {
+  name: "chat.protege_identity", area: "agent-chat", risk: "dry", repeats: 3,
+  description: "The learner's agent speaks as their protégé: it knows its own name, says the learner teaches it, and asks to be taught instead of tutoring an untaught topic.",
+  params: { learner: { default: "@tester01" } },
+  async run(ctx, p) {
+    const me = await ctx.as(p.learner);
+    const [agent] = await ctx.db.rows("edu.student_agents", { student_id: me.id }, { columns: "name", limit: 1 });
+    if (!agent?.name) ctx.expect.blocked(`${p.learner} has no learning agent`);
+
+    const who = await ctx.agent.chat({ as: p.learner, model: p.model, prompt: "Who are you, and how do you learn things?" });
+    ctx.expect.eq("turn answered", who.status, 200);
+    const intro = String(who.reply || "");
+    ctx.expect.ok(`names itself (${agent.name})`, intro.toLowerCase().includes(agent.name.toLowerCase()), intro.slice(0, 200));
+    ctx.expect.ok("says the learner teaches it", /\b(you teach|you('ve| have) taught|teach(ing)? me|learn from you|taught by you)\b/i.test(intro), intro.slice(0, 200));
+    ctx.expect.ok("doesn't call itself a tutor or general assistant", !/\bI(['’]m| am) (your|an?) (personal )?(tutor|AI assistant|assistant)\b/i.test(intro), intro.slice(0, 200));
+
+    // The Krebs cycle: far outside what any test learner has taught their agent.
+    const ask = await ctx.agent.chat({ as: p.learner, model: p.model, prompt: "Explain the Krebs cycle to me step by step." });
+    ctx.expect.eq("turn answered", ask.status, 200);
+    const reply = String(ask.reply || "");
+    ctx.expect.ok("asks to be taught or says it wasn't taught",
+      (ask.tools || []).some((t) => t.tool === "ask_to_be_taught") || /\b(haven['’]?t|have not|not yet) (been )?taught\b|\bteach me\b/i.test(reply), reply.slice(0, 200));
+    ctx.expect.ok("doesn't tutor the steps itself", !/\b(acetyl[- ]?CoA|oxaloacetate|isocitrate|succinate)\b/i.test(reply), reply.slice(0, 200));
+    ctx.expect.noBackendNames("reply has no backend names", reply);
+    ctx.expect.loopHealthy(ask);
+  },
+};
