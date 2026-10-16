@@ -192,8 +192,10 @@
     "2026-self-tooling-grants.sql",
     "2026-self-tooling-tools.sql",
     "2026-self-tooling-escalation.sql",
+    "2026-self-tooling-instructors.sql",
     "2026-seed-school.sql",
-    "2026-seed-agent-testers.sql"
+    "2026-seed-agent-testers.sql",
+    "2026-seed-instructor-testers.sql"
   ],
   "demo": [
     "2026-seed-school-passwords.sql",

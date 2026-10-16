@@ -284,7 +284,7 @@ export const promotionCheck = {
   params: { toolId: { default: null }, testers: { default: DEFAULT_PROMOTION_TESTERS } },
   async run(ctx, p) {
     if (!p.toolId) ctx.expect.blocked("pass { toolId }");
-    const t = (await ctx.db.rows("edu.agent_tools", { id: p.toolId }, { columns: "id, scope, status, definition, params_schema, capabilities, views, verification", limit: 1 }))[0];
+    const t = (await ctx.db.rows("edu.agent_tools", { id: p.toolId }, { columns: "id, scope, audience, status, definition, params_schema, capabilities, views, verification", limit: 1 }))[0];
     if (!t) ctx.expect.blocked("no such tool");
     const { validateDefinition, runDefinition } = await import("../../self-tooling/interpreters.js");
     const { coerceInput } = await import("../../self-tooling/bind.js");
@@ -294,7 +294,9 @@ export const promotionCheck = {
     const { selfToolDeps } = await import("../../adaptive-learning/chat.js");
     const { runDry } = await import("../../../lib/dryRunContext.js");
 
-    const v = await validateDefinition(structuredClone(t.definition), t.params_schema);
+    const audience = t.audience || "learner";
+    const role = audience === "instructor" ? "instructor" : "student";
+    const v = await validateDefinition(structuredClone(t.definition), t.params_schema, { audience });
     ctx.expect.ok("definition validates", v.ok, v.errors);
     for (const c of t.capabilities || []) {
       ctx.expect.eq(`capability ${c} is on`, await capabilityStatus(c), "enabled");
@@ -305,13 +307,14 @@ export const promotionCheck = {
     let withRows = 0;
     for (const handle of testers) {
       const acct = await ctx.as(handle);
-      if (!acct.tester) ctx.expect.blocked(`${handle} isn't a test learner`);
+      if (!acct.tester) ctx.expect.blocked(`${handle} isn't a test account`);
+      if ((acct.role === "instructor") !== (audience === "instructor")) ctx.expect.blocked(`${handle} is a ${acct.role} — this is a${audience === "instructor" ? "n instructor" : " learner"} tool`);
       let any = false;
       for (const [i, s] of samples.entries()) {
         const t0 = Date.now();
         let out = null, err = null;
         // Read-only, and dry anyway: nothing a capability step calls can change data.
-        try { out = await runDry(() => runDefinition(structuredClone(t.definition), coerceInput(t.params_schema, s), { learnerId: acct.id, callCapability: selfToolDeps(acct.id).callCapability })); }
+        try { out = await runDry(() => runDefinition(structuredClone(t.definition), coerceInput(t.params_schema, s), { learnerId: acct.id, callCapability: selfToolDeps(acct.id, role).callCapability })); }
         catch (e) { err = e.message; }
         const ms = Date.now() - t0;
         ctx.expect.ok(`${acct.username} sample ${i + 1} runs`, !err && Array.isArray(out?.rows), err);
@@ -511,5 +514,94 @@ export const writeConfirm = {
     ctx.expect.ok("the tasks are done now", (await statusOf()).every((s) => s === "done"), await statusOf());
     const twice = await ctx.http({ as: p.learner, method: "POST", path: `/api/self-tooling/confirmations/${card2.confirmationId}/confirm` });
     ctx.expect.status("can't be used twice", twice, 409);
+  },
+};
+
+// ── Phase S7: instructors ────────────────────────────────────────────────
+/** Truth from the database: per activity of this instructor, completed students and their average grade. */
+async function activityTruth(ctx, instructorId) {
+  const acts = await ctx.db.rows("edu.self_study_assignments", { created_by: instructorId }, { columns: "id, title" });
+  const out = [];
+  for (const a of acts) {
+    const t = (await ctx.db.rows("edu.self_study_targets", { assignment_id: a.id }, { columns: "status, grade" })).filter((x) => x.grade != null);
+    out.push({ title: a.title, graded: t.length, avg: t.length ? t.reduce((n, x) => n + x.grade, 0) / t.length : null });
+  }
+  return out;
+}
+const rowFor = (rows, title) => rows.find((r) => Object.values(r).some((v) => v === title));
+const hasNumberNear = (row, n, tol = 0.6) => Object.values(row || {}).some((v) => typeof v === "number" && Math.abs(v - n) <= tol);
+
+export const instructorToolMatchesDb = {
+  name: "selftool.instructor_tool_matches_db", area: "self-tooling", risk: "dry",
+  description: "An instructor's tool (average grade per activity across their classes) is built from instructor views only, and its numbers equal a direct database query.",
+  params: { instructor: { default: "@tester51" } },
+  async run(ctx, p) {
+    await needCreate(ctx);
+    const me = await ctx.as(p.instructor);
+    if (me.role !== "instructor") ctx.expect.blocked(`${p.instructor} isn't an instructor (seed 2026-seed-instructor-testers.sql)`);
+    const truth = await activityTruth(ctx, me.id);
+    if (!truth.length) ctx.expect.blocked("the instructor tester has no activities — seed missing");
+    const { executeChatTool } = await import("../../adaptive-learning/chat.js");
+    const { runDry } = await import("../../../lib/dryRunContext.js");
+    const r = await runDry(() => executeChatTool("create_tool", {
+      goal: "Average grade and number of graded students for each of my activities", name: "activity_grade_summary", label: "Grades by activity",
+      hint: { views: ["my_activity_results"] } }, me.id, { role: "instructor", channel: "verify" }));
+    ctx.note(`definition: ${JSON.stringify(r?.definition || null).slice(0, 300)}`);
+    ctx.expect.eq("created", r?.status, "created");
+    const rows = r?.result?.rows || [];
+    ctx.expect.ok("reads only instructor views", JSON.stringify(r?.definition || {}).includes("my_activity_results") && !/"my_(tasks|goals|chats|battles|weak_topics)"/.test(JSON.stringify(r?.definition || {})));
+    for (const a of truth.filter((x) => x.graded)) {
+      const row = rowFor(rows, a.title);
+      ctx.expect.ok(`"${a.title}" is listed`, !!row, rows.slice(0, 5));
+      ctx.expect.ok(`"${a.title}" average grade ${a.avg.toFixed(1)}`, hasNumberNear(row, a.avg), row);
+    }
+  },
+};
+
+export const instructorScope = {
+  name: "selftool.instructor_scope", area: "self-tooling", risk: "read",
+  description: "Instructor views hold only that instructor's own classes and activities (never another teacher's), show students by name only, and learners can't reach them.",
+  params: { a: { default: "@tester51" }, b: { default: "@tester52" }, learner: { default: "@tester01" } },
+  async run(ctx, p) {
+    const A = await ctx.as(p.a), B = await ctx.as(p.b), L = await ctx.as(p.learner);
+    if (A.role !== "instructor" || B.role !== "instructor") ctx.expect.blocked("instructor testers missing (seed 2026-seed-instructor-testers.sql)");
+    const { readView } = await import("../../self-tooling/viewRuntime.js");
+    const { validateDefinition } = await import("../../self-tooling/interpreters.js");
+    const bResults = await readView("my_activity_results", B.id);
+    const aResults = await readView("my_activity_results", A.id);
+    ctx.expect.gte("instructor B sees their own results", bResults.length, 1);
+    ctx.expect.ok("B never sees A's activities", bResults.every((r) => !String(r.activity || "").includes("Tester Class A")), bResults.map((r) => r.activity));
+    ctx.expect.ok("A never sees B's activities", aResults.every((r) => !String(r.activity || "").includes("Tester Class B")), aResults.map((r) => r.activity));
+    const bStudents = await readView("my_class_students", B.id);
+    ctx.expect.ok("B's roster is only Class B", bStudents.length > 0 && bStudents.every((r) => r.class === "Tester Class B"), bStudents.map((r) => r.class));
+    ctx.expect.ok("students by name only (no ids, emails or contact details)", bStudents.every((r) => Object.keys(r).every((k) => ["student", "class", "status", "joined_at"].includes(k))), Object.keys(bStudents[0] || {}));
+    const learnerRows = await readView("my_activity_results", L.id);
+    ctx.expect.eq("a learner owns no instructor results", learnerRows.length, 0);
+    const v = await validateDefinition({ kind: "spec", from: "my_activity_results" }, {}, { audience: "learner" });
+    ctx.expect.ok("learner tools can't use instructor views", v.errors.some((e) => /isn't available to learner tools/.test(e)), v.errors);
+    const w = await validateDefinition({ kind: "spec", from: "my_tasks" }, {}, { audience: "instructor" });
+    ctx.expect.ok("instructor tools can't use learner views", w.errors.some((e) => /isn't available to instructor tools/.test(e)), w.errors);
+  },
+};
+
+export const instructorAgentBuilds = {
+  name: "selftool.instructor_agent_builds", area: "self-tooling", risk: "dry", repeats: 3,
+  description: "Asked in chat for the average grade on each of their activities, the instructor's agent builds a tool and answers from it — with the database's numbers.",
+  params: { instructor: { default: "@tester51" } },
+  async run(ctx, p) {
+    await needCreate(ctx);
+    const me = await ctx.as(p.instructor);
+    if (me.role !== "instructor") ctx.expect.blocked(`${p.instructor} isn't an instructor`);
+    const truth = (await activityTruth(ctx, me.id)).filter((x) => x.graded);
+    const turn = await ctx.agent.chat({ as: p.instructor, model: p.model,
+      prompt: "What's the average grade on each of my activities, and how many students have been graded on each?" });
+    ctx.expect.eq("turn answered", turn.status, 200);
+    const built = (turn.tools || []).filter((t) => t.tool === "create_tool").at(-1);
+    ctx.expect.ok("agent called create_tool", !!built, (turn.tools || []).map((t) => t.tool));
+    ctx.expect.eq("tool built", built?.result?.status, "created");
+    const rows = built?.result?.result?.rows || [];
+    for (const a of truth) ctx.expect.ok(`"${a.title}" average ${a.avg.toFixed(1)} in the tool's answer`, hasNumberNear(rowFor(rows, a.title), a.avg), rows.slice(0, 4));
+    ctx.expect.noBackendNames("reply has no backend names", turn.reply);
+    ctx.expect.loopHealthy(turn);
   },
 };

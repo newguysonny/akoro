@@ -12,7 +12,8 @@ const toolNames = new Set([...chatSrc.matchAll(/^\s{4}name: "([a-z_]+)",$/gm)].m
 test("every view is scoped: self views name an owner column; public views fix their filter", () => {
   for (const [name, v] of Object.entries(DATA_VIEWS)) {
     assert.ok(["self", "public"].includes(v.scope), `${name}: scope`);
-    if (v.scope === "self") assert.ok(v.source.owner && (typeof v.source.owner === "string" || Array.isArray(v.source.owner)), `${name}: owner`);
+    // Owned directly (owner column) or through a parent row (ownerPath "relation.column", joined !inner).
+    if (v.scope === "self") assert.ok((v.source.owner && (typeof v.source.owner === "string" || Array.isArray(v.source.owner))) || /^[a-z_]+\.[a-z_]+$/.test(v.source.ownerPath || ""), `${name}: owner`);
     if (v.scope === "public") assert.ok(v.source.where && Object.keys(v.source.where).length, `${name}: fixed filter`);
     assert.ok(Object.keys(v.fields).length >= 2, `${name}: allowlisted fields`);
     assert.ok(!("*" in v.fields), `${name}: never *`);
@@ -70,9 +71,9 @@ test("wiring: off by default, allow-listed, gated in the catalogue and in the to
   assert.match(access, /export const selfToolingEnabled = \(\) => on\("AKORO_SELF_TOOLING_ENABLED"\);/);
   assert.match(access, /export const selfToolingRealUsers = \(\) => on\("AKORO_SELF_TOOLING_REAL_USERS"\);/);
   assert.match(chatSrc, /self_tooling: selfToolingEnabled\(\) && selfTooling,/);
-  assert.match(chatSrc, /const selfToolOn = role === "student" && await selfToolingAllowedFor\(req\.user\.id\);/);
+  assert.match(chatSrc, /const selfToolOn = \(role === "student" \|\| role === "instructor"\) && await selfToolingAllowedFor\(req\.user\.id\);/);
   assert.match(chatSrc, /selfTooling: selfToolOn,/);
-  assert.match(chatSrc, /case "schema_lookup": \{\n\s+if \(role === "instructor"\)[^\n]*\n\s+if \(!\(await selfToolingAllowedFor\(studentId\)\)\)/);
+  assert.match(chatSrc, /case "schema_lookup": \{\n\s+if \(!SELF_TOOLING_ROLES\.has\(role\)\)[^\n]*\n\s+if \(!\(await selfToolingAllowedFor\(studentId\)\)\)/);
   const sql = readFileSync(new URL("../../migrations/2026-self-tooling-grants.sql", import.meta.url), "utf8");
   assert.match(sql, /revoked_at\s+timestamptz/);
   assert.doesNotMatch(sql, /user_id/, "grants are for everyone (decision S10)");

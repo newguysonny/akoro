@@ -16,7 +16,7 @@ import { CAPABILITIES } from "./capabilities.js";
 
 const edu = () => db.schema("edu");
 const NAME = /^[a-z][a-z0-9_]{2,47}$/;
-const LIST_COLUMNS = "id, owner_id, scope, name, label, goal, mode, status, version, capabilities, views, usage_count, fail_streak, last_used_at, promoted_from, created_at, updated_at, verification";
+const LIST_COLUMNS = "id, owner_id, scope, audience, name, label, goal, mode, status, version, capabilities, views, usage_count, fail_streak, last_used_at, promoted_from, created_at, updated_at, verification";
 
 const httpError = (status, message, extra = {}) => Object.assign(new Error(message), { status, ...extra });
 
@@ -36,7 +36,7 @@ async function owners(rows) {
 }
 
 const publicTool = (t, who) => ({
-  id: t.id, scope: t.scope, name: t.name, label: t.label, goal: t.goal, mode: t.mode, status: t.status, version: t.version,
+  id: t.id, scope: t.scope, audience: t.audience || "learner", name: t.name, label: t.label, goal: t.goal, mode: t.mode, status: t.status, version: t.version,
   capabilities: t.capabilities || [], views: t.views || [], uses: t.usage_count || 0, failStreak: t.fail_streak || 0,
   lastUsedAt: t.last_used_at, createdAt: t.created_at, promotedFrom: t.promoted_from || null,
   owner: t.owner_id ? (who.get(t.owner_id) || { name: null, username: null }) : null,
@@ -97,7 +97,7 @@ export async function promoteTool({ id, name, label, goal, replaces = [], admin,
   for (const c of t.capabilities || []) if (CAPABILITIES[c]?.kind !== "read") throw httpError(422, `Uses ${c}, which isn't a read capability`);
 
   // The gate decides (plan §9): the tool's samples on three test learners.
-  const run = await runGate(id);
+  const run = await runGate(id, t.audience || "learner");
   if (run.verdict !== "PASS") {
     await audit(admin, "agent_tool.promote_blocked", id, null, { runId: run.id, verdict: run.verdict, reason: run.reason });
     throw httpError(422, `The promotion check didn't pass (${run.verdict}${run.reason ? `: ${String(run.reason).slice(0, 200)}` : ""}).`, { runId: run.id, verdict: run.verdict });
@@ -105,7 +105,7 @@ export async function promoteTool({ id, name, label, goal, replaces = [], admin,
 
   const now = new Date().toISOString();
   const { data: row, error } = await edu().from("agent_tools").insert({
-    owner_id: null, scope: "platform", name: finalName,
+    owner_id: null, scope: "platform", audience: t.audience || "learner", name: finalName,
     label: String(label || t.label).trim().slice(0, 60), goal: String(goal || t.goal).trim().slice(0, 300),
     mode: t.mode, definition: t.definition, params_schema: t.params_schema, capabilities: t.capabilities, views: t.views,
     status: "active", version: 1, promoted_from: t.id, usage_count: 0,

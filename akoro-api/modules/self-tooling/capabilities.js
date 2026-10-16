@@ -11,6 +11,8 @@
  * `tool` is the existing learner chat tool the capability runs through, so every
  * permission, scope and privacy check that tool has still applies (§7.5).
  * `returns` names the fields a recipe can filter, sort and join on.
+ * `audience` "instructor" marks capabilities only instructor tools may use
+ * (default "learner"); a tool never mixes the two (S7).
  */
 const read = (tool, description, keywords, returns) => ({ kind: "read", status: "enabled", scope: "self", tool, description, keywords, returns });
 const locked = (description, keywords, extra = {}) => ({ kind: "write", status: "locked", scope: "self", description, keywords, ...extra });
@@ -42,6 +44,9 @@ export const CAPABILITIES = Object.freeze({
   "agents.search":          { ...read("search_agents", "Find other learners' agents who are visible to this learner (privacy, blocks and visibility applied).", ["agent", "agents", "classmate", "online", "learners", "who"], ["agents[].username", "agents[].level", "agents[].xp", "agents[].presence", "agents[].subjects"]), scope: "network" },
   "challenges.search":      { ...read("search_challenge_requests", "Open challenge requests the learner could accept.", ["challenge", "request", "open"], ["requests[].title", "requests[].subject", "requests[].battleType"]), scope: "network" },
   "blogs.search_public":    { ...read("search_blog_posts", "Search published Akoro blog articles.", ["blog", "article", "how to", "study tips"], ["posts[].title", "posts[].slug", "posts[].category"]), scope: "public" },
+
+  // ── read: instructors (S7) — through the instructor chat tools, so their checks apply ──
+  "activities.outcomes":    { ...read("check_activity_outcomes", "How one of the instructor's assigned activities went: completion counts and class-average understanding, confusion and engagement (args: assignmentId; without it, their recent activities).", ["outcome", "outcomes", "how did", "went", "understanding", "engagement", "confusion"], ["recent[].title", "recent[].type", "completed", "assigned", "averages"]), audience: "instructor" },
 
   // ── locked: requestable, need an admin grant ──────────────────────────
   // Runs in capRuntime.js (no chat tool): other players' results in battles the learner took part in.
@@ -75,3 +80,7 @@ export const FORBIDDEN = Object.freeze([
 ]);
 
 export const forbiddenFor = (goal) => FORBIDDEN.filter((x) => x.pattern.test(String(goal || "")) || (x.named && x.named.test(String(goal || ""))));
+
+/** Who a capability is for: "learner" (default) or "instructor". */
+export const capAudience = (cap) => cap?.audience || "learner";
+

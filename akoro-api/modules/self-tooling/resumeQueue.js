@@ -54,7 +54,7 @@ export async function enqueueResume(requestId) {
 async function runResume(requestId) {
   const [{ createTool }, { selfToolDeps }] = await Promise.all([import("./pipeline.js"), import("../adaptive-learning/chat.js")]);
   return resumeRequest(requestId, {
-    createTool: (args) => createTool({ ...args, ...selfToolDeps(args.learnerId) }),
+    createTool: (args) => createTool({ ...args, ...selfToolDeps(args.learnerId, args.audience === "instructor" ? "instructor" : "student") }),
   });
 }
 
