@@ -6,20 +6,32 @@
  * already manage; administrators cannot provision an integration from here.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { ClipboardList, RefreshCw, Search, ShieldCheck, Wrench } from 'lucide-react';
+import { ClipboardList, KeyRound, RefreshCw, Search, ShieldCheck, Wrench } from 'lucide-react';
 
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Sel, Skeleton, Toast, Txa } from '../components/Primitives.jsx';
-import { apiGet, apiPatch } from '../services/api.js';
+import { apiGet, apiPatch, apiPost } from '../services/api.js';
 import { AMBER, BORDER, GREEN, INK, LIGHT, MUTED, MUTED2, RED, WHITE, FONT, PURPLE, BLUE } from '../constants.js';
 
 const STATUS = {
   new:          { label: 'New',          color: AMBER,  bg: '#FFF7ED' },
   under_review: { label: 'Under review', color: BLUE,   bg: '#EFF6FF' },
   planned:      { label: 'Planned',      color: PURPLE, bg: '#F5F3FF' },
+  approved:     { label: 'Approved',     color: GREEN,  bg: '#ECFDF5' },
   declined:     { label: 'Declined',     color: RED,    bg: '#FEF2F2' },
   implemented:  { label: 'Implemented',  color: GREEN,  bg: '#ECFDF5' },
+  expired:      { label: 'Expired',      color: MUTED,  bg: LIGHT },
 };
+// Statuses a plain review can set; approved/expired come from Decide and the expiry sweep.
+const REVIEW_STATUSES = ['new', 'under_review', 'planned', 'declined', 'implemented'];
+
+const KINDS = [
+  { key: 'tool', label: 'Tool ideas' },
+  { key: 'capability', label: 'Permissions' },
+  { key: 'grants', label: 'Granted' },
+];
+
+const RESUME = { waiting: 'Waiting', resuming: 'Resuming…', resumed: 'Answered in chat', failed: 'Resume failed', expired: 'Expired', cancelled: 'Cancelled' };
 
 const CATEGORIES = {
   study_support: 'Study support',
@@ -53,6 +65,7 @@ export default function AgentToolRequestsPage() {
   const [statusCounts, setStatusCounts] = useState({});
   const [total, setTotal] = useState(0);
   const [activeStatus, setActiveStatus] = useState('');
+  const [kind, setKind] = useState('tool');
   const [search, setSearch] = useState('');
   const [submittedSearch, setSubmittedSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -64,7 +77,8 @@ export default function AgentToolRequestsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ limit: '100' });
+      if (kind === 'grants') { setLoading(false); return; }
+      const params = new URLSearchParams({ limit: '100', kind });
       if (activeStatus) params.set('status', activeStatus);
       if (submittedSearch) params.set('search', submittedSearch);
       const result = await apiGet(`/api/admin/agent-tool-requests?${params}`);
@@ -77,7 +91,7 @@ export default function AgentToolRequestsPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeStatus, submittedSearch]);
+  }, [activeStatus, submittedSearch, kind]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -91,6 +105,24 @@ export default function AgentToolRequestsPage() {
       await load();
     } catch (e) {
       setToast({ type: 'error', message: e.message || 'Could not save this review.' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function decide({ decision, note, expiresInDays }) {
+    if (!selected) return;
+    setBusy(true);
+    try {
+      const expiresAt = expiresInDays ? new Date(Date.now() + Number(expiresInDays) * 86_400_000).toISOString() : null;
+      const result = await apiPost(`/api/admin/agent-tool-requests/${selected.id}/decide`, { decision, note, expiresAt });
+      setToast({ type: 'success', message: decision === 'approve'
+        ? `Approved for everyone — resuming ${result.resuming} learner request${result.resuming === 1 ? '' : 's'}.`
+        : decision === 'deny' ? 'Declined — the learner was told in their chat.' : 'Marked as planned — the learner was told.' });
+      setSelected(null);
+      await load();
+    } catch (e) {
+      setToast({ type: 'error', message: e.message || 'Could not save the decision.' });
     } finally {
       setBusy(false);
     }
@@ -123,6 +155,14 @@ export default function AgentToolRequestsPage() {
           </div>
         </div>
 
+        <div role="tablist" style={{ display: 'flex', gap: 6, marginBottom: 14, borderBottom: `1px solid ${BORDER}` }}>
+          {KINDS.map((k) => <button key={k.key} role="tab" aria-selected={kind === k.key} onClick={() => { setKind(k.key); setActiveStatus(''); }} style={{
+            border: 'none', background: 'none', padding: '9px 12px', cursor: 'pointer', fontFamily: FONT, fontSize: 13,
+            fontWeight: kind === k.key ? 700 : 600, color: kind === k.key ? INK : MUTED,
+            borderBottom: `2px solid ${kind === k.key ? AMBER : 'transparent'}`, marginBottom: -1,
+          }}>{k.label}</button>)}
+        </div>
+        {kind === 'grants' ? <GrantsPanel onToast={setToast} /> : <>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', marginBottom: 16 }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
             {filterButton('', 'All')}
@@ -149,8 +189,11 @@ export default function AgentToolRequestsPage() {
             {requests.length === 0 ? <EmptyState activeStatus={activeStatus} hasSearch={!!submittedSearch} /> : <RequestList requests={requests} onOpen={setSelected} />}
           </div>
         )}
+        </>}
       </div>
-      <ReviewModal request={selected} busy={busy} onClose={() => setSelected(null)} onSave={saveReview} />
+      {selected?.kind === 'capability'
+        ? <DecideModal request={selected} busy={busy} onClose={() => setSelected(null)} onDecide={decide} />
+        : <ReviewModal request={selected} busy={busy} onClose={() => setSelected(null)} onSave={saveReview} />}
     </PageLayout>
   );
 }
@@ -171,13 +214,15 @@ function RequestList({ requests, onOpen }) {
       const person = request.requester?.fullName || request.requester?.username || request.requester?.email || 'Learner account';
       return <button key={request.id} onClick={() => onOpen(request)} style={{ width: '100%', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 16, textAlign: 'left', padding: '16px', border: 'none', borderBottom: `1px solid ${BORDER}`, background: WHITE, cursor: 'pointer', fontFamily: FONT }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ color: INK, fontSize: 14, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{request.title}</div>
-          <div style={{ color: MUTED, fontSize: 12.5, lineHeight: 1.45, marginTop: 5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{request.description}</div>
+          <div style={{ color: INK, fontSize: 14, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{request.capability?.tool?.label || request.title}</div>
+          <div style={{ color: MUTED, fontSize: 12.5, lineHeight: 1.45, marginTop: 5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{request.capability ? `${request.capability.goal || ''} — needs: ${request.capability.does || request.capability.name}` : request.description}</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, color: MUTED2, fontSize: 11.5, marginTop: 9 }}>
             <span>{person}</span><span>•</span><span>{formatWhen(request.createdAt)}</span>
+            {request.capability?.askedBy > 1 && <><span>•</span><span>{request.capability.askedBy} learners asked</span></>}
+            {request.capability?.resumeStatus && request.status === 'approved' && <><span>•</span><span>{RESUME[request.capability.resumeStatus] || request.capability.resumeStatus}</span></>}
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, flexWrap: 'wrap', justifyContent: 'flex-end' }}><CategoryPill category={request.category} /><StatusPill status={request.status} /></div>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, flexWrap: 'wrap', justifyContent: 'flex-end' }}>{request.capability ? <RiskPills risk={request.capability.risk} /> : <CategoryPill category={request.category} />}<StatusPill status={request.status} /></div>
       </button>;
     })}
   </div>;
@@ -203,7 +248,7 @@ function ReviewModal({ request, busy, onClose, onSave }) {
     </div>
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, .55fr) minmax(0, 1.45fr)', gap: 12, alignItems: 'start' }}>
       <Sel label="Review status" value={status} onChange={(event) => setStatus(event.target.value)}>
-        {Object.entries(STATUS).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}
+        {REVIEW_STATUSES.map((key) => <option key={key} value={key}>{STATUS[key].label}</option>)}
       </Sel>
       <Txa label="Internal review note" value={adminNote} onChange={(event) => setAdminNote(event.target.value.slice(0, 1000))} placeholder="Why this is planned, declined, or needs follow-up…" rows={4} />
     </div>
@@ -212,4 +257,89 @@ function ReviewModal({ request, busy, onClose, onSave }) {
       <div style={{ display: 'flex', gap: 8 }}><Btn variant="secondary" onClick={onClose} disabled={busy}>Cancel</Btn><Btn onClick={() => onSave({ status, adminNote })} disabled={busy}>{busy ? 'Saving…' : 'Save review'}</Btn></div>
     </div>
   </Modal>;
+}
+
+function RiskPills({ risk = {} }) {
+  const pill = (text, color, bg) => <span key={text} style={{ display: 'inline-flex', padding: '4px 9px', borderRadius: 999, background: bg, color, fontFamily: FONT, fontSize: 11, fontWeight: 700 }}>{text}</span>;
+  return <>
+    {risk.othersData && pill("Other learners' data", AMBER, '#FFF7ED')}
+    {risk.writes && pill('Changes data', RED, '#FEF2F2')}
+    {!risk.othersData && !risk.writes && pill('Own data, read-only', GREEN, '#ECFDF5')}
+  </>;
+}
+
+/** A permission the learner's agent asked for: approve turns it on for EVERYONE. */
+function DecideModal({ request, busy, onClose, onDecide }) {
+  const [note, setNote] = useState('');
+  const [expiresInDays, setExpiresInDays] = useState('');
+  useEffect(() => { setNote(''); setExpiresInDays(''); }, [request]);
+  const c = request.capability || {};
+  const open = ['new', 'under_review', 'planned'].includes(request.status);
+  const person = request.requester?.fullName || request.requester?.username || request.requester?.email || 'Learner account';
+  const cell = (label, value) => <div><div style={{ color: MUTED2, marginBottom: 3 }}>{label}</div><div style={{ color: INK, fontWeight: 600 }}>{value}</div></div>;
+  return <Modal open={!!request} onClose={busy ? () => {} : onClose} title="Permission request" width={720}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 15 }}><RiskPills risk={c.risk} /><StatusPill status={request.status} /></div>
+    <h3 style={{ margin: '0 0 7px', color: INK, fontFamily: FONT, fontSize: 17 }}>{c.tool?.label || request.title}</h3>
+    <p style={{ margin: '0 0 6px', color: INK, fontFamily: FONT, fontSize: 13.5, lineHeight: 1.6 }}><strong>Learner's goal:</strong> {c.goal || '—'}</p>
+    <p style={{ margin: '0 0 16px', color: MUTED, fontFamily: FONT, fontSize: 13.5, lineHeight: 1.6 }}><strong>Needs:</strong> {c.does || c.name} <code style={{ fontSize: 12 }}>{c.name}</code></p>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, padding: 12, background: LIGHT, borderRadius: 10, marginBottom: 18, fontFamily: FONT, fontSize: 12 }}>
+      {cell('Requested by', person)}
+      {cell('Learners asking', c.askedBy ?? 1)}
+      {cell('Submitted', formatWhen(request.createdAt))}
+      {cell('Expires', formatWhen(c.expiresAt))}
+      {c.resumeStatus && cell('Resume', RESUME[c.resumeStatus] || c.resumeStatus)}
+    </div>
+    {c.resumeResult?.reason && <div style={{ padding: 10, background: '#FEF2F2', color: RED, borderRadius: 9, fontFamily: FONT, fontSize: 12, marginBottom: 14 }}>Last resume: {c.resumeResult.reason}</div>}
+    {open ? <>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(160px, .5fr) minmax(0, 1.5fr)', gap: 12, alignItems: 'start' }}>
+        <Sel label="Approval lasts" value={expiresInDays} onChange={(event) => setExpiresInDays(event.target.value)} disabled={!c.risk?.grantable}>
+          <option value="">Until revoked</option><option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option>
+        </Sel>
+        <Txa label="Note (shown to the learner if you decline or plan it)" value={note} onChange={(event) => setNote(event.target.value.slice(0, 500))} placeholder="e.g. We'll add this after the privacy review." rows={3} />
+      </div>
+      <div style={{ padding: '10px 12px', background: '#FFFBEB', border: `1px solid ${BORDER}`, borderRadius: 9, marginTop: 14, fontFamily: FONT, fontSize: 12, color: INK, lineHeight: 1.5 }}>
+        <KeyRound size={13} color={AMBER} style={{ verticalAlign: '-2px', marginRight: 6 }} />
+        Approving turns this on for <strong>every learner</strong> and finishes every waiting request for it — each learner gets the answer in their chat.
+        {!c.risk?.grantable && <> This one can't be approved yet (tools are read-only for now) — plan or decline it.</>}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
+        <Btn variant="secondary" onClick={onClose} disabled={busy}>Cancel</Btn>
+        <Btn variant="secondary" onClick={() => onDecide({ decision: 'deny', note })} disabled={busy}>Decline</Btn>
+        <Btn variant="secondary" onClick={() => onDecide({ decision: 'plan', note })} disabled={busy}>Plan it</Btn>
+        <Btn onClick={() => onDecide({ decision: 'approve', note, expiresInDays })} disabled={busy || !c.risk?.grantable}>{busy ? 'Saving…' : 'Approve for everyone'}</Btn>
+      </div>
+    </> : <div style={{ display: 'flex', justifyContent: 'flex-end' }}><Btn variant="secondary" onClick={onClose}>Close</Btn></div>}
+  </Modal>;
+}
+
+/** Granted permissions — revoke turns one off for everyone at once. */
+function GrantsPanel({ onToast }) {
+  const [grants, setGrants] = useState(null);
+  const [busyId, setBusyId] = useState(null);
+  const load = useCallback(async () => {
+    try { setGrants((await apiGet('/api/admin/capability-grants')).grants || []); }
+    catch (e) { onToast({ type: 'error', message: e.message || 'Could not load grants.' }); setGrants([]); }
+  }, [onToast]);
+  useEffect(() => { load(); }, [load]);
+  async function revoke(g) {
+    if (!window.confirm(`Turn off "${g.does || g.capability}" for everyone? Tools that use it stop at once.`)) return;
+    setBusyId(g.id);
+    try { await apiPost(`/api/admin/capability-grants/${g.id}/revoke`, {}); onToast({ type: 'success', message: 'Revoked.' }); await load(); }
+    catch (e) { onToast({ type: 'error', message: e.message || 'Could not revoke.' }); }
+    finally { setBusyId(null); }
+  }
+  if (!grants) return <Skeleton height={200} />;
+  const shown = grants.filter((g) => g.active || g.revoked_at);
+  if (!shown.length) return <div style={{ padding: 28, textAlign: 'center', fontFamily: FONT, color: MUTED, fontSize: 13, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14 }}>No permissions have been granted yet.</div>;
+  return <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden' }}>
+    {shown.map((g) => <div key={g.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 12, padding: 16, borderBottom: `1px solid ${BORDER}`, fontFamily: FONT }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ color: INK, fontWeight: 700, fontSize: 14 }}>{g.does || g.capability}</div>
+        <div style={{ color: MUTED2, fontSize: 11.5, marginTop: 6 }}><code>{g.capability}</code> · granted {formatWhen(g.created_at)}{g.expires_at ? ` · until ${formatWhen(g.expires_at)}` : ''}{g.revoked_at ? ` · revoked ${formatWhen(g.revoked_at)}` : ''}</div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {g.active ? <><StatusPill status="approved" /><Btn variant="secondary" size="sm" onClick={() => revoke(g)} disabled={busyId === g.id}>{busyId === g.id ? 'Revoking…' : 'Revoke'}</Btn></> : <StatusPill status="expired" />}
+      </div>
+    </div>)}
+  </div>;
 }
