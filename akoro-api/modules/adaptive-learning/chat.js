@@ -4027,6 +4027,13 @@ router.post("/agent", async (req, res) => {
     const CURRENT_TIME_CONTEXT =
       `\n\nCurrent date and time: ${nowLagos} (Africa/Lagos). ` +
       `Use it to resolve relative dates — "tomorrow at 8pm" becomes an exact due_at ISO instant in +01:00. Never state a due date you could not compute from this.`;
+    // Self-tooling: without this the model tours unrelated tools and says
+    // "I don't have that data" instead of building the tool (verify run
+    // 1a8cb552, 2 of 3 repeats).
+    const selfToolOn = role === "student" && await selfToolingAllowedFor(req.user.id);
+    const selfToolCtx = selfToolOn
+      ? "\n\n## Building tools (preview)\nWhen the learner asks for something none of your tools gives directly — a total, average, count or breakdown over their own data (hours of sessions per month, tasks finished per week, accuracy by year) — don't say you don't have the data and don't piece it together from unrelated tools. Call create_tool (schema_lookup first if unsure what it can use), then answer from its result. Only say it can't be done after create_tool is rejected, and say why."
+      : "";
     const systemContent = (await assembleChatDoctrine({
       agentName: safeAgentName || "Akoro",
       role,
@@ -4039,7 +4046,7 @@ router.post("/agent", async (req, res) => {
       renderRelevantMemory(relevantMemories) +
       renderScratchpad(conversation?.scratchpad) +
       (goalsCtx || "") +
-      protegeCtx + inboxCtx +
+      protegeCtx + inboxCtx + selfToolCtx +
       (syllabusCtx ? `\n\n${syllabusCtx}` : "") +
       (pastCtx ? `\n\n${pastCtx}` : "") +
       (curriculumCtx ? `\n\n${curriculumCtx}` : "") +
@@ -4061,8 +4068,8 @@ router.post("/agent", async (req, res) => {
       status: wantsStream ? status : null,
       tools: role === "student" ? openAiChatTools({
         allowToolRequest: hasExplicitToolRequestConsent(userMessage),
-        selfTooling: await selfToolingAllowedFor(req.user.id),
-      }).concat(await selfToolingAllowedFor(req.user.id) ? await learnerToolDefs(req.user.id).catch(() => []) : []) : instructorTools,
+        selfTooling: selfToolOn,
+      }).concat(selfToolOn ? await learnerToolDefs(req.user.id).catch(() => []) : []) : instructorTools,
       // Learners: capability questions are answered from the live catalogue.
       // Instructors: an activity request (or a confirmation continuing one)
       // MUST produce a prepare_activity call — left on "auto" the model
