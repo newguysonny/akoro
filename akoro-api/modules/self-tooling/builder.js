@@ -24,6 +24,7 @@ Rules:
 - group: { by: [field | {field, bucket: day|week|month|year}] (ALWAYS a list), count, sum:[fields], avg:[fields], min:[fields], max:[fields] } → output fields: the by-fields (a bucketed one is named <field>_<bucket>, e.g. started_at_month), count, sum_<f>, avg_<f>, min_<f>, max_<f>.
 - sort: { by, dir: asc|desc }. limit ≤ 100. Use "$paramName" to use a declared param.
 - Also give 2 realistic sample inputs ("samples": [ {…}, {…} ]) matching the params.
+- A recipe or spec can only filter, compute per row, group, sort and join rows that EXIST. If the goal asks to make something new from them — a plan or schedule over dates, spreading items across days, "N per day", "skip Sundays", rules that depend on earlier choices — a recipe/spec can't do it: answer {"notExpressible": "needs scheduling logic"} rather than returning the rows unchanged.
 - If it truly can't be built from what's listed, answer {"notExpressible": "<why, one sentence>"}. Every view holds only THIS learner's own rows: if the goal needs other learners' data and nothing listed holds it, that is notExpressible — never present the learner's own numbers as other people's.
 Answer with ONE JSON object only.`;
 

@@ -88,3 +88,11 @@ test("catalogue: platform tools join the learner's own; own wins a name clash; p
   assert.match(src, /filter\(\(t\) => !own\.has\(t\.name\)\)/);
   assert.match(src, /fail >= 3 && !platform \? \{ status: "disabled" \}/);
 });
+
+test("scheduling goals go to code first", async () => {
+  const { needsCode } = await import("./pipeline.js");
+  assert.ok(needsCode("Spread my weak topics over the days until my exam on 2026-11-06: two topics a day, weakest first, skipping Sundays"));
+  assert.ok(needsCode("plan out my revision, 3 topics per day"));
+  assert.ok(!needsCode("How many tasks I have by status"));
+  assert.ok(!needsCode("total hours of my learning sessions per month this year"));
+});
