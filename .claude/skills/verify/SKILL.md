@@ -43,6 +43,16 @@ curl -s $B/suites | jq
 5. FAIL → fix and repeat. BLOCKED → say exactly what blocked it (stale deploy,
    fixture drift, flag off…). ERROR → it's a gate problem; say so.
 
+## Suites
+
+`smoke` · `agent-chat` · `agent-network` · `battles` · `regression` (everything
+that doesn't write) · `writes` (real changes on test learners + `writes.no_residue`).
+
+- **Writes on production** need `VERIFY_ALLOW_WRITES=true` on the Render
+  service; without it they come back BLOCKED. Locally they always run.
+- **Model comparison:** `{"scenario":"chat.schedule_message_here","models":["gpt-4o-mini","gpt-4.1"],"wait":false}`
+  → `data.compare` lists each model's verdict side by side.
+
 ## Accounts
 
 - Test learners `@tester01`…`@tester50` (seeded): any scenario.
@@ -61,7 +71,11 @@ need `ctx.cleanup(undo)` for everything they create.
 
 ## Local target (before deploying)
 
-The golden-path stack (Postgres + PostgREST + Redis + mock model) runs the
-API locally — see `akoro-api/scripts/golden-path/README.md`. With the mock
-model, agent-choice scenarios FAIL by design (it can't pick tools); everything
-else is meaningful.
+```bash
+STACK_DIR=<scratchpad>/stack akoro-api/scripts/verify/local-stack.sh   # idempotent; re-run after a restart
+B=http://127.0.0.1:4600/api/verify; K='Authorization: Bearer local-console-key'
+```
+Real API on Postgres + PostgREST + Redis, all migrations and the 50 testers,
+`VERIFY_TARGET=local` (writes allowed). With the mock model (no
+`OPENAI_API_KEY`), scenarios that judge the model's tool choice FAIL by design;
+everything else is meaningful.

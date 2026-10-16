@@ -73,11 +73,11 @@ async function auditRealUsers(run, ids) {
   if (error) console.warn(`[verify] audit log failed for ${run.id}: ${error.message}`);
 }
 
-async function runScenarioOnce(def, params, repeat) {
+async function runScenarioOnce(def, params, repeat, runId) {
   const sink = [];
   const evidence = { accounts: [], http: [], agent: [], tools: [], db: [], logs: [], notes: [] };
   const realUsers = new Set();
-  const ctx = createContext({ scenario: def, sink, evidence, realUsers });
+  const ctx = createContext({ scenario: def, sink, evidence, realUsers, runId });
   let error = null, timer;
   try {
     await Promise.race([
@@ -101,12 +101,12 @@ async function runScenarioOnce(def, params, repeat) {
   };
 }
 
-async function runScenario(def, params) {
+async function runScenario(def, params, runId) {
   const repeats = Math.min(LIMITS.maxRepeats, Math.max(1, Number(params?.repeats) || def.repeats || 1));
   const merged = { ...defaultsOf(def), ...(params || {}) };
   const results = [];
   for (let i = 1; i <= repeats; i++) {
-    const r = await runScenarioOnce(def, merged, i);
+    const r = await runScenarioOnce(def, merged, i, runId);
     results.push(r);
     if (r.verdict === "BLOCKED" || r.verdict === "ERROR") break;   // repeating can't fix a precondition
   }
@@ -124,13 +124,16 @@ async function runScenario(def, params) {
 const defaultsOf = (def) => Object.fromEntries(Object.entries(def.params || {}).filter(([, v]) => v && "default" in v).map(([k, v]) => [k, v.default]));
 
 /** Start a run. Resolves when it finishes; callers may not wait. */
-export function startRun({ scenario, suite, params = {}, expectSha = null, actor = "coding-agent" }) {
+export function startRun({ scenario, suite, params = {}, expectSha = null, actor = "coding-agent", models = null }) {
   const names = suite ? SUITES[suite] : scenario ? [scenario] : null;
+  // Model comparison: the same scenario once per model (plan §8.6).
+  const compare = Array.isArray(models) && models.length ? models.slice(0, 4).map(String) : null;
+  if (compare && !scenario) throw Object.assign(new Error("models compares one scenario — pass scenario, not suite."), { status: 400 });
   if (!names) throw Object.assign(new Error(suite ? `No suite "${suite}".` : "Pass scenario or suite."), { status: 400 });
   const missing = names.filter((n) => !SCENARIOS[n]);
   if (missing.length) throw Object.assign(new Error(`Unknown scenario: ${missing.join(", ")}`), { status: 400 });
   const run = {
-    id: randomUUID(), kind: suite ? "suite" : "scenario", name: suite || scenario, actor,
+    id: randomUUID(), kind: suite || compare ? "suite" : "scenario", name: compare ? `${scenario} × ${compare.join(", ")}` : suite || scenario, actor,
     params, expectSha: expectSha ? String(expectSha).slice(0, 64) : null, sha: buildSha(), target: TARGET,
     status: "queued", verdict: null, reason: null, scenarios: [], realUser: false,
     createdAt: new Date().toISOString(), finishedAt: null, ms: null, persisted: false,
@@ -149,11 +152,20 @@ export function startRun({ scenario, suite, params = {}, expectSha = null, actor
         run.reason = `stale deploy: expected ${run.expectSha}, this server runs ${run.sha || "an unknown build"}`;
       } else {
         const realUsers = new Set();
-        for (const n of names) {
-          const res = await runScenario(SCENARIOS[n], params);
+        const plan = compare ? compare.map((m) => ({ name: names[0], params: { ...params, model: m }, label: `${names[0]}@${m}` }))
+          : names.map((n) => ({ name: n, params }));
+        for (const step of plan) {
+          const t0s = Date.now();
+          const res = await runScenario(SCENARIOS[step.name], step.params, run.id);
           res.realUsers.forEach((id) => realUsers.add(id));
           delete res.realUsers;
+          if (step.label) { res.name = step.label; res.model = step.params.model; }
+          res.ms = Date.now() - t0s;
           run.scenarios.push(res);
+        }
+        if (compare) {
+          run.compare = run.scenarios.map((s) => ({ model: s.model, verdict: s.verdict, repeats: s.repeats, ms: s.ms,
+            failed: s.assertions.filter((a) => !a.passed).map((a) => a.name) }));
         }
         run.realUser = realUsers.size > 0;
         await auditRealUsers(run, realUsers);
@@ -180,7 +192,7 @@ export function startRun({ scenario, suite, params = {}, expectSha = null, actor
 export function publicRun(run, { full = true } = {}) {
   const base = { id: run.id, kind: run.kind, name: run.name, status: run.status, verdict: run.verdict, reason: run.reason,
     sha: run.sha, expectedSha: run.expectSha, target: run.target, ms: run.ms, createdAt: run.createdAt, finishedAt: run.finishedAt,
-    persisted: run.persisted, verified: run.verdict === "PASS" };
+    persisted: run.persisted, verified: run.verdict === "PASS", ...(run.compare ? { compare: run.compare } : {}) };
   if (!full) return base;
   return { ...base, scenarios: run.scenarios.map((s) => ({ name: s.name, verdict: s.verdict, repeats: s.repeats, reason: s.reason,
     failed: s.assertions.filter((a) => !a.passed), assertions: s.assertions, evidence: s.evidence })) };

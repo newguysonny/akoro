@@ -1091,7 +1091,20 @@ Planned scope:
   stored PASS with evidence; a deliberately broken assertion yields FAIL;
   stopping Redis yields BLOCKED.
 
-### Phase V2 — Agentic depth + writes on testers
+### Phase V2 — Agentic depth + writes on testers ✅ built 2026-10-16
+As built: `expect.honest` (a failed tool must be admitted) and
+`expect.loopHealthy` (call bound, no identical repeats, no unknown tools);
+`chat.tool_error_honesty` (×3); model comparison (`models: [...]` on one
+scenario → `compare`); write scenarios `tasks.create_due_in_minutes` and
+`followups.deliver_into_chat` (real worker delivery into a chosen chat +
+notification) with owner-scoped cleanup (`ctx.db.deleteOwned` — test
+learners only, narrowing filter required) and `writes.no_residue`; suite
+`writes`; local target script `scripts/verify/local-stack.sh`. Writes on
+production stay behind `VERIFY_ALLOW_WRITES=true`. Verified locally: writes
+suite PASS, database left clean. `studyprep.no_charge_before_confirm` moved to
+a later batch (planning calls bill differently — needs its own rules first).
+
+Planned scope:
 - Repeats + pass rates, honesty and loop-health checks, model comparison
   report, `write` scenarios with cleanup (`followups.deliver_into_chat`,
   `studyprep.no_charge_before_confirm`), `local` target over golden-path.
