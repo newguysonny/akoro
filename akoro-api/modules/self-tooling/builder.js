@@ -42,6 +42,17 @@ Example — weak topics in subjects where past-question accuracy is under $maxAc
 How rows flow: "from" makes a step's (or saved table's) rows current; ops change the current rows; "save" names them; "join" joins the current rows with "right".
 Capability steps: "rows" is the path to the list inside its result (see "returns", e.g. "bySubject" for "bySubject[].x").`;
 
+const CODE_FORMAT = `Format (CODE — only when a recipe or spec can't express it: scheduling, spreading items over days, multi-step rules):
+{"definition":{"kind":"code","steps":[{"id":"weak","view":"my_weak_topics","where":[…]}],"source":"function run(input, data, akoro) { … return rows; }"}, "samples":[{…},{…}]}
+- "steps" declare what to read (views/capabilities, as in a recipe). The code gets them as data.<id> (arrays of rows). It CANNOT read anything else and cannot call Akoro.
+- input = the declared params; akoro = { today: "YYYY-MM-DD" (Africa/Lagos), now: ISO time, timezone }.
+- Plain JavaScript (ES2020) only. NOT allowed: eval, Function, import, require, this, globalThis, prototypes/constructor, async/await, timers, network, template literals with \${…} (join with +). Under 8 KB; must finish fast.
+- Return an array of flat objects (the rows the learner sees), at most 100.
+Example — spread my weakest topics over the days until $examDate, $perDay a day, weakest first, skipping Sundays:
+{"definition":{"kind":"code","steps":[{"id":"weak","view":"my_weak_topics"}],"source":"function run(input, data, akoro) {\n  var topics = data.weak.slice().sort(function (a, b) { return a.confidence - b.confidence; });\n  var day = new Date(akoro.today + 'T00:00:00Z'), end = new Date(input.examDate + 'T00:00:00Z'), out = [], i = 0;\n  while (i < topics.length && day < end) {\n    if (day.getUTCDay() !== 0) { for (var k = 0; k < input.perDay && i < topics.length; k++, i++) out.push({ date: day.toISOString().slice(0, 10), subject: topics[i].subject, topic: topics[i].topic }); }\n    day.setUTCDate(day.getUTCDate() + 1);\n  }\n  return out;\n}"},"samples":[{"examDate":"2026-12-01","perDay":2},{"examDate":"2026-11-20","perDay":1}]}`;
+
+const FORMATS = { spec: SPEC_FORMAT, recipe: RECIPE_FORMAT, code: CODE_FORMAT };
+
 /** The registry slice the builder may use: views (with fields) + capabilities (with returns). */
 export function registrySlice(lookup, hint = {}) {
   const viewNames = new Set([...(lookup?.views || []).map((v) => v.name), ...[].concat(hint.views || []).filter((v) => v in DATA_VIEWS)]);
@@ -59,12 +70,12 @@ export function registrySlice(lookup, hint = {}) {
  */
 export async function buildDefinition({ stage, goal, params, slice, feedback = null, learnerId, platformPays = false }) {
   const messages = [
-    { role: "system", content: `${COMMON}\n\n${stage === "spec" ? SPEC_FORMAT : RECIPE_FORMAT}` },
+    { role: "system", content: `${COMMON}\n\n${FORMATS[stage] || RECIPE_FORMAT}` },
     { role: "user", content: JSON.stringify({ goal, params: params || {}, available: slice }) },
   ];
   if (feedback) messages.push({ role: "user", content: `Your previous attempt failed: ${feedback}\nFix it and answer again with ONE JSON object.` });
   const resp = await openai.chat.completions.create({
-    model: BUILDER_MODEL(), temperature: 0, max_tokens: 1200,
+    model: BUILDER_MODEL(), temperature: 0, max_tokens: stage === "code" ? 2000 : 1200,
     response_format: { type: "json_object" },
     messages,
     __feature: "self_tooling", ...(platformPays ? { __payer: "platform" } : { __userId: learnerId }),

@@ -4,6 +4,9 @@
  *
  * SPEC (stage 2) — one Data View:
  *   { kind:"spec", from, where?, compute?, group?, sort?, limit?, select? }
+ * CODE (stage 3, flag AKORO_SELF_TOOLING_CODE_ENABLED) — declared reads + one
+ *   sandboxed function: { kind:"code", steps:[…as recipe…], source:"function run(input, data, akoro) {…}" }
+ *   (sandbox/index.js — data in, answer out; the code never calls Akoro)
  * RECIPE (stage 1, compose) — up to 4 steps (views or capabilities), then ops:
  *   { kind:"recipe", steps:[{ id, view, where? } | { id, cap, args?, rows }],
  *     then:[{ op:"from", ref } | { op:"save", as } | { op:"join", right, on, type? } |
@@ -15,6 +18,7 @@
 import { DATA_VIEWS } from "./views.js";
 import { CAPABILITIES } from "./capabilities.js";
 import { CAP_RUNNERS } from "./capRuntime.js";
+import { runCode, staticCheck, asRows, codeEnabled } from "./sandbox/index.js";
 import { capabilityStatus } from "./registry.js";
 import { readView } from "./viewRuntime.js";
 import { bind, refsIn, paramProps } from "./bind.js";
@@ -130,7 +134,29 @@ function flowOp(errors, o, cur, label) {
 function checkMixedRefs(errors, value) {
   if (typeof value === "string") { if (value.includes("$") && !/^\$[a-zA-Z][a-zA-Z0-9_]*$/.test(value)) errors.push(`"${value.slice(0, 40)}": a param must be a whole value ("$name"), not combined with other text`); }
   else if (Array.isArray(value)) value.forEach((v) => checkMixedRefs(errors, v));
-  else if (value && typeof value === "object") Object.values(value).forEach((v) => checkMixedRefs(errors, v));
+  else if (value && typeof value === "object") Object.entries(value).forEach(([k, v]) => { if (k !== "source") checkMixedRefs(errors, v); });   // code is code, not a param slot
+}
+
+/** Validate read steps (views or capabilities). → the set of step ids. */
+async function checkSteps(errors, steps, uses) {
+  const ids = new Set();
+  for (const st of steps) {
+    if (!st?.id || !/^[a-z][a-z0-9_]{0,23}$/.test(st.id) || ids.has(st.id)) { errors.push(`step id ${st?.id} invalid or repeated`); continue; }
+    ids.add(st.id);
+    if (st.view) {
+      if (!DATA_VIEWS[st.view]) errors.push(`step ${st.id}: unknown view ${st.view}`); else uses.views.push(st.view);
+      checkWhere(errors, st.where, DATA_VIEWS[st.view]?.fields, `step ${st.id}`);
+    } else if (st.cap) {
+      const cap = CAPABILITIES[st.cap];
+      if (!cap) { errors.push(`step ${st.id}: unknown capability ${st.cap}`); continue; }
+      const status = await capabilityStatus(st.cap);
+      if (status !== "enabled") errors.push(`step ${st.id}: capability ${st.cap} needs approval`);
+      if (cap.kind !== "read") errors.push(`step ${st.id}: ${st.cap} changes data — tools are read-only for now`);
+      uses.capabilities.push(st.cap);
+      if (st.rows != null && typeof st.rows !== "string") errors.push(`step ${st.id}: rows is a path like "weak_topics"`);
+    } else errors.push(`step ${st.id}: needs view or cap`);
+  }
+  return ids;
 }
 
 /** → { ok, errors, uses: { views:[], capabilities:[] } } */
@@ -160,26 +186,18 @@ export async function validateDefinition(def, params) {
       for (const st of [].concat(def.sort || [])) flowOp(errors, { op: "sort", ...st }, cur, "spec.sort");
       if (Array.isArray(def.select)) flowOp(errors, { op: "pick", fields: def.select }, cur, "spec.select");
     }
+  } else if (def.kind === "code") {
+    // Stage 3: declared reads (same rules as recipe steps) + one sandboxed function.
+    if (!codeEnabled()) errors.push("code tools are turned off on this server");
+    const steps = Array.isArray(def.steps) ? def.steps : [];
+    if (steps.length > MAX_STEPS) errors.push(`at most ${MAX_STEPS} reads`);
+    await checkSteps(errors, steps, uses);
+    if (def.then != null) errors.push("a code tool has no then-ops — do it in the code");
+    for (const e of staticCheck(def.source)) errors.push(`code: ${e}`);
   } else if (def.kind === "recipe") {
     const steps = Array.isArray(def.steps) ? def.steps : [];
     if (!steps.length || steps.length > MAX_STEPS) errors.push(`recipe needs 1–${MAX_STEPS} steps`);
-    const ids = new Set();
-    for (const st of steps) {
-      if (!st?.id || !/^[a-z][a-z0-9_]{0,23}$/.test(st.id) || ids.has(st.id)) { errors.push(`step id ${st?.id} invalid or repeated`); continue; }
-      ids.add(st.id);
-      if (st.view) {
-        if (!DATA_VIEWS[st.view]) errors.push(`step ${st.id}: unknown view ${st.view}`); else uses.views.push(st.view);
-        checkWhere(errors, st.where, DATA_VIEWS[st.view]?.fields, `step ${st.id}`);
-      } else if (st.cap) {
-        const cap = CAPABILITIES[st.cap];
-        if (!cap) { errors.push(`step ${st.id}: unknown capability ${st.cap}`); continue; }
-        const status = await capabilityStatus(st.cap);
-        if (status !== "enabled") errors.push(`step ${st.id}: capability ${st.cap} needs approval`);
-        if (cap.kind !== "read") errors.push(`step ${st.id}: ${st.cap} changes data — tools are read-only for now`);
-        uses.capabilities.push(st.cap);
-        if (st.rows != null && typeof st.rows !== "string") errors.push(`step ${st.id}: rows is a path like "weak_topics"`);
-      } else errors.push(`step ${st.id}: needs view or cap`);
-    }
+    const ids = await checkSteps(errors, steps, uses);
     const then = Array.isArray(def.then) ? def.then : [];
     if (then.length > MAX_THEN) errors.push(`at most ${MAX_THEN} then-ops`);
     const tables = new Map(steps.filter((st) => st?.id).map((st) => [st.id, st.view && DATA_VIEWS[st.view] ? viewTypes(DATA_VIEWS[st.view]) : null]));
@@ -210,7 +228,7 @@ export async function validateDefinition(def, params) {
       } else if (OUT_OPS.has(o?.op)) checkOp(errors, o, label, null);
       else errors.push(`${label}: unknown op ${o?.op}`);
     }
-  } else errors.push(`kind must be "spec" or "recipe" (got ${def.kind})`);
+  } else errors.push(`kind must be "spec", "recipe" or "code" (got ${def.kind})`);
   return { ok: !errors.length, errors, uses };
 }
 
@@ -227,6 +245,17 @@ function applyOp(rows, o) {
     default: throw new ToolError(`unknown op ${o.op}`);
   }
 }
+/** One declared read: a view (the learner's own rows) or a capability's list. */
+async function readStep(st, learnerId, callCapability) {
+  if (st.view) return O.filter(await readView(st.view, learnerId, { where: st.where || [] }), st.where || []);
+  const cap = CAPABILITIES[st.cap];
+  const res = cap.runtime ? await CAP_RUNNERS[st.cap](learnerId, st.args || {}).catch((e) => ({ error: e.message })) : await callCapability(cap.tool, st.args || {});
+  if (res?.error) throw new ToolError(`${st.cap} failed: ${res.error}`);
+  const got = pathGet(res, st.rows);
+  return Array.isArray(got) ? got : got == null ? [] : [got];
+}
+const TIMEZONE = process.env.AKORO_TIMEZONE || "Africa/Lagos";
+
 const pathGet = (obj, path) => (path ? String(path).split(".").reduce((o, k) => (o == null ? o : o[k]), obj) : obj);
 
 /**
@@ -255,17 +284,19 @@ export async function runDefinition(def, input, { learnerId, callCapability }) {
     for (const s of [].concat(d.sort || [])) rows = O.sort(rows, s);
     if (Array.isArray(d.select) && d.select.length) rows = O.pick(rows, { fields: d.select });
     if (d.limit) rows = O.limit(rows, { n: d.limit });
+  } else if (d.kind === "code") {
+    if (!codeEnabled()) throw new ToolError("code tools are turned off");
+    const data = {};
+    for (const st of d.steps || []) data[st.id] = await readStep(st, learnerId, callCapability);
+    const now = new Date();
+    const akoro = { today: now.toLocaleDateString("en-CA", { timeZone: TIMEZONE }), now: now.toISOString(), timezone: TIMEZONE };
+    const r = await runCode(d.source, { input, data, akoro });
+    if (!r.ok) throw new ToolError(r.error);
+    rows = asRows(r.value);
   } else {
     const out = {};
     for (const st of d.steps) {
-      if (st.view) out[st.id] = O.filter(await readView(st.view, learnerId, { where: st.where || [] }), st.where || []);
-      else {
-        const cap = CAPABILITIES[st.cap];
-        const res = cap.runtime ? await CAP_RUNNERS[st.cap](learnerId, st.args || {}).catch((e) => ({ error: e.message })) : await callCapability(cap.tool, st.args || {});
-        if (res?.error) throw new ToolError(`${st.cap} failed: ${res.error}`);
-        const got = pathGet(res, st.rows);
-        out[st.id] = Array.isArray(got) ? got : got == null ? [] : [got];
-      }
+      out[st.id] = await readStep(st, learnerId, callCapability);
     }
     rows = d.steps.length === 1 ? out[d.steps[0].id] : null;
     for (const o of d.then || []) {

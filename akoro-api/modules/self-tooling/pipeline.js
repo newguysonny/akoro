@@ -1,7 +1,8 @@
 /**
  * modules/self-tooling/pipeline.js — create_tool and the learner-tool runtime
- * (plan §7.4, §7.9, §7.10). Stages 1 (recipe), 2 (spec) and 4 (escalate to
- * an admin, escalation.js); sandboxed code (S5) comes later.
+ * (plan §7.4, §7.9, §7.10). Stages 1 (recipe), 2 (spec), 3 (sandboxed code,
+ * sandbox/ — flag AKORO_SELF_TOOLING_CODE_ENABLED) and 4 (escalate to an
+ * admin, escalation.js).
  *
  *   createTool  → { status: created|escalated|rejected, … }   one call in, one status out
  *   runLearnerTool / learnerToolDefs / listMyTools / setMyToolStatus
@@ -15,6 +16,7 @@ import { validateParams, coerceInput, paramProps, wellFormedParams } from "./bin
 import { buildDefinition, registrySlice } from "./builder.js";
 import { createExpect, repeatVerdict } from "../verify/assertions.js";
 import { escalate } from "./escalation.js";
+import { codeEnabled } from "./sandbox/index.js";
 
 const edu = () => db.schema("edu");
 const NAME = /^[a-z][a-z0-9_]{2,47}$/;
@@ -156,7 +158,8 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   }
 
   // ── 1. recipe, 2. spec ─────────────────────────────────────────────────
-  const order = hint.mode === "spec" ? ["spec", "recipe"] : ["recipe", "spec"];
+  // Cheapest and safest first; sandboxed code (stage 3) only when the flag is on.
+  const order = [...(hint.mode === "spec" ? ["spec", "recipe"] : ["recipe", "spec"]), ...(codeEnabled() ? ["code"] : [])];
   const ctx = { learnerId, callCapability };
   let lastProblem = null;
   let inexpressible = false;   // the builder said what's available can't express it
