@@ -37,6 +37,7 @@ export const CHAT_TOOL_DISPLAY = Object.freeze({
   schedule_chat_follow_up:        { category: "action",   headline: "Scheduling a follow-up",              description: "Setting a time for me to check in with you", done: "Scheduled a follow-up" },
   list_scheduled_chat_follow_ups: { category: "research", headline: "Checking your scheduled check-ins",   description: "Listing the follow-ups already planned" },
   cancel_scheduled_chat_follow_up:{ category: "action",   headline: "Cancelling a follow-up",              description: "Removing a planned check-in", done: "Cancelled a follow-up" },
+  get_past_question_practice:     { category: "research", headline: "Checking your past-question practice", description: "Adding up attempts and accuracy" },
   schema_lookup:                  { category: "research", headline: "Checking what I can look at",          description: "Seeing what a new tool could use" },
   list_chats:                     { category: "research", headline: "Checking your chats",                 description: "Listing your conversations" },
   read_chat:                      { category: "research", headline: "Reading another chat",                description: "Picking up what was said there" },

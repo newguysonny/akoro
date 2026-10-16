@@ -62,13 +62,14 @@ export const schemaLookupSafe = {
 
 export const agentUsesSchemaLookup = {
   name: "selftool.agent_uses_schema_lookup", area: "self-tooling", risk: "dry", repeats: 3,
-  description: "Asked something no tool answers, the agent checks schema_lookup instead of guessing or refusing outright.",
+  description: "Asked something no existing tool answers (session hours per month), the agent checks schema_lookup instead of guessing.",
   params: { learner: { default: "@tester01" } },
   async run(ctx, p) {
     const { getLearnerChatTools } = await import("../../adaptive-learning/chat.js");
     if (!getLearnerChatTools().some((t) => t.name === "schema_lookup")) ctx.expect.blocked("self-tooling is off on this server");
     const turn = await ctx.agent.chat({ as: p.learner, model: p.model,
-      prompt: "Which of my weak topics are in subjects where I also did badly on past questions? Combine both for me." });
+      // No existing tool answers this (sessions have no duration tool) — it needs a new one.
+      prompt: "How many hours did my learning sessions take in total each month this year? No tool you have does that yet — see what a new one could use." });
     ctx.expect.eq("turn answered", turn.status, 200);
     ctx.expect.toolCalled(turn, "schema_lookup");
     ctx.expect.noBackendNames("reply has no backend names", turn.reply);

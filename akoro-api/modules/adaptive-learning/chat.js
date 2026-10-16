@@ -369,9 +369,22 @@ export const CHAT_TOOLS = [
     },
   },
   {
+    name: "get_past_question_practice",
+    description: "The learner's own past-question practice: per exam and subject — questions attempted, correct, accuracy, years practised, last practised — plus totals. Use for 'how am I doing on past questions', accuracy by subject, or combining with weak topics. Exam-prep runs are a different thing (get_exam_prep_status).",
+    input_schema: {
+      type: "object",
+      properties: {
+        subject: { type: "string", description: "Optional subject filter, e.g. Physics." },
+        exam: { type: "string", description: "Optional exam filter, e.g. WAEC, JAMB." },
+        days: { type: "number", description: "Optional: only the last N days." },
+      },
+      required: [],
+    },
+  },
+  {
     name: "schema_lookup",
     featureGate: "self_tooling",
-    description: "Self-tooling (preview): find what data and operations a NEW tool could use for a goal no existing tool covers. Returns data views (fields you can filter, sort and count — always the learner's own data or published content) and capabilities, each 'available' or 'needs_approval', plus anything not allowed. Read-only; builds nothing. Use an existing tool first; call this only when none fits, then tell the learner what could and couldn't be done.",
+    description: "Self-tooling (preview): find what data and operations a NEW tool could use for a goal no existing tool covers. Returns data views (fields you can filter, sort and count — always the learner's own data or published content) and capabilities, each 'available' or 'needs_approval', plus anything not allowed. Read-only; builds nothing. Use an existing tool first; call this only when none fits, then tell the learner what could and couldn't be done. Never tell the learner some data doesn't exist just because an unrelated tool came back empty — check here first.",
     input_schema: {
       type: "object",
       properties: {
@@ -1956,6 +1969,38 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       } catch (error) {
         return { error: error.message || "Could not schedule the chat follow-up" };
       }
+    }
+    case "get_past_question_practice": {
+      try {
+        let q = db.schema("edu").from("past_question_attempts")
+          .select("exam, subject, year, attempted, correct, created_at").eq("user_id", studentId)
+          .order("created_at", { ascending: false }).limit(1000);
+        if (input?.subject) q = q.ilike("subject", String(input.subject).trim());
+        if (input?.exam) q = q.ilike("exam", String(input.exam).trim());
+        const days = Number(input?.days);
+        if (Number.isFinite(days) && days > 0) q = q.gte("created_at", new Date(Date.now() - days * 86_400_000).toISOString());
+        const { data, error } = await q;
+        if (error) return { error: "Couldn't load your past-question practice just now." };
+        const groups = new Map();
+        for (const r0 of data ?? []) {
+          const k = `${r0.exam}|${r0.subject || "—"}`;
+          const g = groups.get(k) || { exam: r0.exam, subject: r0.subject || null, attempted: 0, correct: 0, years: new Set(), lastPractised: r0.created_at };
+          g.attempted += Number(r0.attempted) || 0; g.correct += Number(r0.correct) || 0;
+          if (r0.year) g.years.add(r0.year);
+          if (r0.created_at > g.lastPractised) g.lastPractised = r0.created_at;
+          groups.set(k, g);
+        }
+        const bySubject = [...groups.values()].map((g) => ({
+          exam: g.exam, subject: g.subject, attempted: g.attempted, correct: g.correct,
+          accuracy: g.attempted ? `${Math.round((g.correct / g.attempted) * 100)}%` : null,
+          years: [...g.years].sort(), lastPractised: g.lastPractised,
+        })).sort((a, b) => b.attempted - a.attempted);
+        const attempted = bySubject.reduce((n, g) => n + g.attempted, 0);
+        const correct = bySubject.reduce((n, g) => n + g.correct, 0);
+        return bySubject.length
+          ? { bySubject, totals: { attempted, correct, accuracy: attempted ? `${Math.round((correct / attempted) * 100)}%` : null, sessions: (data ?? []).length } }
+          : { bySubject: [], totals: { attempted: 0, correct: 0 }, message: "No past-question practice recorded yet." };
+      } catch (error) { return asToolError("your past-question practice")(error); }
     }
     case "schema_lookup": {
       if (role === "instructor") return { error: "Self-tooling is for learners." };

@@ -26,6 +26,7 @@ export const CAPABILITIES = Object.freeze({
   "learning.sessions":      read("get_my_learning_sessions", "Recent teaching sessions with the agent.", ["session", "lesson"], ["sessions[].subject", "sessions[].topic", "sessions[].status"]),
   "learning.overview":      read("get_learning_overview", "Summary of what the agent has learnt by subject.", ["overview", "learnt", "summary"], ["subjects[].subject", "subjects[].topics"]),
   "learning.knowledge_map": read("get_knowledge_map", "Subject → topic map of what the agent knows, with health.", ["map", "knowledge", "topics"], ["subjects[].topics[].topic", "subjects[].topics[].confidence"]),
+  "practice.past_questions": read("get_past_question_practice", "Past-question practice by exam and subject: attempted, correct, accuracy, years, last practised.", ["past question", "past questions", "accuracy", "practice", "exam"], ["bySubject[].exam", "bySubject[].subject", "bySubject[].attempted", "bySubject[].correct", "bySubject[].accuracy", "totals"]),
   "school.mine":            read("get_my_school", "The learner's school and class.", ["school", "class"], ["school", "class"]),
   "school.subjects":        read("list_school_subjects", "Subjects the learner's class takes.", ["subject", "subjects", "timetable"], ["subjects[].name"]),
   "school.teachers":        read("list_my_teachers", "The learner's teachers and what they teach.", ["teacher", "teachers"], ["teachers[].name", "teachers[].subject"]),
