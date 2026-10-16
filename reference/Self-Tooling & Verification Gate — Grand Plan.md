@@ -1386,7 +1386,27 @@ everyone).
   failed cleanup is reported to the admin at once.
 - Optional: notify the account owner afterwards ("a test ran on your account").
 
-### Phase S7 — Instructor self-tooling (proposed design)
+### Phase S7 — Instructor self-tooling ✅ built 2026-10-16
+
+As built: instructor Data Views (`my_classes`, `my_class_students`,
+`my_activities`, `my_activity_results`, `my_activity_drafts`) owned directly
+or through a parent row (`ownerPath`, joined `!inner`, re-checked per row);
+students by display name only. Capability `activities.outcomes`. One
+audience per tool (`edu.agent_tools.audience`): lookup, builder slice and
+validation only offer the caller's audience; platform tools listed, run and
+promoted per audience (instructor tools promotion-checked on tester51/52 as
+instructors). Instructor chat gets schema_lookup / create_tool / their saved
+tools and its own prompt rules. Seed: tester51 (Class A: tester01-05, two
+graded activities), tester52 (Class B: tester06-10). New group op `counts`
+(rows that have a value → `count_<field>`). Found on the way:
+`check_activity_outcomes` read activities from the wrong schema (instructors
+were told they had none) and never loaded class averages — fixed. Gate (on
+the sandbox): `instructor_scope` and `instructor_tool_matches_db` PASS;
+`instructor_agent_builds` PASS 5/5 alone, 2/3 in the latest suite — about 1
+in 5 builds still counts every assigned student where "graded" was asked.
+Runs with write scenarios now queue one at a time.
+
+Proposed design (as planned):
 - Same pipeline (lookup → recipe/spec/code → verify → save; escalation;
   confirm-before-write), with **instructor-scoped Data Views**: their classes,
   students' submissions and grades in their classes, activities, attendance —
