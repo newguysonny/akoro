@@ -1,0 +1,71 @@
+/*
+ * ca.css — the Course Approvals section (admin side of the Course Creator
+ * review flow), styled with the same vocabulary as the ported
+ * reference/Kpemu Course Builder.html. Classes keep the reference's names
+ * and everything is scoped under .caroot so nothing leaks into the admin
+ * shell; the light-theme variables are pinned (this console has no dark
+ * mode). The root is a centred 760px column inside the admin PageLayout.
+ */
+.caroot{
+  --bg:#fff;--text:#0d0d0d;--muted:#6e6e6e;--border:#e8e8e8;--pill:#f3f3f3;
+  --fg:#6c3cff;--btn:#fff;--warn:#c2740c;--ok:#16a34a;
+  color:var(--text);font:15px/1.5 Inter,system-ui,-apple-system,'Segoe UI',sans-serif;
+  max-width:760px;margin:0 auto;padding:28px 20px 80px}
+.caroot *{box-sizing:border-box}
+.caroot button,.caroot input,.caroot select,.caroot textarea{font:inherit;color:inherit}
+.caroot svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.caroot h1{margin:0 0 6px;font-size:28px;font-weight:500;letter-spacing:-.01em}
+.caroot h2{margin:0;font-size:17px;font-weight:600}
+.caroot .lead{margin:0 0 18px;color:var(--muted)}
+.caroot .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.caroot .sp{flex:1}
+.caroot .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:1px solid var(--border);border-radius:6px;background:var(--btn);font-size:14px;font-weight:500;cursor:pointer}
+.caroot .btn:hover{background:var(--pill)}.caroot .btn.p{background:var(--text);color:var(--bg);border-color:var(--text)}.caroot .btn.d{color:#d6336c}.caroot .btn:disabled{opacity:.4;cursor:default}
+.caroot :is(.btn,button,a,input,select,textarea):focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.caroot .back{color:var(--muted);cursor:pointer;display:inline-block;margin-bottom:10px;font-size:14px;background:none;border:0;padding:0}
+.caroot .chip{font-size:13px;padding:1px 9px;border-radius:99px;background:var(--pill);color:var(--muted)}
+.caroot input,.caroot select,.caroot textarea{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);font-size:15px}
+.caroot label{display:block;font-size:13px;font-weight:500;margin:14px 0 5px;color:var(--muted)}
+.caroot .ccnav{display:flex;gap:6px;margin:0 0 22px;flex-wrap:wrap}
+.caroot .ccnav a{display:flex;align-items:center;gap:8px;padding:8px 13px;border-radius:99px;color:var(--muted);cursor:pointer;font-weight:500;font-size:14px;text-decoration:none}
+.caroot .ccnav a:hover,.caroot .ccnav a.on{background:var(--pill)}.caroot .ccnav a.on{color:var(--text);font-weight:600}
+.caroot .ccnav small{background:var(--fg);color:#fff;border-radius:99px;padding:0 7px;font-size:12px}
+.caroot .tools{display:flex;gap:10px;margin:20px 0 18px;flex-wrap:wrap;align-items:center}.caroot .tools select{width:auto;border-radius:99px;background:var(--pill);border-color:transparent}
+.caroot .sbox{position:relative;flex:1 1 240px;max-width:380px}.caroot .sbox svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
+.caroot .sbox input{padding-left:42px;padding-right:38px;border-radius:99px;background:var(--pill);border-color:transparent}.caroot .sbox input:focus{background:var(--bg);border-color:var(--fg)}
+.caroot .sx{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:24px;height:24px;border:0;border-radius:50%;background:var(--border);color:var(--text);cursor:pointer;font-size:12px;padding:0}
+.caroot .hgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:22px}
+.caroot .stat{border:1px solid var(--border);border-radius:12px;padding:14px}.caroot .stat span{display:block;color:var(--muted);font-size:14px}.caroot .stat b{font-size:26px;font-weight:600}
+.caroot .cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+.caroot .ccard{border:1px solid var(--border);border-radius:12px;overflow:hidden;cursor:pointer;transition:transform .2s}.caroot .ccard:hover{transform:translateY(-2px)}
+.caroot .cban{height:88px;color:#fff;font-weight:600;font-size:17px;padding:10px 14px;display:flex;align-items:flex-end}
+.caroot .cbody{padding:12px 14px}.caroot .cbody b{display:block;font-weight:600}.caroot .cbody span{display:block;color:var(--muted);font-size:14px}
+.caroot .ccd{display:flex;align-items:center;gap:12px;border:1px solid var(--border);border-radius:12px;padding:10px;margin-bottom:10px}
+.caroot .th{width:64px;height:48px;border-radius:9px;background:var(--pill);display:grid;place-items:center;color:var(--fg);flex:none}.caroot .th svg{width:24px;height:24px}
+.caroot .ct{flex:1;min-width:0}.caroot .ct b{display:block;font-weight:600;overflow-wrap:anywhere}.caroot .ct span{color:var(--muted);font-size:14px}.caroot .ct em{font-style:normal;font-weight:600;color:var(--fg)}
+.caroot .mini{display:flex;gap:6px}.caroot .mini button{border:1px solid var(--border);background:var(--btn);border-radius:6px;min-width:34px;height:34px;padding:0 10px;cursor:pointer}
+.caroot .empty{border:1px dashed var(--border);border-radius:12px;padding:20px;text-align:center;color:var(--muted);margin-bottom:12px}
+.caroot .ck{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;border:2px solid var(--border);font-size:13px;flex:none}.caroot .ck.on{background:var(--ok);border-color:var(--ok);color:#fff}
+.caroot .chk{display:flex;gap:12px;align-items:center;padding:8px 0}
+.caroot .note{border:1px solid var(--warn);border-radius:10px;padding:12px 14px;margin:14px 0;color:var(--text)}
+.caroot .facts{border:1px solid var(--border);border-radius:12px;padding:4px 14px;margin:14px 0 26px}
+.caroot .fact{display:flex;gap:14px;padding:10px 0;border-bottom:1px solid var(--border);font-size:14px}.caroot .fact:last-child{border-bottom:0}
+.caroot .fact span{flex:0 0 150px;color:var(--muted)}.caroot .fact b{font-weight:500;overflow-wrap:anywhere;white-space:pre-wrap}
+.caroot .ov{position:fixed;inset:0;background:rgba(0,0,0,.45);display:grid;place-items:center;padding:16px;z-index:40}
+.caroot .modal{background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;width:100%;max-width:420px;max-height:92vh;overflow:auto}.caroot .modal h2{margin-bottom:6px}
+.caroot .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:8px 16px;border-radius:99px;z-index:50;font-weight:500}
+.caroot .pv{background:#f5f4f0;color:#16132b;border-radius:18px;padding:16px;max-height:68vh;overflow:auto;margin-top:12px}
+.caroot .pv .top{color:#8a8895;font-size:14px;margin:2px 2px 14px}.caroot .pv .top b{color:#6c3cff;font-weight:600}
+.caroot .ps{background:#fff;border:1px solid #e8e6e1;border-radius:22px;margin-bottom:12px;overflow:hidden}
+.caroot .ps summary{list-style:none;display:flex;align-items:center;gap:12px;padding:16px;cursor:pointer}.caroot .ps summary::-webkit-details-marker{display:none}
+.caroot .pn{width:40px;height:40px;border-radius:12px;background:#ece9e4;color:#6b6870;display:grid;place-items:center;font-weight:600;flex:none}
+.caroot .pt{flex:1;min-width:0}.caroot .pt b{display:flex;align-items:center;gap:8px;font-size:16px;line-height:1.3}.caroot .pt b svg{color:#b5b3bd;width:18px;height:18px}.caroot .pt span{color:#8a8895;font-size:14px}
+.caroot .pf{background:#e5f6ec;color:#1f9d55;font-weight:600;font-size:12px;border-radius:99px;padding:4px 10px;flex:none;max-width:84px;text-align:center;line-height:1.25}
+.caroot .chv{color:#8a8895;transition:transform .2s;flex:none}.caroot details[open] .chv{transform:rotate(180deg)}
+.caroot .pr{display:flex;align-items:center;gap:12px;padding:13px 16px;border-top:1px solid #ece9e4;font-size:15px}
+.caroot .pr .no{width:28px;height:28px;border-radius:50%;background:#ece9e4;color:#6b6870;display:grid;place-items:center;font-size:12px;flex:none}
+.caroot .pr svg{color:#6c3cff;width:18px;height:18px;flex:none}.caroot .pr.lk{color:#9a98a3}.caroot .pr.lk svg{color:#b5b3bd}
+.caroot .pr .tt{flex:1;min-width:0}.caroot .pr .tt small{display:block;color:#8a8895;font-size:13px}
+.caroot .pb{display:flex;align-items:center;gap:6px;flex:none;color:#4b1fd1;font-weight:500}
+.caroot .pbc{width:26px;height:26px;border-radius:50%;background:#1d1d2b;display:grid;place-items:center}.caroot .pr .pbc svg{color:#fff;fill:#fff;stroke:none;width:13px;height:13px}
+.caroot .pb u{text-decoration:none;border-bottom:2px solid #a78bfa;line-height:1.2}
+@media (prefers-reduced-motion:reduce){.caroot .ccard,.caroot .chv{transition:none}}
