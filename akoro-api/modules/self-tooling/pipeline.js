@@ -166,7 +166,12 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   // What could it use?
   // learnerId is the OWNER: a learner, or an instructor for instructor tools (S7).
   const lookup = await schemaLookup(goal, { audience });
-  const slice = registrySlice(lookup, hint, audience);
+  // A resume after an approval builds from exactly what was asked for and
+  // approved (the hint) — a gate run once 'resumed' into a tool that answered
+  // from an unrelated view instead of the granted capability.
+  const slice = resumed && [].concat(hint.capabilities || []).length
+    ? registrySlice({ views: [], capabilities: [] }, hint, audience)
+    : registrySlice(lookup, hint, audience);
   const lockedIn = async (names) => {
     const out = [];
     for (const c of names) if (CAPABILITIES[c]?.status === "locked" && (await capabilityStatus(c)) === "locked") out.push(c);

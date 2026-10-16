@@ -34,7 +34,9 @@ Answer with ONE JSON object only.`;
 const SPEC_FORMAT = `Format (a SPEC — one view):
 {"definition": {"kind":"spec","from":"<view>","where":[{"field","op","value"}],"compute":[…],"group":{…},"sort":[{"by","dir"}],"limit":20,"select":[…]}, "samples":[{…},{…}]}
 Example — past-question accuracy per subject this year:
-{"definition":{"kind":"spec","from":"my_past_questions","where":[{"field":"created_at","op":"within","value":"1y"}],"group":{"by":["subject"],"sum":["attempted","correct"]},"compute":[],"sort":[{"by":"sum_attempted","dir":"desc"}]},"samples":[{},{}]}`;
+{"definition":{"kind":"spec","from":"my_past_questions","where":[{"field":"created_at","op":"within","value":"1y"}],"group":{"by":["subject"],"sum":["attempted","correct"]},"compute":[],"sort":[{"by":"sum_attempted","dir":"desc"}]},"samples":[{},{}]}
+Example — per group, how many rows HAVE a value vs all rows (e.g. graded vs assigned):
+{"definition":{"kind":"spec","from":"<view>","group":{"by":["<label field>"],"count":true,"counts":["<value field>"],"avg":["<value field>"]},"select":["<label field>","count","count_<value field>","avg_<value field>"]},"samples":[{},{}]}`;
 
 const RECIPE_FORMAT = `Format (a RECIPE — up to 4 steps, then ops):
 {"definition":{"kind":"recipe","steps":[{"id":"a","view":"<view>","where":[…]},{"id":"b","cap":"<capability>","args":{…},"rows":"<path to the list in its result>"}],
