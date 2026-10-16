@@ -11,7 +11,7 @@ import { schemaLookup, capabilityStatus } from "./registry.js";
 import { forbiddenFor, CAPABILITIES } from "./capabilities.js";
 import { DATA_VIEWS } from "./views.js";
 import { validateDefinition, runDefinition } from "./interpreters.js";
-import { validateParams, coerceInput, paramProps } from "./bind.js";
+import { validateParams, coerceInput, paramProps, wellFormedParams } from "./bind.js";
 import { buildDefinition, registrySlice } from "./builder.js";
 import { createExpect, repeatVerdict } from "../verify/assertions.js";
 
@@ -71,7 +71,8 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   const goal = String(input?.goal || "").trim().slice(0, 300);
   const name = String(input?.name || "").trim();
   const label = String(input?.label || "").trim().slice(0, 60);
-  const params = input?.params && typeof input.params === "object" ? paramProps(input.params) : {};
+  const given = input?.params && typeof input.params === "object" && !Array.isArray(input.params) ? paramProps(input.params) : {};
+  const { params, dropped: droppedParams } = wellFormedParams(given);
   const hint = input?.hint && typeof input.hint === "object" ? input.hint : {};
   const ev = { user_id: learnerId, goal: goal || "(none)", stages_tried: [], capabilities: [], builder_calls: 0 };
   const finish = async (outcome, out) => {
@@ -148,6 +149,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   }
   return finish("rejected", reject(`Couldn't build it safely: ${String(lastProblem || "no stage could express it").slice(0, 240)}`));
 
+  const droppedNote = droppedParams.length ? ` (Ignored params that weren't simple values: ${droppedParams.join(", ")} — the tool reads the data itself.)` : "";
   async function register({ stage, built, v, check }) {
     ev.mode = stage;
     ev.capabilities = v.uses.capabilities;
@@ -160,7 +162,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       await finish("created", {});
       return { status: "created", dryRun: true, tool: name, label, mode: stage, verified: true, definition: built.definition,
         result: runNow.ok ? { rows: runNow.rows, total: runNow.total, truncated: runNow.truncated } : { error: runNow.error },
-        note: "DRY RUN — the tool was built and verified but NOT saved. Answer the learner from `result`." };
+        note: "DRY RUN — the tool was built and verified but NOT saved. Answer the learner from `result`." + droppedNote };
     }
     const { data: row, error } = await edu().from("agent_tools").insert({ owner_id: learnerId, scope: "learner", ...def, usage_count: runNow.ok ? 1 : 0, last_used_at: new Date().toISOString() }).select("id").single();
     if (error) return finish("failed", reject(`Couldn't save the tool: ${error.message}`));
@@ -169,7 +171,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     return {
       status: "created", tool: name, label, mode: stage, verified: true,
       result: runNow.ok ? { rows: runNow.rows, total: runNow.total, truncated: runNow.truncated } : { error: runNow.error },
-      note: `Saved as the learner's tool "${label}". \`result\` is its answer for this request — use it now. Next time, call ${name} directly.`,
+      note: `Saved as the learner's tool "${label}". \`result\` is its answer for this request — use it now. Next time, call ${name} directly.${droppedNote}`,
       __newTool: toolDef(def),
     };
   }
