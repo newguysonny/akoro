@@ -391,8 +391,10 @@ export const sandboxContained = {
     const { runCode, staticCheck, CODE_LIMITS } = await import("../../self-tooling/sandbox/index.js");
     const ok = await runCode("function run(input, data){ return data.a.map(function (r) { return { x: r.x * 2 }; }); }", { input: {}, data: { a: [{ x: 1 }, { x: 2 }] }, akoro: {} });
     ctx.expect.ok("plain code runs", ok.ok && ok.value?.[1]?.x === 4, ok);
-    const hostless = await runCode("function run(){ return [typeof fetch, typeof XMLHttpRequest, typeof std, typeof os].join(','); }", {});
-    ctx.expect.eq("no network or host objects", hostless.value, "undefined,undefined,undefined,undefined");
+    // Network names are refused before running; host objects simply aren't there.
+    ctx.expect.ok("network refused before running", staticCheck("function run(){ return fetch('https://example.com') }").some((e) => /network/.test(e)));
+    const hostless = await runCode("function run(){ return [typeof std, typeof os, typeof module, typeof exports, typeof __dirname, typeof Buffer, typeof console].join(','); }", {});
+    ctx.expect.eq("no host objects", hostless.value, "undefined,undefined,undefined,undefined,undefined,undefined,undefined");
     const t0 = Date.now();
     const loop = await runCode("function run(){ for (;;) {} }", {});
     ctx.expect.ok("infinite loop stopped", !loop.ok && /too long/.test(loop.error), loop);
