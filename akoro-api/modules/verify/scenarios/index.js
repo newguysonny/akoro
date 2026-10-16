@@ -2,13 +2,13 @@
 import { healthBuild, toolsCatalogue } from "./smoke.js";
 import { scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites } from "./chat.js";
 import { followUpDeliverIntoChat, taskDueInMinutes, noResidue } from "./writes.js";
-import { viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup } from "./selftool.js";
+import { viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool } from "./selftool.js";
 import { privacyEdges } from "./network.js";
 import { rateLimitCountedOnce, battleEntryGates } from "./platform.js";
 
 const ALL = [healthBuild, toolsCatalogue, scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites,
   privacyEdges, rateLimitCountedOnce, battleEntryGates, followUpDeliverIntoChat, taskDueInMinutes, noResidue,
-  viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup];
+  viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool];
 
 export const SCENARIOS = Object.fromEntries(ALL.map((s) => [s.name, s]));
 
@@ -19,8 +19,10 @@ export const SUITES = {
   writes: ["tasks.create_due_in_minutes", "followups.deliver_into_chat", "writes.no_residue"],
   "agent-network": ["network.privacy_edges"],
   battles: ["battles.entry_gates"],
-  "self-tooling": ["selftool.views_match_schema", "selftool.schema_lookup_safe", "selftool.agent_uses_schema_lookup"],
+  "self-tooling": ["selftool.views_match_schema", "selftool.schema_lookup_safe", "selftool.create_spec_matches_db", "selftool.create_rejects_forbidden",
+    "selftool.agent_builds_tool", "selftool.agent_uses_schema_lookup"],
+  "self-tooling-writes": ["selftool.register_reuse_disable", "writes.no_residue"],
   // Self-tooling scenarios that need the feature on stay in their own suite
   // (BLOCKED while the flag is off); the schema check runs everywhere.
-  regression: ALL.filter((s) => s.risk !== "write" && !["selftool.schema_lookup_safe", "selftool.agent_uses_schema_lookup"].includes(s.name)).map((s) => s.name),
+  regression: ALL.filter((s) => s.risk !== "write" && (!s.name.startsWith("selftool.") || s.name === "selftool.views_match_schema")).map((s) => s.name),
 };

@@ -25,6 +25,7 @@
     { "text": "What reminders have you scheduled for me?", "tool": "list_scheduled_chat_follow_ups", "run": true },
     { "text": "Is there a way to see which of my weak topics are in subjects where my past-question accuracy is low? No tool does that yet — check what a new tool could use.", "tool": "schema_lookup" },
     { "text": "How am I doing on past questions? Give me my accuracy by subject.", "tool": "get_past_question_practice", "run": true },
+    { "text": "No tool does this yet: build one that totals my learning-session hours per month this year, then use it.", "tool": "create_tool" },
     { "text": "Show me my other chats.", "tool": "list_chats", "run": true },
     { "text": "Read chat 7b0f3c2a-1d4e-4f5a-9b6c-2e8d7a1c3f40 and continue from there.", "tool": "read_chat" },
     { "text": "Drop the revision steps into my chat 7b0f3c2a-1d4e-4f5a-9b6c-2e8d7a1c3f40.", "tool": "post_to_chat" },

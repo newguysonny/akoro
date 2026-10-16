@@ -95,6 +95,7 @@ import { getLearnerProfileContext } from "./learner-profile-context.js";
 import { validateLearnerTaskInput } from "./learner-task-validation.js";
 import { listChats, readChat, postToChat, ownedChatId } from "./chat-history-tools.js";
 import { schemaLookup } from "../self-tooling/registry.js";
+import { createTool, runLearnerTool, learnerToolDefs } from "../self-tooling/pipeline.js";
 import { selfToolingEnabled, selfToolingAllowedFor } from "../self-tooling/access.js";
 import { createLearnerToolRequest } from "../agent-tool-requests/service.js";
 import {
@@ -391,6 +392,23 @@ export const CHAT_TOOLS = [
         goal: { type: "string", description: "What the learner wants to find out or do, in plain language." },
       },
       required: ["goal"],
+    },
+  },
+  {
+    name: "create_tool",
+    featureGate: "self_tooling",
+    description: "Self-tooling (preview): BUILD a new read-only tool when no existing tool answers the learner's question (call schema_lookup first to see what it can use). It is built safely from the learner's own data, checked, saved for this learner, and RUN at once — the answer comes back in `result`. Outcomes: created (answer from result; next time call the tool by name), rejected (say plainly it can't be done and why). Never describe how it was built; never show internal names.",
+    input_schema: {
+      type: "object",
+      properties: {
+        goal:   { type: "string", description: "What the tool should work out, in plain language (≤ 300 chars), e.g. 'total hours of my learning sessions per month this year'." },
+        name:   { type: "string", description: "snake_case name, e.g. session_hours_by_month." },
+        label:  { type: "string", description: "Learner-facing name, e.g. 'Study hours by month'." },
+        params: { type: "object", description: "Optional inputs: { paramName: { type: string|number|integer|boolean, description, default } } (≤ 6)." },
+        run:    { type: "object", description: "Values for the params to answer THIS request with." },
+        hint:   { type: "object", description: "Optional: { views: [...], capabilities: [...] } from schema_lookup." },
+      },
+      required: ["goal", "name", "label"],
     },
   },
   {
@@ -1189,7 +1207,7 @@ async function resolveLearnerSchoolContext(studentId) {
  * flag the scratchpad, and by the agent console's DRY mode, which answers
  * these with what they WOULD do instead of doing it (lib/dryRunContext.js).
  */
-export const SIDE_EFFECT_TOOLS = ["create_task", "suggest_help", "schedule_chat_follow_up", "post_to_chat", "cancel_scheduled_chat_follow_up", "submit_tool_request", "prepare_activity", "revise_activity_draft",
+export const SIDE_EFFECT_TOOLS = ["create_task", "suggest_help", "schedule_chat_follow_up", "post_to_chat", "create_tool", "cancel_scheduled_chat_follow_up", "submit_tool_request", "prepare_activity", "revise_activity_draft",
           "create_goal", "update_goal_progress", "save_blog_draft", "publish_blog", "update_agent_network_settings", "block_agent", "log_past_question_practice",
           "challenge_agent", "post_challenge_request", "accept_challenge_request", "cancel_challenge_request", "rematch_battle", "message_agent", "reply_to_agent", "start_study_prep_session",
           "consult_peer_agents", "discard_activity_draft", "schedule_activity_routine", "cancel_activity_routine"];
@@ -1205,7 +1223,8 @@ const asToolError = (what) => (e) => ({ error: `Couldn't load ${what} just now${
 export async function executeChatTool(name, input, studentId, { conversationId = null, role = "student", channel = "ai_chat" } = {}) {
   // Agent console, DRY mode: anything that would change data is answered with
   // what it would have done — read-only tools still run for real.
-  if (isDryRun() && isSideEffecting(name, input)) {
+  // create_tool handles dry mode itself: it builds and verifies, but doesn't save.
+  if (isDryRun() && isSideEffecting(name, input) && name !== "create_tool") {
     return { dryRun: true, wouldDo: name, input, note: "DRY RUN — nothing was changed. Tell the learner exactly what you would have done." };
   }
   switch (name) {
@@ -2009,6 +2028,20 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       try { return await schemaLookup(String(input.goal).slice(0, 300)); }
       catch (error) { return { error: error.message || "Couldn't check what's available right now" }; }
     }
+    case "create_tool": {
+      if (role === "instructor") return { error: "Self-tooling is for learners." };
+      if (!(await selfToolingAllowedFor(studentId))) return { error: "Building new tools isn't turned on for this account yet." };
+      try {
+        return await createTool({
+          learnerId: studentId, input: input || {}, dry: isDryRun(),
+          builtIn: new Set(CHAT_TOOLS.map((t) => t.name)),
+          callCapability: (tool, args) => executeChatTool(tool, args, studentId, { role: "student", channel: "self_tooling" }),
+        });
+      } catch (error) {
+        console.warn("[self-tooling] create_tool failed:", error?.message || error);
+        return { status: "rejected", reason: "Building the tool failed unexpectedly — try again." };
+      }
+    }
     case "list_chats": {
       try { return await listChats(studentId, { search: input?.search, limit: input?.limit, currentChatId: conversationId }); }
       catch (error) { return { error: error.message || "Could not load your chats" }; }
@@ -2374,7 +2407,16 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         category: request.category,
       };
     }
-    default: return { error: `Unknown tool: ${name}` };
+    default: {
+      // A tool the learner's agent built (self-tooling) — read-only, re-checked every call.
+      if (role !== "instructor" && (await selfToolingAllowedFor(studentId))) {
+        const out = await runLearnerTool(name, input, studentId, {
+          callCapability: (tool, args) => executeChatTool(tool, args, studentId, { role: "student", channel: "self_tooling" }),
+        });
+        if (out) return out;
+      }
+      return { error: `Unknown tool: ${name}` };
+    }
   }
 }
 // =============================================================
@@ -3677,6 +3719,12 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
       if (traceRow) trace.toolEnd(traceRow, toolResult);
       // Structured observation: the tool's real backend outcome becomes the
       // model's next input, so the reply confirms facts, not intent.
+      // create_tool built a tool: offer it for the rest of this turn.
+      if (toolResult && typeof toolResult === "object" && toolResult.__newTool) {
+        const def = toolResult.__newTool;
+        delete toolResult.__newTool;
+        if (!tools.some((t) => t.function?.name === def.function.name)) tools.push(def);
+      }
       const observation = toolObservation({ action: tool, result: toolResult, requestId: newToolRequestId() });
       // Every tool call is logged: with nothing here, "the agent ignores my
       // data" is undiagnosable from server logs — zero lines means the model
@@ -4014,7 +4062,7 @@ router.post("/agent", async (req, res) => {
       tools: role === "student" ? openAiChatTools({
         allowToolRequest: hasExplicitToolRequestConsent(userMessage),
         selfTooling: await selfToolingAllowedFor(req.user.id),
-      }) : instructorTools,
+      }).concat(await selfToolingAllowedFor(req.user.id) ? await learnerToolDefs(req.user.id).catch(() => []) : []) : instructorTools,
       // Learners: capability questions are answered from the live catalogue.
       // Instructors: an activity request (or a confirmation continuing one)
       // MUST produce a prepare_activity call — left on "auto" the model
