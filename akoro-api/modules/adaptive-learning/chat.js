@@ -12,7 +12,7 @@
 // =============================================================
 
 import express from "express";
-import { isDryRun, runDry } from "../../lib/dryRunContext.js";
+import { isDryRun, runDry, runInspected, isInspected } from "../../lib/dryRunContext.js";
 import { jsonbArray, jsonbObject } from "../../lib/jsonb.js";
 import { authenticateToken } from "../auth/routes.js";
 import pkg from "pg";
@@ -117,10 +117,17 @@ import {
 const router     = express.Router();
 // Agent console (modules/agentConsole): a turn sent with the console's key in
 // x-agent-console-dry runs in DRY mode — tools that change data are simulated.
+// x-agent-console-inspect (same key) adds each tool call's arguments and a
+// truncated result to toolExecutions — the verification gate asserts on them.
 router.use((req, res, next) => {
   const key = process.env.AGENT_CONSOLE_KEY;
-  if (key && req.get("x-agent-console-dry") === key) return runDry(() => next());
-  next();
+  if (!key) return next();
+  const dry = req.get("x-agent-console-dry") === key;
+  const inspect = req.get("x-agent-console-inspect") === key;
+  let go = next;
+  if (inspect) { const inner = go; go = () => runInspected(inner); }
+  if (dry) { const inner = go; go = () => runDry(inner); }
+  return go();
 });
 // The one direct-Postgres pool in the API. Deliberately small: Supavisor (the
 // external proxy in front of Supabase Postgres) absorbs traffic spikes, so a
@@ -3482,6 +3489,14 @@ function openAiChatTools({ allowToolRequest = true } = {}) {
  * not call the tool again with an invented value. Used across every tool
  * and workflow, both roles.
  */
+/** A tool result, size-capped, for an inspected (gate/console) request. */
+function inspectResult(value) {
+  try {
+    const text = JSON.stringify(value ?? null);
+    return text.length <= 4000 ? JSON.parse(text) : { truncated: true, preview: text.slice(0, 4000) };
+  } catch { return { unserializable: true }; }
+}
+
 export function clarify(field, question, extra = {}) {
   return { needsClarification: true, missing: field, question, ...extra };
 }
@@ -3604,6 +3619,7 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         requestId: observation.request_id,
         sideEffecting: SIDE_EFFECT_TOOLS.includes(tool)
           || isSideEffectingAction(tool, input),
+        ...(isInspected() ? { input, result: inspectResult(toolResult) } : {}),
         // A small echo so the chat UI can render the Preview affordance for
         // the human-in-the-loop approval without parsing the model's prose.
         // The protégé's two moves ride the reply so the app can show them:
