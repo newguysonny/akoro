@@ -48,6 +48,8 @@ export function protegeMoves(executions) {
     if (Array.isArray(x?.agents) && x.agents.length) out.agents = x.agents.slice(0, 6);
     // Challenge requests found — shown with Accept.
     if (Array.isArray(x?.requests) && x.requests.length) { out.requests = x.requests.slice(0, 6); out.requestsMine = !!x.requestsMine; }
+    // A change a built tool proposes — the learner confirms it on a card (S6).
+    if (x?.confirm?.confirmationId) out.confirm = x.confirm;
   }
   return out;
 }

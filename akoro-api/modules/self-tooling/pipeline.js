@@ -16,6 +16,7 @@ import { validateParams, coerceInput, paramProps, wellFormedParams } from "./bin
 import { buildDefinition, registrySlice } from "./builder.js";
 import { createExpect, repeatVerdict } from "../verify/assertions.js";
 import { escalate } from "./escalation.js";
+import { proposeWrite } from "./confirmations.js";
 import { codeEnabled } from "./sandbox/index.js";
 
 const edu = () => db.schema("edu");
@@ -217,7 +218,8 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     if (dry) {
       await finish("created", {});
       return { status: "created", dryRun: true, tool: name, label, mode: stage, verified: true, definition: built.definition,
-        result: runNow.ok ? { rows: runNow.rows, total: runNow.total, truncated: runNow.truncated } : { error: runNow.error },
+        result: runNow.ok ? (runNow.write ? await writeOutcome({ learnerId, dry: true, tool: { label }, write: runNow.write })
+          : { rows: runNow.rows, total: runNow.total, truncated: runNow.truncated }) : { error: runNow.error },
         note: "DRY RUN — the tool was built and verified but NOT saved. Answer the learner from `result`." + droppedNote };
     }
     const { data: row, error } = await edu().from("agent_tools").insert({ owner_id: learnerId, scope: "learner", ...def, usage_count: runNow.ok ? 1 : 0, last_used_at: new Date().toISOString() }).select("id").single();
@@ -226,7 +228,8 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     await finish("created", {});
     return {
       status: "created", tool: name, label, mode: stage, verified: true,
-      result: runNow.ok ? { rows: runNow.rows, total: runNow.total, truncated: runNow.truncated } : { error: runNow.error },
+      result: runNow.ok ? (runNow.write ? await writeOutcome({ learnerId, conversationId, dry: false, tool: { id: row.id, name, label }, write: runNow.write })
+        : { rows: runNow.rows, total: runNow.total, truncated: runNow.truncated }) : { error: runNow.error },
       note: `Saved as the learner's tool "${label}". \`result\` is its answer for this request — use it now. Next time, call ${name} directly.${droppedNote}`,
       __newTool: toolDef(def),
     };
@@ -260,7 +263,7 @@ export async function learnerToolDefs(learnerId) {
 }
 
 /** Run a saved tool — the learner's own, else a platform one. → result, or null when there's no such tool. */
-export async function runLearnerTool(name, input, learnerId, { callCapability }) {
+export async function runLearnerTool(name, input, learnerId, { callCapability, conversationId = null, dry = false }) {
   if (!NAME.test(String(name || ""))) return null;
   let { data: t } = await edu().from("agent_tools").select("*").eq("owner_id", learnerId).eq("name", name).in("status", ["active", "disabled"]).maybeSingle();
   if (!t) ({ data: t } = await edu().from("agent_tools").select("*").eq("scope", "platform").eq("name", name).in("status", ["active", "disabled"]).maybeSingle());
@@ -269,7 +272,8 @@ export async function runLearnerTool(name, input, learnerId, { callCapability })
   if (t.status !== "active") return { error: platform ? "This Akoro tool is turned off for now." : "This tool is turned off — rebuild it or turn it back on in Settings → Agent → My tools." };
   // Re-check on EVERY call: a revoked grant or removed view takes effect at once (§7.10).
   for (const c of t.capabilities || []) {
-    if ((await capabilityStatus(c)) !== "enabled" || CAPABILITIES[c]?.kind !== "read") return { error: "This tool uses something that's no longer allowed, so it can't run." };
+    const cap = CAPABILITIES[c];
+    if ((await capabilityStatus(c)) !== "enabled" || !(cap?.kind === "read" || cap?.target)) return { error: "This tool uses something that's no longer allowed, so it can't run." };
   }
   for (const v of t.views || []) if (!DATA_VIEWS[v]) return { error: "This tool uses data that's no longer available." };
   // Always as THIS learner: views are forced to their own rows (viewRuntime).
@@ -282,7 +286,19 @@ export async function runLearnerTool(name, input, learnerId, { callCapability })
     ...(fail >= 3 && !platform ? { status: "disabled" } : {}), updated_at: new Date().toISOString(),
   }).eq("id", t.id);
   if (!r.ok) return { error: fail >= 3 && !platform ? "This tool failed three times in a row and was turned off — rebuild it." : `The tool couldn't run: ${r.error}` };
+  if (r.write) return writeOutcome({ learnerId, conversationId, dry, tool: t, write: r.write });
   return { tool: t.label, rows: r.rows, total: r.total, truncated: r.truncated };
+}
+
+/**
+ * A tool with a write step ran: in a dry run say what WOULD change; otherwise
+ * store the proposal and return the confirmation card (nothing written).
+ */
+async function writeOutcome({ learnerId, conversationId, dry, tool, write }) {
+  const items = write.targets.map((x) => x.label);
+  if (dry) return { status: "would_need_confirmation", dryRun: true, tool: tool.label, action: write.does, items, more: write.more || 0,
+    note: "DRY RUN — nothing was proposed or changed. Say what would change and that the learner would confirm it on a card." };
+  return { tool: tool.label, ...(await proposeWrite({ learnerId, conversationId, tool, write })) };
 }
 
 /** Learner tools unused for `days` days are archived (§7.10 health). Platform tools are the admins' call. */

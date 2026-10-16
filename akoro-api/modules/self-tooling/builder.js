@@ -42,6 +42,7 @@ Example — weak topics in subjects where past-question accuracy is under $maxAc
 {"definition":{"kind":"recipe","steps":[{"id":"weak","view":"my_weak_topics","where":[{"field":"confidence","op":"lt","value":0.5}]},{"id":"pq","view":"my_past_questions"}],
  "then":[{"op":"from","ref":"pq"},{"op":"group","by":["subject"],"sum":["attempted","correct"]},{"op":"compute","as":"accuracy","fn":"divide","a":"sum_correct","b":"sum_attempted"},{"op":"filter","where":[{"field":"accuracy","op":"lt","value":"$maxAccuracy"}]},{"op":"save","as":"acc"},
  {"op":"from","ref":"weak"},{"op":"join","right":"acc","on":["subject"]},{"op":"sort","by":"confidence","dir":"asc"},{"op":"pick","fields":["subject","topic","confidence","accuracy"]}]},"samples":[{"maxAccuracy":0.6},{"maxAccuracy":0.9}]}
+Changing data (only when "writes" are listed and the goal asks to DO something, e.g. "mark my overdue tasks done"): end the recipe with {"op":"write","cap":"<write name>"} on rows still from its onRowsOf view (filter/sort/limit/pick them — never group). It changes NOTHING when the tool runs: the learner is shown exactly those rows and confirms. Pick the rows precisely (filter by the goal's conditions); a write never touches rows the filter didn't keep.
 How rows flow: "from" makes a step's (or saved table's) rows current; ops change the current rows; "save" names them; "join" joins the current rows with "right".
 Capability steps: "rows" is the path to the list inside its result (see "returns", e.g. "bySubject" for "bySubject[].x").`;
 
@@ -62,9 +63,13 @@ const FORMATS = { spec: SPEC_FORMAT, recipe: RECIPE_FORMAT, code: CODE_FORMAT };
 export function registrySlice(lookup, hint = {}) {
   const viewNames = new Set([...(lookup?.views || []).map((v) => v.name), ...[].concat(hint.views || []).filter((v) => v in DATA_VIEWS)]);
   const capNames = new Set([...(lookup?.capabilities || []).filter((c) => c.status === "available").map((c) => c.name), ...[].concat(hint.capabilities || []).filter((c) => c in CAPABILITIES)]);
+  // Write capabilities the lookup found ON (granted) and that a tool can target (S6).
+  const writeNames = [...capNames].filter((n) => CAPABILITIES[n]?.kind === "write" && CAPABILITIES[n].target);
+  for (const n of writeNames) viewNames.add(CAPABILITIES[n].target);
   return {
     views: [...viewNames].map((n) => describeView(n, DATA_VIEWS[n])),
     capabilities: [...capNames].filter((n) => CAPABILITIES[n]?.kind === "read").map((n) => ({ name: n, does: CAPABILITIES[n].description, returns: CAPABILITIES[n].returns })),
+    ...(writeNames.length ? { writes: writeNames.map((n) => ({ name: n, does: CAPABILITIES[n].description, onRowsOf: CAPABILITIES[n].target })) } : {}),
   };
 }
 

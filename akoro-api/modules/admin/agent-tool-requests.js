@@ -69,7 +69,7 @@ function capabilityInfo(row) {
     risk: {
       othersData: cap?.scope === "network",
       writes: cap?.kind === "write",
-      grantable: !!cap && cap.status === "locked" && cap.kind === "read",
+      grantable: !!cap && cap.status === "locked" && (cap.kind === "read" || !!cap.target),
     },
     askedBy: row.askedBy ?? null,
     resumeStatus: row.resume_status || null,

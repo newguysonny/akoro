@@ -24,7 +24,7 @@ test("runtime capabilities have runners; the probe is hidden and harmless", () =
 });
 
 test("escalate refuses what a grant couldn't satisfy, and dry runs make no request", async () => {
-  assert.equal((await escalate({ learnerId: "u", capability: "tasks.mark_done", goal: "mark my task done", proposed: {} })).status, "rejected");
+  assert.equal((await escalate({ learnerId: "u", capability: "circles.leave", goal: "leave my circle", proposed: {} })).status, "rejected");
   assert.equal((await escalate({ learnerId: "u", capability: "others.private_data", goal: "x", proposed: {} })).status, "rejected");
   assert.equal((await escalate({ learnerId: "u", capability: "learner.context", goal: "x", proposed: {} })).status, "rejected");
   const dry = await escalate({ learnerId: "u", capability: "battles.class_results", goal: "how I did against classmates", proposed: {}, dry: true });
@@ -95,4 +95,30 @@ test("scheduling goals go to code first", async () => {
   assert.ok(needsCode("plan out my revision, 3 topics per day"));
   assert.ok(!needsCode("How many tasks I have by status"));
   assert.ok(!needsCode("total hours of my learning sessions per month this year"));
+});
+
+test("write steps: last op, rows from the target view, never grouped, and the capability must be on", async () => {
+  const { validateDefinition } = await import("./interpreters.js");
+  const tasks = { id: "t", view: "my_tasks", where: [{ field: "status", op: "eq", value: "pending" }] };
+  const ok = await validateDefinition({ kind: "recipe", steps: [tasks], then: [{ op: "sort", by: "due_at" }, { op: "write", cap: "tasks.mark_done" }] }, {});
+  assert.deepEqual(ok.errors.filter((e) => !/needs approval/.test(e)), [], "only the grant is missing (no DB grant here)");
+  assert.ok(ok.uses.capabilities.includes("tasks.mark_done"));
+  const grouped = await validateDefinition({ kind: "recipe", steps: [tasks], then: [{ op: "group", by: ["status"], count: true }, { op: "write", cap: "tasks.mark_done" }] }, {});
+  assert.ok(grouped.errors.some((e) => /works on rows from my_tasks/.test(e)));
+  const notLast = await validateDefinition({ kind: "recipe", steps: [tasks], then: [{ op: "write", cap: "tasks.mark_done" }, { op: "limit", n: 3 }] }, {});
+  assert.ok(notLast.errors.some((e) => /last step/.test(e)));
+  const wrongView = await validateDefinition({ kind: "recipe", steps: [{ id: "g", view: "my_goals" }], then: [{ op: "write", cap: "tasks.mark_done" }] }, {});
+  assert.ok(wrongView.errors.some((e) => /rows from my_tasks/.test(e)));
+  const notWrite = await validateDefinition({ kind: "recipe", steps: [tasks], then: [{ op: "write", cap: "tasks.list_mine" }] }, {});
+  assert.ok(notWrite.errors.some((e) => /isn't a write/.test(e)));
+  const noTarget = await validateDefinition({ kind: "recipe", steps: [tasks], then: [{ op: "write", cap: "circles.leave" }] }, {});
+  assert.ok(noTarget.errors.some((e) => /isn't a write/.test(e)));
+});
+
+test("a row's private id survives pick but never leaves the server", async () => {
+  const O = await import("./ops.js");
+  const rows = [{ title: "A", status: "pending", _ref: "id-1" }];
+  assert.deepEqual(O.pick(rows, { fields: ["title"] }), [{ title: "A", _ref: "id-1" }]);
+  assert.deepEqual(O.stripRefs(O.pick(rows, { fields: ["title"] })), [{ title: "A" }]);
+  assert.equal("_ref" in O.group(rows, { by: ["status"], count: true })[0], false);
 });

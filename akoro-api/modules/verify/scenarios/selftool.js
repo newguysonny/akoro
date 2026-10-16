@@ -445,3 +445,71 @@ export const codeToolBuilt = {
     if (seq.length >= 2) ctx.expect.ok("weakest first", seq.every((c, i) => i === 0 || c >= seq[i - 1] - 1e-9), seq);
   },
 };
+
+// ── Phase S6: writes, confirmed by the learner ──────────────────────────
+export const writeConfirm = {
+  name: "selftool.write_confirm", area: "self-tooling", risk: "write",
+  description: "A tool that changes data proposes exactly which rows and changes nothing until the learner confirms; declining changes nothing; another learner can't confirm it; confirming applies it once; a dry run proposes nothing.",
+  params: { learner: { default: "@tester27" }, other: { default: "@tester28" } },
+  async run(ctx, p) {
+    await needCreate(ctx);
+    const me = await ctx.as(p.learner);
+    await ctx.as(p.other);
+    const { default: db } = await import("../../../db.js");
+    const { activeGrants } = await import("../../self-tooling/registry.js");
+    const tag = ctx.marker.slice(8, 16).replace(/[^a-z0-9]/g, "x");
+    const name = `verify_done_${tag}`;
+    const titles = [`${ctx.marker} revise fractions`, `${ctx.marker} revise motion`];
+
+    // The hidden write probe, granted only for this run (it can only mark tasks done, and every write needs a tap).
+    const { data: grant, error: gErr } = await db.schema("edu").from("capability_grants")
+      .insert({ capability: "verify.task_done", note: `gate ${ctx.marker}`, expires_at: new Date(Date.now() + 15 * 60_000).toISOString() }).select("id").single();
+    if (gErr) ctx.expect.blocked(`couldn't grant the probe: ${gErr.message}`);
+    ctx.cleanup(async () => { await db.schema("edu").from("capability_grants").update({ revoked_at: new Date().toISOString() }).eq("id", grant.id); await activeGrants({ fresh: true }); });
+    await activeGrants({ fresh: true });
+    ctx.cleanup(() => ctx.db.deleteOwned("tasks", { ownerColumn: "creator_id", ownerId: me.id, filters: { title: { like: `${ctx.marker}%` } } }));
+    ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tools", { ownerColumn: "owner_id", ownerId: me.id, filters: { name } }));
+    ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tool_write_confirmations", { ownerColumn: "principal_id", ownerId: me.id, filters: { tool_name: "selftool:verify.task_done" } }));
+
+    for (const title of titles) {
+      const t = await ctx.agent.tool({ as: p.learner, tool: "create_task", mode: "live", input: { title, priority: "low", dueInMinutes: 60 } });
+      ctx.expect.ok(`task "${title.slice(-15)}" created`, !t?.error, t?.error);
+    }
+    const statusOf = async () => (await ctx.db.rows("tasks", { creator_id: me.id, title: { like: `${ctx.marker}%` } }, { columns: "title, status" })).map((r) => r.status);
+
+    const r = await ctx.agent.tool({ as: p.learner, tool: "create_tool", mode: "live", input: {
+      goal: `Mark my tasks whose title starts with "${ctx.marker}" as done`, name, label: `${ctx.marker} Finish gate tasks`,
+      hint: { views: ["my_tasks"], capabilities: ["verify.task_done"] } } });
+    ctx.expect.eq("tool created", r?.status, "created");
+    const card = r?.result?.confirmation;
+    ctx.expect.eq("running it asks for confirmation", r?.result?.status, "needs_confirmation");
+    ctx.note(`definition: ${JSON.stringify(r?.definition || null).slice(0, 300)}; items: ${JSON.stringify(card?.items || [])}`);
+    if (!card?.confirmationId) return;
+    ctx.expect.eq("lists exactly the two gate tasks", (card.items || []).length, 2);
+    ctx.expect.ok("lists only the gate tasks", (card.items || []).every((x) => String(x).startsWith(ctx.marker)), card.items);
+    ctx.expect.ok("nothing changed before confirming", (await statusOf()).every((s) => s !== "done"), await statusOf());
+
+    const theirs = await ctx.http({ as: p.other, method: "POST", path: `/api/self-tooling/confirmations/${card.confirmationId}/confirm` });
+    ctx.expect.status("another learner can't confirm it", theirs, 404);
+    const declined = await ctx.http({ as: p.learner, method: "POST", path: `/api/self-tooling/confirmations/${card.confirmationId}/reject` });
+    ctx.expect.eq("declined", declined.body?.data?.status, "rejected");
+    ctx.expect.ok("declining changed nothing", (await statusOf()).every((s) => s !== "done"));
+
+    // Dry run: says what would change, proposes nothing.
+    const before = await ctx.db.count("edu.agent_tool_write_confirmations", { principal_id: me.id, tool_name: "selftool:verify.task_done" });
+    const dry = await ctx.agent.tool({ as: p.learner, tool: name, learnerTool: true, mode: "dry", input: {} });
+    ctx.expect.eq("dry run only describes", dry?.status, "would_need_confirmation");
+    ctx.expect.eq("dry run proposed nothing", await ctx.db.count("edu.agent_tool_write_confirmations", { principal_id: me.id, tool_name: "selftool:verify.task_done" }), before);
+
+    const again = await ctx.agent.tool({ as: p.learner, tool: name, learnerTool: true, mode: "live", input: {} });
+    const card2 = again?.confirmation;
+    ctx.expect.ok("asking again gives a fresh card", card2?.confirmationId && card2.confirmationId !== card.confirmationId && card2.status === "pending", again);
+    if (!card2?.confirmationId) return;
+    const ok = await ctx.http({ as: p.learner, method: "POST", path: `/api/self-tooling/confirmations/${card2.confirmationId}/confirm` });
+    ctx.expect.status("confirmed", ok, 200);
+    ctx.expect.eq("both applied", ok.body?.data?.result?.done, 2);
+    ctx.expect.ok("the tasks are done now", (await statusOf()).every((s) => s === "done"), await statusOf());
+    const twice = await ctx.http({ as: p.learner, method: "POST", path: `/api/self-tooling/confirmations/${card2.confirmationId}/confirm` });
+    ctx.expect.status("can't be used twice", twice, 409);
+  },
+};

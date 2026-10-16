@@ -20,7 +20,7 @@ export async function readView(viewName, learnerId, { where = [] } = {}) {
   const owners = [owner].flat().filter(Boolean);
   const own = Object.entries(view.fields).filter(([, f]) => !f.path).map(([k]) => k);
   const embeds = Object.entries(view.embed || {}).map(([rel, cols]) => `${rel}(${cols.join(",")})`);
-  const columns = [...new Set([...own, ...owners])].concat(embeds).join(", ");
+  const columns = [...new Set([...own, ...owners, ...(view.ref ? [view.ref] : [])])].concat(embeds).join(", ");
   let q = (schema === "public" ? db.from(table) : db.schema(schema).from(table)).select(columns);
 
   if (view.scope === "self") {
@@ -52,6 +52,9 @@ export async function readView(viewName, learnerId, { where = [] } = {}) {
       if (f.path) { const [rel, col] = f.path.split("."); const e = Array.isArray(row[rel]) ? row[rel][0] : row[rel]; out[k] = e ? e[col] ?? null : null; }
       else out[k] = row[k] ?? null;
     }
+    // A write target's id rides along privately (S6): a write step needs it,
+    // and runDefinition strips it before rows reach the model or the learner.
+    if (view.ref && row[view.ref] != null) Object.defineProperty(out, "_ref", { value: String(row[view.ref]), enumerable: true, writable: true, configurable: true });
     return out;
   });
 }
