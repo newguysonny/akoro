@@ -189,7 +189,7 @@ even if its tests pass. They extend Grand Plan §2 (rules 1–24 still apply).
 | S4 | Does the agent read the database schema? | **No.** `schema_lookup` returns Data Views and capabilities from the registry, never `information_schema`. | Proposed (rule 25) |
 | S5 | Who can use a created tool? | **The learner who created it**, across their chats. Admins see all tools and can **promote** one to every learner after a gate run. | **User decision** |
 | S6 | Can created tools change data? | **Read-only in v1.** Writes come in phase S6, composed only from write capabilities, each step confirmed by the learner. | **User decision** |
-| S7 | Sandbox for stage 3 | **QuickJS compiled to WebAssembly, in a worker thread inside akoro-api**: no network, no filesystem, no imports, memory and CPU limits, a single capability bridge. External sandboxes (E2B / Daytona) stay an option if code tools ever need packages. | Proposed |
+| S7 | Sandbox for stage 3 | **QuickJS compiled to WebAssembly, in a worker thread inside akoro-api**: no network, no filesystem, no imports, memory and CPU limits. External sandboxes (E2B / Daytona) stay an option if code tools ever need packages. | **Built (S5)** — data in, answer out: no bridge at all |
 | S8 | Where do escalations go? | **The existing "Agent requests" flow**, extended: `edu.agent_tool_requests` gains a `kind = capability` with the resume ticket; the existing admin page gains a capability tab. | **Built (S3)** |
 | S10 | Who gets an approved capability? | **Everyone.** An admin approval turns the capability on for all learners (optional expiry); there is no per-learner grant. Every waiting request for the same capability resumes. | **User decision** |
 | S9 | How does work resume? | **Event-driven**: an admin decision enqueues a job that re-runs the stored `create_tool` as that learner and posts the outcome into the original chat (the delivery path built for scheduled messages), plus a notification. No polling. | **Built (S3)** — plus a 15-min sweep for lost jobs |
@@ -1236,7 +1236,27 @@ Planned scope:
 - Agent tools page, promote (gate-verified), merge duplicates, analytics
   dashboard, auto-disable/archival jobs.
 
-### Phase S5 — Sandboxed code (stage 3)
+### Phase S5 — Sandboxed code (stage 3) ✅ built 2026-10-16 (flag off by default)
+
+As built (`modules/self-tooling/sandbox/`, quickjs-emscripten 0.32.0): one
+change from §7.7 — **data in, answer out, no bridge**. A code definition is
+`{ kind:"code", steps:[reads, as in a recipe], source:"function run(input,
+data, akoro) {…}" }`: the host reads the declared views/capabilities (owner
+forced, as for every tool) and passes them in as `data`; the code can't call
+Akoro at all, so there is no bridge to misuse or rate-limit. `akoro` = { today
+(Africa/Lagos), now, timezone }, frozen. Containment: static checks (no eval,
+Function, import/require, this/globalThis, prototypes/constructor, Reflect,
+Proxy, async, timers, network names, `${}` templates, long literals; ≤ 8 KB),
+then a fresh QuickJS (WebAssembly) runtime in a fresh worker thread per run —
+32 MB QuickJS memory, 512 KB stack, 500 ms CPU (interrupt handler), 2 s wall
+(the worker is terminated), V8 heap cap, empty env, 64 KB answer. Pipeline:
+recipe → spec → code (when `AKORO_SELF_TOOLING_CODE_ENABLED=true`) →
+escalate. Escape test pack (`sandbox.test.mjs`, 8 tests) and gate
+`selftool.sandbox_contained` PASS on production (regression run 31449b8f).
+`selftool.code_tool` (build a scheduling tool, check its plan obeys every
+rule) needs the flag on.
+
+Planned scope:
 - QuickJS worker, capability bridge, static checks, limits; flag
   `AKORO_SELF_TOOLING_CODE_ENABLED`.
 - **Exit:** sandbox escape test pack (network, fs, infinite loop, memory bomb,
