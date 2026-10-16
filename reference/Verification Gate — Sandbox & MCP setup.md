@@ -35,7 +35,7 @@ root directory `akoro-api`, build `npm ci`, start `npm start`, health check
 | `OPENAI_API_KEY` | a key for agent scenarios (a separate key keeps sandbox spend visible) |
 | `JWT_SECRET` | its own value |
 | `AKORO_SELF_TOOLING_ENABLED`, `AKORO_SELF_TOOLING_CODE_ENABLED` | `true`, to test self-tooling |
-| `AKORO_AGENT_NETWORK_ENABLED` etc. | the same feature flags as production, so the sandbox tests what production runs |
+| feature flags | the same as production, so the sandbox tests what production runs. Flags left unset on production can stay unset here — e.g. `AKORO_AGENT_NETWORK_ENABLED` defaults to on (only `false` turns it off). |
 | `AKORO_JOBS_ENABLED` | optional: `chat follow-ups worker,self-tool resumes worker` keeps only the workers the gate needs |
 
 Writes stay on test learners in the sandbox too (same policy as production),
