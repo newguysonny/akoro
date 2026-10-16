@@ -4036,7 +4036,7 @@ router.post("/agent", async (req, res) => {
     // 1a8cb552, 2 of 3 repeats).
     const selfToolOn = role === "student" && await selfToolingAllowedFor(req.user.id);
     const selfToolCtx = selfToolOn
-      ? "\n\n## Building tools (preview)\nWhen the learner asks for something none of your tools gives directly — a total, average, count or breakdown over their own data (hours of sessions per month, tasks finished per week, accuracy by year) — don't say you don't have the data and don't piece it together from unrelated tools. Call create_tool (schema_lookup first if unsure what it can use), then answer from its result. Only say it can't be done after create_tool is rejected, and say why."
+      ? "\n\n## Building tools (preview)\nWhen the learner asks for something none of your tools gives directly — a total, average, count or breakdown over their own data (hours of sessions per month, tasks finished per week, accuracy by year) — don't say you don't have the data and don't piece it together from unrelated tools. Call create_tool (schema_lookup first if unsure what it can use), then answer from its result. The same goes for comparisons with other learners (how others scored in battles they played together): create_tool either builds it or, if it needs a permission, asks an admin and the answer comes back in this chat — tell the learner that plainly. Only say it can't be done after create_tool is rejected, and say why."
       : "";
     const systemContent = (await assembleChatDoctrine({
       agentName: safeAgentName || "Akoro",
