@@ -117,7 +117,7 @@ export function createContext({ scenario, sink, evidence, realUsers, runId = "lo
     return turn;
   }
 
-  async function agentTool({ as: who, tool, input = {}, mode = "dry", learnerTool = false } = {}) {
+  async function agentTool({ as: who, tool, input = {}, mode = "dry", learnerTool = false, conversationId = null } = {}) {
     const acct = await as(who);
     const live = mode === "live";
     if (live && (risk !== "write" || !acct.tester)) throw new PolicyError("Live tool calls are for write scenarios on test learners only.");
@@ -125,7 +125,7 @@ export function createContext({ scenario, sink, evidence, realUsers, runId = "lo
     // learnerTool: a tool the learner's agent built (self-tooling), not a built-in.
     if (!learnerTool && !getLearnerChatTools().some((t) => t.name === tool)) throw new BlockedError(`"${tool}" isn't an enabled learner tool on this server.`);
     const t0 = Date.now();
-    const go = () => executeChatTool(tool, input, acct.id, { role: "student", channel: "verify" });
+    const go = () => executeChatTool(tool, input, acct.id, { role: "student", channel: "verify", conversationId });
     let result;
     try { result = live ? await go() : await runDry(go); } catch (e) { result = { threw: e.message || String(e) }; }
     evidence.tools.push({ as: acct.username, tool, input: redact(input), mode: live ? "live" : "dry", ms: Date.now() - t0,
@@ -134,10 +134,10 @@ export function createContext({ scenario, sink, evidence, realUsers, runId = "lo
   }
 
   const dbApi = {
-    /** Read rows (evidence). `filters`: { col: value } equality, or { col: { in: [...] } }. */
+    /** Read rows (evidence). `filters`: { col: value } equality, { col: { in: [...] } } or { col: { like } }. */
     async rows(name, filters = {}, { columns = "*", limit = 200, order } = {}) {
       let q = table(name).select(columns);
-      for (const [k, v] of Object.entries(filters)) q = v && typeof v === "object" && Array.isArray(v.in) ? q.in(k, v.in) : q.eq(k, v);
+      for (const [k, v] of Object.entries(filters)) q = v && typeof v === "object" && Array.isArray(v.in) ? q.in(k, v.in) : v && typeof v === "object" && v.like ? q.like(k, v.like) : q.eq(k, v);
       if (order) q = q.order(order.column, { ascending: !!order.ascending });
       const { data, error } = await q.limit(limit);
       if (error) throw new BlockedError(`Evidence query on ${name} failed: ${error.message}`);

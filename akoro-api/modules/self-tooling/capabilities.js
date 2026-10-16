@@ -44,7 +44,12 @@ export const CAPABILITIES = Object.freeze({
   "blogs.search_public":    { ...read("search_blog_posts", "Search published Akoro blog articles.", ["blog", "article", "how to", "study tips"], ["posts[].title", "posts[].slug", "posts[].category"]), scope: "public" },
 
   // ── locked: requestable, need an admin grant ──────────────────────────
-  "battles.class_results":  locked("Battle results of the learner's classmates (scores and ranks in shared battles).", ["classmates", "beat", "class results", "others"], { kind: "read", scope: "network" }),
+  // Runs in capRuntime.js (no chat tool): other players' results in battles the learner took part in.
+  "battles.class_results":  locked("Results of the other players in battles the learner took part in: their name, score, rank and whether they won (blocked learners left out).", ["classmates", "beat", "class results", "others", "other players", "opponents", "compare", "versus"], { kind: "read", scope: "network", runtime: true,
+    returns: ["results[].battleTitle", "results[].subject", "results[].player", "results[].score", "results[].rank", "results[].isWinner", "results[].isMe"] }),
+  // The gate's harmless probe (scenario selftool.escalate_and_resume): returns the time and nothing else.
+  // Never offered by schema_lookup; reachable only through a hint, so a grant left on changes nothing.
+  "verify.probe":           locked("Gate probe: returns the current time (testing escalation only).", [], { kind: "read", runtime: true, hidden: true, returns: ["checkedAt", "ok"] }),
   "tasks.mark_done":        locked("Mark one of the learner's tasks as done.", ["done", "complete", "finish task"]),
   "buddies.end":            locked("End one of the learner's study buddy pairings.", ["end buddy", "stop buddy"]),
   "circles.leave":          locked("Leave a revision circle the learner joined.", ["leave circle"]),

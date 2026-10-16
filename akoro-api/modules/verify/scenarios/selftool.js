@@ -182,3 +182,67 @@ export const agentBuildsTool = {
     ctx.expect.loopHealthy(turn);
   },
 };
+
+// ── Phase S3: escalation + resume ────────────────────────────────────────
+export const escalateAndResume = {
+  name: "selftool.escalate_and_resume", area: "self-tooling", risk: "write",
+  description: "A goal needing a locked capability becomes one admin request (deduped); approval grants it, the build resumes as the learner and the answer lands in the same chat with a notification; revoking stops the saved tool.",
+  params: { learner: { default: "@tester24" } },
+  async run(ctx, p) {
+    await needCreate(ctx);
+    const me = await ctx.as(p.learner);
+    // The probe capability is harmless (it returns the time) and never offered by
+    // schema_lookup, so a grant made here changes nothing for real learners.
+    const made = await ctx.http({ as: p.learner, method: "POST", path: "/api/adaptive/chat/sessions", body: { title: `${ctx.marker} escalation` } });
+    ctx.expect.status("chat created", made, 201);
+    const chatId = made.body?.session?.id;
+    if (!chatId) ctx.expect.blocked("couldn't create the chat");
+    const name = `probe_${ctx.marker.slice(8, 16).replace(/[^a-z0-9]/g, "x")}`;
+    const goal = `${ctx.marker} show when the gate probe last checked in`;
+    ctx.cleanup(() => ctx.db.deleteOwned("chat_sessions", { ownerColumn: "user_id", ownerId: me.id, filters: { id: chatId } }));
+    ctx.cleanup(() => ctx.db.deleteOwned("notifications", { ownerColumn: "user_id", ownerId: me.id, filters: { related_id: chatId } }));
+    ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tools", { ownerColumn: "owner_id", ownerId: me.id, filters: { name: { like: `${name}%` } } }));
+    ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tool_requests", { ownerColumn: "requester_id", ownerId: me.id, filters: { goal } }));
+
+    const input = { goal, name, label: `${ctx.marker} Probe check`, hint: { capabilities: ["verify.probe"] } };
+    const r = await ctx.agent.tool({ as: p.learner, tool: "create_tool", mode: "live", conversationId: chatId, input });
+    ctx.expect.eq("escalated", r?.status, "escalated");
+    ctx.expect.ok("returns the request it made", !!r?.requestId, r);
+    if (!r?.requestId) return;
+    const row = (await ctx.db.rows("edu.agent_tool_requests", { id: r.requestId }, { columns: "kind, requested_capability, status, resume_status, conversation_id, requester_id", limit: 1 }))[0];
+    ctx.expect.ok("request row: capability, waiting, this chat, this learner",
+      row?.kind === "capability" && row?.requested_capability === "verify.probe" && row?.status === "new" && row?.resume_status === "waiting" && row?.conversation_id === chatId && row?.requester_id === me.id, row);
+    const again = await ctx.agent.tool({ as: p.learner, tool: "create_tool", mode: "live", conversationId: chatId, input });
+    ctx.expect.ok("asking again returns the same request", again?.requestId === r.requestId && again?.duplicate === true, again);
+
+    // The admin decision (in-process, as the gate): approve for everyone, short expiry.
+    const { decideRequest, revokeGrant } = await import("../../self-tooling/escalation.js");
+    const { enqueueResume } = await import("../../self-tooling/resumeQueue.js");
+    const decided = await decideRequest({ requestId: r.requestId, decision: "approve", note: "gate test", expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+      admin: { id: null, label: "verification gate" }, enqueue: enqueueResume });
+    ctx.expect.ok("approved with a grant", decided?.request?.status === "approved" && !!decided?.grant?.id, decided);
+    const grantId = decided?.grant?.id;
+    if (grantId) ctx.cleanup(() => revokeGrant({ grantId, admin: { id: null, label: "verification gate" } }).catch(() => {}));
+
+    // Resume: the build re-runs as the learner and answers in the same chat.
+    const done = await ctx.until(async () => {
+      const x = (await ctx.db.rows("edu.agent_tool_requests", { id: r.requestId }, { columns: "status, resume_status, resume_result", limit: 1 }))[0];
+      return x && ["resumed", "failed"].includes(x.resume_status) ? x : null;
+    }, { timeoutMs: 120_000, everyMs: 4_000 });
+    ctx.expect.eq("resumed", done?.resume_status, "resumed");
+    ctx.expect.eq("request implemented", done?.status, "implemented");
+    ctx.note(`resume result: ${JSON.stringify(done?.resume_result || null).slice(0, 300)}`);
+    const msgs = await ctx.db.rows("chat_messages", { session_id: chatId, user_id: me.id }, { columns: "role, text", limit: 10 });
+    ctx.expect.ok("answer posted into the same chat", msgs.some((m) => m.role === "agent" && /permission/i.test(m.text) && /built/i.test(m.text)), msgs.map((m) => m.text.slice(0, 80)));
+    ctx.expect.gte("learner notified", await ctx.db.count("notifications", { user_id: me.id, related_id: chatId }), 1);
+    const tool = (await ctx.db.rows("edu.agent_tools", { owner_id: me.id, name: { like: `${name}%` } }, { columns: "name, capabilities, status", limit: 1 }))[0];
+    ctx.expect.ok("tool saved with the capability", !!tool && tool.status === "active" && (tool.capabilities || []).includes("verify.probe"), tool);
+
+    // Revoke: the saved tool stops at once.
+    if (grantId && tool) {
+      await revokeGrant({ grantId, admin: { id: null, label: "verification gate" } });
+      const after = await ctx.agent.tool({ as: p.learner, tool: tool.name, learnerTool: true, mode: "live", input: {} });
+      ctx.expect.ok("revoked capability stops the tool", !!after?.error && !after?.rows, after);
+    }
+  },
+};

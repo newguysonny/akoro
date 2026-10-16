@@ -397,7 +397,7 @@ export const CHAT_TOOLS = [
   {
     name: "create_tool",
     featureGate: "self_tooling",
-    description: "Self-tooling (preview): BUILD a new read-only tool when no existing tool answers the learner's question (call schema_lookup first to see what it can use). It is built safely from the learner's own data, checked, saved for this learner, and RUN at once — the answer comes back in `result`. Outcomes: created (answer from result; next time call the tool by name), rejected (say plainly it can't be done and why). Never describe how it was built; never show internal names.",
+    description: "Self-tooling (preview): BUILD a new read-only tool when no existing tool answers the learner's question (call schema_lookup first to see what it can use). It is built safely from the learner's own data, checked, saved for this learner, and RUN at once — the answer comes back in `result`. Outcomes: created (answer from result; next time call the tool by name); escalated (it needs a permission only an admin can give — a request was made; tell the learner in plain words that you've asked, and that the answer will come back in this chat); rejected (say plainly it can't be done and why). If schema_lookup shows a needed capability as needs_approval, pass it in hint.capabilities so the request names it. Never describe how it was built; never show internal names.",
     input_schema: {
       type: "object",
       properties: {
@@ -1220,6 +1220,14 @@ export const isSideEffecting = (tool, input) => SIDE_EFFECT_TOOLS.includes(tool)
  *  not the loop's generic "could not be completed". */
 const asToolError = (what) => (e) => ({ error: `Couldn't load ${what} just now${e?.message ? ` (${String(e.message).slice(0, 120)})` : ""}.` });
 
+/** What create_tool needs from the chat: built-in names (never shadowed) and a runner for capabilities. */
+export function selfToolDeps(studentId) {
+  return {
+    builtIn: new Set(CHAT_TOOLS.map((t) => t.name)),
+    callCapability: (tool, args) => executeChatTool(tool, args, studentId, { role: "student", channel: "self_tooling" }),
+  };
+}
+
 export async function executeChatTool(name, input, studentId, { conversationId = null, role = "student", channel = "ai_chat" } = {}) {
   // Agent console, DRY mode: anything that would change data is answered with
   // what it would have done — read-only tools still run for real.
@@ -2032,11 +2040,7 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       if (role === "instructor") return { error: "Self-tooling is for learners." };
       if (!(await selfToolingAllowedFor(studentId))) return { error: "Building new tools isn't turned on for this account yet." };
       try {
-        return await createTool({
-          learnerId: studentId, input: input || {}, dry: isDryRun(),
-          builtIn: new Set(CHAT_TOOLS.map((t) => t.name)),
-          callCapability: (tool, args) => executeChatTool(tool, args, studentId, { role: "student", channel: "self_tooling" }),
-        });
+        return await createTool({ learnerId: studentId, input: input || {}, dry: isDryRun(), conversationId, ...selfToolDeps(studentId) });
       } catch (error) {
         console.warn("[self-tooling] create_tool failed:", error?.stack || error?.message || error);
         return { status: "rejected", reason: "Building the tool failed unexpectedly — try again." };

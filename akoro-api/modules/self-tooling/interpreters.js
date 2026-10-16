@@ -14,6 +14,7 @@
  */
 import { DATA_VIEWS } from "./views.js";
 import { CAPABILITIES } from "./capabilities.js";
+import { CAP_RUNNERS } from "./capRuntime.js";
 import { capabilityStatus } from "./registry.js";
 import { readView } from "./viewRuntime.js";
 import { bind, refsIn, paramProps } from "./bind.js";
@@ -260,7 +261,7 @@ export async function runDefinition(def, input, { learnerId, callCapability }) {
       if (st.view) out[st.id] = O.filter(await readView(st.view, learnerId, { where: st.where || [] }), st.where || []);
       else {
         const cap = CAPABILITIES[st.cap];
-        const res = await callCapability(cap.tool, st.args || {});
+        const res = cap.runtime ? await CAP_RUNNERS[st.cap](learnerId, st.args || {}).catch((e) => ({ error: e.message })) : await callCapability(cap.tool, st.args || {});
         if (res?.error) throw new ToolError(`${st.cap} failed: ${res.error}`);
         const got = pathGet(res, st.rows);
         out[st.id] = Array.isArray(got) ? got : got == null ? [] : [got];
