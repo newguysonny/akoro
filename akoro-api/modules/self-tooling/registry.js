@@ -74,7 +74,7 @@ export async function schemaLookup(goal, { limit = 6 } = {}) {
       ? "Nothing in the registry matches this goal — it can't be built from what's available."
       : forbidden.length
         ? "Part of this goal isn't allowed (see notAllowed) — tell the learner plainly; don't try to build it."
-        : "Views can be filtered, sorted and counted; capabilities are existing operations. A tool can only use what's listed here as available; needs_approval means an admin must allow it first. These names are internal — tell the learner in plain words (\"your learning sessions\"), never the names.",
+        : "Views can be filtered, sorted and counted; capabilities are existing operations. Next: call create_tool with this goal to build the tool and answer from its result. A tool can only use what's listed here as available; needs_approval means an admin must allow it first. These names are internal — tell the learner in plain words (\"your learning sessions\"), never the names.",
   };
 }
 

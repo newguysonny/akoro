@@ -18,7 +18,7 @@ Rules:
 - Every view is already limited to this learner's own data (or published content) — never add an owner filter.
 - Filter ops: eq neq lt lte gt gte in contains startsWith isNull notNull within ("30d","12h","6m","1y").
 - compute: { as, fn, a, b } with fn divide|multiply|add|subtract|round|percent|minutesBetween|daysBetween; a/b are field names or numbers.
-- group: { by: [field | {field, bucket: day|week|month|year}], count, sum:[fields], avg:[fields], min:[fields], max:[fields] } → output fields: the by-fields (bucketed ones named field_bucket), count, sum_<f>, avg_<f>, min_<f>, max_<f>.
+- group: { by: [field | {field, bucket: day|week|month|year}] (ALWAYS a list), count, sum:[fields], avg:[fields], min:[fields], max:[fields] } → output fields: the by-fields (bucketed ones named field_bucket), count, sum_<f>, avg_<f>, min_<f>, max_<f>.
 - sort: { by, dir: asc|desc }. limit ≤ 100. Use "$paramName" to use a declared param.
 - Also give 2 realistic sample inputs ("samples": [ {…}, {…} ]) matching the params.
 - If it truly can't be built from what's listed, answer {"notExpressible": "<why, one sentence>"}.
