@@ -52,8 +52,12 @@ export const pastQuestionsTruth = {
     const turn = await ctx.agent.chat({ as: p.learner, model: p.model, prompt: "How am I doing on past questions overall? Give me the numbers." });
     ctx.expect.toolCalled(turn, "get_past_question_practice");
     const reply = String(turn.reply || "");
-    ctx.expect.ok("doesn't claim there's no practice", !/\b(no|haven['’]?t|have not)\b[^.]{0,40}\b(attempts?|practi[cs]ed?|past questions?)\b/i.test(reply), reply.slice(0, 200));
     const pct = Math.round((correct / attempted) * 100);
+    // The false claim is "no practice" WITHOUT the real figures ("none for WAEC
+    // yet" next to the real BECE numbers is accurate, not a false claim).
+    const saysNone = /\b(no|haven['’]?t|have not)\b[^.]{0,40}\b(attempts?|practi[cs]ed?|past questions?)\b/i.test(reply);
+    const hasFigures = reply.includes(String(attempted)) || reply.includes(`${pct}%`);
+    ctx.expect.ok("doesn't claim there's no practice", !(saysNone && !hasFigures), reply.slice(0, 200));
     ctx.expect.ok(`reply has the real figures (${correct}/${attempted}, ${pct}%)`,
       reply.includes(String(attempted)) || reply.includes(`${pct}%`) || reply.includes(String(correct)), reply.slice(0, 200));
     ctx.expect.loopHealthy(turn);

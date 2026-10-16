@@ -384,7 +384,7 @@ export const CHAT_TOOLS = [
   {
     name: "schema_lookup",
     featureGate: "self_tooling",
-    description: "Self-tooling (preview): find what data and operations a NEW tool could use for a goal no existing tool covers. Returns data views (fields you can filter, sort and count — always the learner's own data or published content) and capabilities, each 'available' or 'needs_approval', plus anything not allowed. Read-only; builds nothing. Use an existing tool first; call this only when none fits, then tell the learner what could and couldn't be done. Never tell the learner some data doesn't exist just because an unrelated tool came back empty — check here first.",
+    description: "Self-tooling (preview): find what data and operations a NEW tool could use for a goal no existing tool covers. Returns data views (fields you can filter, sort and count — always the learner's own data or published content) and capabilities, each 'available' or 'needs_approval', plus anything not allowed. Read-only; builds nothing. Use an existing tool first; call this only when none fits, then tell the learner what could and couldn't be done. Never tell the learner some data doesn't exist just because an unrelated tool came back empty — check here first. Never show the learner view or capability names (e.g. my_learning_sessions); describe them in plain words (\"your learning sessions\").",
     input_schema: {
       type: "object",
       properties: {
