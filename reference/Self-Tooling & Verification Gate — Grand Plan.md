@@ -1111,7 +1111,22 @@ Planned scope:
 - **Exit:** a write scenario leaves no residue on testers (verified by a
   second read-only scenario).
 
-### Phase S1 — Capability Registry + Data Views + `schema_lookup`
+### Phase S1 — Capability Registry + Data Views + `schema_lookup` ✅ built 2026-10-16
+As built: `modules/self-tooling/` — `views.js` (13 Data Views: 12 learner-scoped
++ published blog posts; allowlisted, typed fields; embeds for battles/courses),
+`capabilities.js` (22 read capabilities over existing tools — 19 own-data, 3
+network/public through their tools' privacy rules; 5 locked; 5 forbidden
+patterns), `registry.js` (grants for everyone with 30 s cache, keyword-ranked
+`schemaLookup`), `access.js` (`AKORO_SELF_TOOLING_ENABLED`, default off, +
+`AKORO_SELF_TOOLING_LEARNERS` allow-list, checked in the chat route AND the
+tool). Migration `2026-self-tooling-grants.sql`. Gate: `selftool.views_match_schema`
+(in `regression`), `selftool.schema_lookup_safe`, `selftool.agent_uses_schema_lookup`
+(suite `self-tooling`). Verified locally: views match the schema, lookup is
+safe and flags forbidden goals, a grant flips locked → available and revoke
+flips it back. Not built in S1: embedding-based ranking (keyword ranking is
+enough for 35 items).
+
+Planned scope:
 - `modules/self-tooling/capabilities.js`, 14 Data Views, read capabilities
   wrapping existing tools, grants table, contract tests (§7.2).
 - `schema_lookup` tool behind `AKORO_SELF_TOOLING_ENABLED` (testers only).
