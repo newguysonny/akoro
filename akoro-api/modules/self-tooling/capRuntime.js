@@ -41,3 +41,35 @@ export const CAP_RUNNERS = {
     return { checkedAt: new Date().toISOString(), ok: true };
   },
 };
+
+/**
+ * Write runners (S6): apply one capability to ONE of the learner's own rows,
+ * by the row's id. Called only from a confirmed card (confirmations.js); the
+ * owner is checked here again, whatever the confirmation says.
+ * → { ok: true } | { ok: false, error }
+ */
+/** The same as the app's "mark done" (PATCH /api/tasks/:id/toggle), side effects included. */
+const markTaskDone = async (learnerId, ref) => {
+  const { data, error } = await db.from("tasks").update({ status: "done", completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("id", ref).eq("creator_id", learnerId).neq("status", "done").select("id").maybeSingle();
+  if (error) return { ok: false, error: "couldn't update the task" };
+  if (!data) return { ok: false, error: "not found or already done" };
+  try {
+    const [{ cancelAutonomyReviewForTask }, { emitAutonomyEvent }] = await Promise.all([
+      import("../adaptive-learning/learner-autonomy.js"), import("../autonomy/triggers.js"),
+    ]);
+    await cancelAutonomyReviewForTask({ taskId: data.id, userId: learnerId }).catch(() => {});
+    emitAutonomyEvent(learnerId, "task_done").catch(() => {});
+  } catch { /* the task is done; follow-ups are best effort, as in the route */ }
+  return { ok: true };
+};
+export const WRITE_RUNNERS = {
+  "tasks.mark_done": markTaskDone,
+  "verify.task_done": markTaskDone,
+  /** Through the study_buddy tool, so its own checks (and notifications) run. */
+  async "buddies.end"(learnerId, ref, { callTool }) {
+    const r = await callTool("study_buddy", { action: "end", id: ref });
+    return r?.error ? { ok: false, error: String(r.error).slice(0, 120) } : { ok: true };
+  },
+};
+

@@ -137,6 +137,22 @@ function checkMixedRefs(errors, value) {
   else if (value && typeof value === "object") Object.entries(value).forEach(([k, v]) => { if (k !== "source") checkMixedRefs(errors, v); });   // code is code, not a param slot
 }
 
+export const MAX_WRITE_ROWS = 20;
+/**
+ * A write step (S6): the LAST op, a write capability that's on (granted),
+ * applied to rows that still come from its target view (not grouped). It
+ * changes nothing when the tool runs — it proposes; the learner confirms.
+ */
+async function checkWrite(errors, o, { origin, last, label, uses }) {
+  const cap = CAPABILITIES[o.cap];
+  if (!cap) return errors.push(`${label}: unknown capability ${o.cap}`);
+  if (cap.kind !== "write" || !cap.target) return errors.push(`${label}: ${o.cap} isn't a write a tool can make`);
+  if ((await capabilityStatus(o.cap)) !== "enabled") errors.push(`${label}: capability ${o.cap} needs approval`);
+  if (!last) errors.push(`${label}: write must be the last step`);
+  if (origin !== cap.target) errors.push(`${label}: ${o.cap} works on rows from ${cap.target} (filter/sort/pick them; don't group)`);
+  uses.capabilities.push(o.cap);
+}
+
 /** Validate read steps (views or capabilities). → the set of step ids. */
 async function checkSteps(errors, steps, uses) {
   const ids = new Set();
@@ -204,17 +220,22 @@ export async function validateDefinition(def, params) {
     let cur = steps.length === 1 ? tables.get(steps[0]?.id) ?? null : null;
     const used = new Set(steps.length === 1 ? [steps[0]?.id] : []);
     const union = (a, b) => (a && b ? new Map([...b, ...a]) : null);
+    // Which view the current rows still come from (a write needs its target's rows, ungrouped).
+    const origins = new Map(steps.filter((st) => st?.id).map((st) => [st.id, st.view || null]));
+    let origin = steps.length === 1 ? steps[0]?.view || null : null;
     for (const [i, o] of then.entries()) {
       if (!o || typeof o !== "object") continue;
-      if (o.op === "from") { used.add(o.ref); cur = tables.get(o.ref) ?? null; }
-      else if (o.op === "save") { if (o.as) tables.set(o.as, cur); }
+      if (o.op === "from") { used.add(o.ref); cur = tables.get(o.ref) ?? null; origin = origins.get(o.ref) ?? null; }
+      else if (o.op === "save") { if (o.as) { tables.set(o.as, cur); origins.set(o.as, origin); } }
       else if (o.op === "join") {
         used.add(o.right); if (o.left) used.add(o.left);
         const left = o.left ? tables.get(o.left) : cur, right = tables.get(o.right);
         for (const k of [].concat(o.on || [])) for (const [side, t] of [["left", left], ["right", right]]) if (t && !t.has(k)) errors.push(`then[${i}]: join key ${k} isn't a field of the ${side} rows (have: ${[...t.keys()].join(", ")})`);
         cur = union(left, right);
+        if (o.left) origin = origins.get(o.left) ?? null;
       }
-      else if (OUT_OPS.has(o.op)) cur = flowOp(errors, o, cur, `then[${i}]`);
+      else if (o.op === "write") await checkWrite(errors, o, { origin, last: i === then.length - 1, label: `then[${i}]`, uses });
+      else if (OUT_OPS.has(o.op)) { cur = flowOp(errors, o, cur, `then[${i}]`); if (o.op === "group") origin = null; }
     }
     for (const st of steps) if (st?.id && !used.has(st.id)) errors.push(`step ${st.id} is never used — remove it`);
     for (const [i, o] of then.entries()) {
@@ -226,7 +247,7 @@ export async function validateDefinition(def, params) {
         if (o.left && !ids.has(o.left)) errors.push(`${label}: join left unknown step ${o.left}`);
         if (!Array.isArray(o.on) || !o.on.length) errors.push(`${label}: join.on`);
       } else if (OUT_OPS.has(o?.op)) checkOp(errors, o, label, null);
-      else errors.push(`${label}: unknown op ${o?.op}`);
+      else if (o?.op !== "write") errors.push(`${label}: unknown op ${o?.op}`);
     }
   } else errors.push(`kind must be "spec", "recipe" or "code" (got ${def.kind})`);
   return { ok: !errors.length, errors, uses };
@@ -276,6 +297,7 @@ export function dropUnsetFilters(value, input) {
 export async function runDefinition(def, input, { learnerId, callCapability }) {
   const d = bind(dropUnsetFilters(normalizeDefinition(def), input), input);
   let rows;
+  let write = null;   // a recipe's write step: the change it PROPOSES (S6)
   if (d.kind === "spec") {
     rows = await readView(d.from, learnerId, { where: d.where || [] });
     rows = O.filter(rows, d.where || []);
@@ -303,11 +325,19 @@ export async function runDefinition(def, input, { learnerId, callCapability }) {
       if (o.op === "from") rows = out[o.ref];
       else if (o.op === "save") { out[o.as] = rows || []; }
       else if (o.op === "join") rows = O.join(o.left ? out[o.left] : rows || [], out[o.right], o);
+      else if (o.op === "write") {
+        // Propose, never apply: the rows it would change, by private id.
+        const cap = CAPABILITIES[o.cap];
+        const targets = (rows || []).filter((r) => r?._ref);
+        write = { cap: o.cap, does: cap.description, targets: targets.slice(0, MAX_WRITE_ROWS).map((r) => ({ ref: r._ref, label: String(cap.item ? cap.item(r) : r._ref).slice(0, 120) })), more: Math.max(0, targets.length - MAX_WRITE_ROWS) };
+        continue;
+      }
       else rows = applyOp(rows || [], o);
       if (rows.length > O.MAX_ROWS) throw new ToolError("too many rows");
     }
     rows = rows || [];
   }
   const total = rows.length;
-  return { rows: rows.slice(0, O.MAX_OUT), total, truncated: total > O.MAX_OUT };
+  // The private _ref never leaves the server.
+  return { rows: O.stripRefs(rows.slice(0, O.MAX_OUT)), total, truncated: total > O.MAX_OUT, ...(write ? { write } : {}) };
 }

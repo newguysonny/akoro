@@ -122,7 +122,10 @@ export function group(rows, { by = [], count = false, sum = [], avg = [], min = 
 
 export const sort = (rows, { by, dir = "asc" }) => [...rows].sort((a, b) => (dir === "desc" ? -cmp(a[by], b[by]) : cmp(a[by], b[by])));
 export const limit = (rows, { n }) => rows.slice(0, Math.min(MAX_OUT, Math.max(1, Number(n) || MAX_OUT)));
-export const pick = (rows, { fields }) => rows.map((r) => Object.fromEntries(fields.filter((f) => f in r).map((f) => [f, r[f]])));
+// pick keeps a write target's private _ref (S6) so a write step after it still knows which row.
+export const pick = (rows, { fields }) => rows.map((r) => Object.fromEntries([...fields.filter((f) => f in r).map((f) => [f, r[f]]), ...("_ref" in r ? [["_ref", r._ref]] : [])]));
+/** Remove the private _ref before rows leave the server. */
+export const stripRefs = (rows) => rows.map((r) => { if (!r || typeof r !== "object" || !("_ref" in r)) return r; const { _ref, ...rest } = r; return rest; });
 export const rename = (rows, { from, to }) => rows.map((r) => { const { [from]: v, ...rest } = r; return { ...rest, [to]: v }; });
 export function dedupe(rows, { fields }) {
   const seen = new Set();

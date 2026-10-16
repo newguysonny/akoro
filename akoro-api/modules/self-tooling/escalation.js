@@ -42,9 +42,9 @@ export async function escalate({ learnerId, capability, goal, proposed, conversa
   const cap = CAPABILITIES[capability];
   if (!cap || FORBIDDEN.some((f) => f.name === capability)) return { status: "rejected", reason: "That isn't something a tool can be allowed to do." };
   if (cap.status !== "locked") return { status: "rejected", reason: "That capability doesn't need a permission." };
-  if (cap.kind !== "read") {
-    // Writes come with learner confirmation in a later phase (S6) — no request a grant couldn't satisfy.
-    return { status: "rejected", reason: "Tools can only read for now, so this can't be built yet — it's on the roadmap." };
+  if (cap.kind !== "read" && !cap.target) {
+    // A write a built tool can't target yet — no request a grant couldn't satisfy.
+    return { status: "rejected", reason: "Tools can't make this kind of change yet — it's on the roadmap." };
   }
   const line = requestLine(capability);
   if (dry) {
@@ -117,7 +117,7 @@ export async function decideRequest({ requestId, decision, note = null, expiresA
   const cleanNote = note ? String(note).replace(/\s+/g, " ").trim().slice(0, 500) : null;
 
   if (decision === "approve") {
-    if (!cap || cap.status !== "locked" || cap.kind !== "read") throw Object.assign(new Error("This capability can't be granted (only locked read capabilities can, for now)."), { status: 422 });
+    if (!cap || cap.status !== "locked" || !(cap.kind === "read" || cap.target)) throw Object.assign(new Error("This capability can't be granted yet (no tool can target it)."), { status: 422 });
     if (expiresAt && !(Date.parse(expiresAt) > Date.now())) throw Object.assign(new Error("expiresAt must be in the future"), { status: 422 });
     let grant = null;
     const { data: live } = await edu().from("capability_grants").select("id, expires_at").eq("capability", r.requested_capability).is("revoked_at", null);
@@ -231,7 +231,10 @@ export async function resumeRequest(requestId, { createTool }) {
   }
   const messageId = `00000000-0000-4000-8000-${createHash("sha256").update(requestId).digest("hex").slice(0, 12)}`;
   let text;
-  if (out.status === "created") {
+  if (out.status === "created" && out.result?.confirmation) {
+    // A write tool: nothing is changed without the learner's tap, and a posted message can't carry the card.
+    text = `Good news — I was given permission, so I built "${out.label || label}" for you. It would change: ${(out.result.confirmation.items || []).slice(0, 5).join(", ") || "nothing right now"}. Nothing has changed yet — ask me to run it and confirm on the card.`;
+  } else if (out.status === "created") {
     const rows = out.result?.rows || [];
     text = `Good news — I was given permission, so I built "${out.label || label}" for you. Here's what it found:\n\n${out.result?.error ? `It couldn't run just now (${out.result.error}).` : rowsText(rows)}\n\nIt's saved in your tools, so you can ask me again any time.`;
   } else if (out.status === "escalated") {

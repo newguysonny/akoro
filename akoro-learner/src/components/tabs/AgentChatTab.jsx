@@ -29,6 +29,7 @@ import { applyTraceEvent, blocksFromSavedTrace, promoteActivity, settleRunning }
 import { CHAT_STARTERS, cleanIdeas, protegeMoves } from '../../lib/chatIdeas.js';
 import AgentCards from '../network/AgentCards.jsx';
 import ChallengeRequestCards from '../network/ChallengeRequestCards.jsx';
+import ConfirmChangeCard from './agentChat/ConfirmChangeCard.jsx';
 import { useVoiceAnswer } from '../../hooks/useVoiceAnswer.js';
 import { useSpeakReply } from '../../hooks/useSpeakReply.js';
 
@@ -903,6 +904,7 @@ function AgentChatTab({
                   )}
                   {msg.agents?.length>0&&<AgentCards agents={msg.agents} onFill={applyIdea}/>}
                   {msg.requests?.length>0&&<ChallengeRequestCards requests={msg.requests} mine={!!msg.requestsMine}/>}
+                  {msg.confirm&&<ConfirmChangeCard confirm={msg.confirm}/>}
                   {/* Not taught yet — the learner can teach it now. */}
                   {msg.teach&&onTeachTopic&&(
                     <div style={{ display:"flex",alignItems:"center",gap:10,marginTop:10,padding:"10px 12px",borderRadius:14,background:`${BRAND}0D`,border:`1px solid ${BRAND}33` }}>

@@ -2426,6 +2426,7 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       if (role !== "instructor" && (await selfToolingAllowedFor(studentId))) {
         const out = await runLearnerTool(name, input, studentId, {
           callCapability: (tool, args) => executeChatTool(tool, args, studentId, { role: "student", channel: "self_tooling" }),
+          conversationId, dry: isDryRun(),
         });
         if (out) return out;
       }
@@ -3756,6 +3757,9 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         // The protégé's two moves ride the reply so the app can show them:
         // a Teach me button, and the teaching guide's mark on the answer.
         ...(tool === "ask_to_be_taught" && toolResult?.asked ? { teach: { topic: toolResult.topic, subject: toolResult.subject } } : {}),
+        // A tool that would change data (S6): the confirmation card — only the learner's tap runs it.
+        ...(toolResult?.confirmation?.confirmationId ? { confirm: toolResult.confirmation }
+          : toolResult?.result?.confirmation?.confirmationId ? { confirm: toolResult.result.confirmation } : {}),
         // Agent search results ride as cards the app can show (Challenge / Message buttons).
         ...((tool === "search_agents" || tool === "find_competitors") && Array.isArray(toolResult?.agents) ? { agents: toolResult.agents.slice(0, 6) } : {}),
         // `requestsMine`: the learner's OWN requests get Cancel, not Accept.

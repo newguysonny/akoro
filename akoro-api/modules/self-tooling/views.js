@@ -25,7 +25,7 @@ export const DATA_VIEWS = Object.freeze({
   my_tasks: {
     description: "The learner's own tasks (to-dos): title, priority, status, due time.",
     keywords: ["task", "todo", "to-do", "due", "deadline", "reminder"],
-    scope: "self", source: { schema: "public", table: "tasks", owner: "creator_id" },
+    scope: "self", source: { schema: "public", table: "tasks", owner: "creator_id" }, ref: "id",   // write target (tasks.mark_done)
     fields: { title: text({ sort: false }), priority: text(), status: text(), task_type: text(), due_at: time(), completed_at: time(), created_at: time() },
   },
   my_goals: {
@@ -95,7 +95,7 @@ export const DATA_VIEWS = Object.freeze({
   my_buddies: {
     description: "The learner's study buddy pairings: subject, exam, goal, status, last and next check-in.",
     keywords: ["buddy", "buddies", "partner", "study buddy"],
-    scope: "self", source: { schema: "edu", table: "study_buddies", owner: ["requester_id", "buddy_id"] },
+    scope: "self", source: { schema: "edu", table: "study_buddies", owner: ["requester_id", "buddy_id"] }, ref: "id",   // write target (buddies.end)
     fields: { subject: text(), exam: text(), goal: text({ sort: false }), status: text(), accepted_at: time(), last_checkin_at: time(), next_checkin_at: time() },
   },
   my_agent_messages: {
