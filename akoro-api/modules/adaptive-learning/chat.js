@@ -95,7 +95,7 @@ import { getLearnerProfileContext } from "./learner-profile-context.js";
 import { validateLearnerTaskInput } from "./learner-task-validation.js";
 import { listChats, readChat, postToChat, ownedChatId } from "./chat-history-tools.js";
 import { schemaLookup } from "../self-tooling/registry.js";
-import { createTool, runLearnerTool, learnerToolDefs } from "../self-tooling/pipeline.js";
+import { createTool, runLearnerTool, learnerToolDefs, forcedSelfTool } from "../self-tooling/pipeline.js";
 import { selfToolingEnabled, selfToolingAllowedFor } from "../self-tooling/access.js";
 import { createLearnerToolRequest } from "../agent-tool-requests/service.js";
 import {
@@ -4049,6 +4049,7 @@ router.post("/agent", async (req, res) => {
     // "I don't have that data" instead of building the tool (verify run
     // 1a8cb552, 2 of 3 repeats).
     const selfToolOn = role === "student" && await selfToolingAllowedFor(req.user.id);
+    const forceSelfTool = selfToolOn ? await forcedSelfTool(req.user.id, userMessage).catch(() => null) : null;
     const selfToolCtx = selfToolOn
       ? "\n\n## Building tools (preview)\nWhen the learner asks for something none of your tools gives directly — a total, average, count or breakdown over their own data (hours of sessions per month, tasks finished per week, accuracy by year) — don't say you don't have the data and don't piece it together from unrelated tools. Call create_tool (schema_lookup first if unsure what it can use), then answer from its result. The same goes for comparisons with other learners (how others scored in battles they played together): create_tool either builds it or, if it needs a permission, asks an admin and the answer comes back in this chat — tell the learner that plainly. Only say it can't be done after create_tool is rejected, and say why."
       : "";
@@ -4096,6 +4097,10 @@ router.post("/agent", async (req, res) => {
       // only; the tool's own clarify() handles anything genuinely missing.
       requiredTool: role === "student"
         ? (requiresAgentCapabilitiesTool(userMessage) ? "get_agent_capabilities"
+          // Other players' results in the learner's battles: go through
+          // create_tool (it builds, or asks an admin for the permission) —
+          // left on auto the model sometimes said "I can't see that" instead.
+          : forceSelfTool ? "create_tool"
           // Identity questions about the learner's OWN school/class/subjects/
           // teachers/progress are fact questions about data the model cannot
           // see — the live 2026-10-01 transcript had tools=0 and an invented

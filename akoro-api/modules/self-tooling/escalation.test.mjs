@@ -130,3 +130,14 @@ test("code may only hard-code dates the learner gave", async () => {
   assert.match(inventedDates("var day = new Date('2026-10-01T00:00:00Z'); var end = '2026-11-06';", goal)[0], /2026-10-01/);
   assert.deepEqual(inventedDates("var e = input.examDate || '2026-12-01';", "plan until my exam", { examDate: { type: "string", default: "2026-12-01" } }), []);
 });
+
+test("questions about other players in battles force create_tool; others don't", async () => {
+  const { asksAboutOthersInBattles } = await import("./pipeline.js");
+  for (const q of ["In the battles I played, how did the other players score compared to me?", "Who beat me in my last battles?",
+    "How do my battle scores compare with my classmates?", "show my opponents' scores in my challenges"]) assert.ok(asksAboutOthersInBattles(q), q);
+  for (const q of ["How many battles have I won?", "Find me a battle to join", "How did the other players do in the weekly league?",
+    "Compare my accuracy by subject"]) assert.ok(!asksAboutOthersInBattles(q), q);
+  const chat = readFileSync(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
+  assert.match(chat, /const forceSelfTool = selfToolOn \? await forcedSelfTool\(req\.user\.id, userMessage\)/);
+  assert.match(chat, /: forceSelfTool \? "create_tool"/);
+});
