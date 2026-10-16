@@ -3,7 +3,7 @@
  * perform (plan §7.5–7.6). Pure functions over arrays of plain rows: no I/O,
  * no expressions, no loops the tool can write. Shared by recipes and specs.
  *
- *   filter  where: [{ field, op, value }]   op: eq neq lt lte gt gte in contains startsWith isNull notNull within
+ *   filter  where: [{ field, op, value }]   op: eq neq lt lte gt gte in contains startsWith isNull notNull within year month
  *   compute { as, fn, a, b }                fn: divide multiply add subtract round percent minutesBetween daysBetween
  *   group   { by: [field | {field, bucket}], count?, sum?, avg?, min?, max? }   bucket: day week month year
  *   sort    { by, dir }        limit { n }        pick { fields }        rename { from, to }
@@ -12,7 +12,7 @@
  */
 export const MAX_ROWS = 2000;
 export const MAX_OUT = 100;
-const OPS = new Set(["eq", "neq", "lt", "lte", "gt", "gte", "in", "contains", "startsWith", "isNull", "notNull", "within"]);
+const OPS = new Set(["eq", "neq", "lt", "lte", "gt", "gte", "in", "contains", "startsWith", "isNull", "notNull", "within", "year", "month"]);
 const FNS = new Set(["divide", "multiply", "add", "subtract", "round", "percent", "minutesBetween", "daysBetween"]);
 const BUCKETS = new Set(["day", "week", "month", "year"]);
 
@@ -55,6 +55,9 @@ export function matches(row, { field, op, value }) {
     case "isNull": return v == null;
     case "notNull": return v != null;
     case "within": { const ms = withinMs(value); return ms != null && v != null && Date.parse(v) >= Date.now() - ms; }
+    // Calendar periods (UTC): year 2026 | "this"; month "2026-03" | "this".
+    case "year": { const t = Date.parse(v); return Number.isFinite(t) && new Date(t).getUTCFullYear() === (value === "this" ? new Date().getUTCFullYear() : Number(value)); }
+    case "month": { const t = Date.parse(v); return Number.isFinite(t) && new Date(t).toISOString().slice(0, 7) === (value === "this" ? new Date().toISOString().slice(0, 7) : String(value)); }
     default: throw new ToolError(`unknown filter op ${op}`);
   }
 }

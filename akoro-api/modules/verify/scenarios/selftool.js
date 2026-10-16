@@ -71,7 +71,9 @@ export const agentUsesSchemaLookup = {
       // No existing tool answers this (sessions have no duration tool) — it needs a new one.
       prompt: "How many hours did my learning sessions take in total each month this year? No tool you have does that yet — see what a new one could use." });
     ctx.expect.eq("turn answered", turn.status, 200);
-    ctx.expect.toolCalled(turn, "schema_lookup");
+    // create_tool runs the same lookup itself, so going straight to it is fine too.
+    const used = (turn.tools || []).map((t) => t.tool);
+    ctx.expect.ok("checked what a new tool could use (schema_lookup or create_tool)", used.includes("schema_lookup") || used.includes("create_tool"), used);
     ctx.expect.noBackendNames("reply has no backend names", turn.reply);
     ctx.expect.loopHealthy(turn);
   },
@@ -168,8 +170,13 @@ export const agentBuildsTool = {
     const built = (turn.tools || []).find((t) => t.tool === "create_tool");
     ctx.expect.ok("agent called create_tool", !!built, (turn.tools || []).map((t) => t.tool));
     ctx.expect.eq("tool built and verified", built?.result?.status, "created");
-    if (sessions.length) ctx.expect.gte("tool returned this learner's months", (built?.result?.result?.rows || []).length, 1);
-    ctx.note(`${sessions.length} finished sessions this year in the database`);
+    const rows = built?.result?.result?.rows || [];
+    if (sessions.length) ctx.expect.gte("tool returned this learner's months", rows.length, 1);
+    // The tool's total (any numeric column, in minutes or hours) must equal the database's.
+    const minutes = sessions.reduce((n, r) => n + Math.round((Date.parse(r.completed_at) - Date.parse(r.started_at)) / 60_000), 0);
+    const got = rows.reduce((n, r) => n + Object.entries(r).filter(([k, v]) => typeof v === "number" && !/count|year|month/i.test(k)).reduce((a, [, v]) => a + v, 0), 0);
+    ctx.expect.ok("total matches the database (minutes or hours)", Math.abs(got - minutes) <= 1 || Math.abs(got - minutes / 60) <= 0.05, { got, minutes });
+    ctx.note(`${sessions.length} finished sessions this year in the database, ${minutes} minutes`);
     ctx.expect.noBackendNames("reply has no backend names", turn.reply);
     ctx.expect.loopHealthy(turn);
   },

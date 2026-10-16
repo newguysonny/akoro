@@ -81,6 +81,32 @@ export function normalizeDefinition(def) {
   return def;
 }
 
+/**
+ * Follow which fields the rows carry through the ops, so a filter, sort or
+ * pick on a field that isn't there (a hard-coded template name, a field
+ * dropped by a group) fails validation instead of quietly returning nothing.
+ * `cur` is a Set of field names, or null when unknown (capability rows).
+ */
+function flowOp(errors, o, cur, label) {
+  const need = (f, what) => { if (cur && typeof f === "string" && !f.startsWith("$") && !cur.has(f)) errors.push(`${label}: ${what} ${f} isn't a field here (have: ${[...cur].join(", ")})`); };
+  switch (o.op) {
+    case "filter": for (const w of [].concat(o.where || [])) need(w?.field, "filter field"); return cur;
+    case "compute": need(o.a, "compute input"); if (o.fn !== "round") need(o.b, "compute input"); return cur && o.as ? new Set([...cur, o.as]) : cur;
+    case "group": {
+      const by = [].concat(o.by || []).map((b) => (typeof b === "string" ? { field: b } : b || {}));
+      by.forEach((b) => need(b.field, "group field"));
+      for (const k of ["sum", "avg", "min", "max"]) for (const f of [].concat(o[k] || [])) need(f, `${k} field`);
+      return new Set([...by.map((b) => (b.bucket ? `${b.field}_${b.bucket}` : b.field)), ...(o.count ? ["count"] : []),
+        ...["sum", "avg", "min", "max"].flatMap((k) => [].concat(o[k] || []).map((f) => `${k}_${f}`))]);
+    }
+    case "sort": need(o.by, "sort field"); return cur;
+    case "pick": for (const f of [].concat(o.fields || [])) need(f, "pick field"); return new Set([].concat(o.fields || []));
+    case "rename": need(o.from, "rename field"); return cur ? new Set([...[...cur].filter((f) => f !== o.from), o.to]) : cur;
+    case "dedupe": for (const f of [].concat(o.fields || [])) need(f, "dedupe field"); return cur;
+    default: return cur;
+  }
+}
+
 /** → { ok, errors, uses: { views:[], capabilities:[] } } */
 export async function validateDefinition(def, params) {
   const errors = [];
@@ -100,6 +126,13 @@ export async function validateDefinition(def, params) {
     for (const s of [].concat(def.sort || [])) checkOp(errors, { op: "sort", ...s }, "spec.sort", fields);
     if (def.limit != null && !(Number(def.limit) > 0)) errors.push("spec.limit");
     if (def.select != null && !Array.isArray(def.select)) errors.push("spec.select must be a list");
+    if (fields) {
+      let cur = new Set(Object.keys(fields));
+      for (const c of [].concat(def.compute || [])) cur = flowOp(errors, { op: "compute", ...c }, cur, "spec.compute");
+      if (def.group) cur = flowOp(errors, { op: "group", ...def.group }, cur, "spec.group");
+      for (const st of [].concat(def.sort || [])) flowOp(errors, { op: "sort", ...st }, cur, "spec.sort");
+      if (Array.isArray(def.select)) flowOp(errors, { op: "pick", fields: def.select }, cur, "spec.select");
+    }
   } else if (def.kind === "recipe") {
     const steps = Array.isArray(def.steps) ? def.steps : [];
     if (!steps.length || steps.length > MAX_STEPS) errors.push(`recipe needs 1–${MAX_STEPS} steps`);
@@ -122,6 +155,18 @@ export async function validateDefinition(def, params) {
     }
     const then = Array.isArray(def.then) ? def.then : [];
     if (then.length > MAX_THEN) errors.push(`at most ${MAX_THEN} then-ops`);
+    const tables = new Map(steps.filter((st) => st?.id).map((st) => [st.id, st.view && DATA_VIEWS[st.view] ? new Set(Object.keys(DATA_VIEWS[st.view].fields)) : null]));
+    let cur = steps.length === 1 ? tables.get(steps[0]?.id) ?? null : null;
+    const used = new Set(steps.length === 1 ? [steps[0]?.id] : []);
+    const union = (a, b) => (a && b ? new Set([...a, ...b]) : null);
+    for (const [i, o] of then.entries()) {
+      if (!o || typeof o !== "object") continue;
+      if (o.op === "from") { used.add(o.ref); cur = tables.get(o.ref) ?? null; }
+      else if (o.op === "save") { if (o.as) tables.set(o.as, cur); }
+      else if (o.op === "join") { used.add(o.right); if (o.left) used.add(o.left); cur = union(o.left ? tables.get(o.left) : cur, tables.get(o.right)); }
+      else if (OUT_OPS.has(o.op)) cur = flowOp(errors, o, cur, `then[${i}]`);
+    }
+    for (const st of steps) if (st?.id && !used.has(st.id)) errors.push(`step ${st.id} is never used — remove it`);
     for (const [i, o] of then.entries()) {
       const label = `then[${i}]`;
       if (o?.op === "from") { if (!ids.has(o.ref)) errors.push(`${label}: from unknown step ${o.ref}`); }
