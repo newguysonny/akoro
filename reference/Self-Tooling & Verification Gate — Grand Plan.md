@@ -188,7 +188,7 @@ even if its tests pass. They extend Grand Plan §2 (rules 1–24 still apply).
 | S3 | Who writes the recipe/spec/code? | **The tool builder** (a separate LLM call with a fixed prompt and the registry as context), not the chat agent. Output is validated by code. | Proposed |
 | S4 | Does the agent read the database schema? | **No.** `schema_lookup` returns Data Views and capabilities from the registry, never `information_schema`. | Proposed (rule 25) |
 | S5 | Who can use a created tool? | **The learner who created it**, across their chats. Admins see all tools and can **promote** one to every learner after a gate run. | **User decision** |
-| S6 | Can created tools change data? | **Read-only in v1.** Writes come in phase S6, composed only from write capabilities, each step confirmed by the learner. | **User decision** |
+| S6 | Can created tools change data? | **Read-only in v1.** Writes come in phase S6, composed only from write capabilities, each step confirmed by the learner. | **User decision** — **Built (S6)**: a write step proposes, the learner confirms on a card |
 | S7 | Sandbox for stage 3 | **QuickJS compiled to WebAssembly, in a worker thread inside akoro-api**: no network, no filesystem, no imports, memory and CPU limits. External sandboxes (E2B / Daytona) stay an option if code tools ever need packages. | **Built (S5)** — data in, answer out: no bridge at all |
 | S8 | Where do escalations go? | **The existing "Agent requests" flow**, extended: `edu.agent_tool_requests` gains a `kind = capability` with the resume ticket; the existing admin page gains a capability tab. | **Built (S3)** |
 | S10 | Who gets an approved capability? | **Everyone.** An admin approval turns the capability on for all learners (optional expiry); there is no per-learner grant. Every waiting request for the same capability resumes. | **User decision** |
@@ -1270,7 +1270,28 @@ Planned scope:
 - **Exit:** sandbox escape test pack (network, fs, infinite loop, memory bomb,
   prototype tampering, bridge misuse) all contained; gate scenarios PASS.
 
-### Phase S6 — Writes with learner confirmation
+### Phase S6 — Writes with learner confirmation ✅ built 2026-10-16
+
+As built (`modules/self-tooling/confirmations.js`, `capRuntime.js`
+WRITE_RUNNERS, learner `ConfirmChangeCard`): a recipe may end with
+`{op:"write", cap}` on rows still from the capability's `target` view
+(filtered / sorted / picked, never grouped). Running the tool changes
+nothing — it **proposes**: the exact rows, by a private `_ref` id that never
+leaves the server, are stored as a pending confirmation (10 min) in
+`edu.agent_tool_write_confirmations` (tagged `selftool`, so the Python
+gateway never consumes them) and the chat shows a card listing them. Only
+the learner's tap (`POST /api/self-tooling/confirmations/:id/confirm`)
+applies them — the grant re-checked first, the row claimed once, each
+target re-checked for ownership by its runner; decline, expiry, a second
+confirm and other learners are refused; dry runs describe and propose
+nothing. Write capabilities with a target: `tasks.mark_done` (same effects
+as the app's mark-done) and `buddies.end` (through `study_buddy`, so its
+checks and notifications run); they are requested and approved through S3
+like reads. `circles.leave` / `challenges.cancel_mine` have no target view
+yet. Code tools can't write (plan: code may only *propose* — not built).
+Gate `selftool.write_confirm` PASS on production (runs dde9ffb2, a1bc92c8).
+
+Planned scope:
 - Write capabilities via grants, write steps in recipes, confirmation cards in
   Node chat (token + digest), `SIDE_EFFECT_TOOLS` integration.
 
