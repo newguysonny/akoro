@@ -53,6 +53,9 @@ BEGIN
          'active'
   FROM public.users u
   WHERE u.role IN ('student', 'instructor')
+    -- Not the agent testers: their school links are deliberate fixtures
+    -- (tester31-50 have no school, so coin entry bills their own wallet).
+    AND NOT (u.username ~ '^tester[0-9]{2}$' AND u.email LIKE '%@demo.akoro.app')
     AND NOT EXISTS (
       SELECT 1 FROM public.classroom_students cs
       WHERE cs.user_id = u.id AND cs.classroom_id = ANY(classes)

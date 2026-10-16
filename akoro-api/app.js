@@ -69,6 +69,7 @@ import programmesModule          from "./modules/programmes/routes.js";
 import hfMirrorModule            from "./modules/hfmirror/routes.js";
 import parseConsoleModule        from "./modules/records/parseConsole.js";
 import agentConsoleModule        from "./modules/agentConsole/routes.js";
+import verifyModule              from "./modules/verify/routes.js";
 import { startRoutineScheduler }  from "./modules/self-study/routines.js";
 import communitiesModule, { COMMUNITIES_QUERY_TIMEOUT_MS } from "./modules/communities/routes.js";
 import { setupDiscussionSocket } from "./modules/communities/discussionSocket.js";
@@ -789,6 +790,7 @@ app.use("/api/pharmd",      standardLimit, pharmdModule);          // PHARM.D pr
 app.use("/api/programmes",  standardLimit, programmesModule);  // Program Courses (admin)
 app.use("/api/hf",          standardLimit, hfMirrorModule);        // Hugging Face model mirror console (key-guarded)
 app.use("/api/parse",       standardLimit, parseConsoleModule);
+app.use("/api/verify",        standardLimit, verifyModule);          // Verification Gate (AGENT_CONSOLE_KEY) — PASS/FAIL with evidence
 app.use("/api/agent-console", standardLimit, agentConsoleModule);   // learner Agent Chat test console (AGENT_CONSOLE_KEY)   // parse-worker console (key-guarded browser tester)
 app.use("/api/communities",  standardLimit, communitiesModule);  // higher-ed study groups
 app.use("/api/instructor/tools", standardLimit, instructorToolsModule);  // platform tools/assets catalog + purchase

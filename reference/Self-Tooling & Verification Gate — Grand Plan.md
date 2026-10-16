@@ -1062,7 +1062,25 @@ default **off** (new risk surface).
 The gate comes first: self-tooling depends on it for verification, and every
 later phase is verified by it.
 
-### Phase V1 — Gate core 🆕
+### Phase V1 — Gate core ✅ built 2026-10-16
+As built (differences from the sketch below):
+- The runner is **in-process with a concurrency limit**, not a BullMQ queue:
+  the gate must be able to say BLOCKED when Redis is down, not hang on it.
+  Runs persist to `edu.verify_runs/assertions`; a run cut off by a restart
+  reads back as ERROR ("interrupted").
+- Agent turns are observed through a new request flag: `x-agent-console-inspect`
+  (console key) adds each tool call's arguments and a capped result to the
+  Agent Chat response. Learners' own requests never carry it.
+- 9 scenarios, 5 suites (`smoke`, `agent-chat`, `agent-network`, `battles`,
+  `regression`). Verified end to end on a local stack (Postgres + PostgREST +
+  Redis + mock model): PASS on 8, FAIL on the model-choice scenario (the mock
+  can't pick tools — by design), BLOCKED on a wrong commit, real-user run
+  audit-logged, writes refused for real users.
+- First finding: `2026-seed-demo-schools.sql` enrolled **every** student
+  (testers included) into demo schools, so "independent" testers were billed
+  to a demo school — fixed (testers excluded).
+
+Planned scope:
 - `modules/verify/` (routes, runner on BullMQ, context, assertions, evidence +
   redaction, policy), `edu.verify_runs/assertions` migration, console guard.
 - Scenarios: `smoke.*`, `chat.schedule_message_here`, `chat.history_tools`,

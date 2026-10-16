@@ -13,5 +13,11 @@ import { AsyncLocalStorage } from "node:async_hooks";
 
 const store = new AsyncLocalStorage();
 
-export const runDry = (fn) => store.run({ dry: true }, fn);
+export const runDry = (fn) => store.run({ ...store.getStore(), dry: true }, fn);
 export const isDryRun = () => store.getStore()?.dry === true;
+
+// INSPECTED: the verification gate / console asked to see each tool call's
+// arguments and (truncated) result in the response, so it can assert on what
+// the agent actually did. Never set for a learner's own request.
+export const runInspected = (fn) => store.run({ ...store.getStore(), inspect: true }, fn);
+export const isInspected = () => store.getStore()?.inspect === true;

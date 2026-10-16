@@ -1,0 +1,65 @@
+---
+name: verify
+description: Verify a change on the deployed Akoro API with the Verification Gate (/api/verify) before saying it works. Use after pushing any fix or feature to the preview branch, when asked to "verify", "check it works on the server", or before reporting a bug fixed.
+---
+
+# Verify with the gate
+
+The Verification Gate runs scenarios against the REAL running API and returns
+a verdict with evidence. Plan: `reference/Self-Tooling & Verification Gate — Grand Plan.md` §8.
+
+**Rule: never say "verified", "works on the server" or "fixed" for deployed
+behaviour without a `PASS` run on the deployed commit.** FAIL, BLOCKED,
+ERROR, INCONCLUSIVE and "no run" are not verified — report them as they are.
+
+## Reaching it
+
+`https://api.akoro.name.ng/api/verify` — the cloud environment's network
+secret adds `Authorization: Bearer <AGENT_CONSOLE_KEY>`; never ask for the key.
+
+```bash
+B=https://api.akoro.name.ng/api/verify
+curl -s $B/scenarios | jq '.data.scenarios[] | {name, risk, description}'
+curl -s $B/suites | jq
+```
+
+## Workflow
+
+1. Unit/contract tests pass locally.
+2. Push. Wait for Render: poll `curl -s https://api.akoro.name.ng/health | jq -r .build.git`
+   until it equals the pushed commit (`git rev-parse HEAD`).
+3. Run the affected suite (or scenario), pinned to that commit:
+   ```bash
+   SHA=$(git rev-parse HEAD)
+   curl -s -X POST $B/runs -H 'Content-Type: application/json' \
+     -d "{\"suite\":\"regression\",\"expectSha\":\"$SHA\"}" \
+     | jq '.data | {id, verdict, reason, scenarios: [.scenarios[] | {name, verdict, repeats, failed: [.failed[] | {name, expected, actual}]}]}'
+   ```
+   One scenario: `{"scenario":"chat.schedule_message_here","params":{"learner":"@tester01"}}`.
+   Long runs: add `"wait":false`, then `GET $B/runs/<id>`.
+4. Report: verdict, run id, commit, and every failed assertion with expected/actual.
+5. FAIL → fix and repeat. BLOCKED → say exactly what blocked it (stale deploy,
+   fixture drift, flag off…). ERROR → it's a gate problem; say so.
+
+## Accounts
+
+- Test learners `@tester01`…`@tester50` (seeded): any scenario.
+- Real users (`@username` / email / id): `read` and `dry` scenarios only — the
+  gate refuses writes, saves nothing to their chats, audit-logs every run.
+  Only use a real account when the user asks (e.g. to reproduce their bug).
+
+## Adding a scenario
+
+`akoro-api/modules/verify/scenarios/<area>.js` → export `{ name, area, risk,
+description, params?, repeats?, run(ctx, p) }`, register it in
+`scenarios/index.js` (and a suite). Drive through `ctx.http` / `ctx.agent`,
+check evidence with `ctx.db` and `ctx.expect.*`; a missing precondition is
+`ctx.expect.blocked(reason)`, never a silent pass. Writes (`risk: "write"`)
+need `ctx.cleanup(undo)` for everything they create.
+
+## Local target (before deploying)
+
+The golden-path stack (Postgres + PostgREST + Redis + mock model) runs the
+API locally — see `akoro-api/scripts/golden-path/README.md`. With the mock
+model, agent-choice scenarios FAIL by design (it can't pick tools); everything
+else is meaningful.
