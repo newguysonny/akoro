@@ -75,12 +75,18 @@ export async function sweepResumes() {
 }
 
 let swept = false;
-/** Every 15 min: lost resumes re-queued, undecided requests expired. */
+/** Every 15 min: lost resumes re-queued, undecided requests expired. Daily: unused tools archived. */
 export function armSweep() {
   if (swept) return;
   swept = true;
   registerTick("self-tool-resume-sweep", sweepResumes);
-  if (cronSource() !== "cloudflare") cron.schedule("*/15 * * * *", () => { sweepResumes().catch((e) => console.warn("[self-tool-resumes] sweep failed:", e.message)); });
+  // Daily (04:10 UTC): learner tools unused for 60 days are archived (S4).
+  const archive = async () => (await import("./pipeline.js")).archiveUnusedTools(Number(process.env.SELF_TOOLING_ARCHIVE_DAYS) || 60);
+  registerTick("self-tool-archive", archive);
+  if (cronSource() !== "cloudflare") {
+    cron.schedule("*/15 * * * *", () => { sweepResumes().catch((e) => console.warn("[self-tool-resumes] sweep failed:", e.message)); });
+    cron.schedule("10 4 * * *", () => { archive().then((r) => r.archived && console.log(`[self-tooling] archived ${r.archived} unused tool(s)`)).catch((e) => console.warn("[self-tooling] archive failed:", e.message)); });
+  }
 }
 
 export function startResumeWorker() {

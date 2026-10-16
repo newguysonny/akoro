@@ -124,7 +124,12 @@ async function runScenario(def, params, runId) {
 const defaultsOf = (def) => Object.fromEntries(Object.entries(def.params || {}).filter(([, v]) => v && "default" in v).map(([k, v]) => [k, v.default]));
 
 /** Start a run. Resolves when it finishes; callers may not wait. */
-export function startRun({ scenario, suite, params = {}, expectSha = null, actor = "coding-agent", models = null }) {
+/**
+ * `nested`: started from inside another run (a scenario that runs the
+ * promotion check) — it skips the concurrency slot, which the outer run
+ * already holds, so it can't wait on itself.
+ */
+export function startRun({ scenario, suite, params = {}, expectSha = null, actor = "coding-agent", models = null, nested = false }) {
   const names = suite ? SUITES[suite] : scenario ? [scenario] : null;
   // Model comparison: the same scenario once per model (plan §8.6).
   const compare = Array.isArray(models) && models.length ? models.slice(0, 4).map(String) : null;
@@ -142,7 +147,7 @@ export function startRun({ scenario, suite, params = {}, expectSha = null, actor
   if (live.size > 200) live.delete(live.keys().next().value);
 
   run.done = (async () => {
-    await slot();
+    if (!nested) await slot();
     const t0 = Date.now();
     run.status = "running";
     try {
@@ -181,7 +186,7 @@ export function startRun({ scenario, suite, params = {}, expectSha = null, actor
       run.ms = Date.now() - t0;
       run.finishedAt = new Date().toISOString();
       await persistEnd(run).catch(() => {});
-      release();
+      if (!nested) release();
       console.log(`[verify] ${run.kind} ${run.name} → ${run.verdict} (${run.ms} ms, run ${run.id})`);
     }
     return run;
