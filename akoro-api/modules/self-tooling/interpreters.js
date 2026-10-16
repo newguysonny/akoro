@@ -70,7 +70,7 @@ function normOp(o) {
   if (!o || typeof o !== "object") return o;
   if (o.where != null) o.where = asList(o.where);
   if (o.op === "group") o.by = asList(o.by) || [];
-  for (const k of ["sum", "avg", "min", "max", "fields", "on"]) if (o[k] != null) o[k] = asList(o[k]);
+  for (const k of ["sum", "avg", "min", "max", "counts", "fields", "on"]) if (o[k] != null) o[k] = asList(o[k]);
   return o;
 }
 /**
@@ -81,7 +81,7 @@ function normOp(o) {
 export function normalizeDefinition(def) {
   if (!def || typeof def !== "object") return def;
   if (def.where != null) def.where = asList(def.where);
-  if (def.group && typeof def.group === "object") { def.group.by = asList(def.group.by) || []; for (const k of ["sum", "avg", "min", "max"]) if (def.group[k] != null) def.group[k] = asList(def.group[k]); }
+  if (def.group && typeof def.group === "object") { def.group.by = asList(def.group.by) || []; for (const k of ["sum", "avg", "min", "max", "counts"]) if (def.group[k] != null) def.group[k] = asList(def.group[k]); }
   if (def.compute != null) def.compute = asList(def.compute);
   if (def.sort != null) def.sort = asList(def.sort);
   if (typeof def.select === "string") def.select = [def.select];
@@ -103,7 +103,7 @@ const viewTypes = (view) => new Map(Object.entries(view.fields).map(([k, f]) => 
 function flowOp(errors, o, cur, label) {
   const need = (f, what) => {
     if (cur && typeof f === "string" && !f.startsWith("$") && !cur.has(f)) {
-      errors.push(`${label}: ${what} ${f} isn't a field here (have: ${[...cur.keys()].join(", ")})${/^count_/.test(f) && cur.has("count") ? ' — a group\'s count is named "count"' : ""}`);
+      errors.push(`${label}: ${what} ${f} isn't a field here (have: ${[...cur.keys()].join(", ")})${/^count_/.test(f) ? ' — "count" counts every row; to count rows that have a value, group with counts: ["<field>"] (gives count_<field>)' : ""}`);
     }
   };
   const needNum = (f, what) => { need(f, what); const t = cur?.get(f); if (t && !NUMERIC.has(t)) errors.push(`${label}: ${what} ${f} is a ${t}, not a number${t === "timestamp" ? " — use compute minutesBetween first" : ""}`); };
@@ -119,8 +119,9 @@ function flowOp(errors, o, cur, label) {
       const by = [].concat(o.by || []).map((b) => (typeof b === "string" ? { field: b } : b || {}));
       by.forEach((b) => need(b.field, "group field"));
       for (const k of ["sum", "avg"]) for (const f of [].concat(o[k] || [])) needNum(f, `${k} field`);
-      for (const k of ["min", "max"]) for (const f of [].concat(o[k] || [])) need(f, `${k} field`);
+      for (const k of ["min", "max", "counts"]) for (const f of [].concat(o[k] || [])) need(f, `${k} field`);
       return new Map([
+        ...[].concat(o.counts || []).map((f) => [`count_${f}`, "integer"]),
         ...by.map((b) => (b.bucket ? [`${b.field}_${b.bucket}`, "string"] : [b.field, cur?.get(b.field) ?? null])),
         ...(o.count ? [["count", "integer"]] : []),
         ...["sum", "avg"].flatMap((k) => [].concat(o[k] || []).map((f) => [`${k}_${f}`, "number"])),

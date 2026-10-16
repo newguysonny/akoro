@@ -159,3 +159,13 @@ test("instructor views: owned (directly or through their activity), names only, 
     group: { by: ["activity"], avg: ["grade"], count: true }, sort: [{ by: "avg_grade", dir: "desc" }] }, {}, { audience: "instructor" });
   assert.deepEqual(ok.errors, []);
 });
+
+test("group counts: rows that have a value (graded students), validated as count_<field>", async () => {
+  const O = await import("./ops.js");
+  const { validateDefinition } = await import("./interpreters.js");
+  const rows = [{ a: "X", grade: 70 }, { a: "X", grade: null }, { a: "X", grade: 80 }, { a: "Y", grade: null }];
+  assert.deepEqual(O.group(rows, { by: ["a"], count: true, counts: ["grade"], avg: ["grade"] }),
+    [{ a: "X", count: 3, count_grade: 2, avg_grade: 75 }, { a: "Y", count: 1, count_grade: 0, avg_grade: null }]);
+  const v = await validateDefinition({ kind: "spec", from: "my_activity_results", group: { by: ["activity"], counts: "grade", avg: ["grade"] }, select: ["activity", "count_grade", "avg_grade"] }, {}, { audience: "instructor" });
+  assert.deepEqual(v.errors, []);
+});
