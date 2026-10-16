@@ -76,6 +76,14 @@ async function owned(id, userId) {
   return data;
 }
 
+/** The learner's changes still waiting for their tap — the chat shows them again after a reload. */
+export async function listPendingConfirmations(userId) {
+  const { data, error } = await edu().from(TABLE).select("*").eq("principal_id", userId).eq("capability_jti", JTI)
+    .eq("status", "pending").gt("expires_at", new Date().toISOString()).order("created_at", { ascending: false }).limit(5);
+  if (error) throw new Error("couldn't load waiting changes");
+  return (data || []).map(publicConfirmation);
+}
+
 export async function getConfirmation(id, userId) {
   return publicConfirmation(await owned(id, userId));
 }

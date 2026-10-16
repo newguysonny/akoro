@@ -4,6 +4,7 @@
  *   PATCH /api/self-tooling/tools/:id      { label? | status: active|disabled | delete: true }
  *   GET   /api/self-tooling/requests       permissions the agent asked an admin for (S3)
  *   POST  /api/self-tooling/requests/:id/cancel   withdraw a waiting one
+ *   GET   /api/self-tooling/confirmations            changes still waiting for the learner (resurface after reload)
  *   GET   /api/self-tooling/confirmations/:id        a change a tool proposed (S6)
  *   POST  /api/self-tooling/confirmations/:id/confirm | /reject   ONLY the learner's tap runs a write
  * No definitions or internal names are returned (rule 36) — label, goal, status, usage.
@@ -13,7 +14,7 @@ import { authenticateToken } from "../auth/routes.js";
 import { listMyTools, updateMyTool } from "./pipeline.js";
 import { selfToolingAllowedFor } from "./access.js";
 import { listMyRequests, cancelMyRequest } from "./escalation.js";
-import { getConfirmation, confirmWrite, rejectWrite } from "./confirmations.js";
+import { getConfirmation, confirmWrite, rejectWrite, listPendingConfirmations } from "./confirmations.js";
 
 const router = express.Router();
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -53,6 +54,9 @@ const confirmationRoute = (fn) => asyncHandler(async (req, res) => {
   try { res.json({ success: true, data: await fn(req) }); }
   catch (e) { res.status(e.status || 500).json({ success: false, error: e.message }); }
 });
+router.get("/confirmations", authenticateToken, asyncHandler(async (req, res) => {
+  res.json({ success: true, data: { pending: await listPendingConfirmations(req.user.id) } });
+}));
 router.get("/confirmations/:id", authenticateToken, confirmationRoute((req) => getConfirmation(req.params.id, req.user.id)));
 router.post("/confirmations/:id/reject", authenticateToken, confirmationRoute((req) => rejectWrite({ id: req.params.id, userId: req.user.id })));
 router.post("/confirmations/:id/confirm", authenticateToken, confirmationRoute(async (req) => {

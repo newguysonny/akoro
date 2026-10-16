@@ -1295,7 +1295,25 @@ Planned scope:
 - Write capabilities via grants, write steps in recipes, confirmation cards in
   Node chat (token + digest), `SIDE_EFFECT_TOOLS` integration.
 
-### Phase V3 — Sandbox environment + MCP wrapper
+### Phase V3 — Sandbox environment + MCP wrapper ✅ built 2026-10-16 (sandbox off until deployed)
+
+As built — setup guide: `reference/Verification Gate — Sandbox & MCP setup.md`.
+**The switch** (production akoro-api, `modules/verify/sandbox.js`):
+`VERIFY_SANDBOX_ENABLED=true` + `VERIFY_SANDBOX_URL` (+ optional
+`VERIFY_SANDBOX_KEY`) forward gate runs to the sandbox gate; unset, the gate
+tests this API exactly as before. A run can be pinned here with
+`"target":"production"`; an unreachable sandbox is BLOCKED, never a silent
+fallback; `/scenarios` shows `runsGoTo` and the sandbox's sha. **The sandbox**
+is the same code as a second Render service with `VERIFY_TARGET=sandbox` on the
+new Supabase database: boot migrations add the demo seeds, it never forwards,
+and — one change from §8.9 — writes stay on test learners there too, so a
+misconfigured sandbox can't touch a real account. It needs its own Redis (queue
+names are shared). **MCP**: `scripts/verify/mcp-server.mjs`, a dependency-free
+stdio server (`gate_status`, `gate_scenarios`, `gate_run`, `gate_get_run`),
+verified end to end against production. **CI**: `.github/workflows/verify-gate.yml`,
+manual, fails unless the verdict is PASS.
+
+Planned scope:
 - Render sandbox service + Supabase project from migrations; MCP server over
   the gate API; optional CI hook running `regression` before merging to main.
 

@@ -661,7 +661,10 @@ if (process.env.MIGRATIONS_ON_BOOT !== "false") {
       if (await migrationsAlreadyApplied(mUrl, mSha)) {
         console.log(`[MIGRATIONS] already applied for ${String(mSha).slice(0, 7) || "this build"} — skipping boot run`);
       } else {
-        const { applied, failed } = await applyMigrations({ url: mUrl, groups: ["schema"], label: "boot" });
+        // The gate's sandbox (VERIFY_TARGET=sandbox, its own database) also gets the
+        // demo seeds — schools, courses, classes — so its testers have a world to act in.
+        const groups = process.env.VERIFY_TARGET === "sandbox" ? ["schema", "demo"] : ["schema"];
+        const { applied, failed } = await applyMigrations({ url: mUrl, groups, label: "boot" });
         if (failed) console.error(`[MIGRATIONS] ${failed} migration(s) FAILED at boot — check the logs above; the API is starting anyway.`);
       }
     } catch (e) {
