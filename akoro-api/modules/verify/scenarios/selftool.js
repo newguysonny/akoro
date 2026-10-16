@@ -409,7 +409,7 @@ export const sandboxContained = {
 };
 
 export const codeToolBuilt = {
-  name: "selftool.code_tool", area: "self-tooling", risk: "dry",
+  name: "selftool.code_tool", area: "self-tooling", risk: "dry", repeats: 3,
   description: "A goal only code can express (spread my weakest topics over the days before an exam, two a day, weakest first, no Sundays) is built as a sandboxed code tool, verified, and its plan obeys every rule on the learner's real topics.",
   params: { learner: { default: "@tester21" } },
   async run(ctx, p) {
@@ -434,5 +434,14 @@ export const codeToolBuilt = {
     ctx.expect.ok("at most two topics a day", [...perDay.values()].every((n) => n <= 2), Object.fromEntries(perDay));
     ctx.expect.ok("no Sundays", [...perDay.keys()].every((d) => new Date(`${d}T00:00:00Z`).getUTCDay() !== 0), [...perDay.keys()]);
     ctx.expect.ok("all before the exam", [...perDay.keys()].every((d) => d < exam), exam);
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Africa/Lagos" });
+    ctx.expect.ok("none in the past", [...perDay.keys()].every((d) => d >= today), today);
+    // Weakest first: confidence never goes down along the plan (when rows carry it, else via the learner's topics).
+    const me = await ctx.as(p.learner);
+    const conf = new Map();
+    const { data: agent } = await (await import("../../../db.js")).default.schema("edu").from("student_agents").select("id").eq("student_id", me.id).maybeSingle();
+    if (agent?.id) for (const k of await ctx.db.rows("edu.agent_knowledge", { agent_id: agent.id }, { columns: "topic, confidence" })) conf.set(String(k.topic).toLowerCase(), Number(k.confidence));
+    const seq = rows.map((x) => conf.get(String(x.topic || "").toLowerCase())).filter((c) => Number.isFinite(c));
+    if (seq.length >= 2) ctx.expect.ok("weakest first", seq.every((c, i) => i === 0 || c >= seq[i - 1] - 1e-9), seq);
   },
 };
