@@ -1195,7 +1195,12 @@ gate. Learner `GET /api/self-tooling/requests` + withdraw; Settings →
 Agent shows permission requests. Admin page: Permissions tab (decide) and
 Granted tab (revoke). Gate: `selftool.escalate_and_resume` PASS on
 production (run 427cad6d) — request, dedupe, approval, resume into the same
-chat, notification, revoke stops the saved tool.
+chat, notification, revoke stops the saved tool. `selftool.agent_escalates`
+PASS 3/3 (run fef9600f): asked how other players scored in their battles,
+the agent goes through create_tool, which escalates, and says so plainly. A
+goal about other learners whose top lookup match is a locked network
+capability escalates before building (a build from own-data views passed
+the learner's own scores off as others').
 
 Planned scope:
 - Requests table extension, admin Capabilities tab with decide endpoint and
