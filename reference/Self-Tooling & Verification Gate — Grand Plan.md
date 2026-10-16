@@ -1208,7 +1208,31 @@ Planned scope:
   expiry job, learner view of requests.
 - **Exit:** `selftool.escalate_and_resume` PASS end to end on testers.
 
-### Phase S4 — Admin tool library, promotion, analytics
+### Phase S4 — Admin tool library, promotion, analytics ✅ built 2026-10-16
+
+As built (`modules/self-tooling/library.js`, `modules/admin/agent-tools.js`,
+admin page **Agent tools**): a library of every built tool (filter by
+learners' / everyone and status, search; detail with definition and
+verification; turn off/on, revoke — audit-logged). **Promote to everyone**
+first runs the gate scenario `selftool.promotion_check` (the tool validates,
+its capabilities are on and read-only, its samples run cleanly as three test
+learners — each on their own data — and return data for at least one) and
+only promotes on PASS; the platform copy has no owner, keeps
+`promoted_from` and the check's run id, and can retire similar learner
+copies (merge). Platform tools join every learner's catalogue (their own
+tool wins a name clash), always run on the calling learner's data, and never
+auto-disable on one learner's failures (admins see the fail streak). **Similar
+tools** groups active tools over the same data with similar goals.
+**Analytics** (`GET /api/admin/self-tooling/analytics?days=`): goals asked /
+built / sent to an admin / not built, build time p50/p90, goals per day, top
+permissions requested, rejection reasons, most used and failing tools.
+Daily archive of learner tools unused for 60 days (`self-tool-archive` tick).
+Gate: `selftool.promote_platform` PASS on production (run 82c7d930) —
+promotion check passed, another learner saw and ran it on their own tasks
+(counts matched the database), revoke stopped it. Not built: versioning on
+rebuild (a taken name is rejected, or suffixed on resume).
+
+Planned scope:
 - Agent tools page, promote (gate-verified), merge duplicates, analytics
   dashboard, auto-disable/archival jobs.
 
