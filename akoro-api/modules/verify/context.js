@@ -160,6 +160,12 @@ export function createContext({ scenario, sink, evidence, realUsers, runId = "lo
       evidence.db.push({ table: name, cleanup: true, deleted: (data || []).length });
       return (data || []).length;
     },
+    /** Does a select of these columns work on the live database? → { ok, error } (never throws). */
+    async probe(name, columns) {
+      const { error } = await table(name).select(columns).limit(1);
+      evidence.db.push({ table: name, probe: columns, ok: !error, ...(error ? { error: error.message } : {}) });
+      return { ok: !error, error: error?.message || null };
+    },
     async count(name, filters = {}) {
       let q = table(name).select("*", { count: "exact", head: true });
       for (const [k, v] of Object.entries(filters)) {

@@ -94,6 +94,8 @@ import { hasExplicitToolRequestConsent } from "./agent-tool-request-intent.js";
 import { getLearnerProfileContext } from "./learner-profile-context.js";
 import { validateLearnerTaskInput } from "./learner-task-validation.js";
 import { listChats, readChat, postToChat, ownedChatId } from "./chat-history-tools.js";
+import { schemaLookup } from "../self-tooling/registry.js";
+import { selfToolingEnabled, selfToolingAllowedFor } from "../self-tooling/access.js";
 import { createLearnerToolRequest } from "../agent-tool-requests/service.js";
 import {
   getAgentPreferenceSummary,
@@ -364,6 +366,18 @@ export const CHAT_TOOLS = [
         followUpId: { type: "string", description: "The followUpId returned by list_scheduled_chat_follow_ups or schedule_chat_follow_up." },
       },
       required: ["followUpId"],
+    },
+  },
+  {
+    name: "schema_lookup",
+    featureGate: "self_tooling",
+    description: "Self-tooling (preview): find what data and operations a NEW tool could use for a goal no existing tool covers. Returns data views (fields you can filter, sort and count — always the learner's own data or published content) and capabilities, each 'available' or 'needs_approval', plus anything not allowed. Read-only; builds nothing. Use an existing tool first; call this only when none fits, then tell the learner what could and couldn't be done.",
+    input_schema: {
+      type: "object",
+      properties: {
+        goal: { type: "string", description: "What the learner wants to find out or do, in plain language." },
+      },
+      required: ["goal"],
     },
   },
   {
@@ -940,8 +954,11 @@ const blogResearchEnabled = String(process.env.AKORO_BLOG_RESEARCH_ENABLED ?? "t
 // AKORO_AGENT_NETWORK_ENABLED=false removes those tools everywhere at once.
 const agentNetworkEnabled = String(process.env.AKORO_AGENT_NETWORK_ENABLED ?? "true").toLowerCase() !== "false";
 
-export function getLearnerChatTools({ allowToolRequest = true } = {}) {
+export function getLearnerChatTools({ allowToolRequest = true, selfTooling = true } = {}) {
   const enabled = {
+    // Off by default; the chat route also checks the learner allow-list
+    // (selfTooling) so the tool is never offered to anyone not on it.
+    self_tooling: selfToolingEnabled() && selfTooling,
     blog_research: blogResearchEnabled,
     peer_consult: peerConsultEnabled,
     agent_network: agentNetworkEnabled,
@@ -1939,6 +1956,13 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       } catch (error) {
         return { error: error.message || "Could not schedule the chat follow-up" };
       }
+    }
+    case "schema_lookup": {
+      if (role === "instructor") return { error: "Self-tooling is for learners." };
+      if (!(await selfToolingAllowedFor(studentId))) return { error: "Building new tools isn't turned on for this account yet." };
+      if (!input?.goal || !String(input.goal).trim()) return clarify("goal", "What would you like the new tool to find out or do?", { action: "schema_lookup" });
+      try { return await schemaLookup(String(input.goal).slice(0, 300)); }
+      catch (error) { return { error: error.message || "Couldn't check what's available right now" }; }
     }
     case "list_chats": {
       try { return await listChats(studentId, { search: input?.search, limit: input?.limit, currentChatId: conversationId }); }
@@ -3470,8 +3494,8 @@ const STOPPED_REPLY = "(Stopped before finishing.)";
 const activeTurnStops = new Map();   // `${userId}:${turnId}` → { stop: boolean }
 const turnStopKey = (userId, turnId) => `${userId}:${turnId}`;
 
-function openAiChatTools({ allowToolRequest = true } = {}) {
-  return getLearnerChatTools({ allowToolRequest }).map((tool) => ({
+function openAiChatTools({ allowToolRequest = true, selfTooling = true } = {}) {
+  return getLearnerChatTools({ allowToolRequest, selfTooling }).map((tool) => ({
     type: "function",
     function: { name: tool.name, description: tool.description, parameters: tool.input_schema },
   }));
@@ -3944,6 +3968,7 @@ router.post("/agent", async (req, res) => {
       status: wantsStream ? status : null,
       tools: role === "student" ? openAiChatTools({
         allowToolRequest: hasExplicitToolRequestConsent(userMessage),
+        selfTooling: await selfToolingAllowedFor(req.user.id),
       }) : instructorTools,
       // Learners: capability questions are answered from the live catalogue.
       // Instructors: an activity request (or a confirmation continuing one)
