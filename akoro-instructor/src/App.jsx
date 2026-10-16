@@ -24,6 +24,7 @@ import DocumentsPage, { DocumentEditorPage } from './pages/DocumentsPage.jsx';
 import ChatPage     from './pages/ChatPage.jsx';
 import AssessmentReviewPage from './pages/AssessmentReviewPage.jsx';
 import SettingsPage       from './pages/SettingsPage.jsx';
+import AgentToolsPage     from './pages/AgentToolsPage.jsx';
 import WalletPage         from './pages/WalletPage.jsx';
 import PurchaseCheckoutPage from './pages/PurchaseCheckoutPage.jsx';
 import LessonReviewPage from './pages/LessonReviewPage.jsx';
@@ -144,6 +145,7 @@ function AppRoutes() {
       <Route path="/mgmt/weekly-forecast" element={<ProtectedRoute><WeeklyForecastPage /></ProtectedRoute>} />
       <Route path="/mgmt/daily-schedule"  element={<ProtectedRoute><DailySchedulePage /></ProtectedRoute>} />
       <Route path="/settings"       element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+      <Route path="/agent-tools"    element={<ProtectedRoute><AgentToolsPage /></ProtectedRoute>} />
       <Route path="/profile"        element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
       <Route path="/marketplace"    element={<ProtectedRoute><MarketplacePage /></ProtectedRoute>} />
       <Route path="/apps"           element={<ProtectedRoute><AppCenterPage /></ProtectedRoute>} />
