@@ -15,6 +15,9 @@
  * db); handlers throw HarnessRejection with stable codes on denial.
  */
 
+import { bindRegistry } from "../../agent-runtime/tools.js";
+
+// Study Prep's levels (the runtime adds `persona`; Study Prep has none yet).
 export const TOOL_LEVELS = Object.freeze(["read", "propose", "execute"]);
 
 const str = (description) => ({ type: "string", description });
@@ -28,7 +31,8 @@ const obj = (properties = {}, required = []) => ({ type: "object", properties, r
  * and was never told propose_plan takes `topics`, so no plan was ever made.
  */
 export const TOOL_ARGS = Object.freeze({
-  "syllabus.resolve": obj({ subject: str("The school subject, e.g. 'Basic Science'."), classLevel: str("The class, e.g. 'JSS1'."), exam: str("Exam board, e.g. 'WAEC'. Optional.") }, ["subject", "classLevel"]),
+  // In a session the harness resolves for the session's own subject and class, so none is required.
+  "syllabus.resolve": obj({ subject: str("The school subject, e.g. 'Basic Science'."), classLevel: str("The class, e.g. 'JSS1'."), exam: str("Exam board, e.g. 'WAEC'. Optional.") }),
   "learner.get_state": obj({ subject: str("The school subject."), topics: TOPIC_LIST }, ["subject"]),
   "learner.get_history": obj({ subject: str("The school subject.") }),
   "learner.get_relevant_memory": obj({ subject: str("The school subject.") }),
@@ -91,74 +95,38 @@ export function llmFacingTools({ includeContentSearch = false } = {}) {
 /**
  * Bind handlers. `readTools` are the db-backed read functions; `harness` is
  * the study-prep harness; `learnerId`/`sessionId` scope every call. Returns
- * { execute(toolName, args, intent) } — one dispatcher the agent loop uses.
+ * the shared runtime registry (agent-runtime/tools.js): { catalogue,
+ * validate, execute(toolName, args, intent), display } — one dispatcher the
+ * agent loop uses, with the generic checks in front of every handler.
  */
 export function buildRegistry({ readTools, harness, learnerId, sessionId, contentSearchEnabled = false }) {
-  const assertTool = (name) => {
-    const tool = toolByName(name);
-    if (!tool || HARNESS_ONLY_OPERATIONS.includes(name)) {
-      const error = new Error(`Unknown tool: ${name}`);
-      error.code = "tool_not_permitted"; error.httpStatus = 403;
-      throw error;
-    }
-    if (name === "content.search" && !contentSearchEnabled) {
-      const error = new Error("content.search is not enabled in this loop");
-      error.code = "tool_not_permitted"; error.httpStatus = 403;
-      throw error;
-    }
-    return tool;
+  const s = { sessionId, learnerId };
+  const handlers = {
+    // In a session the harness resolves it (class → school → platform) and records the source.
+    "syllabus.resolve": (args) => (sessionId && harness?.resolveSyllabus
+      ? harness.resolveSyllabus(s)
+      : readTools.resolveSyllabus({ subject: args.subject, classLevel: args.classLevel, exam: args.exam })),
+    "syllabus.generate": (_args, intent) => harness.generateSyllabus({ ...s, intent }),
+    "learner.get_state": (args) => readTools.getLearnerState({ learnerId, subject: args.subject, topicIds: args.topics }),
+    "learner.get_history": (args) => readTools.getLearnerHistory({ learnerId, subject: args.subject }),
+    "learner.get_relevant_memory": (args) => readTools.getRelevantMemory({ learnerId, subject: args.subject }),
+    "concept.get_prerequisites": (args) => readTools.getPrerequisites({ subject: args.subject }),
+    "content.search": (args) => readTools.searchContent({ subject: args.subject, query: args.query }),
+    "session.get_state": () => readTools.getSessionState(s),
+    "plan.validate": (args) => harness.validateProposedPlan({ ...s, topicIds: args.topics }),
+    "propose_plan": (args, intent) => harness.proposePlan({ ...s, topicIds: args.topics, intent }),
+    "offer_strategy": (args, intent) => harness.offerStrategy({ ...s, topicId: args.topicId, strategy: args.strategy, intent }),
+    "advance_topic": (_args, intent) => harness.advanceTopic({ ...s, intent }),
+    "defer_topic": (args, intent) => harness.deferTopic({ ...s, topicId: args.topicId, reasonCode: args.reasonCode, intent }),
+    "topic.flag": (args, intent) => harness.flagTopic({ ...s, topicId: args.topicId, reason: args.reason, intent }),
+    "session.replan": (args, intent) => harness.proposePlan({ ...s, topicIds: args.topics, intent }),
+    "conclude_session": (_args, intent) => harness.concludeSession({ ...s, intent }),
+    "practice.generate": (args, intent) => harness.startTopicPractice({ ...s, topicId: args.topicId, mode: args.mode, intent }),
+    "practice.submit": (args, intent) => harness.submitPractice({ ...s, topicId: args.topicId, answers: args.answers, intent }),
   };
-
-  return {
-    // The catalogue the agent (LLM or stub) plans against.
-    catalogue: llmFacingTools({ includeContentSearch: contentSearchEnabled }),
-    async execute(name, args = {}, intent = null) {
-      const tool = assertTool(name);
-      switch (name) {
-        case "syllabus.resolve":
-          // In a session the harness resolves it (class → school → platform) and records the source.
-          if (sessionId && harness?.resolveSyllabus) return harness.resolveSyllabus({ sessionId, learnerId });
-          return readTools.resolveSyllabus({ subject: args.subject, classLevel: args.classLevel, exam: args.exam });
-        case "syllabus.generate":
-          return harness.generateSyllabus({ sessionId, learnerId, intent });
-        case "learner.get_state":
-          return readTools.getLearnerState({ learnerId, subject: args.subject, topicIds: args.topics });
-        case "learner.get_history":
-          return readTools.getLearnerHistory({ learnerId, subject: args.subject });
-        case "learner.get_relevant_memory":
-          return readTools.getRelevantMemory({ learnerId, subject: args.subject });
-        case "concept.get_prerequisites":
-          return readTools.getPrerequisites({ subject: args.subject });
-        case "content.search":
-          return readTools.searchContent({ subject: args.subject, query: args.query });
-        case "session.get_state":
-          return readTools.getSessionState({ learnerId, sessionId });
-        case "plan.validate":
-          return harness.validateProposedPlan({ sessionId, learnerId, topicIds: args.topics });
-        case "propose_plan":
-          return harness.proposePlan({ sessionId, learnerId, topicIds: args.topics, intent });
-        case "offer_strategy":
-          return harness.offerStrategy({ sessionId, learnerId, topicId: args.topicId, strategy: args.strategy, intent });
-        case "advance_topic":
-          return harness.advanceTopic({ sessionId, learnerId, intent });
-        case "defer_topic":
-          return harness.deferTopic({ sessionId, learnerId, topicId: args.topicId, reasonCode: args.reasonCode, intent });
-        case "topic.flag":
-          return harness.flagTopic({ sessionId, learnerId, topicId: args.topicId, reason: args.reason, intent });
-        case "session.replan":
-          return harness.proposePlan({ sessionId, learnerId, topicIds: args.topics, intent });
-        case "conclude_session":
-          return harness.concludeSession({ sessionId, learnerId, intent });
-        case "practice.generate":
-          return harness.startTopicPractice({ sessionId, learnerId, topicId: args.topicId, mode: args.mode, intent });
-        case "practice.submit":
-          return harness.submitPractice({ sessionId, learnerId, topicId: args.topicId, answers: args.answers, intent });
-        default: {
-          const error = new Error(`Unhandled tool: ${name}`);
-          error.code = "tool_not_permitted"; error.httpStatus = 403;
-          throw error;
-        }
-      }
-    },
-  };
+  return bindRegistry({
+    definitions: TOOL_DEFINITIONS, args: TOOL_ARGS, harnessOnly: HARNESS_ONLY_OPERATIONS, handlers,
+    // content.search stays a definition but is offered only once enabled (Decision 14).
+    isEnabled: (name) => name !== "content.search" || contentSearchEnabled,
+  });
 }

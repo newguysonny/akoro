@@ -25,11 +25,18 @@ test("every tool the planner is offered has a provider-valid, unique name", () =
   assert.equal(providerToolName("propose_plan"), "propose_plan", "already-safe names are unchanged");
 });
 
+// The decision-maker and the loop live in the shared agent runtime (Phase 2);
+// Study Prep's files configure them.
+const RUNTIME_AGENT = new URL("../../agent-runtime/llm-agent.js", import.meta.url);
+const RUNTIME_LOOP = new URL("../../agent-runtime/loop.js", import.meta.url);
+
 test("replies are mapped back to registry names; the call is bounded and labelled", () => {
-  const src = readFileSync(new URL("./llm-agent.js", import.meta.url), "utf8");
+  const src = readFileSync(RUNTIME_AGENT, "utf8");
   assert.match(src, /name: providerToolName\(tool\.name\)/);
   assert.match(src, /toRegistry\.get\(call\.function\.name\)/);
-  assert.match(src, /__feature: "study_prep_planning", __timeoutMs: 45_000, __maxRetries: 1/);
+  assert.match(src, /__feature: feature, __timeoutMs: timeoutMs, __maxRetries: maxRetries/);
+  const wrapper = readFileSync(new URL("./llm-agent.js", import.meta.url), "utf8");
+  assert.match(wrapper, /feature: "study_prep_planning", timeoutMs: 45_000, maxRetries: 1/);
   const loop = readFileSync(new URL("./agent-loop.js", import.meta.url), "utf8");
   assert.match(loop, /action: "agent_error"/, "a provider failure is recorded in the session's events");
 });
@@ -57,15 +64,16 @@ test("every tool tells the model its arguments; planning tools take topic ids", 
   }
   assert.ok(TOOL_ARGS["syllabus.resolve"].properties.classLevel, "classLevel, the name execute() reads");
   assert.ok(llmFacingTools().every((t) => t.args?.type === "object"));
-  const src = readFileSync(new URL("./llm-agent.js", import.meta.url), "utf8");
+  const src = readFileSync(RUNTIME_AGENT, "utf8");
   assert.match(src, /args: \{ \.\.\.\(tool\.args \|\| \{ type: "object" \}\)/);
 });
 
 test("the agent knows its budget and its last step can only finish", () => {
+  const runtimeLoop = readFileSync(RUNTIME_LOOP, "utf8");
+  assert.match(runtimeLoop, /finalOnly: iteration === maxIterations \? finals : null/);
   const loop = readFileSync(new URL("./agent-loop.js", import.meta.url), "utf8");
-  assert.match(loop, /finalOnly: iteration === maxIterations \? finalActions : null/);
   assert.match(loop, /contextSetName === "planning" \? \["propose_plan"\] : TERMINAL_ACTIONS/);
-  const src = readFileSync(new URL("./llm-agent.js", import.meta.url), "utf8");
+  const src = readFileSync(RUNTIME_AGENT, "utf8");
   assert.match(src, /finalOnly\.includes\(toRegistry\.get\(t\.function\.name\)\)/);
   assert.match(src, /Iteration \$\{iteration\} of \$\{maxIterations\}/);
 });
