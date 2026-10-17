@@ -166,3 +166,13 @@ test('study-prep steps become trace rows for the turn they happened in', () => {
   assert.deepEqual(later.map((b) => b.id), ['study_prep_3']);
   assert.equal(studyPrepEventBlocks(events, { to: Date.parse('2026-10-17T10:00:00Z') }).length, 0);
 });
+
+test('study-prep rows carry the agent\'s stated intent and only real durations', () => {
+  const rows = studyPrepEventBlocks([
+    { sequence: 1, eventType: 'agent_tool_call', agentIntent: 'Weak topics first.', durationMs: 840, at: '2026-10-17T10:00:00Z' },
+    { sequence: 2, eventType: 'harness_decision', narrative: 'Checked the plan.', at: '2026-10-17T10:00:01Z' },
+  ]);
+  assert.equal(rows[0].headline, 'agent says: Weak topics first.');
+  assert.equal(rows[0].ms, 840);
+  assert.equal(rows[1].ms, null, 'no recorded duration, none shown');
+});

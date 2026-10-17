@@ -181,14 +181,23 @@ const STUDY_PREP_STEP = {
  */
 export function studyPrepEventBlocks(events, { from = 0, to = Infinity } = {}) {
   return (events || [])
-    .filter((event) => event?.narrative)
+    // What the harness narrated, and what the agent said it was doing.
+    .filter((event) => event?.narrative || event?.agentIntent)
     .filter((event) => {
       const at = Date.parse(event.at || '') || 0;
       return at >= from && at < to;
     })
-    .map((event) => ({
-      type: 'tool', id: `study_prep_${event.sequence}`, status: 'done', ok: true, ms: event.durationMs ?? null,
-      category: 'study_prep', headline: event.narrative,
-      description: STUDY_PREP_STEP[event.eventType] || 'A Study Prep step', result: event.narrative,
-    }));
+    .map((event) => {
+      // The agent's own words: shown as "agent says:", never as a harness fact.
+      const said = !event.narrative && event.agentIntent;
+      return {
+        type: 'tool', id: `study_prep_${event.sequence}`, status: 'done', ok: true,
+        // Real recorded durations only — never a made-up one.
+        ms: event.durationMs != null ? event.durationMs : null,
+        category: 'study_prep',
+        headline: said ? `agent says: ${event.agentIntent}` : event.narrative,
+        description: said ? 'What I said I would do' : (STUDY_PREP_STEP[event.eventType] || 'A Study Prep step'),
+        result: said ? event.agentIntent : event.narrative,
+      };
+    });
 }

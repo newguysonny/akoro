@@ -10,18 +10,20 @@ import test from "node:test";
  */
 
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [card, tab, api, app, shell] = await Promise.all([
+const [card, tab, api, app, shell, trace] = await Promise.all([
   read("../../akoro-learner/src/components/tabs/studyPrep/StudyPrepChatCard.jsx"),
   read("../../akoro-learner/src/components/tabs/AgentChatTab.jsx"),
   read("../../akoro-learner/src/services/studyPrepApi.js"),
   read("../../akoro-learner/src/App.jsx"),
   read("../../akoro-learner/src/components/AppShell.jsx"),
+  // The session's steps render in the chat turn's trace, not the card (2026-10-17).
+  read("../../akoro-learner/src/lib/agentChatTrace.js"),
 ]);
 
 test("the session card renders inside the Agent Chat tab from the session echo", () => {
   assert.match(tab, /import StudyPrepChatCard from '\.\/studyPrep\/StudyPrepChatCard\.jsx'/);
   assert.match(tab, /entry\?\.session\?\.id && entry\?\.success\)\?\.session/);
-  assert.match(tab, /msg\.studyPrepSessionId&&<StudyPrepChatCard sessionId=\{msg\.studyPrepSessionId\}\/>/);
+  assert.match(tab, /msg\.studyPrepSessionId&&<StudyPrepChatCard sessionId=\{msg\.studyPrepSessionId\} onEvents=\{onStudyPrepEvents\}\/>/);
   // the non-stream fallback carries the same echo
   assert.match(tab, /studyPrepSessionFallback/);
 });
@@ -51,20 +53,20 @@ test("the teach-back gate is the learner's own button hitting the harness endpoi
   assert.match(api, /teach-back-done/);
 });
 
-test("agent intent renders as 'agent says:' — italic, muted, never bolded", () => {
-  assert.match(card, /agent says: \{event\.agentIntent\}/);
-  assert.match(card, /fontStyle: 'italic'/);
-  const intentLine = card.slice(card.indexOf("agent says:"), card.indexOf("agent says:") + 200);
+test("agent intent renders as 'agent says:' — the agent's words, never a harness fact", () => {
+  // A row of the turn's Study Prep steps (lib/agentChatTrace.js studyPrepEventBlocks).
+  assert.match(trace, /headline: said \? `agent says: \$\{event\.agentIntent\}` : event\.narrative/);
+  const intentLine = trace.slice(trace.indexOf("agent says:"), trace.indexOf("agent says:") + 200);
   assert.doesNotMatch(intentLine, /fontWeight: 9|fontWeight: 8/);
 });
 
 test("honest pacing: real recorded durations render, never fabricated", () => {
-  assert.match(card, /event\.durationMs != null/);
-  assert.match(card, /\(\{event\.durationMs\} ms\)/);
+  // Only a recorded duration; none recorded, none shown (the trace row hides it).
+  assert.match(trace, /ms: event\.durationMs != null \? event\.durationMs : null/);
   // The events render itself must never fabricate pacing with timers. (The
   // session-load effect may keep a network retry backoff — that is transport,
   // not a displayed duration. 2026-10-03.)
-  const eventsRender = card.slice(Math.max(0, card.indexOf("durationMs") - 500), card.indexOf("durationMs") + 500);
+  const eventsRender = trace.slice(Math.max(0, trace.indexOf("durationMs") - 500), trace.indexOf("durationMs") + 500);
   assert.doesNotMatch(eventsRender, /setTimeout|sleep\(/);
 });
 
@@ -83,7 +85,9 @@ test("the card never constructs scores or answer keys — the harness decides", 
 });
 
 test("replay is the events feed — the card never re-runs or calls the LLM", () => {
-  assert.match(card, /Activity \(\{events\.length\}\)/);
-  assert.match(card, /\[\.\.\.events\]\.reverse\(\)\.map/);
+  // The card hands its session's recorded events to the chat, which shows them in the trace.
+  assert.match(card, /onEvents\?\.\(sessionId, events\)/);
+  assert.match(tab, /studyPrepEventBlocks\(studyPrepEvents\[sessionId\]/);
   assert.doesNotMatch(card, /openai|chat\.completions/);
+  assert.doesNotMatch(trace, /openai|chat\.completions/);
 });

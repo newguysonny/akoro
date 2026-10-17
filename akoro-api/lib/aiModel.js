@@ -13,8 +13,16 @@ import { makeAiBreaker } from "./circuitBreaker.js";
 import { aiContext } from "./aiContext.js";
 import { AI_DEFAULT_MAX_TOKENS, usdCost, cachedTokensOf } from "./aiPricing.js";
 import { recordAiCall, errorKindOf } from "./aiTelemetry.js";
+import { modelRegistry } from "./modelRegistry.js";
+import { makeOpenAICompatibleAdapter } from "./providers/openaiCompatible.js";
+import { makeAnthropicAdapter } from "./providers/anthropic.js";
 
-export const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+// The default model (lib/modelRegistry.js: AI_MODEL_DEFAULT, legacy OPENAI_MODEL,
+// else gpt-4o-mini). New code names a role (`__role`) instead of importing this.
+export const OPENAI_MODEL = modelRegistry.defaultId;
+
+// Providers other than OpenAI, behind the same call path (§7.11.4).
+const adapters = { openai_compatible: makeOpenAICompatibleAdapter(), anthropic: makeAnthropicAdapter() };
 export { InsufficientCoins };
 
 // One breaker per endpoint family. Every model call in the app — chat,
@@ -60,6 +68,15 @@ async function meteredCreate(params = {}) {
   const clean = { ...params };
   delete clean.__userId; delete clean.__feature; delete clean.__ref; delete clean.__billTo; delete clean.__payer;
   delete clean.__timeoutMs; delete clean.__maxRetries;
+  delete clean.__role; delete clean.__learnerChoice; delete clean.__allowedModels;
+  // Which model (§7.11.3): the caller's own `model`, else resolved from the
+  // role and the learner's choice. Either way the catalogue says who serves it.
+  const entry = clean.model
+    ? (modelRegistry.get(clean.model) || modelRegistry.catalogue.find((e) => e.apiModel === clean.model) || null)
+    : modelRegistry.resolveModel({ role: params.__role || "chat", learnerChoice: params.__learnerChoice || null, allowedModels: params.__allowedModels || null });
+  if (entry) clean.model = entry.apiModel;
+  const adapter = entry && entry.provider !== "openai" ? adapters[entry.provider] : null;
+  const fire = (body, opts) => (adapter ? adapter.create(body, opts, entry) : chatBreaker.fire(body, opts));
   // Per-call SDK bounds (`__timeoutMs` / `__maxRetries`). The SDK's defaults
   // are a 10-MINUTE timeout with 2 retries — a single stalled provider call
   // once hung a chat turn for minutes while the browser had long given up.
@@ -83,7 +100,8 @@ async function meteredCreate(params = {}) {
     if (!ok) throw new InsufficientCoins(1, total);
   }
 
-  const model = clean.model || OPENAI_MODEL;
+  // Billed and recorded under the catalogue id, priced at its own rate.
+  const model = entry?.id || clean.model || OPENAI_MODEL;
   const charge = (usage) => chargeForAI({ userId, feature, model, usage, ref, billTo })
     .catch((e) => { if (!(e instanceof InsufficientCoins)) console.warn("[coins] charge failed:", e.message); });
 
@@ -109,7 +127,7 @@ async function meteredCreate(params = {}) {
   if (clean.stream) {
     let source;
     try {
-      source = await chatBreaker.fire({
+      source = await fire({
         ...clean,
         ...(bills ? { stream_options: { include_usage: true, ...(clean.stream_options || {}) } } : {}),
       }, reqOpts);
@@ -126,7 +144,7 @@ async function meteredCreate(params = {}) {
 
   let res;
   try {
-    res = await chatBreaker.fire(clean, reqOpts);
+    res = await fire(clean, reqOpts);
   } catch (e) { report(null, { ok: false, errorKind: errorKindOf(e) }); throw e; }
 
   report(res?.usage ?? null);

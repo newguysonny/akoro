@@ -441,8 +441,11 @@ test("the plan generator's model calls are individually bounded — no 10-minute
   assert.equal((guide.match(/__timeoutMs: 45_000, __maxRetries: 1/g) || []).length, 4,
     "generateSubtopics, generateObjectives and both assignment drafters are bounded");
   // ...and the metered client actually forwards them as SDK request options.
-  assert.match(aiModel, /clean\.__timeoutMs != null \|\| clean\.__maxRetries != null/);
-  assert.match(aiModel, /chatBreaker\.fire\(clean, reqOpts\)/);
+  // Read from the caller's params — `clean` has them stripped before the call (the 10-minute-stall fix).
+  assert.match(aiModel, /params\.__timeoutMs != null \|\| params\.__maxRetries != null/);
+  // Through the provider dispatch: OpenAI calls still reach the chat breaker with the options.
+  assert.match(aiModel, /res = await fire\(clean, reqOpts\)/);
+  assert.match(aiModel, /adapter \? adapter\.create\(body, opts, entry\) : chatBreaker\.fire\(body, opts\)/);
   assert.match(aiModel, /rawClient\.chat\.completions\.create\(params, reqOpts\)/);
 });
 

@@ -5,13 +5,17 @@
  * becomes a malformed iteration the loop records and moves on from — the
  * model never gets to freestyle state.
  *
- *   makeLlmAgent({ system, catalogue, feature, learnerId, intentMaxChars,
- *                  maxTokens, timeoutMs, finishHint })
+ *   makeLlmAgent({ system, catalogue, feature, learnerId, learnerChoice,
+ *                  intentMaxChars, maxTokens, timeoutMs, finishHint })
+ *
+ * The model is the `controller` role's (lib/modelRegistry.js): the learner's
+ * choice when they may make one, else the role's env default, else the
+ * platform default. Safety lives in the harness, whichever model decides.
  *
  * Each workflow passes its own catalogue (agent-runtime/tools.js) and the
  * feature name it is billed under.
  */
-import { OPENAI_MODEL, openai } from "../../lib/aiModel.js";
+import { openai } from "../../lib/aiModel.js";
 
 /**
  * Registry names are dotted ("syllabus.resolve"); OpenAI function names must
@@ -23,7 +27,7 @@ export function providerToolName(name) {
 }
 
 export function makeLlmAgent({
-  system, catalogue, feature, learnerId = null, intentMaxChars = 240,
+  system, catalogue, feature, learnerId = null, learnerChoice = null, intentMaxChars = 240,
   maxTokens = 700, timeoutMs = 45_000, maxRetries = 1,
   finishHint = "This is your last step: finish now with the best you can make from what you found.",
 }) {
@@ -69,7 +73,8 @@ export function makeLlmAgent({
         },
       ];
       const response = await openai.chat.completions.create({
-        model: OPENAI_MODEL, max_tokens: maxTokens, messages, tools: offered.length ? offered : tools, tool_choice: "required",
+        __role: "controller", ...(learnerChoice ? { __learnerChoice: learnerChoice } : {}),
+        max_tokens: maxTokens, messages, tools: offered.length ? offered : tools, tool_choice: "required",
         __feature: feature, __timeoutMs: timeoutMs, __maxRetries: maxRetries,
         ...(learnerId ? { __userId: learnerId } : {}),
       });

@@ -34,6 +34,19 @@ const MODEL_PRICES = {
 };
 const DEFAULT_PRICE = MODEL_PRICES["gpt-4o-mini"];
 
+/** The built-in price table — the model registry's default catalogue (lib/modelRegistry.js). */
+export const DEFAULT_MODEL_PRICES = Object.freeze(Object.fromEntries(Object.entries(MODEL_PRICES).map(([k, v]) => [k, Object.freeze({ ...v })])));
+
+/**
+ * Add a catalogue model's price (lib/modelRegistry.js, from AI_MODELS), under
+ * every name a call may be billed as (its id and its API model). A model the
+ * registry knows is never billed at the gpt-4o-mini fallback.
+ */
+export function registerModelPrice(names, price) {
+  for (const name of [].concat(names).filter(Boolean)) MODEL_PRICES[name] = { in: price.in, out: price.out, ...(price.cachedIn != null ? { cachedIn: price.cachedIn } : {}) };
+}
+export const hasModelPrice = (name) => Object.prototype.hasOwnProperty.call(MODEL_PRICES, name);
+
 // OpenAI bills cached prompt-prefix tokens at ~50% of the input rate (automatic
 // prompt caching kicks in for stable ≥1024-token prefixes — e.g. the tutor's
 // fixed system prompt). We price cached input at CACHED_INPUT_FACTOR so the
@@ -46,7 +59,9 @@ export const AI_DEFAULT_MAX_TOKENS = Math.max(0, Math.round(num(process.env.AI_D
 export function usdCost(model, tokensIn = 0, tokensOut = 0, cachedIn = 0) {
   const p = MODEL_PRICES[model] || DEFAULT_PRICE;
   const freshIn = Math.max(0, tokensIn - cachedIn);
-  return (freshIn / 1e6) * p.in + (cachedIn / 1e6) * p.in * CACHED_INPUT_FACTOR + (tokensOut / 1e6) * p.out;
+  // A catalogue price may carry its own cached-input rate (e.g. Claude cache reads).
+  const cachedRate = p.cachedIn != null ? p.cachedIn : p.in * CACHED_INPUT_FACTOR;
+  return (freshIn / 1e6) * p.in + (cachedIn / 1e6) * cachedRate + (tokensOut / 1e6) * p.out;
 }
 
 /** Coins to debit for a completion (real cost × markup, rounded up, min 1). */
