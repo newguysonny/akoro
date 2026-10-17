@@ -132,3 +132,16 @@ export async function checkResults(battleId) {
     score: total ? correct / total : 0, perQuestion, gaps,
   };
 }
+
+/**
+ * Remove one Agent Check battle (the gate's cleanup) — only a check whose one
+ * seat is this learner. Its questions, answers, seats and log go with it.
+ * → number of battles deleted.
+ */
+export async function discardCheckBattle(battleId, learnerId) {
+  const { data: seats } = await db.from("battle_participants").select("user_id").eq("battle_id", battleId);
+  if (!seats?.length || seats.some((s) => s.user_id !== learnerId)) return 0;
+  const { data, error } = await db.from("battles").delete().eq("id", battleId).eq("battle_type", "check").select("id");
+  if (error) throw new Error(error.message);
+  return (data || []).length;
+}

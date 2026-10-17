@@ -50,7 +50,8 @@ const makeAgentCheck = ({ questions, secondsPerQuestion } = {}) => ({
   async coverage({ learnerId, topic, subject }) {
     const { embedQuestion, recall } = await import("../../battle/agentRecall.js");
     const embedding = await embedQuestion(topic);
-    const notes = await recall({ studentId: learnerId, embedding, topic, queryText: topic, subject, limit: 4 });
+    // Deciding whether there is anything to check is the platform's, not a charge.
+    const notes = await recall({ studentId: learnerId, embedding, topic, queryText: topic, subject, limit: 4, payer: "platform" });
     const n = notes?.length || 0;
     return { notes: n, strength: n === 0 ? "none" : n < 3 ? "thin" : "good" };
   },

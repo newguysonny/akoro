@@ -166,7 +166,11 @@ export const agentCheckBattle = {
     }
     const battleId = started.check?.battleId;
     ctx.expect.ok("a check battle was created", !!battleId, JSON.stringify(started.check || null));
-    ctx.cleanup(() => ctx.db.deleteOwned("battle_participants", { ownerColumn: "user_id", ownerId: me.id, filters: { battle_id: battleId } }));
+    // Registered after the session's cleanup, so it runs first (cleanups run newest first).
+    ctx.cleanup(async () => {
+      const { discardCheckBattle } = await import("../../battle/agentCheck.js");
+      await discardCheckBattle(battleId, me.id);
+    });
     ctx.note(`topic "${topic.label}", battle ${battleId}, ${started.check?.questions} questions`);
 
     // 3 questions × 10 s, a 6 s start and the end delay: scored within ~75 s.
@@ -177,6 +181,9 @@ export const agentCheckBattle = {
       if (row?.check_scored_at) scored = row;
     }
     if (!scored) ctx.expect.blocked("the check battle did not finish within 100 s — is the battle worker running?");
+    // Scoring claims the result first, then settles the topic: give it a moment.
+    await new Promise((r) => setTimeout(r, 3000));
+    [scored] = await ctx.db.rows("edu.study_prep_topics", { id: topic.id }, { columns: "check_battle_id, check_scored_at, check_result, status", limit: 1 });
 
     const [battle] = await ctx.db.rows("battles", { id: battleId }, { columns: "battle_type, status, study_prep_topic_id, created_by", limit: 1 });
     ctx.expect.eq("battle type is an Agent Check", battle?.battle_type, "check");
@@ -188,6 +195,7 @@ export const agentCheckBattle = {
     ctx.note(`result: ${r.correct}/${r.total} from notes, ${r.guessed} guessed, ${r.unknown} not in the notes; topic → ${scored.status}`);
     ctx.expect.eq("every question scored", (r.perQuestion || []).length, r.total);
 
+
     const debits = (await ctx.db.rows("coin_transactions", { account_id: acct.id }, { columns: "delta, type, feature, created_at", limit: 30, order: { column: "created_at", ascending: false } }))
       .filter((t) => t.created_at >= t0 && t.type === "debit");
     ctx.note(`debits: ${JSON.stringify(debits.map((t) => ({ feature: t.feature, delta: t.delta })))}`);
@@ -195,7 +203,10 @@ export const agentCheckBattle = {
     ctx.expect.eq("nothing else billed (questions and answers are the platform's)", debits.filter((t) => t.feature !== "study_prep_practice").length, 0);
 
     const events = await ctx.db.rows("edu.study_prep_events", { session_id: id, event_type: "engine_result" }, { columns: "facts", limit: 5 });
-    ctx.expect.ok("the Engine scored it as the agent's answers", events.some((e) => e.facts?.source === "agent_recall"));
+    const engine = events.find((e) => e.facts?.source === "agent_recall");
+    ctx.expect.ok("the Engine scored it as the agent's answers", !!engine);
+    const expected = engine?.facts?.outcome === "retest_offered" ? "active" : engine?.facts?.outcome;
+    ctx.expect.eq("the topic follows the Engine's outcome", scored.status, expected);
     const said = await ctx.db.rows("chat_messages", { session_id: id }, { columns: "text, meta", limit: 10 });
     ctx.expect.gte("the protégé posted in chat (start + result)", said.filter((m) => m.meta?.battle?.id === battleId).length, 2);
   },

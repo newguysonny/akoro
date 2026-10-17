@@ -86,7 +86,7 @@ export async function embedQuestion(text) {
  * could pull back a Social Studies note purely because the vectors sat close,
  * and the only thing stopping it being used was the similarity floor below.
  */
-export async function recall({ studentId, embedding, topic, queryText = null, subject = null, limit = RECALL_LIMIT }) {
+export async function recall({ studentId, embedding, topic, queryText = null, subject = null, limit = RECALL_LIMIT, payer = null }) {
   try {
     const { data, error } = await db.rpc("match_student_knowledge", {
       p_student_id: studentId,
@@ -120,7 +120,8 @@ export async function recall({ studentId, embedding, topic, queryText = null, su
       candidates: kept,
       textOf: (n) => `(${[n.topic, n.subtopic].filter(Boolean).join(" — ")}) ${n.content ?? ""}`,
       topK: limit,
-      userId: studentId,
+      // An Agent Check was charged once, up front (D45): its rerank is the platform's.
+      userId: payer === "platform" ? null : studentId,
     });
   } catch (e) {
     console.warn("[battle/recall] search threw:", e.message);

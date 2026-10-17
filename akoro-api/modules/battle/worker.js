@@ -283,6 +283,7 @@ async function agentAnswer(battleId, questionOrder, participantId, thinkingMs = 
       // narrows it — a Mathematics question has no business retrieving a Social
       // Studies note, however close the vectors happen to sit.
       queryText: q.question_text, subject: q.subject,
+      ...(prepaid ? { payer: "platform" } : {}),
     });
     try {
       const ans = await answerFromRecall({
@@ -406,6 +407,8 @@ async function agentAnswer(battleId, questionOrder, participantId, thinkingMs = 
  */
 async function scheduleAgentAnswers(battleId, q) {
   const players = await autoPlayers(battleId);
+  const { data: bt } = await db.from("battles").select("battle_type").eq("id", battleId).maybeSingle();
+  const prepaid = bt?.battle_type === "check";   // an Agent Check's searches are the platform's (D45)
   // One embedding for the question, shared by every agent searching against it.
   // Per agent it would be the same vector computed N times and billed N times.
   const embedding = await embedQuestion(`${q.topic ? q.topic + ": " : ""}${q.question_text}`);
@@ -417,6 +420,7 @@ async function scheduleAgentAnswers(battleId, q) {
     const notes = await recall({
       studentId: p.user_id, embedding, topic: q.topic,
       queryText: q.question_text, subject: q.subject, limit: 3,
+      ...(prepaid ? { payer: "platform" } : {}),
     });
     const thinkingMs = thinkingTimeMs(recallStrength(notes), q.time_limit_seconds);
     await battleQueue.add("agent-answer",

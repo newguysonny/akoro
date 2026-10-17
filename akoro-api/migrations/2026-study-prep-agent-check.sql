@@ -49,13 +49,14 @@ COMMENT ON COLUMN edu.study_prep_topics.check_result IS '{ correct, guessed, wro
 -- a classroom. An Agent Check is neither (it belongs to a Study Prep topic),
 -- and neither are network battles (createNetworkBattle inserts both null) or
 -- the daily battle (recurring_key) — where the rule is live, those inserts
--- failed. A battle is scoped by a course, a classroom, its Study Prep topic,
--- the network creator who made it, or its daily series.
+-- failed. A battle is scoped by a course, a classroom, being an Agent Check
+-- (its Study Prep topic link is SET NULL when the session goes, and the check
+-- stays in the learner's history), the network creator, or its daily series.
 DO $$
 BEGIN
   ALTER TABLE public.battles DROP CONSTRAINT IF EXISTS battles_scope_check;
   ALTER TABLE public.battles ADD CONSTRAINT battles_scope_check CHECK (
-    course_id IS NOT NULL OR classroom_id IS NOT NULL OR study_prep_topic_id IS NOT NULL
+    course_id IS NOT NULL OR classroom_id IS NOT NULL OR battle_type = 'check'
     OR created_by IS NOT NULL OR recurring_key IS NOT NULL
   );
 EXCEPTION WHEN check_violation THEN
