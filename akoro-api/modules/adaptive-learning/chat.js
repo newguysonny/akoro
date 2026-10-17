@@ -3054,7 +3054,18 @@ router.post("/sessions", async (req, res) => {
   }
 });
 
-// GET /sessions/:id/messages — messages for one owned session.
+// GET /sessions/:id/messages — messages for one owned session, oldest first.
+// Without `limit`: the whole transcript (copy, other apps). With `limit`
+// (1-100): only the newest `limit` messages — older than `before` (an ISO
+// time, the oldest one already loaded) when given — plus `hasMore`, so the
+// chat loads its history a page at a time as the learner scrolls up.
+export function historyPage(query = {}) {
+  const raw = Number.parseInt(query.limit, 10);
+  const limit = Number.isFinite(raw) ? Math.max(1, Math.min(100, raw)) : null;
+  const before = limit && query.before && !Number.isNaN(Date.parse(query.before)) ? new Date(query.before).toISOString() : null;
+  return { limit, before };
+}
+
 router.get("/sessions/:id/messages", async (req, res) => {
   try {
     res.set("Cache-Control", "no-store");
@@ -3063,11 +3074,14 @@ router.get("/sessions/:id/messages", async (req, res) => {
       .eq("id", req.params.id).eq("user_id", req.user.id).maybeSingle();
     if (!session) return res.status(404).json({ error: "Session not found" });
 
-    const loadMessages = (columns) => db
-      .from("chat_messages")
-      .select(columns)
-      .eq("session_id", req.params.id)
-      .order("created_at", { ascending: true });
+    const { limit, before } = historyPage(req.query);
+    const loadMessages = (columns) => {
+      let q = db.from("chat_messages").select(columns).eq("session_id", req.params.id);
+      if (!limit) return q.order("created_at", { ascending: true });
+      if (before) q = q.lt("created_at", before);
+      // Newest first to take the page (one extra says whether more exist).
+      return q.order("created_at", { ascending: false }).limit(limit + 1);
+    };
     // The reply trace column may not exist yet during a rolling deploy —
     // fall back to the plain transcript rather than failing the history load.
     let { data, error } = await loadMessages("id, role, text, created_at, trace, meta");
@@ -3076,7 +3090,9 @@ router.get("/sessions/:id/messages", async (req, res) => {
     if (error && /meta/i.test(String(error.message || ""))) ({ data, error } = await loadMessages("id, role, text, created_at, trace"));
     if (error && /trace/i.test(String(error.message || ""))) ({ data, error } = await loadMessages("id, role, text, created_at"));
     if (error) throw new Error(error.message);
-    res.json({ success: true, messages: data ?? [] });
+    if (!limit) return res.json({ success: true, messages: data ?? [] });
+    const rows = data ?? [];
+    res.json({ success: true, messages: rows.slice(0, limit).reverse(), hasMore: rows.length > limit });
   } catch (err) {
     console.error("[/chat/sessions messages GET]", err);
     res.status(500).json({ error: err.message });

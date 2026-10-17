@@ -49,8 +49,11 @@ test('the view follows new output only at the bottom; otherwise a ↓ jump butto
 });
 
 test('a reloaded chat rebuilds the same steps from the saved trace', () => {
+  // Each saved message (the open page and every older page) rebuilds through fromSaved.
+  const saved = between(tab, 'const fromSaved = (m)', 'const openSession = async');
+  assert.match(saved, /blocksFromSavedTrace\(m\.trace\)/);
   const open = between(tab, 'const openSession = async', 'const retryHistoryLoad');
-  assert.match(open, /blocksFromSavedTrace\(m\.trace\)/);
+  assert.match(open, /map\(fromSaved\)/);
 });
 
 test('the trace UI never shows backend tool names (only the opt-in developer view shows raw I/O)', () => {
@@ -69,4 +72,19 @@ test('the last step\'s streamed words become the reply instead of being written 
   assert.match(send, /promoteActivity\(m\.blocks, data\?\.id\)/);
   assert.match(api, /'activity_start', 'activity_delta', 'activity_end', 'activity_promote', 'activity_drop'/);
   assert.match(blocks, /<ChangeRow key=\{item\.id\} block=\{item\}\/>/);
+});
+
+test('history loads a page at a time: the newest 10 on open, older pages on scrolling to the top', () => {
+  assert.match(tab, /const HISTORY_PAGE = 10;/);
+  const open = between(tab, 'const openSession = async', 'const retryHistoryLoad');
+  assert.match(open, /messages\?limit=\$\{HISTORY_PAGE\}/);
+  const older = between(tab, 'const loadOlder = async', 'const removeSession');
+  assert.match(older, /&before=\$\{encodeURIComponent\(page\.before\)\}/);
+  assert.match(older, /\[\.\.\.fresh, \.\.\.prev\]/);
+  assert.match(tab, /if\(el\.scrollTop<80\) loadOlder\(\);/);
+  // The reading position is kept when older messages go in above.
+  assert.match(tab, /el\.scrollTop=el\.scrollHeight-kept\.height\+kept\.top;/);
+  // Copy chat still asks for the whole transcript (no limit).
+  const copy = between(tab, 'const copySession = async', 'useEffect(');
+  assert.match(copy, /sessions\/\$\{s\.id\}\/messages`\)/);
 });

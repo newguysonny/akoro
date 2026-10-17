@@ -161,3 +161,43 @@ export const protegeIdentity = {
     ctx.expect.loopHealthy(ask);
   },
 };
+
+// The chat history loads a page at a time (the learner app asks for 10).
+export const historyPages = {
+  name: "chat.history_pages", area: "agent-chat", risk: "write",
+  description: "A chat's history comes a page at a time, newest first, walking back with `before` until hasMore is false — and without a limit it is still the whole transcript (copy chat).",
+  params: { learner: { default: "@tester07" } },
+  async run(ctx, p) {
+    const me = await ctx.as(p.learner);
+    const base = "/api/adaptive/chat/sessions";
+    const made = await ctx.http({ as: p.learner, method: "POST", path: base, body: { title: `${ctx.marker} history pages` } });
+    const id = made.body?.session?.id;
+    if (!id) ctx.expect.blocked(`creating a chat answered ${made.status}`);
+    ctx.cleanup(() => ctx.db.deleteOwned("chat_messages", { ownerColumn: "user_id", ownerId: me.id, filters: { session_id: id } }));
+    ctx.cleanup(() => ctx.db.deleteOwned("chat_sessions", { ownerColumn: "user_id", ownerId: me.id, filters: { id } }));
+    const total = 23;
+    for (let i = 1; i <= total; i++) {
+      const sent = await ctx.http({ as: p.learner, method: "POST", path: `${base}/${id}/messages`, body: { role: i % 2 ? "user" : "agent", text: `${ctx.marker} message ${i}` } });
+      if (sent.status >= 300) ctx.expect.blocked(`adding message ${i} answered ${sent.status}`);
+    }
+    const n = (m) => Number(String(m.text).split("message ")[1]);
+    const pages = [];
+    let before = null;
+    for (let guard = 0; guard < 5; guard++) {
+      const res = await ctx.http({ as: p.learner, path: `${base}/${id}/messages?limit=10${before ? `&before=${encodeURIComponent(before)}` : ""}` });
+      ctx.expect.status(`page ${guard + 1}`, res, 200);
+      const msgs = res.body?.messages || [];
+      pages.push({ numbers: msgs.map(n), hasMore: res.body?.hasMore });
+      if (!res.body?.hasMore || !msgs.length) break;
+      before = msgs[0].created_at;
+    }
+    ctx.note(`pages: ${JSON.stringify(pages)}`);
+    ctx.expect.eq("three pages for 23 messages", pages.length, 3);
+    ctx.expect.eq("page 1 is the newest 10, oldest first", JSON.stringify(pages[0]?.numbers), JSON.stringify([14, 15, 16, 17, 18, 19, 20, 21, 22, 23]));
+    ctx.expect.eq("page 2 is the 10 before", JSON.stringify(pages[1]?.numbers), JSON.stringify([4, 5, 6, 7, 8, 9, 10, 11, 12, 13]));
+    ctx.expect.eq("page 3 is the rest", JSON.stringify(pages[2]?.numbers), JSON.stringify([1, 2, 3]));
+    ctx.expect.eq("the last page says there is no more", pages[2]?.hasMore, false);
+    const all = await ctx.http({ as: p.learner, path: `${base}/${id}/messages` });
+    ctx.expect.eq("no limit: the whole transcript (copy chat)", (all.body?.messages || []).length, total);
+  },
+};

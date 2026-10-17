@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
 import { API, apiGet, apiPost, apiPatch, apiDelete, streamPost } from '../../services/api.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
@@ -9,6 +9,8 @@ import { chatPicker, applyPick } from '../../lib/chatModels.js';
 
 /* One gutter for the conversation and the composer, so messages line up with the input box. */
 const CHAT_GUTTER = 16;
+/* Messages per history page: the newest on open, then a page per scroll to the top. */
+const HISTORY_PAGE = 10;
 /* Agent replies have no bubble, so they sit a little further in than the gutter. */
 const REPLY_INSET = 12;   // 28px from the edge — the Claude app's reading margin
 import RichText from '../common/RichText.jsx';
@@ -176,6 +178,12 @@ function AgentChatTab({
   // bottom; otherwise offer a floating ↓ "jump to latest" button.
   const atBottomRef    = useRef(true);
   const [showJump,     setShowJump]     = useState(false);
+  // History loads a page at a time: the newest HISTORY_PAGE messages on open,
+  // the page before them each time the learner scrolls to the top.
+  const olderRef       = useRef({ hasMore: false, before: null, loading: false });
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const prependRef     = useRef(null);   // the scroll position to keep while older messages are added
+  const skipFollowRef  = useRef(false);
   const fileInputRef   = useRef(null);
   const MAX_FILES      = 4;
   const MAX_FILE_MB    = 5;
@@ -280,21 +288,25 @@ function AgentChatTab({
     return creatingRef.current;
   };
 
+  const fromSaved = (m) => ({
+    id: m.id,
+    from: m.role === "user" ? "me" : "agent",
+    text: m.text,
+    time: new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    at: m.created_at,
+    ...(m.role !== "user" && Array.isArray(m.trace) ? { blocks: blocksFromSavedTrace(m.trace) } : {}),
+  });
+
   const openSession = async (id) => {
     setDrawerOpen(false);
     if (id === sessionIdRef.current) return;
     try {
-      const d = await apiGet(`${CHAT_BASE}/sessions/${id}/messages`);
-      const msgs = (d?.messages ?? []).map(m => ({
-        id: m.id,
-        from: m.role === "user" ? "me" : "agent",
-        text: m.text,
-        time: new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        at: m.created_at,
-        ...(m.role !== "user" && Array.isArray(m.trace) ? { blocks: blocksFromSavedTrace(m.trace) } : {}),
-      }));
+      const d = await apiGet(`${CHAT_BASE}/sessions/${id}/messages?limit=${HISTORY_PAGE}`);
+      const msgs = (d?.messages ?? []).map(fromSaved);
       setSession(id);
       atBottomRef.current = true;
+      olderRef.current = { hasMore: !!d?.hasMore, before: msgs[0]?.at || null, loading: false };
+      setLoadingOlder(false);
       setMessages(msgs.length ? msgs : [greeting(agentName, agentEmoji)]);
       setHistoryError(null);
     } catch {
@@ -320,7 +332,8 @@ function AgentChatTab({
         loadSessions().catch(() => {});
         if (!data?.sessionId || data.sessionId !== sessionIdRef.current) return;
         try {
-          const d = await apiGet(`${CHAT_BASE}/sessions/${data.sessionId}/messages`);
+          // The new message is among the newest: one page is enough.
+          const d = await apiGet(`${CHAT_BASE}/sessions/${data.sessionId}/messages?limit=${HISTORY_PAGE}`);
           if (data.sessionId !== sessionIdRef.current) return;
           setMessages((prev) => {
             const ids = new Set(prev.map((m) => m.id));
@@ -351,8 +364,36 @@ function AgentChatTab({
   const newChat = () => {
     setDrawerOpen(false);
     setSession(null);
+    olderRef.current = { hasMore: false, before: null, loading: false };
+    setLoadingOlder(false);
     setMessages([greeting(agentName, agentEmoji)]);
     setHistoryError(null);
+  };
+
+  // The page before the oldest message shown, kept in place on screen.
+  const loadOlder = async () => {
+    const page = olderRef.current;
+    const id = sessionIdRef.current;
+    if (!id || !page.hasMore || page.loading || !page.before) return;
+    page.loading = true; setLoadingOlder(true);
+    try {
+      const d = await apiGet(`${CHAT_BASE}/sessions/${id}/messages?limit=${HISTORY_PAGE}&before=${encodeURIComponent(page.before)}`);
+      if (id !== sessionIdRef.current) return;
+      const older = (d?.messages ?? []).map(fromSaved);
+      olderRef.current = { hasMore: !!d?.hasMore && older.length > 0, before: older[0]?.at || page.before, loading: false };
+      const el = feedRef.current;
+      if (el) prependRef.current = { height: el.scrollHeight, top: el.scrollTop };
+      setMessages((prev) => {
+        const ids = new Set(prev.map((m) => m.id));
+        const fresh = older.filter((m) => !ids.has(m.id));
+        return fresh.length ? [...fresh, ...prev] : prev;
+      });
+    } catch {
+      // Try again on the next scroll to the top.
+      if (id === sessionIdRef.current) olderRef.current = { ...page, loading: false };
+    } finally {
+      if (id === sessionIdRef.current) setLoadingOlder(false);
+    }
   };
 
   const removeSession = async (id, e) => {
@@ -526,9 +567,24 @@ function AgentChatTab({
     const atBottom=el.scrollHeight-el.scrollTop-el.clientHeight<80;
     atBottomRef.current=atBottom;
     if(atBottom) setShowJump(false);
+    if(el.scrollTop<80) loadOlder();
   };
+  // Older messages went in above: keep what the learner was reading in place.
+  // A first page too short to scroll fetches the next one straight away.
+  useLayoutEffect(()=>{
+    const el=feedRef.current; if(!el) return;
+    const kept=prependRef.current;
+    if(kept){
+      prependRef.current=null;
+      el.scrollTop=el.scrollHeight-kept.height+kept.top;
+      skipFollowRef.current=true;
+    }
+    if(el.scrollHeight<=el.clientHeight+10&&olderRef.current.hasMore) loadOlder();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[messages]);
   useEffect(()=>{
     if(!feedRef.current) return;
+    if(skipFollowRef.current){ skipFollowRef.current=false; return; }
     if(atBottomRef.current) feedRef.current.scrollTop=feedRef.current.scrollHeight;
     else setShowJump(true);
   },[messages,loading]);
@@ -897,6 +953,13 @@ function AgentChatTab({
               ran, then the reply (Grand Plan §13.4). */}
           <div style={{ flex:1,position:"relative",display:"flex",flexDirection:"column",minHeight:0 }}>
           <div ref={feedRef} onScroll={onFeedScroll} style={{ flex:1,overflowY:"auto",padding:`14px ${CHAT_GUTTER}px`,display:"flex",flexDirection:"column",gap:14 }}>
+            {loadingOlder&&(
+              <div role="status" style={{ display:"flex",alignItems:"center",justifyContent:"center",gap:7,fontSize:11.5,fontWeight:700,color:"var(--ak-text-muted)" }}>
+                <style>{'@keyframes ak-trace-spin{to{transform:rotate(360deg)}}'}</style>
+                <span aria-hidden style={{ width:11,height:11,borderRadius:"50%",border:`1.6px solid ${BRAND}40`,borderTopColor:BRAND,display:"inline-block",animation:"ak-trace-spin .8s linear infinite" }}/>
+                Loading earlier messages…
+              </div>
+            )}
             {messages.map((msg,mi)=>{
               const isMe=msg.from==="me";
               const thinkingStream=!isMe&&msg.phase==="thinking";
