@@ -37,6 +37,9 @@ const TEMPLATES = {
   session_concluded: (f) => `Session complete${f.understood ? ` — ${f.understood} topic${f.understood === 1 ? "" : "s"} understood` : ""}.`,
   session_paused: (f) => PAUSE_COPY[f.reason] || "Session paused. Tap resume when you are ready.",
   harness_rejection: (f) => REJECTION_COPY[f.code] || `That action was not allowed (${f.code}).`,
+  syllabus_generated: (f) => f.reused
+    ? `There's no syllabus for ${f.classLevel || "this class"} ${f.subject || "this subject"} on Akoro yet, so I'm using an outline drafted earlier from the national curriculum. It's an AI-drafted outline, not your school's official syllabus.`
+    : `I couldn't find a syllabus for ${f.classLevel || "this class"} ${f.subject || "this subject"} on Akoro, so I drafted an outline from the national curriculum. It's an AI-drafted outline, not your school's official syllabus.`,
 };
 
 const PAUSE_COPY = {
@@ -60,6 +63,8 @@ const REJECTION_COPY = {
   deferred_retry_used: "The one deferred retry for this session is already used.",
   invalid_state_transition: "That step does not follow from where the session is right now.",
   tool_schema_invalid: "That request was malformed — nothing happened.",
+  syllabus_exists: "A real syllabus exists for this subject — the plan is made from it, not from a drafted outline.",
+  outline_invalid: "The drafted outline didn't pass its checks — nothing was saved.",
 };
 
 /**
