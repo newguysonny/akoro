@@ -13,3 +13,9 @@ WHERE NOT EXISTS (SELECT 1 FROM public.users WHERE email = 'sbxlearner@sandbox.a
 INSERT INTO edu.student_agents (student_id, name)
 SELECT id, 'Sandy' FROM public.users WHERE email = 'sbxlearner@sandbox.akoro.invalid'
 ON CONFLICT (student_id) DO NOTHING;
+
+-- The app's agent record (tasks.agent_id points here).
+INSERT INTO public.user_agents (user_id, agent_name, is_active)
+SELECT u.id, 'Sandy', true FROM public.users u
+WHERE u.email = 'sbxlearner@sandbox.akoro.invalid'
+  AND NOT EXISTS (SELECT 1 FROM public.user_agents a WHERE a.user_id = u.id);
