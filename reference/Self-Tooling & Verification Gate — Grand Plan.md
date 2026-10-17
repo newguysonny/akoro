@@ -1374,7 +1374,33 @@ everyone).
   stay private to their learner until an admin promotes them (S4).
 - **Instructors get self-tooling — YES**, as phase **S7** (below).
 
-### Phase V4 — Real-user writes (proposed design)
+### Phase V4 — Real-user writes ✅ built 2026-10-17
+
+As built: **Admin → Insights → Real-account checks** (`/real-account-checks`;
+API `/api/admin/verify/real-user-*`, admin-only; `modules/verify/realUser.js`).
+The admin looks up the account, picks a check, gives a reason, confirms.
+- Production: off unless `VERIFY_REAL_USER_WRITES=true` (independent of
+  `VERIFY_ALLOW_WRITES`, which is about test learners). The run happens on
+  production itself — the sandbox has no real accounts.
+- The approval row (`edu.verify_real_user_runs`) is the record: admin, account,
+  check, reason; single-use (approved → running claimed once), expires in 15 min;
+  then verdict, `cleanup_ok`, residue, and how the owner was told.
+- Policy: `assertMayActAs(account, "write", { approval })` passes only for the
+  approval's own account; only the admin route passes an approval — the gate
+  API (coding-agent key) never can. Cleanup on a real account must be pinned
+  to the run's own rows (an id or the run marker).
+- Only scenarios with `realUserSafe: { what, changes, roles }`; today:
+  `tasks.create_due_in_minutes` (students). One pass, no suites. At most 3 per
+  account per 24 h.
+- After the run: the account is checked for rows carrying the run marker;
+  the owner gets an in-app notification + email (Resend) + SMS (Twilio, when
+  they have a phone); `admin_audit_log` gets `verify.real_user_write`;
+  leftovers alert the admin (in-app + `ALERT_EMAIL_TO`).
+- Gate: `verify.real_user_run` (suite `real-user`, sandbox only — BLOCKED on
+  production) runs the whole path on `sbxlearner`, a non-test account seeded
+  only in the sandbox (email/SMS stay inside the sandbox).
+
+Original design:
 - Only an **admin**, in the admin app, can start one: a single named real
   account, one write scenario, one run. The coding agent's key can never do
   it (the gate API refuses real-user writes without an admin approval token).

@@ -5,10 +5,11 @@ import { followUpDeliverIntoChat, taskDueInMinutes, noResidue } from "./writes.j
 import { viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds } from "./selftool.js";
 import { privacyEdges } from "./network.js";
 import { rateLimitCountedOnce, battleEntryGates } from "./platform.js";
+import { realUserRun } from "./realuser.js";
 
 const ALL = [healthBuild, toolsCatalogue, scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity,
   privacyEdges, rateLimitCountedOnce, battleEntryGates, followUpDeliverIntoChat, taskDueInMinutes, noResidue,
-  viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds];
+  viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun];
 
 export const SCENARIOS = Object.fromEntries(ALL.map((s) => [s.name, s]));
 
@@ -17,6 +18,8 @@ export const SUITES = {
   "agent-chat": ["chat.schedule_message_here", "chat.tool_error_honesty", "chat.past_questions_truth", "chat.history_tools", "chat.read_tools_run", "chat.dry_run_no_writes", "chat.protege_identity"],
   // Real changes on test learners, then proof nothing was left behind.
   writes: ["tasks.create_due_in_minutes", "followups.deliver_into_chat", "writes.no_residue"],
+  // Phase V4 end to end (sandbox only: BLOCKED on production).
+  "real-user": ["verify.real_user_run", "writes.no_residue"],
   "agent-network": ["network.privacy_edges"],
   battles: ["battles.entry_gates"],
   "self-tooling": ["selftool.views_match_schema", "selftool.schema_lookup_safe", "selftool.create_spec_matches_db", "selftool.create_rejects_forbidden",

@@ -21,7 +21,7 @@ import { signInternalAccess } from "../auth/routes.js";
 import { runDry } from "../../lib/dryRunContext.js";
 import { readLogs, logSeq } from "../../lib/logTap.js";
 import { createExpect, BlockedError } from "./assertions.js";
-import { resolveAccount, assertMayActAs, PolicyError } from "./policy.js";
+import { resolveAccount, assertMayActAs, approvedFor, PolicyError } from "./policy.js";
 import { redact } from "./evidence.js";
 
 const API_BASE = process.env.INTERNAL_API_URL || `http://127.0.0.1:${process.env.PORT || 3000}`;
@@ -33,18 +33,20 @@ const table = (name) => {
   return schema === "public" ? db.from(t) : db.schema(schema).from(t);
 };
 
-export function createContext({ scenario, sink, evidence, realUsers, runId = "local" }) {
+export function createContext({ scenario, sink, evidence, realUsers, runId = "local", approval = null }) {
   // Everything a write scenario creates carries this, so leftovers are findable.
   const marker = `[verify:${String(runId).slice(0, 8)}]`;
   const accounts = new Map();
   const cleanups = [];
   const risk = scenario.risk;
+  // Writable: a test learner, or the one real account an admin approved for this run (V4).
+  const writable = (acct) => !!acct && (acct.tester || approvedFor(approval, acct));
 
   const as = async (handle) => {
     const key = String(handle || "").trim().toLowerCase();
     if (accounts.has(key)) return accounts.get(key);
     const acct = await resolveAccount(handle);
-    assertMayActAs(acct, risk);
+    assertMayActAs(acct, risk, { approval });
     if (!acct.tester) realUsers.add(acct.id);
     accounts.set(key, acct);
     evidence.accounts.push({ username: acct.username, role: acct.role, tester: acct.tester });
@@ -56,7 +58,7 @@ export function createContext({ scenario, sink, evidence, realUsers, runId = "lo
     if (!path || !path.startsWith("/")) throw new Error("ctx.http needs a path starting with /");
     const acct = who ? await as(who) : null;
     if (acct && method !== "GET" && risk === "read") throw new PolicyError(`A read scenario can't ${method} ${path}.`);
-    if (acct && !acct.tester && method !== "GET") throw new PolicyError("Real users are read-only to the gate.");
+    if (acct && method !== "GET" && !writable(acct)) throw new PolicyError("Real users are read-only to the gate.");
     const h = { "Content-Type": "application/json", ...headers };
     if (acct) h.Authorization = `Bearer ${signInternalAccess({ id: acct.id, role: role || acct.role }, 300)}`;
     const t0 = Date.now();
@@ -80,7 +82,7 @@ export function createContext({ scenario, sink, evidence, realUsers, runId = "lo
     const acct = await as(who);
     const live = mode === "live";
     if (live && risk !== "write") throw new PolicyError("A live agent turn changes data — only write scenarios may use it.");
-    if (live && !acct.tester) throw new PolicyError("Real users are read-only to the gate.");
+    if (live && !writable(acct)) throw new PolicyError("Real users are read-only to the gate.");
     const key = process.env.AGENT_CONSOLE_KEY;
     const fromSeq = logSeq();
     const t0 = Date.now();
@@ -120,7 +122,7 @@ export function createContext({ scenario, sink, evidence, realUsers, runId = "lo
   async function agentTool({ as: who, tool, input = {}, mode = "dry", learnerTool = false, conversationId = null } = {}) {
     const acct = await as(who);
     const live = mode === "live";
-    if (live && (risk !== "write" || !acct.tester)) throw new PolicyError("Live tool calls are for write scenarios on test learners only.");
+    if (live && (risk !== "write" || !writable(acct))) throw new PolicyError("Live tool calls are for write scenarios on test learners only.");
     const { executeChatTool, getLearnerChatTools } = await chat();
     // learnerTool: a tool the learner's agent built (self-tooling), not a built-in.
     if (!learnerTool && !getLearnerChatTools().some((t) => t.name === tool)) throw new BlockedError(`"${tool}" isn't an enabled learner tool on this server.`);
@@ -146,14 +148,19 @@ export function createContext({ scenario, sink, evidence, realUsers, runId = "lo
     },
     /**
      * Cleanup only: delete rows a write scenario created. The owner must be a
-     * TEST learner acting in this run, and at least one narrowing filter
-     * besides the owner is required — this can never sweep an account.
+     * TEST learner acting in this run (or the admin-approved account, V4), and
+     * at least one narrowing filter besides the owner is required — this can
+     * never sweep an account. On a real account a filter must also pin this
+     * run's own rows: an id, or a value carrying the run marker.
      */
     async deleteOwned(name, { ownerColumn, ownerId, filters = {} }) {
       if (risk !== "write") throw new PolicyError("Only write scenarios clean up.");
       const owner = [...accounts.values()].find((a) => a.id === ownerId);
-      if (!owner?.tester) throw new PolicyError("deleteOwned: the owner isn't a test learner in this run.");
+      if (!writable(owner)) throw new PolicyError("deleteOwned: the owner isn't a test learner in this run.");
       if (!ownerColumn || !Object.keys(filters).length) throw new PolicyError("deleteOwned needs an owner column and a narrowing filter.");
+      if (!owner.tester && !Object.entries(filters).some(([k, v]) => k === "id" || String(v?.like ?? v).includes(marker))) {
+        throw new PolicyError("deleteOwned on a real account needs an id or a run-marker filter.");
+      }
       let q = table(name).delete().eq(ownerColumn, ownerId);
       for (const [k, v] of Object.entries(filters)) q = v && typeof v === "object" && v.like ? q.like(k, v.like) : q.eq(k, v);
       const { data, error } = await q.select("*");

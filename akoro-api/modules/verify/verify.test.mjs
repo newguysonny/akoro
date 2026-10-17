@@ -103,7 +103,8 @@ test("loop health: call bound, identical repeats, unknown tools", () => {
 test("write scenarios: cleanup is owner-scoped to test learners and needs a narrowing filter", () => {
   const ctxSrc = readFileSync(new URL("./context.js", import.meta.url), "utf8");
   assert.match(ctxSrc, /if \(risk !== "write"\) throw new PolicyError\("Only write scenarios clean up\."\)/);
-  assert.match(ctxSrc, /if \(!owner\?\.tester\) throw new PolicyError/);
+  assert.match(ctxSrc, /if \(!writable\(owner\)\) throw new PolicyError/);
+  assert.match(ctxSrc, /const writable = \(acct\) => !!acct && \(acct\.tester \|\| approvedFor\(approval, acct\)\)/);
   assert.match(ctxSrc, /needs an owner column and a narrowing filter/);
   const writes = readFileSync(new URL("./scenarios/writes.js", import.meta.url), "utf8");
   for (const m of writes.matchAll(/risk: "write"/g)) assert.ok(m);

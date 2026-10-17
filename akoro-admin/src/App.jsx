@@ -41,6 +41,7 @@ import SettingsPage         from './pages/SettingsPage.jsx';
 import WalletPage           from './pages/WalletPage.jsx';
 import AgentToolRequestsPage from './pages/AgentToolRequestsPage.jsx';
 import AgentToolsPage from './pages/AgentToolsPage.jsx';
+import RealAccountChecksPage from './pages/RealAccountChecksPage.jsx';
 import PrivacyPolicyPage    from './pages/PrivacyPolicyPage.jsx';
 import TermsOfServicePage   from './pages/TermsOfServicePage.jsx';
 import SigninPage           from './pages/auth/SigninPage.jsx';
@@ -153,6 +154,7 @@ export default function App() {
           <Route path="/wallet"            element={<AdminRoute><WalletPage /></AdminRoute>} />
           <Route path="/agent-tool-requests" element={<AdminRoute><AgentToolRequestsPage /></AdminRoute>} />
           <Route path="/agent-tools" element={<AdminRoute><AgentToolsPage /></AdminRoute>} />
+          <Route path="/real-account-checks" element={<AdminRoute><RealAccountChecksPage /></AdminRoute>} />
           <Route path="/privacy"           element={<PrivacyPolicyPage />} />
           <Route path="/terms"             element={<TermsOfServicePage />} />
           <Route path="/signin"            element={<GuestRoute><SigninPage /></GuestRoute>} />

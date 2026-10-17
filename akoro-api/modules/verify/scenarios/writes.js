@@ -1,6 +1,11 @@
 // Real changes on TEST learners only (risk: write). Every row a scenario
 // creates carries ctx.marker and is removed by ctx.cleanup; writes.no_residue
 // proves nothing was left behind. On production these need VERIFY_ALLOW_WRITES=true.
+//
+// `realUserSafe` (phase V4): an admin may run this once on a real account. Only
+// for scenarios that undo everything they create, send nothing to anyone else
+// and spend no coins. `what` / `changes` complete the owner's notice: "ran an
+// automatic check of <what> ... It <changes>."
 
 export const followUpDeliverIntoChat = {
   name: "followups.deliver_into_chat", area: "agent-chat", risk: "write",
@@ -46,6 +51,7 @@ export const followUpDeliverIntoChat = {
 
 export const taskDueInMinutes = {
   name: "tasks.create_due_in_minutes", area: "agent-chat", risk: "write",
+  realUserSafe: { what: "creating a task with your agent", changes: "created one test task and deleted it straight away", roles: ["student"] },
   description: "A task 'due in 30 minutes' is saved with a precise due time and shows in the learner's tasks.",
   params: { learner: { default: "@tester06" } },
   async run(ctx, p) {
