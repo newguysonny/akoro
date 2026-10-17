@@ -79,9 +79,15 @@ export async function examPrepPolicyFor(examBoard, subject) {
   return board.data || { pass_threshold: 0.70, max_attempts: 3, policy_version: "exam-confidence-v1" };
 }
 
-export async function generateExamPrepAttempt({ topic, subject, examBoard, count, attemptNumber, kind }) {
+/**
+ * `prepaid`: the caller already charged the learner a flat price for this
+ * practice (Study Prep, harness.practice.generate), so the platform pays the
+ * tokens — otherwise the learner was billed twice for one practice. Without
+ * it (the standalone exam-prep route) the call is metered to the learner.
+ */
+export async function generateExamPrepAttempt({ topic, subject, examBoard, count, attemptNumber, kind, prepaid = false }) {
   const response = await openai.chat.completions.create({
-    model: OPENAI_MODEL, max_tokens: 3500, messages: [{ role: "user", content: `Create ${count} fresh multiple-choice, generated exam-style practice questions.
+    model: OPENAI_MODEL, max_tokens: 3500, __feature: "exam_prep_generation", ...(prepaid ? { __payer: "platform" } : {}), messages: [{ role: "user", content: `Create ${count} fresh multiple-choice, generated exam-style practice questions.
 This is not a historical past paper and must not claim to be one.
 Board style: ${examBoard}; subject: ${subject}; topic: ${topic}; attempt: ${attemptNumber}; kind: ${kind}.
 Use different question wording/examples from earlier attempts. Every question needs exactly four options and one unambiguous answer index.
@@ -116,9 +122,9 @@ export function nextRunStatus({ score, passThreshold, currentAttempt, maxAttempt
 }
 
 /** Start a diagnostic run (optionally linked to a study-prep session topic). */
-export async function startExamPrepRun({ learnerId, request, studyPrepTopicId = null }) {
+export async function startExamPrepRun({ learnerId, request, studyPrepTopicId = null, prepaid = false }) {
   const policy = await examPrepPolicyFor(request.examBoard, request.subject);
-  const questions = await generateExamPrepAttempt({ ...request, count: request.questionCount, attemptNumber: 1, kind: "diagnostic" });
+  const questions = await generateExamPrepAttempt({ ...request, count: request.questionCount, attemptNumber: 1, kind: "diagnostic", prepaid });
   const insert = {
     learner_id: learnerId, topic: request.topic, subject: request.subject, exam_board: request.examBoard,
     pass_threshold: policy.pass_threshold, max_attempts: policy.max_attempts, policy_version: policy.policy_version,
@@ -209,7 +215,7 @@ export async function submitExamPrepAttempt({ learnerId, runId, answers }) {
 }
 
 /** Fresh retest — hard-gated on the learner's own teach-back confirmation. */
-export async function startExamPrepRetest({ learnerId, runId, learnerConfirmedReady }) {
+export async function startExamPrepRetest({ learnerId, runId, learnerConfirmedReady, prepaid = false }) {
   const run = await getOwnedExamPrepRun(runId, learnerId);
   if (!run) return { notFound: true };
   if (run.status !== "teach_back_required" || Number(run.current_attempt) >= Number(run.max_attempts)) {
@@ -219,7 +225,7 @@ export async function startExamPrepRetest({ learnerId, runId, learnerConfirmedRe
     throw new ExamPrepRequestError("learnerConfirmedReady must be true to request a fresh retest");
   }
   const attemptNumber = Number(run.current_attempt) + 1;
-  const questions = await generateExamPrepAttempt({ topic: run.topic, subject: run.subject, examBoard: run.exam_board, count: Number(run.question_count), attemptNumber, kind: "retest" });
+  const questions = await generateExamPrepAttempt({ topic: run.topic, subject: run.subject, examBoard: run.exam_board, count: Number(run.question_count), attemptNumber, kind: "retest", prepaid });
   const key = Object.fromEntries(questions.map((question) => [question.id, question.answerIndex]));
   const publicQuestions = questions.map(({ answerIndex, ...question }) => question);
   const { data: attempt, error: attemptError } = await db.schema("edu").from("learner_exam_prep_attempts").insert({

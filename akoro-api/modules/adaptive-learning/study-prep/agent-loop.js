@@ -60,9 +60,19 @@ export async function runAgentStep({
   let toolCallsUsed = 0;
 
   for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
-    const step = await agent.next({
-      iteration, goal, observations, tools: registry.catalogue,
-    });
+    let step;
+    try {
+      step = await agent.next({ iteration, goal, observations, tools: registry.catalogue });
+    } catch (error) {
+      // The provider call itself failed (rejected request, timeout). Record it
+      // in the session's log — it used to vanish, leaving a plan-less session
+      // with no trace of why — then fail the step as before.
+      await store.appendEvents(sessionId, [makeEvent({
+        sequence: 0, iteration, eventType: "agent_action", origin: "harness",
+        action: "agent_error", facts: { reason: String(error?.message || error).slice(0, 240) },
+      })]).catch(() => {});
+      throw error;
+    }
 
     const requested = step?.tool || step?.action;
     if (!requested) {
