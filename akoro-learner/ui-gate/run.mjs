@@ -44,6 +44,13 @@ for (const s of report.scenarios) {
   console.log(`  ${s.verdict.padEnd(12)} ${s.name} [${s.device}]${s.reason ? ` — ${s.reason}` : ''}`);
   for (const c of s.checks || []) if (!c.passed) console.log(`      ✗ ${c.name}${'expected' in c ? ` (expected ${JSON.stringify(c.expected)}, got ${JSON.stringify(c.actual)})` : 'actual' in c ? ` (got ${JSON.stringify(c.actual)})` : ''}`);
 }
-if (report.network && !report.network.websocket) console.log("  (this network's proxy doesn't carry WebSockets — the live-session check is BLOCKED here)");
+if (report.scenarios.some((s) => /WebSockets/.test(s.reason || ''))) console.log("  (this network's proxy doesn't carry WebSockets — the live-session check is BLOCKED here)");
 console.log(`Verdict: ${report.verdict}   report: ${path.join(outDir, 'report.json')}\n`);
+// In GitHub Actions: the same table on the run's summary page.
+if (process.env.GITHUB_STEP_SUMMARY) {
+  const { appendFile } = await import('node:fs/promises');
+  const rows = report.scenarios.map((s) => `| ${s.verdict} | \`${s.name}\` | ${s.device} | ${String(s.reason || (s.checks || []).filter((c) => !c.passed).map((c) => `✗ ${c.name}`).join('; ') || '').replace(/\|/g, '\\|')} |`);
+  await appendFile(process.env.GITHUB_STEP_SUMMARY, [`### Frontend gate — ${report.verdict}`, `${report.target} · ${report.app || ''} → ${report.api} · as ${report.learner}`, '',
+    '| Verdict | Scenario | Device | Detail |', '|---|---|---|---|', ...rows, ''].join('\n'));
+}
 process.exit(report.verdict === 'PASS' ? 0 : 1);

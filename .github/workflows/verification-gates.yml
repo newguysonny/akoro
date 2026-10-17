@@ -1,0 +1,153 @@
+# Verification Gates — the API's Verification Gate (akoro-api/modules/verify)
+# and the learner app's frontend gate (akoro-learner/ui-gate), on deploy and
+# by hand. Only PASS is green.
+#
+# On a push: wait until the API (and its sandbox, when gate runs go there)
+# reports the pushed commit, then run the backend gate, then the frontend
+# gate — one after the other, never two gate runs at once (concurrent runs
+# trip writes.no_residue). The frontend gate builds THIS commit's learner
+# app and drives it against the live API. A commit that never deploys
+# (another branch) is noted and skipped, not failed.
+#
+# By hand: Actions → Verification Gates → Run workflow, with the gate(s),
+# suites and targets below. target=live runs the frontend gate on the
+# deployed app (vars.AKORO_APP_URL).
+#
+# One-time setup (Settings → Secrets and variables → Actions):
+#   secret   AKORO_GATE_URL    the API, e.g. https://api.akoro.name.ng
+#   secret   AKORO_GATE_KEY    the API's AGENT_CONSOLE_KEY
+#   variable AKORO_APP_URL     the deployed learner app, e.g. https://akoro.name.ng
+#   secret   UI_GATE_PASSWORD  optional — the test learners' password if it
+#                              was changed from the seed's
+name: Verification Gates
+
+on:
+  push:
+    branches: [main, "arena/**"]
+    paths: ["akoro-api/**", "akoro-learner/**", ".github/workflows/verification-gates.yml", ".github/scripts/gate-*.sh"]
+  workflow_dispatch:
+    inputs:
+      gates:
+        description: "Which gates: both, backend, frontend"
+        default: "both"
+      backend_suite:
+        description: "Backend suite (regression, smoke, agent-chat, writes, study-prep, teaching, decay, suggestions, …)"
+        default: "regression"
+      backend_target:
+        description: "Backend: default (the sandbox when it's on) or production"
+        default: "default"
+      frontend_suite:
+        description: "Frontend suite: all, reader, auth"
+        default: "all"
+      frontend_target:
+        description: "Frontend: local (build this commit, live API) or live (the deployed app)"
+        default: "local"
+      device:
+        description: "phone, desktop or phone,desktop"
+        default: "phone,desktop"
+      learner:
+        description: "Frontend test learner (tester01–tester50)"
+        default: "tester17"
+      expect_sha:
+        description: "Commit the server must be running (blank: this run's commit on push, unchecked by hand)"
+        default: ""
+
+concurrency:
+  group: verification-gates
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Wait for the deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      deployed: ${{ steps.wait.outputs.deployed || 'true' }}
+      api_changed: ${{ steps.changes.outputs.api }}
+      learner_changed: ${{ steps.changes.outputs.learner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: What changed
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" != "push" ]; then echo "api=true" >> "$GITHUB_OUTPUT"; echo "learner=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          before="${{ github.event.before }}"
+          if ! git cat-file -e "$before^{commit}" 2>/dev/null; then before="${{ github.sha }}~1"; fi
+          files=$(git diff --name-only "$before" "${{ github.sha }}")
+          echo "$files" | grep -qE '^(akoro-api/|\.github/)' && echo "api=true" >> "$GITHUB_OUTPUT" || echo "api=false" >> "$GITHUB_OUTPUT"
+          echo "$files" | grep -qE '^(akoro-learner/|akoro-api/|\.github/)' && echo "learner=true" >> "$GITHUB_OUTPUT" || echo "learner=false" >> "$GITHUB_OUTPUT"
+      # Only an API change redeploys the API; a learner-only push runs against
+      # the API already live.
+      - name: Wait until the API runs this commit
+        id: wait
+        if: github.event_name == 'push' && steps.changes.outputs.api == 'true'
+        env:
+          GATE_URL: ${{ secrets.AKORO_GATE_URL }}
+          GATE_KEY: ${{ secrets.AKORO_GATE_KEY }}
+          SHA: ${{ github.sha }}
+          WAIT_MIN: "25"
+        run: bash .github/scripts/gate-wait-deploy.sh
+
+  backend:
+    name: Backend gate
+    needs: deploy
+    if: >-
+      needs.deploy.outputs.deployed == 'true' &&
+      ((github.event_name == 'push' && needs.deploy.outputs.api_changed == 'true') ||
+       (github.event_name == 'workflow_dispatch' && inputs.gates != 'frontend'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run the backend gate
+        env:
+          GATE_URL: ${{ secrets.AKORO_GATE_URL }}
+          GATE_KEY: ${{ secrets.AKORO_GATE_KEY }}
+          SUITE: ${{ inputs.backend_suite || 'regression' }}
+          TARGET: ${{ inputs.backend_target || 'default' }}
+          EXPECT_SHA: ${{ github.event_name == 'push' && github.sha || inputs.expect_sha }}
+        run: bash .github/scripts/gate-backend.sh
+
+  frontend:
+    name: Frontend gate
+    needs: [deploy, backend]
+    # After the backend gate (pass or fail — its verdict is its own job's), never beside it.
+    if: >-
+      always() && needs.deploy.result == 'success' && needs.deploy.outputs.deployed == 'true' &&
+      ((github.event_name == 'push' && needs.deploy.outputs.learner_changed == 'true') ||
+       (github.event_name == 'workflow_dispatch' && inputs.gates != 'backend'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: akoro-learner
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: akoro-learner/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Run the frontend gate
+        env:
+          UI_GATE_API: ${{ secrets.AKORO_GATE_URL }}
+          UI_GATE_APP: ${{ (inputs.frontend_target || 'local') == 'live' && vars.AKORO_APP_URL || '' }}
+          UI_GATE_ORIGIN: ${{ vars.AKORO_APP_URL || 'https://akoro.name.ng' }}
+          UI_GATE_PASSWORD: ${{ secrets.UI_GATE_PASSWORD }}
+        run: >-
+          node ui-gate/run.mjs
+          --target "${{ inputs.frontend_target || 'local' }}"
+          --suite "${{ inputs.frontend_suite || 'all' }}"
+          --device "${{ inputs.device || 'phone,desktop' }}"
+          --learner "${{ inputs.learner || 'tester17' }}"
+      - name: Keep the evidence (screenshots, video, report)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-gate-evidence
+          path: akoro-learner/ui-gate/.out
+          retention-days: 14

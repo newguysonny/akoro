@@ -97,6 +97,13 @@ Real API on Postgres + PostgREST + Redis, all migrations and the 50 testers,
 `OPENAI_API_KEY`), scenarios that judge the model's tool choice FAIL by design;
 everything else is meaningful.
 
+## In GitHub
+
+`.github/workflows/verification-gates.yml` runs both gates on every push to
+`main` / `arena/**` that touches the API or the learner app (after waiting
+for the API to report the pushed commit), and by hand from the Actions tab.
+Its summary page lists every scenario's verdict.
+
 ## The frontend gate
 
 For learner-app changes, also run the frontend gate

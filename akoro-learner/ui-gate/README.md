@@ -63,4 +63,4 @@ Add one: a `{ name, description, needs?, devices?, run(t) }` in
 `equal`, `note`, `block`, `cleanup`, `shot`, `state` (shared within a run),
 `network`.
 
-CI: `.github/workflows/ui-gate.yml` (manual), evidence kept as an artifact.
+CI: `.github/workflows/verification-gates.yml` — on deploy (after the backend gate) and by hand; evidence kept as an artifact.
