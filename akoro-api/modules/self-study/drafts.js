@@ -29,8 +29,8 @@ import {
 } from "./draftVersions.js";
 
 /** The model call behind an assignment draft's questions, billed to its instructor. */
-const questionChat = (instructorId) => (messages) =>
-  nana.generateAssignmentQuestions({ messages, billing: { __userId: instructorId, __feature: "assignment_questions" } });
+const questionChat = (instructorId) => (messages, opts = {}) =>
+  nana.generateAssignmentQuestions({ messages, ...opts, billing: { __userId: instructorId, __feature: "assignment_questions" } });
 
 /** Battles ride the same drafting flow but assign through their battle form
  *  (the one shared BattleForm), so they are valid drafts, not bench assigns. */

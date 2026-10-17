@@ -136,16 +136,25 @@ export class NaNaEsumai {
    * built by modules/self-study/questionPaper.js from the teacher's own
    * request ("5 questions, 3 MCQ, 2 theory") — first drafts and follow-up
    * versions alike — which also checks the result against the request and
-   * retries once. → the model's JSON string.
+   * retries once. `response_format` is the paper's strict JSON schema
+   * (self-study/paperSchema.js); a model that refuses the schema falls
+   * back to plain JSON mode once. → the model's JSON string.
    */
-  async generateAssignmentQuestions({ messages, billing = {} }) {
-    const res = await openai.chat.completions.create({
+  async generateAssignmentQuestions({ messages, billing = {}, response_format = null }) {
+    const call = (format) => openai.chat.completions.create({
       model: "gpt-4.1-mini", temperature: 0.3, max_tokens: 6000,
       __timeoutMs: 45_000, __maxRetries: 1,
-      response_format: { type: "json_object" },
+      response_format: format,
       messages,
       ...billing,
     });
+    let res;
+    try {
+      res = await call(response_format || { type: "json_object" });
+    } catch (e) {
+      if (!response_format || e?.status !== 400) throw e;
+      res = await call({ type: "json_object" });
+    }
     return res.choices?.[0]?.message?.content || "{}";
   }
 

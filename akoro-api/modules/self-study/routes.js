@@ -47,6 +47,7 @@
  * Both:
  *   GET    /targets/:targetId/submission.pdf → the whole submission as one PDF
  *   GET    /targets/:targetId/submission.md  → the same as markdown (AI grading)
+ *   GET    /targets/:targetId/submission.json → the same as the paper template's data
  *   GET    /targets/:targetId/marked.pdf     → the marked copy (learner: once
  *                                              graded; teacher: any time, as a preview)
  */
@@ -69,11 +70,11 @@ import {
 } from "./routines.js";
 import { emitAutonomyEvent } from "../autonomy/triggers.js";
 import {
-  SUBMISSION_FILE_LIMITS, sniffSubmissionFile, storeSubmissionFile, readSubmissionFile,
+  SUBMISSION_FILE_LIMITS, sniffSubmissionFile, storeSubmissionFile, readSubmissionFile, isDrawingName, cropDrawing,
   removeSubmissionObject, contentDisposition,
 } from "./submissionFiles.js";
 import {
-  buildSubmissionArtifacts, readSubmissionArtifact, buildMarkedCopyLater, readMarkedCopy, aiGradeTarget,
+  buildSubmissionArtifacts, readSubmissionArtifact, loadSubmissionDocument, buildMarkedCopyLater, readMarkedCopy, aiGradeTarget,
 } from "./submissionArtifacts.js";
 import { validateMarks } from "./submissionMarkup.js";
 import { briefForLearner, pdfMeta, cleanAnswer, cleanQuestionMarks } from "./submissionView.js";
@@ -146,7 +147,7 @@ router.post("/assignment-draft/questions", requireRole(TEACHER_ROLES), asyncHand
   const fallback = parseQuestionRequest(words).mix.length || !types.length ? "" : ` Use only these question types: ${types.join(", ")}.`;
   try {
     const { paper, warning } = await draftPaper({
-      chat: (messages) => nana.generateAssignmentQuestions({ messages, billing: { __userId: req.user.id, __feature: "assignment_questions" } }),
+      chat: (messages, opts = {}) => nana.generateAssignmentQuestions({ messages, ...opts, billing: { __userId: req.user.id, __feature: "assignment_questions" } }),
       topic: topic.trim(), subject: String(subject).trim(),
       classLevel: typeof class_level === "string" ? class_level.slice(0, 60) : null,
       request: (words + fallback).trim(),
@@ -899,7 +900,7 @@ router.post("/:id/files", asyncHandler(async (req, res) => {
   if (typeof data !== "string" || !data) return bad(res, "File data is required (base64)");
   // base64 inflates by ~4/3 — reject early, before decoding
   if (data.length > Math.ceil(SUBMISSION_FILE_LIMITS.MAX_BYTES * 1.4)) return bad(res, "Files can be at most 5MB");
-  const bytes = Buffer.from(data, "base64");
+  let bytes = Buffer.from(data, "base64");
   if (!bytes.length) return bad(res, "That file is empty");
   if (bytes.length > SUBMISSION_FILE_LIMITS.MAX_BYTES) return bad(res, "Files can be at most 5MB");
   // What it IS, from its bytes — the browser's type is only a hint.
@@ -912,6 +913,8 @@ router.post("/:id/files", asyncHandler(async (req, res) => {
   if (qIndex !== null && (count ?? 0) >= SUBMISSION_FILE_LIMITS.PER_QUESTION) return bad(res, `At most ${SUBMISSION_FILE_LIMITS.PER_QUESTION} files per question`);
   if (qIndex === null && (count ?? 0) >= SUBMISSION_FILE_LIMITS.MAX_FILES) return bad(res, "At most 5 files per submission");
 
+  // A whiteboard drawing is kept cropped to the handwriting (the paper shows the work, not the board).
+  if (sniffed.format === "png" && isDrawingName(clean)) bytes = await cropDrawing(bytes);
   const stored = await storeSubmissionFile({ learnerId: req.user.id, targetId: target.id, name: clean, bytes, mime: sniffed.mime });
   const { data: file, error } = await edu().from("self_study_files")
     .insert({ target_id: target.id, name: clean, mime: sniffed.mime, kind: sniffed.kind, size: bytes.length, question_index: qIndex, ...stored })
@@ -968,6 +971,20 @@ router.get("/files/:fileId", asyncHandler(async (req, res) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Cache-Control", "private, max-age=3600");
   res.send(bytes);
+}));
+
+/** GET /api/self-study/targets/:targetId/submission.json — the submission as
+ *  the paper template lays it out (paperSchema.js submissionDocument): the
+ *  learner, answered / unanswered, each question with its answer, drawings
+ *  and marks box. Marks only once published. */
+router.get(/^\/targets\/([0-9a-f-]{36})\/submission\.json$/i, asyncHandler(async (req, res) => {
+  const seen = await viewableTarget(req, req.params[0]);
+  if (seen.error) return res.status(seen.status).json({ success: false, error: seen.error });
+  if (!seen.target.submission?.submittedAt) return bad(res, "Nothing has been submitted yet");
+  const doc = await loadSubmissionDocument(seen.target.id);
+  if (!doc) return missing(res, "Not found");
+  res.setHeader("Cache-Control", "private, no-cache");
+  ok(res, { document: doc });
 }));
 
 /** GET /api/self-study/targets/:targetId/submission.pdf (or .md) — the whole

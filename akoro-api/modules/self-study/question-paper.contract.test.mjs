@@ -170,7 +170,7 @@ test("wiring: chat tools carry the request; drafts build versions in the backgro
   assert.match(routes, /router\.put\("\/drafts\/:id\/versions\/:n"/);
   assert.match(routes, /router\.post\("\/drafts\/:id\/versions\/:n\/retry"/);
   assert.match(routes, /await draftPaper\(\{/);
-  assert.match(guide, /async generateAssignmentQuestions\(\{ messages, billing = \{\} \}\)/);
+  assert.match(guide, /async generateAssignmentQuestions\(\{ messages, billing = \{\}, response_format = null \}\)/);
 });
 
 test("named kinds: true/false, labelling, assertion and reason, case study", async () => {

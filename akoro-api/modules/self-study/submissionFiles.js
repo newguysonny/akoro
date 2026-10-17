@@ -84,3 +84,51 @@ export function contentDisposition(name, type = "inline") {
   const ascii = n.replace(/[^\x20-\x7E]/g, "_").replace(/["\\]/g, "_");
   return `${type}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(n)}`;
 }
+
+/** A whiteboard drawing's file name (the learner app names them drawing-q{n}.png). */
+export const isDrawingName = (name) => /^drawing-q\d+\.png$/i.test(String(name || ""));
+
+/**
+ * A whiteboard drawing → the same PNG cropped to the handwriting (plus a
+ * small margin), so the submission paper shows the work, not the whole
+ * board. The board is one flat colour: its corner pixel. Anything that
+ * can't be read, or has no ink, comes back unchanged. → Buffer
+ */
+export async function cropDrawing(bytes, { margin = 16, tolerance = 28 } = {}, deps = {}) {
+  try {
+    const { loadImage, createCanvas } = deps.canvas || await import("@napi-rs/canvas");
+    const img = await loadImage(bytes);
+    const w = img.width, h = img.height;
+    if (!w || !h) return bytes;
+    const c = createCanvas(w, h);
+    const ctx = c.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+    const px = ctx.getImageData(0, 0, w, h).data;
+    const [br, bg, bb, ba] = [px[0], px[1], px[2], px[3]];
+    let x0 = w, y0 = h, x1 = -1, y1 = -1;
+    for (let y = 0; y < h; y++) {
+      let row = y * w * 4;
+      for (let x = 0; x < w; x++, row += 4) {
+        const a = px[row + 3];
+        const ink = ba < 16 ? a > 16
+          : Math.abs(px[row] - br) > tolerance || Math.abs(px[row + 1] - bg) > tolerance || Math.abs(px[row + 2] - bb) > tolerance || Math.abs(a - ba) > 64;
+        if (!ink) continue;
+        if (x < x0) x0 = x; if (x > x1) x1 = x;
+        if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+    }
+    if (x1 < 0) return bytes;   // nothing drawn
+    const m = Math.round(margin * Math.max(1, Math.min(w, h) / 600));
+    x0 = Math.max(0, x0 - m); y0 = Math.max(0, y0 - m);
+    x1 = Math.min(w - 1, x1 + m); y1 = Math.min(h - 1, y1 + m);
+    const cw = x1 - x0 + 1, ch = y1 - y0 + 1;
+    if (cw >= w && ch >= h) return bytes;
+    const out = createCanvas(cw, ch);
+    const octx = out.getContext("2d");
+    octx.drawImage(c, x0, y0, cw, ch, 0, 0, cw, ch);
+    return out.toBuffer("image/png");
+  } catch (e) {
+    console.warn("[self-study/files] drawing not cropped:", String(e?.message || e).slice(0, 160));
+    return bytes;
+  }
+}

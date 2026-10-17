@@ -19,9 +19,15 @@
  * Questions are stored the way details.questions always has been —
  * { q, type, max_points, difficulty, cognitive_level, options?, correct?,
  *   figure?, figure_note?, section?, passage? } — so the learner stepper,
- * grading and the PDF read them unchanged.
+ * grading and the PDF read them unchanged. The paper template adds two
+ * optional fields: answer_space (how it is answered on paper) and marking
+ * (the teacher copy's marking-scheme line).
+ *
+ * The model answers in a strict JSON schema (paperSchema.js) — `chat` gets
+ * it as its second argument: chat(messages, { response_format }).
  */
 import { sanitizeSvg } from "./paperLayout.js";
+import { ANSWER_SPACES, dropNulls, paperResponseFormat, revisionResponseFormat } from "./paperSchema.js";
 
 const WORD_NUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, fifteen: 15, twenty: 20 };
 const num = (s) => (s == null ? null : /^\d+$/.test(s) ? Number(s) : WORD_NUM[String(s).toLowerCase()] ?? null);
@@ -177,7 +183,7 @@ const FIGURE_RULES =
 const FORMAT_RULES = {
   true_false: 'A "True or false" question is ONE statement in "text" for the learner to judge (no question mark); set "format": "true_false", options exactly ["True", "False"], "correct" 0 when the statement is true, 1 when false. Mix true and false statements.',
   assertion_reason: 'An "Assertion and reason" question sets "format": "assertion_reason" and gives "assertion" and "reason" — one sentence each, without the words Assertion/Reason. Leave "options" out: the standard four are added (0: both true and the reason explains the assertion · 1: both true but the reason does not explain it · 2: assertion true, reason false · 3: assertion false, reason true); "correct" is 0–3 in that order. Vary which one is right.',
-  label: `A "Labelling" question sets "format": "label": a diagram with 2–6 parts marked P, Q, R… by leader lines (the names are NOT written in it), "text" asks the learner to name the labelled parts, "labels": ["P", "Q", …] and "label_answers": { "P": "…", … }. ${"The figure follows the FIGURE rules"}; if a clean drawing isn't possible give "figure_note" describing the diagram and where each letter points instead.`,
+  label: `A "Labelling" question sets "format": "label": a diagram with 2–6 parts marked P, Q, R… by leader lines (the names are NOT written in it), "text" asks the learner to name the labelled parts, "labels": ["P", "Q", …] and "label_answers": [{ "label": "P", "answer": "…" }, …]. ${"The figure follows the FIGURE rules"}; if a clean drawing isn't possible give "figure_note" describing the diagram and where each letter points instead.`,
   case_study: 'A "Case study" is a realistic scenario of 80–200 words written ONCE in "passages" (title it "Case study: …"), then its open, analytical questions (apply, analyse, evaluate — not recall); each sets "format": "case_study" and "passage" to that scenario\'s 0-based index. At most 4 questions per scenario.',
 };
 
@@ -213,7 +219,12 @@ const SHAPE =
   '"sections"?: [{ "title", "instructions" }], "passages"?: [{ "title", "text" }], ' +
   '"questions": [ { "text", "type", "max_points", "difficulty" (Easy|Medium|Hard), "cognitive_level" (Recall|Understand|Apply|Analyze|Evaluate|Create), ' +
   '"options"?: string[], "correct"?: number, "figure"?: { "svg", "caption", "alt" }, "figure_note"?: string, "section"?: number, "passage"?: number, ' +
-  '"format"?: "true_false"|"assertion_reason"|"label"|"case_study", "assertion"?: string, "reason"?: string, "labels"?: string[], "label_answers"?: { [label]: string } } ] }';
+  '"format"?: "true_false"|"assertion_reason"|"label"|"case_study", "assertion"?: string, "reason"?: string, "labels"?: string[], "label_answers"?: [{ "label", "answer" }], ' +
+  '"answer_space": "options"|"true_false"|"lines"|"working"|"blank"|"labels", "answer"?: string, "marking": string } ] } — unused fields are null.\n' +
+  'Every question has an "answer_space" (how it is answered on the printed paper): multiple choice "options"; true or false "true_false"; labelling "labels"; ' +
+  'a fill-in-the-gap question "blank" with its gap written as ____ in "text"; a calculation or a question that needs steps "working" (a box for working, then "Answer: ___"); other open answers "lines". ' +
+  'Every question has "marking": the teacher copy\'s marking-scheme line — the answer and how its marks split, e.g. "C – 135 (2¼ × 60)" or "3x = 20 − 5 (1 mark); x = 5 (1 mark)"; ' +
+  'open questions also give "answer", the model answer (the final value for working questions).';
 
 const level = (lv) => (lv ? `\nClass / level: ${lv}` : "");
 
@@ -248,6 +259,8 @@ function paperForModel(base) {
     ...(q.format === "assertion_reason" ? { assertion: q.assertion, reason: q.reason } : {}),
     ...(q.format === "label" ? { labels: q.labels, label_answers: q.answer || {} } : {}),
     ...(Number.isInteger(q.passage) ? { passage: q.passage } : {}),
+    ...(q.answer_space ? { answer_space: q.answer_space } : {}),
+    ...(q.marking ? { marking: q.marking } : {}),
   }));
 }
 
@@ -265,7 +278,8 @@ export function buildRevisionMessages({ topic, subject, classLevel = null, reque
     "A new case-study scenario goes in \"passages\" (the full list, existing ones first, unchanged) and its questions point at it.",
     "Also return \"note\": ONE short line saying what changed, numbered as in the NEW list (e.g. \"Q4 made harder; new Q3 with a diagram\").",
     "Write maths with Unicode, never LaTeX.",
-    'Return JSON: { "note": string, "passages"?: [{ "title", "text" }], "questions": [ ... ] } — question fields as: { "text", "type", "max_points", "difficulty", "cognitive_level", "options"?, "correct"?, "figure"?: { "svg", "caption", "alt" }, "figure_note"?, "format"?, "assertion"?, "reason"?, "labels"?, "label_answers"?, "passage"? }',
+    'Return JSON: { "note": string, "passages"?: [{ "title", "text" }], "questions": [ ... ] } — question fields as: { "text", "type", "max_points", "difficulty", "cognitive_level", "options"?, "correct"?, "figure"?: { "svg", "caption", "alt" }, "figure_note"?, "format"?, "assertion"?, "reason"?, "labels"?, "label_answers"?: [{ "label", "answer" }], "passage"?, "answer_space", "answer"?, "marking" } — unused fields are null (an unchanged question is { "from": i } with everything else null).',
+    'A changed or new question gives "answer_space" (options · true_false · lines · working · blank, with its gap as ____ · labels) and "marking", the marking-scheme line (answer and how its marks split).',
   ].join("\n");
   const user = `Topic: ${topic}\nSubject: ${subject}` + level(classLevel) +
     (base.passages?.length ? `\nThe current passages:\n${JSON.stringify(base.passages.map((p, i) => ({ index: i, title: p.title, text: String(p.text).slice(0, 1500) })))}` : "") +
@@ -283,6 +297,7 @@ const str = (v, max) => String(v ?? "").trim().slice(0, max);
 /** One model question → the stored shape. */
 function normalizeQuestion(q, { options = null } = {}) {
   if (!q || typeof q !== "object") return null;
+  q = dropNulls(q);
   const format = FORMATS.includes(q.format) ? q.format : kindFor(q.type)?.format || null;
   let text = str(q.text ?? q.q, 2000);
   let assertion = "", reason = "";
@@ -319,7 +334,9 @@ function normalizeQuestion(q, { options = null } = {}) {
     const labels = [...new Set((Array.isArray(q.labels) ? q.labels : []).map((l) => str(l, 12)).filter(Boolean))].slice(0, 8);
     if (labels.length < 1) return null;
     out.labels = labels;
-    const key = q.label_answers && typeof q.label_answers === "object" ? q.label_answers : q.answer && typeof q.answer === "object" ? q.answer : {};
+    // label_answers: [{ label, answer }] (the schema) or { P: "…" } (older replies, stored keys).
+    const pairs = Array.isArray(q.label_answers) ? Object.fromEntries(q.label_answers.map((x) => [str(x?.label, 12), x?.answer])) : null;
+    const key = pairs || (q.label_answers && typeof q.label_answers === "object" ? q.label_answers : q.answer && typeof q.answer === "object" ? q.answer : {});
     const answer = Object.fromEntries(labels.map((l) => [l, str(key[l], 200)]).filter(([, v]) => v));
     if (Object.keys(answer).length) out.answer = answer;
   } else if (Array.isArray(q.options)) {
@@ -342,6 +359,13 @@ function normalizeQuestion(q, { options = null } = {}) {
   if (!out.figure && str(q.figure_note, 300)) out.figure_note = str(q.figure_note, 300);
   if (Number.isInteger(q.section)) out.section = q.section;
   if (Number.isInteger(q.passage)) out.passage = q.passage;
+  // The paper template: how it is answered, and the marking-scheme line.
+  const space = ANSWER_SPACES.includes(q.answer_space) ? q.answer_space : null;
+  const fits = space && (Array.isArray(out.options)
+    ? (out.format === "true_false" ? space === "true_false" : space === "options")
+    : out.format === "label" ? space === "labels" : !["options", "true_false", "labels"].includes(space));
+  if (fits) out.answer_space = space;
+  if (str(q.marking, 600)) out.marking = str(q.marking, 600);
   return out;
 }
 
@@ -382,8 +406,9 @@ export function applyRevision(base, json) {
   const opts = Math.max(4, ...src.map((q) => (Array.isArray(q.options) ? q.options.length : 0)));
   const questions = [];
   const changes = {};
-  for (const item of (Array.isArray(j.questions) ? j.questions : []).slice(0, MAX_QUESTIONS)) {
+  for (let item of (Array.isArray(j.questions) ? j.questions : []).slice(0, MAX_QUESTIONS)) {
     if (!item || typeof item !== "object") continue;
+    item = dropNulls(item);
     const from = Number.isInteger(item.from) && src[item.from] ? src[item.from] : null;
     if (from && !item.changed) { questions.push(structuredClone(from)); continue; }
     const q = normalizeQuestion(from && !item.text ? { ...from, ...item, text: from.q } : item, { options: Array.isArray(item.options) ? 5 : opts });
@@ -480,7 +505,7 @@ export async function draftPaper({ chat, topic, subject, classLevel, request, pl
   const plan = mergePlan(parseQuestionRequest(request), given);
   const ask = async (feedback, previous) => {
     let json = {};
-    try { json = JSON.parse(await chat(buildPaperMessages({ topic, subject, classLevel, request, plan, difficulty, subtopics, feedback, previous })) || "{}"); } catch { json = {}; }
+    try { json = JSON.parse(await chat(buildPaperMessages({ topic, subject, classLevel, request, plan, difficulty, subtopics, feedback, previous }), { response_format: paperResponseFormat() }) || "{}"); } catch { json = {}; }
     return { json, paper: normalizePaper(json, plan) };
   };
   const first = await ask(null, null);
@@ -506,7 +531,7 @@ export async function revisePaper({ chat, topic, subject, classLevel, request, b
   const contract = { total: null, mix: [], options: plan.options || baseOpts, totalPoints: null, diagrams: plan.diagrams === 0 ? 0 : addsFigure ? true : null };
   const ask = async (feedback, previous) => {
     let json = {};
-    try { json = JSON.parse(await chat(buildRevisionMessages({ topic, subject, classLevel, request, base, plan, feedback, previous })) || "{}"); } catch { json = {}; }
+    try { json = JSON.parse(await chat(buildRevisionMessages({ topic, subject, classLevel, request, base, plan, feedback, previous }), { response_format: revisionResponseFormat() }) || "{}"); } catch { json = {}; }
     return { json, ...applyRevision(base, json) };
   };
   const first = await ask(null, null);

@@ -15,6 +15,7 @@ import { readSubmissionFile, sniffSubmissionFile, removeSubmissionObject } from 
 import { putRecordObject, createPresignedDownload } from "../records/lib/storage.js";
 import { downloadCapped, docxToPages } from "../records/officeText.js";
 import { pdfIsCurrent } from "./submissionView.js";
+import { submissionDocument } from "./paperSchema.js";
 
 const edu = () => db.schema("edu");
 const inFlight = new Map();   // targetId → Promise — one build at a time per submission
@@ -55,6 +56,24 @@ async function loadSubmission(targetId) {
  * Build both copies for a target and store them. → { bytes, markdown, meta }
  * Storage failing never fails the build: the bytes still come back (meta.key null).
  */
+/**
+ * The submission as the paper template lays it out (paperSchema.js) —
+ * the data the apps and a printed copy render. Marks and feedback appear
+ * once published (grade, feedback); a draft AI grade never does.
+ */
+export async function loadSubmissionDocument(targetId) {
+  const loaded = await loadSubmission(targetId);
+  if (!loaded) return null;
+  const { data: graded } = await edu().from("self_study_targets")
+    .select("grade, feedback, graded_at").eq("id", targetId).maybeSingle();
+  return submissionDocument({
+    assignment: loaded.assignment,
+    target: { ...loaded.target, ...(graded || {}) },
+    learner: loaded.learner,
+    files: loaded.fileRows.map((r) => ({ id: r.id, name: r.name, mime: r.mime, kind: r.kind, question: r.question_index })),
+  });
+}
+
 export function buildSubmissionArtifacts(targetId) {
   if (inFlight.has(targetId)) return inFlight.get(targetId);
   const job = (async () => {

@@ -76,8 +76,10 @@ export function aiGradeSchema() {
   return {
     type: "object", additionalProperties: false, required: ["questions", "rubric", "feedback"],
     properties: {
-      questions: { type: "array", items: { type: "object", additionalProperties: false, required: ["index", "awarded", "why"],
-        properties: { index: { type: "integer" }, awarded: { type: "number" }, why: { type: "string" } } } },
+      // `read`: what the learner answered, as the marker read it (their handwriting
+      // transcribed) — shown beside the marks box on the submission paper.
+      questions: { type: "array", items: { type: "object", additionalProperties: false, required: ["index", "read", "awarded", "why"],
+        properties: { index: { type: "integer" }, read: { type: "string" }, awarded: { type: "number" }, why: { type: "string" } } } },
       rubric: { type: "array", items: { type: "object", additionalProperties: false, required: ["criterion", "level", "why"],
         properties: { criterion: { type: "string" }, level: { type: "integer" }, why: { type: "string" } } } },
       feedback: { type: "string" },
@@ -94,7 +96,7 @@ export function buildAiGradeMessages({ assignment = {}, markdown = "", images = 
   const system = [
     `You are drafting marks for a teacher on a learner's submission for "${String(assignment.title || "an activity").slice(0, 160)}"${assignment.subject ? ` (${assignment.subject})` : ""}.`,
     "The teacher reviews and approves everything you produce. Be fair, specific and brief; never invent work the learner didn't submit.",
-    open.length ? "Mark each listed question: `awarded` from 0 to its max points (halves allowed), `why` in one sentence citing what the learner wrote." : "",
+    open.length ? "Mark each listed question: `read` is the learner's answer as you read it — their typed text, or their handwriting / drawing transcribed line by line (\"\" when there is none); `awarded` from 0 to its max points (halves allowed); `why` in one sentence citing what the learner wrote." : "",
     open.length ? open.map(({ q, i }) => `Q${i + 1} (index ${i}, max ${pointsOf(q)}${Number.isInteger(q?.passage) && passages[q.passage] ? `, about passage ${q.passage + 1}` : ""}): ${qText(q)}${q?.figure ? " [has a diagram the learner saw]" : ""}${typeof q === "object" && q?.answer ? `\n  Model answer: ${typeof q.answer === "object" ? Object.entries(q.answer).map(([k, v]) => `${k}: ${v}`).join("; ") : q.answer}` : ""}${q?.format === "label" ? " [the learner names each labelled part as \"P: …\" lines]" : ""}${isMcq(q) ? `\n  Options: ${q.options.map((o, j) => `${"ABCDEFGHIJ"[j]}. ${o}`).join("; ")}${q.correct != null ? `\n  Key: ${"ABCDEFGHIJ"[Number(q.correct)]} — award full marks only if the learner's answer (typed or in their file) clearly picks it` : ""}` : ""}${files.has(i) ? " [answered with an attached file or drawing — read it]" : ""}`).join("\n") : "",
     // A comprehension passage the open questions are about.
     open.some(({ q }) => Number.isInteger(q?.passage) && passages[q.passage])
@@ -123,7 +125,8 @@ export function shapeAiGrade({ assignment = {}, submission = {}, json = {}, note
     const max = pointsOf(q);
     const got = byIndex.get(i);
     const awarded = Math.min(max, Math.max(0, Math.round(Number(got?.awarded) * 2) / 2));
-    return { index: i, awarded: Number.isFinite(awarded) ? awarded : 0, max, why: String(got?.why || "Not assessed — check this one.").slice(0, 400) };
+    return { index: i, awarded: Number.isFinite(awarded) ? awarded : 0, max, why: String(got?.why || "Not assessed — check this one.").slice(0, 400),
+      ...(String(got?.read || "").trim() ? { read: String(got.read).trim().slice(0, 1200) } : {}) };
   });
   const all = [...mcq, ...marked].sort((a, b) => a.index - b.index);
   const rubricDef = rubricRows(assignment.details);
