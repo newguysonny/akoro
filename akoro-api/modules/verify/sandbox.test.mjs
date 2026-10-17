@@ -36,3 +36,26 @@ test("an unreachable sandbox is BLOCKED, never a silent fallback", withEnv({ VER
   assert.equal(r.body.data.verdict, "BLOCKED");
   assert.match(r.body.error, /target.*production/);
 }));
+
+test("a sandbox whose host answers 502 is BLOCKED with the reason, never a bare 502", withEnv({ VERIFY_SANDBOX_ENABLED: "true", VERIFY_SANDBOX_URL: "https://sandbox.example.com" }, async () => {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("<html>Bad gateway</html>", { status: 502, headers: { "Content-Type": "text/html" } });
+  try {
+    const r = await forward("POST", "/runs", { scenario: "smoke.health_build" });
+    assert.equal(r.status, 503);
+    assert.equal(r.body.data.verdict, "BLOCKED");
+    assert.match(r.body.data.reason, /answered 502/);
+    assert.match(r.body.error, /target.*production/);
+  } finally { globalThis.fetch = realFetch; }
+}));
+
+test("a sandbox's own JSON verdict passes through", withEnv({ VERIFY_SANDBOX_ENABLED: "true", VERIFY_SANDBOX_URL: "https://sandbox.example.com" }, async () => {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ success: true, data: { id: "x", verdict: "PASS" } }), { status: 200, headers: { "Content-Type": "application/json" } });
+  try {
+    const r = await forward("GET", "/runs/x");
+    assert.equal(r.status, 200);
+    assert.equal(r.body.data.verdict, "PASS");
+    assert.equal(r.body.via, "sandbox");
+  } finally { globalThis.fetch = realFetch; }
+}));

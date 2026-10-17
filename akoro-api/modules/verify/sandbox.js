@@ -34,6 +34,14 @@ export async function forward(method, path, body = null, { timeoutMs = 120_000 }
       ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(timeoutMs),
     });
     const json = await r.json().catch(() => null);
+    // The sandbox itself down (its host answering 502/503/504, a non-JSON
+    // page): BLOCKED, as a 503 with the reason. Passed through as a bare
+    // 502, the CDN in front of this API swaps the body for its own error
+    // page and the caller learns nothing.
+    if (r.status >= 500 && !(json && typeof json === "object" && json.data)) {
+      return { status: 503, body: { success: false, via: "sandbox", data: { verdict: "BLOCKED", reason: `the sandbox (${url}) answered ${r.status}` },
+        error: `The sandbox gate answered ${r.status} — it is down or restarting. Pass "target":"production" to run here instead.` } };
+    }
     return { status: r.status, body: json && typeof json === "object" ? { ...json, via: "sandbox" } : { success: false, error: `sandbox answered ${r.status}`, via: "sandbox" } };
   } catch (e) {
     return { status: 503, body: { success: false, via: "sandbox", data: { verdict: "BLOCKED", reason: `sandbox unreachable (${url}): ${e.message}` }, error: `The sandbox gate didn't answer: ${e.message}. Pass "target":"production" to run here instead.` } };
