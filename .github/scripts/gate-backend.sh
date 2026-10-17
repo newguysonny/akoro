@@ -24,6 +24,15 @@ for attempt in 1 2 3 4 5 6; do
   case "$code" in 502|503|504) echo "The API answered $code (restarting?) — retrying in 20s ($attempt/6)"; sleep 20 ;; *) break ;; esac
 done
 if [ "${code:-0}" -ge 400 ]; then
+  # Which part is refused? Status of a few variants of the same request.
+  probe() { printf '  %-44s %s\n' "$1" "$(curl -s -o /dev/null -m 30 -w '%{http_code}' "${@:2}")"; }
+  echo "Probes:"
+  probe "GET /health" "$GATE_URL/health"
+  probe "GET /health + edge header" "${edge[@]}" "$GATE_URL/health"
+  probe "GET /api/verify/suites + edge (no key)" "${edge[@]}" "$GATE_URL/api/verify/suites"
+  probe "GET /api/verify/suites + edge + key" "${edge[@]}" -H "Authorization: Bearer $GATE_KEY" "$GATE_URL/api/verify/suites"
+  probe "GET /api/verify/suites + edge + x-agent-console-key" "${edge[@]}" -H "x-agent-console-key: $GATE_KEY" "$GATE_URL/api/verify/suites"
+  echo "  (key length ${#GATE_KEY}, edge header length ${#EDGE_HEADER})"
   echo "::error::The gate answered $code."
   grep -iE '^(server|cf-ray|cf-mitigated|x-render-origin-server):' "$hdrs" || true
   echo "$start" | grep -o '<title>[^<]*</title>' || echo "$start" | head -c 300
