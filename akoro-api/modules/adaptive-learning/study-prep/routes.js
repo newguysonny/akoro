@@ -271,6 +271,8 @@ function shapeView(view) {
     session: view.session, topics: view.topics,
     events: (view.events || []).map(publicEvent),
     loop: view.loop || undefined,
+    // D45: practice is the Agent Check — the card words its buttons for it.
+    agentCheck: !!view.agentCheck,
   };
 }
 
