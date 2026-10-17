@@ -74,10 +74,13 @@ const row = (battleId, order, q, seconds = 15) => ({
  * produced it.
  */
 function normalise(raw, fallbackTopic) {
+  // `orig` keeps each option's position in the source list: correct_answer_index
+  // refers to THAT list, so dropping an empty option must not shift the answer
+  // onto its neighbour (a right answer was being marked wrong).
   const opts = (Array.isArray(raw.options) ? raw.options : [])
     .map((o, i) => (typeof o === "string"
-      ? { label: String.fromCharCode(65 + i), text: o.replace(/^[A-E][.)]\s*/, "") }
-      : { label: String(o.label ?? String.fromCharCode(65 + i)).trim().toUpperCase(), text: String(o.text ?? "").trim() }))
+      ? { label: String.fromCharCode(65 + i), text: o.replace(/^[A-E][.)]\s*/, ""), orig: i }
+      : { label: String(o.label ?? String.fromCharCode(65 + i)).trim().toUpperCase(), text: String(o.text ?? "").trim(), orig: i }))
     .filter((o) => o.text);
 
   if (opts.length < 2) return null;
@@ -88,10 +91,10 @@ function normalise(raw, fallbackTopic) {
   let idx = opts.findIndex((o) => o.label === key);
   // Some models answer with the option's TEXT rather than its letter.
   if (idx < 0) idx = opts.findIndex((o) => o.text.toLowerCase() === String(raw.answer ?? "").trim().toLowerCase());
-  if (idx < 0 && Number.isInteger(raw.correct_answer_index)) idx = raw.correct_answer_index;
+  if (idx < 0 && Number.isInteger(raw.correct_answer_index)) idx = opts.findIndex((o) => o.orig === raw.correct_answer_index);
   if (idx < 0 || idx >= opts.length) return null;
 
-  return { stem, options: opts, correctIndex: idx, topic: raw.topic || fallbackTopic || null, xp: raw.xp_value ?? 35, ...(raw.explanation ? { explanation: String(raw.explanation).trim() } : {}) };
+  return { stem, options: opts.map(({ orig, ...o }) => o), correctIndex: idx, topic: raw.topic || fallbackTopic || null, xp: raw.xp_value ?? 35, ...(raw.explanation ? { explanation: String(raw.explanation).trim() } : {}) };
 }
 
 const dedupeKey = (q) => q.stem.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 90);
