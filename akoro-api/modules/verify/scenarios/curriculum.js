@@ -3,6 +3,8 @@
 
 export const syllabusCoverage = {
   name: "curriculum.syllabus_coverage", area: "study-prep", risk: "read",
+  // A data-coverage report, not a code check: kept out of the regression suite.
+  regression: false,
   description: "A subject + class (default JSS1 Basic Science) resolves to real syllabus topics, with approved concepts behind them.",
   params: { subject: { default: "Basic Science" }, classLevel: { default: "JSS1" }, exam: { default: "WAEC" } },
   async run(ctx, p) {
