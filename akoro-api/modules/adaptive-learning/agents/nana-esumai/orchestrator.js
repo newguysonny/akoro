@@ -63,30 +63,14 @@ export class NaNaEsumaiOrchestrator extends BaseOrchestrator {
     };
   }
 
-  async processTeachingMessage(humanMessage, callbacks = {}) {
-    const { onStudentChunk, onGuideChunk, onStateUpdate } = callbacks;
-    const { topic, phase, mustKnowParts, mustKnowIndex, history } = this.session;
-    this.session.turnCount++;
-    const state = await getStudentState(this.session.agentId);
-    const [drift, studentReply] = await Promise.all([
-      this.control.checkForDrift([...history.slice(-4), { role: "human_teacher", content: humanMessage }], topic),
-      this._generateStudentReply({ humanMessage, topic, understanding: Math.round(state.cognitive.understanding * 100), confusion: Math.round(state.cognitive.confusion * 100), history, phaseLabel: PHASES[phase] }, onStudentChunk),
-    ]);
-    if (drift.isDrifting) {
-      return { type: "drift_warning", sargeantMessage: this.control.generateRedirectMessage(drift, topic), studentAgentResponse: null, guideMessage: null, adaptiveEngine: null, driftInfo: drift };
-    }
-    const analysis    = await this._analyzeUnderstanding(studentReply, topic, history);
-    const updatedState = await updateStudentState(this.session.agentId, topic, analysis, { phase, mustKnowIndex, lastAction: null, agentPairId: NaNaEsumaiOrchestrator.profile.id });
-    if (onStateUpdate) onStateUpdate({ understanding: Math.round(updatedState.cognitive.understanding * 100), confusion: Math.round(updatedState.cognitive.confusion * 100), engagement: Math.round((updatedState.cognitive.engagement || 0.5) * 100) });
-    const guideResult = await this.guide.getTip({ topic, phase: PHASES[phase], currentSubtopic: mustKnowParts[mustKnowIndex] || null, humanMessage, studentResponse: studentReply, understanding: Math.round(updatedState.cognitive.understanding * 100), confusion: Math.round(updatedState.cognitive.confusion * 100), history, mustKnowParts, mustKnowIndex }, onGuideChunk);
-    let phaseChanged = false, phaseLabel = null, subtopicAdvanced = false;
-    if (guideResult.nextPhase && guideResult.nextPhase !== phase) { this.session.phase = guideResult.nextPhase; phaseChanged = true; phaseLabel = PHASES[guideResult.nextPhase]; }
-    if (guideResult.nextMustKnowIndex > mustKnowIndex) { this.session.mustKnowIndex = guideResult.nextMustKnowIndex; subtopicAdvanced = true; }
-    await updateStudentState(this.session.agentId, topic, analysis, { phase: this.session.phase, mustKnowIndex: this.session.mustKnowIndex, lastAction: guideResult.nextAction, agentPairId: NaNaEsumaiOrchestrator.profile.id });
-    const controlStatusLine = drift.driftLevel === "edge" ? `⚠️ ${drift.edgeNote || "Edge expansion allowed."}` : drift.driftLevel === "none" ? `✅ ${drift.statusMessage || "On topic."}` : null;
-    history.push({ role: "human_teacher", content: humanMessage, timestamp: new Date() });
-    history.push({ role: "student_agent",  content: studentReply,  timestamp: new Date() });
-    return { type: "teaching_response", studentAgentResponse: studentReply, guideMessage: guideResult.tip, guideIsUrgent: guideResult.isUrgent || false, guideName: this.guide.name, controlStatusLine, controlName: this.control.name, adaptiveEngine: { understanding: Math.round(updatedState.cognitive.understanding * 100), confusion: Math.round(updatedState.cognitive.confusion * 100), actionLabel: this._friendlyAction(guideResult.nextAction, analysis), misconception: analysis.misconceptionDetected || null, misconceptionCleared: analysis.misconceptionCleared || false }, phaseChanged, phaseLabel, subtopicAdvanced, currentSubtopic: mustKnowParts[this.session.mustKnowIndex] || null, currentPhase: this.session.phase, driftInfo: drift, agentPairId: NaNaEsumaiOrchestrator.profile.id };
+  /**
+   * Retired (D42). This class only supplies the GUIDE (and control) inside a
+   * StudentSessionOrchestrator session; it never runs a teaching turn. Its old
+   * turn moved the learner's phase on the guide's say-so — phases now change
+   * only through the evidence gate (teaching-session/state-machine.js).
+   */
+  async processTeachingMessage() {
+    throw new Error("Guide pairs don't run teaching turns — use the student session (D42).");
   }
 
   async endSession() {

@@ -34,56 +34,25 @@ export async function getOrchestrator({
   priorBlocks       = null,   // previous session's block_history — restored as conversation memory
 } = {}) {
 
-  if (agentPairId && BUILTIN_REGISTRY[agentPairId])
-    return new BUILTIN_REGISTRY[agentPairId].Orchestrator();
-
-  if (agentPairId?.startsWith("trained:")) {
-    const rawId  = agentPairId.replace("trained:", "");
-    const caller = userId || studentId;
-    if (caller) {
-      const owns = await userOwnsAgent(caller, rawId);
-      if (!owns) {
-        console.warn(`[Registry] User ${caller} does not own agent ${rawId} — fallback to NaNa`);
-        /* NaNa Esumai is used directly in teachingSession.js — no legacy orchestrator needed */
-return null;
-      }
-    }
-    const trained = await _loadTrainedOrchestrator(rawId);
-    return trained ?? null;
+  // D42: a learner's teaching session is ALWAYS the student session — the
+  // 8-step turn, where the phase moves only through the evidence gate. A
+  // guide pair ("nana-esumai" / "trained:<agentId>"), a trained agent id or
+  // the learner's saved preference only chooses the GUIDE inside it. (They
+  // used to return the NaNa / Trained orchestrators, which moved the phase on
+  // the guide's say-so.)
+  const caller = userId || studentId;
+  if (!caller) return null;
+  let guideId = teacherAgentId;
+  if (!guideId && agentPairId?.startsWith("trained:")) guideId = agentPairId.replace("trained:", "");
+  if (!guideId && agentId && agentId !== studentId) guideId = agentId;
+  if (!guideId && !agentPairId) {
+    const prefs = await getAgentPreferences(caller).catch(() => ({}));
+    if (String(prefs?.guide_pair_id || "").startsWith("trained:")) guideId = prefs.guide_pair_id.replace("trained:", "");
   }
-
-  if (mode === "student" || studentId) {
-    const guideOrchestrator = await _resolveGuideForStudent(teacherAgentId, studentId || userId);
-    return new StudentSessionOrchestrator({
-      studentId, teacherAgentId, guideOrchestrator, sessionType, subject, decayPayload, referenceMaterial, teachingEvidence, priorBlocks,
-    });
-  }
-
-  if (agentId) {
-    const caller = userId || studentId;
-    const canLoad = !caller || await userOwnsAgent(caller, agentId);
-    if (canLoad) {
-      const trained = await _loadTrainedOrchestrator(agentId);
-      if (trained) return trained;
-    }
-  }
-
-  if (userId || studentId) {
-    const prefs  = await getAgentPreferences(userId || studentId);
-    const pairId = prefs.guide_pair_id || "nana-esumai";
-    if (pairId && BUILTIN_REGISTRY[pairId]) return new BUILTIN_REGISTRY[pairId].Orchestrator();
-    if (pairId.startsWith("trained:")) {
-      const rawId = pairId.replace("trained:", "");
-      const owns  = await userOwnsAgent(userId || studentId, rawId);
-      if (owns) {
-        const trained = await _loadTrainedOrchestrator(rawId);
-        if (trained) return trained;
-      }
-    }
-  }
-
-  /* NaNa Esumai is used directly in teachingSession.js — no legacy orchestrator needed */
-return null;
+  const guideOrchestrator = await _resolveGuideForStudent(guideId, caller);
+  return new StudentSessionOrchestrator({
+    studentId: studentId || caller, teacherAgentId: guideId || null, guideOrchestrator, sessionType, subject, decayPayload, referenceMaterial, teachingEvidence, priorBlocks,
+  });
 }
 
 async function _loadTrainedOrchestrator(agentId) {

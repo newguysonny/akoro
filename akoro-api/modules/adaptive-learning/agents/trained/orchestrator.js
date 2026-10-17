@@ -154,141 +154,14 @@ export class TrainedOrchestrator extends BaseOrchestrator {
   }
 
   // ── PROCESS ONE TURN ──────────────────────────────────────────
-  async processTeachingMessage(humanMessage, callbacks = {}) {
-    const { onStudentChunk, onGuideChunk, onStateUpdate } = callbacks;
-    const { topic, phase, mustKnowParts, mustKnowIndex, history } = this.session;
-
-    this.session.turnCount++;
-
-    const state = await getStudentState(this.session.agentId);
-
-    // 1. Drift check + student reply IN PARALLEL
-    // Student reply uses trained teacher's style prompt
-    const recentHistory = history.slice(-6).map(h =>
-      `${h.role === "human_teacher" ? "Teacher" : "Student Agent"}: ${h.content}`
-    ).join("\n");
-
-    const teacherChunks = await loadTeacherChunks(
-      this.config.teacher_id,
-      humanMessage,
-      4
-    );
-
-    const combinedContext = teacherChunks.length > 0
-      ? `## Relevant material from teacher's sessions:\n` +
-        teacherChunks.map((c, i) => `[${i + 1}] (${c.chunk_type}) ${c.chunk_text}`).join("\n\n")
-      : "";
-
-    const studentSystemPrompt = await buildStudentAgentPrompt({
-      config:          this.config,
-      topic,
-      understanding:   state.cognitive.understanding,
-      confusion:       state.cognitive.confusion,
-      phaseLabel:      this._getCurrentPhaseLabel(phase),
-      combinedContext,
-      recentHistory,
-    });
-
-    // No separate drift check. It ran beside this call, and its verdict could
-    // discard the reply before anyone saw it — a turn spent, two calls billed,
-    // one thrown away, and a red warning where teaching should have been. The
-    // guide steers inside its own tip now. See nana-esumai/guide.js.
-    const studentReply = await this._streamOrComplete(
-      studentSystemPrompt, humanMessage, 0.65, onStudentChunk);
-
-    // 2. Analyze understanding
-    const analysis = await this._analyzeUnderstanding(studentReply, topic, history);
-
-    // 3. Persist state
-    const updatedState = await updateStudentState(
-      this.session.agentId, topic, analysis,
-      { phase, mustKnowIndex, lastAction: null, agentPairId: this._profile.id }
-    );
-
-    if (onStateUpdate) {
-      onStateUpdate({
-        understanding: Math.round(updatedState.cognitive.understanding * 100),
-        confusion:     Math.round(updatedState.cognitive.confusion     * 100),
-        engagement:    Math.round(updatedState.cognitive.engagement    * 100),
-      });
-    }
-
-    // 4. Guide tip
-    const guideResult = await this.guide.getTip(
-      {
-        topic,
-        phase:           this._getCurrentPhaseLabel(phase),
-        currentSubtopic: mustKnowParts[mustKnowIndex] || null,
-        humanMessage,
-        studentResponse: studentReply,
-        understanding:   Math.round(updatedState.cognitive.understanding * 100),
-        confusion:       Math.round(updatedState.cognitive.confusion     * 100),
-        history,
-        mustKnowParts,
-        mustKnowIndex,
-      },
-      onGuideChunk || null
-    );
-
-    // 5. Advance phase / subtopic
-    let phaseChanged     = false;
-    let phaseLabel       = null;
-    let subtopicAdvanced = false;
-
-    if (guideResult.nextPhase && guideResult.nextPhase !== phase) {
-      this.session.phase = guideResult.nextPhase;
-      phaseChanged       = true;
-      phaseLabel         = this._getCurrentPhaseLabel(guideResult.nextPhase);
-    }
-
-    if (guideResult.nextMustKnowIndex > mustKnowIndex) {
-      this.session.mustKnowIndex = guideResult.nextMustKnowIndex;
-      subtopicAdvanced           = true;
-    }
-
-    // 6. Final persist
-    await updateStudentState(
-      this.session.agentId, topic, analysis,
-      {
-        phase:         this.session.phase,
-        mustKnowIndex: this.session.mustKnowIndex,
-        lastAction:    guideResult.nextAction,
-        agentPairId:   this._profile.id,
-      }
-    );
-
-    // 7. Control status
-    const controlStatusLine =
-      // Nothing announced for staying on topic: "✅ On topic." on every turn was
-      // noise, and noise is what made the warning easy to miss when it mattered.
-      null;
-
-    history.push({ role: "human_teacher", content: humanMessage, timestamp: new Date() });
-    history.push({ role: "student_agent", content: studentReply,  timestamp: new Date() });
-
-    return {
-      type:                 "teaching_response",
-      studentAgentResponse: studentReply,
-      guideMessage:         guideResult.tip,
-      guideIsUrgent:        guideResult.isUrgent || false,
-      guideName:            this.guide.name,
-      controlStatusLine,
-      controlName:          this.control.name,
-      adaptiveEngine: {
-        understanding:        Math.round(updatedState.cognitive.understanding * 100),
-        confusion:            Math.round(updatedState.cognitive.confusion     * 100),
-        actionLabel:          this._friendlyAction(guideResult.nextAction, analysis),
-        misconception:        analysis.misconceptionDetected  || null,
-        misconceptionCleared: analysis.misconceptionCleared   || false,
-      },
-      phaseChanged,
-      phaseLabel,
-      subtopicAdvanced,
-      currentSubtopic: mustKnowParts[this.session.mustKnowIndex] || null,
-      currentPhase:    this.session.phase,
-      driftInfo:       { isDrifting: !!guideResult?.offTopic, driftLevel: guideResult?.offTopic ? "edge" : "none" },
-      agentPairId:     this._profile.id,
-    };
+  /**
+   * Retired (D42). This class only supplies the GUIDE (and control) inside a
+   * StudentSessionOrchestrator session; it never runs a teaching turn. Its old
+   * turn moved the learner's phase on the guide's say-so — phases now change
+   * only through the evidence gate (teaching-session/state-machine.js).
+   */
+  async processTeachingMessage() {
+    throw new Error("Guide pairs don't run teaching turns — use the student session (D42).");
   }
 
   // ── END SESSION ───────────────────────────────────────────────

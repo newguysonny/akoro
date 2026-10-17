@@ -346,114 +346,19 @@ export function setupWebSocket(io) {
       } catch (err) { socket.emit("error", { message: err.message }); }
     });
 
-    // ── start_session ─────────────────────────────────────────
-    // v3.2: accepts userId for ownership check
-    socket.on("start_session", async ({ agentId, topic, agentPairId, userId }) => {
-      if (!agentId || !topic) return socket.emit("error", { message: "agentId and topic required" });
-      try {
-        let pairId = agentPairId;
-        if (!pairId) {
-          const prefs = await getAgentPreferences(userId || agentId);
-          pairId = prefs.guide_pair_id || "nana-sargeant";
-        }
-
-        // A fresh session id is server-generated. Accepting an arbitrary id here
-        // could overwrite another live entry in the in-memory session map.
-        const id = `session_${agentId}_${Date.now()}`;
-        const orchestrator = await getOrchestrator({
-          agentPairId: pairId,
-          agentId,
-          userId: userId || agentId,   // v3.2 ownership check
-        });
-        const init = await orchestrator.initialize(agentId, topic);
-
-        activeSessions.set(id, orchestrator);
-        socket.join(`session:${id}`);
-        if (userId) socket.join(`user:${userId}`);
-        socket.data = { ...socket.data, sessionId: id, agentId, agentPairId: pairId, userId, mode: "teaching" };
-
-        socket.emit("session_ready", {
-          sessionId: id, agentPairId: pairId,
-          message: init.openingPrompt, mustKnowParts: init.mustKnowParts,
-          topicBoundary: init.topicBoundary, studentAgentName: init.studentAgentName,
-          initialState: init.initialState, teacherName: init.teacherName || null,
-          lecturePlan: init.lecturePlan || null,
-        });
-      } catch (err) { console.error("[start_session]", err); socket.emit("error", { message: err.message }); }
-    });
-
-    // ── start_student_session ─────────────────────────────────
-    // v3.2: userId used for ownership check on teacherAgentId
-    socket.on("start_student_session", async ({ studentId, topic, teacherAgentId, userId }) => {
-      if (!studentId || !topic) return socket.emit("error", { message: "studentId and topic required" });
-      try {
-        const caller = userId || studentId;
-        const id = `student_${studentId}_${Date.now()}`;
-        const orchestrator = await getOrchestrator({
-          mode: "student", studentId,
-          teacherAgentId: teacherAgentId || null,
-          userId: caller,
-        });
-        const init = await orchestrator.initialize(studentId, topic);
-
-        activeSessions.set(id, orchestrator);
-        socket.join(`session:${id}`);
-        socket.join(`student:${studentId}`);
-        if (userId) socket.join(`user:${userId}`);
-        socket.data = { ...socket.data, sessionId: id, agentId: studentId, agentPairId: "student-session", userId: caller, mode: "student" };
-
-        socket.emit("student_session_ready", {
-          sessionId: id, agentPairId: "student-session",
-          sessionType: "free_teaching",
-          message: init.openingPrompt, mustKnowParts: init.mustKnowParts,
-          topicBoundary: init.topicBoundary, studentAgentName: init.studentAgentName,
-          agentLevel: init.agentLevel, totalSessions: init.totalSessions,
-          knowledgeScore: init.knowledgeScore, initialState: init.initialState,
-        });
-      } catch (err) { console.error("[start_student_session]", err); socket.emit("error", { message: err.message }); }
-    });
-
-    // ── start_decay_session ───────────────────────────────────
-    socket.on("start_decay_session", async ({ studentId, subject, topic, teacherAgentId, notificationId, userId }) => {
-      if (!studentId || !subject || !topic)
-        return socket.emit("error", { message: "studentId, subject and topic required" });
-      try {
-        const caller = userId || studentId;
-        const agent  = await getOrCreateStudentAgent(studentId);
-        const decaySessionPayload = await decayEngine.generateDecaySession(agent.id, studentId, subject, topic);
-        // A client may send an arbitrary notification UUID. Retain it for the
-        // session only when it belongs to this authenticated learner.
-        const ownedNotificationId = notificationId && await decayEngine.markNotificationRead(notificationId, studentId)
-          ? notificationId
-          : null;
-
-        const id = `decay_${studentId}_${Date.now()}`;
-        const orchestrator = await getOrchestrator({
-          mode: "student", studentId,
-          teacherAgentId: teacherAgentId || null,
-          userId: caller,
-          sessionType: "decay_review",
-          decayPayload: { ...decaySessionPayload, notificationId: ownedNotificationId },
-        });
-        const init = await orchestrator.initialize(studentId, topic);
-
-        activeSessions.set(id, orchestrator);
-        socket.join(`session:${id}`);
-        socket.join(`student:${studentId}`);
-        if (userId) socket.join(`user:${userId}`);
-        socket.data = { ...socket.data, sessionId: id, agentId: studentId, agentPairId: "student-session", userId: caller, mode: "decay_review" };
-
-        socket.emit("student_session_ready", {
-          sessionId: id, agentPairId: "student-session",
-          sessionType: "decay_review", subject, topic,
-          message: init.openingPrompt, mustKnowParts: init.mustKnowParts,
-          topicBoundary: init.topicBoundary, studentAgentName: init.studentAgentName,
-          agentLevel: init.agentLevel, knowledgeScore: init.knowledgeScore,
-          initialState: init.initialState,
-          decayPayload: decaySessionPayload,
-        });
-      } catch (err) { console.error("[start_decay_session]", err); socket.emit("error", { message: err.message }); }
-    });
+    // ── Retired session starts (D42) ──────────────────────────
+    // start_session ran the NaNa / Trained orchestrators, which moved the
+    // learner up a phase on the guide's say-so; start_student_session and
+    // start_decay_session never saved the session. Every teaching session now
+    // starts with start_adaptive_session (fresh | continuation | decay), where
+    // phases change only through the evidence gate and the guide is a choice
+    // inside the session (switch_agent_pair).
+    for (const retired of ["start_session", "start_student_session", "start_decay_session"]) {
+      socket.on(retired, () => socket.emit("error", {
+        code: "retired_event",
+        message: `${retired} was retired — start the session with start_adaptive_session.`,
+      }));
+    }
 
     // ══════════════════════════════════════════════════════════
     // start_adaptive_session — UNIFIED handler for all 3 modes
@@ -472,6 +377,7 @@ export function setupWebSocket(io) {
       notificationId,             // for decay
       reference,                  // compact text returned by /teaching/reference
       document,                   // { recordId } | { contentKey } — a library document to search per turn
+      teacherAgentId,             // the learner's chosen guide (ownership checked in the registry)
       userId,
     }) => {
       if (!studentId || !topic)
@@ -537,6 +443,8 @@ export function setupWebSocket(io) {
           mode:                 "student",
           studentId,
           userId:               caller,
+          // Only the guide; the gated student session is the same either way (D42).
+          teacherAgentId:       typeof teacherAgentId === "string" ? teacherAgentId.slice(0, 120) : null,
           sessionType,
           subject,
           // The restored conversation. (A continuationSessionId used to be
@@ -852,6 +760,9 @@ export function setupWebSocket(io) {
 
         // Resolve the teacher agent the new pair maps to (null = platform default)
         let teacherAgentId = null;
+        if (!["nana-esumai", "nana-sargeant"].includes(newAgentPairId) && !newAgentPairId.startsWith("trained:")) {
+          return socket.emit("error", { message: "Unknown teaching guide.", code: "UNKNOWN_GUIDE", agentPairId: newAgentPairId });
+        }
         if (newAgentPairId.startsWith("trained:")) {
           teacherAgentId = newAgentPairId.replace("trained:", "");
           const owns = await userOwnsAgent(caller, teacherAgentId);
@@ -868,11 +779,17 @@ export function setupWebSocket(io) {
 
         // Rebuild the orchestrator with the new teacher; reuse student + topic
         const priorOrchestrator = activeSessions.get(sessionId);
+        // Only the guide changes (D42): the session keeps its type, subject,
+        // decay material, conversation, phase and evidence. (A switch used to
+        // rebuild it as a fresh free-teaching session.)
         const orchestrator = await getOrchestrator({
           mode:     "student",
           studentId,
           userId:   caller,
           teacherAgentId,
+          sessionType:  priorOrchestrator?.sessionType || "free_teaching",
+          subject:      priorOrchestrator?.subject || subject || null,
+          decayPayload: priorOrchestrator?.decayPayload || null,
           referenceMaterial: priorOrchestrator?.referenceMaterial || null,
           teachingEvidence: serialiseTeachingEvidence(priorOrchestrator?.teachingEvidence),
         });
@@ -887,6 +804,10 @@ export function setupWebSocket(io) {
           orchestrator.sessionMeta = priorOrchestrator.sessionMeta || null;
         }
         const init = await orchestrator.initialize(studentId, topic);
+        // The live conversation carries over too (initialize() starts it empty).
+        if (priorOrchestrator?.session?.history?.length && orchestrator.session) {
+          orchestrator.session.history = priorOrchestrator.session.history;
+        }
 
         // Swap in place under the same sessionId so the socket room stays valid
         activeSessions.set(sessionId, orchestrator);

@@ -616,7 +616,7 @@ export const EN = {
   'teaching.connecting':          'Connecting…',
   'teaching.reconnecting':        'Reconnecting…',
   'teaching.switching':           'Switching…',
-  'teaching.switch':              'Switch',
+  'teaching.switch':              'Switch guide',
   'teaching.summarize':           'Summarize',
   'teaching.understanding':       'Understanding',
   'teaching.confusion':           'Confusion',

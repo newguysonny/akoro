@@ -98,9 +98,8 @@ router.use(authenticateToken, assessmentRouter);
  *   Client → Server:
  *     list_agent_pairs         get available teaching agents
  *     get_my_agents            get user's purchased agents
- *     start_session            start a teaching session
- *     start_student_session    start student self-study session
- *     start_decay_session      start a spaced-repetition review
+ *     start_adaptive_session   start a teaching session (fresh | continuation | decay)
+ *     (start_session / start_student_session / start_decay_session: retired, D42)
  *     teacher_message          send a teaching turn message
  *     end_session              end the session + get evaluation
  *     switch_agent_pair        switch to a different agent
