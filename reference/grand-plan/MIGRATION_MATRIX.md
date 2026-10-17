@@ -35,7 +35,21 @@ These change what Phase 1 and later phases must do first.
 | F3 double charge | Generation is platform-paid when Study Prep already took the flat price (`prepaid` in `exam-prep-service.js`); the standalone exam-prep route stays metered. | Gate `studyprep.practice_charged_once` PASS: one debit, `study_prep_practice`, −2 |
 | **F8 (new)** every `/study-prep/sessions/:id` route and `getOwnedExamPrepRun` rejected real UUIDs (13 hex digits required in the last group) — the plan card could never be confirmed; practice could never be submitted or retested | Both patterns now 8-4-4-4-12, tested against real UUIDs. | Same gate run: confirm and practice succeed |
 
-Still open: F2 (no production syllabus data), F4-F7.
+| F2 empty syllabus | `syllabus.generate` (§8.7): when the platform syllabus is empty the planner drafts an outline, checked in code, saved to `edu.generated_syllabi` as provisional, reused per scope, labelled "AI-drafted outline" on the plan card and in narration; refused while a real syllabus exists. Real syllabi still to be uploaded. | Gate `studyprep.generated_outline` PASS on the sandbox and on production |
+| §7 test gaps | Seam tests on an in-memory db (`lib/testing/fakeDb.mjs`) for the Study Prep store, read tools, resolver, generator, chat handlers and routes; teaching lifecycle, context, the 8-step turn and the workflow projection; decay math, exam prep, lesson ladders, syllabus reads and battle questions (~215 tests). | 1,074 API tests pass |
+
+**Bugs those tests found, all fixed (2026-10-17):**
+- `listEvents` returned the oldest events, so "recent activity" showed the session start.
+- Mastery evidence was dropped for topic labels with a comma (`or()` filter).
+- An SS1 learner got the JSS1 syllabus (class substring match).
+- `getRelevantMemory` ignored the subject.
+- `GET /study-prep/sessions` turned a database error into "no session".
+- The lesson ladder cache never matched learners without a school/class (`eq(null)`), so the ladder was regenerated each session.
+- Battle questions marked a correct answer wrong when an empty option was dropped.
+- Two simultaneous teaching completions both awarded XP.
+- Starting a retest overwrote the diagnostic score with 0.
+
+Still open: F4-F7, plus the `resolve_class` / `resolve_school` steps of §8.7 (school syllabi from `mgmt.*`).
 
 ## 2. Open questions (§20)
 
