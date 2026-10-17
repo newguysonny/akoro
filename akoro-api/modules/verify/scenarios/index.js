@@ -21,6 +21,7 @@ export const SUITES = {
   writes: ["tasks.create_due_in_minutes", "followups.deliver_into_chat", "writes.no_residue"],
   // Phase V4 end to end (sandbox only: BLOCKED on production).
   "real-user": ["verify.real_user_run", "writes.no_residue"],
+  curriculum: ["curriculum.syllabus_coverage"],
   "agent-network": ["network.privacy_edges"],
   battles: ["battles.entry_gates"],
   "self-tooling": ["selftool.views_match_schema", "selftool.schema_lookup_safe", "selftool.create_spec_matches_db", "selftool.create_rejects_forbidden",
@@ -31,5 +32,5 @@ export const SUITES = {
   // (BLOCKED while the flag is off); the schema check runs everywhere.
   // One dry build (create_spec_matches_db) exercises the whole create_tool
   // path — a broken save path once slipped past every other scenario.
-  regression: ALL.filter((s) => s.risk !== "write" && (!s.name.startsWith("selftool.") || ["selftool.views_match_schema", "selftool.create_spec_matches_db", "selftool.sandbox_contained"].includes(s.name))).map((s) => s.name),
+  regression: ALL.filter((s) => s.risk !== "write" && s.regression !== false && (!s.name.startsWith("selftool.") || ["selftool.views_match_schema", "selftool.create_spec_matches_db", "selftool.sandbox_contained"].includes(s.name))).map((s) => s.name),
 };
