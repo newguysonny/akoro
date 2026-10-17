@@ -4,6 +4,8 @@ import RichText from "../common/RichText.jsx";
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, AGENT_STYLES } from '../../constants.js';
 import { MicIcon, XIcon, BrainIcon, SparkleIcon, ZapIcon, ChevDownIcon, Icon } from '../common/Icons.jsx';
 import FortizoChatComposer from '../common/FortizoChatComposer.jsx';
+import QuoteChip from '../common/QuoteChip.jsx';
+import { parseQuoted } from '../../lib/quotedMessage.js';
 import StreamCaret from '../common/StreamCaret.jsx';
 import BlockRenderer from '../sessions/BlockRenderer.jsx';
 import { AgentAvatar } from '../common/AgentAvatar.jsx';
@@ -105,7 +107,7 @@ function GuideChat({ messages, guideName, guideEmoji, onSuggestion }) {
             borderRadius:"18px 4px 18px 18px", background:"var(--ak-tag-bg)",
             border:"1px solid var(--ak-border2)", color:"var(--ak-text)",
             fontSize:13.5, lineHeight:1.6, whiteSpace:"pre-wrap", fontWeight:600 }}>
-            {m.text}
+            {(() => { const { quote: q, question } = parseQuoted(m.text); return <><QuoteChip quote={q} inBubble dark/>{question}</>; })()}
           </div>
           <CopyMessageButton text={m.text} dark />
         </div>
@@ -161,6 +163,8 @@ function GuideChat({ messages, guideName, guideEmoji, onSuggestion }) {
 
 function SessionChatView({
   blocks, loading, loadingNote = '', input, onInputChange, onSend,
+  // A reader passage quoted into the next message (lib/quotedMessage.js).
+  quote = null, onQuoteClear,
   topic, subject, agentName, agentEmoji, mode, reference = null,
   userTurns, onSummarize, showSummarize,
   recording, onToggleRecording, seconds,
@@ -500,13 +504,15 @@ function SessionChatView({
               value={input}
               onChange={onInputChange}
               onSend={guide?.onSend ? () => guide.onSend(input) : undefined}
-              placeholder={t('teaching.guide_ph')}
+              placeholder={quote ? 'Ask about this passage…' : t('teaching.guide_ph')}
+              quote={quote}
+              onQuoteClear={onQuoteClear}
               bookAction={onOpenReader}
               boardAction={onOpenBoard}
               bookLabel="Open reading material"
               modelLabel="Guide"
               modelLabelDescription="Your guide leads this session"
-              sendDisabled={!input.trim()}
+              sendDisabled={!input.trim() && !quote}
             />
           </div>
         ) : (
@@ -515,7 +521,9 @@ function SessionChatView({
             value={input}
             onChange={onInputChange}
             onSend={onSend}
-            placeholder={t('teaching.explain_ph').replace('{name}', agentName)}
+            placeholder={quote ? 'Ask about this passage…' : t('teaching.explain_ph').replace('{name}', agentName)}
+            quote={quote}
+            onQuoteClear={onQuoteClear}
             bookAction={onOpenReader}
               boardAction={onOpenBoard}
             bookLabel="Open reading material"
@@ -527,7 +535,7 @@ function SessionChatView({
             attachmentLabel="Attachments are not available in teaching sessions yet"
             modelLabel="Adaptive"
             modelLabelDescription="The teaching guide selects the response mode"
-            sendDisabled={!input.trim()}
+            sendDisabled={!input.trim() && !quote}
           />
         </div>
         )}

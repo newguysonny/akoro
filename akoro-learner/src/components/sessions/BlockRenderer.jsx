@@ -3,6 +3,8 @@ import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, AGENT_STYLES } from 
 import { ZapIcon, ChevDownIcon, Icon } from '../common/Icons.jsx';
 import { AgentAvatar } from '../common/AgentAvatar.jsx';
 import { citeLabel, inlinePieces, toReaderCite } from '../../lib/askAnswer.js';
+import { parseQuoted } from '../../lib/quotedMessage.js';
+import QuoteChip from '../common/QuoteChip.jsx';
 
 /* Where a step sits in the arc of the topic. Four kinds, because that is the
    shape of learning something: name it, see how it works, use it, tie it
@@ -435,7 +437,11 @@ function BlockRenderer({ block, agentName, agentEmoji, onCite = null }) {
             {block.modality === "live" ? <><Icon name="ti-microphone" size={10}/> Voice</> : <><Icon name="ti-headphones" size={10}/> Audio</>}
           </span>
         )}
-        {block.text}
+        {(() => {
+          // A reader passage the learner quoted shows as a card above their words.
+          const { quote, question } = parseQuoted(block.text);
+          return <><QuoteChip quote={quote} inBubble/>{question}</>;
+        })()}
         {block.audioUrl && <AudioPlayer url={block.audioUrl} dark={false} />}
       </div>
     </div>

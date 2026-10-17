@@ -1691,7 +1691,8 @@ export default function SessionReaderModal({
     if (action === "explain") {
       // "Explain" hands the selection to the live session's tutor — on mobile
       // the reader steps aside so the chat (and the prefilled input) is visible.
-      onExplainSelection?.(truncated);
+      // The whole passage (capped in lib/quotedMessage.js) and its page.
+      onExplainSelection?.(text, { pageNumber: Number.isInteger(selection?.pageIndex) ? selection.pageIndex + 1 : null });
     } else {
       openForm(action, truncated);
     }

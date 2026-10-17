@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { BRAND } from '../../constants.js';
 import { Icon } from './Icons.jsx';
+import QuoteChip from './QuoteChip.jsx';
 
 /*
  * The layout is adapted from akoro-learner/reference/FortizoApp.jsx's
@@ -161,8 +162,15 @@ export default function FortizoChatComposer({
   running = false,
   onStop,
   stopLabel = 'Stop',
+  // A reader passage quoted into this message ({ text, pageNumber }), shown
+  // above the input with a remove control (the copilot pattern).
+  quote = null,
+  onQuoteClear,
 }) {
   const composerRef = useRef(null);
+  const inputRef = useRef(null);
+  // A new quote puts the cursor in the input, ready for the question.
+  useEffect(() => { if (quote?.text) inputRef.current?.focus({ preventScroll: true }); }, [quote]);
   const inputDisabled = disabled;
   const canSend = !disabled && !sendDisabled;
 
@@ -183,7 +191,9 @@ export default function FortizoChatComposer({
       borderRadius: 25, background: surface, boxShadow: dark ? 'none' : '0 4px 14px rgba(30,41,59,.055)',
       transition: 'border-color .16s, box-shadow .16s',
     }}>
+      <QuoteChip quote={quote} onClear={onQuoteClear} dark={dark}/>
       <input
+        ref={inputRef}
         value={value}
         onChange={event => onChange?.(event.target.value)}
         onKeyDown={sendFromKeyboard}

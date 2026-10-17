@@ -8,6 +8,7 @@ import { API, apiGet } from '../../services/api.js';
 const AGENT_CONFIG = { name: '', emoji: '🤖', guideName: 'NaNa Esumai', guideEmoji: '🧠', guideRenderStyle: {} };
 import { XIcon, SparkleIcon, ZapIcon, BrainIcon, Icon } from '../common/Icons.jsx';
 import SessionChatView from './SessionChatView.jsx';
+import { makeQuote, withQuote } from '../../lib/quotedMessage.js';
 import SessionReaderModal, { buildSessionReaderPages, useIsMobileView } from './SessionReaderModal.jsx';
 import WhiteboardModal from './WhiteboardModal.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
@@ -45,6 +46,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
   const [initLoading, setInitLoading] = useState(true);
   const [prepNote, setPrepNote] = useState('');   // shown while the lesson is being prepared
   const [input,      setInput]      = useState("");
+  const [quote,      setQuote]      = useState(null);   // a reader passage riding the next message
   const [recording,  setRecording]  = useState(false);
   const [seconds,    setSeconds]    = useState(0);
   const [loading,    setLoading]    = useState(false);
@@ -208,11 +210,14 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
     // every content object identity would fight the learner's own toggling.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content?.state, isMobileView]);
-  // "Ask the tutor" in the reader's selection popover: prefill the live
-  // session's input with the selection. On mobile the reader closes so the
-  // chat (and the prefill) is actually visible.
-  const explainSelection = (text) => {
-    setInput(`Please explain: "${text}"`);
+  // "Ask the tutor" in the reader's selection popover: the selection sits as
+  // a quote above the composer and the learner types their own question
+  // (the copilot pattern); both go in the next message. On mobile the reader
+  // closes so the chat (and the quote) is actually visible.
+  const explainSelection = (text, { pageNumber = null } = {}) => {
+    const q = makeQuote(text, pageNumber);
+    if (!q) return;
+    setQuote(q);
     if (isMobileView) setReaderOpen(false);
   };
 
@@ -232,9 +237,10 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
     }]);
   };
   const sendGuideMessage = (text) => {
-    const clean = String(text || "").trim();
+    const clean = withQuote(text, quote);
     if (!clean) return;
     setInput("");
+    setQuote(null);
     setGuideMessages(prev => {
       const next = [...prev, { role: "user", text: clean }];
       // One honest note that live guide replies are not wired yet — never
@@ -688,9 +694,10 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
   };
 
   const handleSend = async (overrideText, modality = "text", audioUrl = null) => {
-    const text = (overrideText ?? input).trim();
+    // A quoted passage rides the typed message only (not voice or a resend).
+    const text = overrideText != null ? String(overrideText).trim() : withQuote(input, quote);
     if (!text || loading) return;
-    if (!overrideText) setInput("");
+    if (overrideText == null) { setInput(""); setQuote(null); }
     lastModalityRef.current = modality;
     speakSeqRef.current += 1;            // invalidate any queued speech from the prior turn
     setBlocks(prev => [...prev, { type:"user", text, modality, audioUrl }]);
@@ -834,6 +841,8 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       input={input}
       onInputChange={setInput}
       onSend={handleSend}
+      quote={quote}
+      onQuoteClear={() => setQuote(null)}
       topic={topic}
       subject={subject}
       reference={config?.reference || null}
