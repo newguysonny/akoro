@@ -1,12 +1,12 @@
 /**
- * The learner app as the frontend gate runs it in LOCAL mode: the normal
- * Vite config, built into UI_GATE_DIST and served by `vite preview` on
+ * The app as the frontend gate runs it in LOCAL mode: its normal Vite config
+ * (UI_GATE_BASE_CONFIG — the learner app's, or the instructor app's), built into UI_GATE_DIST and served by `vite preview` on
  * localhost, with /api and /socket.io passed through to the live API
  * (UI_GATE_API). The app and its API share one origin, so
  * cookies and CORS behave like production without the deployed site.
  */
 import { defineConfig } from 'vite';
-import base from '../vite.config.js';
+const base = (await import(process.env.UI_GATE_BASE_CONFIG || '../vite.config.js')).default;
 
 const target = process.env.UI_GATE_API || 'https://api.akoro.name.ng';
 const port = Number(process.env.UI_GATE_PORT || 4321);

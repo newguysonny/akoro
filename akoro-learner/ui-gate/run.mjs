@@ -3,7 +3,7 @@
  * The frontend gate — run the learner app's journeys in a real browser and
  * print a verdict (README.md beside this file).
  *
- *   node ui-gate/run.mjs [--target local|live] [--suite reader|auth|all]
+ *   node ui-gate/run.mjs [--target local|live] [--suite reader|auth|chat|all|instructor]
  *                        [--scenario name] [--device phone,desktop]
  *                        [--learner tester17] [--headed] [--out dir]
  *                        [--no-build]   (local: reuse the last build)
@@ -13,7 +13,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runGate } from './lib/gate.mjs';
-import { SUITES, ALL } from './scenarios/index.mjs';
+import { SUITES, ALL, PORTAL_OF } from './scenarios/index.mjs';
 
 const args = process.argv.slice(2);
 const opt = (name, fallback = null) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : fallback; };
@@ -21,6 +21,8 @@ const flag = (name) => args.includes(`--${name}`);
 
 const target = opt('target', process.env.UI_GATE_APP ? 'live' : 'local');
 const suite = opt('suite', 'all');
+// The instructor app's suites run against the instructor app (its own build and sign-in).
+let portal = PORTAL_OF[suite] || 'student';
 const only = opt('scenario');
 let scenarios = SUITES[suite];
 if (!scenarios) { console.error(`Unknown suite "${suite}". Suites: ${Object.keys(SUITES).join(', ')}`); process.exit(2); }
@@ -32,14 +34,15 @@ if (only) {
   const add = (n) => { if (want.has(n)) return; want.add(n); (byName.get(n).needs || []).forEach(add); };
   add(only);
   scenarios = ALL.filter((s) => want.has(s.name));
+  portal = byName.get(only).portal || portal;
 }
 const deviceNames = String(opt('device', 'phone,desktop')).split(',').map((s) => s.trim()).filter(Boolean);
 const outDir = path.resolve(opt('out', path.join(path.dirname(fileURLToPath(import.meta.url)), '.out')));
 
-const report = await runGate({ target, app: opt('app', process.env.UI_GATE_APP), api: opt('api', process.env.UI_GATE_API || 'https://api.akoro.name.ng'),
-  learner: opt('learner', process.env.UI_GATE_LEARNER || 'tester17'), scenarios, deviceNames, outDir, headed: flag('headed'), build: !flag('no-build') });
+const report = await runGate({ target, portal, app: opt('app', process.env.UI_GATE_APP), api: opt('api', process.env.UI_GATE_API || 'https://api.akoro.name.ng'),
+  learner: opt('learner', process.env.UI_GATE_LEARNER) || undefined, scenarios, deviceNames, outDir, headed: flag('headed'), build: !flag('no-build') });
 
-console.log(`\nFrontend gate · ${report.target} · ${report.app || '(no app)'} → ${report.api} · as ${report.learner}`);
+console.log(`\nFrontend gate · ${report.portal} · ${report.target} · ${report.app || '(no app)'} → ${report.api} · as ${report.learner}`);
 for (const s of report.scenarios) {
   console.log(`  ${s.verdict.padEnd(12)} ${s.name} [${s.device}]${s.reason ? ` — ${s.reason}` : ''}`);
   for (const c of s.checks || []) if (!c.passed) console.log(`      ✗ ${c.name}${'expected' in c ? ` (expected ${JSON.stringify(c.expected)}, got ${JSON.stringify(c.actual)})` : 'actual' in c ? ` (got ${JSON.stringify(c.actual)})` : ''}`);

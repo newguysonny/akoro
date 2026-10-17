@@ -10,7 +10,12 @@ npm run ui-gate                                  # local build, all suites, phon
 node ui-gate/run.mjs --suite reader --device phone
 node ui-gate/run.mjs --scenario reader.quote_chip   # brings what it needs along
 UI_GATE_APP=https://akoro.name.ng node ui-gate/run.mjs --target live
+node ui-gate/run.mjs --suite instructor          # the instructor app, as tester51
 ```
+
+**The instructor app** — suite `instructor` builds `akoro-instructor` instead
+(the same pass-through to the API) and signs in with portal `instructor` as
+an instructor test account (`tester51` by default, `--learner tester52`).
 
 **Verdicts** — `PASS` every check held · `FAIL` a check did not (screenshot +
 video in `ui-gate/.out/`) · `BLOCKED` a precondition was missing, with the

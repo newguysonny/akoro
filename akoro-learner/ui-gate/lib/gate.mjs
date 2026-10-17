@@ -1,9 +1,10 @@
 /**
  * ui-gate/lib/gate.mjs — the frontend gate's runner.
  *
- * Drives the REAL learner app in a real browser, signed in as a seeded test
- * learner (tester01–tester50 @demo.akoro.app, never a real account), and
- * gives every scenario a verdict like the API gate does:
+ * Drives the REAL learner app — or, with portal "instructor", the instructor
+ * app — in a real browser, signed in as a seeded test account
+ * (tester01–tester52 @demo.akoro.app, never a real account), and gives every
+ * scenario a verdict like the API gate does:
  *
  *   PASS     every check held
  *   FAIL     a check did not hold (screenshot + video kept)
@@ -27,7 +28,11 @@ import { fileURLToPath } from 'node:url';
 import { chromium, devices as pwDevices } from 'playwright';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const APP_ROOT = path.resolve(HERE, '../..');
+/** The app each portal is: its checkout, and the X-Akoro-Portal it signs in with. */
+export const PORTALS = {
+  student: { root: path.resolve(HERE, '../..'), defaultAccount: 'tester17' },
+  instructor: { root: path.resolve(HERE, '../../../akoro-instructor'), defaultAccount: 'tester51' },
+};
 const DEMO_PASSWORD = 'Password123!';
 export const TESTER = /^tester\d{2}$/i;
 
@@ -50,27 +55,27 @@ export const EDGE_HEADER = (() => {
 class Blocked extends Error { constructor(m) { super(m); this.name = 'Blocked'; } }
 
 /* ── local target: this checkout, built and served, API passed through ── */
-function runVite(args, env) {
-  const child = spawn(process.execPath, [path.join(APP_ROOT, 'node_modules/vite/bin/vite.js'), ...args, '--config', path.join(HERE, '../vite.gate.config.mjs')],
-    { cwd: APP_ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
+function runVite(args, env, root) {
+  const child = spawn(process.execPath, [path.join(root, 'node_modules/vite/bin/vite.js'), ...args, '--config', path.join(HERE, '../vite.gate.config.mjs')],
+    { cwd: root, env: { ...env, UI_GATE_BASE_CONFIG: path.join(root, 'vite.config.js') }, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = '';
   child.stdout.on('data', (d) => { log += d; });
   child.stderr.on('data', (d) => { log += d; });
   return { child, log: () => log };
 }
 
-async function startLocalApp({ api, port, dist, build = true }) {
+async function startLocalApp({ api, port, dist, build = true, root }) {
   const env = {
     ...process.env,
     UI_GATE_API: api, UI_GATE_PORT: String(port), UI_GATE_DIST: dist,
     VITE_API_URL: `http://127.0.0.1:${port}`,
   };
   if (build) {
-    const b = runVite(['build', '--logLevel', 'warn'], env);
+    const b = runVite(['build', '--logLevel', 'warn'], env, root);
     const code = await new Promise((r) => b.child.on('exit', r));
     if (code !== 0) throw new Blocked(`building the app failed: ${b.log().slice(-600)}`);
   }
-  const { child, log } = runVite(['preview'], env);
+  const { child, log } = runVite(['preview'], env, root);
   const url = `http://127.0.0.1:${port}`;
   for (let i = 0; i < 60; i++) {
     if (child.exitCode != null) throw new Blocked(`the local app did not start: ${log().slice(-400)}`);
@@ -124,13 +129,13 @@ function transport(context, appPage) {
 }
 
 /* ── sign-in, through the app's own login ───────────────────────────────── */
-async function signIn(send, { authBase, learner }) {
+async function signIn(send, { authBase, learner, portal = 'student' }) {
   const username = String(learner || '').replace(/^@/, '');
-  if (!TESTER.test(username)) throw new Blocked(`the frontend gate signs in only as a test learner (tester01–tester50), not "${learner}"`);
+  if (!TESTER.test(username)) throw new Blocked(`the frontend gate signs in only as a test account (tester01–tester52), not "${learner}"`);
   const email = `${username.toLowerCase()}@demo.akoro.app`;
   let r;
   try {
-    r = await send({ method: 'POST', url: `${authBase}/api/auth/login`, headers: { 'X-Akoro-Portal': 'student' },
+    r = await send({ method: 'POST', url: `${authBase}/api/auth/login`, headers: { 'X-Akoro-Portal': portal },
       data: { email, password: process.env.UI_GATE_PASSWORD || DEMO_PASSWORD } });
   } catch (e) { throw new Blocked(`the API did not answer the login: ${e.message}`); }
   const body = r.body || {};
@@ -149,7 +154,7 @@ async function signIn(send, { authBase, learner }) {
 }
 
 /* ── one scenario's toolkit ─────────────────────────────────────────────── */
-function toolkit({ page, context, app, api, session, state, outDir, scenario, device, network, send }) {
+function toolkit({ page, context, app, api, session, state, outDir, scenario, device, network, send, portal = 'student' }) {
   const checks = [];
   const notes = [];
   const cleanups = [];
@@ -165,7 +170,7 @@ function toolkit({ page, context, app, api, session, state, outDir, scenario, de
       // http://127.0.0.1 the request client holds back a Secure cookie the
       // browser would send. Live: the page's own cookies.
       const r = await send({ method, url: `${api}${p}`, data,
-        headers: { 'X-Akoro-Portal': 'student', ...(send.local ? { Cookie: `akoro_access_student=${session.accessToken}` } : {}) } });
+        headers: { 'X-Akoro-Portal': portal, ...(send.local ? { Cookie: `akoro_access_${portal}=${session.accessToken}` } : {}) } });
       return { status: r.status, body: r.body };
     },
     check,
@@ -186,10 +191,10 @@ function toolkit({ page, context, app, api, session, state, outDir, scenario, de
  * `needs` names scenarios that must have passed first.
  */
 export async function runGate({ target = 'local', app = process.env.UI_GATE_APP, api = process.env.UI_GATE_API || 'https://api.akoro.name.ng',
-  learner = process.env.UI_GATE_LEARNER || 'tester17', scenarios, deviceNames = ['phone', 'desktop'], outDir, port = 4321, headed = false, video = true, build = true } = {}) {
+  portal = 'student', learner = process.env.UI_GATE_LEARNER || PORTALS[portal]?.defaultAccount || 'tester17', scenarios, deviceNames = ['phone', 'desktop'], outDir, port = 4321, headed = false, video = true, build = true } = {}) {
   await rm(outDir, { recursive: true, force: true });
   await mkdir(outDir, { recursive: true });
-  const report = { target, app: null, api, learner, startedAt: new Date().toISOString(), scenarios: [] };
+  const report = { target, portal, app: null, api, learner, startedAt: new Date().toISOString(), scenarios: [] };
   let local = null;
   let browser = null;
   const blockAll = (reason) => {
@@ -197,7 +202,8 @@ export async function runGate({ target = 'local', app = process.env.UI_GATE_APP,
   };
   try {
     if (target === 'local') {
-      local = await startLocalApp({ api, port, dist: path.join(path.dirname(outDir), '.dist'), build });
+      if (!PORTALS[portal]) throw new Blocked(`unknown portal "${portal}" (${Object.keys(PORTALS).join(', ')})`);
+      local = await startLocalApp({ api, port, dist: path.join(path.dirname(outDir), portal === 'student' ? '.dist' : `.dist-${portal}`), build, root: PORTALS[portal].root });
       report.app = local.url;
     } else {
       if (!app) throw new Blocked('live target needs UI_GATE_APP (the deployed app URL)');
@@ -237,7 +243,7 @@ export async function runGate({ target = 'local', app = process.env.UI_GATE_APP,
       send.local = !appPage;
       let session;
       try {
-        session = await signIn(send, { authBase, learner });
+        session = await signIn(send, { authBase, learner, portal });
       } catch (e) {
         for (const s of scenarios) report.scenarios.push({ name: s.name, device: deviceName, verdict: 'BLOCKED', reason: e.message, checks: [] });
         await context.close();
@@ -262,7 +268,7 @@ export async function runGate({ target = 'local', app = process.env.UI_GATE_APP,
           verdictOf.set(scenario.name, 'BLOCKED');
           continue;
         }
-        const t = toolkit({ page, context, app: report.app, api: authBase, session, state, outDir, scenario, device: deviceName, network, send });
+        const t = toolkit({ page, context, app: report.app, api: authBase, session, state, outDir, scenario, device: deviceName, network, send, portal });
         const t0 = Date.now();
         const errorsBefore = consoleErrors.length;
         let verdict, reason = null;
