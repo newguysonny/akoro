@@ -37,6 +37,7 @@ export const paperStructured = {
     const qs = Array.isArray(paper.questions) ? paper.questions : [];
     ctx.note(`warning: ${paper.warning || "none"} · ${JSON.stringify(qs.map((q) => ({ type: q.type, space: q.answer_space, marking: !!q.marking })))}`);
     ctx.expect.eq("4 questions", qs.length, 4);
+    ctx.expect.eq("the paper matches the request (no warning)", paper.warning || null, null);
     ctx.expect.ok("every question has an answer space", qs.every((q) => SPACES.includes(q.answer_space)), qs.map((q) => q.answer_space));
     ctx.expect.ok("every question has a marking-scheme line", qs.every((q) => typeof q.marking === "string" && q.marking.trim()), qs.map((q) => q.marking));
     const mcq = qs.filter((q) => Array.isArray(q.options));
@@ -186,6 +187,7 @@ function chatToSubmission(c) {
       ctx.expect.ok("every question has an answer space", qs.every((q) => SPACES.includes(q.answer_space)), qs.map((q) => q.answer_space));
       ctx.expect.ok("every question has a marking-scheme line", qs.every((q) => typeof q.marking === "string" && q.marking.trim()), qs.map((q) => q.marking || null));
       ctx.expect.ok("multiple choice keeps its key", qs.filter(isMcq).every((q) => Number.isInteger(q.correct)));
+      ctx.expect.eq("the paper matches the request (no warning for the teacher)", v1.warning || null, null);
       c.check(ctx, qs, paper);
       if (!qs.length) return;
 

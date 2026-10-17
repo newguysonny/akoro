@@ -380,6 +380,31 @@ function normalizeQuestion(q, { options = null } = {}) {
   return out;
 }
 
+/**
+ * A question whose type isn't one of the plan's labels (the model wrote its
+ * answer space, "lines", or a format, "true_false", there) takes the label of
+ * a plan kind it fits that still has room — its format first, then a gap
+ * question for "Fill in the gap", working for "Calculation", then any kind of
+ * the same shape. So the mix check counts what is really there.
+ */
+function relabelToPlan(questions, plan) {
+  const mix = plan?.mix || [];
+  if (!mix.length) return;
+  const room = new Map(mix.map((x) => [x.label, x.count - questions.filter((q) => q.type === x.label).length]));
+  const fits = (x, q) => (x.format ? q.format === x.format
+    : !q.format && (x.kind === "mcq") === Array.isArray(q.options) && x.kind !== "label");
+  const score = (x, q) => (x.format && q.format === x.format ? 3
+    : q.answer_space === "blank" && /fill/i.test(x.label) ? 2
+      : q.answer_space === "working" && /calculat/i.test(x.label) ? 2 : 1);
+  for (const q of questions) {
+    if (room.has(q.type)) continue;
+    const best = mix.filter((x) => room.get(x.label) > 0 && fits(x, q)).sort((a, b) => score(b, q) - score(a, q))[0];
+    if (!best) continue;
+    q.type = best.label;
+    room.set(best.label, room.get(best.label) - 1);
+  }
+}
+
 /** The model's first-draft JSON → { instructions, questions, sections?, passages? }. */
 export function normalizePaper(json, plan = {}) {
   const j = json && typeof json === "object" ? json : {};
@@ -402,6 +427,7 @@ export function normalizePaper(json, plan = {}) {
       if (Number.isInteger(q.passage) && !passages[q.passage]?.text) delete q.passage;
       return q;
     });
+  relabelToPlan(questions, plan);
   const usedS = questions.some((q) => Number.isInteger(q.section));
   const usedP = questions.some((q) => Number.isInteger(q.passage));
   return {

@@ -36,7 +36,7 @@ const LIST = (items, description) => ({ type: ["array", "null"], items, ...(desc
 /** One question's fields — strict mode: every field present, null when unused. */
 const QUESTION_PROPS = {
   text: S("The question as printed. A fill-in-the-gap question marks its gap with ____."),
-  type: S("The question kind's label, exactly as the plan names it (e.g. \"MCQ\", \"Theory\")."),
+  type: S("The question kind's label, exactly as the request names it (e.g. \"MCQ\", \"True or false\", \"Fill in the gap\") — never the answer space or format."),
   format: { type: ["string", "null"], enum: ["true_false", "assertion_reason", "label", "case_study", null] },
   answer_space: { type: ["string", "null"], enum: [...ANSWER_SPACES, null],
     description: "options: circle a letter · true_false: tick True or False · lines: a few written lines · working: a box to show working, then \"Answer: ___\" · blank: fill the ____ in the sentence · labels: name each labelled part" },

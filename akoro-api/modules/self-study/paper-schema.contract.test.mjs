@@ -216,3 +216,15 @@ test("the type's kind decides the shape: an MCQ marked true_false keeps its opti
   const p2 = normalizePaper({ questions: [sq({ text: "Solve 2x = 6", type: "Calculation", answer_space: "options" })] });
   assert.equal(p2.questions[0].answer_space, "working");
 });
+
+test("a type written as the answer space or format takes the plan's label for that kind", () => {
+  const plan = mergePlan(parseQuestionRequest("4 questions: 2 true or false, 1 fill in the gap and 1 short answer"), null);
+  const paper = normalizePaper({ instructions: "x", sections: null, passages: null, questions: [
+    sq({ text: "Plants make food in light.", type: "true_false", format: "true_false", options: ["True", "False"], correct: 0, answer_space: "true_false" }),
+    sq({ text: "Roots make food.", type: "true_false", format: "true_false", options: ["True", "False"], correct: 1, answer_space: "true_false" }),
+    sq({ text: "Plants take in ____ from the air.", type: "blank", answer_space: "blank", answer: "carbon dioxide" }),
+    sq({ text: "Why are leaves green?", type: "lines", answer_space: "lines" }),
+  ] }, plan);
+  assert.deepEqual(paper.questions.map((q) => q.type), ["True or false", "True or false", "Fill in the gap", "Short answer"]);
+  assert.deepEqual(checkPaper(paper, plan), []);
+});
