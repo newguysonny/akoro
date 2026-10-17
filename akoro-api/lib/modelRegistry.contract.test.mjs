@@ -23,7 +23,9 @@ test("unset AI_MODELS: today's catalogue and default — nothing changes", () =>
   const r = createModelRegistry({});
   assert.equal(r.defaultId, "gpt-4o-mini");
   assert.equal(r.resolveModel({ role: "controller" }).id, "gpt-4o-mini");
-  assert.ok(r.catalogue.every((e) => e.provider === "openai"));
+  assert.deepEqual(r.catalogue.filter((e) => e.selectable).map((e) => e.id),
+    ["gpt-4o-mini", "gpt-4.1", "claude-haiku", "claude-sonnet", "claude-opus", "claude-fable", "grok", "deepseek"], "the picker's models live here now");
+  assert.ok(r.catalogue.filter((e) => !e.selectable).every((e) => e.provider === "openai"), "the rest of the price table: OpenAI, not pickable");
   assert.ok(!r.get("text-embedding-3-small"), "embeddings are not chat models");
   assert.equal(createModelRegistry({ OPENAI_MODEL: "gpt-4.1" }).defaultId, "gpt-4.1", "legacy OPENAI_MODEL is honoured");
   assert.equal(createModelRegistry({ OPENAI_MODEL: "gpt-4.1", AI_MODEL_DEFAULT: "gpt-4o" }).defaultId, "gpt-4o");
@@ -53,22 +55,25 @@ test("resolution: locked role → learner's choice (only when allowed) → role 
   assert.equal(off.resolveModel({ role: "chat", learnerChoice: "claude-sonnet" }).id, "gpt-4o-mini", "picker off: the choice is ignored");
   assert.match(off.resolve({ role: "chat", learnerChoice: "claude-sonnet" }).notice, /model choice is off/);
 
-  const on = reg({ AI_MODEL_PICKER_ENABLED: "true", AI_MODEL_ROLE_PERSONA: "claude-opus" });
+  const KEYS = { OPENAI_API_KEY: "k", ANTHROPIC_API_KEY: "k", XAI_API_KEY: "k" };
+  assert.equal(reg({ AI_MODEL_PICKER_ENABLED: "true" }).resolveModel({ role: "chat", learnerChoice: "claude-sonnet" }).id, "gpt-4o-mini", "no Claude key here: not set up, so not used");
+  const on = reg({ ...KEYS, AI_MODEL_PICKER_ENABLED: "true", AI_MODEL_ROLE_PERSONA: "claude-opus" });
   assert.equal(on.resolveModel({ role: "chat", learnerChoice: "claude-sonnet" }).id, "claude-sonnet");
   assert.equal(on.resolve({ role: "chat", learnerChoice: "claude-sonnet" }).source, "learner");
   assert.equal(on.resolveModel({ role: "chat", learnerChoice: "claude-sonnet", allowedModels: ["grok"] }).id, "gpt-4o-mini", "not in the plan's list");
   assert.equal(on.resolveModel({ role: "controller", learnerChoice: "plain" }).id, "gpt-4o-mini", "a controller needs tool calling");
-  assert.equal(on.resolveModel({ role: "chat", learnerChoice: "gpt-4.1" }).id, "gpt-4o-mini", "built-in models aren't selectable");
+  assert.equal(on.resolveModel({ role: "chat", learnerChoice: "gpt-4o" }).id, "gpt-4o-mini", "price-table models aren't selectable");
   // Grading is fixed by env, whatever the learner picks.
   assert.equal(on.resolveModel({ role: "assessor", learnerChoice: "claude-sonnet" }).id, "gpt-4o-mini");
   assert.equal(reg({ AI_MODEL_ROLE_ASSESSOR: "claude-opus" }).resolveModel({ role: "assessor" }).id, "claude-opus");
   // Role env default, and extra locked roles.
   assert.equal(on.resolveModel({ role: "persona" }).id, "claude-opus");
-  const locked = reg({ AI_MODEL_PICKER_ENABLED: "true", AI_MODEL_LOCKED_ROLES: "chat" });
+  const locked = reg({ ...KEYS, AI_MODEL_PICKER_ENABLED: "true", AI_MODEL_LOCKED_ROLES: "chat" });
   assert.equal(locked.resolveModel({ role: "chat", learnerChoice: "claude-sonnet" }).id, "gpt-4o-mini");
   assert.throws(() => on.resolveModel({ role: "boss" }), /Unknown model role/);
   // What the picker may list.
-  assert.deepEqual(on.selectable().map((e) => e.id).sort(), ["claude-opus", "claude-sonnet", "grok", "plain"]);
+  assert.deepEqual(on.selectable().map((e) => e.id).sort(),
+    ["claude-fable", "claude-haiku", "claude-opus", "claude-sonnet", "gpt-4.1", "gpt-4o-mini", "grok", "plain"], "DeepSeek: no key here");
   assert.deepEqual(on.selectable(["grok"]).map((e) => e.id), ["grok"]);
 });
 

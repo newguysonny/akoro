@@ -16,33 +16,39 @@ test("available only when configured AND callable here; everything else is comin
   const list = publicModelList(env);
   const by = Object.fromEntries(list.map((m) => [m.id, m]));
   assert.equal(by["gpt-4.1"].available, true);
-  assert.equal(by["claude-sonnet"].available, false);          // key set, but no Anthropic adapter yet
-  assert.match(by["claude-sonnet"].note, /Coming soon/);
-  assert.equal(by.grok.available, false);
+  assert.equal(by["claude-sonnet"].available, true);           // key set, and the Claude adapter calls it
+  assert.equal(publicModelList({ OPENAI_API_KEY: "k" }).find((m) => m.id === "claude-sonnet").available, false);
+  assert.match(publicModelList({ OPENAI_API_KEY: "k" }).find((m) => m.id === "claude-sonnet").note, /Coming soon/);
+  assert.equal(by.grok.available, false);                        // model id from env, but no price yet → never billed blind
   assert.equal(by.deepseek.available, false);
   assert.equal(publicModelList({}).find((m) => m.id === "gpt-4.1").available, false);   // no OpenAI key → not offered
   assert.ok(list.every((m) => !("apiModel" in m) && !("envModel" in m)));                // no internals to the browser
-  assert.deepEqual(SUPPORTED_PROVIDERS, ["openai"]);
+  assert.deepEqual([...SUPPORTED_PROVIDERS].sort(), ["anthropic", "openai", "openai_compatible"]);
 });
 
-test("AI_MODELS adds, overrides and switches off entries; bad JSON keeps the built-ins", () => {
+test("AI_MODELS adds, overrides and switches off entries; bad JSON or a missing price fails boot", () => {
   const env = { OPENAI_API_KEY: "k", AI_MODELS: JSON.stringify([
     { id: "gpt-4.1", enabled: false },
-    { id: "gpt-4.1-mini", provider: "openai", apiModel: "gpt-4.1-mini", label: "GPT-4.1 mini" },
+    { id: "gpt-4.1-mini", provider: "openai", apiModel: "gpt-4.1-mini", label: "GPT-4.1 mini", price: { in: 0.4, out: 1.6 }, selectable: true },
+    { id: "grok", price: { in: 3, out: 15 } },
     { id: "deepseek", selectable: false },
   ]) };
   const list = publicModelList(env);
   assert.equal(list.find((m) => m.id === "gpt-4.1").available, false);
   assert.equal(list.find((m) => m.id === "gpt-4.1-mini").available, true);
   assert.ok(!list.some((m) => m.id === "deepseek"));
-  assert.equal(modelCatalogue({ AI_MODELS: "{nope" }).length, 8);
+  assert.equal(publicModelList({ ...env, XAI_API_KEY: "k", XAI_MODEL: "grok-x" }).find((m) => m.id === "grok").available, true);
+  assert.throws(() => modelCatalogue({ AI_MODELS: "{nope" }), /valid JSON/);
+  assert.throws(() => modelCatalogue({ AI_MODELS: JSON.stringify([{ id: "x", provider: "openai", apiModel: "x" }]) }), /price/);
   assert.equal(modelAvailability({ provider: "openai", apiModel: "x", enabled: false }, env).available, false);
 });
 
 test("a learner's pick resolves to an API model only when available", () => {
   const env = { OPENAI_API_KEY: "k", ANTHROPIC_API_KEY: "k" };
   assert.equal(resolveChatModel("gpt-4.1", env), "gpt-4.1");
-  assert.equal(resolveChatModel("claude-opus", env), null);
+  assert.equal(resolveChatModel("claude-opus", env), "claude-opus-5-5");
+  assert.equal(resolveChatModel("claude-opus", { OPENAI_API_KEY: "k" }), null);   // no Claude key → keep the default
+  assert.equal(resolveChatModel("gpt-4o", env), null);                            // in the price table, not the picker
   assert.equal(resolveChatModel("gpt-5-ultra-free", env), null);
   assert.equal(resolveChatModel({ id: "x" }, env), null);
 });
