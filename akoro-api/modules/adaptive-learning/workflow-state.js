@@ -24,7 +24,9 @@ export function canTransitionWorkflow(from, to) {
 export function workflowEvent({ state, attempt = null, score = null }) {
   if (!WORKFLOW_STATES.has(state)) throw new Error("Unknown workflow state");
   const cleanAttempt = Number.isInteger(Number(attempt)) && Number(attempt) > 0 ? Number(attempt) : null;
-  const cleanScore = Number.isFinite(Number(score)) ? Math.max(0, Math.min(1, Number(score))) : null;
+  // No score is no score: Number(null) is 0, which used to overwrite the
+  // learner's earlier diagnostic score with 0 when a retest started.
+  const cleanScore = score != null && score !== "" && Number.isFinite(Number(score)) ? Math.max(0, Math.min(1, Number(score))) : null;
   const label = {
     researching: "Preparing approved study context",
     planned: "Practice plan ready",
