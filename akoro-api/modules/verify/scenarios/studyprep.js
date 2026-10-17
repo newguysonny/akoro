@@ -7,20 +7,19 @@ export const planCompletes = {
   params: { learner: { default: "@tester12" }, subject: { default: "Basic Science" }, classLevel: { default: "JSS1" } },
   async run(ctx, p) {
     const me = await ctx.as(p.learner);
-    // One active session per learner: clear a leftover from an earlier run first.
+    // One active session per learner: remove sessions earlier gate runs left
+    // (they carry a run marker in the goal), then cancel any other active one.
+    const stale = await ctx.db.deleteOwned("edu.study_prep_sessions", { ownerColumn: "learner_id", ownerId: me.id, filters: { goal: { like: "[verify:%" } } });
+    if (stale) ctx.note(`removed ${stale} leftover gate session(s)`);
     const active = await ctx.http({ as: p.learner, path: "/api/adaptive/study-prep/sessions" });
     const prior = active.body?.session;
     if (prior?.id) await ctx.http({ as: p.learner, method: "POST", path: `/api/adaptive/study-prep/sessions/${prior.id}/cancel`, body: {} });
+    // Registered before creating: even a failed create leaves nothing behind.
+    ctx.cleanup(() => ctx.db.deleteOwned("edu.study_prep_sessions", { ownerColumn: "learner_id", ownerId: me.id, filters: { goal: { like: `${ctx.marker}%` } } }));
 
     const made = await ctx.http({ as: p.learner, method: "POST", path: "/api/adaptive/study-prep/sessions",
       body: { goal: `${ctx.marker} Prepare for my ${p.classLevel} ${p.subject} test next week`, subject: p.subject, classLevel: p.classLevel, examBoard: "WAEC" } });
     const session = made.body?.session;
-    if (session?.id) {
-      ctx.cleanup(async () => {
-        await ctx.http({ as: p.learner, method: "POST", path: `/api/adaptive/study-prep/sessions/${session.id}/cancel`, body: {} });
-        await ctx.db.deleteOwned("edu.study_prep_sessions", { ownerColumn: "learner_id", ownerId: me.id, filters: { id: session.id } });
-      });
-    }
     ctx.expect.status("session created", made, 201);
     const events = made.body?.events || [];
     const failures = events.filter((e) => e.eventType === "observation" && e.facts?.ok === false).map((e) => e.facts?.error?.message || e.facts?.error || "error");
