@@ -41,7 +41,7 @@ export function makeLlmAgent({ system, contentSearchEnabled = false, learnerId =
         type: "object",
         properties: {
           intent: { type: "string", description: `One short sentence stating why you are doing this (max ${POLICY.INTENT_MAX_CHARS} characters).` },
-          args: { type: "object", description: "The tool arguments." },
+          args: { ...(tool.args || { type: "object" }), description: "The tool arguments." },
         },
         required: ["intent", "args"],
       },

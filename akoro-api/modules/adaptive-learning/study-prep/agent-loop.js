@@ -116,7 +116,8 @@ export async function runAgentStep({
       // resumable inside the practice op. The agent still SEES the code.
       insufficientBalance = error?.code === "insufficient_balance";
     }
-    observations.push(observation);
+    // The agent's transcript names the tool each observation answers.
+    observations.push({ tool: requested, ...observation });
     await store.appendEvents(sessionId, [makeEvent({
       sequence: 0, iteration, eventType: "observation", origin: "harness",
       topicId: topicId || null, facts: observation,

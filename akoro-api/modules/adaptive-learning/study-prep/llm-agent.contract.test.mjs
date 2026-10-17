@@ -10,7 +10,7 @@ process.env.SUPABASE_URL ||= "http://localhost:1";
 process.env.SUPABASE_SERVICE_KEY ||= "test";
 
 const { providerToolName } = await import("./llm-agent.js");
-const { llmFacingTools } = await import("../tools/registry.js");
+const { llmFacingTools, TOOL_DEFINITIONS, TOOL_ARGS } = await import("../tools/registry.js");
 
 const PROVIDER_NAME = /^[a-zA-Z0-9_-]{1,64}$/;
 
@@ -45,4 +45,18 @@ test("a Study Prep practice is charged once: flat price, platform-paid generatio
   // The standalone exam-prep route has no flat charge, so it stays metered.
   const route = readFileSync(new URL("../exam-prep-confidence.js", import.meta.url), "utf8");
   assert.doesNotMatch(route, /prepaid/);
+});
+
+test("every tool tells the model its arguments; planning tools take topic ids", () => {
+  for (const t of TOOL_DEFINITIONS) {
+    assert.equal(TOOL_ARGS[t.name]?.type, "object", `${t.name} has an argument schema`);
+  }
+  for (const name of ["propose_plan", "plan.validate", "session.replan"]) {
+    assert.deepEqual(TOOL_ARGS[name].required, ["topics"]);
+    assert.equal(TOOL_ARGS[name].properties.topics.type, "array");
+  }
+  assert.ok(TOOL_ARGS["syllabus.resolve"].properties.classLevel, "classLevel, the name execute() reads");
+  assert.ok(llmFacingTools().every((t) => t.args?.type === "object"));
+  const src = readFileSync(new URL("./llm-agent.js", import.meta.url), "utf8");
+  assert.match(src, /args: \{ \.\.\.\(tool\.args \|\| \{ type: "object" \}\)/);
 });
