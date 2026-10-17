@@ -72,7 +72,9 @@ test("websocket: the old starts are retired; start passes the chosen guide; swit
   assert.match(ws, /for \(const retired of \["start_session", "start_student_session", "start_decay_session"\]\)/);
   assert.match(ws, /code: "retired_event"/);
   assert.doesNotMatch(ws, /socket\.on\("start_session", async/);
-  assert.match(ws, /teacherAgentId:\s+typeof teacherAgentId === "string"/, "start_adaptive_session uses the learner's chosen guide");
+  const start = readFileSync(new URL("../teaching-session/start.js", import.meta.url), "utf8");
+  assert.match(ws, /prevSessionId, notificationId, reference: sessionReference, document, teacherAgentId,/, "start_adaptive_session passes the learner's chosen guide");
+  assert.match(start, /teacherAgentId: typeof teacherAgentId === "string" && teacherAgentId/);
   const sw = ws.slice(ws.indexOf('socket.on("switch_agent_pair"'), ws.indexOf("// ── get_knowledge_health"));
   for (const kept of ["sessionType:  priorOrchestrator?.sessionType", "decayPayload: priorOrchestrator?.decayPayload", "orchestrator.session.history = priorOrchestrator.session.history", "teachingEvidence: serialiseTeachingEvidence(priorOrchestrator?.teachingEvidence)", "phase: priorOrchestrator.session.phase"]) {
     assert.ok(sw.includes(kept), `switch keeps: ${kept}`);

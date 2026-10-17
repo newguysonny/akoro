@@ -7,6 +7,9 @@ const teachingSessionContext = await readFile(new URL("./teaching-session/contex
 const decayEngine = await readFile(new URL("./agents/student/decayEngine.js", import.meta.url), "utf8");
 const orchestrator = await readFile(new URL("./agents/student/orchestrator.js", import.meta.url), "utf8");
 const chat = await readFile(new URL("./chat.js", import.meta.url), "utf8");
+// Session preparation (continuation / decay loading) is shared by every
+// transport since D43 — the socket and the agent bridge both call it.
+const sessionStart = await readFile(new URL("./teaching-session/start.js", import.meta.url), "utf8");
 
 test("adaptive socket events use token identity rather than browser-supplied learner ids", () => {
   for (const event of [
@@ -19,11 +22,9 @@ test("adaptive socket events use token identity rather than browser-supplied lea
   assert.match(websocket, /payload\.userId = u\.id;/);
   assert.match(websocket, /payload\.studentId = u\.id;/);
 
-  const legacyStart = websocket.slice(
-    websocket.indexOf('socket.on("start_session"'),
-    websocket.indexOf('socket.on("start_student_session"'),
-  );
-  assert.doesNotMatch(legacyStart, /sessionId\s*\|\|/);
+  // The legacy starts are retired (D42): they answer with an error only.
+  assert.match(websocket, /for \(const retired of \["start_session", "start_student_session", "start_decay_session"\]\)/);
+  assert.match(websocket, /prepareTeachingSession\(\{\s*studentId, caller, topic, subject, mode,/);
 });
 
 test("continuation history is scoped to the authenticated learner", () => {
@@ -33,7 +34,7 @@ test("continuation history is scoped to the authenticated learner", () => {
     teachingSessionContext,
     /\.eq\("id", prevSessionId\)\s*\.eq\("student_id", studentId\)\s*\.maybeSingle\(\)/,
   );
-  assert.match(websocket, /loadContinuationContext\(\{ studentId, prevSessionId \}\)/);
+  assert.match(sessionStart, /loadContinuationContext\(\{ studentId, prevSessionId \}\)/);
 });
 
 test("decay-alert mutations are scoped to their authenticated owner", () => {
@@ -41,7 +42,7 @@ test("decay-alert mutations are scoped to their authenticated owner", () => {
   assert.match(decayEngine, /\.eq\("id", notificationId\)\s*\.eq\("student_id", studentId\)/);
   assert.match(decayEngine, /async markNotificationActioned\(notificationId, sessionId, studentId\)/);
   assert.match(orchestrator, /markNotificationActioned\(this\.notificationId, sessionId, studentId\)/);
-  assert.match(websocket, /markNotificationRead\(notificationId, studentId\)/);
+  assert.match(sessionStart, /markNotificationRead\(notificationId, studentId\)/);
   assert.match(websocket, /markNotificationRead\(notificationId, socket\.data\.user\.id\)/);
   assert.match(chat, /markNotificationRead\(req\.params\.notifId, req\.user\.id\)/);
 });

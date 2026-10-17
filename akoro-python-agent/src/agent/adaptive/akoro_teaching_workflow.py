@@ -59,8 +59,9 @@ class AkoroTeachingWorkflowSession:
     tool_context: str
 
     def start(self, *, topic: str, subject: str | None, teacher_agent_id: str | None,
-              mode: str, reference: dict[str, object] | None) -> dict[str, Any]:
-        response = self.client._post("/teaching-workflow/sessions", {
+              mode: str, reference: dict[str, object] | None,
+              previous_session_id: str | None = None, notification_id: str | None = None) -> dict[str, Any]:
+        payload: dict[str, Any] = {
             "sessionId": self.session_id,
             "toolContext": self.tool_context,
             "topic": topic,
@@ -68,7 +69,14 @@ class AkoroTeachingWorkflowSession:
             "teacherAgentId": teacher_agent_id,
             "mode": mode,
             "reference": reference,
-        })
+        }
+        # Akoro loads the earlier session (continuation) or the alert (decay)
+        # itself, after checking they belong to the capability's learner.
+        if previous_session_id:
+            payload["previousSessionId"] = previous_session_id
+        if notification_id:
+            payload["notificationId"] = notification_id
+        response = self.client._post("/teaching-workflow/sessions", payload)
         return _object(response, "session")
 
     def turn(self, *, message: str, turn_id: str | None) -> dict[str, Any]:

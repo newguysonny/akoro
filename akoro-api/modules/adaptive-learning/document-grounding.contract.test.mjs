@@ -7,6 +7,7 @@ process.env.SUPABASE_SERVICE_KEY ||= "test-service-key";
 
 const { resolveSessionDocument, groundTurn, passagesAsReference, citationsForReply } = await import("./documentGrounding.js");
 const ws = await readFile(new URL("./websocket.js", import.meta.url), "utf8");
+const sessionStart = await readFile(new URL("./teaching-session/start.js", import.meta.url), "utf8");
 const agent = await readFile(new URL("./agents/student/agent.js", import.meta.url), "utf8");
 
 const passages = [
@@ -57,7 +58,9 @@ test("the protégé's [n] become page/box or moment citations; reference text is
 
 test("the socket wires it: resolve at start (token identity), ground before the turn, cite after", () => {
   assert.match(ws, /document,\s+\/\/ \{ recordId \} \| \{ contentKey \}/);
-  assert.match(ws, /orchestrator\.documentTargetPromise = document \? resolveSessionDocument\(\{ userId: caller, document \}\) : null;/);
+  // Resolved in the shared session start (D43), against the token identity.
+  assert.match(sessionStart, /orchestrator\.documentTargetPromise = document \? resolveSessionDocument\(\{ userId: caller, document \}\) : null;/);
+  assert.match(ws, /prepareTeachingSession\(\{[^}]*document/);
   const turn = ws.slice(ws.indexOf('socket.on("teacher_message"'), ws.indexOf('socket.on("request_summary"'));
   assert.ok(turn.indexOf("groundTurn(") < turn.indexOf("processTeachingMessage("), "grounding happens before the turn runs");
   assert.match(turn, /orchestrator\.studentAgent\.referenceMaterial = grounding \? grounding\.reference : orchestrator\.referenceMaterial;/, "no grounding → the fixed reference again");

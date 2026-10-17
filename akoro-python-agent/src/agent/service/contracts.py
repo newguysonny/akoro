@@ -34,6 +34,11 @@ class StartSessionRequest(Contract):
         pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
     )
     mode: Literal["fresh", "continuation", "decay"] = "fresh"
+    # continuation: the earlier session's Akoro recordId (returned when it
+    # started). decay: the learner's decay alert, if the review came from one.
+    # Akoro checks both belong to the capability's learner.
+    previous_session_id: str | None = Field(default=None, alias="previousSessionId", min_length=36, max_length=36, pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+    notification_id: str | None = Field(default=None, alias="notificationId", min_length=36, max_length=36, pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
     # Opaque, short-lived capability created by Akoro API after it authenticates
     # and authorises the browser request. Python only relays it to the private
     # tools API and never parses it as identity or permission data.

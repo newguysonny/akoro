@@ -124,6 +124,8 @@ def create_app(
             conversation_id=payload.conversation_id,
             session_type=session_type,
             reference=SessionReference.from_payload(payload.reference.model_dump() if payload.reference else None),
+            previous_session_id=payload.previous_session_id,
+            notification_id=payload.notification_id,
         )
         try:
             return runtime.start(session)

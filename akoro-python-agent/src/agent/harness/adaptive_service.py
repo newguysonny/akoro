@@ -48,11 +48,16 @@ class AdaptiveServiceRuntime:
     def start(self, session: AdaptiveSession) -> dict:
         """Choose one authority for the complete session, before any turn starts.
 
-        A canonical Node session remains canonical for its full lifetime.  We
-        fall back only when establishing it reports an explicitly recoverable
-        outage; we never turn a previously started Node session into a local
-        one, because its evidence and progression state would diverge.
+        A canonical Node session remains canonical for its full lifetime, and
+        (D42/D43) when the Node workflow is configured it is the ONLY teaching
+        authority: fresh, continuation and decay all run there, saved to Akoro
+        and gated on evidence. A Node outage at start is surfaced as an error —
+        never a silent switch to the local loop, which saves nothing to Akoro
+        and has its own progression. The local loop remains for the standalone
+        evaluation mode (no Node workflow configured).
         """
+        if self._node_is_authority() and session.session_type == "continuation" and not session.previous_session_id:
+            raise ValueError("A continuation needs previousSessionId (the earlier session's recordId)")
         if self._can_use_node_workflow(session):
             remote = self.teaching_workflow_client.open_session(  # type: ignore[union-attr]
                 session_id=session.session_id, tool_context=session.tool_context or "",
@@ -62,10 +67,10 @@ class AdaptiveServiceRuntime:
                 ready = proxy.initialize()
                 self.sessions.create(proxy)  # type: ignore[arg-type]
                 return ready
-            except AkoroTeachingWorkflowError as exc:
-                if not exc.recoverable:
-                    raise
-                fallback_reason = "canonical_workflow_unavailable"
+            except AkoroTeachingWorkflowError:
+                # Recoverable or not: the canonical workflow owns teaching, so
+                # the caller sees the outage instead of an ungated local lesson.
+                raise
         else:
             fallback_reason = "not_eligible" if self.teaching_workflow_client else "not_configured"
 
@@ -88,6 +93,9 @@ class AdaptiveServiceRuntime:
         self.sessions.create(loop)
         return ready
 
+    def _node_is_authority(self) -> bool:
+        return bool(self.prefer_node_teaching_workflow and self.teaching_workflow_client)
+
     def _can_use_node_workflow(self, session: AdaptiveSession) -> bool:
         # The Node workflow owns its own conversation/evidence lifecycle. Keep
         # Python-only durable context and canonical-concept deployments local
@@ -96,7 +104,9 @@ class AdaptiveServiceRuntime:
             self.prefer_node_teaching_workflow
             and self.teaching_workflow_client
             and session.tool_context
-            and session.session_type == "free_teaching"
+            # All three modes: Akoro loads a continuation's earlier session
+            # and a review's decay context itself (D43).
+            and session.session_type in ("free_teaching", "continuation", "decay_review")
             and not session.conversation_id
             and not self.enable_concept_state
             and not self.enable_learning_insights

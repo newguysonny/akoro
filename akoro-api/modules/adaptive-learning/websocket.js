@@ -21,16 +21,17 @@ import {
   getTopicsBySubject,
 } from "./agents/student/knowledge.js";
 import { decayEngine } from "./agents/student/decayEngine.js";
-import { resolveLadder, provenanceLabel } from "./lessonLadder.js";
-import { NaNaEsumai } from "./agents/nana-esumai/guide.js";
+import { provenanceLabel } from "./lessonLadder.js";
 import { normalizeSessionReference } from "./sessionReference.js";
-import { resolveSessionDocument, groundTurn, citationsForReply } from "./documentGrounding.js";
+import { groundTurn, citationsForReply } from "./documentGrounding.js";
 import { serialiseTeachingEvidence } from "./teaching-evidence.js";
 import {
   createSessionRecord, ensureSessionRecord, appendSessionBlocks, completeSessionRecord,
   readSessionBlocks,
 } from "./teaching-session/lifecycle.js";
-import { loadContinuationContext, loadDecayPriorLesson, carryForward } from "./teaching-session/context.js";
+import { carryForward } from "./teaching-session/context.js";
+import { resultToTypedBlocks } from "./teaching-session/blocks.js";
+import { prepareTeachingSession } from "./teaching-session/start.js";
 
 export const activeSessions = new Map();
 
@@ -154,117 +155,6 @@ function fmtSessionEnd({ evaluation, controlReport, finalState, agentPairId,
 // =============================================================
 // SOCKET.IO SETUP
 // =============================================================
-// =============================================================
-// TYPED BLOCK CONVERTERS
-// Maps orchestrator result → BlockRenderer-compatible typed blocks
-// (same format as teachingSession.js REST endpoint)
-// =============================================================
-
-const NANA_RENDER_STYLE = {
-  bubbleBg:     "rgba(124,58,237,0.10)",
-  bubbleBorder: "#7C3AED",
-  labelColor:   "#7C3AED",
-  ttsVoice:     "alloy",
-  assessStyle:  "gentle",
-};
-
-function resultToTypedBlocks(result, agentPairId) {
-  const blocks     = [];
-  const guideName  = result.guideName  || "NaNa Esumai";
-  const guideEmoji = result.guideEmoji || "🧠";
-  const renderStyle = result.guideRenderStyle || NANA_RENDER_STYLE;
-  const agentName  = result.studentAgentName || "Agent";
-  // These labels are already shaped by the server-side evidence workflow.
-  // They are safe learner-facing direction, not raw evaluation values.
-  const learningState = result.publicLearningState || {};
-
-  // No drift block. A wandering learner is steered inside NaNa's own tip now,
-  // as part of a turn that still teaches — rather than by a red alarm from a
-  // second agent that replaced the whole turn with a scolding. Sargeant still
-  // appears below for the assessment gate, which is a different job.
-
-  const advancedObjectiveHeader = result.subtopicAdvanced && result.currentSubtopic
-    ? {
-        type:    "subtopic-hdr",
-        subtopic: result.currentSubtopic,
-        idx:     result.subtopicIdx     ?? 0,
-        items:   result.subtopicObjectives ?? [],
-        total:   result.totalSubtopics  ?? 1,
-        topic:   result.topic    ?? "",
-        subject: result.subject  ?? "",
-      }
-    : null;
-
-  // Sargeant assessment gate
-  if (result.wardenHolding && result.wardenHoldMessage) {
-    blocks.push({
-      type:        "sargeant",
-      phase:       `Assessment gate — ${result.currentSubtopic || ""}`,
-      text:        result.wardenHoldMessage,
-      renderStyle,
-    });
-  }
-
-  // Student Agent response. The current idea and short explanation of the
-  // prompt's purpose are deterministic server-owned UI copy—never an inferred
-  // browser state and never a claim that the agent has mastered the concept.
-  if (result.studentAgentResponse) {
-    blocks.push({
-      type:            "student-agent",
-      agent:           agentName,
-      emoji:           "🤖",
-      currentIdea:     learningState.currentIdea || null,
-      whyThisResponse: learningState.whyThisResponse || null,
-      text:            result.studentAgentResponse,
-    });
-  }
-
-  // Teaching Guide response. A short evidence status and next learning move
-  // replace the internal phase label; private scores and evaluator rationale
-  // stay on the server.
-  if (result.guideMessage) {
-    blocks.push({
-      type:             "guide",
-      agent:            guideName,
-      emoji:            guideEmoji,
-      learningState:    learningState.learningState || null,
-      nextLearningMove: learningState.nextLearningMove || null,
-      text:             result.guideMessage,
-      renderStyle,
-    });
-  }
-
-  // When this turn unlocks a new objective, introduce it only after the
-  // responses about the just-completed idea. This keeps each response context
-  // truthful and leaves the familiar objective tracker ready for the next turn.
-  if (advancedObjectiveHeader) blocks.push(advancedObjectiveHeader);
-
-  // Sargeant assessment result
-  if (result.assessmentResult) {
-    const confPct = Math.round((result.assessmentResult.score ?? 0.7) * 100);
-    blocks.push({
-      type:         "assess-result",
-      subtopic:     result.currentSubtopic,
-      agentName,
-      confidence:   confPct,
-      passed:       result.assessmentResult.passed ?? confPct >= 70,
-      nextSubtopic: result.nextSubtopic ?? null,
-      renderStyle,
-    });
-  }
-
-  // Session complete
-  if (result.sessionComplete || result.currentPhase === "complete") {
-    blocks.push({
-      type:    "session-complete",
-      text:    `${agentName} has completed the session on ${result.topic || "this topic"}. +${result.turnXP ?? 0} XP earned.`,
-      isDecay: result.sessionType === "decay_review",
-    });
-  }
-
-  return blocks;
-}
-
 export function setupWebSocket(io) {
 
   // Wire decay engine + global io for webhook emits
@@ -394,103 +284,12 @@ export function setupWebSocket(io) {
         // Socket payloads are client-controlled. Only retain the capped,
         // text-only reference produced by the authenticated upload endpoint.
         const sessionReference = normalizeSessionReference(reference);
-        let historyBlocks = [];
-        let decayPayload  = null;
-        let sessionType   = "free_teaching";
-        let resumeFrom    = null;
-        let resumeTeachingEvidence = null;
-        let ownedNotificationId = null;
-        // The previous conversation, restored as agent memory (continuation)
-        // or as review context (decay). UI chrome is filtered out by the
-        // mapper/orchestrator; only the spoken turns become context.
-        let priorBlocks   = [];
-
-        // ── Continuation: load block history from DB ─────────
-        if (mode === "continuation" && prevSessionId) {
-          sessionType = "continuation";
-          // Ownership is enforced inside the loader (the continuation id
-          // comes from the browser); a missing history degrades to a fresh
-          // start, never a failed session.
-          const continuation = await loadContinuationContext({ studentId, prevSessionId });
-          historyBlocks          = continuation.historyBlocks;
-          priorBlocks            = continuation.priorBlocks;
-          resumeFrom             = continuation.resumeFrom;
-          resumeTeachingEvidence = continuation.resumeTeachingEvidence;
-        }
-
-        // ── Decay: load decay context ─────────────────────────
-        if (mode === "decay") {
-          sessionType = "decay_review";
-          const agent = await getOrCreateStudentAgent(studentId);
-          decayPayload = await decayEngine.generateDecaySession(agent.id, studentId, subject, topic);
-          // An alert id is an untrusted browser value. It may be carried into
-          // the session only after the token-derived learner owns that alert.
-          if (notificationId && await decayEngine.markNotificationRead(notificationId, studentId)) {
-            ownedNotificationId = notificationId;
-          }
-          decayPayload = { ...decayPayload, notificationId: ownedNotificationId };
-
-          // A review resumes the relationship, not just the topic health: the
-          // tail of the most recent lesson on this topic becomes the agent's
-          // conversational memory, and the modal shows it faded.
-          const priorLesson = await loadDecayPriorLesson({ studentId, topic });
-          priorBlocks   = priorLesson.priorBlocks;
-          historyBlocks = priorLesson.historyBlocks;
-        }
-
-        // ── Create orchestrator with mode-aware context ───────
-        const orchestrator = await getOrchestrator({
-          mode:                 "student",
-          studentId,
-          userId:               caller,
-          // Only the guide; the gated student session is the same either way (D42).
-          teacherAgentId:       typeof teacherAgentId === "string" ? teacherAgentId.slice(0, 120) : null,
-          sessionType,
-          subject,
-          // The restored conversation. (A continuationSessionId used to be
-          // passed here and silently dropped — getOrchestrator never named
-          // it, so every continuation restarted the agent with empty memory.)
-          priorBlocks,
-          decayPayload,
-          // Capped source material from the higher-ed start-session modal.
-          // It is session-memory only; no file or raw text is persisted.
-          referenceMaterial: sessionReference,
-          teachingEvidence: resumeTeachingEvidence,
+        // One preparation for every transport (teaching-session/start.js):
+        // continuation / decay loading, the gated student session, the ladder.
+        const { orchestrator, init, sessionType, decayPayload, historyBlocks, priorBlocks, ladder } = await prepareTeachingSession({
+          studentId, caller, topic, subject, mode,
+          prevSessionId, notificationId, reference: sessionReference, document, teacherAgentId,
         });
-
-        // Read by initialize() once the ladder is resolved, so the session
-        // starts where the last one stopped rather than at step one.
-        orchestrator.resumeFrom = resumeFrom;
-        // Whole-document grounding (documentGrounding.js): resolved against
-        // the AUTHENTICATED learner (caller is the token identity) with the
-        // reader's access rule. A promise, so the lesson opening never waits
-        // on it; the first teacher_message does.
-        orchestrator.documentTargetPromise = document ? resolveSessionDocument({ userId: caller, document }) : null;
-
-        // Resolve the lesson ladder from the most trustworthy source available
-        // (school scheme of work → exam-syllabus grounding → AI). Cached per
-        // topic so a teacher review improves it for every future learner, and
-        // NEVER blocking: a pending-review ladder is served immediately.
-        let ladder = null;
-        try {
-          ladder = await resolveLadder({
-            studentId, topic, subject,
-            guide: orchestrator.guideOrchestrator?.guide || new NaNaEsumai(),
-          });
-          if (ladder?.subtopics?.length) {
-            // initialize() reads this instead of calling detectMustKnowParts —
-            // one LLM call saved per session start.
-            orchestrator.presetMustKnow = ladder.subtopics;
-            orchestrator.session = orchestrator.session || {};
-            orchestrator.session.objectives = ladder.objectives || {};
-            // The path, not just the stops: what each step builds on and what
-            // it unlocks, so the learner can see where they are in the topic
-            // rather than only what is in front of them.
-            orchestrator.session.knowledgeMap = ladder.map || [];
-          }
-        } catch (e) { console.warn("[resolveLadder]", e.message); }
-
-        const init = await orchestrator.initialize(studentId, topic);
         const id   = `${mode}_${studentId}_${Date.now()}`;
 
         activeSessions.set(id, orchestrator);
@@ -540,9 +339,8 @@ export function setupWebSocket(io) {
           },
         });
 
-        // Stash identity FIRST so the cancel/disconnect path can still save the
-        // session even if this initial insert fails or hasn't finished yet.
-        orchestrator.sessionMeta = { studentId, topic, subject };
+        // (sessionMeta — the identity lifecycle.js saves from — was set by
+        // prepareTeachingSession, so cancel/disconnect can still save.)
 
         // Persist in background — never blocks the session. The new row
         // carries the prior transcript (faded) so the NEXT continuation sees

@@ -7,12 +7,26 @@
  * executes every turn. The bridge is deliberately session-affine: after Node
  * has accepted a session, a failed follow-up is surfaced to Python rather than
  * switching midway to a local implementation with divergent cognitive state.
+ *
+ * D43: a bridged session is a real session. It is prepared exactly like the
+ * app's (teaching-session/start.js — continuation loads the earlier session,
+ * decay loads its review context, the gated student session, the lesson
+ * ladder), saved to edu.adaptive_sessions (its id comes back as `recordId`),
+ * every turn is saved, and ending it completes the row. The live orchestrator
+ * stays in this process; if it is lost (restart, TTL), the caller resumes with
+ * mode "continuation" and `previousSessionId: recordId`.
  */
 import { Router } from "express";
 
 import db from "../../db.js";
-import { getOrchestrator } from "../adaptive-learning/agents/registry.js";
 import { TEACHING_TURN_WORKFLOW } from "../adaptive-learning/teaching-workflow/runner.js";
+import { prepareTeachingSession, TEACHING_MODES } from "../adaptive-learning/teaching-session/start.js";
+import {
+  createSessionRecord, ensureSessionRecord, appendSessionBlocks, completeSessionRecord,
+} from "../adaptive-learning/teaching-session/lifecycle.js";
+import { carryForward } from "../adaptive-learning/teaching-session/context.js";
+import { resultToTypedBlocks } from "../adaptive-learning/teaching-session/blocks.js";
+import { clearStateCache } from "../adaptive-learning/student-state.js";
 import {
   requireAgentToolsCredential,
   verifyAgentToolsCapability,
@@ -24,7 +38,8 @@ const MAX_TURNS_PER_SESSION = 32;
 const MAX_MESSAGE_CHARS = 12_000;
 const SESSION_ID = /^[A-Za-z0-9_-]{1,180}$/;
 const TURN_ID = /^[A-Za-z0-9_-]{8,180}$/;
-const MODES = new Set(["fresh", "continuation", "decay"]);
+const MODES = new Set(TEACHING_MODES);
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 class WorkflowGatewayError extends Error {
   constructor(status, message) {
@@ -151,113 +166,134 @@ function sendError(res, error) {
   });
 }
 
-router.post("/sessions", requireAgentToolsCredential, async (req, res) => {
-  try {
-    cleanup();
-    const { sessionId, claims } = readCapability(req.body || {});
-    await activeLearner(claims);
-    const existing = sessions.get(sessionId);
-    if (existing) {
-      if (existing.learnerId !== String(claims.sub)) {
-        throw new WorkflowGatewayError(403, "Teaching workflow session does not belong to this learner");
-      }
-      if (existing.running) throw new WorkflowGatewayError(409, "A teaching workflow turn is already running");
-      existing.updatedAt = Date.now();
-      return res.json({ success: true, session: existing.initial, replayed: true });
-    }
+// ── The bridge's work, after authentication ─────────────────────────────────
+// `claims` are a VERIFIED learner capability (readCapability). Exported as
+// teachingBridge so the Verification Gate can drive a real bridged session
+// for a test learner without holding the gateway secret.
 
-    const topic = text(req.body?.topic, 500);
-    const subject = text(req.body?.subject, 180) || null;
-    const mode = text(req.body?.mode, 24) || "fresh";
-    const teacherAgentId = text(req.body?.teacherAgentId, 180) || null;
-    if (!topic) throw new WorkflowGatewayError(422, "topic is required");
-    if (!MODES.has(mode)) throw new WorkflowGatewayError(422, "mode is invalid");
-
-    const sessionType = mode === "decay" ? "decay_review" : mode === "continuation" ? "continuation" : "free_teaching";
-    const orchestrator = await getOrchestrator({
-      mode: "student",
-      studentId: String(claims.sub),
-      userId: String(claims.sub),
-      teacherAgentId,
-      sessionType,
-      subject,
-      referenceMaterial: reference(req.body?.reference),
-    });
-    if (!orchestrator?.initialize || !orchestrator?.processTeachingMessage) {
-      throw new WorkflowGatewayError(503, "Canonical teaching workflow is unavailable");
+async function startSession(claims, sessionId, body) {
+  cleanup();
+  const existing = sessions.get(sessionId);
+  if (existing) {
+    if (existing.learnerId !== String(claims.sub)) {
+      throw new WorkflowGatewayError(403, "Teaching workflow session does not belong to this learner");
     }
-    const initial = publicStart(await orchestrator.initialize(String(claims.sub), topic), sessionId);
-    sessions.set(sessionId, {
-      learnerId: String(claims.sub), orchestrator, initial, turns: new Map(), running: false, updatedAt: Date.now(),
-    });
-    return res.status(201).json({ success: true, session: initial, replayed: false });
-  } catch (error) {
-    return sendError(res, error);
+    if (existing.running) throw new WorkflowGatewayError(409, "A teaching workflow turn is already running");
+    existing.updatedAt = Date.now();
+    return { status: 200, session: existing.initial, replayed: true };
   }
-});
 
-router.post("/sessions/:sessionId/turns", requireAgentToolsCredential, async (req, res) => {
-  try {
-    const body = { ...(req.body || {}), sessionId: req.params.sessionId };
-    const { sessionId, claims } = readCapability(body);
-    await activeLearner(claims);
-    const entry = entryFor(sessionId, claims);
-    if (entry.running) throw new WorkflowGatewayError(409, "A teaching workflow turn is already running");
-    if (typeof body.message !== "string" || body.message.length > MAX_MESSAGE_CHARS) {
-      throw new WorkflowGatewayError(422, "message is invalid");
-    }
-    const message = text(body.message, MAX_MESSAGE_CHARS);
-    const turnId = text(body.turnId, 180) || null;
-    if (!message) throw new WorkflowGatewayError(422, "message is required");
-    if (body.turnId !== undefined && !TURN_ID.test(turnId || "")) throw new WorkflowGatewayError(422, "turnId is invalid");
-    const replayed = cachedTurn(entry, turnId, message);
-    if (replayed) return res.json({ success: true, turn: replayed, replayed: true });
-
-    entry.running = true;
-    try {
-      const turn = publicTurn(await entry.orchestrator.processTeachingMessage(message));
-      cacheTurn(entry, turnId, message, turn);
-      entry.updatedAt = Date.now();
-      return res.json({ success: true, turn, replayed: false });
-    } finally {
-      entry.running = false;
-    }
-  } catch (error) {
-    return sendError(res, error);
+  const topic = text(body?.topic, 500);
+  const subject = text(body?.subject, 180) || null;
+  const mode = text(body?.mode, 24) || "fresh";
+  const teacherAgentId = text(body?.teacherAgentId, 180) || null;
+  const previousSessionId = text(body?.previousSessionId, 40) || null;
+  const notificationId = text(body?.notificationId, 40) || null;
+  if (!topic) throw new WorkflowGatewayError(422, "topic is required");
+  if (!MODES.has(mode)) throw new WorkflowGatewayError(422, "mode is invalid");
+  if (mode === "continuation" && !UUID.test(previousSessionId || "")) {
+    throw new WorkflowGatewayError(422, "previousSessionId (the earlier session's recordId) is required to continue");
   }
-});
+  if (notificationId && !UUID.test(notificationId)) throw new WorkflowGatewayError(422, "notificationId is invalid");
 
-router.post("/sessions/:sessionId/summary", requireAgentToolsCredential, async (req, res) => {
+  // The learner is the capability's subject — never a body field.
+  const learnerId = String(claims.sub);
+  let prepared;
   try {
-    const { sessionId, claims } = readCapability({ ...(req.body || {}), sessionId: req.params.sessionId });
-    await activeLearner(claims);
-    const entry = entryFor(sessionId, claims);
-    if (entry.running) throw new WorkflowGatewayError(409, "A teaching workflow turn is already running");
+    prepared = await prepareTeachingSession({
+      studentId: learnerId, caller: learnerId, topic, subject, mode,
+      prevSessionId: previousSessionId, notificationId, reference: reference(body?.reference), teacherAgentId,
+    });
+  } catch (error) {
+    if (error?.status) throw new WorkflowGatewayError(error.status, error.message);
+    throw error;
+  }
+  const { orchestrator, init, sessionType, historyBlocks, priorBlocks } = prepared;
+  // Saved before the session is offered, so a lost process can be continued.
+  const recordId = await createSessionRecord(orchestrator, {
+    studentId: learnerId, topic, subject, openingBlocks: carryForward(priorBlocks, init.openingBlocks),
+  });
+  const initial = {
+    ...publicStart(init, sessionId),
+    sessionType, recordId: recordId || null, saved: Boolean(recordId),
+    // The earlier conversation (continuation / decay), for display only.
+    historyBlocks: historyBlocks || [],
+  };
+  sessions.set(sessionId, {
+    learnerId, orchestrator, initial, turns: new Map(), running: false, updatedAt: Date.now(),
+  });
+  return { status: 201, session: initial, replayed: false };
+}
+
+async function runTurn(claims, sessionId, body) {
+  const entry = entryFor(sessionId, claims);
+  if (entry.running) throw new WorkflowGatewayError(409, "A teaching workflow turn is already running");
+  if (typeof body?.message !== "string" || body.message.length > MAX_MESSAGE_CHARS) {
+    throw new WorkflowGatewayError(422, "message is invalid");
+  }
+  const message = text(body.message, MAX_MESSAGE_CHARS);
+  const turnId = text(body.turnId, 180) || null;
+  if (!message) throw new WorkflowGatewayError(422, "message is required");
+  if (body.turnId !== undefined && !TURN_ID.test(turnId || "")) throw new WorkflowGatewayError(422, "turnId is invalid");
+  const replayed = cachedTurn(entry, turnId, message);
+  if (replayed) return { turn: replayed, replayed: true };
+
+  entry.running = true;
+  try {
+    const result = await entry.orchestrator.processTeachingMessage(message);
+    // Saved like the app's turns: the learner's message, then the typed blocks.
+    await appendSessionBlocks(entry.orchestrator, [{ type: "user", text: message }, ...resultToTypedBlocks(result, "student-session")]);
+    const turn = publicTurn(result);
+    cacheTurn(entry, turnId, message, turn);
     entry.updatedAt = Date.now();
-    return res.json({ success: true, summary: await entry.orchestrator.generateSummary(), workflow: publicWorkflow() });
-  } catch (error) {
-    return sendError(res, error);
+    return { turn, replayed: false };
+  } finally {
+    entry.running = false;
   }
-});
+}
 
-router.post("/sessions/:sessionId/end", requireAgentToolsCredential, async (req, res) => {
+async function summarise(claims, sessionId) {
+  const entry = entryFor(sessionId, claims);
+  if (entry.running) throw new WorkflowGatewayError(409, "A teaching workflow turn is already running");
+  entry.updatedAt = Date.now();
+  return { summary: await entry.orchestrator.generateSummary(), workflow: publicWorkflow() };
+}
+
+async function endSession(claims, sessionId) {
+  const entry = entryFor(sessionId, claims);
+  if (entry.running) throw new WorkflowGatewayError(409, "A teaching workflow turn is already running");
+  entry.running = true;
   try {
-    const body = { ...(req.body || {}), sessionId: req.params.sessionId };
+    const summary = await entry.orchestrator.endSession();
+    await ensureSessionRecord(entry.orchestrator);
+    await completeSessionRecord(entry.orchestrator);   // the row is complete; XP once
+    await clearStateCache(entry.orchestrator.session?.agentId || entry.learnerId).catch(() => {});
+    sessions.delete(sessionId);
+    return { summary, workflow: publicWorkflow(), recordId: entry.orchestrator.dbSessionId || null };
+  } finally {
+    entry.running = false;
+  }
+}
+
+export const teachingBridge = Object.freeze({ startSession, runTurn, summarise, endSession, WorkflowGatewayError });
+
+// ── HTTP: the gateway credential + a learner capability, then the work ──────
+const authed = (fn) => async (req, res) => {
+  try {
+    const body = { ...(req.body || {}), ...(req.params.sessionId ? { sessionId: req.params.sessionId } : {}) };
     const { sessionId, claims } = readCapability(body);
     await activeLearner(claims);
-    const entry = entryFor(sessionId, claims);
-    if (entry.running) throw new WorkflowGatewayError(409, "A teaching workflow turn is already running");
-    entry.running = true;
-    try {
-      const summary = await entry.orchestrator.endSession();
-      sessions.delete(sessionId);
-      return res.json({ success: true, summary, workflow: publicWorkflow() });
-    } finally {
-      entry.running = false;
-    }
+    const out = await fn(claims, sessionId, body);
+    const { status = 200, ...rest } = out;
+    return res.status(status).json({ success: true, ...rest });
   } catch (error) {
     return sendError(res, error);
   }
-});
+};
+
+router.post("/sessions", requireAgentToolsCredential, authed(startSession));
+router.post("/sessions/:sessionId/turns", requireAgentToolsCredential, authed(runTurn));
+router.post("/sessions/:sessionId/summary", requireAgentToolsCredential, authed((claims, sessionId) => summarise(claims, sessionId)));
+router.post("/sessions/:sessionId/end", requireAgentToolsCredential, authed((claims, sessionId) => endSession(claims, sessionId)));
 
 export default router;

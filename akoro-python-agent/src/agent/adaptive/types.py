@@ -153,6 +153,11 @@ class AdaptiveSession:
     conversation_id: str | None = None
     conversation: LearnerConversationContext | None = None
     reference: SessionReference | None = None
+    # Canonical (Akoro) session links: the earlier session a continuation
+    # resumes, a decay review's alert, and the saved record Akoro returned.
+    previous_session_id: str | None = None
+    notification_id: str | None = None
+    record_id: str | None = None
     knowledge_buffer: list[KnowledgeChunk] = field(default_factory=list)
     turns_completed: int = 0
     xp_earned: int = 0

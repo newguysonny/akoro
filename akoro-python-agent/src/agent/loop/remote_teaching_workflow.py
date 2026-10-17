@@ -41,7 +41,13 @@ class RemoteTeachingWorkflowProxy:
             teacher_agent_id=self.session.teacher_agent_id,
             mode=mode,
             reference=reference.metadata() | {"text": reference.text} if reference else None,
+            previous_session_id=self.session.previous_session_id,
+            notification_id=self.session.notification_id,
         )
+        # Akoro saved the session; its id is what a later continuation resumes.
+        record_id = result.get("recordId")
+        if isinstance(record_id, str) and record_id:
+            self.session.record_id = record_id
         return self._with_authority(result)
 
     def process_teaching_message(self, message: str, turn_id: str | None = None) -> dict[str, Any]:
