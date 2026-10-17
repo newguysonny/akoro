@@ -18,6 +18,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { layoutBlockLines } from '../../lib/blockLines.js';
 import { findInkLines } from '../../lib/inkLines.js';
+import { registerTextLayer } from '../../lib/textSelection.js';
+import './pdfTextLayer.css';
 
 const isFigure = (t) => String(t || '').trim() === '<image>';
 const FAMILY = 'sans-serif';   // the spans and the measurements must agree
@@ -77,6 +79,10 @@ export default function BlockTextLayer({ blocks, height, surface = null, surface
   const list = useMemo(() => (Array.isArray(blocks) ? blocks : []).filter((b) =>
     Array.isArray(b?.bbox_2d) && b.bbox_2d.length === 4 && !isFigure(b.text_content) && String(b.text_content || '').trim()), [blocks]);
 
+  // Keeps a drag on the words it is over (lib/textSelection.js).
+  const hasList = list.length > 0;
+  useEffect(() => (hasList ? registerTextLayer(rootRef.current) : undefined), [hasList]);
+
   useEffect(() => {
     setInk(list.length ? readInk(surface, width, height, list) : null);
   }, [surface, surfaceKey, width, height, list]);
@@ -96,11 +102,11 @@ export default function BlockTextLayer({ blocks, height, surface = null, surface
 
   if (!list.length) return null;
   return (
-    <div ref={rootRef} style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 2 }}>
+    <div ref={rootRef} className="sel-layer" style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 2 }}>
       {laid.map((b, i) => (
         <span key={i} style={{ position: 'absolute', left: `${b.x1 / 10}%`, top: `${b.y1 / 10}%`,
           width: `${Math.max(0.5, (b.x2 - b.x1) / 10)}%`, height: `${Math.max(0.5, (b.y2 - b.y1) / 10)}%`,
-          color: 'transparent', WebkitUserSelect: 'text', userSelect: 'text', pointerEvents: 'auto', cursor: 'text' }}>
+          color: 'transparent', pointerEvents: 'auto', cursor: 'text' }}>
           {b.lines.map((ln, j) => (
             <span key={j} style={{ position: 'absolute', left: `${ln.left}px`, top: `${ln.top}px`, height: `${ln.height}px`,
               fontFamily: FAMILY, fontSize: `${ln.fontPx}px`, lineHeight: `${ln.height}px`, whiteSpace: 'pre',

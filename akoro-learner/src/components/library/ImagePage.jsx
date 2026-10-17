@@ -9,6 +9,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import BlockTextLayer from './BlockTextLayer.jsx';
+import './pdfTextLayer.css';
 
 export default function ImagePage({ src, alt = '', blocks = null }) {
   const imgRef = useRef(null);
@@ -37,8 +38,8 @@ export default function ImagePage({ src, alt = '', blocks = null }) {
   }, []);
 
   return (
-    <div style={{ position: 'relative', width: '100%' }}>
-      <img ref={imgRef} src={src} alt={alt} onLoad={(e) => setHeight(e.currentTarget.clientHeight || 0)}
+    <div className="sel-page" style={{ position: 'relative', width: '100%' }}>
+      <img ref={imgRef} src={src} alt={alt} draggable={false} onLoad={(e) => setHeight(e.currentTarget.clientHeight || 0)}
         style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }}/>
       <BlockTextLayer blocks={blocks} height={height} surface={pixels} surfaceKey={pixels ? 1 : 0}/>
     </div>

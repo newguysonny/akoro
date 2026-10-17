@@ -18,6 +18,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import BlockTextLayer from './BlockTextLayer.jsx';
 import './pdfTextLayer.css';
+import { registerTextLayer } from '../../lib/textSelection.js';
 import { BRAND } from '../../constants.js';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -54,13 +55,21 @@ export function PdfPage({ pdf, pageNumber, blocks = null }) {
   const [showBlocks, setShowBlocks] = useState(false);  // the extraction overlay
   const [wrapW, setWrapW]   = useState(0);              // measured CSS width — sizes the extraction text layer
   const [drawn, setDrawn]   = useState(0);              // bumps after each paint — the text layer reads the pixels
+  const [hasText, setHasText] = useState(null);         // the PDF's own words on this page (null = not read yet)
 
   useEffect(() => {
     let cancelled = false;
     const wrap = wrapRef.current, canvas = canvasRef.current;
     if (!wrap || !canvas || !pdf) return;
+    let unguard = () => {};
+    let busy = false;
+    let drawnW = 0;
 
     const render = async () => {
+      // Once drawn, a page stays drawn: redrawing (and so rebuilding the
+      // text layer) under a live selection would drop it.
+      if (busy || (canvas.width > 0 && wrap.dataset.drawn === '1')) return;
+      busy = true;
       try {
         const page = await pdf.getPage(pageNumber);
         if (cancelled) return;
@@ -81,18 +90,28 @@ export function PdfPage({ pdf, pageNumber, blocks = null }) {
         // highlights the real words on the page. pdf.js sizes spans through a
         // --scale-factor custom property on the container (CSS-pixel scale).
         const layer = wrap.querySelector('.pdf-text-layer');
-        if (layer) {
+        if (layer && !cancelled) {
+          unguard();
           layer.innerHTML = '';
           layer.style.setProperty('--scale-factor', String(cssScale));
+          const textContent = await page.getTextContent();
           const tl = new pdfjsLib.TextLayer({
-            textContentSource: await page.getTextContent(),
+            textContentSource: textContent,
             container: layer,
             viewport: page.getViewport({ scale: cssScale }),
           });
           await tl.render();
+          if (cancelled) return;
+          // Keeps a drag on the words it is over (lib/textSelection.js).
+          unguard = registerTextLayer(layer);
+          setHasText(textContent.items.some((it) => String(it.str || '').trim()));
         }
+        wrap.dataset.drawn = '1';
+        drawnW = cssWidth;
       } catch {
         if (!cancelled) setGone(true);
+      } finally {
+        busy = false;
       }
     };
 
@@ -104,23 +123,27 @@ export function PdfPage({ pdf, pageNumber, blocks = null }) {
     io.observe(wrap);
     // The extraction text layer sizes its type from the laid-out width —
     // keep it honest across container resizes.
-    const ro = new ResizeObserver(() => setWrapW(wrap.clientWidth || 0));
+    const ro = new ResizeObserver(() => {
+      setWrapW(wrap.clientWidth || 0);
+      // A new width (a phone turned) re-draws so the words stay on the glyphs.
+      if (drawnW && Math.abs((wrap.clientWidth || 0) - drawnW) > 2) { delete wrap.dataset.drawn; render(); }
+    });
     ro.observe(wrap);
     setWrapW(wrap.clientWidth || 0);
-    return () => { cancelled = true; io.disconnect(); ro.disconnect(); };
+    return () => { cancelled = true; io.disconnect(); ro.disconnect(); unguard(); delete wrap.dataset.drawn; };
   }, [pdf, pageNumber]);
 
   const blockList = Array.isArray(blocks) ? blocks.filter((b) => Array.isArray(b?.bbox_2d) && b.bbox_2d.length === 4) : [];
   const isFigure = (t) => String(t || '').trim() === '<image>';
 
   return (
-    <div ref={wrapRef} style={{ position: 'relative', width: '100%', background: '#fff' }}>
+    <div ref={wrapRef} className="sel-page" style={{ position: 'relative', width: '100%', background: '#fff' }}>
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: 'auto', aspectRatio: `1 / ${aspect}` }}/>
-      <div className="pdf-text-layer" style={{ position: 'absolute', inset: 0, overflow: 'hidden',
-        lineHeight: 1, textAlign: 'initial', unicodeBidi: 'isolate',
-        /* transparent but selectable — the pdf.js approach: the spans carry
-           the real words aligned to the glyphs; dragging selects them. */
-        color: 'transparent', WebkitUserSelect: 'text', userSelect: 'text' }}/>
+      {/* Transparent words aligned to the glyphs — the pdf.js approach. Only
+          the spans select (pdfTextLayer.css); the gaps between them belong
+          to the end marker, so a drag never runs off to the page's end. */}
+      <div className="pdf-text-layer sel-layer" style={{ position: 'absolute', inset: 0, overflow: 'hidden',
+        lineHeight: 1, textAlign: 'initial', unicodeBidi: 'isolate', color: 'transparent' }}/>
       {/* AI-extraction layout overlay — bboxes are normalized 0-1000, so
           percent = value/10. Figures (<image> sentinel) tint amber. */}
       {showBlocks && blockList.length > 0 && blockList.map((b, i) => {
@@ -139,7 +162,9 @@ export function PdfPage({ pdf, pageNumber, blocks = null }) {
           over its own bbox, so scans become selectable/searchable exactly
           like pdf.js text pages. Container ignores pointers; the spans
           capture only where text actually is. */}
-      {wrapW > 0 && <BlockTextLayer blocks={blockList} height={wrapW * aspect}
+      {/* Only for a page with no words of its own (a scan): over a real text
+          page it would be a second selectable copy of the same words. */}
+      {wrapW > 0 && hasText === false && <BlockTextLayer blocks={blockList} height={wrapW * aspect}
         surface={drawn ? canvasRef.current : null} surfaceKey={drawn}/>}
       {blockList.length > 0 && (
         <button onClick={() => setShowBlocks((v) => !v)}
