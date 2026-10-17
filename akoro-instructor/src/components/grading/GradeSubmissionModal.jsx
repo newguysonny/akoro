@@ -33,6 +33,7 @@ import { apiGet, apiPatch, apiPost, apiPut, apiDelete, apiBlob, downloadActivity
 import SubmissionMarkup from './SubmissionMarkup.jsx';
 import QuestionMarker, { QuestionRail, autoMarks, markTotals, pointsOf } from './QuestionMarker.jsx';
 import AnswerPaper from '../paper/AnswerPaper.jsx';
+import { SubmissionSheet } from '../paper/PaperSheets.jsx';
 import { openSubmittedFile } from './openFile.js';
 import { Sparkles } from 'lucide-react';
 import { readChoice } from '../../lib/paper.js';
@@ -319,7 +320,19 @@ export default function GradeSubmissionModal({
   const RUBRIC = useMemo(() => rubricFor(brief), [brief]);
   const RUBRIC_MAX = RUBRIC.reduce((s, r) => s + r.max, 0);
   const submitted = !!current?.submission?.submittedAt;
-  const [view, setView] = useState('pdf');   // 'pdf' | 'answers'
+  const [view, setView] = useState('pdf');   // 'pdf' | 'answers' (the paper, one question at a time)
+  // The submission as the paper template (submission.json): the Paper view.
+  const [paperDoc, setPaperDoc] = useState(null);
+  useEffect(() => {
+    setPaperDoc(null);
+    if (!current?.targetId || !current?.submission?.submittedAt) return undefined;
+    let live = true;
+    apiGet(`/api/self-study/targets/${current.targetId}/submission.json`)
+      .then((d) => { if (live) setPaperDoc(d?.data?.document ?? null); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [current?.targetId, current?.submission?.submittedAt]);
+  const loadPaperFile = useCallback((f) => apiBlob(`/api/self-study/files/${f.id}`), []);
   // The left paper's question follows the step being marked (and back).
   useEffect(() => { if (Array.isArray(brief?.details?.questions) && brief.details.questions.length && qIndex < brief.details.questions.length) setStep((s) => (s < brief.details.questions.length ? qIndex : s)); }, [qIndex]);   // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -412,7 +425,8 @@ export default function GradeSubmissionModal({
       setMode(hasQuestions ? 'questions' : 'rubric'); setRubric(RUBRIC.map(() => null)); setManualScore(''); setFeedbackText('');
     }
     setQIndex(Math.min(draft?.step ?? 0, Math.max(0, qList.length - 1))); setError(''); setSaveState('idle');
-    setView(current?.submission?.submittedAt ? 'pdf' : 'answers');
+    // Assignments with questions are marked on the paper, one question at a time.
+    setView(current?.submission?.submittedAt && !(brief?.details?.questions || []).length ? 'pdf' : 'answers');
     clearTimeout(markTimer.current);
     setMarks(current?.markup?.marks ?? []); setMarkState('idle');
     setAi(current?.aiGrade ?? null);
@@ -613,7 +627,7 @@ export default function GradeSubmissionModal({
           <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, boxShadow: '0 1px 2px rgba(33,31,53,.04), 0 12px 28px -12px rgba(33,31,53,.18)', overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 20px', borderBottom: `1px solid ${BORDER}`, background: '#F7F6F3' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} role="tablist">
-                {submitted && [['pdf', 'Submission PDF'], ['answers', 'Answers']].map(([id, label]) => (
+                {submitted && [['answers', hasQuestions ? 'Paper' : 'Answers'], ['pdf', 'Submission PDF']].map(([id, label]) => (
                   <button key={id} role="tab" aria-selected={view === id} onClick={() => setView(id)}
                     style={{ padding: '5px 12px', borderRadius: 999, border: `1px solid ${view === id ? PURPLE : BORDER}`, background: view === id ? '#F1ECFF' : WHITE, color: view === id ? PURPLE : MUTED, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
                     {label}
@@ -637,9 +651,16 @@ export default function GradeSubmissionModal({
               </div>
             ) : (
             hasQuestions && (Object.keys(current.submission?.answers || {}).length > 0 || (current.submission?.files || current.files || []).length > 0) ? (
+              paperDoc ? (
+                <div style={{ padding: '16px 16px 20px', background: '#F1F0EC' }}>
+                  <SubmissionSheet doc={paperDoc} embedded printable={false} only={step < qList.length ? step : null}
+                    marks={qMarks} loadFile={loadPaperFile} onOpenFile={openSubmittedFile} />
+                </div>
+              ) : (
               <div style={{ padding: '18px 20px 24px' }}>
                 <PaperAnswers current={current} brief={brief} marks={qMarks} focus={qIndex} />
               </div>
+              )
             ) : (
             <div style={{ padding: '24px 28px 30px' }}>
               <h2 style={{ margin: '0 0 10px', fontSize: 19, fontWeight: 700, color: INK, fontFamily: 'Lora, Georgia, serif', lineHeight: 1.35 }}>{q.title}</h2>

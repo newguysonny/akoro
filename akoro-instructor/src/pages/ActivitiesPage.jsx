@@ -28,6 +28,8 @@ import PaperBuilder from '../components/paper/PaperBuilder.jsx';
 import PaperView from '../components/paper/PaperView.jsx';
 import { removeRef, AR_OPTIONS, TF_OPTIONS } from '../lib/paper.js';
 import { downloadActivityPdf } from '../lib/activityPdf.js';
+import { printSheet } from '../lib/printSheet.js';
+import { AssignmentSheet } from '../components/paper/PaperSheets.jsx';
 import BattleForm from '../components/battles/BattleForm.jsx';
 import { useBattlesAPI } from '../hooks/useBattlesAPI.js';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
@@ -802,7 +804,18 @@ export function DetailPage({ activity, onDeleted, onClose }) {
   const canPdf = !!data && (isJourney || questions.length > 0 || (data.subtopics ?? []).length > 0);
   // Same sheet the preview prints: the paper with its answer key, or the
   // plan/stages when the activity never had questions.
+  // An activity with questions downloads as the paper (the assignment
+  // template): the learners' paper, or the teacher copy with the marking scheme.
+  const printPaper = (copy) => {
+    setPdfErr(false);
+    printSheet(
+      <AssignmentSheet title={data.title} subject={data.subject} topic={data.topic} date={data.created_at} dueAt={data.due_at}
+        details={data.details} instructions={data.instructions} copy={copy} printable={false} />,
+      { title: `${data.title || 'Assignment'}${copy === 'teacher' ? ' — marking scheme' : ''}` },
+    ).catch(() => setPdfErr(true));
+  };
   const downloadPdf = () => {
+    if (questions.length) { printPaper('student'); return; }
     try {
       downloadActivityPdf({
         draft: {
@@ -953,8 +966,13 @@ export function DetailPage({ activity, onDeleted, onClose }) {
             <div style={{ display: 'flex', gap: 8 }}>
               <Btn size="sm" variant="secondary" onClick={downloadPdf} disabled={!canPdf}
                 title="Download this activity as a PDF">
-                <Download size={13} /> Download PDF
+                <Download size={13} /> {questions.length ? 'Download paper' : 'Download PDF'}
               </Btn>
+              {questions.length > 0 && (
+                <Btn size="sm" variant="secondary" onClick={() => printPaper('teacher')} title="Download the marking scheme (teacher copy)">
+                  <Download size={13} /> Marking scheme
+                </Btn>
+              )}
               <Btn size="sm" variant="secondary" onClick={del}><Trash2 size={13} /> Delete activity</Btn>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>

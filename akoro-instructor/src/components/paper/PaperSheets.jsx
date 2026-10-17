@@ -20,11 +20,11 @@
  * paper and akoro-learner/src/components/activity: it needs only React and
  * lib/paper.js.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { paperBlocks, passageRange, figureSrc, mathRuns, letterOf } from '../../lib/paper.js';
 
 const CSS = `
-.aks{--ink:#111;--muted:#555;--line:#222;--hair:#bdbdbd;--font:"Times New Roman",Times,"Liberation Serif",Georgia,serif;
+.aks{container-type:inline-size;--ink:#111;--muted:#555;--line:#222;--hair:#bdbdbd;--font:"Times New Roman",Times,"Liberation Serif",Georgia,serif;
   background:#e6e6e6;color:var(--ink);font:11pt/1.35 var(--font);padding:1px 0;counter-reset:aks-sheet}
 .aks *{box-sizing:border-box}
 .aks-bar{max-width:210mm;margin:12px auto 0;text-align:right;font:14px system-ui,sans-serif}
@@ -102,9 +102,16 @@ const CSS = `
 .aks-key th{background:#efefef}
 .aks-key td:last-child,.aks-key th:last-child{text-align:center;width:18mm}
 .aks-key tfoot td{font-weight:700}
-@media screen and (max-width:820px){
-  .aks{background:#fff}
-  .aks-bar{padding:0 16px}
+.aks--embedded{background:none;padding:0}
+.aks--embedded .aks-sheet{min-height:0;margin:0 auto 10px;padding:22px 24px 28px;box-shadow:0 1px 6px rgba(0,0,0,.12)}
+.aks-chip{display:inline-block;margin-left:2mm;padding:0 1.5mm;border-radius:3px;font:800 8pt system-ui,sans-serif;letter-spacing:.04em;vertical-align:1px}
+.aks-chip--new{background:#FDECC8;color:#B45309}
+.aks-chip--changed{background:#EDE5FF;color:#6C3BFF}
+.aks-q--new{background:#FFF8E6;outline:4px solid #FFF8E6}
+.aks-q--changed{background:#F4F0FF;outline:4px solid #F4F0FF}
+.aks-keyline{margin-top:1.5mm;padding:1mm 2mm;border-left:2px solid #047857;font-size:9.5pt;color:#047857}
+.aks-mark--live u{font-weight:700}
+@container (max-width:820px){
   .aks-sheet{min-height:0;margin:0 0 8px;padding:16px 16px 40px;box-shadow:none}
   .aks-qs--2{columns:1}
   .aks-details{grid-template-columns:1fr}
@@ -113,6 +120,10 @@ const CSS = `
   .aks-fields .aks-field:first-child{grid-column:1/-1}
   .aks-q--marked{grid-template-columns:1fr}
   .aks-mark{flex-direction:row;align-items:flex-end;min-height:0}
+}
+@media screen and (max-width:820px){
+  .aks:not(.aks--embedded){background:#fff}
+  .aks-bar{padding:0 16px}
 }
 @media print{
   @page{size:A4;margin:0}
@@ -181,9 +192,9 @@ function QFigure({ q }) {
 }
 
 /** The space left for the answer on the blank paper. */
-function AnswerSpace({ q, space }) {
-  if (space === 'options') {
-    return <ol className="aks-opts" role="list">{q.options.map((o, i) => <li key={i}><span className="aks-l">{letterOf(i)}</span><span><MathText text={o} /></span></li>)}</ol>;
+function AnswerSpace({ q, space, showKey = false }) {
+  if (space === 'options' || (space === 'true_false' && showKey)) {
+    return <ol className="aks-opts" role="list">{q.options.map((o, i) => <li key={i} className={showKey && Number(q.correct) === i ? 'is-key' : undefined}><span className="aks-l">{letterOf(i)}</span><span><MathText text={o} /></span></li>)}</ol>;
   }
   if (space === 'true_false') return <div className="aks-tf"><span>True</span><span>False</span></div>;
   if (space === 'labels') return <div className="aks-labels">{(q.labels || []).map((l) => <div key={l}><b>{l}</b></div>)}</div>;
@@ -221,7 +232,10 @@ function PrintBar({ show }) {
  * The assignment paper. `details` is the assignment's details
  * ({ questions, sections?, passages?, instructions? }).
  */
-export function AssignmentSheet({ title, subject, topic, date = null, dueAt = null, org = null, details, instructions = null, teacherCopy = false, printable = true }) {
+export function AssignmentSheet({ title, subject, topic, date = null, dueAt = null, org = null, details, instructions = null,
+  teacherCopy = false, copy = null, printable = true, embedded = false, showKey = false, changes = null, versionLabel = '' }) {
+  // copy: 'student' (the paper) · 'teacher' (the marking scheme) · 'both'.
+  const which = copy || (teacherCopy ? 'both' : 'student');
   const blocks = paperBlocks(details);
   const qs = Array.isArray(details?.questions) ? details.questions : [];
   const sections = Array.isArray(details?.sections) ? details.sections : [];
@@ -231,12 +245,12 @@ export function AssignmentSheet({ title, subject, topic, date = null, dueAt = nu
   if (qs.some((q) => spaceOf(q) === 'working')) lines.push('Show your working in the space provided.');
   const twoCols = qs.length > 6 && !qs.some((q) => ['working', 'labels'].includes(spaceOf(q)) || ESSAY.test(q.type || ''));
   return (
-    <div className="aks">
+    <div className={`aks${embedded ? ' aks--embedded' : ''}`}>
       <Styles />
       <PrintBar show={printable} />
-      <main className="aks-sheet">
+      {which !== 'teacher' && <main className="aks-sheet">
         <header className="aks-head">
-          <p className="aks-org">{org || '[School Name]'}</p>
+          {org && <p className="aks-org">{org}</p>}
           <h1 className="aks-title">{title || 'Assignment'}</h1>
           {sections.length > 0 && (
             <dl className="aks-parts">
@@ -278,12 +292,15 @@ export function AssignmentSheet({ title, subject, topic, date = null, dueAt = nu
                 const obj = q && typeof q === 'object' ? q : { q: String(q ?? '') };
                 const space = spaceOf(obj);
                 const pts = ptsOf(obj);
+                const change = changes?.[i];
                 return (
-                  <li key={i} className="aks-q" data-type={space}>
+                  <li key={i} className={`aks-q${change ? ` aks-q--${change}` : ''}`} data-type={space}>
                     <span className="aks-n">{i + 1}.</span>
                     <Stem q={obj} space={space} />
+                    {change && <span className={`aks-chip aks-chip--${change}`}>{change === 'new' ? 'NEW' : 'CHANGED'}{versionLabel ? ` IN ${versionLabel}` : ''}</span>}
                     <QFigure q={obj} />
-                    <AnswerSpace q={obj} space={space} />
+                    <AnswerSpace q={obj} space={space} showKey={showKey} />
+                    {showKey && <div className="aks-keyline">Key: <MathText text={keyLine(obj)} /></div>}
                     {pts && <span className="aks-pts">[{marksWord(pts)}]</span>}
                   </li>
                 );
@@ -291,11 +308,11 @@ export function AssignmentSheet({ title, subject, topic, date = null, dueAt = nu
             </ol>
           </section>
         ))}
-      </main>
-      {teacherCopy && (
+      </main>}
+      {which !== 'student' && (
         <main className="aks-sheet">
           <header className="aks-head">
-            <p className="aks-org">{org || '[School Name]'} – Marking Scheme</p>
+            <p className="aks-org">{org ? `${org} – Marking Scheme` : 'Marking Scheme'}</p>
             <h1 className="aks-title">{title || 'Assignment'}</h1>
             <p><span className="aks-badge">TEACHER COPY</span></p>
           </header>
@@ -313,18 +330,20 @@ export function AssignmentSheet({ title, subject, topic, date = null, dueAt = nu
 /** A drawing's image, loaded through the app's own authenticated fetch. */
 function Drawing({ file, loadFile }) {
   const [src, setSrc] = useState(null);
+  // The app may pass a new loader each render; the drawing loads once per file.
+  const loader = useRef(loadFile); loader.current = loadFile;
   useEffect(() => {
     let url = null;
     let live = true;
-    if (loadFile && file?.id) {
-      Promise.resolve(loadFile(file)).then((blob) => {
+    if (loader.current && file?.id) {
+      Promise.resolve(loader.current(file)).then((blob) => {
         if (!live || !blob) return;
         url = typeof blob === 'string' ? blob : URL.createObjectURL(blob);
         setSrc(url);
       }).catch(() => {});
     }
     return () => { live = false; if (url && url.startsWith('blob:')) URL.revokeObjectURL(url); };
-  }, [file?.id, loadFile]);
+  }, [file?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <figure className="aks-drawing">
       <figcaption>Attached: {file.name}</figcaption>
@@ -333,10 +352,10 @@ function Drawing({ file, loadFile }) {
   );
 }
 
-function MarkBox({ marks }) {
+function MarkBox({ marks, live = false }) {
   if (marks?.max == null) return <div className="aks-mark"><span>Marks</span><b><u>{marks?.awarded ?? ''}</u></b></div>;
   return (
-    <div className="aks-mark">
+    <div className={`aks-mark${live ? ' aks-mark--live' : ''}`}>
       <span>Marks</span>
       <b><u>{marks.awarded ?? ' '}</u>/ {marks.max}</b>
       {marks.comment && <em>{marks.comment}</em>}
@@ -368,13 +387,63 @@ function SubmittedAnswer({ item, loadFile, onOpenFile }) {
   );
 }
 
+function QuestionRow({ item, loadFile, onOpenFile, marks, live = false }) {
+  return (
+    <li className="aks-q aks-q--marked" data-status={item.status}>
+      <span className="aks-n">{item.number}.</span>
+      <div>
+        <p className="aks-stem">
+          {item.format === 'assertion_reason' && item.assertion
+            ? <>Assertion: <MathText text={item.assertion} /><br />Reason: <MathText text={item.reason || ''} /></>
+            : item.answerSpace === 'blank' ? <GapText text={item.text} /> : <MathText text={item.text} />}
+        </p>
+        <SubmittedAnswer item={item} loadFile={loadFile} onOpenFile={onOpenFile} />
+      </div>
+      <MarkBox marks={marks} live={live} />
+    </li>
+  );
+}
+
+/** One question of the submission on its own sheet: its part, its case study, the answer, the marks box. */
+function OneQuestion({ doc, index, loadFile, onOpenFile, embedded, marksOf }) {
+  const part = (doc.parts || []).find((p) => (p.questions || []).some((q) => q.index === index));
+  const item = part?.questions.find((q) => q.index === index);
+  if (!item) return null;
+  const passage = item.passage != null ? (part.passages || []).find((p) => p.index === item.passage) : null;
+  return (
+    <div className={`aks${embedded ? ' aks--embedded' : ''}`}>
+      <Styles />
+      <main className="aks-sheet">
+        {part.title && (
+          <header className="aks-part">
+            <h2>{part.title}</h2>
+            {part.note && <p>{part.note}</p>}
+          </header>
+        )}
+        {passage && (
+          <aside className="aks-case">
+            <h3>{passage.title || 'Case study'}<small>{passage.questions}</small></h3>
+            <p>{passage.text}</p>
+          </aside>
+        )}
+        <ol className="aks-qs" role="list">
+          <QuestionRow item={item} loadFile={loadFile} onOpenFile={onOpenFile} marks={marksOf(item)} live />
+        </ol>
+      </main>
+    </div>
+  );
+}
+
 /**
  * A learner's submission as the submission template. `doc` is the API's
  * GET /api/self-study/targets/:id/submission.json document; `loadFile(file)`
  * returns the file's Blob (or a URL) for drawings; `onOpenFile` opens others.
  */
-export function SubmissionSheet({ doc, loadFile = null, onOpenFile = null, printable = true }) {
+export function SubmissionSheet({ doc, loadFile = null, onOpenFile = null, printable = true, embedded = false, only = null, marks = null }) {
   if (!doc) return null;
+  // marks: { [index]: { awarded, comment } } — the grader's marks as they are typed.
+  const marksOf = (item) => (marks && marks[item.index] ? { ...item.marks, awarded: marks[item.index].awarded ?? null, comment: marks[item.index].comment || null } : item.marks);
+  if (only != null) return <OneQuestion doc={doc} index={only} loadFile={loadFile} onOpenFile={onOpenFile} embedded={embedded} marksOf={marksOf} />;
   const d = doc.details || {};
   const s = doc.summary || {};
   const who = [doc.learner?.name, doc.learner?.className].filter(Boolean).join(' ');
@@ -382,12 +451,12 @@ export function SubmissionSheet({ doc, loadFile = null, onOpenFile = null, print
   const total = doc.totalPoints;
   const scoreText = doc.feedback?.score != null ? String(doc.feedback.score) : '';
   return (
-    <div className="aks">
+    <div className={`aks${embedded ? ' aks--embedded' : ''}`}>
       <Styles />
       <PrintBar show={printable} />
       <main className="aks-sheet">
         <header className="aks-head">
-          <p className="aks-org">{doc.header?.org || '[School Name]'}</p>
+          {doc.header?.org && <p className="aks-org">{doc.header.org}</p>}
           <h1 className="aks-title">{doc.header?.title || 'Assignment'}</h1>
           <p><span className="aks-badge">{doc.header?.badge || 'LEARNER SUBMISSION'}</span></p>
         </header>
@@ -431,20 +500,7 @@ export function SubmissionSheet({ doc, loadFile = null, onOpenFile = null, print
               </aside>
             ))}
             <ol className="aks-qs" role="list">
-              {(part.questions || []).map((item) => (
-                <li key={item.index} className="aks-q aks-q--marked" data-status={item.status}>
-                  <span className="aks-n">{item.number}.</span>
-                  <div>
-                    <p className="aks-stem">
-                      {item.format === 'assertion_reason' && item.assertion
-                        ? <>Assertion: <MathText text={item.assertion} /><br />Reason: <MathText text={item.reason || ''} /></>
-                        : item.answerSpace === 'blank' ? <GapText text={item.text} /> : <MathText text={item.text} />}
-                    </p>
-                    <SubmittedAnswer item={item} loadFile={loadFile} onOpenFile={onOpenFile} />
-                  </div>
-                  <MarkBox marks={item.marks} />
-                </li>
-              ))}
+              {(part.questions || []).map((item) => <QuestionRow key={item.index} item={item} loadFile={loadFile} onOpenFile={onOpenFile} marks={marksOf(item)} />)}
             </ol>
           </section>
         ))}

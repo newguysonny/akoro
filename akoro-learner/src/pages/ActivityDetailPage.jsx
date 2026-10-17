@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  fetchMyActivities, completeActivity, uploadActivityFile, removeActivityFile, downloadActivityFile, downloadMySubmissionPdf,
+  fetchMyActivities, completeActivity, uploadActivityFile, removeActivityFile, downloadActivityFile, downloadMySubmissionPdf, fetchMySubmissionDocument,
   saveActivityAnswer, saveActivityText, fetchActivityFileBlob, saveBlobAs,
 } from '../services/activityApi.js';
 import { onActivityGraded } from '../services/activitySocket.js';
@@ -11,6 +11,8 @@ import Spinner from '../components/common/Spinner.jsx';
 import { hasAnswer, stepStatuses, resumeStep, openingAnswers, shownAnswer, lastCheck } from '../lib/questionSteps.js';
 import { MathText, QuestionFigure, QuestionContext } from '../components/activity/QuestionPaper.jsx';
 import AnswerPaper, { FileCard } from '../components/activity/AnswerPaper.jsx';
+import { SubmissionSheet } from '../components/activity/PaperSheets.jsx';
+import { printSheet } from '../lib/printSheet.js';
 import WhiteboardModal from '../components/teaching/WhiteboardModal.jsx';
 // The document editor (TipTap + the .docx writer) loads only when opened.
 const WordEditor = lazy(() => import('../components/docs/WordEditor.jsx'));
@@ -521,6 +523,7 @@ export default function ActivityDetailPage() {
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [paperDoc, setPaperDoc] = useState(null);   // my handed-in work as the submission paper
   const [saved, setSaved] = useState({});   // answers the server holds per question (autosaved)
   const [files, setFiles] = useState([]);   // uploaded so far — each with its question
   const [uploadingQ, setUploadingQ] = useState(null);
@@ -700,6 +703,25 @@ export default function ActivityDetailPage() {
   };
 
   /* A drawing reopens on the whiteboard while the work is open; anything else downloads. */
+  // Handed in: my work as the submission paper (shown until it's marked, and downloaded).
+  const submittedAt = row?.submission?.submittedAt || null;
+  const hasPaper = Array.isArray(row?.briefDetails?.questions) && row.briefDetails.questions.length > 0;
+  useEffect(() => {
+    setPaperDoc(null);
+    if (!submittedAt || !row?.targetId || !hasPaper) return undefined;
+    let live = true;
+    fetchMySubmissionDocument(row.targetId).then((d) => { if (live) setPaperDoc(d); }).catch(() => {});
+    return () => { live = false; };
+  }, [row?.targetId, submittedAt, hasPaper]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const loadPaperFile = (f) => fetchActivityFileBlob(f.id);
+  const downloadSubmission = () => {
+    setPdfBusy(true); setSubmitErr('');
+    const done = paperDoc
+      ? printSheet(<SubmissionSheet doc={paperDoc} printable={false} loadFile={loadPaperFile} />, { title: `${row.title || 'Submission'} — my submission` })
+      : downloadMySubmissionPdf(row.targetId, row.title);
+    Promise.resolve(done).catch((e) => setSubmitErr(e?.message || 'Could not get the PDF.')).finally(() => setPdfBusy(false));
+  };
+
   const openFile = (f) => {
     const editable = row?.status !== 'complete' && !row?.graded && f.question != null;
     if (editable && DRAWING_RE.test(f.name || '')) { setBoard(Number(f.question)); return; }
@@ -1048,9 +1070,11 @@ export default function ActivityDetailPage() {
               its question — marked (key, each mark and comment) once graded */}
           {(isDone || row.graded) && questions?.length > 0 && (
             <div style={{ marginBottom: 20 }}>
-              <p style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', margin: '0 0 12px', fontFamily: "'Nunito',sans-serif" }}>{row.graded ? 'Your marked paper' : 'Your answers'}</p>
-              <AnswerPaper details={row.briefDetails} answers={row.submission?.answers || {}} files={row.submission?.files || []}
-                marks={row.graded ? row.feedbackQuestions || [] : []} showKey={!!row.graded} onOpenFile={openFile} sans="'Nunito',sans-serif"/>
+              <p style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', margin: '0 0 12px', fontFamily: "'Nunito',sans-serif" }}>{row.graded ? 'Your marked paper' : 'Your submission'}</p>
+              {!row.graded && paperDoc
+                ? <SubmissionSheet doc={paperDoc} embedded printable={false} loadFile={loadPaperFile} onOpenFile={openFile}/>
+                : <AnswerPaper details={row.briefDetails} answers={row.submission?.answers || {}} files={row.submission?.files || []}
+                    marks={row.graded ? row.feedbackQuestions || [] : []} showKey={!!row.graded} onOpenFile={openFile} sans="'Nunito',sans-serif"/>}
             </div>
           )}
 
@@ -1072,7 +1096,7 @@ export default function ActivityDetailPage() {
           {row.submission?.submittedAt && row.targetId && (
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
               <button type="button" disabled={pdfBusy}
-                onClick={() => { setPdfBusy(true); setSubmitErr(''); downloadMySubmissionPdf(row.targetId, row.title).catch((e) => setSubmitErr(e?.message || 'Could not get the PDF.')).finally(() => setPdfBusy(false)); }}
+                onClick={downloadSubmission}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 20, border: '1px solid var(--ak-border)', background: 'var(--ak-surface)', color: 'var(--ak-text)', fontSize: 12.5, fontWeight: 800, cursor: pdfBusy ? 'default' : 'pointer', fontFamily: "'Nunito',sans-serif" }}>
                 {pdfBusy ? <Spinner size={12}/> : <Icon name="ti-file-type-pdf" size={14} color={RED}/>} Download my submission (PDF)
               </button>

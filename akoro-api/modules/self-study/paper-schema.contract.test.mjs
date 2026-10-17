@@ -228,3 +228,14 @@ test("a type written as the answer space or format takes the plan's label for th
   assert.deepEqual(paper.questions.map((q) => q.type), ["True or false", "True or false", "Fill in the gap", "Short answer"]);
   assert.deepEqual(checkPaper(paper, plan), []);
 });
+
+test("the paper sheets and the print helper are the same in both apps", async () => {
+  const read = (p) => readFile(new URL(p, import.meta.url), "utf8");
+  const [a, b, c, d] = await Promise.all([
+    read("../../../akoro-instructor/src/components/paper/PaperSheets.jsx"), read("../../../akoro-learner/src/components/activity/PaperSheets.jsx"),
+    read("../../../akoro-instructor/src/lib/printSheet.js"), read("../../../akoro-learner/src/lib/printSheet.js"),
+  ]);
+  assert.equal(a, b, "PaperSheets.jsx is identical in akoro-instructor and akoro-learner");
+  assert.equal(c, d, "printSheet.js is identical in both apps");
+  assert.match(a, /container-type:inline-size/, "sheets fit the panel they're in (container queries), not the window");
+});

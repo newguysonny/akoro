@@ -177,6 +177,12 @@ export async function downloadMySubmissionPdf(targetId, title, { marked = false 
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
+/* My submission laid out as the paper (the submission template's data). */
+export async function fetchMySubmissionDocument(targetId) {
+  const d = await apiGet(`/api/self-study/targets/${targetId}/submission.json`);
+  return d?.data?.document ?? d?.document ?? null;
+}
+
 /* Download a submission file. Auth rides the session cookie, so a plain
    <a href> cannot carry it cross-origin — fetch the blob, then hand it to
    the browser as an object URL. */

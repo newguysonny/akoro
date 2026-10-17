@@ -14,7 +14,7 @@
 import { useEffect, useState } from 'react';
 import { Sparkles, AlertTriangle, Loader2, RotateCcw, Eye, Pencil } from 'lucide-react';
 import { INK, MUTED, MUTED2, BORDER, WHITE, LIGHT, GREEN, PURPLE, AMBER, RED, FONT } from '../../constants.js';
-import PaperView from './PaperView.jsx';
+import { AssignmentSheet } from './PaperSheets.jsx';
 import PaperBuilder from './PaperBuilder.jsx';
 import { rowsFromQuestions, cleanPaper } from '../../pages/ActivitiesPage.jsx';
 
@@ -139,8 +139,8 @@ export default function DraftVersions({ draft, selected, onSelect, onSave, onRet
               </div>
             </>
           ) : (
-            <PaperView details={v.paper} title={payload.topic} instructions={v.paper?.instructions} showKey={showKey}
-              changes={v.changes} versionLabel={`V${v.n}`} />
+            <AssignmentSheet embedded printable={false} details={v.paper} title={draft.title || payload.topic} subject={payload.subject} topic={payload.topic}
+              dueAt={payload.due_at} instructions={v.paper?.instructions} showKey={showKey} changes={v.changes} versionLabel={`V${v.n}`} />
           )}
           {!editing && (v.paper?.questions || []).some((q) => q.figure_note && !q.figure) && (
             <div style={{ fontSize: 11.5, color: AMBER, fontWeight: 700, marginTop: 8 }}>Some questions need a figure — add it in Edit before assigning.</div>

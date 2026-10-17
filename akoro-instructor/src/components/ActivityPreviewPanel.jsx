@@ -16,6 +16,8 @@ import {
   ClipboardList, Sparkles, ExternalLink, AlertTriangle, Download,
 } from 'lucide-react';
 import { downloadActivityPdf } from '../lib/activityPdf.js';
+import { printSheet } from '../lib/printSheet.js';
+import { AssignmentSheet } from './paper/PaperSheets.jsx';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, RED, FONT } from '../constants.js';
 import { ActivityForm, byKey, rowsFromQuestions } from '../pages/ActivitiesPage.jsx';
@@ -223,6 +225,16 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
   const assignBlock = needsFigure ? 'Add the missing figure first (Edit on the version).' : dueUnset ? `Set the exact due date for “${payload.due_hint}” first.` : '';
   const [pdfErr, setPdfErr] = useState(false);
   const downloadPdf = () => {
+    // A version with questions downloads as the paper, with its marking scheme after it.
+    if (shown?.status === 'ready' && (shown.paper?.questions || []).length) {
+      setPdfErr(false);
+      printSheet(
+        <AssignmentSheet title={draft.title || payload.topic} subject={payload.subject} topic={payload.topic} dueAt={payload.due_at}
+          details={shown.paper} instructions={shown.paper?.instructions} copy="both" printable={false} />,
+        { title: `${draft.title || payload.topic || 'Assignment'} — V${shown.n}` },
+      ).catch(() => setPdfErr(true));
+      return;
+    }
     try {
       downloadActivityPdf({ draft, meta, shown, audience });
       setPdfErr(false);
