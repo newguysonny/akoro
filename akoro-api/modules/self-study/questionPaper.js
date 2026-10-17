@@ -28,6 +28,7 @@
  */
 import { sanitizeSvg } from "./paperLayout.js";
 import { ANSWER_SPACES, answerSpaceFor, dropNulls, paperResponseFormat, revisionResponseFormat } from "./paperSchema.js";
+import { layoutPaper } from "./paperTemplate.js";
 
 const WORD_NUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, fifteen: 15, twenty: 20 };
 const num = (s) => (s == null ? null : /^\d+$/.test(s) ? Number(s) : WORD_NUM[String(s).toLowerCase()] ?? null);
@@ -430,13 +431,20 @@ export function normalizePaper(json, plan = {}) {
   relabelToPlan(questions, plan);
   const usedS = questions.some((q) => Number.isInteger(q.section));
   const usedP = questions.some((q) => Number.isInteger(q.passage));
-  return {
+  const paper = {
     instructions: str(j.instructions, 300) || "Answer all questions.",
     questions,
     ...(usedS ? { sections } : {}),
     ...(usedP ? { passages } : {}),
   };
+  // Every paper is laid out by the template (paperTemplate.js): its Parts by
+  // question kind — unless the teacher asked for their own sections.
+  return layoutPaper(paper, { keepSections: !!plan.sections && usedS }).paper;
 }
+
+/** Sections the template made (not ones the teacher asked for): re-laid out after a revision. */
+const TEMPLATE_PART = /^Part [A-Z] – (Multiple Choice|True or False|Short Answers|Calculations|Diagrams|Case Study|Essay)$/;
+const templateParts = (sections) => !Array.isArray(sections) || !sections.length || sections.every((x) => TEMPLATE_PART.test(String(x?.title || "")));
 
 /**
  * A follow-up's JSON over the base version → the next paper and what
@@ -473,13 +481,18 @@ export function applyRevision(base, json) {
     }
   }
   for (const q of questions) if (Number.isInteger(q.passage) && !passages[q.passage]?.text) delete q.passage;
-  const paper = {
+  const revised = {
     instructions: base.instructions || "Answer all questions.",
     questions,
     ...(base.sections ? { sections: base.sections } : {}),
     ...(questions.some((q) => Number.isInteger(q.passage)) ? { passages } : {}),
   };
-  return { paper, changes, note: str(j.note, 200) };
+  if (!templateParts(base.sections)) return { paper: revised, changes, note: str(j.note, 200) };
+  // The template's Parts again (a new MCQ joins Part A); the change marks follow their questions.
+  const { paper, order } = layoutPaper(revised);
+  const moved = {};
+  order.forEach((old, i) => { if (changes[old]) moved[i] = changes[old]; });
+  return { paper, changes: moved, note: str(j.note, 200) };
 }
 
 const labelOf = (q) => String(q?.type || "").trim().toLowerCase();

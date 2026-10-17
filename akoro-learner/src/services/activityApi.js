@@ -177,10 +177,11 @@ export async function downloadMySubmissionPdf(targetId, title, { marked = false 
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
-/* My submission laid out as the paper (the submission template's data). */
-export async function fetchMySubmissionDocument(targetId) {
-  const d = await apiGet(`/api/self-study/targets/${targetId}/submission.json`);
-  return d?.data?.document ?? d?.document ?? null;
+/* My submission as the paper — the server's template, ready to show or print. */
+export async function fetchMySubmissionPaper(targetId) {
+  const r = await authFetch(`${API}/api/self-study/targets/${targetId}/submission.html?embed=1`);
+  if (!r.ok) throw new Error('Could not load your paper.');
+  return r.text();
 }
 
 /* Download a submission file. Auth rides the session cookie, so a plain

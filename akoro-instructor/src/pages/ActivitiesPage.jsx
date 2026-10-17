@@ -21,15 +21,14 @@ import {
   Clock, Trash2, ChevronRight, Sparkles, Loader2, CheckCircle2, Info, ArrowUp, ArrowDown, BarChart3, Check,  AlertTriangle, Download } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, Badge, Toast } from '../components/Primitives.jsx';
-import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
+import { apiGet, apiPost, apiPatch, apiDelete, apiBlob } from '../services/api.js';
 import AudiencePicker, { audienceBody, parseHandles, BLANK_AUDIENCE } from '../components/AudiencePicker.jsx';
 import PlanEditor from '../components/PlanEditor.jsx';
 import PaperBuilder from '../components/paper/PaperBuilder.jsx';
 import PaperView from '../components/paper/PaperView.jsx';
 import { removeRef, AR_OPTIONS, TF_OPTIONS } from '../lib/paper.js';
 import { downloadActivityPdf } from '../lib/activityPdf.js';
-import { printSheet } from '../lib/printSheet.js';
-import { AssignmentSheet } from '../components/paper/PaperSheets.jsx';
+import { printPaperHtml } from '../components/paper/PaperFrame.jsx';
 import BattleForm from '../components/battles/BattleForm.jsx';
 import { useBattlesAPI } from '../hooks/useBattlesAPI.js';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
@@ -161,6 +160,9 @@ export function cleanQuestions(raw) {
         ...(!row.figure && row.figure_note ? { figure_note: row.figure_note } : {}),
         ...(row.format === 'case_study' ? { format: 'case_study' } : {}),
         ...(typeof row.answer === 'string' && row.answer.trim() ? { answer: row.answer.trim() } : {}),   // a model answer (graders see it, learners don't)
+        // The paper template's fields ride along (how it's answered on paper, the marking-scheme line).
+        ...(row.answer_space ? { answer_space: row.answer_space } : {}),
+        ...(typeof row.marking === 'string' && row.marking.trim() ? { marking: row.marking.trim() } : {}),
       };
       // Kinds with a fixed shape (question.format).
       if (row.format === 'assertion_reason') {
@@ -226,6 +228,8 @@ export function rowsFromQuestions(questions) {
       ...(obj.format === 'assertion_reason' ? { assertion: obj.assertion || '', reason: obj.reason || '' } : {}),
       ...(obj.format === 'label' ? { kind: 'label', labels: Array.isArray(obj.labels) ? obj.labels : [], answer: obj.answer && typeof obj.answer === 'object' ? obj.answer : {} } : {}),
       ...(typeof obj.answer === 'string' ? { answer: obj.answer } : {}),
+      ...(obj.answer_space ? { answer_space: obj.answer_space } : {}),
+      ...(obj.marking ? { marking: obj.marking } : {}),
     };
   });
 }
@@ -808,11 +812,10 @@ export function DetailPage({ activity, onDeleted, onClose }) {
   // template): the learners' paper, or the teacher copy with the marking scheme.
   const printPaper = (copy) => {
     setPdfErr(false);
-    printSheet(
-      <AssignmentSheet title={data.title} subject={data.subject} topic={data.topic} date={data.created_at} dueAt={data.due_at}
-        details={data.details} instructions={data.instructions} copy={copy} printable={false} />,
-      { title: `${data.title || 'Assignment'}${copy === 'teacher' ? ' — marking scheme' : ''}` },
-    ).catch(() => setPdfErr(true));
+    apiBlob(`/api/self-study/${data.id}/paper.html?copy=${copy}&embed=1`)
+      .then((b) => b.text())
+      .then((html) => printPaperHtml(html, `${data.title || 'Assignment'}${copy === 'teacher' ? ' — marking scheme' : ''}`))
+      .catch(() => setPdfErr(true));
   };
   const downloadPdf = () => {
     if (questions.length) { printPaper('student'); return; }

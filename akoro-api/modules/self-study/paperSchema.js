@@ -111,7 +111,10 @@ const LONG_TYPES = /^(essays?|theory|structured)$/i;
 /** The answer space a question leaves (its own, else from its kind). */
 export function answerSpaceFor(q) {
   if (!q || typeof q !== "object") return "lines";
-  if (ANSWER_SPACES.includes(q.answer_space)) return q.answer_space;
+  // Its own space while it still fits (a teacher may have changed the question's kind since).
+  const own = ANSWER_SPACES.includes(q.answer_space) ? q.answer_space : null;
+  const hasOpts = Array.isArray(q.options) && q.options.length > 0;
+  if (own && (["options", "true_false"].includes(own) ? hasOpts : own === "labels" ? Array.isArray(q.labels) && q.labels.length > 0 : !hasOpts)) return own;
   if (q.format === "true_false") return "true_false";
   if (q.format === "label") return "labels";
   if (Array.isArray(q.options)) return "options";

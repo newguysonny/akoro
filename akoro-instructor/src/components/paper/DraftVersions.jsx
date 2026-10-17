@@ -14,7 +14,9 @@
 import { useEffect, useState } from 'react';
 import { Sparkles, AlertTriangle, Loader2, RotateCcw, Eye, Pencil } from 'lucide-react';
 import { INK, MUTED, MUTED2, BORDER, WHITE, LIGHT, GREEN, PURPLE, AMBER, RED, FONT } from '../../constants.js';
-import { AssignmentSheet } from './PaperSheets.jsx';
+import PaperFrame from './PaperFrame.jsx';
+import { apiBlob } from '../../services/api.js';
+
 import PaperBuilder from './PaperBuilder.jsx';
 import { rowsFromQuestions, cleanPaper } from '../../pages/ActivitiesPage.jsx';
 
@@ -33,6 +35,23 @@ function Tab({ v, on, onClick }) {
       {v.edited && <span style={{ fontSize: 10.5, fontWeight: 700, color: AMBER }}>· edited</span>}
     </button>
   );
+}
+
+/** A ready version as the server's paper (the template), with or without the key. */
+function VersionPaper({ draftId, v, showKey }) {
+  const [html, setHtml] = useState(null);
+  const [err, setErr] = useState(false);
+  const stamp = v.editedAt || v.readyAt || '';
+  useEffect(() => {
+    let live = true;
+    setErr(false);
+    apiBlob(`/api/self-study/drafts/${draftId}/paper.html?version=${v.n}&embed=1${showKey ? '&key=1' : ''}`)
+      .then((b) => b.text()).then((t) => { if (live) setHtml(t); })
+      .catch(() => { if (live) setErr(true); });
+    return () => { live = false; };
+  }, [draftId, v.n, showKey, stamp]);
+  if (err) return <div style={{ fontSize: 12, color: MUTED, padding: 12 }}>Couldn't load the paper — try again.</div>;
+  return <PaperFrame html={html} title={`Version ${v.n}`} />;
 }
 
 export default function DraftVersions({ draft, selected, onSelect, onSave, onRetry, busy = false, editing, setEditing }) {
@@ -139,8 +158,7 @@ export default function DraftVersions({ draft, selected, onSelect, onSave, onRet
               </div>
             </>
           ) : (
-            <AssignmentSheet embedded printable={false} details={v.paper} title={draft.title || payload.topic} subject={payload.subject} topic={payload.topic}
-              dueAt={payload.due_at} instructions={v.paper?.instructions} showKey={showKey} changes={v.changes} versionLabel={`V${v.n}`} />
+            <VersionPaper draftId={draft.id} v={v} showKey={showKey} />
           )}
           {!editing && (v.paper?.questions || []).some((q) => q.figure_note && !q.figure) && (
             <div style={{ fontSize: 11.5, color: AMBER, fontWeight: 700, marginTop: 8 }}>Some questions need a figure — add it in Edit before assigning.</div>

@@ -80,6 +80,8 @@ import { validateMarks } from "./submissionMarkup.js";
 import { briefForLearner, pdfMeta, cleanAnswer, cleanQuestionMarks } from "./submissionView.js";
 import { cleanPaperDetails } from "./paperLayout.js";
 import { draftPaper, parseQuestionRequest, summarizePaper } from "./questionPaper.js";
+import { assignmentPaperHtml, submissionPaperHtml } from "./paperRender.js";
+import { versionAt, latestReady } from "./draftVersions.js";
 
 
 
@@ -971,6 +973,62 @@ router.get("/files/:fileId", asyncHandler(async (req, res) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Cache-Control", "private, max-age=3600");
   res.send(bytes);
+}));
+
+/* ── The paper template (paperTemplate.js), rendered on the server ─────── */
+
+const sendPaper = (res, html, name) => {
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Content-Disposition", contentDisposition(name, "inline"));
+  res.setHeader("Cache-Control", "private, no-cache");
+  res.send(html);
+};
+
+/** GET /api/self-study/:id/paper.html?copy=student|teacher|both&embed=1 — the
+ *  assignment as the paper template. The teacher (or school) gets any copy;
+ *  a learner it was given to gets the student paper only. */
+router.get(/^\/([0-9a-f-]{36})\/paper\.html$/i, asyncHandler(async (req, res) => {
+  const id = req.params[0];
+  let copy = ["student", "teacher", "both"].includes(req.query.copy) ? req.query.copy : "student";
+  let { assignment, error } = TEACHER_ROLES.includes(req.user.role) ? await ownedAssignment(req, id) : { error: "forbidden" };
+  if (error) {
+    const t = await myTargetOf(id, req.user.id);
+    if (!t) return res.status(error === "not_found" ? 404 : 403).json({ success: false, error: "Not yours to see" });
+    const { data } = await edu().from("self_study_assignments").select("*").eq("id", id).maybeSingle();
+    assignment = { ...data, details: briefForLearner(data?.details, false) };
+    copy = "student";
+  }
+  if (!(assignment.details?.questions || []).length) return bad(res, "This activity has no question paper");
+  sendPaper(res, await assignmentPaperHtml(assignment, { copy, embed: !!req.query.embed }), `${assignment.title || "paper"}.html`);
+}));
+
+/** GET /api/self-study/drafts/:id/paper.html?version=n&copy=&key=1&embed=1 —
+ *  a chat draft's version as the paper (the preview, its download). */
+router.get(/^\/drafts\/([0-9a-f-]{36})\/paper\.html$/i, requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
+  let draft;
+  try { draft = await getActivityDraft(req.user, req.params[0]); } catch (e) { return res.status(e.status || 500).json({ success: false, error: e.message }); }
+  const v = req.query.version != null ? versionAt(draft.payload, Number(req.query.version)) : latestReady(draft.payload);
+  if (!v || v.status !== "ready") return bad(res, "That version isn't ready");
+  const p = draft.payload || {};
+  const copy = ["student", "teacher", "both"].includes(req.query.copy) ? req.query.copy : "student";
+  const html = await assignmentPaperHtml(
+    { title: draft.title, subject: p.subject || draft.subject, topic: p.topic || draft.topic, due_at: p.due_at || null, created_at: draft.created_at,
+      school_id: draft.school_id, created_by: draft.created_by, instructions: v.paper?.instructions, details: v.paper },
+    { copy, showKey: !!req.query.key, embed: !!req.query.embed, changes: req.query.key ? v.changes : null, versionLabel: `V${v.n}` },
+  );
+  sendPaper(res, html, `${draft.title || "paper"}.html`);
+}));
+
+/** GET /api/self-study/targets/:targetId/submission.html?only=i&embed=1 — the
+ *  submission as the paper template (one question when grading). */
+router.get(/^\/targets\/([0-9a-f-]{36})\/submission\.html$/i, asyncHandler(async (req, res) => {
+  const seen = await viewableTarget(req, req.params[0]);
+  if (seen.error) return res.status(seen.status).json({ success: false, error: seen.error });
+  if (!seen.target.submission?.submittedAt) return bad(res, "Nothing has been submitted yet");
+  const only = req.query.only != null && req.query.only !== "" && Number.isInteger(Number(req.query.only)) ? Number(req.query.only) : null;
+  const html = await submissionPaperHtml(seen.target.id, { only, embed: !!req.query.embed });
+  if (!html) return missing(res, "Not found");
+  sendPaper(res, html, "submission.html");
 }));
 
 /** GET /api/self-study/targets/:targetId/submission.json — the submission as

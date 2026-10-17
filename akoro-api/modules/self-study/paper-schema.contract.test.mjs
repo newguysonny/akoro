@@ -52,9 +52,14 @@ test("a strict reply (nulls for unused fields) → the stored question shape, wi
       sq({ text: "Name the labelled parts.", type: "Labelling", format: "label", labels: ["P", "Q"], label_answers: [{ label: "P", answer: "Nucleus" }, { label: "Q", answer: "Cell wall" }], answer_space: "labels", figure_note: "A plant cell" }),
     ],
   }, { options: 4 });
-  const [w, m, b, c, l] = paper.questions;
-  assert.deepEqual(w, { q: "Solve for x: 3x + 5 = 20.", type: "Calculation", max_points: 2, difficulty: "", cognitive_level: "", answer: "x = 5", section: 0,
+  const by = (t) => paper.questions.find((q) => q.q.startsWith(t));
+  const [w, m, b, c, l] = ["Solve for x", "Which is the solution", "The place value", "Write an equation", "Name the labelled"].map(by);
+  assert.deepEqual(w, { q: "Solve for x: 3x + 5 = 20.", type: "Calculation", max_points: 2, difficulty: "", cognitive_level: "", answer: "x = 5", section: 1,
     answer_space: "working", marking: "3x = 20 − 5 (1 mark); x = 5 (1 mark)" });
+  // The template's Parts, in its order: objective, short, labelling, case study.
+  assert.deepEqual(paper.questions.map((q) => q.q.slice(0, 12)), ["Which is the", "Solve for x:", "The place va", "Name the lab", "Write an equ"]);
+  assert.deepEqual(paper.sections.map((x) => x.title), ["Part A – Multiple Choice", "Part B – Short Answers", "Part C – Diagrams", "Part D – Case Study"]);
+  assert.equal(paper.sections[0].instructions, "Each question carries 1 mark.");
   assert.equal(m.answer_space, "options");
   assert.equal(m.correct, 1);
   assert.equal(b.answer_space, "blank");
@@ -62,7 +67,7 @@ test("a strict reply (nulls for unused fields) → the stored question shape, wi
   assert.equal(c.passage, 0);
   assert.deepEqual(l.answer, { P: "Nucleus", Q: "Cell wall" });
   assert.equal(l.answer_space, "labels");
-  assert.equal(paper.sections.length, 2);
+  assert.equal(paper.sections.length, 4, "the teacher's own sections are replaced by the template's Parts unless they asked for sections");
   assert.ok(!("options" in w) && !("figure" in w), "nulls are not stored");
 });
 
@@ -76,7 +81,7 @@ test("a strict revision reply: { from } with nulls copies; a changed question ke
     { ...R, from: 0 },
     { ...R, from: 1, changed: true, text: "Q two, harder", max_points: 6, marking: "Three points, 2 marks each" },
   ] });
-  assert.deepEqual(paper.questions[0], base.questions[0]);
+  assert.deepEqual(paper.questions[0], { ...base.questions[0], section: 0 });
   assert.equal(paper.questions[1].q, "Q two, harder");
   assert.equal(paper.questions[1].max_points, 6);
   assert.equal(paper.questions[1].marking, "Three points, 2 marks each");
@@ -100,6 +105,8 @@ test("answer space: its own when set, else from the question's kind", () => {
   assert.equal(answerSpaceFor({ q: "x", type: "Calculation" }), "working");
   assert.equal(answerSpaceFor({ q: "x", type: "Theory" }), "lines");
   assert.equal(answerSpaceFor({ q: "x", type: "Theory", answer_space: "working" }), "working");
+  assert.equal(answerSpaceFor({ q: "x", type: "Theory", answer_space: "options" }), "lines", "a stale space (the kind changed) gives way");
+  assert.equal(answerSpaceFor({ q: "x", options: ["a", "b"], answer_space: "working" }), "options");
 });
 
 // The reference submission (Equations — Assignment, Amara JSS1-2).
@@ -206,7 +213,8 @@ test("the type's kind decides the shape: an MCQ marked true_false keeps its opti
     sq({ text: "Demand falls when…", type: "MCQ", format: "true_false", options: five, correct: 2, max_points: 1, answer_space: "options" }),
     sq({ text: "Supply rises when…", type: "MCQ", format: "true_false", options: five, correct: 0, max_points: 1, answer_space: "options" }),
   ] }, plan);
-  const [c1, , m1] = paper.questions;
+  const c1 = paper.questions.find((q) => q.format === "case_study");
+  const m1 = paper.questions.find((q) => Array.isArray(q.options));
   assert.equal(c1.type, "Case study");
   assert.equal(m1.format, undefined, "an MCQ is never true/false");
   assert.deepEqual(m1.options, five);
@@ -229,13 +237,65 @@ test("a type written as the answer space or format takes the plan's label for th
   assert.deepEqual(checkPaper(paper, plan), []);
 });
 
-test("the paper sheets and the print helper are the same in both apps", async () => {
+test("both apps show the server's paper the same way", async () => {
   const read = (p) => readFile(new URL(p, import.meta.url), "utf8");
-  const [a, b, c, d] = await Promise.all([
-    read("../../../akoro-instructor/src/components/paper/PaperSheets.jsx"), read("../../../akoro-learner/src/components/activity/PaperSheets.jsx"),
-    read("../../../akoro-instructor/src/lib/printSheet.js"), read("../../../akoro-learner/src/lib/printSheet.js"),
-  ]);
-  assert.equal(a, b, "PaperSheets.jsx is identical in akoro-instructor and akoro-learner");
-  assert.equal(c, d, "printSheet.js is identical in both apps");
-  assert.match(a, /container-type:inline-size/, "sheets fit the panel they're in (container queries), not the window");
+  const [a, b] = await Promise.all([read("../../../akoro-instructor/src/components/paper/PaperFrame.jsx"), read("../../../akoro-learner/src/components/activity/PaperFrame.jsx")]);
+  assert.equal(a, b, "PaperFrame.jsx is identical in akoro-instructor and akoro-learner");
+  assert.match(a, /const PAGE_W = 840;/, "laid out at the template's desktop width, then scaled");
+});
+
+const T = await import("./paperTemplate.js");
+const ref = (f) => readFile(new URL(`../../../reference/question-layout-for-activity/submission-crop/${f}`, import.meta.url), "utf8");
+const styleOf = (html) => /<style>\n?([\s\S]*?)<\/style>/.exec(html)[1];
+
+test("the server's template is the reference CSS, verbatim", async () => {
+  const [asg, sub] = await Promise.all([ref("assignment-equations.html"), ref("submission-template-1.html")]);
+  const out = T.renderAssignmentHtml({ assignment: EQUATIONS, org: "Akoro Demo Academy, Ikeja, Nigeria" });
+  assert.ok(out.includes(styleOf(asg).trim()), "assignment.css is the reference's own");
+  const doc = submissionDocument({ assignment: EQUATIONS, target: SUBMITTED, files: drawings });
+  assert.ok(T.renderSubmissionHtml({ doc }).includes(styleOf(sub).trim()), "submission.css is the reference's own");
+});
+
+test("every paper is laid out by the template's Parts, in its order, with its notes", () => {
+  const { paper, order } = T.layoutPaper(EQUATIONS.details);
+  assert.deepEqual(paper.sections.map((x) => x.title), ["Part A – Multiple Choice", "Part B – Calculations", "Part C – Case Study"]);
+  assert.deepEqual(paper.sections.map((x) => x.instructions), ["Each question carries 1 mark.", "Marks are shown at the end of each question.", "Read the case study, then answer Questions 7–8."]);
+  assert.deepEqual(order, [1, 4, 0, 2, 3, 5, 6, 7]);
+  assert.equal(T.paperOrg({ name: "Akoro Demo Academy", city: "Ikeja", state: "Lagos" }), "Akoro Demo Academy, Ikeja, Nigeria");
+  assert.equal(T.paperOrg(null), null);
+});
+
+test("the assignment paper: header with parts, details, fields, instructions, parts, answer spaces, teacher copy", () => {
+  const assignment = { ...EQUATIONS, created_at: "2026-10-14T09:00:00Z", details: T.layoutPaper(EQUATIONS.details).paper };
+  const html = T.renderAssignmentHtml({ assignment, org: "Akoro Demo Academy, Ikeja, Nigeria", copy: "both" });
+  for (const bit of ['<p class="doc-head__org">Akoro Demo Academy, Ikeja, Nigeria</p>', "<dt>Part A:</dt><dd>MULTIPLE CHOICE (QUESTIONS 1–2)</dd>",
+    "<div><dt>Subject</dt><dd>Mathematics</dd></div>", '<span class="field">Score (/16):</span>', '<h2 class="part__title">Part B – Calculations</h2>',
+    '<div class="workspace">Working</div><p class="ans">Answer: <span class="blank"></span></p>', '<aside class="case" data-first="7">',
+    '<span class="badge">TEACHER COPY</span>', "<tfoot><tr><td colspan=\"2\">Total</td><td>16</td></tr></tfoot>", "function paginate()"]) {
+    assert.ok(html.includes(bit), bit);
+  }
+  assert.ok(!html.includes('"correct"') && !/is-key/.test(html.replace(".options .is-key", "")), "the learner paper carries no key");
+  assert.ok(!T.renderAssignmentHtml({ assignment }).includes("TEACHER COPY"), "student copy only by default");
+});
+
+test("the submission paper numbers 1..n, fills the chosen option, shows drawings, marks boxes and the footer label", () => {
+  const doc = submissionDocument({ assignment: EQUATIONS, target: SUBMITTED, learner: { name: "Amara", className: "JSS1-2", username: "demo_stu_jss12" }, files: drawings });
+  const html = T.renderSubmissionHtml({ doc, images: new Map([["f0", "data:image/png;base64,AAAA"]]) });
+  assert.deepEqual([...html.matchAll(/<li class="q" data-n="(\d+)"/g)].map((m) => Number(m[1])), [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.match(html, /\.q::before\{content:attr\(data-n\) "\."\}/, "numbers come from the data (the template's counter showed 0.)");
+  assert.match(html, /<li class="is-selected">x = 7<\/li>/);
+  assert.match(html, /<figure class="drawing" data-file="drawing-q1\.png"><img src="data:image\/png;base64,AAAA"/);
+  assert.match(html, /<div class="noanswer">No answer submitted<\/div>/);
+  assert.match(html, /data-footer="Amara JSS1-2 · Equations — Assignment · page "/);
+  const one = T.renderSubmissionHtml({ doc, only: 3, marks: { 3: { awarded: 2, comment: "Good" } } });
+  assert.equal([...one.matchAll(/<li class="q"/g)].length, 1);
+  assert.match(one, /<b data-got="2">\/ 2<\/b><em>Good<\/em>/);
+  assert.match(one, /<body class="embed single"/);
+});
+
+test("model text never becomes markup in the paper", () => {
+  const evil = { title: "<img src=x onerror=alert(1)>", details: { questions: [{ q: "</p><script>alert(1)</script>", type: "Theory", options: ["<b>x</b>", "y"], correct: 0 }] } };
+  const html = T.renderAssignmentHtml({ assignment: evil, copy: "both" });
+  assert.ok(!html.includes("<script>alert(1)</script>") && !html.includes("<img src=x") && !html.includes("<b>x</b>"));
+  assert.ok(html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"));
 });

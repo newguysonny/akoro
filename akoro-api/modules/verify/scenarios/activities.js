@@ -199,6 +199,12 @@ function chatToSubmission(c) {
       ctx.cleanup(() => ctx.db.deleteOwned("edu.self_study_assignments", { ownerColumn: "created_by", ownerId: teacher.id, filters: { id } }));
       ctx.cleanup(() => ctx.db.deleteOwned("notifications", { ownerColumn: "user_id", ownerId: learner.id, filters: { related_id: id } }));
 
+      // The paper template, rendered by the server: the teacher's paper + marking scheme, the learner's paper.
+      const html = (r) => r.status === 200 && /text\/html/.test(r.headers["content-type"] || "");
+      ctx.expect.ok("the teacher's paper renders (template)", html(await ctx.http({ as: p.instructor, path: `/api/self-study/${id}/paper.html?copy=both` })));
+      ctx.expect.ok("the draft's paper renders", html(await ctx.http({ as: p.instructor, path: `/api/self-study/drafts/${draftId}/paper.html?version=${v1.n}&key=1&embed=1` })));
+      ctx.expect.ok("the learner's paper renders", html(await ctx.http({ as: p.learner, path: `/api/self-study/${id}/paper.html?copy=teacher` })));
+
       // The learner's copy: no answer key, no marking scheme.
       const mine = await ctx.http({ as: p.learner, path: "/api/self-study/mine" });
       const brief = JSON.stringify((Array.isArray(mine.body?.data) ? mine.body.data : []).find((a) => a.id === id)?.details || {});
@@ -223,6 +229,8 @@ function chatToSubmission(c) {
       }
       const done = await ctx.http({ as: p.learner, method: "POST", path: `/api/self-study/${id}/complete`, body: {} });
       ctx.expect.eq("handed in", done.status, 200);
+
+      ctx.expect.ok("the submission paper renders", html(await ctx.http({ as: p.learner, path: `/api/self-study/targets/${(await ctx.db.rows("edu.self_study_targets", { assignment_id: id, student_id: learner.id }, { columns: "id" }))[0]?.id}/submission.html` })));
 
       // 5. Read back as the submission template.
       const target = (await ctx.db.rows("edu.self_study_targets", { assignment_id: id, student_id: learner.id }, { columns: "id" }))[0];

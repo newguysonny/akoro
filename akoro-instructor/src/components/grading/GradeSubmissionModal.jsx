@@ -33,7 +33,7 @@ import { apiGet, apiPatch, apiPost, apiPut, apiDelete, apiBlob, downloadActivity
 import SubmissionMarkup from './SubmissionMarkup.jsx';
 import QuestionMarker, { QuestionRail, autoMarks, markTotals, pointsOf } from './QuestionMarker.jsx';
 import AnswerPaper from '../paper/AnswerPaper.jsx';
-import { SubmissionSheet } from '../paper/PaperSheets.jsx';
+import PaperFrame from '../paper/PaperFrame.jsx';
 import { openSubmittedFile } from './openFile.js';
 import { Sparkles } from 'lucide-react';
 import { readChoice } from '../../lib/paper.js';
@@ -321,18 +321,6 @@ export default function GradeSubmissionModal({
   const RUBRIC_MAX = RUBRIC.reduce((s, r) => s + r.max, 0);
   const submitted = !!current?.submission?.submittedAt;
   const [view, setView] = useState('pdf');   // 'pdf' | 'answers' (the paper, one question at a time)
-  // The submission as the paper template (submission.json): the Paper view.
-  const [paperDoc, setPaperDoc] = useState(null);
-  useEffect(() => {
-    setPaperDoc(null);
-    if (!current?.targetId || !current?.submission?.submittedAt) return undefined;
-    let live = true;
-    apiGet(`/api/self-study/targets/${current.targetId}/submission.json`)
-      .then((d) => { if (live) setPaperDoc(d?.data?.document ?? null); })
-      .catch(() => {});
-    return () => { live = false; };
-  }, [current?.targetId, current?.submission?.submittedAt]);
-  const loadPaperFile = useCallback((f) => apiBlob(`/api/self-study/files/${f.id}`), []);
   // The left paper's question follows the step being marked (and back).
   useEffect(() => { if (Array.isArray(brief?.details?.questions) && brief.details.questions.length && qIndex < brief.details.questions.length) setStep((s) => (s < brief.details.questions.length ? qIndex : s)); }, [qIndex]);   // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -384,6 +372,18 @@ export default function GradeSubmissionModal({
   const hasQuestions = qList.length > 0;
   const [qMarks, setQMarks] = useState({});   // index → { awarded, comment, auto? }
   const [step, setStep] = useState(0);
+  // The submission as the server's paper template: one question at a time
+  // while marking (the step), the whole paper on Review.
+  const [paperHtml, setPaperHtml] = useState(null);
+  const paperOnly = Array.isArray(brief?.details?.questions) && step < brief.details.questions.length ? step : null;
+  useEffect(() => {
+    if (!current?.targetId || !current?.submission?.submittedAt || !(brief?.details?.questions || []).length) { setPaperHtml(null); return undefined; }
+    let live = true;
+    apiBlob(`/api/self-study/targets/${current.targetId}/submission.html?embed=1${paperOnly != null ? `&only=${paperOnly}` : ''}`)
+      .then((b) => b.text()).then((t) => { if (live) setPaperHtml(t); })
+      .catch(() => { if (live) setPaperHtml(null); });
+    return () => { live = false; };
+  }, [current?.targetId, current?.submission?.submittedAt, paperOnly, brief]);
 
   /* Grading state — autosaved locally on every change. */
   const [mode, setMode] = useState('rubric');                 // 'questions' | 'rubric' | 'manual'
@@ -651,11 +651,8 @@ export default function GradeSubmissionModal({
               </div>
             ) : (
             hasQuestions && (Object.keys(current.submission?.answers || {}).length > 0 || (current.submission?.files || current.files || []).length > 0) ? (
-              paperDoc ? (
-                <div style={{ padding: '16px 16px 20px', background: '#F1F0EC' }}>
-                  <SubmissionSheet doc={paperDoc} embedded printable={false} only={step < qList.length ? step : null}
-                    marks={qMarks} loadFile={loadPaperFile} onOpenFile={openSubmittedFile} />
-                </div>
+              paperHtml ? (
+                <PaperFrame html={paperHtml} marks={qMarks} title={`${current.student.name} — paper`} />
               ) : (
               <div style={{ padding: '18px 20px 24px' }}>
                 <PaperAnswers current={current} brief={brief} marks={qMarks} focus={qIndex} />

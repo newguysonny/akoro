@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  fetchMyActivities, completeActivity, uploadActivityFile, removeActivityFile, downloadActivityFile, downloadMySubmissionPdf, fetchMySubmissionDocument,
+  fetchMyActivities, completeActivity, uploadActivityFile, removeActivityFile, downloadActivityFile, downloadMySubmissionPdf, fetchMySubmissionPaper,
   saveActivityAnswer, saveActivityText, fetchActivityFileBlob, saveBlobAs,
 } from '../services/activityApi.js';
 import { onActivityGraded } from '../services/activitySocket.js';
@@ -11,8 +11,7 @@ import Spinner from '../components/common/Spinner.jsx';
 import { hasAnswer, stepStatuses, resumeStep, openingAnswers, shownAnswer, lastCheck } from '../lib/questionSteps.js';
 import { MathText, QuestionFigure, QuestionContext } from '../components/activity/QuestionPaper.jsx';
 import AnswerPaper, { FileCard } from '../components/activity/AnswerPaper.jsx';
-import { SubmissionSheet } from '../components/activity/PaperSheets.jsx';
-import { printSheet } from '../lib/printSheet.js';
+import PaperFrame, { printPaperHtml } from '../components/activity/PaperFrame.jsx';
 import WhiteboardModal from '../components/teaching/WhiteboardModal.jsx';
 // The document editor (TipTap + the .docx writer) loads only when opened.
 const WordEditor = lazy(() => import('../components/docs/WordEditor.jsx'));
@@ -523,7 +522,7 @@ export default function ActivityDetailPage() {
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
-  const [paperDoc, setPaperDoc] = useState(null);   // my handed-in work as the submission paper
+  const [paperHtml, setPaperHtml] = useState(null);   // my handed-in work as the submission paper (server template)
   const [saved, setSaved] = useState({});   // answers the server holds per question (autosaved)
   const [files, setFiles] = useState([]);   // uploaded so far — each with its question
   const [uploadingQ, setUploadingQ] = useState(null);
@@ -707,17 +706,16 @@ export default function ActivityDetailPage() {
   const submittedAt = row?.submission?.submittedAt || null;
   const hasPaper = Array.isArray(row?.briefDetails?.questions) && row.briefDetails.questions.length > 0;
   useEffect(() => {
-    setPaperDoc(null);
+    setPaperHtml(null);
     if (!submittedAt || !row?.targetId || !hasPaper) return undefined;
     let live = true;
-    fetchMySubmissionDocument(row.targetId).then((d) => { if (live) setPaperDoc(d); }).catch(() => {});
+    fetchMySubmissionPaper(row.targetId).then((t) => { if (live) setPaperHtml(t); }).catch(() => {});
     return () => { live = false; };
   }, [row?.targetId, submittedAt, hasPaper]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const loadPaperFile = (f) => fetchActivityFileBlob(f.id);
   const downloadSubmission = () => {
     setPdfBusy(true); setSubmitErr('');
-    const done = paperDoc
-      ? printSheet(<SubmissionSheet doc={paperDoc} printable={false} loadFile={loadPaperFile} />, { title: `${row.title || 'Submission'} — my submission` })
+    const done = paperHtml
+      ? printPaperHtml(paperHtml, `${row.title || 'Submission'} — my submission`)
       : downloadMySubmissionPdf(row.targetId, row.title);
     Promise.resolve(done).catch((e) => setSubmitErr(e?.message || 'Could not get the PDF.')).finally(() => setPdfBusy(false));
   };
@@ -1071,8 +1069,8 @@ export default function ActivityDetailPage() {
           {(isDone || row.graded) && questions?.length > 0 && (
             <div style={{ marginBottom: 20 }}>
               <p style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', margin: '0 0 12px', fontFamily: "'Nunito',sans-serif" }}>{row.graded ? 'Your marked paper' : 'Your submission'}</p>
-              {!row.graded && paperDoc
-                ? <SubmissionSheet doc={paperDoc} embedded printable={false} loadFile={loadPaperFile} onOpenFile={openFile}/>
+              {!row.graded && paperHtml
+                ? <PaperFrame html={paperHtml} title="My submission"/>
                 : <AnswerPaper details={row.briefDetails} answers={row.submission?.answers || {}} files={row.submission?.files || []}
                     marks={row.graded ? row.feedbackQuestions || [] : []} showKey={!!row.graded} onOpenFile={openFile} sans="'Nunito',sans-serif"/>}
             </div>

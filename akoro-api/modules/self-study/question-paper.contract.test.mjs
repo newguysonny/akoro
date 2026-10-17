@@ -67,8 +67,8 @@ test("count check, one retry, then a warning — never a silent change", async (
   assert.match(calls[1].at(-1).content, /Asked for 5 questions, got 4\. Asked for 3 MCQ, got 2\./);
   assert.equal(out.warning, null);
   assert.equal(out.paper.questions.length, 5);
-  assert.deepEqual(out.paper.questions[0], { q: "1", type: "MCQ", max_points: 2, difficulty: "Easy", cognitive_level: "Recall", options: ["a", "b", "c", "d"], correct: 1, answer_space: "options" });
-  assert.equal("sections" in out.paper, false);
+  assert.deepEqual(out.paper.questions[0], { q: "1", type: "MCQ", max_points: 2, difficulty: "Easy", cognitive_level: "Recall", options: ["a", "b", "c", "d"], correct: 1, answer_space: "options", section: 0 });
+  assert.deepEqual(out.paper.sections.map((x) => x.title), ["Part A – Multiple Choice", "Part B – Short Answers"], "laid out by the paper template");
 
   let n = 0;
   const still = await qp.draftPaper({ chat: async () => { n += 1; return JSON.stringify({ questions: [mcq("1"), theory("2")] }); }, topic: "t", subject: "s", request: "3 MCQ and 2 theory" });
@@ -108,7 +108,8 @@ test("a follow-up copies untouched questions exactly and marks what changed", ()
     { from: 2, changed: true, text: "Word equation, with conditions?", type: "Theory", max_points: 6, keep_figure: true },
     { from: 99 },
   ] });
-  assert.deepEqual(paper.questions[0], base.questions[0], "copied byte for byte — the teacher's edits stay");
+  assert.deepEqual(paper.questions[0], { ...base.questions[0], section: 0 }, "copied byte for byte — the teacher's edits stay (in the template's Part A)");
+  assert.deepEqual(paper.sections.map((x) => x.title), ["Part A – Multiple Choice", "Part B – Short Answers"]);
   assert.equal(paper.questions[1].q, "Where, exactly?");
   assert.ok(paper.questions[2].figure.svg);
   assert.equal(paper.questions[3].figure.alt, "tri", "kept figure");
