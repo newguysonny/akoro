@@ -9,7 +9,10 @@ body=$(jq -nc --arg s "${SUITE:-}" --arg c "${SCENARIO:-}" --arg e "${EXPECT_SHA
    + (if $e != "" then {expectSha:$e} else {} end)
    + (if $t == "production" then {target:"production"} else {} end)')
 # Optional: EDGE_HEADER="Name: value" — what a Cloudflare skip rule in front of the API lets through.
-edge=(); [ -n "${EDGE_HEADER:-}" ] && edge=(-H "$EDGE_HEADER")
+# Trimmed: a secret pasted with a trailing newline would end the request's
+# headers early (the edge lets it through, the API gets a broken request: 502).
+EDGE_HEADER=$(printf '%s' "${EDGE_HEADER:-}" | tr -d '\r\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+edge=(); [ -n "$EDGE_HEADER" ] && edge=(-H "$EDGE_HEADER")
 hdrs=$(mktemp)
 # A 502/503/504 is the API restarting (a deploy) or waking: try again a few times.
 for attempt in 1 2 3 4 5 6; do

@@ -8,7 +8,10 @@ if [ -z "${GATE_URL:-}" ] || [ -z "${GATE_KEY:-}" ]; then
   echo "::warning::The AKORO_GATE_URL / AKORO_GATE_KEY secrets are not set — the gates can't run. See .github/workflows/verification-gates.yml."
   echo "deployed=false" >> "$GITHUB_OUTPUT"; exit 0
 fi
-edge=(); [ -n "${EDGE_HEADER:-}" ] && edge=(-H "$EDGE_HEADER")
+# Trimmed: a secret pasted with a trailing newline would end the request's
+# headers early (the edge lets it through, the API gets a broken request: 502).
+EDGE_HEADER=$(printf '%s' "${EDGE_HEADER:-}" | tr -d '\r\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+edge=(); [ -n "$EDGE_HEADER" ] && edge=(-H "$EDGE_HEADER")
 deadline=$(( $(date +%s) + ${WAIT_MIN:-25} * 60 ))
 api=""; sandbox=""; goes=""
 while [ "$(date +%s)" -lt "$deadline" ]; do

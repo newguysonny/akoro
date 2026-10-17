@@ -74,7 +74,15 @@ async function openRecordReader(t, marker, readyLocator) {
   const { page } = t;
   await page.goto(`${t.app}/library`, { waitUntil: 'domcontentloaded' });
   const card = page.getByRole('button', { name: markerRe(marker) }).first();
-  t.check('the record is on the library shelf', await card.waitFor({ timeout: 30_000 }).then(() => true, () => false));
+  // The shelf can show its cached list first; a new record may need one reload.
+  let onShelf = await card.waitFor({ timeout: 15_000 }).then(() => true, () => false);
+  if (!onShelf) {
+    t.note('the new record was not on the shelf at first — reloaded the library');
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    onShelf = await card.waitFor({ timeout: 20_000 }).then(() => true, () => false);
+  }
+  t.check('the record is on the library shelf', onShelf);
+  if (!onShelf) return false;   // a FAIL, not a precondition
   await card.click();
   // A file never extracted asks first; reading it as-is is the plain path.
   const asIs = page.getByRole('button', { name: 'Read as-is' });
