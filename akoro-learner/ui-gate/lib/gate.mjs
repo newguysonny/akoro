@@ -37,6 +37,16 @@ export const DEVICES = {
   desktop: { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 },
 };
 
+/**
+ * UI_GATE_EDGE_HEADER="Name: value" — a header the edge in front of the API
+ * (a Cloudflare skip rule) lets through; sent on every request to the API.
+ */
+export const EDGE_HEADER = (() => {
+  const raw = String(process.env.UI_GATE_EDGE_HEADER || '');
+  const i = raw.indexOf(':');
+  return i > 0 ? { [raw.slice(0, i).trim()]: raw.slice(i + 1).trim() } : {};
+})();
+
 class Blocked extends Error { constructor(m) { super(m); this.name = 'Blocked'; } }
 
 /* ── local target: this checkout, built and served, API passed through ── */
@@ -79,7 +89,7 @@ async function probeWebSocket(api) {
   return new Promise((resolve) => {
     const req = https.request(`${api}/socket.io/?EIO=4&transport=websocket`, {
       agent, timeout: 15_000,
-      headers: { Connection: 'Upgrade', Upgrade: 'websocket', 'Sec-WebSocket-Version': '13', 'Sec-WebSocket-Key': 'dGhlIHNhbXBsZSBub25jZQ==', Origin: process.env.UI_GATE_ORIGIN || 'https://akoro.name.ng' },
+      headers: { ...EDGE_HEADER, Connection: 'Upgrade', Upgrade: 'websocket', 'Sec-WebSocket-Version': '13', 'Sec-WebSocket-Key': 'dGhlIHNhbXBsZSBub25jZQ==', Origin: process.env.UI_GATE_ORIGIN || 'https://akoro.name.ng' },
     });
     req.on('upgrade', (_res, socket) => { socket.destroy(); resolve(true); });
     req.on('response', (res) => { res.resume(); resolve(false); });
@@ -97,12 +107,19 @@ async function signIn(context, { authBase, learner }) {
   let r;
   try {
     r = await context.request.post(`${authBase}/api/auth/login`, {
-      headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'student' },
+      headers: { ...EDGE_HEADER, 'Content-Type': 'application/json', 'X-Akoro-Portal': 'student' },
       data: { email, password: process.env.UI_GATE_PASSWORD || DEMO_PASSWORD },
     });
   } catch (e) { throw new Blocked(`the API did not answer the login: ${e.message}`); }
   const body = await r.json().catch(() => ({}));
-  if (!r.ok()) throw new Blocked(`login as ${username} answered ${r.status()}: ${body?.message || 'no message'}`);
+  if (!r.ok()) {
+    // A refusal from the edge (Cloudflare) never reached the API: say so.
+    const h = r.headers();
+    const edge = h.server === 'cloudflare' && !h['x-render-origin-server']
+      ? ` — refused by Cloudflare before the API (cf-mitigated: ${h['cf-mitigated'] || 'none'}, ray ${h['cf-ray'] || '?'}); set UI_GATE_EDGE_HEADER to a header a Cloudflare skip rule lets through`
+      : '';
+    throw new Blocked(`login as ${username} answered ${r.status()}: ${body?.message || 'no message'}${edge}`);
+  }
   const data = body.data || body;
   if (data.twoFactorRequired) throw new Blocked(`${username} has two-factor sign-in on; the gate can't pass it`);
   return { user: data.user, accessExpiresAt: data.accessExpiresAt, accessToken: data.accessToken };
@@ -123,7 +140,7 @@ function toolkit({ page, context, app, api, session, state, outDir, scenario, de
     api: async (method, p, data) => {
       // The learner's own access cookie, sent explicitly: over http://127.0.0.1
       // the request client holds back a Secure cookie the browser would send.
-      const headers = { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'student', Cookie: `akoro_access_student=${session.accessToken}` };
+      const headers = { ...EDGE_HEADER, 'Content-Type': 'application/json', 'X-Akoro-Portal': 'student', Cookie: `akoro_access_student=${session.accessToken}` };
       const r = await context.request.fetch(`${api}${p}`, { method, headers, ...(data !== undefined ? { data } : {}) });
       const body = await r.json().catch(() => null);
       return { status: r.status(), body };
@@ -195,6 +212,11 @@ export async function runGate({ target = 'local', app = process.env.UI_GATE_APP,
       await context.addInitScript(({ user, exp }) => {
         try { localStorage.setItem('akoro_user', JSON.stringify(user)); localStorage.setItem('akoro_access_exp', String(exp)); } catch { /* storage off */ }
       }, { user: session.user, exp: session.accessExpiresAt });
+      // The browser's own requests to the API carry the edge header too (added
+      // at the network layer, so no CORS preflight).
+      if (Object.keys(EDGE_HEADER).length && target === 'live') {
+        await context.route((u) => u.origin === new URL(api).origin, (route) => route.continue({ headers: { ...route.request().headers(), ...EDGE_HEADER } }));
+      }
       const page = await context.newPage();
       page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text().slice(0, 300)); });
       page.on('pageerror', (e) => consoleErrors.push(`pageerror: ${String(e.message).slice(0, 300)}`));

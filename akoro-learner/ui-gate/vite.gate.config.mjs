@@ -17,9 +17,13 @@ const outbound = process.env.HTTPS_PROXY
 // The API accepts the learner app's own origin (and its sockets accept only
 // portal origins), so the pass-through presents the deployed app's origin.
 const appOrigin = process.env.UI_GATE_ORIGIN || 'https://akoro.name.ng';
+// UI_GATE_EDGE_HEADER="Name: value": what the edge in front of the API
+// (a Cloudflare skip rule) lets through.
+const edgeRaw = String(process.env.UI_GATE_EDGE_HEADER || '');
+const edge = edgeRaw.indexOf(':') > 0 ? { [edgeRaw.slice(0, edgeRaw.indexOf(':')).trim()]: edgeRaw.slice(edgeRaw.indexOf(':') + 1).trim() } : {};
 const passThrough = (_proxy, options) => {
   if (outbound) options.agent = outbound;
-  options.headers = { ...(options.headers || {}), origin: appOrigin };
+  options.headers = { ...(options.headers || {}), ...edge, origin: appOrigin };
 };
 
 const proxy = {

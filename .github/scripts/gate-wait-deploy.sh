@@ -8,12 +8,13 @@ if [ -z "${GATE_URL:-}" ] || [ -z "${GATE_KEY:-}" ]; then
   echo "::warning::The AKORO_GATE_URL / AKORO_GATE_KEY secrets are not set — the gates can't run. See .github/workflows/verification-gates.yml."
   echo "deployed=false" >> "$GITHUB_OUTPUT"; exit 0
 fi
+edge=(); [ -n "${EDGE_HEADER:-}" ] && edge=(-H "$EDGE_HEADER")
 deadline=$(( $(date +%s) + ${WAIT_MIN:-25} * 60 ))
 api=""; sandbox=""; goes=""
 while [ "$(date +%s)" -lt "$deadline" ]; do
-  api=$(curl -s -m 15 "$GATE_URL/health" | jq -r '.build.git // empty' 2>/dev/null)
+  api=$(curl -s -m 15 "${edge[@]}" "$GATE_URL/health" | jq -r '.build.git // empty' 2>/dev/null)
   if [ "$api" = "$SHA" ]; then
-    info=$(curl -s -m 30 "$GATE_URL/api/verify/scenarios" -H "Authorization: Bearer $GATE_KEY")
+    info=$(curl -s -m 30 "${edge[@]}" "$GATE_URL/api/verify/scenarios" -H "Authorization: Bearer $GATE_KEY")
     goes=$(echo "$info" | jq -r '.data.runsGoTo // "here"')
     sandbox=$(echo "$info" | jq -r '.data.sandbox.sha // empty')
     if [ "$goes" != "sandbox" ] || [ "$sandbox" = "$SHA" ]; then

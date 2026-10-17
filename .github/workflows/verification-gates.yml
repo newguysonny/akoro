@@ -19,6 +19,18 @@
 #   variable AKORO_APP_URL     the deployed learner app, e.g. https://akoro.name.ng
 #   secret   UI_GATE_PASSWORD  optional — the test learners' password if it
 #                              was changed from the seed's
+#   secret   AKORO_EDGE_HEADER optional — "Name: value", a header Cloudflare
+#                              lets through. GitHub's runners are datacenter
+#                              IPs, which Cloudflare's bot protection refuses
+#                              (403 before the API). Make a long random value,
+#                              e.g. "X-Akoro-Gate: <random>", and in Cloudflare →
+#                              Security → WAF → Custom rules add a rule
+#                              (any(http.request.headers["x-akoro-gate"][*] eq "<random>"))
+#                              with action Skip (all remaining custom rules,
+#                              rate limiting, managed rules, Browser Integrity
+#                              Check, Security Level). Bot Fight Mode can't be
+#                              skipped by a rule on the free plan — turn it off,
+#                              or use Super Bot Fight Mode's verified-bot setting.
 name: Verification Gates
 
 on:
@@ -86,6 +98,7 @@ jobs:
         env:
           GATE_URL: ${{ secrets.AKORO_GATE_URL }}
           GATE_KEY: ${{ secrets.AKORO_GATE_KEY }}
+          EDGE_HEADER: ${{ secrets.AKORO_EDGE_HEADER }}
           SHA: ${{ github.sha }}
           WAIT_MIN: "25"
         run: bash .github/scripts/gate-wait-deploy.sh
@@ -105,6 +118,7 @@ jobs:
         env:
           GATE_URL: ${{ secrets.AKORO_GATE_URL }}
           GATE_KEY: ${{ secrets.AKORO_GATE_KEY }}
+          EDGE_HEADER: ${{ secrets.AKORO_EDGE_HEADER }}
           SUITE: ${{ inputs.backend_suite || 'regression' }}
           TARGET: ${{ inputs.backend_target || 'default' }}
           EXPECT_SHA: ${{ github.event_name == 'push' && github.sha || inputs.expect_sha }}
@@ -138,6 +152,7 @@ jobs:
           UI_GATE_APP: ${{ (inputs.frontend_target || 'local') == 'live' && vars.AKORO_APP_URL || '' }}
           UI_GATE_ORIGIN: ${{ vars.AKORO_APP_URL || 'https://akoro.name.ng' }}
           UI_GATE_PASSWORD: ${{ secrets.UI_GATE_PASSWORD }}
+          UI_GATE_EDGE_HEADER: ${{ secrets.AKORO_EDGE_HEADER }}
         run: >-
           node ui-gate/run.mjs
           --target "${{ inputs.frontend_target || 'local' }}"
@@ -150,4 +165,5 @@ jobs:
         with:
           name: frontend-gate-evidence
           path: akoro-learner/ui-gate/.out
+          include-hidden-files: true
           retention-days: 14

@@ -8,13 +8,26 @@ body=$(jq -nc --arg s "${SUITE:-}" --arg c "${SCENARIO:-}" --arg e "${EXPECT_SHA
    + (if $c != "" then {scenario:$c} else {suite:$s} end)
    + (if $e != "" then {expectSha:$e} else {} end)
    + (if $t == "production" then {target:"production"} else {} end)')
-start=$(curl -sS --fail-with-body -X POST "$GATE_URL/api/verify/runs" -H "Authorization: Bearer $GATE_KEY" -H 'Content-Type: application/json' -d "$body")
+# Optional: EDGE_HEADER="Name: value" — what a Cloudflare skip rule in front of the API lets through.
+edge=(); [ -n "${EDGE_HEADER:-}" ] && edge=(-H "$EDGE_HEADER")
+hdrs=$(mktemp)
+start=$(curl -sS -D "$hdrs" -X POST "$GATE_URL/api/verify/runs" "${edge[@]}" -H "Authorization: Bearer $GATE_KEY" -H 'Content-Type: application/json' -d "$body")
+code=$(awk 'toupper($1) ~ /^HTTP/ {c=$2} END {print c}' "$hdrs")
+if [ "${code:-0}" -ge 400 ]; then
+  echo "::error::The gate answered $code."
+  grep -iE '^(server|cf-ray|cf-mitigated|x-render-origin-server):' "$hdrs" || true
+  echo "$start" | grep -o '<title>[^<]*</title>' || echo "$start" | head -c 300
+  if grep -qi '^server: cloudflare' "$hdrs" && ! grep -qi '^x-render-origin-server' "$hdrs"; then
+    echo "::error::Cloudflare refused the request before it reached the API (GitHub's runners are datacenter IPs). Add a Cloudflare skip rule for the AKORO_EDGE_HEADER secret — see .github/workflows/verification-gates.yml."
+  fi
+  exit 1
+fi
 id=$(echo "$start" | jq -r '.data.id')
 [ -n "$id" ] && [ "$id" != null ] || { echo "::error::The gate did not start a run: $start"; exit 1; }
 echo "Run $id ($(echo "$start" | jq -r '.data.target // "?"'))"
 run=""
 for i in $(seq 1 90); do
-  run=$(curl -sS "$GATE_URL/api/verify/runs/$id" -H "Authorization: Bearer $GATE_KEY")
+  run=$(curl -sS "$GATE_URL/api/verify/runs/$id" "${edge[@]}" -H "Authorization: Bearer $GATE_KEY")
   [ "$(echo "$run" | jq -r .data.status)" = "done" ] && break
   sleep 10
 done
