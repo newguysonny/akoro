@@ -2375,8 +2375,9 @@ event id, sequence, latency, context set, rejection codes, fallback reason.
 
 ### 13.4 Agent Chat tab — coding-agent UI spec (D41)
 
-Reference: `reference/screen-20260930-103526_5RMBLnv7_compressed.mp4` and the
-two screenshots of a coding agent (Claude Code on the web), studied 2026-10-09.
+Reference: a screen recording and two screenshots of a coding agent (Claude
+Code on the web), studied 2026-10-09 (the recording was removed from the repo
+on 2026-10-17 once built; this section is the record of it).
 The Agent Chat tab should look and behave like it.
 
 **What the reference does**

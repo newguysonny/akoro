@@ -3,7 +3,9 @@
 Scope: the backend that powers the Fortizo document viewer + study tools
 (Chat/Copilot, Summary, Quiz, Flashcards, Podcast, Video, Notes). Document
 parsing is **not** built from scratch — it's the vendored Hanji engine
-(`hanji-main/`), called as an internal service. This doc is written to be
+(`hanji-main/`, upstream source; the zip was removed from `reference/` on
+2026-10-17 — the parse prompt the worker needs is vendored in
+`runpod-worker/handler.py`), called as an internal service. This doc is written to be
 handed to Claude Code as the implementation brief.
 
 ---
