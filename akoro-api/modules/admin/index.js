@@ -9,12 +9,14 @@ import appCenterRouter from "./appCenter.js";
 import aiSpendRouter from "./aiSpend.js";
 import evalsRouter from "./evals.js";
 import agentToolRequestsRouter from "./agent-tool-requests.js";
+import agentToolsRouter from "./agent-tools.js";
 import tiersRouter from "./tiers.js";
 import pilotSchoolsRouter from "./pilotSchools.js";
 import billingRouter from "./billing.js";
 import couponsRouter from "./coupons.js";
 import messagesRouter from "./messages.js";
 import reportsRouter from "./reports.js";
+import verifyRealUserRouter from "./verify-real-user.js";
 
 const router = Router();
 router.use("/", coreRouter);
@@ -27,11 +29,13 @@ router.use("/", appCenterRouter);
 router.use("/", aiSpendRouter);
 router.use("/", evalsRouter);
 router.use("/", agentToolRequestsRouter);
+router.use("/", agentToolsRouter);
 router.use("/", tiersRouter);
 router.use("/", pilotSchoolsRouter);
 router.use("/", billingRouter);
 router.use("/", couponsRouter);
 router.use("/", messagesRouter);
 router.use("/", reportsRouter);
+router.use("/", verifyRealUserRouter);
 
 export default router;

@@ -114,11 +114,12 @@ export async function resolveLadder({ studentId, topic, subject, guide }) {
 
   // 1. Cached ladder (skip rejected — those regenerate).
   try {
-    const { data: cached } = await db.schema("edu").from("lesson_ladders")
-      .select("*")
-      .eq("topic_key", topicKey)
-      .eq("school_id", schoolId ?? null)
-      .eq("class_id", classId ?? null)
+    // eq(col, null) never matches NULL — learners with no school/class never
+    // hit the cache (and the re-insert then failed the unique key). IS NULL.
+    const nullable = (q, col, v) => (v == null ? q.is(col, null) : q.eq(col, v));
+    let q = db.schema("edu").from("lesson_ladders").select("*").eq("topic_key", topicKey);
+    q = nullable(nullable(q, "school_id", schoolId), "class_id", classId);
+    const { data: cached } = await q
       .ilike("subject", subject || "")
       .in("status", ["approved", "pending_review"])
       .maybeSingle();

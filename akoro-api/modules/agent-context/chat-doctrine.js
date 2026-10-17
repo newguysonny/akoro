@@ -14,6 +14,8 @@
  */
 
 import { loadDoctrine } from "./context-manager.js";
+import { renderPersona } from "./template.js";
+import { studentPersonality, personalityBand } from "./personas/student.js";
 
 export async function tutorSystemPrompt({ agentName = "Akoro", role = "student" } = {}) {
   const base = (await loadDoctrine("channels/CHAT.md")).replaceAll("{{agentName}}", agentName);
@@ -29,8 +31,18 @@ export async function tutorSystemPrompt({ agentName = "Akoro", role = "student" 
  * agent historically DENIED having memory because nothing in the prompt
  * owned the ability (see memory/DURABLE_MEMORY.md).
  */
+/** identity/PROTEGE.md with the agent's own facts; defaults when the agent isn't known yet. */
+export async function protegeIdentity({ agentName = "Akoro", learnerName = "the learner", level = 1, sessions = 0 } = {}) {
+  const band = personalityBand({ level, sessions });
+  // Each band's template takes exactly its own values (the renderer rejects extras).
+  const values = { FRESH: {}, EARLY: { sessions }, SOLID: { level, sessions }, ADVANCED: { level, sessions } }[band];
+  const personality = await studentPersonality(band, values);
+  return renderPersona("identity/PROTEGE.md", { agentName, learnerName, level, sessions, personality: personality.trim() });
+}
+
 export async function assembleChatDoctrine({
   agentName = "Akoro", role = "student", think = false, research = false, durableMemory = false, currentTimeContext = "",
+  protege = null,
 } = {}) {
   let system = await tutorSystemPrompt({ agentName, role });
   // P2b deliberate adoption: the platform SOUL opens the student prompt —
@@ -38,7 +50,10 @@ export async function assembleChatDoctrine({
   // soul" — and the curated agent wisdom (memory/MEMORY.md) joins the memory
   // family. Instructor doctrine keeps its own voice.
   if (role === "student") {
-    system = (await loadDoctrine("identity/SOUL.md")) + "\n\n" + system;
+    // The learner's chat speaks as THEIR protégé from the first lines — the
+    // shared soul, then who this agent is (name, whose, level, personality
+    // band) — not a tutor corrected by protégé rules at the end.
+    system = (await loadDoctrine("identity/SOUL.md")) + "\n\n" + (await protegeIdentity({ agentName, ...(protege || {}) })) + "\n\n" + system;
     // Exam-prep adoption (Master Plan §4.8–4.9 + Akoro-Exam-Prep-Confidence-
     // Loop.md): test preparation is a study-prep session, never a chat
     // questionnaire. The live 2026-10-01 transcript had the model interview

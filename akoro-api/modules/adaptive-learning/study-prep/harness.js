@@ -37,8 +37,11 @@ const HTTP_FOR_CODE = {
   invalid_state_transition: 409, attempt_cap_exceeded: 409, strategy_not_permitted: 422,
   prerequisite_violation: 422, topic_not_in_syllabus: 422, plan_too_large: 422, duplicate_topic: 422,
   deferred_retry_used: 409, insufficient_balance: 402, teach_back_gate: 409, agent_loop_cap: 409,
-  session_tool_call_cap: 409, unknown_action: 400,
+  session_tool_call_cap: 409, unknown_action: 400, syllabus_exists: 409, outline_invalid: 502,
 };
+
+/** What the plan card says when the session plans against a generated outline (§8.7). */
+export const GENERATED_OUTLINE_LABEL = "AI-drafted outline — not your school's official syllabus";
 
 export function createHarness({ store, topicWorkflow, syllabus, now = () => new Date().toISOString() }) {
   const reject = async (session, code, message, facts = {}) => {
@@ -74,7 +77,52 @@ export function createHarness({ store, topicWorkflow, syllabus, now = () => new 
     plan: row.plan || null, estimate: row.estimate || null, policyVersion: row.policy_version,
     toolCallsUsed: Number(row.tool_calls_used || 0), createdAt: row.created_at, updatedAt: row.updated_at,
     completedAt: row.completed_at || null, topics: topics ? topics.map(publicTopic) : undefined,
+    syllabusSource: row.syllabus_source || "platform",
+    syllabusLabel: row.syllabus_source === "generated" ? GENERATED_OUTLINE_LABEL : null,
   });
+
+  /** The topics this session plans against: its generated outline, else the platform syllabus. */
+  const topicsFor = (session) => (session.syllabus_source === "generated" && session.syllabus_ref && syllabus.generatedTopics
+    ? syllabus.generatedTopics(session.syllabus_ref)
+    : syllabus.resolveTopics({ subject: session.subject, classLevel: session.class_level, exam: session.exam_board }));
+
+  /**
+   * syllabus.generate (§8.7): draft an outline ONLY when the real syllabus is
+   * empty — a real syllabus always wins (`syllabus_exists`). The outline is
+   * reused for the same scope; the session records it as its source.
+   */
+  async function generateSyllabus({ sessionId, learnerId, intent = null }) {
+    const session = await ownedSession(sessionId, learnerId);
+    if (!session) throw new HarnessRejection("session_not_found", "Study-prep session was not found", 404);
+    if (session.status !== "planning" && session.status !== "replanning") {
+      return reject(session, "invalid_state_transition", "An outline can only be drafted while planning");
+    }
+    if (!syllabus.generateOutline) return reject(session, "tool_not_permitted", "Outline drafting is not available");
+    const real = await syllabus.resolveTopics({ subject: session.subject, classLevel: session.class_level, exam: session.exam_board });
+    if (real.length) {
+      return reject(session, "syllabus_exists", "A real syllabus exists for this subject and class — plan from syllabus.resolve", { topicCount: real.length });
+    }
+    let outline;
+    try {
+      outline = await syllabus.generateOutline({ subject: session.subject, classLevel: session.class_level, examBoard: session.exam_board, goal: session.goal, learnerId });
+    } catch (error) {
+      if (error?.code === "outline_invalid") return reject(session, "outline_invalid", "The drafted outline failed its checks — try again", { reason: String(error.message).slice(0, 200) });
+      throw error;
+    }
+    const updated = await store.updateSessionConditional(session.id, session.status, {
+      syllabus_source: "generated", syllabus_ref: outline.id, updated_at: now(),
+    });
+    if (!updated) return reject(session, "invalid_state_transition", "The session moved on — refresh and try again");
+    await log(session.id, null, {
+      eventType: "harness_decision", origin: "harness", decisionNode: "syllabus_generated",
+      agentIntent: intent, facts: { topicCount: outline.topics.length, reused: outline.reused, subject: session.subject, classLevel: session.class_level },
+      narrative: deliberate("syllabus_generated", { subject: session.subject, classLevel: session.class_level, reused: outline.reused })?.narrative,
+    });
+    return {
+      source: "generated", reused: outline.reused, label: GENERATED_OUTLINE_LABEL,
+      topics: outline.topics.map((t) => ({ id: t.id, label: t.label })),
+    };
+  }
 
   async function ownedSession(sessionId, learnerId) {
     const session = await store.getSession(sessionId);
@@ -114,7 +162,7 @@ export function createHarness({ store, topicWorkflow, syllabus, now = () => new 
       });
     }
     const [syllabusTopics, prerequisites] = await Promise.all([
-      syllabus.resolveTopics({ subject: session.subject, classLevel: session.class_level, exam: session.exam_board }),
+      topicsFor(session),
       syllabus.prerequisiteEdges({ subject: session.subject }),
     ]);
     const validation = validatePlan({ proposedTopics: topicIds, syllabusTopics, prerequisites });
@@ -519,7 +567,7 @@ export function createHarness({ store, topicWorkflow, syllabus, now = () => new 
     const session = await ownedSession(sessionId, learnerId);
     if (!session) throw new HarnessRejection("session_not_found", "Study-prep session was not found", 404);
     const [syllabusTopics, prerequisites] = await Promise.all([
-      syllabus.resolveTopics({ subject: session.subject, classLevel: session.class_level, exam: session.exam_board }),
+      topicsFor(session),
       syllabus.prerequisiteEdges({ subject: session.subject }),
     ]);
     const validation = validatePlan({ proposedTopics: topicIds, syllabusTopics, prerequisites });
@@ -563,7 +611,7 @@ export function createHarness({ store, topicWorkflow, syllabus, now = () => new 
     startTopicPractice, submitPractice, confirmTeachBack, offerStrategy,
     advanceTopic, deferTopic, retryDeferredTopic, flagTopic,
     concludeSession, pauseSession, resumeSession, cancelSession,
-    validateProposedPlan, getSessionView, sessionNext,
+    validateProposedPlan, getSessionView, sessionNext, generateSyllabus,
     publicSession, publicTopic, pause, log,
   };
 }

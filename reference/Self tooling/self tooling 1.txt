@@ -1,0 +1,193 @@
+‎Yes — this is absolutely possible. It's called dynamic tool creation (or self-extending agents).
+‎
+‎It's a real, active pattern. Let me break down how it works, the hard parts, and a concrete design.
+‎
+‎---
+‎
+‎The Core Idea
+‎
+‎Your agent has a tool registry that isn't fixed at build time. When it hits a request no existing tool handles, it:
+‎
+‎1. Detects the gap — "I have search, but not search_with_filter."
+‎2. Writes the tool — generates code (a function + schema).
+‎3. Registers it — adds it to its available tools at runtime.
+‎4. Calls it — uses the new tool to answer.
+‎5. (optionally) Persists it — saves for reuse next time.
+‎
+‎Your example:
+‎
+‎```
+‎User: "search for my friends under 23"
+‎Agent thinks: search() exists, but no age filter
+‎Agent writes: def search_friends_under_age(age): ...
+‎Agent registers it → calls it → returns result
+‎```
+‎
+‎---
+‎
+‎How It Actually Works
+‎
+‎1. Tool = code + schema
+‎
+‎A tool is just:
+‎
+‎```python
+‎# code
+‎def search_friends_under_age(max_age: int) -> list:
+‎    results = base_search("friends")
+‎    return [r for r in results if r["age"] < max_age]
+‎
+‎# schema (what the LLM sees)
+‎{
+‎  "name": "search_friends_under_age",
+‎  "description": "Search friends under a given age",
+‎  "parameters": {"max_age": {"type": "integer"}}
+‎}
+‎```
+‎
+‎2. The meta-tool
+‎
+‎You give the agent one special tool: create_tool(name, description, code, schema). That's the bootstrapping mechanism. The agent calls it to add new tools to its own list.
+‎
+‎3. The loop
+‎
+‎```
+‎LLM → wants to call tool → tool missing?
+‎      → calls create_tool(...) 
+‎      → new tool registered
+‎      → LLM re-plans, calls new tool
+‎```
+‎
+‎---
+‎
+‎The Hard Parts (This Is Where It Gets Real)
+‎
+‎Challenge Why it matters Mitigation
+‎Security Agent-generated code can do anything Sandbox execution (E2B/Daytona!), no network by default, allowlists
+‎Correctness Generated code may be buggy Run tests, dry-run, retry loop
+‎Schema drift Agent invents inconsistent tool interfaces Enforce a strict template/validation
+‎Tool sprawl Hundreds of near-duplicate tools Dedup, version, garbage-collect unused tools
+‎Prompt injection User tricks agent into writing malicious tools Treat generated code as untrusted
+‎Persistence Reuse across sessions? Store in a tool DB with versioning
+‎Trust Do you trust auto-generated tools in prod? Human-in-the-loop for sensitive ops
+‎
+‎The single biggest risk is security. Auto-generated code must run in a sandbox — which is exactly why the sandbox question you asked earlier matters here.
+‎
+‎---
+‎
+‎Architecture for Your Case
+‎
+‎```
+‎┌─────────────────────────────────────────┐
+‎│  User: "search friends under 23"        │
+‎└───────────────┬─────────────────────────┘
+‎                ▼
+‎┌─────────────────────────────────────────┐
+‎│  Agent (LLM loop)                        │
+‎│  Tools: [login, search, create_tool]     │
+‎└───────────────┬─────────────────────────┘
+‎                │ no matching tool
+‎                ▼
+‎┌─────────────────────────────────────────┐
+‎│  create_tool(                            │
+‎│    name="search_friends_under_age",      │
+‎│    code="...",                           │
+‎│    schema={...}                          │
+‎│  )                                       │
+‎└───────────────┬─────────────────────────┘
+‎                ▼
+‎┌─────────────────────────────────────────┐
+‎│  SANDBOX (E2B / Daytona / Docker)        │
+‎│  - validate code                         │
+‎│  - run tests                             │
+‎│  - execute in isolation                  │
+‎└───────────────┬─────────────────────────┘
+‎                ▼
+‎┌─────────────────────────────────────────┐
+‎│  Tool Registry (in-memory + persistent)  │
+‎│  [login, search, search_friends_under_age]│
+‎└───────────────┬─────────────────────────┘
+‎                ▼
+‎        Agent calls new tool → answer
+‎```
+‎
+‎---
+‎
+‎Minimal Implementation Sketch
+‎
+‎```python
+‎tools = {
+‎    "login": {...},
+‎    "search": {...},
+‎    "create_tool": {
+‎        "description": "Create a new tool at runtime",
+‎        "parameters": {
+‎            "name": "string",
+‎            "code": "string",
+‎            "schema": "object"
+‎        }
+‎    }
+‎}
+‎
+‎def create_tool(name, code, schema):
+‎    # 1. Validate
+‎    validate_syntax(code)
+‎    validate_schema(schema)
+‎    
+‎    # 2. Run in sandbox
+‎    result = sandbox.run(code, tests=generate_smoke_test(schema))
+‎    if not result.ok:
+‎        return f"Tool failed validation: {result.error}"
+‎    
+‎    # 3. Register
+‎    tools[name] = {"code": code, "schema": schema}
+‎    return f"Tool '{name}' registered."
+‎```
+‎
+‎The agent's system prompt says:
+‎
+‎"If no tool matches the request, use create_tool to build one, then call it."
+‎
+‎---
+‎
+‎Real-World Examples
+‎
+‎· Voyager (Minecraft agent) — writes its own skills in code, stores them in a library. The canonical example.
+‎· CodeAct / OpenHands — agent writes and executes code as its action space.
+‎· Gorilla / ToolLLM — models that call and compose tools, some generate new ones.
+‎· AutoGPT-style — rudimentary self-tooling (often messy).
+‎· Claude/GPT "code interpreter" — a degenerate case: the LLM writes code per request instead of pre-registering tools.
+‎
+‎---
+‎
+‎Two Philosophies
+‎
+‎A. Pre-register tools (persistent)
+‎
+‎· Agent writes tool → saves to registry → reuses forever.
+‎· Pros: efficiency, growing capability.
+‎· Cons: sprawl, stale tools, security surface grows.
+‎
+‎B. Generate-and-run (ephemeral)
+‎
+‎· Agent writes code per request, runs it in a sandbox, discards it.
+‎· Pros: no sprawl, simpler, safer.
+‎· Cons: no reuse, re-generates each time.
+‎
+‎For your "friends under 23" example, (B) is usually the pragmatic winner — you don't need a permanent search_friends_under_age tool; you need the agent to compose search + a filter, on the fly, in a sandbox. This is what CodeAct/OpenHands do.
+‎
+‎---
+‎
+‎My Recommendation
+‎
+‎1. Start with ephemeral code-gen (philosophy B): give the agent search + a code-execution sandbox. It writes the filter inline. No tool registry mutation needed. Much simpler and safer.
+‎2. Add persistence later if you see repeated patterns worth caching as named tools.
+‎3. Always sandbox the generated code — this is non-negotiable. Use E2B/Daytona/Docker from your earlier question.
+‎4. Never auto-trust generated tools for privileged actions (payments, deletes) without human review.
+‎
+‎---
+‎
+‎Bottom line: Yes, it's possible and it's a known pattern. But the cleanest version isn't "agent permanently adds tools to its list" — it's "agent writes throwaway code in a sandbox to bridge the gap." You get the same capability with far less sprawl and risk.
+‎
+‎Want me to sketch the full prompt + harness for the ephemeral version, using your login/search example?
+‎

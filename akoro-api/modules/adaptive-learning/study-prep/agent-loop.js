@@ -56,13 +56,26 @@ export async function runAgentStep({
   contextSetName = "planning", maxIterations = POLICY.MAX_ITERATIONS_PER_STEP,
 }) {
   const observations = [];
+  // Planning ends only by proposing a plan — never by concluding the session.
+  const finalActions = contextSetName === "planning" ? ["propose_plan"] : TERMINAL_ACTIONS;
   let terminal = null;
   let toolCallsUsed = 0;
 
   for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
-    const step = await agent.next({
-      iteration, goal, observations, tools: registry.catalogue,
-    });
+    let step;
+    try {
+      // The agent knows its budget; the last iteration may only end the step.
+      step = await agent.next({ iteration, maxIterations, goal, observations, tools: registry.catalogue, finalOnly: iteration === maxIterations ? finalActions : null });
+    } catch (error) {
+      // The provider call itself failed (rejected request, timeout). Record it
+      // in the session's log — it used to vanish, leaving a plan-less session
+      // with no trace of why — then fail the step as before.
+      await store.appendEvents(sessionId, [makeEvent({
+        sequence: 0, iteration, eventType: "agent_action", origin: "harness",
+        action: "agent_error", facts: { reason: String(error?.message || error).slice(0, 240) },
+      })]).catch(() => {});
+      throw error;
+    }
 
     const requested = step?.tool || step?.action;
     if (!requested) {
@@ -106,7 +119,8 @@ export async function runAgentStep({
       // resumable inside the practice op. The agent still SEES the code.
       insufficientBalance = error?.code === "insufficient_balance";
     }
-    observations.push(observation);
+    // The agent's transcript names the tool each observation answers.
+    observations.push({ tool: requested, ...observation });
     await store.appendEvents(sessionId, [makeEvent({
       sequence: 0, iteration, eventType: "observation", origin: "harness",
       topicId: topicId || null, facts: observation,

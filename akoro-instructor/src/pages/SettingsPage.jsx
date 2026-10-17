@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Languages, Moon, Palette, Bell, MessageCircle, Shield, Key, Lock,
-  PauseCircle, Trash2, HelpCircle, Bug, FileText, Info, ChevronRight, Receipt,
+  PauseCircle, Trash2, HelpCircle, Bug, FileText, Info, ChevronRight, Receipt, Wrench,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { PageLayout } from '../components/Layout.jsx';
@@ -105,6 +105,17 @@ export default function SettingsPage() {
             label="Order history"
             sublabel="Your tool & asset purchases"
             onClick={() => navigate('/orders')}
+            right={<ChevronRight size={18} color={MUTED} />}
+          />
+        </Section>
+
+        {/* AI agent */}
+        <Section title="AI agent">
+          <Row
+            icon={Wrench}
+            label="My agent tools"
+            sublabel="Tools your AI Chat agent built for you"
+            onClick={() => navigate('/agent-tools')}
             right={<ChevronRight size={18} color={MUTED} />}
           />
         </Section>

@@ -1,0 +1,219 @@
+‎Yes — if we design the Verification Gate to trigger Akoro's agent through your existing API, then the test uses Akoro's configured model, not the coding agent's model.
+‎
+‎Using your example:
+‎
+‎Coding Agent
+‎Opus 5.5
+‎    │
+‎    │ "Run verification scenario"
+‎    ▼
+‎Verification Gate
+‎    │
+‎    │ HTTP request
+‎    ▼
+‎Akoro API
+‎    │
+‎    │ your existing agent configuration
+‎    ▼
+‎Akoro Agent
+‎    │
+‎    │ model = gpt-4o-mini
+‎    ▼
+‎OpenAI
+‎
+‎So there are actually two different AI systems involved.
+‎
+‎1. The coding agent
+‎
+‎For example:
+‎
+‎Claude Opus 5.5
+‎
+‎Its job is to write/modify Akoro code and use the Verification Gate.
+‎
+‎It might reason:
+‎
+‎> "I changed the exam-prep confirmation logic. I need to verify it."
+‎
+‎
+‎
+‎Then it calls:
+‎
+‎verify_scenario("exam_prep_confirmation")
+‎
+‎The coding agent's model is not what we're testing.
+‎
+‎
+‎---
+‎
+‎2. Akoro's own agent
+‎
+‎Your Akoro backend has its own model configuration, for example:
+‎
+‎AKORO_DEFAULT_MODEL=gpt-4o-mini
+‎
+‎When the verification scenario triggers an actual Akoro agent workflow:
+‎
+‎Verification Gate
+‎       ↓
+‎Akoro API
+‎       ↓
+‎Akoro Agent
+‎       ↓
+‎gpt-4o-mini
+‎
+‎That is the model being tested.
+‎
+‎So if your goal is:
+‎
+‎> "Did our Akoro agent correctly use get_learner_state, get_syllabus, create_plan, etc.?"
+‎
+‎
+‎
+‎then the gate should execute the real Akoro agent, using the model configured by Akoro.
+‎
+‎
+‎---
+‎
+‎This is actually very important
+‎
+‎We don't want the coding agent to simulate the Akoro agent.
+‎
+‎Bad test:
+‎
+‎Opus 5.5
+‎   ↓
+‎Pretend to be Akoro agent
+‎   ↓
+‎"Looks like the workflow works"
+‎
+‎That doesn't test Akoro's agent.
+‎
+‎Correct test:
+‎
+‎Opus 5.5
+‎   ↓
+‎Verification Gate
+‎   ↓
+‎Akoro API
+‎   ↓
+‎Akoro's actual agent runtime
+‎   ↓
+‎Akoro's configured model
+‎   ↓
+‎Tools / DB / workflows
+‎
+‎Then the gate observes what actually happened.
+‎
+‎
+‎---
+‎
+‎We can therefore test the entire real agentic stack
+‎
+‎For example, suppose your Akoro agent has:
+‎
+‎Model
+‎  ↓
+‎Agent controller
+‎  ↓
+‎Tool selection
+‎  ↓
+‎get_learner_state()
+‎  ↓
+‎get_syllabus()
+‎  ↓
+‎build_plan()
+‎  ↓
+‎calculate_cost()
+‎  ↓
+‎await_confirmation
+‎
+‎The Verification Gate can trigger that flow and verify:
+‎
+‎✓ Correct model configuration
+‎✓ Correct agent was invoked
+‎✓ Correct tools were called
+‎✓ Correct arguments were supplied
+‎✓ Tools returned successfully
+‎✓ Workflow followed the state machine
+‎✓ Credits weren't spent prematurely
+‎✓ Database state is correct
+‎✓ Final result is correct
+‎
+‎That is much more valuable than simply testing individual HTTP endpoints.
+‎
+‎
+‎---
+‎
+‎We can even test different models
+‎
+‎This gives you another powerful capability.
+‎
+‎Suppose your Akoro API supports:
+‎
+‎AKORO_MODEL=gpt-4o-mini
+‎
+‎You could have:
+‎
+‎Verification Environment A
+‎    model = gpt-4o-mini
+‎
+‎Verification Environment B
+‎    model = another supported model
+‎
+‎and run the same scenario against both.
+‎
+‎For example:
+‎
+‎Same Scenario
+‎                         │
+‎              ┌──────────┴──────────┐
+‎              ↓                     ↓
+‎        gpt-4o-mini            Model B
+‎              │                     │
+‎              ↓                     ↓
+‎         Agent run              Agent run
+‎              │                     │
+‎              └──────────┬──────────┘
+‎                         ↓
+‎                   Compare results
+‎
+‎This could eventually become an agent regression/evaluation system for Akoro.
+‎
+‎
+‎---
+‎
+‎One subtle point
+‎
+‎The Verification Gate itself doesn't need to know or care which model Akoro uses.
+‎
+‎Ideally it simply says:
+‎
+‎POST /whatever-starts-the-agent-workflow
+‎
+‎and then observes the execution.
+‎
+‎The Akoro API remains responsible for:
+‎
+‎Which model?
+‎Which system instructions?
+‎Which tools?
+‎Which agent?
+‎Which workflow?
+‎Which memory?
+‎Which policies?
+‎
+‎That makes the test much more realistic.
+‎
+‎So if tomorrow you change:
+‎
+‎gpt-4o-mini
+‎
+‎to:
+‎
+‎another model
+‎
+‎the same verification scenario can run again and tell you whether Akoro still behaves correctly.
+‎
+‎That's the architecture I'd recommend for your Akoro Verification Gate. The coding agent (Opus, Claude Code, etc.) is the developer using the verification system; Akoro's configured model is the agent being tested.
+‎

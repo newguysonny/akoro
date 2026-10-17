@@ -70,6 +70,8 @@ import courseBuilderModule       from "./modules/course-builder/routes.js";
 import hfMirrorModule            from "./modules/hfmirror/routes.js";
 import parseConsoleModule        from "./modules/records/parseConsole.js";
 import agentConsoleModule        from "./modules/agentConsole/routes.js";
+import verifyModule              from "./modules/verify/routes.js";
+import selfToolingModule         from "./modules/self-tooling/routes.js";
 import { startRoutineScheduler }  from "./modules/self-study/routines.js";
 import communitiesModule, { COMMUNITIES_QUERY_TIMEOUT_MS } from "./modules/communities/routes.js";
 import { setupDiscussionSocket } from "./modules/communities/discussionSocket.js";
@@ -660,7 +662,10 @@ if (process.env.MIGRATIONS_ON_BOOT !== "false") {
       if (await migrationsAlreadyApplied(mUrl, mSha)) {
         console.log(`[MIGRATIONS] already applied for ${String(mSha).slice(0, 7) || "this build"} — skipping boot run`);
       } else {
-        const { applied, failed } = await applyMigrations({ url: mUrl, groups: ["schema"], label: "boot" });
+        // The gate's sandbox (VERIFY_TARGET=sandbox, its own database) also gets the
+        // demo seeds — schools, courses, classes — so its testers have a world to act in.
+        const groups = process.env.VERIFY_TARGET === "sandbox" ? ["schema", "demo"] : ["schema"];
+        const { applied, failed } = await applyMigrations({ url: mUrl, groups, label: "boot" });
         if (failed) console.error(`[MIGRATIONS] ${failed} migration(s) FAILED at boot — check the logs above; the API is starting anyway.`);
       }
     } catch (e) {
@@ -717,6 +722,22 @@ if (process.env.REDIS_URL && !skipJob("battle worker")) {
     }
   } catch (e) {
     console.error("[chat-follow-ups] worker failed to start:", e.message);
+  }
+
+  // Self-tooling (S3): an admin approval resumes the learner's tool build in
+  // their chat. Durable jobs + a 15-minute sweep for lost ones and expiry.
+  // Without the worker, approvals resume in-process (resumeQueue.enqueueResume).
+  {
+    const withWorker = !skipJob("self-tool resumes worker");
+    const withSweep = withWorker || !skipJob("self-tool resume sweep");
+    if (withWorker || withSweep) {
+      import("./modules/self-tooling/resumeQueue.js")
+        .then((m) => {
+          if (withWorker) { m.startResumeWorker(); console.log("[self-tool-resumes] worker started at boot"); }
+          else { m.armSweep(); console.log("[self-tool-resumes] sweep only (resumes run in-process)"); }
+        })
+        .catch((e) => console.error("[self-tool-resumes] failed to start:", e.message));
+    }
   }
 
   // The learner's persisted opt-in, not a browser state, authorizes every
@@ -791,6 +812,8 @@ app.use("/api/programmes",  standardLimit, programmesModule);  // Program Course
 app.use("/api/course-builder", standardLimit, courseBuilderModule);  // Course Creator (instructor)
 app.use("/api/hf",          standardLimit, hfMirrorModule);        // Hugging Face model mirror console (key-guarded)
 app.use("/api/parse",       standardLimit, parseConsoleModule);
+app.use("/api/self-tooling",  standardLimit, selfToolingModule);     // learner: my agent-built tools
+app.use("/api/verify",        standardLimit, verifyModule);          // Verification Gate (AGENT_CONSOLE_KEY) — PASS/FAIL with evidence
 app.use("/api/agent-console", standardLimit, agentConsoleModule);   // learner Agent Chat test console (AGENT_CONSOLE_KEY)   // parse-worker console (key-guarded browser tester)
 app.use("/api/communities",  standardLimit, communitiesModule);  // higher-ed study groups
 app.use("/api/instructor/tools", standardLimit, instructorToolsModule);  // platform tools/assets catalog + purchase

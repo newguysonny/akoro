@@ -1,0 +1,614 @@
+‎Yes to both. In fact, I'd recommend building the verification gate as a separate service for Akoro Arena. You can connect it to your existing akoro-api through environment variables without merging the two codebases.
+‎
+‎And yes, you can use it to test your agentic system, including AI tool calls, multi-step workflows, memory, decision-making, and execution results.
+‎
+‎The important distinction is that API verification tests whether your application works, while agentic verification tests whether your AI system uses its tools and workflows correctly. Your gate can support both.
+‎
+‎1. Can we build it as a separate service?
+‎
+‎Absolutely. Let's call it akoro-verification-gate.
+‎
+‎You could structure the repository like this:
+‎
+‎akoro-arena/
+‎│
+‎├── backend/                  # Existing Akoro API
+‎│   ├── src/
+‎│   ├── routes/
+‎│   ├── services/
+‎│   └── ...
+‎│
+‎├── frontend/                 # Existing application
+‎│
+‎└── akoro-verification-gate/  # New, independent service
+‎    ├── src/
+‎    │   ├── server.ts
+‎    │   ├── mcp.ts
+‎    │   │
+‎    │   ├── core/
+‎    │   │   ├── registry.ts
+‎    │   │   ├── runner.ts
+‎    │   │   ├── assertions.ts
+‎    │   │   └── evidence.ts
+‎    │   │
+‎    │   ├── clients/
+‎    │   │   ├── akoro-api.ts
+‎    │   │   └── supabase.ts
+‎    │   │
+‎    │   ├── scenarios/
+‎    │   │   ├── authentication.ts
+‎    │   │   ├── exam-prep.ts
+‎    │   │   ├── credits.ts
+‎    │   │   ├── agent-tools.ts
+‎    │   │   └── workflows.ts
+‎    │   │
+‎    │   └── policies/
+‎    │       ├── permissions.ts
+‎    │       └── execution-limits.ts
+‎    │
+‎    ├── tests/
+‎    ├── package.json
+‎    ├── tsconfig.json
+‎    ├── .env.example
+‎    └── README.md
+‎
+‎This is a proposed structure, not a claim about the existing repository layout.
+‎
+‎You can create this as a new folder in the existing repository or as a completely separate GitHub repository.
+‎
+‎My recommendation: Start with a separate folder in the existing Akoro Arena repository. This keeps development convenient while preserving a separate application, dependency set, configuration, and deployment process. You can split it into its own repository later if necessary.
+‎
+‎How does it connect to Akoro API?
+‎
+‎Through environment variables.
+‎
+‎For example, the verification service could have the following configuration:
+‎
+‎# Akoro Verification Gate
+‎
+‎NODE_ENV=test
+‎PORT=4100
+‎
+‎# Akoro API
+‎AKORO_API_BASE_URL=https://your-akoro-api.example.com
+‎
+‎# Verification environment
+‎AKORO_ENVIRONMENT=sandbox
+‎
+‎# Authentication for authorized test operations
+‎AKORO_TEST_API_KEY=your_test_only_api_key
+‎
+‎# Optional: isolated test database access
+‎SUPABASE_URL=your_test_supabase_url
+‎SUPABASE_SERVICE_ROLE_KEY=your_test_only_service_role_key
+‎
+‎# Execution limits
+‎VERIFICATION_TIMEOUT_MS=30000
+‎VERIFICATION_MAX_CONCURRENT_RUNS=3
+‎
+‎These are illustrative variable names. You should adapt them to the existing Akoro API's authentication and deployment configuration.
+‎
+‎Keep actual credentials in the service's secret manager or deployment environment. Never commit .env files containing secrets.
+‎
+‎How the connection works
+‎
+‎┌──────────────────────────┐
+‎│   AKORO VERIFICATION     │
+‎│          GATE            │
+‎│                          │
+‎│  Scenario registry       │
+‎│  MCP server              │
+‎│  Assertion engine        │
+‎│  Evidence collector      │
+‎└────────────┬─────────────┘
+‎             │
+‎             │ AKORO_API_BASE_URL
+‎             │ Authorization
+‎             ▼
+‎┌──────────────────────────┐
+‎│       AKORO API          │
+‎│                          │
+‎│  Authentication         │
+‎│  Agent execution         │
+‎│  Learning workflows      │
+‎│  Exam preparation        │
+‎│  Credit enforcement      │
+‎└────────────┬─────────────┘
+‎             │
+‎             ▼
+‎┌──────────────────────────┐
+‎│       SUPABASE           │
+‎│                          │
+‎│  Users                   │
+‎│  Agent state             │
+‎│  Learning evidence       │
+‎│  Sessions and credits    │
+‎└──────────────────────────┘
+‎
+‎The gate communicates with the API over HTTP. It doesn't need to import your backend's source code or share its dependencies.
+‎
+‎This provides several advantages:
+‎
+‎You can deploy the gate independently.
+‎
+‎Changes to the API don't require the gate to share the same codebase.
+‎
+‎The gate tests externally observable behavior.
+‎
+‎You can point it at different environments by changing configuration.
+‎
+‎You can use it with different coding agents that support MCP.
+‎
+‎
+‎One important caveat: If you point it at your production API, the gate is testing production. Environment variables alone do not make an environment safe. Start with a sandbox or staging deployment and isolated test credentials.
+‎
+‎Also, a Supabase service-role key bypasses normal row-level security protections. Prefer a restricted test database role or dedicated test database, and keep any necessary privileged access exclusively inside the gate.
+‎
+‎
+‎---
+‎
+‎2. Can we test our agentic system, tool calls, and workflows?
+‎
+‎Yes. This is where the project becomes much more powerful than a conventional API testing tool.
+‎
+‎We can design the gate to test four different layers of Akoro Arena.
+‎
+‎Layer A: API and backend testing
+‎
+‎This tests whether the application's endpoints behave correctly.
+‎
+‎For example:
+‎
+‎TestExpected result
+‎
+‎Create a learnerLearner record is created correctly.
+‎Start an exam-prep sessionSession is created with the expected initial state.
+‎Confirm a planSession advances according to the defined state machine.
+‎Exhaust available creditsFurther billable usage is rejected or handled according to policy.
+‎Submit a completed attemptThe expected attempt record and results are persisted.
+‎
+‎
+‎These are conventional integration and end-to-end tests.
+‎
+‎They form the foundation because an AI agent cannot reliably operate a system whose underlying APIs are broken.
+‎
+‎Layer B: AI agent tool-call testing
+‎
+‎This tests whether an agent selects and uses tools correctly.
+‎
+‎Imagine an Akoro agent receives this task:
+‎
+‎> Help a JSS1 learner prepare for Basic Science.
+‎
+‎
+‎
+‎The agent may need to:
+‎
+‎1. Retrieve the learner's current state.
+‎
+‎
+‎2. Retrieve the relevant syllabus.
+‎
+‎
+‎3. Identify an appropriate learning topic.
+‎
+‎
+‎4. Construct a study plan.
+‎
+‎
+‎5. Request learner confirmation.
+‎
+‎
+‎6. Begin the confirmed session.
+‎
+‎
+‎
+‎The gate should verify not only the final answer but also the tool execution and resulting state.
+‎
+‎For example:
+‎
+‎{
+‎  "scenario": "exam_prep_agent_tool_calls",
+‎  "status": "pass",
+‎  "checks": [
+‎    {
+‎      "name": "learner_state_retrieved",
+‎      "passed": true
+‎    },
+‎    {
+‎      "name": "syllabus_tool_called",
+‎      "passed": true
+‎    },
+‎    {
+‎      "name": "plan_matches_syllabus",
+‎      "passed": true
+‎    },
+‎    {
+‎      "name": "confirmation_required",
+‎      "passed": true
+‎    },
+‎    {
+‎      "name": "no_premature_credit_deduction",
+‎      "passed": true
+‎    }
+‎  ]
+‎}
+‎
+‎The gate needs access to actual tool-call records or reliable instrumentation to verify these details. It must not infer that a tool was called simply because the final answer looks correct.
+‎
+‎What specific tool-call problems could we catch?
+‎
+‎The agent selects a nonexistent tool.
+‎
+‎The agent supplies invalid arguments.
+‎
+‎The agent repeatedly calls the same tool without progress.
+‎
+‎The agent calls a tool that is not permitted in the current state.
+‎
+‎A tool returns an error, but the agent reports success.
+‎
+‎The agent fails to inspect a tool's output before continuing.
+‎
+‎The agent produces a final answer without completing a required operation.
+‎
+‎The agent calls a write operation when only read access is authorized.
+‎
+‎
+‎You can also test whether the tool registry exposes the intended schemas and whether authorization rules are enforced independently of the agent's instructions.
+‎
+‎
+‎---
+‎
+‎Layer C: Agentic workflow testing
+‎
+‎This tests complete sequences of actions rather than individual tool calls.
+‎
+‎For Akoro, consider the exam-preparation loop:
+‎
+‎Learner requests exam preparation
+‎              |
+‎              v
+‎     Retrieve learner state
+‎              |
+‎              v
+‎      Retrieve syllabus
+‎              |
+‎              v
+‎       Build study plan
+‎              |
+‎              v
+‎     Calculate credit cost
+‎              |
+‎              v
+‎   Present plan for confirmation
+‎              |
+‎              v
+‎     Wait for learner action
+‎              |
+‎              v
+‎     Learner confirms plan
+‎              |
+‎              v
+‎      Start learning session
+‎              |
+‎              v
+‎       Execute learning loop
+‎              |
+‎              v
+‎     Record learning evidence
+‎              |
+‎              v
+‎      Update learner state
+‎
+‎The gate could execute this workflow and verify the transitions between steps.
+‎
+‎For example, it could deliberately test these situations:
+‎
+‎SituationWhat the gate verifies
+‎
+‎Learner confirms the planThe session starts according to the defined rules.
+‎Learner declines the planThe system doesn't start the confirmed session.
+‎Learner has insufficient creditsThe session is handled according to the credit policy.
+‎Syllabus retrieval failsThe system doesn't pretend it has retrieved valid syllabus data.
+‎An AI tool fails midwayThe workflow handles the error without falsely reporting completion.
+‎The session is pausedThe system preserves the expected state.
+‎The learner resumesThe workflow resumes according to the permitted transition rules.
+‎The agent repeats an actionIdempotency rules prevent duplicate side effects where required.
+‎
+‎
+‎This is especially useful for your session-state design because the gate can test whether the actual system follows its permitted transitions.
+‎
+‎It can also test recovery paths, not just the ideal workflow.
+‎
+‎
+‎---
+‎
+‎Layer D: Agent intelligence and decision-making
+‎
+‎This layer is different.
+‎
+‎An agent might execute every tool correctly but still make a poor decision about what to teach next.
+‎
+‎For example, suppose a learner struggles with a topic that depends on an earlier concept.
+‎
+‎The gate could prepare a known learner state and evaluate whether the agent selects an appropriate next action according to your adaptive-learning rules.
+‎
+‎A scenario might look like this:
+‎
+‎SCENARIO: adaptive_topic_selection
+‎
+‎Given:
+‎  Learner has weak evidence for Concept A.
+‎  Concept B requires Concept A.
+‎  Concept C does not require Concept A.
+‎
+‎When:
+‎  The agent selects the next learning activity.
+‎
+‎Verify:
+‎  1. The learner state was retrieved.
+‎  2. The prerequisite relationship was respected.
+‎  3. The chosen activity satisfies the defined selection rules.
+‎  4. The agent did not invent a prerequisite.
+‎  5. The resulting action is consistent with the workflow policy.
+‎
+‎The exact expected choice must come from your actual adaptive-learning policy. If multiple choices are valid, the test should check the permitted conditions rather than insist on one arbitrary answer.
+‎
+‎For LLM-based decisions, you can combine:
+‎
+‎Deterministic assertions for tool permissions, state transitions, and prerequisite constraints.
+‎
+‎Fixed test fixtures for reproducible scenarios.
+‎
+‎Evaluation rubrics for open-ended explanations.
+‎
+‎Repeated runs to detect inconsistent behavior.
+‎
+‎Cost and latency measurements.
+‎
+‎
+‎This is important because an LLM may produce different valid answers across runs. Your gate should distinguish legitimate variation from a violation of the system's rules.
+‎
+‎
+‎---
+‎
+‎3. Can we test the entire agentic loop?
+‎
+‎Yes. We can test the loop as an observable execution sequence.
+‎
+‎For an agent built around:
+‎
+‎Observe → Decide → Act → Observe → Continue or Finish
+‎
+‎the gate can record each externally observable step.
+‎
+‎For example:
+‎
+‎{
+‎  "run_id": "agent_run_001",
+‎  "status": "pass",
+‎  "execution": [
+‎    {
+‎      "step": 1,
+‎      "type": "observation",
+‎      "source": "learner_state_tool",
+‎      "status": "success"
+‎    },
+‎    {
+‎      "step": 2,
+‎      "type": "tool_call",
+‎      "tool": "get_syllabus",
+‎      "status": "success"
+‎    },
+‎    {
+‎      "step": 3,
+‎      "type": "tool_call",
+‎      "tool": "create_study_plan",
+‎      "status": "success"
+‎    },
+‎    {
+‎      "step": 4,
+‎      "type": "policy_check",
+‎      "check": "learner_confirmation_required",
+‎      "status": "pass"
+‎    }
+‎  ]
+‎}
+‎
+‎This is an illustrative execution trace.
+‎
+‎For Akoro's architecture, I would capture:
+‎
+‎Tool name and validated arguments.
+‎
+‎Tool execution result.
+‎
+‎Execution order.
+‎
+‎Success or failure.
+‎
+‎State before and after relevant actions.
+‎
+‎Retry count.
+‎
+‎Token consumption and credit accounting.
+‎
+‎Execution duration.
+‎
+‎Final outcome and evidence.
+‎
+‎
+‎You do not need to expose the model's private chain of thought to do this.
+‎
+‎Record the operational trace, not hidden reasoning.
+‎
+‎The gate can establish whether the agent retrieved the learner state, called the permitted tools, respected the prerequisites, and reached the correct observable outcome without collecting private internal reasoning.
+‎
+‎
+‎---
+‎
+‎4. How do we actually observe tool calls?
+‎
+‎There is one architectural detail we must settle before building the agentic tests.
+‎
+‎The verification gate cannot automatically see every tool call inside Akoro just because it can call the API.
+‎
+‎We need to determine where the calls occur.
+‎
+‎Case 1: Tools execute through the Akoro backend
+‎
+‎If your backend executes agent tool calls, add or reuse structured execution records.
+‎
+‎The gate can invoke the workflow through the API and inspect those records.
+‎
+‎Case 2: Tools execute inside a separate agent worker
+‎
+‎The gate will need access to that worker's execution logs, tracing system, or test instrumentation.
+‎
+‎It can still trigger the workflow through the backend, but the backend must expose sufficient evidence of what the worker did.
+‎
+‎Case 3: The coding agent itself uses tools
+‎
+‎If you're testing a coding agent that has its own MCP tools, shell access, and file-editing capabilities, you need an integration that can observe or capture those actions.
+‎
+‎The Akoro verification gate can serve as one of its MCP tools, but it won't automatically intercept every other tool the coding agent uses.
+‎
+‎These cases can coexist, and the correct implementation depends on your current agent architecture.
+‎
+‎
+‎---
+‎
+‎5. The architecture I would build
+‎
+‎I would keep one verification service but separate its internal responsibilities.
+‎
+‎akoro-verification-gate/
+‎│
+‎├── MCP Interface
+‎│   ├── list_scenarios
+‎│   ├── verify_scenario
+‎│   └── get_run_evidence
+‎│
+‎├── Verification Engine
+‎│   ├── Scenario registry
+‎│   ├── Scenario runner
+‎│   ├── Assertions
+‎│   └── Safety policies
+‎│
+‎├── Application Verification
+‎│   ├── API integration
+‎│   ├── Authentication
+‎│   ├── Database invariants
+‎│   └── Credit enforcement
+‎│
+‎├── Agent Verification
+‎│   ├── Tool-call validation
+‎│   ├── Tool-sequence assertions
+‎│   ├── Workflow execution
+‎│   └── State-transition checks
+‎│
+‎├── Intelligence Evaluation
+‎│   ├── Adaptive-learning tests
+‎│   ├── Output evaluation
+‎│   ├── Regression fixtures
+‎│   └── Consistency checks
+‎│
+‎└── Evidence
+‎    ├── Run results
+‎    ├── Execution traces
+‎    ├── Assertion results
+‎    └── Diagnostic logs
+‎
+‎The same MCP tools can dispatch to different types of scenarios.
+‎
+‎For example:
+‎
+‎verify_scenario("credit_enforcement")
+‎verify_scenario("agent_tool_call_validation")
+‎verify_scenario("exam_prep_workflow")
+‎verify_scenario("adaptive_topic_selection")
+‎
+‎The agent still sees a small tool interface, while the registry contains the actual verification logic.
+‎
+‎
+‎---
+‎
+‎6. One additional capability I'd strongly recommend
+‎
+‎Build a verification suite, not just individual scenario execution.
+‎
+‎For example:
+‎
+‎verify_suite("exam_prep_regression")
+‎
+‎This could run a predefined collection of scenarios:
+‎
+‎1. Session creation.
+‎
+‎
+‎2. Plan confirmation.
+‎
+‎
+‎3. Credit enforcement.
+‎
+‎
+‎4. Syllabus retrieval.
+‎
+‎
+‎5. Agent tool-call validation.
+‎
+‎
+‎6. Adaptive topic selection.
+‎
+‎
+‎7. Session completion.
+‎
+‎
+‎8. Learning evidence persistence.
+‎
+‎
+‎
+‎The suite would return an overall status and individual scenario results.
+‎
+‎If one critical scenario fails, the suite fails. If one scenario is blocked by infrastructure, the suite must not report an unqualified pass.
+‎
+‎You can run this suite whenever your coding agent modifies the exam-preparation system.
+‎
+‎Over time, you can build separate suites for:
+‎
+‎Authentication and account security.
+‎
+‎AI tool execution.
+‎
+‎Exam preparation.
+‎
+‎Credit economics.
+‎
+‎Learning and memory.
+‎
+‎Full application regression.
+‎
+‎
+‎This gives you a repeatable way to test the system as it evolves.
+‎
+‎
+‎---
+‎
+‎My final recommendation
+‎
+‎Build akoro-verification-gate as a separate service connected to your existing API through environment variables.
+‎
+‎Design it from the beginning to support two verification targets:
+‎
+‎1. Product verification: Do Akoro's APIs, database operations, and user-facing workflows behave correctly?
+‎
+‎
+‎2. Agent verification: Does Akoro's AI system call the right tools, respect workflow constraints, handle failures, and produce the required outcomes?
+‎
+‎
+‎
+‎Start with deterministic tests for session confirmation and credit enforcement. Then instrument the agent execution layer so the gate can validate real tool calls and multi-step workflows.
+‎
+‎One thing I would establish before writing the code: where in your current Akoro Arena architecture are the AI tools actually executed—the Express backend, a separate worker, or inside the agent runtime? That determines how we collect trustworthy execution evidence without redesigning your existing system.
+‎

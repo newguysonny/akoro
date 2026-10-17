@@ -34,7 +34,7 @@ export async function activityOutcomeSummary(instructor, assignmentId) {
   let cognitive = [];
   if (ids.length) {
     const { data: agents } = await edu().from("student_agents")
-      .select("student_id, knowledge_score").in("student_id", ids);
+      .select("id, student_id, knowledge_score").in("student_id", ids);   // id: the agent whose state is read below
     const byStudent = new Map((agents ?? []).map((a) => [a.student_id, a.id]));
     const states = await Promise.all([...byStudent.values()].map((agentId) =>
       getStudentStateSafe(agentId)));
@@ -65,7 +65,9 @@ export async function activityOutcomeSummary(instructor, assignmentId) {
 
 /** The instructor's recent activities (newest first) for pick-one flows. */
 export async function listRecentActivities(instructor, limit = 5) {
-  const { data } = await db.from("self_study_assignments")
+  // edu schema — reading it from public returned nothing, so the agent told
+  // instructors they had no activities (gate selftool.instructor_agent_builds).
+  const { data } = await edu().from("self_study_assignments")
     .select("id, title, type, subject, topic, created_at")
     .eq("created_by", instructor.id)
     .order("created_at", { ascending: false })

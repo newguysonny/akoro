@@ -1,0 +1,210 @@
+‎Your Architecture Is Realistic — But There's a Wrinkle Worth Fixing
+‎
+‎You've basically invented a schema-grounded tool synthesis pattern. That's a legit design. Let me validate what's right, flag what will bite you, and offer a cleaner variant.
+‎
+‎---
+‎
+‎What You're Describing
+‎
+‎```
+‎Tools at start:
+‎  [login, search, create_tool, schema_lookup]
+‎
+‎User: "unfollow user X"
+‎  → agent: no tool matches
+‎  → schema_lookup("user relationships")
+‎  → sees: users, follows (follower_id, followee_id)
+‎  → reasons: "I can write unfollow()"
+‎  → create_tool(code="DELETE FROM follows WHERE ...")
+‎  → registers + calls
+‎```
+‎
+‎Yes, this works. It's essentially:
+‎
+‎· Schema-grounded code generation (a real research area)
+‎· Tool synthesis from a data model
+‎
+‎---
+‎
+‎The Critical Problem With This Design
+‎
+‎Schema knowledge ≠ permission to act.
+‎
+‎Your design lets the agent:
+‎
+‎1. Read the schema
+‎2. Invent any operation the schema permits
+‎3. Execute it
+‎
+‎That means the agent can write:
+‎
+‎```python
+‎def delete_all_users(): ...
+‎def export_all_emails(): ...
+‎def grant_admin(user_id): ...
+‎```
+‎
+‎The schema permits all of these. So "schema says it's possible" is not a safe gate. This is the core flaw.
+‎
+‎Filtering happens in memory is fine. Writing arbitrary SQL against your prod DB is not.
+‎
+‎---
+‎
+‎The Fix: Separate "Read the Schema" From "Write the Operation"
+‎
+‎Split into three concerns, not two:
+‎
+‎Layer What it does Who controls it
+‎Schema lookup Agent discovers what entities/relations exist Agent reads (safe)
+‎Capability registry Declares what operations are allowed You define (not agent)
+‎Tool synthesis Agent composes allowed ops into new tools Agent writes (bounded)
+‎
+‎The key shift: the agent can't invent new DB operations — only compose ones you already allow.
+‎
+‎---
+‎
+‎Recommended Architecture
+‎
+‎Tool set (start)
+‎
+‎```
+‎1. login
+‎2. search
+‎3. schema_lookup        ← read-only, returns entity/relation metadata
+‎4. list_capabilities    ← returns ALLOWED operations
+‎5. create_tool          ← composes capabilities into new tools
+‎```
+‎
+‎The capability registry (you own this)
+‎
+‎You pre-declare the verbs the system supports, even if no tool wraps them yet:
+‎
+‎```yaml
+‎capabilities:
+‎  - name: add_relationship
+‎    params: [from_user, to_user, type]
+‎    maps_to: "INSERT INTO relationships ..."
+‎    requires_permission: relationship:write
+‎
+‎  - name: remove_relationship
+‎    params: [from_user, to_user, type]
+‎    maps_to: "DELETE FROM relationships ..."
+‎    requires_permission: relationship:write
+‎
+‎  - name: update_field
+‎    params: [entity, id, field, value]
+‎    allowlist_fields: [age, name, bio]   # NOT role, NOT email_verified
+‎```
+‎
+‎Now the agent's space of possible tools is bounded by your capability set — not by "whatever the schema technically allows."
+‎
+‎Flow
+‎
+‎```
+‎User: "unfollow user X"
+‎  → no tool matches
+‎  → list_capabilities() → sees remove_relationship exists
+‎  → create_tool("unfollow", composes remove_relationship(type="follow"))
+‎  → registered + called → done
+‎```
+‎
+‎If the user asks "delete all users":
+‎
+‎```
+‎  → list_capabilities() → no "delete_entity" capability
+‎  → agent cannot write it → returns "not supported"
+‎```
+‎
+‎That's the safety property you want.
+‎
+‎---
+‎
+‎Why This Is Better Than Pure Schema-Driven
+‎
+‎Pure schema-driven Capability-driven (recommended)
+‎Agent can invent any DB op Agent composes only allowed ops
+‎"Schema allows it" = permission "Capability exists" = permission
+‎Hard to audit Capability list = your audit surface
+‎Injection = full DB access Injection = bounded to capabilities
+‎Scaling = schema explodes agent options Scaling = you curate capabilities
+‎
+‎You keep all the flexibility ("agent writes tools on the fly") but you decide the ceiling.
+‎
+‎---
+‎
+‎Is Two-Tool + Schema Realistic?
+‎
+‎Realistic, yes. But I'd argue it's too permissive for anything touching real user data. Two failure modes:
+‎
+‎1. Security — agent writes destructive ops the schema permits.
+‎2. Correctness — agent misreads relationships, writes subtly wrong queries (e.g., deletes the wrong direction of a follow).
+‎
+‎Both are cured by the capability layer.
+‎
+‎---
+‎
+‎Even Simpler Alternative (If You Want Less Machinery)
+‎
+‎If you don't want a capability registry, use ephemeral code-gen with a read-only DB role:
+‎
+‎· Agent writes throwaway code per request (no persistent tool registry).
+‎· Code runs against a read-only replica.
+‎· Writes must go through your 2–3 pre-built write tools — never generated.
+‎
+‎This gives you:
+‎
+‎· Unlimited "read/filter/compose" flexibility (agent writes it live)
+‎· Writes stay locked to vetted tools
+‎· No tool sprawl, no schema-exposure risk for mutations
+‎
+‎This is often the sweet spot for coding agents.
+‎
+‎---
+‎
+‎My Recommendation, Ranked
+‎
+‎1. Best safety + flexibility: capability registry + create_tool composes capabilities. Agent never writes raw DB ops.
+‎2. Simplest, still safe: ephemeral code-gen for reads/filters + fixed write tools.
+‎3. Your original idea (schema → tool): works, but add a capability/allowlist gate before letting it write. Otherwise you've given the LLM prod write access with extra steps.
+‎
+‎---
+‎
+‎Concrete Sketch
+‎
+‎```python
+‎TOOLS = {
+‎  "login": ...,
+‎  "search": ...,
+‎  "schema_lookup": ...,      # read-only metadata
+‎  "list_capabilities": ...,  # ALLOWED ops only
+‎  "create_tool": ...,        # composes capabilities
+‎}
+‎
+‎CAPABILITIES = load_capability_registry()  # you author this
+‎
+‎def create_tool(name, description, code, schema, uses):
+‎    # every new tool must declare which capabilities it uses
+‎    for cap in uses:
+‎        if cap not in CAPABILITIES:
+‎            return f"Capability '{cap}' not allowed"
+‎    validate(code)             # syntax, no raw SQL, no network
+‎    run_in_sandbox(code)       # dry-run
+‎    TOOLS[name] = {...}
+‎    return f"Tool '{name}' registered."
+‎```
+‎
+‎The agent's prompt:
+‎
+‎"If no tool matches, call list_capabilities. If a capability covers the need, use create_tool to compose it. Never write raw DB operations. If no capability fits, tell the user it's unsupported."
+‎
+‎---
+‎
+‎Bottom Line
+‎
+‎· Your idea is realistic and sound — schema-grounded tool synthesis is a real pattern.
+‎· But "schema allows it" ≠ "allowed to do it." Add a capability layer so the agent composes vetted operations instead of inventing arbitrary DB access.
+‎· Start with login, search, schema_lookup, list_capabilities, create_tool — five tools, not two.
+‎· If you want to skip the machinery, use ephemeral code-gen for reads + fixed write tools.
+‎
+‎Want me to write the actual system prompt + capability registry schema for your friends/follows example?
+‎

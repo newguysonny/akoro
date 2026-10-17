@@ -110,12 +110,13 @@ export const supabaseStore = {
     return written;
   },
 
+  /** The NEWEST `limit` events, in order. (It used to return the oldest, so "recent activity" showed the session's start.) */
   async listEvents(sessionId, { limit = 200 } = {}) {
     const { data, error } = await db.schema("edu").from("study_prep_events")
-      .select("*").eq("session_id", sessionId).order("sequence", { ascending: true })
+      .select("*").eq("session_id", sessionId).order("sequence", { ascending: false })
       .limit(Math.max(1, Math.min(Number(limit) || 200, 500)));
     if (error) throw error;
-    return data || [];
+    return (data || []).reverse();
   },
 
   /** Wallet-first charge (§4.11). Maps lib/coins InsufficientCoins onto the harness error. */
@@ -143,10 +144,13 @@ export const supabaseStore = {
   async recordMasteryEvidence({ learnerId, sessionRef, topicLabel, subject, passed, score, mastery }) {
     try {
       const slug = String(topicLabel || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-      const { data: concepts, error } = await db.schema("edu").from("concept_catalog")
-        .select("id").eq("status", "approved").ilike("subject", `%${String(subject || "").trim()}%`)
-        .or(`topic_key.ilike.%${slug}%,title.ilike.%${String(topicLabel || "").trim()}%`)
-        .limit(1);
+      // Two plain filters, not an or() string: a label with a comma or
+      // parenthesis ("Forces, Motion and Energy") broke the or() syntax and
+      // the evidence was silently dropped.
+      const approved = () => db.schema("edu").from("concept_catalog")
+        .select("id").eq("status", "approved").ilike("subject", `%${String(subject || "").trim()}%`);
+      let { data: concepts, error } = await approved().ilike("topic_key", `%${slug}%`).limit(1);
+      if (!error && !concepts?.length) ({ data: concepts, error } = await approved().ilike("title", `%${String(topicLabel || "").trim()}%`).limit(1));
       if (error || !concepts?.length) return null;
       const turnRef = `${sessionRef}:attempt`;
       const { error: evidenceError } = await db.schema("edu").from("learner_concept_evidence").upsert({

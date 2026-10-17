@@ -157,6 +157,13 @@ export default function StudyPrepChatCard({ sessionId }) {
             <div style={{ fontSize: 13.5, fontWeight: 900, letterSpacing: 1, color: 'var(--ak-text)' }}>YOUR {session.subject.toUpperCase()} PLAN</div>
             <div style={caption}>{(session.plan || []).length} topics{estimate ? ` · estimated cost: ${estimate.totalCoins} coins` : ''}</div>
           </div>
+          {/* No real syllabus for this class + subject: the plan is made from an AI-drafted outline (§8.7). Always said. */}
+          {session.syllabusLabel && (
+            <div role="note" style={{ display: 'flex', gap: 7, alignItems: 'flex-start', fontSize: 11.5, fontWeight: 700, lineHeight: 1.45, color: 'var(--ak-text-sub)', padding: '7px 10px', borderRadius: 9, background: 'var(--ak-surface2, rgba(124,58,237,.06))', border: '1px solid var(--ak-border2)' }}>
+              <span className="ti ti-info-circle" aria-hidden="true" style={{ fontSize: 14, marginTop: 1 }} />
+              <span>{session.syllabusLabel}</span>
+            </div>
+          )}
           {!adjusting ? (
             <>
               <ol style={{ margin: 0, paddingLeft: 20, display: 'grid', gap: 5 }}>

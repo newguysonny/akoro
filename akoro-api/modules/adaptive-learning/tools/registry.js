@@ -17,9 +17,41 @@
 
 export const TOOL_LEVELS = Object.freeze(["read", "propose", "execute"]);
 
+const str = (description) => ({ type: "string", description });
+const TOPIC_ID = str("A topic id exactly as syllabus.resolve returned it.");
+const TOPIC_LIST = { type: "array", items: { type: "string" }, description: "Topic ids exactly as syllabus.resolve returned them, in teaching order." };
+const obj = (properties = {}, required = []) => ({ type: "object", properties, required, additionalProperties: false });
+
+/**
+ * The arguments each tool reads (what `execute` below passes on). The model
+ * is given these — without them it guessed names ("level" for classLevel)
+ * and was never told propose_plan takes `topics`, so no plan was ever made.
+ */
+export const TOOL_ARGS = Object.freeze({
+  "syllabus.resolve": obj({ subject: str("The school subject, e.g. 'Basic Science'."), classLevel: str("The class, e.g. 'JSS1'."), exam: str("Exam board, e.g. 'WAEC'. Optional.") }, ["subject", "classLevel"]),
+  "learner.get_state": obj({ subject: str("The school subject."), topics: TOPIC_LIST }, ["subject"]),
+  "learner.get_history": obj({ subject: str("The school subject.") }),
+  "learner.get_relevant_memory": obj({ subject: str("The school subject.") }),
+  "concept.get_prerequisites": obj({ subject: str("The school subject.") }, ["subject"]),
+  "content.search": obj({ subject: str("The school subject."), query: str("What to search for.") }, ["query"]),
+  "session.get_state": obj(),
+  "syllabus.generate": obj(),
+  "plan.validate": obj({ topics: TOPIC_LIST }, ["topics"]),
+  "propose_plan": obj({ topics: TOPIC_LIST }, ["topics"]),
+  "offer_strategy": obj({ topicId: TOPIC_ID, strategy: { type: "string", enum: ["teach_back", "different_analogy", "interleave", "space_out", "escalate_human"] } }, ["topicId", "strategy"]),
+  "advance_topic": obj(),
+  "defer_topic": obj({ topicId: TOPIC_ID, reasonCode: str("Why, e.g. 'attempt_cap_reached'.") }, ["topicId", "reasonCode"]),
+  "topic.flag": obj({ topicId: TOPIC_ID, reason: str("A short reason.") }, ["topicId", "reason"]),
+  "session.replan": obj({ topics: TOPIC_LIST }, ["topics"]),
+  "conclude_session": obj(),
+  "practice.generate": obj({ topicId: TOPIC_ID, mode: { type: "string", enum: ["diagnostic", "retest"] } }, ["topicId", "mode"]),
+  "practice.submit": obj({ topicId: TOPIC_ID, answers: { type: "array", items: obj({ questionId: str("Question id."), answerIndex: { type: "integer" } }, ["questionId", "answerIndex"]) } }, ["topicId", "answers"]),
+});
+
 /** Pure catalogue — names, levels, and what the model is told. */
 export const TOOL_DEFINITIONS = Object.freeze([
   { name: "syllabus.resolve", level: "read", description: "List the approved syllabus topics for the learner's subject and class level. A plan may only contain topics from this list." },
+  { name: "syllabus.generate", level: "execute", description: "ONLY when syllabus.resolve returned no topics: draft an outline for the session's subject and class from the national curriculum (reused if one was drafted before). The plan is then made from these topics, and the learner sees it labelled as an AI-drafted outline. Refused when a real syllabus exists." },
   { name: "learner.get_state", level: "read", description: "Read the learner's recorded 0-1 mastery estimates for the subject's topics. Missing topics have no evidence yet." },
   { name: "learner.get_history", level: "read", description: "Read a bounded list of the learner's recent exam-prep runs: topic, status, score, attempts." },
   { name: "learner.get_relevant_memory", level: "read", description: "Retrieve a few relevant recorded learning memories (evidence kinds and summaries) — targeted retrieval, never a full history dump." },
@@ -53,7 +85,7 @@ export function toolByName(name) {
 export function llmFacingTools({ includeContentSearch = false } = {}) {
   return TOOL_DEFINITIONS
     .filter((tool) => tool.name !== "content.search" || includeContentSearch)
-    .map((tool) => ({ name: tool.name, level: tool.level, description: tool.description }));
+    .map((tool) => ({ name: tool.name, level: tool.level, description: tool.description, args: TOOL_ARGS[tool.name] || obj() }));
 }
 
 /**
@@ -85,6 +117,8 @@ export function buildRegistry({ readTools, harness, learnerId, sessionId, conten
       switch (name) {
         case "syllabus.resolve":
           return readTools.resolveSyllabus({ subject: args.subject, classLevel: args.classLevel, exam: args.exam });
+        case "syllabus.generate":
+          return harness.generateSyllabus({ sessionId, learnerId, intent });
         case "learner.get_state":
           return readTools.getLearnerState({ learnerId, subject: args.subject, topicIds: args.topics });
         case "learner.get_history":

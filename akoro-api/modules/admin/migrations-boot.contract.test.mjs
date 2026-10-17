@@ -25,10 +25,11 @@ test("the migration engine is a shared library with boot-safe semantics", () => 
 test("the API self-migrates at boot — schema only, skippable, never crash-looping", () => {
   assert.match(appJs, /MIGRATIONS_ON_BOOT !== "false"/);
   assert.match(appJs, /migrationsAlreadyApplied\(mUrl, mSha\)/);
-  assert.match(appJs, /applyMigrations\(\{ url: mUrl, groups: \["schema"\], label: "boot" \}\)/);
-  // Demo seeds never run at boot; a failed boot run starts the API anyway
-  // (loud log, no crash loop) and is recorded for the next boot to retry.
-  assert.match(appJs, /groups: \["schema"\]/);
+  assert.match(appJs, /applyMigrations\(\{ url: mUrl, groups, label: "boot" \}\)/);
+  // Demo seeds never run at boot — except on the gate's sandbox (its own
+  // database); a failed boot run starts the API anyway (loud log, no crash
+  // loop) and is recorded for the next boot to retry.
+  assert.match(appJs, /const groups = process\.env\.VERIFY_TARGET === "sandbox" \? \["schema", "demo"\] : \["schema"\];/);
   assert.doesNotMatch(appJs, /groups: \["demo"\]/);
   assert.match(appJs, /boot run failed — starting anyway/);
   // No connection string configured → one loud, actionable line.

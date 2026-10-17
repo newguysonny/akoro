@@ -1,0 +1,147 @@
+‎No — you almost never clone the database. That would be a disaster.
+‎
+‎Let me explain why, and what actually happens instead.
+‎
+‎---
+‎
+‎Why Cloning the DB Is the Wrong Mental Model
+‎
+‎If every tool-creation cloned the database:
+‎
+‎· Cost explodes — storage + compute per clone.
+‎· Staleness — the clone drifts from live data immediately.
+‎· Writes get lost — user's new friend never shows up in the clone.
+‎· Security nightmare — copies of PII everywhere.
+‎· Slow — cloning GB/TB takes seconds-to-minutes, killing agent latency.
+‎
+‎So no. The database stays where it is. The question is: how does the new tool talk to it?
+‎
+‎---
+‎
+‎What Actually Happens
+‎
+‎The generated tool doesn't own data — it calls existing data access.
+‎
+‎You have three clean patterns:
+‎
+‎Pattern 1: The tool calls your existing API/tools (recommended)
+‎
+‎The new tool is just orchestration logic on top of tools you already have.
+‎
+‎```python
+‎# Generated tool — NO database access at all
+‎def search_friends_under_age(max_age: int):
+‎    results = search("friends")          # existing tool
+‎    return [r for r in results if r["age"] < max_age]
+‎```
+‎
+‎· search() already talks to the DB (through your backend).
+‎· The new tool just filters in memory.
+‎· No cloning, no new DB connection, no credentials.
+‎
+‎This is the right answer for your example.
+‎
+‎---
+‎
+‎Pattern 2: The tool queries the same DB via a safe client
+‎
+‎If the tool needs to query directly, it uses the existing DB connection — same DB, same credentials, same schema.
+‎
+‎```python
+‎def search_friends_under_age(max_age: int):
+‎    return db.query(
+‎        "SELECT * FROM friends WHERE age < %s",
+‎        [max_age]
+‎    )
+‎```
+‎
+‎· One shared connection pool.
+‎· The generated code is just another client of the same DB.
+‎· You inject the connection — the agent never sees credentials.
+‎
+‎---
+‎
+‎Pattern 3: A sandboxed read-only replica (for safety)
+‎
+‎If you're worried about generated code doing damage:
+‎
+‎· Point the sandbox at a read-only replica.
+‎· Writes still go through your trusted tools.
+‎· You're not cloning per tool — you have one replica, shared.
+‎
+‎This is the only case where "a copy of the DB" exists — and it's a standing replica, not a per-tool clone.
+‎
+‎---
+‎
+‎The Key Insight
+‎
+‎Tools are code, not data stores.
+‎
+‎· The database is a shared resource, owned by your app.
+‎· The sandbox runs generated code, but the sandbox connects out to the DB (or to your API), it doesn't contain the DB.
+‎
+‎```
+‎┌──────────────┐
+‎│  Database    │  ← single source of truth
+‎└──────┬───────┘
+‎       │ (shared connection / API)
+‎       ▼
+‎┌──────────────┐
+‎│  Backend /   │
+‎│  existing    │
+‎│  tools       │
+‎└──────┬───────┘
+‎       │
+‎       ▼
+‎┌──────────────┐
+‎│  Sandbox     │  ← runs generated tool code
+‎│  (no DB copy)│     calls backend, not DB directly
+‎└──────────────┘
+‎```
+‎
+‎---
+‎
+‎So When Would You Clone Anything?
+‎
+‎Only in narrow cases:
+‎
+‎Case What you clone Why
+‎Untrusted code might corrupt data One read-only replica Safety
+‎Offline / air-gapped analysis A snapshot, once No live access
+‎Heavy analytics that would hammer prod A replica Load isolation
+‎
+‎None of these are per tool creation. They're infrastructure decisions, made once.
+‎
+‎---
+‎
+‎For Your Specific Example
+‎
+‎"search for my friends under 23"
+‎
+‎The flow is:
+‎
+‎1. Agent sees no search_friends_under_age tool.
+‎2. Agent generates:
+‎   ```python
+‎   def search_friends_under_age(max_age):
+‎       return [f for f in search("friends") if f["age"] < max_age]
+‎   ```
+‎3. Agent registers it and calls it.
+‎4. search("friends") hits your existing backend → existing DB.
+‎5. Filtering happens in memory in the sandbox.
+‎
+‎No DB clone. No new connection. No credentials exposed.
+‎
+‎---
+‎
+‎Bottom Line
+‎
+‎· No, you don't clone the database per tool.
+‎· Generated tools are thin logic that reuse your existing data access (API or shared connection).
+‎· The DB stays singular and shared.
+‎· If safety demands it, use one standing read-only replica — never a per-tool copy.
+‎
+‎The mental model to keep: the sandbox runs code; the database is a shared service the code calls into — not something the tool carries around with it.
+‎
+‎Want me to show how to inject a safe DB connection into a sandbox (e.g., via E2B/Daytona) so generated tools can query without ever seeing credentials?
+‎

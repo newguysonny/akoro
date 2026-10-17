@@ -1,0 +1,45 @@
+# Verification Gate — run a suite against the deployed API (or its sandbox)
+# and fail unless the verdict is PASS. Manual for now (plan phase V3: an
+# optional check before merging to main). Secrets: AKORO_GATE_URL (e.g.
+# https://api.akoro.name.ng) and AKORO_GATE_KEY (the server's AGENT_CONSOLE_KEY).
+name: Verification Gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: "Suite to run"
+        default: "regression"
+      expect_sha:
+        description: "Commit the server must be running (blank: don't check)"
+        default: ""
+      target:
+        description: "default (sandbox when it's on) or production"
+        default: "default"
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Run the gate
+        env:
+          GATE_URL: ${{ secrets.AKORO_GATE_URL }}
+          GATE_KEY: ${{ secrets.AKORO_GATE_KEY }}
+          SUITE: ${{ inputs.suite }}
+          EXPECT_SHA: ${{ inputs.expect_sha }}
+          TARGET: ${{ inputs.target }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GATE_URL}" ] || [ -z "${GATE_KEY}" ]; then echo "Set the AKORO_GATE_URL and AKORO_GATE_KEY secrets."; exit 1; fi
+          body=$(jq -nc --arg s "$SUITE" --arg e "$EXPECT_SHA" --arg t "$TARGET" \
+            '{suite:$s, wait:false, actor:"github-actions"} + (if $e != "" then {expectSha:$e} else {} end) + (if $t == "production" then {target:"production"} else {} end)')
+          id=$(curl -sS --fail-with-body -X POST "$GATE_URL/api/verify/runs" -H "Authorization: Bearer $GATE_KEY" -H 'Content-Type: application/json' -d "$body" | jq -r '.data.id')
+          echo "Run $id"
+          for i in $(seq 1 90); do
+            run=$(curl -sS "$GATE_URL/api/verify/runs/$id" -H "Authorization: Bearer $GATE_KEY")
+            [ "$(echo "$run" | jq -r .data.status)" = "done" ] && break
+            sleep 10
+          done
+          echo "$run" | jq '.data | {verdict, reason, sha, target, scenarios: [.scenarios[]? | "\(.name) = \(.verdict) \(.repeats)"]}'
+          [ "$(echo "$run" | jq -r .data.verdict)" = "PASS" ] || { echo "::error::Gate verdict $(echo "$run" | jq -r .data.verdict)"; exit 1; }
