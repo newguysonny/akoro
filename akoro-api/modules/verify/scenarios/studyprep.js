@@ -230,8 +230,9 @@ export const classSyllabusFirst = {
   async run(ctx, p) {
     const me = await ctx.as(p.learner);
     const base = "/api/adaptive/study-prep/sessions";
-    const [student] = await ctx.db.rows("mgmt.students", { user_id: me.id, status: "active" }, { columns: "school_id, class_id", limit: 1 });
-    if (!student?.class_id) ctx.expect.blocked(`${p.learner} has no linked school enrollment with a class`);
+    const linked = await ctx.db.rows("mgmt.students", { user_id: me.id }, { columns: "school_id, class_id, status", limit: 5 });
+    const student = linked.find((row) => row.status === "active");
+    if (!student?.class_id) ctx.expect.blocked(`${p.learner} has no linked, active school enrollment with a class (found ${JSON.stringify(linked.map((row) => ({ status: row.status, hasClass: !!row.class_id })))}) — apply the sandbox seed 2026-seed-sandbox-class-syllabus.sql`);
     const subjects = await ctx.db.rows("mgmt.subjects", { school_id: student.school_id, name: p.subject }, { columns: "id", limit: 1 });
     const items = subjects[0] ? await ctx.db.rows("mgmt.syllabus_items", { school_id: student.school_id, class_id: student.class_id, subject_id: subjects[0].id }, { columns: "topic, term, status", limit: 100 }) : [];
     if (items.length < 2) ctx.expect.blocked(`${p.learner}'s class has no ${p.subject} syllabus items — apply the sandbox seed 2026-seed-sandbox-class-syllabus.sql`);
