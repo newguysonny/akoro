@@ -11,7 +11,10 @@ body=$(jq -nc --arg s "${SUITE:-}" --arg c "${SCENARIO:-}" --arg e "${EXPECT_SHA
 # Optional: EDGE_HEADER="Name: value" — what a Cloudflare skip rule in front of the API lets through.
 # Trimmed: a secret pasted with a trailing newline would end the request's
 # headers early (the edge lets it through, the API gets a broken request: 502).
-EDGE_HEADER=$(printf '%s' "${EDGE_HEADER:-}" | tr -d '\r\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+trim() { printf '%s' "$1" | tr -d '\r\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'; }
+EDGE_HEADER=$(trim "${EDGE_HEADER:-}")
+GATE_KEY=$(trim "${GATE_KEY:-}")
+GATE_URL=$(trim "${GATE_URL:-}"); GATE_URL=${GATE_URL%/}
 edge=(); [ -n "$EDGE_HEADER" ] && edge=(-H "$EDGE_HEADER")
 hdrs=$(mktemp)
 # A 502/503/504 is the API restarting (a deploy) or waking: try again a few times.
