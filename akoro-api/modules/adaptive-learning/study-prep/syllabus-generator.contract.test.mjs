@@ -38,7 +38,7 @@ test("checkOutline rejects what the plan forbids", () => {
 });
 
 // ── harness with in-memory doubles ──────────────────────────────────────────
-function harnessWith({ realTopics = [], outline = null }) {
+function harnessWith({ realTopics = [], outline = null, schoolChain = null }) {
   const sessions = new Map();
   const events = [];
   const calls = { generate: 0 };
@@ -55,6 +55,11 @@ function harnessWith({ realTopics = [], outline = null }) {
     prerequisiteEdges: async () => [],
     generateOutline: async () => { calls.generate += 1; return outline; },
     generatedTopics: async (id) => (id === outline?.id ? outline.topics : []),
+    // The learner's own class/school syllabus (§8.7), when the test gives one.
+    ...(schoolChain ? {
+      resolveSyllabusChain: async () => schoolChain,
+      topicsForSource: async ({ source, ref }) => (source === schoolChain.source && ref === schoolChain.ref ? schoolChain.topics : []),
+    } : {}),
   };
   return { harness: createHarness({ store, topicWorkflow: {}, syllabus }), sessions, events, calls };
 }
@@ -110,4 +115,73 @@ test("the narration says it's an AI-drafted outline, and when it was reused", ()
   assert.match(fresh, /couldn't find a syllabus for JSS1 Agricultural Science/);
   assert.match(fresh, /AI-drafted outline, not your school's official syllabus/);
   assert.match(deliberate("syllabus_generated", { reused: true }).narrative, /drafted earlier/);
+});
+
+// ── the learner's class / school syllabus wins (§8.7 steps 1–2) ─────────────
+
+const CLASS_CHAIN = {
+  source: "class", ref: "class-jss1", className: "JSS1", term: "First",
+  topics: [
+    { id: "living-things", label: "Living Things", term: "First", covered: true, source: "class" },
+    { id: "states-of-matter", label: "States of Matter", term: "First", covered: false, source: "class" },
+  ],
+};
+
+test("syllabus.resolve: the class syllabus is returned, recorded as the source, and narrated", async () => {
+  const { harness, sessions, events } = harnessWith({ schoolChain: CLASS_CHAIN, realTopics: [{ id: "energy", label: "Energy" }] });
+  const s = await harness.createSession({ learnerId: "L", goal: "Pass my JSS1 test", subject: "Basic Science" });
+  const out = await harness.resolveSyllabus({ sessionId: s.id, learnerId: "L" });
+  assert.equal(out.found, true);
+  assert.equal(out.source, "class");
+  assert.equal(out.term, "First");
+  assert.deepEqual(out.topics, [
+    { id: "living-things", label: "Living Things", term: "First", covered: true },
+    { id: "states-of-matter", label: "States of Matter", term: "First", covered: false },
+  ]);
+  assert.equal(sessions.get(s.id).syllabus_source, "class");
+  assert.equal(sessions.get(s.id).syllabus_ref, "class-jss1");
+  const said = events.find((e) => (e.decisionNode || e.decision_node) === "syllabus_resolved");
+  assert.match(said.narrative, /your school's JSS1 Basic Science syllabus for the First term/);
+  // Asked again: same source, no second narration.
+  await harness.resolveSyllabus({ sessionId: s.id, learnerId: "L" });
+  assert.equal(events.filter((e) => (e.decisionNode || e.decision_node) === "syllabus_resolved").length, 1);
+});
+
+test("a plan made from the class syllabus is checked against it — not the platform's", async () => {
+  const { harness } = harnessWith({ schoolChain: CLASS_CHAIN, realTopics: [{ id: "energy", label: "Energy" }] });
+  const s = await harness.createSession({ learnerId: "L", goal: "Pass my JSS1 test", subject: "Basic Science" });
+  await harness.resolveSyllabus({ sessionId: s.id, learnerId: "L" });
+  const planned = await harness.proposePlan({ sessionId: s.id, learnerId: "L", topicIds: ["states-of-matter", "living-things"] });
+  assert.equal(planned.session.status, "awaiting_confirmation");
+  assert.equal(planned.session.syllabusSource, "class");
+  assert.equal(planned.session.syllabusLabel, null, "only a generated outline carries the AI-drafted label");
+  // A platform-only topic is not in the class syllabus.
+  const other = harnessWith({ schoolChain: CLASS_CHAIN, realTopics: [{ id: "energy", label: "Energy" }] });
+  const s2 = await other.harness.createSession({ learnerId: "L", goal: "Pass my JSS1 test", subject: "Basic Science" });
+  await other.harness.resolveSyllabus({ sessionId: s2.id, learnerId: "L" });
+  await assert.rejects(() => other.harness.proposePlan({ sessionId: s2.id, learnerId: "L", topicIds: ["energy"] }), (e) => e.code === "topic_not_in_syllabus");
+});
+
+test("syllabus.generate is refused while the learner's class or school has a syllabus", async () => {
+  for (const chain of [CLASS_CHAIN, { ...CLASS_CHAIN, source: "school", ref: "school-a", term: null }]) {
+    const { harness, calls } = harnessWith({ schoolChain: chain, outline: OUTLINE });
+    const s = await harness.createSession({ learnerId: "L", goal: "Pass my test", subject: "Basic Science" });
+    await assert.rejects(() => harness.generateSyllabus({ sessionId: s.id, learnerId: "L" }), (e) => e.code === "syllabus_exists");
+    assert.equal(calls.generate, 0, chain.source);
+  }
+});
+
+test("nothing anywhere → found:false, and only then may an outline be drafted", async () => {
+  const { harness, sessions } = harnessWith({ schoolChain: { source: null, ref: null, topics: [], term: null }, outline: OUTLINE });
+  const s = await harness.createSession({ learnerId: "L", goal: "Pass my test", subject: "Agricultural Science" });
+  const out = await harness.resolveSyllabus({ sessionId: s.id, learnerId: "L" });
+  assert.equal(out.found, false);
+  assert.match(out.next, /syllabus\.generate/);
+  assert.equal(sessions.get(s.id).syllabus_source ?? null, null);
+  const drafted = await harness.generateSyllabus({ sessionId: s.id, learnerId: "L" });
+  assert.equal(drafted.source, "generated");
+  // Once drafted, resolve returns the outline (it stays the source).
+  const again = await harness.resolveSyllabus({ sessionId: s.id, learnerId: "L" });
+  assert.equal(again.source, "generated");
+  assert.deepEqual(again.topics.map((t) => t.id), ["farm-tools", "soil-types", "crops"]);
 });

@@ -19,6 +19,7 @@ const SNAPSHOTS = {
   practice_scored: { topicLabel: "Water Cycle", score: 3, total: 5, percentage: 60, passed: false, thresholdPercentage: 70 },
   agent_check_started: { topicLabel: "Water Cycle", mode: "diagnostic", coins: 2 },
   agent_check_skipped: { topicLabel: "Water Cycle" },
+  syllabus_resolved: { source: "class", subject: "Basic Science", className: "JSS1", term: "First" },
   agent_check_scored: { topicLabel: "Water Cycle", correct: 4, total: 5, guessed: 1, percentage: 80, passed: true, thresholdPercentage: 70 },
   strategy_offered: { strategy: "teach_back", topicLabel: "Water Cycle" },
   teach_back_confirmed: { topicLabel: "Water Cycle" },

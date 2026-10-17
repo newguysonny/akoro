@@ -238,6 +238,7 @@
     "2026-seed-sandbox-real-account.sql",
     "2026-seed-sandbox-syllabus.sql",
     "2026-seed-sandbox-concepts.sql",
-    "2026-seed-sandbox-notes.sql"
+    "2026-seed-sandbox-notes.sql",
+    "2026-seed-sandbox-class-syllabus.sql"
   ]
 }

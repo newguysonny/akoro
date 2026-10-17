@@ -54,7 +54,7 @@ These change what Phase 1 and later phases must do first.
 
 | D44 one forgetting curve (part of F5) | `agents/student/retention.js`: per-concept curve (learned × e^(−days ÷ stability), stability 45 days, ×2 per good review), recomputed nightly from the last review (the old pass compounded). Teaching files knowledge under the lesson topic + concept; topic health from its concepts; one alert per topic naming faded concepts; concept-led review sessions; per-concept reinforcement. `knowledge_confidence` and `learner_concept_state` retention are still separate (folded in Phases 8/10). | `retention.d44.test.mjs`; gate `decay.concept_curve` PASS (sandbox); columns present on production |
 
-Still open: F5 (the other two retention models and the single-writer rule), F7, plus the `resolve_class` / `resolve_school` steps of §8.7 (school syllabi from `mgmt.*`). Python sessions using Python-only features (attached conversation, concept-state / insights / soul-state flags) still run on its local loop until those contracts are unified.
+Still open: F5 (the other two retention models and the single-writer rule), F7. §8.7 is built: `syllabus.resolve` tries the learner's class syllabus, then their school's (`mgmt.syllabus_items`, from a linked enrollment only), then the platform's, and records the source; `syllabus.generate` only when all three are empty (`syllabus-resolver.js`, gate `studyprep.class_syllabus_first`). Python sessions using Python-only features (attached conversation, concept-state / insights / soul-state flags) still run on its local loop until those contracts are unified.
 
 ## 2. Open questions (§20)
 

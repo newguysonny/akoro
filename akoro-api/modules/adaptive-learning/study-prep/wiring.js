@@ -11,7 +11,7 @@ import {
 } from "../exam-prep-service.js";
 import { InsufficientBalanceError, createHarness } from "./harness.js";
 import { supabaseStore as store } from "./store.js";
-import { prerequisiteEdges, resolveTopics } from "./syllabus-resolver.js";
+import { prerequisiteEdges, resolveTopics, resolveSyllabusChain, topicsForSource } from "./syllabus-resolver.js";
 import { generateOutline, generatedTopics } from "./syllabus-generator.js";
 import * as readToolsModule from "./read-tools.js";
 import { makeLlmAgent } from "./llm-agent.js";
@@ -35,7 +35,7 @@ const topicWorkflow = {
 };
 
 // generateOutline / generatedTopics: the AI-drafted outline fallback (§8.7).
-const syllabus = { resolveTopics, prerequisiteEdges, generateOutline, generatedTopics };
+const syllabus = { resolveTopics, prerequisiteEdges, generateOutline, generatedTopics, resolveSyllabusChain, topicsForSource };
 
 /**
  * D45: practice as an Agent Check battle — ON by default, no env needed.

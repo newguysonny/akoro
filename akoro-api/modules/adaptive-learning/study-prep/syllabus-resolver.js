@@ -111,3 +111,143 @@ export async function prerequisiteEdges({ subject }) {
   }
   return out;
 }
+
+// ── The learner's own school syllabus (Grand Plan §8.7, D30) ────────────────
+//
+// Most specific first: the learner's CLASS syllabus, then their SCHOOL's (any
+// class), then the platform's. The school and class come only from a linked
+// enrollment — mgmt.students.user_id = the authenticated learner, active —
+// never from a self-reported school name or a student's name (names repeat,
+// and matching on one could open another child's class).
+
+const TERM_ORDER = ["first", "second", "third"];
+const termRank = (term) => {
+  const index = TERM_ORDER.findIndex((name) => String(term || "").toLowerCase().startsWith(name));
+  return index < 0 ? TERM_ORDER.length : index;
+};
+
+/** The learner's linked enrollment → { schoolId, classId, className } or null. */
+export async function learnerEnrollment(learnerId) {
+  if (!learnerId) return null;
+  const { data: students, error } = await db.schema("mgmt").from("students")
+    .select("id, school_id, class_id").eq("user_id", learnerId).eq("status", "active").limit(2);
+  if (error) throw error;
+  // Linked to more than one active enrollment: ambiguous — use neither.
+  if ((students || []).length !== 1) return null;
+  const student = students[0];
+  let className = null;
+  if (student.class_id) {
+    const { data: classes, error: classError } = await db.schema("mgmt").from("classes")
+      .select("id, name").eq("id", student.class_id).limit(1);
+    if (classError) throw classError;
+    className = classes?.[0]?.name || null;
+  }
+  return { schoolId: student.school_id, classId: student.class_id || null, className };
+}
+
+/**
+ * The school's current term: the latest resumption on or before today, unless
+ * that term's vacation has already started (between terms → null).
+ */
+export async function currentTerm(schoolId, today = new Date().toISOString().slice(0, 10)) {
+  if (!schoolId) return null;
+  const { data: events, error } = await db.schema("mgmt").from("academic_calendar")
+    .select("term, event_type, starts_on").eq("school_id", schoolId)
+    .in("event_type", ["resumption", "vacation"]).lte("starts_on", today)
+    .order("starts_on", { ascending: false }).limit(10);
+  if (error) throw error;
+  const latest = (events || [])[0];
+  return latest?.event_type === "resumption" && latest.term ? latest.term : null;
+}
+
+/** The school's subject rows matching a subject name. */
+async function schoolSubjectIds(schoolId, subject) {
+  const name = String(subject || "").trim();
+  if (!schoolId || !name) return [];
+  const { data, error } = await db.schema("mgmt").from("subjects")
+    .select("id, name").eq("school_id", schoolId).ilike("name", `%${name}%`).limit(10);
+  if (error) throw error;
+  return (data || []).map((row) => row.id);
+}
+
+/** syllabus_items → topics: one per slug, current term first, then by term. */
+export function shapeSchoolTopics(items, { term = null, source } = {}) {
+  const seen = new Set();
+  const out = [];
+  const sorted = [...(items || [])].sort((a, b) => {
+    const current = (row) => (term && String(row.term || "").toLowerCase() === String(term).toLowerCase() ? 0 : 1);
+    return current(a) - current(b) || termRank(a.term) - termRank(b.term);
+  });
+  for (const item of sorted) {
+    const id = topicSlug(item.topic);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id, label: String(item.topic).trim(), term: item.term || null, covered: item.status === "covered", source });
+  }
+  return out;
+}
+
+/**
+ * syllabus.resolve_class — the learner's class syllabus for this subject
+ * (mgmt.syllabus_items for their school + class). This term's topics when the
+ * class has any for the term, else every term's. → { topics, term } (empty
+ * topics without a linked enrollment).
+ */
+export async function resolveClassTopics({ learnerId, subject, enrollment = undefined, today } = {}) {
+  const linked = enrollment === undefined ? await learnerEnrollment(learnerId) : enrollment;
+  if (!linked?.classId) return { topics: [], term: null, enrollment: linked };
+  const subjectIds = await schoolSubjectIds(linked.schoolId, subject);
+  if (!subjectIds.length) return { topics: [], term: null, enrollment: linked };
+  const { data: items, error } = await db.schema("mgmt").from("syllabus_items")
+    .select("topic, term, status, subject_id").eq("school_id", linked.schoolId).eq("class_id", linked.classId)
+    .in("subject_id", subjectIds).limit(300);
+  if (error) throw error;
+  const term = await currentTerm(linked.schoolId, today);
+  const thisTerm = term ? (items || []).filter((row) => String(row.term || "").toLowerCase() === term.toLowerCase()) : [];
+  return { topics: shapeSchoolTopics(thisTerm.length ? thisTerm : items, { term, source: "class" }), term: thisTerm.length ? term : null, enrollment: linked };
+}
+
+/** syllabus.resolve_school — the learner's school syllabus for this subject, any class. */
+export async function resolveSchoolTopics({ learnerId, subject, enrollment = undefined } = {}) {
+  const linked = enrollment === undefined ? await learnerEnrollment(learnerId) : enrollment;
+  if (!linked?.schoolId) return { topics: [], enrollment: linked };
+  const subjectIds = await schoolSubjectIds(linked.schoolId, subject);
+  if (!subjectIds.length) return { topics: [], enrollment: linked };
+  const { data: items, error } = await db.schema("mgmt").from("syllabus_items")
+    .select("topic, term, status, subject_id, class_id").eq("school_id", linked.schoolId)
+    .in("subject_id", subjectIds).limit(500);
+  if (error) throw error;
+  return { topics: shapeSchoolTopics(items, { source: "school" }), enrollment: linked };
+}
+
+/**
+ * The syllabus a session plans against, most specific first:
+ * class → school → platform. → { source, ref, topics, term } — source null
+ * and topics [] when none exists (then, and only then, syllabus.generate).
+ */
+export async function resolveSyllabusChain({ learnerId, subject, classLevel, exam, today } = {}) {
+  const enrollment = await learnerEnrollment(learnerId);
+  if (enrollment) {
+    const cls = await resolveClassTopics({ subject, enrollment, today });
+    if (cls.topics.length) return { source: "class", ref: enrollment.classId, topics: cls.topics, term: cls.term, className: enrollment.className };
+    const school = await resolveSchoolTopics({ subject, enrollment });
+    if (school.topics.length) return { source: "school", ref: enrollment.schoolId, topics: school.topics, term: null, className: enrollment.className };
+  }
+  const platform = await resolveTopics({ subject, classLevel, exam });
+  if (platform.length) return { source: "platform", ref: null, topics: platform.map((topic) => ({ ...topic, source: "platform" })), term: null };
+  return { source: null, ref: null, topics: [], term: null };
+}
+
+/** The topics of a session's recorded source (what its plan is checked against). */
+export async function topicsForSource({ source, ref, learnerId, subject, classLevel, exam }) {
+  if (source === "class" || source === "school") {
+    const enrollment = await learnerEnrollment(learnerId);
+    // The enrollment changed since the session started: no longer the learner's class/school.
+    const still = source === "class" ? enrollment?.classId === ref : enrollment?.schoolId === ref;
+    if (!still) return [];
+    return source === "class"
+      ? (await resolveClassTopics({ subject, enrollment })).topics
+      : (await resolveSchoolTopics({ subject, enrollment })).topics;
+  }
+  return resolveTopics({ subject, classLevel, exam });
+}

@@ -42,6 +42,12 @@ const TEMPLATES = {
   session_concluded: (f) => `Session complete${f.understood ? ` — ${f.understood} topic${f.understood === 1 ? "" : "s"} understood` : ""}.`,
   session_paused: (f) => PAUSE_COPY[f.reason] || "Session paused. Tap resume when you are ready.",
   harness_rejection: (f) => REJECTION_COPY[f.code] || `That action was not allowed (${f.code}).`,
+  // Which syllabus the plan comes from (§8.7): the learner's own class or school first.
+  syllabus_resolved: (f) => f.source === "class"
+    ? `Planning from your school's ${f.className || "class"} ${f.subject || ""} syllabus${f.term ? ` for the ${f.term} term` : ""}.`.replace(/\s+/g, " ")
+    : f.source === "school"
+      ? `Your class has no ${f.subject || "subject"} syllabus at your school yet, so I'm planning from your school's ${f.subject || "subject"} topics for other classes.`
+      : `Planning from Akoro's ${f.classLevel || ""} ${f.subject || ""} syllabus.`.replace(/\s+/g, " "),
   syllabus_generated: (f) => f.reused
     ? `There's no syllabus for ${f.classLevel || "this class"} ${f.subject || "this subject"} on Akoro yet, so I'm using an outline drafted earlier from the national curriculum. It's an AI-drafted outline, not your school's official syllabus.`
     : `I couldn't find a syllabus for ${f.classLevel || "this class"} ${f.subject || "this subject"} on Akoro, so I drafted an outline from the national curriculum. It's an AI-drafted outline, not your school's official syllabus.`,

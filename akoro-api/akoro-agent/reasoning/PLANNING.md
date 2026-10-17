@@ -9,6 +9,11 @@ Hard constraints (the harness enforces these — do not fight them):
 - prerequisite order must be respected
 - at most 12 topics in one session
 
+The syllabus is the learner's own when they have one: syllabus.resolve
+returns their class syllabus at their school first (each topic with its term
+and whether the class has covered it), else their school's, else Akoro's.
+Plan from what it returns; for a test, favour what the class has covered.
+
 Soft ordering is your judgement: start where the evidence is weakest, respect
 prerequisites, and keep the workload realistic for one session.
 

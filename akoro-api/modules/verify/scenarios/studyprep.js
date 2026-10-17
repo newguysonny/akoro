@@ -219,3 +219,44 @@ export const agentCheckBattle = {
     ctx.expect.gte("the protégé posted in chat (start + result)", said.filter((m) => m.meta?.battle?.id === battleId).length, 2);
   },
 };
+
+// §8.7 steps 1–2: a learner with a linked school enrollment plans from their
+// OWN class syllabus (mgmt.syllabus_items), not the platform's. The sandbox
+// seed gives Akoro Demo Academy's JSS2 a Basic Science class syllabus.
+export const classSyllabusFirst = {
+  name: "studyprep.class_syllabus_first", area: "study-prep", risk: "write",
+  description: "A learner enrolled at a school plans from their own class syllabus first: the session records source 'class', and every planned topic is one of the class's topics.",
+  params: { learner: { default: "@tester11" }, subject: { default: "Basic Science" } },
+  async run(ctx, p) {
+    const me = await ctx.as(p.learner);
+    const base = "/api/adaptive/study-prep/sessions";
+    const [student] = await ctx.db.rows("mgmt.students", { user_id: me.id, status: "active" }, { columns: "school_id, class_id", limit: 1 });
+    if (!student?.class_id) ctx.expect.blocked(`${p.learner} has no linked school enrollment with a class`);
+    const subjects = await ctx.db.rows("mgmt.subjects", { school_id: student.school_id, name: p.subject }, { columns: "id", limit: 1 });
+    const items = subjects[0] ? await ctx.db.rows("mgmt.syllabus_items", { school_id: student.school_id, class_id: student.class_id, subject_id: subjects[0].id }, { columns: "topic, term, status", limit: 100 }) : [];
+    if (items.length < 2) ctx.expect.blocked(`${p.learner}'s class has no ${p.subject} syllabus items — apply the sandbox seed 2026-seed-sandbox-class-syllabus.sql`);
+    const slug = (t) => String(t || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 120);
+    const classTopics = new Set(items.map((row) => slug(row.topic)));
+    ctx.note(`${p.learner}'s class has ${items.length} ${p.subject} topics`);
+
+    await ctx.db.deleteOwned("edu.study_prep_sessions", { ownerColumn: "learner_id", ownerId: me.id, filters: { goal: { like: "[verify:%" } } });
+    const active = await ctx.http({ as: p.learner, path: base });
+    if (active.body?.session?.id) await ctx.http({ as: p.learner, method: "POST", path: `${base}/${active.body.session.id}/cancel`, body: {} });
+    ctx.cleanup(() => ctx.db.deleteOwned("edu.study_prep_sessions", { ownerColumn: "learner_id", ownerId: me.id, filters: { goal: { like: `${ctx.marker}%` } } }));
+
+    const made = await ctx.http({ as: p.learner, method: "POST", path: base,
+      body: { goal: `${ctx.marker} Revise ${p.subject} for my class test`, subject: p.subject, classLevel: "JSS2", examBoard: "BECE" } });
+    const session = made.body?.session;
+    ctx.note(`status ${session?.status}, source ${session?.syllabusSource}, plan ${JSON.stringify((session?.plan || []).map((t) => t.syllabusTopicId))}`);
+    ctx.expect.eq("planning ends with a plan to confirm", session?.status, "awaiting_confirmation");
+    const [row] = await ctx.db.rows("edu.study_prep_sessions", { id: session?.id || "00000000-0000-0000-0000-000000000000" }, { columns: "syllabus_source, syllabus_ref", limit: 1 });
+    ctx.expect.eq("planned against the learner's class syllabus", row?.syllabus_source, "class");
+    ctx.expect.eq("the source is the learner's class", row?.syllabus_ref, student.class_id);
+    const plan = session?.plan || [];
+    ctx.expect.gte("plan has topics", plan.length, 1);
+    ctx.expect.ok("every planned topic is a class topic", plan.every((t) => classTopics.has(t.syllabusTopicId)), JSON.stringify(plan.map((t) => t.syllabusTopicId)));
+    ctx.expect.eq("not labelled as an AI-drafted outline", session?.syllabusLabel ?? null, null);
+    ctx.expect.ok("the narration says it's the class syllabus", (made.body?.events || []).some((e) => /your school's .*syllabus/i.test(e.narrative || "")));
+    if (session?.id) await ctx.http({ as: p.learner, method: "POST", path: `${base}/${session.id}/cancel`, body: {} });
+  },
+};

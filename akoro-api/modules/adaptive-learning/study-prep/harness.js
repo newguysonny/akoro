@@ -92,10 +92,62 @@ export function createHarness({ store, topicWorkflow, syllabus, agentCheck = nul
     syllabusLabel: row.syllabus_source === "generated" ? GENERATED_OUTLINE_LABEL : null,
   });
 
-  /** The topics this session plans against: its generated outline, else the platform syllabus. */
-  const topicsFor = (session) => (session.syllabus_source === "generated" && session.syllabus_ref && syllabus.generatedTopics
-    ? syllabus.generatedTopics(session.syllabus_ref)
-    : syllabus.resolveTopics({ subject: session.subject, classLevel: session.class_level, exam: session.exam_board }));
+  /**
+   * The topics this session plans against — its recorded source (§8.7): a
+   * generated outline, the learner's class or school syllabus, else the
+   * platform syllabus.
+   */
+  const topicsFor = (session) => {
+    const source = session.syllabus_source;
+    if (source === "generated" && session.syllabus_ref && syllabus.generatedTopics) return syllabus.generatedTopics(session.syllabus_ref);
+    if ((source === "class" || source === "school") && syllabus.topicsForSource) {
+      return syllabus.topicsForSource({ source, ref: session.syllabus_ref, learnerId: session.learner_id, subject: session.subject, classLevel: session.class_level, exam: session.exam_board });
+    }
+    return syllabus.resolveTopics({ subject: session.subject, classLevel: session.class_level, exam: session.exam_board });
+  };
+
+  /** The real syllabus for a session, most specific first (class → school → platform). */
+  const realSyllabus = async (session) => (syllabus.resolveSyllabusChain
+    ? syllabus.resolveSyllabusChain({ learnerId: session.learner_id, subject: session.subject, classLevel: session.class_level, exam: session.exam_board })
+    : { source: "platform", ref: null, topics: await syllabus.resolveTopics({ subject: session.subject, classLevel: session.class_level, exam: session.exam_board }) });
+
+  /**
+   * syllabus.resolve (§8.7): the syllabus this session plans against — the
+   * learner's class syllabus, else their school's, else the platform's. The
+   * most specific one wins in code; the session records it as its source, so
+   * the plan is checked against the same list. A drafted outline, once made,
+   * stays the source. Nothing found → found: false (then syllabus.generate).
+   */
+  async function resolveSyllabus({ sessionId, learnerId }) {
+    const session = await ownedSession(sessionId, learnerId);
+    if (!session) throw new HarnessRejection("session_not_found", "Study-prep session was not found", 404);
+    const base = { subject: session.subject, classLevel: session.class_level };
+    if (session.syllabus_source === "generated" && session.syllabus_ref) {
+      const topics = await topicsFor(session);
+      return { ...base, found: true, source: "generated", label: GENERATED_OUTLINE_LABEL, topics: topics.map((t) => ({ id: t.id, label: t.label })) };
+    }
+    const real = await realSyllabus(session);
+    if (!real.topics.length) {
+      return { ...base, topics: [], found: false, next: "No syllabus exists for this subject and class — not the learner's class or school, not on Akoro. Call syllabus.generate to draft an outline, then propose a plan from its topics." };
+    }
+    const changed = session.syllabus_source !== real.source || (session.syllabus_ref || null) !== (real.ref || null);
+    if (changed && ["planning", "replanning"].includes(session.status)) {
+      await store.updateSessionConditional(session.id, session.status, { syllabus_source: real.source, syllabus_ref: real.ref || null, updated_at: now() });
+      await log(session.id, null, {
+        eventType: "harness_decision", origin: "harness", decisionNode: "syllabus_resolved",
+        facts: { source: real.source, topicCount: real.topics.length, subject: session.subject, classLevel: session.class_level, className: real.className || null, term: real.term || null },
+        narrative: deliberate("syllabus_resolved", { source: real.source, subject: session.subject, classLevel: session.class_level, className: real.className, term: real.term })?.narrative,
+      });
+    }
+    return {
+      ...base, found: true, source: real.source, ...(real.term ? { term: real.term } : {}),
+      topics: real.topics.map((t) => ({
+        id: t.id, label: t.label,
+        // The class syllabus says what was taught: covered this term or still to come.
+        ...(t.term ? { term: t.term } : {}), ...(t.covered != null ? { covered: t.covered } : {}),
+      })),
+    };
+  }
 
   /**
    * syllabus.generate (§8.7): draft an outline ONLY when the real syllabus is
@@ -109,9 +161,10 @@ export function createHarness({ store, topicWorkflow, syllabus, agentCheck = nul
       return reject(session, "invalid_state_transition", "An outline can only be drafted while planning");
     }
     if (!syllabus.generateOutline) return reject(session, "tool_not_permitted", "Outline drafting is not available");
-    const real = await syllabus.resolveTopics({ subject: session.subject, classLevel: session.class_level, exam: session.exam_board });
-    if (real.length) {
-      return reject(session, "syllabus_exists", "A real syllabus exists for this subject and class — plan from syllabus.resolve", { topicCount: real.length });
+    // Only after the class, school and platform syllabi all came back empty.
+    const real = await realSyllabus(session);
+    if (real.topics.length) {
+      return reject(session, "syllabus_exists", "A real syllabus exists for this subject and class — plan from syllabus.resolve", { topicCount: real.topics.length, source: real.source });
     }
     let outline;
     try {
@@ -756,7 +809,7 @@ export function createHarness({ store, topicWorkflow, syllabus, agentCheck = nul
     startTopicPractice, submitPractice, completeAgentCheck, confirmTeachBack, offerStrategy,
     advanceTopic, deferTopic, retryDeferredTopic, flagTopic,
     concludeSession, pauseSession, resumeSession, cancelSession,
-    validateProposedPlan, getSessionView, sessionNext, generateSyllabus,
+    validateProposedPlan, getSessionView, sessionNext, generateSyllabus, resolveSyllabus,
     publicSession, publicTopic, pause, log,
   };
 }

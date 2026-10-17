@@ -50,8 +50,8 @@ export const TOOL_ARGS = Object.freeze({
 
 /** Pure catalogue — names, levels, and what the model is told. */
 export const TOOL_DEFINITIONS = Object.freeze([
-  { name: "syllabus.resolve", level: "read", description: "List the approved syllabus topics for the learner's subject and class level. A plan may only contain topics from this list." },
-  { name: "syllabus.generate", level: "execute", description: "ONLY when syllabus.resolve returned no topics: draft an outline for the session's subject and class from the national curriculum (reused if one was drafted before). The plan is then made from these topics, and the learner sees it labelled as an AI-drafted outline. Refused when a real syllabus exists." },
+  { name: "syllabus.resolve", level: "read", description: "List the syllabus topics for the session's subject, most specific first: the learner's own class syllabus at their school (with each topic's term and whether it was covered), else their school's, else Akoro's platform syllabus. Says which (source). A plan may only contain topics from this list." },
+  { name: "syllabus.generate", level: "execute", description: "ONLY when syllabus.resolve returned no topics (no class, school or platform syllabus): draft an outline for the session's subject and class from the national curriculum (reused if one was drafted before). The plan is then made from these topics, and the learner sees it labelled as an AI-drafted outline. Refused when a real syllabus exists." },
   { name: "learner.get_state", level: "read", description: "Read the learner's recorded 0-1 mastery estimates for the subject's topics. Missing topics have no evidence yet." },
   { name: "learner.get_history", level: "read", description: "Read a bounded list of the learner's recent exam-prep runs: topic, status, score, attempts." },
   { name: "learner.get_relevant_memory", level: "read", description: "Retrieve a few relevant recorded learning memories (evidence kinds and summaries) — targeted retrieval, never a full history dump." },
@@ -116,6 +116,8 @@ export function buildRegistry({ readTools, harness, learnerId, sessionId, conten
       const tool = assertTool(name);
       switch (name) {
         case "syllabus.resolve":
+          // In a session the harness resolves it (class → school → platform) and records the source.
+          if (sessionId && harness?.resolveSyllabus) return harness.resolveSyllabus({ sessionId, learnerId });
           return readTools.resolveSyllabus({ subject: args.subject, classLevel: args.classLevel, exam: args.exam });
         case "syllabus.generate":
           return harness.generateSyllabus({ sessionId, learnerId, intent });

@@ -8,7 +8,7 @@ process.env.OPENAI_API_KEY ||= "test";
 
 const { default: db } = await import("../../../db.js");
 const { installFakeDb } = await import("../../../lib/testing/fakeDb.mjs");
-const { topicSlug, shapeSyllabus, resolveTopics, prerequisiteEdges } = await import("./syllabus-resolver.js");
+const { topicSlug, shapeSyllabus, resolveTopics, prerequisiteEdges, learnerEnrollment, currentTerm, resolveClassTopics, resolveSchoolTopics, resolveSyllabusChain, topicsForSource } = await import("./syllabus-resolver.js");
 
 function fakeFor(t, seed = {}, options = {}) {
   const fake = installFakeDb(db, seed, options);
@@ -177,4 +177,105 @@ test("prerequisiteEdges: no edges → [] without reading the catalog; errors pro
   fake.rows(EDGES).push(edges[0]);
   fake.failNext(CONCEPTS, "select", { message: "catalog down" });
   await assert.rejects(prerequisiteEdges({ subject: "x" }), { message: "catalog down" });
+});
+
+// ── the learner's own class and school syllabus (§8.7) ─────────────────────
+
+const ME = "11111111-1111-4111-8111-111111111111";
+const SCHOOL = "school-a", OTHER_SCHOOL = "school-b", JSS1 = "class-jss1", JSS2 = "class-jss2";
+const schoolSeed = (extra = {}) => ({
+  "mgmt.students": [
+    { id: "st1", school_id: SCHOOL, class_id: JSS1, user_id: ME, status: "active", first_name: "Ada", last_name: "Okafor" },
+    // Same name at another school, not linked to this learner: never used.
+    { id: "st2", school_id: OTHER_SCHOOL, class_id: "class-x", user_id: null, status: "active", first_name: "Ada", last_name: "Okafor" },
+  ],
+  "mgmt.classes": [{ id: JSS1, school_id: SCHOOL, name: "JSS1" }, { id: JSS2, school_id: SCHOOL, name: "JSS2" }],
+  "mgmt.subjects": [{ id: "sub-bs", school_id: SCHOOL, name: "Basic Science" }, { id: "sub-other", school_id: OTHER_SCHOOL, name: "Basic Science" }],
+  "mgmt.academic_calendar": [
+    { school_id: SCHOOL, term: "First", event_type: "resumption", starts_on: "2026-09-08" },
+    { school_id: SCHOOL, term: "First", event_type: "vacation", starts_on: "2026-12-11" },
+  ],
+  "mgmt.syllabus_items": [
+    { school_id: SCHOOL, class_id: JSS1, subject_id: "sub-bs", term: "Second", topic: "Energy", status: "pending" },
+    { school_id: SCHOOL, class_id: JSS1, subject_id: "sub-bs", term: "First", topic: "Living Things", status: "covered" },
+    { school_id: SCHOOL, class_id: JSS1, subject_id: "sub-bs", term: "First", topic: "States of Matter", status: "pending" },
+    { school_id: SCHOOL, class_id: JSS2, subject_id: "sub-bs", term: "First", topic: "Machines", status: "pending" },
+    { school_id: OTHER_SCHOOL, class_id: "class-x", subject_id: "sub-other", term: "First", topic: "Secret Topic", status: "pending" },
+  ],
+  ...extra,
+});
+
+test("enrollment comes only from the linked, active student row — never a name match", async (t) => {
+  fakeFor(t, schoolSeed());
+  assert.deepEqual(await learnerEnrollment(ME), { schoolId: SCHOOL, classId: JSS1, className: "JSS1" });
+  assert.equal(await learnerEnrollment("22222222-2222-4222-8222-222222222222"), null);
+  assert.equal(await learnerEnrollment(null), null);
+});
+
+test("two active linked enrollments are ambiguous: neither is used", async (t) => {
+  const seed = schoolSeed();
+  seed["mgmt.students"].push({ id: "st3", school_id: OTHER_SCHOOL, class_id: "class-x", user_id: ME, status: "active" });
+  fakeFor(t, seed);
+  assert.equal(await learnerEnrollment(ME), null);
+});
+
+test("current term: the latest resumption, none once that term's vacation began", async (t) => {
+  fakeFor(t, schoolSeed());
+  assert.equal(await currentTerm(SCHOOL, "2026-10-17"), "First");
+  assert.equal(await currentTerm(SCHOOL, "2026-12-20"), null);
+  assert.equal(await currentTerm(SCHOOL, "2026-08-01"), null);
+});
+
+test("resolve_class: this term's topics for the learner's class, with covered status", async (t) => {
+  fakeFor(t, schoolSeed());
+  const out = await resolveClassTopics({ learnerId: ME, subject: "Basic Science", today: "2026-10-17" });
+  assert.equal(out.term, "First");
+  assert.deepEqual(out.topics, [
+    { id: "living-things", label: "Living Things", term: "First", covered: true, source: "class" },
+    { id: "states-of-matter", label: "States of Matter", term: "First", covered: false, source: "class" },
+  ]);
+  // Between terms: every term's topics, in term order.
+  const holiday = await resolveClassTopics({ learnerId: ME, subject: "Basic Science", today: "2026-12-20" });
+  assert.equal(holiday.term, null);
+  assert.deepEqual(holiday.topics.map((x) => x.id), ["living-things", "states-of-matter", "energy"]);
+});
+
+test("resolve_school: the school's topics for the subject, any class — never another school's", async (t) => {
+  fakeFor(t, schoolSeed());
+  const out = await resolveSchoolTopics({ learnerId: ME, subject: "Basic Science" });
+  assert.deepEqual(out.topics.map((x) => x.id).sort(), ["energy", "living-things", "machines", "states-of-matter"]);
+  assert.ok(out.topics.every((x) => x.source === "school"));
+  assert.ok(!out.topics.some((x) => x.label === "Secret Topic"));
+});
+
+test("the chain: class first, school when the class has none, then the platform, else nothing", async (t) => {
+  const fake = fakeFor(t, schoolSeed({ [SUBJECTS]: subjects, [TOPICS]: topics }));
+  const cls = await resolveSyllabusChain({ learnerId: ME, subject: "Basic Science", classLevel: "JSS1", exam: "WAEC", today: "2026-10-17" });
+  assert.equal(cls.source, "class");
+  assert.equal(cls.ref, JSS1);
+  assert.equal(cls.className, "JSS1");
+
+  // This class has no Basic Science items: the school's.
+  const items = fake.rows("mgmt.syllabus_items");
+  for (let i = items.length - 1; i >= 0; i--) if (items[i].class_id === JSS1) items.splice(i, 1);
+  const school = await resolveSyllabusChain({ learnerId: ME, subject: "Basic Science", classLevel: "JSS1", exam: "WAEC" });
+  assert.equal(school.source, "school");
+  assert.equal(school.ref, SCHOOL);
+  assert.deepEqual(school.topics.map((x) => x.id), ["machines"]);
+
+  // No enrollment: straight to the platform syllabus.
+  const platform = await resolveSyllabusChain({ learnerId: "22222222-2222-4222-8222-222222222222", subject: "Basic Science", classLevel: "JSS1", exam: "WAEC" });
+  assert.equal(platform.source, "platform");
+  assert.ok(platform.topics.length > 0);
+
+  const none = await resolveSyllabusChain({ learnerId: "22222222-2222-4222-8222-222222222222", subject: "Latin", classLevel: "JSS1", exam: "WAEC" });
+  assert.deepEqual(none, { source: null, ref: null, topics: [], term: null });
+});
+
+test("a session's class source stops applying once the learner's enrollment changes", async (t) => {
+  const fake = fakeFor(t, schoolSeed());
+  const args = { source: "class", ref: JSS1, learnerId: ME, subject: "Basic Science", classLevel: "JSS1", exam: "WAEC" };
+  assert.ok((await topicsForSource(args)).length > 0);
+  fake.rows("mgmt.students").find((row) => row.id === "st1").class_id = JSS2;
+  assert.deepEqual(await topicsForSource(args), []);
 });
