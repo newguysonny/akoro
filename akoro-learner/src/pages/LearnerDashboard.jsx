@@ -37,6 +37,7 @@ import { ProgressBar, LiveBadge } from '../components/common/ProgressBar.jsx';
 import { ZapIcon, MicIcon, Icon } from '../components/common/Icons.jsx';
 import NowStudyingBar from '../components/dashboard/NowStudyingBar.jsx';
 import PharmDProgram from '../components/pharmd/PharmDProgram.jsx';
+import ProgrammePage from '../components/programmes/ProgrammePage.jsx';
 import ContentsDiscoveryTab from '../components/tabs/ContentsDiscoveryTab.jsx';
 import { AppShell, SidebarToggle } from '../components/AppShell.jsx';
 import { NavIcon } from '../components/common/NavIcons.jsx';
@@ -78,10 +79,14 @@ export default function LearnerDashboard() {
   // feed and the Pharm D browse/folder chain like they do between tabs.
   const discoverViewFromUrl = () => {
     const v = new URLSearchParams(location.search).get("view");
-    return v === "courses" || v === "pharmd" || v === "contents" ? v : "hub";
+    return v === "courses" || v === "pharmd" || v === "contents" || v === "programme" ? v : "hub";
   };
   const discoverQFromUrl    = () => new URLSearchParams(location.search).get("q") || "";
   const pharmdCourseFromUrl = () => new URLSearchParams(location.search).get("course") || null;
+  // The generic published-programme page (?view=programme&programme=ID,
+  // ?pcourse=ID for its open course) — the hub's programme cards.
+  const programmeIdFromUrl     = () => new URLSearchParams(location.search).get("programme") || null;
+  const programmeCourseFromUrl = () => new URLSearchParams(location.search).get("pcourse") || null;
   // The focused discovery feeds (Teaching guide / Live classes): ?focus=
   // on the courses view — same feed, one rail.
   const discoveryFocusFromUrl = () => {
@@ -1208,9 +1213,18 @@ export default function LearnerDashboard() {
                   onCourseRoute={(c)=>navigate(`/app?tab=discovery&view=pharmd${c?`&course=${encodeURIComponent(c)}`:""}`)}
                   focus={pharmdFocus}
                   onFocusConsumed={()=>setPharmdFocus(null)}/>
+              // A published programme from the admin catalogue — the generic
+              // programme page (sections → published courses → materials).
+              : discoverView==="programme" && programmeIdFromUrl()
+              ? <ProgrammePage
+                  programmeId={programmeIdFromUrl()}
+                  onClose={()=>navigate("/app?tab=discovery")}
+                  courseRoute={programmeCourseFromUrl()}
+                  onCourseRoute={(c)=>navigate(`/app?tab=discovery&view=programme&programme=${encodeURIComponent(programmeIdFromUrl())}${c?`&pcourse=${encodeURIComponent(c)}`:""}`)}/>
               : <DiscoverHub
                   userId={userProfile?.id}
                   onOpenPharmd={()=>navigate("/app?tab=discovery&view=pharmd")}
+                  onOpenProgramme={(p)=>p?.id&&navigate(`/app?tab=discovery&view=programme&programme=${encodeURIComponent(p.id)}`)}
                   onOpenContents={(q)=>navigate(`/app?tab=discovery&view=contents${q?`&q=${encodeURIComponent(q)}`:""}`)}
                   onOpenRail={(rail,q)=>navigate(`/app?tab=discovery&view=courses&focus=${rail}${q?`&q=${encodeURIComponent(q)}`:""}`)}
                   onOpenCourses={(q)=>navigate(`/app?tab=discovery&view=courses${q?`&q=${encodeURIComponent(q)}`:""}`)}

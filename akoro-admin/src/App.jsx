@@ -9,6 +9,7 @@ import InstructorsPage      from './pages/InstructorsPage.jsx';
 import SchoolsPage          from './pages/SchoolsPage.jsx';
 import CoursesPage          from './pages/CoursesPage.jsx';
 import ProgramCoursesSection from './pages/programmes-page/index.jsx';
+import CourseApprovalsSection from './pages/course-approvals/index.jsx';
 import AppCenterPage        from './pages/AppCenterPage.jsx';
 import AgentsPage           from './pages/AgentsPage.jsx';
 import PastQuestionsPage    from './pages/PastQuestionsPage.jsx';
@@ -118,6 +119,14 @@ export default function App() {
             <AdminRoute>
               <PageLayout title="Program Courses" subtitle="Build and manage programs and learning content">
                 <ProgramCoursesSection />
+              </PageLayout>
+            </AdminRoute>
+          } />
+          {/* Course Approvals — the review queue for instructor-built Course Creator courses. */}
+          <Route path="/course-approvals/*" element={
+            <AdminRoute>
+              <PageLayout title="Course Approvals" subtitle="Review and publish courses instructors submit">
+                <CourseApprovalsSection />
               </PageLayout>
             </AdminRoute>
           } />

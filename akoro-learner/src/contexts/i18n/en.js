@@ -307,6 +307,8 @@ export const EN = {
   'settings.notifications':  'Notifications',
   'settings.privacy':        'Privacy & Security',
   'settings.change_password':'Change Password',
+  'settings.set_password': 'Set Password',
+  'settings.set_pw_note': 'You signed in with Google, so there is no password on this account yet. Create one to also sign in with your email.',
   'settings.two_factor':     'Two-Factor Auth',
   'settings.deactivate':     'Deactivate Account',
   'settings.delete':         'Delete Account',

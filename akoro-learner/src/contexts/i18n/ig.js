@@ -152,6 +152,8 @@ export const IG = {
   'settings.notifications':  'Ọkwa',
   'settings.privacy':        'Nzuzo & Nchekwa',
   'settings.change_password':'Gbanwee Okwuntughe',
+  'settings.set_password': 'Debe Okwuntughe',
+  'settings.set_pw_note': 'I ji Google banye, ya mere akaụntụ a enwebeghị okwuntughe. Mepụta otu ka i jiri ímeèlụ gị banye kwa.',
   'settings.two_factor':     'Nkwenye Ihe Abụọ',
   'settings.deactivate':     'Kwụsị Akaụntụ',
   'settings.delete':         'Hichapụ Akaụntụ',

@@ -244,15 +244,18 @@ function GenericSheet({ field,label,type,options,value,onClose,onSave }) {
     border:'1.5px solid var(--ak-border2)',outline:'none',fontSize:14,
     fontFamily:"'Nunito',sans-serif",color:'var(--ak-text)',
     background:'var(--ak-surface)',boxSizing:'border-box',marginTop:6 };
+  // 'set-password' = an OAuth account with no password on file: there is no
+  // current password to ask for, so the sheet takes only new + confirm.
+  const isPw = type==='change-password'||type==='set-password';
   const handle = () => {
-    if(type==='change-password'){
-      if(!pw.current){setErr(t('settings.enter_current_pw'));return;}
+    if(isPw){
+      if(type==='change-password'&&!pw.current){setErr(t('settings.enter_current_pw'));return;}
       if(pw.next.length<8){setErr(t('settings.pw_too_short'));return;}
       if(pw.next!==pw.confirm){setErr(t('settings.pw_no_match'));return;}
       setErr('');
     }
     if(type==='delete-confirm'&&del!=='DELETE') return;
-    onSave(field, type==='change-password'?pw:val);
+    onSave(field, isPw?pw:val);
     onClose();
   };
   return (
@@ -315,9 +318,19 @@ function GenericSheet({ field,label,type,options,value,onClose,onSave }) {
             ))}
           </div>
         )}
-        {type==='change-password'&&(
+        {isPw&&(
           <div style={{ display:'flex',flexDirection:'column',gap:12 }}>
-            {[['current',t('settings.current_pw')],['next',t('settings.new_pw')],['confirm',t('settings.confirm_pw')]].map(([k,l])=>(
+            {type==='set-password'&&(
+              <p style={{ margin:0,fontSize:12.5,lineHeight:1.6,fontWeight:600,
+                color:'var(--ak-text-sub)',background:'var(--ak-tag-bg,#F3F4F6)',
+                borderRadius:12,padding:'10px 14px' }}>
+                {t('settings.set_pw_note')}
+              </p>
+            )}
+            {[
+              ...(type==='change-password'?[['current',t('settings.current_pw')]]:[]),
+              ['next',t('settings.new_pw')],['confirm',t('settings.confirm_pw')],
+            ].map(([k,l])=>(
               <div key={k}>
                 <label style={{ fontSize:12,fontWeight:800,color:'var(--ak-text-sec)' }}>{l}</label>
                 <input type="password" value={pw[k]}
@@ -369,6 +382,7 @@ function GenericSheet({ field,label,type,options,value,onClose,onSave }) {
               cursor:(type==='delete-confirm'&&del!=='DELETE')?'not-allowed':'pointer',
               fontFamily:"'Nunito',sans-serif" }}>
             {type==='change-password'?t('settings.update_password')
+              :type==='set-password'?t('settings.set_password')
               :type==='deactivate'?t('settings.deactivate')
               :type==='delete-confirm'?t('settings.delete_my_account'):t('settings.save_changes')}
           </button>

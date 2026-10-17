@@ -138,6 +138,8 @@ export const AR = {
   'settings.notifications':  'الإشعارات',
   'settings.privacy':        'الخصوصية والأمان',
   'settings.change_password':'تغيير كلمة المرور',
+  'settings.set_password': 'تعيين كلمة المرور',
+  'settings.set_pw_note': 'لقد سجّلت الدخول عبر Google، لذا لا توجد كلمة مرور لهذا الحساب بعد. أنشئ واحدة لتتمكن من الدخول ببريدك الإلكتروني أيضًا.',
   'settings.two_factor':     'المصادقة الثنائية',
   'settings.deactivate':     'إلغاء تنشيط الحساب',
   'settings.delete':         'حذف الحساب',

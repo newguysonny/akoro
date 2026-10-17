@@ -142,6 +142,9 @@ export default function SettingsPage() {
           displayMode,
           accentColor:   accent,
           twoFactor:     data.twoFactorEnabled || false,
+          // OAuth sign-ups may have no password on file; default to true so an
+          // older API (no hasPassword field) keeps the full 3-field sheet.
+          hasPassword:   data.hasPassword !== false,
           googleLinked:  !!data.email,
           plan:          effectivePlan(data.plan),
           sessionsUsed:  0,
@@ -193,7 +196,7 @@ export default function SettingsPage() {
             id:user.id,email:user.email,username:user.username,
             fullName:user.fullName,avatarUrl:user.avatarUrl,avatarEmoji:'👨🏾‍🎓',
             subjects:[],language,displayMode,accentColor:accent,
-            twoFactor:false,googleLinked:false,plan:effectivePlan(),sessionsUsed:0,
+            twoFactor:false,hasPassword:true,googleLinked:false,plan:effectivePlan(),sessionsUsed:0,
             sessionsLimit:30,teachingHours:'0h',xpBalance:0,
             memberId:user.id,memberSince:'—',
             notif:{ email:true,sms:false,push:true,whatsapp:false,whatsappNumber:'',

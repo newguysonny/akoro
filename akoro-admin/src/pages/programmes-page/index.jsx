@@ -51,7 +51,10 @@ const TI = {
 };
 
 export const Chip = ({ s }) => <span className={`chip ${s === 'published' ? 'pub' : s === 'draft' ? 'dr' : ''}`}>{s}</span>;
-export const Tile = ({ c }) => <div className="tile" style={{ background: G[c.color || 0] }}>{(c.code || '').slice(0, 7)}</div>;
+/* Course tile: the cover image when one is set, the colour gradient when not. */
+export const Tile = ({ c }) => (c.cover_url
+  ? <div className="tile" style={{ backgroundImage: `url(${c.cover_url})`, backgroundSize: 'cover', backgroundPosition: 'center' }} role="img" aria-label={c.code} />
+  : <div className="tile" style={{ background: G[c.color || 0] }}>{(c.code || '').slice(0, 7)}</div>);
 const timeAgo = (iso) => {
   const m = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
   if (m < 1) return 'Just now';
@@ -455,7 +458,12 @@ function SectionDetail() {
               draggable={ro}
               onClick={() => !ro && navigate(`/program-courses/courses/${c.id}`)}
             >
-              <div className="cban" style={{ background: G[c.color || 0] }}>{c.code}</div>
+              <div
+                className="cban"
+                style={c.cover_url
+                  ? { backgroundImage: `url(${c.cover_url})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                  : { background: G[c.color || 0] }}
+              >{c.cover_url ? '' : c.code}</div>
               <div className="cbody">
                 <b>{c.title || c.code}</b>
                 <span>by {c.instructor || '—'} · {c.materials_count} topics</span>
@@ -784,12 +792,16 @@ function CourseForm({ edit = false }) {
   const { toast } = usePc();
   const [programs] = useData(() => get('/api/programmes/programs'), []);
   const [c, setC] = useState(edit ? null : { color: 0 });
+  const [cover, setCover] = useState(null);
   const [busy, setBusy] = useState(false);
   const formRef = useRef(null);
 
   useEffect(() => {
     if (edit && cid) get(`/api/programmes/courses/${cid}`).then(setC).catch(() => setC(null));
   }, [edit, cid]);
+  useEffect(() => { if (edit && c) setCover(c.cover_url || null); }, [edit, c]);
+
+  const pickCover = (files) => { if (files?.[0]) shrink(files[0], 900, (d) => { if (d) setCover(d); else toast('Choose an image file'); }); };
 
   if (!programs || (edit && !c)) return null;
   const sections = (pid2) => programs.find((p) => p.id === pid2)?.programme_sections ?? [];
@@ -800,7 +812,7 @@ function CourseForm({ edit = false }) {
 
   const save = async () => {
     const v = (k) => formRef.current?.querySelector(`[data-k=${k}]`)?.value.trim() ?? '';
-    const body = { programme_id: v('pid'), section_id: v('year'), code: v('code'), title: v('title'), instructor: v('inst'), color: col, status: v('status') };
+    const body = { programme_id: v('pid'), section_id: v('year'), code: v('code'), title: v('title'), instructor: v('inst'), color: col, status: v('status'), cover_url: cover };
     if (!body.code) { toast('Give the course a code'); return; }
     setBusy(true);
     try {
@@ -817,6 +829,21 @@ function CourseForm({ edit = false }) {
       <h1>{edit ? 'Edit course' : 'New course'}</h1>
       <p className="lead">{edit ? 'Update the details students see for this course.' : 'Add a course to a program and section. You can add content after saving.'}</p>
       <div className="form" ref={formRef}>
+        <label>Cover image</label>
+        <div className="cover" onClick={() => document.getElementById('pc-ccvf')?.click()}>
+          {cover ? (
+            <>
+              <img alt="Cover preview" src={cover} />
+              <div className="cvact">
+                <button className="btn" onClick={(e) => { e.stopPropagation(); document.getElementById('pc-ccvf')?.click(); }}>Replace</button>
+                <button className="btn" onClick={(e) => { e.stopPropagation(); setCover(null); }}>Remove</button>
+              </div>
+            </>
+          ) : (
+            <div><I k="plus" />Add cover image<br /><span style={{ fontSize: 11 }}>Optional — without one, students see the card colour below</span></div>
+          )}
+        </div>
+        <input type="file" id="pc-ccvf" accept="image/*" hidden onChange={(e) => pickCover(e.target.files)} />
         <label>Program</label>
         <select data-k="pid" defaultValue={pid}>
           {programs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -900,9 +927,11 @@ function ItemForm({ edit = false }) {
           {Object.keys(TY).map((k) => <option key={k} value={k}>{TY[k]}</option>)}
         </select>
         <label>Size or duration</label><input data-k="meta" defaultValue={m?.meta ?? ''} placeholder="1.6 MB or 18 min" />
+        <label>Resource URL</label>
+        <input data-k="url" type="url" defaultValue={m?.url ?? ''} placeholder="https://… — students open this link" />
         <label>File</label>
         <div className="drop" onClick={() => document.getElementById('pc-ifl')?.click()}>
-          {fileLabel || 'Choose a file (UI only, not uploaded)'}
+          {fileLabel || 'Choose a file (UI only — files are not uploaded yet; paste a resource URL above instead)'}
         </div>
         <input
           type="file" id="pc-ifl" hidden
