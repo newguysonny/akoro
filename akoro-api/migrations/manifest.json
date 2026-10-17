@@ -230,6 +230,7 @@
     "2026-seed-voucher-media.sql",
     "2026-seed-jss1-battle-ready.sql",
     "2026-seed-course-enrolments.sql",
-    "2026-seed-sandbox-real-account.sql"
+    "2026-seed-sandbox-real-account.sql",
+    "2026-seed-sandbox-syllabus.sql"
   ]
 }
