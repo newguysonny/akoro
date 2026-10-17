@@ -2635,7 +2635,13 @@ Every new path keeps the old path working while its flag is off.
 Each phase lists what to build and its exit criteria. **No phase may break an
 existing contract test.** Phases 11 (UI) can start in parallel after Phase 3.
 
-### Phase 0 — Audit and migration matrix
+### Phase 0 — Audit and migration matrix ✅ done 2026-10-17
+
+Output: `reference/grand-plan/MIGRATION_MATRIX.md` — file-by-file matrix,
+transport inventory, frontend entry points, every concept-state writer, Q1/Q2
+answered, new questions Q22-Q26, and the fixes to make before Phase 1 (the
+planning loop's tool names, the double practice charge, empty syllabus data).
+
 - Map every file in §6.2 with its callers, tables and socket messages.
 - Map frontend entry points (`TeachAgentModal`, `DecaySessionModal`,
   `LearnerDashboard`, `SessionSheet`, `StudyPrepChatCard`, `AgentChatTab`).
@@ -2915,9 +2921,9 @@ LLM failure must never corrupt workflow state.
 
 | # | Item | Owner/phase |
 |---|---|---|
-| Q1 | JSS1 Basic Science rows in `edu.syllabus_*` and `concept_catalog` ❓ — no longer a blocker (D30 generates an outline when missing), but real rows give better plans | Phase 0 |
+| Q1 | ~~JSS1 Basic Science rows~~ — **answered (Phase 0):** production has **no** rows in `edu.syllabus_subjects`, `syllabus_topics` or `concept_catalog` for any subject (gate `curriculum.syllabus_coverage`). D30 is therefore a prerequisite for Study Prep, alongside syllabus ingestion. | Done |
 | Q15 | ~~School/class/term lookup~~ — **resolved (§8.7):** linked `mgmt.students.user_id` → class; term from `mgmt.academic_calendar`; profile/conversation for class level; names only for school-confirmed link suggestions. | Done |
-| Q2 | Real per-generation coin cost in `lib/aiPricing.js` (examples use 2) ❓ | Phase 0 |
+| Q2 | ~~Per-generation coin cost~~ — **answered (Phase 0):** ≈2 coins metered (gpt-4o-mini, ~1-1.5k output tokens, markup 2), max 5 at `max_tokens` 3500 — but practice is **charged twice** today (flat 2 + metered), ≈4 total. Fix: one charge. | Done |
 | Q3 | Default stays `gpt-4o-mini` (D23). Open: which assessor/evidence model env locks to, and whether controller prompts need per-model tuning (run the same scenarios on each selectable model). | Phase 6 spike |
 | Q4 | Teaching worst-case turn cost and the balance check threshold | Phase 6 |
 | Q5 | Starting cap values in §7.2 table (Teaching turns, strategy changes, Practice caps) | Tune in staging |
@@ -2936,6 +2942,11 @@ LLM failure must never corrupt workflow state.
 | Q9 | Who can see developer mode (staff role only)? | Phase 11 |
 | Q10 | Notification channels for handoff/completion (in-app only, or web push via existing `notifications/webpush.js`)? | Phase 7 |
 | Q11 | ~~Standalone Practice UI~~ — **resolved (D29):** `AssessmentRoom`. | Done |
+| Q22 | Retire or gate the ungated NaNa / Trained orchestrator paths and the legacy socket starts (`start_session`, `start_student_session`, `start_decay_session`)? | Phase 6 |
+| Q23 | Keep, migrate or retire the Python-agent teaching bridge (`agent-tools/teaching-workflow-routes.js`)? | Phase 1 / 6 |
+| Q24 | Which retention model wins — `learner_concept_state` (SQL), `knowledge_confidence` (0-100) or `agent_knowledge`? | Phase 8 / 10 |
+| Q25 | Confirm `assessmentGateway.js` (proctored `AssessmentRoom`) as the Practice workflow's base and add it to §6.2. | Phase 9 |
+| Q26 | Fix the double practice charge now, ahead of Phase 5? | Now |
 
 ---
 
