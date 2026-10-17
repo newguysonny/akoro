@@ -28,7 +28,8 @@ export class ExamPrepConflictError extends Error {
   constructor(message, code) { super(message); this.code = code; }
 }
 
-const RUN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
+// 8-4-4-4-12 (it once required 13 in the last group: every real run read as missing).
+const RUN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const text = (value, maximum) => String(value || "").replace(/[\r\n\x00]+/g, " ").trim().slice(0, maximum);
 
 export function examPrepInput(body) {

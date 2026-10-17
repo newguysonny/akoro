@@ -69,3 +69,14 @@ test("the agent knows its budget and its last step can only finish", () => {
   assert.match(src, /finalOnly\.includes\(toRegistry\.get\(t\.function\.name\)\)/);
   assert.match(src, /Iteration \$\{iteration\} of \$\{maxIterations\}/);
 });
+
+for (const [file, name] of [["./routes.js", "UUID"], ["../exam-prep-service.js", "RUN_ID"]]) test(`${file} ${name} accepts real ids`, async () => {
+  const { randomUUID } = await import("node:crypto");
+  const src = readFileSync(new URL(file, import.meta.url), "utf8");
+  const pattern = new RegExp(`const ${name} = \\/(.+)\\/i;`).exec(src)?.[1];
+  assert.ok(pattern, `${file} defines ${name}`);
+  const UUID = new RegExp(pattern, "i");
+  for (let i = 0; i < 20; i++) assert.ok(UUID.test(randomUUID()));
+  assert.ok(!UUID.test("not-a-uuid"));
+  assert.ok(!UUID.test(`${randomUUID()}0`));
+});

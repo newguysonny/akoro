@@ -83,7 +83,8 @@ test("the agent prepares but never assigns — tools, gating, and honesty", () =
   // /agent arms the instructor loop (students keep the learner set untouched).
   // The catalogue resolves once, through the kill-switch guard, so the
   // prepare-force never requires a tool that isn't armed.
-  assert.match(chat, /const instructorTools = role === "student" \? \[\] : openAiInstructorTools\(\);/);
+  // Instructor self-tooling (S7) may append its tools to the instructor set.
+  assert.match(chat, /const instructorTools = role === "student" \? \[\] : openAiInstructorTools\(\)(?:\.concat\([^\n]*)?/);
   // Learners' own built tools (self-tooling) are appended to the student catalogue.
   assert.match(chat, /\}\)(?:\.concat\([^\n]*\))? : instructorTools,/);
   assert.match(chat, /SIDE_EFFECT_TOOLS = \[[^\]]*"prepare_activity", "revise_activity_draft"[^\]]*\]/, "prepare + revise are side-effecting");
