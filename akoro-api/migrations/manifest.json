@@ -196,7 +196,8 @@
     "2026-seed-school.sql",
     "2026-seed-agent-testers.sql",
     "2026-seed-instructor-testers.sql",
-    "2026-verify-real-user-runs.sql"
+    "2026-verify-real-user-runs.sql",
+    "2026-study-prep-generated-syllabi.sql"
   ],
   "demo": [
     "2026-seed-school-passwords.sql",

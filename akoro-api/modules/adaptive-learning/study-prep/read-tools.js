@@ -93,7 +93,10 @@ export async function getPrerequisites({ subject }) {
 /** syllabus.resolve — the approved topic list the plan must come from. */
 export async function resolveSyllabusTool({ subject, classLevel, exam }) {
   const topics = await resolveTopics({ subject, classLevel, exam });
-  return { subject, classLevel, topics: topics.map((topic) => ({ id: topic.id, label: topic.label })) };
+  if (!topics.length) {
+    return { subject, classLevel, topics: [], found: false, next: "No syllabus exists for this subject and class on Akoro. Call syllabus.generate to draft an outline, then propose a plan from its topics." };
+  }
+  return { subject, classLevel, found: true, topics: topics.map((topic) => ({ id: topic.id, label: topic.label })) };
 }
 
 /** session.get_state — the agent sees the same state the harness does (S5 §6.1). */

@@ -12,6 +12,7 @@ import {
 import { InsufficientBalanceError, createHarness } from "./harness.js";
 import { supabaseStore as store } from "./store.js";
 import { prerequisiteEdges, resolveTopics } from "./syllabus-resolver.js";
+import { generateOutline, generatedTopics } from "./syllabus-generator.js";
 import * as readToolsModule from "./read-tools.js";
 import { makeLlmAgent } from "./llm-agent.js";
 import { buildRegistry } from "../tools/registry.js";
@@ -33,7 +34,8 @@ const topicWorkflow = {
   publicRun, publicAttempt,
 };
 
-const syllabus = { resolveTopics, prerequisiteEdges };
+// generateOutline / generatedTopics: the AI-drafted outline fallback (§8.7).
+const syllabus = { resolveTopics, prerequisiteEdges, generateOutline, generatedTopics };
 
 export function getHarness() {
   return createHarness({ store, topicWorkflow, syllabus });
