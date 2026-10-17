@@ -12,7 +12,17 @@ edge=(); [ -n "${EDGE_HEADER:-}" ] && edge=(-H "$EDGE_HEADER")
 deadline=$(( $(date +%s) + ${WAIT_MIN:-25} * 60 ))
 api=""; sandbox=""; goes=""
 while [ "$(date +%s)" -lt "$deadline" ]; do
-  api=$(curl -s -m 15 "${edge[@]}" "$GATE_URL/health" | jq -r '.build.git // empty' 2>/dev/null)
+  hdrs=$(mktemp)
+  health=$(curl -s -m 15 -D "$hdrs" "${edge[@]}" "$GATE_URL/health")
+  code=$(awk 'toupper($1) ~ /^HTTP/ {c=$2} END {print c}' "$hdrs")
+  # Refused at the edge (Cloudflare, before the API): waiting won't help.
+  if [ "${code:-0}" = "403" ] && grep -qi '^server: cloudflare' "$hdrs" && ! grep -qi '^x-render-origin-server' "$hdrs"; then
+    grep -iE '^(server|cf-ray|cf-mitigated):' "$hdrs" || true
+    echo "$health" | grep -o '<title>[^<]*</title>' || true
+    echo "::error::Cloudflare refused this runner before the API (403). Set the AKORO_EDGE_HEADER secret and its Cloudflare skip rule — see .github/workflows/verification-gates.yml."
+    exit 1
+  fi
+  api=$(echo "$health" | jq -r '.build.git // empty' 2>/dev/null)
   if [ "$api" = "$SHA" ]; then
     info=$(curl -s -m 30 "${edge[@]}" "$GATE_URL/api/verify/scenarios" -H "Authorization: Bearer $GATE_KEY")
     goes=$(echo "$info" | jq -r '.data.runsGoTo // "here"')
