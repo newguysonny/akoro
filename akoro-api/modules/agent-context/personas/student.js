@@ -58,3 +58,16 @@ export async function buildMergeNotesPrompt() {
 export async function studentPersonality(band, values = {}) {
   return renderPersona(`${DIR}/personality/${band}.md`, values ?? {});
 }
+
+/**
+ * The band for an agent's overall level and sessions — the same rule the
+ * teaching session uses (agents/student/agent.js _getPersonality, without the
+ * per-subject NEW_SUBJECT band, which only a session on one subject knows).
+ */
+export function personalityBand({ level = 1, sessions = 0 } = {}) {
+  if (!sessions) return "FRESH";
+  if (level < 3) return "EARLY";
+  if (level < 7) return "SOLID";
+  return "ADVANCED";
+}
+

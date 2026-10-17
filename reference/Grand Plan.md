@@ -201,7 +201,7 @@ session mode" (`fresh | continuation | decay`); "Adaptive Learning Workflow"
 | D9 | What streams into a thinking block? | **The provider's reasoning *summary* when the chosen model offers one** (OpenAI reasoning models via the Responses API — already used by agent-chat Think mode; Claude with `thinking.display: "summarized"`), streamed live. **Otherwise** (e.g. the default `gpt-4o-mini`) the agent's `intent` streamed as it is generated, then the harness narration. Raw chain-of-thought is never available or shown. Summaries are shown live but **not stored**; on reload the block shows the stored narration. | Matches the coding-agent experience and the existing `ThoughtBlock`, without exposing hidden reasoning. |
 | D27 | Activity text | **The agent may write its own short learner-facing message** with each action (`message`, ≤ 400 chars, streamed as an activity block), like the text a coding agent writes between tool calls. Facts in it (scores, pass/fail, coins) must come from the harness: the narrator inserts them; the model's text may not state them. | Makes the stream read like a coding agent instead of only templates. |
 | D28 | Where the live stream UI is used | **Only the Agent Chat tab** (`AgentChatTab.jsx`) renders the coding-agent stream (thinking → tool rows → activity → reply), including Study Prep and any workflow shown in chat. **`TeachAgentModal` keeps its current UI** (and `DecaySessionModal`, which shares that design), and **`AssessmentRoom` keeps its UI** for Practice (D29). The backend still emits and stores the same events for every workflow; the modals just don't render them as a trace. | User decision. |
-| D29 | What Practice is | **Practice = the live proctored assessment** (`AssessmentRoom` + Session Assessment Gateway + Sergeant). The agent chooses questions, probes and hints; proctoring, scoring and the verdict stay in code. `AssessmentRoom` keeps its UI. | User decision (§11). |
+| D29 | What Practice is | *(Narrowed by D45: Study Prep practice is a battle.)* **Practice = the live proctored assessment** (`AssessmentRoom` + Session Assessment Gateway + Sergeant). The agent chooses questions, probes and hints; proctoring, scoring and the verdict stay in code. `AssessmentRoom` keeps its UI. | User decision (§11). |
 | D30 | No syllabus found | Syllabus is resolved **class → school → platform → AI-generated**. `syllabus.generate` is allowed only after the other three return nothing; the draft is grounded on the national curriculum, checked by code, saved as provisional, and always labelled as AI-drafted (§8.7). | User decision: a missing syllabus must never block a learner. |
 | D31 | How practice works | **Agent Check** (§7.12): NaNa asks, the learner's agent answers only from its owner's notes, Sergeant judges, the Education Engine scores. No human answers. Replaces `practice.generate/submit` in Study Prep, Teaching and Decay. The proctored assessment stays human and separate. | User decision: practice tests the agent, like Battles. |
 | D32 | Decay `retrieval_practice` | **Stays human recall for now** — the one place outside the proctored assessment and guide mode where the learner answers questions. Its answers are scored server-side and tagged `source: "learner_recall"`; the Agent Check still runs the retention check and retest. Revisit later. | User decision (Q16). |
@@ -214,6 +214,10 @@ session mode" (`fresh | continuation | decay`); "Adaptive Learning Workflow"
 | D39 | Schools and instructors see struggles | **Yes.** For learners linked to a school (`mgmt.students.user_id`), the learner's school admins and the instructors who teach their class/subject see the learner's **non-sensitive** struggles (type, concept, open/resolved, what worked) and class-level totals in the school dashboard. **Sensitive types** show on the dashboard as a neutral **"may need support"** flag when 2+ sensitive struggles are open within 14 days; the instructor can **open the flag to see full detail** (types, concepts, dates). Every opening of sensitive detail is logged (who, when, which learner). `health_energy` still expires after 30 days. Learners are told in Settings → Agent that their school can see this, including sensitive struggles. | User decisions (Q19, Q21). |
 | D40 | Strategy Library v3 | **Approved:** 15 new strategies, 22 in total, each with targets, where it runs, permitted workflows and a NaNa guide file (§7.7.2). | User decision (Q20). |
 | D41 | Agent Chat tab look and behaviour | Modelled on the coding-agent reference video/screenshots: "Thought for Ns" rows, expandable tool rows and groups, change rows, unboxed markdown activity text, interleaved order, jump-to-latest, stop button. Learner language in learner mode; raw tool I/O only in developer mode. The chat tool loop streams every iteration (§13.4). | User decision. |
+| D42 | Who moves a learner up a teaching phase (Q22) | **Only the evidence gate** (`applyTeachingProgress` on `teaching_evidence`), on every teaching path. The **"switch agent" button only changes the teaching guide** (its voice, tips and persona) — never the pipeline or the gate. The NaNa / Trained orchestrators stop setting `phase` / `mustKnowIndex` from the guide's output; the legacy socket starts (`start_session`, `start_student_session`, `start_decay_session`) are retired. | User decision (2026-10-17). |
+| D43 | The Python agent's teaching route (Q23) | **Fix it now** (persist sessions to `edu.adaptive_sessions`, real `continuation` / `decay` loading, the same evidence gate); **deploy the Python agent later as its own service**, the way the Verification Gate sandbox was. | User decision (2026-10-17). |
+| D44 | One forgetting curve (Q24) | **The protégé's knowledge (`agent_knowledge`), nested per topic → per concept.** A learner can forget one concept without forgetting the whole topic, so the protégé's curve does the same: each concept inside a topic decays on its own, slowly; the topic's health is derived from its concepts. `knowledge_confidence` (0-100) and the `learner_concept_state` retention pass are folded into it (Phase 8 / 10). | User decision (2026-10-17). |
+| D45 | Practice in a study plan (Q25) | **A battle, not the proctored assessment.** During Study Prep the protégé calls the teaching guide (or Sargeant) to review its knowledge: a battle between the **teaching guide / platform** and the **protégé**, answering only from what the learner taught it (the Agent Check, §7.12, run as a real battle). The protégé posts a **message in chat** to open it; the learner watches in the **existing battle UI** over the websocket (questions changing, answers, scores). Proctored `AssessmentRoom` stays a separate, learner-taken assessment (D29 narrowed). | User decision (2026-10-17). Supersedes D29 for Study Prep practice. |
 | D10 | Who writes narration? | **Harness templates** (`ActivityNarrator`, grown from `narration.js:deliberate()`) for facts; the agent's `intent` (≤ 240 chars, sanitised, untrusted display text) for "why". v3's `narration` field **is** `intent`. | Deterministic where possible (v3 §40), already built (v7). |
 | D11 | Event store | New generic `edu.workflow_events`. `study_prep_events` is kept read-only and backfilled. | One stream model for four workflows (v3 §43). |
 | D12 | Live transport | **Event store is the source of truth; transport is replaceable.** Teaching and Decay keep the existing Socket.IO connection. Study Prep and Practice use SSE (same heartbeat pattern as `/chat/agent`). Both carry the identical event envelope. Replay: `GET /api/workflows/:id/events?after=N`. | v3 §42–43; reuses what already works. |
@@ -2635,7 +2639,13 @@ Every new path keeps the old path working while its flag is off.
 Each phase lists what to build and its exit criteria. **No phase may break an
 existing contract test.** Phases 11 (UI) can start in parallel after Phase 3.
 
-### Phase 0 — Audit and migration matrix
+### Phase 0 — Audit and migration matrix ✅ done 2026-10-17
+
+Output: `reference/grand-plan/MIGRATION_MATRIX.md` — file-by-file matrix,
+transport inventory, frontend entry points, every concept-state writer, Q1/Q2
+answered, new questions Q22-Q26, and the fixes to make before Phase 1 (the
+planning loop's tool names, the double practice charge, empty syllabus data).
+
 - Map every file in §6.2 with its callers, tables and socket messages.
 - Map frontend entry points (`TeachAgentModal`, `DecaySessionModal`,
   `LearnerDashboard`, `SessionSheet`, `StudyPrepChatCard`, `AgentChatTab`).
@@ -2915,9 +2925,9 @@ LLM failure must never corrupt workflow state.
 
 | # | Item | Owner/phase |
 |---|---|---|
-| Q1 | JSS1 Basic Science rows in `edu.syllabus_*` and `concept_catalog` ❓ — no longer a blocker (D30 generates an outline when missing), but real rows give better plans | Phase 0 |
+| Q1 | ~~JSS1 Basic Science rows~~ — **answered (Phase 0):** production has **no** rows in `edu.syllabus_subjects`, `syllabus_topics` or `concept_catalog` for any subject (gate `curriculum.syllabus_coverage`). D30 is therefore a prerequisite for Study Prep, alongside syllabus ingestion. | Done |
 | Q15 | ~~School/class/term lookup~~ — **resolved (§8.7):** linked `mgmt.students.user_id` → class; term from `mgmt.academic_calendar`; profile/conversation for class level; names only for school-confirmed link suggestions. | Done |
-| Q2 | Real per-generation coin cost in `lib/aiPricing.js` (examples use 2) ❓ | Phase 0 |
+| Q2 | ~~Per-generation coin cost~~ — **answered (Phase 0):** ≈2 coins metered (gpt-4o-mini, ~1-1.5k output tokens, markup 2), max 5 at `max_tokens` 3500 — but practice is **charged twice** today (flat 2 + metered), ≈4 total. Fix: one charge. | Done |
 | Q3 | Default stays `gpt-4o-mini` (D23). Open: which assessor/evidence model env locks to, and whether controller prompts need per-model tuning (run the same scenarios on each selectable model). | Phase 6 spike |
 | Q4 | Teaching worst-case turn cost and the balance check threshold | Phase 6 |
 | Q5 | Starting cap values in §7.2 table (Teaching turns, strategy changes, Practice caps) | Tune in staging |
@@ -2936,6 +2946,11 @@ LLM failure must never corrupt workflow state.
 | Q9 | Who can see developer mode (staff role only)? | Phase 11 |
 | Q10 | Notification channels for handoff/completion (in-app only, or web push via existing `notifications/webpush.js`)? | Phase 7 |
 | Q11 | ~~Standalone Practice UI~~ — **resolved (D29):** `AssessmentRoom`. | Done |
+| Q22 | ~~Ungated teaching paths~~ — **resolved (D42):** evidence-only phase changes everywhere; "switch agent" changes only the guide; legacy starts retired. | Done |
+| Q23 | ~~Python teaching bridge~~ — **resolved (D43):** fix now, deploy the Python agent as a separate service later. | Done |
+| Q24 | ~~Retention model~~ — **resolved (D44):** protégé knowledge, per topic → per concept, each concept decaying slowly on its own. | Done |
+| Q25 | ~~Practice base~~ — **resolved (D45):** Study Prep practice is a battle (guide/platform vs protégé) watched in the battle UI; `AssessmentRoom` stays separate. | Done |
+| Q26 | Fix the double practice charge now, ahead of Phase 5? | Now |
 
 ---
 

@@ -52,8 +52,10 @@ export async function resolveTopics({ subject, classLevel = "JSS1", exam = "WAEC
   if (error) throw error;
   let rows = subjects || [];
   const classToken = String(classLevel || "").replace(/\s+/g, "").toUpperCase();
-  const classScoped = rows.filter((row) => String(row.code || "").toUpperCase().includes(classToken)
-    || String(row.name || "").toUpperCase().includes(classToken));
+  // A whole class token, not a substring: "SS1" must not match "JSS1" (or "JSS1" match "JSS10").
+  const classPattern = classToken ? new RegExp(`(^|[^A-Z0-9])${classToken.replace(/[^A-Z0-9]/g, "")}($|[^0-9])`) : null;
+  const hasClass = (value) => !!classPattern && classPattern.test(String(value || "").toUpperCase().replace(/([A-Z])\s+(\d)/g, "$1$2"));
+  const classScoped = rows.filter((row) => hasClass(row.code) || hasClass(row.name));
   const examName = EXAM_FOR_BOARD(exam);
   const examScoped = (classScoped.length ? classScoped : rows).filter((row) => row.exam === examName);
   rows = examScoped.length ? examScoped : (classScoped.length ? classScoped : rows);

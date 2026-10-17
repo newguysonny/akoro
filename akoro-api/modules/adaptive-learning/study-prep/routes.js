@@ -34,7 +34,9 @@ const guard = (res) => {
   return true;
 };
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
+// 8-4-4-4-12. (It once required 13 in the last group, so every /:id route
+// answered 422 for every real session and topic id.)
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const paramId = (res, value, label) => (UUID.test(value || "") ? value : (fail(res, 422, "tool_schema_invalid", `Invalid ${label}`), null));
 
 // POST /study-prep/sessions — create + one planning agent step. No generation, no spend.
@@ -254,6 +256,8 @@ router.post("/sessions/:id/cancel", async (req, res) => {
 /** The learner's active session view, or null when none exists. */
 async function getActiveSessionView(learnerId) {
   const active = await supabaseStore.findActiveSessionsList(learnerId);
+  // A failed lookup is a fault, not "no session" — the UI would offer a new one.
+  if (active?.error) throw active.error;
   const id = active?.data?.[0]?.id;
   if (!id) return null;
   return getHarness().getSessionView({ sessionId: id, learnerId });

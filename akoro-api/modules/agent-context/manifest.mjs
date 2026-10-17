@@ -73,7 +73,7 @@ export const SETS = Object.freeze({
   chat_protege: Object.freeze({
     mode: "verbatim",
     consumer: "agent chat /agent route — student role, protégé rules (taught knowledge, the teaching guide)",
-    files: Object.freeze(["policies/PROTEGE.md"]),
+    files: Object.freeze(["identity/PROTEGE.md", "policies/PROTEGE.md"]),
   }),
   chat_instructor: Object.freeze({
     mode: "verbatim",

@@ -1,0 +1,563 @@
+‎Yes. Think of the sandbox as a second, disposable copy of Akoro that the Verification Gate is allowed to modify freely.
+‎
+‎You don't necessarily need to create it immediately, but for what we're designing, I strongly recommend it.
+‎
+‎1. What does "sandbox" mean here?
+‎
+‎Right now you likely have something like:
+‎
+‎Akoro
+‎   │
+‎   ├── Frontend
+‎   │
+‎   └── akoro-api
+‎          │
+‎          └── Production Supabase
+‎
+‎We don't want the verification agent doing things like:
+‎
+‎CREATE TEST USER
+‎DELETE USER
+‎CREATE EXAM SESSION
+‎SPEND CREDITS
+‎RESET LEARNER STATE
+‎
+‎against your real production database.
+‎
+‎Instead:
+‎
+‎Verification Gate
+‎                           │
+‎                           │
+‎                    AKORO_API_BASE_URL
+‎                           │
+‎                           ▼
+‎                  ┌─────────────────┐
+‎                  │ Akoro Sandbox   │
+‎                  │                 │
+‎                  │ akoro-api       │
+‎                  │       │         │
+‎                  │       ▼         │
+‎                  │ Test Supabase   │
+‎                  └─────────────────┘
+‎
+‎The sandbox is simply an isolated environment that behaves like Akoro production but contains test data.
+‎
+‎
+‎---
+‎
+‎2. Do we need a completely separate akoro-api?
+‎
+‎Not necessarily.
+‎
+‎There are several ways to do this.
+‎
+‎Option A — Separate deployment of the same API
+‎
+‎This is what I'd recommend initially.
+‎
+‎You have:
+‎
+‎Production
+‎https://api.akoro.name.ng
+‎        │
+‎        ▼
+‎Production Supabase
+‎
+‎and deploy the same Akoro API code again:
+‎
+‎Sandbox
+‎https://akoro-api-test.onrender.com
+‎        │
+‎        ▼
+‎Sandbox Supabase
+‎
+‎The important difference is the environment variables.
+‎
+‎Production:
+‎
+‎SUPABASE_URL=https://production-project.supabase.co
+‎
+‎Sandbox:
+‎
+‎SUPABASE_URL=https://sandbox-project.supabase.co
+‎
+‎The code can be essentially identical.
+‎
+‎That is actually ideal because the Verification Gate is testing the real application code, not a specially rewritten testing version.
+‎
+‎
+‎---
+‎
+‎3. How do we get the sandbox?
+‎
+‎You have two main approaches.
+‎
+‎Approach 1 — Separate Supabase project
+‎
+‎Create another Supabase project specifically for Akoro testing.
+‎
+‎Something like:
+‎
+‎Supabase
+‎│
+‎├── akoro-production
+‎│
+‎└── akoro-verification
+‎
+‎Then deploy another instance of akoro-api whose environment variables point to akoro-verification.
+‎
+‎This is probably the simplest architecture for you.
+‎
+‎You could then have:
+‎
+‎┌──────────────────────┐
+‎                    │  Akoro Verification  │
+‎                    │        Gate          │
+‎                    └──────────┬───────────┘
+‎                               │
+‎                               │ HTTP
+‎                               ▼
+‎                    ┌──────────────────────┐
+‎                    │    Akoro API         │
+‎                    │      SANDBOX         │
+‎                    └──────────┬───────────┘
+‎                               │
+‎                               │
+‎                               ▼
+‎                    ┌──────────────────────┐
+‎                    │ Supabase TEST        │
+‎                    │                      │
+‎                    │ users                │
+‎                    │ sessions             │
+‎                    │ syllabus             │
+‎                    │ concepts             │
+‎                    │ transactions         │
+‎                    │ etc.                 │
+‎                    └──────────────────────┘
+‎
+‎
+‎Production remains completely separate:
+‎
+‎                    ┌──────────────────────┐
+‎                    │    Akoro API         │
+‎                    │     PRODUCTION       │
+‎                    └──────────┬───────────┘
+‎                               │
+‎                               ▼
+‎                    ┌──────────────────────┐
+‎                    │ Supabase PRODUCTION  │
+‎                    └──────────────────────┘
+‎
+‎
+‎---
+‎
+‎4. Do we need to upload/copy the production schema?
+‎
+‎Yes—but not the production data.
+‎
+‎This distinction is extremely important.
+‎
+‎Your test database needs to understand the same tables, columns, relationships, indexes, functions, constraints, etc. that your API expects.
+‎
+‎For example, if production has:
+‎
+‎users
+‎profiles
+‎edu.syllabus_subjects
+‎edu.syllabus_topics
+‎edu.syllabus_subtopics
+‎edu.syllabus_chunks
+‎learner_concept_state
+‎learner_concept_evidence
+‎exam_sessions
+‎attempts
+‎transactions
+‎...
+‎
+‎the sandbox needs the relevant schema too.
+‎
+‎But you generally do not want to copy all your real users and production records into it.
+‎
+‎Instead:
+‎
+‎PRODUCTION DATABASE
+‎
+‎Schema ────────────────┐
+‎                       │
+‎                       │ replicate
+‎                       ▼
+‎SANDBOX DATABASE
+‎
+‎Schema
+‎+
+‎Test/seed data
+‎
+‎Not:
+‎
+‎Production
+‎    │
+‎    └── copy EVERYTHING ──► Sandbox
+‎                            ❌
+‎
+‎
+‎---
+‎
+‎5. What exactly should be copied?
+‎
+‎Think of the database as two things:
+‎
+‎Structure
+‎
+‎Things such as:
+‎
+‎Tables
+‎Columns
+‎Foreign keys
+‎Indexes
+‎Constraints
+‎Triggers
+‎Functions
+‎RLS policies
+‎Enums
+‎Database extensions
+‎Schemas
+‎
+‎These should generally match the application version you're testing.
+‎
+‎Data
+‎
+‎Things such as:
+‎
+‎Real users
+‎Real learner records
+‎Real payment records
+‎Real conversations
+‎Real personal information
+‎Real production agent memories
+‎
+‎These should not simply be copied into the sandbox.
+‎
+‎Instead, create controlled test fixtures.
+‎
+‎For example:
+‎
+‎test_learner_001
+‎test_learner_002
+‎test_teacher_001
+‎test_school_001
+‎
+‎with predictable data.
+‎
+‎
+‎---
+‎
+‎6. But what about Akoro's syllabus?
+‎
+‎This is slightly different.
+‎
+‎Your Verification Gate needs realistic reference data to test things like:
+‎
+‎JSS1
+‎   └── Basic Science
+‎         ├── Topic A
+‎         ├── Topic B
+‎         └── Topic C
+‎
+‎So the sandbox can contain sanitized or seeded application data that represents the required Akoro environment.
+‎
+‎For example:
+‎
+‎Sandbox
+‎
+‎Users
+‎ ├── test_learner_001
+‎ ├── test_teacher_001
+‎
+‎Syllabus
+‎ ├── JSS1 Basic Science
+‎ ├── JSS1 Mathematics
+‎ └── ...
+‎
+‎Concepts
+‎ ├── Concept A
+‎ ├── Concept B
+‎ └── ...
+‎
+‎Test transactions
+‎ └── generated during verification
+‎
+‎You don't need actual production learners to accomplish this.
+‎
+‎
+‎---
+‎
+‎7. There is an even better approach for the Verification Gate
+‎
+‎Rather than manually maintaining two databases forever, we can make the sandbox reproducible.
+‎
+‎For example:
+‎
+‎Production schema
+‎        │
+‎        ▼
+‎Migration files
+‎        │
+‎        ▼
+‎Fresh Supabase test database
+‎        │
+‎        ▼
+‎Seed script
+‎        │
+‎        ▼
+‎Known Akoro test environment
+‎
+‎Then the gate can always assume:
+‎
+‎> "If I start a fresh verification environment, I know exactly what database structure and test data exist."
+‎
+‎
+‎
+‎This is much safer than manually modifying the sandbox dashboard.
+‎
+‎
+‎---
+‎
+‎8. How would this work with your existing Akoro development?
+‎
+‎You probably already have your Supabase migrations/schema in the project.
+‎
+‎If so, we can use those.
+‎
+‎Conceptually:
+‎
+‎Akoro repository
+‎│
+‎├── supabase/
+‎│   ├── migrations/
+‎│   │    ├── 001_initial.sql
+‎│   │    ├── 002_learning.sql
+‎│   │    ├── 003_exam_prep.sql
+‎│   │    └── ...
+‎│   │
+‎│   └── seed.sql
+‎│
+‎├── akoro-api/
+‎│
+‎└── akoro-verification-gate/
+‎
+‎Then:
+‎
+‎supabase migrations
+‎        │
+‎        ├──────────────► Production DB
+‎        │
+‎        └──────────────► Verification DB
+‎
+‎That is much better than exporting production and manually uploading it every time.
+‎
+‎
+‎---
+‎
+‎9. What does SUPABASE_SERVICE_ROLE_KEY mean?
+‎
+‎This part of the example:
+‎
+‎SUPABASE_SERVICE_ROLE_KEY=your_test_only_service_role_key
+‎
+‎means the Verification Gate may need privileged access to inspect or clean up test data.
+‎
+‎For example, after running:
+‎
+‎verify("exam_prep_flow")
+‎
+‎the gate might create:
+‎
+‎test_learner_123
+‎test_exam_session_123
+‎test_transaction_123
+‎
+‎At the end it needs to remove those records.
+‎
+‎A privileged key can do that.
+‎
+‎But we should not casually give the gate your production service-role key.
+‎
+‎Instead:
+‎
+‎Production service key
+‎       ❌ NEVER give to verification gate
+‎
+‎Sandbox service key
+‎       ✅ acceptable if properly protected
+‎
+‎Even better, where possible, use narrower database permissions instead of a full service-role credential.
+‎
+‎
+‎---
+‎
+‎10. What does AKORO_TEST_API_KEY mean?
+‎
+‎This is separate from Supabase.
+‎
+‎Imagine your API normally requires authentication:
+‎
+‎Verification Gate
+‎      │
+‎      │ Authorization: ...
+‎      ▼
+‎Akoro API
+‎
+‎We can give the gate a dedicated machine/test credential that allows it to execute approved test operations.
+‎
+‎For example:
+‎
+‎AKORO_TEST_API_KEY=...
+‎
+‎The Akoro API can recognize:
+‎
+‎This request comes from the verification environment.
+‎
+‎and enforce additional restrictions.
+‎
+‎But again, we shouldn't assume your current API already supports this. We can add the appropriate authentication mechanism to your existing Akoro API.
+‎
+‎
+‎---
+‎
+‎11. And AKORO_API_BASE_URL is very simple
+‎
+‎This:
+‎
+‎AKORO_API_BASE_URL=https://your-akoro-api.example.com
+‎
+‎just tells the Verification Gate:
+‎
+‎> "Which Akoro API should I test?"
+‎
+‎
+‎
+‎Production:
+‎
+‎AKORO_API_BASE_URL=https://api.akoro.name.ng
+‎
+‎Sandbox:
+‎
+‎AKORO_API_BASE_URL=https://akoro-api-sandbox.example.com
+‎
+‎So the same Verification Gate code can test different environments.
+‎
+‎For example:
+‎
+‎Verification Gate
+‎       │
+‎       ├── Sandbox → safe automated verification
+‎       │
+‎       └── Staging → pre-release verification
+‎
+‎I would not point it at production initially.
+‎
+‎
+‎---
+‎
+‎12. Do we actually need a sandbox right now?
+‎
+‎For the first development of the gate, no.
+‎
+‎We can build the gate locally first.
+‎
+‎For example:
+‎
+‎AKORO_API_BASE_URL=http://localhost:3000
+‎AKORO_ENVIRONMENT=local
+‎
+‎Then:
+‎
+‎Your computer
+‎
+‎Verification Gate
+‎       │
+‎       ▼
+‎Local Akoro API
+‎       │
+‎       ▼
+‎Local/test Supabase
+‎
+‎Once the scenarios work:
+‎
+‎Local
+‎  ↓
+‎Sandbox
+‎  ↓
+‎Staging
+‎  ↓
+‎Production (optional/very restricted)
+‎
+‎This is actually the development path I'd recommend.
+‎
+‎
+‎---
+‎
+‎13. The environment strategy I'd use for Akoro
+‎
+‎I'd eventually aim for:
+‎
+‎AKORO
+‎                      │
+‎       ┌──────────────┼──────────────┐
+‎       │              │              │
+‎       ▼              ▼              ▼
+‎    LOCAL          SANDBOX        PRODUCTION
+‎       │              │              │
+‎       ▼              ▼              ▼
+‎   Test DB         Test DB        Real DB
+‎
+‎And:
+‎
+‎Verification Gate
+‎       │
+‎       ├── LOCAL      ← development
+‎       │
+‎       ├── SANDBOX    ← automated agent verification
+‎       │
+‎       └── STAGING    ← pre-deployment verification
+‎
+‎Production should be treated separately.
+‎
+‎
+‎---
+‎
+‎The important part for your question
+‎
+‎Yes, the sandbox needs the Akoro database schema.
+‎
+‎But we don't want to manually clone your production database every time.
+‎
+‎The ideal setup is:
+‎
+‎Akoro migrations/schema
+‎          │
+‎          ├──────────► Production Supabase
+‎          │
+‎          └──────────► Verification Supabase
+‎                              │
+‎                              ▼
+‎                       Seed test data
+‎                              │
+‎                              ▼
+‎                    Verification Gate
+‎
+‎So when you add something like the new exam-prep tables:
+‎
+‎edu.exam_sessions
+‎edu.exam_topics
+‎...
+‎
+‎the migration becomes part of the source-controlled database definition, and the verification environment can receive the same change.
+‎
+‎No real learner data needs to be copied.
+‎
+‎And because your gate will eventually test things like agent tool calls, exam-prep workflows, credits, learner state, and multi-step agent execution, having a database that mirrors the production structure is very valuable.
+‎
+‎If you want, the next step should be to look at your actual Akoro Arena database/migrations and deployment setup and determine exactly what we need to create for the sandbox rather than designing this generically.
+‎

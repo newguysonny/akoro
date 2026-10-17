@@ -12,6 +12,7 @@ import {
 import { InsufficientBalanceError, createHarness } from "./harness.js";
 import { supabaseStore as store } from "./store.js";
 import { prerequisiteEdges, resolveTopics } from "./syllabus-resolver.js";
+import { generateOutline, generatedTopics } from "./syllabus-generator.js";
 import * as readToolsModule from "./read-tools.js";
 import { makeLlmAgent } from "./llm-agent.js";
 import { buildRegistry } from "../tools/registry.js";
@@ -25,13 +26,16 @@ export const studyPrepEnabled = () => String(process.env.AKORO_STUDY_PREP_ENABLE
 /** The topic workflow: the extracted exam-prep service, harness-driven. */
 const topicWorkflow = {
   policyFor: async ({ examBoard, subject }) => examPrepPolicyFor(examBoard, subject),
-  startRun: async ({ learnerId, studyPrepTopicId, request }) => startExamPrepRun({ learnerId, request, studyPrepTopicId }),
+  // prepaid: the harness charged the flat practice price first (and refunds it
+  // if generation fails), so generation tokens are not billed again.
+  startRun: async ({ learnerId, studyPrepTopicId, request }) => startExamPrepRun({ learnerId, request, studyPrepTopicId, prepaid: true }),
   submit: async ({ learnerId, runId, answers }) => submitExamPrepAttempt({ learnerId, runId, answers }),
-  retest: async ({ learnerId, runId, learnerConfirmedReady }) => startExamPrepRetest({ learnerId, runId, learnerConfirmedReady }),
+  retest: async ({ learnerId, runId, learnerConfirmedReady }) => startExamPrepRetest({ learnerId, runId, learnerConfirmedReady, prepaid: true }),
   publicRun, publicAttempt,
 };
 
-const syllabus = { resolveTopics, prerequisiteEdges };
+// generateOutline / generatedTopics: the AI-drafted outline fallback (§8.7).
+const syllabus = { resolveTopics, prerequisiteEdges, generateOutline, generatedTopics };
 
 export function getHarness() {
   return createHarness({ store, topicWorkflow, syllabus });
@@ -66,7 +70,7 @@ export async function runStudyPrepPlanningStep({ sessionId, learnerId }) {
     getSessionState: readToolsModule.makeSessionStateReader(harness).bind(null),
   };
   const registry = buildRegistry({ readTools: sessionReadTools, harness, learnerId, sessionId });
-  const agent = makeLlmAgent({ system: context.system });
+  const agent = makeLlmAgent({ system: context.system, learnerId });
   const step = await runAgentStep({
     sessionId, goal: view.session.goal, agent, registry, store, harness, contextSetName: "planning",
   });

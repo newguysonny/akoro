@@ -17,9 +17,14 @@ export const TOOL_REQUEST_STATUSES = new Set([
   "new",
   "under_review",
   "planned",
+  "approved",
   "declined",
   "implemented",
+  "expired",
 ]);
+
+/** Set only by the capability decision flow (a grant + resume), never by a plain status edit. */
+export const DECISION_ONLY_STATUSES = new Set(["approved", "expired"]);
 
 export function boundedText(value, maximum) {
   return typeof value === "string"

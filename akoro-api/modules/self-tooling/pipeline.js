@@ -1,0 +1,372 @@
+/**
+ * modules/self-tooling/pipeline.js — create_tool and the learner-tool runtime
+ * (plan §7.4, §7.9, §7.10). Stages 1 (recipe), 2 (spec), 3 (sandboxed code,
+ * sandbox/ — flag AKORO_SELF_TOOLING_CODE_ENABLED) and 4 (escalate to an
+ * admin, escalation.js).
+ *
+ *   createTool  → { status: created|escalated|rejected, … }   one call in, one status out
+ *   runLearnerTool / learnerToolDefs / listMyTools / setMyToolStatus
+ */
+import db from "../../db.js";
+import { schemaLookup, capabilityStatus } from "./registry.js";
+import { forbiddenFor, CAPABILITIES } from "./capabilities.js";
+import { DATA_VIEWS } from "./views.js";
+import { validateDefinition, runDefinition } from "./interpreters.js";
+import { validateParams, coerceInput, paramProps, wellFormedParams } from "./bind.js";
+import { buildDefinition, registrySlice } from "./builder.js";
+import { createExpect, repeatVerdict } from "../verify/assertions.js";
+import { escalate } from "./escalation.js";
+import { proposeWrite } from "./confirmations.js";
+import { codeEnabled } from "./sandbox/index.js";
+
+const edu = () => db.schema("edu");
+const NAME = /^[a-z][a-z0-9_]{2,47}$/;
+export const LIMITS = {
+  dailyCreates: Math.max(1, Number(process.env.SELF_TOOLING_DAILY_CREATES) || 5),
+  maxTools: Math.max(1, Number(process.env.SELF_TOOLING_MAX_TOOLS) || 20),
+  inCatalogue: 8,
+  runMs: 3_000,
+  builderCalls: 5,
+};
+
+const reject = (reason, extra = {}) => ({ status: "rejected", reason, ...extra });
+
+async function logEvent(row) {
+  const { error } = await edu().from("self_tool_events").insert(row);
+  if (error) console.warn("[self-tooling] event not logged:", error.message);
+}
+
+const SCHEDULING = /\b(spread|schedule|timetable|plan (out|my)|(per|a|each|every) (day|week)|skip(ping)? (sundays?|saturdays?|weekends?)|over the (next|coming) \d*\s*(days|weeks)|until (my|the) (exam|test))\b/i;
+/** Goals only code can express (plans over dates, N per day, skip days). */
+export const needsCode = (goal) => SCHEDULING.test(String(goal || ""));
+
+/**
+ * Code may only hard-code a date the learner gave (in the goal or a param
+ * default). A generated plan once started on an invented "2026-10-01"
+ * instead of akoro.today, so half of it was in the past.
+ */
+export function inventedDates(source, goal, params = {}) {
+  const given = `${goal} ${JSON.stringify(params)}`;
+  const found = [...new Set(String(source || "").match(/(?<!\d)\d{4}-\d{2}-\d{2}(?!\d)/g) || [])].filter((d) => !given.includes(d));
+  return found.length ? [`code: don't hard-code ${found.join(", ")} — start from akoro.today (dates the learner gave are fine)`] : [];
+}
+
+const ABOUT_OTHERS = /\b(other (players?|learners?|students?|people)|others|classmates?|opponents?|everyone else|the rest of (my|the) class)\b/i;
+const BATTLE_WORDS = /\b(battles?|duels?|challenges?|matches)\b/i;
+const OTHERS_WORDS = /\b(other (players?|learners?|students?|people)|others|opponents?|classmates?|everyone else|the rest|compared? (to|with)|versus|vs\.?|who (beat|won)|beat me|than me)\b/i;
+/** "How did the other players do in my battles?" — about other learners' battle results. */
+export const asksAboutOthersInBattles = (message) => BATTLE_WORDS.test(String(message || "")) && OTHERS_WORDS.test(String(message || ""));
+
+/**
+ * The forced first step (iteration 0) for that question: create_tool, so the
+ * agent reaches "this needs an admin's permission" (or builds it, once granted)
+ * instead of answering "I can't see that" from unrelated tools — which it did
+ * about 1 time in 10–15 on every model tried. Not forced when the learner (or
+ * everyone) already has a tool for it: then the agent just calls that tool.
+ * → "create_tool" | null
+ */
+export async function forcedSelfTool(learnerId, message) {
+  if (!asksAboutOthersInBattles(message)) return null;
+  const { data } = await edu().from("agent_tools").select("id").eq("status", "active")
+    .or(`owner_id.eq.${learnerId},scope.eq.platform`).contains("capabilities", ["battles.class_results"]).limit(1);
+  return data?.length ? null : "create_tool";
+}
+
+/**
+ * For a goal about other learners: the lookup's TOP-ranked capability, when it
+ * is a locked one over other learners' data (an available capability ranked
+ * above it — e.g. the weekly league — may answer it, so then build). → name | null
+ */
+export function othersCapabilityFirst(goal, ranked) {
+  if (!ABOUT_OTHERS.test(String(goal || ""))) return null;
+  const top = ranked[0];
+  return top?.status === "needs_approval" && CAPABILITIES[top.name]?.scope === "network" ? top.name : null;
+}
+
+/** Run a definition once, timed; never throws. */
+async function tryRun(def, params, input, ctx) {
+  const t0 = Date.now();
+  try {
+    const out = await runDefinition(def, coerceInput(params, input), ctx);
+    return { ok: true, ms: Date.now() - t0, ...out };
+  } catch (e) {
+    return { ok: false, ms: Date.now() - t0, error: e.message || String(e) };
+  }
+}
+
+/**
+ * Verify before register (§7.9): every sample runs without error, returns a
+ * list, within time. (Scope is enforced inside the view reader on every row.)
+ * → { verdict, assertions, runs, emptyEverywhere }
+ */
+async function verifyTool(def, params, samples, ctx) {
+  const sink = [];
+  const expect = createExpect(sink);
+  const inputs = samples.length ? samples : [{}];
+  const runs = [];
+  for (const [i, s] of inputs.entries()) {
+    const r = await tryRun(def, params, s, ctx);
+    runs.push(r);
+    expect.ok(`sample ${i + 1} runs`, r.ok, r.error);
+    if (r.ok) {
+      expect.ok(`sample ${i + 1} returns a list`, Array.isArray(r.rows));
+      expect.lte(`sample ${i + 1} time (ms)`, r.ms, LIMITS.runMs);
+    }
+  }
+  return { verdict: repeatVerdict({ assertions: sink }), assertions: sink, runs, emptyEverywhere: runs.every((r) => r.ok && !r.rows.length) };
+}
+
+/** create_tool (§7.1). `builtIn`: names of built-in tools (never shadowed). */
+/**
+ * `conversationId`: the chat a resume answers into. `resumed`: re-run by the
+ * resume job after an admin approval — no daily limit, a taken name gets a
+ * suffix, and the platform pays (it was our gap).
+ */
+export async function createTool({ learnerId, input, dry = false, builtIn = new Set(), callCapability, conversationId = null, resumed = false, audience = "learner" }) {
+  const t0 = Date.now();
+  const goal = String(input?.goal || "").trim().slice(0, 300);
+  let name = String(input?.name || "").trim();
+  const label = String(input?.label || "").trim().slice(0, 60);
+  const given = input?.params && typeof input.params === "object" && !Array.isArray(input.params) ? paramProps(input.params) : {};
+  const { params, dropped: droppedParams } = wellFormedParams(given);
+  const droppedNote = droppedParams.length ? ` (Ignored params that weren't simple values: ${droppedParams.join(", ")} — the tool reads the data itself.)` : "";
+  const hint = input?.hint && typeof input.hint === "object" ? input.hint : {};
+  const ev = { user_id: learnerId, goal: goal || "(none)", stages_tried: [], capabilities: [], builder_calls: 0 };
+  const finish = async (outcome, out) => {
+    await logEvent({ ...ev, outcome: dry && outcome === "created" ? "dry" : outcome, reason: out.reason || null, ms: Date.now() - t0 });
+    return out;
+  };
+
+  // ── 0. validate ───────────────────────────────────────────────────────
+  if (goal.length < 3) return reject("Say what the tool should do (goal).");
+  if (!NAME.test(name)) return reject("name must be snake_case, 3–48 characters, starting with a letter.");
+  if (builtIn.has(name)) return reject(`"${name}" is an existing tool — use it instead.`);
+  if (label.length < 2) return reject("Give the tool a learner-facing label.");
+  const pErr = validateParams(params);
+  if (pErr.length) return reject(`params: ${pErr.join("; ")}`);
+  const forbidden = forbiddenFor(goal);
+  if (forbidden.length) return finish("rejected", reject(`Not allowed: ${forbidden.map((f) => f.description).join(" ")}`));
+
+  if (!dry && resumed) {
+    const { data: taken } = await edu().from("agent_tools").select("name").eq("owner_id", learnerId).in("status", ["active", "disabled"]).like("name", `${name}%`);
+    const names = new Set((taken || []).map((t) => t.name));
+    for (let i = 2; names.has(name) && i < 50; i++) name = `${String(input?.name).slice(0, 44)}_${i}`;
+  }
+  if (!dry && !resumed) {
+    const since = new Date(Date.now() - 86_400_000).toISOString();
+    // Tools saved in the last day, any status (a learner deleting a tool archives it, so it still counts).
+    const { count: today } = await edu().from("agent_tools").select("*", { count: "exact", head: true })
+      .eq("owner_id", learnerId).gte("created_at", since);
+    if ((today || 0) >= LIMITS.dailyCreates) return finish("rejected", reject(`You can build ${LIMITS.dailyCreates} tools a day — try again tomorrow, or reuse one you have.`));
+    const { data: mine } = await edu().from("agent_tools").select("name").eq("owner_id", learnerId).in("status", ["active", "disabled"]).limit(LIMITS.maxTools + 1);
+    if ((mine || []).some((t) => t.name === name)) return reject(`You already have a tool called ${name} — call it, or pick another name.`);
+    if ((mine || []).length >= LIMITS.maxTools) return finish("rejected", reject(`You have ${LIMITS.maxTools} tools — delete one in Settings → Agent → My tools first.`));
+  }
+
+  // What could it use?
+  // learnerId is the OWNER: a learner, or an instructor for instructor tools (S7).
+  const lookup = await schemaLookup(goal, { audience });
+  const slice = registrySlice(lookup, hint, audience);
+  // A resume after an approval must USE what was approved — a gate run once
+  // 'resumed' into a tool that answered from an unrelated view instead.
+  const mustUse = resumed ? [].concat(hint.capabilities || []).filter((c) => c in CAPABILITIES) : [];
+  const lockedIn = async (names) => {
+    const out = [];
+    for (const c of names) if (CAPABILITIES[c]?.status === "locked" && (await capabilityStatus(c)) === "locked") out.push(c);
+    return out;
+  };
+  const locked = await lockedIn((lookup.capabilities || []).filter((c) => c.status === "needs_approval").map((c) => c.name));
+  // ── 4. escalate (§7.8) — a locked capability named in the hint, or the only thing that fits.
+  const toEscalate = async (capability, why) => {
+    const out = await escalate({ learnerId, capability, goal, dry, conversationId,
+      proposed: { name, label, params, audience, hint: { views: [].concat(hint.views || []), capabilities: [capability] }, run: input?.run && typeof input.run === "object" ? input.run : {} } });
+    ev.stages_tried.push("escalate"); ev.capabilities = [capability]; ev.request_id = out.requestId || null;
+    return finish(out.status === "escalated" ? (dry ? "dry" : "escalated") : "rejected", { ...out, ...(why ? { why } : {}) });
+  };
+  if (!resumed) {
+    const hinted = await lockedIn([].concat(hint.capabilities || []));
+    if (hinted.length) return toEscalate(hinted[0]);
+    // About OTHER learners, and the best match for that is a locked network
+    // capability: the learner's own views can't answer it, and a build from
+    // them passed the learner's own scores off as "the other players'".
+    const others = othersCapabilityFirst(goal, lookup.capabilities || []);
+    if (others && locked.includes(others)) return toEscalate(others);
+  }
+  if (!slice.views.length && !slice.capabilities.length) {
+    if (locked.length && !resumed) return toEscalate(locked[0]);
+    return finish("rejected", reject(locked.length ? "This needs a permission that isn't on." : "Nothing available matches this goal, so it can't be built."));
+  }
+
+  // ── 1. recipe, 2. spec ─────────────────────────────────────────────────
+  // Cheapest and safest first; sandboxed code (stage 3) only when the flag is on.
+  // A goal that reads as planning/scheduling goes to code first — a recipe or
+  // spec "built" for it returned the rows unsorted into days and still passed.
+  const base = hint.mode === "spec" ? ["spec", "recipe"] : ["recipe", "spec"];
+  const order = codeEnabled() ? (hint.mode === "code" || needsCode(goal) ? ["code", ...base] : [...base, "code"]) : base;
+  const ctx = { learnerId, callCapability };
+  let lastProblem = null;
+  let inexpressible = false;   // the builder said what's available can't express it
+  for (const stage of order) {
+    ev.stages_tried.push(stage);
+    let feedback = null;
+    let fallback = null;   // a verified build that returned nothing for every sample — kept if the repair is no better
+    for (let attempt = 1; attempt <= 3 && ev.builder_calls < LIMITS.builderCalls; attempt++) {
+      ev.builder_calls++;
+      let built;
+      try { built = await buildDefinition({ stage, goal, params, slice, feedback, learnerId, platformPays: dry || resumed }); }
+      catch (e) {
+        if (/coin|balance/i.test(String(e?.message))) return finish("rejected", reject("Not enough coins to build a tool."));
+        lastProblem = `builder failed: ${e.message}`; break;
+      }
+      if (built.notExpressible) { lastProblem = built.notExpressible; inexpressible = true; break; }
+      if (!built.definition) { feedback = built.error || "no definition"; lastProblem = feedback; continue; }
+      if (built.definition.kind !== stage) built.definition.kind = stage === "spec" && built.definition.from ? "spec" : built.definition.kind;
+      const v = await validateDefinition(built.definition, params, { audience });
+      if (v.ok && built.definition.kind === "code") v.errors.push(...inventedDates(built.definition.source, goal, params));
+      for (const c of mustUse) if (!v.uses.capabilities.includes(c)) v.errors.push(`use the approved capability ${c} (a step {"id":"x","cap":"${c}"} — returns ${JSON.stringify(CAPABILITIES[c].returns || [])})`);
+      if (v.errors.length) v.ok = false;
+      if (!v.ok) { feedback = v.errors.slice(0, 6).join("; "); lastProblem = feedback; continue; }
+      const check = await verifyTool(built.definition, params, built.samples || [], ctx);
+      if (check.verdict !== "PASS") {
+        feedback = check.assertions.filter((a) => !a.passed).map((a) => `${a.name}: ${a.actual ?? ""}`).join("; ");
+        lastProblem = feedback; continue;
+      }
+      if (check.emptyEverywhere && attempt === 1) {
+        fallback = { built, v, check };
+        feedback = "every sample returned no rows — check the filters (this learner does have data)";
+        lastProblem = feedback;
+        continue;
+      }
+      return register({ stage, built, v, check });
+    }
+    if (fallback) return register({ stage, ...fallback });
+  }
+  // Nothing available could express it, but a locked capability might.
+  if (locked.length && !resumed && inexpressible) return toEscalate(locked[0], lastProblem);
+  return finish("rejected", reject(`Couldn't build it safely: ${String(lastProblem || "no stage could express it").slice(0, 240)}`));
+
+  async function register({ stage, built, v, check }) {
+    ev.mode = stage;
+    ev.capabilities = v.uses.capabilities;
+    const verification = { verdict: check.verdict, at: new Date().toISOString(),
+      assertions: check.assertions.map((a) => ({ name: a.name, passed: a.passed })), samples: built.samples || [] };
+    const runNow = await tryRun(built.definition, params, input?.run && typeof input.run === "object" ? input.run : (built.samples || [])[0] || {}, ctx);
+    const def = { name, label, goal, mode: stage, definition: built.definition, params_schema: params,
+      capabilities: v.uses.capabilities, views: [...new Set(v.uses.views)], verification };
+    if (dry) {
+      await finish("created", {});
+      return { status: "created", dryRun: true, tool: name, label, mode: stage, verified: true, definition: built.definition,
+        result: runNow.ok ? (runNow.write ? await writeOutcome({ learnerId, dry: true, tool: { label }, write: runNow.write })
+          : { rows: runNow.rows, total: runNow.total, truncated: runNow.truncated }) : { error: runNow.error },
+        note: "DRY RUN — the tool was built and verified but NOT saved. Answer the learner from `result`." + droppedNote };
+    }
+    const { data: row, error } = await edu().from("agent_tools").insert({ owner_id: learnerId, scope: "learner", audience, ...def, usage_count: runNow.ok ? 1 : 0, last_used_at: new Date().toISOString() }).select("id").single();
+    if (error) return finish("failed", reject(`Couldn't save the tool: ${error.message}`));
+    ev.tool_id = row.id;
+    await finish("created", {});
+    return {
+      status: "created", tool: name, label, mode: stage, verified: true,
+      result: runNow.ok ? (runNow.write ? await writeOutcome({ learnerId, conversationId, dry: false, tool: { id: row.id, name, label }, write: runNow.write })
+        : { rows: runNow.rows, total: runNow.total, truncated: runNow.truncated }) : { error: runNow.error },
+      note: `Saved as the learner's tool "${label}". \`result\` is its answer for this request — use it now. Next time, call ${name} directly.${droppedNote}`,
+      __newTool: toolDef(def),
+    };
+  }
+}
+
+/** A saved tool as an OpenAI function. */
+export function toolDef(t) {
+  const props = Object.fromEntries(Object.entries(paramProps(t.params_schema)).map(([k, p]) => [k, {
+    ...(Array.isArray(p.enum) ? { type: typeof p.enum[0] === "number" ? "number" : "string", enum: p.enum } : { type: p.type }),
+    ...(p.description ? { description: String(p.description).slice(0, 200) } : {}),
+  }]));
+  const origin = t.scope === "platform" ? "an Akoro tool for every learner, runs on this learner's own data" : "a tool the learner's agent built";
+  return { type: "function", function: { name: t.name, description: `${t.label} — ${t.goal} (${origin}; read-only)`, parameters: { type: "object", properties: props, required: [] } } };
+}
+
+/**
+ * The catalogue: the learner's own tools (most recently used first) and the
+ * tools an admin promoted to everyone (most used first). The learner's own
+ * tool wins a name clash; built-in names never reach here (§7.10).
+ */
+export async function learnerToolDefs(learnerId, audience = "learner") {
+  const [{ data: mine }, { data: platform }] = await Promise.all([
+    edu().from("agent_tools").select("name, label, goal, params_schema, scope")
+      .eq("owner_id", learnerId).eq("status", "active").order("last_used_at", { ascending: false, nullsFirst: false }).limit(LIMITS.inCatalogue),
+    edu().from("agent_tools").select("name, label, goal, params_schema, scope")
+      .eq("scope", "platform").eq("audience", audience).eq("status", "active").order("usage_count", { ascending: false }).limit(LIMITS.inCatalogue),
+  ]);
+  const own = new Set((mine || []).map((t) => t.name));
+  return [...(mine || []), ...(platform || []).filter((t) => !own.has(t.name))].map(toolDef);
+}
+
+/** Run a saved tool — the learner's own, else a platform one. → result, or null when there's no such tool. */
+export async function runLearnerTool(name, input, learnerId, { callCapability, conversationId = null, dry = false, audience = "learner" }) {
+  if (!NAME.test(String(name || ""))) return null;
+  let { data: t } = await edu().from("agent_tools").select("*").eq("owner_id", learnerId).eq("name", name).in("status", ["active", "disabled"]).maybeSingle();
+  if (!t) ({ data: t } = await edu().from("agent_tools").select("*").eq("scope", "platform").eq("audience", audience).eq("name", name).in("status", ["active", "disabled"]).maybeSingle());
+  if (t && (t.audience || "learner") !== audience) return null;   // never run another audience's tool
+  if (!t) return null;
+  const platform = t.scope === "platform";
+  if (t.status !== "active") return { error: platform ? "This Akoro tool is turned off for now." : "This tool is turned off — rebuild it or turn it back on in Settings → Agent → My tools." };
+  // Re-check on EVERY call: a revoked grant or removed view takes effect at once (§7.10).
+  for (const c of t.capabilities || []) {
+    const cap = CAPABILITIES[c];
+    if ((await capabilityStatus(c)) !== "enabled" || !(cap?.kind === "read" || cap?.target)) return { error: "This tool uses something that's no longer allowed, so it can't run." };
+  }
+  for (const v of t.views || []) if (!DATA_VIEWS[v]) return { error: "This tool uses data that's no longer available." };
+  // Always as THIS learner: views are forced to their own rows (viewRuntime).
+  const r = await tryRun(t.definition, t.params_schema, input || {}, { learnerId, callCapability });
+  const fail = r.ok ? 0 : (t.fail_streak || 0) + 1;
+  // A learner's tool turns itself off after 3 failures in a row; a platform tool
+  // never does on one learner's failures — admins see its fail streak instead.
+  await edu().from("agent_tools").update({
+    usage_count: (t.usage_count || 0) + 1, last_used_at: new Date().toISOString(), fail_streak: fail,
+    ...(fail >= 3 && !platform ? { status: "disabled" } : {}), updated_at: new Date().toISOString(),
+  }).eq("id", t.id);
+  if (!r.ok) return { error: fail >= 3 && !platform ? "This tool failed three times in a row and was turned off — rebuild it." : `The tool couldn't run: ${r.error}` };
+  if (r.write) return writeOutcome({ learnerId, conversationId, dry, tool: t, write: r.write });
+  return { tool: t.label, rows: r.rows, total: r.total, truncated: r.truncated };
+}
+
+/**
+ * A tool with a write step ran: in a dry run say what WOULD change; otherwise
+ * store the proposal and return the confirmation card (nothing written).
+ */
+async function writeOutcome({ learnerId, conversationId, dry, tool, write }) {
+  const items = write.targets.map((x) => x.label);
+  if (dry) return { status: "would_need_confirmation", dryRun: true, tool: tool.label, action: write.does, items, more: write.more || 0,
+    note: "DRY RUN — nothing was proposed or changed. Say what would change and that the learner would confirm it on a card." };
+  return { tool: tool.label, ...(await proposeWrite({ learnerId, conversationId, tool, write })) };
+}
+
+/** Learner tools unused for `days` days are archived (§7.10 health). Platform tools are the admins' call. */
+export async function archiveUnusedTools(days = 60) {
+  const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();
+  const now = new Date().toISOString();
+  const { data, error } = await edu().from("agent_tools").update({ status: "archived", updated_at: now })
+    .eq("scope", "learner").in("status", ["active", "disabled"])
+    .or(`last_used_at.lt.${cutoff},and(last_used_at.is.null,created_at.lt.${cutoff})`).select("id");
+  if (error) throw new Error(`archive failed: ${error.message}`);
+  return { archived: (data || []).length };
+}
+
+export async function listMyTools(learnerId) {
+  const { data, error } = await edu().from("agent_tools").select("id, name, label, goal, mode, status, usage_count, last_used_at, created_at")
+    .eq("owner_id", learnerId).in("status", ["active", "disabled"]).order("created_at", { ascending: false }).limit(50);
+  if (error) throw new Error("Couldn't load your tools");
+  return data || [];
+}
+
+export async function updateMyTool(learnerId, id, patch) {
+  const allowed = {};
+  if (typeof patch?.label === "string" && patch.label.trim().length >= 2) allowed.label = patch.label.trim().slice(0, 60);
+  if (["active", "disabled"].includes(patch?.status)) allowed.status = patch.status;
+  if (patch?.delete === true) allowed.status = "archived";
+  if (!Object.keys(allowed).length) throw Object.assign(new Error("Nothing to change"), { status: 400 });
+  const { data, error } = await edu().from("agent_tools").update({ ...allowed, updated_at: new Date().toISOString(), ...(allowed.status !== "active" ? { fail_streak: 0 } : {}) })
+    .eq("owner_id", learnerId).eq("id", id).in("status", ["active", "disabled"]).select("id, name, label, status").maybeSingle();
+  if (error) throw new Error("Couldn't update the tool");
+  if (!data) throw Object.assign(new Error("Tool not found"), { status: 404 });
+  return data;
+}

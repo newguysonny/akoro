@@ -29,6 +29,7 @@ import { applyTraceEvent, blocksFromSavedTrace, promoteActivity, settleRunning }
 import { CHAT_STARTERS, cleanIdeas, protegeMoves } from '../../lib/chatIdeas.js';
 import AgentCards from '../network/AgentCards.jsx';
 import ChallengeRequestCards from '../network/ChallengeRequestCards.jsx';
+import ConfirmChangeCard from './agentChat/ConfirmChangeCard.jsx';
 import { useVoiceAnswer } from '../../hooks/useVoiceAnswer.js';
 import { useSpeakReply } from '../../hooks/useSpeakReply.js';
 
@@ -203,6 +204,17 @@ function AgentChatTab({
   // ── Persistent chat sessions ───────────────────────────────────────────────
   const [sessions,      setSessions]      = useState([]);
   const [sessionId,     setSessionId]     = useState(null);
+  // Changes waiting for the learner's OK (self-tooling S6): refetched when the chat opens or a reply lands.
+  const [pendingChanges, setPendingChanges] = useState([]);
+  const lastPhase = messages[messages.length - 1]?.phase;
+  useEffect(() => {
+    if (lastPhase && lastPhase !== "done") return;   // after a reply settles, not mid-stream
+    let gone = false;
+    apiGet('/api/self-tooling/confirmations')
+      .then((r) => { if (!gone) setPendingChanges(((r?.data || r)?.pending) || []); })
+      .catch(() => {});
+    return () => { gone = true; };
+  }, [sessionId, messages.length, lastPhase]);
   const [drawerOpen,    setDrawerOpen]    = useState(false);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   // A failed history load must never look like an EMPTY history — that exact
@@ -903,6 +915,7 @@ function AgentChatTab({
                   )}
                   {msg.agents?.length>0&&<AgentCards agents={msg.agents} onFill={applyIdea}/>}
                   {msg.requests?.length>0&&<ChallengeRequestCards requests={msg.requests} mine={!!msg.requestsMine}/>}
+                  {msg.confirm&&<ConfirmChangeCard confirm={msg.confirm}/>}
                   {/* Not taught yet — the learner can teach it now. */}
                   {msg.teach&&onTeachTopic&&(
                     <div style={{ display:"flex",alignItems:"center",gap:10,marginTop:10,padding:"10px 12px",borderRadius:14,background:`${BRAND}0D`,border:`1px solid ${BRAND}33` }}>
@@ -968,6 +981,8 @@ function AgentChatTab({
                 </div>
               );
             })}
+            {/* Changes a built tool proposed that are still waiting for the learner's tap — shown again after a reload (S6). */}
+            {pendingChanges.filter((c)=>!messages.some((m)=>m.confirm?.confirmationId===c.confirmationId)).map((c)=><ConfirmChangeCard key={c.confirmationId} confirm={c}/>)}
             {loading&&(
               <div style={{ display:"flex",alignItems:"center",gap:8,color:"var(--ak-text-muted)",fontSize:12.5,fontWeight:600 }}>
                 <span style={{ display:"flex",gap:5 }}>{[0,.25,.5].map((d,i)=><span key={i} style={{ width:6,height:6,borderRadius:"50%",background:BRAND,display:"inline-block",animation:`bounce-dot .7s ease-in-out ${d}s infinite alternate` }}/>)}</span>

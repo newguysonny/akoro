@@ -12,7 +12,7 @@
 // =============================================================
 
 import express from "express";
-import { isDryRun, runDry } from "../../lib/dryRunContext.js";
+import { isDryRun, runDry, runInspected, isInspected } from "../../lib/dryRunContext.js";
 import { jsonbArray, jsonbObject } from "../../lib/jsonb.js";
 import { authenticateToken } from "../auth/routes.js";
 import pkg from "pg";
@@ -94,6 +94,9 @@ import { hasExplicitToolRequestConsent } from "./agent-tool-request-intent.js";
 import { getLearnerProfileContext } from "./learner-profile-context.js";
 import { validateLearnerTaskInput } from "./learner-task-validation.js";
 import { listChats, readChat, postToChat, ownedChatId } from "./chat-history-tools.js";
+import { schemaLookup } from "../self-tooling/registry.js";
+import { createTool, runLearnerTool, learnerToolDefs, forcedSelfTool } from "../self-tooling/pipeline.js";
+import { selfToolingEnabled, selfToolingAllowedFor } from "../self-tooling/access.js";
 import { createLearnerToolRequest } from "../agent-tool-requests/service.js";
 import {
   getAgentPreferenceSummary,
@@ -117,10 +120,17 @@ import {
 const router     = express.Router();
 // Agent console (modules/agentConsole): a turn sent with the console's key in
 // x-agent-console-dry runs in DRY mode — tools that change data are simulated.
+// x-agent-console-inspect (same key) adds each tool call's arguments and a
+// truncated result to toolExecutions — the verification gate asserts on them.
 router.use((req, res, next) => {
   const key = process.env.AGENT_CONSOLE_KEY;
-  if (key && req.get("x-agent-console-dry") === key) return runDry(() => next());
-  next();
+  if (!key) return next();
+  const dry = req.get("x-agent-console-dry") === key;
+  const inspect = req.get("x-agent-console-inspect") === key;
+  let go = next;
+  if (inspect) { const inner = go; go = () => runInspected(inner); }
+  if (dry) { const inner = go; go = () => runDry(inner); }
+  return go();
 });
 // The one direct-Postgres pool in the API. Deliberately small: Supavisor (the
 // external proxy in front of Supabase Postgres) absorbs traffic spikes, so a
@@ -357,6 +367,48 @@ export const CHAT_TOOLS = [
         followUpId: { type: "string", description: "The followUpId returned by list_scheduled_chat_follow_ups or schedule_chat_follow_up." },
       },
       required: ["followUpId"],
+    },
+  },
+  {
+    name: "get_past_question_practice",
+    description: "The learner's own past-question practice: per exam and subject — questions attempted, correct, accuracy, years practised, last practised — plus totals. Use for 'how am I doing on past questions', accuracy by subject, or combining with weak topics. For an OVERALL answer call it ONCE with no filters — the result already covers every exam and subject with totals; never guess subjects to filter by. Exam-prep runs are a different thing (get_exam_prep_status).",
+    input_schema: {
+      type: "object",
+      properties: {
+        subject: { type: "string", description: "Optional subject filter, e.g. Physics." },
+        exam: { type: "string", description: "Optional exam filter, e.g. WAEC, JAMB." },
+        days: { type: "number", description: "Optional: only the last N days." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "schema_lookup",
+    featureGate: "self_tooling",
+    description: "Self-tooling (preview): find what data and operations a NEW tool could use for a goal no existing tool covers. Returns data views (fields you can filter, sort and count — always the learner's own data or published content) and capabilities, each 'available' or 'needs_approval', plus anything not allowed. Read-only; builds nothing. Use an existing tool first; call this only when none fits. If it finds available views or capabilities for the goal, call create_tool next IN THE SAME TURN to build the tool and answer the learner from its result — don't just describe what a tool could do. Only explain what can't be done when nothing available fits, or part of the goal isn't allowed. Never tell the learner some data doesn't exist just because an unrelated tool came back empty — check here first. Never show the learner view or capability names (e.g. my_learning_sessions); describe them in plain words (\"your learning sessions\").",
+    input_schema: {
+      type: "object",
+      properties: {
+        goal: { type: "string", description: "What the learner wants to find out or do, in plain language." },
+      },
+      required: ["goal"],
+    },
+  },
+  {
+    name: "create_tool",
+    featureGate: "self_tooling",
+    description: "Self-tooling (preview): BUILD a new read-only tool when no existing tool answers the learner's question (call schema_lookup first to see what it can use). It is built safely from the learner's own data, checked, saved for this learner, and RUN at once — the answer comes back in `result`. Outcomes: created (answer from result; next time call the tool by name); escalated (it needs a permission only an admin can give — a request was made; tell the learner in plain words that you've asked, and that the answer will come back in this chat); rejected (say plainly it can't be done and why). If schema_lookup shows a needed capability as needs_approval, pass it in hint.capabilities so the request names it. Never describe how it was built; never show internal names.",
+    input_schema: {
+      type: "object",
+      properties: {
+        goal:   { type: "string", description: "What the tool should work out, in plain language (≤ 300 chars), e.g. 'total hours of my learning sessions per month this year'." },
+        name:   { type: "string", description: "snake_case name, e.g. session_hours_by_month." },
+        label:  { type: "string", description: "Learner-facing name, e.g. 'Study hours by month'." },
+        params: { type: "object", description: "Optional inputs the learner might change next time (a year, a subject): { paramName: { type: string|number|integer|boolean, description, default } } (≤ 6). Never data — the tool reads the learner's data itself. Usually none or one." },
+        run:    { type: "object", description: "Values for the params to answer THIS request with." },
+        hint:   { type: "object", description: "Optional: { views: [...], capabilities: [...] } from schema_lookup." },
+      },
+      required: ["goal", "name", "label"],
     },
   },
   {
@@ -803,7 +855,7 @@ export const CHAT_TOOLS = [
   },
   {
     name: "get_ranking",
-    description: "Get the student's total XP and rank (overall, and in their courses/classes), and battles won.",
+    description: "Get the student's total XP and leaderboard rank (overall, and in their courses/classes), and battles won. Not for how other players did in battles the learner played — that needs create_tool.",
     input_schema: { type: "object", properties: {}, required: [] },
   },
   {
@@ -933,8 +985,11 @@ const blogResearchEnabled = String(process.env.AKORO_BLOG_RESEARCH_ENABLED ?? "t
 // AKORO_AGENT_NETWORK_ENABLED=false removes those tools everywhere at once.
 const agentNetworkEnabled = String(process.env.AKORO_AGENT_NETWORK_ENABLED ?? "true").toLowerCase() !== "false";
 
-export function getLearnerChatTools({ allowToolRequest = true } = {}) {
+export function getLearnerChatTools({ allowToolRequest = true, selfTooling = true } = {}) {
   const enabled = {
+    // Off by default; the chat route also checks the learner allow-list
+    // (selfTooling) so the tool is never offered to anyone not on it.
+    self_tooling: selfToolingEnabled() && selfTooling,
     blog_research: blogResearchEnabled,
     peer_consult: peerConsultEnabled,
     agent_network: agentNetworkEnabled,
@@ -1017,7 +1072,7 @@ export const INSTRUCTOR_TOOLS = [
   },
   {
     name: "check_activity_outcomes",
-    description: "See how one assigned activity actually went: completion counts and class-average understanding, confusion and engagement. Use when the instructor asks how an activity went or wants to act on results (revision work, a follow-up). Without an assignment id you get their recent activities to pick from. Suggest next steps - but any new activity still goes through prepare_activity and their preview.",
+    description: "See how ONE assigned activity actually went: completion counts and class-average understanding, confusion and engagement (not grades across several activities — build a tool with create_tool for that). Use when the instructor asks how an activity went or wants to act on results (revision work, a follow-up). Without an assignment id you get their recent activities to pick from. Suggest next steps - but any new activity still goes through prepare_activity and their preview.",
     input_schema: { type: "object", properties: { assignmentId: { type: "string", description: "From prepare/list flows or the workbench. Omit to list recent activities." } }, required: [] },
   },
   {
@@ -1152,7 +1207,7 @@ async function resolveLearnerSchoolContext(studentId) {
  * flag the scratchpad, and by the agent console's DRY mode, which answers
  * these with what they WOULD do instead of doing it (lib/dryRunContext.js).
  */
-export const SIDE_EFFECT_TOOLS = ["create_task", "suggest_help", "schedule_chat_follow_up", "post_to_chat", "cancel_scheduled_chat_follow_up", "submit_tool_request", "prepare_activity", "revise_activity_draft",
+export const SIDE_EFFECT_TOOLS = ["create_task", "suggest_help", "schedule_chat_follow_up", "post_to_chat", "create_tool", "cancel_scheduled_chat_follow_up", "submit_tool_request", "prepare_activity", "revise_activity_draft",
           "create_goal", "update_goal_progress", "save_blog_draft", "publish_blog", "update_agent_network_settings", "block_agent", "log_past_question_practice",
           "challenge_agent", "post_challenge_request", "accept_challenge_request", "cancel_challenge_request", "rematch_battle", "message_agent", "reply_to_agent", "start_study_prep_session",
           "consult_peer_agents", "discard_activity_draft", "schedule_activity_routine", "cancel_activity_routine"];
@@ -1165,10 +1220,23 @@ export const isSideEffecting = (tool, input) => SIDE_EFFECT_TOOLS.includes(tool)
  *  not the loop's generic "could not be completed". */
 const asToolError = (what) => (e) => ({ error: `Couldn't load ${what} just now${e?.message ? ` (${String(e.message).slice(0, 120)})` : ""}.` });
 
+/** What create_tool needs from the chat: built-in names (never shadowed) and a runner for capabilities. */
+/** `role`: "student" (learner tools) or "instructor" (instructor tools, S7) — capabilities run as that role. */
+export function selfToolDeps(userId, role = "student") {
+  return {
+    builtIn: new Set([...CHAT_TOOLS, ...INSTRUCTOR_TOOLS].map((t) => t.name)),
+    callCapability: (tool, args) => executeChatTool(tool, args, userId, { role, channel: "self_tooling" }),
+  };
+}
+/** Which tools a role's agent builds (S7): instructors build instructor tools; everyone else learner tools. */
+const toolAudience = (role) => (role === "instructor" ? "instructor" : "learner");
+const SELF_TOOLING_ROLES = new Set(["student", "instructor"]);
+
 export async function executeChatTool(name, input, studentId, { conversationId = null, role = "student", channel = "ai_chat" } = {}) {
   // Agent console, DRY mode: anything that would change data is answered with
   // what it would have done — read-only tools still run for real.
-  if (isDryRun() && isSideEffecting(name, input)) {
+  // create_tool handles dry mode itself: it builds and verifies, but doesn't save.
+  if (isDryRun() && isSideEffecting(name, input) && name !== "create_tool") {
     return { dryRun: true, wouldDo: name, input, note: "DRY RUN — nothing was changed. Tell the learner exactly what you would have done." };
   }
   switch (name) {
@@ -1933,6 +2001,56 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         return { error: error.message || "Could not schedule the chat follow-up" };
       }
     }
+    case "get_past_question_practice": {
+      try {
+        let q = db.schema("edu").from("past_question_attempts")
+          .select("exam, subject, year, attempted, correct, created_at").eq("user_id", studentId)
+          .order("created_at", { ascending: false }).limit(1000);
+        if (input?.subject) q = q.ilike("subject", String(input.subject).trim());
+        if (input?.exam) q = q.ilike("exam", String(input.exam).trim());
+        const days = Number(input?.days);
+        if (Number.isFinite(days) && days > 0) q = q.gte("created_at", new Date(Date.now() - days * 86_400_000).toISOString());
+        const { data, error } = await q;
+        if (error) return { error: "Couldn't load your past-question practice just now." };
+        const groups = new Map();
+        for (const r0 of data ?? []) {
+          const k = `${r0.exam}|${r0.subject || "—"}`;
+          const g = groups.get(k) || { exam: r0.exam, subject: r0.subject || null, attempted: 0, correct: 0, years: new Set(), lastPractised: r0.created_at };
+          g.attempted += Number(r0.attempted) || 0; g.correct += Number(r0.correct) || 0;
+          if (r0.year) g.years.add(r0.year);
+          if (r0.created_at > g.lastPractised) g.lastPractised = r0.created_at;
+          groups.set(k, g);
+        }
+        const bySubject = [...groups.values()].map((g) => ({
+          exam: g.exam, subject: g.subject, attempted: g.attempted, correct: g.correct,
+          accuracy: g.attempted ? `${Math.round((g.correct / g.attempted) * 100)}%` : null,
+          years: [...g.years].sort(), lastPractised: g.lastPractised,
+        })).sort((a, b) => b.attempted - a.attempted);
+        const attempted = bySubject.reduce((n, g) => n + g.attempted, 0);
+        const correct = bySubject.reduce((n, g) => n + g.correct, 0);
+        return bySubject.length
+          ? { bySubject, totals: { attempted, correct, accuracy: attempted ? `${Math.round((correct / attempted) * 100)}%` : null, sessions: (data ?? []).length } }
+          : { bySubject: [], totals: { attempted: 0, correct: 0 }, message: "No past-question practice recorded yet." };
+      } catch (error) { return asToolError("your past-question practice")(error); }
+    }
+    case "schema_lookup": {
+      if (!SELF_TOOLING_ROLES.has(role)) return { error: "Building tools is for learners and instructors." };
+      if (!(await selfToolingAllowedFor(studentId))) return { error: "Building new tools isn't turned on for this account yet." };
+      if (!input?.goal || !String(input.goal).trim()) return clarify("goal", "What would you like the new tool to find out or do?", { action: "schema_lookup" });
+      try { return await schemaLookup(String(input.goal).slice(0, 300), { audience: toolAudience(role) }); }
+      catch (error) { return { error: error.message || "Couldn't check what's available right now" }; }
+    }
+    case "create_tool": {
+      if (!SELF_TOOLING_ROLES.has(role)) return { error: "Building tools is for learners and instructors." };
+      if (!(await selfToolingAllowedFor(studentId))) return { error: "Building new tools isn't turned on for this account yet." };
+      try {
+        return await createTool({ learnerId: studentId, input: input || {}, dry: isDryRun(), conversationId,
+          audience: toolAudience(role), ...selfToolDeps(studentId, role === "instructor" ? "instructor" : "student") });
+      } catch (error) {
+        console.warn("[self-tooling] create_tool failed:", error?.stack || error?.message || error);
+        return { status: "rejected", reason: "Building the tool failed unexpectedly — try again." };
+      }
+    }
     case "list_chats": {
       try { return await listChats(studentId, { search: input?.search, limit: input?.limit, currentChatId: conversationId }); }
       catch (error) { return { error: error.message || "Could not load your chats" }; }
@@ -2169,11 +2287,21 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       const rows = data ?? [];
       const overall = rows.find((r) => r.scope === "global") ?? null;
       if (!rows.length) return { totalXp: 0, rank: null, note: "No XP yet — finish a session or a battle to get on the leaderboard." };
+      // Name each scoped ranking — without it the model wrote "Subject 1, Subject 2".
+      const courseIds = [...new Set(rows.map((r) => r.course_id).filter(Boolean))];
+      const { data: courses } = courseIds.length ? await db.from("courses").select("id, title, subject").in("id", courseIds) : { data: [] };
+      const course = new Map((courses ?? []).map((c) => [c.id, c]));
       return {
         totalXp: overall?.total_xp ?? Math.max(...rows.map((r) => r.total_xp ?? 0)),
         rank: overall?.rank ?? null,
         battlesWon: overall?.battles_won ?? null,
-        other: rows.filter((r) => r.scope !== "global").map((r) => ({ scope: r.scope, rank: r.rank, totalXp: r.total_xp })),
+        // All of these are the LEARNER's own positions — named so a model can't
+        // read them as other players' scores (it did).
+        yourRankElsewhere: rows.filter((r) => r.scope !== "global").map((r) => ({
+          leaderboard: course.get(r.course_id)?.title ?? course.get(r.course_id)?.subject ?? `${r.scope} leaderboard`,
+          yourRank: r.rank, yourXp: r.total_xp,
+        })),
+        note: "These are the learner's OWN leaderboard positions only — nothing here is about other players or particular battles.",
       };
     }
     case "get_weak_topics": {
@@ -2298,7 +2426,17 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         category: request.category,
       };
     }
-    default: return { error: `Unknown tool: ${name}` };
+    default: {
+      // A tool the learner's agent built (self-tooling) — read-only, re-checked every call.
+      if (SELF_TOOLING_ROLES.has(role) && (await selfToolingAllowedFor(studentId))) {
+        const out = await runLearnerTool(name, input, studentId, {
+          callCapability: (tool, args) => executeChatTool(tool, args, studentId, { role, channel: "self_tooling" }),
+          conversationId, dry: isDryRun(), audience: toolAudience(role),
+        });
+        if (out) return out;
+      }
+      return { error: `Unknown tool: ${name}` };
+    }
   }
 }
 // =============================================================
@@ -3463,8 +3601,8 @@ const STOPPED_REPLY = "(Stopped before finishing.)";
 const activeTurnStops = new Map();   // `${userId}:${turnId}` → { stop: boolean }
 const turnStopKey = (userId, turnId) => `${userId}:${turnId}`;
 
-function openAiChatTools({ allowToolRequest = true } = {}) {
-  return getLearnerChatTools({ allowToolRequest }).map((tool) => ({
+function openAiChatTools({ allowToolRequest = true, selfTooling = true } = {}) {
+  return getLearnerChatTools({ allowToolRequest, selfTooling }).map((tool) => ({
     type: "function",
     function: { name: tool.name, description: tool.description, parameters: tool.input_schema },
   }));
@@ -3482,6 +3620,14 @@ function openAiChatTools({ allowToolRequest = true } = {}) {
  * not call the tool again with an invented value. Used across every tool
  * and workflow, both roles.
  */
+/** A tool result, size-capped, for an inspected (gate/console) request. */
+function inspectResult(value) {
+  try {
+    const text = JSON.stringify(value ?? null);
+    return text.length <= 4000 ? JSON.parse(text) : { truncated: true, preview: text.slice(0, 4000) };
+  } catch { return { unserializable: true }; }
+}
+
 export function clarify(field, question, extra = {}) {
   return { needsClarification: true, missing: field, question, ...extra };
 }
@@ -3593,6 +3739,12 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
       if (traceRow) trace.toolEnd(traceRow, toolResult);
       // Structured observation: the tool's real backend outcome becomes the
       // model's next input, so the reply confirms facts, not intent.
+      // create_tool built a tool: offer it for the rest of this turn.
+      if (toolResult && typeof toolResult === "object" && toolResult.__newTool) {
+        const def = toolResult.__newTool;
+        delete toolResult.__newTool;
+        if (!tools.some((t) => t.function?.name === def.function.name)) tools.push(def);
+      }
       const observation = toolObservation({ action: tool, result: toolResult, requestId: newToolRequestId() });
       // Every tool call is logged: with nothing here, "the agent ignores my
       // data" is undiagnosable from server logs — zero lines means the model
@@ -3604,11 +3756,15 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         requestId: observation.request_id,
         sideEffecting: SIDE_EFFECT_TOOLS.includes(tool)
           || isSideEffectingAction(tool, input),
+        ...(isInspected() ? { input, result: inspectResult(toolResult) } : {}),
         // A small echo so the chat UI can render the Preview affordance for
         // the human-in-the-loop approval without parsing the model's prose.
         // The protégé's two moves ride the reply so the app can show them:
         // a Teach me button, and the teaching guide's mark on the answer.
         ...(tool === "ask_to_be_taught" && toolResult?.asked ? { teach: { topic: toolResult.topic, subject: toolResult.subject } } : {}),
+        // A tool that would change data (S6): the confirmation card — only the learner's tap runs it.
+        ...(toolResult?.confirmation?.confirmationId ? { confirm: toolResult.confirmation }
+          : toolResult?.result?.confirmation?.confirmationId ? { confirm: toolResult.result.confirmation } : {}),
         // Agent search results ride as cards the app can show (Challenge / Message buttons).
         ...((tool === "search_agents" || tool === "find_competitors") && Array.isArray(toolResult?.agents) ? { agents: toolResult.agents.slice(0, 6) } : {}),
         // `requestsMine`: the learner's OWN requests get Cancel, not Accept.
@@ -3894,8 +4050,32 @@ router.post("/agent", async (req, res) => {
     const CURRENT_TIME_CONTEXT =
       `\n\nCurrent date and time: ${nowLagos} (Africa/Lagos). ` +
       `Use it to resolve relative dates — "tomorrow at 8pm" becomes an exact due_at ISO instant in +01:00. Never state a due date you could not compute from this.`;
+    // Self-tooling: without this the model tours unrelated tools and says
+    // "I don't have that data" instead of building the tool (verify run
+    // 1a8cb552, 2 of 3 repeats).
+    const selfToolOn = (role === "student" || role === "instructor") && await selfToolingAllowedFor(req.user.id);
+    const forceSelfTool = selfToolOn && role === "student" ? await forcedSelfTool(req.user.id, userMessage).catch(() => null) : null;
+    const selfToolCtx = selfToolOn && role === "instructor"
+      ? "\n\n## Building tools (preview)\nWhen the instructor asks for something none of your tools gives directly — a total, average, count, ranking or breakdown over THEIR OWN classes and activities (average grade per activity, who hasn't started, completion by class, students below a mark) — call create_tool (schema_lookup first if unsure what it can use) and answer from its result; don't say you don't have the data. check_activity_outcomes is for ONE activity's summary — a question across several activities (each activity's average, who hasn't started anything) is a create_tool question. Tools only ever see this instructor's own classes and the work set in them — students by name only, never another teacher's class or a learner's private chats or notes. Only say it can't be done after create_tool is rejected, and say why."
+      : selfToolOn
+      ? "\n\n## Building tools (preview)\nWhen the learner asks for something none of your tools gives directly — a total, average, count or breakdown over their own data (hours of sessions per month, tasks finished per week, accuracy by year) — don't say you don't have the data and don't piece it together from unrelated tools. Call create_tool (schema_lookup first if unsure what it can use), then answer from its result. The same goes for comparisons with other learners (how others scored in battles they played together): create_tool either builds it or, if it needs a permission, asks an admin and the answer comes back in this chat — tell the learner that plainly. Only say it can't be done after create_tool is rejected, and say why."
+      : "";
+    // Who this learner's agent is (their protégé): its name, level and
+    // sessions from edu.student_agents, and the learner's first name.
+    const protege = role === "student" ? await (async () => {
+      const [{ data: a }, { data: u }] = await Promise.all([
+        db.schema("edu").from("student_agents").select("name, level, total_sessions").eq("student_id", req.user.id).limit(1).maybeSingle(),
+        db.from("users").select("full_name, username").eq("id", req.user.id).maybeSingle(),
+      ]);
+      return {
+        agentName: (a?.name || safeAgentName || "Akoro").replace(/[\r\n]+/g, " ").slice(0, 80),
+        learnerName: String(u?.full_name || u?.username || "your learner").split(" ")[0].slice(0, 40),
+        level: Number(a?.level) || 1, sessions: Number(a?.total_sessions) || 0,
+      };
+    })().catch(() => null) : null;
     const systemContent = (await assembleChatDoctrine({
       agentName: safeAgentName || "Akoro",
+      protege,
       role,
       think: isThink,
       research: isResearch,
@@ -3906,7 +4086,7 @@ router.post("/agent", async (req, res) => {
       renderRelevantMemory(relevantMemories) +
       renderScratchpad(conversation?.scratchpad) +
       (goalsCtx || "") +
-      protegeCtx + inboxCtx +
+      protegeCtx + inboxCtx + selfToolCtx +
       (syllabusCtx ? `\n\n${syllabusCtx}` : "") +
       (pastCtx ? `\n\n${pastCtx}` : "") +
       (curriculumCtx ? `\n\n${curriculumCtx}` : "") +
@@ -3919,7 +4099,11 @@ router.post("/agent", async (req, res) => {
     // Draft tools can be kill-switched off entirely; a required tool that
     // isn't in the catalogue would throw inside the loop — so the prepare
     // force below only arms when the instructor catalogue is non-empty.
-    const instructorTools = role === "student" ? [] : openAiInstructorTools();
+    // Instructors' agents build tools too (S7): their two self-tooling tools and their saved tools join the list.
+    const instructorTools = role === "student" ? [] : openAiInstructorTools().concat(role === "instructor" && selfToolOn
+      ? [...openAiChatTools({ allowToolRequest: false, selfTooling: true }).filter((t) => t.function.name === "schema_lookup" || t.function.name === "create_tool"),
+        ...await learnerToolDefs(req.user.id, "instructor").catch(() => [])]
+      : []);
     const prepared = await runAgentToolLoop({
       systemContent,
       messages: [...dialogue, { role: "user", content: userContent }],
@@ -3928,7 +4112,8 @@ router.post("/agent", async (req, res) => {
       status: wantsStream ? status : null,
       tools: role === "student" ? openAiChatTools({
         allowToolRequest: hasExplicitToolRequestConsent(userMessage),
-      }) : instructorTools,
+        selfTooling: selfToolOn,
+      }).concat(selfToolOn ? await learnerToolDefs(req.user.id).catch(() => []) : []) : instructorTools,
       // Learners: capability questions are answered from the live catalogue.
       // Instructors: an activity request (or a confirmation continuing one)
       // MUST produce a prepare_activity call — left on "auto" the model
@@ -3937,6 +4122,10 @@ router.post("/agent", async (req, res) => {
       // only; the tool's own clarify() handles anything genuinely missing.
       requiredTool: role === "student"
         ? (requiresAgentCapabilitiesTool(userMessage) ? "get_agent_capabilities"
+          // Other players' results in the learner's battles: go through
+          // create_tool (it builds, or asks an admin for the permission) —
+          // left on auto the model sometimes said "I can't see that" instead.
+          : forceSelfTool ? "create_tool"
           // Identity questions about the learner's OWN school/class/subjects/
           // teachers/progress are fact questions about data the model cannot
           // see — the live 2026-10-01 transcript had tools=0 and an invented
