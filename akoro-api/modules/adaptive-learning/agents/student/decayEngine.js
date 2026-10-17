@@ -11,18 +11,20 @@
 //   6. Run scheduled decay checks (called by cron)
 // =============================================================
 
-import { createClient } from "@supabase/supabase-js";
+import db from "../../../../db.js";
 import { embed } from "./knowledge.js";
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  // SUPABASE_SERVICE_ROLE_KEY is an alias for the app's standard
-  // SUPABASE_SERVICE_KEY (same service-role secret) — fall back so a
-  // deployment setting only the standard name still boots.
-  process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_KEY
-);
+// The app's one database client (metered like every other query; it used to
+// create a second, unmetered client of its own). Resolved per call, so tests
+// can point db.js at an in-memory store.
+const supabase = {
+  schema: (...a) => db.schema(...a),
+  from: (...a) => db.from(...a),
+  rpc: (...a) => db.rpc(...a),
+};
 import { openai } from "../../../../lib/aiModel.js";
 import { buildDecayMustKnowPrompt } from "../../../agent-context/personas/student.js";
+import { retainedConfidence, afterReview, outcomeForScore, topicHealth, conceptName, RETENTION } from "./retention.js";
 
 // =============================================================
 // DECAY CONFIGURATION
@@ -122,80 +124,89 @@ export class DecayEngine {
     this.wsManager = io;
   }
 
-  // ── Apply live decay to all topics for an agent ─────────────
+  // ── Apply live decay to every concept an agent knows (D44) ──
   /**
-   * Run decay calculation for every topic an agent knows.
-   * Updates confidence, priority, next_review_due in DB.
-   * Returns topics that crossed a threshold (need notification).
+   * Each concept (agent_knowledge row: topic + subtopic) is recomputed from
+   * its last review on the slow forgetting curve (retention.js) — never from
+   * last night's decayed value, which made forgetting accelerate. Updates
+   * confidence, priority, next_review_due.
+   *
+   * Returns one entry per TOPIC that has a faded concept (high / critical, or
+   * whose priority just worsened), with the topic's health from all of its
+   * concepts and the faded ones named.
    */
   async applyDecay(agentId) {
-    const { data: topics, error } = await supabase
+    const { data: rows, error } = await supabase
       .schema("edu").from("agent_knowledge")
       .select("*")
-      .eq("agent_id", agentId)
-      .not("last_seen_at", "is", null);
+      .eq("agent_id", agentId);
 
-    if (error || !topics?.length) return [];
+    if (error || !rows?.length) return [];
 
-    const alertTopics = [];
+    const now = Date.now();
+    const ORDER = { low: 0, medium: 1, high: 2, critical: 3 };
+    const fadedKeys = new Set();
 
-    for (const topic of topics) {
-      const daysSince = Math.max(
-        0,
-        (Date.now() - new Date(topic.last_seen_at).getTime()) / 86_400_000
-      );
+    for (const row of rows) {
+      const base = row.learned_at || row.last_seen_at;
+      if (!base) continue;
+      const daysSince = Math.max(0, (now - new Date(base).getTime()) / 86_400_000);
+      const prevConf = Number(row.confidence ?? 0.5);
+      const newConf = retainedConfidence({
+        learned: row.learned_confidence ?? prevConf, daysSince, stabilityDays: row.stability_days ?? RETENTION.initialStabilityDays,
+      });
+      const prevPrio = row.priority || "low";
+      const newPrio = getPriority(newConf);
+      row.days_since_review = Math.round(daysSince);
+      if (Math.abs(newConf - prevConf) < 0.005 && newPrio === prevPrio) continue;   // nothing to record
 
-      if (daysSince < 1) continue; // Too soon to decay
-
-      const prevConf    = topic.confidence ?? 0.5;
-      const decayRate   = topic.decay_rate   ?? DECAY_CONFIG.baseDecayRate;
-      const newConf     = calculateDecayedConfidence(prevConf, daysSince, decayRate);
-      const prevPrio    = topic.priority || "low";
-      const newPrio     = getPriority(newConf);
-      const nextDue     = getNextReviewDate(newConf, newPrio);
-      const decayAmount = prevConf - newConf;
-
-      // Update DB
+      row.confidence = newConf;
+      row.priority = newPrio;
       await supabase
         .schema("edu").from("agent_knowledge")
-        .update({
-          confidence:      newConf,
-          priority:        newPrio,
-          next_review_due: nextDue,
-          updated_at:      new Date(),
-        })
-        .eq("id", topic.id);
+        .update({ confidence: newConf, priority: newPrio, next_review_due: getNextReviewDate(newConf, newPrio), updated_at: new Date() })
+        .eq("id", row.id);
 
-      // Log the decay event
       await supabase.schema("edu").from("decay_events").insert({
         agent_id:          agentId,
-        student_id:        topic.student_id,
-        subject:           topic.subject,
-        topic:             topic.topic,
+        student_id:        row.student_id,
+        subject:           row.subject,
+        topic:             row.topic,
         event_type:        "decay_calculated",
         confidence_before: prevConf,
         confidence_after:  newConf,
         days_since_review: Math.round(daysSince),
-        decay_amount:      decayAmount,
-        metadata:          { decay_rate: decayRate, priority_before: prevPrio, priority_after: newPrio },
+        decay_amount:      prevConf - newConf,
+        metadata:          { concept: conceptName(row), stability_days: row.stability_days ?? RETENTION.initialStabilityDays, priority_before: prevPrio, priority_after: newPrio },
       });
 
-      // Flag if priority worsened (e.g. low → high, or high → critical)
-      const priorityOrder = { low: 0, medium: 1, high: 2, critical: 3 };
-      const pWorsened = (priorityOrder[newPrio] || 0) > (priorityOrder[prevPrio] || 0);
-
-      if (pWorsened || newConf < DECAY_CONFIG.priorityThresholds.high) {
-        alertTopics.push({
-          ...topic,
-          confidence:       newConf,
-          priority:         newPrio,
-          days_since_review: Math.round(daysSince),
-          decay_amount:     decayAmount,
-        });
+      if ((ORDER[newPrio] || 0) > (ORDER[prevPrio] || 0) || newConf < DECAY_CONFIG.priorityThresholds.high) {
+        fadedKeys.add(`${row.topic.toLowerCase()}`);
       }
     }
 
-    return alertTopics;
+    // One entry per topic with a faded concept; its health comes from ALL of
+    // the topic's concepts (a learner can forget one, not the whole topic).
+    const byTopic = new Map();
+    for (const row of rows) {
+      const key = row.topic.toLowerCase();
+      if (!fadedKeys.has(key)) continue;
+      if (!byTopic.has(key)) byTopic.set(key, []);
+      byTopic.get(key).push(row);
+    }
+    return [...byTopic.values()].map((topicRows) => {
+      const health = topicHealth(topicRows);
+      return {
+        student_id:        topicRows[0].student_id,
+        subject:           topicRows[0].subject,
+        topic:             topicRows[0].topic,
+        confidence:        health.confidence,
+        priority:          health.priority,
+        concepts:          health.faded,
+        days_since_review: Math.max(...topicRows.map((r) => r.days_since_review || 0)),
+        stability_days:    Math.min(...topicRows.map((r) => Number(r.stability_days) || RETENTION.initialStabilityDays)),
+      };
+    });
   }
 
   // ── Find topics that need review ─────────────────────────────
@@ -226,165 +237,173 @@ export class DecayEngine {
 
   // ── Generate a decay review session payload ──────────────────
   /**
-   * Builds a session object that can be passed directly to
-   * start_decay_session on the socket or POST /decay/session/start.
+   * A review of one topic, built from its concepts (D44): the faded concepts
+   * come first in the lesson, then the rest weakest-first. No model call is
+   * needed when the topic has concepts; only a topic with none falls back to
+   * asking for its must-know parts.
    */
   async generateDecaySession(agentId, studentId, subject, topic) {
-    // Load topic health data
-    const { data: topicData } = await supabase
+    // Every concept row of the topic. (This used .single(), which fails once a
+    // topic has more than one concept, and then silently used 0.30; and it
+    // required an exact subject, which drifts between spellings.)
+    const { data: rows } = await supabase
       .schema("edu").from("agent_knowledge")
       .select("*")
       .eq("agent_id", agentId)
-      .eq("subject", subject)
-      .ilike("topic", topic)
-      .single();
+      .ilike("topic", topic);
+    const all = rows || [];
+    const sameSubject = subject ? all.filter((r) => String(r.subject || "").toLowerCase() === String(subject).toLowerCase()) : [];
+    const topicRows = sameSubject.length ? sameSubject : all;
+    const health = topicHealth(topicRows);
 
-    const confidence   = topicData?.confidence   ?? 0.30;
-    const daysSince    = topicData?.last_seen_at
-      ? Math.round((Date.now() - new Date(topicData.last_seen_at).getTime()) / 86_400_000)
-      : 0;
-    const priority     = topicData?.priority     ?? getPriority(confidence);
-    const reviewCount  = topicData?.times_seen   ?? 0;
-    const decayRate    = topicData?.decay_rate    ?? DECAY_CONFIG.baseDecayRate;
+    const confidence = health.confidence ?? 0.30;
+    const oldest = topicRows.reduce((min, r) => {
+      const t = new Date(r.learned_at || r.last_seen_at || Date.now()).getTime();
+      return t < min ? t : min;
+    }, Date.now());
+    const daysSince = Math.round((Date.now() - oldest) / 86_400_000);
+    const priority = health.priority ?? getPriority(confidence);
+    const reviewCount = topicRows.reduce((n, r) => n + (Number(r.times_seen) || 0), 0);
+    const stability = topicRows.length ? Math.min(...topicRows.map((r) => Number(r.stability_days) || RETENTION.initialStabilityDays)) : RETENTION.initialStabilityDays;
+    const resolvedSubject = subject || topicRows[0]?.subject || null;
 
-    // Generate a focused description
-    const description  = this._buildSessionDescription(subject, topic, confidence, daysSince);
-    const title        = this._buildSessionTitle(topic, confidence);
-
-    // Load relevant teacher chunks if any
-    const sessionId    = `DECAY-${subject}-${topic}-${Date.now()}`;
+    // The lesson: faded concepts first, then the rest weakest-first. The
+    // topic-level row (no subtopic) isn't a concept of its own.
+    const named = health.concepts.filter((c) => c.concept.toLowerCase() !== String(topic).toLowerCase());
+    const mustKnowParts = named.length ? named.map((c) => c.concept) : await this._getMustKnowForTopic(resolvedSubject, topic);
 
     return {
-      sessionId,
-      type:           "decay_review",     // distinct from free-teaching sessions
-      subject,
+      sessionId:      `DECAY-${resolvedSubject}-${topic}-${Date.now()}`,
+      type:           "decay_review",
+      subject:        resolvedSubject,
       topic,
-      title,
-      description,
+      title:          this._buildSessionTitle(topic, confidence),
+      description:    this._buildSessionDescription(resolvedSubject, topic, confidence, daysSince),
       confidence,
       priority,
       daysSinceReview: daysSince,
       reviewCount,
-      decayRate,
       teachingGoal:   this._buildTeachingGoal(topic, confidence),
-      mustKnowParts:  await this._getMustKnowForTopic(subject, topic),
+      mustKnowParts,
+      fadedConcepts:  health.faded,
+      concepts:       health.concepts,
       decayMetadata: {
         currentConfidence:  confidence,
         daysSinceReview:    daysSince,
         reason:             "knowledge_decay",
         reviewNeeded:       true,
-        decayRate,
+        stabilityDays:      stability,
         reviewCount,
-        projectedIn7Days:   Math.max(0.05, confidence - decayRate * 7),
+        projectedIn7Days:   retainedConfidence({ learned: confidence, daysSince: 7, stabilityDays: stability }),
       },
     };
   }
 
-  // ── Reinforce knowledge after review ─────────────────────────
+  // ── Reinforce knowledge after a review (D44) ─────────────────
   /**
-   * Called when a decay review session ends.
-   * Boosts confidence based on how well the student taught.
+   * Each concept the review actually reached moves back up and will fade
+   * more slowly next time (stability grows on a good review). `conceptOutcomes`
+   * ({ conceptName: "correct" | "partial" | "incorrect" }, from the session's
+   * teaching evidence) decides per concept; a concept the session never
+   * reached is NOT reinforced. Without it, the session score applies to every
+   * concept of the topic. (This used .single(), which found nothing once a
+   * topic had more than one concept — so reviews reinforced nothing.)
    */
-  async reinforceKnowledge(agentId, studentId, subject, topic, performanceScore, sessionId) {
-    // performanceScore: 0–1 (from session understanding %)
-    const reinforcementType =
-      performanceScore >= 0.75 ? "correct" :
-      performanceScore >= 0.40 ? "partial" : "incorrect";
-
-    const { data: current } = await supabase
+  async reinforceKnowledge(agentId, studentId, subject, topic, performanceScore, sessionId, { conceptOutcomes = null } = {}) {
+    const overall = outcomeForScore(Number(performanceScore) || 0);
+    const { data: rows } = await supabase
       .schema("edu").from("agent_knowledge")
-      .select("confidence, decay_rate, times_seen")
+      .select("id, subtopic, topic, subject, confidence, stability_days, times_seen")
       .eq("agent_id", agentId)
-      .eq("subject", subject)
-      .ilike("topic", topic)
-      .single();
-
-    if (!current) return null;
-
-    const prevConf      = current.confidence;
-    const gain          = DECAY_CONFIG.reinforcementRate[reinforcementType];
-    const newConf       = Math.min(0.98, prevConf + gain);
-    const newPrio       = getPriority(newConf);
-    const nextDue       = getNextReviewDate(newConf, newPrio);
-
-    // Decay rate improves (decreases) on good reviews
-    const newDecayRate  = reinforcementType === "correct"
-      ? Math.max(0.04, current.decay_rate * 0.92)
-      : Math.min(0.25, current.decay_rate * 1.05);
-
-    await supabase
-      .schema("edu").from("agent_knowledge")
-      .update({
-        confidence:      newConf,
-        priority:        newPrio,
-        next_review_due: nextDue,
-        decay_rate:      newDecayRate,
-        times_seen:      (current.times_seen || 0) + 1,
-        last_seen_at:    new Date(),
-        updated_at:      new Date(),
-      })
-      .eq("agent_id", agentId)
-      .eq("subject", subject)
       .ilike("topic", topic);
+    if (!rows?.length) return null;
 
-    // Log reinforcement event
-    await supabase.schema("edu").from("decay_events").insert({
-      agent_id:          agentId,
-      student_id:        studentId,
-      subject,
-      topic,
-      event_type:        "reinforced",
-      confidence_before: prevConf,
-      confidence_after:  newConf,
-      days_since_review: 0,
-      decay_amount:      -(newConf - prevConf), // negative = gain
-      session_id:        sessionId,
-      metadata:          { reinforcement_type: reinforcementType, performance_score: performanceScore },
-    });
+    const outcomes = conceptOutcomes && typeof conceptOutcomes === "object"
+      ? Object.fromEntries(Object.entries(conceptOutcomes).map(([k, v]) => [String(k).trim().toLowerCase(), v]))
+      : null;
+    const touched = [];
+    for (const row of rows) {
+      const name = conceptName(row);
+      const outcome = outcomes ? outcomes[name.toLowerCase()] : overall;
+      if (!outcome) continue;   // not reached in this review — it keeps fading
+      const prevConf = Number(row.confidence ?? 0.5);
+      const next = afterReview({ current: prevConf, stabilityDays: row.stability_days ?? RETENTION.initialStabilityDays, outcome });
+      const newPrio = getPriority(next.learned);
+      await supabase.schema("edu").from("agent_knowledge").update({
+        confidence:         next.learned,
+        learned_confidence: next.learned,
+        learned_at:         new Date(),
+        stability_days:     next.stabilityDays,
+        priority:           newPrio,
+        next_review_due:    getNextReviewDate(next.learned, newPrio),
+        times_seen:         (row.times_seen || 0) + 1,
+        last_seen_at:       new Date(),
+        updated_at:         new Date(),
+      }).eq("id", row.id);
+      await supabase.schema("edu").from("decay_events").insert({
+        agent_id: agentId, student_id: studentId, subject: row.subject || subject, topic: row.topic,
+        event_type: "reinforced", confidence_before: prevConf, confidence_after: next.learned, days_since_review: 0,
+        decay_amount: -(next.learned - prevConf), session_id: sessionId,
+        metadata: { concept: name, reinforcement_type: outcome, stability_days: next.stabilityDays, performance_score: performanceScore },
+      });
+      touched.push({ concept: name, outcome, before: prevConf, after: next.learned, stabilityDays: next.stabilityDays });
+    }
+    if (!touched.length) return { confidenceBefore: null, confidenceAfter: null, reinforcementType: overall, gain: 0, concepts: [] };
 
+    const before = touched.reduce((n, c) => n + c.before, 0) / touched.length;
+    const after = touched.reduce((n, c) => n + c.after, 0) / touched.length;
+    const newPriority = getPriority(after);
     return {
-      confidenceBefore:   prevConf,
-      confidenceAfter:    newConf,
-      reinforcementType,
-      gain,
-      newPriority:        newPrio,
-      nextReviewDue:      nextDue,
+      confidenceBefore:  before,
+      confidenceAfter:   after,
+      reinforcementType: overall,
+      gain:              after - before,
+      newPriority,
+      nextReviewDue:     getNextReviewDate(after, newPriority),
+      concepts:          touched,
     };
   }
 
   // ── Send decay alerts via WebSocket ──────────────────────────
   /**
-   * Push a knowledge decay notification to a student's socket room.
-   * Also saves the notification to DB for persistence.
+   * One alert per topic, naming the concepts that faded (D44). A topic that
+   * already has an alert the learner hasn't acted on isn't alerted again —
+   * the nightly pass used to add one every night. Saved to the database, the
+   * bell, and the student's socket room.
    */
   async sendDecayAlert(io, studentId, agentId, decayedTopics) {
-    if (!decayedTopics?.length) return;
+    if (!decayedTopics?.length) return 0;
+    let sent = 0;
 
     for (const t of decayedTopics) {
-      const message = this._buildAlertMessage(t.subject, t.topic, t.confidence, t.days_since_review);
+      const { data: open } = await supabase
+        .schema("edu").from("decay_notifications")
+        .select("id").eq("student_id", studentId).ilike("topic", t.topic).eq("is_actioned", false).limit(1);
+      if (open?.length) continue;
 
-      // Save notification to DB
+      const concepts = (t.concepts || []).map((c) => ({ concept: c.concept, confidence: Number(c.confidence.toFixed(3)), priority: c.priority }));
+      const message = this._buildAlertMessage(t.subject, t.topic, t.confidence, t.days_since_review, concepts.map((c) => c.concept));
+
       const { data: notif } = await supabase
         .schema("edu").from("decay_notifications")
         .insert({
           student_id: studentId,
           agent_id:   agentId,
-          subject:    t.subject,
+          subject:    t.subject || "general",
           topic:      t.topic,
           confidence: t.confidence,
           priority:   t.priority,
           message,
+          concepts,
         })
         .select("id")
         .single();
 
-      // Also surface it in the general bell notifications so it shows up
-      // alongside live-class and other alerts. Best-effort.
       try {
         await supabase.from("notifications").insert({
           user_id:    studentId,
           type:       "knowledge_decay",
-          title:      `📉 Revise ${t.topic}`,
+          title:      `Revise ${t.topic}`,
           content:    message,
           related_id: notif?.id ?? null,
           is_read:    false,
@@ -393,7 +412,6 @@ export class DecayEngine {
         console.warn("[decay] bell notification insert failed:", e.message);
       }
 
-      // Emit to student's socket room
       if (io) {
         io.to(`student:${studentId}`).emit("knowledge_decay_alert", {
           notificationId: notif?.id,
@@ -402,13 +420,13 @@ export class DecayEngine {
           confidence:     Math.round(t.confidence * 100),
           priority:       t.priority,
           daysSinceReview: t.days_since_review,
+          concepts:       concepts.map((c) => ({ ...c, confidence: Math.round(c.confidence * 100) })),
           message,
           decayMetadata: {
             currentConfidence: t.confidence,
             daysSinceReview:   t.days_since_review,
-            projectedIn7Days:  Math.max(0.05, t.confidence - (t.decay_rate || 0.10) * 7),
+            projectedIn7Days:  retainedConfidence({ learned: t.confidence, daysSince: 7, stabilityDays: t.stability_days || RETENTION.initialStabilityDays }),
           },
-          // Include ready-to-use session start payload
           sessionPayload: {
             subject:        t.subject,
             topic:          t.topic,
@@ -420,7 +438,6 @@ export class DecayEngine {
         });
       }
 
-      // Log alert sent
       await supabase.schema("edu").from("decay_events").insert({
         agent_id:          agentId,
         student_id:        studentId,
@@ -430,10 +447,12 @@ export class DecayEngine {
         confidence_before: t.confidence,
         confidence_after:  t.confidence,
         days_since_review: t.days_since_review,
-        decay_amount:      t.decay_amount || 0,
-        metadata:          { priority: t.priority, notification_id: notif?.id },
+        decay_amount:      0,
+        metadata:          { priority: t.priority, notification_id: notif?.id, concepts: concepts.map((c) => c.concept) },
       });
+      sent++;
     }
+    return sent;
   }
 
   // ── Scheduled decay runner ───────────────────────────────────
@@ -468,8 +487,7 @@ export class DecayEngine {
 
         // 3. Send alerts for decayed topics
         if (alertTopics.length > 0) {
-          await this.sendDecayAlert(io, agent.student_id, agent.id, alertTopics);
-          alertsSent += alertTopics.length;
+          alertsSent += await this.sendDecayAlert(io, agent.student_id, agent.id, alertTopics);
         }
 
         // 4. Send WebSocket alerts for decayed subtopics
@@ -612,18 +630,18 @@ export class DecayEngine {
     return `Push ${topic} knowledge from ${Math.round(confidence * 100)}% toward mastery`;
   }
 
-  _buildAlertMessage(subject, topic, confidence, daysSince) {
-    const t   = topic.charAt(0).toUpperCase() + topic.slice(1);
-    const sub = subject.charAt(0).toUpperCase() + subject.slice(1);
-    const pct = Math.round(confidence * 100);
-
-    if (confidence < DECAY_CONFIG.priorityThresholds.critical) {
-      return `🚨 Your agent is forgetting ${sub} — ${t}! Confidence dropped to ${pct}%. Teach it now before it's lost.`;
+  /** The alert text: which concepts are fading, in which topic (D44). Plain text, no emoji. */
+  _buildAlertMessage(subject, topic, confidence, daysSince, concepts = []) {
+    const cap = (v) => (v ? String(v).charAt(0).toUpperCase() + String(v).slice(1) : "");
+    const where = subject ? `${cap(subject)} — ${cap(topic)}` : cap(topic);
+    const pct = Math.round((Number(confidence) || 0) * 100);
+    const names = (concepts || []).filter(Boolean);
+    const list = names.length > 3 ? `${names.slice(0, 3).join(", ")} and ${names.length - 3} more` : names.join(", ");
+    if (names.length) {
+      return `Your agent is forgetting ${list} in ${where}. Teach ${names.length === 1 ? "it" : "them"} again — a short session brings ${names.length === 1 ? "it" : "them"} back (topic at ${pct}%).`;
     }
-    if (confidence < DECAY_CONFIG.priorityThresholds.high) {
-      return `⚠️ ${sub} — ${t} needs revision. Agent confidence: ${pct}%. A short teaching session will reinforce this.`;
-    }
-    return `📚 Time to review ${sub} — ${t} with your agent (${pct}% confidence). Regular teaching keeps knowledge sharp.`;
+    if (confidence < DECAY_CONFIG.priorityThresholds.critical) return `Your agent is forgetting ${where} (${pct}%). Teach it again before it's lost.`;
+    return `${where} needs revision (${pct}%). A short teaching session will reinforce it.`;
   }
 
   async _getMustKnowForTopic(subject, topic) {

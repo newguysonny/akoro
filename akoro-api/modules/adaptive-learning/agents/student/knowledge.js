@@ -178,7 +178,7 @@ export async function saveAgentKnowledge({
   // created every session.
   const { data: existing } = await supabase
     .schema("edu").from("agent_knowledge")
-    .select("id, times_seen, confidence, decay_rate, content")
+    .select("id, times_seen, confidence, decay_rate, content, stability_days")
     .eq("agent_id", agentId).eq("topic", topic).eq("subtopic", subtopic ?? "")
     .maybeSingle();
 
@@ -190,7 +190,11 @@ export async function saveAgentKnowledge({
     // covered deleted everything else known about it — while times_seen and
     // confidence both rose to say the opposite.
     const { content: merged } = await mergeKnowledge(existing.content, content, { userId: studentId });
-    const newConf      = Math.min(0.98, existing.confidence + 0.05);
+    // Taught again = a review on the forgetting curve (D44): it moves back up
+    // and fades more slowly from here.
+    const { afterReteach } = await import("./retention.js");
+    const reviewed     = afterReteach({ current: existing.confidence, stabilityDays: existing.stability_days });
+    const newConf      = reviewed.learned;
     const newDecayRate = Math.max(0.04, (existing.decay_rate || 0.10) * 0.95);
 
     const { getPriority, getNextReviewDate } = await import("./decayEngine.js");
@@ -204,6 +208,9 @@ export async function saveAgentKnowledge({
         embedding:       await embed(`${merged} ${topic} ${subtopic ?? ""}`.trim()),
         embedded_at:     new Date(),
         confidence:      newConf,
+        learned_confidence: newConf,
+        learned_at:      new Date(),
+        stability_days:  reviewed.stabilityDays,
         times_seen:      existing.times_seen + 1,
         last_seen_at:    new Date(),
         chunk_type:      chunkType,
@@ -235,6 +242,8 @@ export async function saveAgentKnowledge({
       content,
       chunk_type:      chunkType,
       confidence,
+      learned_confidence: confidence,
+      learned_at:      new Date(),
       decay_rate:      0.10,
       priority,
       next_review_due: nextDue,

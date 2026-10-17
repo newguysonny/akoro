@@ -199,7 +199,10 @@ export class StudentAgent {
   }
 
   // ── Extract knowledge to save after each turn ──────────────
-  async extractKnowledgeFromTurn(humanMessage, studentReply, topic, subject, analysis, teachingEvidence = null) {
+  // `concept` (D44): the lesson concept being taught — the knowledge is kept
+  // under the lesson's topic and this concept, so each concept fades and is
+  // reviewed on its own.
+  async extractKnowledgeFromTurn(humanMessage, studentReply, topic, subject, analysis, teachingEvidence = null, concept = null) {
     // A generated protege reply is never proof that it learned. Commit durable
     // protege knowledge only after the human explanation met the full
     // server-owned rule: clear core plus distinct elaboration and no unresolved
@@ -235,10 +238,16 @@ export class StudentAgent {
     result.confidence = Math.min(0.85, Math.max(0.1, Number(result.confidence) || 0.1));
 
     // Queue for batch save at session end
+    // Filed under the LESSON's topic and concept. (It used the model's own
+    // topic name, so one lesson scattered across invented topics and no
+    // concept was ever recorded.)
+    const lessonTopic = String(topic || result.topic || "").trim() || result.topic;
+    const lessonConcept = concept && String(concept).trim().toLowerCase() !== lessonTopic.toLowerCase() ? String(concept).trim().slice(0, 180) : "";
     this.sessionKnowledgeBuffer.push({
       agentId:    this.agentId,
       studentId:  this.studentId,
-      topic:      result.topic,
+      topic:      lessonTopic,
+      subtopic:   lessonConcept,
       subject,
       content:    result.content,
       chunkType:  result.chunkType,

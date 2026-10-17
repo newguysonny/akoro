@@ -162,9 +162,11 @@ test("_buildTeachingGoal: rebuild <0.40, reinforce <0.65, push toward mastery wi
   assert.equal(engine._buildTeachingGoal("fractions", 0.654), "Push fractions knowledge from 65% toward mastery");
 });
 
-test("_buildAlertMessage tiers follow DECAY_CONFIG.priorityThresholds and capitalise subject/topic", () => {
+test("_buildAlertMessage names the faded concepts (D44), capitalises subject/topic, no emoji", () => {
   const t = DECAY_CONFIG.priorityThresholds;
-  assert.match(engine._buildAlertMessage("maths", "algebra", t.critical - 0.01, 9), /forgetting Maths — Algebra! Confidence dropped to 34%/);
-  assert.match(engine._buildAlertMessage("maths", "algebra", t.critical, 9), /Maths — Algebra needs revision\. Agent confidence: 35%/);
-  assert.match(engine._buildAlertMessage("maths", "algebra", t.high, 9), /Time to review Maths — Algebra with your agent \(55% confidence\)/);
+  assert.match(engine._buildAlertMessage("maths", "algebra", 0.5, 9, ["Factorising"]), /forgetting Factorising in Maths — Algebra\. Teach it again/);
+  assert.match(engine._buildAlertMessage("maths", "algebra", 0.5, 9, ["A", "B", "C", "D", "E"]), /forgetting A, B, C and 2 more in Maths — Algebra\. Teach them again/);
+  assert.match(engine._buildAlertMessage("maths", "algebra", t.critical - 0.01, 9), /forgetting Maths — Algebra \(34%\)/);
+  assert.match(engine._buildAlertMessage(null, "algebra", t.high, 9), /^Algebra needs revision \(55%\)/, "a missing subject doesn't crash");
+  assert.doesNotMatch(engine._buildAlertMessage("maths", "algebra", 0.1, 9, ["x"]), /[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/u);
 });

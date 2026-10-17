@@ -16,6 +16,7 @@ import {
   finalizeSessionDelta,
 } from "./knowledge.js";
 import { decayEngine } from "./decayEngine.js";
+import { outcomeForEvidence } from "./retention.js";
 import { getStudentState } from "../../student-state.js";
 import { createTeachingEvidenceState, publicTeachingEvidence } from "../../teaching-evidence.js";
 import { createPublicLearningState } from "../../public-learning-state.js";
@@ -476,12 +477,22 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
     // If this was a decay review — reinforce the topic confidence
     let reinforcementResult = null;
     if (this.sessionType === "decay_review" && this.decayPayload?.topic) {
+      // Per concept (D44): each lesson concept's own teaching evidence decides
+      // its reinforcement; a concept the review never reached isn't touched.
+      const parts = this.session.mustKnowParts || [];
+      const evidence = this.teachingEvidence?.concepts || [];
+      const conceptOutcomes = {};
+      parts.forEach((name, i) => {
+        const outcome = outcomeForEvidence(evidence[i]);
+        if (name && outcome) conceptOutcomes[name] = outcome;
+      });
       reinforcementResult = await decayEngine.reinforceKnowledge(
         agentId, studentId,
         this.decayPayload.subject,
         this.decayPayload.topic,
         learnerEvidenceScore / 100,   // demonstrated teaching evidence, not delivery
-        sessionId
+        sessionId,
+        { conceptOutcomes: Object.keys(conceptOutcomes).length ? conceptOutcomes : null },
       );
 
       // Mark notification as actioned

@@ -129,6 +129,7 @@ export function createTeachingTurnTools() {
           context.subject,
           analysis,
           evidenceUpdate.current,
+          activeConcept(context),   // the concept this turn taught (D44)
         );
         if (extracted) orchestrator.stats.agentKnowledgeAdded++;
 
