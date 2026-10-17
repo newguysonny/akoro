@@ -153,7 +153,15 @@ test('study-prep steps become trace rows for the turn they happened in', () => {
   const all = studyPrepEventBlocks(events);
   assert.deepEqual(all.map((b) => b.headline), ['Checked the plan.', 'Your agent answered 3 of 5.']);
   assert.equal(all[1].description, 'The Education Engine scored it');
-  assert.ok(all.every((b) => b.type === 'tool' && b.status === 'done' && b.category === 'action'));
+  assert.ok(all.every((b) => b.type === 'tool' && b.status === 'done' && b.category === 'study_prep'));
+  // Their own row, apart from the turn's tool rows — even a single step.
+  const turnTool = { type: 'tool', id: 't1', status: 'done', category: 'action', headline: 'Starting your study session' };
+  const items = groupTraceBlocks([turnTool, ...all]);
+  assert.deepEqual(items.map((i) => i.type), ['tool', 'group']);
+  assert.equal(groupLabel(items[1].tools), 'Study Prep · 2 steps');
+  const one = groupTraceBlocks(studyPrepEventBlocks(events.slice(0, 1)));
+  assert.equal(one[0].type, 'group');
+  assert.equal(groupLabel(one[0].tools), 'Study Prep · 1 step');
   const later = studyPrepEventBlocks(events, { from: Date.parse('2026-10-17T10:01:00Z') });
   assert.deepEqual(later.map((b) => b.id), ['study_prep_3']);
   assert.equal(studyPrepEventBlocks(events, { to: Date.parse('2026-10-17T10:00:00Z') }).length, 0);

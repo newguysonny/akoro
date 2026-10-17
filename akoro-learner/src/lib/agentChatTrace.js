@@ -128,6 +128,11 @@ export function groupTraceBlocks(blocks) {
   const sameKind = (a, b) => (a.category || 'research') === (b.category || 'research');
   for (const block of blocks || []) {
     const prev = items[items.length - 1];
+    // Study Prep's steps always fold into their own row, even a single one.
+    if (block?.category === 'study_prep' && !(prev?.type === 'group' && prev.tools[0].category === 'study_prep')) {
+      items.push({ type: 'group', id: `group_${block.id}`, tools: [block] });
+      continue;
+    }
     if (groupable(block) && groupable(prev) && sameKind(block, prev)) {
       items[items.length - 1] = { type: 'group', id: `group_${prev.id}`, tools: [prev, block] };
     } else if (groupable(block) && prev?.type === 'group' && sameKind(block, prev.tools[0])) {
@@ -146,6 +151,7 @@ export function groupLabel(tools) {
   if (categories.size === 1 && categories.has('research')) return `Checked ${count} things`;
   if (categories.size === 1 && categories.has('read')) return `Read ${count} source${count === 1 ? '' : 's'}`;
   if (categories.size === 1 && categories.has('action')) return `Did ${count} things`;
+  if (categories.size === 1 && categories.has('study_prep')) return `Study Prep · ${count} step${count === 1 ? '' : 's'}`;
   return `Ran ${count} steps`;
 }
 
@@ -182,7 +188,7 @@ export function studyPrepEventBlocks(events, { from = 0, to = Infinity } = {}) {
     })
     .map((event) => ({
       type: 'tool', id: `study_prep_${event.sequence}`, status: 'done', ok: true, ms: event.durationMs ?? null,
-      category: 'action', headline: event.narrative,
+      category: 'study_prep', headline: event.narrative,
       description: STUDY_PREP_STEP[event.eventType] || 'A Study Prep step', result: event.narrative,
     }));
 }
