@@ -4,11 +4,12 @@ import { startMicCapture } from '../../utils/micCapture.js';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, STUDENT_ID } from '../../constants.js';
 import { acquireActivityLock } from '../../utils/activityLock.js';
 import { useWakeLock } from '../../hooks/useWakeLock.js';
-import { API, apiGet } from '../../services/api.js';
+import { API, apiGet, apiPost } from '../../services/api.js';
 const AGENT_CONFIG = { name: '', emoji: '🤖', guideName: 'NaNa Esumai', guideEmoji: '🧠', guideRenderStyle: {} };
 import { XIcon, SparkleIcon, ZapIcon, BrainIcon, Icon } from '../common/Icons.jsx';
 import SessionChatView from './SessionChatView.jsx';
 import { makeQuote, withQuote } from '../../lib/quotedMessage.js';
+import { materialText, localLearnSuggestions, learnSuggestionInput, shapeLearnSuggestions } from '../../lib/learnSuggestions.js';
 import SessionReaderModal, { buildSessionReaderPages, useIsMobileView } from './SessionReaderModal.jsx';
 import WhiteboardModal from './WhiteboardModal.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
@@ -186,6 +187,24 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
     // The material is fixed at session start; topic/subject don't change mid-session.
     [readerReference, config?.subtopics, session?.subtopics],
   );
+  // Learn suggestions (LEARNING WITH GUIDE): about the material open in this
+  // session, else the topic. The material-derived ones show at once; the AI
+  // ones, grounded in the same text, replace them when they arrive.
+  const learnBase = useMemo(() => {
+    const ready = content?.state === 'ready';
+    return {
+      // The real topic only — not the "your topic" display fallback.
+      topic: config?.topic || session?.topic || '', subject: config?.subject || session?.subject || '',
+      title: ready ? (content.docTitle || '') : (readerReference?.name || ''),
+      text: materialText({ content, reference: readerReference }),
+      subtopics: config?.subtopics || session?.subtopics || [],
+    };
+    // The material is fixed once ready; re-derive only when it lands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [content?.state, content?.pages, readerReference, topic, subject]);
+  const [aiLearn, setAiLearn] = useState(null);   // { key, list }
+  const learnKey = `${learnBase.title}|${learnBase.topic}|${learnBase.text.length}`;
+  const learnSuggestions = aiLearn?.key === learnKey && aiLearn.list.length >= 3 ? aiLearn.list : localLearnSuggestions(learnBase);
   const openReader      = () => { if (!content || content.state === 'ready') setReaderOpen(true); };
   // A citation chip on the protégé's message: open the reader on that page
   // and flash the cited box (or seek the recording). The key re-fires a
@@ -236,6 +255,16 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       text: t('teaching.guide_open').replace('{name}', guide.name),
     }]);
   };
+  // Asked once per material, the first time the guide chat opens.
+  useEffect(() => {
+    if (chatMode !== "guide" || aiLearn?.key === learnKey) return undefined;
+    let live = true;
+    apiPost('/api/adaptive/chat/learn-suggestions', learnSuggestionInput(learnBase), { timeout: 15000 })
+      .then((r) => { if (live) setAiLearn({ key: learnKey, list: shapeLearnSuggestions(r?.suggestions) }); })
+      .catch(() => { if (live) setAiLearn({ key: learnKey, list: [] }); });
+    return () => { live = false; };
+  }, [chatMode, learnKey]);   // eslint-disable-line react-hooks/exhaustive-deps
+
   const sendGuideMessage = (text) => {
     const clean = withQuote(text, quote);
     if (!clean) return;
@@ -877,6 +906,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
         messages: guideMessages,
         onSend: sendGuideMessage,
         onSuggestion: setInput,
+        suggestions: learnSuggestions,
         guideName: guide.name,
         guideEmoji: guide.emoji,
       }}

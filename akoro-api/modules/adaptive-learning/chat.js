@@ -17,7 +17,7 @@ import { jsonbArray, jsonbObject } from "../../lib/jsonb.js";
 import { authenticateToken } from "../auth/routes.js";
 import pkg from "pg";
 import { OPENAI_MODEL, openai } from "../../lib/aiModel.js";
-import { buildSuggestionMessages, shapeSuggestions } from "./chatSuggestions.js";
+import { buildSuggestionMessages, shapeSuggestions, buildLearnSuggestionMessages, LEARN_LIMITS } from "./chatSuggestions.js";
 import { loadTaughtKnowledge, renderTaughtContext, buildGuideMessages, shapeGuideAnswer, teachRequest } from "./protege.js";
 import { loadDoctrine } from "../agent-context/context-manager.js";
 
@@ -3851,6 +3851,31 @@ router.post("/suggestions", async (req, res) => {
     res.json({ success: true, suggestions: shapeSuggestions(completion.choices?.[0]?.message?.content) });
   } catch (e) {
     console.warn("[chat/suggestions] none this time:", String(e?.message || e).slice(0, 120));
+    res.json({ success: true, suggestions: [] });
+  }
+});
+
+/**
+ * POST /api/adaptive/chat/learn-suggestions — the guide chat's "Learn
+ * suggestions", grounded in the session's material (or its topic).
+ * Body: { topic, subject?, title?, excerpt?, subtopics? }. The app shows its
+ * own material-derived suggestions at once; these replace them when they
+ * arrive. Any failure returns none.
+ */
+router.post("/learn-suggestions", async (req, res) => {
+  const b = req.body || {};
+  if (!String(b.topic || b.title || b.excerpt || "").trim()) return res.json({ success: true, suggestions: [] });
+  try {
+    const completion = await openai.chat.completions.create({
+      model: process.env.OPENAI_SUGGEST_MODEL || "gpt-4o-mini", temperature: 0.4, max_tokens: 220,
+      __timeoutMs: 12_000, __maxRetries: 0,
+      response_format: { type: "json_object" },
+      messages: buildLearnSuggestionMessages({ topic: b.topic, subject: b.subject, title: b.title, excerpt: b.excerpt, subtopics: b.subtopics }),
+      __userId: req.user?.id, __feature: "learn_suggestions",
+    });
+    res.json({ success: true, suggestions: shapeSuggestions(completion.choices?.[0]?.message?.content, { count: LEARN_LIMITS.count, chars: LEARN_LIMITS.chars }) });
+  } catch (e) {
+    console.warn("[chat/learn-suggestions] none this time:", String(e?.message || e).slice(0, 120));
     res.json({ success: true, suggestions: [] });
   }
 });

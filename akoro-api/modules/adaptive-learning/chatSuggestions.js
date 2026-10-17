@@ -36,8 +36,8 @@ export function buildSuggestionMessages({ role = "student", ask = "", reply = ""
   return [{ role: "system", content: system }, { role: "user", content: user }];
 }
 
-/** The model's JSON → up to 3 clean, distinct chips. */
-export function shapeSuggestions(raw) {
+/** The model's JSON → up to `count` (default 3) clean, distinct chips. */
+export function shapeSuggestions(raw, { count = SUGGESTION_LIMITS.count, chars = SUGGESTION_LIMITS.chars } = {}) {
   let json = {};
   try { json = typeof raw === "string" ? JSON.parse(raw) : raw || {}; } catch { json = {}; }
   const seen = new Set();
@@ -48,13 +48,45 @@ export function shapeSuggestions(raw) {
       .replace(/^["'“]|["'”]$/g, "")
       .replace(/\s+/g, " ")
       .trim();
-    if (!t || t.length > SUGGESTION_LIMITS.chars) continue;
+    if (!t || t.length > chars) continue;
     if (/\b(assign|publish|send it)\b/i.test(t)) continue;   // the human's button, never a chip
     const key = t.toLowerCase().replace(/[^a-z0-9 ]/g, "");
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(t);
-    if (out.length === SUGGESTION_LIMITS.count) break;
+    if (out.length === count) break;
   }
   return out;
+}
+
+/**
+ * "Learn suggestions" for a teaching session's LEARNING WITH GUIDE chat:
+ * four things the learner could ask about the material they have open (or,
+ * with none, the topic) — one summary, one explanation, one quiz, one
+ * real-life example, each naming something actually in the material.
+ */
+export const LEARN_LIMITS = Object.freeze({ count: 4, chars: 70, excerptChars: 3000 });
+
+export function buildLearnSuggestionMessages({ topic = "", subject = "", title = "", excerpt = "", subtopics = [] } = {}) {
+  const clip = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+  const material = clip(excerpt, LEARN_LIMITS.excerptChars);
+  const subs = (Array.isArray(subtopics) ? subtopics : []).slice(0, 8).map((x) => clip(x, 80)).filter(Boolean);
+  const system = [
+    `Suggest exactly ${LEARN_LIMITS.count} short things a learner could ask their tutor to help them study, written as the learner would type them ` +
+      "(imperative or a question, at most 10 words each, no numbering, no quotes around the whole line, no emoji).",
+    "In this order: 1) summarise the material or a named part of it, 2) explain one specific concept simply, " +
+      "3) quiz me on one specific concept, 4) a real-life example of one specific concept.",
+    material
+      ? "Name concepts, terms or sections that actually appear in the MATERIAL below. Never invent content that is not there."
+      : "There is no material: base them on the TOPIC and its subtopics.",
+    "Write in the same language as the material (or the topic).",
+    'Return JSON: { "suggestions": [string, string, string, string] }',
+  ].join("\n");
+  const user = [
+    `TOPIC: ${clip(topic, 120) || "(none)"}${subject ? ` (${clip(subject, 60)})` : ""}`,
+    title ? `MATERIAL TITLE: ${clip(title, 120)}` : "",
+    subs.length ? `SUBTOPICS: ${subs.join("; ")}` : "",
+    material ? `MATERIAL:\n${material}` : "",
+  ].filter(Boolean).join("\n");
+  return [{ role: "system", content: system }, { role: "user", content: user }];
 }

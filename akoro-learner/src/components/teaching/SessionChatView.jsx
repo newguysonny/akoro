@@ -42,15 +42,9 @@ function MicMeter({ level = 0 }) {
    held by the parent (TeachAgentModal) so toggling modes preserves them.
    Learn suggestions follow the Fortizo reference: a collapsible list under
    a small uppercase header; picking one fills the composer rather than
-   firing a request, because there is no guide backend yet. */
-const GUIDE_SUGGESTIONS = [
-  { key: "teaching.sug_summarize", icon: "📝" },
-  { key: "teaching.sug_quiz",      icon: "❓" },
-  { key: "teaching.sug_simple",    icon: "💡" },
-  { key: "teaching.sug_example",   icon: "🌍" },
-];
-
-function GuideChat({ messages, guideName, guideEmoji, onSuggestion }) {
+   firing a request. They come from the parent, drawn from the session's
+   material, or its topic when there is none (lib/learnSuggestions.js). */
+function GuideChat({ messages, guideName, guideEmoji, onSuggestion, suggestions = [] }) {
   const { t } = useLang();
   const [suggestionsOpen, setSuggestionsOpen] = useState(true);
   // The ⌥N hints only make sense with a hardware keyboard.
@@ -67,14 +61,14 @@ function GuideChat({ messages, guideName, guideEmoji, onSuggestion }) {
     const onKeyDown = (e) => {
       if (!e.altKey) return;
       const n = parseInt(e.key, 10);
-      if (n >= 1 && n <= GUIDE_SUGGESTIONS.length) {
+      if (n >= 1 && n <= suggestions.length) {
         e.preventDefault();
-        onSuggestion?.(t(GUIDE_SUGGESTIONS[n - 1].key));
+        onSuggestion?.(suggestions[n - 1].label);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [kbdHints, onSuggestion, t]);
+  }, [kbdHints, onSuggestion, suggestions]);
 
   const isEmpty = messages.length <= 1;
 
@@ -142,14 +136,14 @@ function GuideChat({ messages, guideName, guideEmoji, onSuggestion }) {
           </button>
           {suggestionsOpen && (
             <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-              {GUIDE_SUGGESTIONS.map((s, i) => (
-                <button key={s.key} type="button" onClick={() => onSuggestion?.(t(s.key))}
+              {suggestions.map((s, i) => (
+                <button key={s.id || i} type="button" onClick={() => onSuggestion?.(s.label)}
                   style={{ display:"flex", alignItems:"center", gap:10, textAlign:"left",
                     padding:"10px 12px", borderRadius:12, background:"var(--ak-tag-bg)",
                     border:"1px solid var(--ak-border2)", cursor:"pointer",
                     fontFamily:"'Nunito',sans-serif" }}>
-                  <span style={{ fontSize:14, flexShrink:0 }}>{s.icon}</span>
-                  <span style={{ flex:1, fontSize:12.5, fontWeight:700, color:"var(--ak-text)" }}>{t(s.key)}</span>
+                  <Icon name={s.icon} size={15} color="var(--ak-accent)"/>
+                  <span style={{ flex:1, fontSize:12.5, fontWeight:700, color:"var(--ak-text)" }}>{s.label}</span>
                   {kbdHints && <span style={{ fontSize:10, fontWeight:800, color:"var(--ak-text-muted)", flexShrink:0 }}>⌥{i + 1}</span>}
                 </button>
               ))}
@@ -378,6 +372,7 @@ function SessionChatView({
           guideName={guide?.guideName}
           guideEmoji={guide?.guideEmoji}
           onSuggestion={guide?.onSuggestion}
+          suggestions={guide?.suggestions || []}
         />
       ) : (
       <div ref={scrollRef} style={{ flex:1,overflowY:"auto",padding:"14px 16px",
