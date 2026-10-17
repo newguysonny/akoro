@@ -256,6 +256,8 @@ router.post("/sessions/:id/cancel", async (req, res) => {
 /** The learner's active session view, or null when none exists. */
 async function getActiveSessionView(learnerId) {
   const active = await supabaseStore.findActiveSessionsList(learnerId);
+  // A failed lookup is a fault, not "no session" — the UI would offer a new one.
+  if (active?.error) throw active.error;
   const id = active?.data?.[0]?.id;
   if (!id) return null;
   return getHarness().getSessionView({ sessionId: id, learnerId });

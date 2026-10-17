@@ -73,9 +73,20 @@ export async function getLearnerHistory({ learnerId, subject, limit = 10 }) {
 
 /** learner.get_relevant_memory — targeted retrieval, never a history dump (S3). */
 export async function getRelevantMemory({ learnerId, subject, limit = 8 }) {
-  const { data, error } = await db.schema("edu").from("learner_concept_evidence")
+  // Scoped to the subject's concepts — it used to return any subject's evidence.
+  let conceptIds = null;
+  if (String(subject || "").trim()) {
+    const { data: concepts, error: conceptError } = await db.schema("edu").from("concept_catalog")
+      .select("id").ilike("subject", `%${String(subject).trim()}%`).limit(500);
+    if (conceptError) throw conceptError;
+    conceptIds = (concepts || []).map((c) => c.id);
+    if (!conceptIds.length) return { memories: [] };
+  }
+  let query = db.schema("edu").from("learner_concept_evidence")
     .select("observation_kind, response_quality, evidence_summary, observed_at, concept_id")
-    .eq("learner_id", learnerId).order("observed_at", { ascending: false }).limit(Math.max(1, Math.min(Number(limit) || 8, 20)));
+    .eq("learner_id", learnerId);
+  if (conceptIds) query = query.in("concept_id", conceptIds);
+  const { data, error } = await query.order("observed_at", { ascending: false }).limit(Math.max(1, Math.min(Number(limit) || 8, 20)));
   if (error) throw error;
   return {
     memories: (data || []).map((row) => ({
