@@ -173,14 +173,18 @@ export async function completeSessionRecord(orchestrator) {
       teaching_evidence: serialiseTeachingEvidence(orchestrator?.teachingEvidence) || {},
       updated_at:   new Date().toISOString(),
     };
-    let { error } = await db.schema("edu").from("adaptive_sessions").update(completion).eq("id", id);
+    // Conditional on "not already complete": of two simultaneous completions
+    // only the one that flips the row awards XP (both used to).
+    const complete = (patch) => db.schema("edu").from("adaptive_sessions").update(patch)
+      .eq("id", id).neq("status", "complete").select("id");
+    let { data: flipped, error } = await complete(completion);
     if (error && isMissingColumn(error, "teaching_evidence")) {
       const { teaching_evidence: _evidence, ...legacyCompletion } = completion;
-      ({ error } = await db.schema("edu").from("adaptive_sessions").update(legacyCompletion).eq("id", id));
+      ({ data: flipped, error } = await complete(legacyCompletion));
     }
     if (error) throw error;
 
-    if (prior && prior.status !== "complete" && prior.student_id) {
+    if (flipped?.length && prior && prior.status !== "complete" && prior.student_id) {
       try {
         const { awardXP, XP } = await import("../../ranking/routes.js");
         awardXP({ userId: prior.student_id, reason: "teaching_session", amount: XP.SESSION_ATTEND, subject: prior.subject || null }).catch(() => {});

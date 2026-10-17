@@ -47,7 +47,9 @@ test("the tester cohort boot-seeds with the schemas — not behind an opt-in fla
     assert.ok(manifest.schema.includes(f), `${f} must be in the schema group (applies at backend boot)`);
     assert.ok(!manifest.demo.includes(f), `${f} must not sit in the opt-in demo group`);
   }
-  assert.match(app, /applyMigrations\(\{ url: mUrl, groups: \["schema"\]/, "backend boot applies the schema group");
+  // Boot applies the schema group (the gate's sandbox adds demo on top).
+  assert.match(app, /const groups = process\.env\.VERIFY_TARGET === "sandbox" \? \["schema", "demo"\] : \["schema"\];/, "backend boot applies the schema group");
+  assert.match(app, /applyMigrations\(\{ url: mUrl, groups, label: "boot" \}\)/);
   const seed = await readFile(new URL("../../migrations/2026-seed-agent-testers.sql", import.meta.url), "utf8");
   assert.match(seed, /FOR i IN 1\.\.50 LOOP/, "the seed creates tester01–tester50");
   assert.match(seed, /'tester%s@demo\.akoro\.app'/, "demo.akoro.app emails — the AGENT_CONSOLE_LEARNERS shape");
