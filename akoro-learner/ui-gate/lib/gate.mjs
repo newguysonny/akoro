@@ -99,26 +99,49 @@ async function probeWebSocket(api) {
   });
 }
 
+/* ── how the gate talks to the API ──────────────────────────────────────── */
+/**
+ * → request({ method, url, headers, data }) → { status, headers, body }.
+ * Live: from a page on the app's own origin, with the browser's cookies —
+ * exactly how the app calls its API (and the browser's network path, proxy
+ * included). Local: Node's request client to the pass-through.
+ */
+function transport(context, appPage) {
+  if (appPage) {
+    return async ({ method = 'GET', url, headers = {}, data }) => appPage.evaluate(async ({ method, url, headers, data }) => {
+      try {
+        const r = await fetch(url, { method, credentials: 'include', headers: { 'Content-Type': 'application/json', ...headers }, ...(data !== undefined ? { body: JSON.stringify(data) } : {}) });
+        const text = await r.text();
+        let body = null; try { body = JSON.parse(text); } catch { body = { message: text.slice(0, 200) }; }
+        return { status: r.status, headers: Object.fromEntries(r.headers.entries()), body };
+      } catch (e) { return { status: 0, headers: {}, body: { message: String(e.message) } }; }
+    }, { method, url, headers, data });
+  }
+  return async ({ method = 'GET', url, headers = {}, data }) => {
+    const r = await context.request.fetch(url, { method, headers: { ...EDGE_HEADER, 'Content-Type': 'application/json', ...headers }, ...(data !== undefined ? { data } : {}) });
+    return { status: r.status(), headers: r.headers(), body: await r.json().catch(() => null) };
+  };
+}
+
 /* ── sign-in, through the app's own login ───────────────────────────────── */
-async function signIn(context, { authBase, learner }) {
+async function signIn(send, { authBase, learner }) {
   const username = String(learner || '').replace(/^@/, '');
   if (!TESTER.test(username)) throw new Blocked(`the frontend gate signs in only as a test learner (tester01–tester50), not "${learner}"`);
   const email = `${username.toLowerCase()}@demo.akoro.app`;
   let r;
   try {
-    r = await context.request.post(`${authBase}/api/auth/login`, {
-      headers: { ...EDGE_HEADER, 'Content-Type': 'application/json', 'X-Akoro-Portal': 'student' },
-      data: { email, password: process.env.UI_GATE_PASSWORD || DEMO_PASSWORD },
-    });
+    r = await send({ method: 'POST', url: `${authBase}/api/auth/login`, headers: { 'X-Akoro-Portal': 'student' },
+      data: { email, password: process.env.UI_GATE_PASSWORD || DEMO_PASSWORD } });
   } catch (e) { throw new Blocked(`the API did not answer the login: ${e.message}`); }
-  const body = await r.json().catch(() => ({}));
-  if (!r.ok()) {
+  const body = r.body || {};
+  if (r.status === 0) throw new Blocked(`the API did not answer the login: ${body.message}`);
+  if (r.status < 200 || r.status >= 300) {
     // A refusal from the edge (Cloudflare) never reached the API: say so.
-    const h = r.headers();
+    const h = r.headers || {};
     const edge = h.server === 'cloudflare' && !h['x-render-origin-server']
       ? ` — refused by Cloudflare before the API (cf-mitigated: ${h['cf-mitigated'] || 'none'}, ray ${h['cf-ray'] || '?'}); set UI_GATE_EDGE_HEADER to a header a Cloudflare skip rule lets through`
       : '';
-    throw new Blocked(`login as ${username} answered ${r.status()}: ${body?.message || 'no message'}${edge}`);
+    throw new Blocked(`login as ${username} answered ${r.status}: ${body?.message || 'no message'}${edge}`);
   }
   const data = body.data || body;
   if (data.twoFactorRequired) throw new Blocked(`${username} has two-factor sign-in on; the gate can't pass it`);
@@ -126,7 +149,7 @@ async function signIn(context, { authBase, learner }) {
 }
 
 /* ── one scenario's toolkit ─────────────────────────────────────────────── */
-function toolkit({ page, context, app, api, session, state, outDir, scenario, device, network }) {
+function toolkit({ page, context, app, api, session, state, outDir, scenario, device, network, send }) {
   const checks = [];
   const notes = [];
   const cleanups = [];
@@ -138,12 +161,12 @@ function toolkit({ page, context, app, api, session, state, outDir, scenario, de
     learner: session.user,
     /** An API call as the signed-in learner (the browser's own cookies). */
     api: async (method, p, data) => {
-      // The learner's own access cookie, sent explicitly: over http://127.0.0.1
-      // the request client holds back a Secure cookie the browser would send.
-      const headers = { ...EDGE_HEADER, 'Content-Type': 'application/json', 'X-Akoro-Portal': 'student', Cookie: `akoro_access_student=${session.accessToken}` };
-      const r = await context.request.fetch(`${api}${p}`, { method, headers, ...(data !== undefined ? { data } : {}) });
-      const body = await r.json().catch(() => null);
-      return { status: r.status(), body };
+      // Local: the learner's own access cookie, sent explicitly — over
+      // http://127.0.0.1 the request client holds back a Secure cookie the
+      // browser would send. Live: the page's own cookies.
+      const r = await send({ method, url: `${api}${p}`, data,
+        headers: { 'X-Akoro-Portal': 'student', ...(send.local ? { Cookie: `akoro_access_student=${session.accessToken}` } : {}) } });
+      return { status: r.status, body: r.body };
     },
     check,
     equal: (name, actual, expected) => check(name, actual === expected, { expected, actual }),
@@ -200,9 +223,21 @@ export async function runGate({ target = 'local', app = process.env.UI_GATE_APP,
       // No service worker: a cached build or cached API answer would hide what is deployed.
       const context = await browser.newContext({ ...dev, ignoreHTTPSErrors, serviceWorkers: 'block', ...(video ? { recordVideo: { dir: path.join(outDir, 'video', deviceName), size: dev.viewport } } : {}) });
       const consoleErrors = [];
+      // The browser's own requests to the API carry the edge header too (added
+      // at the network layer, so no CORS preflight).
+      if (Object.keys(EDGE_HEADER).length && target === 'live') {
+        await context.route((u) => u.origin === new URL(api).origin, (route) => route.continue({ headers: { ...route.request().headers(), ...EDGE_HEADER } }));
+      }
+      let appPage = null;
+      if (target === 'live') {
+        appPage = await context.newPage();
+        await appPage.goto(report.app, { waitUntil: 'domcontentloaded' }).catch(() => {});
+      }
+      const send = transport(context, appPage);
+      send.local = !appPage;
       let session;
       try {
-        session = await signIn(context, { authBase, learner });
+        session = await signIn(send, { authBase, learner });
       } catch (e) {
         for (const s of scenarios) report.scenarios.push({ name: s.name, device: deviceName, verdict: 'BLOCKED', reason: e.message, checks: [] });
         await context.close();
@@ -212,11 +247,6 @@ export async function runGate({ target = 'local', app = process.env.UI_GATE_APP,
       await context.addInitScript(({ user, exp }) => {
         try { localStorage.setItem('akoro_user', JSON.stringify(user)); localStorage.setItem('akoro_access_exp', String(exp)); } catch { /* storage off */ }
       }, { user: session.user, exp: session.accessExpiresAt });
-      // The browser's own requests to the API carry the edge header too (added
-      // at the network layer, so no CORS preflight).
-      if (Object.keys(EDGE_HEADER).length && target === 'live') {
-        await context.route((u) => u.origin === new URL(api).origin, (route) => route.continue({ headers: { ...route.request().headers(), ...EDGE_HEADER } }));
-      }
       const page = await context.newPage();
       page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text().slice(0, 300)); });
       page.on('pageerror', (e) => consoleErrors.push(`pageerror: ${String(e.message).slice(0, 300)}`));
@@ -232,7 +262,7 @@ export async function runGate({ target = 'local', app = process.env.UI_GATE_APP,
           verdictOf.set(scenario.name, 'BLOCKED');
           continue;
         }
-        const t = toolkit({ page, context, app: report.app, api: authBase, session, state, outDir, scenario, device: deviceName, network });
+        const t = toolkit({ page, context, app: report.app, api: authBase, session, state, outDir, scenario, device: deviceName, network, send });
         const t0 = Date.now();
         const errorsBefore = consoleErrors.length;
         let verdict, reason = null;
