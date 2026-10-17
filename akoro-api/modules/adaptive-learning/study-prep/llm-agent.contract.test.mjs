@@ -60,3 +60,12 @@ test("every tool tells the model its arguments; planning tools take topic ids", 
   const src = readFileSync(new URL("./llm-agent.js", import.meta.url), "utf8");
   assert.match(src, /args: \{ \.\.\.\(tool\.args \|\| \{ type: "object" \}\)/);
 });
+
+test("the agent knows its budget and its last step can only finish", () => {
+  const loop = readFileSync(new URL("./agent-loop.js", import.meta.url), "utf8");
+  assert.match(loop, /finalOnly: iteration === maxIterations \? finalActions : null/);
+  assert.match(loop, /contextSetName === "planning" \? \["propose_plan"\] : TERMINAL_ACTIONS/);
+  const src = readFileSync(new URL("./llm-agent.js", import.meta.url), "utf8");
+  assert.match(src, /finalOnly\.includes\(toRegistry\.get\(t\.function\.name\)\)/);
+  assert.match(src, /Iteration \$\{iteration\} of \$\{maxIterations\}/);
+});
