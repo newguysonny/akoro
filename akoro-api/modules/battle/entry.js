@@ -29,9 +29,16 @@ export const REVIEW_REWARD_COINS = Math.max(0, Math.round(Number(process.env.REV
  * battle runs for whoever turned up, a 2v2 needs all four, anything else two.
  */
 export function minPlayersFor(b) {
-  if (b?.battle_type === "review" || String(b?.recurring_key || "").startsWith("daily:")) return 1;
+  // A review and an Agent Check (D45) are one learner's agent alone.
+  if (b?.battle_type === "review" || b?.battle_type === "check" || String(b?.recurring_key || "").startsWith("daily:")) return 1;
   return b?.battle_type === "team" ? 4 : 2;
 }
+
+/**
+ * A MARK SHEET, not a contest: a review, or an Agent Check (D45) — one
+ * learner's agent, no HP to lose, no winner, no XP race.
+ */
+export const isMarkSheet = (type) => type === "review" || type === "check";
 
 /** The requirements as the card shows them. */
 export function requirementsOf(b) {

@@ -7,14 +7,14 @@ import { privacyEdges } from "./network.js";
 import { rateLimitCountedOnce, battleEntryGates } from "./platform.js";
 import { realUserRun } from "./realuser.js";
 import { syllabusCoverage } from "./curriculum.js";
-import { planCompletes, practiceChargedOnce, generatedOutline } from "./studyprep.js";
+import { planCompletes, practiceChargedOnce, generatedOutline, agentCheckBattle } from "./studyprep.js";
 import { bridgePersists } from "./teaching.js";
 import { conceptCurve } from "./decay.js";
 import { suggestionsAnswer } from "./suggestions.js";
 
 const ALL = [healthBuild, toolsCatalogue, scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity,
   privacyEdges, rateLimitCountedOnce, battleEntryGates, followUpDeliverIntoChat, taskDueInMinutes, noResidue,
-  viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer];
+  viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, agentCheckBattle];
 
 export const SCENARIOS = Object.fromEntries(ALL.map((s) => [s.name, s]));
 
@@ -30,6 +30,7 @@ export const SUITES = {
   decay: ["decay.concept_curve"],
   suggestions: ["chat.suggestions_answer"],
   "study-prep": ["studyprep.plan_completes", "studyprep.practice_charged_once", "studyprep.generated_outline", "writes.no_residue"],
+  "agent-check": ["studyprep.agent_check_battle", "writes.no_residue"],
   "agent-network": ["network.privacy_edges"],
   battles: ["battles.entry_gates"],
   "self-tooling": ["selftool.views_match_schema", "selftool.schema_lookup_safe", "selftool.create_spec_matches_db", "selftool.create_rejects_forbidden",

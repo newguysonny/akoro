@@ -114,3 +114,89 @@ export const generatedOutline = {
     if (s2?.id) await ctx.http({ as: p.learner, method: "POST", path: `${base}/${s2.id}/cancel`, body: {} });
   },
 };
+
+// D45 (§7.12): Study Prep practice as an Agent Check battle, end to end —
+// the harness charges once, a 'check' battle runs (the protégé answers from
+// the learner's notes, Sergeant judges), the Engine scores it as the agent's,
+// and the protégé reports in chat. Runs the Agent Check path directly, so it
+// works while AKORO_STUDY_PREP_AGENT_CHECK is still off for learners.
+export const agentCheckBattle = {
+  name: "studyprep.agent_check_battle", area: "study-prep", risk: "write", regression: false,
+  description: "An Agent Check runs as a real battle: one 2-coin charge, the protégé answers from the learner's notes, Sergeant rules, the result is scored as the agent's and posted in chat.",
+  params: { learner: { default: "@tester17" }, subject: { default: "Biology" }, classLevel: { default: "SS1" } },
+  async run(ctx, p) {
+    const me = await ctx.as(p.learner);
+    const base = "/api/adaptive/study-prep/sessions";
+    await ctx.db.deleteOwned("edu.study_prep_sessions", { ownerColumn: "learner_id", ownerId: me.id, filters: { goal: { like: "[verify:%" } } });
+    const active = await ctx.http({ as: p.learner, path: base });
+    if (active.body?.session?.id) await ctx.http({ as: p.learner, method: "POST", path: `${base}/${active.body.session.id}/cancel`, body: {} });
+    ctx.cleanup(() => ctx.db.deleteOwned("edu.study_prep_sessions", { ownerColumn: "learner_id", ownerId: me.id, filters: { goal: { like: `${ctx.marker}%` } } }));
+
+    const made = await ctx.http({ as: p.learner, method: "POST", path: base,
+      body: { goal: `${ctx.marker} Revise ${p.subject} cells before my test`, subject: p.subject, classLevel: p.classLevel, examBoard: "WAEC" } });
+    const id = made.body?.session?.id;
+    if (made.body?.session?.status !== "awaiting_confirmation") ctx.expect.blocked(`planning didn't reach a plan (${made.body?.session?.status || made.status})`);
+    // The protégé's thread for this session, and its notifications.
+    ctx.cleanup(() => ctx.db.deleteOwned("chat_messages", { ownerColumn: "user_id", ownerId: me.id, filters: { session_id: id } }));
+    ctx.cleanup(() => ctx.db.deleteOwned("chat_sessions", { ownerColumn: "user_id", ownerId: me.id, filters: { id } }));
+    ctx.cleanup(() => ctx.db.deleteOwned("notifications", { ownerColumn: "user_id", ownerId: me.id, filters: { related_id: id } }));
+    const confirmed = await ctx.http({ as: p.learner, method: "POST", path: `${base}/${id}/confirm`, body: {} });
+    ctx.expect.status("plan confirmed", confirmed, [200, 201]);
+    const topic = (confirmed.body?.topics || []).find((t) => t.status === "active");
+    if (!topic) ctx.expect.blocked("no active topic after confirming the plan");
+
+    const [acct] = await ctx.db.rows("coin_accounts", { owner_id: me.id }, { columns: "id, balance", limit: 1 });
+    if (!acct) ctx.expect.blocked(`${p.learner} has no coin account`);
+    const t0 = new Date(Date.now() - 1000).toISOString();
+    const { getAgentCheckHarness } = await import("../../adaptive-learning/study-prep/wiring.js");
+    const harness = getAgentCheckHarness({ questions: 3, secondsPerQuestion: 10 });
+    let started;
+    try {
+      started = await harness.startTopicPractice({ sessionId: id, learnerId: me.id, topicId: topic.id, mode: "diagnostic" });
+    } catch (e) {
+      if (e.code === "insufficient_balance") ctx.expect.blocked(`${p.learner} can't afford a practice`);
+      throw e;
+    }
+    if (started.skipped) {
+      ctx.note(`${p.learner} has no notes on "${topic.label}" — the check was skipped with nothing charged (the no-notes rule)`);
+      const debits = (await ctx.db.rows("coin_transactions", { account_id: acct.id }, { columns: "delta, type, feature, created_at", limit: 10, order: { column: "created_at", ascending: false } }))
+        .filter((t) => t.created_at >= t0 && t.type === "debit");
+      ctx.expect.eq("nothing charged when there is nothing to check", debits.length, 0);
+      ctx.expect.blocked(`no notes on "${topic.label}" to check — teach ${p.learner}'s agent this topic, or pick a learner with notes on it`);
+    }
+    const battleId = started.check?.battleId;
+    ctx.expect.ok("a check battle was created", !!battleId, JSON.stringify(started.check || null));
+    ctx.cleanup(() => ctx.db.deleteOwned("battle_participants", { ownerColumn: "user_id", ownerId: me.id, filters: { battle_id: battleId } }));
+    ctx.note(`topic "${topic.label}", battle ${battleId}, ${started.check?.questions} questions`);
+
+    // 3 questions × 10 s, a 6 s start and the end delay: scored within ~75 s.
+    let scored = null;
+    for (let i = 0; i < 40 && !scored; i++) {
+      await new Promise((r) => setTimeout(r, 2500));
+      const [row] = await ctx.db.rows("edu.study_prep_topics", { id: topic.id }, { columns: "check_battle_id, check_scored_at, check_result, status", limit: 1 });
+      if (row?.check_scored_at) scored = row;
+    }
+    if (!scored) ctx.expect.blocked("the check battle did not finish within 100 s — is the battle worker running?");
+
+    const [battle] = await ctx.db.rows("battles", { id: battleId }, { columns: "battle_type, status, study_prep_topic_id, created_by", limit: 1 });
+    ctx.expect.eq("battle type is an Agent Check", battle?.battle_type, "check");
+    ctx.expect.eq("battle completed", battle?.status, "completed");
+    ctx.expect.eq("the platform asked (no creator)", battle?.created_by ?? null, null);
+    ctx.expect.eq("one seat: the protégé", await ctx.db.count("battle_participants", { battle_id: battleId }), 1);
+    ctx.expect.gte("Sergeant ruled on the questions", await ctx.db.count("battle_log", { battle_id: battleId, event_type: "judge_ruling" }), 1);
+    const r = scored.check_result || {};
+    ctx.note(`result: ${r.correct}/${r.total} from notes, ${r.guessed} guessed, ${r.unknown} not in the notes; topic → ${scored.status}`);
+    ctx.expect.eq("every question scored", (r.perQuestion || []).length, r.total);
+
+    const debits = (await ctx.db.rows("coin_transactions", { account_id: acct.id }, { columns: "delta, type, feature, created_at", limit: 30, order: { column: "created_at", ascending: false } }))
+      .filter((t) => t.created_at >= t0 && t.type === "debit");
+    ctx.note(`debits: ${JSON.stringify(debits.map((t) => ({ feature: t.feature, delta: t.delta })))}`);
+    ctx.expect.eq("one flat practice charge", debits.filter((t) => t.feature === "study_prep_practice").length, 1);
+    ctx.expect.eq("nothing else billed (questions and answers are the platform's)", debits.filter((t) => t.feature !== "study_prep_practice").length, 0);
+
+    const events = await ctx.db.rows("edu.study_prep_events", { session_id: id, event_type: "engine_result" }, { columns: "facts", limit: 5 });
+    ctx.expect.ok("the Engine scored it as the agent's answers", events.some((e) => e.facts?.source === "agent_recall"));
+    const said = await ctx.db.rows("chat_messages", { session_id: id }, { columns: "text, meta", limit: 10 });
+    ctx.expect.gte("the protégé posted in chat (start + result)", said.filter((m) => m.meta?.battle?.id === battleId).length, 2);
+  },
+};

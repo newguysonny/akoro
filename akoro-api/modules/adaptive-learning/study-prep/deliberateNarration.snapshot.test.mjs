@@ -17,6 +17,9 @@ const SNAPSHOTS = {
   topic_started: { topicLabel: "Water Cycle" },
   practice_generated: { topicLabel: "Water Cycle", attemptNumber: 2, coins: 2 },
   practice_scored: { topicLabel: "Water Cycle", score: 3, total: 5, percentage: 60, passed: false, thresholdPercentage: 70 },
+  agent_check_started: { topicLabel: "Water Cycle", mode: "diagnostic", coins: 2 },
+  agent_check_skipped: { topicLabel: "Water Cycle" },
+  agent_check_scored: { topicLabel: "Water Cycle", correct: 4, total: 5, guessed: 1, percentage: 80, passed: true, thresholdPercentage: 70 },
   strategy_offered: { strategy: "teach_back", topicLabel: "Water Cycle" },
   teach_back_confirmed: { topicLabel: "Water Cycle" },
   topic_advanced: { topicLabel: "Water Cycle", nextTopicLabel: "Photosynthesis" },
@@ -58,4 +61,11 @@ test("pause copy is shared between narration and the UI banners", () => {
   assert.equal(pauseCopy("agent_loop_cap"), "I got stuck — tap to retry or adjust.");
   assert.match(pauseCopy("insufficient_balance"), /Not enough coins/);
   assert.match(pauseCopy("anything_else"), /paused/i);
+});
+
+test("the Agent Check narrates the agent's result, never the learner's mastery", () => {
+  const n = deliberate("agent_check_scored", SNAPSHOTS.agent_check_scored).narrative;
+  assert.match(n, /Your agent answered 4 of 5/);
+  assert.match(n, /guess on 1/);
+  assert.doesNotMatch(n, /you mastered/i);
 });

@@ -74,6 +74,22 @@ export const supabaseStore = {
     return topics;
   },
 
+  async getTopicById(topicId) {
+    const { data, error } = await db.schema("edu").from("study_prep_topics").select("*").eq("id", topicId).maybeSingle();
+    if (error) throw error;
+    return data || null;
+  },
+
+  /** Score an Agent Check once: only the topic's CURRENT check, only if unscored. → row or null. */
+  async claimCheckScore(topicId, battleId, result, at) {
+    const { data, error } = await db.schema("edu").from("study_prep_topics")
+      .update({ check_scored_at: at, check_result: result, updated_at: at })
+      .eq("id", topicId).eq("check_battle_id", battleId).is("check_scored_at", null)
+      .select("*").maybeSingle();
+    if (error) throw error;
+    return data || null;
+  },
+
   async updateTopicConditional(topicId, expectedStatus, patch) {
     const { data, error } = await db.schema("edu").from("study_prep_topics")
       .update(patch).eq("id", topicId).eq("status", expectedStatus).select("*").maybeSingle();
@@ -141,7 +157,7 @@ export const supabaseStore = {
    * Mastery write-back (§4.5): best-effort evidence row when an approved
    * concept matches this subject+topic; skipped (never invented) otherwise.
    */
-  async recordMasteryEvidence({ learnerId, sessionRef, topicLabel, subject, passed, score, mastery }) {
+  async recordMasteryEvidence({ learnerId, sessionRef, topicLabel, subject, passed, score, mastery, source = "study_prep" }) {
     try {
       const slug = String(topicLabel || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
       // Two plain filters, not an or() string: a label with a comma or
@@ -152,15 +168,18 @@ export const supabaseStore = {
       let { data: concepts, error } = await approved().ilike("topic_key", `%${slug}%`).limit(1);
       if (!error && !concepts?.length) ({ data: concepts, error } = await approved().ilike("title", `%${String(topicLabel || "").trim()}%`).limit(1));
       if (error || !concepts?.length) return null;
-      const turnRef = `${sessionRef}:attempt`;
+      // An Agent Check is the AGENT's answers from the learner's notes (§7.12.2).
+      const turnRef = source === "agent_recall" ? `${sessionRef}:check` : `${sessionRef}:attempt`;
       const { error: evidenceError } = await db.schema("edu").from("learner_concept_evidence").upsert({
         learner_id: learnerId, concept_id: concepts[0].id,
         source_session_id: sessionRef.slice(0, 180), source_turn_id: turnRef.slice(0, 180),
         observation_kind: passed ? "assessment_result" : "partial_understanding",
         response_quality: Number(score) || 0, claim_validity: 1, model_confidence: 1,
         claim_status: "not_checked",
-        evidence_summary: `Study-prep ${passed ? "passed" : "attempt"}: score ${Math.round((Number(score) || 0) * 100)}% (mastery → ${mastery?.next ?? "n/a"})`.slice(0, 1200),
-        provenance: { source: "study_prep", mastery },
+        evidence_summary: (source === "agent_recall"
+          ? `Study-prep Agent Check: the learner's agent answered ${Math.round((Number(score) || 0) * 100)}% from their notes (mastery → ${mastery?.next ?? "n/a"})`
+          : `Study-prep ${passed ? "passed" : "attempt"}: score ${Math.round((Number(score) || 0) * 100)}% (mastery → ${mastery?.next ?? "n/a"})`).slice(0, 1200),
+        provenance: { source, mastery },
       }, { onConflict: "learner_id,source_session_id,source_turn_id,concept_id" });
       if (evidenceError) console.error("[study-prep-store/mastery-evidence]", evidenceError.message);
       return concepts[0].id;

@@ -17,7 +17,7 @@ import { updateKnowledgeConfidence, flagBattleReviewTopics } from "./knowledge.j
 import { emitAutonomyEvent } from "../autonomy/triggers.js";
 import { workerJob } from "../../lib/workerLog.js";
 import { coinsAvailable, schoolBillTo, InsufficientCoins, grantCoins } from "../../lib/coins.js";
-import { REVIEW_REWARD_COINS, minPlayersFor } from "./entry.js";
+import { REVIEW_REWARD_COINS, minPlayersFor, isMarkSheet } from "./entry.js";
 import { prepareRuling, ruling, verdict, JUDGE } from "./judge.js";
 import { HP_PER_MISS_DEFAULT } from "./hp.js";
 import { guardWorker } from "../../lib/redisQuotaGuard.js";
@@ -208,7 +208,9 @@ async function startBattle(battleId) {
   await appendLog(battleId, "battle_start",
     battle.battle_type === "review"
       ? `Study review started — ${competing.length} learner working through the questions.`
-      : `Battle started! ${competing.length} agents competing.`);
+      : battle.battle_type === "check"
+        ? `Agent Check started — ${JUDGE.name} judges, and your agent answers only from what you taught it.`
+        : `Battle started! ${competing.length} agents competing.`);
 
   const { data: firstQ } = await db.from("battle_questions").select("*").eq("battle_id", battleId).eq("question_order", 1).single();
   if (!firstQ) return endBattle(battleId);
@@ -236,8 +238,11 @@ async function startBattle(battleId) {
  * "⏰ ran out of time" and a 0–0 result.
  */
 async function agentAnswer(battleId, questionOrder, participantId, thinkingMs = null) {
-  const { data: battle } = await db.from("battles").select("status").eq("id", battleId).maybeSingle();
+  const { data: battle } = await db.from("battles").select("status, battle_type").eq("id", battleId).maybeSingle();
   if (battle?.status !== "live") return;                       // ended, or ended early
+  // An Agent Check (D45) was paid for up front by Study Prep — one charge per
+  // check (§7.12.2) — so its answers are the platform's, not billed again.
+  const prepaid = battle.battle_type === "check";
 
   const { data: q } = await db.from("battle_questions")
     .select("*").eq("battle_id", battleId).eq("question_order", questionOrder).maybeSingle();
@@ -266,8 +271,8 @@ async function agentAnswer(battleId, questionOrder, participantId, thinkingMs = 
   // the question is embedded, the learner's own notes are searched, and the
   // model is shown ONLY those notes. A correct answer therefore means their
   // notes contained the answer.
-  const billTo = await schoolBillTo(p.user_id).catch(() => null);
-  const wallet = await coinsAvailable({ userId: p.user_id, billTo, min: 1 }).catch(() => ({ ok: true }));
+  const billTo = prepaid ? null : await schoolBillTo(p.user_id).catch(() => null);
+  const wallet = prepaid ? { ok: true } : await coinsAvailable({ userId: p.user_id, billTo, min: 1 }).catch(() => ({ ok: true }));
   let picked = null, basis = "unknown", cited = null;
   let broke = !wallet.ok;
   if (!broke) {
@@ -281,7 +286,7 @@ async function agentAnswer(battleId, questionOrder, participantId, thinkingMs = 
     });
     try {
       const ans = await answerFromRecall({
-        question: q.question_text, options, notes, userId: p.user_id,
+        question: q.question_text, options, notes, userId: p.user_id, ...(prepaid ? { payer: "platform" } : {}),
       });
       basis = ans.basis; cited = ans.cited;
       picked = ans.index;
@@ -457,7 +462,8 @@ async function revealQuestion(battleId, questionOrder) {
   const options = JSON.parse(q.options_json);
 
   const { data: btype } = await db.from("battles").select("battle_type, hp_per_miss").eq("id", battleId).maybeSingle();
-  const isReviewBattle = btype?.battle_type === "review";
+  const isReviewBattle = isMarkSheet(btype?.battle_type);   // a review or an Agent Check: no HP, no XP race
+  const judgeRules = btype?.battle_type !== "review";       // Sergeant rules in every contest and every Agent Check
   // What a miss costs: the creator set it, and invitees saw it before accepting.
   const hpPerMiss = btype?.hp_per_miss ?? HP_PER_MISS_DEFAULT;
 
@@ -538,7 +544,7 @@ async function revealQuestion(battleId, questionOrder) {
   }
 
   // Sergeant's ruling: the key (marking is never a model's call) and why.
-  const judged = isReviewBattle ? null : await ruling(q).catch(() => null);
+  const judged = judgeRules ? await ruling(q).catch(() => null) : null;
   if (judged) await appendLog(battleId, "judge_ruling", judged.text, null, JUDGE.name, null, questionOrder, { why: judged.why });
 
   getIO().to(`battle:${battleId}`).emit("battle:reveal", {
@@ -678,7 +684,10 @@ async function endBattle(battleId) {
   // to the leaderboard exactly as a battle's does. Paying a flat prize for
   // turning up would make a review the cheapest XP on the platform; paying
   // nothing would make it the only work that does not count.
-  const isReview = battleInfo?.battle_type === "review";
+  const isReview = isMarkSheet(battleInfo?.battle_type);
+  // An Agent Check (D45) is Study Prep's practice: no XP, no reward coins —
+  // Study Prep scores it and tells the learner in chat.
+  const isCheck = battleInfo?.battle_type === "check";
   // A TEAM battle (2v2): the team with more correct answers wins; every
   // member of it is a winner. Ties share the result.
   const isTeam = battleInfo?.battle_type === "team";
@@ -712,7 +721,7 @@ async function endBattle(battleId) {
     const p = participants[i];
     const r = rankOf.get(p.id);
     const share = (p.correct_answers ?? 0) / Math.max(1, battleInfo?.total_questions ?? 0);
-    const xpEarned = isReview
+    const xpEarned = isCheck ? 0 : isReview
       ? Math.round((pool ?? 0) * Math.min(1, share))
       : (xpDist[p.id] ?? 0);
     earnedXp.set(p.id, xpEarned);
@@ -732,7 +741,7 @@ async function endBattle(battleId) {
 
   // A review is a check of knowledge, not a contest: everyone who took part
   // gets a free coin from the platform for doing it.
-  if (isReview && REVIEW_REWARD_COINS > 0) {
+  if (isReview && !isCheck && REVIEW_REWARD_COINS > 0) {
     for (const p of participants) {
       const gave = await grantCoins({ userId: p.user_id, coins: REVIEW_REWARD_COINS, feature: "review_participation", ref: battleId }).catch(() => null);
       if (gave != null) {
@@ -757,7 +766,9 @@ async function endBattle(battleId) {
   const ss = String(durSecs % 60).padStart(2, "0");
 
   await appendLog(battleId, "battle_end",
-    isReview
+    isCheck
+      ? `Agent Check complete — ${winner?.score ?? 0} of ${battleInfo?.total_questions ?? 0} correct.`
+      : isReview
       ? `Review complete — ${winner?.score ?? 0} of ${battleInfo?.total_questions ?? 0} correct. Mark sheet ready.`
       : winner ? `Battle complete! ${winner.user_agents?.agent_name} wins ${winner.score ?? 0}–${runnerUp?.score ?? 0}`
       : "Battle complete — every agent ran out of HP, so nobody is ranked",
@@ -793,6 +804,15 @@ async function endBattle(battleId) {
     }
   }
   for (const p of participants) toldNoCoins.delete(`${battleId}:${p.id}`);
+
+  // An Agent Check hands its result to Study Prep: the Engine scores it, the
+  // topic moves on (or offers a retest), and the protégé reports in chat.
+  if (isCheck) {
+    try {
+      const { completeAgentCheckBattle } = await import("../adaptive-learning/study-prep/wiring.js");
+      await completeAgentCheckBattle(battleId);
+    } catch (e) { console.warn("[battle-worker] agent check result:", e.message); }
+  }
 
   // Revisions, once, now that the whole battle can be seen.
   //

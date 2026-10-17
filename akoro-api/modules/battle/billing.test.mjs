@@ -22,16 +22,25 @@ test("questions: the creator pays once (checked up front), a platform battle is 
 });
 
 test("answers: each learner pays for their own agent; the shared question vector is the app's", () => {
-  assert.match(recall, /__feature: "battle_answer",\s*__userId: userId,/);
+  assert.match(recall, /__feature: payer === "platform" \? "agent_check_answer" : "battle_answer",\s*__userId: userId,/);
   assert.match(recall, /__feature: "battle_recall",[\s\S]{0,200}__payer: "platform",/);
   assert.match(worker, /coinsAvailable\(\{ userId: p\.user_id, billTo, min: 1 \}\)/);
   assert.match(worker, /e instanceof InsufficientCoins\) broke = true/);
 });
 
+test("an Agent Check (D45) was charged once by Study Prep: its answers are the platform's, nothing else is", () => {
+  assert.match(worker, /const prepaid = battle\.battle_type === "check";/);
+  assert.match(worker, /const wallet = prepaid \? \{ ok: true \} : await coinsAvailable/);
+  assert.match(worker, /\.\.\.\(prepaid \? \{ payer: "platform" \} : \{\}\)/);
+  assert.match(recall, /\.\.\.\(payer === "platform" \? \{ __payer: "platform" \} : \{\}\)/);
+});
+
 test("Sergeant judges for free: every judge call is the platform's, and a review has no judge", () => {
   assert.equal((judge.match(/\.\.\.PLATFORM, __feature: "battle_judge"/g) || []).length, 2);
   assert.match(judge, /const PLATFORM = \{ __payer: "platform" \};/);
-  assert.match(worker, /const judged = isReviewBattle \? null : await ruling\(q\)/);
+  // Sergeant rules in every contest and in every Agent Check; never in a review.
+  assert.match(worker, /const judgeRules = btype\?\.battle_type !== "review";/);
+  assert.match(worker, /const judged = judgeRules \? await ruling\(q\)\.catch\(\(\) => null\) : null;/);
   assert.match(worker, /if \(!isReview\) \{\s*const v = await verdict\(/);
   // Marking stays the stored key — the judge explains, it doesn't decide.
   assert.doesNotMatch(judge, /is_correct:/);

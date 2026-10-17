@@ -174,21 +174,27 @@ export async function revokeGrant({ grantId, admin }) {
 /**
  * Post the agent's message into the learner's chat — the request's chat if it
  * still exists and is theirs, else a new chat — and notify. Idempotent per
- * `messageId` when given.
+ * `messageId` when given. `meta` rides the message (a card: { battle }), and
+ * `createId` names the chat to create (and reuse) when there is none.
  */
-export async function postIntoChat({ userId, conversationId, title, text, kind = "agent_follow_up", messageId = null }) {
+export async function postIntoChat({ userId, conversationId, title, text, kind = "agent_follow_up", messageId = null, meta = null, createId = null }) {
   const now = new Date().toISOString();
   let sessionId = null;
   if (conversationId) {
     const { data } = await db.from("chat_sessions").select("id").eq("id", conversationId).eq("user_id", userId).maybeSingle();
     sessionId = data?.id || null;
   }
+  if (!sessionId && createId) {
+    // A thread kept for one purpose (a Study Prep session's chat): reuse it by id.
+    const { data } = await db.from("chat_sessions").select("id").eq("id", createId).eq("user_id", userId).maybeSingle();
+    sessionId = data?.id || null;
+  }
   if (!sessionId) {
-    sessionId = randomUUID();
+    sessionId = createId || randomUUID();
     const { error } = await db.from("chat_sessions").insert({ id: sessionId, user_id: userId, title: String(title || "Your agent").slice(0, 80), created_at: now, updated_at: now, last_message_at: now });
     if (error) throw new Error("couldn't create the chat");
   }
-  const { error } = await db.from("chat_messages").upsert({ id: messageId || randomUUID(), session_id: sessionId, user_id: userId, role: "agent", text, created_at: now }, { onConflict: "id", ignoreDuplicates: true });
+  const { error } = await db.from("chat_messages").upsert({ id: messageId || randomUUID(), session_id: sessionId, user_id: userId, role: "agent", text, created_at: now, ...(meta ? { meta } : {}) }, { onConflict: "id", ignoreDuplicates: true });
   if (error) throw new Error("couldn't post into the chat");
   await db.from("chat_sessions").update({ updated_at: now, last_message_at: now }).eq("id", sessionId).eq("user_id", userId).then(() => {}, () => {});
   const link = `/app?tab=agent&sessionId=${encodeURIComponent(sessionId)}`;

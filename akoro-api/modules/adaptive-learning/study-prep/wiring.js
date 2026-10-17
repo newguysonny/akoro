@@ -37,8 +37,63 @@ const topicWorkflow = {
 // generateOutline / generatedTopics: the AI-drafted outline fallback (§8.7).
 const syllabus = { resolveTopics, prerequisiteEdges, generateOutline, generatedTopics };
 
+/**
+ * D45: practice as an Agent Check battle. OFF until the learner UI for it is
+ * reviewed — the current Study Prep card renders the human-answered practice,
+ * and turning this on without the new card would change what learners see.
+ * AKORO_STUDY_PREP_AGENT_CHECK=true turns it on.
+ */
+export const agentCheckEnabled = () => String(process.env.AKORO_STUDY_PREP_AGENT_CHECK ?? "false").toLowerCase() === "true";
+
+/** The Agent Check behind the harness (battle/agentCheck.js + the learner's notes). */
+const makeAgentCheck = ({ questions, secondsPerQuestion } = {}) => ({
+  async coverage({ learnerId, topic, subject }) {
+    const { embedQuestion, recall } = await import("../../battle/agentRecall.js");
+    const embedding = await embedQuestion(topic);
+    const notes = await recall({ studentId: learnerId, embedding, topic, queryText: topic, subject, limit: 4 });
+    const n = notes?.length || 0;
+    return { notes: n, strength: n === 0 ? "none" : n < 3 ? "thin" : "good" };
+  },
+  async start({ learnerId, subject, topic, studyPrepTopicId, mode }) {
+    const { createCheckBattle } = await import("../../battle/agentCheck.js");
+    return createCheckBattle({ learnerId, subject, topic, studyPrepTopicId, mode,
+      ...(questions ? { total: questions } : {}), ...(secondsPerQuestion ? { secondsPerQuestion } : {}) });
+  },
+  async results(battleId) {
+    const { checkResults } = await import("../../battle/agentCheck.js");
+    return checkResults(battleId);
+  },
+});
+const agentCheck = makeAgentCheck();
+
+/** The protégé's messages: one chat thread per Study Prep session, carrying the battle to watch. */
+const protege = {
+  async say({ learnerId, session, text, battle }) {
+    const { postIntoChat } = await import("../../self-tooling/escalation.js");
+    return postIntoChat({
+      userId: learnerId, conversationId: null, createId: session.id,
+      title: `Study Prep: ${session.goal || session.subject || "your plan"}`.slice(0, 80),
+      text, kind: "agent_check", meta: { battle },
+    });
+  },
+};
+
 export function getHarness() {
-  return createHarness({ store, topicWorkflow, syllabus });
+  return createHarness({ store, topicWorkflow, syllabus, ...(agentCheckEnabled() ? { agentCheck, protege } : {}) });
+}
+
+/**
+ * The Agent Check harness regardless of the switch — for the gate's
+ * scenario (a test learner), never for a learner's request.
+ * `questions` / `secondsPerQuestion` shorten the battle for a gate run.
+ */
+export function getAgentCheckHarness({ questions, secondsPerQuestion } = {}) {
+  return createHarness({ store, topicWorkflow, syllabus, agentCheck: makeAgentCheck({ questions, secondsPerQuestion }), protege });
+}
+
+/** The battle worker's hook when an Agent Check ends. Scores even if the switch was turned off meanwhile. */
+export async function completeAgentCheckBattle(battleId) {
+  return createHarness({ store, topicWorkflow, syllabus, agentCheck, protege }).completeAgentCheck({ battleId });
 }
 
 const readTools = {

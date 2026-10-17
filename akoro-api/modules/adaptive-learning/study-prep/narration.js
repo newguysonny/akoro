@@ -28,6 +28,11 @@ const TEMPLATES = {
   plan_adjusted: (f) => `Plan adjusted${f.dropped ? ` — removed ${f.dropped}` : ""}. The cost estimate was updated to match.`,
   topic_started: (f) => `Starting ${label(f)}. A short diagnostic comes first — it shows what you already know.`,
   practice_generated: (f) => `Fresh practice generated for ${label(f)}${f.attemptNumber ? ` (attempt ${f.attemptNumber})` : ""}. ${f.coins ? `${f.coins} coins charged.` : ""}`.trim(),
+  // The Agent Check (D45, §7.12): the learner's agent answered, never the learner —
+  // so it is "your agent answered 4 of 5", never "you mastered".
+  agent_check_started: (f) => `Agent Check on ${label(f)}${f.mode === "retest" ? " (retest)" : ""}: your agent answers from what you taught it, and Sergeant judges. ${f.coins ? `${f.coins} coins charged.` : ""}`.trim(),
+  agent_check_skipped: (f) => `Your agent has no notes on ${label(f)} yet, so there is nothing to check — teach it first. Nothing was charged.`,
+  agent_check_scored: (f) => `Your agent answered ${f.correct} of ${f.total} from your notes (${f.percentage}%)${f.guessed ? `, and had to guess on ${f.guessed}` : ""}. ${f.passed ? "Above the pass mark — topic understood." : `Below the ${f.thresholdPercentage}% pass mark.`}`,
   practice_scored: (f) => `Scored ${f.score} of ${f.total} (${f.percentage}%). ${f.passed ? "Above the pass mark — topic understood." : `Below the ${f.thresholdPercentage}% pass mark.`}`,
   strategy_offered: (f) => `Offered the ${String(f.strategy || "").replace(/_/g, " ")} strategy for ${label(f)} — you choose whether to use it.`,
   teach_back_confirmed: (f) => `You confirmed the teach-back for ${label(f)}. A fresh retest is unlocked — same standard, new questions.`,

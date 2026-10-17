@@ -43,7 +43,16 @@ const HTTP_FOR_CODE = {
 /** What the plan card says when the session plans against a generated outline (§8.7). */
 export const GENERATED_OUTLINE_LABEL = "AI-drafted outline — not your school's official syllabus";
 
-export function createHarness({ store, topicWorkflow, syllabus, now = () => new Date().toISOString() }) {
+/**
+ * agentCheck (D45, §7.12) — when given, practice IS the Agent Check: a battle
+ * the learner watches, where their protégé answers only from their notes.
+ *   coverage({ learnerId, topic, subject }) → { notes, strength: none|thin|good }
+ *   start({ learnerId, subject, topic, studyPrepTopicId, mode }) → { battleId, placed, title }
+ *   results(battleId) → { total, correct, guessed, wrong, unknown, score, perQuestion, gaps, studyPrepTopicId }
+ * protege.say({ learnerId, session, text, battle }) — the protégé's message in chat.
+ * Without agentCheck the legacy human-answered practice (topicWorkflow) runs.
+ */
+export function createHarness({ store, topicWorkflow, syllabus, agentCheck = null, protege = null, now = () => new Date().toISOString() }) {
   const reject = async (session, code, message, facts = {}) => {
     if (session) {
       await log(session.id, null, {
@@ -69,6 +78,8 @@ export function createHarness({ store, topicWorkflow, syllabus, now = () => new 
     status: row.status, attemptsUsed: Number(row.attempts_used || 0), deferredRetryUsed: Boolean(row.deferred_retry_used),
     flaggedReason: row.flagged_reason || null, examPrepRunId: row.exam_prep_run_id || null,
     learnerConfirmedReady: Boolean(row.learner_confirmed_ready),
+    checkBattleId: row.check_battle_id || null, checkMode: row.check_mode || null,
+    checkScoredAt: row.check_scored_at || null, checkResult: row.check_result || null,
   });
 
   const publicSession = (row, topics = null) => ({
@@ -269,6 +280,8 @@ export function createHarness({ store, topicWorkflow, syllabus, now = () => new 
     const gate = teachBackGate({ mode, learnerConfirmedReady: topic.learner_confirmed_ready });
     if (!gate.ok) return reject(session, gate.code, gate.message, { topic: topic.label });
 
+    if (agentCheck) return startAgentCheck({ session, topic, learnerId, mode });
+
     // Charge first (§4.11). Never generate on credit.
     const coins = STUDY_PREP_COST.COINS_PER_PRACTICE;
     let charge;
@@ -308,6 +321,135 @@ export function createHarness({ store, topicWorkflow, syllabus, now = () => new 
       await store.refundCoins({ charge, feature: "study_prep_practice", ref: `study_prep:${session.id}` });
       throw error;
     }
+  }
+
+  /**
+   * The Agent Check (D45, §7.12): the protégé is checked in a battle the
+   * learner watches. No notes on the topic → nothing to check, nothing
+   * charged, go and teach. Otherwise: charge once (§7.12.2), create the
+   * battle, and the protégé says so in chat with the battle to watch.
+   */
+  async function startAgentCheck({ session, topic, learnerId, mode }) {
+    if (topic.check_battle_id && !topic.check_scored_at) {
+      return reject(session, "invalid_state_transition", "An Agent Check on this topic is still running — watch it finish first");
+    }
+    const coverage = await agentCheck.coverage({ learnerId, topic: topic.label, subject: session.subject });
+    if (!coverage || coverage.strength === "none") {
+      await log(session.id, topic.id, {
+        eventType: "harness_decision", origin: "harness", decisionNode: "agent_check_skipped",
+        facts: { topic: topic.label, notes: 0 },
+        narrative: deliberate("agent_check_skipped", { topicLabel: topic.label })?.narrative,
+      });
+      return { session: publicSession(session), topic: publicTopic(topic), skipped: { reason: "no_notes", next: "teach" } };
+    }
+
+    const coins = STUDY_PREP_COST.COINS_PER_PRACTICE;
+    let charge;
+    try {
+      charge = await store.chargeCoins({ learnerId, coins, feature: "study_prep_practice", ref: `study_prep:${session.id}` });
+    } catch (error) {
+      if (error instanceof InsufficientBalanceError || error?.code === "insufficient_balance") {
+        await pause(session, "insufficient_balance", { topic: topic.label });
+        throw new HarnessRejection("insufficient_balance", "Not enough coins for another Agent Check — the session is paused and resumable", 402);
+      }
+      throw error;
+    }
+
+    let check;
+    try {
+      check = await agentCheck.start({ learnerId, subject: session.subject, topic: topic.label, studyPrepTopicId: topic.id, mode });
+    } catch (error) {
+      // The check never ran — refund, keep the session intact.
+      await store.refundCoins({ charge, feature: "study_prep_practice", ref: `study_prep:${session.id}` });
+      throw error;
+    }
+    const updatedTopic = await store.updateTopicConditional(topic.id, "active", {
+      attempts_used: Number(topic.attempts_used) + 1,
+      check_battle_id: check.battleId, check_mode: mode, check_scored_at: null, check_result: null,
+      // A retest spends the learner's teach-back; the next one needs a new one.
+      ...(mode === "retest" ? { learner_confirmed_ready: false } : {}),
+      updated_at: now(),
+    });
+    await log(session.id, topic.id, {
+      eventType: "harness_decision", origin: "harness", decisionNode: "agent_check_started",
+      facts: { topic: topic.label, mode, battleId: check.battleId, questions: check.placed, coins, attemptNumber: Number(topic.attempts_used) + 1 },
+      narrative: deliberate("agent_check_started", { topicLabel: topic.label, mode, coins })?.narrative,
+    });
+    await protege?.say({
+      learnerId, session,
+      text: `I've asked my teaching guide to check what you taught me about ${topic.label}${mode === "retest" ? " again" : ""}. I can only answer from your notes, and Sergeant judges every answer. Watch me answer.`,
+      battle: { id: check.battleId, kind: "agent_check", topic: topic.label, mode },
+    }).catch(() => {});
+    return {
+      session: publicSession(session), topic: publicTopic(updatedTopic || topic),
+      check: { battleId: check.battleId, mode, questions: check.placed },
+    };
+  }
+
+  /**
+   * An Agent Check's battle ended (the battle worker calls this). The Engine
+   * scores it — a guess is not demonstrated — the topic is settled or offered
+   * a retest, mastery evidence is written as the agent's (agent_recall), and
+   * the protégé reports in chat. Scored once per check.
+   */
+  async function completeAgentCheck({ battleId }) {
+    if (!agentCheck) return null;
+    const result = await agentCheck.results(battleId);
+    if (!result?.studyPrepTopicId) return null;
+    const topic = await store.getTopicById(result.studyPrepTopicId);
+    if (!topic || topic.check_battle_id !== battleId) return null;
+    const claimed = await store.claimCheckScore(topic.id, battleId, {
+      correct: result.correct, guessed: result.guessed, wrong: result.wrong, unknown: result.unknown,
+      total: result.total, score: result.score, perQuestion: result.perQuestion, gaps: result.gaps,
+    }, now());
+    if (!claimed) return null;   // already scored
+    const session = await store.getSession(topic.session_id);
+    if (!session) return null;
+
+    const policy = await topicWorkflow.policyFor({ examBoard: session.exam_board, subject: session.subject });
+    const threshold = applyThreshold({
+      score: result.score, passThreshold: policy.pass_threshold,
+      attemptsUsed: Number(topic.attempts_used), maxAttempts: policy.max_attempts,
+    });
+    const outcome = threshold.passed ? "understood" : threshold.capped ? "capped_out" : "retest_offered";
+    const percentage = Math.round((result.score || 0) * 100);
+    const thresholdPercentage = Math.round(Number(policy.pass_threshold) * 100);
+    await log(session.id, topic.id, {
+      eventType: "engine_result", origin: "engine",
+      facts: {
+        topic: topic.label, source: "agent_recall", battleId, score: result.score, correct: result.correct,
+        guessed: result.guessed, total: result.total, percentage, passed: threshold.passed,
+        attemptsRemaining: threshold.attemptsRemaining, outcome, gaps: result.gaps,
+      },
+      narrative: deliberate("agent_check_scored", {
+        topicLabel: topic.label, correct: result.correct, total: result.total, guessed: result.guessed,
+        percentage, passed: threshold.passed, thresholdPercentage,
+      })?.narrative,
+    });
+    const mastery = masteryWriteBack({
+      currentMastery: topic.mastery ?? null, score: result.score, passed: threshold.passed,
+      attemptsUsed: Number(topic.attempts_used),
+    });
+    await store.recordMasteryEvidence({
+      learnerId: session.learner_id, sessionRef: `study_prep:${session.id}`, topicLabel: topic.label, subject: session.subject,
+      passed: threshold.passed, score: result.score, mastery, source: "agent_recall",
+    });
+    let updatedTopic = claimed;
+    if (outcome !== "retest_offered") {
+      updatedTopic = (await store.updateTopicConditional(topic.id, "active", { status: outcome, updated_at: now() })) || claimed;
+    }
+
+    const next = outcome === "understood" ? "That's above the pass mark — this topic is understood."
+      : outcome === "capped_out" ? "That was the last attempt on this topic, so we'll move on and come back to it."
+        : `That's below the ${thresholdPercentage}% pass mark. Teach me what I missed, then tap "I've taught it" and I'll be checked again.`;
+    const gapLine = result.gaps.length ? ` I couldn't answer from your notes on: ${result.gaps.slice(0, 4).join("; ")}.` : "";
+    const guessLine = result.guessed ? ` I had to guess on ${result.guessed} — a guess doesn't count.` : "";
+    await protege?.say({
+      learnerId: session.learner_id, session,
+      text: `The check on ${topic.label} is done: I answered ${result.correct} of ${result.total} from your notes.${guessLine}${gapLine} ${next}`,
+      battle: { id: battleId, kind: "agent_check", topic: topic.label, result: { correct: result.correct, total: result.total, outcome } },
+    }).catch(() => {});
+    return { session: publicSession(session), topic: publicTopic(updatedTopic), result, outcome, mastery };
   }
 
   /**
@@ -599,7 +741,8 @@ export function createHarness({ store, topicWorkflow, syllabus, now = () => new 
       if (session.status === "paused") return `paused:${session.pausedReason || "learner_requested"}`;
       if (session.status === "completed" || session.status === "cancelled" || session.status === "abandoned") return "ended";
       if (!current) return "advance_or_conclude";
-      if (!current.examPrepRunId) return "start_practice";
+      if (current.checkBattleId && !current.checkScoredAt) return "agent_check_running";
+      if (!current.examPrepRunId && !current.checkBattleId) return "start_practice";
       const run = current.learnerConfirmedReady ? "retest_ready" : "awaiting_submission_or_teach_back";
       return run;
     })();
@@ -608,7 +751,7 @@ export function createHarness({ store, topicWorkflow, syllabus, now = () => new 
 
   return {
     createSession, proposePlan, confirmPlan, adjustPlan,
-    startTopicPractice, submitPractice, confirmTeachBack, offerStrategy,
+    startTopicPractice, submitPractice, completeAgentCheck, confirmTeachBack, offerStrategy,
     advanceTopic, deferTopic, retryDeferredTopic, flagTopic,
     concludeSession, pauseSession, resumeSession, cancelSession,
     validateProposedPlan, getSessionView, sessionNext, generateSyllabus,

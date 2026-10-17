@@ -200,7 +200,8 @@
     "2026-seed-instructor-testers.sql",
     "2026-verify-real-user-runs.sql",
     "2026-study-prep-generated-syllabi.sql",
-    "2026-agent-knowledge-retention.sql"
+    "2026-agent-knowledge-retention.sql",
+    "2026-study-prep-agent-check.sql"
   ],
   "demo": [
     "2026-seed-school-passwords.sql",

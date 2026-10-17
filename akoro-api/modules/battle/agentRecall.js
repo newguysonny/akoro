@@ -163,6 +163,8 @@ export async function answerFromRecall({
   // models on "does it refuse when the notes are silent" is the only way that
   // constraint is more than an assertion.
   model = ANSWER_MODEL,
+  // "platform": the app pays — an Agent Check was charged once, up front (D45).
+  payer = null,
 }) {
   if (!notes.length) {
     return { index: null, basis: "unknown", cited: null, why: "nothing in memory on this" };
@@ -185,8 +187,9 @@ export async function answerFromRecall({
     // 0: recalling what a note says is not a creative act, and a battle that
     // gave different answers to the same notes would not be measuring anything.
     temperature: 0,
-    __feature: "battle_answer",
+    __feature: payer === "platform" ? "agent_check_answer" : "battle_answer",
     __userId: userId,
+    ...(payer === "platform" ? { __payer: "platform" } : {}),
     response_format: { type: "json_object" },
     messages: [
       {
