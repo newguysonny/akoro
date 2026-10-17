@@ -38,12 +38,11 @@ const topicWorkflow = {
 const syllabus = { resolveTopics, prerequisiteEdges, generateOutline, generatedTopics };
 
 /**
- * D45: practice as an Agent Check battle. OFF until the learner UI for it is
- * reviewed — the current Study Prep card renders the human-answered practice,
- * and turning this on without the new card would change what learners see.
- * AKORO_STUDY_PREP_AGENT_CHECK=true turns it on.
+ * D45: practice as an Agent Check battle — ON by default, no env needed.
+ * AKORO_STUDY_PREP_AGENT_CHECK=false is only an off switch, back to the
+ * human-answered practice.
  */
-export const agentCheckEnabled = () => String(process.env.AKORO_STUDY_PREP_AGENT_CHECK ?? "false").toLowerCase() === "true";
+export const agentCheckEnabled = () => String(process.env.AKORO_STUDY_PREP_AGENT_CHECK ?? "true").toLowerCase() !== "false";
 
 /** The Agent Check behind the harness (battle/agentCheck.js + the learner's notes). */
 const makeAgentCheck = ({ questions, secondsPerQuestion } = {}) => ({
@@ -90,6 +89,14 @@ export function getHarness() {
  */
 export function getAgentCheckHarness({ questions, secondsPerQuestion } = {}) {
   return createHarness({ store, topicWorkflow, syllabus, agentCheck: makeAgentCheck({ questions, secondsPerQuestion }), protege });
+}
+
+/**
+ * The human-answered practice regardless of the switch (what
+ * AKORO_STUDY_PREP_AGENT_CHECK=false gives) — for the gate's scenario.
+ */
+export function getPracticeHarness() {
+  return createHarness({ store, topicWorkflow, syllabus });
 }
 
 /** The battle worker's hook when an Agent Check ends. Scores even if the switch was turned off meanwhile. */

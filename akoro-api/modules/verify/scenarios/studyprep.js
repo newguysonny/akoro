@@ -32,7 +32,9 @@ export const planCompletes = {
 
 export const practiceChargedOnce = {
   name: "studyprep.practice_charged_once", area: "study-prep", risk: "write",
-  description: "One Study Prep practice costs the learner exactly the flat practice price — the question generation is not billed on top.",
+  // The human-answered practice (the off switch's path); the Agent Check's
+  // own one-charge rule is studyprep.agent_check_battle.
+  description: "One human-answered Study Prep practice costs the learner exactly the flat practice price — the question generation is not billed on top.",
   params: { learner: { default: "@tester13" }, subject: { default: "Basic Science" }, classLevel: { default: "JSS1" } },
   async run(ctx, p) {
     const me = await ctx.as(p.learner);
@@ -54,10 +56,16 @@ export const practiceChargedOnce = {
     const [acct] = await ctx.db.rows("coin_accounts", { owner_id: me.id }, { columns: "id, balance", limit: 1 });
     if (!acct) ctx.expect.blocked(`${p.learner} has no coin account`);
     const t0 = new Date(Date.now() - 1000).toISOString();
-    const practice = await ctx.http({ as: p.learner, method: "POST", path: `${base}/${id}/topics/${topic.id}/practice`, body: { mode: "diagnostic" } });
-    if (practice.status === 402) ctx.expect.blocked(`${p.learner} can't afford a practice`);
-    ctx.expect.status("practice generated", practice, [200, 201]);
-    const runId = practice.body?.run?.id;
+    const { getPracticeHarness } = await import("../../adaptive-learning/study-prep/wiring.js");
+    let practice;
+    try {
+      practice = await getPracticeHarness().startTopicPractice({ sessionId: id, learnerId: me.id, topicId: topic.id, mode: "diagnostic" });
+    } catch (e) {
+      if (e.code === "insufficient_balance") ctx.expect.blocked(`${p.learner} can't afford a practice`);
+      throw e;
+    }
+    ctx.expect.ok("practice generated", !!practice?.attempt, JSON.stringify(practice || null).slice(0, 200));
+    const runId = practice?.run?.id;
     if (runId) ctx.cleanup(() => ctx.db.deleteOwned("edu.learner_exam_prep_runs", { ownerColumn: "learner_id", ownerId: me.id, filters: { id: runId } }));
 
     // Token charges are written just after the provider answers — give them a moment.
@@ -119,7 +127,7 @@ export const generatedOutline = {
 // the harness charges once, a 'check' battle runs (the protégé answers from
 // the learner's notes, Sergeant judges), the Engine scores it as the agent's,
 // and the protégé reports in chat. Runs the Agent Check path directly, so it
-// works while AKORO_STUDY_PREP_AGENT_CHECK is still off for learners.
+// works even where AKORO_STUDY_PREP_AGENT_CHECK=false switches it off.
 export const agentCheckBattle = {
   name: "studyprep.agent_check_battle", area: "study-prep", risk: "write", regression: false,
   description: "An Agent Check runs as a real battle: one 2-coin charge, the protégé answers from the learner's notes, Sergeant rules, the result is scored as the agent's and posted in chat.",

@@ -72,16 +72,16 @@ test("GET /sessions restores the learner's active session view with topics and p
   assert.equal(res.body.events[0].narrative, "Started");
 });
 
-test("the session view says whether practice is the Agent Check (D45), so the card can word it", async (t) => {
+test("the session view says whether practice is the Agent Check (D45, on by default), so the card can word it", async (t) => {
   const id = randomUUID();
   const seed = () => ({ [S]: [session(id, ME, "topic_active")], "edu.study_prep_topics": [], "edu.study_prep_events": [] });
   const before = process.env.AKORO_STUDY_PREP_AGENT_CHECK;
   t.after(() => { if (before === undefined) delete process.env.AKORO_STUDY_PREP_AGENT_CHECK; else process.env.AKORO_STUDY_PREP_AGENT_CHECK = before; });
   fakeFor(t, seed());
-  delete process.env.AKORO_STUDY_PREP_AGENT_CHECK;
-  assert.equal((await call("GET", `/sessions/${id}`)).body.agentCheck, false);
-  process.env.AKORO_STUDY_PREP_AGENT_CHECK = "true";
+  delete process.env.AKORO_STUDY_PREP_AGENT_CHECK;   // on by default
   assert.equal((await call("GET", `/sessions/${id}`)).body.agentCheck, true);
+  process.env.AKORO_STUDY_PREP_AGENT_CHECK = "false";   // the off switch
+  assert.equal((await call("GET", `/sessions/${id}`)).body.agentCheck, false);
 });
 
 test("GET /sessions surfaces a db failure as a 500, not as 'no session'", async (t) => {
