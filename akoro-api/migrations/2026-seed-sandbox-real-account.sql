@@ -8,3 +8,8 @@
 INSERT INTO public.users (email, username, password_hash, full_name, role, is_active, onboarding_completed, email_verified, country)
 SELECT 'sbxlearner@sandbox.akoro.invalid', 'sbxlearner', '!', 'Sandbox Learner', 'student', true, true, true, 'Nigeria'
 WHERE NOT EXISTS (SELECT 1 FROM public.users WHERE email = 'sbxlearner@sandbox.akoro.invalid');
+
+-- Its own learning agent (tasks are kept by the agent).
+INSERT INTO edu.student_agents (student_id, name)
+SELECT id, 'Sandy' FROM public.users WHERE email = 'sbxlearner@sandbox.akoro.invalid'
+ON CONFLICT (student_id) DO NOTHING;
