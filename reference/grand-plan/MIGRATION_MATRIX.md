@@ -49,7 +49,10 @@ These change what Phase 1 and later phases must do first.
 - Two simultaneous teaching completions both awarded XP.
 - Starting a retest overwrote the diagnostic score with 0.
 
-Still open: F4-F7, plus the `resolve_class` / `resolve_school` steps of §8.7 (school syllabi from `mgmt.*`).
+| F4 ungated phase paths (D42) | `getOrchestrator` always builds the gated student session; a guide pair / trained agent / saved preference only picks the guide. NaNa / Trained orchestrators no longer run turns. Legacy socket starts retired. `switch_agent_pair` keeps the whole session (it used to rebuild a decay session as free teaching); `start_adaptive_session` honours the chosen guide. | `agents/registry.d42.test.mjs`; regression PASS |
+| F6 Python teaching bridge (D43) | One shared session start (`teaching-session/start.js`) for the socket and the bridge; the bridge saves the session (recordId), every turn, completes on end; continuation/decay run in Akoro with `previousSessionId` / `notificationId`; the Python agent no longer falls back to its local loop on an outage. | Gate `teaching.bridge_persists` PASS; 79 Python tests |
+
+Still open: F5, F7, plus the `resolve_class` / `resolve_school` steps of §8.7 (school syllabi from `mgmt.*`). Python sessions using Python-only features (attached conversation, concept-state / insights / soul-state flags) still run on its local loop until those contracts are unified.
 
 ## 2. Open questions (§20)
 
