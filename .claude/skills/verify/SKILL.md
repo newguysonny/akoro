@@ -33,6 +33,13 @@ where runs go and the sandbox's build with
 `.data.sandbox.sha` to equal the pushed commit (the sandbox redeploys
 separately). Pin a run to production with `"target":"production"` in the body.
 
+### Real accounts (V4)
+
+The gate key can never write to a real account — real users stay read/dry.
+A write check on a real account is started only by an admin in the admin
+app (Insights → Real-account checks); never ask for or try to work around
+that. The whole path is tested on the sandbox with suite `real-user`.
+
 ## Workflow
 
 1. Unit/contract tests pass locally.

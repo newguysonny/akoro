@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import AkoroLogo from './common/AkoroLogo.jsx';
-import {LayoutDashboard, Users, GraduationCap, BookOpen, BookMarked, LayoutTemplate, FileText, Briefcase, Bell, Settings, LogOut, BarChart2, CreditCard, Star, Tag, DollarSign, FileBarChart, Inbox, Megaphone, Building2, Bot, ChevronDown, Menu, Store, Library, Cpu, FlaskConical, Wrench, Layers, School, History, Repeat, Receipt, Ticket, RefreshCw, X, MessageCircleQuestion, MessageSquare, Home, BookCopy, FolderOpen } from 'lucide-react';
+import {LayoutDashboard, Users, GraduationCap, BookOpen, BookMarked, LayoutTemplate, FileText, Briefcase, Bell, Settings, LogOut, BarChart2, CreditCard, Star, Tag, DollarSign, FileBarChart, Inbox, Megaphone, Building2, Bot, ChevronDown, Menu, Store, Library, Cpu, FlaskConical, Wrench, Layers, School, History, Repeat, Receipt, Ticket, RefreshCw, X, MessageCircleQuestion, MessageSquare, Home, BookCopy, FolderOpen, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import AppHeader, { ReferenceChatIcon } from './AppHeader.jsx';
 
@@ -41,6 +41,7 @@ const NAV_GROUPS = [
     { to: '/evals',     icon: FlaskConical, label: 'Evals' },
     { to: '/agent-tool-requests', icon: Wrench, label: 'Agent requests' },
     { to: '/agent-tools', icon: Layers, label: 'Agent tools' },
+    { to: '/real-account-checks', icon: ShieldCheck, label: 'Real-account checks' },
   ] },
   { label: 'People', icon: Users, children: [
     { to: '/users',       icon: Users,         label: 'Users' },

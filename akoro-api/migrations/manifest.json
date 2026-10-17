@@ -195,7 +195,8 @@
     "2026-self-tooling-instructors.sql",
     "2026-seed-school.sql",
     "2026-seed-agent-testers.sql",
-    "2026-seed-instructor-testers.sql"
+    "2026-seed-instructor-testers.sql",
+    "2026-verify-real-user-runs.sql"
   ],
   "demo": [
     "2026-seed-school-passwords.sql",
@@ -228,6 +229,7 @@
     "2026-seed-voucher-products.sql",
     "2026-seed-voucher-media.sql",
     "2026-seed-jss1-battle-ready.sql",
-    "2026-seed-course-enrolments.sql"
+    "2026-seed-course-enrolments.sql",
+    "2026-seed-sandbox-real-account.sql"
   ]
 }

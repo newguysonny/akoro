@@ -38,7 +38,7 @@ const shaMatches = (want, have) => !want || (!!have && (have.startsWith(want) ||
 
 export function listScenarios() {
   return Object.values(SCENARIOS).map((s) => ({ name: s.name, area: s.area, risk: s.risk, description: s.description,
-    repeats: s.repeats || 1, params: s.params || {} }));
+    repeats: s.repeats || 1, params: s.params || {}, ...(s.realUserSafe ? { realUserSafe: true } : {}) }));
 }
 export const listSuites = () => Object.entries(SUITES).map(([name, list]) => ({ name, scenarios: list }));
 
@@ -79,11 +79,11 @@ async function auditRealUsers(run, ids) {
   if (error) console.warn(`[verify] audit log failed for ${run.id}: ${error.message}`);
 }
 
-async function runScenarioOnce(def, params, repeat, runId) {
+async function runScenarioOnce(def, params, repeat, runId, approval) {
   const sink = [];
   const evidence = { accounts: [], http: [], agent: [], tools: [], db: [], logs: [], notes: [] };
   const realUsers = new Set();
-  const ctx = createContext({ scenario: def, sink, evidence, realUsers, runId });
+  const ctx = createContext({ scenario: def, sink, evidence, realUsers, runId, approval });
   let error = null, timer;
   try {
     await Promise.race([
@@ -107,12 +107,13 @@ async function runScenarioOnce(def, params, repeat, runId) {
   };
 }
 
-async function runScenario(def, params, runId) {
-  const repeats = Math.min(LIMITS.maxRepeats, Math.max(1, Number(params?.repeats) || def.repeats || 1));
+async function runScenario(def, params, runId, approval) {
+  // An approved real-account run is exactly one pass (V4).
+  const repeats = approval ? 1 : Math.min(LIMITS.maxRepeats, Math.max(1, Number(params?.repeats) || def.repeats || 1));
   const merged = { ...defaultsOf(def), ...(params || {}) };
   const results = [];
   for (let i = 1; i <= repeats; i++) {
-    const r = await runScenarioOnce(def, merged, i, runId);
+    const r = await runScenarioOnce(def, merged, i, runId, approval);
     results.push(r);
     if (r.verdict === "BLOCKED" || r.verdict === "ERROR") break;   // repeating can't fix a precondition
   }
@@ -135,12 +136,18 @@ const defaultsOf = (def) => Object.fromEntries(Object.entries(def.params || {}).
  * promotion check) — it skips the concurrency slot, which the outer run
  * already holds, so it can't wait on itself.
  */
-export function startRun({ scenario, suite, params = {}, expectSha = null, actor = "coding-agent", models = null, nested = false }) {
+/**
+ * `approval` (V4): { id, accountId } from modules/verify/realUser.js — the
+ * only caller that passes it. The gate API never does, so its key can't write
+ * to a real account.
+ */
+export function startRun({ scenario, suite, params = {}, expectSha = null, actor = "coding-agent", models = null, nested = false, approval = null }) {
   const names = suite ? SUITES[suite] : scenario ? [scenario] : null;
   // Model comparison: the same scenario once per model (plan §8.6).
   const compare = Array.isArray(models) && models.length ? models.slice(0, 4).map(String) : null;
   if (compare && !scenario) throw Object.assign(new Error("models compares one scenario — pass scenario, not suite."), { status: 400 });
   if (!names) throw Object.assign(new Error(suite ? `No suite "${suite}".` : "Pass scenario or suite."), { status: 400 });
+  if (approval && (suite || compare)) throw Object.assign(new Error("A real-account run is one scenario."), { status: 400 });
   const missing = names.filter((n) => !SCENARIOS[n]);
   if (missing.length) throw Object.assign(new Error(`Unknown scenario: ${missing.join(", ")}`), { status: 400 });
   const run = {
@@ -169,7 +176,7 @@ export function startRun({ scenario, suite, params = {}, expectSha = null, actor
           : names.map((n) => ({ name: n, params }));
         for (const step of plan) {
           const t0s = Date.now();
-          const res = await runScenario(SCENARIOS[step.name], step.params, run.id);
+          const res = await runScenario(SCENARIOS[step.name], step.params, run.id, approval);
           res.realUsers.forEach((id) => realUsers.add(id));
           delete res.realUsers;
           if (step.label) { res.name = step.label; res.model = step.params.model; }

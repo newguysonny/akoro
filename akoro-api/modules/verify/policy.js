@@ -6,7 +6,9 @@
  * and which risk classes each account allows.
  *
  *   test learners (tester01–50 @demo.akoro.app)  read · dry · write (writes need VERIFY_ALLOW_WRITES)
- *   real users (any other learner)                read · dry only — never a real change (rule 35)
+ *   real users (any other learner)                read · dry only — never a real change (rule 35),
+ *                                                 except ONE run an admin approved for that one
+ *                                                 account (phase V4, realUser.js)
  */
 import db from "../../db.js";
 import { BlockedError } from "./assertions.js";
@@ -20,6 +22,9 @@ export const LIMITS = {
 };
 // Production: writes only when VERIFY_ALLOW_WRITES=true. Local/sandbox are disposable.
 export const writesAllowed = () => TARGET !== "production" || String(process.env.VERIFY_ALLOW_WRITES || "").toLowerCase() === "true";
+// V4: admin-approved write runs on a real account. Production: only with
+// VERIFY_REAL_USER_WRITES=true. Local/sandbox accounts aren't real people.
+export const realUserWritesEnabled = () => TARGET !== "production" || String(process.env.VERIFY_REAL_USER_WRITES || "").toLowerCase() === "true";
 
 /** Same key as the agent console: Authorization: Bearer, x-agent-console-key or ?key=. */
 export function guard(req, res, next) {
@@ -55,10 +60,17 @@ export async function resolveAccount(handle) {
   return { id: u.id, username: u.username, email: u.email, role: String(u.role || "student"), name: u.full_name || u.username, tester: isTester(u) };
 }
 
-/** May a scenario of `risk` act as `account`? Throws PolicyError with the reason. */
-export function assertMayActAs(account, risk) {
+/** Did an admin approve writes on exactly this account for this run? */
+export const approvedFor = (approval, account) => !!approval?.id && !!account?.id && approval.accountId === account.id && realUserWritesEnabled();
+
+/**
+ * May a scenario of `risk` act as `account`? Throws PolicyError with the reason.
+ * `approval` (V4) only ever comes from the admin route, never from the gate API.
+ */
+export function assertMayActAs(account, risk, { approval = null } = {}) {
   if (!RISKS.includes(risk)) throw new PolicyError(`Unknown risk class "${risk}".`);
   if (risk === "write") {
+    if (approvedFor(approval, account)) return;
     if (!account.tester) throw new PolicyError(`Real users are read-only to the gate — "${account.username}" can't be used by a write scenario. Use a test learner (tester01–50).`);
     if (!writesAllowed()) throw new PolicyError("Write scenarios are off — set VERIFY_ALLOW_WRITES=true to allow them on test learners.");
   }
