@@ -97,7 +97,8 @@ export function shapeLearnSuggestions(list) {
   const seen = new Set();
   const out = [];
   for (const s of Array.isArray(list) ? list : []) {
-    const label = clean(s);
+    const raw = clean(s);
+    const label = raw ? raw[0].toUpperCase() + raw.slice(1) : '';   // the model sometimes starts lowercase
     if (!label || label.length > 90 || seen.has(label.toLowerCase())) continue;
     seen.add(label.toLowerCase());
     const id = kinds[out.length] || `more-${out.length}`;

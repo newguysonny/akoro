@@ -50,3 +50,8 @@ test('shapeLearnSuggestions: distinct, capped at 4, icons by kind', () => {
   assert.equal(s[0].icon, 'ti-notes');
   assert.deepEqual(shapeLearnSuggestions(null), []);
 });
+
+test('shapeLearnSuggestions starts each with a capital', () => {
+  assert.deepEqual(shapeLearnSuggestions(['summarise the cell wall section', 'explain mitochondria simply']).map((x) => x.label),
+    ['Summarise the cell wall section', 'Explain mitochondria simply']);
+});
