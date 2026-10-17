@@ -90,7 +90,10 @@ export async function runAgentStep({
     // Session-level tool-call guard (S4 max-turns, ~40 calls).
     toolCallsUsed += 1;
     if (toolCallsUsed > POLICY.SESSION_TOOL_CALL_CAP) {
-      await harness.pause({ id: sessionId, status: "topic_active" }, "agent_loop_cap", { reason: "session_tool_call_cap" });
+      // Paused from the state it is really in — the conditional write pins it,
+      // and a guessed status would silently miss (F7).
+      const current = await store.getSession(sessionId);
+      if (current) await harness.pause(current, "agent_loop_cap", { reason: "session_tool_call_cap" });
       return { ended: "session_tool_call_cap", iterations: iteration - 1, terminal: null, observations };
     }
 

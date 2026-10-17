@@ -17,8 +17,9 @@ export const ACTIVE_SESSION_STATES = Object.freeze(
 
 export const TOPIC_STATES = Object.freeze(["queued", "active", "understood", "flagged_gap", "capped_out", "deferred"]);
 
-const SESSION_TRANSITIONS = Object.freeze({
-  planning: ["awaiting_confirmation", "replanning", "abandoned", "cancelled"],
+export const SESSION_TRANSITIONS = Object.freeze({
+  // paused: the planning agent hit its step cap — resumable back into planning.
+  planning: ["awaiting_confirmation", "replanning", "paused", "abandoned", "cancelled"],
   awaiting_confirmation: ["topic_active", "replanning", "cancelled", "abandoned"],
   topic_active: ["paused", "replanning", "completed", "abandoned", "cancelled"],
   replanning: ["topic_active", "awaiting_confirmation", "paused", "abandoned", "cancelled"],
@@ -28,7 +29,7 @@ const SESSION_TRANSITIONS = Object.freeze({
   cancelled: [],
 });
 
-const TOPIC_TRANSITIONS = Object.freeze({
+export const TOPIC_TRANSITIONS = Object.freeze({
   queued: ["active", "deferred"],
   active: ["understood", "flagged_gap", "capped_out", "deferred", "queued"],
   understood: [],

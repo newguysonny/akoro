@@ -11,6 +11,9 @@ import test from "node:test";
 import { createHarness, HarnessRejection, InsufficientBalanceError } from "./harness.js";
 import { POLICY } from "./state-machine.js";
 import { makeEvent } from "./events.js";
+import { guardStudyPrepStore, makeWorkflowMirror, studyPrepWorkflow } from "./workflow.js";
+import { createWorkflowEngine } from "../../workflows/engine.js";
+import { memoryWorkflowStore } from "../../workflows/store.js";
 
 // ── in-memory store double ─────────────────────────────────────────────────
 
@@ -409,4 +412,90 @@ test("events never carry answer keys or raw chat in facts, and intent is origin-
   assert.ok(agentEvent.agent_intent.length <= POLICY.INTENT_MAX_CHARS);
   // makeEvent refuses a bad origin outright
   assert.throws(() => makeEvent({ sequence: 0, eventType: "observation", origin: "llm_chain_of_thought" }), /invalid origin/);
+});
+
+// ── F7: every status write goes through the workflow definition ────────────
+
+test("F7: an unlisted session or topic move is refused before anything is written", async () => {
+  const store = guardStudyPrepStore(new MemoryStore());
+  const session = await store.createSession({ learner_id: LEARNER, status: "planning", goal: "g", subject: "s" });
+  // planning → completed is not a move a session can make.
+  await assert.rejects(() => store.updateSessionConditional(session.id, "planning", { status: "completed" }), (e) => e.code === "invalid_state_transition");
+  assert.equal((await store.getSession(session.id)).status, "planning", "nothing written");
+  // A finished session stays finished.
+  await store.updateSessionConditional(session.id, "planning", { status: "cancelled" });
+  await assert.rejects(() => store.updateSessionConditional(session.id, "cancelled", { status: "topic_active" }), (e) => e.code === "invalid_state_transition");
+  // Topics: understood is final; queued can't jump to understood.
+  const [topic] = await store.createTopics(session.id, [{ syllabusTopicId: "a", label: "A" }, { syllabusTopicId: "b", label: "B" }]);
+  await store.updateTopicConditional(topic.id, "active", { status: "understood" });
+  await assert.rejects(() => store.updateTopicConditional(topic.id, "understood", { status: "active" }), (e) => e.code === "invalid_state_transition");
+  await assert.rejects(() => store.updateTopicConditional("topic-sess-2", "queued", { status: "understood" }), (e) => e.code === "invalid_state_transition");
+  // A patch that doesn't change status is not a transition.
+  assert.ok(await store.updateSessionConditional(session.id, "cancelled", { updated_at: "x" }));
+});
+
+test("F7: conclude only ends a running session; cancel can't reopen an ended one", async () => {
+  const { harness, store } = build();
+  const session = await harness.createSession({ learnerId: LEARNER, goal: "Prepare", subject: "Basic Science" });
+  await assert.rejects(() => harness.concludeSession({ sessionId: session.id, learnerId: LEARNER }), (e) => e.code === "invalid_state_transition");
+  assert.equal((await store.getSession(session.id)).status, "planning");
+  await harness.cancelSession({ sessionId: session.id, learnerId: LEARNER });
+  await assert.rejects(() => harness.cancelSession({ sessionId: session.id, learnerId: LEARNER }), (e) => e.code === "invalid_state_transition");
+  await assert.rejects(() => harness.concludeSession({ sessionId: session.id, learnerId: LEARNER }), (e) => e.code === "invalid_state_transition");
+  assert.equal((await store.getSession(session.id)).status, "cancelled");
+});
+
+test("F7: the definition is the state machine — every session state has a lifecycle status", () => {
+  assert.equal(studyPrepWorkflow.type, "study_prep");
+  assert.equal(studyPrepWorkflow.initial, "planning");
+  assert.equal(studyPrepWorkflow.statusOf.awaiting_confirmation, "waiting_learner");
+  assert.equal(studyPrepWorkflow.statusOf.completed, "completed");
+  assert.deepEqual(studyPrepWorkflow.transitions.completed, []);
+  assert.ok(studyPrepWorkflow.transitions.planning.includes("paused"), "a planning agent that hits its cap pauses, resumably");
+});
+
+// ── Phase 1: the dual-write into the workflow engine ───────────────────────
+
+test("dual-write: the session's run and its events mirror into the engine, step for step", async () => {
+  const wfStore = memoryWorkflowStore();
+  const engine = createWorkflowEngine({ store: wfStore });
+  const store = new MemoryStore();
+  const harness = createHarness({ store, topicWorkflow: makeTopicWorkflow(), syllabus, workflowMirror: makeWorkflowMirror(engine), now: () => "2026-01-01T00:00:00Z" });
+  const session = await plannedSession(harness);
+  const wfId = (await store.getSession(session.id)).workflow_id;
+  assert.ok(wfId, "the session points at its workflow instance");
+  let instance = await engine.get(wfId, LEARNER);
+  assert.equal(instance.workflow_type, "study_prep");
+  assert.equal(instance.idempotency_key, `study_prep:${session.id}`);
+  assert.equal(instance.state, "awaiting_confirmation");
+  assert.equal(instance.status, "waiting_learner");
+
+  await harness.confirmPlan({ sessionId: session.id, learnerId: LEARNER });
+  instance = await engine.get(wfId, LEARNER);
+  assert.equal(instance.state, "topic_active");
+  assert.equal(instance.status, "active");
+
+  // Every Study Prep event is in the workflow's stream, in order.
+  const spEvents = store.events.filter((e) => e.session_id === session.id);
+  const wfEvents = await engine.events(wfId);
+  assert.equal(wfEvents.length, spEvents.length);
+  assert.deepEqual(wfEvents.map((e) => e.sequence), wfEvents.map((_, i) => i));
+  assert.deepEqual(wfEvents.map((e) => e.payload.studyPrepSequence), spEvents.map((e) => e.sequence));
+  assert.ok(wfEvents.some((e) => e.payload.decisionNode === "plan_confirmed" && e.visibility === "learner"));
+
+  await harness.cancelSession({ sessionId: session.id, learnerId: LEARNER });
+  instance = await engine.get(wfId, LEARNER);
+  assert.equal(instance.status, "cancelled");
+  assert.ok(instance.cancelled_at);
+});
+
+test("dual-write is best effort: an engine failure never fails the learner's action", async () => {
+  const broken = { create: async () => { throw new Error("db down"); }, transition: async () => { throw new Error("db down"); }, appendEvent: async () => { throw new Error("db down"); } };
+  const warnings = [];
+  const store = new MemoryStore();
+  const harness = createHarness({ store, topicWorkflow: makeTopicWorkflow(), syllabus, workflowMirror: makeWorkflowMirror(broken, { log: { warn: (m) => warnings.push(m) } }), now: () => "2026-01-01T00:00:00Z" });
+  const session = await plannedSession(harness);
+  await harness.confirmPlan({ sessionId: session.id, learnerId: LEARNER });
+  assert.equal((await store.getSession(session.id)).status, "topic_active");
+  assert.ok(warnings.some((w) => /workflow mirror: create failed/.test(w)));
 });

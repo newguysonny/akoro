@@ -19,6 +19,10 @@ import { buildRegistry } from "../tools/registry.js";
 import { buildAgentContext } from "./context-manager.js";
 import { runAgentStep } from "./agent-loop.js";
 import { pauseCopy } from "./narration.js";
+import db from "../../../db.js";
+import { createWorkflowEngine } from "../../workflows/engine.js";
+import { makeSupabaseWorkflowStore } from "../../workflows/store.js";
+import { makeWorkflowMirror, workflowEngineEnabled } from "./workflow.js";
 
 // Default-on kill switch: study-prep ships enabled; =false removes every surface.
 export const studyPrepEnabled = () => String(process.env.AKORO_STUDY_PREP_ENABLED ?? "true").toLowerCase() !== "false";
@@ -78,8 +82,22 @@ const protege = {
   },
 };
 
+// Phase 1: the generic workflow engine, dual-written behind WORKFLOW_ENGINE_ENABLED.
+let _mirror = null;
+const workflowMirror = () => (_mirror ||= makeWorkflowMirror(createWorkflowEngine({ store: makeSupabaseWorkflowStore(db) })));
+
 export function getHarness() {
-  return createHarness({ store, topicWorkflow, syllabus, ...(agentCheckEnabled() ? { agentCheck, protege } : {}) });
+  return createHarness({ store, topicWorkflow, syllabus,
+    ...(agentCheckEnabled() ? { agentCheck, protege } : {}),
+    ...(workflowEngineEnabled() ? { workflowMirror: workflowMirror() } : {}) });
+}
+
+/**
+ * The harness WITH the workflow dual-write regardless of the switch — for the
+ * gate's scenario (a test learner), never for a learner's request.
+ */
+export function getWorkflowHarness() {
+  return createHarness({ store, topicWorkflow, syllabus, ...(agentCheckEnabled() ? { agentCheck, protege } : {}), workflowMirror: workflowMirror() });
 }
 
 /**

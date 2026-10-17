@@ -18,6 +18,7 @@ import {
 } from "./state-machine.js";
 import { makeEvent, stampThoughtType } from "./events.js";
 import { deliberate } from "./narration.js";
+import { guardStudyPrepStore } from "./workflow.js";
 import {
   STRATEGY_LIBRARY, STUDY_PREP_COST, applyThreshold, estimateSessionCost, isPermittedStrategy, masteryWriteBack,
 } from "./education-engine.js";
@@ -52,7 +53,10 @@ export const GENERATED_OUTLINE_LABEL = "AI-drafted outline — not your school's
  * protege.say({ learnerId, session, text, battle }) — the protégé's message in chat.
  * Without agentCheck the legacy human-answered practice (topicWorkflow) runs.
  */
-export function createHarness({ store, topicWorkflow, syllabus, agentCheck = null, protege = null, now = () => new Date().toISOString() }) {
+export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentCheck = null, protege = null, workflowMirror = null, now = () => new Date().toISOString() }) {
+  // Every session and topic status write is checked against the workflow
+  // definition (F7) and, with a mirror, dual-written to the engine (Phase 1).
+  const store = guardStudyPrepStore(rawStore, { mirror: workflowMirror });
   const reject = async (session, code, message, facts = {}) => {
     if (session) {
       await log(session.id, null, {
@@ -708,6 +712,10 @@ export function createHarness({ store, topicWorkflow, syllabus, agentCheck = nul
     if (!session) throw new HarnessRejection("session_not_found", "Study-prep session was not found", 404);
     const topics = await store.getTopics(session.id);
     const understood = topics.filter((row) => row.status === "understood").length;
+    // Only a running session concludes — not one still planning, or already over.
+    if (!canTransitionSession(session.status, "completed")) {
+      return reject(session, "invalid_state_transition", `A ${session.status.replace(/_/g, " ")} session can't be concluded`);
+    }
     const updated = await store.updateSessionConditional(session.id, session.status, {
       status: "completed", paused_reason: null, completed_at: now(), updated_at: now(),
     });
@@ -752,6 +760,7 @@ export function createHarness({ store, topicWorkflow, syllabus, agentCheck = nul
   async function cancelSession({ sessionId, learnerId }) {
     const session = await ownedSession(sessionId, learnerId);
     if (!session) throw new HarnessRejection("session_not_found", "Study-prep session was not found", 404);
+    if (!canTransitionSession(session.status, "cancelled")) return reject(session, "invalid_state_transition", "The session already ended");
     const updated = await store.updateSessionConditional(session.id, session.status, { status: "cancelled", updated_at: now() });
     if (!updated) return reject(session, "invalid_state_transition", "The session already ended");
     return { session: publicSession(updated) };

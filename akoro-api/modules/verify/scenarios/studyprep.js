@@ -261,3 +261,60 @@ export const classSyllabusFirst = {
     if (session?.id) await ctx.http({ as: p.learner, method: "POST", path: `${base}/${session.id}/cancel`, body: {} });
   },
 };
+
+// Phase 1 + F7: a Study Prep session dual-writes into the generic workflow
+// engine, and an illegal move is refused. Runs the harness with the engine
+// on (getWorkflowHarness), so it works while WORKFLOW_ENGINE_ENABLED is off.
+export const workflowMirror = {
+  name: "studyprep.workflow_mirror", area: "study-prep", risk: "write",
+  description: "A Study Prep session gets one workflow instance that follows it state for state, with every session event in its stream in order; an illegal move (concluding a cancelled session) is refused and changes nothing.",
+  params: { learner: { default: "@tester16" }, subject: { default: "Basic Science" }, classLevel: { default: "JSS3" } },
+  async run(ctx, p) {
+    const me = await ctx.as(p.learner);
+    await ctx.db.deleteOwned("edu.study_prep_sessions", { ownerColumn: "learner_id", ownerId: me.id, filters: { goal: { like: "[verify:%" } } });
+    const { getWorkflowHarness } = await import("../../adaptive-learning/study-prep/wiring.js");
+    const harness = getWorkflowHarness();
+    const active = await ctx.http({ as: p.learner, path: "/api/adaptive/study-prep/sessions" });
+    if (active.body?.session?.id) await harness.cancelSession({ sessionId: active.body.session.id, learnerId: me.id }).catch(() => {});
+    ctx.cleanup(() => ctx.db.deleteOwned("edu.study_prep_sessions", { ownerColumn: "learner_id", ownerId: me.id, filters: { goal: { like: `${ctx.marker}%` } } }));
+
+    const session = await harness.createSession({ learnerId: me.id, goal: `${ctx.marker} Revise ${p.subject}`, subject: p.subject, classLevel: p.classLevel, examBoard: "BECE" });
+    const [linked] = await ctx.db.rows("edu.study_prep_sessions", { id: session.id }, { columns: "workflow_id", limit: 1 });
+    const wfId = linked?.workflow_id;
+    if (!wfId) ctx.expect.blocked("the session has no workflow instance — is migrations/2026-workflow-engine.sql applied?");
+    ctx.cleanup(() => ctx.db.deleteOwned("edu.workflow_instances", { ownerColumn: "learner_id", ownerId: me.id, filters: { id: wfId } }));
+
+    const wf = async () => (await ctx.db.rows("edu.workflow_instances", { id: wfId }, { columns: "state, status, workflow_type, idempotency_key, cancelled_at", limit: 1 }))[0];
+    let row = await wf();
+    ctx.expect.eq("one study_prep instance for the session", row?.workflow_type, "study_prep");
+    ctx.expect.eq("keyed to the session", row?.idempotency_key, `study_prep:${session.id}`);
+    ctx.expect.eq("starts in planning (active)", `${row?.state}/${row?.status}`, "planning/active");
+
+    const syllabus = await harness.resolveSyllabus({ sessionId: session.id, learnerId: me.id });
+    if (!syllabus.found || !syllabus.topics.length) ctx.expect.blocked(`no ${p.classLevel} ${p.subject} syllabus to plan from`);
+    await harness.proposePlan({ sessionId: session.id, learnerId: me.id, topicIds: [syllabus.topics[0].id] });
+    row = await wf();
+    ctx.expect.eq("the plan card waits on the learner", `${row?.state}/${row?.status}`, "awaiting_confirmation/waiting_learner");
+    await harness.confirmPlan({ sessionId: session.id, learnerId: me.id });
+    row = await wf();
+    ctx.expect.eq("confirmed: a topic is active", `${row?.state}/${row?.status}`, "topic_active/active");
+    await harness.cancelSession({ sessionId: session.id, learnerId: me.id });
+    row = await wf();
+    ctx.expect.eq("cancelled together", `${row?.state}/${row?.status}`, "cancelled/cancelled");
+    ctx.expect.ok("cancelled_at stamped", !!row?.cancelled_at);
+
+    // F7: a finished session can't be concluded — refused, nothing moves.
+    let refused = null;
+    try { await harness.concludeSession({ sessionId: session.id, learnerId: me.id }); } catch (e) { refused = e.code; }
+    ctx.expect.eq("concluding a cancelled session is refused", refused, "invalid_state_transition");
+    const [after] = await ctx.db.rows("edu.study_prep_sessions", { id: session.id }, { columns: "status", limit: 1 });
+    ctx.expect.eq("the session is still cancelled", after?.status, "cancelled");
+
+    const spEvents = await ctx.db.rows("edu.study_prep_events", { session_id: session.id }, { columns: "sequence", limit: 200, order: { column: "sequence", ascending: true } });
+    const wfEvents = await ctx.db.rows("edu.workflow_events", { workflow_id: wfId }, { columns: "sequence, payload", limit: 200, order: { column: "sequence", ascending: true } });
+    ctx.note(`${spEvents.length} study-prep events, ${wfEvents.length} workflow events`);
+    ctx.expect.eq("every session event is in the workflow stream", wfEvents.length, spEvents.length);
+    ctx.expect.ok("in order, numbered from 0", wfEvents.every((e, i) => e.sequence === i), JSON.stringify(wfEvents.map((e) => e.sequence)));
+    ctx.expect.ok("each points back at its session event", wfEvents.every((e, i) => e.payload?.studyPrepSequence === spEvents[i]?.sequence));
+  },
+};
