@@ -724,7 +724,9 @@ export function createHarness({ store, topicWorkflow, syllabus, agentCheck = nul
       store.getTopics(session.id),
       store.listEvents(session.id, { limit: eventLimit }),
     ]);
-    return { session: publicSession(session, topics), topics: topics.map(publicTopic), events };
+    // agentCheck: practice is the Agent Check (D45) — the card words its
+    // buttons for it before the learner taps anything.
+    return { session: publicSession(session, topics), topics: topics.map(publicTopic), events, agentCheck: !!agentCheck };
   }
 
   /**

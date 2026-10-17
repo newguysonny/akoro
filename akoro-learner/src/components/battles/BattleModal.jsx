@@ -209,7 +209,10 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
   // The type comes from the SERVER (/battles/:id/state), not from the card that
   // opened this: accepting an invitation opens the arena with only an id and a
   // status, so the card cannot be relied on to carry it.
-  const isReview = battleType === 'review';
+  // An Agent Check (D45) reads like a review: one seat, a mark sheet, no
+  // winner — the agent answers from the learner's notes.
+  const isCheck = battleType === 'check';
+  const isReview = battleType === 'review' || isCheck;
   const isClassroom = (initialBattle?.battleType === 'classroom') || participants.length > 2;
   // "Bolt vs Nova" for a 1v1, "Bolt vs your agent and 23 more" for a group —
   // from who is actually seated, so it holds for a battle opened from anywhere.
@@ -356,12 +359,12 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
                 <div style={{ ...panel }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                     <div style={{ flex: 1, textAlign: 'center' }}>{A && <><AgentPill p={A} big /><div style={{ color: '#fff', fontWeight: 800, fontSize: 12.5, marginTop: 6 }}>{A.agentName}{A.userId === myId ? ' (you)' : ''}</div></>}</div>
-                    <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#1A1A2E', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#fff' }}>VS</div>
+                    {!isCheck && <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#1A1A2E', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#fff' }}>VS</div>}
                     <div style={{ flex: 1, textAlign: 'center' }}>{Bp && <><AgentPill p={Bp} big /><div style={{ color: '#fff', fontWeight: 800, fontSize: 12.5, marginTop: 6 }}>{Bp.agentName}</div></>}</div>
                   </div>
                   <div style={{ textAlign: 'center', marginTop: 14 }}>
-                    <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,.6)', marginBottom: 10 }}>Waiting for the battle to start…</div>
-                    <button onClick={startBattle} style={{ padding: '10px 18px', borderRadius: 14, border: 'none', background: 'linear-gradient(135deg,#E8884A,#D97706)', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, display: 'inline-flex', alignItems: 'center', gap: 7 }}><PlayIcon size={13} color="#fff" />Start battle</button>
+                    <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,.6)', marginBottom: 10 }}>{isCheck ? 'The Agent Check starts in a moment…' : 'Waiting for the battle to start…'}</div>
+                    {!isCheck && <button onClick={startBattle} style={{ padding: '10px 18px', borderRadius: 14, border: 'none', background: 'linear-gradient(135deg,#E8884A,#D97706)', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, display: 'inline-flex', alignItems: 'center', gap: 7 }}><PlayIcon size={13} color="#fff" />Start battle</button>}
                     {notice && <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,.5)', marginTop: 8 }}>{notice}</div>}
                   </div>
                 </div>
@@ -463,7 +466,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
                     {iAmParticipant && !isReview && (me?.hp ?? 100) <= 0
                       ? 'Your agent is out of HP — you are watching as a spectator'
                       : iAmParticipant
-                      ? (isReview ? 'Your agent is working through your review' : 'Your agent is answering — watch it play')
+                      ? (isCheck ? 'Your agent is answering from your notes — watch it' : isReview ? 'Your agent is working through your review' : 'Your agent is answering — watch it play')
                       : "You're watching this battle"}
                   </div>
                   {reveal?.judge && (
@@ -481,7 +484,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
               {/* Review result — a review has no winner, so the panel below
                   rendered nothing at all for one: a finished review showed no
                   score and no XP, just an empty arena. */}
-              {isCompleted && isReview && results?.type === 'review' && (
+              {isCompleted && isReview && ['review', 'check'].includes(results?.type) && (
                 <div style={{ ...panel, textAlign: 'center' }}>
                   <Icon name="ti-clipboard" size={34} color="rgba(255,255,255,.35)"/>
                   <div style={{ fontSize: 18, fontWeight: 900, color: '#F1F5F9', marginTop: 4 }}>
@@ -494,6 +497,11 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
                   {(results.score?.unanswered > 0) && (
                     <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,.45)', marginTop: 3 }}>
                       {results.score.unanswered} not answered (no notes on it, no credit, or out of time)
+                    </div>
+                  )}
+                  {(results.score?.guessed > 0) && (
+                    <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,.45)', marginTop: 3 }}>
+                      {results.score.guessed} guessed — not in your notes, so not counted
                     </div>
                   )}
                   {results.battle?.duration_formatted && (
@@ -530,7 +538,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <b>Q{m.order}.</b> {m.question}
                             <div style={{ fontSize: 11, color: 'rgba(255,255,255,.5)' }}>
-                              {m.answered ? `Chose ${m.chosenAnswer}` : 'Not answered'}{!m.isCorrect ? ` · Answer: ${m.correctAnswer}` : ''}
+                              {m.answered ? `Chose ${m.chosenAnswer}` : 'Not answered'}{m.guessed ? ' (a guess — not in your notes)' : ''}{!m.isCorrect ? ` · Answer: ${m.correctAnswer}` : ''}
                             </div>
                           </div>
                         </div>
@@ -643,7 +651,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
             <span>·</span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><BookIcon size={11} color="rgba(255,255,255,.35)" />Your class</span>
           </div>
-          {isLive && iAmParticipant && <span style={{ fontSize: 11, fontWeight: 700, color: '#E8884A', display: 'flex', alignItems: 'center', gap: 5 }}><ZapIcon size={11} color="#E8884A" />{isReview ? 'Your review — your agent is answering' : 'Your agent is playing'}</span>}
+          {isLive && iAmParticipant && <span style={{ fontSize: 11, fontWeight: 700, color: '#E8884A', display: 'flex', alignItems: 'center', gap: 5 }}><ZapIcon size={11} color="#E8884A" />{isCheck ? 'Agent Check — your agent is answering' : isReview ? 'Your review — your agent is answering' : 'Your agent is playing'}</span>}
         </div>
       </div>
     </div>

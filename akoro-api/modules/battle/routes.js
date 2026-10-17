@@ -54,7 +54,7 @@ import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
 import { cleanHpPerMiss } from "./hp.js";
-import { entryCheck, minPlayersFor } from "./entry.js";
+import { entryCheck, minPlayersFor, isMarkSheet } from "./entry.js";
 import { toCard } from "./card.js";
 import { buildQuestions, perQuestionSeconds } from "./questionSource.js";
 import { InsufficientCoins } from "../../lib/coins.js";
@@ -1894,7 +1894,8 @@ router.get("/battles/:battleId/results", authenticateToken, asyncHandler(async (
   // order, what they chose, what was right, and the total. A ranking of one is
   // not information, and calling them the winner of a solo review would be
   // actively misleading.
-  if (battle.battle_type === "review") {
+  // An Agent Check (D45) is a mark sheet too: one seat, no winner.
+  if (isMarkSheet(battle.battle_type)) {
     const learner = scoreboard[0] ?? null;
     const seat = (participants ?? []).find((p) => p.role !== "teacher");
 
@@ -1922,13 +1923,18 @@ router.get("/battles/:battleId/results", authenticateToken, asyncHandler(async (
         chosenAnswer:  a?.selected_index != null ? options[a.selected_index] : null,
         isCorrect:     a ? !!a.is_correct : false,
         answered:      !!a,
+        // Agent Check: the notes didn't cover it and the agent picked anyway —
+        // not demonstrated, right or wrong.
+        guessed:       battle.battle_type === "check" && a?.answer_basis === "unknown",
         responseMs:    a?.response_time_ms ?? null,
       };
     });
 
     const total   = sheet.length;
-    const correct = sheet.filter((r) => r.isCorrect).length;
+    // A guess is not demonstrated, so it is not counted correct (D45).
+    const correct = sheet.filter((r) => r.isCorrect && !r.guessed).length;
     const missed  = sheet.filter((r) => !r.answered).length;
+    const guessed = sheet.filter((r) => r.guessed).length;
 
     // Where they actually went wrong, so the teacher does not have to tally it
     // by hand off the sheet.
@@ -1937,11 +1943,11 @@ router.get("/battles/:battleId/results", authenticateToken, asyncHandler(async (
       const k = r.topic || "General";
       byTopic[k] ??= { topic: k, total: 0, correct: 0 };
       byTopic[k].total++;
-      if (r.isCorrect) byTopic[k].correct++;
+      if (r.isCorrect && !r.guessed) byTopic[k].correct++;
     }
 
     return res.json({
-      type: "review",
+      type: battle.battle_type,
       battle: { ...battle, duration_formatted: fmtDuration(battle.duration_seconds ?? 0) },
       learner: learner && {
         userId: learner.userId, username: learner.username,
@@ -1954,8 +1960,9 @@ router.get("/battles/:battleId/results", authenticateToken, asyncHandler(async (
       },
       score: {
         correct, total,
-        wrong:      total - correct - missed,
+        wrong:      total - correct - missed - guessed,
         unanswered: missed,
+        guessed,
         percent:    total ? Math.round((correct / total) * 100) : 0,
       },
       byTopic: Object.values(byTopic)

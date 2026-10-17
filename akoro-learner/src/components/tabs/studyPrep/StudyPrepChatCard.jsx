@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { BRAND, GREEN, RED } from '../../../constants.js';
+import BattleModal from '../../battles/BattleModal.jsx';
 import {
   adjustStudyPrepPlan, advanceStudyPrepTopic, confirmStudyPrepPlan, confirmStudyPrepTeachBack,
   concludeStudyPrepSession, deferStudyPrepTopic, fetchStudyPrepSession, generateStudyPrepPractice,
@@ -41,6 +42,8 @@ export default function StudyPrepChatCard({ sessionId }) {
   const [error, setError] = useState('');
   const [adjusting, setAdjusting] = useState(false);
   const [dropPick, setDropPick] = useState({});
+  const [noNotes, setNoNotes] = useState(false);
+  const [watching, setWatching] = useState(null);
 
   const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
@@ -79,6 +82,14 @@ export default function StudyPrepChatCard({ sessionId }) {
     fetchStudyPrepSession(sessionId).then((response) => { if (response?.session) setView(response); }).catch(() => {});
   }, [sessionId]);
 
+  // An Agent Check runs on the server; the card picks up its score when it lands.
+  const checkRunning = !!view?.topics?.some((topic) => topic.status === 'active' && topic.checkBattleId && !topic.checkScoredAt);
+  useEffect(() => {
+    if (!checkRunning) return undefined;
+    const timer = setInterval(refresh, 5000);
+    return () => clearInterval(timer);
+  }, [checkRunning, refresh]);
+
   if (!view) {
     return (
       <div style={{ ...card, padding: 12, marginTop: 6 }}>
@@ -98,6 +109,20 @@ export default function StudyPrepChatCard({ sessionId }) {
   const events = view.events || [];
   const activeTopic = topics.find((topic) => topic.status === 'active') || null;
   const estimate = session.estimate;
+  // D45: practice is the Agent Check — the protégé answers from the learner's
+  // notes in a battle the learner watches; the Engine's score lands on the topic.
+  const agentMode = !!view.agentCheck;
+  // A check that settled its topic still shows its result until the learner moves on.
+  const lastSettled = [...topics].filter((topic) => topic.status !== 'queued').sort((a, b) => b.position - a.position)[0];
+  const shownTopic = activeTopic || (agentMode && lastSettled?.checkScoredAt && ['understood', 'capped_out'].includes(lastSettled.status) ? lastSettled : null);
+  const checkResult = agentMode && shownTopic?.checkScoredAt && shownTopic.checkResult ? {
+    ...shownTopic.checkResult,
+    passed: shownTopic.status === 'understood',
+    outcome: shownTopic.status === 'understood' || shownTopic.status === 'capped_out' ? shownTopic.status : 'retest_offered',
+  } : null;
+  const shownResult = agentMode ? checkResult : result;
+  const checkLive = agentMode && !!shownTopic?.checkBattleId && !shownTopic.checkScoredAt;
+  const watch = () => setWatching({ id: shownTopic.checkBattleId, title: `Agent Check: ${shownTopic.label}`, topic: shownTopic.label, status: 'lobby', type: 'check' });
 
   const confirmPlan = () => void run(() => confirmStudyPrepPlan(session.id), (response) => {
     setView((previous) => ({ ...previous, session: response.session, topics: response.topics }));
@@ -115,6 +140,8 @@ export default function StudyPrepChatCard({ sessionId }) {
 
   const generate = (mode) => void run(() => generateStudyPrepPractice(session.id, activeTopic.id, mode), (response) => {
     setView((previous) => ({ ...previous, session: response.session, topics: previous.topics.map((topic) => topic.id === response.topic.id ? response.topic : topic) }));
+    setNoNotes(!!response.skipped);
+    if (agentMode) return;
     setAttempt(response.attempt); setAnswers({}); setResult(null);
   });
 
@@ -134,10 +161,10 @@ export default function StudyPrepChatCard({ sessionId }) {
 
   const advance = () => void run(() => advanceStudyPrepTopic(session.id), (response) => {
     setView((previous) => ({ ...previous, topics: previous.topics.map((topic) => topic.id === response.topic.id ? response.topic : topic) }));
-    setResult(null); setAttempt(null);
+    setResult(null); setAttempt(null); setNoNotes(false);
   });
 
-  const defer = () => void run(() => deferStudyPrepTopic(session.id, activeTopic?.id, 'attempt_cap_reached'), () => { setResult(null); refresh(); });
+  const defer = () => void run(() => deferStudyPrepTopic(session.id, shownTopic?.id, 'attempt_cap_reached'), () => { setResult(null); refresh(); });
   const retryDeferred = (topicId) => void run(() => retryStudyPrepDeferred(session.id, topicId), refresh);
   const conclude = () => void run(() => concludeStudyPrepSession(session.id), (response) => setView((previous) => ({ ...previous, session: response.session })));
   const resume = () => void run(() => resumeStudyPrepSession(session.id), (response) => setView((previous) => ({ ...previous, session: response.session })));
@@ -226,17 +253,38 @@ export default function StudyPrepChatCard({ sessionId }) {
             })}
           </div>
 
-          {activeTopic && (
+          {shownTopic && (
             <div style={{ display: 'grid', gap: 8, padding: '9px 10px', border: '1px solid var(--ak-border2)', borderRadius: 11, background: 'var(--ak-surface-hover)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline' }}>
-                <div style={{ fontSize: 13.5, fontWeight: 900, color: 'var(--ak-text)' }}>{activeTopic.label}</div>
-                <div style={caption}>{activeTopic.learnerConfirmedReady ? 'teach-back confirmed' : `attempt ${activeTopic.attemptsUsed}`}</div>
+                <div style={{ fontSize: 13.5, fontWeight: 900, color: 'var(--ak-text)' }}>{shownTopic.label}</div>
+                <div style={caption}>{shownTopic.learnerConfirmedReady ? 'teach-back confirmed' : `attempt ${shownTopic.attemptsUsed}`}</div>
               </div>
 
-              {!attempt && !result && (
+              {!attempt && !shownResult && !checkLive && (
                 <div style={{ display: 'grid', gap: 7 }}>
-                  <div style={caption}>A short diagnostic comes first — it shows what you already know.</div>
-                  <div><button type="button" disabled={busy} onClick={() => generate('diagnostic')} style={primary}>Start diagnostic (2 coins)</button></div>
+                  {!agentMode ? (
+                    <>
+                      <div style={caption}>A short diagnostic comes first — it shows what you already know.</div>
+                      <div><button type="button" disabled={busy} onClick={() => generate('diagnostic')} style={primary}>Start diagnostic (2 coins)</button></div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={caption}>{noNotes
+                        ? `Your agent has no notes on ${shownTopic.label} yet, so there's nothing to check. Teach it first — nothing was charged.`
+                        : 'Your agent is checked first: your teaching guide asks, your agent answers only from what you taught it, and Sergeant judges every answer.'}</div>
+                      <div><button type="button" disabled={busy} onClick={() => generate('diagnostic')} style={primary}>Start Agent Check (2 coins)</button></div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {checkLive && (
+                <div style={{ display: 'grid', gap: 7 }}>
+                  <div style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)' }}>
+                    <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: RED, flexShrink: 0 }} />
+                    Agent Check running
+                  </div>
+                  <div><button type="button" onClick={watch} style={primary}>Watch the battle</button></div>
                 </div>
               )}
 
@@ -258,34 +306,44 @@ export default function StudyPrepChatCard({ sessionId }) {
                 </div>
               )}
 
-              {result && (
+              {shownResult && !checkLive && (
                 <div style={{ display: 'grid', gap: 8 }}>
                   <div style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
-                    <span style={{ fontSize: 22, fontWeight: 900, color: result.passed ? GREEN : RED }}>{Math.round((result.score || 0) * 100)}%</span>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--ak-text)' }}>{result.correct} of {result.total} correct</span>
+                    <span style={{ fontSize: 22, fontWeight: 900, color: shownResult.passed ? GREEN : RED }}>{Math.round((shownResult.score || 0) * 100)}%</span>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--ak-text)' }}>{agentMode ? `Your agent answered ${shownResult.correct} of ${shownResult.total} from your notes` : `${shownResult.correct} of ${shownResult.total} correct`}</span>
                   </div>
-                  <div style={caption}>{result.passed ? 'Threshold reached — topic understood.' : result.outcome === 'capped_out' ? 'Attempt cap reached.' : 'Below the pass mark — teach it back, then take a fresh retest.'}</div>
-                  {result.outcome === 'retest_offered' && !activeTopic.learnerConfirmedReady && (
+                  <div style={caption}>
+                    {agentMode && shownResult.guessed > 0 && `It had to guess on ${shownResult.guessed} — a guess doesn't count. `}
+                    {shownResult.passed ? 'Threshold reached — topic understood.' : shownResult.outcome === 'capped_out' ? 'Attempt cap reached.' : 'Below the pass mark — teach it back, then take a fresh retest.'}
+                  </div>
+                  {agentMode && shownResult.gaps?.length > 0 && (
+                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                      {shownResult.gaps.map((gap, index) => (
+                        <span key={gap} style={{ ...chip, background: '#FEF3C7', color: '#B45309', border: '1px solid #F59E0B55' }}>{index === 0 ? `Not in your notes: ${gap}` : gap}</span>
+                      ))}
+                    </div>
+                  )}
+                  {shownResult.outcome === 'retest_offered' && !shownTopic.learnerConfirmedReady && (
                     <div style={{ display: 'grid', gap: 6, padding: '8px 9px', border: '1px dashed var(--ak-border2)', borderRadius: 9 }}>
                       <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--ak-text)' }}>Teach it back</div>
-                      <div style={caption}>Explain {activeTopic.label} in your own words — out loud or in writing. It is retrieval practice for you; the retest unlocks only when YOU confirm.</div>
+                      <div style={caption}>Explain {shownTopic.label} in your own words — out loud or in writing. It is retrieval practice for you; the retest unlocks only when YOU confirm.</div>
                       <div><button type="button" disabled={busy} onClick={teachBackDone} style={primary}>I've taught it back — unlock retest</button></div>
                     </div>
                   )}
-                  {activeTopic.learnerConfirmedReady && !attempt && result.outcome === 'retest_offered' && (
-                    <div><button type="button" disabled={busy} onClick={() => generate('retest')} style={primary}>Start fresh retest (2 coins)</button></div>
+                  {shownTopic.learnerConfirmedReady && !attempt && shownResult.outcome === 'retest_offered' && (
+                    <div><button type="button" disabled={busy} onClick={() => generate('retest')} style={primary}>{agentMode ? 'Start a fresh Agent Check (2 coins)' : 'Start fresh retest (2 coins)'}</button></div>
                   )}
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    {result.outcome === 'understood' && <button type="button" disabled={busy} onClick={advance} style={primary}>Next topic</button>}
-                    {result.outcome === 'capped_out' && <button type="button" disabled={busy} onClick={defer} style={secondary}>Defer this topic</button>}
-                    {['understood', 'capped_out'].includes(result.outcome) && <button type="button" disabled={busy} onClick={conclude} style={secondary}>Conclude session</button>}
+                    {shownResult.outcome === 'understood' && <button type="button" disabled={busy} onClick={advance} style={primary}>Next topic</button>}
+                    {shownResult.outcome === 'capped_out' && <button type="button" disabled={busy} onClick={defer} style={secondary}>Defer this topic</button>}
+                    {['understood', 'capped_out'].includes(shownResult.outcome) && <button type="button" disabled={busy} onClick={conclude} style={secondary}>Conclude session</button>}
                   </div>
                 </div>
               )}
             </div>
           )}
 
-          {!activeTopic && (
+          {!shownTopic && (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button type="button" disabled={busy} onClick={advance} style={primary}>Move to the next topic</button>
               <button type="button" disabled={busy} onClick={conclude} style={secondary}>Conclude session</button>
@@ -334,6 +392,7 @@ export default function StudyPrepChatCard({ sessionId }) {
           </div>
         </details>
       )}
+      {watching && <BattleModal battle={watching} onClose={() => { setWatching(null); refresh(); }} />}
     </div>
   );
 }
