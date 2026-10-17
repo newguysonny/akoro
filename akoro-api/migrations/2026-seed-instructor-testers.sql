@@ -32,6 +32,13 @@ BEGIN
       RETURNING id INTO v_t;
     END IF;
 
+    -- Coins for the gate's live instructor turns (chat, question drafting):
+    -- topped back up to at least 5000 on every deploy, like the learner testers.
+    INSERT INTO public.coin_accounts (owner_type, owner_id, balance)
+    VALUES ('user', v_t, 5000)
+    ON CONFLICT (owner_type, owner_id) DO UPDATE
+      SET balance = GREATEST(public.coin_accounts.balance, EXCLUDED.balance), updated_at = now();
+
     SELECT id INTO v_room FROM public.classrooms WHERE teacher_id = v_t AND name = r.room LIMIT 1;
     IF v_room IS NULL THEN
       INSERT INTO public.classrooms (teacher_id, name, description, student_limit)

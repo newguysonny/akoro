@@ -76,6 +76,8 @@ test("count check, one retry, then a warning — never a silent change", async (
   assert.match(still.warning, /Asked for 5 questions, got 2\./);
   assert.equal(still.paper.questions.length, 2, "what came back is kept, with the warning");
   await assert.rejects(qp.draftPaper({ chat: async () => "{}", topic: "t", subject: "s", request: "" }), /no questions/);
+  // The model call's own failure is the answer, not "no questions" (it once hid "Insufficient coin balance").
+  await assert.rejects(qp.draftPaper({ chat: async () => { throw new Error("Insufficient coin balance"); }, topic: "t", subject: "s", request: "" }), /Insufficient coin balance/);
 });
 
 test("figures: sanitized SVG with alt, or a slot for the teacher; wrong option counts flagged", () => {

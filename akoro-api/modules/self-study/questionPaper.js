@@ -523,7 +523,9 @@ export async function draftPaper({ chat, topic, subject, classLevel, request, pl
   const plan = mergePlan(parseQuestionRequest(request), given);
   const ask = async (feedback, previous) => {
     let json = {};
-    try { json = JSON.parse(await chat(buildPaperMessages({ topic, subject, classLevel, request, plan, difficulty, subtopics, feedback, previous }), { response_format: paperResponseFormat() }) || "{}"); } catch { json = {}; }
+    // The call's own failure (no coins, the provider down) is the teacher's answer; only bad JSON counts as "no questions".
+    const text = await chat(buildPaperMessages({ topic, subject, classLevel, request, plan, difficulty, subtopics, feedback, previous }), { response_format: paperResponseFormat() });
+    try { json = JSON.parse(text || "{}"); } catch { json = {}; }
     return { json, paper: normalizePaper(json, plan) };
   };
   const first = await ask(null, null);
@@ -549,7 +551,8 @@ export async function revisePaper({ chat, topic, subject, classLevel, request, b
   const contract = { total: null, mix: [], options: plan.options || baseOpts, totalPoints: null, diagrams: plan.diagrams === 0 ? 0 : addsFigure ? true : null };
   const ask = async (feedback, previous) => {
     let json = {};
-    try { json = JSON.parse(await chat(buildRevisionMessages({ topic, subject, classLevel, request, base, plan, feedback, previous }), { response_format: revisionResponseFormat() }) || "{}"); } catch { json = {}; }
+    const text = await chat(buildRevisionMessages({ topic, subject, classLevel, request, base, plan, feedback, previous }), { response_format: revisionResponseFormat() });
+    try { json = JSON.parse(text || "{}"); } catch { json = {}; }
     return { json, ...applyRevision(base, json) };
   };
   const first = await ask(null, null);
