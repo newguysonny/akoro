@@ -65,10 +65,11 @@ async function meteredCreate(params = {}) {
   // once hung a chat turn for minutes while the browser had long given up.
   // Only calls that opt in are bounded; long streams elsewhere keep the
   // SDK defaults.
-  const reqOpts = (clean.__timeoutMs != null || clean.__maxRetries != null)
+  // Read from `params`: `clean` has already had them removed above.
+  const reqOpts = (params.__timeoutMs != null || params.__maxRetries != null)
     ? {
-        ...(clean.__timeoutMs != null ? { timeout: clean.__timeoutMs } : {}),
-        ...(clean.__maxRetries != null ? { maxRetries: clean.__maxRetries } : {}),
+        ...(params.__timeoutMs != null ? { timeout: params.__timeoutMs } : {}),
+        ...(params.__maxRetries != null ? { maxRetries: params.__maxRetries } : {}),
       }
     : undefined;
   // Cost guardrail: bound output when a caller omits max_tokens (0 = off).

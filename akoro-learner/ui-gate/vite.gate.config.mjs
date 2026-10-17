@@ -1,0 +1,37 @@
+/**
+ * The learner app as the frontend gate runs it in LOCAL mode: the normal
+ * Vite config, built into UI_GATE_DIST and served by `vite preview` on
+ * localhost, with /api and /socket.io passed through to the live API
+ * (UI_GATE_API). The app and its API share one origin, so
+ * cookies and CORS behave like production without the deployed site.
+ */
+import { defineConfig } from 'vite';
+import base from '../vite.config.js';
+
+const target = process.env.UI_GATE_API || 'https://api.akoro.name.ng';
+const port = Number(process.env.UI_GATE_PORT || 4321);
+// Behind an outbound proxy (a cloud sandbox), the pass-through goes through it too.
+const outbound = process.env.HTTPS_PROXY
+  ? new (await import('https-proxy-agent')).HttpsProxyAgent(process.env.HTTPS_PROXY)
+  : undefined;
+// The API accepts the learner app's own origin (and its sockets accept only
+// portal origins), so the pass-through presents the deployed app's origin.
+const appOrigin = process.env.UI_GATE_ORIGIN || 'https://akoro.name.ng';
+const passThrough = (_proxy, options) => {
+  if (outbound) options.agent = outbound;
+  options.headers = { ...(options.headers || {}), origin: appOrigin };
+};
+
+const proxy = {
+  '/api': { target, changeOrigin: true, secure: true, configure: passThrough },
+  '/socket.io': { target, changeOrigin: true, secure: true, ws: true, configure: passThrough },
+};
+
+export default defineConfig(async (env) => {
+  const b = typeof base === 'function' ? await base(env) : base;
+  return {
+    ...b,
+    build: { ...(b.build || {}), outDir: process.env.UI_GATE_DIST || 'dist-ui-gate', emptyOutDir: true },
+    preview: { host: '127.0.0.1', port, strictPort: true, proxy },
+  };
+});

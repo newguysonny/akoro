@@ -96,3 +96,19 @@ Real API on Postgres + PostgREST + Redis, all migrations and the 50 testers,
 `VERIFY_TARGET=local` (writes allowed). With the mock model (no
 `OPENAI_API_KEY`), scenarios that judge the model's tool choice FAIL by design;
 everything else is meaningful.
+
+## The frontend gate
+
+For learner-app changes, also run the frontend gate
+(`akoro-learner/ui-gate/README.md`): the app's journeys in a real browser,
+phone and desktop, as a test learner, with the same verdicts.
+
+```bash
+cd akoro-learner
+PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers NODE_EXTRA_CA_CERTS=/root/.ccr/ca-bundle.crt \
+  node ui-gate/run.mjs --suite reader          # local build of this commit → live API
+```
+
+Report each scenario's verdict. BLOCKED here usually names the cloud
+network (the file store or WebSockets unreachable through the proxy) —
+say so; it is not a pass. Never commit `ui-gate/.out/` (screenshots).

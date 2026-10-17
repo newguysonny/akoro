@@ -11,6 +11,7 @@
     "check:header": "esbuild scripts/check-subtopic-header.mjs --bundle --platform=node --format=cjs --outfile=node_modules/.cache/csh.cjs --loader:.jsx=jsx --jsx=automatic && node node_modules/.cache/csh.cjs",
     "check:dhub": "node scripts/check-dhub-hub.mjs && node scripts/check-dhub-search.mjs",
     "lint:undef": "eslint src",
+    "ui-gate": "node ui-gate/run.mjs",
     "test:reader": "node --test src/lib/speech.test.mjs src/lib/chatIdeas.test.mjs src/lib/paper.test.mjs src/lib/extractRun.test.mjs src/lib/askAnswer.test.mjs src/lib/readerArtifacts.test.mjs src/lib/officePages.test.mjs src/lib/podcastTimeline.test.mjs src/lib/markRects.test.mjs src/lib/questionSteps.test.mjs src/lib/wordDoc.test.mjs src/lib/chatModels.test.mjs src/lib/blockLines.test.mjs src/lib/quotedMessage.test.mjs src/lib/learnSuggestions.test.mjs"
   },
   "dependencies": {
@@ -56,6 +57,7 @@
     "autoprefixer": "^10.4.0",
     "eslint": "^10.1.0",
     "globals": "^16.5.0",
+    "playwright": "^1.56.1",
     "postcss": "^8.4.0",
     "tailwindcss": "^3.4.0",
     "vite": "^5.0.0",
