@@ -76,6 +76,7 @@ jobs:
     outputs:
       deployed: ${{ steps.wait.outputs.deployed || 'true' }}
       api_changed: ${{ steps.changes.outputs.api }}
+      gates_changed: ${{ steps.changes.outputs.gates }}
       learner_changed: ${{ steps.changes.outputs.learner }}
     steps:
       - uses: actions/checkout@v4
@@ -88,7 +89,10 @@ jobs:
           before="${{ github.event.before }}"
           if ! git cat-file -e "$before^{commit}" 2>/dev/null; then before="${{ github.sha }}~1"; fi
           files=$(git diff --name-only "$before" "${{ github.sha }}")
-          echo "$files" | grep -qE '^(akoro-api/|\.github/)' && echo "api=true" >> "$GITHUB_OUTPUT" || echo "api=false" >> "$GITHUB_OUTPUT"
+          # api: the API itself changed (it redeploys; wait for it). gates: the
+          # gates changed (run both against what is live, no wait).
+          echo "$files" | grep -qE '^akoro-api/' && echo "api=true" >> "$GITHUB_OUTPUT" || echo "api=false" >> "$GITHUB_OUTPUT"
+          echo "$files" | grep -qE '^\.github/' && echo "gates=true" >> "$GITHUB_OUTPUT" || echo "gates=false" >> "$GITHUB_OUTPUT"
           echo "$files" | grep -qE '^(akoro-learner/|akoro-api/|\.github/)' && echo "learner=true" >> "$GITHUB_OUTPUT" || echo "learner=false" >> "$GITHUB_OUTPUT"
       # Only an API change redeploys the API; a learner-only push runs against
       # the API already live.
@@ -108,7 +112,7 @@ jobs:
     needs: deploy
     if: >-
       needs.deploy.outputs.deployed == 'true' &&
-      ((github.event_name == 'push' && needs.deploy.outputs.api_changed == 'true') ||
+      ((github.event_name == 'push' && (needs.deploy.outputs.api_changed == 'true' || needs.deploy.outputs.gates_changed == 'true')) ||
        (github.event_name == 'workflow_dispatch' && inputs.gates != 'frontend'))
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -121,7 +125,8 @@ jobs:
           EDGE_HEADER: ${{ secrets.AKORO_EDGE_HEADER }}
           SUITE: ${{ inputs.backend_suite || 'regression' }}
           TARGET: ${{ inputs.backend_target || 'default' }}
-          EXPECT_SHA: ${{ github.event_name == 'push' && github.sha || inputs.expect_sha }}
+          # Pinned to the pushed commit only when the API itself changed (and redeployed).
+          EXPECT_SHA: ${{ github.event_name == 'push' && needs.deploy.outputs.api_changed == 'true' && github.sha || inputs.expect_sha }}
         run: bash .github/scripts/gate-backend.sh
 
   frontend:

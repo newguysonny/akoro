@@ -11,13 +11,17 @@ body=$(jq -nc --arg s "${SUITE:-}" --arg c "${SCENARIO:-}" --arg e "${EXPECT_SHA
 # Optional: EDGE_HEADER="Name: value" — what a Cloudflare skip rule in front of the API lets through.
 edge=(); [ -n "${EDGE_HEADER:-}" ] && edge=(-H "$EDGE_HEADER")
 hdrs=$(mktemp)
-start=$(curl -sS -D "$hdrs" -X POST "$GATE_URL/api/verify/runs" "${edge[@]}" -H "Authorization: Bearer $GATE_KEY" -H 'Content-Type: application/json' -d "$body")
-code=$(awk 'toupper($1) ~ /^HTTP/ {c=$2} END {print c}' "$hdrs")
+# A 502/503/504 is the API restarting (a deploy) or waking: try again a few times.
+for attempt in 1 2 3 4 5 6; do
+  start=$(curl -sS -D "$hdrs" -X POST "$GATE_URL/api/verify/runs" "${edge[@]}" -H "Authorization: Bearer $GATE_KEY" -H 'Content-Type: application/json' -d "$body")
+  code=$(awk 'toupper($1) ~ /^HTTP/ {c=$2} END {print c}' "$hdrs")
+  case "$code" in 502|503|504) echo "The API answered $code (restarting?) — retrying in 20s ($attempt/6)"; sleep 20 ;; *) break ;; esac
+done
 if [ "${code:-0}" -ge 400 ]; then
   echo "::error::The gate answered $code."
   grep -iE '^(server|cf-ray|cf-mitigated|x-render-origin-server):' "$hdrs" || true
   echo "$start" | grep -o '<title>[^<]*</title>' || echo "$start" | head -c 300
-  if grep -qi '^server: cloudflare' "$hdrs" && ! grep -qi '^x-render-origin-server' "$hdrs"; then
+  if [ "$code" = "403" ] && grep -qi '^server: cloudflare' "$hdrs" && ! grep -qi '^x-render-origin-server' "$hdrs"; then
     echo "::error::Cloudflare refused the request before it reached the API (GitHub's runners are datacenter IPs). Add a Cloudflare skip rule for the AKORO_EDGE_HEADER secret — see .github/workflows/verification-gates.yml."
   fi
   exit 1
