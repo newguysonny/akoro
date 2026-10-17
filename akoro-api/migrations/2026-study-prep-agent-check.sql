@@ -44,3 +44,20 @@ ALTER TABLE edu.study_prep_topics
 COMMENT ON COLUMN public.battles.study_prep_topic_id IS 'An Agent Check (battle_type check): the Study Prep topic it checks (D45).';
 COMMENT ON COLUMN edu.study_prep_topics.check_battle_id IS 'The topic''s current Agent Check battle (D45). Scored once: check_scored_at.';
 COMMENT ON COLUMN edu.study_prep_topics.check_result IS '{ correct, guessed, wrong, total, score, perQuestion:[{order, outcome, gap?}], gaps }';
+
+-- The scope rule (2026-class-battles.sql) wanted every battle in a course or
+-- a classroom. An Agent Check is neither (it belongs to a Study Prep topic),
+-- and neither are network battles (createNetworkBattle inserts both null) or
+-- the daily battle (recurring_key) — where the rule is live, those inserts
+-- failed. A battle is scoped by a course, a classroom, its Study Prep topic,
+-- the network creator who made it, or its daily series.
+DO $$
+BEGIN
+  ALTER TABLE public.battles DROP CONSTRAINT IF EXISTS battles_scope_check;
+  ALTER TABLE public.battles ADD CONSTRAINT battles_scope_check CHECK (
+    course_id IS NOT NULL OR classroom_id IS NOT NULL OR study_prep_topic_id IS NOT NULL
+    OR created_by IS NOT NULL OR recurring_key IS NOT NULL
+  );
+EXCEPTION WHEN check_violation THEN
+  RAISE NOTICE 'battles_scope_check not applied — some rows have no scope at all.';
+END $$;
