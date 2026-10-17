@@ -50,14 +50,22 @@ export function makeLlmAgent({ system, contentSearchEnabled = false, learnerId =
 
   return {
     catalogue,
-    async next({ iteration, goal, observations }) {
+    async next({ iteration, maxIterations = null, goal, observations, finalOnly = null }) {
+      // Last iteration: only the actions that end the step are offered, so a
+      // planner that spent its budget reading still proposes instead of
+      // being cut off by the loop cap.
+      const offered = finalOnly
+        ? tools.filter((t) => finalOnly.includes(toRegistry.get(t.function.name)))
+        : tools;
       const messages = [
         { role: "system", content: system },
         {
           role: "user",
           content: [
             `Goal: ${String(goal || "").slice(0, 300)}`,
-            `Iteration: ${iteration}.`,
+            maxIterations
+              ? `Iteration ${iteration} of ${maxIterations}.${finalOnly ? " This is your last step: finish now with the best plan you can make from what you found." : " Read only what you need, then act — the step ends at the last iteration."}`
+              : `Iteration: ${iteration}.`,
             observations.length
               ? `Observations so far:\n${observations.map((observation, index) => `${index + 1}. ${JSON.stringify(observation)}`).join("\n").slice(0, 6000)}`
               : "No observations yet — start by inspecting what you need.",
@@ -66,7 +74,7 @@ export function makeLlmAgent({ system, contentSearchEnabled = false, learnerId =
         },
       ];
       const response = await openai.chat.completions.create({
-        model: OPENAI_MODEL, max_tokens: 700, messages, tools, tool_choice: "required",
+        model: OPENAI_MODEL, max_tokens: 700, messages, tools: offered.length ? offered : tools, tool_choice: "required",
         __feature: "study_prep_planning", __timeoutMs: 45_000, __maxRetries: 1,
         ...(learnerId ? { __userId: learnerId } : {}),
       });
