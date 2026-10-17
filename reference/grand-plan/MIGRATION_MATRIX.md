@@ -27,6 +27,16 @@ These change what Phase 1 and later phases must do first.
 
 ---
 
+### 1.1 Fixed since the audit (2026-10-17)
+
+| Finding | Fix | Proof |
+|---|---|---|
+| F1 planning loop | Provider-safe tool names mapped back (`llm-agent.js`); provider errors logged as `agent_error` events; call labelled `study_prep_planning`, 45 s timeout. Two more causes surfaced once the 400 was gone: tools had **no argument schemas** (`TOOL_ARGS` in `tools/registry.js` now), and the planner spent its 6 iterations reading (it now knows its budget; the last planning iteration offers only `propose_plan`). | Gate `studyprep.plan_completes` PASS 3/3 on the sandbox (with a sandbox-only JSS1 Basic Science seed, F2 still open for production) |
+| F3 double charge | Generation is platform-paid when Study Prep already took the flat price (`prepaid` in `exam-prep-service.js`); the standalone exam-prep route stays metered. | Gate `studyprep.practice_charged_once` PASS: one debit, `study_prep_practice`, −2 |
+| **F8 (new)** every `/study-prep/sessions/:id` route and `getOwnedExamPrepRun` rejected real UUIDs (13 hex digits required in the last group) — the plan card could never be confirmed; practice could never be submitted or retested | Both patterns now 8-4-4-4-12, tested against real UUIDs. | Same gate run: confirm and practice succeed |
+
+Still open: F2 (no production syllabus data), F4-F7.
+
 ## 2. Open questions (§20)
 
 | # | Answer |
