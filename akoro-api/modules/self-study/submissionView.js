@@ -11,7 +11,7 @@ export function briefForLearner(details, graded) {
     ...details,
     questions: details.questions.map((q) => {
       if (!q || typeof q !== "object") return q;
-      const { correct, answer, explanation, ...rest } = q;   // eslint-disable-line no-unused-vars
+      const { correct, answer, explanation, marking, ...rest } = q;   // eslint-disable-line no-unused-vars
       return rest;
     }),
   };
