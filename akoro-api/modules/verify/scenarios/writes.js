@@ -83,5 +83,6 @@ export const noResidue = {
     ctx.expect.eq("no leftover built tools", await ctx.db.count("edu.agent_tools", { label: like }), 0);
     ctx.expect.eq("no leftover capability requests", await ctx.db.count("edu.agent_tool_requests", { goal: like }), 0);
     ctx.expect.eq("no leftover study-prep sessions", await ctx.db.count("edu.study_prep_sessions", { goal: like }), 0);
+    ctx.expect.eq("no leftover activities", await ctx.db.count("edu.self_study_assignments", { title: like }), 0);
   },
 };

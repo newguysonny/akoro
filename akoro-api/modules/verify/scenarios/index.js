@@ -11,10 +11,11 @@ import { planCompletes, practiceChargedOnce, generatedOutline, agentCheckBattle,
 import { bridgePersists } from "./teaching.js";
 import { conceptCurve } from "./decay.js";
 import { suggestionsAnswer } from "./suggestions.js";
+import { paperStructured } from "./activities.js";
 
 const ALL = [healthBuild, toolsCatalogue, scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity,
   privacyEdges, rateLimitCountedOnce, battleEntryGates, followUpDeliverIntoChat, taskDueInMinutes, noResidue,
-  viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, agentCheckBattle, classSyllabusFirst, historyPages, workflowMirror];
+  viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, agentCheckBattle, classSyllabusFirst, historyPages, workflowMirror, paperStructured];
 
 export const SCENARIOS = Object.fromEntries(ALL.map((s) => [s.name, s]));
 
@@ -22,6 +23,8 @@ export const SUITES = {
   smoke: ["smoke.health_build", "smoke.tools_catalogue", "ratelimit.counted_once"],
   "agent-chat": ["chat.schedule_message_here", "chat.tool_error_honesty", "chat.past_questions_truth", "chat.history_tools", "chat.read_tools_run", "chat.dry_run_no_writes", "chat.protege_identity"],
   "chat-history": ["chat.history_pages", "writes.no_residue"],
+  // Assignments on paper: structured AI output, cropped drawings, the submission template.
+  activities: ["activity.paper_structured", "writes.no_residue"],
   // Real changes on test learners, then proof nothing was left behind.
   writes: ["tasks.create_due_in_minutes", "followups.deliver_into_chat", "writes.no_residue"],
   // Phase V4 end to end (sandbox only: BLOCKED on production).
