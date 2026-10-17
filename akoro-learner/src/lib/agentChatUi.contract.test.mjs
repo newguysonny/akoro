@@ -15,7 +15,7 @@ test('thinking, tools and text stream as interleaved steps of one turn', () => {
   const send = between(tab, 'const sendMessage=async', 'const toLocalInput=');
   assert.match(send, /onTrace: appendTrace/);
   assert.match(send, /applyTraceEvent\(m\.blocks,event,data,Date\.now\(\)\)/);
-  assert.match(tab, /<TraceBlocks blocks=\{msg\.blocks\}\/>/);
+  assert.match(tab, /<TraceBlocks blocks=\{\[\.\.\.\(msg\.blocks\|\|\[\]\),\.\.\.studyPrepSteps\(msg\)\]\}\/>/);
   // Consecutive tool rows group; thinking rows read "Thought for Ns".
   assert.match(blocks, /groupTraceBlocks\(blocks\)/);
   assert.match(blocks, /thoughtLabel\(/);

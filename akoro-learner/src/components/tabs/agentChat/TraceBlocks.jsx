@@ -156,7 +156,7 @@ export function ToolRow({ block, nested = false }) {
           ? <span style={{ color: RED, fontWeight: 800, fontSize: 12 }}>✕</span>
           : <span style={{ color: GREEN, fontWeight: 800, fontSize: 12 }}>✓</span>)}
         {block.status === 'stopped' && <span style={{ fontSize: 11 }}>stopped</span>}
-        <span style={{ fontSize: 11, opacity: .85, flexShrink: 0 }}>{durationLabel(block.ms || elapsed)}</span>
+        {(running || block.ms != null) && <span style={{ fontSize: 11, opacity: .85, flexShrink: 0 }}>{durationLabel(block.ms || elapsed)}</span>}
         <Chevron open={open}/>
       </RowButton>
       {open && (

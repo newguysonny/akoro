@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
 import { API, apiGet, apiPost, apiPatch, apiDelete, streamPost } from '../../services/api.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
@@ -25,7 +25,7 @@ import { useInFlight } from '../../hooks/useInFlight.js';
 import StudyPrepChatCard from './studyPrep/StudyPrepChatCard.jsx';
 import { fetchActiveStudyPrepSession } from '../../services/studyPrepApi.js';
 import TraceBlocks from './agentChat/TraceBlocks.jsx';
-import { applyTraceEvent, blocksFromSavedTrace, promoteActivity, settleRunning } from '../../lib/agentChatTrace.js';
+import { applyTraceEvent, blocksFromSavedTrace, promoteActivity, settleRunning, studyPrepEventBlocks } from '../../lib/agentChatTrace.js';
 import { CHAT_STARTERS, cleanIdeas, protegeMoves } from '../../lib/chatIdeas.js';
 import AgentCards from '../network/AgentCards.jsx';
 import ChallengeRequestCards from '../network/ChallengeRequestCards.jsx';
@@ -98,6 +98,25 @@ function AgentChatTab({
   });
 
   const [messages,   setMessages]   = useState(() => [greeting(initName, initEmoji)]);
+  // Each study-prep session's steps, reported by its card: they show in the
+  // trace of the turn they happened in, not in the card.
+  const [studyPrepEvents, setStudyPrepEvents] = useState({});
+  const onStudyPrepEvents = useCallback((sessionId, events) => {
+    setStudyPrepEvents((previous) => (previous[sessionId] === events ? previous : { ...previous, [sessionId]: events }));
+  }, []);
+  // A card's steps, split by turn: from this card's message (the first card
+  // of the session takes everything before it) up to the session's next card.
+  const studyPrepSteps = (msg) => {
+    const sessionId = msg.from !== "me" && msg.studyPrepSessionId;
+    if (!sessionId || !studyPrepEvents[sessionId]) return [];
+    const msgAt = (m) => Date.parse(m.at || "") || (typeof m.id === "number" ? Math.floor(m.id) : 0);
+    const cards = messages.filter((m) => m.from !== "me" && m.studyPrepSessionId === sessionId);
+    const index = cards.indexOf(msg);
+    return studyPrepEventBlocks(studyPrepEvents[sessionId], {
+      from: index <= 0 ? 0 : msgAt(msg),
+      to: index >= 0 && cards[index + 1] ? msgAt(cards[index + 1]) : Infinity,
+    });
+  };
   const [input,      setInput]      = useState("");
   const [loading,    setLoading]    = useState(false);
   const [agentName,  setAgentName]  = useState(initName);
@@ -271,6 +290,7 @@ function AgentChatTab({
         from: m.role === "user" ? "me" : "agent",
         text: m.text,
         time: new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        at: m.created_at,
         ...(m.role !== "user" && Array.isArray(m.trace) ? { blocks: blocksFromSavedTrace(m.trace) } : {}),
       }));
       setSession(id);
@@ -472,6 +492,7 @@ function AgentChatTab({
           from: "agent",
           text: "Your study-prep session is active — pick up where you left off:",
           time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          at: new Date().toISOString(),
           phase: "done",
           studyPrepSessionId: response.session.id,
         }]);
@@ -902,8 +923,8 @@ function AgentChatTab({
               );
               return (
                 <div key={msg.id} style={{ display:"flex",flexDirection:"column",alignItems:"stretch",minWidth:0,paddingLeft:REPLY_INSET }}>
-                  {msg.blocks?.length>0&&<TraceBlocks blocks={msg.blocks}/>}
-                  {!msg.blocks?.length&&(msg.thinking||thinkingStream)&&<ThoughtBlock thinking={msg.thinking} streaming={thinkingStream}/>}
+                  {(msg.blocks?.length>0||studyPrepSteps(msg).length>0)&&<TraceBlocks blocks={[...(msg.blocks||[]),...studyPrepSteps(msg)]}/>}
+                  {!msg.blocks?.length&&!studyPrepSteps(msg).length&&(msg.thinking||thinkingStream)&&<ThoughtBlock thinking={msg.thinking} streaming={thinkingStream}/>}
                   {/* An answer from the teaching guide, not from what the learner taught. */}
                   {msg.guide&&(
                     <div style={{ display:"inline-flex",alignSelf:"flex-start",alignItems:"center",gap:6,margin:"0 0 6px",padding:"4px 10px",borderRadius:20,background:"rgba(232,136,74,.12)",border:"1px solid rgba(232,136,74,.4)",color:"#B45309",fontSize:11.5,fontWeight:800 }}>
@@ -935,7 +956,7 @@ function AgentChatTab({
                       <span style={{ width:8,height:8,borderRadius:2,background:"var(--ak-text-muted)",display:"inline-block" }}/>{t('agent.stopped')}
                     </div>
                   )}
-                  {!isMe&&msg.studyPrepSessionId&&<StudyPrepChatCard sessionId={msg.studyPrepSessionId}/>}
+                  {!isMe&&msg.studyPrepSessionId&&<StudyPrepChatCard sessionId={msg.studyPrepSessionId} onEvents={onStudyPrepEvents}/>}
                   {!isMe&&msg.syllabus?.length>0&&(
                     <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5 }}>
                       {msg.syllabus.map((s,i)=>(

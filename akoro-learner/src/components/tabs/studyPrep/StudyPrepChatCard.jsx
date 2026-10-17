@@ -33,7 +33,7 @@ const TOPIC_STATUS_LABEL = {
   flagged_gap: 'gap flagged', capped_out: 'capped out', deferred: 'deferred',
 };
 
-export default function StudyPrepChatCard({ sessionId }) {
+export default function StudyPrepChatCard({ sessionId, onEvents }) {
   const [view, setView] = useState(null);
   const [attempt, setAttempt] = useState(null);
   const [answers, setAnswers] = useState({});
@@ -82,6 +82,10 @@ export default function StudyPrepChatCard({ sessionId }) {
     fetchStudyPrepSession(sessionId).then((response) => { if (response?.session) setView(response); }).catch(() => {});
   }, [sessionId]);
 
+  // The session's steps go to the chat's trace, not the card (AgentChatTab).
+  const events = view?.events;
+  useEffect(() => { if (events) onEvents?.(sessionId, events); }, [sessionId, events, onEvents]);
+
   // An Agent Check runs on the server; the card picks up its score when it lands.
   const checkRunning = !!view?.topics?.some((topic) => topic.status === 'active' && topic.checkBattleId && !topic.checkScoredAt);
   useEffect(() => {
@@ -106,7 +110,6 @@ export default function StudyPrepChatCard({ sessionId }) {
 
   const session = view.session;
   const topics = view.topics || [];
-  const events = view.events || [];
   const activeTopic = topics.find((topic) => topic.status === 'active') || null;
   const estimate = session.estimate;
   // D45: practice is the Agent Check — the protégé answers from the learner's
@@ -366,32 +369,6 @@ export default function StudyPrepChatCard({ sessionId }) {
         </div>
       )}
 
-      {/* ── the activity log: replay only, honest pacing ───────────────── */}
-      {events.length > 0 && (
-        <details style={{ marginTop: 2 }}>
-          <summary style={{ ...caption, cursor: 'pointer', fontWeight: 800 }}>Activity ({events.length})</summary>
-          <div style={{ display: 'grid', gap: 6, marginTop: 7, maxHeight: 220, overflowY: 'auto' }}>
-            {[...events].reverse().map((event) => (
-              <div key={event.sequence} style={{ display: 'grid', gap: 1 }}>
-                {event.agentIntent && (
-                  <div style={{ fontSize: 11, fontStyle: 'italic', color: 'var(--ak-text-muted)', fontWeight: 500 }}>
-                    agent says: {event.agentIntent}
-                    {event.durationMs != null && <span style={{ marginLeft: 5, opacity: 0.7 }}>({event.durationMs} ms)</span>}
-                  </div>
-                )}
-                {event.narrative && (
-                  <div style={{ fontSize: 11.5, fontWeight: 650, color: 'var(--ak-text-sub)', lineHeight: 1.45 }}>
-                    {event.eventType === 'harness_decision' ? '✓ ' : event.eventType === 'engine_result' ? '📊 ' : event.eventType === 'human_gate' ? '👤 ' : ''}{event.narrative}
-                  </div>
-                )}
-                {!event.narrative && !event.agentIntent && (
-                  <div style={{ fontSize: 10.5, color: 'var(--ak-text-muted)' }}>{event.eventType}{event.tool ? ` · ${event.tool}` : ''}{event.action ? ` · ${event.action}` : ''}</div>
-                )}
-              </div>
-            ))}
-          </div>
-        </details>
-      )}
       {watching && <BattleModal battle={watching} onClose={() => { setWatching(null); refresh(); }} />}
     </div>
   );

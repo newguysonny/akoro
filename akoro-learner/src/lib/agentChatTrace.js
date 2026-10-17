@@ -160,3 +160,29 @@ export function durationLabel(ms) {
   const value = Number(ms) || 0;
   return value < 1000 ? `${Math.round(value)}ms` : `${(value / 1000).toFixed(1)}s`;
 }
+
+const STUDY_PREP_STEP = {
+  harness_decision: 'A Study Prep check',
+  engine_result: 'The Education Engine scored it',
+  human_gate: 'Your decision',
+  observation: 'What I noticed',
+};
+
+/**
+ * A study-prep session's steps (its event log) as trace rows, for the chat
+ * turn they happened in: events at or after `from` (ms) and before `to`.
+ * The card shows the session; its steps read as part of the agent's work.
+ */
+export function studyPrepEventBlocks(events, { from = 0, to = Infinity } = {}) {
+  return (events || [])
+    .filter((event) => event?.narrative)
+    .filter((event) => {
+      const at = Date.parse(event.at || '') || 0;
+      return at >= from && at < to;
+    })
+    .map((event) => ({
+      type: 'tool', id: `study_prep_${event.sequence}`, status: 'done', ok: true, ms: event.durationMs ?? null,
+      category: 'action', headline: event.narrative,
+      description: STUDY_PREP_STEP[event.eventType] || 'A Study Prep step', result: event.narrative,
+    }));
+}

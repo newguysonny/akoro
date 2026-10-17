@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   applyTraceEvent, blocksFromSavedTrace, durationLabel, groupLabel, groupTraceBlocks, promoteActivity, settleRunning, thoughtLabel,
+  studyPrepEventBlocks,
 } from './agentChatTrace.js';
 
 const fold = (events, start = 1000) => events.reduce(
@@ -141,4 +142,19 @@ test('developer view: raw I/O lives on the live row only and is dropped from a s
   ]);
   assert.deepEqual(blocks[0].raw, { name: 'list_my_goals', args: '{}', output: '{"goals":[]}' });
   assert.ok(!('raw' in blocksFromSavedTrace(blocks)[0]));
+});
+
+test('study-prep steps become trace rows for the turn they happened in', () => {
+  const events = [
+    { sequence: 1, eventType: 'harness_decision', narrative: 'Checked the plan.', at: '2026-10-17T10:00:00Z' },
+    { sequence: 2, eventType: 'agent_tool_call', narrative: null, at: '2026-10-17T10:00:01Z' },
+    { sequence: 3, eventType: 'engine_result', narrative: 'Your agent answered 3 of 5.', at: '2026-10-17T10:05:00Z' },
+  ];
+  const all = studyPrepEventBlocks(events);
+  assert.deepEqual(all.map((b) => b.headline), ['Checked the plan.', 'Your agent answered 3 of 5.']);
+  assert.equal(all[1].description, 'The Education Engine scored it');
+  assert.ok(all.every((b) => b.type === 'tool' && b.status === 'done' && b.category === 'action'));
+  const later = studyPrepEventBlocks(events, { from: Date.parse('2026-10-17T10:01:00Z') });
+  assert.deepEqual(later.map((b) => b.id), ['study_prep_3']);
+  assert.equal(studyPrepEventBlocks(events, { to: Date.parse('2026-10-17T10:00:00Z') }).length, 0);
 });
