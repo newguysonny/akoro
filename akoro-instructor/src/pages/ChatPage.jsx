@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Send, Plus, Brain, CheckSquare, X, Paperclip, Camera,
@@ -69,6 +69,9 @@ import {
 } from '../constants.js';
 
 const bdr = (w, c) => `${w}px solid ${c}`;
+
+/* Messages per history page: the newest on open, then a page per scroll to the top. */
+const HISTORY_PAGE = 10;
 
 const CHAT_INIT = [
   { id: 1, from: 'agent', text: "Good morning! I'm ready to help — training, quizzes, reminders, or student reports. What do you need?", time: '8:01 AM' },
@@ -159,6 +162,12 @@ export default function ChatPage() {
   const [attachFile, setAttachFile] = useState(null);
 
   const feedRef   = useRef(null);
+  // History loads a page at a time: the newest HISTORY_PAGE messages on open,
+  // the page before them each time the instructor scrolls to the top.
+  const olderRef      = useRef({ hasMore: false, before: null, loading: false });
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const prependRef    = useRef(null);   // the scroll position to keep while older messages go in above
+  const skipFollowRef = useRef(false);
   const attachRef = useRef(null);
   const inputRef  = useRef(null);
 
@@ -211,22 +220,27 @@ export default function ChatPage() {
     .then((d) => { const list = d?.sessions ?? []; setChatSessions(list); return list; })
     .catch(() => []);
 
+  // Cards ride the persisted message meta — a reload rebuilds the same
+  // topic/draft previews the live reply rendered, not a flat transcript.
+  const fromSaved = (m) => ({
+    id: m.id,
+    from: m.role === 'user' ? 'me' : 'agent',
+    text: m.text,
+    time: new Date(m.created_at).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' }),
+    at: m.created_at,
+    ...(Array.isArray(m.meta?.previews) && m.meta.previews.length ? { previews: m.meta.previews } : {}),
+    ...(Array.isArray(m.meta?.tools) && m.meta.tools.length ? { tools: m.meta.tools } : {}),
+  });
+
   const openChatSession = async (id) => {
     setDrawerOpen(false);
     if (id === chatSessionRef.current) return;
     try {
-      const d = await apiGet(`${CHAT_BASE}/sessions/${id}/messages`);
-      // Cards ride the persisted message meta — a reload rebuilds the same
-      // topic/draft previews the live reply rendered, not a flat transcript.
-      const msgs = (d?.messages ?? []).map((m) => ({
-        id: m.id,
-        from: m.role === 'user' ? 'me' : 'agent',
-        text: m.text,
-        time: new Date(m.created_at).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' }),
-        ...(Array.isArray(m.meta?.previews) && m.meta.previews.length ? { previews: m.meta.previews } : {}),
-        ...(Array.isArray(m.meta?.tools) && m.meta.tools.length ? { tools: m.meta.tools } : {}),
-      }));
+      const d = await apiGet(`${CHAT_BASE}/sessions/${id}/messages?limit=${HISTORY_PAGE}`);
+      const msgs = (d?.messages ?? []).map(fromSaved);
       chatSessionRef.current = id;
+      olderRef.current = { hasMore: !!d?.hasMore, before: msgs[0]?.at || null, loading: false };
+      setLoadingOlder(false);
       setMessages(msgs.length ? msgs : CHAT_INIT);
     } catch (e) {
       // History failures were once silent — the instructor just saw a fresh
@@ -236,7 +250,37 @@ export default function ChatPage() {
     }
   };
 
-  const newChat = () => { setDrawerOpen(false); chatSessionRef.current = null; setMessages(CHAT_INIT); setInput(''); };
+  const newChat = () => {
+    setDrawerOpen(false); chatSessionRef.current = null;
+    olderRef.current = { hasMore: false, before: null, loading: false }; setLoadingOlder(false);
+    setMessages(CHAT_INIT); setInput('');
+  };
+
+  // The page before the oldest message shown, kept in place on screen.
+  const loadOlder = async () => {
+    const page = olderRef.current;
+    const id = chatSessionRef.current;
+    if (!id || !page.hasMore || page.loading || !page.before) return;
+    page.loading = true; setLoadingOlder(true);
+    try {
+      const d = await apiGet(`${CHAT_BASE}/sessions/${id}/messages?limit=${HISTORY_PAGE}&before=${encodeURIComponent(page.before)}`);
+      if (id !== chatSessionRef.current) return;
+      const older = (d?.messages ?? []).map(fromSaved);
+      olderRef.current = { hasMore: !!d?.hasMore && older.length > 0, before: older[0]?.at || page.before, loading: false };
+      const el = feedRef.current;
+      if (el) prependRef.current = { height: el.scrollHeight, top: el.scrollTop };
+      setMessages((prev) => {
+        const ids = new Set(prev.map((m) => m.id));
+        const fresh = older.filter((m) => !ids.has(m.id));
+        return fresh.length ? [...fresh, ...prev] : prev;
+      });
+    } catch {
+      // Try again on the next scroll to the top.
+      if (id === chatSessionRef.current) olderRef.current = { ...page, loading: false };
+    } finally {
+      if (id === chatSessionRef.current) setLoadingOlder(false);
+    }
+  };
 
   const removeChatSession = async (id) => {
     setChatSessions((prev) => prev.filter((x) => x.id !== id));
@@ -344,7 +388,21 @@ export default function ChatPage() {
   }, [on, off, loadMyTools]);
 
   // ── auto-scroll ──
+  // Older messages went in above: keep what the instructor was reading in
+  // place. A first page too short to scroll fetches the next one straight away.
+  useLayoutEffect(() => {
+    const el = feedRef.current; if (!el) return;
+    const kept = prependRef.current;
+    if (kept) {
+      prependRef.current = null;
+      el.scrollTop = el.scrollHeight - kept.height + kept.top;
+      skipFollowRef.current = true;
+    }
+    if (el.scrollHeight <= el.clientHeight + 10 && olderRef.current.hasMore) loadOlder();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages]);
   useEffect(() => {
+    if (skipFollowRef.current) { skipFollowRef.current = false; return; }
     if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight;
   }, [messages, trainingInChat]);
 
@@ -721,7 +779,12 @@ export default function ChatPage() {
         </div>
 
         {/* Message feed */}
-        <div ref={feedRef} style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '8px 2px' }}>
+        <div ref={feedRef} onScroll={(e) => { if (e.currentTarget.scrollTop < 80) loadOlder(); }} style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '8px 2px' }}>
+          {loadingOlder && (
+            <div role="status" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 12, color: MUTED }}>
+              <Loader size={12} className="spinner" /> Loading earlier messages…
+            </div>
+          )}
           {messages.map((msg, mi) => {
             const isMe = msg.from === 'me';
             const isLatestReply = !isMe && mi === messages.length - 1 && mi > 0;
