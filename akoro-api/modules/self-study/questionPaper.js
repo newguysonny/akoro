@@ -27,7 +27,7 @@
  * it as its second argument: chat(messages, { response_format }).
  */
 import { sanitizeSvg } from "./paperLayout.js";
-import { ANSWER_SPACES, dropNulls, paperResponseFormat, revisionResponseFormat } from "./paperSchema.js";
+import { ANSWER_SPACES, answerSpaceFor, dropNulls, paperResponseFormat, revisionResponseFormat } from "./paperSchema.js";
 
 const WORD_NUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, fifteen: 15, twenty: 20 };
 const num = (s) => (s == null ? null : /^\d+$/.test(s) ? Number(s) : WORD_NUM[String(s).toLowerCase()] ?? null);
@@ -149,6 +149,12 @@ export function mergePlan(parsed, given) {
     out.wanted = (out.wanted || []).filter((w) => !out.mix.some((x) => x.label === w));
   }
   const n = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : null);
+  // The teacher's own words win over the agent's reading of them when the
+  // agent's mix doesn't even add up to its own total and the words' does
+  // ("one case study with 2 questions and 2 MCQ": 2 case-study questions, not 1).
+  const sum = (mix) => mix.reduce((a, x) => a + x.count, 0);
+  const total = n(given.total);
+  if (total && parsed?.mix?.length && sum(out.mix) !== total && sum(parsed.mix) === total) out.mix = [...parsed.mix];
   if (n(given.total)) out.total = Math.min(MAX_QUESTIONS, n(given.total));
   else if (out.mix.length) out.total = out.mix.reduce((a, x) => a + x.count, 0);
   if (given.diagrams === 0 || given.diagrams === false) out.diagrams = 0;
@@ -298,7 +304,12 @@ const str = (v, max) => String(v ?? "").trim().slice(0, max);
 function normalizeQuestion(q, { options = null } = {}) {
   if (!q || typeof q !== "object") return null;
   q = dropNulls(q);
-  const format = FORMATS.includes(q.format) ? q.format : kindFor(q.type)?.format || null;
+  // The kind its type names decides the shape ("MCQ" is never true/false);
+  // only a type we don't know leaves it to the model's format — and a
+  // true/false format on a question with other options is a slip.
+  const named = kindFor(String(q.type || "").replace(/_/g, " "));
+  let format = named ? named.format || null : FORMATS.includes(q.format) ? q.format : null;
+  if (!named && format === "true_false" && Array.isArray(q.options) && q.options.length > 2) format = null;
   let text = str(q.text ?? q.q, 2000);
   let assertion = "", reason = "";
   if (format === "assertion_reason") {
@@ -364,7 +375,7 @@ function normalizeQuestion(q, { options = null } = {}) {
   const fits = space && (Array.isArray(out.options)
     ? (out.format === "true_false" ? space === "true_false" : space === "options")
     : out.format === "label" ? space === "labels" : !["options", "true_false", "labels"].includes(space));
-  if (fits) out.answer_space = space;
+  out.answer_space = fits ? space : answerSpaceFor(out);
   if (str(q.marking, 600)) out.marking = str(q.marking, 600);
   return out;
 }
@@ -379,6 +390,13 @@ export function normalizePaper(json, plan = {}) {
   const questions = (Array.isArray(j.questions) ? j.questions : []).slice(0, MAX_QUESTIONS)
     .map((q) => normalizeQuestion(q, { options: mixOpts.get(String(q?.type || "").toLowerCase()) || plan.options || 5 }))
     .filter(Boolean)
+    .map((q) => {
+      // "case_study" / "MCQ" written for the plan's "Case study" / "Objective": the plan's label.
+      const k = kindFor(String(q.type || "").replace(/_/g, " "));
+      const same = k && (plan.mix || []).find((x) => kindFor(x.label) === k);
+      if (same && q.type !== same.label) q.type = same.label;
+      return q;
+    })
     .map((q) => {
       if (Number.isInteger(q.section) && !sections[q.section]) delete q.section;
       if (Number.isInteger(q.passage) && !passages[q.passage]?.text) delete q.passage;

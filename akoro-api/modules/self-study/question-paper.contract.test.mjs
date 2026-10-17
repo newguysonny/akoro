@@ -67,7 +67,7 @@ test("count check, one retry, then a warning — never a silent change", async (
   assert.match(calls[1].at(-1).content, /Asked for 5 questions, got 4\. Asked for 3 MCQ, got 2\./);
   assert.equal(out.warning, null);
   assert.equal(out.paper.questions.length, 5);
-  assert.deepEqual(out.paper.questions[0], { q: "1", type: "MCQ", max_points: 2, difficulty: "Easy", cognitive_level: "Recall", options: ["a", "b", "c", "d"], correct: 1 });
+  assert.deepEqual(out.paper.questions[0], { q: "1", type: "MCQ", max_points: 2, difficulty: "Easy", cognitive_level: "Recall", options: ["a", "b", "c", "d"], correct: 1, answer_space: "options" });
   assert.equal("sections" in out.paper, false);
 
   let n = 0;

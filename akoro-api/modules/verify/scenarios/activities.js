@@ -123,7 +123,7 @@ const CHAT_CASES = [
     },
   },
   {
-    key: "economics_case_study", subject: "Economics",
+    key: "economics_case_study", subject: "Economics", instructor: "@tester52",
     prompt: (who) => `Set an Economics assignment for ${who} on demand and supply (SS1): one case study with 2 questions about it, plus 2 objective questions with 5 options each (A–E).`,
     check(ctx, qs, paper) {
       ctx.expect.eq("4 questions", qs.length, 4);
@@ -136,7 +136,7 @@ const CHAT_CASES = [
     },
   },
   {
-    key: "biology_cell", subject: "Biology",
+    key: "biology_cell", subject: "Biology", instructor: "@tester52",
     prompt: (who) => `Biology assignment for ${who} on the cell (SS1): 3 questions — 1 labelling question on a diagram of an animal cell, 1 assertion and reason, and 1 essay.`,
     check(ctx, qs) {
       ctx.expect.eq("3 questions", qs.length, 3);
@@ -154,7 +154,7 @@ function chatToSubmission(c) {
   return {
     name: `activity.chat_${c.key}`, area: "activities", risk: "write",
     description: `Instructor chat → assignment → learner submission (${c.subject}): the paper drafts in the structured output and matches the request; the learner's work reads back as the submission template.`,
-    params: { instructor: { default: "@tester51" }, learner: { default: "@tester19" } },
+    params: { instructor: { default: c.instructor || "@tester51" }, learner: { default: "@tester19" } },
     async run(ctx, p) {
       const teacher = await ctx.as(p.instructor);
       if (teacher.role !== "instructor") ctx.expect.blocked(`${p.instructor} isn't an instructor (seed 2026-seed-instructor-testers.sql)`);

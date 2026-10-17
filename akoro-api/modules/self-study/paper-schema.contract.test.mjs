@@ -7,7 +7,7 @@ process.env.SUPABASE_URL ||= "http://localhost:59999";
 process.env.SUPABASE_SERVICE_KEY ||= "test-service-key";
 
 const { paperSchema, revisionSchema, paperResponseFormat, answerSpaceFor, submissionDocument } = await import("./paperSchema.js");
-const { normalizePaper, applyRevision, draftPaper, revisePaper } = await import("./questionPaper.js");
+const { normalizePaper, applyRevision, draftPaper, revisePaper, mergePlan, parseQuestionRequest, checkPaper } = await import("./questionPaper.js");
 const { cropDrawing, isDrawingName } = await import("./submissionFiles.js");
 const { aiGradeSchema, shapeAiGrade } = await import("./aiGrade.js");
 
@@ -58,7 +58,7 @@ test("a strict reply (nulls for unused fields) → the stored question shape, wi
   assert.equal(m.answer_space, "options");
   assert.equal(m.correct, 1);
   assert.equal(b.answer_space, "blank");
-  assert.equal(c.answer_space, undefined, "options on an open question don't fit — dropped (answerSpaceFor decides)");
+  assert.equal(c.answer_space, "lines", "options on an open question don't fit — the kind's own space instead");
   assert.equal(c.passage, 0);
   assert.deepEqual(l.answer, { P: "Nucleus", Q: "Cell wall" });
   assert.equal(l.answer_space, "labels");
@@ -192,4 +192,27 @@ test("the AI grade reads the learner's answer (handwriting transcribed) for the 
   const d = shapeAiGrade({ assignment: { details: { questions: [{ q: "Solve 3x + 5 = 20", max_points: 2 }] } }, submission: { answers: {} },
     json: { questions: [{ index: 0, read: "3x = 15\nx = 5", awarded: 2, why: "Correct steps." }], rubric: [], feedback: "f" } });
   assert.equal(d.questions[0].read, "3x = 15\nx = 5");
+});
+
+test("the type's kind decides the shape: an MCQ marked true_false keeps its options; case_study counts as Case study", () => {
+  const request = "one case study with 2 questions and 2 objective questions with 5 options each (A–E)";
+  // The chat agent read "one case study" as 1 — the words (2) win when its mix misses its own total.
+  const plan = mergePlan(parseQuestionRequest(request), { total: 4, mix: [{ label: "Case study", kind: "open", count: 1 }, { label: "Objective", kind: "mcq", count: 2 }], options: 5 });
+  assert.deepEqual(plan.mix.map((x) => [x.label, x.count]), [["Case study", 2], ["MCQ", 2]]);
+  const five = ["A", "B", "C", "D", "E"].map((x) => `Price ${x}`);
+  const paper = normalizePaper({ instructions: "Answer all.", sections: null, passages: [{ title: "Case study: Tomatoes in Kano", text: "When tomato prices rose…" }], questions: [
+    sq({ text: "Explain the rise in price.", type: "case_study", format: "case_study", passage: 0, max_points: 4, answer_space: "lines" }),
+    sq({ text: "What should traders do?", type: "case_study", format: "case_study", passage: 0, max_points: 5, answer_space: "lines" }),
+    sq({ text: "Demand falls when…", type: "MCQ", format: "true_false", options: five, correct: 2, max_points: 1, answer_space: "options" }),
+    sq({ text: "Supply rises when…", type: "MCQ", format: "true_false", options: five, correct: 0, max_points: 1, answer_space: "options" }),
+  ] }, plan);
+  const [c1, , m1] = paper.questions;
+  assert.equal(c1.type, "Case study");
+  assert.equal(m1.format, undefined, "an MCQ is never true/false");
+  assert.deepEqual(m1.options, five);
+  assert.equal(m1.answer_space, "options");
+  assert.deepEqual(checkPaper(paper, plan), []);
+  // An answer space that doesn't fit is replaced by the one the kind gives.
+  const p2 = normalizePaper({ questions: [sq({ text: "Solve 2x = 6", type: "Calculation", answer_space: "options" })] });
+  assert.equal(p2.questions[0].answer_space, "working");
 });
