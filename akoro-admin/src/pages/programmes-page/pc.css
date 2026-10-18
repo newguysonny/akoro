@@ -131,3 +131,11 @@
 
 /* Inside the console shell the frame already pads on phones — go full-width. */
 @media (max-width:768px){.pcroot{padding:18px 2px 60px}}
+
+/* Drag-to-reorder */
+.pc-dragging{position:fixed!important;z-index:100;pointer-events:none;transform:scale(1.03);
+  box-shadow:0 12px 32px rgba(20,20,40,.22);border-radius:12px;opacity:.97}
+.pc-placeholder{background:#F4F5FF;border:2px dashed #4A5CD5;border-radius:10px;min-height:60px}
+.pc-placeholder>*{visibility:hidden}
+[data-drag-handle]{cursor:grab;color:#b0b0b0;padding:8px 4px;touch-action:none}
+[data-drag-handle]:active{cursor:grabbing}
