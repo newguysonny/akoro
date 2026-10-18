@@ -51,19 +51,24 @@ export const quietLearningPass = {
     }
 
     // The pass.
+    const t0 = new Date(Date.now() - 2_000).toISOString();
     const pass = await runQuietPass({ userId: me.id, chatSessionId: chatId, force: true });
     ctx.note(`pass: ${JSON.stringify(pass)}`);
     ctx.expect.eq("the pass ran", pass.status, "done");
     const summary = (await ctx.db.rows("edu.learner_agent_conversation_summaries", { chat_session_id: chatId }, { columns: "summary, source_message_count" }))[0];
     ctx.expect.ok("a real summary (not the concatenated one)", summary?.summary && !/^Latest learner request/.test(summary.summary) && /titration|chemistry/i.test(summary.summary), summary);
     ctx.expect.eq("…up to this point of the chat", summary?.source_message_count, 10);
+    // New notes from this chat, and the learner's earlier notes this pass refined (a merge, not a copy).
     const mems = await ctx.db.rows("edu.learner_agent_memories", { user_id: me.id, chat_session_id: chatId, status: "active" }, { columns: "id, kind, content, source" });
-    ctx.note(`memories: ${JSON.stringify(mems.map((x) => [x.kind, x.content]))}`);
-    ctx.expect.ok("it remembered what matters (≥ 2 notes)", mems.length >= 2, mems.length);
-    ctx.expect.ok("…of the learner's preference, goal or class", mems.some((x) => /diagram|quiz/i.test(x.content)) && mems.some((x) => /waec|ss2|\ba\b.*chemistry|chemistry/i.test(x.content)), mems.map((x) => x.content));
-    ctx.expect.ok("…and what was left unfinished", mems.some((x) => x.kind === "open_thread" || /curves|tomorrow/i.test(x.content)), mems.map((x) => [x.kind, x.content]));
-    ctx.expect.ok("nothing sensitive is remembered", !mems.some((x) => /anxi|doctor|tablet|tired/i.test(x.content)), mems.map((x) => x.content));
-    ctx.expect.ok("all marked as quiet learning", mems.every((x) => x.source === "quiet_learning"), mems.map((x) => x.source));
+    const touched = (await ctx.db.rows("edu.learner_agent_memories", { user_id: me.id, status: "active" }, { columns: "id, kind, content, updated_at", limit: 200 }))
+      .filter((x) => x.updated_at >= t0);
+    ctx.note(`new: ${JSON.stringify(mems.map((x) => [x.kind, x.content]))} · touched: ${JSON.stringify(touched.map((x) => [x.kind, x.content]))}`);
+    ctx.expect.ok("it remembered what matters (≥ 2 new notes)", mems.length >= 2, mems.length);
+    ctx.expect.ok("…the learner's preference (new, or merged into the one they had)", touched.some((x) => /diagram|quiz/i.test(x.content)), touched.map((x) => x.content));
+    ctx.expect.ok("…their goal or class", touched.some((x) => /waec|ss2|chemistry/i.test(x.content)), touched.map((x) => x.content));
+    ctx.expect.ok("…and what was left unfinished", touched.some((x) => x.kind === "open_thread" || /curves|tomorrow/i.test(x.content)), touched.map((x) => [x.kind, x.content]));
+    ctx.expect.ok("nothing sensitive is remembered", !touched.some((x) => /anxi|doctor|tablet|tired/i.test(x.content)), touched.map((x) => x.content));
+    ctx.expect.ok("new notes are marked as quiet learning", mems.every((x) => x.source === "quiet_learning"), mems.map((x) => x.source));
     ctx.expect.eq("the run is logged", (await ctx.db.rows("edu.quiet_learning_runs", { chat_session_id: chatId }, { columns: "status, watermark" }))[0]?.status, "done");
 
     // A replay does nothing.
