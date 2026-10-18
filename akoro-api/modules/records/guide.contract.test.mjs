@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { buildGuideMessages, cleanGuideHistory, GUIDE_LIMITS } from "./guideLib.js";
+import { turnRows } from "./askLib.js";
 
 const read = (p) => readFile(new URL(p, import.meta.url), "utf8");
 const [routes, askLib, migration, manifest, modal, chatView, recordSession, api] = await Promise.all([
@@ -62,4 +63,15 @@ test("continuation and links use the saved session's id; a cached transcript fin
   assert.match(modal, /else if \(d\.rowId\) onSessionSaved\?\.\(d\.rowId\);/);
   assert.match(recordSession, /onSessionSaved=\{\(sid\) => storeSid\(record\.id, sid\)\}/);
   assert.match(recordSession, /ready\(\[\{ html: '', text: '' \}\], null, \{ name: record\.name, text: text\.slice\(0, MAX_REFERENCE_CHARS\) \}\);/);
+});
+
+test("a turn's two rows carry the same columns (a batch insert NULLs a missing one; citations is NOT NULL)", () => {
+  for (const channel of [null, "ask", "guide"]) {
+    const [u, a] = turnRows({ userId: "u", recordId: "r", question: "q?", selection: { text: "s" }, answer: "a", citations: [{ n: 1 }], channel, now: 0 });
+    assert.deepEqual(Object.keys(u).sort(), Object.keys(a).sort());
+    assert.deepEqual(u.citations, []);
+    assert.equal(a.selection, null);
+    assert.deepEqual(a.citations, [{ n: 1 }]);
+    assert.equal("channel" in u, !!channel);
+  }
 });

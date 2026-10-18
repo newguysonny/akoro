@@ -298,13 +298,22 @@ export async function loadAskHistory({ userId, recordId, limit = ASK_LIMITS.HIST
   }));
 }
 
+/** The two rows of one turn — the same columns in both (see saveAskTurn). */
+export function turnRows({ userId, recordId, question, selection = null, answer, citations = [], channel = null, now = Date.now() }) {
+  const base = { user_id: userId, record_id: recordId, ...(channel ? { channel } : {}) };
+  return [
+    { ...base, role: "user", text: question, citations: [], selection: selection || null, created_at: new Date(now).toISOString() },
+    { ...base, role: "assistant", text: answer, citations: Array.isArray(citations) ? citations : [], selection: null, created_at: new Date(now + 1).toISOString() },
+  ];
+}
+
 export async function saveAskTurn({ userId, recordId, question, selection, answer, citations, channel = "ask" }) {
   const db = await dbLazy();
   const now = Date.now();
-  const rows = (withChannel) => [
-    { user_id: userId, record_id: recordId, ...(withChannel ? { channel } : {}), role: "user", text: question, selection: selection || null, created_at: new Date(now).toISOString() },
-    { user_id: userId, record_id: recordId, ...(withChannel ? { channel } : {}), role: "assistant", text: answer, citations, created_at: new Date(now + 1).toISOString() },
-  ];
+  // Both rows carry every column: a batch insert fills a column one row
+  // leaves out with NULL (not its default), and citations is NOT NULL — the
+  // learner's row without citations made every turn fail to save.
+  const rows = (withChannel) => turnRows({ userId, recordId, question, selection, answer, citations, channel: withChannel ? channel : null, now });
   let { data, error } = await db.schema("edu").from("record_chat_messages").insert(rows(true)).select("id, role");
   // Without the column an Ask turn saves as before; a guide turn must not land in Ask's thread.
   if (error && noChannel(error) && channel === "ask") ({ data, error } = await db.schema("edu").from("record_chat_messages").insert(rows(false)).select("id, role"));
