@@ -893,7 +893,7 @@ export const CHAT_TOOLS = [
   },
   {
     name: "search_my_study_knowledge",
-    description: "Search a small, bounded set of the signed-in learner's own saved study knowledge and notes. Use only when they ask to find their own notes, prior study material, or saved knowledge. A query is required; never search teacher/private material or another learner's records.",
+    description: "Search a small, bounded set of the signed-in learner's saved study knowledge — what their agent learnt from past teaching sessions. For documents, files or notes in their Library (uploads, links, pasted notes) use search_my_library instead. A query is required; never search teacher/private material or another learner's records.",
     input_schema: {
       type: "object",
       properties: {

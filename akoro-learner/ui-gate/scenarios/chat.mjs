@@ -93,6 +93,19 @@ export const scenarios = [
       const shown = await link.waitFor({ timeout: 90_000 }).then(() => true, () => false);
       const all = await page.locator('button[data-material]').allInnerTexts().catch(() => []);
       t.note(`material chips: ${all.join(' | ')}`);
+      // The reply is saved with its links: a reopened chat shows them too.
+      const chats = await t.api('GET', '/api/adaptive/chat/sessions');
+      const rows = chats.body?.sessions || chats.body?.data || [];
+      t.note(`chats: ${rows.slice(0, 3).map((c) => `${String(c.id).slice(0, 8)} "${String(c.title || '').slice(0, 50)}"`).join(' · ')}`);
+      const mine = rows.find((c) => String(c.title || '').includes(marker));
+      t.check('the turn is in a fresh chat of its own', !!mine);
+      if (mine) {
+        const saved = await t.api('GET', `/api/adaptive/chat/sessions/${mine.id}/messages?limit=10`);
+        const reply = (saved.body?.messages || []).filter((m) => m.role !== 'user').pop();
+        t.note(`saved reply meta: ${JSON.stringify(reply?.meta || null).slice(0, 300)}`);
+        t.note(`saved reply: ${String(reply?.text || '').slice(0, 300)} · tools: ${JSON.stringify((reply?.trace || []).map((b) => b.tool || b.type)).slice(0, 300)}`);
+        t.check('…and the saved reply keeps the link', (reply?.meta?.materials || []).some((m) => m.href === `/library?record=${record.id}`));
+      }
       t.check('the record shows as a link under the reply', shown);
       if (!shown) return;
       await link.click();
