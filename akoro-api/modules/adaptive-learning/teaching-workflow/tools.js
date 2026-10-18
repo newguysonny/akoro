@@ -170,6 +170,8 @@ export function createTeachingTurnTools() {
                 mustKnowIndex: context.mustKnowIndex,
                 teachingEvidence: teachingContext(orchestrator),
                 dialogue: evidenceUpdate.dialogue,
+                // The document's passages for this turn (documentGrounding.js) — the tip cites them.
+                reference: orchestrator.studentAgent?.referenceMaterial || null,
               },
               context.callbacks.onGuideChunk || null,
             )

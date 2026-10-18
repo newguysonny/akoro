@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchMyLibrary } from '../services/libraryApi.js';
 import { listRecords, listFolders, setRecordProgress, touchRecordOpened, searchRecords } from '../services/recordsApi.js';
@@ -300,6 +300,7 @@ export default function LibraryPage() {
   // records, so a record opened HERE parks on the bar too.
   const [now, nowActs] = useNowStudying(STUDENT_ID);
   const [searchParams] = useSearchParams();
+  const openRecordRef = useRef(null);   // the ?record= deep link opens through the normal flow
   const [items, setItems]       = useState([]);
   const [records, setRecords]   = useState([]);
   const [folders, setFolders]   = useState([]);
@@ -368,6 +369,12 @@ export default function LibraryPage() {
       if (folderParam) {
         const target = (flds || []).find((f) => `${f.id}` === `${folderParam}`);
         if (target) setFolderPage(target);
+      }
+      // Deep link (Agent Chat materials): /library?record=<id> opens that record.
+      const recordParam = searchParams.get('record');
+      if (recordParam) {
+        const target = (recs || []).find((r) => `${r.id}` === `${recordParam}`);
+        if (target) openRecordRef.current?.(target);
       }
     } finally { setLoading(false); }
   }, []);
@@ -500,6 +507,7 @@ export default function LibraryPage() {
     else if (r.kind === 'upload') setViewer(r);     // missing file → the viewer explains itself
     setSheetOpen(false);
   };
+  openRecordRef.current = openRecord;
 
   /* First open of a fresh record: 10% progress + a last-opened stamp. */
   const handleRecordOpened = useCallback((r) => {

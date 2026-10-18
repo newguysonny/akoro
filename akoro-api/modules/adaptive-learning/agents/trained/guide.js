@@ -4,6 +4,7 @@
 // All personality, phases, and tips driven from DB config.
 // =============================================================
 
+import { guidePassagesBlock } from "../../documentGrounding.js";
 import { buildGuidePrompt } from "../../training/agentPromptBuilder.js";
 import { buildTrainedMustKnowPrompt, buildTrainedEvaluateSessionPrompt } from "../../../agent-context/personas/trained.js";
 
@@ -74,7 +75,7 @@ export class TrainedGuide {
     });
 
     const messages = [
-      { role: "system", content: systemPrompt },
+      { role: "system", content: systemPrompt + guidePassagesBlock(params.reference) },
       {
         role: "user",
         content: JSON.stringify({

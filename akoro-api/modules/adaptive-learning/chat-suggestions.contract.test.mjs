@@ -72,7 +72,7 @@ test("wiring: every reply gets suggestions, after it arrives", () => {
   assert.match(chatPage, /onClick=\{\(\) => \{ setInput\(it\.fill\); inputRef\.current\?\.focus\(\); \}\}/, "a chip fills the box, it doesn't send");
   assert.match(draftCard, /if \(next\) onDraft\?\.\(next\);/);
   // The learner's Agent Chat: starters on a fresh chat, follow-ups after every reply.
-  assert.match(learnerTab, /apiPost\('\/api\/adaptive\/chat\/suggestions', \{ ask: text, reply: finalReply, role: 'student' \}\)/);
+  assert.match(learnerTab, /apiPost\('\/api\/adaptive\/chat\/suggestions', \{ ask: text, reply: finalReply, role: 'student',\s+tools: turnTools\.map/, "the turn's tools tailor the chips (a guide chip after \"not taught yet\")");
   assert.match(learnerTab, /messages\.length===1 \? CHAT_STARTERS\.map/);
   assert.match(learnerTab, /onClick=\{\(\)=>applyIdea\(it\.fill\)\}/, "a chip fills the box, it doesn't send");
 });

@@ -272,8 +272,9 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
   useEffect(() => {
     if (chatMode !== "guide" || aiLearn?.key === learnKey) return undefined;
     let live = true;
-    apiPost('/api/adaptive/chat/learn-suggestions', learnSuggestionInput(learnBase), { timeout: 15000 })
-      .then((r) => { if (live) setAiLearn({ key: learnKey, list: shapeLearnSuggestions(r?.suggestions) }); })
+    // With a library document open, the suggestions come from its own pages (each cites one).
+    apiPost('/api/adaptive/chat/learn-suggestions', { ...learnSuggestionInput(learnBase), ...(config?.document ? { document: config.document } : {}) }, { timeout: 20000 })
+      .then((r) => { if (live) setAiLearn({ key: learnKey, list: shapeLearnSuggestions(r?.suggestions, r?.cited) }); })
       .catch(() => { if (live) setAiLearn({ key: learnKey, list: [] }); });
     return () => { live = false; };
   }, [chatMode, learnKey]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -933,7 +934,11 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       guide={{
         messages: guideMessages,
         onSend: sendGuideMessage,
-        onSuggestion: setInput,
+        // A cited suggestion brings its passage along: the guide's answer starts from it.
+        onSuggestion: (label, citation) => {
+          setInput(label);
+          if (citation?.quote) { const q = makeQuote(citation.quote, citation.pageNumber ?? null); if (q) setQuote(q); }
+        },
         suggestions: learnSuggestions,
         guideName: guide.name,
         guideEmoji: guide.emoji,

@@ -50,6 +50,30 @@ export function protegeMoves(executions) {
     if (Array.isArray(x?.requests) && x.requests.length) { out.requests = x.requests.slice(0, 6); out.requestsMine = !!x.requestsMine; }
     // A change a built tool proposes — the learner confirms it on a card (S6).
     if (x?.confirm?.confirmationId) out.confirm = x.confirm;
+    // Materials the tools returned — clickable chips to the material itself.
+    if (Array.isArray(x?.materials)) out.materials = [...(out.materials || []), ...x.materials];
+  }
+  if (out.materials) out.materials = cleanMaterials(out.materials);
+  return out;
+}
+
+/* Only the app's own pages, deduped, at most 8 (the API builds these from
+   tool results; the client still refuses anything that isn't a known route). */
+const MATERIAL_HREF = [/^\/blog\/[\w-]+$/, /^\/write\/blog\/[\w-]+$/, /^\/course\/[\w-]+$/, /^\/library\?record=[0-9a-f-]{36}$/i, /^\/activities\/[\w-]+$/];
+export function cleanMaterials(list) {
+  const seen = new Set();
+  const out = [];
+  for (const m of Array.isArray(list) ? list : []) {
+    const title = String(m?.title || '').trim();
+    if (!title) continue;
+    const href = typeof m.href === 'string' && MATERIAL_HREF.some((re) => re.test(m.href)) ? m.href : null;
+    const teach = m.action?.type === 'teach' && m.action.topic ? { topic: String(m.action.topic), subject: String(m.action.subject || '') } : null;
+    if (!href && !teach) continue;
+    const key = href || `teach:${teach.topic.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ kind: String(m.kind || ''), title: title.slice(0, 90), ...(href ? { href } : { teach }) });
+    if (out.length >= 8) break;
   }
   return out;
 }

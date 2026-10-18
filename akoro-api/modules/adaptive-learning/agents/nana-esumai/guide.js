@@ -10,6 +10,7 @@
  *       Signals phase transitions (1 → 2 → 3 → 4 → assessment).
  */
 
+import { guidePassagesBlock } from "../../documentGrounding.js";
 import { openai } from "../base-orchestrator.js";
 // P2 (Context Layer Adoption): every prompt below loads VERBATIM from the
 // akoro-agent/ workspace via these builders — byte-identical to the
@@ -292,7 +293,7 @@ export class NaNaEsumai {
   async getTip(params, onChunk = null) {
     const { topic, phase, currentSubtopic, humanMessage, studentResponse,
             understanding, confusion, history, mustKnowParts, mustKnowIndex,
-            teachingEvidence = {}, dialogue = {} } = params;
+            teachingEvidence = {}, dialogue = {}, reference = null } = params;
     const evidenceInstruction = await buildEvidenceInstruction({ teachingEvidence, dialogue });
 
     const systemPrompt = await buildTipDecisionPrompt({
@@ -304,7 +305,7 @@ export class NaNaEsumai {
     });
 
     const messages = [
-      { role: "system", content: systemPrompt },
+      { role: "system", content: systemPrompt + guidePassagesBlock(reference) },
       { role: "user",   content: JSON.stringify({ humanMessage, studentResponse, recentHistory: history.slice(-4) }) },
     ];
 

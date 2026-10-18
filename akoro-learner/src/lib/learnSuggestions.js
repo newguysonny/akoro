@@ -91,8 +91,13 @@ export function learnSuggestionInput({ topic = '', subject = '', title = '', tex
   };
 }
 
-/** The API's strings → suggestions with icons (in the local order of kinds). */
-export function shapeLearnSuggestions(list) {
+/**
+ * The API's strings → suggestions with icons (in the local order of kinds).
+ * `cited` (the open document's own): [{ text, citation }] — each keeps the
+ * page it is about, shown as a chip that jumps the reader there.
+ */
+export function shapeLearnSuggestions(list, cited = null) {
+  const pageOf = new Map((Array.isArray(cited) ? cited : []).map((c) => [clean(c?.text).toLowerCase(), c?.citation || null]));
   const kinds = ['summary', 'explain', 'quiz', 'example'];
   const seen = new Set();
   const out = [];
@@ -102,7 +107,8 @@ export function shapeLearnSuggestions(list) {
     if (!label || label.length > 90 || seen.has(label.toLowerCase())) continue;
     seen.add(label.toLowerCase());
     const id = kinds[out.length] || `more-${out.length}`;
-    out.push({ id, icon: ICONS[id] || 'ti-sparkles', label });
+    const citation = pageOf.get(raw.toLowerCase()) || null;
+    out.push({ id, icon: ICONS[id] || 'ti-sparkles', label, ...(citation ? { citation } : {}) });
     if (out.length === 4) break;
   }
   return out;

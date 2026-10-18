@@ -8,6 +8,7 @@ import QuoteChip from '../common/QuoteChip.jsx';
 import { parseQuoted } from '../../lib/quotedMessage.js';
 import StreamCaret from '../common/StreamCaret.jsx';
 import BlockRenderer from '../sessions/BlockRenderer.jsx';
+import { citeLabel, toReaderCite } from '../../lib/askAnswer.js';
 import { Answer } from './ReaderAsk.jsx';
 import { AgentAvatar } from '../common/AgentAvatar.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
@@ -143,13 +144,23 @@ function GuideChat({ messages, guideName, guideEmoji, onSuggestion, suggestions 
           {suggestionsOpen && (
             <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
               {suggestions.map((s, i) => (
-                <button key={s.id || i} type="button" onClick={() => onSuggestion?.(s.label)}
+                <button key={s.id || i} type="button" onClick={() => onSuggestion?.(s.label, s.citation || null)}
                   style={{ display:"flex", alignItems:"center", gap:10, textAlign:"left",
                     padding:"10px 12px", borderRadius:12, background:"var(--ak-tag-bg)",
                     border:"1px solid var(--ak-border2)", cursor:"pointer",
                     fontFamily:"'Nunito',sans-serif" }}>
                   <Icon name={s.icon} size={15} color="var(--ak-accent)"/>
                   <span style={{ flex:1, fontSize:12.5, fontWeight:700, color:"var(--ak-text)" }}>{s.label}</span>
+                  {/* The page this suggestion is about: a chip that opens the reader there. */}
+                  {s.citation && toReaderCite(s.citation) && (
+                    <span role="button" tabIndex={0} className="folio-citation" aria-label={`Source: ${citeLabel(s.citation)}`}
+                      title={s.citation.quote ? `“${s.citation.quote}”` : 'Source'}
+                      onClick={(e) => { e.stopPropagation(); onCite?.(toReaderCite(s.citation)); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); onCite?.(toReaderCite(s.citation)); } }}
+                      style={{ flexShrink:0, cursor: onCite ? 'pointer' : 'default' }}>
+                      <Icon name="ti-file-text" size={10}/> {citeLabel(s.citation)}
+                    </span>
+                  )}
                   {kbdHints && <span style={{ fontSize:10, fontWeight:800, color:"var(--ak-text-muted)", flexShrink:0 }}>⌥{i + 1}</span>}
                 </button>
               ))}

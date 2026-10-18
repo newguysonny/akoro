@@ -266,7 +266,10 @@ function BlockRenderer({ block, agentName, agentEmoji, onCite = null }) {
         <div style={{ padding:"9px 13px", borderRadius:"4px 18px 18px 18px",
           background:nana.bg, border:`0.5px solid ${nana.ring}`,
           color:nana.color, fontSize:13.5, lineHeight:1.6, whiteSpace:"pre-wrap", fontWeight:500 }}>
-          {block.text}
+          {/* The guide's tip cites the open document too: chips that jump the reader there. */}
+          {block.citations?.length
+            ? <CitedText text={block.text} citations={block.citations} onCite={onCite} color={nana.color}/>
+            : block.text}
         </div>
         {block.nextLearningMove && (
           <div style={{ fontSize:10, color:"#C7D2FE", margin:"5px 2px 0", lineHeight:1.45, fontWeight:600 }}>

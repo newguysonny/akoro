@@ -28,7 +28,8 @@ import StudyPrepChatCard from './studyPrep/StudyPrepChatCard.jsx';
 import { fetchActiveStudyPrepSession } from '../../services/studyPrepApi.js';
 import TraceBlocks from './agentChat/TraceBlocks.jsx';
 import { applyTraceEvent, blocksFromSavedTrace, promoteActivity, settleRunning, studyPrepEventBlocks } from '../../lib/agentChatTrace.js';
-import { CHAT_STARTERS, cleanIdeas, protegeMoves } from '../../lib/chatIdeas.js';
+import { CHAT_STARTERS, cleanIdeas, cleanMaterials, protegeMoves } from '../../lib/chatIdeas.js';
+import { useNavigate } from 'react-router-dom';
 import AgentCards from '../network/AgentCards.jsx';
 import ChallengeRequestCards from '../network/ChallengeRequestCards.jsx';
 import ConfirmChangeCard from './agentChat/ConfirmChangeCard.jsx';
@@ -82,6 +83,8 @@ function ThoughtBlock({ thinking, streaming }) {
   );
 }
 
+const MATERIAL_ICON = { blog:"ti-article", my_blog:"ti-pencil", course:"ti-school", record:"ti-paperclip", topic:"ti-chalkboard", activity:"ti-list-check" };
+
 function AgentChatTab({
   onStartTeach, onTeachTopic, onStartExamPrep, onOpenConceptTracker, onOpenAdaptiveControls, agentNameProp, agentEmojiProp, onChatActive,
   agentOnline = false, agentAutonomyLoaded = false, agentAutonomySaving = false,
@@ -89,6 +92,7 @@ function AgentChatTab({
   agentActivity = null,
 }) {
   const { t } = useLang();
+  const navigate = useNavigate();
   const initName  = agentNameProp  || '';
   const initEmoji = agentEmojiProp || '🤖';
 
@@ -296,6 +300,7 @@ function AgentChatTab({
     at: m.created_at,
     ...(m.role !== "user" && Array.isArray(m.trace) ? { blocks: blocksFromSavedTrace(m.trace) } : {}),
     ...(m.role !== "user" && m.meta?.proposal ? { proposal: m.meta.proposal } : {}),
+    ...(m.role !== "user" && Array.isArray(m.meta?.materials) && m.meta.materials.length ? { materials: cleanMaterials(m.meta.materials) } : {}),
   });
 
   const openSession = async (id) => {
@@ -726,6 +731,7 @@ function AgentChatTab({
     const controller=typeof AbortController!=="undefined"?new AbortController():null;
     abortRef.current=controller;
     let finalReply="";
+    let turnTools=[];   // what ran this turn — the chips follow it (a not-taught reply gets "ask your teaching guide")
     let gotDone=false;
     // A turn that started but never got its "done" (the stream errored or the
     // connection closed mid-way): stop the spinners, say what happened, and
@@ -752,6 +758,7 @@ function AgentChatTab({
           // activity-draft pattern) — render the interactive session card.
           const studyPrepSession = (toolExecutions || []).find((entry) => entry?.session?.id && entry?.success)?.session || null;
           setMessages(prev=>prev.map(m=>m.id===replyId?{...m,...(reply!=null?{text:reply}:{}),thinking:thinking||m.thinking,syllabus:syllabus||[],pastQuestions:pastQuestions||[],phase:"done",...(stopped?{stopped:true}:{}),...(studyPrepSession?{studyPrepSessionId:studyPrepSession.id}:{}),...protegeMoves(toolExecutions)}:m));
+          turnTools=toolExecutions||[];
           if ((toolExecutions || []).some((entry) => entry?.tool === "create_task" && entry?.success)) refetchTasks();
           if ((toolExecutions || []).some((entry) => entry?.tool === "suggest_help" && entry?.success)) refetchInbox();
         },
@@ -789,6 +796,7 @@ function AgentChatTab({
           setMessages(prev=>[...prev,{id:replyId,from:"agent",text:finalReply,time:t2,
             thinking:data.thinking||"",syllabus:data.syllabus||[],pastQuestions:data.pastQuestions||[],
             blocks:blocksFromSavedTrace(data.trace),...protegeMoves(data?.toolExecutions)}]);
+          turnTools=data?.toolExecutions||[];
           const studyPrepSessionFallback = (data?.toolExecutions || []).find((entry) => entry?.session?.id && entry?.success)?.session || null;
           if (studyPrepSessionFallback) {
             setMessages(prev=>prev.map(m=>m.id===replyId?{...m,studyPrepSessionId:studyPrepSessionFallback.id}:m));
@@ -806,7 +814,8 @@ function AgentChatTab({
     // Suggestions for every reply: three follow-ups, asked for AFTER the
     // reply has arrived (it never waits on them); a failure is just no chips.
     if(finalReply && !controller?.signal.aborted){
-      apiPost('/api/adaptive/chat/suggestions', { ask: text, reply: finalReply, role: 'student' })
+      apiPost('/api/adaptive/chat/suggestions', { ask: text, reply: finalReply, role: 'student',
+        tools: turnTools.map((x)=>({ tool: x?.tool, topic: x?.teach?.topic || x?.guide?.teach?.topic || null })) })
         .then((r)=>{
           const ideas=cleanIdeas(r?.suggestions);
           if(ideas.length) setMessages(prev=>prev.map(m=>m.id===replyId?{...m,ideas}:m));
@@ -1058,21 +1067,37 @@ function AgentChatTab({
                       {t(msg.proposal.status==="executed"?'agent.posted_done':msg.proposal.status==="failed"?'agent.proposal_failed':'agent.posted_closed')}
                     </div>
                   ))}
+                  {/* Materials the tools found — each opens the material (or teaches the topic). */}
+                  {!isMe&&msg.materials?.length>0&&(
+                    <div aria-label={t('agent.materials')} style={{ display:"flex",flexWrap:"wrap",gap:6,marginTop:8 }}>
+                      {msg.materials.map((m)=>(
+                        <button key={m.href||`t:${m.teach.topic}`} type="button" data-material={m.kind}
+                          onClick={()=>{ if(m.href) navigate(m.href); else if(onTeachTopic) onTeachTopic(m.teach); }}
+                          disabled={!m.href&&!onTeachTopic} title={m.href?t('agent.materials'):t('agent.syllabus_hint')}
+                          style={{ display:"inline-flex",alignItems:"center",gap:5,maxWidth:"100%",padding:"6px 11px",borderRadius:20,border:`1.5px solid ${BRAND}40`,background:"var(--ak-surface)",color:BRAND,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
+                          <Icon name={MATERIAL_ICON[m.kind]||"ti-arrow-up-right"} size={12}/>
+                          <span style={{ overflow:"hidden",textOverflow:"ellipsis" }}>{m.title}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   {!isMe&&msg.syllabus?.length>0&&(
                     <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5 }}>
                       {msg.syllabus.map((s,i)=>(
-                        <span key={i} title={`${s.exam?s.exam+" ":""}${s.subject} — ${s.topic}`} style={{ display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:800,padding:"3px 9px",borderRadius:20,background:`${BRAND}12`,border:`1px solid ${BRAND}30`,color:BRAND,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
+                        <button type="button" key={i} disabled={!onTeachTopic} onClick={()=>onTeachTopic?.({ topic:s.topic, subject:s.subject||'' })}
+                          title={`${s.exam?s.exam+" ":""}${s.subject} — ${s.topic} · ${t('agent.syllabus_hint')}`} style={{ cursor:onTeachTopic?"pointer":"default",fontFamily:"'Nunito',sans-serif",display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:800,padding:"3px 9px",borderRadius:20,background:`${BRAND}12`,border:`1px solid ${BRAND}30`,color:BRAND,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
                           <Icon name="ti-book" size={10}/> {s.exam?`${s.exam} · `:""}{s.topic}
-                        </span>
+                        </button>
                       ))}
                     </div>
                   )}
                   {!isMe&&msg.pastQuestions?.length>0&&(
                     <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5 }}>
                       {msg.pastQuestions.map((s,i)=>(
-                        <span key={i} title={`${s.exam} ${s.year||""}${s.subject?` · ${s.subject}`:""}${s.topic?` — ${s.topic}`:""}`} style={{ display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:800,padding:"3px 9px",borderRadius:20,background:"rgba(232,136,74,.12)",border:"1px solid rgba(232,136,74,.35)",color:"#B45309",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
+                        <button type="button" key={i} onClick={()=>applyIdea(t('agent.past_q_fill').replace('{paper}', `${s.exam}${s.year?` ${s.year}`:""}`).replace('{topic}', s.topic||s.subject||''))}
+                          title={`${s.exam} ${s.year||""}${s.subject?` · ${s.subject}`:""}${s.topic?` — ${s.topic}`:""}`} style={{ cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:800,padding:"3px 9px",borderRadius:20,background:"rgba(232,136,74,.12)",border:"1px solid rgba(232,136,74,.35)",color:"#B45309",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
                           <Icon name="ti-edit" size={10}/> {s.exam}{s.year?` ${s.year}`:""}{s.topic?` · ${s.topic}`:""}
-                        </span>
+                        </button>
                       ))}
                     </div>
                   )}

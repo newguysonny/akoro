@@ -17,7 +17,11 @@ import { jsonbArray, jsonbObject } from "../../lib/jsonb.js";
 import { authenticateToken } from "../auth/routes.js";
 import pkg from "pg";
 import { OPENAI_MODEL, openai } from "../../lib/aiModel.js";
-import { buildSuggestionMessages, shapeSuggestions, buildLearnSuggestionMessages, LEARN_LIMITS } from "./chatSuggestions.js";
+import { buildSuggestionMessages, notTaughtFrom, guideChip, shapeSuggestions, buildLearnSuggestionMessages, LEARN_LIMITS, buildCitedLearnSuggestionMessages, citedLearnSchema, shapeCitedLearnSuggestions } from "./chatSuggestions.js";
+import { resolveAskTargetFor } from "../records/access.js";
+import { materialsFrom, collectMaterials } from "./chat-materials.js";
+import { gatherPassages, extractCitations } from "../records/askLib.js";
+import { searchRecordChunks } from "../records/searchLib.js";
 import { loadTaughtKnowledge, renderTaughtContext, buildGuideMessages, shapeGuideAnswer, teachRequest } from "./protege.js";
 import { loadDoctrine } from "../agent-context/context-manager.js";
 
@@ -900,6 +904,15 @@ export const CHAT_TOOLS = [
     },
   },
   {
+    name: "search_my_library",
+    description: "Find documents in the signed-in learner's own Library (uploads, links, pasted notes) by name or by what is inside them. Use when recommending study material, or when they ask for their notes or a document; the reply then shows each one as a link that opens it in the reader. Never invent a document — mention only what this returns.",
+    input_schema: {
+      type: "object",
+      properties: { query: { type: "string", description: "The topic or document to look for (3 to 200 characters)." } },
+      required: ["query"],
+    },
+  },
+  {
     name: "get_concept_tracker_summary",
     description: "When Concept Tracker is enabled, read the signed-in learner's bounded approved-concept statuses, resume points, and learner-visible confusion notes. Use for 'where was I stuck?' or 'what should I resume?'. Never expose raw chat, model rationale, or Guardian review internals.",
     featureGate: "concept_tracker",
@@ -1474,13 +1487,13 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       return getLearnerProfileContext(studentId).catch(asToolError("your profile"));
     case "check_progress": {
       const { data: enrollments } = await db.from("enrollments")
-        .select("course_id, progress, courses!inner(title, subject)")
+        .select("course_id, progress, courses!inner(title, subject, slug)")
         .eq("user_id", studentId).eq("status", "active");
       // The OVERALL row — the table has one per scope (global/course/classroom).
       const { data: xpRow } = await db.from("xp_leaderboard")
         .select("total_xp, rank").eq("user_id", studentId).eq("scope", "global").limit(1);
       return {
-        courses:  (enrollments ?? []).map(e => ({ title: e.courses?.title, subject: e.courses?.subject, progress: e.progress ?? 0 })),
+        courses:  (enrollments ?? []).map(e => ({ title: e.courses?.title, subject: e.courses?.subject, progress: e.progress ?? 0, slug: e.courses?.slug || null })),
         total_xp: xpRow?.[0]?.total_xp ?? 0,
         rank:     xpRow?.[0]?.rank ?? "—",
       };
@@ -2335,6 +2348,23 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       return getKnowledgeMap(studentId, input).catch(asToolError("your knowledge map"));
     case "search_my_study_knowledge":
       return searchMyStudyKnowledge(studentId, input).catch(asToolError("your saved study knowledge"));
+    case "search_my_library": {
+      // The learner's own records only (searchRecordChunks is user-scoped), plus a name match.
+      const q = String(input?.query || "").trim().slice(0, 200);
+      if (q.length < 3) return { records: [], note: "Give a topic or document name to look for." };
+      try {
+        const [hits, named] = await Promise.all([
+          searchRecordChunks({ userId: studentId, q, limit: 12 }).catch(() => []),
+          db.schema("edu").from("records").select("id, name").eq("user_id", studentId).ilike("name", `%${q.replace(/[%_]/g, "")}%`).limit(5)
+            .then((r) => r.data || []).catch(() => []),
+        ]);
+        const byId = new Map();
+        for (const n of named) byId.set(n.id, { recordId: n.id, name: n.name, snippet: null });
+        for (const h of hits) if (h.recordId && !byId.has(h.recordId)) byId.set(h.recordId, { recordId: h.recordId, name: h.name, snippet: h.snippet || null, page: h.pageNumber ?? null });
+        const records = [...byId.values()].slice(0, 5);
+        return records.length ? { records } : { records: [], note: "Nothing in their Library matches — say so; don't invent a document." };
+      } catch (error) { return { error: "Their Library is unavailable right now" }; }
+    }
     case "get_concept_tracker_summary":
       return getConceptTrackerSummary(studentId, input).catch(asToolError("the concept tracker"));
     case "get_learning_insights_summary":
@@ -3583,8 +3613,10 @@ function previewMetaFrom(toolExecutions) {
   const previews = execs
     .filter((x) => (x.tool === "prepare_activity" || x.tool === "revise_activity_draft") && x.success && x.draft)
     .map((x) => x.draft);
-  if (!previews.length) return null;
-  return { previews, tools: execs.map((x) => x.tool) };
+  // The reply's material links come back on reload too.
+  const materials = collectMaterials(execs.map((x) => x.materials || []));
+  if (!previews.length && !materials.length) return null;
+  return { ...(previews.length ? { previews } : {}), ...(materials.length ? { materials } : {}), tools: execs.map((x) => x.tool) };
 }
 
 /**
@@ -3789,6 +3821,9 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         // A tool that would change data (S6): the confirmation card — only the learner's tap runs it.
         ...(toolResult?.confirmation?.confirmationId ? { confirm: toolResult.confirmation }
           : toolResult?.result?.confirmation?.confirmationId ? { confirm: toolResult.result.confirmation } : {}),
+        // Materials the tool returned (courses, blog posts, Library documents, weak topics)
+        // ride as clickable links — built from ids/slugs, never from the model's prose.
+        ...(() => { const mats = collectMaterials([materialsFrom(tool, toolResult)]); return mats.length ? { materials: mats } : {}; })(),
         // Agent search results ride as cards the app can show (Challenge / Message buttons).
         ...((tool === "search_agents" || tool === "find_competitors") && Array.isArray(toolResult?.agents) ? { agents: toolResult.agents.slice(0, 6) } : {}),
         // `requestsMine`: the learner's OWN requests get Cancel, not Accept.
@@ -3864,18 +3899,33 @@ router.post("/suggestions", async (req, res) => {
   if (!reply) return res.json({ success: true, suggestions: [] });
   // The teacher's ideas only for a non-learner account that asks for them.
   const role = req.body?.role === "instructor" && req.user?.role !== "student" ? "instructor" : "student";
+  const tools = Array.isArray(req.body?.tools) ? req.body.tools.slice(0, 12) : [];
+  const notTaught = role === "student" ? notTaughtFrom({ reply, tools }) : null;
+  const chip = guideChip(notTaught);
   try {
+    // What this agent can actually do: its live capability card, plus the tools
+    // the learner's agent built for them — chips stay within reach.
+    const capabilities = [];
+    if (role === "student") {
+      const card = await executeChatTool("get_agent_capabilities", {}, req.user.id, { role: "student" }).catch(() => null);
+      for (const sec of card?.sections || []) if (sec.title !== "Limits") capabilities.push(...(sec.items || []));
+      for (const t of await learnerToolDefs(req.user.id).catch(() => [])) {
+        const d = t?.function?.description || t?.function?.name;
+        if (d) capabilities.push(`Your own tool: ${String(d).slice(0, 120)}`);
+      }
+    }
     const completion = await openai.chat.completions.create({
       model: process.env.OPENAI_SUGGEST_MODEL || "gpt-4o-mini", temperature: 0.5, max_tokens: 160,
       __timeoutMs: 12_000, __maxRetries: 0,
       response_format: { type: "json_object" },
-      messages: buildSuggestionMessages({ role, ask: req.body?.ask, reply, context: req.body?.context }),
+      messages: buildSuggestionMessages({ role, ask: req.body?.ask, reply, context: req.body?.context, capabilities, notTaught }),
       __userId: req.user?.id, __feature: "chat_suggestions",
     });
-    res.json({ success: true, suggestions: shapeSuggestions(completion.choices?.[0]?.message?.content) });
+    const ideas = shapeSuggestions(completion.choices?.[0]?.message?.content);
+    res.json({ success: true, suggestions: chip ? [chip, ...ideas.filter((x) => !/teaching guide/i.test(x))].slice(0, 3) : ideas });
   } catch (e) {
     console.warn("[chat/suggestions] none this time:", String(e?.message || e).slice(0, 120));
-    res.json({ success: true, suggestions: [] });
+    res.json({ success: true, suggestions: chip ? [chip] : [] });
   }
 });
 
@@ -3889,6 +3939,30 @@ router.post("/suggestions", async (req, res) => {
 router.post("/learn-suggestions", async (req, res) => {
   const b = req.body || {};
   if (!String(b.topic || b.title || b.excerpt || "").trim()) return res.json({ success: true, suggestions: [] });
+  // The open document: suggestions built from its passages, each pointing at its page.
+  const doc = b.document && typeof b.document === "object" ? b.document : null;
+  if (doc && (doc.recordId || doc.contentKey)) {
+    try {
+      const target = await resolveAskTargetFor({ userId: req.user.id, recordId: doc.recordId, contentKey: doc.contentKey });
+      if (target && !target.status) {
+        const { passages } = await gatherPassages({ target, question: `${b.title || ""} ${b.topic || ""} key ideas summary`.slice(0, 400), search: searchRecordChunks });
+        if (passages?.length) {
+          const completion = await openai.chat.completions.create({
+            model: process.env.OPENAI_SUGGEST_MODEL || "gpt-4o-mini", temperature: 0.4, max_tokens: 320,
+            __timeoutMs: 15_000, __maxRetries: 0,
+            response_format: citedLearnSchema(),
+            messages: buildCitedLearnSuggestionMessages({ topic: b.topic, subject: b.subject, title: b.title, passages }),
+            __userId: req.user?.id, __feature: "learn_suggestions",
+          });
+          const toCitation = (n) => extractCitations(`[${n}]`, passages).citations[0] || null;
+          const cited = shapeCitedLearnSuggestions(completion.choices?.[0]?.message?.content, { toCitation });
+          if (cited.length) return res.json({ success: true, suggestions: cited.map((x) => x.text), cited });
+        }
+      }
+    } catch (e) {
+      console.warn("[chat/learn-suggestions] cited suggestions failed, plain ones instead:", String(e?.message || e).slice(0, 120));
+    }
+  }
   try {
     const completion = await openai.chat.completions.create({
       model: process.env.OPENAI_SUGGEST_MODEL || "gpt-4o-mini", temperature: 0.4, max_tokens: 220,

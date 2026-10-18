@@ -406,6 +406,10 @@ export function setupWebSocket(io) {
           const studentBlock = blocks.find((b) => b.type === "student-agent");
           const citations = studentBlock ? citationsForReply(studentBlock.text, grounding.passages) : [];
           if (citations.length) studentBlock.citations = citations;
+          // The guide's tip cites the same passages (guidePassagesBlock).
+          const guideBlock = blocks.find((b) => b.type === "guide");
+          const guideCites = guideBlock ? citationsForReply(guideBlock.text, grounding.passages) : [];
+          if (guideCites.length) guideBlock.citations = guideCites;
         }
 
         socket.emit("turn_complete", {

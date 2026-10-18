@@ -88,7 +88,7 @@ function publicKnowledgeTopic(row) {
 export async function getLearningOverview(learnerId) {
   const [enrollmentsResult, tasksResult, knowledge] = await Promise.all([
     db.from("enrollments")
-      .select("progress, courses!inner(title, subject)", { count: "exact" })
+      .select("progress, courses!inner(title, subject, slug)", { count: "exact" })
       .eq("user_id", learnerId).eq("status", "active")
       .order("enrolled_at", { ascending: false }).limit(8),
     db.from("tasks")
@@ -103,6 +103,7 @@ export async function getLearningOverview(learnerId) {
     title: text(row.courses?.title, 180),
     subject: text(row.courses?.subject, 180) || null,
     progress: Math.max(0, Math.min(100, Number(row.progress) || 0)),
+    slug: text(row.courses?.slug, 180) || null,   // the chat links the course (chat-materials.js)
   }));
   const subjects = knowledge.subjects.map(publicKnowledgeSubject).slice(0, 8);
   const focus = subjects
