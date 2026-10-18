@@ -9,6 +9,7 @@
 import db from "../../db.js";
 import { OPENAI_MODEL, openai } from "../../lib/aiModel.js";
 import { reportAgentActivity, clearAgentActivity } from "../../lib/agentActivity.js";
+import { notifyUser } from "../notify.js";
 import { autonomyCadence, minCycleMs, weeklyRunsCap } from "./cadence.js";
 
 const edu = () => db.schema("edu");
@@ -183,15 +184,19 @@ export async function reasonAboutSignals(userId, signals) {
 export async function validateAndShapeProposals(userId, rawProposals) {
   if (!Array.isArray(rawProposals)) return [];
   const since = new Date(Date.now() - DEDUPE_WINDOW_DAYS * 24 * 3600 * 1000).toISOString();
-  const [history, openTasks] = await Promise.all([
+  const [history, openTasks, chatOpen] = await Promise.all([
     edu().from("agent_proposals").select("title").eq("user_id", userId)
       .gte("created_at", since).limit(100).then((r) => r.data ?? []).catch(() => []),
     db.from("tasks").select("title").eq("creator_id", userId)
       .in("status", ["pending", "queued", "done"]).limit(200).then((r) => r.data ?? []).catch(() => []),
+    // The chat's own open suggestions: the one inbox shows each idea once.
+    db.from("agent_suggestions").select("title").eq("user_id", userId).eq("status", "open")
+      .limit(100).then((r) => r.data ?? []).catch(() => []),
   ]);
   const seen = new Set([
     ...history.map((h) => normalizeTitle(h.title)),
     ...openTasks.map((t) => normalizeTitle(t.title)),
+    ...chatOpen.map((s) => normalizeTitle(s.title)),
   ]);
 
   const shaped = [];
@@ -311,14 +316,13 @@ export async function runAutonomyCycleForUser(userId, trigger = "nightly") {
 
     if (toInsert.length) {
       reportAgentActivity(userId, `Reviewed your goals — ${toInsert.length} suggestion${toInsert.length === 1 ? "" : "s"} ready`);
-      try {
-        await db.from("notifications").insert({
-          user_id: userId,
-          type: "agent_proposals",
-          title: `🤖 ${toInsert.length} suggestion${toInsert.length === 1 ? "" : "s"} from your agent`,
-          content: reasoned.summary ? String(reasoned.summary).slice(0, 300) : "Your agent reviewed your goals overnight — take a look in Suggestions.",
-        });
-      } catch { /* the inbox badge is the durable surface */ }
+      // Through notifyUser: the bell row, the live socket and web push (the
+      // learner's push preference respected) — a bare insert reached none.
+      await notifyUser({
+        userId, type: "agent_proposals", link: "/app?tab=agent",
+        title: `${toInsert.length} suggestion${toInsert.length === 1 ? "" : "s"} from your agent`,
+        content: reasoned.summary ? String(reasoned.summary).slice(0, 300) : "Your agent reviewed your goals overnight — take a look in Suggestions.",
+      }).catch(() => { /* the inbox badge is the durable surface */ });
     } else {
       clearAgentActivity(userId);
     }

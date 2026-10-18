@@ -1953,6 +1953,9 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         const title = String(input?.title || "").trim().slice(0, 140);
         const rationale = String(input?.rationale || "").trim().slice(0, 400);
         if (!title) return { error: "A suggestion needs a title" };
+        // Already open in the inbox (from chat or the planner): don't offer it twice.
+        const { openTitles, normalizeTitle } = await import("../agent-proposals/inbox.js");
+        if ((await openTitles(studentId)).has(normalizeTitle(title))) return { saved: false, duplicate: true, title, note: "This is already in their Suggestions — mention it instead of adding it again." };
         const { data: agentRow } = await db.from("user_agents").select("id").eq("user_id", studentId).single();
         const { data: suggestion, error } = await db.from("agent_suggestions").insert({
           user_id: studentId, agent_id: agentRow?.id ?? null,

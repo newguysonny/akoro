@@ -106,6 +106,7 @@
     "2026-submission-grading.sql",
     "2026-activity-submissions.sql",
     "2026-agent-suggestions.sql",
+    "2026-agent-suggestions-dismiss-reason.sql",
     "2026-activity-drafts.sql",
     "2026-draft-routines.sql",
     "2026-task-output-types-2.sql",

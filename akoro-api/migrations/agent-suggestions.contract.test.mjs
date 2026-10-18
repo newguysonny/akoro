@@ -11,7 +11,8 @@ import test from "node:test";
  * status included — and the customize modal is gone (Settings owns it).
  */
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [migration, manifest, routes, chat, page, taskApi, en] = await Promise.all([
+const [inbox, migration, manifest, routes, chat, page, taskApi, en] = await Promise.all([
+  read("../../akoro-api/modules/agent-proposals/inbox.js"),
   read("./2026-agent-suggestions.sql"),
   read("./manifest.json"),
   read("../../akoro-api/modules/tasks/routes.js"),
@@ -36,14 +37,21 @@ test("the API serves, accepts and dismisses suggestions — always user-scoped",
   assert.ok(routes.indexOf('router.get("/suggestions"') < routes.indexOf('router.get("/:taskId"'),
     "suggestions routes precede the task-id route");
   assert.match(routes, /\.eq\("user_id", req\.user\.id\)\.eq\("status", "open"\)/, "open rows for this user only");
-  // Accept: creates the task, then marks the suggestion accepted with provenance.
+  // The routes go through the one inbox service (agent-proposals/inbox.js).
   const accept = routes.slice(routes.indexOf('"/suggestions/:id/accept"'), routes.indexOf('"/suggestions/:id/dismiss"'));
-  assert.match(accept, /db\.from\("tasks"\)\.insert\(/, "accept inserts a real task");
-  assert.match(accept, /status: "accepted", task_id: task\.id/, "the suggestion keeps its task link");
-  assert.match(accept, /emit\("task:created"/, "same live signal as the agent's own create_task");
-  // Dismiss: never deletes, just closes — and 404s when there is nothing to close.
-  assert.match(routes, /status: "dismissed", resolved_at:/);
-  assert.match(routes, /error: "Suggestion not found"/);
+  assert.match(accept, /acceptChatSuggestion\(req\.user\.id, req\.params\.id, \{ asTask: true \}\)/, "the Tasks tab's accept still makes a task (its UI says so)");
+  assert.match(routes, /dismissChatSuggestion\(req\.user\.id, req\.params\.id, req\.body\?\.reason\)/);
+  // Accept does what the kind says: a task, a goal, or the chat to start — claimed first.
+  const take = inbox.slice(inbox.indexOf("export async function acceptChatSuggestion"), inbox.indexOf("export async function dismissChatSuggestion"));
+  assert.match(take, /\.update\(\{ status: "accepted", resolved_at: now\(\) \}\)[\s\S]*\.eq\("status", "open"\)/, "claim first: a double tap acts once");
+  assert.match(take, /createGoal\(userId, \{ title: sg\.title \}, \{ source: "agent" \}\)/, "a goal suggestion becomes a goal");
+  assert.match(take, /kind === "conversation"[\s\S]*prompt: sg\.title/, "a conversation is handed back to start the chat");
+  assert.match(take, /db\.from\("tasks"\)\.insert\(/, "a task suggestion inserts a real task");
+  assert.match(take, /update\(\{ task_id: task\.id \}\)/, "the suggestion keeps its task link");
+  assert.match(take, /emit\("task:created"/, "same live signal as the agent's own create_task");
+  // Dismiss: never deletes, just closes with the reason — and 404s when there is nothing to close.
+  assert.match(inbox, /status: "dismissed", resolved_at: now\(\), dismiss_reason: reasonOf\(reason\)/);
+  assert.match(inbox, /fail\("Suggestion not found", 404\)/);
 });
 
 test("the agent files suggestions through the suggest_help chat tool", () => {

@@ -5,6 +5,7 @@
  * Auth uses our JWT middleware (not separate auth).
  */
 
+import { acceptChatSuggestion, dismissChatSuggestion } from "../agent-proposals/inbox.js";
 import { Router }                         from "express";
 import db                                 from "../../db.js";
 import { TaskDB, TaskFileDB, TaskRunDB, TaskOutputDB, TaskScheduleDB, DynamicToolDB } from "./lib/db.js";
@@ -280,46 +281,22 @@ router.get("/suggestions", async (req, res) => {
   }
 });
 
-/** POST /api/tasks/suggestions/:id/accept — turn one suggestion into a real task. */
+/** POST /api/tasks/suggestions/:id/accept — turn one suggestion into a real task
+    (this tab's contract; /api/agent/proposals/inbox accepts each kind as itself). */
 router.post("/suggestions/:id/accept", async (req, res) => {
   try {
-    const { data: suggestion } = await db.from("agent_suggestions")
-      .select("*").eq("id", req.params.id).eq("user_id", req.user.id).single();
-    if (!suggestion || suggestion.status !== "open")
-      return res.status(404).json({ error: "Suggestion not found" });
-
-    const { data: task, error } = await db.from("tasks").insert({
-      creator_id: req.user.id, agent_id: suggestion.agent_id,
-      title: suggestion.title, description: suggestion.rationale || null,
-      priority: "medium", status: "pending", task_type: "general",
-    }).select().single();
-    if (error) throw new Error(error.message);
-
-    const { data: updated, error: upErr } = await db.from("agent_suggestions")
-      .update({ status: "accepted", task_id: task.id, resolved_at: new Date().toISOString() })
-      .eq("id", suggestion.id).select().single();
-    if (upErr) throw new Error(upErr.message);
-
-    // Same signal the agent's own create_task emits, so any open UI refreshes.
-    global.io?.to(`user:${req.user.id}`).emit("task:created", task);
-    res.json({ task, suggestion: updated });
+    res.json(await acceptChatSuggestion(req.user.id, req.params.id, { asTask: true }));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
-/** PATCH /api/tasks/suggestions/:id/dismiss — close one suggestion for good. */
+/** PATCH /api/tasks/suggestions/:id/dismiss — close one suggestion, with an optional reason. */
 router.patch("/suggestions/:id/dismiss", async (req, res) => {
   try {
-    const { data: updated, error } = await db.from("agent_suggestions")
-      .update({ status: "dismissed", resolved_at: new Date().toISOString() })
-      .eq("id", req.params.id).eq("user_id", req.user.id).eq("status", "open")
-      .select();
-    if (error) throw new Error(error.message);
-    if (!updated?.length) return res.status(404).json({ error: "Suggestion not found" });
-    res.json({ suggestion: updated[0] });
+    res.json({ suggestion: await dismissChatSuggestion(req.user.id, req.params.id, req.body?.reason) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
