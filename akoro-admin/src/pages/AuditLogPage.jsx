@@ -109,9 +109,6 @@ export default function AuditLogPage() {
     <PageLayout title="Audit Log" subtitle="Every pricing, tier, credit, and billing change made from this dashboard">
       <div className="ak-page">
 
-        <h1 className="ak-h1">Audit Log</h1>
-        <p className="ak-sub">Every pricing, tier, credit, and billing change made from this dashboard, most recent first.</p>
-
         {loading && <p className="ak-sub">Loading…</p>}
         {loadError && <p className="ak-sub text-akoro-coral">{loadError}</p>}
 
