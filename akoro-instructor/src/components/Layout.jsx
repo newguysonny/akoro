@@ -403,7 +403,97 @@ export function TopBar({ onToggleSidebar, showBell = true }) {
   );
 }
 
+
 // BottomNav disabled per UI checklist — mobile uses hamburger drawer, not bottom nav.
 export function BottomNav() {
   return null;
+}
+
+export function PageLayout({ children, title, subtitle, action, hideTopBarOnMobile = false }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const mobile = useIsMobile();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    if (!mobile) { setDrawerOpen(false); return; }
+    if (!drawerOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [mobile, drawerOpen]);
+
+  useEffect(() => {
+    if (!mobile || !drawerOpen) return;
+    const onKey = (e) => { if (e.key === 'Escape') setDrawerOpen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [mobile, drawerOpen]);
+
+  if (mobile) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+        <AppHeader
+          onMenu={() => setDrawerOpen((o) => !o)}
+          user={user}
+          actions={[
+            { key: 'chat',          icon: ReferenceChatIcon, label: 'AI Chat',      variant: 'square', onClick: () => navigate('/chat') },
+            { key: 'notifications', icon: Bell,          label: 'Notifications',  variant: 'square', onClick: () => navigate('/notifications') },
+            { key: 'help',          icon: MessageCircleQuestion, label: 'Help & support', variant: 'circle', onClick: () => { window.location.href = 'mailto:support@akoro.app'; } },
+          ]}
+          progress={setupProgressOf(user)}
+          onSetup={() => navigate('/profile')}
+          menuItems={[
+            { key: 'profile',  label: 'Profile',  icon: UserCircle, to: '/profile' },
+            { key: 'settings', label: 'Settings', icon: Settings,   to: '/settings' },
+            'divider',
+            { key: 'logout',   label: 'Log out',  icon: LogOut,     danger: true, onClick: logout },
+          ]}
+        />
+        {!hideTopBarOnMobile && (title || subtitle || action) && (
+          <div style={{ padding: '16px 14px 0', background: BX.white, fontFamily: BX.font }}>
+            {title && <h1 style={{ fontSize: 20, fontWeight: 600, color: BX.ink, margin: '0 0 4px' }}>{title}</h1>}
+            {subtitle && <p style={{ fontSize: 13, color: BX.muted, margin: 0 }}>{subtitle}</p>}
+          </div>
+        )}
+        <main style={{ flex: 1, overflowY: 'auto', padding: '16px 14px', background: BX.white }}>
+          {children}
+        </main>
+        {drawerOpen && (
+          <div onClick={() => setDrawerOpen(false)} aria-hidden="true" style={{ position: 'fixed', inset: 0, zIndex: 1090, background: 'rgba(0,0,0,.45)' }} />
+        )}
+        <aside role="navigation" aria-label="Main menu" aria-hidden={!drawerOpen} style={{
+          position: 'fixed', top: 0, left: 0, bottom: 0, width: 280, zIndex: 1100,
+          transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
+          visibility: drawerOpen ? 'visible' : 'hidden',
+          transition: 'transform .22s ease, visibility .22s',
+          boxShadow: drawerOpen ? '12px 0 32px rgba(0,0,0,.35)' : 'none',
+        }}>
+          <Sidebar collapsed={false} onClose={() => setDrawerOpen(false)} />
+        </aside>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      <Sidebar collapsed={collapsed} />
+      <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: BX.white }}>
+        <TopBar onToggleSidebar={() => setCollapsed((c) => !c)} />
+        <main style={{ flex: 1, overflowY: 'auto', padding: '24px 28px', background: BX.white }}>
+          {(title || subtitle || action) && (
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 24, fontFamily: BX.font }}>
+              <div style={{ flex: 1 }}>
+                {title && <h1 style={{ fontSize: 20, fontWeight: 600, color: BX.ink, margin: '0 0 4px' }}>{title}</h1>}
+                {subtitle && <p style={{ fontSize: 13, color: BX.muted, margin: 0 }}>{subtitle}</p>}
+              </div>
+              {action && <div style={{ flexShrink: 0 }}>{action}</div>}
+            </div>
+          )}
+          {children}
+        </main>
+      </div>
+    </div>
+  );
 }
