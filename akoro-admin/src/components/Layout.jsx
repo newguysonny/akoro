@@ -63,7 +63,7 @@ const NAV_GROUPS = [
     { to: '/agents',      icon: Bot,            label: 'Agents' },
   ] },
   { label: 'Program Courses', icon: Layers, children: [
-    { to: '/program-courses',          icon: Home,       label: 'Program Home' },
+    { to: '/program-courses',          icon: Home,       label: 'Overview' },
     { to: '/program-courses/programs', icon: Layers,     label: 'Programs' },
     { to: '/program-courses/courses',  icon: BookCopy,   label: 'Courses' },
     { to: '/program-courses/contents', icon: FolderOpen, label: 'Contents' },
@@ -697,11 +697,19 @@ export function PageLayout({ children, title, subtitle, action, contentMaxWidth 
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily: BX.font, background: BX.white }}>
+      <style>{`
+        /* When sidebar is collapsed, let Program Courses use the freed width */
+        .bx-main[data-collapsed="true"] .pcroot { max-width: 1000px; }
+        @media (max-width: 1100px) {
+          .bx-main[data-collapsed="true"] .pcroot { max-width: 720px; }
+        }
+      `}</style>
       <Sidebar collapsed={collapsed} />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         <TopBar onToggleSidebar={toggleSidebar} />
-        <main style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
-          <div style={{ maxWidth: contentMaxWidth, margin: '0 auto' }}>
+        <main className="bx-main" data-collapsed={collapsed ? 'true' : 'false'}
+          style={{ flex: 1, overflowY: 'auto', padding: collapsed ? '24px 20px' : '24px 28px' }}>
+          <div style={{ maxWidth: collapsed ? 1200 : contentMaxWidth, margin: '0 auto' }}>
             {pageHead}
             {children}
           </div>

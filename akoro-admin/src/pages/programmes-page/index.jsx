@@ -746,8 +746,11 @@ function ProgramForm({ edit = false }) {
   return (
     <>
       <button className="back" onClick={() => navigate(edit ? `/program-courses/programs/${pid}` : '/program-courses/programs')}>&lsaquo; {edit ? 'Program' : 'Programs'}</button>
-      <h1>{edit ? 'Edit program' : 'New program'}</h1>
-      <p className="lead">{edit ? 'Update the details students see for this program.' : 'Add the details for this program. You can add courses after saving.'}</p>
+      <div className="row" style={{ marginBottom: 18 }}>
+        <div><h1 style={{ margin: 0 }}>{edit ? 'Edit program' : 'New program'}</h1><p className="lead" style={{ margin: '6px 0 0' }}>{edit ? 'Update the details students see for this program.' : 'Add the details for this program. You can add courses after saving.'}</p></div>
+        <span className="sp" />
+        <button className="btn p" disabled={busy || (edit && !p)} onClick={save}>{edit ? 'Save changes' : 'Create program'}</button>
+      </div>
       <div className="form" ref={formRef}>
         <label>Cover image</label>
         <div className="cover" onClick={() => document.getElementById('pc-cvf')?.click()}>
@@ -826,8 +829,11 @@ function CourseForm({ edit = false }) {
   return (
     <>
       <button className="back" onClick={() => navigate(edit ? `/program-courses/courses/${cid}` : '/program-courses/courses')}>&lsaquo; Back</button>
-      <h1>{edit ? 'Edit course' : 'New course'}</h1>
-      <p className="lead">{edit ? 'Update the details students see for this course.' : 'Add a course to a program and section. You can add content after saving.'}</p>
+      <div className="row" style={{ marginBottom: 18 }}>
+        <div><h1 style={{ margin: 0 }}>{edit ? 'Edit course' : 'New course'}</h1><p className="lead" style={{ margin: '6px 0 0' }}>{edit ? 'Update the details students see for this course.' : 'Add a course to a program and section. You can add content after saving.'}</p></div>
+        <span className="sp" />
+        <button className="btn p" disabled={busy} onClick={save}>{edit ? 'Save changes' : 'Create course'}</button>
+      </div>
       <div className="form" ref={formRef}>
         <label>Cover image</label>
         <div className="cover" onClick={() => document.getElementById('pc-ccvf')?.click()}>
@@ -914,8 +920,11 @@ function ItemForm({ edit = false }) {
   return (
     <>
       <button className="back" onClick={() => navigate(sp.get('course') ? `/program-courses/courses/${sp.get('course')}` : '/program-courses/contents')}>&lsaquo; Back</button>
-      <h1>{edit ? 'Edit content' : 'New content'}</h1>
-      <p className="lead">{edit ? 'Update this learning material.' : 'Add a PDF, video, audio lesson, note, link or presentation to a course.'}</p>
+      <div className="row" style={{ marginBottom: 18 }}>
+        <div><h1 style={{ margin: 0 }}>{edit ? 'Edit content' : 'New content'}</h1><p className="lead" style={{ margin: '6px 0 0' }}>{edit ? 'Update this learning material.' : 'Add a PDF, video, audio lesson, note, link or presentation to a course.'}</p></div>
+        <span className="sp" />
+        <button className="btn p" disabled={busy} onClick={save}>{edit ? 'Save changes' : 'Add content'}</button>
+      </div>
       <div className="form" ref={formRef}>
         <label>Course</label>
         <select data-k="cid" defaultValue={cid}>

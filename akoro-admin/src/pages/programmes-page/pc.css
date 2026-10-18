@@ -62,8 +62,8 @@
 .pcroot .sx{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:24px;height:24px;border:0;border-radius:50%;background:var(--border);color:var(--text);cursor:pointer;font-size:12px;line-height:1;padding:0}
 .pcroot .tools select{width:auto;max-width:200px;border-radius:99px;background:var(--pill);border-color:transparent}
 .pcroot input,.pcroot select,.pcroot textarea{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);font-size:15px}
-.pcroot .list{border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:26px}
-.pcroot .li{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--border)}.pcroot .li:last-child{border:0}
+.pcroot .list{margin-bottom:26px;display:flex;flex-direction:column;gap:10px}
+.pcroot .li{display:flex;align-items:center;gap:12px;padding:14px 16px;border:1px solid var(--border);border-radius:12px;background:var(--bg)}
 .pcroot .li.click{cursor:pointer}.pcroot .li.click:hover{background:var(--pill)}
 .pcroot .li .t{flex:1;min-width:0}.pcroot .li .t b{display:block;font-weight:600;font-size:15px;overflow-wrap:anywhere}.pcroot .li .t span{color:var(--muted);font-size:14px}
 .pcroot .tile{width:36px;height:36px;border-radius:8px;color:#fff;font-size:12px;font-weight:600;display:grid;place-items:center;flex:none;text-align:center;line-height:1.1}

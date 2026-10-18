@@ -117,7 +117,7 @@ export default function App() {
           {/* Program Courses — keep the same header/sidebar shell as every admin page. */}
           <Route path="/program-courses/*" element={
             <AdminRoute>
-              <PageLayout title="Program Courses" subtitle="Build and manage programs and learning content">
+              <PageLayout>
                 <ProgramCoursesSection />
               </PageLayout>
             </AdminRoute>
