@@ -12,12 +12,13 @@ import { bridgePersists } from "./teaching.js";
 import { conceptCurve } from "./decay.js";
 import { suggestionsAnswer } from "./suggestions.js";
 import { paperStructured, chatToSubmissionScenarios } from "./activities.js";
+import { authoringVersionsParts, authoringDiagramsEdits } from "./authoring.js";
 import { readerBackend } from "./reader.js";
 import { socketSession } from "./socket.js";
 
 const ALL = [healthBuild, toolsCatalogue, scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity,
   privacyEdges, rateLimitCountedOnce, battleEntryGates, followUpDeliverIntoChat, taskDueInMinutes, noResidue,
-  viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, agentCheckBattle, classSyllabusFirst, historyPages, workflowMirror, paperStructured, ...chatToSubmissionScenarios, readerBackend, socketSession];
+  viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, agentCheckBattle, classSyllabusFirst, historyPages, workflowMirror, paperStructured, ...chatToSubmissionScenarios, authoringVersionsParts, authoringDiagramsEdits, readerBackend, socketSession];
 
 export const SCENARIOS = Object.fromEntries(ALL.map((s) => [s.name, s]));
 
@@ -30,6 +31,8 @@ export const SUITES = {
   reader: ["reader.backend", "teaching.socket_session", "writes.no_residue"],
   activities: ["activity.paper_structured", "activity.chat_maths_equations", "activity.chat_science_photosynthesis",
     "activity.chat_economics_case_study", "activity.chat_biology_cell", "writes.no_residue"],
+  // Teachers' follow-ups in one conversation: versions, parts, edits to specific questions, diagrams.
+  authoring: ["activity.authoring_versions_parts", "activity.authoring_diagrams_edits", "writes.no_residue"],
   // Real changes on test learners, then proof nothing was left behind.
   writes: ["tasks.create_due_in_minutes", "followups.deliver_into_chat", "writes.no_residue"],
   // Phase V4 end to end (sandbox only: BLOCKED on production).
