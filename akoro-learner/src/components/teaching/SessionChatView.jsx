@@ -8,6 +8,7 @@ import QuoteChip from '../common/QuoteChip.jsx';
 import { parseQuoted } from '../../lib/quotedMessage.js';
 import StreamCaret from '../common/StreamCaret.jsx';
 import BlockRenderer from '../sessions/BlockRenderer.jsx';
+import { Answer } from './ReaderAsk.jsx';
 import { AgentAvatar } from '../common/AgentAvatar.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
@@ -37,14 +38,15 @@ function MicMeter({ level = 0 }) {
   );
 }
 
-/* ── Learning with Guide — local, UI-only chat (no protégé) ────────
-   The session here is just the teaching guide and the human. Messages are
-   held by the parent (TeachAgentModal) so toggling modes preserves them.
+/* ── Learning with Guide — the guide teacher and the human (no protégé) ─
+   Messages are held by the parent (TeachAgentModal) so toggling modes
+   preserves them; the guide's replies come from the API, taught from the
+   open document with citation chips that jump the reader (onCite).
    Learn suggestions follow the Fortizo reference: a collapsible list under
    a small uppercase header; picking one fills the composer rather than
    firing a request. They come from the parent, drawn from the session's
    material, or its topic when there is none (lib/learnSuggestions.js). */
-function GuideChat({ messages, guideName, guideEmoji, onSuggestion, suggestions = [] }) {
+function GuideChat({ messages, guideName, guideEmoji, onSuggestion, suggestions = [], onCite = null }) {
   const { t } = useLang();
   const [suggestionsOpen, setSuggestionsOpen] = useState(true);
   // The ⌥N hints only make sense with a hardware keyboard.
@@ -90,9 +92,13 @@ function GuideChat({ messages, guideName, guideEmoji, onSuggestion, suggestions 
               background:AGENT_STYLES.nana.bg, border:`0.5px solid ${AGENT_STYLES.nana.ring}`,
               color:AGENT_STYLES.nana.color, fontSize:13.5, lineHeight:1.6,
               fontWeight:500, width:"100%", boxSizing:"border-box" }}>
-              <RichText text={m.text} />
+              {m.pending && !m.text
+                ? <span aria-label="Your guide is writing" style={{ letterSpacing:2, fontWeight:900 }}>···</span>
+                : m.citations?.length
+                  ? <Answer text={m.text} citations={m.citations} onCite={onCite || (() => {})}/>
+                  : <RichText text={m.text} />}
             </div>
-            <CopyMessageButton text={m.text} dark />
+            {!m.pending && <CopyMessageButton text={m.text} dark />}
           </div>
         </div>
       ) : (
@@ -373,6 +379,7 @@ function SessionChatView({
           guideEmoji={guide?.guideEmoji}
           onSuggestion={guide?.onSuggestion}
           suggestions={guide?.suggestions || []}
+          onCite={onCite}
         />
       ) : (
       <div ref={scrollRef} style={{ flex:1,overflowY:"auto",padding:"14px 16px",

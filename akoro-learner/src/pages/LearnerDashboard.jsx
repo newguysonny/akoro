@@ -1338,6 +1338,10 @@ export default function LearnerDashboard() {
             // instead of a fresh empty one.
             onSessionStarted={sid=>{
               if (sid) setTeachSession(prev => prev ? { ...prev, sessionId: sid } : prev);
+            }}
+            // The link needs the saved session row's id (adaptive_sessions.id),
+            // not the live one — with the live id it was refused every time.
+            onSessionSaved={sid=>{
               if (teachSession?.selfStudyId && sid) {
                 // Best-effort, but not silent: if this never lands the teacher's
                 // progress view points at no session, so leave a trail.

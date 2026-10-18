@@ -5,6 +5,7 @@ import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, STUDENT_ID } from '.
 import { acquireActivityLock } from '../../utils/activityLock.js';
 import { useWakeLock } from '../../hooks/useWakeLock.js';
 import { API, apiGet, apiPost } from '../../services/api.js';
+import { guideReply } from '../../services/recordsApi.js';
 const AGENT_CONFIG = { name: '', emoji: '🤖', guideName: 'NaNa Esumai', guideEmoji: '🧠', guideRenderStyle: {} };
 import { XIcon, SparkleIcon, ZapIcon, BrainIcon, Icon } from '../common/Icons.jsx';
 import SessionChatView from './SessionChatView.jsx';
@@ -14,7 +15,7 @@ import SessionReaderModal, { buildSessionReaderPages, useIsMobileView } from './
 import WhiteboardModal from './WhiteboardModal.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
-function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarted, content = null }) {
+function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarted, onSessionSaved, content = null }) {
   // Hold the activity lock so an auto-reload can't interrupt a teaching session.
   useEffect(() => acquireActivityLock(), []);
   // Keep the screen awake while a session runs (teaching, continuation,
@@ -241,19 +242,31 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
   };
 
   // ── Session mode toggle (LEARN BY TEACHING ↔ LEARNING WITH GUIDE) ────────
-  // "guide" is UI-only for now: just the teaching guide and the human, no
-  // protégé, no WebSocket. The live teaching session (if running) is kept
+  // "guide": the guide teacher and the human, no protégé, no WebSocket. The
+  // guide's replies come from the API (POST /api/records/guide): taught from
+  // the open document with citations that jump the reader, and saved per
+  // learner per document (content.guide); a session without a document is
+  // taught from its topic. The live teaching session (if running) is kept
   // intact underneath — toggling back restores it untouched.
   const [chatMode,      setChatMode]      = useState("teach");
   const [guideMessages, setGuideMessages] = useState([]);
-  const guideNotedRef   = useRef(false);
+  const [guideBusy,     setGuideBusy]     = useState(false);
+  const guideLoadedRef  = useRef(false);
+  const guideApi        = content?.guide || null;
+  const guideOpening    = () => ({ role: "guide", text: t('teaching.guide_open').replace('{name}', guide.name) });
   const toggleChatMode  = () => {
     setChatMode(m => (m === "teach" ? "guide" : "teach"));
-    // Seed the guide's opening line once (local, no backend).
-    setGuideMessages(prev => prev.length ? prev : [{
-      role: "guide",
-      text: t('teaching.guide_open').replace('{name}', guide.name),
-    }]);
+    setGuideMessages(prev => prev.length ? prev : [guideOpening()]);
+    // The learner's earlier guide lesson on this document, once.
+    if (guideApi && !guideLoadedRef.current) {
+      guideLoadedRef.current = true;
+      guideApi.load().then((past) => {
+        if (!past?.length) return;
+        setGuideMessages((cur) => [guideOpening(), ...past.map((m) => ({
+          role: m.role === "assistant" ? "guide" : "user", text: m.text, citations: m.citations || [],
+        })), ...cur.slice(1)]);
+      }).catch(() => {});
+    }
   };
   // Asked once per material, the first time the guide chat opens.
   useEffect(() => {
@@ -267,19 +280,30 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
 
   const sendGuideMessage = (text) => {
     const clean = withQuote(text, quote);
-    if (!clean) return;
+    if (!clean || guideBusy) return;
+    const question = String(text || '').trim() || 'Explain this passage.';
+    const selection = quote ? { text: quote.text, ...(quote.pageNumber ? { pageNumber: quote.pageNumber } : {}) } : null;
+    const history = guideMessages.filter((m) => m.role === 'user' || m.role === 'guide').slice(1);
     setInput("");
     setQuote(null);
-    setGuideMessages(prev => {
-      const next = [...prev, { role: "user", text: clean }];
-      // One honest note that live guide replies are not wired yet — never
-      // fabricate a guide answer.
-      if (!guideNotedRef.current) {
-        guideNotedRef.current = true;
-        next.push({ role: "system", text: t('teaching.guide_note') });
-      }
+    setGuideBusy(true);
+    setGuideMessages(prev => [...prev, { role: "user", text: clean }, { role: "guide", text: "", pending: true }]);
+    const setReply = (patch) => setGuideMessages(prev => {
+      const next = [...prev];
+      const at = next.map((m) => m.pending).lastIndexOf(true);
+      if (at >= 0) next[at] = { ...next[at], ...patch };
       return next;
     });
+    let streamed = '';
+    const send = guideApi ? guideApi.send : (opts) => guideReply(opts);
+    send({
+      message: question, selection, guideName: guide.name, topic, subject,
+      ...(guideApi ? {} : { history }),
+      onDelta: (d) => { streamed += d; setReply({ text: streamed }); },
+    })
+      .then((r) => setReply({ text: r?.answer || streamed, citations: r?.citations || [], pending: false }))
+      .catch((e) => setReply({ role: "system", text: e?.message || t('teaching.guide_error'), pending: false }))
+      .finally(() => setGuideBusy(false));
   };
 
   const userTurns = blocks.filter(b => b.type === "user" && !b.faded).length;
@@ -392,8 +416,12 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       // Persistence result for this session. The lesson runs off the in-memory
       // orchestrator, so a failed save is invisible without this — which is
       // precisely how sessions went missing from the Sessions tab.
+      // onSessionStarted gets the LIVE id (resume_session, minimize); the
+      // saved row's id (rowId) is what continuation and links need — the
+      // adaptive_sessions id the server looks up later.
       ws.on("session_saved", d => {
         if (!d?.saved) console.error("[session] NOT saved — it will not appear in Sessions:", d?.error);
+        else if (d.rowId) onSessionSaved?.(d.rowId);
       });
 
       ws.on("student_session_ready", d => { setSessionId(d.sessionId); onSessionStarted?.(d.sessionId); sessionIdRef.current = d.sessionId; setWsReady(true); setInitLoading(false); });

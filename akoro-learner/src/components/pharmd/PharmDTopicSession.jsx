@@ -198,7 +198,7 @@ export default function PharmDTopicSession({ topic, course, onClose }) {
       content={content}
       onClose={onClose}
       onMinimize={onClose}
-      onSessionStarted={(sid) => storeSid(topic?.id, sid)}
+      onSessionSaved={(sid) => storeSid(topic?.id, sid)}
     />
   );
 }

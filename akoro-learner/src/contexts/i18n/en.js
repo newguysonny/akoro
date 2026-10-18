@@ -607,7 +607,7 @@ export const EN = {
   'teaching.guide_title':         'Learning with your guide',
   'teaching.guide_sub':           'A calm session with {name} — ask anything.',
   'teaching.learn_suggestions':   'Learn suggestions',
-  'teaching.guide_note':          'Live guide replies are on the way — your message is kept in this session.',
+  'teaching.guide_error':         'Your guide couldn\'t reply just now — try again in a moment.',
   'teaching.guide_ph':            'Ask your guide…',
   'teaching.connecting':          'Connecting…',
   'teaching.reconnecting':        'Reconnecting…',

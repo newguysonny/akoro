@@ -44,7 +44,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import TeachAgentModal from '../teaching/TeachAgentModal.jsx';
 import { buildSessionReaderPages } from '../teaching/SessionReaderModal.jsx';
 import { officeReaderPages } from '../../lib/officePages.js';
-import { recordDownloadUrl, extractStoredRecordText, getRecordExtraction, getSharedExtraction, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus, getAskHistory, askRecord, generateRecordTool, startRecordPodcast, getRecordPodcast, listRecordArtifacts, saveRecordArtifact, updateRecordArtifact, deleteRecordArtifact } from '../../services/recordsApi.js';
+import { recordDownloadUrl, extractStoredRecordText, getRecordExtraction, getSharedExtraction, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus, getAskHistory, askRecord, getGuideHistory, guideReply, generateRecordTool, startRecordPodcast, getRecordPodcast, listRecordArtifacts, saveRecordArtifact, updateRecordArtifact, deleteRecordArtifact } from '../../services/recordsApi.js';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
@@ -153,6 +153,11 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
   const ask = useMemo(() => (askKey ? {
     load: () => getAskHistory(askTarget),
     send: (opts) => askRecord({ ...askTarget, ...opts }),
+  } : null), [askKey]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // Learning with Guide: the guide teacher's chat, taught from this document.
+  const guide = useMemo(() => (askKey ? {
+    load: () => getGuideHistory(askTarget),
+    send: (opts) => guideReply({ ...askTarget, ...opts }),
   } : null), [askKey]);   // eslint-disable-line react-hooks/exhaustive-deps
   // Study tools (summary / quiz / flashcards) generated from the document,
   // every item citing where it came from.
@@ -439,12 +444,10 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
           if (segments?.length) {
             const text = segments.map((s) => (s.speaker ? `[${s.speaker}] ${s.text}` : s.text)).join('\n\n');
             setAvTranscript({ segments });
-            // The transcript becomes the session's grounding. (This called the
-      // load effect's `ready` helper, which is not in scope here — every
-      // finished transcription threw "ready is not defined".)
-      setPages([{ html: '', text: '' }]);
-      setPdfParts(null);
-      setReference({ name: record.name, text: text.slice(0, MAX_REFERENCE_CHARS) });
+            // The transcript becomes the session's grounding — and the reader
+            // is ready (it stayed on "Preparing…" when this set the pages
+            // without marking the load done).
+            ready([{ html: '', text: '' }], null, { name: record.name, text: text.slice(0, MAX_REFERENCE_CHARS) });
             return;
           }
           setExtract({ status: 'offer', av: true, done: 0, total: 1 });
@@ -609,6 +612,8 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
     discussion: discussionCommunities ? { communities: discussionCommunities } : null,
     // Ask — the reader's whole-document Q&A with jump-to-source citations.
     ask,
+    // Learning with Guide — the guide teacher's chat, taught from this document.
+    guide,
     // Real Summary / Quiz / Flashcards over the document (cited).
     tools,
     // Generated tabs, notes and annotations — kept across visits.
@@ -724,7 +729,7 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
       content={content}
       onClose={onClose}
       onMinimize={onMinimize}
-      onSessionStarted={(sid) => storeSid(record.id, sid)}
+      onSessionSaved={(sid) => storeSid(record.id, sid)}
     />
       {extractOverlay}
     </>

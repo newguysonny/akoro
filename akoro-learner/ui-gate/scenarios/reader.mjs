@@ -210,6 +210,8 @@ export const scenarios = [
       if (!record?.id) t.block(`saving the pasted record answered ${made.status}: ${made.body?.message || ''}`);
       t.cleanup(async () => { await t.api('DELETE', `/api/records/${record.id}`); });
       t.note(`text record ${record.id}`);
+      t.state.textMarker = marker;
+      t.state.textRecordId = record.id;
       const shown = await openRecordReader(t, marker, '[data-page-index] [data-page-content] p');
       t.check('the reader shows the pasted paragraphs', shown);
       if (shown) {
@@ -285,6 +287,156 @@ export const scenarios = [
       t.check('there are suggestions at once', firstSet.length >= 3, { actual: firstSet.length });
       t.check('none of them is the old generic list', !items.some((s) => OLD_GENERIC.includes(s)), { actual: items });
       t.check('they are about this document', items.some((s) => /cell|mitochondri|nucleus|chloroplast|osmosis|photosynth/i.test(s)), { actual: items });
+    },
+  },
+
+  {
+    name: 'guide.replies',
+    needs: ['reader.opens_text'],
+    description: 'LEARNING WITH GUIDE: the guide replies from the API, teaching from the document with a source chip; the lesson is there again after a reload.',
+    async run(t) {
+      const { page } = t;
+      const box = page.getByPlaceholder('Ask your guide…');
+      if (!(await box.isVisible().catch(() => false))) {
+        await page.getByRole('button', { name: /Back to the session chat/ }).first().click().catch(() => {});
+        await page.locator('[role=button][title="LEARNING WITH GUIDE"]').first().click().catch(() => {});
+      }
+      t.check('the guide chat is open', await box.waitFor({ timeout: 15_000 }).then(() => true, () => false));
+      const question = 'What do mitochondria do in a cell?';
+      await box.fill(question);
+      await page.getByRole('button', { name: 'Send message' }).click();
+      const reply = page.locator('text=/mitochondri|respiration|energy/i').last();
+      t.check('the guide replies about the document', await reply.waitFor({ timeout: 60_000 }).then(() => true, () => false));
+      await page.waitForFunction(() => !document.querySelector('[aria-label="Your guide is writing"]'), null, { timeout: 60_000 }).catch(() => {});
+      const chips = await page.locator('button.folio-citation[aria-label^="Source"]').count();
+      t.check('the reply cites the document (a source chip)', chips > 0, { actual: chips });
+      t.check('no "replies are on the way" note any more', !(await page.getByText(/Live guide replies are on the way/).count()));
+      // The lesson is kept per learner per document.
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      const reopened = await openRecordReader(t, t.state.textMarker, '[data-page-index] [data-page-content] p');
+      if (!reopened) return;
+      await page.getByRole('button', { name: /Back to the session chat/ }).first().click().catch(() => {});
+      await page.locator('[role=button][title="LEARNING WITH GUIDE"]').first().click();
+      t.check('after a reload the guide lesson is still there', await page.getByText(question).first().waitFor({ timeout: 20_000 }).then(() => true, () => false));
+    },
+  },
+  {
+    name: 'reader.tools_cited',
+    needs: ['reader.opens_text'],
+    description: 'Summary, Quiz and Flashcards are generated from the whole document by the server, every item with a source chip.',
+    async run(t) {
+      const { page } = t;
+      for (const tool of ['Summary', 'Quiz', 'Flashcards']) {
+        const gen = page.locator('[title="Generate a study tool"]').first();
+        if (!(await gen.isVisible().catch(() => false))) await page.locator('[title="Open the material"], [aria-label="Open reading material"]').first().click().catch(() => {});
+        await gen.click();
+        const menu = page.locator('.sreader-menu');
+        await menu.getByRole('button', { name: tool, exact: true }).first().click();
+        const scope = menu.locator('label', { hasText: 'From' }).locator('select');
+        if (await scope.count()) await scope.selectOption('Whole document');
+        const before = await page.locator('.folio-citation').count();
+        await menu.getByRole('button', { name: `Build ${tool.toLowerCase()}` }).click();
+        const made = await page.waitForFunction((n) => document.querySelectorAll('.folio-citation').length > n, before, { timeout: 120_000 }).then(() => true, () => false);
+        const err = await menu.locator('[role=alert]').innerText().catch(() => '');
+        t.check(`${tool}: generated with source chips`, made, { actual: err || `${await page.locator('.folio-citation').count()} chips` });
+        await page.keyboard.press('Escape').catch(() => {});
+      }
+    },
+  },
+  {
+    name: 'reader.work_kept',
+    needs: ['reader.tools_cited'],
+    description: 'The generated tabs and a note are saved for this learner on this document, and listed under Saved after a reload.',
+    async run(t) {
+      const { page } = t;
+      const note = `Remember: mitochondria release energy ${t.state.textMarker}`;
+      const gen = page.locator('[title="Generate a study tool"]').first();
+      await gen.click();
+      const menu = page.locator('.sreader-menu');
+      await menu.getByRole('button', { name: 'Notes', exact: true }).first().click();
+      await menu.getByRole('button', { name: 'Build notes' }).click();
+      const area = page.getByPlaceholder('Write a note about this page…').last();
+      t.check('a note opens', await area.waitFor({ timeout: 15_000 }).then(() => true, () => false));
+      await area.fill(note);
+      await page.waitForTimeout(3_000);   // the reader saves on a short delay
+      const saved = await t.api('GET', `/api/records/artifacts?recordId=${t.state.textRecordId}`);
+      const items = saved.body?.data?.artifacts || [];
+      const kinds = new Set(items.map((a) => a.kind));
+      t.check('summary, quiz and flashcards are saved', ['summary', 'quiz', 'flashcards'].every((k) => kinds.has(k)), { actual: [...kinds] });
+      t.check('the note is saved with its words', items.some((a) => a.kind === 'notes' && JSON.stringify(a.content || {}).includes('mitochondria release energy')), { actual: items.map((a) => a.kind) });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      if (!(await openRecordReader(t, t.state.textMarker, '[data-page-index] [data-page-content] p'))) return;
+      await page.locator('[title="Generate a study tool"]').first().click();
+      const savedList = page.locator('.sreader-menu').getByText('Saved', { exact: true });
+      t.check('after a reload they are listed under Saved', await savedList.waitFor({ timeout: 15_000 }).then(() => true, () => false));
+      const rows = await page.locator('.sreader-menu').getByRole('button', { name: /^Delete / }).count();
+      t.check('…all four of them', rows >= 4, { actual: rows });
+      await page.keyboard.press('Escape').catch(() => {});
+    },
+  },
+  {
+    name: 'reader.office_pages',
+    description: 'A Word document opens in the reader as pages of its own text (the server reads it).',
+    async run(t) {
+      const { page } = t;
+      const marker = newMarker();
+      const name = `${marker} Cell Structure.docx`;
+      const { Document, Packer, Paragraph, HeadingLevel } = await import('docx');
+      const doc = new Document({ sections: [{ children: [new Paragraph({ text: 'Cell Structure', heading: HeadingLevel.HEADING_1 }), ...PARAS.map((x) => new Paragraph(x))] }] });
+      const bytes = Buffer.from(await Packer.toBuffer(doc));
+      const mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      const up = await t.api('POST', '/api/records/upload-url', { name, mime, size: bytes.length });
+      if (up.status !== 200 || !up.body?.data?.uploadUrl) t.block(`upload-url answered ${up.status}: ${up.body?.message || ''}`);
+      await page.goto(`${t.app}/library`, { waitUntil: 'domcontentloaded' });
+      const putStatus = await page.evaluate(async ({ url, b64, mime }) => {
+        const body = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+        try { return (await fetch(url, { method: 'PUT', headers: { 'Content-Type': mime }, body })).status; } catch (e) { return String(e.message); }
+      }, { url: up.body.data.uploadUrl, b64: bytes.toString('base64'), mime });
+      if (!(putStatus >= 200 && putStatus < 300)) t.block(`the file store is unreachable from here: ${putStatus}`);
+      const made = await t.api('POST', '/api/records', { kind: 'upload', fileKey: up.body.data.fileKey, name, mime, size: bytes.length });
+      const record = made.body?.data?.record || made.body?.data;
+      if (!record?.id) t.block(`registering the record answered ${made.status}: ${made.body?.message || ''}`);
+      t.cleanup(async () => { await t.api('DELETE', `/api/records/${record.id}`); });
+      const shown = await openRecordReader(t, marker, '[data-page-index] [data-page-content]');
+      t.check('the Word document opens in the reader', shown);
+      if (!shown) return;
+      const text = (await page.locator('[data-page-index] [data-page-content]').allInnerTexts().catch(() => [])).join(' ');
+      t.check('…as its own words', /mitochondria/i.test(text) && /cell wall/i.test(text), { actual: text.slice(0, 100) });
+    },
+  },
+];
+
+/* Suite "reader-podcast" — run on demand (it writes and narrates a whole
+   episode, the costliest reader tool): a two-voice episode made from the
+   document, playable, with a transcript whose lines cite the document. */
+export const podcastScenarios = [
+  {
+    name: 'reader.podcast',
+    description: 'Podcast: the server writes and narrates a two-voice episode from the document; it plays, and its transcript cites the document.',
+    async run(t) {
+      const { page } = t;
+      const marker = newMarker();
+      const made = await t.api('POST', '/api/records', { kind: 'paste', name: `${marker} Cell Structure notes`, content: PARAS.join('\n\n') });
+      const record = made.body?.data?.record || made.body?.data;
+      if (!record?.id) t.block(`saving the pasted record answered ${made.status}: ${made.body?.message || ''}`);
+      t.cleanup(async () => { await t.api('DELETE', `/api/records/${record.id}`); });
+      if (!(await openRecordReader(t, marker, '[data-page-index] [data-page-content] p'))) return;
+      await page.locator('[title="Generate a study tool"]').first().click();
+      const menu = page.locator('.sreader-menu');
+      await menu.getByRole('button', { name: 'Podcast', exact: true }).first().click();
+      const scope = menu.locator('label', { hasText: 'From' }).locator('select');
+      if (await scope.count()) await scope.selectOption('Whole document');
+      await menu.getByRole('button', { name: 'Build podcast' }).click();
+      const audio = page.locator('audio[src]');
+      const ready = await audio.first().waitFor({ state: 'attached', timeout: 300_000 }).then(() => true, () => false);
+      t.check('the episode is made and playable', ready);
+      if (!ready) return;
+      const duration = await audio.first().evaluate((a) => new Promise((r) => (a.readyState >= 1 ? r(a.duration) : a.addEventListener('loadedmetadata', () => r(a.duration), { once: true }))));
+      t.check('…with real audio', Number(duration) > 20, { actual: duration });
+      const chips = await page.locator('.folio-citation').count();
+      t.check('its transcript cites the document', chips > 0, { actual: chips });
+      const saved = await t.api('GET', `/api/records/artifacts?recordId=${record.id}`);
+      t.check('the episode is saved for this learner', (saved.body?.data?.artifacts || []).some((a) => a.kind === 'podcast'));
     },
   },
 ];

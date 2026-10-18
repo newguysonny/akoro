@@ -271,11 +271,12 @@ export async function gatherPassages({ target, question, selection = null, searc
   };
 }
 
-export async function loadAskHistory({ userId, recordId, limit = ASK_LIMITS.HISTORY_LIMIT }) {
+/** One thread per learner per document per channel: "ask" (the Ask tab) or "guide" (Learning with Guide). */
+export async function loadAskHistory({ userId, recordId, limit = ASK_LIMITS.HISTORY_LIMIT, channel = "ask" }) {
   const db = await dbLazy();
   const { data, error } = await db.schema("edu").from("record_chat_messages")
     .select("id, role, text, citations, selection, created_at")
-    .eq("user_id", userId).eq("record_id", recordId)
+    .eq("user_id", userId).eq("record_id", recordId).eq("channel", channel)
     .order("created_at", { ascending: false }).limit(limit);
   if (error) throw error;
   return (data || []).reverse().map((m) => ({
@@ -283,12 +284,12 @@ export async function loadAskHistory({ userId, recordId, limit = ASK_LIMITS.HIST
   }));
 }
 
-export async function saveAskTurn({ userId, recordId, question, selection, answer, citations }) {
+export async function saveAskTurn({ userId, recordId, question, selection, answer, citations, channel = "ask" }) {
   const db = await dbLazy();
   const now = Date.now();
   const { data, error } = await db.schema("edu").from("record_chat_messages").insert([
-    { user_id: userId, record_id: recordId, role: "user", text: question, selection: selection || null, created_at: new Date(now).toISOString() },
-    { user_id: userId, record_id: recordId, role: "assistant", text: answer, citations, created_at: new Date(now + 1).toISOString() },
+    { user_id: userId, record_id: recordId, channel, role: "user", text: question, selection: selection || null, created_at: new Date(now).toISOString() },
+    { user_id: userId, record_id: recordId, channel, role: "assistant", text: answer, citations, created_at: new Date(now + 1).toISOString() },
   ]).select("id, role");
   if (error) throw error;
   return { assistantMessageId: (data || []).find((r) => r.role === "assistant")?.id || null };

@@ -258,7 +258,7 @@ export default function AgentSessionViewer({ course, lesson, onClose }) {
       content={content}
       onClose={onClose}
       onMinimize={onClose}
-      onSessionStarted={(sid) => storeSid(lesson?.id, sid)}
+      onSessionSaved={(sid) => storeSid(lesson?.id, sid)}
     />
   );
 }

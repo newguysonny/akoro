@@ -47,7 +47,8 @@ function Pieces({ pieces, onCite }) {
   });
 }
 
-function Answer({ text, citations, onCite }) {
+/** An answer with its [n] citations as chips that jump the reader (Ask, and the guide chat). */
+export function Answer({ text, citations, onCite }) {
   const blocks = answerBlocks(text, citations);
   return (
     <div className="text-sm leading-relaxed" style={{ color: 'var(--ak-text)' }}>

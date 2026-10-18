@@ -210,6 +210,29 @@ export async function askRecord({ recordId, contentKey, question, selection = nu
   return result || { answer: full, citations: [] };
 }
 
+/* ── Learning with Guide: the guide teacher, grounded in the document ─────── */
+
+/** The learner's guide thread for this document. */
+export async function getGuideHistory({ recordId, contentKey }) {
+  const q = contentKey ? `contentKey=${encodeURIComponent(contentKey)}` : `recordId=${encodeURIComponent(recordId)}`;
+  const d = await apiGet(`/api/records/guide/history?${q}`);
+  return d?.data?.messages ?? [];
+}
+
+/** The guide's reply, streamed to onDelta → { answer, citations, messageId }.
+    With a document (recordId | contentKey) it teaches from it and the turn is
+    saved; without one it teaches the topic from the history sent. */
+export async function guideReply({ recordId, contentKey, message, selection = null, guideName, topic, subject, history, onDelta, onStatus, signal }) {
+  let result = null;
+  const target = recordId || contentKey ? askTarget({ recordId, contentKey }) : {};
+  const full = await streamPost('/api/records/guide?stream=1', {
+    ...target, message, ...(selection ? { selection } : {}),
+    ...(guideName ? { guideName } : {}), ...(topic ? { topic } : {}), ...(subject ? { subject } : {}),
+    ...(!recordId && !contentKey && Array.isArray(history) ? { history } : {}),
+  }, { onDelta, onStatus, signal, onDone: (d) => { result = d; } });
+  return result || { answer: full, citations: [] };
+}
+
 /** Generate a study tool (summary | quiz | flashcards) from the document — grounded, cited. */
 export async function generateRecordTool({ recordId, contentKey, tool, scope = 'page', pageNumber = null, pageText = '', values = {} }) {
   const d = await apiPost(`/api/records/tools/${encodeURIComponent(tool)}`, {
