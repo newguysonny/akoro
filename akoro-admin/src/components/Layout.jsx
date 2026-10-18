@@ -229,11 +229,41 @@ export function Sidebar({ collapsed = false, onClose }) {
   const unread = useUnreadMessages();
   const { pathname } = useLocation();
   const iconOnly = collapsed;
+  const [flyout, setFlyout] = useState(null); // label of group with open flyout
+  const flyoutRef = useRef(null);
 
   const activeGroup = NAV_GROUPS.find((g) => g.children?.some((c) => c.to === pathname))?.label;
   const [open, setOpen] = useState({});
   useEffect(() => { if (activeGroup) setOpen((o) => ({ ...o, [activeGroup]: true })); }, [activeGroup]);
   const toggle = (label) => setOpen((o) => ({ ...o, [label]: !o[label] }));
+
+  // Close flyout on outside click / Escape, and when expanding the sidebar
+  useEffect(() => {
+    if (!flyout) return;
+    const onDoc = (e) => { if (flyoutRef.current && !flyoutRef.current.contains(e.target)) setFlyout(null); };
+    const onKey = (e) => { if (e.key === 'Escape') setFlyout(null); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [flyout]);
+  useEffect(() => { if (!iconOnly) setFlyout(null); }, [iconOnly]);
+
+  const openFlyout = (label, anchorEl) => {
+    setFlyout(flyout === label ? null : label);
+    // position next to the clicked icon
+    requestAnimationFrame(() => {
+      const el = flyoutRef.current;
+      if (!el || !anchorEl) return;
+      const r = anchorEl.getBoundingClientRect();
+      el.style.left = `${r.right + 8}px`;
+      el.style.top = `${Math.min(r.top, window.innerHeight - el.offsetHeight - 16)}px`;
+    });
+  };
+
+  const flyoutGroup = NAV_GROUPS.find((g) => g.label === flyout);
 
   return (
     <aside style={{
@@ -268,17 +298,63 @@ export function Sidebar({ collapsed = false, onClose }) {
         </div>
       </div>
 
-      {/* Nav */}
+      {/* Nav — expandable groups when open, icon rail with flyouts when collapsed */}
       <nav onClickCapture={onClose ? (e) => { if (e.target.closest?.('a')) onClose(); } : undefined}
         style={{ flex: 1, padding: '10px 0', overflowY: 'auto' }}>
         {iconOnly
-          ? NAV.map(item => <NavItem key={item.to} {...item} compact badge={item.to === '/messages' ? unread : 0} />)
+          ? NAV_GROUPS.map(item => (
+              item.children
+                ? (
+                  <button key={item.label}
+                    onClick={(e) => openFlyout(item.label, e.currentTarget)}
+                    title={item.label}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      width: 'calc(100% - 20px)', padding: '10px 0', margin: '1px 10px',
+                      borderRadius: 8, border: 'none', cursor: 'pointer',
+                      color: flyout === item.label ? BX.primary : '#3F4354',
+                      background: flyout === item.label ? `${BX.primary}12` : 'transparent',
+                      fontFamily: BX.font,
+                    }}>
+                    <item.icon size={18} strokeWidth={1.8} />
+                  </button>
+                )
+                : <NavItem key={item.to} {...item} compact badge={item.to === '/messages' ? unread : 0} />
+            ))
           : NAV_GROUPS.map(item => (
               item.children
                 ? <Group key={item.label} item={item} open={!!open[item.label]} onToggle={() => toggle(item.label)} unread={unread} />
                 : <NavItem key={item.to} {...item} badge={item.to === '/messages' ? unread : 0} />
             ))}
       </nav>
+
+      {/* Collapsed flyout */}
+      {iconOnly && flyoutGroup?.children && (
+        <div ref={flyoutRef} style={{
+          position: 'fixed', zIndex: 200, minWidth: 210,
+          background: BX.white, border: `1px solid ${BX.line}`, borderRadius: 10,
+          boxShadow: '0 12px 32px rgba(20,20,40,.14)', padding: 6, fontFamily: BX.font,
+        }}>
+          <div style={{
+            fontSize: 11, fontWeight: 700, color: BX.muted, textTransform: 'uppercase',
+            letterSpacing: '.05em', padding: '8px 10px 4px',
+          }}>{flyoutGroup.label}</div>
+          {flyoutGroup.children.map((c) => (
+            <NavLink key={c.to} to={c.to}
+              onClick={() => setFlyout(null)}
+              style={({ isActive }) => ({
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '8px 10px', borderRadius: 7, textDecoration: 'none',
+                fontFamily: BX.font, fontSize: 13, fontWeight: isActive ? 600 : 500,
+                color: isActive ? BX.primary : BX.ink,
+                background: isActive ? `${BX.primary}0F` : 'transparent',
+              })}>
+              <span style={{ flex: 1 }}>{c.label}</span>
+              {c.to === '/messages' && <Badge count={unread} />}
+            </NavLink>
+          ))}
+        </div>
+      )}
 
       {/* User */}
       <div style={{
@@ -443,10 +519,11 @@ export function TopBar({ onToggleSidebar }) {
       display: 'flex', alignItems: 'center', gap: 10, fontFamily: BX.font,
     }}>
       {onToggleSidebar && (
-        <button onClick={onToggleSidebar} title="Menu" aria-label="Menu"
-          className="bx-hamb"
-          style={{ border: 'none', background: 'none', borderRadius: 8, padding: 7, cursor: 'pointer', color: BX.ink, display: 'none', alignItems: 'center' }}>
-          <Menu size={18} />
+        <button onClick={onToggleSidebar} title="Toggle sidebar" aria-label="Toggle sidebar"
+          style={{ border: 'none', background: 'none', borderRadius: 8, padding: 7, cursor: 'pointer', color: BX.ink, display: 'flex', alignItems: 'center' }}
+          onMouseEnter={e => e.currentTarget.style.background = '#F1F1F5'}
+          onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+          <Menu size={18} strokeWidth={1.8} />
         </button>
       )}
       <button
@@ -501,9 +578,6 @@ export function TopBar({ onToggleSidebar }) {
           .bx-search { display: none !important; }
           .bx-search-mob { display: flex !important; }
           .bx-feedback { display: none !important; }
-        }
-        @media (max-width: 767px) {
-          .bx-hamb { display: flex !important; }
         }
       `}</style>
     </div>
