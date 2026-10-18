@@ -63,7 +63,7 @@ const NAV_GROUPS = [
     { to: '/agents',      icon: Bot,            label: 'Agents' },
   ] },
   { label: 'Program Courses', icon: Layers, children: [
-    { to: '/program-courses',          icon: Home,       label: 'Overview' },
+    { to: '/program-courses',          icon: Home,       label: 'Overview', end: true },
     { to: '/program-courses/programs', icon: Layers,     label: 'Programs' },
     { to: '/program-courses/courses',  icon: BookCopy,   label: 'Courses' },
     { to: '/program-courses/contents', icon: FolderOpen, label: 'Contents' },
@@ -152,10 +152,11 @@ function NavItem({ to, icon: Icon, label, compact, badge = 0 }) {
 }
 
 /* Indented child link inside an expandable group. */
-function ChildLink({ to, label, badge = 0 }) {
+function ChildLink({ to, label, badge = 0, end = false }) {
   return (
     <NavLink
       to={to}
+      end={end}
       style={({ isActive }) => ({
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '7px 10px', borderRadius: 7,
@@ -201,7 +202,7 @@ function Group({ item, open, onToggle, unread }) {
       {open && (
         <div style={{ margin: '2px 8px 4px 20px', paddingLeft: 12, borderLeft: `1px solid ${BX.line}` }}>
           {item.children.map((c) => (
-            <ChildLink key={c.to} to={c.to} label={c.label} badge={c.to === '/messages' ? unread : 0} />
+            <ChildLink key={c.to} to={c.to} label={c.label} badge={c.to === '/messages' ? unread : 0} end={c.end} />
           ))}
         </div>
       )}
@@ -340,7 +341,7 @@ export function Sidebar({ collapsed = false, onClose }) {
             letterSpacing: '.05em', padding: '8px 10px 4px',
           }}>{flyoutGroup.label}</div>
           {flyoutGroup.children.map((c) => (
-            <NavLink key={c.to} to={c.to}
+            <NavLink key={c.to} to={c.to} end={c.end}
               onClick={() => setFlyout(null)}
               style={({ isActive }) => ({
                 display: 'flex', alignItems: 'center', gap: 8,
@@ -698,11 +699,8 @@ export function PageLayout({ children, title, subtitle, action, contentMaxWidth 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily: BX.font, background: BX.white }}>
       <style>{`
-        /* When sidebar is collapsed, let Program Courses use the freed width */
+        /* When sidebar is collapsed, let Program Courses use the freed width (all viewports) */
         .bx-main[data-collapsed="true"] .pcroot { max-width: 1000px; }
-        @media (max-width: 1100px) {
-          .bx-main[data-collapsed="true"] .pcroot { max-width: 720px; }
-        }
       `}</style>
       <Sidebar collapsed={collapsed} />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
