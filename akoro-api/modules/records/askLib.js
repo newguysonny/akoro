@@ -21,6 +21,8 @@
  * exported for the contract test; the db/model pieces load lazily.
  */
 
+import { pastedTextPages } from "./readerPages.js";
+
 export const ASK_LIMITS = Object.freeze({
   MAX_QUESTION_CHARS: 2000,
   MAX_SELECTION_CHARS: 1500,
@@ -216,6 +218,36 @@ export function extractCitations(answer, passages = []) {
 const dbLazy = async () => (await import("../../db.js")).default;
 
 /**
+ * A pasted record's pages, cut the way the reader cuts them
+ * (readerPages.js): Map(pageNumber → { markdown, blocks: [] }). Page 1 is
+ * the reader's cover, so content starts at 2. Empty for any other record.
+ */
+export async function pastedPagesFor(target) {
+  if (!target || target.contentKey || target.kind !== "paste") return new Map();
+  const db = await dbLazy();
+  const { data } = await db.schema("edu").from("records").select("content").eq("id", target.recordId).maybeSingle();
+  return pagesFromPaste(data?.content || "");
+}
+
+/** Pure: pasted text → Map(pageNumber → { markdown, blocks: [] }). */
+export function pagesFromPaste(text) {
+  return new Map(pastedTextPages(text).map((p) => [p.pageNumber, { markdown: p.text, blocks: [] }]));
+}
+
+/** Search hits on a paste (no page) → hits on the reader page that holds their words. */
+export function pasteHitsToPages(hits, pages) {
+  if (!pages.size) return hits;
+  const norm = (s) => String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
+  const texts = [...pages.entries()].map(([n, p]) => [n, norm(p.markdown)]);
+  return hits.map((h) => {
+    if (h.chunkKind !== "paste") return h;
+    const needle = norm(h.text).slice(0, 80);
+    const found = needle && texts.find(([, t]) => t.includes(needle));
+    return found ? { ...h, chunkKind: "page", pageNumber: found[0] } : h;
+  });
+}
+
+/**
  * The record whose chunks answer for a file: a learner's own paste/upload,
  * or — for a shared file — the OWNER's record (the chunks live there).
  * Access is the caller's job (routes reuse the extraction rule).
@@ -246,7 +278,15 @@ export async function gatherPassages({ target, question, selection = null, searc
   }
   hits = hits.map((h) => ({ ...h, text: h.text ?? h.snippet ?? "" }));
 
-  const pages = new Map();
+  // A paste has no extraction: its pages are the reader's own cut, so the
+  // answer cites pages that exist — even before search has indexed it.
+  const pages = await pastedPagesFor(target);
+  if (pages.size) {
+    hits = pasteHitsToPages(hits, pages);
+    if (!hits.some((h) => h.chunkKind === "page")) {
+      hits = [...[...pages.keys()].slice(0, ASK_LIMITS.TOP_PAGES).map((pageNumber) => ({ chunkKind: "page", pageNumber, text: "" })), ...hits];
+    }
+  }
   if (contentKey) {
     const db = await dbLazy();
     const wanted = [...new Set([

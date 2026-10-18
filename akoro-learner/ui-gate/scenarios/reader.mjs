@@ -269,6 +269,9 @@ export const scenarios = [
     description: 'On a PDF page, Annotate draws a highlight over exactly the selected words, saves it with its note, and it is back over the same words after a reload.',
     async run(t) {
       const { page } = t;
+      // The text checks left the pasted record open: open the PDF.
+      if (!(await openRecordReader(t, t.state.pdfMarker, '[data-page-index="0"] .pdf-text-layer span'))) return;
+      await readerPage(page, 0);
       await clearSelection(page);
       const a = await spanBox(page, 0, 2);
       t.check('a line of words to select', !!a);
@@ -367,6 +370,9 @@ export const scenarios = [
       const quizText = (await page.locator('body').innerText()).toLowerCase();
       t.check('…about the selected passage', /chloroplast|photosynth|light/.test(quizText));
 
+      // The new quiz tab is in front: back to the document's own pages.
+      await page.getByRole('button', { name: /Original Content/ }).first().click().catch(() => {});
+      await page.locator('[data-page-index] [data-page-content] p').first().waitFor({ timeout: 10_000 }).catch(() => {});
       const again = (await selectWithin(page, '[data-page-index] [data-page-content] p', 'cell wall is')).replace(/\s+/g, ' ').trim();
       t.check('another passage is selected', again.length > 10);
       await page.getByRole('button', { name: 'Note', exact: true }).click();
@@ -389,7 +395,8 @@ export const scenarios = [
         await page.getByRole('button', { name: /Back to the session chat/ }).first().click().catch(() => {});
       }
       t.check('the guide toggle is there', await toggle.waitFor({ timeout: 15_000 }).then(() => true, () => false));
-      await toggle.click();
+      // On a phone a sheet can sit over it: a direct click if the pointer one is intercepted.
+      await toggle.click({ timeout: 8_000 }).catch(() => toggle.dispatchEvent('click'));
       const header = page.getByRole('button', { name: 'Learn suggestions' });
       t.check('Learn suggestions show', await header.waitFor({ timeout: 10_000 }).then(() => true, () => false));
       const list = header.locator('xpath=following-sibling::div[1]');
@@ -415,7 +422,8 @@ export const scenarios = [
       const box = page.getByPlaceholder('Ask your guide…');
       if (!(await box.isVisible().catch(() => false))) {
         await page.getByRole('button', { name: /Back to the session chat/ }).first().click().catch(() => {});
-        await page.locator('[role=button][title="LEARNING WITH GUIDE"]').first().click().catch(() => {});
+        const tg = page.locator('[role=button][title="LEARNING WITH GUIDE"]').first();
+        await tg.click({ timeout: 8_000 }).catch(() => tg.dispatchEvent('click').catch(() => {}));
       }
       t.check('the guide chat is open', await box.waitFor({ timeout: 15_000 }).then(() => true, () => false));
       const question = 'What do mitochondria do in a cell?';
@@ -432,7 +440,8 @@ export const scenarios = [
       const reopened = await openRecordReader(t, t.state.textMarker, '[data-page-index] [data-page-content] p');
       if (!reopened) return;
       await page.getByRole('button', { name: /Back to the session chat/ }).first().click().catch(() => {});
-      await page.locator('[role=button][title="LEARNING WITH GUIDE"]').first().click();
+      const tg2 = page.locator('[role=button][title="LEARNING WITH GUIDE"]').first();
+      await tg2.click({ timeout: 8_000 }).catch(() => tg2.dispatchEvent('click').catch(() => {}));
       t.check('after a reload the guide lesson is still there', await page.getByText(question).first().waitFor({ timeout: 20_000 }).then(() => true, () => false));
     },
   },
@@ -455,7 +464,8 @@ export const scenarios = [
         const made = await page.waitForFunction((n) => document.querySelectorAll('.folio-citation').length > n, before, { timeout: 120_000 }).then(() => true, () => false);
         const err = await menu.locator('[role=alert]').innerText().catch(() => '');
         t.check(`${tool}: generated with source chips`, made, { actual: err || `${await page.locator('.folio-citation').count()} chips` });
-        await page.keyboard.press('Escape').catch(() => {});
+        // (No Escape: it closes the whole reader. A build closes the menu; if not, toggle it shut.)
+        if (await menu.isVisible().catch(() => false)) await gen.click().catch(() => {});
       }
     },
   },
@@ -487,7 +497,7 @@ export const scenarios = [
       t.check('after a reload they are listed under Saved', await savedList.waitFor({ timeout: 15_000 }).then(() => true, () => false));
       const rows = await page.locator('.sreader-menu').getByRole('button', { name: /^Delete / }).count();
       t.check('…all four of them', rows >= 4, { actual: rows });
-      await page.keyboard.press('Escape').catch(() => {});
+      await page.locator('[title="Generate a study tool"]').first().click().catch(() => {});
     },
   },
   {

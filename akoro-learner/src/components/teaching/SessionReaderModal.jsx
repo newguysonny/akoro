@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
+import { escapeHtml, textToParagraphBlocks, paginateBlocks } from '../../lib/readerPages.js';
 import { BRAND, GREEN, GOLD, RED } from "../../constants.js";
 import { Icon } from "../common/Icons.jsx";
 import MediaPlayer from "../library/MediaPlayer.jsx";
@@ -109,33 +110,8 @@ const FORM_DEFS = {
    icon always has something honest to open.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-const CHARS_PER_PAGE = 2600;
-
-const escapeHtml = (s) =>
-  String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-function textToParagraphBlocks(text) {
-  return String(text ?? "")
-    .split(/\n\s*\n+/)
-    .map((b) => b.trim())
-    .filter(Boolean)
-    .map((b) => `<p>${escapeHtml(b).replace(/\n/g, "<br>")}</p>`);
-}
-
-function paginateBlocks(blocks, perPage = CHARS_PER_PAGE) {
-  const pages = [];
-  let cur = [];
-  let count = 0;
-  for (const b of blocks) {
-    const len = b.replace(/<[^>]+>/g, "").length;
-    if (count > 0 && count + len > perPage) { pages.push(cur); cur = []; count = 0; }
-    cur.push(b);
-    count += len;
-  }
-  if (cur.length) pages.push(cur);
-  return pages;
-}
-
+// The page cut is shared with the server (lib/readerPages.js), so a
+// citation's page is the page shown here.
 const sectionEyebrow = (n, label) =>  `<div class="doc-eyebrow">SECTION ${String(n).padStart(2, "0")}${label ? ` · ${escapeHtml(label)}` : ""}</div>`;
 
 /* 42 → "0:42", 3675 → "1:01:15" — the media toolbar's clock. */

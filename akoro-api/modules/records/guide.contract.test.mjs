@@ -75,3 +75,19 @@ test("a turn's two rows carry the same columns (a batch insert NULLs a missing o
     assert.equal("channel" in u, !!channel);
   }
 });
+
+test("a paste is cut into the reader's own pages, so citations point at pages that exist", async () => {
+  const { pagesFromPaste, pasteHitsToPages } = await import("./askLib.js");
+  const [server, app] = await Promise.all([read("./readerPages.js"), read("../../../akoro-learner/src/lib/readerPages.js")]);
+  assert.equal(server, app, "readerPages.js is identical in the API and the learner app");
+  const reader = await read("../../../akoro-learner/src/components/teaching/SessionReaderModal.jsx");
+  assert.match(reader, /import \{ escapeHtml, textToParagraphBlocks, paginateBlocks \} from '\.\.\/\.\.\/lib\/readerPages\.js';/);
+  const para = (n) => `Paragraph ${n}: ` + "x".repeat(900);
+  const pages = pagesFromPaste([para(1), para(2), para(3), "Mitochondria release the energy stored in glucose."].join("\n\n"));
+  assert.deepEqual([...pages.keys()], [2, 3], "page 1 is the reader's cover; ~2600 chars a page");
+  assert.match(pages.get(3).markdown, /Mitochondria release/);
+  const hits = pasteHitsToPages([{ chunkKind: "paste", text: "Mitochondria release the energy stored in glucose." }, { chunkKind: "transcript", text: "x" }], pages);
+  assert.deepEqual(hits[0], { chunkKind: "page", pageNumber: 3, text: "Mitochondria release the energy stored in glucose." });
+  assert.equal(hits[1].chunkKind, "transcript");
+  assert.deepEqual([...pagesFromPaste("a & b < c").values()][0].markdown, "a & b < c", "the words come back unescaped");
+});

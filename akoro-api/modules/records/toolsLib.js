@@ -17,7 +17,7 @@
  * The pure pieces (passages, schemas, prompts, shaping) are exported for the
  * contract test; db access loads lazily.
  */
-import { contentWords, gatherPassages, passageWhere } from "./askLib.js";
+import { contentWords, gatherPassages, passageWhere, pastedPagesFor } from "./askLib.js";
 
 export const TOOL_IDS = Object.freeze(["summary", "quiz", "flashcards"]);
 export const TOOL_LIMITS = Object.freeze({
@@ -267,6 +267,9 @@ export async function gatherToolPassages({ target, scope, pageNumber = null, pag
     const pages = await loadPages(target.contentKey);
     if (pages.size) return samplePassages(pages);
   }
+  // A paste: its pages as the reader cuts them, so every item cites a real page.
+  const pasted = await pastedPagesFor(target);
+  if (pasted.size) return samplePassages(pasted);
   const chunks = await loadChunks(target.recordId);
   if (chunks.length) return chunkPassages(chunks);
   return pageText ? textPassages(Number.isInteger(pageNumber) ? pageNumber : null, pageText) : [];
