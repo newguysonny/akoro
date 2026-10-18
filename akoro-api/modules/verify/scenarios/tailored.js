@@ -44,6 +44,7 @@ export const tailoredChips = {
     ctx.note(`learn: ${JSON.stringify(cited).slice(0, 600)}`);
     ctx.expect.gte("learn suggestions from the document", cited.length, 3);
     ctx.expect.ok("…most point at a page of it", cited.filter((x) => x.citation?.pageNumber >= 1).length >= 2, cited);
+    ctx.expect.ok("…without the model's passage numbers in the text", !cited.some((x) => /passage\s*\d|\[\d+\]/i.test(x.text)), cited.map((x) => x.text));
     ctx.expect.ok("…and name what is in it", cited.some((x) => /cell wall|mitochondri|nucleus|osmosis|respiration|chromosome|dna/i.test(x.text)), cited);
 
     // 2. Agent Chat: not taught yet → the teaching guide chip, first.

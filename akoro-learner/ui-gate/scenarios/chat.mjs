@@ -65,6 +65,34 @@ export const scenarios = [
     },
   },
   {
+    name: 'chat.materials_links',
+    description: "Materials the agent finds show as links under its reply: a Library record opens in the Library; the record is deleted afterwards.",
+    async run(t) {
+      const { page } = t;
+      const marker = newMarker();
+      const made = await t.api('POST', '/api/records', { kind: 'paste', name: `${marker} Mitochondria notes`,
+        content: 'Mitochondria are the sites of aerobic respiration. They release the energy stored in glucose.' });
+      const record = made.body?.data?.record || made.body?.data;
+      if (!record?.id) t.block(`saving the pasted record answered ${made.status}: ${made.body?.message || ''}`);
+      t.cleanup(async () => { await t.api('DELETE', `/api/records/${record.id}`); });
+
+      await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
+      const box = page.getByRole('textbox', { name: /^Ask / }).last();
+      await box.waitFor({ timeout: 30_000 });
+      await box.fill('Do I have any notes in my library about mitochondria? Search my library.');
+      await box.press('Enter');
+      const link = page.locator(`button[data-material="record"]`, { hasText: marker }).first();
+      const shown = await link.waitFor({ timeout: 90_000 }).then(() => true, () => false);
+      const all = await page.locator('button[data-material]').allInnerTexts().catch(() => []);
+      t.note(`material chips: ${all.join(' | ')}`);
+      t.check('the record shows as a link under the reply', shown);
+      if (!shown) return;
+      await link.click();
+      t.check('…which opens it in the Library', await page.waitForURL((u) => u.pathname === '/library' && u.searchParams.get('record') === record.id, { timeout: 15_000 }).then(() => true, () => false),
+        { actual: page.url() });
+    },
+  },
+  {
     name: 'settings.memory_controls',
     description: 'Settings → Agent → Memory shows what the agent remembers and the "Learn from my conversations" switch, which saves and survives a reload.',
     async run(t) {

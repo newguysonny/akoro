@@ -42,6 +42,10 @@ test("reader: cited learn suggestions and guide tips point at real passages only
   const out = shapeCitedLearnSuggestions({ suggestions: [{ text: "Explain ATP simply", passage: 1 }, { text: "Quiz me on ribosomes", passage: null }] },
     { toCitation: (n) => (n === 1 ? { n, pageNumber: 3 } : null) });
   assert.deepEqual(out, [{ text: "Explain ATP simply", citation: { n: 1, pageNumber: 3 } }, { text: "Quiz me on ribosomes", citation: null }]);
+  const leaked = shapeCitedLearnSuggestions({ suggestions: [{ text: "Summarise the cell wall from passage 1", passage: 1 }, { text: "Quiz me on the nucleus (passage 3)", passage: 3 }, { text: "Explain osmosis [2]", passage: 2 }] },
+    { toCitation: (n) => ({ n }) });
+  assert.deepEqual(leaked.map((x) => x.text), ["Summarise the cell wall", "Quiz me on the nucleus", "Explain osmosis"], "passage numbers never reach the chip text");
+  assert.deepEqual(leaked.map((x) => x.citation.n), [1, 3, 2]);
   assert.equal(guidePassagesBlock(null), "");
   assert.equal(guidePassagesBlock({ text: "x" }), "", "no cited passages, no block");
   assert.match(guidePassagesBlock({ cited: true, text: "[1] ATP", name: "Bio" }), /cite the passage[\s\S]*<reference_material>/);

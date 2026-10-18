@@ -402,11 +402,16 @@ export const scenarios = [
       const list = header.locator('xpath=following-sibling::div[1]');
       const read = async () => (await list.locator('button').allInnerTexts().catch(() => [])).map((s) => s.replace(/\s+/g, ' ').trim()).filter(Boolean);
       const firstSet = await read();
-      // The material's own suggestions show at once; the AI's arrive within ~12 s.
-      await page.waitForTimeout(14_000);
+      // The material's own suggestions show at once; the AI's (built from the
+      // document's passages) arrive within ~20 s, each with its page chip.
+      await page.waitForTimeout(22_000);
       const items = await read();
+      const cites = await list.locator('.folio-citation').allInnerTexts().catch(() => []);
       t.note(`at once: ${firstSet.join(' | ')}`);
-      t.note(`after 14 s: ${items.join(' | ')}`);
+      t.note(`after 22 s: ${items.join(' | ')}`);
+      t.note(`source chips: ${cites.join(' | ')}`);
+      t.check('they point at the document (source chips)', cites.length >= 2, { actual: cites });
+      t.check('no passage numbers in the chip text', !items.some((s) => /passage\s*\d/i.test(s)), { actual: items });
       t.check('there are suggestions at once', firstSet.length >= 3, { actual: firstSet.length });
       t.check('none of them is the old generic list', !items.some((s) => OLD_GENERIC.includes(s)), { actual: items });
       t.check('they are about this document', items.some((s) => /cell|mitochondri|nucleus|chloroplast|osmosis|photosynth/i.test(s)), { actual: items });
