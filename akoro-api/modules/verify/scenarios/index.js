@@ -11,6 +11,7 @@ import { planCompletes, practiceChargedOnce, generatedOutline, agentCheckBattle,
 import { bridgePersists } from "./teaching.js";
 import { conceptCurve } from "./decay.js";
 import { suggestionsAnswer } from "./suggestions.js";
+import { tailoredChips } from "./tailored.js";
 import { paperStructured, chatToSubmissionScenarios } from "./activities.js";
 import { authoringVersionsParts, authoringDiagramsEdits } from "./authoring.js";
 import { inboxOneList } from "./inbox.js";
@@ -22,7 +23,7 @@ import { socketSession } from "./socket.js";
 
 const ALL = [healthBuild, toolsCatalogue, scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity,
   privacyEdges, rateLimitCountedOnce, battleEntryGates, followUpDeliverIntoChat, taskDueInMinutes, noResidue,
-  viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, agentCheckBattle, classSyllabusFirst, historyPages, workflowMirror, paperStructured, ...chatToSubmissionScenarios, authoringVersionsParts, authoringDiagramsEdits, inboxOneList, quietLearningPass, plannerRichGather, proactiveInChat, readerBackend, socketSession];
+  viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, tailoredChips, agentCheckBattle, classSyllabusFirst, historyPages, workflowMirror, paperStructured, ...chatToSubmissionScenarios, authoringVersionsParts, authoringDiagramsEdits, inboxOneList, quietLearningPass, plannerRichGather, proactiveInChat, readerBackend, socketSession];
 
 export const SCENARIOS = Object.fromEntries(ALL.map((s) => [s.name, s]));
 
@@ -46,7 +47,7 @@ export const SUITES = {
   curriculum: ["curriculum.syllabus_coverage"],
   teaching: ["teaching.bridge_persists"],
   decay: ["decay.concept_curve"],
-  suggestions: ["chat.suggestions_answer"],
+  suggestions: ["chat.suggestions_answer", "chat.tailored_chips", "writes.no_residue"],
   "study-prep": ["studyprep.plan_completes", "studyprep.practice_charged_once", "studyprep.generated_outline", "studyprep.class_syllabus_first", "studyprep.workflow_mirror", "writes.no_residue"],
   "agent-check": ["studyprep.agent_check_battle", "writes.no_residue"],
   "agent-network": ["network.privacy_edges"],

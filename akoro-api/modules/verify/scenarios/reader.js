@@ -12,7 +12,7 @@ const PARAS = [
   "The nucleus controls the activities of the cell. It contains chromosomes made of DNA, which carry the instructions for making proteins.",
 ];
 
-async function textPdf() {
+export async function textPdf() {
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.TimesRoman);
   for (let n = 1; n <= 2; n++) {
