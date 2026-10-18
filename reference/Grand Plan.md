@@ -219,9 +219,9 @@ session mode" (`fresh | continuation | decay`); "Adaptive Learning Workflow"
 | D43 | The Python agent's teaching route (Q23) | **Fix it now** (persist sessions to `edu.adaptive_sessions`, real `continuation` / `decay` loading, the same evidence gate); **deploy the Python agent later as its own service**, the way the Verification Gate sandbox was. | User decision (2026-10-17). |
 | D44 | One forgetting curve (Q24) | **The protégé's knowledge (`agent_knowledge`), nested per topic → per concept.** A learner can forget one concept without forgetting the whole topic, so the protégé's curve does the same: each concept inside a topic decays on its own, slowly; the topic's health is derived from its concepts. `knowledge_confidence` (0-100) and the `learner_concept_state` retention pass are folded into it (Phase 8 / 10). | User decision (2026-10-17). |
 | D45 | Practice in a study plan (Q25) | **A battle, not the proctored assessment.** During Study Prep the protégé calls the teaching guide (or Sargeant) to review its knowledge: a battle between the **teaching guide / platform** and the **protégé**, answering only from what the learner taught it (the Agent Check, §7.12, run as a real battle). The protégé posts a **message in chat** to open it; the learner watches in the **existing battle UI** over the websocket (questions changing, answers, scores). Proctored `AssessmentRoom` stays a separate, learner-taken assessment (D29 narrowed). | User decision (2026-10-17). Supersedes D29 for Study Prep practice. |
-| D46 | Who pays for proactive work? *(proposed — open, Q27)* | Background noticing, preparing and quiet learning are small capped calls (gpt-4o-mini, one per cycle / per settled chat). **Proposed: the platform pays for them** under a per-learner weekly USD budget; the learner pays only when they approve a proposal that does paid work, at the same price as asking in chat, shown on the button. | Rule 9: no background workflow spends coins without the learner's say-so; a coin charge for being noticed would punish the feature. |
-| D47 | Consent defaults *(proposed — open, Q28)* | Three consents under "Agent Online": *Proactive suggestions & ideas*, *Learn from my conversations*, *Task check-ins*. **Proposed:** all three on when the learner turns the agent Online, each with a plain-language explainer and its own off switch; *Learn from my conversations* can be paused or wiped from the Memory page. | Today one toggle silently covers two consents and memory has none. |
-| D48 | Where Ideas live *(proposed — open, Q29)* | **Proposed:** an **Ideas** section in the agent tab beside To do / Done / Suggestions (keeps the "no new top-level surface" decision). Alternative: a bottom-bar Ideas tab, as in the reference assistant. Either way the UI is previewed and approved before it is built. | The user's "do not change the learner UI without a preview" rule. |
+| D46 | Who pays for proactive work? | Background noticing, preparing and quiet learning are small capped calls (gpt-4o-mini, one per cycle / per settled chat). **The platform pays for them** under a per-learner weekly USD budget; the learner pays only when they approve a proposal that does paid work, at the same price as asking in chat, shown on the button. | Rule 9: no background workflow spends coins without the learner's say-so; a coin charge for being noticed would punish the feature. User decision (2026-10-18). |
+| D47 | Consent defaults | Three consents under "Agent Online": *Proactive suggestions & ideas*, *Learn from my conversations*, *Task check-ins*. All three on when the learner turns the agent Online, each with a plain-language explainer and its own off switch; *Learn from my conversations* can be paused or wiped from the Memory page. | Today one toggle silently covers two consents and memory has none. User decision (2026-10-18). |
+| D48 | Where Ideas live | An **Ideas** section in the agent tab beside To do / Done / Suggestions (keeps the "no new top-level surface" decision), not a bottom-bar tab. The UI is previewed and approved before it is built. | User decision (2026-10-18); the "no learner UI change without a preview" rule. |
 | D49 | How proactive messages arrive | **In the learner's agent chat, as an agent message with reply buttons**, the same message also listed in Suggestions; posted only when the chat is idle, never in quiet hours, at most one a day. | The reference conversation: noticing, the ready fix, the go-ahead and the report all live in one thread. |
 | D50 | Quiet learning is guidance, not evidence | Memories shape what the agent says and proposes; they never move mastery, scores, goals' status or gates. Sensitive struggle types are never remembered. Learner can see and delete every memory. | Rules 4, 10, 24 and D38. |
 | D10 | Who writes narration? | **Harness templates** (`ActivityNarrator`, grown from `narration.js:deliberate()`) for facts; the agent's `intent` (≤ 240 chars, sanitised, untrusted display text) for "why". v3's `narration` field **is** `intent`. | Deterministic where possible (v3 §40), already built (v7). |
@@ -1555,7 +1555,7 @@ same struggle) and this learner's history:
 
 Full per-strategy targets and workflows: §7.7.2.
 
-### 7.16 Proactive agent — suggestions, ideas, goal work, quiet learning (D46–D50) 🟡→ build on the autonomy planner
+### 7.16 Proactive agent — suggestions, ideas, goal work, quiet learning (D46–D50, locked) 🟡→ build on the autonomy planner
 
 **The idea.** The agent notices things and brings them to the learner (or
 instructor) before being asked — and then waits. Modelled on an assistant that,
@@ -1647,8 +1647,7 @@ signals ──► NOTICE ──► PREPARE ──► OFFER ──► (person dec
   starts (open a chat pre-filled with the brief, start a workflow, or run a
   tool). Not a task; nothing is created until tapped.
 - **Where:** the agent tab — a new **Ideas** section beside To do / Done /
-  Suggestions (keeps §9.6's "no new top-level surface" unless D48 says
-  otherwise). Learner UI change → preview and approval before building.
+  Suggestions (D48 — keeps §9.6's "no new top-level surface"). Learner UI change → preview and approval before building.
 - **Generated** by the nightly cycle (same call, a second output array — no
   extra LLM call), at most 6 live ideas, refreshed when ≥ 3 are used or
   dismissed, each idea expires in 7 days. Instructors get teaching ideas from
@@ -1704,11 +1703,11 @@ signals ──► NOTICE ──► PREPARE ──► OFFER ──► (person dec
 
 - **Separate consents** (Settings → Agent, plain-language explainer for each):
   *Proactive suggestions & ideas* (= planner, today's level 2), *Learn from my
-  conversations* (quiet learning), *Task check-ins* (level 1). Defaults: D47.
+  conversations* (quiet learning), *Task check-ins* (level 1). Defaults: all on with Online (D47).
   "Agent Online" stays the master switch.
 - **Who pays (D46):** background noticing, preparing and remembering are
-  small, capped calls; whether they bill the learner or the platform is a
-  locked decision, not a default. Approving a proposal that does paid work is
+  small, capped calls **paid by the platform** under the weekly budget — never
+  the learner's coins. Approving a proposal that does paid work is
   billed like the same action in chat, and the button says so (rule 7/9 hold).
 - **Budget:** per learner per week — runs, LLM calls and **USD** (the
   `AKORO_AUTONOMY_WEEKLY_BUDGET_USD` in the autonomy plan, still unbuilt);
@@ -2991,7 +2990,7 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   proposals in chat → goal work → Ideas → instructor proactive → budget and
   consents (§7.16.8). Every learner UI piece is previewed before it is built.
 - **Exit:** the §7.16.8 exit list, one Verification Gate scenario each, all
-  green on the sandbox; D46–D48 locked.
+  green on the sandbox. (D46–D48 locked 2026-10-18.)
 
 ---
 
@@ -3165,9 +3164,9 @@ LLM failure must never corrupt workflow state.
 | Q24 | ~~Retention model~~ — **resolved (D44):** protégé knowledge, per topic → per concept, each concept decaying slowly on its own. | Done |
 | Q25 | ~~Practice base~~ — **resolved (D45):** Study Prep practice is a battle (guide/platform vs protégé) watched in the battle UI; `AssessmentRoom` stays separate. | Done |
 | Q26 | Fix the double practice charge now, ahead of Phase 5? | Now |
-| Q27 | Who pays for proactive background work — platform budget or learner coins (D46)? | Before Phase 13 step 2 |
-| Q28 | Consent defaults for suggestions, quiet learning, check-ins (D47)? | Before Phase 13 step 2 |
-| Q29 | Ideas as an agent-tab section or its own bottom-bar tab (D48)? | Before Phase 13 step 6 |
+| Q27 | ~~Who pays for proactive background work~~ — **resolved (D46):** the platform, under a per-learner weekly budget. | Done |
+| Q28 | ~~Consent defaults~~ — **resolved (D47):** all on with Online, each explained and switchable. | Done |
+| Q29 | ~~Where Ideas live~~ — **resolved (D48):** a section in the agent tab. | Done |
 | Q30 | A "Feed" of posts written for the learner (briefings, study tips from the blog)? Not in this phase — rule 13 limits it to approved content. | Later |
 | Q31 | Do instructors get quiet learning (memories of their teaching preferences) too? | Phase 13 step 7 |
 
