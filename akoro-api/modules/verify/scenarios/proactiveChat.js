@@ -55,6 +55,11 @@ export const proactiveInChat = {
       .filter((r) => Date.now() - new Date(r.started_at).getTime() < 24 * 3600 * 1000);
     for (const r of recent) await ctx.db.deleteOwned("edu.autonomy_runs", { ownerColumn: "user_id", ownerId: me.id, filters: { id: r.id } });
     if (recent.length) ctx.note(`cleared ${recent.length} recent planner run(s) on the test learner`);
+    // …and a full Suggestions list (≤ 5 open) would make the planner stop: close
+    // the test learner's leftover proposals through the inbox, as the learner would.
+    const open = ((await ctx.http({ as: p.learner, path: "/api/agent/proposals/inbox" })).body?.data || []).filter((it) => it.source === "planner");
+    for (const it of open) await ctx.http({ as: p.learner, method: "POST", path: `/api/agent/proposals/inbox/${it.ref}/dismiss`, body: { reason: "other" } });
+    if (open.length) ctx.note(`closed ${open.length} leftover suggestion(s) on the test learner`);
 
     // The planner runs (its own delivery attempt may wait: the chats are busy).
     const run = await runAutonomyCycleForUser(me.id, TRIGGER);
