@@ -905,7 +905,7 @@ export const CHAT_TOOLS = [
   },
   {
     name: "search_my_library",
-    description: "Find documents in the signed-in learner's own Library (uploads, links, pasted notes) by name or by what is inside them. Use when recommending study material, or when they ask for their notes or a document; the reply then shows each one as a link that opens it in the reader. Never invent a document — mention only what this returns.",
+    description: "Find documents in the signed-in learner's own Library (uploads, links, pasted notes) by name or by what is inside them. Use when recommending study material, or when they ask for their notes or a document; the reply then shows each one as a link that opens it in the reader. Search again every time (the Library changes; an earlier answer in this chat may be out of date). Never invent a document — mention only what this returns, by name; never show record ids, the app shows each as a link.",
     input_schema: {
       type: "object",
       properties: { query: { type: "string", description: "The topic or document to look for (3 to 200 characters)." } },

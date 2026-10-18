@@ -76,10 +76,18 @@ export const scenarios = [
       if (!record?.id) t.block(`saving the pasted record answered ${made.status}: ${made.body?.message || ''}`);
       t.cleanup(async () => { await t.api('DELETE', `/api/records/${record.id}`); });
 
+      t.cleanup(async () => {
+        const list = await t.api('GET', '/api/adaptive/chat/sessions');
+        for (const c of (list.body?.sessions || list.body?.data || []).filter((x) => String(x.title || '').includes(marker))) await t.api('DELETE', `/api/adaptive/chat/sessions/${c.id}`);
+      });
+
+      // A fresh chat: an old answer in the history must not stand in for a search.
       await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
+      await page.getByRole('button', { name: 'Chats', exact: true }).first().click({ timeout: 30_000 });
+      await page.getByRole('button', { name: /New chat/ }).first().click();
       const box = page.getByRole('textbox', { name: /^Ask / }).last();
       await box.waitFor({ timeout: 30_000 });
-      await box.fill('Do I have any notes in my library about mitochondria? Search my library.');
+      await box.fill(`Search my library for "${marker} Mitochondria notes" — do I have it?`);
       await box.press('Enter');
       const link = page.locator(`button[data-material="record"]`, { hasText: marker }).first();
       const shown = await link.waitFor({ timeout: 90_000 }).then(() => true, () => false);

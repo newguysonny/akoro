@@ -395,6 +395,9 @@ export const scenarios = [
         await page.getByRole('button', { name: /Back to the session chat/ }).first().click().catch(() => {});
       }
       t.check('the guide toggle is there', await toggle.waitFor({ timeout: 15_000 }).then(() => true, () => false));
+      const t0 = Date.now();
+      const answer = page.waitForResponse((r) => r.url().includes('/api/adaptive/chat/learn-suggestions'), { timeout: 40_000 })
+        .then(async (r) => ({ status: r.status(), ms: Date.now() - t0, body: JSON.stringify(await r.json().catch(() => null)).slice(0, 400) }), () => null);
       // On a phone a sheet can sit over it: a direct click if the pointer one is intercepted.
       await toggle.click({ timeout: 8_000 }).catch(() => toggle.dispatchEvent('click'));
       const header = page.getByRole('button', { name: 'Learn suggestions' });
@@ -410,6 +413,8 @@ export const scenarios = [
       t.note(`at once: ${firstSet.join(' | ')}`);
       t.note(`after 22 s: ${items.join(' | ')}`);
       t.note(`source chips: ${cites.join(' | ')}`);
+      const a = await answer;
+      t.note(`learn-suggestions: ${a ? `${a.status} in ${a.ms} ms · ${a.body}` : 'no answer in 40 s'}`);
       t.check('they point at the document (source chips)', cites.length >= 2, { actual: cites });
       t.check('no passage numbers in the chip text', !items.some((s) => /passage\s*\d/i.test(s)), { actual: items });
       t.check('there are suggestions at once', firstSet.length >= 3, { actual: firstSet.length });
