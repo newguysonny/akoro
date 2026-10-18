@@ -85,7 +85,7 @@ test("step 3 · the cycle: bounded, metered, validated server-side", () => {
   assert.equal((cycle.match(/openai\.chat\.completions\.create/g) || []).length, 1);
   // strict schema: every proposal carries its rationale (json_object left it empty)
   assert.match(cycle, /response_format: planningSchema\(\),/);
-  assert.match(cycle, /required: \["kind", "title", "rationale", "payload"\]/);
+  assert.match(cycle, /required: \["kind", "title", "rationale", "from_note", "payload"\]/);
   assert.match(cycle, /__payer: "platform", __feature: "agent_autonomy"/);
   assert.doesNotMatch(cycle, /__userId:\s*userId/);
   // budget guard + pacing + level gate

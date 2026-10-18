@@ -9,6 +9,7 @@
  * Every cadence knob (tick interval, batch size, per-learner dedupe, nightly
  * window) is env-tunable via AKORO_AUTONOMY_* — see ./cadence.js.
  */
+import { deliverDue } from "./deliver.js";
 import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
 import db from "../../db.js";
@@ -119,9 +120,13 @@ export function startAutonomyCycleWorker() {
   // during the window (and claims rows atomically so a multi-replica deploy
   // cannot double-enqueue the same learner). Tick, window, batch size and
   // per-learner cadence all come from AKORO_AUTONOMY_* (cadence.js).
+  let deliveryTicks = 0;
   schedulerTimer = setInterval(async () => {
     const tickStart = Date.now();
     let inWindow = false, jobsFound = 0, jobsProcessed = 0;
+    // Proposals held back (the chat was busy, quiet hours) are posted on a
+    // later tick — every ~10 minutes, any time of day (deliver.js keeps the rules).
+    if (++deliveryTicks % 10 === 0) deliverDue().catch((e) => console.warn("[autonomy/deliver] sweep failed:", e.message));
     try {
       const cadence = autonomyCadence();
       inWindow = inNightlyWindow(new Date(), cadence);

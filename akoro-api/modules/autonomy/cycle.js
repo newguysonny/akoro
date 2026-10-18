@@ -13,6 +13,7 @@ import { notifyUser } from "../notify.js";
 import { untrusted, UNTRUSTED_SYSTEM_RULE } from "../../lib/untrusted.js";
 import { resolveLearnerTimeZone } from "../adaptive-learning/learner-time-context.js";
 import { isSensitive } from "../agent-memory/quietLearningCore.js";
+import { deliverProactive } from "./deliver.js";
 import { autonomyCadence, minCycleMs, weeklyRunsCap } from "./cadence.js";
 
 const edu = () => db.schema("edu");
@@ -149,7 +150,7 @@ export async function gatherSignals(userId) {
   // What the agent remembers, only with "Learn from my conversations" on (D47).
   const learnFromChats = autonomyRow?.learn_from_chats !== false;
   const [memories, summaries] = learnFromChats ? await Promise.all([
-    edu().from("learner_agent_memories").select("kind, content, updated_at")
+    edu().from("learner_agent_memories").select("kind, content, updated_at, chat_session_id")
       .eq("user_id", userId).eq("status", "active").order("updated_at", { ascending: false }).limit(12)
       .then((r) => r.data ?? []).catch(() => []),
     edu().from("learner_agent_conversation_summaries").select("summary, updated_at")
@@ -192,7 +193,7 @@ export async function gatherSignals(userId) {
     recentRecords: recentRecords.map((r) => ({ name: String(r.name || "").slice(0, 80), progress: r.progress ?? 0 })),
     // Quiet-learning notes and chat summaries: guidance, never evidence (D50);
     // sensitive lines never reach the planner even if one slipped into storage.
-    memories: memories.filter((m) => !isSensitive(m.content)).map((m) => ({ kind: m.kind, note: String(m.content).slice(0, 200) })),
+    memories: memories.filter((m) => !isSensitive(m.content)).map((m) => ({ kind: m.kind, note: String(m.content).slice(0, 200), chatId: m.chat_session_id || null })),
     chatSummaries: summaries.map((x) => String(x.summary || ""))
       .filter((t) => t && !/^Latest learner request:/.test(t) && !isSensitive(t)).map((t) => t.slice(0, 500)),
     dismissalTaste: recentFeedback.map((d) => `${d.kind}:${d.decision_note ?? "unspecified"}`),
@@ -224,7 +225,7 @@ export function planningMessages(signals) {
     `JSON only: { "summary": "...", "proposals": [ { "kind": "...", "title": "...", "rationale": "...", "payload": { ... } } ] }` +
     UNTRUSTED_SYSTEM_RULE;
   const said = [
-    signals.memories?.length ? `What their agent remembers:\n${signals.memories.map((m) => `- ${m.kind}: ${m.note}`).join("\n")}` : "",
+    signals.memories?.length ? `What their agent remembers (numbered — a proposal drawn from a note gives its number in from_note):\n${signals.memories.map((m, i) => `[${i + 1}] ${m.kind}: ${m.note}`).join("\n")}` : "",
     signals.chatSummaries?.length ? `Their recent conversations:\n${signals.chatSummaries.map((t) => `- ${t}`).join("\n")}` : "",
     signals.chatTopics?.length ? `Recent chat titles: ${signals.chatTopics.join(" · ")}` : "",
     signals.recentRecords?.length ? `Added to their library lately: ${signals.recentRecords.map((r) => `${r.name} (${r.progress}% read)`).join(" · ")}` : "",
@@ -262,8 +263,9 @@ export function planningSchema() {
           proposals: {
             type: "array",
             items: {
-              type: "object", additionalProperties: false, required: ["kind", "title", "rationale", "payload"],
+              type: "object", additionalProperties: false, required: ["kind", "title", "rationale", "from_note", "payload"],
               properties: {
+                from_note: { type: ["integer", "null"], description: "The number of the remembered note this comes from, or null." },
                 kind: { type: "string", enum: ALLOWED_KINDS },
                 title: { type: "string" },
                 rationale: { type: "string", description: "The real signal this comes from, in one sentence." },
@@ -299,7 +301,7 @@ export async function reasonAboutSignals(userId, signals) {
 }
 
 /** Clean-room validator: caps, dedupe (pending + 30-day history + tasks), shapes. */
-export async function validateAndShapeProposals(userId, rawProposals) {
+export async function validateAndShapeProposals(userId, rawProposals, { notes = [] } = {}) {
   if (!Array.isArray(rawProposals)) return [];
   const since = new Date(Date.now() - DEDUPE_WINDOW_DAYS * 24 * 3600 * 1000).toISOString();
   const [history, openTasks, chatOpen] = await Promise.all([
@@ -349,11 +351,14 @@ export async function validateAndShapeProposals(userId, rawProposals) {
     }
     payload.title = String(payload.title || title).slice(0, 120);
 
+    // The chat the noticed note came from (D49: the proposal is posted there).
+    const note = Number.isInteger(p.from_note) ? notes[p.from_note - 1] : null;
     shaped.push({
       kind: p.kind,
       title,
       rationale: String(p.rationale || "").slice(0, 280) || null,
       payload,
+      sourceChatId: note?.chatId || null,
     });
     seen.add(key);
   }
@@ -412,13 +417,14 @@ export async function runAutonomyCycleForUser(userId, trigger = "nightly") {
 
     const signals = await gatherSignals(userId);
     const reasoned = await reasonAboutSignals(userId, signals);
-    const shaped = await validateAndShapeProposals(userId, reasoned.proposals || []);
+    const shaped = await validateAndShapeProposals(userId, reasoned.proposals || [], { notes: signals.memories || [] });
 
     // Respect the pending cap across what we insert.
     const room = Math.max(0, MAX_PENDING_PROPOSALS - (pendingCount ?? 0));
     const toInsert = shaped.slice(0, Math.min(room, MAX_PROPOSALS_PER_CYCLE)).map((p) => ({
       user_id: userId, kind: p.kind, title: p.title, rationale: p.rationale,
       payload: p.payload, source: trigger === "nightly" ? "cycle" : "event",
+      ...(p.sourceChatId ? { source_chat_id: p.sourceChatId } : {}),
     }));
 
     let runId = null;
@@ -438,9 +444,12 @@ export async function runAutonomyCycleForUser(userId, trigger = "nightly") {
 
     if (toInsert.length) {
       reportAgentActivity(userId, `Reviewed your goals — ${toInsert.length} suggestion${toInsert.length === 1 ? "" : "s"} ready`);
+      // D49: one of them goes into the learner's chat (its own notification
+      // links there). If none could be posted now, one bell row for the batch.
+      const delivered = await deliverProactive(userId).catch(() => ({ posted: false }));
       // Through notifyUser: the bell row, the live socket and web push (the
       // learner's push preference respected) — a bare insert reached none.
-      await notifyUser({
+      if (!delivered.posted) await notifyUser({
         userId, type: "agent_proposals", link: "/app?tab=agent",
         title: `${toInsert.length} suggestion${toInsert.length === 1 ? "" : "s"} from your agent`,
         content: reasoned.summary ? String(reasoned.summary).slice(0, 300) : "Your agent reviewed your goals overnight — take a look in Suggestions.",

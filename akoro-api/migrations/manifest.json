@@ -157,6 +157,7 @@
     "2026-agent-proposals.sql",
     "2026-autonomy-planner.sql",
     "2026-quiet-learning.sql",
+    "2026-proactive-delivery.sql",
     "2026-edu-blogs.sql",
     "2026-edu-blogs-public.sql",
     "2026-records.sql",

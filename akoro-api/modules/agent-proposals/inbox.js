@@ -17,6 +17,7 @@
 import db from "../../db.js";
 import { executeChatTool } from "../adaptive-learning/chat.js";
 import { createGoal } from "../learner-goals/service.js";
+import { markPostedDecision } from "../autonomy/deliver.js";
 
 import { DISMISS_REASONS, reasonOf, normalizeTitle, mergeInbox, parseRef } from "./inboxCore.js";
 
@@ -145,12 +146,14 @@ export async function approveProposal(userId, id) {
       .update({ status: "executed", executed_ref: ref, decided_at: now() })
       .eq("id", claimed.id).eq("status", "approved").select("id").maybeSingle();
     if (doneError || !done) throw new Error("Could not record the approval.");
+    await markPostedDecision(userId, claimed.id, "executed");
     return { executed: true, kind, ...detail };
   } catch (execError) {
     // Released to a visible FAILED state — never back to proposed, never silent.
     await edu().from("agent_proposals")
       .update({ status: "failed", decision_note: String(execError.message).slice(0, 300), decided_at: now() })
       .eq("id", claimed.id).eq("status", "approved");
+    await markPostedDecision(userId, claimed.id, "failed");
     throw fail(execError.message || "Could not execute the proposal.", 400);
   }
 }
@@ -163,6 +166,7 @@ export async function dismissProposal(userId, id, reason) {
     .eq("id", id).eq("user_id", userId).eq("status", PENDING).select("id").maybeSingle();
   if (error) throw fail("Could not dismiss the proposal", 503);
   if (!data) throw fail("This proposal was already decided or has expired.", 404);
+  await markPostedDecision(userId, id, "dismissed");
   return { dismissed: true, reason: why };
 }
 

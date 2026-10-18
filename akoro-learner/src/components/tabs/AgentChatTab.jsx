@@ -295,6 +295,7 @@ function AgentChatTab({
     time: new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     at: m.created_at,
     ...(m.role !== "user" && Array.isArray(m.trace) ? { blocks: blocksFromSavedTrace(m.trace) } : {}),
+    ...(m.role !== "user" && m.meta?.proposal ? { proposal: m.meta.proposal } : {}),
   });
 
   const openSession = async (id) => {
@@ -340,13 +341,13 @@ function AgentChatTab({
             const texts = new Set(prev.map((m) => m.text));
             const fresh = (d?.messages ?? [])
               .filter((m) => m.role !== "user" && !ids.has(m.id) && !texts.has(m.text))
-              .map((m) => ({ id: m.id, from: "agent", text: m.text,
+              .map((m) => ({ id: m.id, from: "agent", text: m.text, ...(m.meta?.proposal ? { proposal: m.meta.proposal } : {}),
                 time: new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }));
             return fresh.length ? [...prev, ...fresh] : prev;
           });
         } catch { /* it is saved — opening the chat again shows it */ }
       };
-      socket.on("chat_follow_up_ready", onReady);
+      socket.on("chat_follow_up_ready", (data) => { onReady(data); if (data?.proposalId) refetchInbox(); });
       return () => { socket.off("chat_follow_up_ready", onReady); socket.off("connect", subscribe); };
     } catch { /* WS unavailable — the notification still links to the chat */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -502,6 +503,33 @@ function AgentChatTab({
     try { await apiPost(`/api/agent/proposals/inbox/${encodeURIComponent(it.ref)}/dismiss`,{ reason: reason||"other" }); }
     catch(e){ setInbox(previous); setListError(e?.message||t('agent.proposal_failed')); }
     finally{ setInboxBusyRef(null); }
+  };
+
+  // A suggestion the agent posted into this chat (D49): the same one is in
+  // Suggestions — a decision in either place shows in both.
+  const decidePosted=async(msg,action)=>{
+    const ref=`p:${msg.proposal.id}`;
+    if(inboxBusyRef) return;
+    setInboxBusyRef(ref); setListError("");
+    const mark=(status)=>setMessages(prev=>prev.map(m=>m.id===msg.id?{...m,proposal:{...m.proposal,status}}:m));
+    try {
+      if(action==="accept"){
+        const d=await apiPost(`/api/agent/proposals/inbox/${encodeURIComponent(ref)}/accept`,{});
+        mark("executed");
+        const r=d?.data||{};
+        if(msg.proposal.kind==="goal") pushAgent(t('agent.proposal_done_goal').replace('{title}',r.title||msg.proposal.title));
+        else if(msg.proposal.kind==="session") pushAgent(t('agent.proposal_done_session'));
+        else { pushAgent(t('agent.suggestion_added').replace('{title}',r.title||msg.proposal.title)); refetchTasks(); }
+      } else {
+        await apiPost(`/api/agent/proposals/inbox/${encodeURIComponent(ref)}/dismiss`,{ reason: action });
+        mark("dismissed");
+      }
+      setInbox(prev=>prev.filter(x=>x.ref!==ref));
+    } catch(e){
+      // Already decided (from Suggestions, or another device): show it as done with.
+      if(e?.status===404||/already decided|expired/i.test(e?.message||"")) mark("decided");
+      else setListError(e?.message||t('agent.proposal_failed'));
+    } finally { setInboxBusyRef(null); }
   };
 
   const pushAgent = (text) => {
@@ -1013,6 +1041,23 @@ function AgentChatTab({
                     </div>
                   )}
                   {!isMe&&msg.studyPrepSessionId&&<StudyPrepChatCard sessionId={msg.studyPrepSessionId} onEvents={onStudyPrepEvents}/>}
+                  {!isMe&&msg.proposal&&(msg.proposal.status==="proposed"?(
+                    <div style={{ display:"flex",flexWrap:"wrap",gap:7,marginTop:9 }}>
+                      <button type="button" onClick={()=>decidePosted(msg,"accept")} disabled={!!inboxBusyRef}
+                        style={{ display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:20,border:"none",background:inboxBusyRef?"var(--ak-border)":`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:12.5,fontWeight:800,cursor:inboxBusyRef?"wait":"pointer",fontFamily:"'Nunito',sans-serif" }}>
+                        {inboxBusyRef===`p:${msg.proposal.id}`?<Spinner size={11} color="#fff"/>:<Icon name="ti-check" size={13}/>}{t('agent.posted_yes')}
+                      </button>
+                      <button type="button" onClick={()=>decidePosted(msg,"wrong_time")} disabled={!!inboxBusyRef}
+                        style={{ padding:"8px 14px",borderRadius:20,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface)",color:"var(--ak-text)",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('agent.posted_later')}</button>
+                      <button type="button" onClick={()=>decidePosted(msg,"not_useful")} disabled={!!inboxBusyRef}
+                        style={{ padding:"8px 14px",borderRadius:20,border:"none",background:"none",color:"var(--ak-text-muted)",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('agent.posted_no')}</button>
+                    </div>
+                  ):(
+                    <div style={{ display:"inline-flex",alignItems:"center",gap:5,marginTop:8,fontSize:11.5,fontWeight:800,color:msg.proposal.status==="executed"?GREEN:"var(--ak-text-muted)" }}>
+                      <Icon name={msg.proposal.status==="executed"?"ti-circle-check":"ti-circle-x"} size={13}/>
+                      {t(msg.proposal.status==="executed"?'agent.posted_done':msg.proposal.status==="failed"?'agent.proposal_failed':'agent.posted_closed')}
+                    </div>
+                  ))}
                   {!isMe&&msg.syllabus?.length>0&&(
                     <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5 }}>
                       {msg.syllabus.map((s,i)=>(
