@@ -3973,6 +3973,14 @@ router.post("/agent", async (req, res) => {
     const chatModel = mode === "default" ? resolveChatModel(req.body?.model) : null;
     const role = ["instructor", "teacher", "school", "school_admin", "admin"].includes(req.user?.role)
       ? "instructor" : "student";
+    // The instructor app asked, but the session is a learner's: a request that
+    // reached the server without the instructor portal header reads the
+    // learner cookie. Refuse it loudly rather than run learner tools for a
+    // teacher (it drafted a study plan for "prepare an assignment").
+    if (req.body?.role === "instructor" && role !== "instructor") {
+      return res.status(409).json({ code: "portal_mismatch",
+        error: "You're signed in as a learner here. Sign in to the instructor app again to use your teaching tools." });
+    }
     const safeAgentName = typeof agentName === "string" ? agentName.replace(/[\r\n]+/g, " ").trim().slice(0, 80) : "Akoro";
     const durableRequested = Boolean(conversationId && durableAgentChatContextEnabled);
     let durable = durableRequested;

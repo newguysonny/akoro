@@ -28,6 +28,7 @@ export function useStudentsAPI() {
     const res = await fetch(`${API}/api/profiles/teacher/students/import`, {
       method: 'POST',
       credentials: 'include',
+      headers: { 'X-Akoro-Portal': 'instructor' },
       body: form,
     });
     const json = await res.json();

@@ -24,7 +24,7 @@ const CATEGORIES = [
 const catColor = { form: BLUE, certificate: AMBER, report: PURPLE, result: GREEN, letter: MUTED2, other: MUTED2 };
 const catPill = (v) => { const c = catColor[v] || MUTED2; return <span style={{ padding: '2px 9px', borderRadius: 999, background: `${c}15`, color: c, fontSize: 10.5, fontWeight: 800, textTransform: 'capitalize' }}>{String(v || 'form').replace('_', ' ')}</span>; };
 const openHtml = (html) => { const w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); } };
-const fetchText = (path) => fetch(`${API}${path}`, { credentials: 'include' }).then((r) => r.ok ? r.text() : '').catch(() => '');
+const fetchText = (path) => fetch(`${API}${path}`, { credentials: 'include', headers: { 'X-Akoro-Portal': 'instructor' } }).then((r) => r.ok ? r.text() : '').catch(() => '');
 
 function Thumb({ getHtml, baseW = 830, height = 122, fallback }) {
   const ref = useRef(null);

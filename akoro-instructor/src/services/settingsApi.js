@@ -27,7 +27,7 @@ export const patchAgent = (agentPatch) => {
 const auth2fa = (path, body) =>
   fetch(`${API}${path}`, {
     method: 'POST', credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'instructor' },
     body: JSON.stringify(body || {}),
   }).then(async r => {
     const j = await r.json().catch(() => ({}));
@@ -48,7 +48,7 @@ export const publishAgentToMarketplace = ({
   fetch(`${API}/api/adaptive/marketplace/list`, {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'instructor' },
     body: JSON.stringify({
       teacherId, agentId, title, subject, description,
       priceKobo, currency: 'NGN', teacherName, teacherAvatar, topicsCovered,
@@ -60,7 +60,7 @@ export const unpublishListing = (listingId, teacherId) =>
   fetch(`${API}/api/adaptive/marketplace/listings/${listingId}`, {
     method: 'DELETE',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'instructor' },
     body: JSON.stringify({ teacherId }),
   }).then((r) => r.json());
 

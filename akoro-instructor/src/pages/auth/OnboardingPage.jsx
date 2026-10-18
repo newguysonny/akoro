@@ -30,7 +30,7 @@ export default function OnboardingPage() {
   const [guideEmoji, setGuideEmoji]     = useState('🧠');
 
   useEffect(() => {
-    fetch(`${API}/api/profiles/directory/schools`, { credentials: 'include' })
+    fetch(`${API}/api/profiles/directory/schools`, { credentials: 'include', headers: { 'X-Akoro-Portal': 'instructor' } })
       .then(r => r.json()).then(j => setSchools(j.data || [])).catch(() => {});
   }, []);
 
@@ -58,7 +58,7 @@ export default function OnboardingPage() {
       const res = await fetch(`${API}/api/profiles/me`, {
         method: 'PATCH',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'instructor' },
         body: JSON.stringify({
           fullName:      fullName.trim(),
           schoolName:    schools.find(s => s.id === schoolId)?.name || undefined,
@@ -76,7 +76,7 @@ export default function OnboardingPage() {
       // Request to join the chosen school (approval by the school admin).
       if (schoolId) {
         await fetch(`${API}/api/profiles/me/school-request`, {
-          method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'instructor' },
           body: JSON.stringify({ school_id: schoolId }),
         }).catch(() => {});
       }

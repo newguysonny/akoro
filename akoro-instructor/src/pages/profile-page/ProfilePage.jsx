@@ -62,7 +62,7 @@ export default function ProfilePage() {
       })
       .finally(() => setLoading(false));
 
-    fetch(`${import.meta.env.VITE_API_URL || 'https://akoro.onrender.com'}/api/instructor/stats`, { credentials: 'include' })
+    fetch(`${import.meta.env.VITE_API_URL || 'https://akoro.onrender.com'}/api/instructor/stats`, { credentials: 'include', headers: { 'X-Akoro-Portal': 'instructor' } })
       .then((r) => r.json()).then((res) => setStats(res?.data ?? {})).catch(() => {});
   }, [user]);
 

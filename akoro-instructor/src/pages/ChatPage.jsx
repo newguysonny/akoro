@@ -697,7 +697,9 @@ export default function ChatPage() {
   const sendStreaming = async (payload, onStatus, signal) => {
     const res = await fetch(`${API}/api/adaptive/chat/agent?stream=1`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      // The instructor portal's own session: without it the server reads the
+      // learner cookie, and a teacher signed in to both apps chats as a learner.
+      headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'instructor' },
       credentials: 'include',
       signal,
       body: JSON.stringify(payload),

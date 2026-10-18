@@ -83,7 +83,7 @@ function ScheduleSessionModal({ open, onClose, onSubmit, courses, asPage = false
 async function uploadCourseCover(file) {
   const fd = new FormData();
   fd.append('file', file);
-  const res = await fetch(`${API}/api/instructor/courses/upload`, { method: 'POST', credentials: 'include', body: fd });
+  const res = await fetch(`${API}/api/instructor/courses/upload`, { method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'instructor' }, body: fd });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(json.message || 'Upload failed');
   return json.url;
