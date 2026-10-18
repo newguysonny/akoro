@@ -40,7 +40,9 @@ test("the guide's thread is its own channel; Ask keeps its own", () => {
   assert.match(migration, /ADD COLUMN IF NOT EXISTS channel TEXT NOT NULL DEFAULT 'ask'/);
   assert.match(migration, /CHECK \(channel IN \('ask', 'guide'\)\)/);
   assert.ok(manifest.indexOf('"2026-record-chat-guide.sql"') > manifest.indexOf('"2026-record-chat.sql"'));
-  assert.match(askLib, /\.eq\("channel", channel\)/);
+  assert.match(askLib, /if \(withChannel\) q = q\.eq\("channel", channel\);/);
+  assert.match(askLib, /if \(channel !== "ask"\) throw error;/, "without the column Ask works as before; the guide never reads Ask's thread");
+  assert.match(migration, /NOTIFY pgrst, 'reload schema';/, "the API's schema cache sees the new column");
   assert.match(askLib, /channel = "ask" \}\) \{/);
   assert.match(routes, /router\.post\("\/guide", authenticateToken/);
   assert.match(routes, /router\.get\("\/guide\/history", authenticateToken/);

@@ -271,13 +271,27 @@ export async function gatherPassages({ target, question, selection = null, searc
   };
 }
 
+/* Before migrations/2026-record-chat-guide.sql is seen (or while the API's
+   schema cache lags it) there is no channel column: Ask works as it always
+   did; only the guide's thread needs it. */
+const noChannel = (error) => error?.code === "42703" || error?.code === "PGRST204" ||
+  (/channel/i.test(String(error?.message || "")) && /column|schema cache|could not find/i.test(String(error?.message || "")));
+
 /** One thread per learner per document per channel: "ask" (the Ask tab) or "guide" (Learning with Guide). */
 export async function loadAskHistory({ userId, recordId, limit = ASK_LIMITS.HISTORY_LIMIT, channel = "ask" }) {
   const db = await dbLazy();
-  const { data, error } = await db.schema("edu").from("record_chat_messages")
-    .select("id, role, text, citations, selection, created_at")
-    .eq("user_id", userId).eq("record_id", recordId).eq("channel", channel)
-    .order("created_at", { ascending: false }).limit(limit);
+  const query = (withChannel) => {
+    let q = db.schema("edu").from("record_chat_messages")
+      .select("id, role, text, citations, selection, created_at")
+      .eq("user_id", userId).eq("record_id", recordId);
+    if (withChannel) q = q.eq("channel", channel);
+    return q.order("created_at", { ascending: false }).limit(limit);
+  };
+  let { data, error } = await query(true);
+  if (error && noChannel(error)) {
+    if (channel !== "ask") throw error;   // the guide's thread can't be told apart yet
+    ({ data, error } = await query(false));
+  }
   if (error) throw error;
   return (data || []).reverse().map((m) => ({
     id: m.id, role: m.role, text: m.text, citations: m.citations || [], selection: m.selection || null, createdAt: m.created_at,
@@ -287,10 +301,13 @@ export async function loadAskHistory({ userId, recordId, limit = ASK_LIMITS.HIST
 export async function saveAskTurn({ userId, recordId, question, selection, answer, citations, channel = "ask" }) {
   const db = await dbLazy();
   const now = Date.now();
-  const { data, error } = await db.schema("edu").from("record_chat_messages").insert([
-    { user_id: userId, record_id: recordId, channel, role: "user", text: question, selection: selection || null, created_at: new Date(now).toISOString() },
-    { user_id: userId, record_id: recordId, channel, role: "assistant", text: answer, citations, created_at: new Date(now + 1).toISOString() },
-  ]).select("id, role");
+  const rows = (withChannel) => [
+    { user_id: userId, record_id: recordId, ...(withChannel ? { channel } : {}), role: "user", text: question, selection: selection || null, created_at: new Date(now).toISOString() },
+    { user_id: userId, record_id: recordId, ...(withChannel ? { channel } : {}), role: "assistant", text: answer, citations, created_at: new Date(now + 1).toISOString() },
+  ];
+  let { data, error } = await db.schema("edu").from("record_chat_messages").insert(rows(true)).select("id, role");
+  // Without the column an Ask turn saves as before; a guide turn must not land in Ask's thread.
+  if (error && noChannel(error) && channel === "ask") ({ data, error } = await db.schema("edu").from("record_chat_messages").insert(rows(false)).select("id, role"));
   if (error) throw error;
   return { assistantMessageId: (data || []).find((r) => r.role === "assistant")?.id || null };
 }

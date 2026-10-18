@@ -18,3 +18,6 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 CREATE INDEX IF NOT EXISTS record_chat_messages_channel_idx
   ON edu.record_chat_messages(user_id, record_id, channel, created_at);
+
+-- The API reads through PostgREST: reload its schema cache so `channel` is seen.
+NOTIFY pgrst, 'reload schema';
