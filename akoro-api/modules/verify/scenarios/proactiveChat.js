@@ -49,6 +49,13 @@ export const proactiveInChat = {
     const latest = await chat("english essay");
     await ctx.http({ as: p.learner, method: "POST", path: `/api/adaptive/chat/sessions/${latest}/messages`, body: { role: "user", text: `${m} Can you check my essay introduction?` } });
 
+    // The planner paces itself (one run per ~20h): on this TEST learner, clear
+    // its recent runs so this one isn't skipped (deleteOwned refuses real accounts).
+    const recent = (await ctx.db.rows("edu.autonomy_runs", { user_id: me.id }, { columns: "id, started_at", limit: 50 }))
+      .filter((r) => Date.now() - new Date(r.started_at).getTime() < 24 * 3600 * 1000);
+    for (const r of recent) await ctx.db.deleteOwned("edu.autonomy_runs", { ownerColumn: "user_id", ownerId: me.id, filters: { id: r.id } });
+    if (recent.length) ctx.note(`cleared ${recent.length} recent planner run(s) on the test learner`);
+
     // The planner runs (its own delivery attempt may wait: the chats are busy).
     const run = await runAutonomyCycleForUser(me.id, TRIGGER);
     ctx.note(`cycle: ${JSON.stringify(run)}`);
