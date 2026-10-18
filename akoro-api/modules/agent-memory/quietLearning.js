@@ -21,7 +21,7 @@ import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
 
 import db from "../../db.js";
-import { OPENAI_MODEL, openai } from "../../lib/aiModel.js";
+import { openai } from "../../lib/aiModel.js";
 import { redisConnectionOptions } from "../../lib/redisOptions.js";
 import { traceRedis } from "../../lib/redisTrace.js";
 import { workerJob } from "../../lib/workerLog.js";
@@ -140,7 +140,8 @@ export async function runQuietPass({ userId, chatSessionId, force = false, chat 
 
     const call = chat || ((body) => openai.chat.completions.create(body));
     const res = await call({
-      model: OPENAI_MODEL, messages, temperature: 0.2, max_tokens: QUIET.MAX_TOKENS,
+      // No learner chose this model: the background role (lib/modelRegistry.js).
+      __role: "background", messages, temperature: 0.2, max_tokens: QUIET.MAX_TOKENS,
       response_format: quietLearningSchema(),
       __payer: "platform", __feature: "quiet_learning", __timeoutMs: 60_000, __maxRetries: 1,
     });

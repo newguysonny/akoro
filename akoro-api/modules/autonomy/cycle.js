@@ -10,6 +10,9 @@ import db from "../../db.js";
 import { OPENAI_MODEL, openai } from "../../lib/aiModel.js";
 import { reportAgentActivity, clearAgentActivity } from "../../lib/agentActivity.js";
 import { notifyUser } from "../notify.js";
+import { untrusted, UNTRUSTED_SYSTEM_RULE } from "../../lib/untrusted.js";
+import { resolveLearnerTimeZone } from "../adaptive-learning/learner-time-context.js";
+import { isSensitive } from "../agent-memory/quietLearningCore.js";
 import { autonomyCadence, minCycleMs, weeklyRunsCap } from "./cadence.js";
 
 const edu = () => db.schema("edu");
@@ -79,8 +82,9 @@ export async function gatherSignals(userId) {
   const [
     goals, pendingTasks, recentDone, pendingProposals, recentFeedback,
     completions, chatSessions, battleResults, memberships,
+    autonomyRow, weakConcepts, decayAlerts, recentRecords, settingsRow,
   ] = await Promise.all([
-    edu().from("learner_goals").select("title, category, exam, target_date, metric")
+    edu().from("learner_goals").select("title, category, exam, target_date, metric, progress_note, updated_at")
       .eq("user_id", userId).eq("status", "active").order("updated_at", { ascending: false }).limit(5)
       .then((r) => r.data ?? []).catch(() => []),
     db.from("tasks").select("title, due_at, status, priority")
@@ -118,12 +122,53 @@ export async function gatherSignals(userId) {
           .order("due_at", { ascending: true }).limit(5);
         return data ?? [];
       }).catch(() => []),
+    // Rich gather (Grand Plan §7.16.8 step 3) — consent first, then what the agent knows.
+    edu().from("learner_agent_autonomy").select("learn_from_chats").eq("user_id", userId).maybeSingle()
+      .then((r) => r.data ?? null).catch(() => null),
+    // concepts the evidence says are weak, or carry a misconception
+    edu().from("learner_concept_state")
+      .select("mastery, misconception_active, next_review_due, concept_catalog(title, subject)")
+      .eq("learner_id", userId).or("mastery.lt.0.5,misconception_active.eq.true")
+      .order("mastery", { ascending: true }).limit(5)
+      .then((r) => r.data ?? []).catch(() => []),
+    // topics the forgetting curve flagged and the learner hasn't reviewed yet
+    edu().from("decay_notifications").select("subject, topic, confidence, created_at")
+      .eq("student_id", userId).eq("is_actioned", false)
+      .gte("created_at", new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString())
+      .order("created_at", { ascending: false }).limit(3)
+      .then((r) => r.data ?? []).catch(() => []),
+    // what they added to their library lately (the names only)
+    edu().from("records").select("name, progress, created_at").eq("user_id", userId)
+      .gte("created_at", new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString())
+      .order("created_at", { ascending: false }).limit(5)
+      .then((r) => r.data ?? []).catch(() => []),
+    db.from("user_settings").select("settings").eq("user_id", userId).maybeSingle()
+      .then((r) => r.data ?? null).catch(() => null),
   ]);
+
+  // What the agent remembers, only with "Learn from my conversations" on (D47).
+  const learnFromChats = autonomyRow?.learn_from_chats !== false;
+  const [memories, summaries] = learnFromChats ? await Promise.all([
+    edu().from("learner_agent_memories").select("kind, content, updated_at")
+      .eq("user_id", userId).eq("status", "active").order("updated_at", { ascending: false }).limit(12)
+      .then((r) => r.data ?? []).catch(() => []),
+    edu().from("learner_agent_conversation_summaries").select("summary, updated_at")
+      .eq("user_id", userId).order("updated_at", { ascending: false }).limit(3)
+      .then((r) => r.data ?? []).catch(() => []),
+  ]) : [[], []];
 
   const nowMs = Date.now();
   const overdue = pendingTasks.filter((t) => t.due_at && new Date(t.due_at).getTime() < nowMs);
+  const day = 24 * 3600 * 1000;
   return {
-    goals,
+    timeZone: resolveLearnerTimeZone({ configuredTimeZone: settingsRow?.settings?.timezone }),
+    goals: goals.map((g) => ({
+      title: g.title, category: g.category || null, exam: g.exam || null, metric: g.metric || null,
+      target_date: g.target_date || null,
+      days_left: g.target_date ? Math.ceil((new Date(g.target_date).getTime() - nowMs) / day) : null,
+      progress_note: g.progress_note || null,
+      days_since_update: g.updated_at ? Math.floor((nowMs - new Date(g.updated_at).getTime()) / day) : null,
+    })),
     tasks: {
       pending: pendingTasks.length,
       overdue: overdue.length,
@@ -137,43 +182,73 @@ export async function gatherSignals(userId) {
     })),
     classWorkDue: memberships.map((a) => ({ title: a.title, due: a.due_at })),
     pendingProposalTitles: pendingProposals.map((p) => p.title),
+    weakConcepts: weakConcepts.map((c) => ({
+      concept: c.concept_catalog?.title || null, subject: c.concept_catalog?.subject || null,
+      mastery: Math.round(Number(c.mastery || 0) * 100), misconception: Boolean(c.misconception_active),
+      review_due: c.next_review_due ? c.next_review_due <= new Date(nowMs + 2 * day).toISOString() : false,
+    })).filter((c) => c.concept),
+    reviewAlerts: decayAlerts.map((d) => ({ subject: d.subject, topic: d.topic, confidence: Math.round(Number(d.confidence || 0)) })),
+    recentRecords: recentRecords.map((r) => ({ name: String(r.name || "").slice(0, 80), progress: r.progress ?? 0 })),
+    // Quiet-learning notes and chat summaries: guidance, never evidence (D50);
+    // sensitive lines never reach the planner even if one slipped into storage.
+    memories: memories.filter((m) => !isSensitive(m.content)).map((m) => ({ kind: m.kind, note: String(m.content).slice(0, 200) })),
+    chatSummaries: summaries.map((x) => String(x.summary || ""))
+      .filter((t) => t && !/^Latest learner request:/.test(t) && !isSensitive(t)).map((t) => t.slice(0, 500)),
     dismissalTaste: recentFeedback.map((d) => `${d.kind}:${d.decision_note ?? "unspecified"}`),
   };
 }
 
-/** ── 2. REASON — one metered, structured call. Coins guard = budget. */
-export async function reasonAboutSignals(userId, signals) {
+/**
+ * The planner's prompt from the gathered signals — pure, so it can be tested.
+ * What the learner said (memories, chat summaries, chat titles, record names)
+ * goes in framed as data (lib/untrusted.js): it informs, it never instructs.
+ */
+export function planningMessages(signals) {
+  const tz = signals.timeZone || LAGOS;
   const system =
     `You are the learner's background study planner for Akoro, an education platform. ` +
-    `You receive their active goals and task signals and propose AT MOST ${MAX_PROPOSALS_PER_CYCLE} ` +
+    `You receive what their agent knows about them and propose AT MOST ${MAX_PROPOSALS_PER_CYCLE} ` +
     `small, concrete, genuinely useful next steps. House rules:\n` +
     `- kinds: task (a study task), practice (a short focused drill), session (a scheduled agent check-in), goal (a new education-related goal)\n` +
-    `- every rationale must cite a real signal ("2 overdue tasks", "goal target in 9 days", "streak at 5 days", "scored 6/10 last battle") — never generic\n` +
+    `- every rationale must cite a real signal ("2 overdue tasks", "goal target in 9 days", "streak at 5 days", "scored 6/10 last battle", "mastery 30% on osmosis", "you meant to revise titration curves") — never generic\n` +
+    `- use what their agent remembers: something they meant to come back to is a good session or practice; a goal they keep mentioning but never set is a good goal proposal; how they like to learn shapes the task (diagrams, short quizzes)\n` +
+    `- weak concepts and review alerts are good practice proposals; a goal with days_left and no recent progress needs a concrete next step\n` +
     `- never repeat a pending proposal or something in their task list already\n` +
-    `- sessions: payload.scheduledAt is ISO 8601 with +01:00 offset, 06:00-21:00 Africa/Lagos never inside 20:00-07:30, at most 14 days ahead\n` +
+    `- sessions: payload.scheduledAt is ISO 8601 in the learner's time zone (${tz}) with its offset, between 06:00 and 21:00 their time, never 20:00-07:30, at most 14 days ahead\n` +
     `- task/practice payload: { title, description?, priority (high|medium|low), dueAt? ISO, course? }\n` +
     `- goal payload: { title, category?, target_date? YYYY-MM-DD } — education-related only\n` +
-    `- the learner dismissed these tastes recently, respect them: ${JSON.stringify(signals.dismissalTaste)}\n` +
+    `- never mention health, feelings, family or money, even if a note does\n` +
+    `- the learner dismissed these tastes recently, respect them: ${JSON.stringify(signals.dismissalTaste || [])}\n` +
     `- prefer FEWER, better proposals; returning zero is correct when nothing would help\n` +
-    `JSON only: { "summary": "...", "proposals": [ { "kind": "...", "title": "...", "rationale": "...", "payload": { ... } } ] }`;
+    `JSON only: { "summary": "...", "proposals": [ { "kind": "...", "title": "...", "rationale": "...", "payload": { ... } } ] }` +
+    UNTRUSTED_SYSTEM_RULE;
+  const said = [
+    signals.memories?.length ? `What their agent remembers:\n${signals.memories.map((m) => `- ${m.kind}: ${m.note}`).join("\n")}` : "",
+    signals.chatSummaries?.length ? `Their recent conversations:\n${signals.chatSummaries.map((t) => `- ${t}`).join("\n")}` : "",
+    signals.chatTopics?.length ? `Recent chat titles: ${signals.chatTopics.join(" · ")}` : "",
+    signals.recentRecords?.length ? `Added to their library lately: ${signals.recentRecords.map((r) => `${r.name} (${r.progress}% read)`).join(" · ")}` : "",
+  ].filter(Boolean).join("\n\n");
   const user =
     `Active goals: ${JSON.stringify(signals.goals)}\n` +
     `Tasks: ${JSON.stringify(signals.tasks)}\n` +
     `Study streak (days): ${signals.streakDays}\n` +
-    `Recent chat topics: ${JSON.stringify(signals.chatTopics)}\n` +
+    `Weak concepts (from their evidence): ${JSON.stringify(signals.weakConcepts || [])}\n` +
+    `Review alerts (forgetting curve): ${JSON.stringify(signals.reviewAlerts || [])}\n` +
     `Recent battle/review results: ${JSON.stringify(signals.recentBattles)}\n` +
     `Class work due this week: ${JSON.stringify(signals.classWorkDue)}\n` +
     `Already proposed (pending): ${JSON.stringify(signals.pendingProposalTitles)}\n` +
-    `Now (Africa/Lagos): ${new Date().toLocaleString("en-GB", { timeZone: LAGOS })}`;
+    `Now (${tz}): ${new Date().toLocaleString("en-GB", { timeZone: tz })}` +
+    (said ? `\n\n${untrusted(said, { source: "the learner's own words and notes", limit: 4000 })}` : "");
+  return [{ role: "system", content: system }, { role: "user", content: user }];
+}
 
+/** ── 2. REASON — one structured call. The platform pays for background noticing (D46). */
+export async function reasonAboutSignals(userId, signals) {
   const res = await openai.chat.completions.create({
     model: OPENAI_MODEL, temperature: 0.4, max_tokens: 700,
     response_format: { type: "json_object" },
-    __userId: userId, __feature: "agent_autonomy",
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: user },
-    ],
+    __payer: "platform", __feature: "agent_autonomy", __ref: userId,
+    messages: planningMessages(signals),
   });
   let parsed = { summary: "", proposals: [] };
   try { parsed = JSON.parse(res.choices?.[0]?.message?.content || "{}"); } catch { /* stays empty */ }

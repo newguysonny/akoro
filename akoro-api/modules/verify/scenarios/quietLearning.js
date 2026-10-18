@@ -6,7 +6,7 @@
  */
 import { runQuietPass } from "../../agent-memory/quietLearning.js";
 
-const CHAT = (m) => [
+export const CHAT = (m) => [
   ["user", `${m} Hi! I'm in SS2 and I'm writing WAEC in May. I want an A in Chemistry.`],
   ["agent", "Great goal. Where shall we start?"],
   ["user", "Titration. I learn best with diagrams and short quizzes, long explanations lose me."],

@@ -55,7 +55,7 @@ test("the drawer's menu copies a WHOLE session for research", () => {
   assert.match(learnerTab, /const copySession = async \(s, e\)/);
   assert.match(learnerTab, /copySession\(s\);/);                                      // fired from the menu item
   assert.match(learnerTab, /\/sessions\/\$\{s\.id\}\/messages/);                      // the FULL conversation from the server
-  assert.match(learnerTab, /copyPlainText/);                                          // the shared clipboard helper
+  assert.match(learnerTab, /copyTextFrom\(async \(\) =>/);                          // the shared clipboard helper, started inside the tap
   assert.match(learnerTab, /m\.role === "user" \? "You" : "Agent"/);                  // role-labelled for research
   assert.match(learnerTab, /copiedId===s\.id/, "check-then-revert confirmation");
   assert.match(learnerTab, /\} catch \{ \/\* leave the icon untouched \*\/ \}/);      // never throws into the tab

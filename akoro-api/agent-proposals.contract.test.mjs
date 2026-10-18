@@ -22,6 +22,8 @@ const read = (...p) => readFileSync(path.join(ROOT, ...p), "utf8");
 const proposalsSql = read("migrations/2026-agent-proposals.sql");
 const plannerSql = read("migrations/2026-autonomy-planner.sql");
 const proposalsRoutes = read("modules/agent-proposals/routes.js");
+const inbox = read("modules/agent-proposals/inbox.js");
+const inboxCore = read("modules/agent-proposals/inboxCore.js");
 const cycle = read("modules/autonomy/cycle.js");
 const autonomyIndex = read("modules/autonomy/index.js");
 const cadence = read("modules/autonomy/cadence.js");
@@ -51,19 +53,21 @@ test("step 2 · agent_proposals + autonomy_runs migrations with HITL provenance"
 test("step 2 · approval claims first, executes via the SAME chat tools, never forked", () => {
   // claim-first: the status flip is guarded on 'proposed' so a double-tap
   // or replay executes at most once
-  assert.match(proposalsRoutes, /\.update\(\{\s*status:\s*"approved",\s*decided_at:\s*now\(\)\s*\}[\s\S]*?\.eq\("status", PENDING\)/);
+  // (the approve / dismiss logic lives in the one inbox's service, Grand Plan §7.16.8 step 1)
+  assert.match(inbox, /\.update\(\{\s*status:\s*"approved",\s*decided_at:\s*now\(\)\s*\}[\s\S]*?\.eq\("status", PENDING\)/);
+  assert.match(proposalsRoutes, /approveProposal\(req\.user\.id, req\.params\.id\)/);
   // execution rides the chat's own tools — no second write path
-  assert.match(proposalsRoutes, /executeChatTool\("create_task",\s*\{\s*priority:\s*"medium",\s*\.\.\.payload\s*\}/);
-  assert.match(proposalsRoutes, /executeChatTool\("schedule_chat_follow_up",\s*payload/);
-  // agent goals land via the goals table marked source:'agent'
-  assert.match(proposalsRoutes, /from\("learner_goals"\)[\s\S]*?source:\s*"agent"/);
+  assert.match(inbox, /executeChatTool\("create_task",\s*\{\s*priority:\s*"medium",\s*\.\.\.payload\s*\}/);
+  assert.match(inbox, /executeChatTool\("schedule_chat_follow_up",\s*payload/);
+  // agent goals land through the goals service (its cap), marked source:'agent'
+  assert.match(inbox, /createGoal\(userId, \{[\s\S]*?\}, \{ source: "agent" \}\)/);
   // failed executions release the claim to a visible FAILED state
-  assert.match(proposalsRoutes, /status:\s*"failed", decision_note:[\s\S]*?\.eq\("status", "approved"\)/);
+  assert.match(inbox, /status:\s*"failed", decision_note:[\s\S]*?\.eq\("status", "approved"\)/);
   // dismiss records the taste reason for the next cycle's prompt
-  assert.match(proposalsRoutes, /DISMISS_REASONS = \["not_useful", "wrong_time", "too_much", "already_doing", "other"\]/);
-  assert.match(proposalsRoutes, /decision_note:\s*reason/);
+  assert.match(inboxCore, /DISMISS_REASONS = Object\.freeze\(\["not_useful", "wrong_time", "too_much", "already_doing", "other"\]\)/);
+  assert.match(inbox, /decision_note:\s*why/);
   // 7d TTL sweep on list
-  assert.match(proposalsRoutes, /\.lt\("expires_at", now\(\)\)/);
+  assert.match(inbox, /\.lt\("expires_at", now\(\)\)/);
   assert.match(appJs, /app\.use\("\/api\/agent\/proposals", standardLimit, agentProposalsModule\)/);
 });
 
@@ -77,10 +81,11 @@ test("step 3 · the cycle: bounded, metered, validated server-side", () => {
   assert.match(cycle, /QUIET_END_MIN = 7 \* 60 \+ 30/);
   assert.match(cycle, /export function inQuietHours/);
   assert.match(cycle, /export function outsideQuietHours/);
-  // ONE reasoning call, structured, metered against the learner's budget
+  // ONE reasoning call, structured, paid by the platform (D46: background noticing never spends the learner's coins)
   assert.equal((cycle.match(/openai\.chat\.completions\.create/g) || []).length, 1);
   assert.match(cycle, /response_format:\s*\{\s*type:\s*"json_object"\s*\}/);
-  assert.match(cycle, /__userId:\s*userId,\s*__feature:\s*"agent_autonomy"/);
+  assert.match(cycle, /__payer: "platform", __feature: "agent_autonomy"/);
+  assert.doesNotMatch(cycle, /__userId:\s*userId/);
   // budget guard + pacing + level gate
   // weekly budget lives in cadence.js now (one source of truth)
   assert.match(cadence, /AKORO_AUTONOMY_MAX_WEEKLY_RUNS", 30/);
@@ -135,19 +140,18 @@ test("step 3 · nightly scheduler is quota-cheap and worker starts at boot", () 
 });
 
 test("step 2 · the Suggestions inbox renders proposals; planner toggle in the drawer", () => {
-  // proposals fetch + approve/dismiss through the inbox API
-  assert.match(tab, /apiGet\('\/api\/agent\/proposals'\)/);
-  assert.match(tab, /apiPost\(`\/api\/agent\/proposals\/\$\{p\.id\}\/approve`,\{\}\)/);
-  assert.match(tab, /apiPost\(`\/api\/agent\/proposals\/\$\{p\.id\}\/dismiss`,\{\}\)/);
-  // one request at a time (xviii rule) + optimistic executed state
-  assert.match(tab, /if\(proposalBusyId\) return;/);
-  assert.match(tab, /\{\.\.\.x,status:'executed'\}/);
-  // the Suggestions chip counts proposals too
-  assert.match(tab, /suggestionCount=suggestions\.length\+pendingProposals\.length/);
+  // one inbox over chat suggestions and proposals: list, accept, dismiss with a reason
+  assert.match(tab, /apiGet\('\/api\/agent\/proposals\/inbox'\)/);
+  assert.match(tab, /apiPost\(`\/api\/agent\/proposals\/inbox\/\$\{encodeURIComponent\(it\.ref\)\}\/accept`,\{\}\)/);
+  assert.match(tab, /apiPost\(`\/api\/agent\/proposals\/inbox\/\$\{encodeURIComponent\(it\.ref\)\}\/dismiss`,\{ reason: reason\|\|"other" \}\)/);
+  // one request at a time (xviii rule)
+  assert.match(tab, /if\(inboxBusyRef\) return;/);
+  // the Suggestions chip counts the whole inbox
+  assert.match(tab, /const suggestionCount=inbox\.length;/);
   assert.match(tab, /k==="suggestions"&&suggestionCount>0&&/);
   assert.match(tab, /agent\.proposals_from_review/);
   // approval reflects back into the transcript (agent observes, never assumes)
-  assert.match(tab, /pushAgent\(t\('agent\.proposal_done_task'\)\.replace\('\{title\}',d\?\.data\?\.title\|\|p\.title\)\)/);
+  assert.match(tab, /pushAgent\(t\('agent\.suggestion_added'\)\.replace\('\{title\}',r\.task\?\.title\|\|r\.title\|\|it\.title\)\)/);
   assert.match(tab, /refetchTasks\(\)/);
   // combined switch: the dashboard online/offline control is the ONE
   // consent — online enables due-task check-ins AND the background planner
