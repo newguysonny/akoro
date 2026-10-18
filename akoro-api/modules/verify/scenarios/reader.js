@@ -83,6 +83,17 @@ export const readerBackend = {
     ctx.expect.ok("the reply teaches from the document (mitochondria / energy)", /mitochondri|energy|respiration/i.test(reply.answer || ""), reply.answer);
     ctx.expect.ok("the reply cites the document", (reply.citations || []).length > 0 && reply.citations.every((c) => Number.isInteger(c.pageNumber)), reply.citations);
     ctx.expect.ok("the reply ends with a check question", /\?\s*$/.test(String(reply.answer || "").trim()) || /\?/.test(String(reply.answer || "").split("\n").slice(-3).join(" ")), reply.answer);
+    if (reply.saved !== true) {
+      ctx.note(`save error: ${reply.saveError || "(none given)"}`);
+      // Why not: is the column there (through the API's schema cache), and how did its migration run?
+      const probe = await ctx.db.probe("edu.record_chat_messages", "id, channel");
+      ctx.note(`channel column through the API: ${probe.ok ? "visible" : `NOT visible — ${probe.error}`}`);
+      const runs = await ctx.db.rows("edu.migration_log", {}, { columns: "run_group, applied, failed, files, git_sha, ran_at", limit: 3, order: { column: "ran_at", ascending: false } }).catch(() => []);
+      for (const r of runs) {
+        const mine = (Array.isArray(r.files) ? r.files : []).find((f) => JSON.stringify(f).includes("record-chat-guide"));
+        ctx.note(`migration run ${String(r.git_sha || "").slice(0, 8)} ${r.ran_at}: applied ${r.applied}, failed ${r.failed}; record-chat-guide: ${mine ? JSON.stringify(mine).slice(0, 300) : "not listed"}`);
+      }
+    }
     ctx.expect.eq("the turn is saved", reply.saved, true);
     const gh = await ctx.http({ as: p.learner, path: `/api/records/guide/history?recordId=${record.id}` });
     ctx.expect.ok("the guide thread holds the lesson", (gh.body?.data?.messages || []).some((m) => m.role === "user" && m.text === message));

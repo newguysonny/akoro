@@ -948,14 +948,17 @@ router.post("/guide", authenticateToken, asyncHandler(async (req, res) => {
     const { citations } = target ? extractCitations(answer, passages) : { citations: [] };
 
     let messageId = null;
+    let saveError = null;
     if (target) {
       try {
         ({ assistantMessageId: messageId } = await saveAskTurn({ userId: req.user.id, recordId: target.recordId, question: message, selection, answer, citations, channel: "guide" }));
       } catch (e) {
-        console.warn("[records-guide] saving the turn failed:", String(e?.message || e).slice(0, 160));
+        saveError = String(e?.message || e).slice(0, 200);
+        console.warn("[records-guide] saving the turn failed:", saveError);
       }
     }
-    const payload = { answer, citations, messageId, passages: passages.length, saved: !!messageId };
+    // The lesson still shows; saved:false (and why) says it won't be there next time.
+    const payload = { answer, citations, messageId, passages: passages.length, saved: !!messageId, ...(saveError ? { saveError } : {}) };
     if (wantsStream) { send("done", payload); clearInterval(heartbeat); return res.end(); }
     return res.json({ success: true, data: payload });
   } catch (err) {
