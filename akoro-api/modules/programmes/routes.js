@@ -15,6 +15,7 @@
  *   DELETE /programs/:id
  *   POST   /programs/:id/sections           add section {name}
  *   POST   /programs/:id/sections/reorder   {order:[sectionId,…]}
+ *   POST   /programs/reorder                {order:[programId,…]}
  *   PATCH  /sections/:id                    rename {name}
  *   DELETE /sections/:id
  *   GET    /courses?programme=&q=           all courses (+programme/section/material counts)
@@ -163,7 +164,7 @@ router.get("/programs", asyncHandler(async (req, res) => {
   const q = clean(req.query.q)?.toLowerCase();
   let query = edu().from("programmes").select(`
     *, programme_sections(id, name, position),
-    programme_courses(id)`).order("created_at", { ascending: true });
+    programme_courses(id)`).order("position", { ascending: true, nullsFirst: false }).order("created_at", { ascending: true });
   const { data: rows } = await query;
   const programs = (rows ?? [])
     .filter((p) => !q || `${p.name}${p.code || ""}`.toLowerCase().includes(q))
@@ -275,6 +276,16 @@ router.post("/programs/:id/sections/reorder", asyncHandler(async (req, res) => {
   for (let i = 0; i < order.length; i += 1) {
     await edu().from("programme_sections").update({ position: i }).eq("id", order[i]);
   }
+  ok(res, { reordered: order.length });
+}));
+
+router.post("/programs/reorder", asyncHandler(async (req, res) => {
+  const order = req.body?.order;
+  if (!Array.isArray(order) || !order.length) return bad(res, "order must be a list of program ids");
+  for (let i = 0; i < order.length; i += 1) {
+    await edu().from("programmes").update({ position: i }).eq("id", order[i]);
+  }
+  await logLine("Programs reordered", `${order.length} programs reordered.`);
   ok(res, { reordered: order.length });
 }));
 
