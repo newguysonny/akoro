@@ -39,6 +39,7 @@ checked against the code on 2026-10-09.
    - 7.13 Peer agent help
    - 7.14 Blog research
    - 7.15 Learning struggle taxonomy
+   - 7.16 Proactive agent — suggestions, ideas, goal work, quiet learning
 8. Workflow 1 — Study Prep
 9. Workflow 2 — Teaching (agent-driven)
 10. Workflow 3 — Decay Review
@@ -218,6 +219,11 @@ session mode" (`fresh | continuation | decay`); "Adaptive Learning Workflow"
 | D43 | The Python agent's teaching route (Q23) | **Fix it now** (persist sessions to `edu.adaptive_sessions`, real `continuation` / `decay` loading, the same evidence gate); **deploy the Python agent later as its own service**, the way the Verification Gate sandbox was. | User decision (2026-10-17). |
 | D44 | One forgetting curve (Q24) | **The protégé's knowledge (`agent_knowledge`), nested per topic → per concept.** A learner can forget one concept without forgetting the whole topic, so the protégé's curve does the same: each concept inside a topic decays on its own, slowly; the topic's health is derived from its concepts. `knowledge_confidence` (0-100) and the `learner_concept_state` retention pass are folded into it (Phase 8 / 10). | User decision (2026-10-17). |
 | D45 | Practice in a study plan (Q25) | **A battle, not the proctored assessment.** During Study Prep the protégé calls the teaching guide (or Sargeant) to review its knowledge: a battle between the **teaching guide / platform** and the **protégé**, answering only from what the learner taught it (the Agent Check, §7.12, run as a real battle). The protégé posts a **message in chat** to open it; the learner watches in the **existing battle UI** over the websocket (questions changing, answers, scores). Proctored `AssessmentRoom` stays a separate, learner-taken assessment (D29 narrowed). | User decision (2026-10-17). Supersedes D29 for Study Prep practice. |
+| D46 | Who pays for proactive work? *(proposed — open, Q27)* | Background noticing, preparing and quiet learning are small capped calls (gpt-4o-mini, one per cycle / per settled chat). **Proposed: the platform pays for them** under a per-learner weekly USD budget; the learner pays only when they approve a proposal that does paid work, at the same price as asking in chat, shown on the button. | Rule 9: no background workflow spends coins without the learner's say-so; a coin charge for being noticed would punish the feature. |
+| D47 | Consent defaults *(proposed — open, Q28)* | Three consents under "Agent Online": *Proactive suggestions & ideas*, *Learn from my conversations*, *Task check-ins*. **Proposed:** all three on when the learner turns the agent Online, each with a plain-language explainer and its own off switch; *Learn from my conversations* can be paused or wiped from the Memory page. | Today one toggle silently covers two consents and memory has none. |
+| D48 | Where Ideas live *(proposed — open, Q29)* | **Proposed:** an **Ideas** section in the agent tab beside To do / Done / Suggestions (keeps the "no new top-level surface" decision). Alternative: a bottom-bar Ideas tab, as in the reference assistant. Either way the UI is previewed and approved before it is built. | The user's "do not change the learner UI without a preview" rule. |
+| D49 | How proactive messages arrive | **In the learner's agent chat, as an agent message with reply buttons**, the same message also listed in Suggestions; posted only when the chat is idle, never in quiet hours, at most one a day. | The reference conversation: noticing, the ready fix, the go-ahead and the report all live in one thread. |
+| D50 | Quiet learning is guidance, not evidence | Memories shape what the agent says and proposes; they never move mastery, scores, goals' status or gates. Sensitive struggle types are never remembered. Learner can see and delete every memory. | Rules 4, 10, 24 and D38. |
 | D10 | Who writes narration? | **Harness templates** (`ActivityNarrator`, grown from `narration.js:deliberate()`) for facts; the agent's `intent` (≤ 240 chars, sanitised, untrusted display text) for "why". v3's `narration` field **is** `intent`. | Deterministic where possible (v3 §40), already built (v7). |
 | D11 | Event store | New generic `edu.workflow_events`. `study_prep_events` is kept read-only and backfilled. | One stream model for four workflows (v3 §43). |
 | D12 | Live transport | **Event store is the source of truth; transport is replaceable.** Teaching and Decay keep the existing Socket.IO connection. Study Prep and Practice use SSE (same heartbeat pattern as `/chat/agent`). Both carry the identical event envelope. Replay: `GET /api/workflows/:id/events?after=N`. | v3 §42–43; reuses what already works. |
@@ -1549,6 +1555,200 @@ same struggle) and this learner's history:
 
 Full per-strategy targets and workflows: §7.7.2.
 
+### 7.16 Proactive agent — suggestions, ideas, goal work, quiet learning (D46–D50) 🟡→ build on the autonomy planner
+
+**The idea.** The agent notices things and brings them to the learner (or
+instructor) before being asked — and then waits. Modelled on an assistant that,
+while checking a site, spotted missing share tags, posted *"One thing I
+noticed… I've got the fix ready — I just need your go-ahead"* in the normal
+chat thread with reply buttons (*Yes, add them* · *I'll send my own art*), did
+the work only after *yes*, and reported back. Four parts, one rule: **the
+agent watches, thinks and brings things; the person decides what gets built.**
+
+| Part | What the learner sees | What it is |
+|---|---|---|
+| **Proactive suggestions** | A message from their agent in chat: what it noticed, why it matters, the fix it has ready, and 2–3 reply buttons. | A *ready proposal*: the noticing and the preparation are done; the doing waits for approval. |
+| **Ideas** | Cards curated from their real context ("Turn your Biology notes into a 10-question quiz", "Teach your agent osmosis — it's your weakest topic"). Tap one → the agent builds it. | A short, ranked list of buildable briefs, refreshed by the planner. |
+| **Goal work** | Progress nudges on their goals; now and then *"You keep mentioning WAEC in May — want to make that a goal?"* | The planner studying goals overnight: progress notes, nudges, implied goals proposed. |
+| **Quiet learning** | Nothing — the agent is simply sharper next time ("Last time you said diagrams help you…"). A memory page lists what it kept, each item deletable. | A background pass after a conversation winds down: real summary, durable memories, deduped and capped. |
+
+#### 7.16.1 What exists today (inventory 2026-10-18)
+
+- ✅ **Consent + schedule:** `edu.learner_agent_autonomy` (enabled, level 1|2), the "Agent Online" header toggle; Level 1 due-task check-ins (`learner-autonomy.js`); Level 2 nightly planner (`modules/autonomy/` — gather → one gpt-4o-mini call → validate → `edu.agent_proposals`, 21:00–22:00 Lagos window, event triggers on task/battle/submission, caps: 3 per run, 5 pending, 30-day dedupe, weekly run cap).
+- ✅ **Approve = replay through the real tool:** `POST /api/agent/proposals/:id/approve` runs `executeChatTool` (task, follow-up) or inserts a goal (`source='agent'`). In chat, `suggest_help` writes `public.agent_suggestions`. Both show in the agent tab's Suggestions list (the inbox, `learner-full-autonomy-plan.md` §9.6).
+- ✅ **Delivery:** scheduled messages into an existing chat (`chat-follow-ups.js`), `notifyUser` (in-app + web push + email, respecting preferences), socket `agent:activity`.
+- ✅ **Memory storage + retrieval:** `learner_agent_conversation_summaries`, `learner_agent_memories` (vector), scratchpads, `match_learner_agent_memory`, `relevantMemories` in every chat turn, `/api/agent-memory/v1` list/forget.
+- ✅ **Goals:** `edu.learner_goals` (`source`, `progress_note`), `/api/goals`, chat tools, `goalsCtx`.
+- ✅ **Instructor routines:** `draft_routines` prepare drafts on a schedule and nudge the teacher; assigning stays human.
+- 🟡 **The planner can't see conversations** — it reads the last 5 chat *titles* only.
+- 🟡 **Memory writing is crude** — `compactAgentSummary` concatenates the last exchange; `safeMemoryUpdates` is regex ("i prefer…", "my goal is…"). No LLM pass, no dedupe, no cap. The forget API has no UI.
+- 🟡 **Proposals are bare titles** — a task or session, never a prepared thing (a drafted quiz, a plan, a tool). `battle`/`plan_digest` kinds exist in the table but are never generated or executed.
+- 🟡 **Two inboxes** (`agent_suggestions`, `agent_proposals`); chat suggestions of kind goal/conversation are accepted as tasks; the dismiss button sends no reason; planner notifications skip push/socket.
+- 🟡 **Goal work** — the planner may propose a goal, but never writes progress, never nudges, never sees a goal implied in chat.
+- 🆕 Ideas surface and generator; ready-proposal artifacts; quiet-learning pass; memory page; separate consents; learner timezone/quiet hours; a USD budget per learner.
+
+#### 7.16.2 The loop (one engine for all four parts)
+
+```
+signals ──► NOTICE ──► PREPARE ──► OFFER ──► (person decides) ──► DO ──► REPORT
+            planner     dry-run      chat message /            approve →     result in
+            + triggers  the real     Ideas card /              replay the    the same
+                        tool         goal nudge                real tool     thread
+```
+
+1. **Notice** — the existing planner cycle and event triggers, with a richer
+   *gather*: conversation **summaries and memories** (not titles), goals and
+   their progress, weak concepts and open struggles (§7.15), decay alerts,
+   class work due, recent Records. All read through `lib/untrusted.js`
+   framing — conversation text is data, never instructions.
+2. **Prepare** — for a proposal that needs work done, the harness runs the real
+   tool in **dry mode** (the agent console's dry path already exists) and
+   stores the *preview* with the proposal: the drafted quiz, the 3-day plan, the
+   tool spec. Preparing is bounded (one cheap call, §7.16.7) and creates
+   nothing the learner can see as done.
+3. **Offer** — a proposal is posted **into the learner's agent chat** as an
+   agent message with reply buttons (*the screenshot shape*), and it also sits
+   in the Suggestions list. Ideas go to the Ideas list. One notification per
+   batch, through `notifyUser` (push respected).
+4. **Decide** — the reply buttons map to approve / a variant / dismiss-with-reason.
+   A typed reply in the thread works too ("yes but make it 5 questions").
+5. **Do** — approval replays the **same tool, live**, through `executeChatTool`
+   (unchanged rule: the LLM proposes, the harness disposes). Anything that costs
+   coins says so on the button ("Yes, build it · ~3 coins").
+6. **Report** — the result lands as the next message in that thread ("Done —
+   here's your quiz"), with the usual cards (PlanCard, quiz card, task row).
+
+#### 7.16.3 Proactive suggestions
+
+- **Kinds** (closed list, code-validated): `task`, `session`, `goal`,
+  `practice` (existing) + 🆕 `quiz_from_records`, `teach_weak_topic`,
+  `study_plan`, `revision_battle`, `follow_up_question` ("You asked about
+  moles yesterday — want 3 practice questions?"), `fix_it` (a problem the agent
+  found in the learner's own things: an overdue task chain, a goal with no
+  tasks, a Record that failed to extract), and for **instructors**
+  `revise_low_scores` (from `check_activity_outcomes`), `chase_missing`
+  (learners who haven't started), `next_activity` (a draft for the next topic).
+- **Every proposal carries**: `noticed` (one line, the signal it came from —
+  required, the cycle already demands a cited signal), `why` (one line),
+  `preview` (the dry-run output, optional), `actions` (2–3 buttons, each a tool
+  replay or a dismiss), `cost_hint`, `expires_at`.
+- **The message** is written by the narrator from the proposal (facts from
+  code, D27-style); the model may add one sentence of its own voice.
+- **Limits:** at most **1 proactive chat message per day** and 3 open
+  proposals in chat; never during quiet hours; never in the middle of an
+  active conversation (posted when the chat has been idle ≥ 10 min); a
+  dismissed kind on the same subject backs off 14 days, "too much" halves the
+  daily rate for 30 days.
+
+#### 7.16.4 Ideas
+
+- **What an idea is:** a *buildable brief* — title, one-line why, the context it
+  came from (a Record, a goal, a weak topic, a past chat), and the action it
+  starts (open a chat pre-filled with the brief, start a workflow, or run a
+  tool). Not a task; nothing is created until tapped.
+- **Where:** the agent tab — a new **Ideas** section beside To do / Done /
+  Suggestions (keeps §9.6's "no new top-level surface" unless D48 says
+  otherwise). Learner UI change → preview and approval before building.
+- **Generated** by the nightly cycle (same call, a second output array — no
+  extra LLM call), at most 6 live ideas, refreshed when ≥ 3 are used or
+  dismissed, each idea expires in 7 days. Instructors get teaching ideas from
+  the same engine over their classes.
+- **Tap → build:** the idea's action runs through the normal chat turn with the
+  brief as the learner's message, so everything that follows (tools, costs,
+  confirmations) is the ordinary, already-tested path.
+
+#### 7.16.5 Goal work
+
+- **Progress notes:** each cycle may write `progress_note` on a goal from code
+  facts only (tasks done, sessions, battle scores, mastery changes) — the model
+  phrases it, the numbers come from the harness. Never changes a goal's target
+  or status on its own.
+- **Nudges:** a goal with no activity in N days, a deadline approaching with
+  little progress, or a milestone reached (celebrate) → a `goal_nudge`
+  proposal with a concrete next step (a task or session the learner can approve).
+- **Implied goals:** quiet learning (below) flags *goal-shaped* memories ("WAEC
+  in May", "I want to get into medicine"); the planner turns one into a `goal`
+  proposal *("You've mentioned … twice — want me to make it a goal?")*. At most
+  one implied-goal proposal per week; a dismissal stops it for that subject.
+- Exam countdowns (goal with a date) feed Study Prep: "WAEC in 6 weeks — want a
+  plan?" → `study_plan` proposal → approval starts the Study Prep workflow
+  (its own plan confirmation and coin gate still apply, rule 7).
+
+#### 7.16.6 Quiet learning
+
+- **When:** a conversation is *settled* — no new turn for 30 min and at least 6
+  turns since the last pass (the `source_message_count` watermark already on
+  `learner_agent_conversation_summaries`). Queued on BullMQ with
+  `jobId = chat_session_id + watermark` (idempotent, survives restarts).
+- **What it writes** (one gpt-4o-mini call, strict JSON):
+  - a real **summary** of the conversation (replaces the concatenated one);
+  - **memories**: `study_preference`, `learner_goal` (goal-shaped, feeds
+    §7.16.5), `learning_summary`, 🆕 `fact_about_me` (class, exams, subjects,
+    constraints — never sensitive categories), 🆕 `open_thread` (something left
+    unfinished: "wanted to revise titration tomorrow" → may become a
+    `follow_up_question` proposal);
+  - **merge, not append:** the existing top-k similar memories are passed in;
+    the pass returns update/keep/forget per item. Cap 200 active memories per
+    learner; least-used fall off first.
+- **Never stored:** sensitive struggle types (§7.15, D38), health details,
+  other people's personal data, answer keys, anything from a tool result the
+  learner didn't see. Memory is guidance, not evidence (rule 4) — it never
+  moves mastery or scores.
+- **The learner sees and controls it:** a **Memory** page in Settings → Agent
+  (list, "forget this", "forget everything", pause learning) on the existing
+  `/api/agent-memory/v1`. Learner UI change → preview first.
+- The regex `safeMemoryUpdates` stays as the instant path (a turn can still
+  save "I prefer diagrams" immediately); the pass is the consolidation.
+
+#### 7.16.7 Consent, cost and safety (fixed in code)
+
+- **Separate consents** (Settings → Agent, plain-language explainer for each):
+  *Proactive suggestions & ideas* (= planner, today's level 2), *Learn from my
+  conversations* (quiet learning), *Task check-ins* (level 1). Defaults: D47.
+  "Agent Online" stays the master switch.
+- **Who pays (D46):** background noticing, preparing and remembering are
+  small, capped calls; whether they bill the learner or the platform is a
+  locked decision, not a default. Approving a proposal that does paid work is
+  billed like the same action in chat, and the button says so (rule 7/9 hold).
+- **Budget:** per learner per week — runs, LLM calls and **USD** (the
+  `AKORO_AUTONOMY_WEEKLY_BUDGET_USD` in the autonomy plan, still unbuilt);
+  `cost_usd` on `autonomy_runs`; stop at 100%, alert ops at 80%.
+- **Timezone and quiet hours** per learner (from profile; Lagos default),
+  learner-editable quiet hours.
+- **Dedupe** across both inboxes on (kind, subject/topic, target id), not just
+  titles; one unified list in the UI.
+- **No open web** (rule 13): noticing reads only Akoro data — the learner's
+  own, their school's, approved content and the blog. The external-site
+  example above is a pattern, not a capability.
+- **Instructors:** the same engine over their classes only (the S7 scope rules),
+  never a learner's private chats or memories.
+
+#### 7.16.8 Build steps
+
+1. **Unify the inbox** — one `proposals` list in the UI over both tables;
+   dismiss reasons sent; planner notifications through `notifyUser`; chat
+   suggestions of kind goal/conversation accepted as what they are.
+2. **Quiet learning pass** + Memory page (preview) — gives every later step
+   real context.
+3. **Rich gather** — summaries, memories, goals' progress, struggles, decay,
+   Records into the planner (untrusted-framed), learner timezone.
+4. **Ready proposals** — `preview` via dry-run tools, the new kinds, replay on
+   approve; posted into chat with reply buttons (preview of the message shape
+   first).
+5. **Goal work** — progress notes, nudges, implied goals.
+6. **Ideas** — second output of the cycle, Ideas section (preview), tap → chat turn.
+7. **Instructor proactive** — the same engine over classes: low scores, missing
+   work, next activity.
+8. **Budget + consents** — USD caps, separate toggles, explainers.
+
+**Exit (each step has a Verification Gate scenario):** a settled conversation
+yields a summary and deduped memories and nothing sensitive; a planner run over
+a learner with a weak topic, an implied goal and a stale goal produces at most
+the capped proposals, each citing its signal; approve replays the real tool
+once (idempotent) and reports in the same thread; dismiss-with-reason backs
+off; quiet hours and budget stop everything; a learner who turns a consent off
+gets nothing from that part; an instructor run never reads a learner's chats.
+
 ---
 
 ## 8. Workflow 1 — Study Prep
@@ -2629,6 +2829,11 @@ STUDY_PREP_TEACHING_HANDOFF_ENABLED 🆕 teach_back → Teaching Workflow
 DECAY_WORKFLOW_ENABLED            🆕
 PRACTICE_WORKFLOW_ENABLED         🆕
 WORKFLOW_DEV_MODE                 🆕 developer event view
+PROACTIVE_PROPOSALS_ENABLED       🆕 ready proposals posted into chat (§7.16.3)
+PROACTIVE_IDEAS_ENABLED           🆕 Ideas list from the planner (§7.16.4)
+GOAL_WORK_ENABLED                 🆕 progress notes, nudges, implied goals (§7.16.5)
+QUIET_LEARNING_ENABLED            🆕 background memory pass after settled chats (§7.16.6)
+AKORO_AUTONOMY_WEEKLY_BUDGET_USD  🆕 per-learner proactive budget (stop at 100%, alert at 80%)
 ```
 
 Every new path keeps the old path working while its flag is off.
@@ -2779,6 +2984,14 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   (workflow_id, type, learner, operation, state, tool, latency, tokens, cost,
   result, error — never answer keys or reasoning).
 - **Exit:** all scenarios A–K pass in staging with flags on; old paths removed only after a release with flags on.
+
+### Phase 13 — Proactive agent (§7.16)
+- Can start now: it builds on the shipped autonomy planner, not on Phases 1–12.
+  Order: unified inbox → quiet learning + Memory page → rich gather → ready
+  proposals in chat → goal work → Ideas → instructor proactive → budget and
+  consents (§7.16.8). Every learner UI piece is previewed before it is built.
+- **Exit:** the §7.16.8 exit list, one Verification Gate scenario each, all
+  green on the sandbox; D46–D48 locked.
 
 ---
 
@@ -2952,6 +3165,11 @@ LLM failure must never corrupt workflow state.
 | Q24 | ~~Retention model~~ — **resolved (D44):** protégé knowledge, per topic → per concept, each concept decaying slowly on its own. | Done |
 | Q25 | ~~Practice base~~ — **resolved (D45):** Study Prep practice is a battle (guide/platform vs protégé) watched in the battle UI; `AssessmentRoom` stays separate. | Done |
 | Q26 | Fix the double practice charge now, ahead of Phase 5? | Now |
+| Q27 | Who pays for proactive background work — platform budget or learner coins (D46)? | Before Phase 13 step 2 |
+| Q28 | Consent defaults for suggestions, quiet learning, check-ins (D47)? | Before Phase 13 step 2 |
+| Q29 | Ideas as an agent-tab section or its own bottom-bar tab (D48)? | Before Phase 13 step 6 |
+| Q30 | A "Feed" of posts written for the learner (briefings, study tips from the blog)? Not in this phase — rule 13 limits it to approved content. | Later |
+| Q31 | Do instructors get quiet learning (memories of their teaching preferences) too? | Phase 13 step 7 |
 
 ---
 
@@ -2966,4 +3184,5 @@ LLM failure must never corrupt workflow state.
 | Promote study-prep infrastructure; migration map | Full structure 2 | — |
 | Code baseline, harness checks, policy constants, manifest, five-part operation rule | Study-Prep Master Plan v7 | Plans 1–5, concrete sessions v1/v2 |
 | Agent-driven teaching turn, controller agent, loop end/cap/fallback, learner model switching, learn_with_guide mode, retrieval_practice | User decisions (this review) | Claude API reference (model ids, prices, tool_choice/thinking/refusal behaviour, 2026-10-06) |
+| Proactive agent (suggestions, ideas, goal work, quiet learning) | User request 2026-10-18 + the reference assistant's conversation (noticed → ready fix → go-ahead → report) | Inventory of `modules/autonomy/`, `agent-proposals/`, `learner-autonomy.js`, agent memory tables (2026-10-18) |
 | Code facts | `akoro-api` / `akoro-learner` as of 2026-10-09 | — |
