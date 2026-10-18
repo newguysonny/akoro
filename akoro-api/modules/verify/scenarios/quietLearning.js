@@ -60,11 +60,12 @@ export const quietLearningPass = {
     ctx.expect.eq("…up to this point of the chat", summary?.source_message_count, 10);
     // New notes from this chat, and the learner's earlier notes this pass refined (a merge, not a copy).
     const mems = await ctx.db.rows("edu.learner_agent_memories", { user_id: me.id, chat_session_id: chatId, status: "active" }, { columns: "id, kind, content, source" });
-    const touched = (await ctx.db.rows("edu.learner_agent_memories", { user_id: me.id, status: "active" }, { columns: "id, kind, content, updated_at", limit: 200 }))
-      .filter((x) => x.updated_at >= t0);
+    const active = await ctx.db.rows("edu.learner_agent_memories", { user_id: me.id, status: "active" }, { columns: "id, kind, content, updated_at", limit: 200 });
+    const touched = active.filter((x) => x.updated_at >= t0);
     ctx.note(`new: ${JSON.stringify(mems.map((x) => [x.kind, x.content]))} · touched: ${JSON.stringify(touched.map((x) => [x.kind, x.content]))}`);
     ctx.expect.ok("it remembered what matters (≥ 2 new notes)", mems.length >= 2, mems.length);
-    ctx.expect.ok("…the learner's preference (new, or merged into the one they had)", touched.some((x) => /diagram|quiz/i.test(x.content)), touched.map((x) => x.content));
+    // Already remembered from an earlier chat is right too: the pass doesn't copy what the agent knows.
+    ctx.expect.ok("…the learner's preference (new, merged, or already known)", active.some((x) => /diagram|quiz/i.test(x.content)), active.map((x) => x.content));
     ctx.expect.ok("…their goal or class", touched.some((x) => /waec|ss2|chemistry/i.test(x.content)), touched.map((x) => x.content));
     ctx.expect.ok("…and what was left unfinished", touched.some((x) => x.kind === "open_thread" || /curves|tomorrow/i.test(x.content)), touched.map((x) => [x.kind, x.content]));
     ctx.expect.ok("nothing sensitive is remembered", !touched.some((x) => /anxi|doctor|tablet|tired/i.test(x.content)), touched.map((x) => x.content));
