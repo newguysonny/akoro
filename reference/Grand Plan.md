@@ -1746,9 +1746,16 @@ signals ──► NOTICE ──► PREPARE ──► OFFER ──► (person dec
    proposal that doesn't say what it noticed. Gate `agent.planner_rich_gather`.
    Still open: quiet hours are enforced in Lagos time (right for Nigerian
    learners; a learner elsewhere needs the validator in their zone).
-4. **Ready proposals** — `preview` via dry-run tools, the new kinds, replay on
-   approve; posted into chat with reply buttons (preview of the message shape
-   first).
+4. 🟡 **Ready proposals** — ✅ posted into chat with reply buttons (2026-10-18,
+   `modules/autonomy/deliver.js`, D49): the chat the noticed note came from
+   if used in the last 7 days (the planner tags each proposal with its note),
+   else the latest chat, else a new one; never in quiet hours or mid-chat (a
+   sweep retries ~10 min later); one a day; a decision in the chat or in
+   Suggestions shows in both. Gate `agent.proactive_in_chat`. Still to do:
+   `preview` via dry-run tools (a drafted quiz or plan carried with the
+   proposal) and the new kinds (`quiz_from_records`, `teach_weak_topic`,
+   `study_plan`, `revision_battle`, `follow_up_question`, `fix_it`); a UI
+   gate check for the in-chat buttons.
 5. **Goal work** — progress notes, nudges, implied goals.
 6. **Ideas** — second output of the cycle, Ideas section (preview), tap → chat turn.
 7. **Instructor proactive** — the same engine over classes: low scores, missing
