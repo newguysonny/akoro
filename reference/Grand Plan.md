@@ -1730,8 +1730,14 @@ signals ──► NOTICE ──► PREPARE ──► OFFER ──► (person dec
    chat); dismiss asks why and keeps it (`agent_suggestions.dismiss_reason`);
    planner notifications through `notifyUser`. Gates: `agent.inbox_one_list`
    (suite `proactive`), UI `chat.suggestions_inbox`.
-2. **Quiet learning pass** + Memory page (preview) — gives every later step
-   real context.
+2. ✅ **Quiet learning pass** + Memory page (2026-10-18) —
+   `modules/agent-memory/quietLearning.js`: a settled chat (30 min quiet, 6+
+   new messages) gets one queued, platform-paid pass (weekly/daily pass
+   budget, one per chat watermark, consent-gated); new kinds `fact_about_me`,
+   `open_thread`; sensitive content dropped in code; ≤ 8 changes a pass, ≤ 200
+   active notes. Settings → Agent → Memory: list, forget one / all, pause.
+   Gates: `agent.quiet_learning` (suite `proactive`), UI
+   `settings.memory_controls`.
 3. **Rich gather** — summaries, memories, goals' progress, struggles, decay,
    Records into the planner (untrusted-framed), learner timezone.
 4. **Ready proposals** — `preview` via dry-run tools, the new kinds, replay on
