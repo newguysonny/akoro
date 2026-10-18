@@ -16,6 +16,54 @@ export const scenarios = [
     description: 'Opening a chat shows only its newest 10 messages; scrolling to the top loads the earlier ones above, keeping the place.',
     run: (t) => historyPagesCheck(t, { path: '/app?tab=agent' }),
   },
+  {
+    name: 'chat.suggestions_inbox',
+    description: "The agent's ideas show in one Suggestions list; accepting a task idea adds the task; dismissing asks why and keeps the reason.",
+    async run(t) {
+      const { page } = t;
+      const marker = newMarker();
+      const ideas = { task: `${marker} Revise titration`, later: `${marker} Make flashcards on bonding` };
+      // The agent files them in a chat turn (its suggest_help tool), as it would on its own.
+      const turn = await t.api('POST', '/api/adaptive/chat/agent', { history: [],
+        message: `Please save two task ideas in my Suggestions list, exactly titled "${ideas.task}" and "${ideas.later}". Use your suggestion tool — don't create tasks.` });
+      t.cleanup(async () => {
+        const left = await t.api('GET', '/api/agent/proposals/inbox');
+        for (const it of (left.body?.data || []).filter((x) => String(x.title).includes(marker))) await t.api('POST', `/api/agent/proposals/inbox/${it.ref}/dismiss`, { reason: 'other' });
+        const tasks = await t.api('GET', '/api/tasks');
+        for (const tk of (tasks.body?.tasks || tasks.body?.data || []).filter((x) => String(x.title).includes(marker))) await t.api('DELETE', `/api/tasks/${tk.id}`);
+      });
+      const inbox = await t.api('GET', '/api/agent/proposals/inbox');
+      const mine = (inbox.body?.data || []).filter((x) => String(x.title).includes(marker));
+      if (mine.length < 2) t.block(`the agent filed ${mine.length} of the 2 ideas (turn ${turn.status}) — nothing to show`);
+
+      await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
+      await page.getByRole('button', { name: /^Tasks/ }).first().click({ timeout: 30_000 });
+      await page.getByRole('button', { name: /^Suggestions/ }).first().click();
+      const card = (title) => page.locator('div', { hasText: title }).filter({ has: page.getByRole('button', { name: 'Dismiss' }) }).last();
+      t.check('both ideas show in the one list', await page.getByText(ideas.task, { exact: true }).waitFor({ timeout: 20_000 }).then(() => true, () => false)
+        && await page.getByText(ideas.later, { exact: true }).isVisible());
+
+      // Dismiss: asks why, then the idea is gone with its reason kept.
+      await card(ideas.later).getByRole('button', { name: 'Dismiss' }).click();
+      t.check('dismissing asks why', await page.getByText(/Why not\?/).first().waitFor({ timeout: 8_000 }).then(() => true, () => false));
+      await page.getByRole('button', { name: 'Not now', exact: true }).first().click();
+      t.check('…and the idea leaves the list', await page.getByText(ideas.later, { exact: true }).waitFor({ state: 'detached', timeout: 10_000 }).then(() => true, () => false));
+
+      // Accept the task idea: the task exists.
+      await card(ideas.task).getByRole('button', { name: /Add as task/ }).click();
+      t.check('accepting leaves the list', await page.getByText(ideas.task, { exact: true }).waitFor({ state: 'detached', timeout: 15_000 }).then(() => true, () => false));
+      // Read back (a short retry: a burst of calls can meet the API's rate limit).
+      let found = false, last = null;
+      for (let i = 0; i < 5 && !found; i++) {
+        last = await t.api('GET', '/api/tasks?status=pending');
+        found = (last.body?.tasks || []).some((x) => x.title === ideas.task);
+        if (!found) await page.waitForTimeout(3_000);
+      }
+      t.check('…as a real task', found, { actual: `${last?.status} · ${(last?.body?.tasks || []).length} tasks` });
+      const after = await t.api('GET', '/api/agent/proposals/inbox');
+      t.check('neither is in the inbox any more', !(after.body?.data || []).some((x) => String(x.title).includes(marker)));
+    },
+  },
 ];
 
 /**

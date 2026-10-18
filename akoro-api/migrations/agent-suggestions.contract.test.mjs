@@ -67,12 +67,19 @@ test("the agent files suggestions through the suggest_help chat tool", () => {
 test("the Tasks tab is To do / Done / Suggestions, and suggestions are advice only", () => {
   assert.match(page, /\["pending",t\('agent\.to_do'\)\],\["done",t\('agent\.done'\)\],\["suggestions",t\('agent\.suggestions'\)\]/);
   assert.match(page, /agent\.suggestions_empty/);
-  assert.match(page, /acceptSuggestion\(sg\)/);
-  assert.match(page, /dismissSuggestion\(sg\)/);
-  assert.match(taskApi, /apiPost\(`\/api\/tasks\/suggestions\/\$\{sg\.id\}\/accept`\)/);
-  assert.match(taskApi, /apiPatch\(`\/api\/tasks\/suggestions\/\$\{id\}\/dismiss`\)/);
+  // One list over chat suggestions and the planner's proposals (the one inbox).
+  assert.match(page, /apiGet\('\/api\/agent\/proposals\/inbox'\)/);
+  assert.match(page, /inbox\.map\(it=>/);
+  assert.match(page, /acceptIdea\(it\)/);
+  assert.match(page, /apiPost\(`\/api\/agent\/proposals\/inbox\/\$\{encodeURIComponent\(it\.ref\)\}\/accept`/);
+  // Accept does what the kind says: a conversation starts in the chat.
+  assert.match(page, /kind==='conversation'[\s\S]{0,80}setInnerTab\("chat"\); sendMessage\(r\.prompt\|\|it\.title\)/);
+  // Dismiss asks why (the planner learns), with a skip.
+  assert.match(page, /onClick=\{\(\)=>setAskWhy\(it\.ref\)\}/);
+  assert.match(page, /dismissIdea\(it,r\)/);
+  assert.match(page, /\/dismiss`,\{ reason: reason\|\|"other" \}/);
   // A filed suggestion refreshes the list live, stream and JSON path alike.
-  assert.equal((page.match(/tool === "suggest_help" && entry\?\.success/g) || []).length, 2);
+  assert.equal((page.match(/tool === "suggest_help" && entry\?\.success\)\) refetchInbox\(\)/g) || []).length, 2);
   // Nothing auto-creates tasks from suggestions — accept is a learner action.
   assert.doesNotMatch(taskApi, /acceptSuggestion[\s\S]*?createTask\(/);
 });
