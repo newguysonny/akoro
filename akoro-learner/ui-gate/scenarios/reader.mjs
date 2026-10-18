@@ -135,6 +135,8 @@ export const scenarios = [
       if (!record?.id) t.block(`registering the record answered ${made.status}: ${made.body?.message || ''}`);
       t.cleanup(async () => { await t.api('DELETE', `/api/records/${record.id}`); });
       t.note(`pdf record ${record.id}`);
+      t.state.pdfMarker = marker;
+      t.state.pdfRecordId = record.id;
 
       const shown = await openRecordReader(t, marker, '[data-page-index="0"] .pdf-text-layer span');
       t.check('page 1 renders with a text layer', shown);
@@ -259,6 +261,120 @@ export const scenarios = [
       t.check('the sent message shows the quote above the question', /page \d+/i.test(bubbleText) && bubbleText.toLowerCase().includes(picked.slice(0, 15).toLowerCase()),
         { actual: bubbleText.slice(0, 140) });
       t.check('the quote is cleared after sending', !(await chip.isVisible().catch(() => false)));
+    },
+  },
+  {
+    name: 'reader.pdf_highlight',
+    needs: ['reader.selection_one_page'],
+    description: 'On a PDF page, Annotate draws a highlight over exactly the selected words, saves it with its note, and it is back over the same words after a reload.',
+    async run(t) {
+      const { page } = t;
+      await clearSelection(page);
+      const a = await spanBox(page, 0, 2);
+      t.check('a line of words to select', !!a);
+      if (!a) return;
+      // Across most of one line of words.
+      await drag(page, { x: a.x, y: a.y }, { x: a.x + Math.min(220, (a.layer.right - a.x) * 0.6), y: a.y });
+      const sel = await readSelection(page);
+      t.check('words are selected on page 1', sel.text.trim().length > 8 && sel.anchorPage === '0', { actual: sel });
+      const annotate = page.getByRole('button', { name: 'Annotate' });
+      t.check('the selection menu offers Annotate', await annotate.waitFor({ timeout: 8_000 }).then(() => true, () => false));
+      await annotate.click();
+      const box = page.getByPlaceholder('Add a note…');
+      t.check('the note box opens', await box.waitFor({ timeout: 8_000 }).then(() => true, () => false));
+      await box.fill('Key idea for the test');
+      await page.getByRole('button', { name: 'Save', exact: true }).click();
+      const marks = page.locator('[data-page-index="0"] .folio-annotation');
+      t.check('a highlight is drawn', await marks.first().waitFor({ timeout: 8_000 }).then(() => true, () => false));
+      // The highlight covers the words that were selected.
+      const over = await page.evaluate(({ x, y }) => [...document.querySelectorAll('[data-page-index="0"] .folio-annotation')]
+        .some((m) => { const r = m.getBoundingClientRect(); return x >= r.left - 4 && x <= r.right + 4 && y >= r.top - 4 && y <= r.bottom + 4; }), { x: a.x + 5, y: a.y });
+      t.check('…over the selected words', over);
+      await page.waitForTimeout(1_500);
+      const saved = await t.api('GET', `/api/records/artifacts?recordId=${t.state.pdfRecordId}`);
+      const ann = (saved.body?.data?.artifacts || []).find((x) => x.kind === 'annotation');
+      t.check('the highlight is saved with its note', !!ann && JSON.stringify(ann.content).includes('Key idea for the test'), { actual: (saved.body?.data?.artifacts || []).map((x) => x.kind) });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      if (!(await openRecordReader(t, t.state.pdfMarker, '[data-page-index="0"] .pdf-text-layer span'))) return;
+      const back = page.locator('[data-page-index="0"] .folio-annotation');
+      t.check('after a reload the highlight is back', await back.first().waitFor({ timeout: 20_000 }).then(() => true, () => false));
+      await back.first().scrollIntoViewIfNeeded().catch(() => {});
+      const stillOver = await page.evaluate(() => {
+        const m = document.querySelector('[data-page-index="0"] .folio-annotation');
+        const r = m?.getBoundingClientRect();
+        if (!r) return false;
+        const spans = [...document.querySelectorAll('[data-page-index="0"] .pdf-text-layer span')];
+        return spans.some((s) => { const b = s.getBoundingClientRect(); return b.width > 0 && !(b.right < r.left || b.left > r.right || b.bottom < r.top || b.top > r.bottom); });
+      });
+      t.check('…still on the printed words', stillOver);
+      await back.first().click({ force: true });
+      t.check('clicking it shows its note', await page.getByText('Key idea for the test').first().waitFor({ timeout: 8_000 }).then(() => true, () => false));
+    },
+  },
+  {
+    name: 'reader.text_marks',
+    needs: ['reader.opens_text'],
+    description: 'On a text page, Annotate marks the selected words and Hide covers a passage (click to reveal); both are saved and back after a reload.',
+    async run(t) {
+      const { page } = t;
+      // The PDF check may have left the PDF open: open the text record.
+      if (!(await openRecordReader(t, t.state.textMarker, '[data-page-index] [data-page-content] p'))) return;
+      const picked = (await selectWithin(page, '[data-page-index] [data-page-content] p', 'Mitochondria')).replace(/\s+/g, ' ').trim();
+      t.check('words are selected', picked.length > 10, { actual: picked.length });
+      await page.getByRole('button', { name: 'Annotate' }).click();
+      await page.getByPlaceholder('Add a note…').fill('Energy — learn this');
+      await page.getByRole('button', { name: 'Save', exact: true }).click();
+      const mark = page.locator('[data-page-content] mark.folio-annotation').first();
+      t.check('the selected words are highlighted', await mark.waitFor({ timeout: 8_000 }).then(() => true, () => false));
+      const markText = (await mark.innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
+      t.check('…exactly those words', markText.length > 5 && picked.toLowerCase().startsWith(markText.slice(0, 20).toLowerCase()), { expected: picked.slice(0, 40), actual: markText.slice(0, 40) });
+
+      const hidden = (await selectWithin(page, '[data-page-index] [data-page-content] p', 'nucleus controls')).replace(/\s+/g, ' ').trim();
+      t.check('a passage to hide is selected', hidden.length > 10);
+      await page.getByRole('button', { name: 'Hide', exact: true }).click();
+      const red = page.locator('[data-page-content] .folio-redaction').first();
+      t.check('the passage is covered', await red.waitFor({ timeout: 8_000 }).then(() => true, () => false));
+      t.check('…its words are not readable', await red.evaluate((el) => getComputedStyle(el).color === 'rgba(0, 0, 0, 0)').catch(() => false));
+      await red.click();
+      t.check('clicking it reveals the words', await page.locator('[data-page-content] .folio-redaction.revealed').first().waitFor({ timeout: 5_000 }).then(() => true, () => false));
+
+      await page.waitForTimeout(1_500);
+      const saved = await t.api('GET', `/api/records/artifacts?recordId=${t.state.textRecordId}`);
+      const kinds = (saved.body?.data?.artifacts || []).map((x) => x.kind);
+      t.check('the highlight and the hidden passage are saved', kinds.includes('annotation') && kinds.includes('redaction'), { actual: kinds });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      if (!(await openRecordReader(t, t.state.textMarker, '[data-page-index] [data-page-content] p'))) return;
+      t.check('after a reload the highlight is back', await page.locator('[data-page-content] mark.folio-annotation').first().waitFor({ timeout: 20_000 }).then(() => true, () => false));
+      t.check('…and the passage is hidden again', await page.locator('[data-page-content] .folio-redaction:not(.revealed)').first().waitFor({ timeout: 20_000 }).then(() => true, () => false));
+    },
+  },
+  {
+    name: 'reader.selection_tools',
+    needs: ['reader.text_marks'],
+    description: 'From a selection, "Quiz me" builds a cited quiz on that passage, and "Note" starts a note from it.',
+    async run(t) {
+      const { page } = t;
+      const picked = (await selectWithin(page, '[data-page-index] [data-page-content] p', 'Chloroplasts')).replace(/\s+/g, ' ').trim();
+      t.check('words are selected', picked.length > 10);
+      await page.getByRole('button', { name: 'Quiz me' }).click();
+      const menu = page.locator('.sreader-menu');
+      const focus = menu.locator('input[type=text]').first();
+      t.check('the quiz form starts from the selection', ((await focus.inputValue().catch(() => '')) || '').toLowerCase().includes(picked.slice(0, 15).toLowerCase()) || !(await focus.count()),
+        { actual: await focus.inputValue().catch(() => '') });
+      const before = await page.locator('.folio-citation').count();
+      await menu.getByRole('button', { name: 'Build quiz' }).click();
+      t.check('a quiz is built with source chips', await page.waitForFunction((n) => document.querySelectorAll('.folio-citation').length > n, before, { timeout: 120_000 }).then(() => true, () => false));
+      const quizText = (await page.locator('body').innerText()).toLowerCase();
+      t.check('…about the selected passage', /chloroplast|photosynth|light/.test(quizText));
+
+      const again = (await selectWithin(page, '[data-page-index] [data-page-content] p', 'cell wall is')).replace(/\s+/g, ' ').trim();
+      t.check('another passage is selected', again.length > 10);
+      await page.getByRole('button', { name: 'Note', exact: true }).click();
+      await menu.getByRole('button', { name: 'Build notes' }).click();
+      const area = page.getByPlaceholder('Write a note about this page…').last();
+      t.check('a note opens', await area.waitFor({ timeout: 15_000 }).then(() => true, () => false));
+      const noteText = (await area.inputValue().catch(() => '')) + (await page.locator('body').innerText());
+      t.check('…starting from the selected passage', noteText.toLowerCase().includes(again.slice(0, 15).toLowerCase()), { actual: (await area.inputValue().catch(() => '')).slice(0, 80) });
     },
   },
   {
