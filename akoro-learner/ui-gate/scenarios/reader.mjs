@@ -429,11 +429,13 @@ export const scenarios = [
       if (!open) { await t.shot('guide-closed'); return; }
       const question = 'What do mitochondria do in a cell?';
       await box.fill(question);
-      await page.getByRole('button', { name: 'Send message' }).click();
+      await page.getByRole('button', { name: 'Send message' }).last().click({ timeout: 10_000 }).catch(() => box.press('Enter'));
       const reply = page.locator('text=/mitochondri|respiration|energy/i').last();
       t.check('the guide replies about the document', await reply.waitFor({ timeout: 60_000 }).then(() => true, () => false));
-      await page.waitForFunction(() => !document.querySelector('[aria-label="Your guide is writing"]'), null, { timeout: 60_000 }).catch(() => {});
-      const chips = await page.locator('button.folio-citation[aria-label^="Source"]').count();
+      // The chips come with the stream's last event, after the words: wait for them.
+      const chip = page.locator('button.folio-citation[aria-label^="Source"]');
+      await chip.first().waitFor({ timeout: 60_000 }).catch(() => {});
+      const chips = await chip.count();
       t.check('the reply cites the document (a source chip)', chips > 0, { actual: chips });
       t.check('no "replies are on the way" note any more', !(await page.getByText(/Live guide replies are on the way/).count()));
       // The lesson is kept per learner per document.
