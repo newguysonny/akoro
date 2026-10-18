@@ -430,8 +430,11 @@ export const scenarios = [
       const question = 'What do mitochondria do in a cell?';
       await box.fill(question);
       await page.getByRole('button', { name: 'Send message' }).last().click({ timeout: 10_000 }).catch(() => box.press('Enter'));
-      const reply = page.locator('text=/mitochondri|respiration|energy/i').last();
-      t.check('the guide replies about the document', await reply.waitFor({ timeout: 60_000 }).then(() => true, () => false));
+      // Only the chat's own words count: the reader behind it holds the same terms.
+      const replied = await page.waitForFunction((q) => [...document.querySelectorAll('div, p, span')].some((el) => el.offsetParent !== null
+        && el.childElementCount < 6 && !el.textContent.includes(q) && /mitochondri|respiration|energy/i.test(el.textContent)
+        && el.closest('[data-page-index]') === null), question, { timeout: 60_000 }).then(() => true, () => false);
+      t.check('the guide replies about the document', replied);
       // The chips come with the stream's last event, after the words: wait for them.
       const chip = page.locator('button.folio-citation[aria-label^="Source"]');
       await chip.first().waitFor({ timeout: 60_000 }).catch(() => {});
