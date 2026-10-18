@@ -13,6 +13,8 @@ test("the planner's gather reads what the agent knows — with consent, nothing 
   assert.match(cycle, /!\/\^Latest learner request:\/\.test\(t\) && !isSensitive\(t\)/);
   for (const src of ["learner_concept_state", "decay_notifications", 'from("records")', "user_settings"]) assert.ok(cycle.includes(src), src);
   assert.match(cycle, /days_left: g\.target_date \?/);
+  // the resolver returns { timeZone, source } — the planner takes the name
+  assert.match(cycle, /resolveLearnerTimeZone\(\{ configuredTimeZone: settingsRow\?\.settings\?\.timezone \}\)\.timeZone \|\| LAGOS/);
 });
 
 test("the learner's words go in as data; the platform pays; the learner's time zone is used", () => {

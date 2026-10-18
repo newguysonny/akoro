@@ -161,7 +161,8 @@ export async function gatherSignals(userId) {
   const overdue = pendingTasks.filter((t) => t.due_at && new Date(t.due_at).getTime() < nowMs);
   const day = 24 * 3600 * 1000;
   return {
-    timeZone: resolveLearnerTimeZone({ configuredTimeZone: settingsRow?.settings?.timezone }),
+    // → { timeZone, source }: the name only (a crash here stopped every planner run, gate d681c984).
+    timeZone: resolveLearnerTimeZone({ configuredTimeZone: settingsRow?.settings?.timezone }).timeZone || LAGOS,
     goals: goals.map((g) => ({
       title: g.title, category: g.category || null, exam: g.exam || null, metric: g.metric || null,
       target_date: g.target_date || null,
