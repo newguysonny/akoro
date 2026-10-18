@@ -316,12 +316,6 @@ export default function TiersPage() {
     <PageLayout title="Tiers & Credits" subtitle="Default credit caps and feature gating per platform">
       <div className="ak-page">
 
-        <h1 className="ak-h1">Tiers &amp; Credits</h1>
-        <p className="ak-sub">
-          Default credit caps and feature gating per tier, split by platform. Changes apply
-          platform-wide unless a school has its own pilot override.
-        </p>
-
         {loading && <p className="ak-sub">Loading…</p>}
         {loadError && <p className="ak-sub text-akoro-coral">{loadError}</p>}
 
