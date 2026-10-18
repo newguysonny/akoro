@@ -300,7 +300,8 @@ export default function PilotSchoolsPage() {
 
   /* ── render ─────────────────────────────────────────────────────────────── */
   return (
-    <PageLayout title="Pilot Schools" subtitle="Pilot programme roster and applications">
+    <PageLayout title="Pilot Schools" subtitle="Pilot programme roster and applications"
+      action={<button className="ak-btn" onClick={() => { openAddModal(); setAddOpen(true); }}>+ Add pilot school</button>}>
       <div className="ak-page">
 
         {selected ? (
@@ -412,9 +413,6 @@ export default function PilotSchoolsPage() {
         ) : (
           /* ══════════ SCHOOLS LIST + APPLICATIONS ══════════ */
           <>
-            <h1 className="ak-h1">Pilot Schools</h1>
-            <p className="ak-sub">Each pilot partner has its own start date, end date, and credit caps. Click a school to see its details.</p>
-
             {loading && <p className="ak-sub">Loading…</p>}
             {loadError && <p className="ak-sub text-akoro-coral">{loadError}</p>}
 
@@ -450,10 +448,7 @@ export default function PilotSchoolsPage() {
                       </select>
                     </div>
 
-                    <div className="ak-toolbar">
-                      <span />
-                      <button className="ak-btn" onClick={() => { openAddModal(); setAddOpen(true); }}>+ Add pilot school</button>
-                    </div>
+
 
                     {pageItems.length ? (
                       <div className="ak-cards">
