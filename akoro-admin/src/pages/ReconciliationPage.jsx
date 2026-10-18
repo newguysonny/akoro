@@ -71,10 +71,6 @@ export default function ReconciliationPage() {
     <PageLayout title="Reconciliation" subtitle="Local billing records against real Paystack transactions">
       <div className="ak-page">
 
-        <h1 className="ak-h1">Reconciliation</h1>
-        <p className="ak-sub">
-          Compares recent subscription charges on Paystack with local subscriptions and invoices. A gap usually means a dropped webhook — settling replays the same fulfillment path, idempotently.
-        </p>
 
         <div className="ak-toolbar">
           <select className="ak-select !w-auto" value={days} onChange={(e) => setDays(e.target.value)} disabled={running}>
