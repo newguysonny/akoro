@@ -64,6 +64,38 @@ export const scenarios = [
       t.check('neither is in the inbox any more', !(after.body?.data || []).some((x) => String(x.title).includes(marker)));
     },
   },
+  {
+    name: 'settings.memory_controls',
+    description: 'Settings → Agent → Memory shows what the agent remembers and the "Learn from my conversations" switch, which saves and survives a reload.',
+    async run(t) {
+      const { page } = t;
+      const was = await t.api('GET', '/api/agent-memory/v1/settings');
+      if (was.status !== 200) t.block(`memory settings answered ${was.status}`);
+      const learning = was.body?.learnFromChats !== false;
+      t.cleanup(async () => { await t.api('PATCH', '/api/agent-memory/v1/settings', { learnFromChats: learning }); });
+      const notes = ((await t.api('GET', '/api/agent-memory/v1/memories')).body?.memories || []).length;
+
+      const open = async () => {
+        await page.goto(`${t.app}/settings`, { waitUntil: 'domcontentloaded' });
+        await page.getByRole('button', { name: /Account/ }).first().locator('xpath=following-sibling::button[1]').click({ timeout: 30_000 });
+        await page.getByText('Learn from my conversations', { exact: true }).waitFor({ timeout: 20_000 });
+      };
+      await open();
+      t.check('the Memory section is there', await page.getByText('Memory', { exact: true }).first().isVisible());
+      t.check(notes ? 'its notes are listed' : 'it says nothing is remembered yet',
+        notes ? await page.getByRole('button', { name: /^Forget: / }).first().isVisible() : await page.getByText(/Nothing remembered yet/).isVisible(), { actual: notes });
+      // The switch: flip it, the server has it, a reload shows it.
+      const row = page.getByText('Learn from my conversations', { exact: true }).locator('xpath=ancestor::*[.//div[contains(@style,"width: 42px")]][1]');
+      await row.locator('div[style*="width: 42px"]').first().click();
+      let saved = null;
+      for (let i = 0; i < 5 && saved !== !learning; i++) { await page.waitForTimeout(800); saved = (await t.api('GET', '/api/agent-memory/v1/settings')).body?.learnFromChats; }
+      t.check('flipping the switch saves it', saved === !learning, { actual: saved });
+      await open();
+      const knob = page.getByText('Learn from my conversations', { exact: true }).locator('xpath=ancestor::*[.//div[contains(@style,"width: 42px")]][1]').locator('div[style*="width: 42px"] > div').first();
+      const left = await knob.evaluate((el) => el.style.left);
+      t.check('…and a reload shows it', (left === '21px') === !learning, { actual: left });
+    },
+  },
 ];
 
 /**
