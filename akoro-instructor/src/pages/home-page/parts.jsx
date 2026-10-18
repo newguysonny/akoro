@@ -12,6 +12,13 @@ import { useAuth } from '../../contexts/AuthContext.jsx';
 import { apiGet, apiPost, apiDelete, API } from '../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, FONT } from '../../constants.js';
 
+// Bachs design tokens
+const BX = {
+  primary: '#4A5CD5', ink: '#1A1B25', muted: '#6B7280',
+  border: '#E8E8EE', white: '#FFFFFF', bg: '#F7F7F9',
+  font: "Inter, system-ui, sans-serif",
+};
+
 /* ── Mock fallback data (matches backend snake_case shape) ──────────── */
 
 const MOCK_STATS = {
@@ -109,10 +116,10 @@ function QuickAction({ icon: Icon, label, desc, color, onClick }) {
     <button
       onClick={onClick}
       style={{
-        background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14,
+        background: BX.white, border: `1px solid ${BX.border}`, borderRadius: 10,
         padding: '16px', cursor: 'pointer', textAlign: 'left',
         display: 'flex', flexDirection: 'column', gap: 8, transition: 'all .15s',
-        fontFamily: FONT,
+        fontFamily: BX.font,
       }}
       onMouseEnter={e => e.currentTarget.style.borderColor = color}
       onMouseLeave={e => e.currentTarget.style.borderColor = BORDER}
@@ -123,8 +130,8 @@ function QuickAction({ icon: Icon, label, desc, color, onClick }) {
       }}>
         <Icon size={18} color={color} />
       </div>
-      <div style={{ fontSize: 13, fontWeight: 700, color: INK }}>{label}</div>
-      <div style={{ fontSize: 11, color: MUTED }}>{desc}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: BX.ink }}>{label}</div>
+      <div style={{ fontSize: 12, color: BX.muted }}>{desc}</div>
     </button>
   );
 }

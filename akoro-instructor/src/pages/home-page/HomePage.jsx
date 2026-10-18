@@ -13,6 +13,13 @@ import { useAuth } from '../../contexts/AuthContext.jsx';
 import { apiGet, apiPost, apiDelete, API } from '../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, FONT } from '../../constants.js';
 
+// Bachs design tokens
+const BX = {
+  primary: '#4A5CD5', ink: '#1A1B25', muted: '#6B7280',
+  border: '#E8E8EE', white: '#FFFFFF', bg: '#F7F7F9',
+  font: "Inter, system-ui, sans-serif",
+};
+
 /* Zeroes, not samples. A stat that failed to load must read as "nothing yet",
    never as a plausible invented number. */
 const EMPTY_STATS = {
@@ -139,13 +146,14 @@ export default function HomePage() {
           <StatCard icon={Flame}    label="Streak"         value={`${stats?.streak_days ?? 0}d`}                sub="keep it going"                color={GREEN}  loading={loading} />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24, alignItems: 'start' }}>
+        <style>{`@media (max-width: 900px){.inst-dash{grid-template-columns:1fr !important;}.inst-qa{grid-template-columns:repeat(2,1fr) !important;}}`}</style>
+        <div className="inst-dash" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24, alignItems: 'start' }}>
           {/* Left col */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
             {/* Quick actions */}
             <div>
               <h2 style={{ fontSize: 16, fontWeight: 700, color: INK, margin: '0 0 14px', fontFamily: FONT }}>Quick Actions</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+              <div className="inst-qa" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
                 <QuickAction icon={Video}    label="New Live Class"   desc="Schedule a live session"     color={AMBER}  onClick={() => navigate('/courses')} />
                 <QuickAction icon={Eye}      label="View Students"    desc="Manage your enrolled learners" color={BLUE} onClick={() => navigate('/mgmt/students')} />
                 <QuickAction icon={Plus}     label="Add Student"      desc="Enroll a new learner"         color={GREEN}  onClick={() => navigate('/mgmt/students?add=1')} />
