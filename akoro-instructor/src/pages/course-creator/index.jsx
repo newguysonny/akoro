@@ -132,7 +132,7 @@ const useCc = () => useContext(CcCtx);
 
 export default function CourseCreatorPage() {
   return (
-    <PageLayout title="Course Creator" subtitle="Build video and live courses, section by section">
+    <PageLayout>
       <CourseCreatorSection />
     </PageLayout>
   );
