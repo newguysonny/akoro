@@ -13,6 +13,7 @@
  * kept as drawn SVGs.
  */
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useDragReorder } from './reorder.jsx';
 import { Routes, Route, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../../services/api.js';
 import { confirmDialog } from '../../components/ConfirmHost.jsx';
@@ -231,8 +232,21 @@ export function SBox({ placeholder, q, setQ }) {
 
 function ProgramsList() {
   const navigate = useNavigate();
+  const { toast } = usePc();
   const [programs, reload] = useData(() => get('/api/programmes/programs'), []);
   const [q, setQ] = useState('');
+  const { getItemProps } = useDragReorder({
+    onReorder: async (from, to) => {
+      const order = programs.map((p) => p.id);
+      const [m] = order.splice(from, 1);
+      order.splice(to, 0, m);
+      try {
+        await apiPost('/api/programmes/programs/reorder', { order });
+        toast('Order saved');
+        reload();
+      } catch (e) { toast('Could not save order'); }
+    },
+  });
   if (!programs) return null;
   const l = programs.filter((p) => `${p.name}${p.code || ''}`.toLowerCase().includes(q.toLowerCase()));
 
@@ -246,13 +260,16 @@ function ProgramsList() {
       <div className="tools"><SBox placeholder="Search programs" q={q} setQ={setQ} /></div>
       {l.length ? (
         <div className="list">
-          {l.map((p) => (
-            <div className="li click" key={p.id} onClick={() => navigate(`/program-courses/programs/${p.id}`)}>
+          {l.map((p, i) => (
+            <div className="li click" key={p.id}
+              {...(q ? {} : getItemProps(programs.findIndex((x) => x.id === p.id)))}
+              onClick={() => navigate(`/program-courses/programs/${p.id}`)}>
               {p.cover_url
                 ? <div className="thumb" style={{ backgroundImage: `url(${p.cover_url})` }} />
                 : <div className="ico"><I k="prog" /></div>}
               <div className="t"><b>{p.name}</b><span>{p.code || 'No code'} · {p.course_count} courses · {p.duration_label || '—'}</span></div>
               <Chip s={p.status} />
+              {!q && <span data-drag-handle title="Drag to reorder"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span>}
             </div>
           ))}
         </div>
@@ -303,8 +320,16 @@ function ProgramDetail() {
   const navigate = useNavigate();
   const { toast } = usePc();
   const [p, reload] = useData(() => get(`/api/programmes/programs/${pid}`), [pid]);
-  const [ro, setRo] = useState(false);
-  const [dragI, setDragI] = useState(null);
+  const { getItemProps } = useDragReorder({
+    onReorder: async (from, to) => {
+      const order = sections.map((s) => s.id);
+      const [m] = order.splice(from, 1);
+      order.splice(to, 0, m);
+      await apiPost(`/api/programmes/programs/${p.id}/sections/reorder`, { order });
+      toast('Order saved');
+      reload();
+    },
+  });
   // Section add/rename runs through the styled modal, never a browser prompt.
   const [modal, setModal] = useState(null); // null | { mode: 'add' } | { mode: 'rename', section }
 
@@ -339,23 +364,7 @@ function ProgramDetail() {
     await apiDelete(`/api/programmes/sections/${s.id}`);
     reload();
   };
-  const moveSection = async (i, dir) => {
-    const order = sections.map((s) => s.id);
-    const j = i + dir;
-    if (j < 0 || j >= order.length) return;
-    [order[i], order[j]] = [order[j], order[i]];
-    await apiPost(`/api/programmes/programs/${p.id}/sections/reorder`, { order });
-    reload();
-  };
-  const dropSection = async (i) => {
-    if (dragI == null || dragI === i) return;
-    const order = sections.map((s) => s.id);
-    const [m] = order.splice(dragI, 1);
-    order.splice(i, 0, m);
-    setDragI(null);
-    await apiPost(`/api/programmes/programs/${p.id}/sections/reorder`, { order });
-    reload();
-  };
+
 
   return (
     <>
@@ -372,7 +381,7 @@ function ProgramDetail() {
       </div>
       <div className="row" style={{ marginBottom: 12 }}>
         <h2>Sections</h2><span className="chip">{sections.length}</span><span className="sp" />
-        {sections.length > 1 && <button className={`btn${ro ? ' p' : ''}`} onClick={() => setRo((r) => !r)}>{ro ? 'Done' : 'Reorder'}</button>}
+
       </div>
       {sections.length ? (
         <div className="sgrid">
@@ -380,25 +389,17 @@ function ProgramDetail() {
             <div
               className="scard"
               key={s.id}
-              draggable={ro}
-              onDragStart={() => setDragI(i)}
-              onDragOver={(e) => ro && e.preventDefault()}
-              onDrop={() => dropSection(i)}
-              onClick={() => !ro && navigate(`/program-courses/programs/${p.id}/sections/${s.id}`)}
+              {...getItemProps(i)}
+              onClick={() => navigate(`/program-courses/programs/${p.id}/sections/${s.id}`)}
             >
               <span className="ci"><I k="course" /></span>
               <b>{s.name}</b>
               <span className="d">{s.course_count} {s.course_count === 1 ? 'course' : 'courses'}</span>
-              {ro && (
-                <div className="mini sarr">
-                  <button disabled={i === 0} onClick={(e) => { e.stopPropagation(); moveSection(i, -1); }} aria-label="Move up">&#8593;</button>
-                  <button disabled={i === sections.length - 1} onClick={(e) => { e.stopPropagation(); moveSection(i, 1); }} aria-label="Move down">&#8595;</button>
-                </div>
-              )}
-              {!ro && (
+              {(
                 <div className="mini sarr">
                   <button onClick={(e) => { e.stopPropagation(); setModal({ mode: 'rename', section: s }); }}>Rename</button>
                   <button className="d" onClick={(e) => { e.stopPropagation(); delSection(s); }} style={{ color: '#d6336c' }}>Delete</button>
+                  <span data-drag-handle title="Drag to reorder" onClick={(e) => e.stopPropagation()}><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span>
                 </div>
               )}
             </div>
@@ -425,9 +426,22 @@ function ProgramDetail() {
 function SectionDetail() {
   const { pid, sid } = useParams();
   const navigate = useNavigate();
+  const { toast } = usePc();
   const [p] = useData(() => get(`/api/programmes/programs/${pid}`), [pid]);
-  const [courses] = useData(() => get('/api/programmes/courses'), []);
-  const [ro, setRo] = useState(false);
+  const [courses, reloadCourses] = useData(() => get('/api/programmes/courses'), []);
+  const { getItemProps } = useDragReorder({
+    onReorder: async (from, to) => {
+      // Use the existing single-step /move API repeatedly
+      const steps = Math.abs(to - from);
+      const dir = to > from ? 'down' : 'up';
+      const id = cs[from].id;
+      try {
+        for (let k = 0; k < steps; k++) await apiPost(`/api/programmes/courses/${id}/move`, { dir });
+        toast('Order saved');
+        reloadCourses();
+      } catch (e) { toast('Could not save order'); }
+    },
+  });
 
   const section = p?.sections?.find((s) => s.id === sid);
   const cs = useMemo(
@@ -447,7 +461,7 @@ function SectionDetail() {
       </div>
       <div className="row" style={{ marginBottom: 12 }}>
         <h2>Courses</h2><span className="chip">{cs.length}</span><span className="sp" />
-        {cs.length > 1 && <button className={`btn${ro ? ' p' : ''}`} onClick={() => setRo((r) => !r)}>{ro ? 'Done' : 'Reorder'}</button>}
+
       </div>
       {cs.length ? (
         <div className="cgrid">
@@ -455,8 +469,8 @@ function SectionDetail() {
             <div
               className="ccard"
               key={c.id}
-              draggable={ro}
-              onClick={() => !ro && navigate(`/program-courses/courses/${c.id}`)}
+              {...getItemProps(i)}
+              onClick={() => navigate(`/program-courses/courses/${c.id}`)}
             >
               <div
                 className="cban"
@@ -469,20 +483,7 @@ function SectionDetail() {
                 <span>by {c.instructor || '—'} · {c.materials_count} topics</span>
                 <div style={{ marginTop: 6 }}><Chip s={c.status} /></div>
               </div>
-              {ro && (
-                <div className="mini cact">
-                  <button
-                    disabled={i === 0}
-                    onClick={async (e) => { e.stopPropagation(); await apiPost(`/api/programmes/courses/${c.id}/move`, { dir: 'up' }); window.location.reload(); }}
-                    aria-label="Move up"
-                  >&#8593;</button>
-                  <button
-                    disabled={i === cs.length - 1}
-                    onClick={async (e) => { e.stopPropagation(); await apiPost(`/api/programmes/courses/${c.id}/move`, { dir: 'down' }); window.location.reload(); }}
-                    aria-label="Move down"
-                  >&#8595;</button>
-                </div>
-              )}
+                            <span data-drag-handle title="Drag to reorder" onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: 8, right: 8 }}><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span>
             </div>
           ))}
         </div>
@@ -536,8 +537,19 @@ function CourseDetail() {
   const navigate = useNavigate();
   const { toast } = usePc();
   const [c, reload] = useData(() => get(`/api/programmes/courses/${cid}`), [cid]);
-  const [ro, setRo] = useState(false);
   const [menu, setMenu] = useState(null);
+  const { getItemProps } = useDragReorder({
+    onReorder: async (from, to) => {
+      const steps = Math.abs(to - from);
+      const dir = to > from ? 'down' : 'up';
+      const id = its[from].id;
+      try {
+        for (let k = 0; k < steps; k++) await apiPost(`/api/programmes/materials/${id}/move`, { dir });
+        toast('Order saved');
+        reload();
+      } catch (e) { toast('Could not save order'); }
+    },
+  });
 
   if (!c) return null;
   const its = c.materials ?? [];
@@ -560,10 +572,6 @@ function CourseDetail() {
     toast('Content deleted');
     reload();
   };
-  const moveItem = async (m, dir) => {
-    await apiPost(`/api/programmes/materials/${m.id}/move`, { dir });
-    reload();
-  };
 
   return (
     <>
@@ -579,12 +587,12 @@ function CourseDetail() {
       </div>
       <div className="row" style={{ marginBottom: 10 }}>
         <h2>Course contents</h2><span className="chip">{its.length} items</span><span className="sp" />
-        {its.length > 1 && <button className={`btn${ro ? ' p' : ''}`} onClick={() => setRo((r) => !r)}>{ro ? 'Done' : 'Reorder'}</button>}
+
       </div>
       {its.length ? (
         <div className="clist">
           {its.map((m, n) => (
-            <div className="ccd" key={m.id} draggable={ro}>
+                        <div className="ccd" key={m.id} {...getItemProps(i)}>
               <div className="cth">
                 <div className="th" style={m.thumb_url ? { backgroundImage: `url(${m.thumb_url})` } : undefined}>
                   {m.thumb_url && m.type !== 'video' ? null : <svg viewBox="0 0 24 24" className="tic">{TI[m.type]}</svg>}
@@ -595,12 +603,8 @@ function CourseDetail() {
                 <b>{m.title}</b>
                 <span><em>{TY[m.type]}</em>{m.meta ? ` · ${m.meta}` : ''} · {m.status === 'published' ? 'Published' : 'Draft'}</span>
               </div>
-              {ro ? (
-                <div className="mini">
-                  <button className="rb" disabled={n === 0} onClick={() => moveItem(m, 'up')} aria-label="Move up">&#8593;</button>
-                  <button className="rb" disabled={n === its.length - 1} onClick={() => moveItem(m, 'down')} aria-label="Move down">&#8595;</button>
-                </div>
-              ) : (
+              <span data-drag-handle title="Drag to reorder" onClick={(e) => e.stopPropagation()}><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="18" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span>
+              {(
                 <div style={{ position: 'relative' }}>
                   <button className="cm" onClick={() => setMenu(menu === m.id ? null : m.id)} aria-label="More actions">
                     <svg viewBox="0 0 24 24"><path d="M12 6h.01M12 12h.01M12 18h.01" strokeWidth="3" /></svg>
