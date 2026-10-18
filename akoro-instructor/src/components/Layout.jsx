@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import AkoroLogo from './common/AkoroLogo.jsx';
-import { Home, BookOpen, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings, UserCircle, ShieldCheck, Store, Library, LayoutGrid, FileText, ClipboardList, ClipboardCheck, ListChecks, BookMarked, CalendarDays, CalendarClock, GraduationCap, Menu, Search, ChevronDown, Wallet, BookOpenCheck, X, MessageCircleQuestion } from 'lucide-react';
+import { Home, BookOpen, Eye, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings, UserCircle, ShieldCheck, Store, Library, LayoutGrid, FileText, ClipboardList, ClipboardCheck, ListChecks, BookMarked, CalendarDays, CalendarClock, GraduationCap, Menu, Search, ChevronDown, Wallet, BookOpenCheck, X, MessageCircleQuestion } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import AppHeader, { ReferenceChatIcon } from './AppHeader.jsx';
 
@@ -14,6 +14,13 @@ const setupProgressOf = (u, extra = null) =>
 import { useInstructorSocket } from '../hooks/useWebSocket.js';
 import { apiGet } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
+
+// Bachs design tokens (Phase 1 shell)
+const BX = {
+  primary: '#4A5CD5', primaryHover: '#3E4FC4',
+  sidebarBg: '#F7F7F9', ink: '#1A1B25', muted: '#6B7280',
+  border: '#E8E8EE', white: '#FFFFFF', font: "Inter, system-ui, sans-serif",
+};
 
 const NAV = [
   { to: '/',         icon: Home,          label: 'Home' },
@@ -74,17 +81,17 @@ function NavItem({ to, icon: Icon, label, compact }) {
       title={compact ? label : undefined}
       style={({ isActive }) => ({
         display: 'flex', alignItems: 'center',
-        gap: compact ? 0 : 12,
+        gap: compact ? 0 : 10,
         justifyContent: compact ? 'center' : 'flex-start',
-        padding: compact ? '11px 0' : '10px 16px',
-        borderRadius: 10, margin: compact ? '2px 10px' : '2px 8px',
-        textDecoration: 'none', color: isActive ? WHITE : MUTED2,
-        background: isActive ? `${AMBER}22` : 'transparent',
-        fontFamily: FONT, fontSize: 14, fontWeight: isActive ? 600 : 400,
-        transition: 'all .15s',
+        padding: compact ? '11px 0' : '7px 10px',
+        borderRadius: 7, margin: compact ? '2px 10px' : '2px 0',
+        textDecoration: 'none', color: isActive ? BX.primary : BX.muted,
+        background: isActive ? `${BX.primary}0F` : 'transparent',
+        fontFamily: BX.font, fontSize: 13, fontWeight: isActive ? 600 : 400,
+        transition: 'all .12s',
       })}
     >
-      <Icon size={18} />
+      <Icon size={15} strokeWidth={1.8} />
       {!compact && <span>{label}</span>}
     </NavLink>
   );
@@ -132,17 +139,17 @@ function Group({ item, collapsed, open, onToggle, badges = {} }) {
   return (
     <div>
       <button title={collapsed ? item.label : undefined} onClick={onToggle}
-        style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 12, justifyContent: collapsed ? 'center' : 'flex-start', width: 'calc(100% - 16px)', padding: collapsed ? '11px 0' : '10px 16px', margin: '2px 8px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 14, background: open && !collapsed ? 'rgba(255,255,255,.04)' : 'transparent', color: open ? WHITE : MUTED2 }}
-        onMouseEnter={(e) => { e.currentTarget.style.color = WHITE; }}
-        onMouseLeave={(e) => { e.currentTarget.style.color = open ? WHITE : MUTED2; }}>
-        <item.icon size={18} />
+        style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, justifyContent: collapsed ? 'center' : 'flex-start', width: 'calc(100% - 16px)', padding: collapsed ? '11px 0' : '7px 10px', margin: '2px 8px', borderRadius: 7, border: 'none', cursor: 'pointer', fontFamily: BX.font, fontSize: 13, background: 'transparent', color: BX.muted }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = '#EDEDF2'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
+        <item.icon size={15} strokeWidth={1.8} />
         {!collapsed && <span style={{ flex: 1, textAlign: 'left' }}>{item.label}</span>}
         {!collapsed && groupBadge > 0 && !open && <NavBadge count={groupBadge} />}
         {collapsed && groupBadge > 0 && <span style={{ position: 'absolute', top: 4, right: 12, width: 8, height: 8, borderRadius: '50%', background: '#EF4444' }} />}
         {!collapsed && <ChevronDown size={14} style={{ transition: 'transform .2s', transform: open ? 'rotate(180deg)' : 'none', flexShrink: 0 }} />}
       </button>
       {open && !collapsed && (
-        <div style={{ margin: '2px 8px 6px 8px', paddingLeft: 22, borderLeft: '1px solid rgba(255,255,255,.08)' }}>
+        <div style={{ margin: '2px 8px 6px 18px', paddingLeft: 10, borderLeft: `2px solid ${BX.border}` }}>
           {item.children.map((c) => (
             <NavLink key={c.label} to={c.to} end={c.to === '/' || !!c.end}
               style={({ isActive }) => ({ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '7px 10px', textDecoration: 'none', fontFamily: FONT, fontSize: 12.5, color: isActive ? WHITE : MUTED2, background: isActive ? `${AMBER}22` : 'transparent', borderRadius: 8 })}>
@@ -189,15 +196,16 @@ export function Sidebar({ collapsed = false, onClose }) {
 
   return (
     <aside style={{
-      width: compact ? 72 : 240, flexShrink: 0, background: INK,
+      width: compact ? 68 : 224, flexShrink: 0, background: BX.sidebarBg,
+      borderRight: `1px solid ${BX.border}`,
       display: 'flex', flexDirection: 'column',
       height: '100vh', overflow: 'hidden',
       transition: 'width .15s',
     }}>
       {/* Logo */}
       <div style={{
-        padding: compact ? '24px 0 16px' : '24px 20px 16px',
-        borderBottom: `1px solid rgba(255,255,255,.07)`,
+        padding: compact ? '20px 0 14px' : '16px 12px 14px',
+        borderBottom: `1px solid ${BX.border}`,
       }}>
         <div style={{
           display: 'flex', alignItems: 'center',
@@ -206,8 +214,8 @@ export function Sidebar({ collapsed = false, onClose }) {
           <AkoroLogo size={36} radius={10} />
           {!compact && (
             <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: WHITE, fontFamily: FONT }}>Akoro</div>
-              <div style={{ fontSize: 10, color: MUTED2, fontFamily: FONT }}>Instructor Portal</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: BX.ink, fontFamily: BX.font }}>Akoro</div>
+              <div style={{ fontSize: 11, color: BX.muted, fontFamily: BX.font }}>Instructor</div>
             </div>
           )}
           {onClose && (
@@ -221,10 +229,10 @@ export function Sidebar({ collapsed = false, onClose }) {
       {/* Search menu */}
       {!compact ? (
         <div style={{ padding: '12px 14px 4px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 10, padding: '8px 12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#FFFFFF', border: `1px solid ${BX.border}`, borderRadius: 8, padding: '8px 12px' }}>
             <Search size={15} color={MUTED2} style={{ flexShrink: 0 }} />
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search menu…"
-              style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: WHITE, fontSize: 13, fontFamily: FONT, minWidth: 0 }} />
+              style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: BX.ink, fontSize: 13, fontFamily: BX.font, minWidth: 0 }} />
           </div>
         </div>
       ) : (
@@ -250,13 +258,13 @@ export function Sidebar({ collapsed = false, onClose }) {
 
       {/* User */}
       <div style={{
-        padding: '16px', borderTop: `1px solid rgba(255,255,255,.07)`,
+        padding: '12px 10px', borderTop: `1px solid ${BX.border}`,
         display: 'flex', flexDirection: compact ? 'column' : 'row',
         alignItems: 'center', gap: compact ? 12 : 10,
       }}>
         <div style={{
           width: 36, height: 36, borderRadius: '50%',
-          background: `linear-gradient(135deg, ${AMBER}, ${AMBER}88)`,
+          background: BX.primary,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 14, fontWeight: 700, color: WHITE, flexShrink: 0,
         }}
@@ -265,10 +273,10 @@ export function Sidebar({ collapsed = false, onClose }) {
         </div>
         {!compact && (
           <div style={{ flex: 1, overflow: 'hidden' }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: WHITE, fontFamily: FONT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: BX.ink, fontFamily: BX.font, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {user?.fullName || 'Instructor'}
             </div>
-            <div style={{ fontSize: 11, color: MUTED2, fontFamily: FONT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 11, color: BX.muted, fontFamily: BX.font, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {user?.email || ''}
             </div>
           </div>
@@ -355,166 +363,47 @@ function BellButton() {
   );
 }
 
-export function TopBar({ title, subtitle, action, onToggleSidebar, showBell = true }) {
-  return (
-    <div style={{
-      position: 'sticky', top: 0, zIndex: 10,
-      background: 'rgba(250,248,245,.95)', backdropFilter: 'blur(8px)',
-      borderBottom: `1px solid ${BORDER}`,
-      padding: '16px 28px',
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-        {/* Hamburger — collapses the sidebar to icons-only (desktop; on mobile
-            the AppHeader hamburger owns the drawer) */}
-        {onToggleSidebar && (
-          <button onClick={onToggleSidebar} title="Toggle sidebar" style={{ background: WHITE, border: `1.5px solid ${BORDER}`, borderRadius: 10, padding: '8px', cursor: 'pointer', color: INK, display: 'flex', alignItems: 'center' }}>
-            <Menu size={17} />
-          </button>
-        )}
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: INK, margin: 0, fontFamily: FONT }}>{title}</h1>
-          {subtitle && <p style={{ fontSize: 13, color: MUTED, margin: '2px 0 0', fontFamily: FONT }}>{subtitle}</p>}
-        </div>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        {action}
-        {showBell && <BellButton />}
-      </div>
-    </div>
-  );
-}
-
-export function BottomNav() {
-  return (
-    <div style={{
-      display: 'none',
-      position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100,
-      background: WHITE, borderTop: `1px solid ${BORDER}`,
-      padding: '8px 0 12px',
-    }}
-    className="bottom-nav"
-    >
-      {NAV.flatMap((i) => (i.children ? [{ to: i.children[0].to, icon: i.icon, label: i.label }] : [i])).map(({ to, icon: Icon, label }) => (
-        <NavLink
-          key={to}
-          to={to}
-          end={to === '/'}
-          style={({ isActive }) => ({
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-            flex: 1, textDecoration: 'none',
-            color: isActive ? AMBER : MUTED,
-            fontSize: 10, fontFamily: FONT, fontWeight: isActive ? 600 : 400,
-          })}
-        >
-          <Icon size={20} />
-          {label}
-        </NavLink>
-      ))}
-    </div>
-  );
-}
-
-// Phones (below 768px) get the app-shaped shell: the shared Akoro AppHeader
-// (hamburger | spacer | actions | avatar menu) and full-width pages — the
-// sidebar exists ONLY as a drawer the hamburger opens, closed by its X, the
-// hamburger again, the backdrop, or Escape. Tablet/desktop keep the
-// permanent collapsible sidebar unchanged.
-const MOBILE_QUERY = '(max-width: 767px)';
-export function useIsMobile() {
-  const [mobile, setMobile] = useState(() => {
-    try { return window.matchMedia(MOBILE_QUERY).matches; } catch { return false; }
-  });
-  useEffect(() => {
-    let mq;
-    try { mq = window.matchMedia(MOBILE_QUERY); } catch { return; }
-    const onChange = (e) => setMobile(e.matches);
-    mq.addEventListener?.('change', onChange);
-    return () => mq.removeEventListener?.('change', onChange);
-  }, []);
-  return mobile;
-}
-
-export function PageLayout({ children, title, subtitle, action, hideTopBarOnMobile = false }) {
-  const [collapsed, setCollapsed] = useState(false);
-  const mobile = useIsMobile();
-  const { user, logout } = useAuth();
+export function TopBar({ onToggleSidebar, showBell = true }) {
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const [drawerOpen, setDrawerOpen] = useState(false);
-
-  // The page behind an open drawer stays put — lock its scroll (mobile only),
-  // and never carry an open drawer back to desktop.
-  useEffect(() => {
-    if (!mobile) { setDrawerOpen(false); return; }
-    if (!drawerOpen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, [mobile, drawerOpen]);
-
-  // Escape closes the drawer.
-  useEffect(() => {
-    if (!mobile || !drawerOpen) return;
-    const onKey = (e) => { if (e.key === 'Escape') setDrawerOpen(false); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [mobile, drawerOpen]);
-
-  if (mobile) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
-        <AppHeader
-          onMenu={() => setDrawerOpen((o) => !o)}
-          user={user}
-          actions={[
-            { key: 'chat',          icon: ReferenceChatIcon, label: 'AI Chat',      variant: 'square', onClick: () => navigate('/chat') },
-            { key: 'notifications', icon: Bell,          label: 'Notifications',  variant: 'square', onClick: () => navigate('/notifications') },
-            { key: 'help',          icon: MessageCircleQuestion, label: 'Help & support', variant: 'circle', onClick: () => { window.location.href = 'mailto:support@akoro.app'; } },
-          ]}
-          progress={setupProgressOf(user)}
-          onSetup={() => navigate('/profile')}
-          menuItems={[
-            { key: 'profile',  label: 'Profile',  icon: UserCircle, to: '/profile' },
-            { key: 'settings', label: 'Settings', icon: Settings,   to: '/settings' },
-            'divider',
-            { key: 'logout',   label: 'Log out',  icon: LogOut,     danger: true, onClick: logout },
-          ]}
-        />
-        {!hideTopBarOnMobile && (
-          <TopBar title={title} subtitle={subtitle} action={action} onToggleSidebar={null} showBell={false} />
-        )}
-        <main style={{ flex: 1, overflowY: 'auto', padding: '16px 14px' }}>
-          {children}
-        </main>
-        {drawerOpen && (
-          <div onClick={() => setDrawerOpen(false)} aria-hidden="true" style={{ position: 'fixed', inset: 0, zIndex: 1090, background: 'rgba(0,0,0,.45)' }} />
-        )}
-        <aside role="navigation" aria-label="Main menu" aria-hidden={!drawerOpen} style={{
-          position: 'fixed', top: 0, left: 0, bottom: 0, width: 280, zIndex: 1100,
-          transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
-          visibility: drawerOpen ? 'visible' : 'hidden',
-          transition: 'transform .22s ease, visibility .22s',
-          boxShadow: drawerOpen ? '12px 0 32px rgba(0,0,0,.35)' : 'none',
-        }}>
-          <Sidebar collapsed={false} onClose={() => setDrawerOpen(false)} />
-        </aside>
-      </div>
-    );
-  }
-
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <Sidebar collapsed={collapsed} />
-      {/* position:relative — the containing block for full-area takeovers
-          (the grading surface): they cover the WORKING AREA only, so the
-          side nav stays visible and clickable behind them. */}
-      <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <TopBar title={title} subtitle={subtitle} action={action} onToggleSidebar={() => setCollapsed((c) => !c)} />
-        <main style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
-          {children}
-        </main>
+    <div style={{
+      position: 'sticky', top: 0, zIndex: 50,
+      background: BX.white, borderBottom: `1px solid ${BX.border}`,
+      height: 56, padding: '0 20px',
+      display: 'flex', alignItems: 'center', gap: 12,
+      fontFamily: BX.font,
+    }}>
+      {onToggleSidebar && (
+        <button onClick={onToggleSidebar} title="Toggle sidebar"
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 8, borderRadius: 8, color: BX.ink, display: 'flex' }}>
+          <Menu size={20} />
+        </button>
+      )}
+      <button style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: `1px solid ${BX.border}`, borderRadius: 99, padding: '7px 14px', fontSize: 13, fontWeight: 500, background: BX.white, cursor: 'pointer', fontFamily: BX.font, color: BX.ink }}>
+        ⊙ Get started
+      </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, border: `1px solid ${BX.border}`, borderRadius: 8, padding: '7px 12px', fontSize: 13, color: BX.muted, minWidth: 220, cursor: 'pointer' }}>
+        <Search size={14} /> Search
+        <kbd style={{ marginLeft: 'auto', fontSize: 11, background: '#F1F1F4', borderRadius: 4, padding: '2px 6px', fontFamily: BX.font }}>Ctrl K</kbd>
       </div>
-      <BottomNav />
+      <div style={{ flex: 1 }} />
+      <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 8, borderRadius: 8 }}>
+        <Eye size={18} color={BX.muted} />
+      </button>
+      {showBell && <BellButton />}
+      <button style={{ display: 'inline-flex', alignItems: 'center', border: `1px solid ${BX.border}`, borderRadius: 99, padding: '7px 14px', fontSize: 13, fontWeight: 500, background: BX.white, cursor: 'pointer', fontFamily: BX.font, color: BX.ink }}>
+        Feedback
+      </button>
+      <div onClick={() => navigate('/profile')} title={user?.fullName || user?.email}
+        style={{ width: 32, height: 32, borderRadius: '50%', background: BX.primary, color: '#fff', display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BX.font }}>
+        {(user?.fullName || user?.email || 'I')[0].toUpperCase()}
+      </div>
     </div>
   );
+}
+
+// BottomNav disabled per UI checklist — mobile uses hamburger drawer, not bottom nav.
+export function BottomNav() {
+  return null;
 }
