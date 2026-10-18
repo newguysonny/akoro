@@ -724,6 +724,14 @@ if (process.env.REDIS_URL && !skipJob("battle worker")) {
     console.error("[chat-follow-ups] worker failed to start:", e.message);
   }
 
+  // Quiet learning (Grand Plan §7.16.6): a settled chat gets one background
+  // pass — a real summary and merged memories, platform-paid, consent-gated.
+  if (!skipJob("quiet learning worker")) {
+    import("./modules/agent-memory/quietLearning.js")
+      .then((m) => { m.startQuietLearningWorker(); console.log("[quiet-learning] worker started at boot"); })
+      .catch((e) => console.error("[quiet-learning] worker failed to start:", e.message));
+  }
+
   // Self-tooling (S3): an admin approval resumes the learner's tool build in
   // their chat. Durable jobs + a 15-minute sweep for lost ones and expiry.
   // Without the worker, approvals resume in-process (resumeQueue.enqueueResume).

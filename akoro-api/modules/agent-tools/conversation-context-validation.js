@@ -8,7 +8,7 @@ export const CONVERSATION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab]
 export const AGENT_ID = /^[A-Za-z0-9_-]{1,180}$/;
 export const TURN_ID = /^[A-Za-z0-9_-]{8,180}$/;
 export const TOOL_NAME = /^[a-z][a-z0-9_]{0,79}$/;
-export const MEMORY_KINDS = new Set(["learning_summary", "study_preference", "learner_goal"]);
+export const MEMORY_KINDS = new Set(["learning_summary", "study_preference", "learner_goal", "fact_about_me", "open_thread"]);
 const SCRATCHPAD_SECTIONS = ["completed", "nextSteps", "openQuestions"];
 
 export function boundedText(value, maximum) {

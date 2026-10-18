@@ -13,6 +13,7 @@ import { apiGet, apiPost, apiPatch, apiDelete } from '../../services/api.js';
 import Spinner from '../../components/common/Spinner.jsx';
 import AgentNetworkSection from './networkSection.jsx';
 import MyToolsSection from './myToolsSection.jsx';
+import MemorySection from './memorySection.jsx';
 import { useInFlight } from '../../hooks/useInFlight.js';
 import { confirmDialog } from '../../components/common/ConfirmHost.jsx';
 
@@ -226,6 +227,7 @@ function AgentTab({ agent, setAgent, onSaveAgent }) {
           }}/>
       )}
       <AgentNetworkSection/>
+      <MemorySection/>
       <MyToolsSection/>
       {subjectSheet&&(
         <SubjectsSheet current={agent.subjects||[]} accentColor={color}

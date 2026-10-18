@@ -88,6 +88,7 @@ import {
 } from "./learner-autonomy.js";
 import { requiresAgentCapabilitiesTool, requiresActivityPreparation, isDraftFollowUp, requiredLearnerDataTool, requiredStudyPrepTool } from "./agent-chat-intent.js";
 import { agentToolActivity } from "../../lib/agentActivity.js";
+import { noteChatTurn } from "../agent-memory/quietLearning.js";
 import { createChatTrace, decisionNarration } from "./chat-trace.js";
 import { toResponsesInput, toResponsesTools } from "./responses-input.js";
 import { hasExplicitToolRequestConsent } from "./agent-tool-request-intent.js";
@@ -4332,6 +4333,9 @@ router.post("/agent", async (req, res) => {
     console.log(`[agent-chat] turn user=${String(req.user.id).slice(0, 8)} conv=${conversationId ?? "-"} `
       + `turn=${turnId ?? "-"} durable=${durable} tools=${prepared.toolExecutions.length} stopped=${stopped()} `
       + `saved=${turnSaved} ${Date.now() - t0}ms`);
+    // Quiet learning (§7.16.6): once this chat settles, one background pass
+    // writes its summary and merges the learner's memories. Never blocks the reply.
+    if (turnSaved && conversationId && role === "student") noteChatTurn({ userId: req.user.id, chatSessionId: conversationId }).catch(() => {});
 
     const metadata = {
       model: usedModel,

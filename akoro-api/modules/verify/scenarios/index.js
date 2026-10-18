@@ -14,12 +14,13 @@ import { suggestionsAnswer } from "./suggestions.js";
 import { paperStructured, chatToSubmissionScenarios } from "./activities.js";
 import { authoringVersionsParts, authoringDiagramsEdits } from "./authoring.js";
 import { inboxOneList } from "./inbox.js";
+import { quietLearningPass } from "./quietLearning.js";
 import { readerBackend } from "./reader.js";
 import { socketSession } from "./socket.js";
 
 const ALL = [healthBuild, toolsCatalogue, scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity,
   privacyEdges, rateLimitCountedOnce, battleEntryGates, followUpDeliverIntoChat, taskDueInMinutes, noResidue,
-  viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, agentCheckBattle, classSyllabusFirst, historyPages, workflowMirror, paperStructured, ...chatToSubmissionScenarios, authoringVersionsParts, authoringDiagramsEdits, inboxOneList, readerBackend, socketSession];
+  viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, agentCheckBattle, classSyllabusFirst, historyPages, workflowMirror, paperStructured, ...chatToSubmissionScenarios, authoringVersionsParts, authoringDiagramsEdits, inboxOneList, quietLearningPass, readerBackend, socketSession];
 
 export const SCENARIOS = Object.fromEntries(ALL.map((s) => [s.name, s]));
 
@@ -35,7 +36,7 @@ export const SUITES = {
   // Teachers' follow-ups in one conversation: versions, parts, edits to specific questions, diagrams.
   authoring: ["activity.authoring_versions_parts", "activity.authoring_diagrams_edits", "writes.no_residue"],
   // The proactive agent (Grand Plan §7.16): one inbox, by-kind accept, dismiss reasons.
-  proactive: ["agent.inbox_one_list", "writes.no_residue"],
+  proactive: ["agent.inbox_one_list", "agent.quiet_learning", "writes.no_residue"],
   // Real changes on test learners, then proof nothing was left behind.
   writes: ["tasks.create_due_in_minutes", "followups.deliver_into_chat", "writes.no_residue"],
   // Phase V4 end to end (sandbox only: BLOCKED on production).

@@ -27,6 +27,53 @@ router.get("/memories", authenticateToken, async (req, res) => {
   }
 });
 
+/* "Learn from my conversations" (Grand Plan §7.16.6, D47): on by default with
+   the agent Online; off pauses quiet learning — what is already remembered
+   stays until the learner forgets it. */
+router.get("/settings", authenticateToken, async (req, res) => {
+  try {
+    const { data, error } = await db.schema("edu").from("learner_agent_autonomy")
+      .select("enabled, learn_from_chats").eq("user_id", req.user.id).maybeSingle();
+    if (error) throw error;
+    return res.json({ success: true, learnFromChats: data?.learn_from_chats !== false, agentOnline: Boolean(data?.enabled) });
+  } catch (error) {
+    console.error("[agent-memory/settings GET]", error.message);
+    return res.status(503).json({ success: false, error: "Agent memory settings are unavailable" });
+  }
+});
+
+router.patch("/settings", authenticateToken, async (req, res) => {
+  if (typeof req.body?.learnFromChats !== "boolean") {
+    return res.status(422).json({ success: false, error: "learnFromChats must be a boolean" });
+  }
+  try {
+    const { data: row } = await db.schema("edu").from("learner_agent_autonomy").select("user_id").eq("user_id", req.user.id).maybeSingle();
+    const write = row
+      ? db.schema("edu").from("learner_agent_autonomy").update({ learn_from_chats: req.body.learnFromChats, updated_at: new Date().toISOString() }).eq("user_id", req.user.id)
+      : db.schema("edu").from("learner_agent_autonomy").insert({ user_id: req.user.id, enabled: false, learn_from_chats: req.body.learnFromChats });
+    const { error } = await write;
+    if (error) throw error;
+    return res.json({ success: true, learnFromChats: req.body.learnFromChats });
+  } catch (error) {
+    console.error("[agent-memory/settings PATCH]", error.message);
+    return res.status(503).json({ success: false, error: "Could not save the memory setting" });
+  }
+});
+
+/* Forget everything the agent remembers about the learner (summaries stay with their chats). */
+router.delete("/memories", authenticateToken, async (req, res) => {
+  try {
+    const { data, error } = await db.schema("edu").from("learner_agent_memories")
+      .update({ status: "forgotten", updated_at: new Date().toISOString() })
+      .eq("user_id", req.user.id).eq("status", "active").select("id");
+    if (error) throw error;
+    return res.json({ success: true, forgotten: (data || []).length });
+  } catch (error) {
+    console.error("[agent-memory/memories DELETE all]", error.message);
+    return res.status(503).json({ success: false, error: "Agent memory is unavailable" });
+  }
+});
+
 router.delete("/memories/:memoryId", authenticateToken, async (req, res) => {
   if (!UUID.test(req.params.memoryId)) {
     return res.status(422).json({ success: false, error: "memoryId is invalid" });
