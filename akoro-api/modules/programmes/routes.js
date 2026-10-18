@@ -164,8 +164,19 @@ router.get("/programs", asyncHandler(async (req, res) => {
   const q = clean(req.query.q)?.toLowerCase();
   let query = edu().from("programmes").select(`
     *, programme_sections(id, name, position),
-    programme_courses(id)`).order("position", { ascending: true, nullsFirst: false }).order("created_at", { ascending: true });
-  const { data: rows } = await query;
+    programme_courses(id)`);
+  // Order by position once the migration has run; fall back to created_at if the column is missing.
+  let rows;
+  try {
+    const { data, error } = await query.order("position", { ascending: true, nullsFirst: false }).order("created_at", { ascending: true });
+    if (error) throw error;
+    rows = data;
+  } catch {
+    const { data } = await edu().from("programmes").select(`
+      *, programme_sections(id, name, position),
+      programme_courses(id)`).order("created_at", { ascending: true });
+    rows = data;
+  }
   const programs = (rows ?? [])
     .filter((p) => !q || `${p.name}${p.code || ""}`.toLowerCase().includes(q))
     .map((p) => ({ ...p, course_count: (p.programme_courses ?? []).length, programme_courses: undefined }));
