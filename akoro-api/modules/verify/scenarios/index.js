@@ -13,10 +13,11 @@ import { conceptCurve } from "./decay.js";
 import { suggestionsAnswer } from "./suggestions.js";
 import { paperStructured, chatToSubmissionScenarios } from "./activities.js";
 import { readerBackend } from "./reader.js";
+import { socketSession } from "./socket.js";
 
 const ALL = [healthBuild, toolsCatalogue, scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity,
   privacyEdges, rateLimitCountedOnce, battleEntryGates, followUpDeliverIntoChat, taskDueInMinutes, noResidue,
-  viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, agentCheckBattle, classSyllabusFirst, historyPages, workflowMirror, paperStructured, ...chatToSubmissionScenarios, readerBackend];
+  viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, agentCheckBattle, classSyllabusFirst, historyPages, workflowMirror, paperStructured, ...chatToSubmissionScenarios, readerBackend, socketSession];
 
 export const SCENARIOS = Object.fromEntries(ALL.map((s) => [s.name, s]));
 
@@ -26,7 +27,7 @@ export const SUITES = {
   "chat-history": ["chat.history_pages", "writes.no_residue"],
   // Assignments on paper: structured AI output, cropped drawings, the submission template.
   // The reader's backend: extraction, the guide, the study tools, kept items.
-  reader: ["reader.backend", "writes.no_residue"],
+  reader: ["reader.backend", "teaching.socket_session", "writes.no_residue"],
   activities: ["activity.paper_structured", "activity.chat_maths_equations", "activity.chat_science_photosynthesis",
     "activity.chat_economics_case_study", "activity.chat_biology_cell", "writes.no_residue"],
   // Real changes on test learners, then proof nothing was left behind.

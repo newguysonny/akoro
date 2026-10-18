@@ -87,8 +87,19 @@ async function startLocalApp({ api, port, dist, build = true, root }) {
 }
 
 /* ── what this network can carry ────────────────────────────────────────── */
-/** Can a WebSocket reach the API from here? (Some outbound proxies drop the upgrade.) */
+/** Can a WebSocket reach the API from here? Asked up to three times: one
+ *  dropped upgrade (a proxy's bad moment) must not mark the live-session
+ *  checks BLOCKED for the whole run. */
 async function probeWebSocket(api) {
+  for (let i = 0; i < 3; i++) {
+    if (await probeWebSocketOnce(api)) return true;
+    await new Promise((r) => setTimeout(r, 2_000));
+  }
+  return false;
+}
+
+/* One upgrade attempt. (Some outbound proxies drop the upgrade.) */
+async function probeWebSocketOnce(api) {
   const https = await import('node:https');
   const agent = process.env.HTTPS_PROXY ? new (await import('https-proxy-agent')).HttpsProxyAgent(process.env.HTTPS_PROXY) : undefined;
   return new Promise((resolve) => {
