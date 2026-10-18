@@ -144,7 +144,8 @@ export default function BillingCouponsPage() {
   const detailStatus = selected ? couponStatus(selected) : null;
 
   return (
-    <PageLayout title="Coupons" subtitle="Discount codes for paid plans">
+    <PageLayout title="Coupons" subtitle="Discount codes for paid plans"
+      action={<button className="ak-btn" onClick={() => { openCouponModal(); setAddOpen(true); }}>+ New coupon</button>}>
       <div className="ak-page">
 
         {selected ? (
@@ -204,9 +205,6 @@ export default function BillingCouponsPage() {
         ) : (
           /* ══════════ LIST ══════════ */
           <>
-            <h1 className="ak-h1">Coupons</h1>
-            <p className="ak-sub">Discount codes for paid plans. Coupons are applied from a subscription&rsquo;s page.</p>
-
             {loading && <p className="ak-sub">Loading…</p>}
             {loadError && <p className="ak-sub text-akoro-coral">{loadError}</p>}
 
@@ -222,10 +220,7 @@ export default function BillingCouponsPage() {
                   </select>
                 </Filters>
 
-                <div className="ak-toolbar">
-                  <span />
-                  <button className="ak-btn" onClick={() => { openCouponModal(); setAddOpen(true); }}>+ New coupon</button>
-                </div>
+
 
                 <table className="ak-table">
                   <thead><tr><th>Code</th><th>Discount</th><th>Redeemed</th><th>Expires</th><th>Status</th></tr></thead>
