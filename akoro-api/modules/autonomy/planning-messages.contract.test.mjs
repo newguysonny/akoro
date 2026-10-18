@@ -23,4 +23,6 @@ test("the learner's words go in as data; the platform pays; the learner's time z
   assert.match(cycle, /never mention health, feelings, family or money/);
   assert.match(cycle, /Now \(\$\{tz\}\): /);
   assert.match(cycle, /__payer: "platform", __feature: "agent_autonomy"/);
+  // the validator drops a proposal that does not say what it noticed
+  assert.match(cycle, /if \(String\(p\.rationale \|\| ""\)\.trim\(\)\.length < 12\) continue;/);
 });

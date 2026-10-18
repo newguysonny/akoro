@@ -5,7 +5,7 @@
  * planning call draws on it. The platform pays (D46); nothing is persisted.
  */
 import { runQuietPass } from "../../agent-memory/quietLearning.js";
-import { gatherSignals, planningMessages, reasonAboutSignals } from "../../autonomy/cycle.js";
+import { gatherSignals, planningMessages, reasonAboutSignals, validateAndShapeProposals } from "../../autonomy/cycle.js";
 import { CHAT } from "./quietLearning.js";
 
 export const plannerRichGather = {
@@ -48,9 +48,11 @@ export const plannerRichGather = {
 
     // A real planning call (platform-paid, nothing saved) draws on it.
     const plan = await reasonAboutSignals(me.id, signals);
-    const props = Array.isArray(plan.proposals) ? plan.proposals : [];
-    ctx.note(`proposals: ${JSON.stringify(props.map((x) => [x.kind, x.title, x.rationale]))}`);
-    ctx.expect.ok("at most 3 proposals, each with a reason", props.length <= 3 && props.every((x) => String(x.rationale || "").length > 10), props.length);
+    const raw = Array.isArray(plan.proposals) ? plan.proposals : [];
+    // What the learner would get: the server's validator decides, not the model.
+    const props = await validateAndShapeProposals(me.id, raw);
+    ctx.note(`proposed: ${JSON.stringify(raw.map((x) => [x.kind, x.title, x.rationale]))} · kept: ${props.length}`);
+    ctx.expect.ok("at most 3 kept, each saying what it noticed", props.length <= 3 && props.every((x) => String(x.rationale || "").length >= 12), props.map((x) => x.rationale));
     ctx.expect.ok("…drawing on what the agent remembers", props.some((x) => /titration|curve|waec|chemistry|end point|equivalence/i.test(`${x.title} ${x.rationale}`)), props.map((x) => x.title));
     ctx.expect.ok("…and nothing sensitive", !props.some((x) => /anxi|doctor|tablet|tired/i.test(`${x.title} ${x.rationale}`)));
 

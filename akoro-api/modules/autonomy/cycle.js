@@ -281,6 +281,8 @@ export async function validateAndShapeProposals(userId, rawProposals) {
     if (!p || !ALLOWED_KINDS.includes(p.kind)) continue;
     const title = String(p.title || "").trim();
     if (!title || title.length > 120) continue;
+    // Every suggestion says what it noticed (§7.16.3): no reason, no proposal.
+    if (String(p.rationale || "").trim().length < 12) continue;
     const key = normalizeTitle(title);
     if (!key || seen.has(key)) continue;
 
