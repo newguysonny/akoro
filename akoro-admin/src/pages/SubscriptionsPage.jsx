@@ -281,9 +281,6 @@ export default function SubscriptionsPage() {
         ) : (
           /* ══════════ LIST ══════════ */
           <>
-            <h1 className="ak-h1">Subscriptions</h1>
-            <p className="ak-sub">One record per trialing or subscribed learner, billed to a parent or guardian. Pilot users have no subscription record.</p>
-
             {loading && <p className="ak-sub">Loading…</p>}
             {loadError && <p className="ak-sub text-akoro-coral">{loadError}</p>}
 
