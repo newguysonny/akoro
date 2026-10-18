@@ -75,6 +75,22 @@ export function requiresActivityPreparation(message, history = []) {
   return !text.includes("?") && SHORT_ANSWER_RE.test(text);
 }
 
+/* Follow-ups on a draft the instructor already has. "Add a new part with 2
+   true or false questions" names "questions", so the prepare force above
+   started a SECOND draft for every follow-up (verify authoring run
+   98993a9f): version 2 never existed. An edit-shaped message — an editing
+   verb, or a pointer at a question/part/version — while a draft is pending
+   revises it instead; a message that asks for a new activity still prepares. */
+const NEW_ACTIVITY_RE = /\b(?:a|an|another|new|second|fresh|separate)\s+(?:[\w-]+\s+){0,2}(?:assignments?|quiz(?:zes)?|tests?|projects?|activit(?:y|ies)|self[-\s]?study|battles?|journeys?|live\s+(?:course|class|lesson|session))\b/i;
+const DRAFT_EDIT_RE = /^\s*(?:(?:please|now|also|and|then|ok(?:ay)?|great|good|nice|thanks|thank\s+you|next|can\s+you|could\s+you)[\s,!.]+)*(?:add|make|change|turn|convert|remove|delete|drop|replace|swap|rewrite|reword|rephrase|shorten|simplify|increase|reduce|lower|raise|give|set|move|put|split|merge|include|revert|undo|fix|correct|edit|update|use|go\s+back|bring\s+back|keep|let'?s\s+(?:add|make|change|remove|replace|go\s+back))\b/i;
+const DRAFT_POINTER_RE = /\b(?:question|q|number|no\.)\s*\d+\b|\bversion\s*\d+\b|\bv\d+\b|\bpart\s+[a-e]\b/i;
+
+export function isDraftFollowUp(message) {
+  const text = String(message || "").trim();
+  if (!text || ACTIVITY_QUERY_RE.test(text) || NEW_ACTIVITY_RE.test(text)) return false;
+  return DRAFT_EDIT_RE.test(text) || DRAFT_POINTER_RE.test(text);
+}
+
 /* ── Study-prep session requests ─────────────────────────────────────────────
    The live 2026-10-01 transcript: the learner asked "let's plan for a test"
    twice; start_study_prep_session was in the tool list both times and the

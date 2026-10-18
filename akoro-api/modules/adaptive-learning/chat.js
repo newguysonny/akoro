@@ -86,7 +86,7 @@ import {
   scheduleAutonomyReviewForTask,
   setLearnerAutonomy,
 } from "./learner-autonomy.js";
-import { requiresAgentCapabilitiesTool, requiresActivityPreparation, requiredLearnerDataTool, requiredStudyPrepTool } from "./agent-chat-intent.js";
+import { requiresAgentCapabilitiesTool, requiresActivityPreparation, isDraftFollowUp, requiredLearnerDataTool, requiredStudyPrepTool } from "./agent-chat-intent.js";
 import { agentToolActivity } from "../../lib/agentActivity.js";
 import { createChatTrace, decisionNarration } from "./chat-trace.js";
 import { toResponsesInput, toResponsesTools } from "./responses-input.js";
@@ -4122,6 +4122,18 @@ router.post("/agent", async (req, res) => {
         level: Number(a?.level) || 1, sessions: Number(a?.total_sessions) || 0,
       };
     })().catch(() => null) : null;
+    // The instructor's pending drafts: follow-ups ("add a part", "make Q2
+    // harder", "go back to version 1") revise the newest one — without its id
+    // here the model could only start another draft.
+    const pendingDrafts = role === "instructor" && openAiInstructorTools().length
+      ? await listActivityDrafts({ id: req.user.id, role }).then((d) => d.slice(0, 3)).catch(() => []) : [];
+    const draftsCtx = pendingDrafts.length
+      ? "\n\n## Pending drafts (newest first)\n" + pendingDrafts.map((d) => {
+        const vs = Array.isArray(d.payload?.versions) ? d.payload.versions : [];
+        const topic = String(d.payload?.topic || d.topic || "").replace(/[\r\n]+/g, " ").slice(0, 80);
+        return `- draftId ${d.id} · ${String(d.title || "").replace(/[\r\n]+/g, " ").slice(0, 80)} · ${d.type}${topic ? ` · ${topic}` : ""}${vs.length ? ` · latest Version ${vs.at(-1).n}` : ""}`;
+      }).join("\n") + "\nThe instructor's follow-ups about a draft — questions, parts, diagrams, marks, types, versions, title, instructions — change the NEWEST draft: call revise_activity_draft with its draftId (their words about the questions verbatim in question_request; base_version when they name a version). Call prepare_activity only for a new activity."
+      : "";
     const systemContent = (await assembleChatDoctrine({
       agentName: safeAgentName || "Akoro",
       protege,
@@ -4135,7 +4147,7 @@ router.post("/agent", async (req, res) => {
       renderRelevantMemory(relevantMemories) +
       renderScratchpad(conversation?.scratchpad) +
       (goalsCtx || "") +
-      protegeCtx + inboxCtx + selfToolCtx +
+      protegeCtx + inboxCtx + selfToolCtx + draftsCtx +
       (syllabusCtx ? `\n\n${syllabusCtx}` : "") +
       (pastCtx ? `\n\n${pastCtx}` : "") +
       (curriculumCtx ? `\n\n${curriculumCtx}` : "") +
@@ -4186,6 +4198,7 @@ router.post("/agent", async (req, res) => {
             // "let's plan for a test" twice, tools=0 both times). Only while
             // the feature gate keeps the study-prep tools in the list.
             ?? (studyPrepEnabled ? requiredStudyPrepTool(userMessage, dialogue) : null)))
+        : (instructorTools.length && pendingDrafts.length && isDraftFollowUp(userMessage)) ? "revise_activity_draft"
         : ((instructorTools.length && requiresActivityPreparation(userMessage, dialogue))
           ? "prepare_activity" : null),
       role,

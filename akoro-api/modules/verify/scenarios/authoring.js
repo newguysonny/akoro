@@ -37,13 +37,17 @@ function conversation(ctx, p, teacher, learner) {
       ctx.expect.eq(`${label}: turn answered`, turn.status, 200);
       history.push({ role: "user", content: prompt }, { role: "assistant", content: String(turn.reply || "") });
       const tools = (turn.tools || []).map((t) => t.tool);
+      // Any draft a turn prepares is the gate's to remove, the stray ones too.
+      for (const t of turn.tools || []) {
+        const id = t.tool === "prepare_activity" ? t.result?.draftId : null;
+        if (id && id !== draftId) ctx.cleanup(() => ctx.db.deleteOwned("activity_drafts", { ownerColumn: "created_by", ownerId: teacher.id, filters: { id } }));
+      }
       if (!draftId) {
         const prep = (turn.tools || []).filter((t) => t.tool === "prepare_activity").at(-1);
         ctx.expect.ok(`${label}: the agent called prepare_activity`, !!prep, tools);
         draftId = prep?.result?.draftId || null;
         ctx.expect.ok(`${label}: a draft was prepared`, !!draftId, prep?.result);
         if (!draftId) return null;
-        ctx.cleanup(() => ctx.db.deleteOwned("activity_drafts", { ownerColumn: "created_by", ownerId: teacher.id, filters: { id: draftId } }));
       } else {
         const rev = (turn.tools || []).filter((t) => t.tool === "revise_activity_draft").at(-1);
         ctx.expect.ok(`${label}: the agent revised the same draft`, rev?.input?.draftId === draftId && rev?.success !== false, { tools, input: rev?.input, result: rev?.result });
