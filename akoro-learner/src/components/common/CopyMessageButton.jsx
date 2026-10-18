@@ -16,15 +16,36 @@ export async function copyPlainText(text) {
     try {
       const ta = document.createElement('textarea');
       ta.value = text;
+      ta.setAttribute('readonly', '');
       ta.style.position = 'fixed';
       ta.style.opacity = '0';
       document.body.appendChild(ta);
       ta.select();
-      document.execCommand('copy');
+      ta.setSelectionRange(0, text.length);   // iOS ignores select() alone
+      const ok = document.execCommand('copy');
       document.body.removeChild(ta);
-      return true;
+      return ok;
     } catch { return false; }
   }
+}
+
+/**
+ * Copy text that is still being fetched. Browsers (Safari, phone webviews)
+ * refuse a clipboard write that comes after an await — the tap's permission
+ * is gone by then — so the write starts inside the tap and the text is
+ * handed to it as a promise. Call it straight from the click handler.
+ */
+export async function copyTextFrom(getText) {
+  const text = Promise.resolve().then(getText).then((t) => String(t || ''));
+  if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
+    try {
+      const blob = text.then((t) => { if (!t) throw new Error('nothing to copy'); return new Blob([t], { type: 'text/plain' }); });
+      await navigator.clipboard.write([new ClipboardItem({ 'text/plain': blob })]);
+      return true;
+    } catch { /* fall through: older browsers, or a write refused */ }
+  }
+  const t = await text.catch(() => '');
+  return t ? copyPlainText(t) : false;
 }
 
 export default function CopyMessageButton({ text, dark = false, label = 'Copy message' }) {

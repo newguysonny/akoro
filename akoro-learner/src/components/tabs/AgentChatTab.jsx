@@ -15,7 +15,7 @@ const HISTORY_PAGE = 10;
 const REPLY_INSET = 12;   // 28px from the edge — the Claude app's reading margin
 import RichText from '../common/RichText.jsx';
 import CopyMessageButton from '../common/CopyMessageButton.jsx';
-import { copyPlainText } from '../common/CopyMessageButton.jsx';
+import { copyTextFrom } from '../common/CopyMessageButton.jsx';
 import { useTaskAPI } from '../../hooks/useTaskAPI.js';
 import NoAgentSheet, { isNoAgentError } from '../battles/NoAgentSheet.jsx';
 import { confirmDialog } from '../common/ConfirmHost.jsx';
@@ -441,13 +441,16 @@ function AgentChatTab({
   const copySession = async (s, e) => {
     e?.stopPropagation?.();
     try {
-      const d = await apiGet(`${CHAT_BASE}/sessions/${s.id}/messages`);
-      const msgs = d?.messages ?? [];
-      if (!msgs.length) return;
-      const stamp = (iso) => { try { return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
-      const body = msgs.map(m => `${m.role === "user" ? "You" : "Agent"} (${stamp(m.created_at)}):\n${m.text ?? ""}`).join("\n\n");
-      const out = `${s.title || "Agent chat"}\n${msgs.length} message${msgs.length === 1 ? "" : "s"} · copied ${new Date().toLocaleString()}\n\n${body}`;
-      if (!(await copyPlainText(out))) return;
+      // The clipboard write starts inside the tap; the transcript fills it.
+      const copied = await copyTextFrom(async () => {
+        const d = await apiGet(`${CHAT_BASE}/sessions/${s.id}/messages`, { cache: false });
+        const msgs = d?.messages ?? [];
+        if (!msgs.length) return "";
+        const stamp = (iso) => { try { return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
+        const body = msgs.map(m => `${m.role === "user" ? "You" : "Agent"} (${stamp(m.created_at)}):\n${m.text ?? ""}`).join("\n\n");
+        return `${s.title || "Agent chat"}\n${msgs.length} message${msgs.length === 1 ? "" : "s"} · copied ${new Date().toLocaleString()}\n\n${body}`;
+      });
+      if (!copied) return;
       setCopiedId(s.id);
       setTimeout(() => setCopiedId((cur) => (cur === s.id ? null : cur)), 1400);
     } catch { /* leave the icon untouched */ }

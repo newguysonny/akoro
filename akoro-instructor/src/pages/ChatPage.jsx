@@ -26,14 +26,33 @@ async function copyPlainText(text) {
   try {
     const ta = document.createElement('textarea');
     ta.value = text;
+    ta.setAttribute('readonly', '');
     ta.style.position = 'fixed';
     ta.style.opacity = '0';
     document.body.appendChild(ta);
     ta.select();
-    document.execCommand('copy');
+    ta.setSelectionRange(0, text.length);   // iOS ignores select() alone
+    const ok = document.execCommand('copy');
     document.body.removeChild(ta);
-    return true;
+    return ok;
   } catch { return false; }
+}
+
+/* Copy text that is still being fetched. Browsers (Safari, phone webviews)
+   refuse a clipboard write that comes after an await — the tap's permission
+   is gone by then — so the write starts inside the tap and the text is
+   handed to it as a promise. Call it straight from the click handler. */
+async function copyTextFrom(getText) {
+  const text = Promise.resolve().then(getText).then((t) => String(t || ''));
+  if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
+    try {
+      const blob = text.then((t) => { if (!t) throw new Error('nothing to copy'); return new Blob([t], { type: 'text/plain' }); });
+      await navigator.clipboard.write([new ClipboardItem({ 'text/plain': blob })]);
+      return true;
+    } catch { /* fall through: older browsers, or a write refused */ }
+  }
+  const t = await text.catch(() => '');
+  return t ? copyPlainText(t) : false;
 }
 
 function CopyMsgButton({ text }) {
@@ -301,13 +320,16 @@ export default function ChatPage() {
 
   const copySession = async (s) => {
     try {
-      const d = await apiGet(`${CHAT_BASE}/sessions/${s.id}/messages`);
-      const msgs = d?.messages ?? [];
-      if (!msgs.length) return;
-      const stamp = (iso) => { try { return new Date(iso).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' }); } catch { return ''; } };
-      const body = msgs.map((m) => `${m.role === 'user' ? 'You' : 'Agent'} (${stamp(m.created_at)}):\n${m.text ?? ''}`).join('\n\n');
-      const out = `${s.title || 'Agent chat'}\n${msgs.length} message${msgs.length === 1 ? '' : 's'} · copied ${new Date().toLocaleString()}\n\n${body}`;
-      if (!(await copyPlainText(out))) return;
+      // The clipboard write starts inside the tap; the transcript fills it.
+      const copied = await copyTextFrom(async () => {
+        const d = await apiGet(`${CHAT_BASE}/sessions/${s.id}/messages`);
+        const msgs = d?.messages ?? [];
+        if (!msgs.length) return '';
+        const stamp = (iso) => { try { return new Date(iso).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' }); } catch { return ''; } };
+        const body = msgs.map((m) => `${m.role === 'user' ? 'You' : 'Agent'} (${stamp(m.created_at)}):\n${m.text ?? ''}`).join('\n\n');
+        return `${s.title || 'Agent chat'}\n${msgs.length} message${msgs.length === 1 ? '' : 's'} · copied ${new Date().toLocaleString()}\n\n${body}`;
+      });
+      if (!copied) return;
       setCopiedId(s.id);
       setTimeout(() => setCopiedId((cur) => (cur === s.id ? null : cur)), 1400);
     } catch { /* leave the icon untouched — a failed copy never toasts */ }

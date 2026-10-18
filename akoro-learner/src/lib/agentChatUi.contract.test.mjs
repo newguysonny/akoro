@@ -86,5 +86,7 @@ test('history loads a page at a time: the newest 10 on open, older pages on scro
   assert.match(tab, /el\.scrollTop=el\.scrollHeight-kept\.height\+kept\.top;/);
   // Copy chat still asks for the whole transcript (no limit).
   const copy = between(tab, 'const copySession = async', 'useEffect(');
-  assert.match(copy, /sessions\/\$\{s\.id\}\/messages`\)/);
+  assert.match(copy, /sessions\/\$\{s\.id\}\/messages`[,)]/);
+  // …and the clipboard write starts inside the tap (a write after an await is refused).
+  assert.match(copy, /copyTextFrom\(async \(\) =>/);
 });
