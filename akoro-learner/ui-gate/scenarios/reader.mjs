@@ -371,7 +371,7 @@ export const scenarios = [
       t.check('…about the selected passage', /chloroplast|photosynth|light/.test(quizText));
 
       // The new quiz tab is in front: back to the document's own pages.
-      await page.getByRole('button', { name: /Original Content/ }).first().click().catch(() => {});
+      await page.locator('.folio-tab-pill', { hasText: 'Original Content' }).first().click().catch(() => {});
       await page.locator('[data-page-index] [data-page-content] p').first().waitFor({ timeout: 10_000 }).catch(() => {});
       const again = (await selectWithin(page, '[data-page-index] [data-page-content] p', 'cell wall is')).replace(/\s+/g, ' ').trim();
       t.check('another passage is selected', again.length > 10);
@@ -425,7 +425,8 @@ export const scenarios = [
         const tg = page.locator('[role=button][title="LEARNING WITH GUIDE"]').first();
         await tg.click({ timeout: 8_000 }).catch(() => tg.dispatchEvent('click').catch(() => {}));
       }
-      t.check('the guide chat is open', await box.waitFor({ timeout: 15_000 }).then(() => true, () => false));
+      const open = t.check('the guide chat is open', await box.waitFor({ timeout: 15_000 }).then(() => true, () => false));
+      if (!open) { await t.shot('guide-closed'); return; }
       const question = 'What do mitochondria do in a cell?';
       await box.fill(question);
       await page.getByRole('button', { name: 'Send message' }).click();
@@ -453,6 +454,8 @@ export const scenarios = [
       const { page } = t;
       for (const tool of ['Summary', 'Quiz', 'Flashcards']) {
         const gen = page.locator('[title="Generate a study tool"]').first();
+        // A generated tab hides the reader's toolbar: back to the document first.
+        if (!(await gen.isVisible().catch(() => false))) await page.locator('.folio-tab-pill', { hasText: 'Original Content' }).first().click().catch(() => {});
         if (!(await gen.isVisible().catch(() => false))) await page.locator('[title="Open the material"], [aria-label="Open reading material"]').first().click().catch(() => {});
         await gen.click();
         const menu = page.locator('.sreader-menu');
@@ -476,6 +479,7 @@ export const scenarios = [
     async run(t) {
       const { page } = t;
       const note = `Remember: mitochondria release energy ${t.state.textMarker}`;
+      await page.locator('.folio-tab-pill', { hasText: 'Original Content' }).first().click().catch(() => {});
       const gen = page.locator('[title="Generate a study tool"]').first();
       await gen.click();
       const menu = page.locator('.sreader-menu');
@@ -492,11 +496,14 @@ export const scenarios = [
       t.check('the note is saved with its words', items.some((a) => a.kind === 'notes' && JSON.stringify(a.content || {}).includes('mitochondria release energy')), { actual: items.map((a) => a.kind) });
       await page.reload({ waitUntil: 'domcontentloaded' });
       if (!(await openRecordReader(t, t.state.textMarker, '[data-page-index] [data-page-content] p'))) return;
+      // Tabs open at the reload come back as tabs; closed ones are listed under Saved.
+      const pills = page.locator('.folio-tab-pill').filter({ hasNotText: 'Original Content' });
+      await pills.first().waitFor({ timeout: 15_000 }).catch(() => {});
+      const tabs = await pills.count();
+      await page.locator('.folio-tab-pill', { hasText: 'Original Content' }).first().click().catch(() => {});
       await page.locator('[title="Generate a study tool"]').first().click();
-      const savedList = page.locator('.sreader-menu').getByText('Saved', { exact: true });
-      t.check('after a reload they are listed under Saved', await savedList.waitFor({ timeout: 15_000 }).then(() => true, () => false));
       const rows = await page.locator('.sreader-menu').getByRole('button', { name: /^Delete / }).count();
-      t.check('…all four of them', rows >= 4, { actual: rows });
+      t.check('after a reload they are back (open tabs + Saved)', tabs + rows >= 4, { actual: `${tabs} tabs, ${rows} saved` });
       await page.locator('[title="Generate a study tool"]').first().click().catch(() => {});
     },
   },

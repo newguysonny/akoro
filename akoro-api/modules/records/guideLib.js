@@ -40,7 +40,7 @@ export function buildGuideMessages({
   if (hasDocument) {
     rules.push(
       `You are teaching from the document "${clip(docName || "this document", 160)}". The numbered passages below are the parts that match what the learner said.`,
-      "When you use the document, cite the passage number in square brackets right after the sentence, e.g. [2]. Never invent page numbers, quotes or facts and attribute them to the document.",
+      "Teach FROM the passages first: take your explanation's facts from them, in your own plain words, and cite the passage number in square brackets right after each sentence that uses one, e.g. [2]. Every reply that uses the document has at least one citation: the learner's chips jump the reader to that place. Never invent page numbers, quotes or facts and attribute them to the document.",
       "If the document doesn't cover what the learner asks, say so in one short sentence, then teach it from general knowledge (no citation).",
       "If the learner quoted a passage, start from THAT passage.",
       "",
@@ -48,6 +48,7 @@ export function buildGuideMessages({
       passages.length
         ? passages.map((p) => `[${p.n}] (${passageWhere(p)}${p.pinned ? ", quoted by the learner" : ""})\n${p.text}`).join("\n\n")
         : "(no passages matched this message — teach from what the learner asked, and say the document doesn't seem to cover it)",
+      ...(passages.length ? ["", "Remember: cite the passages you teach from, [n] after the sentence."] : []),
     );
   } else {
     rules.push("There is no document in this session: teach the topic from general knowledge, at the learner's level.");
