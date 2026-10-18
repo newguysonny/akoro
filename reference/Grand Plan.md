@@ -1738,8 +1738,14 @@ signals ──► NOTICE ──► PREPARE ──► OFFER ──► (person dec
    active notes. Settings → Agent → Memory: list, forget one / all, pause.
    Gates: `agent.quiet_learning` (suite `proactive`), UI
    `settings.memory_controls`.
-3. **Rich gather** — summaries, memories, goals' progress, struggles, decay,
-   Records into the planner (untrusted-framed), learner timezone.
+3. ✅ **Rich gather** (2026-10-18) — the planner reads quiet-learning notes
+   and chat summaries (with consent, sensitive lines filtered), goals with days
+   left and progress, weak concepts and misconceptions, unread review alerts,
+   recent Records and the learner's time zone, the learner's words framed as
+   data; platform-paid (D46); strict output schema, and the validator drops a
+   proposal that doesn't say what it noticed. Gate `agent.planner_rich_gather`.
+   Still open: quiet hours are enforced in Lagos time (right for Nigerian
+   learners; a learner elsewhere needs the validator in their zone).
 4. **Ready proposals** — `preview` via dry-run tools, the new kinds, replay on
    approve; posted into chat with reply buttons (preview of the message shape
    first).
