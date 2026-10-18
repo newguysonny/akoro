@@ -243,11 +243,53 @@ export function planningMessages(signals) {
   return [{ role: "system", content: system }, { role: "user", content: user }];
 }
 
+/**
+ * The planner's output, strict: every proposal carries its rationale (the
+ * json_object mode left it empty on 2 of 3 proposals, gate 4037860c, and the
+ * validator then dropped them). Payload fields are all present, null when
+ * unused — the validator strips the nulls.
+ */
+export function planningSchema() {
+  const N = (type) => ({ type: [type, "null"] });
+  return {
+    type: "json_schema",
+    json_schema: {
+      name: "study_planner", strict: true,
+      schema: {
+        type: "object", additionalProperties: false, required: ["summary", "proposals"],
+        properties: {
+          summary: { type: "string" },
+          proposals: {
+            type: "array",
+            items: {
+              type: "object", additionalProperties: false, required: ["kind", "title", "rationale", "payload"],
+              properties: {
+                kind: { type: "string", enum: ALLOWED_KINDS },
+                title: { type: "string" },
+                rationale: { type: "string", description: "The real signal this comes from, in one sentence." },
+                payload: {
+                  type: "object", additionalProperties: false,
+                  required: ["title", "description", "priority", "dueAt", "course", "scheduledAt", "message", "category", "target_date"],
+                  properties: {
+                    title: N("string"), description: N("string"), priority: { type: ["string", "null"], enum: ["high", "medium", "low", null] },
+                    dueAt: N("string"), course: N("string"), scheduledAt: N("string"), message: N("string"),
+                    category: N("string"), target_date: N("string"),
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+}
+
 /** ── 2. REASON — one structured call. The platform pays for background noticing (D46). */
 export async function reasonAboutSignals(userId, signals) {
   const res = await openai.chat.completions.create({
     model: OPENAI_MODEL, temperature: 0.4, max_tokens: 700,
-    response_format: { type: "json_object" },
+    response_format: planningSchema(),
     __payer: "platform", __feature: "agent_autonomy", __ref: userId,
     messages: planningMessages(signals),
   });
@@ -286,7 +328,9 @@ export async function validateAndShapeProposals(userId, rawProposals) {
     const key = normalizeTitle(title);
     if (!key || seen.has(key)) continue;
 
-    let payload = (p.payload && typeof p.payload === "object") ? { ...p.payload } : {};
+    let payload = (p.payload && typeof p.payload === "object")
+      ? Object.fromEntries(Object.entries(p.payload).filter(([, v]) => v !== null && v !== undefined && v !== ""))
+      : {};
     if (p.kind === "session") {
       const at = new Date(payload.scheduledAt || "");
       const nowMs = Date.now();
