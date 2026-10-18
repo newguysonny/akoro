@@ -221,9 +221,6 @@ export default function CustomersPage() {
         ) : (
           /* ══════════ LIST ══════════ */
           <>
-            <h1 className="ak-h1">Customers</h1>
-            <p className="ak-sub">The billing identity behind each subscription: the parent or guardian who pays, linked to one or more learners.</p>
-
             {loading && <p className="ak-sub">Loading…</p>}
             {loadError && <p className="ak-sub text-akoro-coral">{loadError}</p>}
 
