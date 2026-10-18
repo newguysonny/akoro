@@ -1,97 +1,93 @@
-/* AppHeader.css — the shared Akoro app header (reference: "Akoro app [header]").
-   Tokens are scoped under .akhdr so the header looks identical regardless of
-   the shell around it; flip to dark later by re-declaring them under
-   [data-theme="dark"] exactly as the reference does. */
+/* AppHeader.css — bachs visual language.
+   Tokens scoped under .akhdr. Primary #4A5CD5, Inter, hairline #E8E8EE. */
 .akhdr {
-  --akhd-purple: #6C3BFF; --akhd-purple-soft: #F1ECFF;
-  --akhd-danger: #EF4444; --akhd-danger-text: #B91C1C; --akhd-danger-soft: #FEF2F2;
-  --akhd-bg: #F9FAFB; --akhd-surface: #FFFFFF; --akhd-surface-hover: #F9FAFB;
-  --akhd-border: #F3F4F6; --akhd-border2: #E5E7EB; --akhd-border3: #D1D5DB;
-  --akhd-text: #111827; --akhd-text-sec: #374151; --akhd-text-sub: #6B7280; --akhd-text-muted: #9CA3AF;
-  --akhd-r-md: 12px; --akhd-r-lg: 16px; --akhd-r-full: 999px;
+  --akhd-purple: #4A5CD5; --akhd-purple-soft: #EEF0FE;
+  --akhd-danger: #DC2626; --akhd-danger-text: #DC2626; --akhd-danger-soft: #FDECEC;
+  --akhd-bg: #FFFFFF; --akhd-surface: #FFFFFF; --akhd-surface-hover: #F1F1F5;
+  --akhd-border: #E8E8EE; --akhd-border2: #E8E8EE; --akhd-border3: #D5D5DE;
+  --akhd-text: #1A1B25; --akhd-text-sec: #3F4354; --akhd-text-sub: #6B7280; --akhd-text-muted: #9CA3AF;
+  --akhd-r-md: 8px; --akhd-r-lg: 10px; --akhd-r-full: 999px;
   --akhd-ease-spring: cubic-bezier(.32, 1.2, .64, 1);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 .akhdr-header {
   position: sticky; top: 0; z-index: 20;
-  display: flex; align-items: center; gap: 8px;
-  padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 12px;
-  background: var(--akhd-surface); border-bottom: 1px solid var(--akhd-border);
+  display: flex; align-items: center; gap: 6px;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 14px 10px;
+  background: rgba(255,255,255,.96); border-bottom: 1px solid var(--akhd-border);
 }
 .akhdr-spacer { flex: 1; }
-.akhdr-actions { display: flex; align-items: center; gap: 8px; }
+.akhdr-actions { display: flex; align-items: center; gap: 4px; }
 
 .akhdr-btn {
-  width: 38px; height: 38px; display: grid; place-items: center; padding: 0; border: 0;
-  background: none; color: var(--akhd-text); font: inherit; cursor: pointer;
+  width: 34px; height: 34px; display: grid; place-items: center; padding: 0; border: 0;
+  background: none; color: var(--akhd-text-sec); font: inherit; cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition: background .15s, border-color .15s, transform .15s var(--akhd-ease-spring);
+  transition: background .15s, color .15s;
+  border-radius: var(--akhd-r-md);
 }
-.akhdr-btn:active, .akhdr-avatar:active { transform: scale(.93); }
-.akhdr-ghost { color: var(--akhd-text-sub); border-radius: var(--akhd-r-md); margin-left: -6px; }
+.akhdr-btn:hover { background: var(--akhd-surface-hover); color: var(--akhd-text); }
+.akhdr-btn:active, .akhdr-avatar:active { transform: scale(.94); }
+.akhdr-ghost { color: var(--akhd-text); border-radius: var(--akhd-r-md); margin-left: -4px; }
 .akhdr-circle { border-radius: var(--akhd-r-full); background: var(--akhd-border); }
-.akhdr-circle:hover { background: var(--akhd-border2); }
-.akhdr-square { border-radius: var(--akhd-r-md); border: 1.5px solid var(--akhd-border2); background: var(--akhd-surface); }
-.akhdr-square:hover { background: var(--akhd-surface-hover); border-color: var(--akhd-border3); }
+.akhdr-circle:hover { background: var(--akhd-border3); }
+.akhdr-square { border-radius: var(--akhd-r-md); border: none; background: none; }
+.akhdr-square:hover { background: var(--akhd-surface-hover); }
 .akhdr-avatar {
-  width: 38px; height: 38px; display: grid; place-items: center; padding: 0; border: 0;
+  width: 30px; height: 30px; display: grid; place-items: center; padding: 0; border: 0;
   border-radius: var(--akhd-r-full); background: var(--akhd-purple); color: #fff;
-  font: 800 .95rem/1 'Nunito', system-ui, sans-serif; cursor: pointer;
+  font: 700 12px/1 Inter, system-ui, sans-serif; cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   transition: box-shadow .15s, transform .15s var(--akhd-ease-spring);
 }
-.akhdr-avatar[aria-expanded="true"] { box-shadow: 0 0 0 3px var(--akhd-purple-soft), 0 0 0 4.5px var(--akhd-purple); }
+.akhdr-avatar[aria-expanded="true"] { box-shadow: 0 0 0 3px var(--akhd-purple-soft); }
 .akhdr-btn:focus-visible, .akhdr-avatar:focus-visible, .akhdr-item:focus-visible { outline: 2px solid var(--akhd-purple); outline-offset: 2px; }
 
 /* ---------- Account dropdown ---------- */
 .akhdr-scrim { position: fixed; inset: 0; z-index: 1; display: none; }
 .akhdr-scrim.show { display: block; }
 .akhdr-menu {
-  position: absolute; z-index: 2; top: calc(100% + 6px); right: 12px;
-  width: min(340px, calc(100% - 24px));
-  padding: 8px 0; background: var(--akhd-surface);
+  position: absolute; z-index: 2; top: calc(100% + 8px); right: 12px;
+  width: min(220px, calc(100% - 24px));
+  padding: 6px; background: var(--akhd-surface);
   border: 1px solid var(--akhd-border2); border-radius: var(--akhd-r-lg);
-  box-shadow: 0 16px 40px rgba(17, 24, 39, .14), 0 2px 8px rgba(17, 24, 39, .06);
+  box-shadow: 0 12px 32px rgba(20,20,40,.14);
   transform-origin: top right; opacity: 0; visibility: hidden; transform: translateY(-6px) scale(.96);
   transition: opacity .15s ease, transform .22s var(--akhd-ease-spring), visibility 0s linear .22s;
+  font-family: Inter, system-ui, sans-serif;
 }
 .akhdr-menu.open {
   opacity: 1; visibility: visible; transform: none;
   transition: opacity .15s ease, transform .22s var(--akhd-ease-spring), visibility 0s;
 }
-.akhdr-menu-head { display: flex; align-items: center; gap: 12px; padding: 12px 16px 14px; }
+.akhdr-menu-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px 10px;
+}
 .akhdr-menu-avatar {
-  flex: none; width: 40px; height: 40px; display: grid; place-items: center;
-  border-radius: var(--akhd-r-full); background: var(--akhd-purple); color: #fff;
-  font-weight: 800; font-size: 1rem;
+  width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+  background: var(--akhd-purple); color: #fff;
+  display: grid; place-items: center; font: 700 13px/1 Inter, system-ui, sans-serif;
 }
 .akhdr-menu-who { min-width: 0; }
-.akhdr-menu-name {
-  font-weight: 800; font-size: 1rem; color: var(--akhd-text);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.akhdr-menu-email {
-  margin-top: 1px; font-size: .84rem; font-weight: 600; color: var(--akhd-text-sub);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.akhdr-divider { height: 1px; margin: 4px 0; background: var(--akhd-border2); }
+.akhdr-menu-name { font-size: 13px; font-weight: 600; color: var(--akhd-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.akhdr-menu-email { font-size: 11px; color: var(--akhd-text-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.akhdr-divider { height: 1px; background: #F1F1F5; margin: 5px 4px; }
 .akhdr-item {
-  display: flex; align-items: center; gap: 14px; width: 100%; padding: 13px 18px;
-  border: 0; background: none; color: var(--akhd-text-sec);
-  font: 600 .95rem/1.2 'Nunito', system-ui, sans-serif; text-align: left; cursor: pointer;
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  border: 0; background: none; cursor: pointer; text-align: left;
+  font: 500 13px/1 Inter, system-ui, sans-serif; color: var(--akhd-text);
+  padding: 9px 10px; border-radius: 7px;
 }
 .akhdr-item:hover { background: var(--akhd-surface-hover); }
-.akhdr-item[aria-disabled="true"] { cursor: default; }
-.akhdr-item[aria-disabled="true"]:hover { background: none; }
-.akhdr-item.danger { color: var(--akhd-danger-text); }
+.akhdr-item svg { color: var(--akhd-text-sub); flex-shrink: 0; }
+.akhdr-item.danger { color: var(--akhd-danger); }
+.akhdr-item.danger svg { color: var(--akhd-danger); }
 .akhdr-item.danger:hover { background: var(--akhd-danger-soft); }
-.akhdr-item .akhdr-mi-label { flex: 1; }
+.akhdr-mi-label { flex: 1; }
 .akhdr-badge {
-  padding: 4px 11px; border-radius: var(--akhd-r-full);
-  background: var(--akhd-border); color: var(--akhd-text-sub);
-  font-size: .76rem; font-weight: 800;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .akhdr-menu, .akhdr-btn, .akhdr-avatar { transition: none; }
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+  background: #EF4444; color: #fff; font-size: 10.5px; font-weight: 800;
+  display: inline-flex; align-items: center; justify-content: center;
 }
