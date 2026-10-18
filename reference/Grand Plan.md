@@ -1724,9 +1724,12 @@ signals ──► NOTICE ──► PREPARE ──► OFFER ──► (person dec
 
 #### 7.16.8 Build steps
 
-1. **Unify the inbox** — one `proposals` list in the UI over both tables;
-   dismiss reasons sent; planner notifications through `notifyUser`; chat
-   suggestions of kind goal/conversation accepted as what they are.
+1. ✅ **Unify the inbox** (2026-10-18) — `GET /api/agent/proposals/inbox`
+   over both tables, each idea once (and each source skips what the other
+   offers); accept by kind (task, goal, check-in, conversation started in
+   chat); dismiss asks why and keeps it (`agent_suggestions.dismiss_reason`);
+   planner notifications through `notifyUser`. Gates: `agent.inbox_one_list`
+   (suite `proactive`), UI `chat.suggestions_inbox`.
 2. **Quiet learning pass** + Memory page (preview) — gives every later step
    real context.
 3. **Rich gather** — summaries, memories, goals' progress, struggles, decay,
