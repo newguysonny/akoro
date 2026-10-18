@@ -182,9 +182,6 @@ export default function InvoicesPage() {
         ) : (
           /* ══════════ LIST ══════════ */
           <>
-            <h1 className="ak-h1">Invoices</h1>
-            <p className="ak-sub">Billing records per subscription. Statuses: draft, open (awaiting payment), paid, void.</p>
-
             {loading && <p className="ak-sub">Loading…</p>}
             {loadError && <p className="ak-sub text-akoro-coral">{loadError}</p>}
 
