@@ -202,8 +202,14 @@ test("named kinds: true/false, labelling, assertion and reason, case study", asy
     { text: "Name the parts labelled P and Q.", type: "Labelling", format: "label", labels: ["P", "Q", "P"], label_answers: { P: "Petal", Q: "Sepal", Z: "x" }, figure_note: "A flower; P points at a petal, Q at a sepal." },
     { text: "Suggest two causes.", type: "Case study", format: "case_study", passage: 0 },
   ] });
-  const q = paper.questions;
-  assert.equal(q.length, 6, "an assertion-and-reason without both statements is dropped");
+  // Laid out in the template's parts: objective (A&R), true or false, labelling, case study.
+  const tf = paper.questions.filter((x) => x.format === "true_false");
+  const ar = paper.questions.filter((x) => x.format === "assertion_reason");
+  const lab = paper.questions.find((x) => x.format === "label");
+  const cs = paper.questions.find((x) => x.format === "case_study");
+  const q = [...tf, ...ar, lab, cs];
+  assert.equal(paper.questions.length, 6, "an assertion-and-reason without both statements is dropped");
+  assert.deepEqual(paper.questions.map((x) => x.format), ["assertion_reason", "assertion_reason", "true_false", "true_false", "label", "case_study"], "true or false is a part of its own, after the objective part");
   assert.deepEqual([q[0].options, q[0].correct, q[1].options, q[1].correct], [["True", "False"], 0, ["True", "False"], 1]);
   assert.deepEqual(q[2].options, [...qp.AR_OPTIONS], "the four standard options, never the model's");
   assert.equal(q[2].q, "Assertion: Leaves are green.\nReason: They contain chlorophyll.");

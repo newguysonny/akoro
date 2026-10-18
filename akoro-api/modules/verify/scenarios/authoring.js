@@ -206,7 +206,7 @@ export const authoringDiagramsEdits = {
     ctx.expect.ok("V2: a labelling question", !!lab, shape(v2.paper));
     ctx.expect.ok("V2: it carries its diagram (an SVG figure)", /<svg[\s>]/i.test(lab?.figure?.svg || ""), lab && { figure: !!lab.figure, note: lab.figure_note });
     ctx.expect.ok("V2: the three parts to label", (lab?.labels || []).length >= 3, lab?.labels);
-    ctx.expect.ok("V2: the marking scheme names them", (lab?.label_answers || []).length >= 3 || /incident|reflected|normal/i.test(lab?.marking || ""), lab && { label_answers: lab.label_answers, marking: lab.marking });
+    ctx.expect.ok("V2: the marking scheme names them", Object.keys(lab?.answer || {}).length >= 3 || /incident|reflected|normal/i.test(lab?.marking || ""), lab && { answer: lab.answer, marking: lab.marking });
     ctx.expect.eq("V2: V1's questions are kept", kept(v1.paper, v2.paper), []);
 
     // The teacher edits question 1 by hand on V2.

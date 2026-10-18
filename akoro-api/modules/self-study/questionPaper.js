@@ -257,7 +257,7 @@ export function buildPaperMessages({ topic, subject, classLevel = null, request 
 /** The base version as the model sees it: numbered, with what each has. */
 function paperForModel(base) {
   return (base.questions || []).map((q, i) => ({
-    index: i, text: q.q, type: q.type || (Array.isArray(q.options) ? "MCQ" : "Open"), max_points: q.max_points ?? null,
+    index: i, number: i + 1, text: q.q, type: q.type || (Array.isArray(q.options) ? "MCQ" : "Open"), max_points: q.max_points ?? null,
     difficulty: q.difficulty || null, cognitive_level: q.cognitive_level || null,
     ...(Array.isArray(q.options) ? { options: q.options, correct: q.correct ?? null } : {}),
     ...(q.figure ? { has_figure: true, figure_alt: q.figure.alt || q.figure.caption || "" } : {}),
@@ -276,6 +276,7 @@ export function buildRevisionMessages({ topic, subject, classLevel = null, reque
   const opts = plan?.options || Math.max(4, ...(base.questions || []).map((q) => (Array.isArray(q.options) ? q.options.length : 0)));
   const system = [
     "You revise a school assignment the teacher already has. Change ONLY what the teacher's follow-up asks; every other question stays exactly as it is.",
+    "The teacher counts questions from 1, as printed: \"question 2\" or \"Q2\" is the one with \"number\": 2 (its index is 1). \"from\" is always the index.",
     'Return the full new list in order. For a question that stays the same return just { "from": <its index> }. ' +
       'For a question you change return { "from": <its index>, "changed": true, ...all its fields }. For a new question return all its fields with no "from". ' +
       "A question that is removed is simply left out. Keep a changed question's figure by setting \"keep_figure\": true instead of redrawing it.",
@@ -287,6 +288,7 @@ export function buildRevisionMessages({ topic, subject, classLevel = null, reque
     "Write maths with Unicode, never LaTeX.",
     'Return JSON: { "note": string, "passages"?: [{ "title", "text" }], "questions": [ ... ] } — question fields as: { "text", "type", "max_points", "difficulty", "cognitive_level", "options"?, "correct"?, "figure"?: { "svg", "caption", "alt" }, "figure_note"?, "format"?, "assertion"?, "reason"?, "labels"?, "label_answers"?: [{ "label", "answer" }], "passage"?, "answer_space", "answer"?, "marking" } — unused fields are null (an unchanged question is { "from": i } with everything else null).',
     'A changed or new question gives "answer_space" (options · true_false · lines · working · blank, with its gap as ____ · labels) and "marking", the marking-scheme line (answer and how its marks split).',
+    'Its "type" is the kind as the teacher names it — "Essay", "True or false", "Fill in the gap", "MCQ", "Calculation", "Short answer" — never a generic "Open question".',
   ].join("\n");
   const user = `Topic: ${topic}\nSubject: ${subject}` + level(classLevel) +
     (base.passages?.length ? `\nThe current passages:\n${JSON.stringify(base.passages.map((p, i) => ({ index: i, title: p.title, text: String(p.text).slice(0, 1500) })))}` : "") +

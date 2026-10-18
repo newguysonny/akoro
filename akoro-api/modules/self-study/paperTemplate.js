@@ -85,16 +85,19 @@ const whenOf = (iso) => {
 
 /* ── The layout rules every AI-made paper follows ──────────────────────── */
 
-const FAMILY_ORDER = ["objective", "short", "label", "case", "essay"];
+const FAMILY_ORDER = ["objective", "truefalse", "short", "label", "case", "essay"];
 function familyOf(q) {
   if (q?.format === "case_study") return "case";
   if (q?.format === "label") return "label";
+  // True or false is a part of its own, as in the template (not with the MCQs).
+  if (q?.format === "true_false") return "truefalse";
   if (Array.isArray(q?.options)) return "objective";
   if (/essay/i.test(q?.type || "")) return "essay";
   return "short";
 }
 function partTitle(fam, qs) {
-  if (fam === "objective") return qs.every((q) => q.format === "true_false") ? "True or False" : "Multiple Choice";
+  if (fam === "objective") return "Multiple Choice";
+  if (fam === "truefalse") return "True or False";
   if (fam === "short") return qs.every((q) => answerSpaceFor(q) === "working") ? "Calculations" : "Short Answers";
   return { label: "Diagrams", case: "Case Study", essay: "Essay" }[fam];
 }
@@ -104,7 +107,7 @@ function partNote(fam, qs, first) {
   const last = first + qs.length - 1;
   if (fam === "case") return `Read the case study, then answer ${range(first, last)}.`;
   if (fam === "label") return "Name each labelled part of the diagram. Marks are shown at the end of each question.";
-  if (same && fam === "objective") return `Each question carries ${marksWord(pts[0])}.`;
+  if (same && (fam === "objective" || fam === "truefalse")) return `Each question carries ${marksWord(pts[0])}.`;
   return "Marks are shown at the end of each question.";
 }
 

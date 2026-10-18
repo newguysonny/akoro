@@ -3648,7 +3648,7 @@ export function clarify(field, question, extra = {}) {
   return { needsClarification: true, missing: field, question, ...extra };
 }
 
-async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, status, tools = openAiChatTools(), requiredTool = null, role = "student", trace = null, isAborted = () => false, think = false, streamText = true, model = null }) {
+async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, status, tools = openAiChatTools(), requiredTool = null, role = "student", trace = null, isAborted = () => false, think = false, streamText = true, model = null, teacherWords = null }) {
   const executions = [];
   const transcript = [...messages];
   if (requiredTool && !tools.some((tool) => tool.function?.name === requiredTool)) {
@@ -3741,6 +3741,10 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
       // The header stream too - the same labels the background workers send,
       // so the agent's subtitle shows live work during active chats as well.
       agentToolActivity(studentId, tool);
+      // A follow-up on a draft's questions goes to the paper writer in the
+      // teacher's own words: the model rewrote "Remove question 3" as the
+      // whole question list, and the revision changed other questions too.
+      if (tool === "revise_activity_draft" && teacherWords && input?.question_request) input = { ...input, question_request: teacherWords };
       const traceRow = trace?.toolStart(tool, input);
       let toolResult;
       try { toolResult = await executeChatTool(tool, input, studentId, { conversationId, role }); }
@@ -4165,7 +4169,9 @@ router.post("/agent", async (req, res) => {
       ? [...openAiChatTools({ allowToolRequest: false, selfTooling: true }).filter((t) => t.function.name === "schema_lookup" || t.function.name === "create_tool"),
         ...await learnerToolDefs(req.user.id, "instructor").catch(() => [])]
       : []);
+    const draftFollowUp = instructorTools.length > 0 && pendingDrafts.length > 0 && isDraftFollowUp(userMessage);
     const prepared = await runAgentToolLoop({
+      teacherWords: draftFollowUp ? userMessage.slice(0, 1500) : null,
       systemContent,
       messages: [...dialogue, { role: "user", content: userContent }],
       studentId: req.user.id,
@@ -4198,7 +4204,7 @@ router.post("/agent", async (req, res) => {
             // "let's plan for a test" twice, tools=0 both times). Only while
             // the feature gate keeps the study-prep tools in the list.
             ?? (studyPrepEnabled ? requiredStudyPrepTool(userMessage, dialogue) : null)))
-        : (instructorTools.length && pendingDrafts.length && isDraftFollowUp(userMessage)) ? "revise_activity_draft"
+        : draftFollowUp ? "revise_activity_draft"
         : ((instructorTools.length && requiresActivityPreparation(userMessage, dialogue))
           ? "prepare_activity" : null),
       role,
