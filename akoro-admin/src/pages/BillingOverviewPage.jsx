@@ -57,9 +57,6 @@ export default function BillingOverviewPage() {
     <PageLayout title="Billing Overview" subtitle="Subscription health at a glance">
       <div className="ak-page">
 
-        <h1 className="ak-h1">Overview</h1>
-        <p className="ak-sub">Subscription health at a glance, computed from live subscription and invoice records. Revenue metrics are grounded in paid invoices since the Paystack gateway went live.</p>
-
         {loading && <p className="ak-sub">Loading…</p>}
         {loadError && <p className="ak-sub text-akoro-coral">{loadError}</p>}
 
