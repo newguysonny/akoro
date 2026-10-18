@@ -581,7 +581,7 @@ export function PageLayout({ children, title, subtitle, action, contentMaxWidth 
 
   if (mobile) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', fontFamily: BX.font }}>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', fontFamily: BX.font, background: BX.white }}>
         <AppHeader
           onMenu={() => setDrawerOpen((o) => !o)}
           user={user}
