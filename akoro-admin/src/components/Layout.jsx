@@ -166,12 +166,16 @@ function ChildLink({ to, label, badge = 0 }) {
         transition: 'all .12s',
       })}
     >
-      <span style={{
-        width: 3, borderRadius: 2, alignSelf: 'stretch', flexShrink: 0,
-        background: isActive ? BX.primary : 'transparent',
-      }} />
-      <span style={{ flex: 1 }}>{label}</span>
-      <Badge count={badge} />
+      {({ isActive }) => (
+        <>
+          <span style={{
+            width: 3, borderRadius: 2, alignSelf: 'stretch', flexShrink: 0,
+            background: isActive ? BX.primary : 'transparent',
+          }} />
+          <span style={{ flex: 1 }}>{label}</span>
+          <Badge count={badge} />
+        </>
+      )}
     </NavLink>
   );
 }
