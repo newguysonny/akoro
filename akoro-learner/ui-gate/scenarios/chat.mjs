@@ -218,8 +218,74 @@ export const scenarios = [
     },
   },
   {
+    name: 'agent.ideas_and_suggestions',
+    description: "Ideas sit beside To do · Done · Suggestions: a card with where it came from, Do it sends its brief as the learner's message; a ready suggestion shows its preview and its own Yes, and Yes shows the report. (The ideas and the suggestion are served by the test so the screens can be checked; the server side is the backend gate's agent.ideas / agent.ready_proposal.)",
+    async run(t) {
+      const { page } = t;
+      const tag = newMarker().replace(/[^a-z0-9]/gi, '').slice(-6);
+      const idea = { id: '00000000-0000-4000-8000-0000000000a1', title: `Turn your Biology notes into a quiz ${tag}`, why: 'You added them on Monday and have not tested yourself yet.', brief: `Make me a 10-question quiz from my Biology notes ${tag}`, icon: 'quiz', context: { kind: 'record', label: 'Cell transport notes' } };
+      const sugg = { ref: 'p:00000000-0000-4000-8000-0000000000b2', id: '00000000-0000-4000-8000-0000000000b2', source: 'planner', kind: 'quiz_from_records', title: `A quiz from your Cell transport notes ${tag}`, why: "You're at 30% on osmosis.", createdAt: new Date().toISOString(),
+        preview: { kind: 'quiz', record: 'Cell transport notes', pages: 14, topics: ['Osmosis', 'Diffusion'], focus: 'Osmosis' }, yes: 'Yes, open the quiz', cost: 'free' };
+      let used = false;
+      await page.route('**/api/agent/ideas', (r) => r.fulfill({ json: { success: true, data: used ? [] : [idea] } }));
+      await page.route(`**/api/agent/ideas/${idea.id}/use`, (r) => { used = true; return r.fulfill({ json: { success: true, data: { ...idea, status: 'used' } } }); });
+      await page.route('**/api/agent/proposals/inbox', (r) => r.fulfill({ json: { success: true, data: [sugg], reasons: ['not_useful', 'wrong_time'] } }));
+      await page.route(`**/api/agent/proposals/inbox/${encodeURIComponent(sugg.ref)}/accept`, (r) => r.fulfill({ json: { success: true, data: { executed: true, kind: sugg.kind,
+        reportView: { text: `Here's your quiz ${tag} — it opens on your **Cell transport notes**.`, meta: { materials: [{ kind: 'study_tool', title: 'Quiz · Cell transport notes', href: '/library?record=00000000-0000-4000-8000-0000000000c3&tool=quiz' }] } } } } }));
+      // The brief goes out as a real chat turn: answered quickly here, so nothing is spent.
+      await page.route('**/api/adaptive/chat/agent**', (r) => r.fulfill({ json: { success: true, reply: 'On it.', response: 'On it.' } }));
+
+      await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
+      await page.getByRole('button', { name: /^Tasks/ }).first().click({ timeout: 30_000 });
+      await page.getByRole('button', { name: /Ideas/ }).first().click();
+      const card = page.locator(`[data-idea="${idea.id}"]`);
+      t.check('an Ideas section beside To do · Done · Suggestions, with the idea', await card.waitFor({ timeout: 20_000 }).then(() => true, () => false));
+      t.check('…saying where it came from', await card.getByText('Cell transport notes').isVisible().catch(() => false));
+      await card.getByRole('button', { name: 'Do it' }).click();
+      t.check('Do it sends its brief as your message', await page.getByText(idea.brief).first().waitFor({ timeout: 20_000 }).then(() => true, () => false));
+
+      await page.getByRole('button', { name: /^Tasks/ }).first().click();
+      await page.getByRole('button', { name: /Suggestions/ }).first().click();
+      const pv = page.locator('[data-proposal-preview="quiz"]').first();
+      t.check('a ready suggestion shows what it prepared', await pv.waitFor({ timeout: 20_000 }).then(() => true, () => false)
+        && /Cell transport notes/.test(await pv.innerText().catch(() => '')) && /reader writes the questions/.test(await pv.innerText().catch(() => '')));
+      const yes = page.getByRole('button', { name: 'Yes, open the quiz' }).first();
+      t.check('…with its own Yes', await yes.isVisible().catch(() => false));
+      await yes.click();
+      t.check('Yes shows the report in the chat', await page.getByText(new RegExp(`Here's your quiz ${tag}`)).first().waitFor({ timeout: 20_000 }).then(() => true, () => false));
+      t.check('…with the quiz to open', await page.locator('button[data-material="study_tool"]').last().isVisible().catch(() => false));
+    },
+  },
+  {
+    name: 'settings.agent_controls',
+    description: 'Settings → Agent: one switch per part (Suggestions and ideas, Learn from my conversations, Task check-ins), quiet hours and time zone — each saves and survives a reload — and this week\'s background budget.',
+    async run(t) {
+      const { page } = t;
+      const was = (await t.api('GET', '/api/agent/settings')).body?.data;
+      if (!was) t.block('agent settings did not load');
+      t.cleanup(() => t.api('PATCH', '/api/agent/settings', { proactive: was.proactive, checkins: was.checkins, quietStart: was.quietStart, quietEnd: was.quietEnd, timeZone: was.timeZone }));
+      const open = async () => {
+        await page.goto(`${t.app}/settings`, { waitUntil: 'domcontentloaded' });
+        await page.getByRole('button', { name: /Account/ }).first().locator('xpath=following-sibling::button[1]').click({ timeout: 30_000 });
+        await page.getByText('Suggestions and ideas', { exact: true }).waitFor({ timeout: 20_000 });
+      };
+      const knobOf = (label) => page.getByText(label, { exact: true }).locator('xpath=ancestor::*[.//div[contains(@style,"width: 42px")]][1]').locator('div[style*="width: 42px"]').first();
+      await open();
+      for (const l of ['Agent Online', 'Learn from my conversations', 'Task check-ins']) t.check(`"${l}" is there`, await page.getByText(l, { exact: true }).first().isVisible());
+      await knobOf('Suggestions and ideas').click();
+      await page.getByLabel('Quiet hours start').selectOption('21:00');
+      await page.getByLabel('Time zone').selectOption('Africa/Nairobi');
+      let saved = null;
+      for (let i = 0; i < 6; i++) { await page.waitForTimeout(800); saved = (await t.api('GET', '/api/agent/settings')).body?.data; if (saved?.timeZone === 'Africa/Nairobi') break; }
+      t.check('the switch, quiet hours and time zone save', saved?.proactive === !was.proactive && saved?.quietStart === '21:00' && saved?.timeZone === 'Africa/Nairobi', { actual: saved });
+      await open();
+      t.check('…and a reload shows them', await page.getByLabel('Quiet hours start').inputValue() === '21:00' && await page.getByLabel('Time zone').inputValue() === 'Africa/Nairobi');
+      t.check("this week's background budget is shown", await page.locator('[data-agent-budget]').isVisible().catch(() => false));
+    },
+  },
+  {
     name: 'settings.memory_controls',
-    description: 'Settings → Agent → Memory shows what the agent remembers and the "Learn from my conversations" switch, which saves and survives a reload.',
+    description: 'Settings → Agent shows what the agent remembers (Memory) and the "Learn from my conversations" switch, which saves and survives a reload.',
     async run(t) {
       const { page } = t;
       const was = await t.api('GET', '/api/agent-memory/v1/settings');
@@ -232,6 +298,9 @@ export const scenarios = [
         await page.goto(`${t.app}/settings`, { waitUntil: 'domcontentloaded' });
         await page.getByRole('button', { name: /Account/ }).first().locator('xpath=following-sibling::button[1]').click({ timeout: 30_000 });
         await page.getByText('Learn from my conversations', { exact: true }).waitFor({ timeout: 20_000 });
+        // The switch now sits with the other agent switches; Memory (the notes) loads on its own.
+        await page.getByText('Memory', { exact: true }).first().waitFor({ timeout: 20_000 });
+        await (notes ? page.getByRole('button', { name: /^Forget: / }).first() : page.getByText(/Nothing remembered yet/)).waitFor({ timeout: 20_000 }).catch(() => {});
       };
       await open();
       t.check('the Memory section is there', await page.getByText('Memory', { exact: true }).first().isVisible());

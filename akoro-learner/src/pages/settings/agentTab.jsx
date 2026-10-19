@@ -14,8 +14,12 @@ import Spinner from '../../components/common/Spinner.jsx';
 import AgentNetworkSection from './networkSection.jsx';
 import MyToolsSection from './myToolsSection.jsx';
 import MemorySection from './memorySection.jsx';
+import AutonomySection from './autonomySection.jsx';
 import { useInFlight } from '../../hooks/useInFlight.js';
 import { confirmDialog } from '../../components/common/ConfirmHost.jsx';
+
+/* "47 days left" for a goal with a date still ahead. */
+const daysLeft = (d) => { const n = d ? Math.ceil((new Date(d).getTime() - Date.now()) / 864e5) : null; return n != null && n >= 0 ? `${n} day${n === 1 ? '' : 's'} left` : ''; };
 
 /* ─── Agent tab ───────────────────────────────────────────────── */
 function AgentTab({ agent, setAgent, onSaveAgent }) {
@@ -194,7 +198,9 @@ function AgentTab({ agent, setAgent, onSaveAgent }) {
             </button>
             <div style={{ flex:1,minWidth:0 }}>
               <p style={{ fontSize:12.5,fontWeight:g.status==='achieved'?600:800,color:g.status==='achieved'?'var(--ak-text-muted)':'var(--ak-text)',margin:0,textDecoration:g.status==='achieved'?'line-through':'none',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',fontFamily:"'Nunito',sans-serif" }}>{g.title}</p>
-              {(g.category||g.target_date)&&<p style={{ fontSize:10.5,color:'var(--ak-text-muted)',margin:'2px 0 0',fontFamily:"'Nunito',sans-serif" }}>{[g.category,g.target_date?`by ${g.target_date}`:''].filter(Boolean).join(' · ')}</p>}
+              {(g.category||g.target_date)&&<p style={{ fontSize:10.5,color:'var(--ak-text-muted)',margin:'2px 0 0',fontFamily:"'Nunito',sans-serif" }}>{[g.category,g.target_date?`by ${g.target_date}`:'',daysLeft(g.target_date)].filter(Boolean).join(' · ')}</p>}
+              {/* The agent's weekly line, from real numbers only (§7.16.5). */}
+              {g.progress_note&&g.status!=='achieved'&&<p data-goal-progress="" style={{ fontSize:10.5,color:'var(--ak-text-sub)',margin:'2px 0 0',fontWeight:700,fontFamily:"'Nunito',sans-serif" }}>{g.progress_note}</p>}
             </div>
             <button onClick={()=>removeGoal(g)} title="Remove" style={{ width:26,height:26,borderRadius:8,border:'1px solid var(--ak-border2, #E3E0EE)',background:'transparent',color:'var(--ak-text-muted)',cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center' }}>×</button>
           </div>
@@ -227,6 +233,7 @@ function AgentTab({ agent, setAgent, onSaveAgent }) {
           }}/>
       )}
       <AgentNetworkSection/>
+      <AutonomySection/>
       <MemorySection/>
       <MyToolsSection/>
       {subjectSheet&&(

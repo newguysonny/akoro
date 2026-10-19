@@ -195,7 +195,7 @@ export async function reportInChat(userId, p, result) {
     if (!r) return null;
     const meta = { ...(r.meta || {}), reportOf: p.id };
     const { data: msg } = await db.from("chat_messages")
-      .insert({ session_id: p.chat_session_id, user_id: userId, role: "agent", text: r.text, meta }).select("id, text, meta, created_at").single();
+      .insert({ session_id: p.chat_session_id, user_id: userId, role: "agent", text: r.text, meta }).select("id, session_id, text, meta, created_at").single();
     if (!msg) return null;
     await edu().from("agent_proposals").update({ report_message_id: msg.id }).eq("id", p.id).eq("user_id", userId);
     await db.from("chat_sessions").update({ last_message_at: new Date().toISOString() }).eq("id", p.chat_session_id).eq("user_id", userId);

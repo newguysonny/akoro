@@ -63,12 +63,11 @@ export default function MemorySection() {
   const shown = all ? list : list.slice(0, SHOWN);
   return (
     <Section title="Memory">
-      <Row icon="ti-brain" label="Learn from my conversations"
-        sub={settings && !settings.agentOnline
-          ? 'Works while your agent is Online. It notes what helps it help you — never health, feelings, money or contact details.'
-          : 'After a chat goes quiet, your agent notes what helps it help you — never health, feelings, money or contact details.'} noArrow>
-        <Toggle on={learning} onChange={toggleLearning} />
-      </Row>
+      {!learning && (
+        <div style={{ padding: '10px 14px 0', fontSize: 12, color: 'var(--ak-text-muted)', fontFamily: NUNITO, lineHeight: 1.5 }}>
+          Learning from your conversations is off — what's here stays until you forget it.
+        </div>
+      )}
       {list.length === 0 ? (
         <div style={{ padding: '12px 14px', fontSize: 12.5, color: 'var(--ak-text-muted)', fontFamily: NUNITO, lineHeight: 1.5 }}>
           Nothing remembered yet. What your agent notes about how you learn, your goals and what you meant to come back to shows up here.

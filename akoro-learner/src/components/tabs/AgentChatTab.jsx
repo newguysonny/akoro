@@ -35,6 +35,7 @@ import ChallengeRequestCards from '../network/ChallengeRequestCards.jsx';
 import ConfirmChangeCard from './agentChat/ConfirmChangeCard.jsx';
 import IngestCard from './agentChat/IngestCard.jsx';
 import ChatFilesStrip from './agentChat/ChatFilesStrip.jsx';
+import ProposalPreview from './agentChat/ProposalPreview.jsx';
 import { addSimilar, chatFiles, chooseFolder, chooseSubject, dismissSimilar, fileIngest, filesOf, getIngest, isLibraryFile, restoreIngest, similarFor, startIngest, structureIngest, undoIngest } from '../../lib/chatUploads.js';
 import SimilarPicker from './agentChat/SimilarPicker.jsx';
 import { useVoiceAnswer } from '../../hooks/useVoiceAnswer.js';
@@ -89,6 +90,19 @@ function ThoughtBlock({ thinking, streaming }) {
 
 const FIND_SIMILAR = "Find similar material";   // the API's structureChips label
 const MATERIAL_ICON = { study_tool:"ti-layout-grid", folder:"ti-folder", blog:"ti-article", my_blog:"ti-pencil", course:"ti-school", record:"ti-paperclip", topic:"ti-chalkboard", activity:"ti-list-check" };
+
+/* Each suggestion kind's label and icon in Suggestions (the ready kinds, §7.16.3). */
+const SUGG_KIND = {
+  goal: ["agent.sugg_goal", "ti-target"], conversation: ["agent.sugg_chat", "ti-message-circle"], session: ["agent.proposal_kind_session", "ti-clock"],
+  practice: ["agent.proposal_kind_practice", "ti-pencil"], task: ["agent.sugg_task", "ti-clipboard"],
+  quiz_from_records: ["agent.kind_quiz", "ti-list-check"], teach_weak_topic: ["agent.kind_teach", "ti-school"], study_plan: ["agent.kind_plan", "ti-calendar-event"],
+  revision_battle: ["agent.kind_check", "ti-swords"], follow_up_question: ["agent.kind_follow_up", "ti-message-circle"], goal_nudge: ["agent.kind_goal_step", "ti-target"],
+  fix_it: ["agent.kind_fix_it", "ti-tool"],
+};
+
+/* Ideas: the icon for what it builds, and for where it came from. */
+const IDEA_ICON = { quiz: "ti-list-check", teach: "ti-school", plan: "ti-calendar-event", notes: "ti-notes", battle: "ti-swords", chat: "ti-message-circle" };
+const IDEA_FROM = { record: "ti-paperclip", goal: "ti-target", weak: "ti-chart-line", note: "ti-bookmark" };
 
 function AgentChatTab({
   onStartTeach, onTeachTopic, onStartExamPrep, onOpenConceptTracker, onOpenAdaptiveControls, agentNameProp, agentEmojiProp, onChatActive,
@@ -324,6 +338,8 @@ function AgentChatTab({
     at: m.created_at,
     ...(m.role !== "user" && Array.isArray(m.trace) ? { blocks: blocksFromSavedTrace(m.trace) } : {}),
     ...(m.role !== "user" && m.meta?.proposal ? { proposal: m.meta.proposal } : {}),
+    // A suggestion's report: a study plan comes back as its plan card (§7.16.2 "Report").
+    ...(m.role !== "user" && m.meta?.studyPrepSessionId ? { studyPrepSessionId: m.meta.studyPrepSessionId } : {}),
     ...(m.role !== "user" && Array.isArray(m.meta?.materials) && m.meta.materials.length ? { materials: cleanMaterials(m.meta.materials) } : {}),
     ...(m.role !== "user" && (m.meta?.ingests?.length || m.meta?.ingest?.id) ? (() => {
       const ids = (Array.isArray(m.meta.ingests) ? m.meta.ingests.map((x) => x?.id) : [m.meta.ingest.id]).filter(Boolean);
@@ -524,6 +540,27 @@ function AgentChatTab({
   const suggestionCount=inbox.length;
   const refetchInbox=async()=>{ try{ const d=await apiGet('/api/agent/proposals/inbox'); setInbox(Array.isArray(d?.data)?d.data:[]); if(Array.isArray(d?.reasons)) setDismissReasons(d.reasons.filter(r=>r!=="other")); }catch{} };
   useEffect(()=>{ refetchInbox(); },[]);
+  // Ideas (§7.16.4): buildable briefs the agent brings overnight. "Do it" sends the brief as
+  // the learner's own chat message — the ordinary, already-tested path from there.
+  const [ideas,setIdeas]=useState([]);
+  const [ideaBusy,setIdeaBusy]=useState(null);
+  const refetchIdeas=async()=>{ try{ const d=await apiGet('/api/agent/ideas'); setIdeas(Array.isArray(d?.data)?d.data:[]); }catch{} };
+  useEffect(()=>{ refetchIdeas(); },[]);
+  const runIdea=async(idea)=>{
+    if(ideaBusy) return;
+    setIdeaBusy(idea.id); setListError("");
+    try {
+      const d=await apiPost(`/api/agent/ideas/${encodeURIComponent(idea.id)}/use`,{});
+      setIdeas(prev=>prev.filter(x=>x.id!==idea.id));
+      setInnerTab("chat"); sendMessage(d?.data?.brief||idea.brief);
+    } catch(e){ setListError(e?.message||t('agent.proposal_failed')); refetchIdeas(); }
+    finally{ setIdeaBusy(null); }
+  };
+  const dropIdea=async(idea)=>{
+    if(ideaBusy) return;
+    setIdeas(prev=>prev.filter(x=>x.id!==idea.id));
+    try { await apiPost(`/api/agent/ideas/${encodeURIComponent(idea.id)}/dismiss`,{}); } catch { refetchIdeas(); }
+  };
   const acceptIdea=async(it)=>{
     if(inboxBusyRef) return;
     setInboxBusyRef(it.ref); setListError("");
@@ -531,10 +568,7 @@ function AgentChatTab({
       const d=await apiPost(`/api/agent/proposals/inbox/${encodeURIComponent(it.ref)}/accept`,{});
       const r=d?.data||{};
       setInbox(prev=>prev.filter(x=>x.ref!==it.ref));
-      if(r.kind==='conversation'||it.kind==='conversation'){ setInnerTab("chat"); sendMessage(r.prompt||it.title); }
-      else if(r.kind==='session'||it.kind==='session') pushAgent(t('agent.proposal_done_session'));
-      else if(r.kind==='goal'||it.kind==='goal') pushAgent(t('agent.proposal_done_goal').replace('{title}',r.goal?.title||r.title||it.title));
-      else { pushAgent(t('agent.suggestion_added').replace('{title}',r.task?.title||r.title||it.title)); refetchTasks(); }
+      afterAccept(r, r.kind||it.kind, it.title);
     } catch(e){ setListError(e?.message||t('agent.proposal_failed')); refetchInbox(); }
     finally{ setInboxBusyRef(null); }
   };
@@ -548,6 +582,30 @@ function AgentChatTab({
     finally{ setInboxBusyRef(null); }
   };
 
+  // After Yes (§7.16.2 "Report"): the result lands in the thread it was offered in. The server
+  // posts it there (shown here when that chat is open); accepted from Suggestions, it comes back
+  // as a view shown where the learner is. A follow-up carries on as their own chat message.
+  const afterAccept=(r,kind,title)=>{
+    if(kind==="follow_up_question"||kind==="conversation"){ setInnerTab("chat"); sendMessage(r.prompt||title); return; }
+    if(["task","practice","goal_nudge","fix_it"].includes(kind)) refetchTasks();
+    if(r.report){
+      if(r.report.session_id===sessionIdRef.current){ const post=fromSaved({ ...r.report, role:"agent" }); setMessages(prev=>prev.some(m=>m.id===post.id)?prev:[...prev,post]); setInnerTab("chat"); }
+      return;
+    }
+    const v=r.reportView;
+    if(v){
+      const t2=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+      setMessages(prev=>[...prev,{ id:Date.now()+Math.random(), from:"agent", text:v.text, time:t2,
+        ...(v.meta?.materials?.length?{ materials:cleanMaterials(v.meta.materials) }:{}),
+        ...(v.meta?.studyPrepSessionId?{ studyPrepSessionId:v.meta.studyPrepSessionId }:{}) }]);
+      setInnerTab("chat");   // the report is where the learner looks next
+      return;
+    }
+    if(kind==="session") pushAgent(t('agent.proposal_done_session'));
+    else if(kind==="goal") pushAgent(t('agent.proposal_done_goal').replace('{title}',r.goal?.title||r.title||title));
+    else pushAgent(t('agent.suggestion_added').replace('{title}',r.task?.title||r.title||title));
+  };
+
   // A suggestion the agent posted into this chat (D49): the same one is in
   // Suggestions — a decision in either place shows in both.
   const decidePosted=async(msg,action)=>{
@@ -559,10 +617,7 @@ function AgentChatTab({
       if(action==="accept"){
         const d=await apiPost(`/api/agent/proposals/inbox/${encodeURIComponent(ref)}/accept`,{});
         mark("executed");
-        const r=d?.data||{};
-        if(msg.proposal.kind==="goal") pushAgent(t('agent.proposal_done_goal').replace('{title}',r.title||msg.proposal.title));
-        else if(msg.proposal.kind==="session") pushAgent(t('agent.proposal_done_session'));
-        else { pushAgent(t('agent.suggestion_added').replace('{title}',r.title||msg.proposal.title)); refetchTasks(); }
+        afterAccept(d?.data||{}, msg.proposal.kind, msg.proposal.title);
       } else {
         await apiPost(`/api/agent/proposals/inbox/${encodeURIComponent(ref)}/dismiss`,{ reason: action });
         mark("dismissed");
@@ -1165,11 +1220,12 @@ function AgentChatTab({
                     </div>
                   )}
                   {!isMe&&msg.studyPrepSessionId&&<StudyPrepChatCard sessionId={msg.studyPrepSessionId} onEvents={onStudyPrepEvents}/>}
+                  {!isMe&&msg.proposal?.status==="proposed"&&msg.proposal.preview&&<ProposalPreview preview={msg.proposal.preview}/>}
                   {!isMe&&msg.proposal&&(msg.proposal.status==="proposed"?(
                     <div style={{ display:"flex",flexWrap:"wrap",gap:7,marginTop:9 }}>
                       <button type="button" onClick={()=>decidePosted(msg,"accept")} disabled={!!inboxBusyRef}
                         style={{ display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:20,border:"none",background:inboxBusyRef?"var(--ak-border)":`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:12.5,fontWeight:800,cursor:inboxBusyRef?"wait":"pointer",fontFamily:"'Nunito',sans-serif" }}>
-                        {inboxBusyRef===`p:${msg.proposal.id}`?<Spinner size={11} color="#fff"/>:<Icon name="ti-check" size={13}/>}{t('agent.posted_yes')}
+                        {inboxBusyRef===`p:${msg.proposal.id}`?<Spinner size={11} color="#fff"/>:<Icon name="ti-check" size={13}/>}{msg.proposal.yes||t('agent.posted_yes')}{msg.proposal.cost==="free"&&<span style={{ fontSize:10.5,fontWeight:800,opacity:.85 }}>· free</span>}
                       </button>
                       <button type="button" onClick={()=>decidePosted(msg,"wrong_time")} disabled={!!inboxBusyRef}
                         style={{ padding:"8px 14px",borderRadius:20,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface)",color:"var(--ak-text)",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('agent.posted_later')}</button>
@@ -1339,8 +1395,8 @@ function AgentChatTab({
             ))}
           </div>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px 8px" }}>
-            <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>{[["pending",t('agent.to_do')],["done",t('agent.done')],["suggestions",t('agent.suggestions')]].map(([k,l])=><button key={k} onClick={()=>setTaskFilter(k)} style={{ padding:"5px 12px",borderRadius:20,border:`1.5px solid ${taskFilter===k?BRAND:"var(--ak-border2)"}`,background:taskFilter===k?`${BRAND}10`:"transparent",color:taskFilter===k?BRAND:"var(--ak-text-muted)",fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",gap:5 }}>{l}{k==="suggestions"&&suggestionCount>0&&<span style={{ fontSize:9,fontWeight:900,background:taskFilter===k?BRAND:"var(--ak-border)",color:taskFilter===k?"#fff":"var(--ak-text-muted)",borderRadius:8,padding:"1px 5px" }}>{suggestionCount}</span>}</button>)}</div>
-            {taskFilter!=="suggestions"&&<button onClick={openNewTask} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:11.5,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
+            <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>{[["pending",t('agent.to_do')],["done",t('agent.done')],["suggestions",t('agent.suggestions')],["ideas",t('agent.ideas')]].map(([k,l])=><button key={k} onClick={()=>setTaskFilter(k)} style={{ padding:"5px 12px",borderRadius:20,border:`1.5px solid ${taskFilter===k?BRAND:"var(--ak-border2)"}`,background:taskFilter===k?`${BRAND}10`:"transparent",color:taskFilter===k?BRAND:"var(--ak-text-muted)",fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",gap:5 }}>{k==="ideas"&&<Icon name="ti-bulb" size={12}/>}{l}{k==="ideas"&&ideas.length>0&&<span style={{ fontSize:9,fontWeight:900,background:taskFilter===k?BRAND:"var(--ak-border)",color:taskFilter===k?"#fff":"var(--ak-text-muted)",borderRadius:8,padding:"1px 5px" }}>{ideas.length}</span>}{k==="suggestions"&&suggestionCount>0&&<span style={{ fontSize:9,fontWeight:900,background:taskFilter===k?BRAND:"var(--ak-border)",color:taskFilter===k?"#fff":"var(--ak-text-muted)",borderRadius:8,padding:"1px 5px" }}>{suggestionCount}</span>}</button>)}</div>
+            {taskFilter!=="suggestions"&&taskFilter!=="ideas"&&<button onClick={openNewTask} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:11.5,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
               <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>{t('agent.new_task')}
             </button>}
           </div>
@@ -1351,13 +1407,29 @@ function AgentChatTab({
             </div>
           )}
           <div style={{ flex:1,padding:"0 16px 16px",display:"flex",flexDirection:"column",gap:8 }}>
-            {taskFilter==="suggestions"?(
+            {taskFilter==="ideas"?(
+              ideas.length===0?<div style={{ textAlign:"center",padding:"32px 16px",color:"var(--ak-text-muted)" }}><Icon name="ti-bulb" size={40} color="var(--ak-text-muted)" style={{opacity:.3}}/><p style={{ fontSize:13,fontWeight:700,marginTop:8,maxWidth:260,marginInline:"auto",lineHeight:1.5 }}>{t('agent.ideas_empty')}</p></div>
+              :(<div data-ideas="">{ideas.map(idea=>(
+                <div key={idea.id} data-idea={idea.id} style={{ display:"flex",gap:11,alignItems:"flex-start",flexWrap:"wrap",padding:"12px 13px",borderRadius:14,border:"1px solid var(--ak-border)",background:"var(--ak-surface)",marginBottom:8 }}>
+                  <span style={{ width:36,height:36,borderRadius:11,background:`${BRAND}12`,color:BRAND,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}><Icon name={IDEA_ICON[idea.icon]||"ti-bulb"} size={17} color={BRAND}/></span>
+                  <div style={{ flex:"1 1 160px",minWidth:0 }}>
+                    <p style={{ fontSize:13.5,fontWeight:800,color:"var(--ak-text)",margin:0,lineHeight:1.4 }}>{idea.title}</p>
+                    {idea.why&&<p style={{ fontSize:12,color:"var(--ak-text-sub)",margin:"3px 0 6px",lineHeight:1.45 }}>{idea.why}</p>}
+                    {idea.context?.label&&<span style={{ display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:800,color:"var(--ak-text-muted)",background:"var(--ak-surface-hover)",borderRadius:20,padding:"2px 8px" }}><Icon name={IDEA_FROM[idea.context.kind]||"ti-sparkles"} size={10}/> {idea.context.label}</span>}
+                  </div>
+                  <div style={{ display:"flex",flexDirection:"column",gap:4,alignItems:"flex-end",flexShrink:0,marginLeft:"auto" }}>
+                    <button type="button" onClick={()=>runIdea(idea)} disabled={!!ideaBusy} style={{ display:"flex",alignItems:"center",gap:5,padding:"7px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:12,fontWeight:800,cursor:ideaBusy?"wait":"pointer",fontFamily:"'Nunito',sans-serif" }}>{ideaBusy===idea.id?<Spinner size={11} color="#fff"/>:null}{t('agent.ideas_do')}</button>
+                    <button type="button" onClick={()=>dropIdea(idea)} disabled={!!ideaBusy} style={{ padding:"4px 6px",border:"none",background:"none",color:"var(--ak-text-muted)",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('agent.ideas_not')}</button>
+                  </div>
+                </div>
+              ))}<p style={{ fontSize:11.5,color:"var(--ak-text-muted)",fontWeight:600,margin:"6px 2px 0",lineHeight:1.5 }}>{t('agent.ideas_note')}</p></div>)
+            ):taskFilter==="suggestions"?(
               suggestionCount===0?<div style={{ textAlign:"center",padding:"32px 16px",color:"var(--ak-text-muted)" }}><Icon name="ti-bulb" size={40} color="var(--ak-text-muted)" style={{opacity:.3}}/><p style={{ fontSize:13,fontWeight:700,marginTop:8,maxWidth:260,marginInline:"auto",lineHeight:1.5 }}>{t('agent.suggestions_empty')}</p></div>
               :(<>{inbox.map(it=>{
                 const planner=it.source==="planner";
                 const accent=planner?GOLD:BRAND;
-                const kindKey=it.kind==="goal"?"agent.sugg_goal":it.kind==="conversation"?"agent.sugg_chat":it.kind==="session"?"agent.proposal_kind_session":it.kind==="practice"?"agent.proposal_kind_practice":"agent.sugg_task";
-                const kindIcon=it.kind==="goal"?"ti-target":it.kind==="conversation"?"ti-message-circle":it.kind==="session"?"ti-clock":it.kind==="practice"?"ti-pencil":"ti-clipboard";
+                const kindKey=SUGG_KIND[it.kind]?.[0]||"agent.sugg_task";
+                const kindIcon=SUGG_KIND[it.kind]?.[1]||"ti-clipboard";
                 const busy=inboxBusyRef===it.ref;
                 return (
                 <div key={it.ref} style={{ padding:"12px 14px",borderRadius:14,background:"var(--ak-surface)",border:`1px dashed ${planner?`${GOLD}70`:`${BRAND}45`}`,marginBottom:8 }}>
@@ -1368,6 +1440,7 @@ function AgentChatTab({
                   </div>
                   <p style={{ fontSize:13.5,fontWeight:700,color:"var(--ak-text)",margin:"0 0 4px",lineHeight:1.45 }}>{it.title}</p>
                   {it.why&&<p style={{ fontSize:12,color:"var(--ak-text-sub)",margin:"0 0 10px",lineHeight:1.5 }}>{it.why}</p>}
+                  {it.preview&&<ProposalPreview preview={it.preview}/>}
                   {askWhy===it.ref?(
                   <div>
                     <p style={{ fontSize:11.5,fontWeight:800,color:"var(--ak-text-sub)",margin:"2px 0 7px" }}>{t('agent.dismiss_why')}</p>
@@ -1381,7 +1454,7 @@ function AgentChatTab({
                   ):(
                   <div style={{ display:"flex",alignItems:"center",gap:7 }}>
                     <button onClick={()=>acceptIdea(it)} disabled={!!inboxBusyRef} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:inboxBusyRef?"var(--ak-border)":`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:11,fontWeight:800,cursor:inboxBusyRef?"wait":"pointer",opacity:inboxBusyRef&&!busy?0.55:1,fontFamily:"'Nunito',sans-serif" }}>
-                      {busy?<Spinner size={11} color="#fff"/>:<svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>}{t(it.kind==="conversation"?'agent.sugg_start_chat':it.kind==="goal"?'agent.sugg_add_goal':planner?'agent.proposal_approve':'agent.suggestion_accept')}
+                      {busy?<Spinner size={11} color="#fff"/>:<svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>}{it.yes||t(it.kind==="conversation"?'agent.sugg_start_chat':it.kind==="goal"?'agent.sugg_add_goal':planner?'agent.proposal_approve':'agent.suggestion_accept')}
                     </button>
                     <button onClick={()=>setAskWhy(it.ref)} disabled={!!inboxBusyRef} title={t('agent.suggestion_dismiss')} aria-label={t('agent.suggestion_dismiss')} style={{ width:27,height:27,borderRadius:"50%",border:"1px solid var(--ak-border2)",background:"var(--ak-surface-hover)",color:"var(--ak-text-muted)",cursor:inboxBusyRef?"wait":"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}><Icon name="ti-x" size={12}/></button>
                     <span style={{ fontSize:10,color:"var(--ak-text-muted)",fontWeight:600,fontStyle:"italic" }}>{t(planner?'agent.proposals_sub':'agent.suggestions_sub')}</span>

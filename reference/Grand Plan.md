@@ -1749,23 +1749,40 @@ signals ──► NOTICE ──► PREPARE ──► OFFER ──► (person dec
    recent Records and the learner's time zone, the learner's words framed as
    data; platform-paid (D46); strict output schema, and the validator drops a
    proposal that doesn't say what it noticed. Gate `agent.planner_rich_gather`.
-   Still open: quiet hours are enforced in Lagos time (right for Nigerian
-   learners; a learner elsewhere needs the validator in their zone).
-4. 🟡 **Ready proposals** — ✅ posted into chat with reply buttons (2026-10-18,
-   `modules/autonomy/deliver.js`, D49): the chat the noticed note came from
-   if used in the last 7 days (the planner tags each proposal with its note),
-   else the latest chat, else a new one; never in quiet hours or mid-chat (a
-   sweep retries ~10 min later); one a day; a decision in the chat or in
-   Suggestions shows in both. Gate `agent.proactive_in_chat`. Still to do:
-   `preview` via dry-run tools (a drafted quiz or plan carried with the
-   proposal) and the new kinds (`quiz_from_records`, `teach_weak_topic`,
-   `study_plan`, `revision_battle`, `follow_up_question`, `fix_it`); a UI
-   gate check for the in-chat buttons.
-5. **Goal work** — progress notes, nudges, implied goals.
-6. **Ideas** — second output of the cycle, Ideas section (preview), tap → chat turn.
-7. **Instructor proactive** — the same engine over classes: low scores, missing
-   work, next activity.
-8. **Budget + consents** — USD caps, separate toggles, explainers.
+   Quiet hours now follow each learner's own window and time zone (step 8).
+4. ✅ **Ready proposals** (2026-10-19) — posted into chat with reply buttons
+   (`modules/autonomy/deliver.js`, D49): the chat the noticed note came from
+   if used in the last 7 days, else the latest chat, else a new one; never in
+   quiet hours or mid-chat; one a day; a decision in the chat or in
+   Suggestions shows in both. New kinds `quiz_from_records`,
+   `teach_weak_topic`, `study_plan`, `revision_battle`, `follow_up_question`,
+   `goal_nudge`, each held to the learner's real records, goals, weak topics
+   and notes (`readyKinds.shapeReady`); the `preview` is written by code from
+   those facts, never by the model. `fix_it` (3+ overdue tasks → spread two a
+   day) is found by code. Yes replays the real tool and the result is posted
+   back in the proposal's chat (or shown in place). Gates
+   `agent.ready_proposal`, UI `chat.agent.ideas_and_suggestions`.
+5. ✅ **Goal work** (2026-10-19) — a weekly progress line from counted facts
+   (tasks done, study sessions, best battle) on each goal, shown in
+   Settings → Agent; nudges for goals untouched 7+ days; at most one implied
+   goal and one fix-it a week. Gate `agent.goal_work`.
+6. ✅ **Ideas** (2026-10-19) — the second output of the same planner call
+   (`edu.agent_ideas`: ≤ 6 live, refilled at ≤ 3, 7-day expiry), each tied to
+   a real record, goal, weak topic or note; an Ideas section beside To do /
+   Done / Suggestions; tap → a chat turn. Gate `agent.ideas`.
+7. ✅ **Instructor proactive** (2026-10-19) — `instructorCycle.js` over the
+   instructor's own activities only: missing work, low scores (< 55% average),
+   the next activity. Facts only, no model call, never reads a learner's
+   chats; approval drafts or reminds, assigning is still the instructor's
+   tap. On by default; no instructor settings switch yet. Gate
+   `agent.instructor_proactive`.
+8. ✅ **Budget + consents** (2026-10-19) — Settings → Agent: Agent Online,
+   Suggestions and ideas, Learn from my conversations, Task check-ins (all on
+   by default with Agent Online, D47), quiet hours and time zone, and this
+   week's background budget. Weekly USD cap per learner, $0.10 by default
+   (`AKORO_AUTONOMY_WEEKLY_BUDGET_USD`), Monday in their zone: 80% raises the
+   `autonomy_budget` alert, 100% stops the planner and quiet learning until
+   Monday. Gate `agent.consents_quiet`, UI `settings.agent_controls`.
 
 **Exit (each step has a Verification Gate scenario):** a settled conversation
 yields a summary and deduped memories and nothing sensitive; a planner run over
@@ -3086,6 +3103,10 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   consents (§7.16.8). Every learner UI piece is previewed before it is built.
 - **Exit:** the §7.16.8 exit list, one Verification Gate scenario each, all
   green on the sandbox. (D46–D48 locked 2026-10-18.)
+- **Status: ✅ done (2026-10-19)** — all eight steps shipped; suite `proactive`
+  10/10 and the UI gates `chat.suggestions_inbox`,
+  `chat.agent.ideas_and_suggestions`, `settings.agent_controls`,
+  `settings.memory_controls` pass on desktop and phone.
 
 
 ### Phase 14 — Materials to study (§7.17)

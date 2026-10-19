@@ -17,7 +17,7 @@
 import db from "../../db.js";
 import { executeChatTool } from "../adaptive-learning/chat.js";
 import { createGoal } from "../learner-goals/service.js";
-import { markPostedDecision, reportInChat } from "../autonomy/deliver.js";
+import { markPostedDecision, reportFor, reportInChat } from "../autonomy/deliver.js";
 import { spreadDue } from "../autonomy/readyKinds.js";
 
 import { DISMISS_REASONS, reasonOf, normalizeTitle, mergeInbox, parseRef } from "./inboxCore.js";
@@ -212,7 +212,9 @@ export async function approveProposal(userId, id) {
     // Report (§7.16.2): the result in the same thread it was offered in.
     const { data: tzRow } = await edu().from("learner_agent_autonomy").select("time_zone").eq("user_id", userId).maybeSingle();
     const report = await reportInChat(userId, claimed, { ...detail, timeZone: tzRow?.time_zone || "Africa/Lagos" });
-    return { executed: true, kind, ...detail, ...(report ? { report } : {}) };
+    // Not posted in a chat (accepted from Suggestions): the same report for the app to show where the learner is.
+    const view = report ? null : reportFor(claimed, { ...detail, timeZone: tzRow?.time_zone || "Africa/Lagos" });
+    return { executed: true, kind, ...detail, ...(report ? { report } : {}), ...(view ? { reportView: view } : {}) };
   } catch (execError) {
     // Released to a visible FAILED state — never back to proposed, never silent.
     await edu().from("agent_proposals")
