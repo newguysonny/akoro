@@ -25,6 +25,7 @@ test("the folder: subject and kind, private, an existing one reused (D51, D53)",
   assert.equal(folderNameFor({}), "From chat — Materials");
   assert.deepEqual(guessKind({ names: ["WAEC Biology 2019 Paper 2.pdf"] }), { subject: "Biology", kind: "past_paper", topic: null });
   assert.equal(guessKind({ names: ["scan.jpg"], ask: "my maths notes" }).subject, "Mathematics");
+  assert.equal(guessKind({ names: ["WAEC Biology2019.pdf"] }).subject, "Biology", "a subject glued to a year still counts");
   // A past-paper name wins over a model that missed it; an off-list kind falls back.
   assert.equal(shapeClassification({ subject: "Biology", kind: "notes", topic: null }, { subject: null, kind: "past_paper" }).kind, "past_paper");
   assert.equal(shapeClassification({ subject: "x", kind: "poem", topic: null }, { subject: null, kind: "notes" }).kind, "notes");

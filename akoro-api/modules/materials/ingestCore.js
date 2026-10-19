@@ -86,7 +86,7 @@ const SUBJECTS = ["Biology", "Chemistry", "Physics", "Mathematics", "English", "
 export function guessKind({ names = [], ask = "" }) {
   const text = `${names.join(" ")} ${ask}`;
   const kind = PAST_PAPER.test(text) ? "past_paper" : /\bslides?\b|\.pptx?\b/i.test(text) ? "slides" : /\bsyllabus\b/i.test(text) ? "syllabus" : /\bnotes?\b/i.test(text) ? "notes" : "other";
-  const subject = SUBJECTS.find((s) => new RegExp(`\\b${s.replace(/ /g, "\\s+")}\\b`, "i").test(text)) || (/\bmaths?\b/i.test(text) ? "Mathematics" : null);
+  const subject = SUBJECTS.find((s) => new RegExp(`\\b${s.replace(/ /g, "\\s+")}(?![a-z])`, "i").test(text)) || (/\bmaths?\b/i.test(text) ? "Mathematics" : null);
   return { subject, kind, topic: null };
 }
 

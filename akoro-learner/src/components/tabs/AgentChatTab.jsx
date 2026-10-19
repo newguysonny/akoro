@@ -669,7 +669,12 @@ function AgentChatTab({
   const runIngest = async (ingest, files, chatId) => {
     const done = await fileIngest(ingest, files, putIngest);
     if (done?.state !== 'ready') return;
-    const r = await structureIngest(done.id).catch(() => null);
+    // The read can be briefly unavailable (the API keeps nothing then): two more tries, 20 s apart.
+    let r = null;
+    for (let i = 0; i < 3 && !r; i++) {
+      if (i) await new Promise((ok) => setTimeout(ok, 20000));
+      r = await structureIngest(done.id).catch(() => null);
+    }
     if (r?.data) putIngest(r.data);
     if (r?.message && sessionIdRef.current === chatId) {
       setMessages((prev) => (prev.some((m) => m.id === r.message.id) ? prev : [...prev, fromSaved({ ...r.message, role: 'agent' })]));

@@ -59,6 +59,7 @@ test("recurring topics across papers: most papers first, then marks", () => {
 
 test("wiring: once per upload, platform-paid, private questions, posted into the chat; undo removes them", () => {
   assert.match(routes, /if \(row\.structure\) return res\.json/, "a second call returns the first result");
+  assert.match(routes, /if \(calls && failures === calls\) \{\s*await move\(row, "ready"\);\s*return res\.status\(503\)/, "a failed read keeps nothing and can be retried");
   assert.match(routes, /__payer: "platform", __feature: "material_structure"/);
   assert.match(routes, /from\("material_questions"\)\.insert/);
   assert.match(routes, /from\("material_questions"\)\.delete\(\)\.eq\("user_id", userId\)\.eq\("ingest_id", row\.id\)/);

@@ -180,10 +180,12 @@ router.post("/ingest/:id/structure", asyncHandler(async (req, res) => {
 
   const items = [];
   const questions = [];
+  let calls = 0, failures = 0;
   for (const record of records || []) {
     const pages = await pagesOfRecord(record);
     if (!pages.length) continue;
     let raw = "{}";
+    calls += 1;
     try {
       const out = await openai.chat.completions.create({
         __role: "background", messages: structureMessages({ names: [record.name], kindHint: row.doc_kind, pages }),
@@ -192,6 +194,7 @@ router.post("/ingest/:id/structure", asyncHandler(async (req, res) => {
       });
       raw = out?.choices?.[0]?.message?.content || "{}";
     } catch (error) {
+      failures += 1;
       console.warn("[materials] structure call failed:", String(error?.message || error).slice(0, 160));
     }
     const s = cleanStructure(raw, { pageNumbers: pages.map((p) => p.pageNumber), fallbackKind: row.doc_kind || "other" });
@@ -199,6 +202,11 @@ router.post("/ingest/:id/structure", asyncHandler(async (req, res) => {
     for (const q of s.questions) questions.push({ ...q, record_id: record.id, exam: s.exam, subject: s.subject || row.subject, year: s.year });
   }
 
+  // Every read failed (the model was unavailable): keep nothing, say nothing — it can be tried again.
+  if (calls && failures === calls) {
+    await move(row, "ready");
+    return res.status(503).json({ success: false, code: "structure_unavailable", message: "Couldn't read it just now — try again in a moment." });
+  }
   const main = items[0] || null;
   const structure = {
     items: items.map(({ dropped, ...it }) => it),

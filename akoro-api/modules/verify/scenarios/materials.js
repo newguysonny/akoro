@@ -54,8 +54,8 @@ export const chatUploadFiled = {
   params: { learner: { default: "@tester18" } },
   async run(ctx, p) {
     const m = ctx.marker.replace(/[^a-z0-9]/gi, "").slice(-6);
-    const subject = `Biology${m}`;   // a subject name unique to this run, so the folder is new
-    const names = [`WAEC ${subject} 2019 Paper 2.pdf`];
+    const subject = "Biology";
+    const names = [`WAEC Biology 2019 Paper 2 ${m}.pdf`];
     const ingest = (body) => ctx.http({ as: p.learner, method: "POST", path: "/api/agent/materials/ingest", body });
     const folderOf = async (id) => ((await ctx.http({ as: p.learner, method: "GET", path: "/api/records/folders" })).body?.data || []).find((f) => f.id === id);
 
@@ -95,7 +95,7 @@ export const chatUploadFiled = {
     ctx.expect.status("ready → extracting is refused (409)", back, 409);
 
     // 4. A second upload on the same subject reuses the folder.
-    const b = await ingest({ names: [`WAEC ${subject} 2020 Paper 1.pdf`], ask: "" });
+    const b = await ingest({ names: [`WAEC Biology 2020 Paper 1 ${m}.pdf`], ask: "" });
     const second = b.body?.data;
     ctx.expect.ok("a second upload reuses the folder", second?.folder?.id === first.folder.id && second?.folder?.created === false, second?.folder);
     const rec2 = await uploadRecord(ctx, p.learner, `${ctx.marker} 2020.pdf`);
