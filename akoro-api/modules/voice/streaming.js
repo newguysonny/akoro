@@ -1,11 +1,12 @@
 /**
  * voice/streaming.js
  * ─────────────────────────────────────────────────────────────
- * Realtime voice streaming via OpenAI Realtime transcription (STT)
+ * Realtime voice streaming.
+ * Live STT via Deepgram streaming (OpenAI Realtime as fallback, deepgramLive.js)
  * + streaming TTS via Deepgram Aura (OpenAI tts-1 as fallback, modules/voice/tts.js).
  *
  * STT events (client → server):
- *   start_voice_stream          — open OpenAI realtime connection
+ *   start_voice_stream          — open the live transcription connection
  *   voice_audio_chunk { audio } — base64 PCM16 mono 24kHz chunk
  *   stop_voice_stream           — close connection, emit voice_complete
  *
@@ -30,7 +31,7 @@
 
 import { speakStream } from "./tts.js";
 import OpenAI from "openai";
-import { createRealtimeTranscriber } from "./openaiRealtime.js";
+import { createLiveTranscriber } from "./liveTranscriber.js";
 import { coinsAvailable, debitCoins, InsufficientCoins } from "../../lib/coins.js";
 import { coinsForTtsChars } from "../../lib/aiPricing.js";
 
@@ -66,14 +67,19 @@ export function setupVoiceStreaming(io) {
       let accumulated = "";
       let interim     = "";   // partial of the current utterance
 
-      const live = createRealtimeTranscriber({
+      const live = createLiveTranscriber({
         onOpen: () => {
-          // Tell frontend OpenAI is ready — start sending audio chunks
+          // Tell the frontend transcription is ready — start sending audio chunks
           socket.emit("voice_stream_ready");
         },
         onDelta: (delta) => {
-          // Interim — words still forming, show as grey ghost text
+          // Interim (OpenAI) — words still forming, show as grey ghost text
           interim += delta;
+          socket.emit("voice_interim", { text: interim, accumulated });
+        },
+        onInterim: (text) => {
+          // Interim (Deepgram) — the whole current segment so far
+          interim = text;
           socket.emit("voice_interim", { text: interim, accumulated });
         },
         onCompleted: (text) => {
