@@ -5,6 +5,7 @@
  */
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import { textPdf } from "./reader.js";
+import { readLogs, logSeq } from "../../../lib/logTap.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -153,7 +154,9 @@ export const pastPaperStructured = {
     await ctx.http({ as, method: "POST", path: `/api/agent/materials/ingest/${ingest.id}/progress`, body: { state: "ready", pages } });
 
     // Structure: topics on real pages, the questions with their marks, said back in the chat.
+    const since = logSeq();
     const st = await ctx.http({ as, method: "POST", path: `/api/agent/materials/ingest/${ingest.id}/structure` });
+    for (const line of readLogs({ since, filter: "materials" }).lines) ctx.note(`log: ${String(line.msg).slice(0, 300)}`);
     const data = st.body?.data;
     ctx.note(`topics: ${(data?.topics || []).join(" · ")} · questions ${data?.questions}`);
     ctx.note(`message: ${String(st.body?.message?.text || "").slice(0, 400)}`);
