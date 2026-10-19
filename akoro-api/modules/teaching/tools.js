@@ -21,6 +21,7 @@
  * the caller belongs to one, otherwise to the teacher — the same rule as every
  * other AI feature.
  */
+import { speakBuffer } from "../voice/tts.js";
 import { Router } from "express";
 import db from "../../db.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
@@ -509,14 +510,13 @@ router.post("/podcast/audio", teacherOnly, async (req, res) => {
     const parts = [];
     const segments = [];
     let bytes = 0;
+    let spokeWith = "tts-1";
     for (const t of turns) {
       const text = String(t.text || "").trim();
       if (!text) continue;
-      const speech = await openai.audio.speech.create({
-        model: "tts-1", voice: voiceOf[String(t.speaker || "Host")] || "alloy",
-        input: text.slice(0, 4000), response_format: "mp3",
-      });
-      const buf = Buffer.from(await speech.arrayBuffer());
+      // Deepgram Aura first; OpenAI tts-1 only as the fallback (voice/tts.js).
+      const { model, buffer: buf } = await speakBuffer({ text: text.slice(0, 4000), voice: voiceOf[String(t.speaker || "Host")] || "alloy", openai });
+      spokeWith = model;
       parts.push(buf);
       segments.push({ speaker: String(t.speaker || "Host"), byteStart: bytes, byteEnd: bytes + buf.length });
       bytes += buf.length;
@@ -528,7 +528,7 @@ router.post("/podcast/audio", teacherOnly, async (req, res) => {
     try {
       const r = await debitCoins({
         userId: req.user.id, coins: Math.max(1, Math.ceil(total / 1000)),
-        feature: "tool_podcast_tts", model: "tts-1", ref: "podcast", billTo,
+        feature: "tool_podcast_tts", model: spokeWith, ref: "podcast", billTo,
       });
       charged = r?.charged ?? r?.coins ?? 0;
     } catch (e) {

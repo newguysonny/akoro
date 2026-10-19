@@ -45,6 +45,7 @@
  *   app.use("/api/records", standardLimit, recordsModule);
  */
 
+import { speakBuffer } from "../voice/tts.js";
 import { Router }           from "express";
 import db                   from "../../db.js";
 import { authenticateToken } from "../auth/routes.js";
@@ -1093,6 +1094,7 @@ router.post("/podcast", authenticateToken, asyncHandler(async (req, res) => {
   res.status(202).json({ success: true, data: { artifact: await withPodcastAudio(created.artifact, userId) } });
 
   // After the response: script → narration → storage → the item is ready.
+  let spokeWith = PODCAST_LIMITS.TTS_MODEL;   // the provider that narrated, for the charge
   void runPodcastJob({ artifactId, target, scope, pageNumber: page, pageText, focus, length, startedAt }, {
     gather: (args) => gatherToolPassages({ ...args, search: searchRecordChunks }),
     chat: async (messages, len) => {
@@ -1104,12 +1106,14 @@ router.post("/podcast", authenticateToken, asyncHandler(async (req, res) => {
       return completion.choices?.[0]?.message?.content || "{}";
     },
     speak: async (input, voice) => {
-      const speech = await openai.audio.speech.create({ model: PODCAST_LIMITS.TTS_MODEL, voice, input, response_format: "mp3" });
-      return Buffer.from(await speech.arrayBuffer());
+      // Deepgram Aura first; OpenAI tts-1 only as the fallback (voice/tts.js).
+      const { model, buffer } = await speakBuffer({ text: input, voice, openai });
+      spokeWith = model;
+      return buffer;
     },
     charge: (chars) => debitCoins({
-      userId, billTo, coins: coinsForTtsChars(PODCAST_LIMITS.TTS_MODEL, chars),
-      feature: "reader_podcast_tts", model: PODCAST_LIMITS.TTS_MODEL, ref: artifactId,
+      userId, billTo, coins: coinsForTtsChars(spokeWith, chars),
+      feature: "reader_podcast_tts", model: spokeWith, ref: artifactId,
     }),
     store: (audio) => putRecordObject({ userId, name: `podcasts/${artifactId}.mp3`, body: audio, contentType: "audio/mpeg" }),
     update: (id, content) => updateArtifact({ userId, id, patch: { content, updated_at: new Date().toISOString() } }),

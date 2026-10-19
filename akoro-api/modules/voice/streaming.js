@@ -2,7 +2,7 @@
  * voice/streaming.js
  * ─────────────────────────────────────────────────────────────
  * Realtime voice streaming via OpenAI Realtime transcription (STT)
- * + streaming TTS via OpenAI tts-1 (TTS). Single OPENAI_API_KEY.
+ * + streaming TTS via Deepgram Aura (OpenAI tts-1 as fallback, modules/voice/tts.js).
  *
  * STT events (client → server):
  *   start_voice_stream          — open OpenAI realtime connection
@@ -28,6 +28,7 @@
  *   tts_error { message }           — TTS failure
  */
 
+import { speakStream } from "./tts.js";
 import OpenAI from "openai";
 import { createRealtimeTranscriber } from "./openaiRealtime.js";
 import { coinsAvailable, debitCoins, InsufficientCoins } from "../../lib/coins.js";
@@ -151,17 +152,13 @@ export function setupVoiceStreaming(io) {
       ttsStreams.set(socket.id, controller);
 
       try {
-        debitCoins({ userId: uid, coins: coinsForTtsChars("tts-1", input.length), feature: "voice_tts", model: "tts-1", billTo })
+        // Deepgram Aura first; OpenAI tts-1 only as the fallback (modules/voice/tts.js).
+        const { model, chunks } = await speakStream({ text: input, voice: ttsVoice, signal: controller.signal, openai });
+        debitCoins({ userId: uid, coins: coinsForTtsChars(model, input.length), feature: "voice_tts", model, billTo })
           .catch((e) => { if (!(e instanceof InsufficientCoins)) console.warn("[coins] tts-stream charge failed:", e.message); });
-        const response = await openai.audio.speech.create({
-          model:           "tts-1",
-          voice:           ttsVoice,
-          input,
-          response_format: "mp3",
-        });
 
-        // Pipe the ReadableStream body as base64 chunks
-        for await (const chunk of response.body) {
+        // Pipe the audio as base64 chunks
+        for await (const chunk of chunks) {
           if (controller.signal.aborted) break;
           socket.emit("tts_audio_chunk", {
             chunk: Buffer.from(chunk).toString("base64"),

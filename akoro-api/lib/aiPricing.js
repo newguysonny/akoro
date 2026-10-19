@@ -83,7 +83,7 @@ export function cachedTokensOf(usage = {}) {
 // ── Audio (voice) pricing ─────────────────────────────────────────────────────
 // STT priced per minute of audio; TTS priced per character of input.
 const STT_USD_PER_MIN = { "whisper-1": 0.006, "deepgram": 0.0043 };
-const TTS_USD_PER_1K_CHARS = { "tts-1": 0.015, "tts-1-hd": 0.030 };   // $15 / 1M chars
+const TTS_USD_PER_1K_CHARS = { "tts-1": 0.015, "tts-1-hd": 0.030, "deepgram-aura-2": 0.030 };   // $15 / 1M chars (Aura-2: $30 / 1M — re-check Deepgram's price list)
 const AUDIO_BYTES_PER_SEC = num(process.env.AUDIO_BYTES_PER_SEC, 3000); // est. for compressed voice
 
 /** Estimate audio minutes from a buffer size when duration is unknown (Whisper). */

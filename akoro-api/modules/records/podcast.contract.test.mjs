@@ -141,7 +141,8 @@ test("routes: made by the server, polled, never client-writable, audio deleted w
   assert.match(post, /podcastInFlight\(a\.content\)/);          // one episode at a time
   assert.match(post, /res\.status\(202\)[\s\S]*void runPodcastJob/);   // answers first, works after
   assert.match(post, /__userId: userId, __billTo: billTo/);
-  assert.match(post, /coinsForTtsChars\(PODCAST_LIMITS\.TTS_MODEL, chars\)/);
+  assert.match(post, /coinsForTtsChars\(spokeWith, chars\)/, "charged at the rate of the provider that narrated");
+  assert.match(post, /await speakBuffer\(\{ text: input, voice, openai \}\)/, "Deepgram first, OpenAI as fallback");
   assert.match(routes, /SERVER_MADE_KINDS\.includes\(v\.row\.kind\)\) return res400/);   // no client-made podcasts
   assert.match(routes, /SERVER_MADE_KINDS\.includes\(row\.kind\)\) return res400/);      // no content patches
   assert.match(routes, /ownsRecordFileKey\(raw\.audioKey, userId\)/);                   // presign only own keys

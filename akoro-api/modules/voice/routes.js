@@ -15,6 +15,7 @@ import OpenAI, { toFile } from "openai";
 import multer            from "multer";
 import { authenticateToken } from "../auth/routes.js";
 import { transcribeBufferDeepgram, hasDeepgram, grantAgentToken } from "./deepgram.js";
+import { speakBuffer } from "./tts.js";
 import { tutorSystemPrompt, protegeDeps } from "../adaptive-learning/chat.js";
 import { loadTaughtKnowledge, renderTaughtContext } from "../adaptive-learning/protege.js";
 import { loadDoctrine } from "../agent-context/context-manager.js";
@@ -86,7 +87,7 @@ router.post("/transcribe", authenticateToken, upload.single("audio"), async (req
    POST /api/voice/speak
    Receives: { text, voice?, speed? }
    Returns:  audio/mpeg stream
-   TTS: OpenAI tts-1
+   TTS: Deepgram Aura (OpenAI tts-1 as fallback)
    voice defaults to "alloy" if not provided or invalid
 ══════════════════════════════════════════════════════════════ */
 router.post("/speak", authenticateToken, async (req, res) => {
@@ -99,15 +100,9 @@ router.post("/speak", authenticateToken, async (req, res) => {
     const ttsVoice = VALID_VOICES.includes(voice) ? voice : "alloy";
     const input = text.slice(0, 4096);   // OpenAI TTS limit
 
-    const mp3 = await openai.audio.speech.create({
-      model:  "tts-1",
-      voice:  ttsVoice,
-      input,
-      speed:  Math.min(2.0, Math.max(0.25, speed)),
-    });
-
-    chargeVoice(req.user.id, "voice_tts", "tts-1", coinsForTtsChars("tts-1", input.length));
-    const buffer = Buffer.from(await mp3.arrayBuffer());
+    // Deepgram Aura first; OpenAI tts-1 only as the fallback (modules/voice/tts.js).
+    const { model, buffer } = await speakBuffer({ text: input, voice: ttsVoice, openai });
+    chargeVoice(req.user.id, "voice_tts", model, coinsForTtsChars(model, input.length));
 
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Content-Length", buffer.length);
