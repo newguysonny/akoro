@@ -129,6 +129,8 @@ export const chatUploadFiled = {
 
 export const pastPaperStructured = {
   name: "materials.past_paper_structured", area: "materials", risk: "write",
+  // The paper is read (one model pass) and a Study Prep plans from it in the background (up to 10 decisions).
+  timeoutMs: 480_000,
   description: "A past paper dropped into chat is read into topics and its questions (with marks, private), the protégé posts what it found into that chat, the agent's past-paper analysis uses them, and Undo removes them.",
   params: { learner: { default: "@tester18" } },
   async run(ctx, p) {
@@ -213,8 +215,17 @@ export const pastPaperStructured = {
       input: { goal: `${ctx.marker} WAEC Biology from my past paper`, from_materials: true, folder: data?.folder?.name || ingest.folder?.name } });
     ctx.note(`study prep: ${JSON.stringify({ from: sp?.from, status: sp?.status, plan: (sp?.plan || []).map((t) => t.label) }).slice(0, 400)}`);
     ctx.expect.ok("Study Prep plans from the folder", !!sp?.from && /past papers/i.test(sp.from), sp);
+    // Planning runs in the background (the card streams it): wait for the plan (≤ 4 min).
+    let plan = sp?.plan || [];
+    for (let i = 0; i < 48 && sp?.sessionId && !plan.length; i++) {
+      await sleep(5_000);
+      const v = await ctx.http({ as, path: `${spBase}/${sp.sessionId}` });
+      if (v.body?.session?.status === "awaiting_confirmation" || v.body?.session?.status === "paused") plan = v.body.session.plan || [];
+      if (v.body?.session?.status === "paused") break;
+    }
+    ctx.note(`plan: ${plan.map((t) => t.label).join(" · ")}`);
     const topicSet = new Set((data?.topics || []).map((t) => t.toLowerCase()));
-    ctx.expect.ok("…its plan uses only the paper's topics", (sp?.plan || []).length > 0 && sp.plan.every((t) => topicSet.has(String(t.label).toLowerCase())), { plan: sp?.plan, topics: data?.topics });
+    ctx.expect.ok("…its plan uses only the paper's topics", plan.length > 0 && plan.every((t) => topicSet.has(String(t.label).toLowerCase())), { plan, topics: data?.topics });
     const [row] = await ctx.db.rows("edu.study_prep_sessions", { learner_id: me.id, goal: { like: `${ctx.marker}%` } }, { columns: "syllabus_source, syllabus_ref, entry_mode", limit: 1 });
     ctx.expect.ok("…and the session records the folder as its syllabus", row?.syllabus_source === "documents" && row?.syllabus_ref === (data?.folder?.id || ingest.folder?.id) && row?.entry_mode === "material", row);
     if (sp?.sessionId) await ctx.http({ as, method: "POST", path: `${spBase}/${sp.sessionId}/cancel`, body: {} });
