@@ -32,7 +32,7 @@ export async function resolveContentAccess({ userId, recordId: rawRecordId, cont
   if (recordId) {
     if (!/^[0-9a-f-]{36}$/i.test(recordId)) return { status: 400, message: "A valid recordId is required." };
     const { data: rec, error } = await (await edu()).from("records")
-      .select("id, user_id, name, mime, file_key").eq("id", recordId).maybeSingle();
+      .select("id, user_id, name, mime, file_key").eq("id", recordId).is("deleted_at", null).maybeSingle();
     if (error) throw error;
     if (!rec || rec.user_id !== userId) return { status: 404, message: "Record not found." };
     if (!rec.file_key) return { status: 400, message: "This record has no saved file — only its details were captured." };
@@ -42,7 +42,7 @@ export async function resolveContentAccess({ userId, recordId: rawRecordId, cont
     // Shared content — the SAME rule the discovery feed opens under. The
     // earliest record holding the key owns it (a key can appear twice).
     const { data: rec, error } = await (await edu()).from("records")
-      .select("id, user_id, name, mime, file_key, kind, private").eq("file_key", contentKey)
+      .select("id, user_id, name, mime, file_key, kind, private").eq("file_key", contentKey).is("deleted_at", null)
       .order("created_at", { ascending: true }).limit(1).maybeSingle();
     if (error) throw error;
     if (!rec || rec.kind !== "upload") return { status: 404, message: "Content not found." };
@@ -68,7 +68,7 @@ export async function resolveAskTargetFor({ userId, recordId: rawRecordId, conte
   if (recordId) {
     if (!/^[0-9a-f-]{36}$/i.test(recordId)) return { status: 400, message: "A valid recordId is required." };
     const { data: rec, error } = await (await edu()).from("records")
-      .select("id, user_id, name, kind, file_key").eq("id", recordId).maybeSingle();
+      .select("id, user_id, name, kind, file_key").eq("id", recordId).is("deleted_at", null).maybeSingle();
     if (error) throw error;
     if (!rec || rec.user_id !== userId) return { status: 404, message: "Record not found." };
     return askTargetForRecord(rec);
@@ -77,7 +77,7 @@ export async function resolveAskTargetFor({ userId, recordId: rawRecordId, conte
     const id = await resolveContentAccess({ userId, contentKey });
     if (id.status) return id;
     const { data: rec, error } = await (await edu()).from("records")
-      .select("id, user_id, name, kind, file_key").eq("file_key", contentKey)
+      .select("id, user_id, name, kind, file_key").eq("file_key", contentKey).is("deleted_at", null)
       .order("created_at", { ascending: true }).limit(1).maybeSingle();
     if (error) throw error;
     if (!rec) return { status: 404, message: "Content not found." };

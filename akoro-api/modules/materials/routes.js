@@ -4,7 +4,8 @@
  * their Library, in a folder the protégé picks or creates.
  *
  *   POST /api/agent/materials/ingest                { names, ask, chatSessionId?, replaces? }
- *        → classify, pick/create the folder → the ingest (state received)
+ *        → each file classified; one ingest per folder (folderMatch.js: the learner's
+ *          own folder for the subject first, a new one only when none fits) → { data, ingests, batchId }
  *   POST /api/agent/materials/ingest/:id/records    { recordIds }
  *        → the uploaded records go into the folder → filed
  *   POST /api/agent/materials/ingest/:id/progress   { state: extracting|ready|failed, pages?, error? }
@@ -13,8 +14,12 @@
  *   POST /api/agent/materials/ingest/:id/similar    → Akoro material on its topics (D52) → offering_more
  *   POST /api/agent/materials/ingest/:id/similar/add { keys } → the chosen ones into the folder → ready
  *   POST /api/agent/materials/ingest/:id/similar/dismiss      → "Not now" → ready
- *   POST /api/agent/materials/ingest/:id/undo       → removes exactly what it made → undone
+ *   POST /api/agent/materials/ingest/:id/folder     { folderId } → "save to A or B?" answered, remembered per subject
+ *   POST /api/agent/materials/ingest/:id/subject    { subject | null } → "which subject?" answered (null: keep it unsorted)
+ *   POST /api/agent/materials/ingest/:id/undo       → Recently deleted (30 days) → undone
+ *   POST /api/agent/materials/ingest/:id/restore    → back where it was → ready
  *   GET  /api/agent/materials/ingest/:id
+ *   GET  /api/agent/materials/chat/:chatId           → "Files in this chat"
  *
  * The bytes go up the way a Library upload does (presign → PUT → POST
  * /api/records) and the uploader's browser runs the same extraction (hanji
@@ -23,18 +28,20 @@
  * workflow definition (an unlisted move answers 409).
  */
 import { Router } from "express";
+import { randomUUID } from "node:crypto";
 import db from "../../db.js";
 import { authenticateToken } from "../auth/routes.js";
 import { openai } from "../../lib/aiModel.js";
-import { removeRecordFile } from "../records/lib/storage.js";
 import { getExtraction } from "../records/extractLib.js";
 import { cleanStructure, structureChips, structureMessage, structureMessages, structureSchema, STRUCTURE_LIMITS } from "./structureCore.js";
 import { folderItemForCandidate, searchTopics, shapeCandidates, SIMILAR_LIMITS } from "./similarCore.js";
 import { searchBlogPosts } from "../adaptive-learning/blogResearch.js";
 import { assertTransition, TransitionError } from "../workflows/definition.js";
 import {
-  INGEST_LIMITS, ingestWorkflow, classifyMessages, classifySchema, folderItemFor, folderNameFor, guessKind, ingestToApi, shapeClassification,
+  INGEST_LIMITS, RESTORE_DAYS, ingestWorkflow, classifyMessages, classifySchema, folderItemFor, guessFile, ingestToApi, shapeClassification,
 } from "./ingestCore.js";
+import { pickFolder, subjectKey, subjectLabel, UNSORTED_FOLDER } from "./folderMatch.js";
+import { filingSentence } from "./structureCore.js";
 
 const router = Router();
 router.use(authenticateToken);
@@ -60,21 +67,73 @@ async function move(row, to, patch = {}) {
   return data;
 }
 
-/** Classify from names + the learner's words: a small capped call, the platform's (D46); a guess if it fails. */
+/** Classify each file from its name + the learner's words: one small capped call, the platform's (D46); guesses if it fails. */
 async function classify(names, ask, userId) {
-  const fallback = guessKind({ names, ask });
   try {
     const res = await openai.chat.completions.create({
-      __role: "background", messages: classifyMessages({ names, ask }), temperature: 0, max_tokens: 80,
+      __role: "background", messages: classifyMessages({ names, ask }), temperature: 0, max_tokens: 60 + 50 * names.length,
       response_format: classifySchema(),
-      __payer: "platform", __feature: "material_ingest", __userId: userId, __timeoutMs: 8_000, __maxRetries: 0,
+      __payer: "platform", __feature: "material_ingest", __userId: userId, __timeoutMs: 10_000, __maxRetries: 0,
     });
-    return shapeClassification(res?.choices?.[0]?.message?.content, fallback);
+    return shapeClassification(res?.choices?.[0]?.message?.content, names, ask);
   } catch (error) {
     console.warn("[materials] classify fell back to the guess:", String(error?.message || error).slice(0, 120));
-    return fallback;
+    return names.map((n) => guessFile(n, ask));
   }
 }
+
+/** What the learner already has: folders, what earlier uploads filed where, the folders they chose. */
+async function folderContext(userId) {
+  const [{ data: folders }, { data: filed }, { data: defaults }] = await Promise.all([
+    edu().from("library_folders").select("id, name").eq("user_id", userId).limit(MAX_FOLDERS + 10),
+    edu().from("material_ingests").select("folder_id, subject, doc_kind, record_ids").eq("user_id", userId)
+      .neq("state", "undone").not("folder_id", "is", null).not("subject", "is", null).limit(500),
+    edu().from("material_folder_defaults").select("subject_key, kind, folder_id").eq("user_id", userId).limit(200),
+  ]);
+  const stats = (filed || []).map((r) => ({ folder_id: r.folder_id, subject: r.subject, kind: r.doc_kind, count: (r.record_ids || []).length || 1 }));
+  return { folders: folders || [], stats, defaults: defaults || [] };
+}
+
+/** pickFolder's answer made real: an existing folder, a new one, two to choose from, or none. */
+async function resolveFolder(userId, { subject, kind }, ctx) {
+  const pick = pickFolder({ subject, kind, ...ctx, atCap: ctx.folders.length >= MAX_FOLDERS });
+  if (pick.folder) return { folder_id: pick.folder.id, folder_name: pick.folder.name, folder_created: false, choices: null };
+  if (pick.choices) return { folder_id: null, folder_name: null, folder_created: false, choices: pick.choices };
+  if (pick.create) {
+    const made = await folderFor(userId, pick.create);
+    if (made) {
+      if (made.created) ctx.folders.push({ id: made.id, name: made.name });
+      return { folder_id: made.id, folder_name: made.name, folder_created: made.created, choices: null };
+    }
+  }
+  return { folder_id: null, folder_name: null, folder_created: false, choices: null };
+}
+
+/**
+ * Move an upload's files to another folder: out of the old one (removed if
+ * this upload made it and it is now empty), into the new. → the row's patch.
+ */
+async function refile(userId, row, target) {
+  const ids = (row.record_ids || []).map(String);
+  if (row.folder_id && row.folder_id !== target.id && ids.length) {
+    await edu().from("library_folder_items").delete().eq("folder_id", row.folder_id).eq("user_id", userId).eq("item_type", "record").in("item_ref", ids);
+  }
+  if (ids.length) {
+    const { data: records } = await edu().from("records").select("id, name, mime").eq("user_id", userId).in("id", ids);
+    if (records?.length) {
+      const { error } = await edu().from("library_folder_items")
+        .upsert(records.map((r) => ({ folder_id: target.id, user_id: userId, ...folderItemFor(r, row.doc_kind) })), { onConflict: "folder_id,item_type,item_ref" });
+      if (error) throw error;
+    }
+  }
+  if (row.folder_id && row.folder_id !== target.id && row.folder_created) {
+    const { count } = await edu().from("library_folder_items").select("id", { count: "exact", head: true }).eq("folder_id", row.folder_id);
+    if (!count) await edu().from("library_folders").delete().eq("id", row.folder_id).eq("user_id", userId);
+  }
+  return { folder_id: target.id, folder_name: target.name, folder_created: row.folder_id === target.id ? row.folder_created : !!target.created };
+}
+
+const withFiling = (row, patch) => ({ filing: { ...(row.filing || {}), ...patch } });
 
 /** An existing folder with this name (any case), else a new private one. → { id, name, created } | null */
 async function folderFor(userId, name) {
@@ -104,21 +163,50 @@ router.post("/ingest", asyncHandler(async (req, res) => {
   }
   // "Save it again" after an Undo: the new upload takes over the old one's chat message.
   const replaced = req.body?.replaces ? await loadOwn(req.body.replaces, userId) : null;
-  const kind = await classify(names, ask, userId);
-  const folderName = folderNameFor(kind);
-  const folder = await folderFor(userId, folderName);
-  const { data, error } = await edu().from("material_ingests").insert({
-    user_id: userId, chat_session_id: chatSessionId, names, state: "received",
-    folder_id: folder?.id || null, folder_name: folder?.name || null, folder_created: !!folder?.created,
-    doc_kind: kind.kind, subject: kind.subject,
-    ...(replaced?.state === "undone" && replaced.chat_message_id ? { chat_message_id: replaced.chat_message_id, chat_session_id: replaced.chat_session_id } : {}),
-  }).select("*").single();
-  if (error) throw error;
-  if (data.chat_message_id) {
-    const { data: msg } = await db.from("chat_messages").select("meta").eq("id", data.chat_message_id).eq("user_id", userId).maybeSingle();
-    if (msg) await db.from("chat_messages").update({ meta: { ...(msg.meta || {}), ingest: { id: data.id } } }).eq("id", data.chat_message_id).eq("user_id", userId);
+  const kinds = await classify(names, ask, userId);
+  const ctx = await folderContext(userId);
+
+  // One upload per folder: files of one subject and kind together, each group
+  // filed where the learner keeps that subject; unknown ones held as Unsorted
+  // until they're read. ("Save it again" keeps its files together.)
+  const groups = new Map();
+  for (const [i, k] of kinds.entries()) {
+    const subject = subjectLabel(k.subject);
+    const key = replaced ? "all" : subject ? `${subjectKey(subject)}|${k.kind}` : "unsorted";
+    if (!groups.has(key)) groups.set(key, { subject, kind: k.kind, topic: k.topic, indexes: [] });
+    groups.get(key).indexes.push(i);
   }
-  res.status(201).json({ success: true, data: ingestToApi(data) });
+  const placed = new Map();
+  for (const g of groups.values()) {
+    const where = await resolveFolder(userId, { subject: g.subject, kind: g.kind }, ctx);
+    const sig = where.folder_id || (where.choices ? `choose:${where.choices.map((c) => c.id).join(",")}` : `none:${g.subject}|${g.kind}`);
+    if (placed.has(sig)) {
+      const p = placed.get(sig);
+      p.indexes.push(...g.indexes);
+      if (g.kind === "past_paper") p.kind = "past_paper";
+    } else placed.set(sig, { ...g, where });
+  }
+
+  const batchId = randomUUID();
+  const made = [];
+  for (const g of placed.values()) {
+    const indexes = g.indexes.sort((a, b) => a - b);
+    const { data, error } = await edu().from("material_ingests").insert({
+      user_id: userId, chat_session_id: chatSessionId, names: indexes.map((i) => names[i]), state: "received",
+      folder_id: g.where.folder_id, folder_name: g.where.folder_name, folder_created: g.where.folder_created,
+      doc_kind: g.kind, subject: g.subject, batch_id: batchId,
+      filing: { fileIndexes: indexes, ...(g.where.choices ? { choices: g.where.choices } : {}) },
+      ...(replaced?.state === "undone" && replaced.chat_message_id ? { chat_message_id: replaced.chat_message_id, chat_session_id: replaced.chat_session_id } : {}),
+    }).select("*").single();
+    if (error) throw error;
+    made.push(data);
+  }
+  if (made[0]?.chat_message_id) {
+    const { data: msg } = await db.from("chat_messages").select("meta").eq("id", made[0].chat_message_id).eq("user_id", userId).maybeSingle();
+    if (msg) await db.from("chat_messages").update({ meta: { ...(msg.meta || {}), ingest: { id: made[0].id }, ingests: made.map((r) => ({ id: r.id })) } }).eq("id", made[0].chat_message_id).eq("user_id", userId);
+  }
+  // `data` is the first upload (older apps); `ingests` is the whole batch, each with the files it holds.
+  res.status(201).json({ success: true, data: ingestToApi(made[0]), ingests: made.map(ingestToApi), batchId });
 }));
 
 router.post("/ingest/:id/records", asyncHandler(async (req, res) => {
@@ -229,22 +317,32 @@ router.post("/ingest/:id/structure", asyncHandler(async (req, res) => {
     })));
     if (error) console.warn("[materials] questions not saved:", error.message);
   }
-  // A folder this upload made under "From chat — …" gets its real name once the subject is known.
-  const subject = main?.subject || row.subject;
+  // Filed by its name; now it's read. A different subject (or one found for an
+  // Unsorted file) moves it to where that subject lives; still none → ask.
+  const found = subjectLabel(main?.subject);
   const kind = main?.kind || row.doc_kind;
-  if (row.folder_id && row.folder_created && /^From chat/.test(row.folder_name || "") && subject) {
-    const better = folderNameFor({ subject, kind });
-    const { error } = await edu().from("library_folders").update({ name: better, updated_at: now() }).eq("id", row.folder_id).eq("user_id", userId);
-    if (!error) row.folder_name = better;
+  const subject = found || row.subject;
+  let filePatch = {};
+  let filing = {};
+  if (found && subjectKey(found) !== subjectKey(row.subject)) {
+    const where = await resolveFolder(userId, { subject: found, kind }, await folderContext(userId));
+    if (where.folder_id && where.folder_id !== row.folder_id) {
+      filePatch = await refile(userId, { ...row, doc_kind: kind }, { id: where.folder_id, name: where.folder_name, created: where.folder_created });
+      filing = { movedFrom: row.folder_name || null, choices: null };
+    } else if (where.choices) filing = { choices: where.choices };
+  } else if (!subject) {
+    filing = { needsSubject: true, subjectOptions: [...new Set((main?.subjectGuesses || []).map(subjectLabel).filter(Boolean))].slice(0, 3) };
   }
-  row = await move(row, "ready", { structure, subject, doc_kind: kind, folder_name: row.folder_name });
+  row = await move(row, "ready", { structure, subject, doc_kind: kind, ...filePatch, ...withFiling(row, filing) });
 
   // What it found, said in the chat it came from (written by code from what was kept).
   let message = null;
   if (row.chat_session_id && items.length) {
-    const text = items.length === 1
+    const found = items.length === 1
       ? structureMessage({ ...main, questions: questions.filter((q) => q.record_id === main.recordId) }, { pages: main.pages })
       : items.map((it) => `**${it.title || it.name}** — ${structureMessage({ ...it, questions: questions.filter((q) => q.record_id === it.recordId) }, { pages: it.pages }).replace(/^I've read it\.?\s*/, "")}`).join("\n\n");
+    const filed = filingSentence({ names: row.names, title: main?.title, subject: row.subject, folder: row.folder_name, filing: row.filing, summary: main?.summary });
+    const text = filed ? `${filed}\n\n${found}` : found;
     const materials = [
       ...(row.folder_id ? [{ kind: "folder", title: row.folder_name, href: `/library?folder=${row.folder_id}` }] : []),
       ...items.map((it) => ({ kind: "record", title: it.title || it.name, href: `/library?record=${it.recordId}` })),
@@ -318,6 +416,12 @@ router.post("/ingest/:id/similar/dismiss", asyncHandler(async (req, res) => {
   res.json({ success: true, data: ingestToApi(row) });
 }));
 
+/**
+ * Undo → Recently deleted for 30 days: the files leave every folder and are
+ * hidden everywhere (records.deleted_at), what the upload added comes out of
+ * its folder, a folder it made goes if now empty — all noted in filing.trash
+ * so Restore puts it back. The purge deletes it for good after 30 days.
+ */
 router.post("/ingest/:id/undo", asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const row = await loadOwn(req.params.id, userId);
@@ -325,16 +429,16 @@ router.post("/ingest/:id/undo", asyncHandler(async (req, res) => {
   if (row.state === "undone") return res.json({ success: true, data: ingestToApi(row) });
   assertTransition(ingestWorkflow, row.state, "undone");
   const ids = (row.record_ids || []).map(String);
-  if (ids.length) {
-    // Out of every folder (a learner may have filed it elsewhere too), then the records and their files.
-    await edu().from("library_folder_items").delete().eq("user_id", userId).eq("item_type", "record").in("item_ref", ids);
-    const { data: records } = await edu().from("records").select("id, file_key").eq("user_id", userId).in("id", ids);
-    await edu().from("records").delete().eq("user_id", userId).in("id", ids);
-    for (const r of records || []) void removeRecordFile(r.file_key);
-  }
-  await edu().from("material_questions").delete().eq("user_id", userId).eq("ingest_id", row.id);
-  // …and the similar material it added to the folder.
   const added = (row.structure?.added || []).map(String);
+  const cols = "folder_id, item_type, item_ref, title, sub, kind, link";
+  const [{ data: fileItems }, { data: addedItems }] = await Promise.all([
+    ids.length ? edu().from("library_folder_items").select(cols).eq("user_id", userId).eq("item_type", "record").in("item_ref", ids) : { data: [] },
+    row.folder_id && added.length ? edu().from("library_folder_items").select(cols).eq("user_id", userId).eq("folder_id", row.folder_id).eq("item_type", "library").in("item_ref", added) : { data: [] },
+  ]);
+  if (ids.length) {
+    await edu().from("library_folder_items").delete().eq("user_id", userId).eq("item_type", "record").in("item_ref", ids);
+    await edu().from("records").update({ deleted_at: now() }).eq("user_id", userId).in("id", ids);
+  }
   if (row.folder_id && added.length) {
     await edu().from("library_folder_items").delete().eq("folder_id", row.folder_id).eq("user_id", userId).eq("item_type", "library").in("item_ref", added);
   }
@@ -347,8 +451,96 @@ router.post("/ingest/:id/undo", asyncHandler(async (req, res) => {
       folderRemoved = true;
     }
   }
-  const done = await move(row, "undone", folderRemoved ? { folder_id: null } : {});
+  const trash = { items: [...(fileItems || []), ...(addedItems || [])], folderId: row.folder_id || null, folderRemoved: folderRemoved ? row.folder_name : null };
+  const done = await move(row, "undone", { ...(folderRemoved ? { folder_id: null } : {}), ...withFiling(row, { deletedAt: now(), trash }) });
   res.json({ success: true, data: { ...ingestToApi(done), folderRemoved } });
+}));
+
+/** "Save to SS2 Biology or WAEC Biology?" — the learner's pick, remembered for that subject. */
+router.post("/ingest/:id/folder", asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  let row = await loadOwn(req.params.id, userId);
+  if (!row) return res.status(404).json({ success: false, message: "Upload not found." });
+  if (row.state === "undone") return res.status(409).json({ success: false, code: "undone", message: "This upload was undone." });
+  const folderId = String(req.body?.folderId || "");
+  const { data: folder } = UUID.test(folderId)
+    ? await edu().from("library_folders").select("id, name").eq("id", folderId).eq("user_id", userId).maybeSingle()
+    : { data: null };
+  if (!folder) return res.status(404).json({ success: false, message: "Folder not found." });
+  const patch = await refile(userId, row, folder);
+  if (row.subject) {
+    await edu().from("material_folder_defaults").upsert({ user_id: userId, subject_key: subjectKey(row.subject), kind: row.doc_kind || "", folder_id: folder.id, updated_at: now() }, { onConflict: "user_id,subject_key,kind" });
+  }
+  const { data } = await edu().from("material_ingests").update({ ...patch, ...withFiling(row, { choices: null }), updated_at: now() }).eq("id", row.id).select("*").single();
+  res.json({ success: true, data: ingestToApi(data) });
+}));
+
+/** "Which subject is this?" — the learner says (or keeps it unsorted: subject null); it's filed where that subject lives. */
+router.post("/ingest/:id/subject", asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  let row = await loadOwn(req.params.id, userId);
+  if (!row) return res.status(404).json({ success: false, message: "Upload not found." });
+  if (row.state === "undone") return res.status(409).json({ success: false, code: "undone", message: "This upload was undone." });
+  const subject = subjectLabel(String(req.body?.subject || "").slice(0, 60));
+  if (!subject) {
+    const { data } = await edu().from("material_ingests").update({ ...withFiling(row, { needsSubject: false }), updated_at: now() }).eq("id", row.id).select("*").single();
+    return res.json({ success: true, data: ingestToApi(data) });
+  }
+  const where = await resolveFolder(userId, { subject, kind: row.doc_kind || "other" }, await folderContext(userId));
+  let patch = { subject };
+  let filing = { needsSubject: false, subjectOptions: [] };
+  if (where.folder_id && where.folder_id !== row.folder_id) {
+    patch = { ...patch, ...await refile(userId, row, { id: where.folder_id, name: where.folder_name, created: where.folder_created }) };
+    filing = { ...filing, movedFrom: row.folder_name || null, choices: null };
+  } else if (where.choices) filing = { ...filing, choices: where.choices };
+  await edu().from("material_questions").update({ subject }).eq("user_id", userId).eq("ingest_id", row.id);
+  const { data } = await edu().from("material_ingests").update({ ...patch, ...withFiling(row, filing), updated_at: now() }).eq("id", row.id).select("*").single();
+  res.json({ success: true, data: ingestToApi(data) });
+}));
+
+/** Restore from Recently deleted (30 days): the files, their folder places and what was added with them. */
+router.post("/ingest/:id/restore", asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const row = await loadOwn(req.params.id, userId);
+  if (!row) return res.status(404).json({ success: false, message: "Upload not found." });
+  if (row.state !== "undone") return res.json({ success: true, data: ingestToApi(row) });
+  const f = row.filing || {};
+  const expired = !f.deletedAt || f.purged || Date.now() - new Date(f.deletedAt).getTime() > RESTORE_DAYS * 86_400_000;
+  if (expired) return res.status(410).json({ success: false, code: "purged", message: "It's been deleted for good." });
+  const ids = (row.record_ids || []).map(String);
+  if (ids.length) await edu().from("records").update({ deleted_at: null }).eq("user_id", userId).in("id", ids);
+  // A folder that went with the Undo comes back (same name); the items go back where they were.
+  let folderId = row.folder_id, folderName = row.folder_name, created = row.folder_created;
+  const trash = f.trash || {};
+  if (trash.folderRemoved) {
+    const again = await folderFor(userId, trash.folderRemoved);
+    if (again) { folderId = again.id; folderName = again.name; created = again.created; }
+  }
+  const items = (trash.items || []).map((it) => ({ ...it, folder_id: it.folder_id === trash.folderId || !it.folder_id ? folderId : it.folder_id, user_id: userId })).filter((it) => it.folder_id);
+  if (items.length) {
+    const { data: live } = await edu().from("library_folders").select("id").eq("user_id", userId).in("id", [...new Set(items.map((it) => it.folder_id))]);
+    const ok = new Set((live || []).map((x) => x.id));
+    const back = items.filter((it) => ok.has(it.folder_id));
+    if (back.length) await edu().from("library_folder_items").upsert(back, { onConflict: "folder_id,item_type,item_ref" });
+  }
+  const done = await move(row, "ready", { folder_id: folderId || null, folder_name: folderName, folder_created: !!created, ...withFiling(row, { deletedAt: null, trash: null }) });
+  res.json({ success: true, data: ingestToApi(done) });
+}));
+
+/** "Files in this chat": every upload this chat brought in that isn't deleted, newest last. */
+router.get("/chat/:chatId", asyncHandler(async (req, res) => {
+  if (!UUID.test(String(req.params.chatId))) return res.status(400).json({ success: false, message: "A chat id is required." });
+  const { data } = await edu().from("material_ingests").select("*").eq("user_id", req.user.id).eq("chat_session_id", req.params.chatId)
+    .neq("state", "undone").order("created_at", { ascending: true }).limit(40);
+  const rows = data || [];
+  const ids = [...new Set(rows.flatMap((r) => r.record_ids || []))];
+  const { data: recs } = ids.length ? await edu().from("records").select("id, name, mime").eq("user_id", req.user.id).in("id", ids).is("deleted_at", null) : { data: [] };
+  const byId = new Map((recs || []).map((r) => [r.id, r]));
+  const files = rows.flatMap((r) => (r.record_ids || []).filter((id) => byId.has(id)).map((id) => ({
+    recordId: id, name: byId.get(id).name, mime: byId.get(id).mime || null, ingestId: r.id,
+    subject: r.subject || null, folder: r.folder_id ? { id: r.folder_id, name: r.folder_name } : null,
+  })));
+  res.json({ success: true, files });
 }));
 
 router.get("/ingest/:id", asyncHandler(async (req, res) => {

@@ -139,7 +139,7 @@ export async function gatherSignals(userId) {
       .order("created_at", { ascending: false }).limit(3)
       .then((r) => r.data ?? []).catch(() => []),
     // what they added to their library lately (the names only)
-    edu().from("records").select("name, progress, created_at").eq("user_id", userId)
+    edu().from("records").select("name, progress, created_at").eq("user_id", userId).is("deleted_at", null)
       .gte("created_at", new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString())
       .order("created_at", { ascending: false }).limit(5)
       .then((r) => r.data ?? []).catch(() => []),

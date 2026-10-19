@@ -2380,7 +2380,7 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       try {
         const [hits, named] = await Promise.all([
           searchRecordChunks({ userId: studentId, q, limit: 12 }).catch(() => []),
-          db.schema("edu").from("records").select("id, name").eq("user_id", studentId).ilike("name", `%${q.replace(/[%_]/g, "")}%`).limit(5)
+          db.schema("edu").from("records").select("id, name").eq("user_id", studentId).is("deleted_at", null).ilike("name", `%${q.replace(/[%_]/g, "")}%`).limit(5)
             .then((r) => r.data || []).catch(() => []),
         ]);
         const byId = new Map();
@@ -2402,11 +2402,14 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         if (subject) q = q.ilike("subject", `%${subject.replace(/[%_]/g, "")}%`);
         const { data, error } = await q;
         if (error) throw error;
-        const rows = data || [];
+        // A paper the learner undid (Recently deleted) doesn't count.
+        const { data: gone } = await db.schema("edu").from("material_ingests").select("id").eq("user_id", studentId).eq("state", "undone").limit(500);
+        const goneIds = new Set((gone || []).map((g) => g.id));
+        const rows = (data || []).filter((r) => !goneIds.has(r.ingest_id));
         if (!rows.length) return { papers: 0, topics: [], note: "No past papers read yet — ask them to upload one (a photo or PDF) in this chat." };
         const { papers, topics } = recurringTopics(rows);
         const recordIds = [...new Set(rows.map((r) => r.record_id).filter(Boolean))].slice(0, 6);
-        const { data: recs } = await db.schema("edu").from("records").select("id, name").eq("user_id", studentId).in("id", recordIds);
+        const { data: recs } = await db.schema("edu").from("records").select("id, name").eq("user_id", studentId).is("deleted_at", null).in("id", recordIds);
         return { papers, topics, records: (recs || []).map((r) => ({ recordId: r.id, name: r.name })),
           ...(papers < 2 ? { note: "Only one paper so far — the pattern needs more years." } : {}) };
       } catch (error) { return { error: "Their past papers are unavailable right now" }; }
@@ -4237,26 +4240,33 @@ router.post("/agent", async (req, res) => {
     // Messages from other learners' agents waiting for this one.
     // Files this turn is saving to the Library (§7.17, D51): the reply says where, in one clause.
     // (A query builder is a thenable, not a promise: no .catch on it — await it inside try.)
-    let ingest = null;
-    if (role === "student" && /^[0-9a-f-]{36}$/i.test(String(req.body?.ingestId || ""))) {
+    // One message's files can be sorted into several uploads (one per folder): ingestIds, or the older ingestId.
+    let ingests = [];
+    const ingestIds = [...new Set([...(Array.isArray(req.body?.ingestIds) ? req.body.ingestIds : []), req.body?.ingestId].map(String))]
+      .filter((x) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 5);
+    if (role === "student" && ingestIds.length) {
       try {
-        ({ data: ingest } = await db.schema("edu").from("material_ingests").select("id, folder_name, doc_kind, state")
-          .eq("id", req.body.ingestId).eq("user_id", req.user.id).maybeSingle());
-      } catch { ingest = null; }
+        const { data } = await db.schema("edu").from("material_ingests").select("id, folder_name, doc_kind, state, filing")
+          .eq("user_id", req.user.id).in("id", ingestIds);
+        ingests = ingestIds.map((id) => (data || []).find((r) => r.id === id)).filter(Boolean);
+      } catch { ingests = []; }
     }
-    // The reply's trace and meta (previews, materials, the upload's card), and the upload pointed at it.
+    // The reply's trace and meta (previews, materials, the uploads' cards), and the uploads pointed at it.
     const saveTurn = async (messageId) => {
-      const meta = { ...(previewMetaFrom(prepared.toolExecutions) || {}), ...(ingest ? { ingest: { id: ingest.id } } : {}) };
+      const meta = { ...(previewMetaFrom(prepared.toolExecutions) || {}),
+        ...(ingests.length ? { ingest: { id: ingests[0].id }, ingests: ingests.map((r) => ({ id: r.id })) } : {}) };
       await saveMessageTrace({ messageId, userId: req.user.id, trace: traceBlocks, meta: Object.keys(meta).length ? meta : null });
-      if (ingest && messageId) {
+      if (ingests.length && messageId) {
         try {
           await db.schema("edu").from("material_ingests").update({ chat_message_id: messageId, chat_session_id: conversationId, updated_at: new Date().toISOString() })
-            .eq("id", ingest.id).eq("user_id", req.user.id);
-        } catch { /* the card still shows; it won't reopen with the chat */ }
+            .eq("user_id", req.user.id).in("id", ingests.map((r) => r.id));
+        } catch { /* the cards still show; they won't reopen with the chat */ }
       }
     };
-    const ingestCtx = ingest && ingest.state !== "undone"
-      ? `\n\n## The learner's upload\nThe file(s) they attached are being saved to their Library${ingest.folder_name ? ` in the folder "${ingest.folder_name}"` : ""} (private to them) and read in the background. Say so in one short clause — the app shows the folder with an Undo, so don't repeat its details or any ids. Answer from what you can read now; if the file isn't readable yet, say you'll be able to work on it once it's read.`
+    const live = ingests.filter((r) => r.state !== "undone");
+    const where = live.map((r) => (r.folder_name ? `"${r.folder_name}"` : r.filing?.choices?.length ? "a folder they'll pick on the card" : null)).filter(Boolean);
+    const ingestCtx = live.length
+      ? `\n\n## The learner's upload\nThe file(s) they attached are being saved to their Library${where.length ? ` — ${[...new Set(where)].join(", ")}` : ""} (private to them) and read in the background; each folder's card shows its files with an Undo. Say so in one short clause — don't repeat the cards' details or any ids. Answer from what you can read now; if the file isn't readable yet, say you'll be able to work on it once it's read.`
       : "";
     const inboxCtx = role === "student" && agentNetworkEnabled
       ? (await inboxBrief(req.user.id).catch(() => "")) + (await buddyBrief(req.user.id).catch(() => ""))

@@ -194,7 +194,7 @@ router.post("/", authenticateToken, asyncHandler(async (req, res) => {
   const body = req.body || {};
   const name = String(body.name || "").trim().slice(0, 255);
 
-  const { count } = await edu().from("records").select("id", { count: "exact", head: true }).eq("user_id", userId);
+  const { count } = await edu().from("records").select("id", { count: "exact", head: true }).eq("user_id", userId).is("deleted_at", null);
   if ((count || 0) >= MAX_RECORDS) return res400(res, "Your record shelf is full (200) — remove one to add another.");
 
   let row;
@@ -279,7 +279,7 @@ router.post("/", authenticateToken, asyncHandler(async (req, res) => {
 // ─── GET /api/records — my shelf ────────────────────────────────────────────
 router.get("/", authenticateToken, asyncHandler(async (req, res) => {
   const { data, error } = await edu().from("records")
-    .select("*").eq("user_id", req.user.id)
+    .select("*").eq("user_id", req.user.id).is("deleted_at", null)   // Recently deleted (§7.17) stays out of the shelf
     .order("created_at", { ascending: false }).limit(MAX_RECORDS);
   if (error) throw error;
   res200(res, await Promise.all((data || []).map(toApi)));
@@ -323,7 +323,7 @@ router.get("/discover", authenticateToken, asyncHandler(async (req, res) => {
 
   let query = edu().from("records")
     .select("id, user_id, kind, name, mime, size, duration, file_key, content, created_at")
-    .in("kind", ["upload", "paste"])
+    .in("kind", ["upload", "paste"]).is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(limit);
   if (premiumIds.length) query = query.not("user_id", "in", `(${premiumIds.join(",")})`);
@@ -363,9 +363,9 @@ router.get("/discover", authenticateToken, asyncHandler(async (req, res) => {
 // were never in the feed, and a guessed or stale id must not leak them.
 router.get("/discover/:id/open", authenticateToken, asyncHandler(async (req, res) => {
   const { data: r, error } = await edu().from("records")
-    .select("id, user_id, kind, name, file_key, content, private")
+    .select("id, user_id, kind, name, file_key, content, private, deleted_at")
     .eq("id", req.params.id).maybeSingle();
-  if (error || !r || !["upload", "paste"].includes(r.kind)) return res404(res, "Record not found.");
+  if (error || !r || r.deleted_at || !["upload", "paste"].includes(r.kind)) return res404(res, "Record not found.");
   if (r.private && r.user_id !== req.user.id) return res404(res, "Record not found.");
   if (r.kind === "upload" && !r.file_key) return res400(res, "This record has no saved file.");
   const premiumIds = await activePremiumUserIds();
@@ -773,7 +773,7 @@ router.get("/extract/:recordId", authenticateToken, asyncHandler(async (req, res
   const recordId = String(req.params.recordId || "");
   if (!/^[0-9a-f-]{36}$/i.test(recordId)) return res400(res, "A recordId is required.");
   const { data: rec, error } = await edu().from("records")
-    .select("file_key").eq("id", recordId).eq("user_id", req.user.id).maybeSingle();
+    .select("file_key").eq("id", recordId).eq("user_id", req.user.id).is("deleted_at", null).maybeSingle();
   if (error) throw error;
   if (!rec) return res.status(404).json({ success: false, message: "Record not found." });
   okExtract(res, rec.file_key ? await getExtraction(rec.file_key) : { pages: [], markdown: "" });
@@ -1191,7 +1191,7 @@ router.get("/ask/history", authenticateToken, asyncHandler(async (req, res) => {
 router.patch("/:id", authenticateToken, asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const { data: existing } = await edu().from("records")
-    .select("id, user_id").eq("id", req.params.id).maybeSingle();
+    .select("id, user_id").eq("id", req.params.id).is("deleted_at", null).maybeSingle();
   if (!existing) return res404(res, "Record not found.");
   if (existing.user_id !== userId) return res403(res, "Not your record.");
 
@@ -1334,7 +1334,7 @@ router.get("/transcribe/:recordId", authenticateToken, asyncHandler(async (req, 
   const recordId = String(req.params.recordId || "");
   if (!/^[0-9a-f-]{36}$/i.test(recordId)) return res400(res, "A recordId is required.");
   const { data: rec, error } = await edu().from("records")
-    .select("file_key").eq("id", recordId).eq("user_id", req.user.id).maybeSingle();
+    .select("file_key").eq("id", recordId).eq("user_id", req.user.id).is("deleted_at", null).maybeSingle();
   if (error) throw error;
   if (!rec) return res.status(404).json({ success: false, message: "Record not found." });
   res.json({ success: true, data: {
@@ -1360,7 +1360,7 @@ router.get("/transcribe/content/:key", authenticateToken, asyncHandler(async (re
 // friendly "save a copy" link (cookies auth it, the store serves the bytes).
 router.get("/:id/file", authenticateToken, asyncHandler(async (req, res) => {
   const { data: existing } = await edu().from("records")
-    .select("id, user_id, file_key, name").eq("id", req.params.id).maybeSingle();
+    .select("id, user_id, file_key, name").eq("id", req.params.id).is("deleted_at", null).maybeSingle();
   if (!existing) return res404(res, "Record not found.");
   if (existing.user_id !== req.user.id) return res403(res, "Not your record.");
   if (!existing.file_key) return res400(res, "This record has no saved file — only its details were captured.");

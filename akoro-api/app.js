@@ -783,6 +783,13 @@ if (process.env.REDIS_URL && !skipJob("battle worker")) {
 // Keeps the vector stores current. Rows arrive without embeddings (SQL seeds,
 // a failed inline call) and rows get edited after being embedded; both leave
 // search quietly wrong, and nothing used to report either.
+// Recently deleted (§7.17): chat uploads the learner undid are deleted for good after 30 days.
+if (!skipJob("materials purge")) {
+  import("./modules/materials/purge.js")
+    .then((m) => m.startMaterialsPurge())
+    .catch((e) => console.error("[materials-purge] failed to start:", e.message));
+}
+
 if (!skipJob("embedding sweeper")) {
   import("./lib/embeddingSweeper.js")
     .then((m) => m.startEmbeddingSweeper())

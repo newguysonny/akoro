@@ -270,7 +270,13 @@ export async function searchRecordChunks({ userId, q, limit = 12, recordId = nul
     p_record_id: recordId,
   });
   if (error) throw new Error(error.message);
-  return (data || []).map((r) => ({
+  // A record in Recently deleted (§7.17) keeps its chunks until the purge, but isn't found.
+  const ids = [...new Set((data || []).map((r) => r.record_id).filter(Boolean))];
+  const { data: gone } = ids.length
+    ? await db.schema("edu").from("records").select("id").in("id", ids).not("deleted_at", "is", null)
+    : { data: [] };
+  const hidden = new Set((gone || []).map((g) => g.id));
+  return (data || []).filter((r) => !hidden.has(r.record_id)).map((r) => ({
     recordId: r.record_id,
     name: r.record_name,
     kind: r.record_kind,

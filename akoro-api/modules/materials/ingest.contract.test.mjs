@@ -11,10 +11,10 @@ const chat = await readFile(new URL("../adaptive-learning/chat.js", import.meta.
 const app = await readFile(new URL("../../app.js", import.meta.url), "utf8");
 const manifest = JSON.parse(await readFile(new URL("../../migrations/manifest.json", import.meta.url), "utf8"));
 
-test("material_ingest is a registered workflow; Undo is final and reachable from every live state", () => {
+test("material_ingest is a registered workflow; Undo is reachable from every live state and only Restore leads back", () => {
   assert.equal(workflowDefinition("material_ingest"), ingestWorkflow);
   for (const s of ingestWorkflow.states.filter((x) => x !== "undone")) assert.ok(canTransition(ingestWorkflow, s, "undone"), `${s} → undone`);
-  assert.deepEqual(ingestWorkflow.transitions.undone, []);
+  assert.deepEqual(ingestWorkflow.transitions.undone, ["ready"], "Undo is Recently deleted: Restore puts it back, nothing else");
   assert.ok(!canTransition(ingestWorkflow, "received", "ready"), "a batch is filed before it is ready");
   assert.ok(canTransition(ingestWorkflow, "failed", "extracting"), "a failed read can be retried");
 });
@@ -27,8 +27,8 @@ test("the folder: subject and kind, private, an existing one reused (D51, D53)",
   assert.equal(guessKind({ names: ["scan.jpg"], ask: "my maths notes" }).subject, "Mathematics");
   assert.equal(guessKind({ names: ["WAEC Biology2019.pdf"] }).subject, "Biology", "a subject glued to a year still counts");
   // A past-paper name wins over a model that missed it; an off-list kind falls back.
-  assert.equal(shapeClassification({ subject: "Biology", kind: "notes", topic: null }, { subject: null, kind: "past_paper" }).kind, "past_paper");
-  assert.equal(shapeClassification({ subject: "x", kind: "poem", topic: null }, { subject: null, kind: "notes" }).kind, "notes");
+  assert.equal(shapeClassification({ files: [{ index: 1, subject: "Biology", kind: "notes", topic: null }] }, ["WAEC Biology 2019.pdf"])[0].kind, "past_paper");
+  assert.equal(shapeClassification({ files: [{ index: 1, subject: "x", kind: "poem", topic: null }] }, ["my notes.docx"])[0].kind, "notes");
   assert.match(routes, /visibility: "private"/);
   assert.match(routes, /f\.name\.toLowerCase\(\) === name\.toLowerCase\(\)/);
   assert.deepEqual(folderItemFor({ id: "r1", name: "a.pdf", mime: "application/pdf" }, "past_paper"),
@@ -36,10 +36,15 @@ test("the folder: subject and kind, private, an existing one reused (D51, D53)",
   assert.equal(ingestToApi({ id: "i", state: "filed", folder_id: "f", folder_name: "Biology — Notes", folder_created: true, doc_kind: "notes" }).folder.created, true);
 });
 
-test("Undo removes exactly what the upload made", () => {
+test("Undo takes out exactly what the upload made, into Recently deleted (restorable 30 days)", () => {
   const undo = routes.slice(routes.indexOf('"/ingest/:id/undo"'));
   assert.match(undo, /library_folder_items"\)\.delete\(\)\.eq\("user_id", userId\)\.eq\("item_type", "record"\)\.in\("item_ref", ids\)/);
-  assert.match(undo, /from\("records"\)\.delete\(\)\.eq\("user_id", userId\)\.in\("id", ids\)/);
+  assert.match(undo, /from\("records"\)\.update\(\{ deleted_at: now\(\) \}\)\.eq\("user_id", userId\)\.in\("id", ids\)/, "hidden, not deleted");
+  assert.match(undo, /withFiling\(row, \{ deletedAt: now\(\), trash \}\)/, "what it took out is noted for Restore");
+  const restore = routes.slice(routes.indexOf('"/ingest/:id/restore"'));
+  assert.match(restore, /update\(\{ deleted_at: null \}\)/);
+  assert.match(restore, /RESTORE_DAYS \* 86_400_000/);
+  assert.match(restore, /move\(row, "ready"/);
   assert.match(undo, /row\.folder_id && row\.folder_created/, "a folder is removed only if this upload made it");
   assert.match(undo, /if \(!count\)/, "…and only when it is empty");
   assert.match(routes, /assertTransition\(ingestWorkflow, row\.state, to\)/, "every move is checked against the definition");
@@ -50,7 +55,7 @@ test("wiring: mounted, migrated after its folders, the chat turn carries the upl
   assert.match(app, /app\.use\("\/api\/agent\/materials", standardLimit, materialsModule\)/);
   const order = manifest.schema || manifest.migrations || Object.values(manifest).flat();
   assert.ok(order.indexOf("2026-material-ingest.sql") > order.indexOf("2026-library-folder-items.sql"));
-  assert.match(chat, /ingest \? \{ ingest: \{ id: ingest\.id \} \}/);
+  assert.match(chat, /ingests\.length \? \{ ingest: \{ id: ingests\[0\]\.id \}, ingests: ingests\.map\(\(r\) => \(\{ id: r\.id \}\)\) \}/);
   assert.match(chat, /chat_message_id: messageId/);
 });
 
