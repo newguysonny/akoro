@@ -132,6 +132,17 @@ function AgentChatTab({
   // A workflow card is pinned above the message box while it runs, and goes
   // back to its message when it is waiting for the learner or done.
   const [runningPrep, setRunningPrep] = useState({});
+  // Developer view: the workflow planner's notes, live, as thinking rows under the card's message.
+  const [prepNotes, setPrepNotes] = useState({});
+  const onStudyPrepNotes = useCallback((sessionId, env) => {
+    setPrepNotes((previous) => {
+      const list = previous[sessionId] || [];
+      const p = env.payload || {};
+      if (list.some((b) => b.iteration === p.iteration && b.at === env.timestamp)) return previous;
+      const text = [p.thinking, p.intent ? `Next: ${p.intent}` : null].filter(Boolean).join('\n\n');
+      return { ...previous, [sessionId]: [...list, { type: 'thinking', id: `wfnote_${sessionId}_${list.length}`, status: 'done', ms: Number(p.ms) || 0, text, source: 'reasoning', iteration: p.iteration, at: env.timestamp }] };
+    });
+  }, []);
   const onStudyPrepRunning = useCallback((sessionId, running) => {
     setRunningPrep((previous) => (!!previous[sessionId] === running ? previous : { ...previous, [sessionId]: running }));
   }, []);
@@ -140,7 +151,8 @@ function AgentChatTab({
   // The running card of this chat (its latest one), and the message it moves out of.
   const prepCards = messages.filter((m) => m.from !== "me" && m.studyPrepSessionId);
   const pinnedPrep = [...prepCards].reverse().find((m) => runningPrep[m.studyPrepSessionId])?.studyPrepSessionId || null;
-  const lastPrepCardId = pinnedPrep ? [...prepCards].reverse().find((m) => m.studyPrepSessionId === pinnedPrep)?.id : null;
+  const lastPrepCardIdOf = (sid) => [...prepCards].reverse().find((m) => m.studyPrepSessionId === sid)?.id ?? null;
+  const lastPrepCardId = pinnedPrep ? lastPrepCardIdOf(pinnedPrep) : null;
   const studyPrepSteps = (msg) => {
     const sessionId = msg.from !== "me" && msg.studyPrepSessionId;
     if (!sessionId || !studyPrepEvents[sessionId]) return [];
@@ -1232,7 +1244,13 @@ function AgentChatTab({
                   )}
                   {!isMe&&msg.studyPrepSessionId&&(pinnedPrep===msg.studyPrepSessionId&&lastPrepCardId===msg.id
                     ? <div data-workflow-pinned-note="" style={{ display:"flex",alignItems:"center",gap:6,marginTop:6,fontSize:11.5,fontWeight:750,color:"var(--ak-text-muted)" }}><Icon name="ti-pin" size={13}/>Study Prep is running — pinned above the message box</div>
-                    : <StudyPrepChatCard sessionId={msg.studyPrepSessionId} onEvents={onStudyPrepEvents} onRunning={onStudyPrepRunning}/>)}
+                    : <StudyPrepChatCard sessionId={msg.studyPrepSessionId} onEvents={onStudyPrepEvents} onRunning={onStudyPrepRunning} developer={devView} onNotes={onStudyPrepNotes}/>)}
+                  {!isMe&&devView&&msg.studyPrepSessionId&&lastPrepCardIdOf(msg.studyPrepSessionId)===msg.id&&prepNotes[msg.studyPrepSessionId]?.length>0&&(
+                    <div data-workflow-notes="" style={{ marginTop:8 }}>
+                      <div style={{ fontSize:10.5,fontWeight:800,color:"var(--ak-text-muted)",letterSpacing:.3,textTransform:"uppercase",margin:"0 0 2px" }}>Developer · planner's notes</div>
+                      <TraceBlocks blocks={prepNotes[msg.studyPrepSessionId]}/>
+                    </div>
+                  )}
                   {!isMe&&msg.proposal?.status==="proposed"&&msg.proposal.preview&&<ProposalPreview preview={msg.proposal.preview}/>}
                   {!isMe&&msg.proposal&&(msg.proposal.status==="proposed"?(
                     <div style={{ display:"flex",flexWrap:"wrap",gap:7,marginTop:9 }}>
@@ -1366,7 +1384,7 @@ function AgentChatTab({
             )}
             {pinnedPrep && (
               <div data-workflow-pinned="" style={{ width:"min(560px,100%)",maxHeight:"42vh",overflowY:"auto",margin:"0 0 8px",boxShadow:"0 4px 18px rgba(30,20,60,.12)",borderRadius:14 }}>
-                <StudyPrepChatCard sessionId={pinnedPrep} onEvents={onStudyPrepEvents} onRunning={onStudyPrepRunning} pinned/>
+                <StudyPrepChatCard sessionId={pinnedPrep} onEvents={onStudyPrepEvents} onRunning={onStudyPrepRunning} pinned developer={devView} onNotes={onStudyPrepNotes}/>
               </div>
             )}
             <div ref={composerWrapRef}>

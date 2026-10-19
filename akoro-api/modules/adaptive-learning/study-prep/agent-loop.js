@@ -36,7 +36,10 @@ export const observationFor = runtimeObservationFor;
 export async function runAgentStep({
   sessionId, topicId = null, goal, agent, registry, store, harness,
   contextSetName = "planning", maxIterations = POLICY.MAX_ITERATIONS_PER_STEP, requireReads = null,
+  onThought = null,
 }) {
+  // onThought({ iteration, ms, thinking, intent, tool }): the decision's notes, live only (developer view).
+  let lastAt = Date.now();
   // Deep research: propose_plan is refused (as an observation the agent reads)
   // until each required read has run this step — except on the last decision.
   const read = new Set();
@@ -84,6 +87,11 @@ export async function runAgentStep({
         const step = entry.step;
         decisions = entry.iteration;
         if (step.tool) read.add(step.tool);
+        const now = Date.now();
+        if (onThought && (step.thinking || step.intent)) {
+          try { onThought({ iteration: entry.iteration, ms: now - lastAt, thinking: step.thinking || null, intent: step.intent || null, tool: step.tool || step.action || null }); } catch { /* never breaks the step */ }
+        }
+        lastAt = now;
         return append({
           iteration, eventType: step.tool ? "agent_tool_call" : "agent_action", origin: "agent_stated_intent",
           topicId: topicId || null, tool: step.tool || null, action: step.action || null,
@@ -93,6 +101,7 @@ export async function runAgentStep({
       if (entry.kind === "observation") {
         // What it found, in one learner-safe line — worked out before the facts are bounded (they drop nested lists).
         const summary = studyPrepResultLine(entry.tool, entry.observation);
+        lastAt = Date.now();   // the next decision's thinking time starts after this result
         return append({ iteration, eventType: "observation", origin: "harness", topicId: topicId || null, tool: entry.tool || null, facts: { ...entry.observation, ...(summary ? { summary } : {}) } });
       }
       return null;

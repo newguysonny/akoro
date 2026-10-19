@@ -23,7 +23,11 @@ export function rememberSeen(workflowId, sequence) {
   try { if (Number.isFinite(sequence)) localStorage.setItem(KEY(workflowId), String(sequence)); } catch { /* private mode */ }
 }
 
-export function openWorkflowStream({ workflowId, after = -1, onEvent, onCaughtUp, onError }) {
+/**
+ * developer: ask for the live-only developer notes too (the planner's notes
+ * per decision); they arrive on onLive(env), never replayed.
+ */
+export function openWorkflowStream({ workflowId, after = -1, onEvent, onCaughtUp, onError, developer = false, onLive }) {
   let last = Number.isFinite(after) ? after : -1;
   let closed = false;
   let ctrl = null;
@@ -35,9 +39,10 @@ export function openWorkflowStream({ workflowId, after = -1, onEvent, onCaughtUp
       const replayed = [];
       let caughtUp = false;
       try {
-        await streamGet(`/api/workflows/${workflowId}/stream?after=${last}`, {
+        await streamGet(`/api/workflows/${workflowId}/stream?after=${last}${developer ? '&developer=1' : ''}`, {
           signal: ctrl.signal,
           onEvent: (name, data) => {
+            if (name === 'workflow_live') { onLive?.(data); return; }
             if (name === 'caught_up') {
               caughtUp = true; delay = 1000;
               if (firstCatchUp) { firstCatchUp = false; onCaughtUp?.(replayed); }

@@ -52,7 +52,7 @@ const awayCache = new Map();
  * runs (head + latest steps). onRunning(sessionId, running) tells the chat
  * whether to pin it.
  */
-export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinned = false }) {
+export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinned = false, developer = false, onNotes }) {
   const [view, setViewState] = useState(() => viewCache.get(sessionId) || null);
   const setView = useCallback((next) => setViewState((previous) => {
     const value = typeof next === 'function' ? next(previous) : next;
@@ -134,9 +134,12 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
       // "While you were away": steps this device hadn't shown yet.
       onCaughtUp: (replayed) => { if (!resumed && seen != null && replayed.length) setAway(workflowCardSteps(replayed.filter((e) => e.sequence > seen)).length); },
       onError: () => setWfEvents(null),
+      // Developer view: the planner's notes per decision — shown by the chat, outside this card.
+      developer,
+      onLive: (env) => { if (env?.type === 'agent.narration') onNotes?.(sessionId, env); },
     });
     return close;
-  }, [workflowId, refresh, setAway]);
+  }, [workflowId, refresh, setAway, developer, onNotes, sessionId]);
 
   // With a workflow stream the steps are the card's own; an older API's
   // session steps still go to the chat's trace (AgentChatTab), as before.

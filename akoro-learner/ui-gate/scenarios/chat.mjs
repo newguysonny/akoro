@@ -387,6 +387,40 @@ export const scenarios = [
     },
   },
   {
+    name: 'chat.study_prep_dev_notes',
+    description: 'Developer view: the Study Prep planner\'s notes arrive live and show in the chat as "Thought for N seconds" rows under the card\'s message — outside the card, which stays the workflow\'s state. Without developer view they are not asked for. (Served by the test.)',
+    async run(t) {
+      const { page } = t;
+      const chatId = '00000000-0000-4000-8000-0000000000f1', spId = '00000000-0000-4000-8000-0000000000f2', wfId = '00000000-0000-4000-8000-0000000000f3';
+      const at = new Date(Date.now() - 5000).toISOString();
+      const urls = [];
+      await page.route('**/api/adaptive/chat/sessions', (r) => r.fulfill({ json: { success: true, sessions: [{ id: chatId, title: 'Basic Science prep', updated_at: at, created_at: at }] } }));
+      await page.route(`**/api/adaptive/chat/sessions/${chatId}/messages**`, (r) => r.fulfill({ json: { success: true, messages: [
+        { id: 'n1', role: 'user', text: 'Prepare me for my JSS1 Basic Science exam', created_at: at },
+        { id: 'n2', role: 'agent', text: 'Planning now.', created_at: at, meta: { studyPrepSessionId: spId } },
+      ], hasMore: false } }));
+      await page.route(`**/api/adaptive/study-prep/sessions/${spId}`, (r) => r.fulfill({ json: { success: true, session: { id: spId, goal: 'JSS1 Basic Science', subject: 'Basic Science', status: 'awaiting_confirmation', workflowId: wfId, plan: [{ syllabusTopicId: 't1', label: 'Cells', position: 1 }], estimate: { totalCoins: 5 } }, topics: [], events: [] } }));
+      await page.route(`**/api/workflows/${wfId}/stream**`, (r) => {
+        urls.push(r.request().url());
+        const step = { v: 3, workflowId: wfId, sequence: 1, type: 'tool.completed', timestamp: at, visibility: 'learner', narration: { headline: 'Reviewing what you know', description: 'Your strong and weak topics', result: 'No recorded evidence on this subject yet', narration: 'x' }, payload: { tool: 'learner.get_state' } };
+        const note = { v: 3, live: true, workflowId: wfId, type: 'agent.narration', visibility: 'developer', timestamp: at, payload: { iteration: 3, ms: 4200, thinking: 'No recorded evidence in Basic Science, so I cannot rank by weakness. Use the school syllabus order and check prerequisites next.', intent: 'Read the prerequisite links so the order respects them.', tool: 'concept.get_prerequisites' } };
+        const body = `event: workflow_event\ndata: ${JSON.stringify(step)}\n\nevent: caught_up\ndata: {"last":1}\n\nevent: workflow_live\ndata: ${JSON.stringify(note)}\n\n`;
+        return r.fulfill({ status: 200, headers: { 'Content-Type': 'text/event-stream' }, body });
+      });
+      await page.addInitScript(() => { try { localStorage.setItem('ak.agentChat.devView', '1'); } catch { /* */ } });
+      await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
+      const notes = page.locator('[data-workflow-notes]');
+      t.check('developer view asks the stream for the notes', await notes.waitFor({ timeout: 30_000 }).then(() => true, () => false) && urls.some((u) => u.includes('developer=1')), JSON.stringify(urls.slice(0, 2)));
+      t.check('…a "Thought for N seconds" row, outside the card', await notes.getByText(/Thought for 4 seconds/).isVisible().catch(() => false)
+        && await page.locator('[data-workflow-steps] [data-workflow-notes]').count() === 0);
+      await notes.getByText(/Thought for 4 seconds/).click().catch(() => {});
+      t.check('…opening to the planner\'s notes and its next step', await notes.getByText(/cannot rank by weakness/).isVisible().catch(() => false) && await notes.getByText(/Next: Read the prerequisite links/).isVisible().catch(() => false));
+      t.check('the card still shows only the workflow\'s state', await page.locator('[data-workflow-steps]').getByText('Reviewing what you know').isVisible().catch(() => false)
+        && !(await page.locator('[data-workflow-steps]').getByText(/cannot rank by weakness/).isVisible().catch(() => false)));
+      await t.shot('dev-notes');
+    },
+  },
+  {
     name: 'chat.study_prep_film',
     description: 'A real Study Prep turn on the sandbox, filmed: a screenshot every 2 seconds from sending the message until the plan-ready message arrives (real model, real planning — about 2–4 minutes). For a person to look at; its checks only say whether each stage was seen.',
     async run(t) {

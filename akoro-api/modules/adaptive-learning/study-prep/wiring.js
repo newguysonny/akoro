@@ -26,6 +26,7 @@ export { planReadyMessage };
 import db from "../../../db.js";
 import { createWorkflowEngine } from "../../workflows/engine.js";
 import { makeSupabaseWorkflowStore } from "../../workflows/store.js";
+import { publishLiveDeveloper } from "../../workflows/bus.js";
 import { makeWorkflowMirror, workflowEngineEnabled } from "./workflow.js";
 
 // Default-on kill switch: study-prep ships enabled; =false removes every surface.
@@ -181,6 +182,8 @@ export async function runStudyPrepPlanningStep({ sessionId, learnerId }) {
   const step = await runAgentStep({
     sessionId, goal: view.session.goal, agent, registry, store: harness.store || store, harness, contextSetName: "planning",
     requireReads: PLANNING_READS,
+    // Developer view: the planner's notes per decision, pushed live to its workflow stream, never stored.
+    onThought: view.session.workflowId ? (t) => publishLiveDeveloper(view.session.workflowId, t) : null,
   });
   const after = await harness.getSessionView({ sessionId, learnerId });
   return { ...after, loop: { ended: step.ended, iterations: step.iterations, terminal: step.terminal } };

@@ -5,10 +5,21 @@
  * re-reads the table, so a listener on another instance misses nothing.
  */
 import { EventEmitter } from "node:events";
-import { forLearner, toEnvelope } from "./envelope.js";
+import { boundPayload, forLearner, toEnvelope } from "./envelope.js";
 
 export const workflowBus = new EventEmitter();
 workflowBus.setMaxListeners(500);
+
+/**
+ * A live-only event (never stored, no sequence): the planner's notes for
+ * developer mode. It reaches only a stream that asked for developer detail.
+ */
+export function publishLiveDeveloper(workflowId, payload) {
+  if (!workflowId) return;
+  const env = { v: 3, live: true, workflowId, type: "agent.narration", actor: "agent", visibility: "developer",
+    timestamp: new Date().toISOString(), payload: boundPayload(payload, { maxString: 1200 }) };
+  try { workflowBus.emit(`wf:${workflowId}`, env); } catch { /* best effort */ }
+}
 
 export function publishWorkflowEvent(row, instance) {
   if (!row?.workflow_id) return;

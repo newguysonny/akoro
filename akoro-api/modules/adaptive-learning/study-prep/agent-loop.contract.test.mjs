@@ -204,3 +204,19 @@ test("deep research: proposing before the required reads is refused as an observ
   // What each read found is kept as a learner-safe line on its observation.
   assert.ok(store.events.some((e) => e.event_type === "observation" && e.tool === "syllabus.resolve" && /topics? found/.test(e.facts?.summary || "")));
 });
+
+test("onThought gets each decision's notes and thinking time; the notes are never written to the log", async () => {
+  const store = new MemoryStore();
+  const harness = createHarness({ store, topicWorkflow, syllabus, now: () => "2026-01-01T00:00:00Z" });
+  const session = await harness.createSession({ learnerId: LEARNER, goal: "Prepare", subject: "Basic Science" });
+  const thoughts = [];
+  const registry = { catalogue: [], execute: async (name, args) => (name === "propose_plan" ? harness.proposePlan({ sessionId: session.id, learnerId: LEARNER, topicIds: args.topics }) : { topics: SYLLABUS }) };
+  const agent = stubAgent([
+    { tool: "syllabus.resolve", args: {}, intent: "Syllabus first.", thinking: "Nothing known yet; start from the syllabus." },
+    { tool: "propose_plan", args: { topics: ["water-cycle"] }, intent: "Propose.", thinking: "Six topics; water cycle first." },
+  ]);
+  await runAgentStep({ sessionId: session.id, goal: session.goal, agent, registry, store, harness, onThought: (t) => thoughts.push(t) });
+  assert.deepEqual(thoughts.map((t) => [t.iteration, t.thinking, t.tool]), [[1, "Nothing known yet; start from the syllabus.", "syllabus.resolve"], [2, "Six topics; water cycle first.", "propose_plan"]]);
+  assert.ok(thoughts.every((t) => Number.isFinite(t.ms) && t.ms >= 0));
+  assert.ok(!JSON.stringify(store.events).includes("Nothing known yet"), "notes never stored");
+});

@@ -68,7 +68,9 @@ router.get("/:id/stream", authenticateToken, async (req, res, next) => {
   const send = (event, data) => { if (!res.destroyed && !res.writableEnded) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); };
   const ping = setInterval(() => { if (!res.destroyed && !res.writableEnded) res.write(": ping\n\n"); }, 20_000);
   const stop = streamWorkflowEvents({
-    list: listFor(instance), after: afterOf(req.query.after ?? req.headers["last-event-id"]), send, filter: forLearner,
+    list: listFor(instance), after: afterOf(req.query.after ?? req.headers["last-event-id"]), send,
+    // ?developer=1 (the app's developer view): the owner also gets the live-only developer notes.
+    filter: req.query.developer === "1" ? (env) => (env.live ? env : forLearner(env)) : forLearner,
     subscribe: (fn) => { const key = `wf:${instance.id}`; workflowBus.on(key, fn); return () => workflowBus.off(key, fn); },
   });
   req.on("close", () => { clearInterval(ping); stop(); });

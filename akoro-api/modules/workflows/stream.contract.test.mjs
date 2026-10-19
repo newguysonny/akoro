@@ -147,3 +147,20 @@ test("planning in the background: the plan-ready message is written from the pla
   assert.match(planReadyMessage({ status: "paused", subject: "Maths" }), /got stuck while planning your Maths/);
   assert.match(planReadyMessage({ status: "planning", subject: "Maths" }), /couldn't finish planning/);
 });
+
+test("developer notes are live only: a developer stream gets them at once, a learner stream never does", async () => {
+  const bus = new EventEmitter();
+  const run = (filter) => {
+    const got = [];
+    const stop = streamWorkflowEvents({ list: async () => [], subscribe: (fn) => { bus.on("e", fn); return () => bus.off("e", fn); }, pollMs: 0, filter, send: (name, data) => got.push([name, data.payload?.thinking || data.last]) });
+    return { got, stop };
+  };
+  const dev = run((env) => (env.live ? env : forLearner(env)));
+  const learner = run(forLearner);
+  await dev.stop.ready; await learner.stop.ready;
+  bus.emit("e", { live: true, type: "agent.narration", visibility: "developer", payload: { thinking: "No evidence yet — lean on the syllabus order." } });
+  await new Promise((r) => setTimeout(r, 5));
+  assert.deepEqual(dev.got.at(-1), ["workflow_live", "No evidence yet — lean on the syllabus order."]);
+  assert.equal(learner.got.filter((g) => g[0] === "workflow_live").length, 0);
+  dev.stop(); learner.stop();
+});

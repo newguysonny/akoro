@@ -28,6 +28,8 @@ export function streamWorkflowEvents({ list, subscribe, after = -1, send, pollMs
 
   const ready = pull().then(() => { if (!stopped) send("caught_up", { last }); });
   const unsubscribe = subscribe((env) => {
+    // A live-only event (developer notes) has no sequence: straight out, if the filter lets it.
+    if (env.live) { if (!stopped) { const shown = filter(env); if (shown) send("workflow_live", shown); } return; }
     // A gap means something was written that this instance didn't see: read it.
     if (env.sequence === last + 1) busy = busy.then(() => out(env)); else pull();
   });
