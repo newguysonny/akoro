@@ -31,8 +31,17 @@ export function makeOpenAICompatibleAdapter({ env = process.env, clientFor = nul
   };
   return {
     /** params already carry `model` = the entry's apiModel. */
-    create(params, reqOpts, entry) {
-      return breakerFor(entry).fire(entry, compatParams(params), reqOpts);
+    async create(params, reqOpts, entry) {
+      try {
+        return await breakerFor(entry).fire(entry, compatParams(params), reqOpts);
+      } catch (error) {
+        // A provider refusing the request (4xx) is our request's fault: say what it refused.
+        const status = error?.status ?? error?.response?.status;
+        if (status && status >= 400 && status < 500) {
+          console.warn(`[ai:${entry.id}] ${status} rejected ${params?.stream ? "stream " : ""}request (${Object.keys(params || {}).filter((k) => !["messages", "model"].includes(k)).join(",")}): ${String(error?.message || "").slice(0, 300)}`);
+        }
+        throw error;
+      }
     },
   };
 }

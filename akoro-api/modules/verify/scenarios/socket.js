@@ -5,6 +5,7 @@
  * in the way. Also proves continuation: reopening with the SAVED session's
  * id (session_saved.rowId) brings the earlier lesson back.
  */
+import { readLogs, logSeq } from "../../../lib/logTap.js";
 import { io } from "socket.io-client";
 import { signInternalAccess } from "../../auth/routes.js";
 
@@ -59,8 +60,13 @@ export const socketSession = {
     ctx.expect.ok("the live id is not the row id (continuation must use the row id)", ready.data.sessionId !== rowId);
 
     // 2. A message gets a turn back.
+    const turnLogs = logSeq();
     a.socket.emit("teacher_message", { message: "Plants make their own food using sunlight, water and carbon dioxide." });
     const turn = await once(a.socket, "turn_complete", 120_000);
+    // An empty turn says nothing by itself: the server's warnings from this turn ride along.
+    if (!(turn.data?.blocks || []).length) {
+      for (const line of readLogs({ since: turnLogs, limit: 40 }).lines.filter((l) => /warn|error|fail|reject|\b4\d\d\b/i.test(String(l.msg)))) ctx.note(`log: ${String(line.msg).slice(0, 400)}`);
+    }
     ctx.expect.ok("a message gets a reply turn", (turn.data?.blocks || []).length > 0, turn.error || (turn.timeout ? "timed out" : null));
     a.socket.emit("end_session", {});
     await new Promise((r) => setTimeout(r, 2_000));
