@@ -3093,6 +3093,12 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   folder (D51) → `material_ingest` structure step → past-paper parsing →
   find similar (D52) → Study Prep `materials` source → study-material tools.
 - **Exit:** the §7.17.6 list, all green on the sandbox. (D51–D54 locked 2026-10-19.)
+- **Status (2026-10-19):** ✅ steps 1–5 built and green on the sandbox (materials,
+  chat.upload_saved, suggestions suites). Step 6 replaced by design: the reader
+  already builds quizzes, flashcards, summaries, notes and podcasts from a
+  document, so the agent routes there — `search_my_library` with the tool asked
+  for links `/library?record=<id>&tool=<tool>`, which opens the reader on that
+  tool (chat.study_tool_routing, reader.tool_link).
 ---
 
 ## 18. Acceptance tests
