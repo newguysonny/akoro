@@ -44,9 +44,6 @@ export function WorkflowSteps({ steps, limit = 0 }) {
             : <Icon name={s.status === 'failed' ? 'ti-circle-x' : 'ti-circle-check'} size={15} color={s.status === 'failed' ? RED : GREEN} style={{ marginTop: 1 }}/>}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)' }}>{s.headline}</div>
-            {(s.description || s.status === 'failed' && s.result) && <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ak-text-muted)', lineHeight: 1.45 }}>{s.status === 'failed' && s.result ? s.result : s.description}</div>}
-            {s.status === 'done' && s.result && s.result !== 'Done' && <div data-workflow-found="" style={{ fontSize: 11.5, fontWeight: 750, color: 'var(--ak-text-sub)', lineHeight: 1.45, display: 'flex', gap: 4 }}><Icon name="ti-arrow-right" size={12} color="var(--ak-text-muted)" style={{ marginTop: 2 }}/>{s.result}</div>}
-            {s.why && <div data-workflow-why="" style={{ fontSize: 11, fontWeight: 600, fontStyle: 'italic', color: 'var(--ak-text-muted)', lineHeight: 1.45 }}>Why: {s.why}</div>}
             {s.tag && <span style={{ display: 'inline-block', marginTop: 4, fontSize: 10.5, fontWeight: 800, padding: '2px 7px', borderRadius: 7, background: '#FEF3C7', color: '#92400E' }}>{s.tag}</span>}
           </div>
           {s.status !== 'running' && s.ms != null && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--ak-text-muted)', whiteSpace: 'nowrap' }}>{durationLabel(s.ms)}</span>}

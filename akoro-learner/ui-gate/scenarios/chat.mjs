@@ -388,7 +388,7 @@ export const scenarios = [
   },
   {
     name: 'chat.study_prep_dev_notes',
-    description: 'Developer view: the Study Prep planner\'s notes arrive live and show in the chat as "Thought for N seconds" rows under the card\'s message — outside the card, which stays the workflow\'s state. Without developer view they are not asked for. (Served by the test.)',
+    description: 'The agent keeps working in the chat after its reply: under the card\'s message, each planning decision is "Thought for N seconds" → the tool row (what it checked and found) → what the agent said about it. With the developer view on, the thought opens to the planner\'s notes. The card stays a checklist of the workflow\'s state — none of this prose is in it. (Served by the test.)',
     async run(t) {
       const { page } = t;
       const chatId = '00000000-0000-4000-8000-0000000000f1', spId = '00000000-0000-4000-8000-0000000000f2', wfId = '00000000-0000-4000-8000-0000000000f3';
@@ -400,24 +400,34 @@ export const scenarios = [
         { id: 'n2', role: 'agent', text: 'Planning now.', created_at: at, meta: { studyPrepSessionId: spId } },
       ], hasMore: false } }));
       await page.route(`**/api/adaptive/study-prep/sessions/${spId}`, (r) => r.fulfill({ json: { success: true, session: { id: spId, goal: 'JSS1 Basic Science', subject: 'Basic Science', status: 'awaiting_confirmation', workflowId: wfId, plan: [{ syllabusTopicId: 't1', label: 'Cells', position: 1 }], estimate: { totalCoins: 5 } }, topics: [], events: [] } }));
+      const ev = (sequence, type, headline, payload, description = '') => ({ v: 3, workflowId: wfId, sequence, type, timestamp: at, visibility: 'learner', narration: { headline, description, result: '', narration: headline }, payload });
       await page.route(`**/api/workflows/${wfId}/stream**`, (r) => {
         urls.push(r.request().url());
-        const step = { v: 3, workflowId: wfId, sequence: 1, type: 'tool.completed', timestamp: at, visibility: 'learner', narration: { headline: 'Reviewing what you know', description: 'Your strong and weak topics', result: 'No recorded evidence on this subject yet', narration: 'x' }, payload: { tool: 'learner.get_state' } };
-        const note = { v: 3, live: true, workflowId: wfId, type: 'agent.narration', visibility: 'developer', timestamp: at, payload: { iteration: 3, ms: 4200, thinking: 'No recorded evidence in Basic Science, so I cannot rank by weakness. Use the school syllabus order and check prerequisites next.', intent: 'Read the prerequisite links so the order respects them.', tool: 'concept.get_prerequisites' } };
-        const body = `event: workflow_event\ndata: ${JSON.stringify(step)}\n\nevent: caught_up\ndata: {"last":1}\n\nevent: workflow_live\ndata: ${JSON.stringify(note)}\n\n`;
+        const events = [
+          ev(1, 'tool.started', 'Reviewing what you know', { tool: 'learner.get_state', intent: 'Read their mastery for the six topics.', durationMs: 4200, iteration: 3 }, 'Your strong and weak topics'),
+          ev(2, 'tool.completed', 'Reviewing what you know', { tool: 'learner.get_state', resultLine: 'No recorded evidence on this subject yet' }),
+          ev(3, 'activity', 'x', { message: "You haven't practised Basic Science here yet, so I'll follow your school's syllabus order. Next I'll check the prerequisites.", iteration: 3 }),
+        ];
+        const note = { v: 3, live: true, workflowId: wfId, type: 'agent.narration', visibility: 'developer', timestamp: at, payload: { iteration: 3, ms: 4200, thinking: 'No recorded evidence in Basic Science, so I cannot rank by weakness. Use the school syllabus order and check prerequisites next.', intent: 'Read their mastery for the six topics.' } };
+        const body = events.map((e) => `event: workflow_event\ndata: ${JSON.stringify(e)}\n\n`).join('') + `event: caught_up\ndata: {"last":3}\n\nevent: workflow_live\ndata: ${JSON.stringify(note)}\n\n`;
         return r.fulfill({ status: 200, headers: { 'Content-Type': 'text/event-stream' }, body });
       });
       await page.addInitScript(() => { try { localStorage.setItem('ak.agentChat.devView', '1'); } catch { /* */ } });
       await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
-      const notes = page.locator('[data-workflow-notes]');
-      t.check('developer view asks the stream for the notes', await notes.waitFor({ timeout: 30_000 }).then(() => true, () => false) && urls.some((u) => u.includes('developer=1')), JSON.stringify(urls.slice(0, 2)));
-      t.check('…a "Thought for N seconds" row, outside the card', await notes.getByText(/Thought for 4 seconds/).isVisible().catch(() => false)
-        && await page.locator('[data-workflow-steps] [data-workflow-notes]').count() === 0);
-      await notes.getByText(/Thought for 4 seconds/).click().catch(() => {});
-      t.check('…opening to the planner\'s notes and its next step', await notes.getByText(/cannot rank by weakness/).isVisible().catch(() => false) && await notes.getByText(/Next: Read the prerequisite links/).isVisible().catch(() => false));
-      t.check('the card still shows only the workflow\'s state', await page.locator('[data-workflow-steps]').getByText('Reviewing what you know').isVisible().catch(() => false)
-        && !(await page.locator('[data-workflow-steps]').getByText(/cannot rank by weakness/).isVisible().catch(() => false)));
-      await t.shot('dev-notes');
+      const run = page.locator('[data-workflow-run]');
+      t.check('the agent\'s run shows under its reply', await run.waitFor({ timeout: 30_000 }).then(() => true, () => false));
+      t.check('…a "Thought for 4 seconds" row', await run.getByText(/Thought for 4 seconds/).isVisible().catch(() => false));
+      t.check('…the tool row in learner words', await run.getByText('Reviewing what you know').isVisible().catch(() => false));
+      t.check('…and what the agent said about it', await run.getByText(/so I'll follow your school's syllabus order/).isVisible().catch(() => false));
+      await run.getByText(/Thought for 4 seconds/).click().catch(() => {});
+      t.check('developer view: the thought opens to the planner\'s notes', urls.some((u) => u.includes('developer=1')) && await run.getByText(/cannot rank by weakness/).isVisible().catch(() => false));
+      await run.getByText('Reviewing what you know').click().catch(() => {});
+      t.check('the tool row opens to what it found', await run.getByText('No recorded evidence on this subject yet').isVisible().catch(() => false));
+      const card = page.locator('[data-workflow-steps]');
+      t.check('the card is a checklist of the workflow\'s state, with no prose', await card.getByText('Reviewing what you know').isVisible().catch(() => false)
+        && await card.getByText(/syllabus order|Why:|No recorded evidence|cannot rank/).count() === 0
+        && await card.locator('[data-workflow-step]').count() === 1);
+      await t.shot('agent-run');
     },
   },
   {

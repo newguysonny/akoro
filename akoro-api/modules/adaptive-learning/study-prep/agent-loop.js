@@ -36,8 +36,10 @@ export const observationFor = runtimeObservationFor;
 export async function runAgentStep({
   sessionId, topicId = null, goal, agent, registry, store, harness,
   contextSetName = "planning", maxIterations = POLICY.MAX_ITERATIONS_PER_STEP, requireReads = null,
-  onThought = null,
+  onThought = null, onMessage = null,
 }) {
+  // onMessage({ iteration, text, seen }): the agent's words to the learner for this decision; `seen` is what it has observed so far (for the fact filter).
+  const seenSoFar = [];
   // onThought({ iteration, ms, thinking, intent, tool }): the decision's notes, live only (developer view).
   let lastAt = Date.now();
   // Deep research: propose_plan is refused (as an observation the agent reads)
@@ -91,17 +93,23 @@ export async function runAgentStep({
         if (onThought && (step.thinking || step.intent)) {
           try { onThought({ iteration: entry.iteration, ms: now - lastAt, thinking: step.thinking || null, intent: step.intent || null, tool: step.tool || step.action || null }); } catch { /* never breaks the step */ }
         }
+        const thoughtMs = now - lastAt;
         lastAt = now;
+        if (onMessage && step.message) {
+          try { await onMessage({ iteration: entry.iteration, text: step.message, seen: seenSoFar.join(" ") }); } catch { /* never breaks the step */ }
+        }
         return append({
           iteration, eventType: step.tool ? "agent_tool_call" : "agent_action", origin: "agent_stated_intent",
           topicId: topicId || null, tool: step.tool || null, action: step.action || null,
-          agentIntent: step.intent || null, facts: { args: step.args || {} },
+          // How long it thought before this decision (the chat's "Thought for N seconds").
+          agentIntent: step.intent || null, facts: { args: step.args || {} }, durationMs: thoughtMs,
         });
       }
       if (entry.kind === "observation") {
         // What it found, in one learner-safe line — worked out before the facts are bounded (they drop nested lists).
         const summary = studyPrepResultLine(entry.tool, entry.observation);
         lastAt = Date.now();   // the next decision's thinking time starts after this result
+        try { seenSoFar.push(JSON.stringify(entry.observation).slice(0, 4000)); } catch { /* unserialisable: nothing to cite */ }
         return append({ iteration, eventType: "observation", origin: "harness", topicId: topicId || null, tool: entry.tool || null, facts: { ...entry.observation, ...(summary ? { summary } : {}) } });
       }
       return null;

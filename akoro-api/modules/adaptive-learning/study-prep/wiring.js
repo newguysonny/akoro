@@ -27,6 +27,7 @@ import db from "../../../db.js";
 import { createWorkflowEngine } from "../../workflows/engine.js";
 import { makeSupabaseWorkflowStore } from "../../workflows/store.js";
 import { publishLiveDeveloper } from "../../workflows/bus.js";
+import { keepFactual } from "../../agent-runtime/factFilter.js";
 import { makeWorkflowMirror, workflowEngineEnabled } from "./workflow.js";
 
 // Default-on kill switch: study-prep ships enabled; =false removes every surface.
@@ -184,6 +185,11 @@ export async function runStudyPrepPlanningStep({ sessionId, learnerId }) {
     requireReads: PLANNING_READS,
     // Developer view: the planner's notes per decision, pushed live to its workflow stream, never stored.
     onThought: view.session.workflowId ? (t) => publishLiveDeveloper(view.session.workflowId, t) : null,
+    // It talks to the learner at each decision (D27): fact-filtered, then posted to the workflow stream.
+    onMessage: async ({ iteration, text, seen }) => {
+      const kept = keepFactual(text, `${seen} ${view.session.subject || ""} ${view.session.goal || ""}`);
+      if (kept) await workflowMirror().agentMessage(sessionId, store, { iteration, text: kept });
+    },
   });
   const after = await harness.getSessionView({ sessionId, learnerId });
   return { ...after, loop: { ended: step.ended, iterations: step.iterations, terminal: step.terminal } };

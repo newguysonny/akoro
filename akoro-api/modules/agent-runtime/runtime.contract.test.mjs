@@ -196,3 +196,12 @@ test("think: the agent's notes come back to it on its next step, never into what
   assert.deepEqual(seen, [[], ["note 1"], ["note 1", "note 2"]]);
   assert.ok(recorded.every((r) => !r.includes("note ")), "notes never reach the recorded log through what the workflow stores");
 });
+
+test("fact filter: a sentence with a number the agent never saw is dropped; the rest is kept, capped", async () => {
+  const { keepFactual } = await import("./factFilter.js");
+  const seen = JSON.stringify({ topics: 6, found: true, weakest: "Cells 21" });
+  assert.equal(keepFactual("I found 6 topics. Your weakest is Cells at 21%. You scored 90% last week.", seen), "I found 6 topics. Your weakest is Cells at 21%.");
+  assert.equal(keepFactual("Next I'll check what you already know.", ""), "Next I'll check what you already know.");
+  assert.equal(keepFactual("You got 7 of 10.", seen), "");
+  assert.ok(keepFactual("word ".repeat(200), "", { max: 50 }).length <= 50);
+});

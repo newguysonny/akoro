@@ -27,7 +27,7 @@ import { useInFlight } from '../../hooks/useInFlight.js';
 import StudyPrepChatCard from './studyPrep/StudyPrepChatCard.jsx';
 import { fetchActiveStudyPrepSession } from '../../services/studyPrepApi.js';
 import TraceBlocks from './agentChat/TraceBlocks.jsx';
-import { applyTraceEvent, blocksFromSavedTrace, promoteActivity, settleRunning, studyPrepEventBlocks } from '../../lib/agentChatTrace.js';
+import { applyTraceEvent, blocksFromSavedTrace, promoteActivity, settleRunning, studyPrepEventBlocks, workflowRunBlocks } from '../../lib/agentChatTrace.js';
 import { CHAT_STARTERS, cleanIdeas, cleanMaterials, protegeMoves } from '../../lib/chatIdeas.js';
 import { useNavigate } from 'react-router-dom';
 import AgentCards from '../network/AgentCards.jsx';
@@ -137,12 +137,16 @@ function AgentChatTab({
   const onStudyPrepNotes = useCallback((sessionId, env) => {
     setPrepNotes((previous) => {
       const list = previous[sessionId] || [];
-      const p = env.payload || {};
-      if (list.some((b) => b.iteration === p.iteration && b.at === env.timestamp)) return previous;
-      const text = [p.thinking, p.intent ? `Next: ${p.intent}` : null].filter(Boolean).join('\n\n');
-      return { ...previous, [sessionId]: [...list, { type: 'thinking', id: `wfnote_${sessionId}_${list.length}`, status: 'done', ms: Number(p.ms) || 0, text, source: 'reasoning', iteration: p.iteration, at: env.timestamp }] };
+      if (list.some((n) => n.payload?.iteration === env.payload?.iteration)) return previous;
+      return { ...previous, [sessionId]: [...list, env] };
     });
   }, []);
+  // The workflow's run as the agent's own turn under the card's message: thought → tool → what it said, per decision.
+  const workflowRun = (sid) => {
+    const reported = studyPrepEvents[sid];
+    if (!reported?.v3) return [];
+    return workflowRunBlocks(reported.v3, { notes: devView ? (prepNotes[sid] || []) : [], running: !!runningPrep[sid] });
+  };
   const onStudyPrepRunning = useCallback((sessionId, running) => {
     setRunningPrep((previous) => (!!previous[sessionId] === running ? previous : { ...previous, [sessionId]: running }));
   }, []);
@@ -1176,7 +1180,7 @@ function AgentChatTab({
               const thinkingStream=!isMe&&msg.phase==="thinking";
               // Chips under the newest reply only: starters on a fresh chat (they
               // show what the agent can do), then each reply's follow-ups.
-              const chipIdeas=!isMe&&mi===messages.length-1&&!running
+              const chipIdeas=!isMe&&mi===messages.length-1&&!running&&!(msg.studyPrepSessionId&&runningPrep[msg.studyPrepSessionId])
                 ? (messages.length===1 ? CHAT_STARTERS.map(c=>({ label:t(c.labelKey)||c.label, fill:t(c.fillKey)||c.fill })) : (msg.ideas||[]))
                 : [];
               if(isMe) return (
@@ -1245,12 +1249,6 @@ function AgentChatTab({
                   {!isMe&&msg.studyPrepSessionId&&(pinnedPrep===msg.studyPrepSessionId&&lastPrepCardId===msg.id
                     ? <div data-workflow-pinned-note="" style={{ display:"flex",alignItems:"center",gap:6,marginTop:6,fontSize:11.5,fontWeight:750,color:"var(--ak-text-muted)" }}><Icon name="ti-pin" size={13}/>Study Prep is running — pinned above the message box</div>
                     : <StudyPrepChatCard sessionId={msg.studyPrepSessionId} onEvents={onStudyPrepEvents} onRunning={onStudyPrepRunning} developer={devView} onNotes={onStudyPrepNotes}/>)}
-                  {!isMe&&devView&&msg.studyPrepSessionId&&lastPrepCardIdOf(msg.studyPrepSessionId)===msg.id&&prepNotes[msg.studyPrepSessionId]?.length>0&&(
-                    <div data-workflow-notes="" style={{ marginTop:8 }}>
-                      <div style={{ fontSize:10.5,fontWeight:800,color:"var(--ak-text-muted)",letterSpacing:.3,textTransform:"uppercase",margin:"0 0 2px" }}>Developer · planner's notes</div>
-                      <TraceBlocks blocks={prepNotes[msg.studyPrepSessionId]}/>
-                    </div>
-                  )}
                   {!isMe&&msg.proposal?.status==="proposed"&&msg.proposal.preview&&<ProposalPreview preview={msg.proposal.preview}/>}
                   {!isMe&&msg.proposal&&(msg.proposal.status==="proposed"?(
                     <div style={{ display:"flex",flexWrap:"wrap",gap:7,marginTop:9 }}>
@@ -1331,6 +1329,8 @@ function AgentChatTab({
                       </button>
                     )}
                   </div>
+                  {/* The agent keeps working after its reply: the workflow's run, live (thought → tool → its words). */}
+                  {!isMe&&msg.studyPrepSessionId&&lastPrepCardIdOf(msg.studyPrepSessionId)===msg.id&&(()=>{ const run=workflowRun(msg.studyPrepSessionId); return run.length>0&&<div data-workflow-run="" style={{ marginTop:10 }}><TraceBlocks blocks={run}/></div>; })()}
                 </div>
               );
             })}
@@ -1380,13 +1380,6 @@ function AgentChatTab({
                     <button onClick={()=>removeAttachment(a.id)} title={t('agent.attach_remove')} aria-label={t('agent.attach_remove')} style={{ position:"absolute",top:-6,right:-6,width:19,height:19,borderRadius:"50%",border:"none",background:"var(--ak-text)",color:"var(--ak-surface)",fontSize:10,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 4px rgba(0,0,0,.25)" }}><Icon name="ti-x" size={10}/></button>
                   </div>
                 ))}
-              </div>
-            )}
-            {pinnedPrep && devView && prepNotes[pinnedPrep]?.length>0 && (
-              // Developer view, while it runs: the planner's latest notes at the live edge, just above the pinned card.
-              <div data-workflow-notes-live="" style={{ width:"min(560px,100%)",margin:"0 0 6px" }}>
-                <div style={{ fontSize:10.5,fontWeight:800,color:"var(--ak-text-muted)",letterSpacing:.3,textTransform:"uppercase",margin:"0 0 2px" }}>Developer · planner's notes{prepNotes[pinnedPrep].length>2?` · ${prepNotes[pinnedPrep].length-2} earlier`:''}</div>
-                <TraceBlocks blocks={prepNotes[pinnedPrep].slice(-2)}/>
               </div>
             )}
             {pinnedPrep && (

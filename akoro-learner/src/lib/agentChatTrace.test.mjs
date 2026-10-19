@@ -225,3 +225,23 @@ test('the workflow card keeps why a step was taken and what it found', async () 
   ]);
   assert.deepEqual([steps.length, steps[0].why, steps[0].result, steps[0].status], [1, 'Find their weakest topics first.', 'Weakest: Cells 21%', 'done']);
 });
+
+test('a workflow run reads as the agent working: thought → tool (found) → what it said, per decision', async () => {
+  const { workflowRunBlocks } = await import('./agentChatTrace.js');
+  const n = (headline, description = '') => ({ headline, description, result: '', narration: headline });
+  const events = [
+    { sequence: 1, type: 'tool.started', narration: n('Checking the syllabus', "Looking for your class's topics"), payload: { tool: 'syllabus.resolve', intent: 'Fetch the topics first.', durationMs: 2100, iteration: 1 } },
+    { sequence: 2, type: 'tool.completed', narration: n('Checking the syllabus'), payload: { tool: 'syllabus.resolve', resultLine: '6 topics found' } },
+    { sequence: 3, type: 'activity', narration: n('x'), payload: { message: "I found 6 topics. Next I'll look at what you already know." } },
+    { sequence: 4, type: 'activity', narration: n('Syllabus found'), payload: { decisionNode: 'syllabus_resolved', narrative: 'x' } },
+    { sequence: 5, type: 'tool.started', narration: n('Reviewing what you know'), payload: { tool: 'learner.get_state', intent: 'Their state.', durationMs: 3000, iteration: 2 } },
+  ];
+  const live = workflowRunBlocks(events, { running: true, notes: [{ payload: { iteration: 2, thinking: 'No evidence yet; check history next.', intent: 'Their state.' } }] });
+  assert.deepEqual(live.map((b) => [b.type, b.status]), [['thinking', 'done'], ['tool', 'done'], ['activity', undefined], ['thinking', 'done'], ['tool', 'running']]);
+  assert.equal(live[0].text, 'Fetch the topics first.');
+  assert.equal(live[1].result, '6 topics found');
+  assert.match(live[3].text, /No evidence yet/, 'developer notes replace the reason for that decision');
+  const done = workflowRunBlocks(events.slice(0, 3), { running: true });
+  assert.equal(done.at(-1).status, 'running', 'between decisions: Thinking…');
+  assert.ok(workflowRunBlocks(events, { running: false }).every((b) => b.status !== 'running'));
+});

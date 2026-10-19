@@ -220,3 +220,21 @@ test("onThought gets each decision's notes and thinking time; the notes are neve
   assert.ok(thoughts.every((t) => Number.isFinite(t.ms) && t.ms >= 0));
   assert.ok(!JSON.stringify(store.events).includes("Nothing known yet"), "notes never stored");
 });
+
+test("the agent talks at each decision: onMessage gets its words and what it has seen; each decision records its thinking time", async () => {
+  const store = new MemoryStore();
+  const harness = createHarness({ store, topicWorkflow, syllabus, now: () => "2026-01-01T00:00:00Z" });
+  const session = await harness.createSession({ learnerId: LEARNER, goal: "Prepare", subject: "Basic Science" });
+  const said = [];
+  const registry = { catalogue: [], execute: async (name, args) => (name === "propose_plan" ? harness.proposePlan({ sessionId: session.id, learnerId: LEARNER, topicIds: args.topics }) : { topics: SYLLABUS }) };
+  const agent = stubAgent([
+    { tool: "syllabus.resolve", args: {}, intent: "Syllabus first.", message: "First I'll check your class syllabus." },
+    { tool: "propose_plan", args: { topics: ["water-cycle"] }, intent: "Propose.", message: "Found the syllabus — proposing a plan now." },
+  ]);
+  await runAgentStep({ sessionId: session.id, goal: session.goal, agent, registry, store, harness, onMessage: (m) => said.push(m) });
+  assert.deepEqual(said.map((m) => m.text), ["First I'll check your class syllabus.", "Found the syllabus — proposing a plan now."]);
+  assert.equal(said[0].seen, "", "nothing seen before the first decision");
+  assert.match(said[1].seen, /water-cycle|topics/, "the second sees the syllabus result");
+  const calls = store.events.filter((e) => e.event_type === "agent_tool_call");
+  assert.ok(calls.every((e) => Number.isFinite(e.duration_ms)), "thinking time recorded on each decision");
+});

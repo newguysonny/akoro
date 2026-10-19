@@ -239,6 +239,8 @@ export function workflowCardSteps(events, { running = true } = {}) {
   for (const event of events || []) {
     if (!event?.narration?.headline || CARD_SKIP.has(event.type)) continue;
     const p = event.payload || {};
+    // The agent's own words are its turn in the chat, never a step of the card.
+    if (event.type === 'activity' && p.message) continue;
     const base = {
       id: `wf_${event.sequence}`, headline: event.narration.headline, description: event.narration.description || '',
       result: event.narration.result || '', ms: p.durationMs ?? null,
@@ -246,7 +248,8 @@ export function workflowCardSteps(events, { running = true } = {}) {
       // Why the agent took this step (its stated intent) — sanitised and capped server-side.
       ...(p.intent ? { why: String(p.intent) } : {}),
     };
-    if (event.type === 'tool.started') { steps.push({ ...base, tool: p.tool || null, status: 'running', result: '' }); continue; }
+    // A tool start's duration is the agent's thinking time before it, not the step's: no time on the card.
+    if (event.type === 'tool.started') { steps.push({ ...base, ms: null, tool: p.tool || null, status: 'running', result: '' }); continue; }
     if (event.type === 'tool.completed' || event.type === 'tool.failed') {
       const open = [...steps].reverse().find((s) => s.status === 'running' && s.tool === (p.tool || null));
       const status = event.type === 'tool.failed' ? 'failed' : 'done';
@@ -270,4 +273,39 @@ export function studyPrepCardHead(status, activeTopicLabel = null) {
     case 'completed': return { title: 'Study plan done', badge: 'Done', tone: 'done' };
     default: return { title: 'Study plan stopped', badge: 'Stopped', tone: 'done' };
   }
+}
+
+/**
+ * A workflow run as the agent's own turn in the chat (Phase 3): for each
+ * decision a "Thought for N seconds" row (its reason — or, in the developer
+ * view, the planner's notes for that decision), the tool row with what it
+ * checked and found, and what the agent said to the learner about it. The
+ * card shows the workflow's state; this is the agent working and talking.
+ * running: a "Thinking…" row while it decides its next step.
+ */
+export function workflowRunBlocks(events, { notes = [], running = false } = {}) {
+  const byIteration = new Map((notes || []).map((n) => [n.payload?.iteration, n.payload]));
+  const blocks = [];
+  for (const event of events || []) {
+    const p = event.payload || {};
+    if (event.type === 'tool.started') {
+      const note = byIteration.get(p.iteration);
+      const text = note?.thinking ? [note.thinking, note.intent ? `Next: ${note.intent}` : null].filter(Boolean).join('\n\n') : (p.intent || '');
+      if (text || p.durationMs) blocks.push({ type: 'thinking', id: `wfth_${event.sequence}`, status: 'done', ms: Number(p.durationMs) || 0, text, ...(note?.thinking ? { source: 'reasoning' } : {}) });
+      blocks.push({ type: 'tool', id: `wft_${event.sequence}`, tool: p.tool || null, status: 'running', ok: null, ms: null, category: 'research',
+        headline: event.narration?.headline || '', description: event.narration?.description || '', result: '' });
+    } else if (event.type === 'tool.completed' || event.type === 'tool.failed') {
+      const open = [...blocks].reverse().find((b) => b.type === 'tool' && b.status === 'running' && b.tool === (p.tool || null));
+      const result = event.type === 'tool.failed' ? (event.narration?.result || "Couldn't finish") : (p.resultLine || '');
+      if (open) Object.assign(open, { status: 'done', ok: event.type !== 'tool.failed', result });
+    } else if (event.type === 'activity' && p.message) {
+      blocks.push({ type: 'activity', id: `wfa_${event.sequence}`, text: String(p.message) });
+    }
+  }
+  if (!running) {
+    for (const b of blocks) if (b.status === 'running') Object.assign(b, { status: 'done', ok: b.ok ?? true });
+  } else if (!blocks.some((b) => b.status === 'running')) {
+    blocks.push({ type: 'thinking', id: 'wfth_live', status: 'running', startedAt: Date.now(), ms: 0, text: '' });
+  }
+  return blocks;
 }

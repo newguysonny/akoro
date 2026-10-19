@@ -16,7 +16,7 @@ export function makeLlmAgent({ system, contentSearchEnabled = false, learnerId =
     system, learnerId,
     catalogue: llmFacingTools({ includeContentSearch: contentSearchEnabled }),
     // Think (2026-10-19): it reasons before each of its (up to 10) decisions.
-    feature: "study_prep_planning", timeoutMs: 60_000, maxRetries: 1, maxTokens: 1400, think: true,
+    feature: "study_prep_planning", timeoutMs: 60_000, maxRetries: 1, maxTokens: 1600, think: true, talk: true,
     intentMaxChars: POLICY.INTENT_MAX_CHARS,
     finishHint: "This is your last step: finish now with the best plan you can make from what you found.",
   });

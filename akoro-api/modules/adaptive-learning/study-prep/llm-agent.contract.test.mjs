@@ -36,7 +36,7 @@ test("replies are mapped back to registry names; the call is bounded and labelle
   assert.match(src, /toRegistry\.get\(call\.function\.name\)/);
   assert.match(src, /__feature: feature, __timeoutMs: timeoutMs, __maxRetries: maxRetries/);
   const wrapper = readFileSync(new URL("./llm-agent.js", import.meta.url), "utf8");
-  assert.match(wrapper, /feature: "study_prep_planning", timeoutMs: 60_000, maxRetries: 1, maxTokens: 1400, think: true/);
+  assert.match(wrapper, /feature: "study_prep_planning", timeoutMs: 60_000, maxRetries: 1, maxTokens: 1600, think: true, talk: true/);
   const loop = readFileSync(new URL("./agent-loop.js", import.meta.url), "utf8");
   assert.match(loop, /action: "agent_error"/, "a provider failure is recorded in the session's events");
 });

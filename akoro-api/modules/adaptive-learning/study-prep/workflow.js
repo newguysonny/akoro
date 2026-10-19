@@ -148,7 +148,7 @@ export function workflowEventFor(row) {
     actor: kind === "human_gate" ? "learner" : (ACTOR[row.origin] || "system"),
     visibility: learner ? "learner" : "developer",
     payload: {
-      studyPrepSequence: row.sequence ?? null, topicId: row.topic_id || row.topicId || null,
+      studyPrepSequence: row.sequence ?? null, iteration: row.iteration ?? null, topicId: row.topic_id || row.topicId || null,
       decisionNode: node, narrative: row.narrative || null, tool, action, intent,
       // 0 is the column default (no timing recorded), not a real duration.
       durationMs: Number(row.duration_ms ?? row.durationMs) > 0 ? Number(row.duration_ms ?? row.durationMs) : null,
@@ -222,6 +222,13 @@ export function makeWorkflowMirror(engine, { log = console } = {}) {
         for (const row of rows) await engine.appendEvent(id, workflowEventFor(row)).catch(quiet("backfill event"));
       }
       return id;
+    },
+    /** The agent's own words to the learner (already fact-filtered): an `activity` in the workflow stream. */
+    async agentMessage(sessionId, store, { iteration = null, text }) {
+      if (!text) return;
+      const id = await workflowIdOf(sessionId, store).catch(() => null);
+      if (!id) return;
+      await engine.appendEvent(id, { event_type: "activity", category: "synthesis", actor: "agent", visibility: "learner", payload: { message: text, iteration } }).catch(quiet("agent message"));
     },
     async eventsWritten(sessionId, rows, store) {
       const id = await workflowIdOf(sessionId, store).catch(() => null);

@@ -14,6 +14,9 @@
  * agent with the next observations, so the analysis builds across the step's
  * decisions; they are never stored in events or shown (only the intent is).
  *
+ * talk: each decision also carries a short message to the learner (what it
+ * just found, what it will do now) — the workflow fact-filters and posts it.
+ *
  * The model is the `controller` role's (lib/modelRegistry.js): the learner's
  * choice when they may make one, else the role's env default, else the
  * platform default. Safety lives in the harness, whichever model decides.
@@ -36,7 +39,7 @@ export function makeLlmAgent({
   system, catalogue, feature, learnerId = null, learnerChoice = null, intentMaxChars = 240,
   maxTokens = 700, timeoutMs = 45_000, maxRetries = 1,
   finishHint = "This is your last step: finish now with the best you can make from what you found.",
-  think = false, thinkMaxChars = 900,
+  think = false, thinkMaxChars = 900, talk = false, talkMaxChars = 400,
 }) {
   const toRegistry = new Map(catalogue.map((tool) => [providerToolName(tool.name), tool.name]));
   if (toRegistry.size !== catalogue.length) throw new Error(`${feature}: tool names collide once made provider-safe`);
@@ -50,9 +53,10 @@ export function makeLlmAgent({
         properties: {
           ...(think ? { thinking: { type: "string", description: `Think it through first (max ${thinkMaxChars} characters): what you know so far, what is still missing or uncertain, and what this step should establish. Your notes come back to you on the next step.` } } : {}),
           intent: { type: "string", description: `One short sentence stating why you are doing this (max ${intentMaxChars} characters).` },
+          ...(talk ? { message: { type: "string", description: `Talk to the learner (max ${talkMaxChars} characters, 1–2 short sentences, plain words, "you"): what you just found from the last result, and what you'll do now. Only facts from the observations — never invent numbers or topics.` } } : {}),
           args: { ...(tool.args || { type: "object" }), description: "The tool arguments." },
         },
-        required: think ? ["thinking", "intent", "args"] : ["intent", "args"],
+        required: [...(think ? ["thinking"] : []), "intent", ...(talk ? ["message"] : []), "args"],
       },
     },
   }));
@@ -98,6 +102,7 @@ export function makeLlmAgent({
         return {
           tool: name, action: name, args, intent: typeof parsed?.intent === "string" ? parsed.intent.slice(0, intentMaxChars) : null,
           ...(think && typeof parsed?.thinking === "string" ? { thinking: parsed.thinking.slice(0, thinkMaxChars) } : {}),
+          ...(talk && typeof parsed?.message === "string" ? { message: parsed.message.slice(0, talkMaxChars) } : {}),
         };
       } catch {
         return { tool: name, action: name, args: {}, intent: null };
