@@ -146,8 +146,9 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
   const events = view?.events;
   useEffect(() => {
     if (wfEvents) onEvents?.(sessionId, { v3: wfEvents });
-    else if (events) onEvents?.(sessionId, events);
-  }, [sessionId, events, wfEvents, onEvents]);
+    // An older API (no workflow) still sends its steps to the chat's trace; with a workflow they wait for the stream.
+    else if (events && !workflowId) onEvents?.(sessionId, events);
+  }, [sessionId, events, wfEvents, onEvents, workflowId]);
 
   // An Agent Check runs on the server; the card picks up its score when it lands.
   const checkRunning = !!view?.topics?.some((topic) => topic.status === 'active' && topic.checkBattleId && !topic.checkScoredAt);
