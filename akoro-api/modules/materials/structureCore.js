@@ -10,7 +10,7 @@
  */
 import { DOC_KINDS } from "./ingestCore.js";
 
-export const STRUCTURE_LIMITS = Object.freeze({ PAGES: 30, PAGE_CHARS: 1800, TOTAL_CHARS: 26_000, TOPICS: 15, QUESTIONS: 60, QUESTION_CHARS: 400, MAX_TOKENS: 2600 });
+export const STRUCTURE_LIMITS = Object.freeze({ PAGES: 30, PAGE_CHARS: 1800, TOTAL_CHARS: 20_000, TOPICS: 15, QUESTIONS: 50, QUESTION_CHARS: 300, MAX_TOKENS: 2000 });
 
 const clip = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();

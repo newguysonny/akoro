@@ -190,7 +190,9 @@ router.post("/ingest/:id/structure", asyncHandler(async (req, res) => {
       const out = await openai.chat.completions.create({
         __role: "background", messages: structureMessages({ names: [record.name], kindHint: row.doc_kind, pages }),
         temperature: 0, max_tokens: STRUCTURE_LIMITS.MAX_TOKENS, response_format: structureSchema(),
-        __payer: "platform", __feature: "material_structure", __userId: userId, __timeoutMs: 75_000, __maxRetries: 1,
+        __payer: "platform", __feature: "material_structure", __userId: userId,
+        // Under the breaker's 60 s backstop: a slow read must not count as the provider failing for every chat.
+        __timeoutMs: 50_000, __maxRetries: 0,
       });
       raw = out?.choices?.[0]?.message?.content || "{}";
     } catch (error) {
