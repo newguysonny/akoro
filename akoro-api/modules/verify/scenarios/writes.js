@@ -88,3 +88,38 @@ export const noResidue = {
     ctx.expect.eq("no leftover teaching sessions", await ctx.db.count("edu.adaptive_sessions", { topic: like }), 0);
   },
 };
+
+/**
+ * A gate run cut short (a redeploy mid-run, a timed-out client) leaves its
+ * rows behind and every later writes.no_residue fails on them. This clears
+ * gate-marked rows older than 30 minutes — so a run still going keeps its
+ * own — on TEST learners only (a real owner is skipped, never touched).
+ */
+const STALE_MS = 30 * 60 * 1000;
+const SWEEPABLE = [
+  { table: "tasks", owner: "creator_id", marked: "title" },
+  { table: "chat_sessions", owner: "user_id", marked: "title" },
+  { table: "edu.records", owner: "user_id", marked: "name" },
+  { table: "edu.study_prep_sessions", owner: "learner_id", marked: "goal" },
+];
+export const sweepStale = {
+  name: "writes.sweep_stale", area: "platform", risk: "write",
+  description: "Clears gate-marked rows older than 30 minutes left on test learners by runs that were cut short.",
+  async run(ctx) {
+    const cutoff = Date.now() - STALE_MS;
+    let swept = 0, skipped = 0;
+    for (const { table, owner, marked } of SWEEPABLE) {
+      const rows = await ctx.db.rows(table, { [marked]: { like: "[verify:%" } }, { columns: `id, ${owner}, created_at, ${marked}`, limit: 200 });
+      for (const row of rows.filter((r) => new Date(r.created_at).getTime() < cutoff)) {
+        let acct;
+        try { acct = await ctx.as(row[owner]); } catch { skipped += 1; continue; }
+        if (!acct?.tester) { skipped += 1; continue; }
+        await ctx.db.deleteOwned(table, { ownerColumn: owner, ownerId: acct.id, filters: { id: row.id } });
+        ctx.note(`swept ${table}: ${String(row[marked]).slice(0, 80)} (@${acct.username})`);
+        swept += 1;
+      }
+    }
+    ctx.note(`swept ${swept}, skipped ${skipped} (not a test learner)`);
+    ctx.expect.ok("the sweep ran", true);
+  },
+};

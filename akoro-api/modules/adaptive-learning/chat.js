@@ -21,6 +21,7 @@ import { buildSuggestionMessages, notTaughtFrom, guideChip, uploadsFrom, uploadC
 import { resolveAskTargetFor } from "../records/access.js";
 import { materialsFrom, collectMaterials } from "./chat-materials.js";
 import { renderRelevantMemory } from "./chat-memory.js";
+import { scrubInternalIds } from "./reply-scrub.js";
 import { recurringTopics } from "../materials/structureCore.js";
 import { resolveMaterialsFolder } from "../materials/studySource.js";
 import { gatherPassages, extractCitations } from "../records/askLib.js";
@@ -4414,6 +4415,8 @@ router.post("/agent", async (req, res) => {
     // A stopped turn keeps whatever streamed so far, marked as stopped, so the
     // saved transcript matches what the learner saw.
     if (stopped()) reply = reply.trim() ? `${reply.trim()}\n\n${STOPPED_REPLY}` : STOPPED_REPLY;
+    // Internal ids the model saw in tool results never reach the learner (reply-scrub.js).
+    reply = scrubInternalIds(reply);
     if (!reply.trim()) reply = "I'm here to help with your studies — ask me anything about your subjects!";
     const traceBlocks = trace.blocks();
 

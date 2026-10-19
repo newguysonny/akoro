@@ -1,7 +1,7 @@
 // The scenario registry. Add a scenario: export it from an area file and list it here.
 import { healthBuild, toolsCatalogue } from "./smoke.js";
 import { scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity, historyPages } from "./chat.js";
-import { followUpDeliverIntoChat, taskDueInMinutes, noResidue } from "./writes.js";
+import { followUpDeliverIntoChat, taskDueInMinutes, noResidue, sweepStale } from "./writes.js";
 import { viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds } from "./selftool.js";
 import { privacyEdges } from "./network.js";
 import { rateLimitCountedOnce, battleEntryGates } from "./platform.js";
@@ -25,7 +25,7 @@ import { socketSession } from "./socket.js";
 
 const ALL = [healthBuild, toolsCatalogue, scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity,
   privacyEdges, rateLimitCountedOnce, battleEntryGates, followUpDeliverIntoChat, taskDueInMinutes, noResidue,
-  viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, tailoredChips, chatUploadFiled, pastPaperStructured, voiceSpeak, voiceLive, agentCheckBattle, classSyllabusFirst, historyPages, workflowMirror, paperStructured, ...chatToSubmissionScenarios, authoringVersionsParts, authoringDiagramsEdits, inboxOneList, quietLearningPass, plannerRichGather, proactiveInChat, readerBackend, socketSession];
+  viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, tailoredChips, chatUploadFiled, pastPaperStructured, voiceSpeak, voiceLive, sweepStale, agentCheckBattle, classSyllabusFirst, historyPages, workflowMirror, paperStructured, ...chatToSubmissionScenarios, authoringVersionsParts, authoringDiagramsEdits, inboxOneList, quietLearningPass, plannerRichGather, proactiveInChat, readerBackend, socketSession];
 
 export const SCENARIOS = Object.fromEntries(ALL.map((s) => [s.name, s]));
 
@@ -52,6 +52,8 @@ export const SUITES = {
   suggestions: ["chat.suggestions_answer", "chat.tailored_chips", "writes.no_residue"],
   // Materials to study (§7.17): chat uploads filed in a Library folder, Undo.
   voice: ["voice.speak_deepgram", "voice.live_deepgram"],
+  // Clear what cut-short runs left on the test learners, then prove it is gone.
+  sweep: ["writes.sweep_stale", "writes.no_residue"],
   materials: ["materials.chat_upload_filed", "materials.past_paper_structured", "writes.no_residue"],
   "study-prep": ["studyprep.plan_completes", "studyprep.practice_charged_once", "studyprep.generated_outline", "studyprep.class_syllabus_first", "studyprep.workflow_mirror", "writes.no_residue"],
   "agent-check": ["studyprep.agent_check_battle", "writes.no_residue"],
