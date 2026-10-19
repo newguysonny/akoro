@@ -409,6 +409,22 @@ export function BottomNav() {
   return null;
 }
 
+const MOBILE_QUERY = '(max-width: 767px)';
+
+export function useIsMobile() {
+  const [mobile, setMobile] = useState(() => {
+    try { return window.matchMedia(MOBILE_QUERY).matches; } catch { return false; }
+  });
+  useEffect(() => {
+    let mq;
+    try { mq = window.matchMedia(MOBILE_QUERY); } catch { return; }
+    const onChange = (e) => setMobile(e.matches);
+    mq.addEventListener?.('change', onChange);
+    return () => mq.removeEventListener?.('change', onChange);
+  }, []);
+  return mobile;
+}
+
 export function PageLayout({ children, title, subtitle, action, hideTopBarOnMobile = false }) {
   const [collapsed, setCollapsed] = useState(false);
   const mobile = useIsMobile();
