@@ -21,7 +21,7 @@ import { buildSuggestionMessages, notTaughtFrom, guideChip, uploadsFrom, uploadC
 import { resolveAskTargetFor } from "../records/access.js";
 import { materialsFrom, collectMaterials } from "./chat-materials.js";
 import { renderRelevantMemory } from "./chat-memory.js";
-import { ensureNotTaughtOpener, scrubInternalIds } from "./reply-scrub.js";
+import { ensureNotTaughtOpener, promisedTeachTopic, scrubInternalIds } from "./reply-scrub.js";
 import { recurringTopics } from "../materials/structureCore.js";
 import { resolveMaterialsFolder } from "../materials/studySource.js";
 import { akoroMaterialFor } from "../materials/akoroMaterial.js";
@@ -4452,6 +4452,16 @@ router.post("/agent", async (req, res) => {
     // Internal ids the model saw in tool results never reach the learner (reply-scrub.js).
     reply = scrubInternalIds(reply);
     if (!stopped()) reply = ensureNotTaughtOpener(reply, prepared.toolExecutions);
+    // …and a reply that promises the Teach me button without having called the
+    // tool gets the button it promised (the same topic, the same links).
+    if (role === "student" && !stopped() && !prepared.toolExecutions.some((x) => x.tool === "ask_to_be_taught")) {
+      const teach = teachRequest({ topic: promisedTeachTopic(reply) });
+      if (teach) {
+        const found = await akoroMaterialFor(teach.topic).catch(() => []);
+        const mats = collectMaterials([materialsFrom("ask_to_be_taught", { materials: found })]);
+        prepared.toolExecutions.push({ tool: "ask_to_be_taught", success: true, backfilled: true, input: { topic: teach.topic }, teach, ...(mats.length ? { materials: mats } : {}) });
+      }
+    }
     if (!reply.trim()) reply = "I'm here to help with your studies — ask me anything about your subjects!";
     const traceBlocks = trace.blocks();
 

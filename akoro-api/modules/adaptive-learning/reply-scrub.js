@@ -37,3 +37,16 @@ export function ensureNotTaughtOpener(reply, toolExecutions = []) {
   const opener = `You haven't taught me ${topic} yet!`;
   return text.trim() ? `${opener}\n\n${text.trim()}` : opener;
 }
+
+/**
+ * The other half: a reply that says it wasn't taught a topic AND promises the
+ * Teach me button, from a turn that never called ask_to_be_taught. The topic
+ * it names, so the server can give the button it promised; null otherwise.
+ */
+export function promisedTeachTopic(reply) {
+  const text = String(reply ?? "");
+  if (!/\bteach me\b/i.test(text) || !/\bbutton\b/i.test(text)) return null;
+  const m = text.match(/\b(?:haven['’]?t|have not|never)\s+(?:yet\s+)?taught\s+me\s+(?:about\s+)?(?:the\s+)?([^.,;:!?—–\n()]{2,60}?)(?:\s+yet\b|\s*[.,;:!?—–\n(]|$)/i);
+  const topic = m?.[1]?.replace(/\*+/g, "").trim();
+  return topic && !/^(it|this|that|them|anything|this topic|that topic)$/i.test(topic) ? topic : null;
+}

@@ -97,9 +97,14 @@ export function buildQuietLearningMessages({ summary = "", transcript = [], memo
 export function cleanPassResult(json, { existing = [] } = {}) {
   const out = { summary: null, adds: [], updates: [], forgets: [], dropped: [] };
   const j = json && typeof json === "object" ? json : {};
-  const summary = clip(j.summary, 1500);
-  if (summary.length >= 40 && !isSensitive(summary)) out.summary = summary;
-  else if (summary) out.dropped.push({ why: summary.length < 40 ? "summary_short" : "summary_sensitive" });
+  // A sensitive sentence is cut from the summary; the rest of it is kept.
+  const raw = clip(j.summary, 1500);
+  const sentences = raw.match(/[^.!?]+[.!?]*/g) || [];
+  const kept = sentences.filter((x) => !isSensitive(x));
+  if (kept.length < sentences.length) out.dropped.push({ why: "summary_sensitive", sentences: sentences.length - kept.length });
+  const summary = kept.join("").replace(/\s+/g, " ").trim();
+  if (summary.length >= 40) out.summary = summary;
+  else if (raw) out.dropped.push({ why: "summary_short" });
 
   const byId = new Map(existing.map((m) => [String(m.id), m]));
   const seen = new Set(existing.map((m) => norm(m.content)));

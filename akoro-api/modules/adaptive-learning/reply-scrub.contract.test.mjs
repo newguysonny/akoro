@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { ensureNotTaughtOpener, scrubInternalIds } from "./reply-scrub.js";
+import { ensureNotTaughtOpener, promisedTeachTopic, scrubInternalIds } from "./reply-scrub.js";
 
 const chat = await readFile(new URL("./chat.js", import.meta.url), "utf8");
 
@@ -16,7 +16,7 @@ test("internal ids the model saw in tool results never reach the learner", () =>
 });
 
 test("wired into every Agent Chat reply before it is shown or saved", () => {
-  assert.match(chat, /reply = scrubInternalIds\(reply\);\n\s*if \(!stopped\(\)\) reply = ensureNotTaughtOpener\(reply, prepared\.toolExecutions\);\n\s*if \(!reply\.trim\(\)\)/);
+  assert.match(chat, /reply = scrubInternalIds\(reply\);\n\s*if \(!stopped\(\)\) reply = ensureNotTaughtOpener\(reply, prepared\.toolExecutions\);\n[\s\S]{0,900}?\n\s*if \(!reply\.trim\(\)\)/);
 });
 
 test("Teach me given: the reply opens by saying it wasn't taught, unless it already does", () => {
@@ -27,4 +27,13 @@ test("Teach me given: the reply opens by saying it wasn't taught, unless it alre
   assert.equal(ensureNotTaughtOpener("I wasn't taught that one yet — tap Teach me.", asked), "I wasn't taught that one yet — tap Teach me.");
   assert.equal(ensureNotTaughtOpener("Here are your tasks.", [{ tool: "list_tasks", success: true }]), "Here are your tasks.");
   assert.equal(ensureNotTaughtOpener("x", [{ tool: "ask_to_be_taught", success: false, input: { topic: "Osmosis" } }]), "x");
+});
+
+test("a reply that promises Teach me without calling the tool gets the button for the topic it named", () => {
+  assert.equal(promisedTeachTopic("You haven't taught me about photosynthesis yet — so I can't.\n- **Teach me first** — tap the Teach me button below."), "photosynthesis");
+  assert.equal(promisedTeachTopic("You haven't taught me the Krebs cycle yet. Tap the Teach me button."), "Krebs cycle");
+  assert.equal(promisedTeachTopic("You haven't taught me photosynthesis yet!"), null, "no button promised");
+  assert.equal(promisedTeachTopic("Tap the Teach me button for osmosis."), null, "no topic it said it wasn't taught");
+  assert.equal(promisedTeachTopic("You haven't taught me this yet — tap the Teach me button."), null, "no named topic");
+  assert.match(chat, /promisedTeachTopic\(reply\)[\s\S]{0,400}tool: "ask_to_be_taught", success: true, backfilled: true/);
 });
