@@ -59,6 +59,20 @@ export const RULES = [
   },
 
   {
+    // Grand Plan §7.16.7: a learner's background agent work (platform-paid)
+    // passed 80% of its weekly USD budget — modules/autonomy/budget.js.
+    key: "autonomy_budget",
+    severity: "warning",
+    title: "Learners near their weekly agent budget",
+    async check() {
+      const since = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+      const { count } = await db.schema("edu").from("learner_agent_autonomy")
+        .select("user_id", { count: "exact", head: true }).gte("budget_alerted_at", since);
+      return { value: count ?? 0, breached: (count ?? 0) > 0, detail: `${count ?? 0} learner(s) passed 80% of AKORO_AUTONOMY_WEEKLY_BUDGET_USD this week` };
+    },
+  },
+
+  {
     key: "ai_failure_rate",
     severity: "critical",
     title: "AI calls are failing",

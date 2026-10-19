@@ -127,6 +127,10 @@ export function startAutonomyCycleWorker() {
     // Proposals held back (the chat was busy, quiet hours) are posted on a
     // later tick — every ~10 minutes, any time of day (deliver.js keeps the rules).
     if (++deliveryTicks % 10 === 0) deliverDue().catch((e) => console.warn("[autonomy/deliver] sweep failed:", e.message));
+    // Instructors (§7.16.8 step 7): their classes looked over once a day in the window — facts only, no model call.
+    if (deliveryTicks % 30 === 0 && inNightlyWindow(new Date(), autonomyCadence())) {
+      import("./instructorCycle.js").then((m) => m.instructorSweep()).catch((e) => console.warn("[autonomy/instructor] sweep failed:", e.message));
+    }
     try {
       const cadence = autonomyCadence();
       inWindow = inNightlyWindow(new Date(), cadence);

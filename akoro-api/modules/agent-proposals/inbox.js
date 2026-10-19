@@ -17,7 +17,8 @@
 import db from "../../db.js";
 import { executeChatTool } from "../adaptive-learning/chat.js";
 import { createGoal } from "../learner-goals/service.js";
-import { markPostedDecision } from "../autonomy/deliver.js";
+import { markPostedDecision, reportInChat } from "../autonomy/deliver.js";
+import { spreadDue } from "../autonomy/readyKinds.js";
 
 import { DISMISS_REASONS, reasonOf, normalizeTitle, mergeInbox, parseRef } from "./inboxCore.js";
 
@@ -139,6 +140,67 @@ export async function approveProposal(userId, id) {
       if (r.error) throw new Error(r.error);
       ref = r.goal.id;
       detail = { goalId: ref, title: r.goal.title };
+    } else if (kind === "goal_nudge") {
+      // A first step toward a goal: the same create_task as chat.
+      const { goalId, ...task } = payload;
+      const result = await executeChatTool("create_task", { priority: "medium", ...task }, userId, { role: "student", channel: "proposal" });
+      if (result?.needsClarification || result?.error) throw new Error(result.question || result.error || "The task could not be created.");
+      ref = result?.taskId ?? null;
+      detail = { taskId: ref, title: result?.title ?? payload.title, goalId: goalId || null };
+    } else if (kind === "quiz_from_records") {
+      // The reader builds the quiz from the whole document: approving opens it there (still theirs, not deleted).
+      const { data: rec } = await db.schema("edu").from("records").select("id, name").eq("id", payload.recordId).eq("user_id", userId).is("deleted_at", null).maybeSingle();
+      if (!rec) throw new Error("That document is no longer in your Library.");
+      ref = rec.id;
+      detail = { recordId: rec.id, recordName: rec.name, href: `/library?record=${rec.id}&tool=quiz` };
+    } else if (kind === "teach_weak_topic") {
+      detail = { teach: { topic: payload.topic, subject: payload.subject || null } };
+    } else if (kind === "study_plan") {
+      // Study Prep's own plan card and coin gate still apply (rule 7): this only starts the plan.
+      const result = await executeChatTool("start_study_prep_session", { goal: String(payload.goal || claimed.title).slice(0, 300), ...(payload.subject ? { subject: payload.subject } : {}), ...(payload.examBoard ? { examBoard: payload.examBoard } : {}) }, userId, { role: "student", channel: "proposal" });
+      if (result?.enabled === false || result?.error || !result?.sessionId) throw new Error(result?.error || result?.message || "The study plan could not be started.");
+      ref = result.sessionId;
+      detail = { sessionId: result.sessionId, status: result.status || null };
+    } else if (kind === "revision_battle") {
+      const { createCheckBattle } = await import("../battle/agentCheck.js");
+      const r = await createCheckBattle({ learnerId: userId, subject: payload.subject || null, topic: payload.topic, total: 5, mode: "retest" });
+      ref = r.battleId;
+      detail = { battleId: r.battleId, placed: r.placed, title: r.title };
+    } else if (kind === "follow_up_question") {
+      // Continues as an ordinary chat turn: the app sends this as the learner's message.
+      detail = { prompt: String(payload.prompt || "").slice(0, 300) };
+    } else if (kind === "chase_missing") {
+      // The instructor's own activity; only learners still not started, now.
+      const { data: act } = await edu().from("self_study_assignments").select("id, title").eq("id", payload.assignmentId).eq("created_by", userId).maybeSingle();
+      if (!act) throw new Error("That activity is no longer yours to chase.");
+      const { data: still } = await edu().from("self_study_targets").select("student_id").eq("assignment_id", act.id).eq("status", "assigned")
+        .in("student_id", (payload.studentIds || []).slice(0, 60));
+      const { notifyUser } = await import("../notify.js");
+      for (const t of still || []) {
+        await notifyUser({ userId: t.student_id, type: "activity_reminder", relatedId: act.id, link: `/activities/${act.id}`,
+          title: `Reminder from your teacher: "${String(act.title).slice(0, 80)}"`, content: "You haven't started it yet — open it when you're ready." }).catch(() => {});
+      }
+      ref = act.id;
+      detail = { reminded: (still || []).length, title: act.title };
+    } else if (kind === "revise_low_scores" || kind === "next_activity") {
+      // A DRAFT through the instructor's own prepare_activity — assigning stays their tap.
+      let topic = payload.topic;
+      if (kind === "next_activity") {
+        const { resolveTopics } = await import("../adaptive-learning/study-prep/syllabus-resolver.js");
+        const { nextTopicAfter } = await import("../autonomy/instructorCore.js");
+        const syllabus = await resolveTopics({ subject: payload.subject }).catch(() => []);
+        topic = nextTopicAfter(payload.topic, syllabus);
+      } else topic = `Revision: ${String(payload.topic).slice(0, 100)}`;
+      const audience = payload.classroomId ? { classroom_id: payload.classroomId } : { user_ids: (payload.studentIds || []).slice(0, 60) };
+      const result = await executeChatTool("prepare_activity", { type: "self_study", subject: payload.subject || undefined, topic, audience }, userId, { role: "instructor", channel: "proposal" });
+      if (result?.needsClarification || result?.error || !result?.draftId) throw new Error(result?.question || result?.error || "The draft could not be prepared.");
+      ref = result.draftId;
+      detail = { draftId: result.draftId, title: result.title, draft: { id: result.draftId, title: result.title, type: result.type, audience: result.audience } };
+    } else if (kind === "fix_it" && payload.fix === "overdue_tasks") {
+      const { data: tasks } = await db.from("tasks").select("id, due_at").eq("creator_id", userId).in("id", (payload.taskIds || []).slice(0, 6)).in("status", ["pending", "queued"]);
+      const moves = spreadDue(tasks || []);
+      for (const m of moves) await db.from("tasks").update({ due_at: m.due_at }).eq("id", m.id).eq("creator_id", userId);
+      detail = { moved: moves.length, days: Math.max(1, Math.ceil(moves.length / 2)) };
     } else {
       throw new Error(`"${kind}" proposals are not executable yet — dismiss it or start it yourself from its tab.`);
     }
@@ -147,7 +209,10 @@ export async function approveProposal(userId, id) {
       .eq("id", claimed.id).eq("status", "approved").select("id").maybeSingle();
     if (doneError || !done) throw new Error("Could not record the approval.");
     await markPostedDecision(userId, claimed.id, "executed");
-    return { executed: true, kind, ...detail };
+    // Report (§7.16.2): the result in the same thread it was offered in.
+    const { data: tzRow } = await edu().from("learner_agent_autonomy").select("time_zone").eq("user_id", userId).maybeSingle();
+    const report = await reportInChat(userId, claimed, { ...detail, timeZone: tzRow?.time_zone || "Africa/Lagos" });
+    return { executed: true, kind, ...detail, ...(report ? { report } : {}) };
   } catch (execError) {
     // Released to a visible FAILED state — never back to proposed, never silent.
     await edu().from("agent_proposals")

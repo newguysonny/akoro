@@ -57,13 +57,14 @@ function autonomyQueue() {
   return queue;
 }
 
+/** Due-task check-ins: the agent Online AND the learner's "Task check-ins" switch (§7.16.7). */
 async function enabledFor(userId, { strict = false } = {}) {
   const { data, error } = await db.schema("edu").from("learner_agent_autonomy")
-    .select("enabled, updated_at")
+    .select("enabled, checkins, updated_at")
     .eq("user_id", userId)
     .maybeSingle();
   if (error && strict) throw new Error("Could not load agent autonomy preference");
-  return Boolean(data?.enabled);
+  return Boolean(data?.enabled) && data?.checkins !== false;
 }
 
 export async function getLearnerAutonomy(userId) {

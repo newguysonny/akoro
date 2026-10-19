@@ -17,7 +17,10 @@ test("which chat (D49): the idea's own chat if used in 7 days, else the latest, 
 });
 
 test("when: not in quiet hours, not mid-chat, once a day — claimed once", () => {
-  assert.match(src, /if \(!ignoreQuietHours && inQuietHours\(now\)\) return \{ posted: false, reason: "quiet_hours" \}/);
+  assert.match(src, /if \(!ignoreQuietHours && inQuiet\(now, quiet\)\) return \{ posted: false, reason: "quiet_hours" \}/, "their own quiet hours");
+  assert.match(src, /let allowed = !!auto\?\.enabled && auto\.proactive !== false;/, "Suggestions and ideas off: nothing posted");
+  assert.match(src, /allowed = u\?\.role === "instructor";/, "instructors: on unless they turned it off");
+  assert.match(src, /if \(!allowed\) return \{ posted: false, reason: "consent_off" \}/);
   assert.match(src, /BUSY_MS: 10 \* 60 \* 1000/);
   assert.match(src, /reason: "chat_busy"/);
   assert.match(src, /DAILY: 1/);
@@ -26,13 +29,13 @@ test("when: not in quiet hours, not mid-chat, once a day — claimed once", () =
 
 test("how: an agent message written by code, carrying the proposal; a link to that chat", () => {
   assert.match(src, /`One thing I noticed: \$\{why\}/);
-  assert.match(src, /role: "agent", text: proactiveMessage\(p\), meta/);
+  assert.match(src, /role: "agent", text: proactiveMessage\(p, \{ timeZone: quiet\.timeZone \}\), meta/);
   assert.match(src, /link: `\/app\?tab=agent&sessionId=\$\{encodeURIComponent\(target\.chatId\)\}`/);
 });
 
 test("wired: the planner tags the source note and posts after a run; a sweep retries; decisions sync", () => {
   assert.match(cycle, /required: \["kind", "title", "rationale", "from_note", "payload"\]/);
-  assert.match(cycle, /sourceChatId: note\?\.chatId \|\| null/);
+  assert.match(cycle, /sourceChatId: readyChat \|\| note\?\.chatId \|\| null/);
   assert.match(cycle, /const delivered = await deliverProactive\(userId\)/);
   assert.match(cycle, /if \(!delivered\.posted\) await notifyUser\(\{/, "one bell row when nothing was posted");
   assert.match(index, /if \(\+\+deliveryTicks % 10 === 0\) deliverDue\(\)/);

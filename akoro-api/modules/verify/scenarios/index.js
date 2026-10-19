@@ -13,6 +13,7 @@ import { conceptCurve } from "./decay.js";
 import { suggestionsAnswer, suggestionsSurviveRefresh, studyToolRouting, untaughtFlashcards } from "./suggestions.js";
 import { tailoredChips } from "./tailored.js";
 import { chatUploadFiled, pastPaperStructured, sortOwnFolders } from "./materials.js";
+import { readyProposal, goalWork, ideasFlow, consentsQuietBudget, instructorProactive } from "./proactiveP13.js";
 import { voiceSpeak, voiceLive } from "./voice.js";
 import { paperStructured, chatToSubmissionScenarios } from "./activities.js";
 import { authoringVersionsParts, authoringDiagramsEdits } from "./authoring.js";
@@ -25,7 +26,7 @@ import { socketSession } from "./socket.js";
 
 const ALL = [healthBuild, toolsCatalogue, scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity,
   privacyEdges, rateLimitCountedOnce, battleEntryGates, followUpDeliverIntoChat, taskDueInMinutes, noResidue,
-  viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, suggestionsSurviveRefresh, studyToolRouting, untaughtFlashcards, tailoredChips, chatUploadFiled, pastPaperStructured, sortOwnFolders, voiceSpeak, voiceLive, sweepStale, agentCheckBattle, classSyllabusFirst, historyPages, workflowMirror, paperStructured, ...chatToSubmissionScenarios, authoringVersionsParts, authoringDiagramsEdits, inboxOneList, quietLearningPass, plannerRichGather, proactiveInChat, readerBackend, socketSession];
+  viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, suggestionsSurviveRefresh, studyToolRouting, untaughtFlashcards, tailoredChips, chatUploadFiled, pastPaperStructured, sortOwnFolders, readyProposal, goalWork, ideasFlow, consentsQuietBudget, instructorProactive, voiceSpeak, voiceLive, sweepStale, agentCheckBattle, classSyllabusFirst, historyPages, workflowMirror, paperStructured, ...chatToSubmissionScenarios, authoringVersionsParts, authoringDiagramsEdits, inboxOneList, quietLearningPass, plannerRichGather, proactiveInChat, readerBackend, socketSession];
 
 export const SCENARIOS = Object.fromEntries(ALL.map((s) => [s.name, s]));
 
@@ -41,7 +42,7 @@ export const SUITES = {
   // Teachers' follow-ups in one conversation: versions, parts, edits to specific questions, diagrams.
   authoring: ["activity.authoring_versions_parts", "activity.authoring_diagrams_edits", "writes.no_residue"],
   // The proactive agent (Grand Plan §7.16): one inbox, by-kind accept, dismiss reasons.
-  proactive: ["agent.inbox_one_list", "agent.quiet_learning", "agent.planner_rich_gather", "agent.proactive_in_chat", "writes.no_residue"],
+  proactive: ["agent.inbox_one_list", "agent.quiet_learning", "agent.planner_rich_gather", "agent.proactive_in_chat", "agent.ready_proposal", "agent.goal_work", "agent.ideas", "agent.consents_quiet", "agent.instructor_proactive", "writes.no_residue"],
   // Real changes on test learners, then proof nothing was left behind.
   writes: ["tasks.create_due_in_minutes", "followups.deliver_into_chat", "writes.no_residue"],
   // Phase V4 end to end (sandbox only: BLOCKED on production).

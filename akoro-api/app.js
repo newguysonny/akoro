@@ -96,6 +96,7 @@ import "./modules/billing/jobs.js"; // billing cron jobs (trial-expiry / invoice
 import agentToolRequestsModule  from "./modules/agent-tool-requests/routes.js";
 import learnerGoalsModule       from "./modules/learner-goals/routes.js";
 import agentProposalsModule      from "./modules/agent-proposals/routes.js";
+import agentLearnerModule      from "./modules/autonomy/learnerRoutes.js";
 import materialsModule           from "./modules/materials/routes.js";
 import blogsModule               from "./modules/blogs/routes.js";
 import recordsModule             from "./modules/records/routes.js";
@@ -843,6 +844,7 @@ app.use("/api/content",    standardLimit, contentModule);   // public blog + car
 app.use("/api/admin",      standardLimit, adminModule);     // admin-only: users, instructors, courses, stats
 app.use("/api",            standardLimit, agentToolRequestsModule); // explicit learner Agent Chat feature/tool requests
 app.use("/api/goals",      standardLimit, learnerGoalsModule); // the learner's educational goals (Full Autonomy spine)
+app.use("/api/agent", standardLimit, agentLearnerModule);   // proactive agent: settings (consents, quiet hours, budget) + Ideas (§7.16)
 app.use("/api/agent/proposals", standardLimit, agentProposalsModule); // Full Autonomy proposal inbox (approve executes via chat tools)
 app.use("/api/agent/materials", standardLimit, materialsModule);   // chat uploads → a Library folder (material_ingest, §7.17)
 app.use("/api/blogs",      standardLimit, blogsModule); // learner-authored blogs (higherEd library: draft / publish)

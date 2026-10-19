@@ -17,6 +17,7 @@
  * is a no-op; sensitive content is never stored and memory never feeds
  * mastery (D50); at most QUIET.MAX_ACTIVE active memories per learner.
  */
+import { budgetState } from "../autonomy/budget.js";
 import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
 
@@ -100,6 +101,11 @@ export async function runQuietPass({ userId, chatSessionId, force = false, chat 
   if (!quietLearningEnabled()) return skipped("disabled");
   const consent = await quietLearningConsent(userId);
   if (!consent.allowed) return skipped(consent.reason);
+  // The weekly background budget (§7.16.7): at 100% remembering waits for the week to turn.
+  if (!force) {
+    const budget = await budgetState(userId).catch(() => null);
+    if (budget?.stop) return skipped("budget");
+  }
 
   const { data: session } = await db.from("chat_sessions").select("id, user_id").eq("id", chatSessionId).maybeSingle();
   if (!session || session.user_id !== userId) return skipped("no_chat");
@@ -143,7 +149,7 @@ export async function runQuietPass({ userId, chatSessionId, force = false, chat 
       // No learner chose this model: the background role (lib/modelRegistry.js).
       __role: "background", messages, temperature: 0.2, max_tokens: QUIET.MAX_TOKENS,
       response_format: quietLearningSchema(),
-      __payer: "platform", __feature: "quiet_learning", __timeoutMs: 60_000, __maxRetries: 1,
+      __payer: "platform", __feature: "quiet_learning", __ref: userId, __timeoutMs: 60_000, __maxRetries: 1,
     });
     let json = {};
     try { json = JSON.parse(res?.choices?.[0]?.message?.content || "{}"); } catch { json = {}; }

@@ -15,6 +15,10 @@ import { resolveLearnerTimeZone } from "../adaptive-learning/learner-time-contex
 import { isSensitive } from "../agent-memory/quietLearningCore.js";
 import { deliverProactive } from "./deliver.js";
 import { autonomyCadence, minCycleMs, weeklyRunsCap } from "./cadence.js";
+import { quietOf, afterQuiet } from "./quietHours.js";
+import { IDEAS, LEARNER_KINDS, shapeIdeas, shapeReady, fixIts, progressLine } from "./readyKinds.js";
+import { budgetState, noteBudget } from "./budget.js";
+import { usdCost } from "../../lib/aiPricing.js";
 
 const edu = () => db.schema("edu");
 
@@ -23,7 +27,6 @@ export const MAX_PENDING_PROPOSALS = 5;
 export const DEDUPE_WINDOW_DAYS = 30;
 export const MIN_HOURS_BETWEEN_EVENT_RUNS = 4;
 export const MAX_EVENT_RUNS_PER_DAY = 2;
-const ALLOWED_KINDS = ["task", "session", "goal", "practice"];
 
 const LAGOS = "Africa/Lagos";
 // Quiet hours 20:00–07:30 Africa/Lagos (locked decision, plan §9.2).
@@ -85,10 +88,10 @@ export async function gatherSignals(userId) {
     completions, chatSessions, battleResults, memberships,
     autonomyRow, weakConcepts, decayAlerts, recentRecords, settingsRow,
   ] = await Promise.all([
-    edu().from("learner_goals").select("title, category, exam, target_date, metric, progress_note, updated_at")
+    edu().from("learner_goals").select("id, title, category, exam, target_date, metric, progress_note, updated_at")
       .eq("user_id", userId).eq("status", "active").order("updated_at", { ascending: false }).limit(5)
       .then((r) => r.data ?? []).catch(() => []),
-    db.from("tasks").select("title, due_at, status, priority")
+    db.from("tasks").select("id, title, due_at, status, priority")
       .eq("creator_id", userId).in("status", ["pending", "queued"]).limit(30)
       .then((r) => r.data ?? []).catch(() => []),
     db.from("tasks").select("id", { count: "exact", head: true })
@@ -124,7 +127,7 @@ export async function gatherSignals(userId) {
         return data ?? [];
       }).catch(() => []),
     // Rich gather (Grand Plan §7.16.8 step 3) — consent first, then what the agent knows.
-    edu().from("learner_agent_autonomy").select("learn_from_chats").eq("user_id", userId).maybeSingle()
+    edu().from("learner_agent_autonomy").select("learn_from_chats, quiet_start, quiet_end, time_zone").eq("user_id", userId).maybeSingle()
       .then((r) => r.data ?? null).catch(() => null),
     // concepts the evidence says are weak, or carry a misconception
     edu().from("learner_concept_state")
@@ -139,7 +142,7 @@ export async function gatherSignals(userId) {
       .order("created_at", { ascending: false }).limit(3)
       .then((r) => r.data ?? []).catch(() => []),
     // what they added to their library lately (the names only)
-    edu().from("records").select("name, progress, created_at").eq("user_id", userId).is("deleted_at", null)
+    edu().from("records").select("id, name, progress, created_at").eq("user_id", userId).is("deleted_at", null)
       .gte("created_at", new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString())
       .order("created_at", { ascending: false }).limit(5)
       .then((r) => r.data ?? []).catch(() => []),
@@ -158,12 +161,39 @@ export async function gatherSignals(userId) {
       .then((r) => r.data ?? []).catch(() => []),
   ]) : [[], []];
 
+  // The week in numbers (goal progress notes are written from these, never guessed) and
+  // what each recent record covers (a quiz preview names its topics).
+  const [sessionsWeek, battlesWeek, ingests] = await Promise.all([
+    edu().from("adaptive_sessions").select("id", { count: "exact", head: true }).eq("student_id", userId).gte("updated_at", since)
+      .then((r) => r.count ?? 0).catch(() => 0),
+    db.from("battle_participants").select("correct_answers, joined_at, battles(total_questions)").eq("user_id", userId).gte("joined_at", since).limit(20)
+      .then((r) => r.data ?? []).catch(() => []),
+    recentRecords.length ? edu().from("material_ingests").select("record_ids, pages, structure").eq("user_id", userId).neq("state", "undone")
+      .not("structure", "is", null).order("created_at", { ascending: false }).limit(30).then((r) => r.data ?? []).catch(() => []) : [],
+  ]);
+  const recordInfo = new Map();
+  for (const ing of ingests) for (const it of ing.structure?.items || []) {
+    if (it.recordId) recordInfo.set(it.recordId, { pages: it.pages || null, topics: (it.topics || []).map((t) => t.name).slice(0, 6) });
+  }
+  const best = battlesWeek.map((b) => ({ score: b.correct_answers ?? 0, total: b.battles?.total_questions ?? 0 })).filter((b) => b.total)
+    .sort((a, b) => b.score / b.total - a.score / a.total)[0] || null;
+
   const nowMs = Date.now();
   const overdue = pendingTasks.filter((t) => t.due_at && new Date(t.due_at).getTime() < nowMs);
   const day = 24 * 3600 * 1000;
   return {
     // → { timeZone, source }: the name only (a crash here stopped every planner run, gate d681c984).
-    timeZone: resolveLearnerTimeZone({ configuredTimeZone: settingsRow?.settings?.timezone }).timeZone || LAGOS,
+    timeZone: quietOf(autonomyRow, resolveLearnerTimeZone({ configuredTimeZone: settingsRow?.settings?.timezone }).timeZone).timeZone,
+    quiet: quietOf(autonomyRow, resolveLearnerTimeZone({ configuredTimeZone: settingsRow?.settings?.timezone }).timeZone),
+    week: { tasksDone: recentDone, sessions: sessionsWeek, bestBattle: best },
+    // What the planner was shown, numbered as it saw them — the validator holds it to these (readyKinds.js).
+    refs: {
+      records: recentRecords.map((r) => ({ id: r.id, name: String(r.name || "").slice(0, 80), ...(recordInfo.get(r.id) || {}) })),
+      goals: goals.map((g) => ({ id: g.id, title: g.title, subject: g.category || null, exam: g.exam || null,
+        days_left: g.target_date ? Math.ceil((new Date(g.target_date).getTime() - Date.now()) / 864e5) : null,
+        days_since_update: g.updated_at ? Math.floor((Date.now() - new Date(g.updated_at).getTime()) / 864e5) : null })),
+      weak: weakConcepts.map((c) => ({ concept: c.concept_catalog?.title || null, subject: c.concept_catalog?.subject || null, mastery: Math.round(Number(c.mastery || 0) * 100) })).filter((c) => c.concept),
+    },
     goals: goals.map((g) => ({
       title: g.title, category: g.category || null, exam: g.exam || null, metric: g.metric || null,
       target_date: g.target_date || null,
@@ -176,6 +206,7 @@ export async function gatherSignals(userId) {
       overdue: overdue.length,
       doneLastWeek: recentDone,
       titles: pendingTasks.slice(0, 8).map((t) => t.title),
+      overdueList: overdue.map((t) => ({ id: t.id, title: t.title, due_at: t.due_at })),
     },
     streakDays: computeStreak(completions.map((c) => String(c).slice(0, 10))),
     chatTopics: chatSessions.filter(Boolean).slice(0, 5),
@@ -211,18 +242,25 @@ export function planningMessages(signals) {
     `You are the learner's background study planner for Akoro, an education platform. ` +
     `You receive what their agent knows about them and propose AT MOST ${MAX_PROPOSALS_PER_CYCLE} ` +
     `small, concrete, genuinely useful next steps. House rules:\n` +
-    `- kinds: task (a study task), practice (a short focused drill), session (a scheduled agent check-in), goal (a new education-related goal)\n` +
+    `- kinds: task (a study task), practice (a short focused drill), session (a scheduled agent check-in), goal (a new education-related goal),\n` +
+    `  quiz_from_records (a quiz from one of THEIR records: payload.record = its R number), teach_weak_topic (they teach their agent a weak concept: payload.topic = the concept exactly as listed),\n` +
+    `  revision_battle (a 5-question Agent Check on a weak concept: payload.topic), study_plan (an exam-countdown plan: payload.goal = the G number of a goal with a date 1–16 weeks away),\n` +
+    `  follow_up_question (pick up something they meant to come back to: from_note = an open_thread note, payload.message = the question to start with), goal_nudge (a concrete first step for a goal untouched a week or due within 3 weeks: payload.goal = its G number, payload.title the step)\n` +
+    `- prefer a ready kind over a bare task when one fits: it arrives prepared\n` +
+    `- a goal they keep mentioning (a learner_goal note not in their goals) → kind goal with from_note; at most one such a week\n` +
     `- every rationale must cite a real signal ("2 overdue tasks", "goal target in 9 days", "streak at 5 days", "scored 6/10 last battle", "mastery 30% on osmosis", "you meant to revise titration curves") — never generic\n` +
     `- use what their agent remembers: something they meant to come back to is a good session or practice; a goal they keep mentioning but never set is a good goal proposal; how they like to learn shapes the task (diagrams, short quizzes)\n` +
     `- weak concepts and review alerts are good practice proposals; a goal with days_left and no recent progress needs a concrete next step\n` +
     `- never repeat a pending proposal or something in their task list already\n` +
-    `- sessions: payload.scheduledAt is ISO 8601 in the learner's time zone (${tz}) with its offset, between 06:00 and 21:00 their time, never 20:00-07:30, at most 14 days ahead\n` +
+    `- sessions: payload.scheduledAt is ISO 8601 in the learner's time zone (${tz}) with its offset, never in their quiet hours (${signals.quiet?.start || "20:00"}–${signals.quiet?.end || "07:30"}), at most 14 days ahead\n` +
     `- task/practice payload: { title, description?, priority (high|medium|low), dueAt? ISO, course? }\n` +
     `- goal payload: { title, category?, target_date? YYYY-MM-DD } — education-related only\n` +
     `- never mention health, feelings, family or money, even if a note does\n` +
     `- the learner dismissed these tastes recently, respect them: ${JSON.stringify(signals.dismissalTaste || [])}\n` +
     `- prefer FEWER, better proposals; returning zero is correct when nothing would help\n` +
-    `JSON only: { "summary": "...", "proposals": [ { "kind": "...", "title": "...", "rationale": "...", "payload": { ... } } ] }` +
+    `- ideas (a separate list, at most ${signals.ideaRoom ?? 3}): buildable briefs from their real context — "Turn your Biology notes into a quiz", "Teach your agent osmosis". ` +
+    `Each: title, why (one line citing the signal), from (record|goal|weak|note) with ref = its number, brief = what they'd say to start it, in their voice ("Make me a 10-question quiz from my Cell transport notes"), icon. Never an idea that repeats a proposal.\n` +
+    `JSON only: { "summary": "...", "proposals": [ { "kind": "...", "title": "...", "rationale": "...", "from_note": n|null, "payload": { ... } } ], "ideas": [ ... ] }` +
     UNTRUSTED_SYSTEM_RULE;
   const said = [
     signals.memories?.length ? `What their agent remembers (numbered — a proposal drawn from a note gives its number in from_note):\n${signals.memories.map((m, i) => `[${i + 1}] ${m.kind}: ${m.note}`).join("\n")}` : "",
@@ -230,7 +268,13 @@ export function planningMessages(signals) {
     signals.chatTopics?.length ? `Recent chat titles: ${signals.chatTopics.join(" · ")}` : "",
     signals.recentRecords?.length ? `Added to their library lately: ${signals.recentRecords.map((r) => `${r.name} (${r.progress}% read)`).join(" · ")}` : "",
   ].filter(Boolean).join("\n\n");
+  const refs = signals.refs || {};
+  const numbered = [
+    refs.records?.length ? `Their records: ${refs.records.map((r, i) => `[R${i + 1}] ${r.name}${r.topics?.length ? ` (${r.topics.slice(0, 4).join(", ")})` : ""}`).join(" · ")}` : "",
+    refs.goals?.length ? `Their goals: ${refs.goals.map((g, i) => `[G${i + 1}] ${g.title}${g.days_left != null ? `, ${g.days_left} days left` : ""}${g.days_since_update != null ? `, untouched ${g.days_since_update} days` : ""}`).join(" · ")}` : "",
+  ].filter(Boolean).join("\n");
   const user =
+    (numbered ? `${numbered}\n` : "") +
     `Active goals: ${JSON.stringify(signals.goals)}\n` +
     `Tasks: ${JSON.stringify(signals.tasks)}\n` +
     `Study streak (days): ${signals.streakDays}\n` +
@@ -257,7 +301,7 @@ export function planningSchema() {
     json_schema: {
       name: "study_planner", strict: true,
       schema: {
-        type: "object", additionalProperties: false, required: ["summary", "proposals"],
+        type: "object", additionalProperties: false, required: ["summary", "proposals", "ideas"],
         properties: {
           summary: { type: "string" },
           proposals: {
@@ -266,18 +310,30 @@ export function planningSchema() {
               type: "object", additionalProperties: false, required: ["kind", "title", "rationale", "from_note", "payload"],
               properties: {
                 from_note: { type: ["integer", "null"], description: "The number of the remembered note this comes from, or null." },
-                kind: { type: "string", enum: ALLOWED_KINDS },
+                kind: { type: "string", enum: [...LEARNER_KINDS] },
                 title: { type: "string" },
                 rationale: { type: "string", description: "The real signal this comes from, in one sentence." },
                 payload: {
                   type: "object", additionalProperties: false,
-                  required: ["title", "description", "priority", "dueAt", "course", "scheduledAt", "message", "category", "target_date"],
+                  required: ["title", "description", "priority", "dueAt", "course", "scheduledAt", "message", "category", "target_date", "record", "goal", "topic", "subject"],
                   properties: {
                     title: N("string"), description: N("string"), priority: { type: ["string", "null"], enum: ["high", "medium", "low", null] },
                     dueAt: N("string"), course: N("string"), scheduledAt: N("string"), message: N("string"),
                     category: N("string"), target_date: N("string"),
+                    record: N("integer"), goal: N("integer"), topic: N("string"), subject: N("string"),
                   },
                 },
+              },
+            },
+          },
+          ideas: {
+            type: "array",
+            items: {
+              type: "object", additionalProperties: false, required: ["title", "why", "from", "ref", "brief", "icon"],
+              properties: {
+                title: { type: "string" }, why: { type: "string" },
+                from: { type: "string", enum: ["record", "goal", "weak", "note"] }, ref: N("integer"),
+                brief: { type: "string" }, icon: { type: "string", enum: ["quiz", "teach", "plan", "notes", "battle", "chat"] },
               },
             },
           },
@@ -290,22 +346,25 @@ export function planningSchema() {
 /** ── 2. REASON — one structured call. The platform pays for background noticing (D46). */
 export async function reasonAboutSignals(userId, signals) {
   const res = await openai.chat.completions.create({
-    model: OPENAI_MODEL, temperature: 0.4, max_tokens: 700,
+    model: OPENAI_MODEL, temperature: 0.4, max_tokens: 1200,
     response_format: planningSchema(),
     __payer: "platform", __feature: "agent_autonomy", __ref: userId,
     messages: planningMessages(signals),
   });
-  let parsed = { summary: "", proposals: [] };
+  let parsed = { summary: "", proposals: [], ideas: [] };
   try { parsed = JSON.parse(res.choices?.[0]?.message?.content || "{}"); } catch { /* stays empty */ }
-  return { ...parsed, tokens: res.usage?.total_tokens ?? 0 };
+  const u = res.usage || {};
+  return { ...parsed, tokens: u.total_tokens ?? 0, costUsd: usdCost(res.model || OPENAI_MODEL, u.prompt_tokens ?? 0, u.completion_tokens ?? 0, 0) };
 }
 
 /** Clean-room validator: caps, dedupe (pending + 30-day history + tasks), shapes. */
-export async function validateAndShapeProposals(userId, rawProposals, { notes = [] } = {}) {
+const READY_SHAPED = new Set(["quiz_from_records", "teach_weak_topic", "study_plan", "revision_battle", "follow_up_question", "goal_nudge"]);
+
+export async function validateAndShapeProposals(userId, rawProposals, { notes = [], refs = {}, quiet = null, impliedThisWeek = 0 } = {}) {
   if (!Array.isArray(rawProposals)) return [];
   const since = new Date(Date.now() - DEDUPE_WINDOW_DAYS * 24 * 3600 * 1000).toISOString();
   const [history, openTasks, chatOpen] = await Promise.all([
-    edu().from("agent_proposals").select("title").eq("user_id", userId)
+    edu().from("agent_proposals").select("title, kind, payload").eq("user_id", userId)
       .gte("created_at", since).limit(100).then((r) => r.data ?? []).catch(() => []),
     db.from("tasks").select("title").eq("creator_id", userId)
       .in("status", ["pending", "queued", "done"]).limit(200).then((r) => r.data ?? []).catch(() => []),
@@ -319,10 +378,17 @@ export async function validateAndShapeProposals(userId, rawProposals, { notes = 
     ...chatOpen.map((s) => normalizeTitle(s.title)),
   ]);
 
+  // A ready kind on the same thing (that record, that topic, that goal) isn't offered twice in 30 days.
+  const thingKey = (kind, pl = {}) => `${kind}:${pl.recordId || pl.goalId || norm(pl.topic) || ""}`;
+  const norm = (x) => String(x || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const things = new Set(history.filter((h) => READY_SHAPED.has(h.kind)).map((h) => thingKey(h.kind, h.payload || {})));
+  let implied = impliedThisWeek;
+  const refsWithNotes = { ...refs, notes };
+
   const shaped = [];
   for (const p of rawProposals) {
     if (shaped.length >= MAX_PROPOSALS_PER_CYCLE) break;
-    if (!p || !ALLOWED_KINDS.includes(p.kind)) continue;
+    if (!p || !LEARNER_KINDS.includes(p.kind)) continue;
     const title = String(p.title || "").trim();
     if (!title || title.length > 120) continue;
     // Every suggestion says what it noticed (§7.16.3): no reason, no proposal.
@@ -333,11 +399,22 @@ export async function validateAndShapeProposals(userId, rawProposals, { notes = 
     let payload = (p.payload && typeof p.payload === "object")
       ? Object.fromEntries(Object.entries(p.payload).filter(([, v]) => v !== null && v !== undefined && v !== ""))
       : {};
-    if (p.kind === "session") {
+    let preview = null;
+    let readyChat = null;
+    if (READY_SHAPED.has(p.kind)) {
+      // Held to what is really there; the preview is written from those facts (readyKinds.js).
+      const ready = shapeReady(p, refsWithNotes);
+      if (!ready) continue;
+      if (things.has(thingKey(p.kind, ready.payload))) continue;
+      things.add(thingKey(p.kind, ready.payload));
+      payload = Object.fromEntries(Object.entries(ready.payload).filter(([, v]) => v !== null && v !== undefined));
+      preview = ready.preview;
+      readyChat = ready.sourceChatId || null;
+    } else if (p.kind === "session") {
       const at = new Date(payload.scheduledAt || "");
       const nowMs = Date.now();
       if (!Number.isFinite(at.getTime()) || at.getTime() <= nowMs || at.getTime() > nowMs + 14 * 24 * 3600 * 1000) continue;
-      payload.scheduledAt = outsideQuietHours(at);
+      payload.scheduledAt = quiet ? afterQuiet(at, quiet) : outsideQuietHours(at);
       payload.title = payload.title || `Check-in: ${title.slice(0, 60)}`;
       payload.message = String(payload.message || `Checking in about: ${title}`).slice(0, 500);
     } else if (p.kind === "task" || p.kind === "practice") {
@@ -348,8 +425,15 @@ export async function validateAndShapeProposals(userId, rawProposals, { notes = 
       payload.priority = ["high", "medium", "low"].includes(payload.priority) ? payload.priority : "medium";
     } else if (p.kind === "goal") {
       payload.title = String(payload.title || title).slice(0, 120);
+      // A goal they keep mentioning (from a learner_goal note): at most one a week (§7.16.5).
+      const fromNote = Number.isInteger(p.from_note) ? notes[p.from_note - 1] : null;
+      if (fromNote?.kind === "learner_goal") {
+        if (implied >= 1) continue;
+        implied += 1;
+        payload.implied = true;
+      }
     }
-    payload.title = String(payload.title || title).slice(0, 120);
+    if (!READY_SHAPED.has(p.kind) || p.kind === "goal_nudge") payload.title = String(payload.title || title).slice(0, 120);
 
     // The chat the noticed note came from (D49: the proposal is posted there).
     const note = Number.isInteger(p.from_note) ? notes[p.from_note - 1] : null;
@@ -358,7 +442,8 @@ export async function validateAndShapeProposals(userId, rawProposals, { notes = 
       title,
       rationale: String(p.rationale || "").slice(0, 280) || null,
       payload,
-      sourceChatId: note?.chatId || null,
+      ...(preview ? { preview } : {}),
+      sourceChatId: readyChat || note?.chatId || null,
     });
     seen.add(key);
   }
@@ -372,8 +457,9 @@ export async function runAutonomyCycleForUser(userId, trigger = "nightly") {
   try {
     // Gate + pace: autonomy on, planner level, one run per ~20h, weekly cap.
     const { data: auto } = await edu().from("learner_agent_autonomy")
-      .select("enabled, level, last_cycle_at").eq("user_id", userId).maybeSingle();
-    if (!auto?.enabled || (auto.level ?? 1) < 2) return { skipped: "not_enabled" };
+      .select("enabled, level, proactive, time_zone, last_cycle_at").eq("user_id", userId).maybeSingle();
+    // Agent Online, and "Suggestions and ideas" not switched off (D47: on by default with Online).
+    if (!auto?.enabled || auto.proactive === false) return { skipped: "not_enabled" };
     const isEvent = trigger !== "nightly";
     // Pace against the LEDGER (last actual run), not last_cycle_at — the
     // scheduler claims by writing last_cycle_at, so it can't be the signal.
@@ -415,15 +501,38 @@ export async function runAutonomyCycleForUser(userId, trigger = "nightly") {
       return { skipped: "inbox_full", pending: pendingCount };
     }
 
-    const signals = await gatherSignals(userId);
+    // The weekly USD budget for background work (§7.16.7): 80% warns ops, 100% stops.
+    const budget = await budgetState(userId, { timeZone: quietOf(auto).timeZone }).catch(() => null);
+    if (budget?.warn) await noteBudget(userId, budget);
+    if (budget?.stop) return { skipped: "budget_usd", budget };
+
+    // Ideas (§7.16.4): stale ones expire; new ones only when 3 or fewer are live.
+    await edu().from("agent_ideas").update({ status: "expired" }).eq("user_id", userId).eq("status", "live").lt("expires_at", new Date().toISOString());
+    const { data: liveIdeas } = await edu().from("agent_ideas").select("title").eq("user_id", userId).eq("status", "live").limit(IDEAS.LIVE);
+    const ideaRoom = (liveIdeas?.length ?? 0) <= IDEAS.REFRESH_AT ? IDEAS.LIVE - (liveIdeas?.length ?? 0) : 0;
+    const { count: impliedThisWeek } = await edu().from("agent_proposals").select("id", { count: "exact", head: true })
+      .eq("user_id", userId).eq("kind", "goal").contains("payload", { implied: true })
+      .gte("created_at", new Date(Date.now() - 7 * 864e5).toISOString());
+
+    // A fix-it at most once a week (dismissed or not): it's a nudge, not a nag.
+    const { count: fixItThisWeek } = await edu().from("agent_proposals").select("id", { count: "exact", head: true })
+      .eq("user_id", userId).eq("kind", "fix_it").gte("created_at", new Date(Date.now() - 7 * 864e5).toISOString());
+    const signals = { ...await gatherSignals(userId), ideaRoom };
     const reasoned = await reasonAboutSignals(userId, signals);
-    const shaped = await validateAndShapeProposals(userId, reasoned.proposals || [], { notes: signals.memories || [] });
+    const shaped = [
+      ...await validateAndShapeProposals(userId, reasoned.proposals || [], { notes: signals.memories || [], refs: signals.refs, quiet: signals.quiet, impliedThisWeek: impliedThisWeek ?? 0 }),
+      // Problems in their own things, found by code (fix_it) — after the planner's, within the same caps.
+      ...(fixItThisWeek ? [] : fixIts(signals)),
+    ];
+    const ideas = ideaRoom ? shapeIdeas(reasoned.ideas || [], { ...signals.refs, notes: signals.memories || [] },
+      { room: ideaRoom, seen: new Set([...(liveIdeas || []).map((i) => normalizeTitle(i.title)), ...shaped.map((p) => normalizeTitle(p.title))]) }) : [];
 
     // Respect the pending cap across what we insert.
     const room = Math.max(0, MAX_PENDING_PROPOSALS - (pendingCount ?? 0));
     const toInsert = shaped.slice(0, Math.min(room, MAX_PROPOSALS_PER_CYCLE)).map((p) => ({
       user_id: userId, kind: p.kind, title: p.title, rationale: p.rationale,
       payload: p.payload, source: trigger === "nightly" ? "cycle" : "event",
+      ...(p.preview ? { preview: p.preview } : {}),
       ...(p.sourceChatId ? { source_chat_id: p.sourceChatId } : {}),
     }));
 
@@ -433,11 +542,23 @@ export async function runAutonomyCycleForUser(userId, trigger = "nightly") {
       finished_at: new Date().toISOString(),
       proposals_created: toInsert.length,
       tokens_used: reasoned.tokens ?? 0,
+      cost_usd: reasoned.costUsd ?? null,
       summary: String(reasoned.summary || "").slice(0, 500) || null,
     }).select("id").single();
     runId = run?.id ?? null;
     if (toInsert.length) {
       await edu().from("agent_proposals").insert(toInsert.map((p) => ({ ...p, run_id: runId })));
+    }
+    if (ideas.length) {
+      await edu().from("agent_ideas").insert(ideas.map((i) => ({ user_id: userId, run_id: runId, title: i.title, why: i.why, brief: i.brief, icon: i.icon, context: i.context })));
+    }
+    // Goal progress (§7.16.5): the week in numbers on each active goal — never its target or status.
+    const line = progressLine(signals.week);
+    if (line) {
+      for (const g of signals.refs?.goals || []) {
+        const was = (signals.goals || []).find((x) => x.title === g.title)?.progress_note;
+        if (was !== line) await edu().from("learner_goals").update({ progress_note: line }).eq("id", g.id).eq("user_id", userId);
+      }
     }
     await edu().from("learner_agent_autonomy")
       .update({ last_cycle_at: startedAt.toISOString() }).eq("user_id", userId);
@@ -457,7 +578,7 @@ export async function runAutonomyCycleForUser(userId, trigger = "nightly") {
     } else {
       clearAgentActivity(userId);
     }
-    return { ok: true, created: toInsert.length, tokens: reasoned.tokens ?? 0 };
+    return { ok: true, created: toInsert.length, ideas: ideas.length, tokens: reasoned.tokens ?? 0, costUsd: reasoned.costUsd ?? null };
   } catch (error) {
     console.error("[autonomy/cycle] failed:", error.message);
     clearAgentActivity(userId);

@@ -249,7 +249,32 @@ export default function ChatPage() {
     at: m.created_at,
     ...(Array.isArray(m.meta?.previews) && m.meta.previews.length ? { previews: m.meta.previews } : {}),
     ...(Array.isArray(m.meta?.tools) && m.meta.tools.length ? { tools: m.meta.tools } : {}),
+    // A suggestion the agent noticed in your classes (Grand Plan §7.16, step 7): Yes / Not now on the message.
+    ...(m.role !== 'user' && m.meta?.proposal ? { proposal: m.meta.proposal } : {}),
   });
+
+  // Yes / Not now on a suggestion the agent posted (the same inbox as the learner side).
+  const [proposalBusy, setProposalBusy] = useState(null);
+  const decideProposal = async (msg, action) => {
+    if (proposalBusy) return;
+    setProposalBusy(msg.id);
+    const ref = `p:${msg.proposal.id}`;
+    const mark = (status) => setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, proposal: { ...m.proposal, status } } : m)));
+    try {
+      if (action === 'accept') {
+        const d = await apiPost(`/api/agent/proposals/inbox/${encodeURIComponent(ref)}/accept`, {});
+        mark('executed');
+        // The report lands in this thread (with the draft card when it drafted one).
+        const rep = d?.data?.report;
+        if (rep) setMessages((prev) => (prev.some((m) => m.id === rep.id) ? prev : [...prev, fromSaved({ ...rep, role: 'agent' })]));
+      } else {
+        await apiPost(`/api/agent/proposals/inbox/${encodeURIComponent(ref)}/dismiss`, { reason: action });
+        mark('dismissed');
+      }
+    } catch (e) {
+      mark(/already decided|expired/i.test(e?.message || '') ? 'closed' : 'failed');
+    } finally { setProposalBusy(null); }
+  };
 
   const openChatSession = async (id) => {
     setDrawerOpen(false);
@@ -840,6 +865,22 @@ export default function ChatPage() {
                       ? <span style={{ whiteSpace: 'pre-wrap' }}>{textPart}</span>
                       : <RichText text={textPart} color={INK} />)}
                   </div>
+                  {!isMe && msg.proposal && (msg.proposal.status === 'proposed' ? (
+                    <div data-proposal={msg.proposal.kind} style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 8 }}>
+                      <button type="button" disabled={!!proposalBusy} onClick={() => decideProposal(msg, 'accept')}
+                        style={{ padding: '8px 14px', borderRadius: 20, border: 'none', background: PURPLE, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: proposalBusy ? 'wait' : 'pointer', fontFamily: FONT }}>
+                        {proposalBusy === msg.id ? 'Working…' : msg.proposal.yes || 'Yes, go ahead'}
+                      </button>
+                      <button type="button" disabled={!!proposalBusy} onClick={() => decideProposal(msg, 'wrong_time')}
+                        style={{ padding: '8px 14px', borderRadius: 20, border: bdr(1.5, BORDER), background: WHITE, color: INK, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Not now</button>
+                      <button type="button" disabled={!!proposalBusy} onClick={() => decideProposal(msg, 'not_useful')}
+                        style={{ padding: '8px 14px', borderRadius: 20, border: 'none', background: 'none', color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Not useful</button>
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: 8, fontSize: 11.5, fontWeight: 800, color: msg.proposal.status === 'executed' ? GREEN : MUTED }}>
+                      {msg.proposal.status === 'executed' ? 'Done' : msg.proposal.status === 'failed' ? "Couldn't do that" : 'Closed'}
+                    </div>
+                  ))}
                   {!isMe && (msg.previews || []).length > 0 && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
                       {msg.previews.map((d, pi) => (
