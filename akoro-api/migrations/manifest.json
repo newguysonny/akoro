@@ -180,6 +180,7 @@
     "2026-material-ingest.sql",
     "2026-material-structure.sql",
     "2026-material-sorting.sql",
+    "2026-material-steps.sql",
     "2026-content-cache.sql",
     "2026-record-search.sql",
     "2026-record-chat.sql",

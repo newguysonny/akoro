@@ -248,3 +248,14 @@ test("streamed words: promoted text moves to the reply, dropped text vanishes, e
     "activity_start", "activity_delta", "activity_drop",
   ]);
 });
+
+test("after a Library search, a reader tool or the past papers, the agent says what it found (2026-10-19)", async () => {
+  const { talkAfterTool, TALK_AFTER_TOOLS } = await import("./chat-trace.js");
+  assert.deepEqual([...TALK_AFTER_TOOLS], ["search_my_library", "analyse_past_papers"]);
+  assert.equal(talkAfterTool("search_my_library", {}, { records: [] }), "Nothing in your Library matches that.");
+  assert.match(talkAfterTool("search_my_library", { tool: "flashcards" }, { records: [{ name: "BIO111 Cell Structure.pdf", tool: "flashcards" }] }), /^Found your \*\*BIO111 Cell Structure\.pdf\*\* — I'll open it in the reader's flashcards/);
+  assert.equal(talkAfterTool("search_my_library", {}, { records: [{ name: "BIO111 notes", page: 12 }, { name: "BIO111 notes", page: 14 }] }), "Found 2 matches in your Library, starting with **BIO111 notes** (p.12, p.14).");
+  assert.equal(talkAfterTool("analyse_past_papers", {}, { papers: 2, topics: [{ topic: "Ecology" }, { topic: "Cells" }] }), "I've looked across 2 past papers; the most recurring: **Ecology** and **Cells**.");
+  assert.equal(talkAfterTool("check_progress", {}, {}), null, "other tools stay as they are");
+  assert.equal(talkAfterTool("search_my_library", {}, { error: "x" }), null);
+});

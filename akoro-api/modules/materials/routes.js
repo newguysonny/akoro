@@ -45,6 +45,7 @@ import {
 } from "./ingestCore.js";
 import { pickFolder, subjectKey, subjectLabel, UNSORTED_FOLDER } from "./folderMatch.js";
 import { filingSentence } from "./structureCore.js";
+import { appendSteps, filedSteps, folderSteps, readSteps, similarSteps, sortSteps, toolStep } from "./stepsCore.js";
 
 const router = Router();
 router.use(authenticateToken);
@@ -138,6 +139,14 @@ async function refile(userId, row, target) {
 
 const withFiling = (row, patch) => ({ filing: { ...(row.filing || {}), ...patch } });
 
+/** Add steps to an upload (the chat shows them under its message). Best effort: a step never fails the upload. */
+async function addSteps(row, steps) {
+  if (!row || !steps.length) return row;
+  const { data } = await edu().from("material_ingests").update({ steps: appendSteps(row.steps, steps.map((s) => ({ ...s, at: s.at || now() }))) })
+    .eq("id", row.id).select("*").maybeSingle().then((r) => r, () => ({ data: null }));
+  return data || row;
+}
+
 /** An existing folder with this name (any case), else a new private one. → { id, name, created } | null */
 async function folderFor(userId, name) {
   const { data: mine } = await edu().from("library_folders").select("id, name").eq("user_id", userId).limit(MAX_FOLDERS);
@@ -166,7 +175,10 @@ router.post("/ingest", asyncHandler(async (req, res) => {
   }
   // "Save it again" after an Undo: the new upload takes over the old one's chat message.
   const replaced = req.body?.replaces ? await loadOwn(req.body.replaces, userId) : null;
+  const sortStarted = Date.now();
   const kinds = await classify(names, ask, userId);
+  const sortMs = Date.now() - sortStarted;
+  const folderStarted = Date.now();
   const ctx = await folderContext(userId);
 
   // One upload per folder: files of one subject and kind together, each group
@@ -204,6 +216,15 @@ router.post("/ingest", asyncHandler(async (req, res) => {
     if (error) throw error;
     made.push(data);
   }
+  // The steps so far, on the message's first upload: the files sorted, and where each group goes.
+  if (made[0]) {
+    made[0] = await addSteps(made[0], [
+      ...sortSteps({ batchId, files: kinds.map((k) => ({ subject: subjectLabel(k.subject), kind: k.kind })), ms: sortMs }),
+      ...folderSteps({ batchId, ms: Date.now() - folderStarted, groups: [...placed.values()].map((g) => ({
+        subject: g.subject, kind: g.kind, folderName: g.where.folder_name, created: g.where.folder_created, choices: g.where.choices,
+        names: g.indexes.map((i) => names[i]) })) }),
+    ]);
+  }
   if (made[0]?.chat_message_id) {
     const { data: msg } = await db.from("chat_messages").select("meta").eq("id", made[0].chat_message_id).eq("user_id", userId).maybeSingle();
     if (msg) await db.from("chat_messages").update({ meta: { ...(msg.meta || {}), ingest: { id: made[0].id }, ingests: made.map((r) => ({ id: r.id })) } }).eq("id", made[0].chat_message_id).eq("user_id", userId);
@@ -227,8 +248,12 @@ router.post("/ingest/:id/records", asyncHandler(async (req, res) => {
     if (error) throw error;
   }
   const recordIds = [...new Set([...(row.record_ids || []), ...ids])];
-  const next = row.state === "received" ? await move(row, "filed", { record_ids: recordIds })
+  let next = row.state === "received" ? await move(row, "filed", { record_ids: recordIds })
     : (await edu().from("material_ingests").update({ record_ids: recordIds, updated_at: now() }).eq("id", row.id).select("*").single()).data;
+  if (row.state === "received") {
+    const first = !Array.isArray(row.filing?.fileIndexes) || row.filing.fileIndexes.includes(0);
+    next = await addSteps(next, filedSteps({ ingestId: row.id, folderName: row.folder_name, first }));
+  }
   res.json({ success: true, data: ingestToApi(next) });
 }));
 
@@ -286,6 +311,8 @@ router.post("/ingest/:id/structure", asyncHandler(async (req, res) => {
     if (!pages.length) continue;
     let raw = "{}";
     calls += 1;
+    const readStarted = Date.now();
+    let readOk = true;
     try {
       const out = await openai.chat.completions.create({
         __role: "background", messages: structureMessages({ names: [record.name], kindHint: row.doc_kind, pages }),
@@ -297,21 +324,23 @@ router.post("/ingest/:id/structure", asyncHandler(async (req, res) => {
       raw = out?.choices?.[0]?.message?.content || "{}";
     } catch (error) {
       failures += 1;
+      readOk = false;
       console.warn("[materials] structure call failed:", String(error?.message || error).slice(0, 160));
     }
     const s = cleanStructure(raw, { pageNumbers: pages.map((p) => p.pageNumber), fallbackKind: row.doc_kind || "other" });
-    items.push({ recordId: record.id, name: record.name, pages: pages.length, ...s, questions: undefined, questionCount: s.questions.length });
+    items.push({ recordId: record.id, name: record.name, pages: pages.length, ...s, questions: undefined, questionCount: s.questions.length, ms: Date.now() - readStarted, ok: readOk });
     for (const q of s.questions) questions.push({ ...q, record_id: record.id, exam: s.exam, subject: s.subject || row.subject, year: s.year });
   }
 
   // Every read failed (the model was unavailable): keep nothing, say nothing — it can be tried again.
   if (calls && failures === calls) {
-    await move(row, "ready");
+    const back = await move(row, "ready");
+    await addSteps(back, [toolStep(`read:${row.id}:failed:${Date.now()}`, "material.read", "Reading your file", { result: "Couldn't read it just now — trying again", ok: false })]);
     return res.status(503).json({ success: false, code: "structure_unavailable", message: "Couldn't read it just now — try again in a moment." });
   }
   const main = items[0] || null;
   const structure = {
-    items: items.map(({ dropped, ...it }) => it),
+    items: items.map(({ dropped, ms, ok, ...it }) => it),
     topics: [...new Map(items.flatMap((it) => it.topics).map((t) => [t.name.toLowerCase(), t])).values()].slice(0, 30),
     questionCount: questions.length,
   };
@@ -339,6 +368,7 @@ router.post("/ingest/:id/structure", asyncHandler(async (req, res) => {
     filing = { needsSubject: true, subjectOptions: [...new Set((main?.subjectGuesses || []).map(subjectLabel).filter(Boolean))].slice(0, 3) };
   }
   row = await move(row, "ready", { structure, subject, doc_kind: kind, ...filePatch, ...withFiling(row, filing) });
+  row = await addSteps(row, readSteps({ ingestId: row.id, items, moved: filing.movedFrom ? { to: row.folder_name, subject: row.subject } : null }));
 
   // What it found, said in the chat it came from (written by code from what was kept).
   let message = null;
@@ -390,8 +420,10 @@ router.post("/ingest/:id/similar", asyncHandler(async (req, res) => {
   let row = await loadOwn(req.params.id, req.user.id);
   if (!row) return res.status(404).json({ success: false, message: "Upload not found." });
   if (!row.structure?.topics?.length) return res.status(409).json({ success: false, code: "not_structured", message: "I haven't read its topics yet." });
+  const similarStarted = Date.now();
   const candidates = await findSimilar(row, req.user.id);
   if (row.state === "ready") row = await move(row, "offering_more", { structure: { ...row.structure, offered: candidates.map((c) => c.key) } });
+  row = await addSteps(row, similarSteps({ ingestId: row.id, candidates, folderName: row.folder_name, ms: Date.now() - similarStarted }));
   res.json({ success: true, data: ingestToApi(row), candidates });
 }));
 

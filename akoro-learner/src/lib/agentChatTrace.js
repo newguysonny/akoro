@@ -358,3 +358,31 @@ export function countdownLabel(ms) {
   const total = Math.max(0, Math.ceil(ms / 1000));
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 }
+
+/**
+ * An upload's steps as the agent's run under its message (2026-10-19): for
+ * each step the server recorded, a tool row (what it did, what it found, how
+ * long) and the short message it said. Steps of the message's uploads are
+ * merged in time order. While one is still being read, a running row.
+ */
+const INGEST_WORKING = new Set(['received', 'filed', 'extracting', 'structured']);
+export function ingestRunBlocks(ingests = []) {
+  const seen = new Set();
+  const steps = [];
+  for (const ingest of ingests || []) {
+    for (const s of ingest?.steps || []) if (s?.id && !seen.has(s.id)) { seen.add(s.id); steps.push(s); }
+  }
+  steps.sort((a, b) => (Date.parse(a.at || '') || 0) - (Date.parse(b.at || '') || 0));
+  const blocks = steps.map((s) => (s.type === 'message'
+    ? { type: 'activity', id: `ing_${s.id}`, text: String(s.text || '') }
+    : { type: 'tool', id: `ing_${s.id}`, tool: s.tool || null, status: 'done', ok: s.ok !== false, ms: s.ms ?? null, category: 'action',
+      headline: s.headline || '', description: '', result: s.result || '' }));
+  const reading = (ingests || []).find((i) => ['extracting', 'structured'].includes(i?.state));
+  if (reading && !(reading.steps || []).some((s) => String(s.id).startsWith(`read:${reading.id}`))) {
+    blocks.push({ type: 'tool', id: `ing_reading_${reading.id}`, tool: 'material.read', status: 'running', ok: null, ms: null, category: 'research',
+      headline: `Reading ${reading.names?.length === 1 ? reading.names[0] : 'your files'}`, description: '', result: '' });
+  } else if (blocks.length && (ingests || []).some((i) => INGEST_WORKING.has(i?.state))) {
+    blocks.push({ type: 'thinking', id: 'ing_live', status: 'running', startedAt: Date.now(), ms: 0, text: '' });
+  }
+  return blocks;
+}

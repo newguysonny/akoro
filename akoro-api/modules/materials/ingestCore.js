@@ -149,6 +149,8 @@ export function ingestToApi(row) {
     movedFrom: f.movedFrom || null,
     needsSubject: !!f.needsSubject, subjectOptions: Array.isArray(f.subjectOptions) ? f.subjectOptions : [],
     restorableUntil, purged: !!f.purged,
+    // What the protégé did with it, step by step (stepsCore.js): the chat shows them under the upload's message.
+    steps: Array.isArray(row.steps) ? row.steps : [],
     createdAt: row.created_at, updatedAt: row.updated_at,
   };
 }

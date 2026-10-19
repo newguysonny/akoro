@@ -27,7 +27,7 @@ import { useInFlight } from '../../hooks/useInFlight.js';
 import StudyPrepChatCard from './studyPrep/StudyPrepChatCard.jsx';
 import { fetchActiveStudyPrepSession } from '../../services/studyPrepApi.js';
 import TraceBlocks from './agentChat/TraceBlocks.jsx';
-import { applyTraceEvent, blocksFromSavedTrace, promoteActivity, settleRunning, splitWakes, studyPrepEventBlocks, workflowRunBlocks } from '../../lib/agentChatTrace.js';
+import { applyTraceEvent, blocksFromSavedTrace, ingestRunBlocks, promoteActivity, settleRunning, splitWakes, studyPrepEventBlocks, workflowRunBlocks } from '../../lib/agentChatTrace.js';
 import { CHAT_STARTERS, cleanIdeas, cleanMaterials, protegeMoves } from '../../lib/chatIdeas.js';
 import { useNavigate } from 'react-router-dom';
 import AgentCards from '../network/AgentCards.jsx';
@@ -1235,6 +1235,8 @@ function AgentChatTab({
                       <Icon name="ti-school" size={12}/> {t('agent.from_guide').replace('{guide}', msg.guide.name||'NaNa')}
                     </div>
                   )}
+                  {/* What the protégé did with the upload, step by step: tool row → what it said (server-recorded steps). */}
+                  {!isMe&&(()=>{ const run=ingestRunBlocks((msg.ingestIds||(msg.ingestId?[msg.ingestId]:[])).map((id)=>ingests[id]).filter(Boolean)); return run.length>0&&<div data-ingest-run="" style={{ margin:"0 0 8px" }}><TraceBlocks blocks={run}/></div>; })()}
                   {!isMe&&(msg.ingestIds||(msg.ingestId?[msg.ingestId]:[])).some((id)=>ingests[id])&&(
                     <div data-ingest-cards="" style={{ display:"flex",flexDirection:"column",gap:8,margin:"0 0 10px" }}>
                       {(msg.ingestIds||[msg.ingestId]).filter((id)=>ingests[id]).map((id)=>(

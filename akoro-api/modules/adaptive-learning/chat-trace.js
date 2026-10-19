@@ -232,6 +232,34 @@ export function decisionNarration(calls) {
 }
 
 /** Bounded copy kept for reload. */
+/**
+ * The tools after which the agent always says what it found before its next
+ * step (2026-10-19): the Library search, the reader's study tools (the same
+ * tool with `tool` set) and the learner's past papers. Other replies stay as
+ * they are. talkAfterTool → the line, written by code from the result, shown
+ * when the model goes straight on to another tool without a word.
+ */
+export const TALK_AFTER_TOOLS = Object.freeze(["search_my_library", "analyse_past_papers"]);
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+export function talkAfterTool(tool, input = {}, result = {}) {
+  if (!TALK_AFTER_TOOLS.includes(tool) || !result || typeof result !== "object" || result.error) return null;
+  if (tool === "search_my_library") {
+    const records = Array.isArray(result.records) ? result.records : [];
+    if (!records.length) return "Nothing in your Library matches that.";
+    const first = String(records[0].name || "a document").slice(0, 80);
+    const study = records[0].tool || input?.tool;
+    if (study) return `Found your **${first}** — I'll open it in the reader's ${study}; it builds them from the whole document.`;
+    const pages = records.filter((r) => r.page != null).map((r) => `p.${r.page}`).slice(0, 3);
+    return records.length === 1
+      ? `Found **${first}** in your Library${pages.length ? ` (${pages.join(", ")})` : ""}.`
+      : `Found ${records.length} matches in your Library, starting with **${first}**${pages.length ? ` (${pages.join(", ")})` : ""}.`;
+  }
+  const papers = Number(result.papers) || 0;
+  if (!papers) return "You haven't uploaded a past paper I've read yet.";
+  const top = (Array.isArray(result.topics) ? result.topics : []).slice(0, 2).map((t) => `**${String(t.topic).slice(0, 50)}**`);
+  return `I've looked across ${plural(papers, "past paper")}${top.length ? `; the most recurring: ${top.join(" and ")}` : ""}.`;
+}
+
 export const TRACE_LIMITS = Object.freeze({ MAX_BLOCKS: 60, MAX_TEXT_CHARS: 4_000 });
 
 /**

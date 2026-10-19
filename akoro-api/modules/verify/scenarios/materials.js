@@ -142,6 +142,9 @@ export const pastPaperStructured = {
     const a = await ctx.http({ as, method: "POST", path: "/api/agent/materials/ingest", body: { names: [name], ask: "Help me prepare with this paper", chatSessionId: chatId } });
     const ingest = a.body?.data;
     if (!ingest?.id) { ctx.expect.ok("the upload is received", false, a.body); return; }
+    // 2026-10-19: each step is in the chat — a tool row and a short message, written from what it returned.
+    const stepIds = (x) => (x?.steps || []).map((st) => st.id.split(":")[0] + (st.type === "message" ? ":say" : ""));
+    ctx.expect.ok("steps: the file sorted and its folder chosen, each said", ["sort", "sort:say", "folders", "folders:say"].every((k) => stepIds(ingest).includes(k)), ingest.steps);
     if (ingest.folder?.id && ingest.folder.created) ctx.cleanup(() => ctx.http({ as, method: "DELETE", path: `/api/records/folders/${ingest.folder.id}` }));
     const rec = await uploadRecord(ctx, as, name, await pastPaperPdf());
     if (!rec?.id) { ctx.expect.ok("the record is saved", false); return; }
@@ -164,6 +167,8 @@ export const pastPaperStructured = {
     ctx.note(`topics: ${(data?.topics || []).join(" · ")} · questions ${data?.questions}`);
     ctx.note(`message: ${String(st.body?.message?.text || "").slice(0, 400)}`);
     ctx.expect.eq("structured, then ready again", data?.state, "ready");
+    ctx.note(`steps: ${(data?.steps || []).map((x) => (x.type === "tool" ? `[${x.headline} → ${x.result}]` : `"${x.text}"`)).join(" ").slice(0, 900)}`);
+    ctx.expect.ok("steps: filed, then read (what it found) and said", ["filed", "read"].every((k) => stepIds(data).includes(k)) && (data?.steps || []).some((x) => x.id.startsWith("read:") && x.type === "message"), data?.steps);
     ctx.expect.gte("topics found", (data?.topics || []).length, 3);
     ctx.expect.ok("…the paper's own topics", (data?.topics || []).some((t) => /osmosis|diffusion/i.test(t)) && (data?.topics || []).some((t) => /ecolog|food|ecosystem/i.test(t)), data?.topics);
     ctx.expect.gte("its questions are found", data?.questions ?? 0, 4);
@@ -186,6 +191,7 @@ export const pastPaperStructured = {
     const cands = sim.body?.candidates || [];
     ctx.note(`similar: ${cands.map((c) => `${c.kind}:${c.title} (${c.why})`).join(" · ") || "(none on the sandbox)"}`);
     ctx.expect.eq("offering similar material", sim.body?.data?.state, "offering_more");
+    ctx.expect.ok("steps: the similar search and what it found, said", ["similar", "similar:say"].every((k) => stepIds(sim.body?.data).includes(k)), sim.body?.data?.steps);
     ctx.expect.ok("…only Akoro courses and blog posts, each with an in-app link and why",
       cands.every((c) => ["course", "blog"].includes(c.kind) && /^\/(course|blog)\//.test(c.href) && c.why), cands);
     const add = await ctx.http({ as, method: "POST", path: `/api/agent/materials/ingest/${ingest.id}/similar/add`, body: { keys: [...cands.slice(0, 1).map((c) => c.key), "blog:not-offered"] } });

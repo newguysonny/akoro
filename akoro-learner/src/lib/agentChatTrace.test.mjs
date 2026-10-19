@@ -273,3 +273,20 @@ test('wakes: each is its own run; the planning run stays before them; a wake bou
   assert.equal(countdownLabel(60_000), '1:00');
   assert.equal(countdownLabel(-5), '0:00');
 });
+
+test('an upload\'s steps: tool rows and messages in time order, across its uploads; a running read', async () => {
+  const { ingestRunBlocks } = await import('./agentChatTrace.js');
+  const t = (s) => new Date(Date.UTC(2026, 9, 19, 12, 0, s)).toISOString();
+  const a = { id: 'i1', state: 'ready', steps: [
+    { id: 'sort:b', type: 'tool', headline: 'Sorting your files', result: 'a Biology past paper · Biology notes', ms: 1400, at: t(1) },
+    { id: 'sort:b:say', type: 'message', text: '2 files.', at: t(2) },
+    { id: 'read:i1:r1', type: 'tool', headline: 'Reading WAEC 2019', result: '8 topics · 50 questions', ms: 18000, at: t(9) },
+  ] };
+  const b = { id: 'i2', state: 'extracting', names: ['BIO111.pdf'], steps: [{ id: 'filed:i2', type: 'tool', headline: 'Filing into Biology — Notes', at: t(5) }] };
+  const blocks = ingestRunBlocks([a, b]);
+  assert.deepEqual(blocks.map((x) => x.type), ['tool', 'activity', 'tool', 'tool', 'tool']);
+  assert.equal(blocks[2].headline, 'Filing into Biology — Notes', 'merged by time');
+  assert.equal(blocks[4].status, 'running');
+  assert.equal(blocks[4].headline, 'Reading BIO111.pdf');
+  assert.equal(ingestRunBlocks([{ id: 'x', state: 'ready', steps: [] }]).length, 0, 'an older upload without steps shows nothing new');
+});

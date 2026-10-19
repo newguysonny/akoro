@@ -99,7 +99,7 @@ import {
 import { requiresAgentCapabilitiesTool, requiresActivityPreparation, isDraftFollowUp, requiredLearnerDataTool, requiredStudyPrepTool, classForExam } from "./agent-chat-intent.js";
 import { agentToolActivity } from "../../lib/agentActivity.js";
 import { noteChatTurn } from "../agent-memory/quietLearning.js";
-import { createChatTrace, decisionNarration } from "./chat-trace.js";
+import { createChatTrace, decisionNarration, TALK_AFTER_TOOLS, talkAfterTool } from "./chat-trace.js";
 import { toResponsesInput, toResponsesTools } from "./responses-input.js";
 import { hasExplicitToolRequestConsent } from "./agent-tool-request-intent.js";
 import { getLearnerProfileContext } from "./learner-profile-context.js";
@@ -3804,6 +3804,9 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
   // Think mode decides every step on the reasoning model; if that model is
   // unavailable the rest of the turn decides on the standard model.
   let reasonDecisions = think;
+  // After a Library search, a reader tool or the past papers, the agent says what it found
+  // before its next step (2026-10-19); if it goes straight on to a tool, this line is said.
+  let owedLine = null;
   for (let iteration = 0; iteration < CHAT_TOOL_LOOP_MAX_ITERATIONS; iteration += 1) {
     // Stop pressed between steps: end here, before spending another call.
     if (isAborted()) return { messages: transcript, toolExecutions: executions, aborted: true };
@@ -3875,6 +3878,8 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
     // Text written alongside tool calls stays between the steps.
     if (liveId) trace.activityEnd(liveId, content);
     else if (content) trace?.activity(content);
+    else if (owedLine) trace?.activity(owedLine);
+    owedLine = null;
     transcript.push(assistant);
     for (const call of calls) {
       if (isAborted()) return { messages: transcript, toolExecutions: executions, aborted: true };
@@ -3901,6 +3906,12 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         toolResult = { success: false, error: "The requested Akoro action could not be completed." };
       }
       if (traceRow) trace.toolEnd(traceRow, toolResult);
+      if (TALK_AFTER_TOOLS.includes(tool)) {
+        owedLine = talkAfterTool(tool, input, toolResult);
+        if (toolResult && typeof toolResult === "object" && !Array.isArray(toolResult)) {
+          toolResult = { ...toolResult, sayFirst: "Before your next step, tell the learner in one short sentence what this found." };
+        }
+      }
       // Structured observation: the tool's real backend outcome becomes the
       // model's next input, so the reply confirms facts, not intent.
       // create_tool built a tool: offer it for the rest of this turn.
