@@ -34,6 +34,21 @@ export async function embed(text) {
   return res.data[0].embedding;
 }
 
+/**
+ * embed(), but a failure (provider down, out of credit, breaker open) is null
+ * instead of a dead teaching turn. A null query vector makes the match_* RPCs
+ * rank on their lexical arm alone; a null stored vector with embedded_at null
+ * is what lib/embeddingSweeper.js fills in once the provider is back.
+ */
+export async function embedOrNull(text) {
+  try {
+    return await embed(text);
+  } catch (err) {
+    console.warn("[embed] skipped:", String(err?.message || err).slice(0, 160));
+    return null;
+  }
+}
+
 // =============================================================
 // STUDENT AGENT CRUD
 // =============================================================
@@ -104,7 +119,7 @@ export async function incrementAgentStats(agentId, { turnsAdded, knowledgeAdded,
 // =============================================================
 
 export async function retrieveAgentKnowledge(agentId, query, limit = 6, subject = null) {
-  const embedding = await embed(query);
+  const embedding = await embedOrNull(query);
 
   const { data, error } = await supabase.rpc("match_agent_knowledge", {
     p_agent_id:        agentId,
@@ -123,7 +138,7 @@ export async function retrieveAgentKnowledge(agentId, query, limit = 6, subject 
  * Used in decay review sessions to focus on one subject.
  */
 export async function retrieveAgentKnowledgeBySubject(agentId, subject, query, limit = 8) {
-  const embedding = await embed(query);
+  const embedding = await embedOrNull(query);
 
   // First try subject-filtered similarity search
   const { data: bySubject } = await supabase
@@ -200,13 +215,14 @@ export async function saveAgentKnowledge({
     const { getPriority, getNextReviewDate } = await import("./decayEngine.js");
     const newPriority  = getPriority(newConf);
     const nextDue      = getNextReviewDate(newConf, newPriority);
+    const vector       = await embedOrNull(`${merged} ${topic} ${subtopic ?? ""}`.trim());
 
     await supabase
       .schema("edu").from("agent_knowledge")
       .update({
         content:         merged,
-        embedding:       await embed(`${merged} ${topic} ${subtopic ?? ""}`.trim()),
-        embedded_at:     new Date(),
+        embedding:       vector,
+        embedded_at:     vector ? new Date() : null,
         confidence:      newConf,
         learned_confidence: newConf,
         learned_at:      new Date(),
@@ -217,7 +233,6 @@ export async function saveAgentKnowledge({
         decay_rate:      newDecayRate,
         priority:        newPriority,
         next_review_due: nextDue,
-        embedding,
         updated_at:      new Date(),
       })
       .eq("id", existing.id);
@@ -229,6 +244,7 @@ export async function saveAgentKnowledge({
   const { getPriority, getNextReviewDate } = await import("./decayEngine.js");
   const priority = getPriority(confidence);
   const nextDue  = getNextReviewDate(confidence, priority);
+  const newVector = await embedOrNull(`${content} ${topic} ${subtopic ?? ""}`.trim());
 
   const { data, error } = await supabase
     .schema("edu").from("agent_knowledge")
@@ -247,8 +263,8 @@ export async function saveAgentKnowledge({
       decay_rate:      0.10,
       priority,
       next_review_due: nextDue,
-      embedding:       await embed(`${content} ${topic} ${subtopic ?? ""}`.trim()),
-      embedded_at:     new Date(),
+      embedding:       newVector,
+      embedded_at:     newVector ? new Date() : null,
     })
     .select("id")
     .single();
@@ -309,7 +325,7 @@ export async function getTopicsBySubject(agentId, subject) {
 // =============================================================
 
 export async function retrieveStudentKnowledge(studentId, query, limit = 5, subject = null) {
-  const embedding = await embed(query);
+  const embedding = await embedOrNull(query);
 
   const { data, error } = await supabase.rpc("match_student_knowledge", {
     p_student_id:      studentId,
@@ -361,26 +377,26 @@ export async function saveStudentKnowledge({
     // change, so the row is left exactly as it is.
     if (action === "unchanged" && merged === existing.content) return { action, id: existing.id };
 
-    const embedding = await embed(`${merged} ${topic} ${subtopic ?? ""}`.trim());
+    const embedding = await embedOrNull(`${merged} ${topic} ${subtopic ?? ""}`.trim());
     const { error } = await supabase
       .schema("edu").from("student_knowledge")
       .update({
         content: merged, subject: subject || "general", source, tags,
         confidence: Math.min(1, Math.max(Number(existing.confidence ?? 0.5), confidence)),
-        embedding, embedded_at: new Date(), updated_at: new Date(),
+        embedding, embedded_at: embedding ? new Date() : null, updated_at: new Date(),
       }).eq("id", existing.id);
     if (error) throw error;
     return { action, id: existing.id };
   }
 
-  const embedding = await embed(`${content} ${topic} ${subtopic ?? ""}`.trim());
+  const embedding = await embedOrNull(`${content} ${topic} ${subtopic ?? ""}`.trim());
   const { data, error } = await supabase
     .schema("edu").from("student_knowledge")
     .insert({
       student_id: studentId, agent_id: agentId,
       topic, subtopic: subtopic ?? "", subject: subject || "general",
       content, source, confidence, tags, embedding,
-      embedded_at: new Date(), updated_at: new Date(),
+      embedded_at: embedding ? new Date() : null, updated_at: new Date(),
     })
     .select("id").single();
   if (error) throw error;
@@ -394,7 +410,7 @@ export async function saveStudentKnowledge({
 export async function retrieveTeacherChunks(teacherId, query, limit = 4, subject = null) {
   if (!teacherId) return [];
 
-  const embedding = await embed(query);
+  const embedding = await embedOrNull(query);
 
   const { data, error } = await supabase.rpc("match_training_chunks", {
     p_teacher_id:      teacherId,
