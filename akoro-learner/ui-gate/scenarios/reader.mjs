@@ -19,7 +19,7 @@ const PARAS = [
 const OLD_GENERIC = ['Summarise this material', 'Quiz me on this topic', 'Explain it simply', 'Give a real-world example'];
 
 /** A two-page text PDF, printed by the browser itself (no file in the repo). */
-async function makePdf(browser) {
+export async function makePdf(browser) {
   const ctx = await browser.newContext();
   const p = await ctx.newPage();
   const page = (n) => `<section style="page-break-after:always"><small>BIO 111 · Cell Structure and Organization · header</small><h2>Part ${n}</h2>` +

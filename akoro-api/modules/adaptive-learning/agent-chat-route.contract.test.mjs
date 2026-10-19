@@ -234,8 +234,9 @@ test("draft cards survive a reload — tool previews ride the persisted message 
   assert.match(source, /function previewMetaFrom\(/);
   assert.match(source, /prepare_activity|revise_activity_draft/);
   // … saves it beside the trace …
-  assert.match(source, /trace: traceBlocks, meta: previewMetaFrom\(prepared\.toolExecutions\)/);
-  assert.match(source, /update\(\{ trace, \.\.\.\(meta \? \{ meta \} : \{\}\) \}\)/);
+  assert.match(source, /\.\.\.\(previewMetaFrom\(prepared\.toolExecutions\) \|\| \{\}\)/);
+  assert.match(source, /saveMessageTrace\(\{ messageId, userId: req\.user\.id, trace: traceBlocks, meta:/);
+  assert.match(source, /update\(\{ \.\.\.\(hasTrace \? \{ trace \} : \{\}\), \.\.\.\(meta \? \{ meta \} : \{\}\) \}\)/, "meta is saved even on a turn with no trace");
   // … and serves it with a rolling-deploy fallback.
   assert.match(source, /loadMessages\("id, role, text, created_at, trace, meta"\)/);
   assert.match(source, /\/meta\/i\.test\(String\(error\.message \|\| ""\)\)/);

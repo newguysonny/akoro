@@ -37,8 +37,25 @@ export function guideChip(notTaught) {
   return notTaught.topic ? `Ask your teaching guide about ${notTaught.topic}` : "Ask your teaching guide";
 }
 
+/**
+ * A file the learner just uploaded (§7.17.5): one chip is always the study
+ * step — a past paper's recurring topics, anything else a study plan.
+ * `attachments`: [{ name, kind }] (kind from the ingest's classification).
+ */
+export function uploadsFrom(attachments) {
+  return (Array.isArray(attachments) ? attachments : []).slice(0, 5)
+    .map((a) => ({ name: String(a?.name || "").replace(/\s+/g, " ").trim().slice(0, 120), kind: String(a?.kind || "").slice(0, 30) || null }))
+    .filter((a) => a.name);
+}
+export function uploadChip(uploads) {
+  if (!uploads?.length) return null;
+  if (uploads.some((u) => u.kind === "past_paper")) return "Find the topics that keep coming up";
+  const short = uploads.length > 1 ? "these files" : uploads[0].name.replace(/\.[a-z0-9]{2,5}$/i, "").slice(0, 28).trim();
+  return `Make a study plan from ${short}`;
+}
+
 /** The model's instructions. `capabilities`: what this agent can actually do (its live catalogue). */
-export function buildSuggestionMessages({ role = "student", ask = "", reply = "", context = "", capabilities = [], notTaught = null }) {
+export function buildSuggestionMessages({ role = "student", ask = "", reply = "", context = "", capabilities = [], notTaught = null, uploads = [] }) {
   const system = [
     `Suggest exactly ${SUGGESTION_LIMITS.count} short things the user could say NEXT in this chat, written as the user would type them ` +
       `(imperative or a question, ≤ 8 words each, no numbering, no quotes, no emoji).`,
@@ -53,6 +70,10 @@ export function buildSuggestionMessages({ role = "student", ask = "", reply = ""
     notTaught
       ? `The agent has NOT been taught this${notTaught.topic ? ` (${notTaught.topic})` : ""}. A chip asking the teaching guide is added separately — don't repeat it. ` +
         "Your chips steer to the learner teaching it: e.g. \"Let me teach you it now\", \"Start a teaching session on it\", \"What should I teach you first?\"."
+      : "",
+    uploads.length
+      ? `The learner just uploaded ${uploads.map((u) => `"${u.name}"${u.kind ? ` (${u.kind.replace(/_/g, " ")})` : ""}`).join(", ")}; it is saved in their Library. ` +
+        "A study-step chip is added separately — your chips work on the file itself: e.g. quiz me on it, summarise it, find similar material, explain a part of it."
       : "",
     'Return JSON: { "suggestions": [string, string, string] }',
   ].filter(Boolean).join("\n");

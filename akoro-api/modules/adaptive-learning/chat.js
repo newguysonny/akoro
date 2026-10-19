@@ -17,7 +17,7 @@ import { jsonbArray, jsonbObject } from "../../lib/jsonb.js";
 import { authenticateToken } from "../auth/routes.js";
 import pkg from "pg";
 import { OPENAI_MODEL, openai } from "../../lib/aiModel.js";
-import { buildSuggestionMessages, notTaughtFrom, guideChip, shapeSuggestions, buildLearnSuggestionMessages, LEARN_LIMITS, buildCitedLearnSuggestionMessages, citedLearnSchema, shapeCitedLearnSuggestions } from "./chatSuggestions.js";
+import { buildSuggestionMessages, notTaughtFrom, guideChip, uploadsFrom, uploadChip, shapeSuggestions, buildLearnSuggestionMessages, LEARN_LIMITS, buildCitedLearnSuggestionMessages, citedLearnSchema, shapeCitedLearnSuggestions } from "./chatSuggestions.js";
 import { resolveAskTargetFor } from "../records/access.js";
 import { materialsFrom, collectMaterials } from "./chat-materials.js";
 import { renderRelevantMemory } from "./chat-memory.js";
@@ -3622,9 +3622,10 @@ function previewMetaFrom(toolExecutions) {
  */
 let warnedTraceColumn = false;
 async function saveMessageTrace({ messageId, userId, trace, meta = null }) {
-  if (!messageId || !Array.isArray(trace) || !trace.length) return;
+  const hasTrace = Array.isArray(trace) && trace.length > 0;
+  if (!messageId || (!hasTrace && !meta)) return;
   try {
-    const { error } = await db.from("chat_messages").update({ trace, ...(meta ? { meta } : {}) })
+    const { error } = await db.from("chat_messages").update({ ...(hasTrace ? { trace } : {}), ...(meta ? { meta } : {}) })
       .eq("id", messageId).eq("user_id", userId).eq("role", "agent");
     if (error) throw error;
   } catch (error) {
@@ -3896,7 +3897,10 @@ router.post("/suggestions", async (req, res) => {
   const role = req.body?.role === "instructor" && req.user?.role !== "student" ? "instructor" : "student";
   const tools = Array.isArray(req.body?.tools) ? req.body.tools.slice(0, 12) : [];
   const notTaught = role === "student" ? notTaughtFrom({ reply, tools }) : null;
-  const chip = guideChip(notTaught);
+  const uploads = role === "student" ? uploadsFrom(req.body?.attachments) : [];
+  // Fixed chips first: the guide when it wasn't taught, the study step after an upload.
+  const fixed = [guideChip(notTaught), uploadChip(uploads)].filter(Boolean);
+  const isFixed = (x) => /teaching guide/i.test(x) || fixed.some((f) => f.toLowerCase() === String(x).toLowerCase());
   try {
     // What this agent can actually do: its live capability card, plus the tools
     // the learner's agent built for them — chips stay within reach.
@@ -3913,14 +3917,14 @@ router.post("/suggestions", async (req, res) => {
       model: process.env.OPENAI_SUGGEST_MODEL || "gpt-4o-mini", temperature: 0.5, max_tokens: 160,
       __timeoutMs: 12_000, __maxRetries: 0,
       response_format: { type: "json_object" },
-      messages: buildSuggestionMessages({ role, ask: req.body?.ask, reply, context: req.body?.context, capabilities, notTaught }),
+      messages: buildSuggestionMessages({ role, ask: req.body?.ask, reply, context: req.body?.context, capabilities, notTaught, uploads }),
       __userId: req.user?.id, __feature: "chat_suggestions",
     });
     const ideas = shapeSuggestions(completion.choices?.[0]?.message?.content);
-    res.json({ success: true, suggestions: chip ? [chip, ...ideas.filter((x) => !/teaching guide/i.test(x))].slice(0, 3) : ideas });
+    res.json({ success: true, suggestions: fixed.length ? [...fixed, ...ideas.filter((x) => !isFixed(x))].slice(0, 3) : ideas });
   } catch (e) {
     console.warn("[chat/suggestions] none this time:", String(e?.message || e).slice(0, 120));
-    res.json({ success: true, suggestions: chip ? [chip] : [] });
+    res.json({ success: true, suggestions: fixed });
   }
 });
 
@@ -4157,6 +4161,22 @@ router.post("/agent", async (req, res) => {
     ]);
     const protegeCtx = taught ? `\n\n${await loadDoctrine("policies/PROTEGE.md")}${renderTaughtContext(taught)}` : "";
     // Messages from other learners' agents waiting for this one.
+    // Files this turn is saving to the Library (§7.17, D51): the reply says where, in one clause.
+    const ingest = role === "student" && /^[0-9a-f-]{36}$/i.test(String(req.body?.ingestId || ""))
+      ? (await db.schema("edu").from("material_ingests").select("id, folder_name, doc_kind, state").eq("id", req.body.ingestId).eq("user_id", req.user.id).maybeSingle().catch(() => ({ data: null }))).data
+      : null;
+    // The reply's trace and meta (previews, materials, the upload's card), and the upload pointed at it.
+    const saveTurn = async (messageId) => {
+      const meta = { ...(previewMetaFrom(prepared.toolExecutions) || {}), ...(ingest ? { ingest: { id: ingest.id } } : {}) };
+      await saveMessageTrace({ messageId, userId: req.user.id, trace: traceBlocks, meta: Object.keys(meta).length ? meta : null });
+      if (ingest && messageId) {
+        await db.schema("edu").from("material_ingests").update({ chat_message_id: messageId, chat_session_id: conversationId, updated_at: new Date().toISOString() })
+          .eq("id", ingest.id).eq("user_id", req.user.id).then(() => {}, () => {});
+      }
+    };
+    const ingestCtx = ingest && ingest.state !== "undone"
+      ? `\n\n## The learner's upload\nThe file(s) they attached are being saved to their Library${ingest.folder_name ? ` in the folder "${ingest.folder_name}"` : ""} (private to them) and read in the background. Say so in one short clause — the app shows the folder with an Undo, so don't repeat its details or any ids. Answer from what you can read now; if the file isn't readable yet, say you'll be able to work on it once it's read.`
+      : "";
     const inboxCtx = role === "student" && agentNetworkEnabled
       ? (await inboxBrief(req.user.id).catch(() => "")) + (await buddyBrief(req.user.id).catch(() => ""))
       : "";
@@ -4224,7 +4244,7 @@ router.post("/agent", async (req, res) => {
       renderRelevantMemory(relevantMemories) +
       renderScratchpad(conversation?.scratchpad) +
       (goalsCtx || "") +
-      protegeCtx + inboxCtx + selfToolCtx + draftsCtx +
+      protegeCtx + inboxCtx + ingestCtx + selfToolCtx + draftsCtx +
       (syllabusCtx ? `\n\n${syllabusCtx}` : "") +
       (pastCtx ? `\n\n${pastCtx}` : "") +
       (curriculumCtx ? `\n\n${curriculumCtx}` : "") +
@@ -4377,18 +4397,18 @@ router.post("/agent", async (req, res) => {
             memories: safeMemoryUpdates(userMessage),
           });
           turnSaved = true;
-          await saveMessageTrace({ messageId: persisted?.assistantMessageId, userId: req.user.id, trace: traceBlocks, meta: previewMetaFrom(prepared.toolExecutions) });
+          await saveTurn(persisted?.assistantMessageId);
         } catch (persistError) {
           // The reply already happened — never lose the transcript to a
           // durable-write hiccup. Fall back to the plain two-row append.
           console.error("[/chat/agent] durable persist failed — appending basic transcript:", persistError.message);
           await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply })
-            .then(async (saved) => { turnSaved = true; await saveMessageTrace({ messageId: saved?.assistantMessageId, userId: req.user.id, trace: traceBlocks, meta: previewMetaFrom(prepared.toolExecutions) }); })
+            .then(async (saved) => { turnSaved = true; await saveTurn(saved?.assistantMessageId); })
             .catch((e) => console.error("[/chat/agent] basic transcript append failed:", e.message));
         }
       } else {
         await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply })
-          .then(async (saved) => { turnSaved = true; await saveMessageTrace({ messageId: saved?.assistantMessageId, userId: req.user.id, trace: traceBlocks, meta: previewMetaFrom(prepared.toolExecutions) }); })
+          .then(async (saved) => { turnSaved = true; await saveTurn(saved?.assistantMessageId); })
           .catch((e) => console.error("[/chat/agent] basic transcript append failed:", e.message));
       }
     } else if (!warnedUnsavedTurn) {

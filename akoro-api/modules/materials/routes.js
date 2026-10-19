@@ -1,0 +1,188 @@
+/**
+ * modules/materials/routes.js — the `material_ingest` workflow (Grand Plan
+ * §7.17.2, D51–D54): a file the learner drops into Agent Chat is saved to
+ * their Library, in a folder the protégé picks or creates.
+ *
+ *   POST /api/agent/materials/ingest                { names, ask, chatSessionId?, replaces? }
+ *        → classify, pick/create the folder → the ingest (state received)
+ *   POST /api/agent/materials/ingest/:id/records    { recordIds }
+ *        → the uploaded records go into the folder → filed
+ *   POST /api/agent/materials/ingest/:id/progress   { state: extracting|ready|failed, pages?, error? }
+ *   POST /api/agent/materials/ingest/:id/undo       → removes exactly what it made → undone
+ *   GET  /api/agent/materials/ingest/:id
+ *
+ * The bytes go up the way a Library upload does (presign → PUT → POST
+ * /api/records) and the uploader's browser runs the same extraction (hanji
+ * for scans) — this module only owns the folder, the state and the Undo.
+ * Folders made here are private (D53); every move is checked against the
+ * workflow definition (an unlisted move answers 409).
+ */
+import { Router } from "express";
+import db from "../../db.js";
+import { authenticateToken } from "../auth/routes.js";
+import { openai } from "../../lib/aiModel.js";
+import { removeRecordFile } from "../records/lib/storage.js";
+import { assertTransition, TransitionError } from "../workflows/definition.js";
+import {
+  INGEST_LIMITS, ingestWorkflow, classifyMessages, classifySchema, folderItemFor, folderNameFor, guessKind, ingestToApi, shapeClassification,
+} from "./ingestCore.js";
+
+const router = Router();
+router.use(authenticateToken);
+const edu = () => db.schema("edu");
+const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+const UUID = /^[0-9a-f-]{36}$/i;
+const MAX_FOLDERS = 50;
+const now = () => new Date().toISOString();
+
+async function loadOwn(id, userId) {
+  if (!UUID.test(String(id))) return null;
+  const { data } = await edu().from("material_ingests").select("*").eq("id", id).eq("user_id", userId).maybeSingle();
+  return data || null;
+}
+
+/** Move the ingest, checked against the definition and pinned to its current state. */
+async function move(row, to, patch = {}) {
+  assertTransition(ingestWorkflow, row.state, to);
+  const { data, error } = await edu().from("material_ingests").update({ ...patch, state: to, updated_at: now() })
+    .eq("id", row.id).eq("state", row.state).select("*").maybeSingle();
+  if (error) throw error;
+  if (!data) throw new TransitionError("The upload changed meanwhile — refresh and try again.", { from: row.state, to });
+  return data;
+}
+
+/** Classify from names + the learner's words: a small capped call, the platform's (D46); a guess if it fails. */
+async function classify(names, ask, userId) {
+  const fallback = guessKind({ names, ask });
+  try {
+    const res = await openai.chat.completions.create({
+      __role: "background", messages: classifyMessages({ names, ask }), temperature: 0, max_tokens: 80,
+      response_format: classifySchema(),
+      __payer: "platform", __feature: "material_ingest", __userId: userId, __timeoutMs: 8_000, __maxRetries: 0,
+    });
+    return shapeClassification(res?.choices?.[0]?.message?.content, fallback);
+  } catch (error) {
+    console.warn("[materials] classify fell back to the guess:", String(error?.message || error).slice(0, 120));
+    return fallback;
+  }
+}
+
+/** An existing folder with this name (any case), else a new private one. → { id, name, created } | null */
+async function folderFor(userId, name) {
+  const { data: mine } = await edu().from("library_folders").select("id, name").eq("user_id", userId).limit(MAX_FOLDERS);
+  const same = (mine || []).find((f) => f.name.toLowerCase() === name.toLowerCase());
+  if (same) return { id: same.id, name: same.name, created: false };
+  if ((mine || []).length >= MAX_FOLDERS) return null;   // at the cap: the files are still saved, just unfiled
+  const { data, error } = await edu().from("library_folders")
+    .insert({ user_id: userId, name, description: "Saved from Agent Chat", visibility: "private" }).select("id, name").single();
+  if (error) {
+    // A race on the unique name: the other request made it — use that one.
+    const { data: again } = await edu().from("library_folders").select("id, name").eq("user_id", userId).ilike("name", name).maybeSingle();
+    return again ? { id: again.id, name: again.name, created: false } : null;
+  }
+  return { id: data.id, name: data.name, created: true };
+}
+
+router.post("/ingest", asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const names = (Array.isArray(req.body?.names) ? req.body.names : []).map((n) => String(n || "").trim().slice(0, INGEST_LIMITS.NAME)).filter(Boolean).slice(0, INGEST_LIMITS.FILES);
+  if (!names.length) return res.status(400).json({ success: false, message: "names: at least one file name is required." });
+  const ask = String(req.body?.ask || "").slice(0, INGEST_LIMITS.ASK);
+  let chatSessionId = UUID.test(String(req.body?.chatSessionId || "")) ? req.body.chatSessionId : null;
+  if (chatSessionId) {
+    const { data: chat } = await db.from("chat_sessions").select("id").eq("id", chatSessionId).eq("user_id", userId).maybeSingle();
+    if (!chat) chatSessionId = null;
+  }
+  // "Save it again" after an Undo: the new upload takes over the old one's chat message.
+  const replaced = req.body?.replaces ? await loadOwn(req.body.replaces, userId) : null;
+  const kind = await classify(names, ask, userId);
+  const folderName = folderNameFor(kind);
+  const folder = await folderFor(userId, folderName);
+  const { data, error } = await edu().from("material_ingests").insert({
+    user_id: userId, chat_session_id: chatSessionId, names, state: "received",
+    folder_id: folder?.id || null, folder_name: folder?.name || null, folder_created: !!folder?.created,
+    doc_kind: kind.kind, subject: kind.subject,
+    ...(replaced?.state === "undone" && replaced.chat_message_id ? { chat_message_id: replaced.chat_message_id, chat_session_id: replaced.chat_session_id } : {}),
+  }).select("*").single();
+  if (error) throw error;
+  if (data.chat_message_id) {
+    const { data: msg } = await db.from("chat_messages").select("meta").eq("id", data.chat_message_id).eq("user_id", userId).maybeSingle();
+    if (msg) await db.from("chat_messages").update({ meta: { ...(msg.meta || {}), ingest: { id: data.id } } }).eq("id", data.chat_message_id).eq("user_id", userId);
+  }
+  res.status(201).json({ success: true, data: ingestToApi(data) });
+}));
+
+router.post("/ingest/:id/records", asyncHandler(async (req, res) => {
+  const row = await loadOwn(req.params.id, req.user.id);
+  if (!row) return res.status(404).json({ success: false, message: "Upload not found." });
+  const ids = [...new Set((Array.isArray(req.body?.recordIds) ? req.body.recordIds : []).map(String))].filter((x) => UUID.test(x)).slice(0, INGEST_LIMITS.FILES);
+  if (!ids.length) return res.status(400).json({ success: false, message: "recordIds: at least one record is required." });
+  const { data: records } = await edu().from("records").select("id, name, mime").eq("user_id", req.user.id).in("id", ids);
+  if ((records || []).length !== ids.length) return res.status(403).json({ success: false, message: "One of those records isn't yours." });
+  if (row.folder_id) {
+    const { error } = await edu().from("library_folder_items")
+      .upsert(records.map((r) => ({ folder_id: row.folder_id, user_id: req.user.id, ...folderItemFor(r, row.doc_kind) })), { onConflict: "folder_id,item_type,item_ref" });
+    if (error) throw error;
+  }
+  const recordIds = [...new Set([...(row.record_ids || []), ...ids])];
+  const next = row.state === "received" ? await move(row, "filed", { record_ids: recordIds })
+    : (await edu().from("material_ingests").update({ record_ids: recordIds, updated_at: now() }).eq("id", row.id).select("*").single()).data;
+  res.json({ success: true, data: ingestToApi(next) });
+}));
+
+const PROGRESS = new Set(["extracting", "ready", "failed"]);
+router.post("/ingest/:id/progress", asyncHandler(async (req, res) => {
+  const row = await loadOwn(req.params.id, req.user.id);
+  if (!row) return res.status(404).json({ success: false, message: "Upload not found." });
+  const to = String(req.body?.state || "");
+  if (!PROGRESS.has(to)) return res.status(400).json({ success: false, message: "state: extracting, ready or failed." });
+  const patch = {};
+  if (Number.isFinite(Number(req.body?.pages))) patch.pages = Math.max(0, Math.min(2000, Math.round(Number(req.body.pages))));
+  if (to === "failed") patch.error = String(req.body?.error || "Couldn't read it.").slice(0, 300);
+  if (to !== "failed") patch.error = null;
+  if (row.state === to) {   // a repeat (a page count update) is not a move
+    const { data } = await edu().from("material_ingests").update({ ...patch, updated_at: now() }).eq("id", row.id).select("*").single();
+    return res.json({ success: true, data: ingestToApi(data) });
+  }
+  res.json({ success: true, data: ingestToApi(await move(row, to, patch)) });
+}));
+
+router.post("/ingest/:id/undo", asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const row = await loadOwn(req.params.id, userId);
+  if (!row) return res.status(404).json({ success: false, message: "Upload not found." });
+  if (row.state === "undone") return res.json({ success: true, data: ingestToApi(row) });
+  assertTransition(ingestWorkflow, row.state, "undone");
+  const ids = (row.record_ids || []).map(String);
+  if (ids.length) {
+    // Out of every folder (a learner may have filed it elsewhere too), then the records and their files.
+    await edu().from("library_folder_items").delete().eq("user_id", userId).eq("item_type", "record").in("item_ref", ids);
+    const { data: records } = await edu().from("records").select("id, file_key").eq("user_id", userId).in("id", ids);
+    await edu().from("records").delete().eq("user_id", userId).in("id", ids);
+    for (const r of records || []) void removeRecordFile(r.file_key);
+  }
+  // The folder goes only if this upload made it and nothing else is in it now.
+  let folderRemoved = false;
+  if (row.folder_id && row.folder_created) {
+    const { count } = await edu().from("library_folder_items").select("id", { count: "exact", head: true }).eq("folder_id", row.folder_id);
+    if (!count) {
+      await edu().from("library_folders").delete().eq("id", row.folder_id).eq("user_id", userId);
+      folderRemoved = true;
+    }
+  }
+  const done = await move(row, "undone", folderRemoved ? { folder_id: null } : {});
+  res.json({ success: true, data: { ...ingestToApi(done), folderRemoved } });
+}));
+
+router.get("/ingest/:id", asyncHandler(async (req, res) => {
+  const row = await loadOwn(req.params.id, req.user.id);
+  if (!row) return res.status(404).json({ success: false, message: "Upload not found." });
+  res.json({ success: true, data: ingestToApi(row) });
+}));
+
+router.use((error, _req, res, next) => {
+  if (error instanceof TransitionError || error?.code === "invalid_state_transition") return res.status(409).json({ success: false, code: "invalid_state_transition", message: error.message });
+  next(error);
+});
+
+export default router;

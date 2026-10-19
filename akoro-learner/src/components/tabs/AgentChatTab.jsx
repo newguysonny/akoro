@@ -33,6 +33,8 @@ import { useNavigate } from 'react-router-dom';
 import AgentCards from '../network/AgentCards.jsx';
 import ChallengeRequestCards from '../network/ChallengeRequestCards.jsx';
 import ConfirmChangeCard from './agentChat/ConfirmChangeCard.jsx';
+import IngestCard from './agentChat/IngestCard.jsx';
+import { fileIngest, getIngest, isLibraryFile, startIngest, undoIngest } from '../../lib/chatUploads.js';
 import { useVoiceAnswer } from '../../hooks/useVoiceAnswer.js';
 import { useSpeakReply } from '../../hooks/useSpeakReply.js';
 
@@ -162,7 +164,15 @@ function AgentChatTab({
     return () => { alive = false; };
   }, []);
   const [researchMode, setResearchMode] = useState(false);
-  const [attachments,  setAttachments]  = useState([]);   // {id, file, name, size, previewUrl}
+  const [attachments,  setAttachments]  = useState([]);
+  // Chat uploads saved to the Library (§7.17): ingest id → its state; the files stay here for "Save it again".
+  const [ingests, setIngests] = useState({});
+  const ingestFilesRef = useRef({});
+  const putIngest = useCallback((x) => {
+    if (!x?.id) return;
+    // An Undo is final for that upload: a late progress step never revives it.
+    setIngests((prev) => (prev[x.id]?.state === 'undone' && x.state !== 'undone') ? prev : { ...prev, [x.id]: { ...prev[x.id], ...x } });
+  }, []);   // {id, file, name, size, previewUrl}
   const [attachError,  setAttachError]  = useState("");
   const [statusLabel,  setStatusLabel]  = useState("");   // streaming phase ("Searching the syllabus…")
   // A turn streams as interleaved thinking / tool / text steps (Grand Plan
@@ -301,6 +311,7 @@ function AgentChatTab({
     ...(m.role !== "user" && Array.isArray(m.trace) ? { blocks: blocksFromSavedTrace(m.trace) } : {}),
     ...(m.role !== "user" && m.meta?.proposal ? { proposal: m.meta.proposal } : {}),
     ...(m.role !== "user" && Array.isArray(m.meta?.materials) && m.meta.materials.length ? { materials: cleanMaterials(m.meta.materials) } : {}),
+    ...(m.role !== "user" && m.meta?.ingest?.id ? { ingestId: m.meta.ingest.id } : {}),
   });
 
   const openSession = async (id) => {
@@ -653,6 +664,23 @@ function AgentChatTab({
     });
   };
 
+  // "Save it again" after an Undo: a fresh upload that takes over the same message.
+  const saveAgain = async (oldId) => {
+    const files = ingestFilesRef.current[oldId];
+    if (!files?.length) return;
+    const next = await startIngest({ files, ask: '', chatSessionId: sessionIdRef.current, replaces: oldId }).catch(() => null);
+    if (!next) return;
+    ingestFilesRef.current[next.id] = files;
+    putIngest(next);
+    setMessages((prev) => prev.map((m) => (m.ingestId === oldId ? { ...m, ingestId: next.id } : m)));
+    await fileIngest(next, files, putIngest);
+  };
+  // A reopened chat: each saved reply's upload card reads its current state.
+  useEffect(() => {
+    const missing = [...new Set(messages.map((m) => m.ingestId).filter((id) => id && !ingests[id]))];
+    for (const id of missing.slice(0, 10)) getIngest(id).then(putIngest).catch(() => {});
+  }, [messages]);   // eslint-disable-line react-hooks/exhaustive-deps
+
   const sendMessage=async(overrideText)=>{
     // Attachments can be sent with an empty message — a friendly default text
     // stands in so the model (and the transcript) knows what's being asked.
@@ -679,6 +707,14 @@ function AgentChatTab({
       setLoading(false); setRunning(false);
       return;
     }
+    // Files go to the Library too (D51): the folder is picked before the turn, the upload and reading run beside it.
+    const libFiles = sentAttachments.map((a) => a.file).filter(isLibraryFile);
+    const ingest = libFiles.length ? await startIngest({ files: libFiles, ask: text, chatSessionId: sid }).catch(() => null) : null;
+    if (ingest) {
+      putIngest(ingest);
+      ingestFilesRef.current[ingest.id] = libFiles;
+      void fileIngest(ingest, libFiles, putIngest);
+    }
     const mode = thinkMode ? "think" : researchMode ? "research" : "default";
     const statusKey = { grounding:'agent.status_grounding', attachments:'agent.status_attachments', thinking:'agent.status_thinking', synthesis:'agent.status_synthesis' };
     const attachmentsPayload = await Promise.all(sentAttachments.map(async (a) => ({
@@ -693,6 +729,7 @@ function AgentChatTab({
     const modelPick = mode === "default" && chatModelId ? { model: chatModelId } : {};
     const payload = { message: text, history: history.slice(-24), agentName, mode, ...modelPick,
       conversationId: sid, turnId,
+      ...(ingest ? { ingestId: ingest.id } : {}),
       ...(devView ? { developer: true } : {}),
       ...(attachmentsPayload.length ? { attachments: attachmentsPayload } : {}) };
     const t2=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
@@ -702,7 +739,7 @@ function AgentChatTab({
       if(started) return;
       started=true;
       setLoading(false);   // hide typing dots — the bubble now carries the text
-      setMessages(prev=>[...prev,{id:replyId,from:"agent",text:"",time:t2,thinking:"",phase:"thinking",blocks:[]}]);
+      setMessages(prev=>[...prev,{id:replyId,from:"agent",text:"",time:t2,thinking:"",phase:"thinking",blocks:[],...(ingest?{ingestId:ingest.id}:{})}]);
     };
     // Every step of the turn (thinking, tool, text between steps) folds into
     // the reply's ordered block list — interleaved as many times as it runs.
@@ -795,7 +832,7 @@ function AgentChatTab({
           finalReply = data.reply || data.response || t('agent.fallback');
           setMessages(prev=>[...prev,{id:replyId,from:"agent",text:finalReply,time:t2,
             thinking:data.thinking||"",syllabus:data.syllabus||[],pastQuestions:data.pastQuestions||[],
-            blocks:blocksFromSavedTrace(data.trace),...protegeMoves(data?.toolExecutions)}]);
+            blocks:blocksFromSavedTrace(data.trace),...protegeMoves(data?.toolExecutions),...(ingest?{ingestId:ingest.id}:{})}]);
           turnTools=data?.toolExecutions||[];
           const studyPrepSessionFallback = (data?.toolExecutions || []).find((entry) => entry?.session?.id && entry?.success)?.session || null;
           if (studyPrepSessionFallback) {
@@ -815,7 +852,8 @@ function AgentChatTab({
     // reply has arrived (it never waits on them); a failure is just no chips.
     if(finalReply && !controller?.signal.aborted){
       apiPost('/api/adaptive/chat/suggestions', { ask: text, reply: finalReply, role: 'student',
-        tools: turnTools.map((x)=>({ tool: x?.tool, topic: x?.teach?.topic || x?.guide?.teach?.topic || null })) })
+        tools: turnTools.map((x)=>({ tool: x?.tool, topic: x?.teach?.topic || x?.guide?.teach?.topic || null })),
+        ...(ingest ? { attachments: ingest.names.map((name)=>({ name, kind: ingest.kind })) } : {}) })
         .then((r)=>{
           const ideas=cleanIdeas(r?.suggestions);
           if(ideas.length) setMessages(prev=>prev.map(m=>m.id===replyId?{...m,ideas}:m));
@@ -1023,6 +1061,12 @@ function AgentChatTab({
                     <div style={{ display:"inline-flex",alignSelf:"flex-start",alignItems:"center",gap:6,margin:"0 0 6px",padding:"4px 10px",borderRadius:20,background:"rgba(232,136,74,.12)",border:"1px solid rgba(232,136,74,.4)",color:"#B45309",fontSize:11.5,fontWeight:800 }}>
                       <Icon name="ti-school" size={12}/> {t('agent.from_guide').replace('{guide}', msg.guide.name||'NaNa')}
                     </div>
+                  )}
+                  {!isMe&&msg.ingestId&&ingests[msg.ingestId]&&(
+                    <IngestCard ingest={ingests[msg.ingestId]}
+                      onOpenFolder={(id)=>navigate(`/library?folder=${encodeURIComponent(id)}`)}
+                      onUndo={async()=>{ const r=await undoIngest(msg.ingestId).catch(()=>null); if(r) putIngest(r); }}
+                      onRedo={ingestFilesRef.current[msg.ingestId] ? ()=>saveAgain(msg.ingestId) : null}/>
                   )}
                   {msg.text&&(
                     <div style={{ fontSize:14.5,lineHeight:1.55,color:"var(--ak-text)",fontWeight:500,wordBreak:"break-word" }}><RichText text={msg.text} size={14.5} lineHeight={1.55}/>{msg.phase==="answering"&&<StreamCaret/>}</div>

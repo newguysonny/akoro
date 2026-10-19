@@ -7,6 +7,8 @@
  * API and deletes it at the end.
  */
 
+import { makePdf } from './reader.mjs';
+
 const newMarker = () => `[ui-gate:${Math.random().toString(16).slice(2, 8)}]`;
 const TOTAL = 13;
 
@@ -111,6 +113,64 @@ export const scenarios = [
       await link.click();
       t.check('…which opens it in the Library', await page.waitForURL((u) => u.pathname === '/library' && u.searchParams.get('record') === record.id, { timeout: 15_000 }).then(() => true, () => false),
         { actual: page.url() });
+    },
+  },
+  {
+    name: 'chat.upload_saved',
+    description: "A file dropped into Agent Chat is saved to a private Library folder named from it, read, and the reply's card says so; the first chip is the study step; Undo removes it.",
+    async run(t) {
+      const { page, context } = t;
+      const marker = newMarker();
+      const tag = marker.replace(/[^a-z0-9]/gi, '').slice(-6);
+      const fileName = `WAEC Biology${tag} 2019 Paper 2.pdf`;
+      const pdf = await makePdf(context.browser());
+      t.cleanup(async () => {
+        const chats = await t.api('GET', '/api/adaptive/chat/sessions');
+        for (const c of (chats.body?.sessions || chats.body?.data || []).filter((x) => String(x.title || '').includes(tag))) await t.api('DELETE', `/api/adaptive/chat/sessions/${c.id}`);
+        const recs = await t.api('GET', '/api/records');
+        for (const r of (recs.body?.data || []).filter((x) => String(x.name || '').includes(tag))) await t.api('DELETE', `/api/records/${r.id}`);
+      });
+
+      await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
+      await page.getByRole('button', { name: 'Chats', exact: true }).first().click({ timeout: 30_000 });
+      await page.getByRole('button', { name: /New chat/ }).first().click();
+      await page.locator('input[type=file]').first().setInputFiles({ name: fileName, mimeType: 'application/pdf', buffer: pdf });
+      const box = page.getByRole('textbox', { name: /^Ask / }).last();
+      await box.fill(`Help me prepare for Biology${tag} with this`);
+      await box.press('Enter');
+
+      const card = page.locator('[data-ingest]').last();
+      t.check('the reply shows the upload card', await card.waitFor({ timeout: 60_000 }).then(() => true, () => false));
+      const ready = await page.locator('[data-ingest="ready"]').last().waitFor({ timeout: 120_000 }).then(() => true, () => false);
+      const text = (await card.innerText().catch(() => '')).replace(/\s+/g, ' ');
+      t.note(`card: ${text}`);
+      t.check('…saved to the Library in a past-papers folder, private', /Saved to Library › .*Past papers/.test(text) && /Only you can see this/.test(text), { actual: text });
+      t.check('…and read', ready && /Read/.test(text), { actual: text });
+      const chips = page.getByRole('button', { name: 'Find the topics that keep coming up' });
+      t.check('the first chip is the study step', await chips.first().waitFor({ timeout: 30_000 }).then(() => true, () => false));
+
+      // Saved with the reply: the record is in a private folder.
+      const recs = (await t.api('GET', '/api/records')).body?.data || [];
+      const rec = recs.find((r) => r.name === fileName);
+      t.check('the file is a Library record', !!rec);
+      const folders = (await t.api('GET', '/api/records/folders')).body?.data || [];
+      let folder = null;
+      for (const f of folders.filter((x) => /past papers$/i.test(x.name))) {
+        const items = (await t.api('GET', `/api/records/folders/${f.id}/items`)).body?.data || [];
+        if (items.some((it) => it.itemRef === rec?.id)) { folder = f; break; }
+      }
+      t.check('…in a private past-papers folder', folder?.visibility === 'private', { actual: folder });
+
+
+      // Undo: the card says so, the record is gone.
+      await card.getByRole('button', { name: 'Undo' }).click();
+      t.check('Undo shows it removed', await page.locator('[data-ingest="undone"]').last().waitFor({ timeout: 20_000 }).then(() => true, () => false));
+      const after = (await t.api('GET', '/api/records')).body?.data || [];
+      t.check('…and the record is gone', !after.some((r) => r.name === fileName));
+      if (folder) {
+        const items = (await t.api('GET', `/api/records/folders/${folder.id}/items`)).body;
+        t.check('…and out of its folder', !(items?.data || []).some((it) => it.itemRef === rec?.id));
+      }
     },
   },
   {
