@@ -410,7 +410,11 @@ export const scenarios = [
       await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
       const box = page.getByRole('textbox').last();
       await box.waitFor({ timeout: 30_000 });
-      await page.getByRole('button', { name: /New chat/i }).first().click({ timeout: 5_000 }).catch(() => {});
+      // A fresh chat: open the chats drawer, then New chat.
+      await page.getByRole('button', { name: 'Chats' }).first().click({ timeout: 10_000 }).catch(() => {});
+      await page.getByRole('button', { name: /New chat/i }).first().click({ timeout: 10_000 }).catch(() => {});
+      await page.waitForTimeout(800);
+      const readyBefore = await page.getByText(/plan is ready/).count();
       await box.fill(`Prepare me for my JSS1 Basic Science exam in 5 weeks ${marker}`);
       await t.shot('00-typed');
       await page.getByRole('button', { name: 'Send message' }).click();
@@ -422,7 +426,7 @@ export const scenarios = [
         await scroll();
         seen.thinking ||= await page.getByText(/Thinking|Thought for/).first().isVisible().catch(() => false);
         seen.pinned ||= await page.locator('[data-workflow-pinned]').isVisible().catch(() => false);
-        seen.ready ||= await page.getByText(/plan is ready/).first().isVisible().catch(() => false);
+        seen.ready ||= (await page.getByText(/plan is ready/).count()) > readyBefore;
         if (seen.ready) after += 1;
         await t.shot(String(i).padStart(2, '0'));
       }
