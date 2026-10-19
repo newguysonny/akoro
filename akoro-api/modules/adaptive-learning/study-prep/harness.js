@@ -440,6 +440,8 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     }
     const coverage = await agentCheck.coverage({ learnerId, topic: topic.label, subject: session.subject });
     if (!coverage || coverage.strength === "none") {
+      // Already found empty (the sweep and the learner's device can both try): said once.
+      if (topic.check_mode === "skipped") return { session: publicSession(session), topic: publicTopic(topic), skipped: { reason: "no_notes", next: "teach", already: true } };
       await log(session.id, topic.id, {
         eventType: "harness_decision", origin: "harness", decisionNode: "agent_check_skipped",
         facts: { topic: topic.label, notes: 0 },

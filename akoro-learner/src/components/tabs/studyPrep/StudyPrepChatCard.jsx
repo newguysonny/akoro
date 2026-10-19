@@ -187,10 +187,10 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
     const timer = setInterval(refresh, 5000);
     return () => clearInterval(timer);
   }, [counting, dueIn != null && dueIn <= 0, refresh]);
-  // The server starts a due check; if it hasn't 8 s after, this card does (inside the approved coins only — counting excludes past them).
+  // The server starts a due check (its sweep runs every 15 s); if it hasn't 25 s after, this card does (inside the approved coins only — counting excludes past them).
   const fallbackFor = useRef(null);
   useEffect(() => {
-    if (!counting || dueIn == null || dueIn > -8000) return;
+    if (!counting || dueIn == null || dueIn > -25000) return;
     const key = `${nextCheck.topicId}:${nextCheck.at}`;
     if (fallbackFor.current === key) return;
     fallbackFor.current = key;

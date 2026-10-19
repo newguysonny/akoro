@@ -422,7 +422,7 @@ export async function autoStartDueChecks({ nowMs = Date.now(), sessionId = null 
     if (Date.parse(due.at) > nowMs) continue;
     try {
       const done = await harness.startTopicPractice({ sessionId: session.id, learnerId: session.learner_id, topicId: topic.id, mode: due.mode, withinEstimateOnly: true });
-      if (done?.skipped) { skipped += 1; await sayNothingToCheck(session.id, topic.label); } else started += 1;
+      if (done?.skipped) { skipped += 1; if (!done.skipped.already) await sayNothingToCheck(session.id, topic.label); } else started += 1;
     } catch (error) {
       failedAt.set(row.id, nowMs);
       console.warn(`[study-prep] auto-start failed for topic ${row.id}: ${error?.message || error}`);

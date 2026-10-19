@@ -198,3 +198,13 @@ test("the stream: waiting is not a step; a wake's reads say what they found", ()
   assert.equal(studyPrepResultLine("session.get_state", { ok: true, result: { topics: [{ label: "Cells", status: "active", lastCheck: { correct: 3, total: 5 } }] } }), "Cells: 3 of 5 on the last check");
   assert.equal(studyPrepResultLine("defer_topic", { ok: true, result: { topic: { label: "Cells" } } }), "Cells set aside for later");
 });
+
+test("no notes is found (and said) once: a second try is quiet", async () => {
+  const { store, harness } = build({ notes: 0 });
+  const s = await activeTopic(harness);
+  const first = await harness.startTopicPractice({ sessionId: s.id, learnerId: LEARNER, topicId: "t1", mode: "diagnostic" });
+  const second = await harness.startTopicPractice({ sessionId: s.id, learnerId: LEARNER, topicId: "t1", mode: "diagnostic" });
+  assert.equal(first.skipped.already, undefined);
+  assert.equal(second.skipped.already, true);
+  assert.equal(store.events.filter((e) => e.decision_node === "agent_check_skipped").length, 1);
+});
