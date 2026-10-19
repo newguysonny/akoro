@@ -54,6 +54,9 @@ export const chatUploadFiled = {
   description: "A chat upload is filed in a private folder named from it (an existing one is reused), read, and Undo removes only what that upload made — the folder too when it made it.",
   params: { learner: { default: "@tester18" } },
   async run(ctx, p) {
+    // A gate run cut short (a redeploy mid-run) leaves its records behind: clear this test learner's first.
+    const me = await ctx.as(p.learner);
+    await ctx.db.deleteOwned("edu.records", { ownerColumn: "user_id", ownerId: me.id, filters: { name: { like: "[verify:%" } } }).catch((e) => ctx.note(`sweep skipped: ${e.message}`));
     const m = ctx.marker.replace(/[^a-z0-9]/gi, "").slice(-6);
     const subject = "Biology";
     const names = [`WAEC Biology 2019 Paper 2 ${m}.pdf`];
