@@ -86,10 +86,12 @@ async function runScenarioOnce(def, params, repeat, runId, approval, accountIds)
   const realUsers = new Set();
   const ctx = createContext({ scenario: def, sink, evidence, realUsers, runId, approval, accountIds });
   let error = null, timer;
+  // A scenario may ask for longer (deep planning, a live battle), up to 10 minutes.
+  const limitMs = Math.min(600_000, Math.max(LIMITS.runTimeoutMs, Number(def.timeoutMs) || 0));
   try {
     await Promise.race([
       def.run(ctx, params),
-      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`timed out after ${LIMITS.runTimeoutMs} ms`)), LIMITS.runTimeoutMs); }),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`timed out after ${limitMs} ms`)), limitMs); }),
     ]);
   } catch (e) {
     error = e;

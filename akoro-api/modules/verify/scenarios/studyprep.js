@@ -82,6 +82,8 @@ export const practiceChargedOnce = {
 
 export const generatedOutline = {
   name: "studyprep.generated_outline", area: "study-prep", risk: "write",
+  // Two synchronous planning runs of up to 10 thinking decisions each.
+  timeoutMs: 300_000,
   description: "With no syllabus for the class + subject, planning drafts an AI outline, labels the plan as such, and the next session reuses the same outline.",
   params: { learner: { default: "@tester14" }, subject: { default: "Agricultural Science" }, classLevel: { default: "JSS1" } },
   async run(ctx, p) {
@@ -130,6 +132,8 @@ export const generatedOutline = {
 // works even where AKORO_STUDY_PREP_AGENT_CHECK=false switches it off.
 export const agentCheckBattle = {
   name: "studyprep.agent_check_battle", area: "study-prep", risk: "write", regression: false,
+  // A live battle: the protégé answers and Sergeant judges each question.
+  timeoutMs: 240_000,
   description: "An Agent Check runs as a real battle: one 2-coin charge, the protégé answers from the learner's notes, Sergeant rules, the result is scored as the agent's and posted in chat.",
   params: { learner: { default: "@tester17" }, subject: { default: "Biology" }, classLevel: { default: "SS1" } },
   async run(ctx, p) {
