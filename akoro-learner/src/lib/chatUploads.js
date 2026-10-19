@@ -5,10 +5,13 @@
  * browser (hanji for scans). The API's material_ingest workflow owns the
  * folder, the state and the Undo.
  *
- *   startIngest({ files, ask, chatSessionId, replaces })   → the ingest (folder picked)
+ *   startIngest({ files, ask, chatSessionId, replaces })   → [ingest…] — one per folder the files sort into
+ *   filesOf(ingest, files)                                  the files one of them holds
  *   fileIngest(ingest, files, onUpdate)                     uploads, files, reads — onUpdate(ingest) on each step
  *   structureIngest(id)                                     reads it into topics (+ a past paper's questions) → { data, message }
- *   undoIngest(id) · getIngest(id)
+ *   chooseFolder(id, folderId) · chooseSubject(id, subject|null)   the card's questions answered
+ *   undoIngest(id) (→ Recently deleted, 30 days) · restoreIngest(id) · getIngest(id)
+ *   chatFiles(chatId)                                       "Files in this chat"
  */
 import { apiGet, apiPost } from '../services/api.js';
 import { createRecord, extractStoredRecordText, getRecordExtraction, presignRecordUpload, putFileTo } from '../services/recordsApi.js';
@@ -24,9 +27,13 @@ export const isLibraryFile = (f) => !!f && (/^(image|audio|video)\//.test(f.type
 
 export async function startIngest({ files, ask, chatSessionId, replaces = null }) {
   const names = files.map((f) => f.name).slice(0, 5);
-  const d = await apiPost(BASE, { names, ask, chatSessionId, ...(replaces ? { replaces } : {}) }, { timeout: 12000 });
-  return d?.data ?? null;
+  const d = await apiPost(BASE, { names, ask, chatSessionId, ...(replaces ? { replaces } : {}) }, { timeout: 15000 });
+  if (Array.isArray(d?.ingests) && d.ingests.length) return d.ingests;
+  return d?.data ? [d.data] : [];
 }
+
+/** The files one upload of the batch holds (by their place in the message). */
+export const filesOf = (ingest, files) => (Array.isArray(ingest?.fileIndexes) ? ingest.fileIndexes.map((i) => files[i]).filter(Boolean) : files);
 
 const progress = (id, state, extra = {}) => apiPost(`${BASE}/${id}/progress`, { state, ...extra }).then((d) => d?.data ?? null);
 
@@ -82,4 +89,8 @@ export const addSimilar = (id, keys) => apiPost(`${BASE}/${id}/similar/add`, { k
 export const dismissSimilar = (id) => apiPost(`${BASE}/${id}/similar/dismiss`, {}).then((d) => d?.data ?? null);
 
 export const undoIngest = (id) => apiPost(`${BASE}/${id}/undo`, {}).then((d) => d?.data ?? null);
+export const restoreIngest = (id) => apiPost(`${BASE}/${id}/restore`, {}).then((d) => d?.data ?? null);
+export const chooseFolder = (id, folderId) => apiPost(`${BASE}/${id}/folder`, { folderId }).then((d) => d?.data ?? null);
+export const chooseSubject = (id, subject) => apiPost(`${BASE}/${id}/subject`, { subject }).then((d) => d?.data ?? null);
+export const chatFiles = (chatId) => apiGet(`/api/agent/materials/chat/${chatId}`).then((d) => d?.files || []);
 export const getIngest = (id) => apiGet(`${BASE}/${id}`).then((d) => d?.data ?? null);
