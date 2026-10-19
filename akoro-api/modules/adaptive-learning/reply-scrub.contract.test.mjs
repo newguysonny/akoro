@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { scrubInternalIds } from "./reply-scrub.js";
+import { ensureNotTaughtOpener, scrubInternalIds } from "./reply-scrub.js";
 
 const chat = await readFile(new URL("./chat.js", import.meta.url), "utf8");
 
@@ -16,5 +16,15 @@ test("internal ids the model saw in tool results never reach the learner", () =>
 });
 
 test("wired into every Agent Chat reply before it is shown or saved", () => {
-  assert.match(chat, /reply = scrubInternalIds\(reply\);\n\s*if \(!reply\.trim\(\)\)/);
+  assert.match(chat, /reply = scrubInternalIds\(reply\);\n\s*if \(!stopped\(\)\) reply = ensureNotTaughtOpener\(reply, prepared\.toolExecutions\);\n\s*if \(!reply\.trim\(\)\)/);
+});
+
+test("Teach me given: the reply opens by saying it wasn't taught, unless it already does", () => {
+  const asked = [{ tool: "ask_to_be_taught", success: true, input: { topic: "Photosynthesis", subject: "Basic Science" }, result: { asked: true, topic: "Photosynthesis" } }];
+  assert.equal(ensureNotTaughtOpener("The **Teach me** button is below.", asked), "You haven't taught me Photosynthesis yet!\n\nThe **Teach me** button is below.");
+  const already = "You haven't taught me photosynthesis yet! Tap Teach me.";
+  assert.equal(ensureNotTaughtOpener(already, asked), already);
+  assert.equal(ensureNotTaughtOpener("I wasn't taught that one yet — tap Teach me.", asked), "I wasn't taught that one yet — tap Teach me.");
+  assert.equal(ensureNotTaughtOpener("Here are your tasks.", [{ tool: "list_tasks", success: true }]), "Here are your tasks.");
+  assert.equal(ensureNotTaughtOpener("x", [{ tool: "ask_to_be_taught", success: false, input: { topic: "Osmosis" } }]), "x");
 });

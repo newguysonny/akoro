@@ -20,3 +20,20 @@ export function scrubInternalIds(text) {
   s = s.replace(new RegExp(`\\s*(?:\\bid\\s+)?\`?${UUID}\`?`, "gi"), "");
   return s.replace(/\s*[—–-]\s*([.,;:!?])/g, "$1").replace(/[ \t]+([.,;:!?])/g, "$1").replace(/\n{3,}/g, "\n\n").trim();
 }
+
+/**
+ * A turn that gave the learner Teach me (ask_to_be_taught ran) opens by saying
+ * the protégé wasn't taught it — PROTEGE.md asks for that line and some models
+ * drop it once the button is there. Code adds it when the reply doesn't say so.
+ */
+const SAYS_NOT_TAUGHT = /\b(haven['’]?t|have not|not yet|wasn['’]?t|never)\b[^.]{0,40}\b(taught|teach)/i;
+
+export function ensureNotTaughtOpener(reply, toolExecutions = []) {
+  const text = String(reply ?? "");
+  const asked = (Array.isArray(toolExecutions) ? toolExecutions : [])
+    .find((t) => t?.tool === "ask_to_be_taught" && t.success !== false && (t.input?.topic || t.result?.topic));
+  if (!asked || SAYS_NOT_TAUGHT.test(text)) return text;
+  const topic = String(asked.result?.topic || asked.input?.topic).replace(/\s+/g, " ").trim().slice(0, 80);
+  const opener = `You haven't taught me ${topic} yet!`;
+  return text.trim() ? `${opener}\n\n${text.trim()}` : opener;
+}

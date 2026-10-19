@@ -55,6 +55,12 @@ export const proactiveInChat = {
       .filter((r) => Date.now() - new Date(r.started_at).getTime() < 24 * 3600 * 1000);
     for (const r of recent) await ctx.db.deleteOwned("edu.autonomy_runs", { ownerColumn: "user_id", ownerId: me.id, filters: { id: r.id } });
     if (recent.length) ctx.note(`cleared ${recent.length} recent planner run(s) on the test learner`);
+    // …and the once-a-day limit counts anything posted to it in the last 24h —
+    // earlier gate runs and the planner's own background runs included.
+    const postedToday = (await ctx.db.rows("edu.agent_proposals", { user_id: me.id }, { columns: "id, posted_at", limit: 100 }))
+      .filter((r) => r.posted_at && Date.now() - new Date(r.posted_at).getTime() < 24 * 3600 * 1000);
+    for (const r of postedToday) await ctx.db.deleteOwned("edu.agent_proposals", { ownerColumn: "user_id", ownerId: me.id, filters: { id: r.id } });
+    if (postedToday.length) ctx.note(`cleared ${postedToday.length} suggestion(s) posted to the test learner in the last day`);
     // …and a full Suggestions list (≤ 5 open) would make the planner stop: close
     // the test learner's leftover proposals through the inbox, as the learner would.
     const open = ((await ctx.http({ as: p.learner, path: "/api/agent/proposals/inbox" })).body?.data || []).filter((it) => it.source === "planner");

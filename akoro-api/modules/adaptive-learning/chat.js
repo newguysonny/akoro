@@ -21,7 +21,7 @@ import { buildSuggestionMessages, notTaughtFrom, guideChip, uploadsFrom, uploadC
 import { resolveAskTargetFor } from "../records/access.js";
 import { materialsFrom, collectMaterials } from "./chat-materials.js";
 import { renderRelevantMemory } from "./chat-memory.js";
-import { scrubInternalIds } from "./reply-scrub.js";
+import { ensureNotTaughtOpener, scrubInternalIds } from "./reply-scrub.js";
 import { recurringTopics } from "../materials/structureCore.js";
 import { resolveMaterialsFolder } from "../materials/studySource.js";
 import { akoroMaterialFor } from "../materials/akoroMaterial.js";
@@ -4451,6 +4451,7 @@ router.post("/agent", async (req, res) => {
     if (stopped()) reply = reply.trim() ? `${reply.trim()}\n\n${STOPPED_REPLY}` : STOPPED_REPLY;
     // Internal ids the model saw in tool results never reach the learner (reply-scrub.js).
     reply = scrubInternalIds(reply);
+    if (!stopped()) reply = ensureNotTaughtOpener(reply, prepared.toolExecutions);
     if (!reply.trim()) reply = "I'm here to help with your studies — ask me anything about your subjects!";
     const traceBlocks = trace.blocks();
 

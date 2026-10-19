@@ -241,3 +241,14 @@ test("a follow-up can add a case study: existing passages kept, the new scenario
   assert.equal(paper.questions[1].passage, 1);
   assert.deepEqual(changes, { 1: "new" });
 });
+
+test("a follow-up that makes a question harder gets it rewritten, not just new options", async () => {
+  const { unchangedRewrites } = await import("./questionPaper.js");
+  const base = { questions: [{ q: "Solve for x: 3x + 5 = 20" }, { q: "Which of these is a linear equation in one variable?" }, { q: "c" }, { q: "d" }, { q: "e" }] };
+  const ask = "Make question 2 harder, and change question 5 into a fill in the gap question.";
+  assert.equal(unchangedRewrites(ask, base, base).length, 1);
+  assert.match(unchangedRewrites(ask, base, base)[0], /^Question 2 was to be rewritten/);
+  assert.deepEqual(unchangedRewrites(ask, base, { questions: [{ q: "Solve 2(3x − 4) = 5x + 1" }] }), []);
+  assert.deepEqual(unchangedRewrites("Give question 2 5 marks.", base, base), []);
+  assert.equal(unchangedRewrites("Reword Q1", base, base).length, 1);
+});

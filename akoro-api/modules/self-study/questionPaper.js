@@ -276,6 +276,7 @@ export function buildRevisionMessages({ topic, subject, classLevel = null, reque
   const opts = plan?.options || Math.max(4, ...(base.questions || []).map((q) => (Array.isArray(q.options) ? q.options.length : 0)));
   const system = [
     "You revise a school assignment the teacher already has. Change ONLY what the teacher's follow-up asks; every other question stays exactly as it is.",
+    "A question you are asked to make harder, easier or reworded gets new wording — a different question at that level, not the same question with new options.",
     "The teacher counts questions from 1, as printed: \"question 2\" or \"Q2\" is the one with \"number\": 2 (its index is 1). \"from\" is always the index.",
     'Return the full new list in order. For a question that stays the same return just { "from": <its index> }. ' +
       'For a question you change return { "from": <its index>, "changed": true, ...all its fields }. For a new question return all its fields with no "from". ' +
@@ -580,6 +581,27 @@ export async function draftPaper({ chat, topic, subject, classLevel, request, pl
   return { paper: best.paper, warning: problems.length ? problems.join(" ") : null, plan };
 }
 
+/**
+ * The questions a follow-up asks to rewrite ("make question 2 harder", "reword
+ * Q3") that came back with the same wording — a harder question is a new
+ * question, not new options under the old one. → problems[]
+ */
+const REWRITE = /\b(harder|easier|simpler|more (?:difficult|challenging)|less (?:difficult|challenging)|tougher|reword|rewrite|rephrase)\b/i;
+export function unchangedRewrites(request, base, paper) {
+  const norm = (t) => String(t || "").toLowerCase().replace(/\s+/g, " ").trim();
+  const now = new Set((paper?.questions || []).map((q) => norm(q.q)));
+  const problems = [];
+  for (const clause of String(request || "").split(/[,;.]|\band\b/i)) {
+    if (!REWRITE.test(clause)) continue;
+    for (const m of clause.matchAll(/\b(?:question|q)\s*(\d{1,2})\b/gi)) {
+      const n = Number(m[1]);
+      const old = base?.questions?.[n - 1]?.q;
+      if (old && now.has(norm(old))) problems.push(`Question ${n} was to be rewritten (${clause.trim().slice(0, 60)}), but its wording is unchanged — write a new question, not just new options.`);
+    }
+  }
+  return problems;
+}
+
 /** A follow-up: the same check-and-retry over applyRevision. → { paper, changes, note, warning } */
 export async function revisePaper({ chat, topic, subject, classLevel, request, base, plan: given }) {
   // A follow-up only holds counts it states itself ("make it 8 questions").
@@ -596,11 +618,12 @@ export async function revisePaper({ chat, topic, subject, classLevel, request, b
     try { json = JSON.parse(text || "{}"); } catch { json = {}; }
     return { json, ...applyRevision(base, json) };
   };
+  const check = (paper) => [...checkPaper(paper, contract), ...unchangedRewrites(request, base, paper)];
   const first = await ask(null, null);
-  let problems = checkPaper(first.paper, contract);
+  let problems = check(first.paper);
   if (!problems.length) return { ...first, warning: null };
   const second = await ask(problems, first.json);
-  const p2 = checkPaper(second.paper, contract);
+  const p2 = check(second.paper);
   const best = p2.length <= problems.length && second.paper.questions.length ? second : first;
   problems = best === second ? p2 : problems;
   if (!best.paper.questions.length) throw new Error("The revision came back empty — try again.");
