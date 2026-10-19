@@ -131,7 +131,13 @@ export const scenarios = [
         for (const r of (recs.body?.data || []).filter((x) => String(x.name || '').includes(tag))) await t.api('DELETE', `/api/records/${r.id}`);
       });
 
+      const calls = [];
+      page.on('response', (r) => { if (/\/api\/(adaptive\/chat\/agent|agent\/materials)/.test(r.url())) calls.push(`${r.request().method()} ${new URL(r.url()).pathname} ${r.status()}`); });
+      // The chat's first load must land before a new chat is opened, or it replaces it.
+      const firstLoad = page.waitForResponse((r) => /\/api\/adaptive\/chat\/sessions(\?|$|\/[^/]+\/messages)/.test(r.url()), { timeout: 30_000 }).catch(() => null);
       await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
+      await firstLoad;
+      await page.waitForTimeout(2_000);
       await page.getByRole('button', { name: 'Chats', exact: true }).first().click({ timeout: 30_000 });
       await page.getByRole('button', { name: /New chat/ }).first().click();
       await page.locator('input[type=file]').first().setInputFiles({ name: fileName, mimeType: 'application/pdf', buffer: pdf });
@@ -144,6 +150,7 @@ export const scenarios = [
       const ready = await page.locator('[data-ingest="ready"]').last().waitFor({ timeout: 120_000 }).then(() => true, () => false);
       const text = (await card.innerText().catch(() => '')).replace(/\s+/g, ' ');
       t.note(`card: ${text}`);
+      t.note(`calls: ${calls.join(' · ')}`);
       t.check('…saved to the Library in a past-papers folder, private', /Saved to Library › .*Past papers/.test(text) && /Only you can see this/.test(text), { actual: text });
       t.check('…and read', ready && /Read/.test(text), { actual: text });
       const chips = page.getByRole('button', { name: 'Find the topics that keep coming up' });

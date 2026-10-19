@@ -4162,16 +4162,23 @@ router.post("/agent", async (req, res) => {
     const protegeCtx = taught ? `\n\n${await loadDoctrine("policies/PROTEGE.md")}${renderTaughtContext(taught)}` : "";
     // Messages from other learners' agents waiting for this one.
     // Files this turn is saving to the Library (§7.17, D51): the reply says where, in one clause.
-    const ingest = role === "student" && /^[0-9a-f-]{36}$/i.test(String(req.body?.ingestId || ""))
-      ? (await db.schema("edu").from("material_ingests").select("id, folder_name, doc_kind, state").eq("id", req.body.ingestId).eq("user_id", req.user.id).maybeSingle().catch(() => ({ data: null }))).data
-      : null;
+    // (A query builder is a thenable, not a promise: no .catch on it — await it inside try.)
+    let ingest = null;
+    if (role === "student" && /^[0-9a-f-]{36}$/i.test(String(req.body?.ingestId || ""))) {
+      try {
+        ({ data: ingest } = await db.schema("edu").from("material_ingests").select("id, folder_name, doc_kind, state")
+          .eq("id", req.body.ingestId).eq("user_id", req.user.id).maybeSingle());
+      } catch { ingest = null; }
+    }
     // The reply's trace and meta (previews, materials, the upload's card), and the upload pointed at it.
     const saveTurn = async (messageId) => {
       const meta = { ...(previewMetaFrom(prepared.toolExecutions) || {}), ...(ingest ? { ingest: { id: ingest.id } } : {}) };
       await saveMessageTrace({ messageId, userId: req.user.id, trace: traceBlocks, meta: Object.keys(meta).length ? meta : null });
       if (ingest && messageId) {
-        await db.schema("edu").from("material_ingests").update({ chat_message_id: messageId, chat_session_id: conversationId, updated_at: new Date().toISOString() })
-          .eq("id", ingest.id).eq("user_id", req.user.id).then(() => {}, () => {});
+        try {
+          await db.schema("edu").from("material_ingests").update({ chat_message_id: messageId, chat_session_id: conversationId, updated_at: new Date().toISOString() })
+            .eq("id", ingest.id).eq("user_id", req.user.id);
+        } catch { /* the card still shows; it won't reopen with the chat */ }
       }
     };
     const ingestCtx = ingest && ingest.state !== "undone"
