@@ -137,7 +137,8 @@ export function workflowEventFor(row) {
     : "decision.accepted";
   // The learner sees the harness's narrated steps, the tools the agent ran and
   // what it said it was doing — never a provider failure or raw facts.
-  const learner = Boolean(row.narrative) || type.startsWith("tool.") || (type === "decision.proposed" && (row.agent_intent || row.agentIntent));
+  // An observation with no tool (the harness noting the session's inputs) is not a step.
+  const learner = Boolean(row.narrative) || (type.startsWith("tool.") && Boolean(tool)) || (type === "decision.proposed" && (row.agent_intent || row.agentIntent));
   const intent = row.origin === "agent_stated_intent" ? (row.agent_intent || row.agentIntent || null) : null;
   return {
     event_type: type,
@@ -149,9 +150,10 @@ export function workflowEventFor(row) {
     payload: {
       studyPrepSequence: row.sequence ?? null, topicId: row.topic_id || row.topicId || null,
       decisionNode: node, narrative: row.narrative || null, tool, action, intent,
-      durationMs: row.duration_ms ?? row.durationMs ?? null,
+      // 0 is the column default (no timing recorded), not a real duration.
+      durationMs: Number(row.duration_ms ?? row.durationMs) > 0 ? Number(row.duration_ms ?? row.durationMs) : null,
       ...(failed ? { code: facts.code || null } : {}),
-      ...(kind === "observation" && studyPrepResultLine(tool, facts) ? { resultLine: studyPrepResultLine(tool, facts) } : {}),
+      ...(kind === "observation" && (facts?.summary || studyPrepResultLine(tool, facts)) ? { resultLine: facts?.summary || studyPrepResultLine(tool, facts) } : {}),
       ...(facts?.topicLabel || facts?.topic ? { topicLabel: facts.topicLabel || facts.topic } : {}),
       ...(facts?.score != null ? { score: facts.score, total: facts.total ?? null, percentage: facts.percentage ?? null } : {}),
       facts, origin: row.origin || null,

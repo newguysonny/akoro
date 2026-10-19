@@ -387,6 +387,51 @@ export const scenarios = [
     },
   },
   {
+    name: 'chat.study_prep_film',
+    description: 'A real Study Prep turn on the sandbox, filmed: a screenshot every 2 seconds from sending the message until the plan-ready message arrives (real model, real planning — about 2–4 minutes). For a person to look at; its checks only say whether each stage was seen.',
+    async run(t) {
+      const { page } = t;
+      const marker = newMarker();
+      // One Study Prep at a time: clear any this tester already has.
+      const clear = async () => {
+        for (let i = 0; i < 4; i += 1) {
+          const a = await t.api('GET', '/api/adaptive/study-prep/sessions');
+          const id = a.body?.session?.id;
+          if (!id) break;
+          await t.api('POST', `/api/adaptive/study-prep/sessions/${id}/cancel`, {});
+        }
+      };
+      await clear();
+      t.cleanup(async () => {
+        await clear();
+        const list = await t.api('GET', '/api/adaptive/chat/sessions');
+        for (const c of (list.body?.sessions || []).filter((x) => String(x.title || '').includes(marker) || String(x.preview || '').includes(marker))) await t.api('DELETE', `/api/adaptive/chat/sessions/${c.id}`);
+      });
+      await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
+      const box = page.getByRole('textbox').last();
+      await box.waitFor({ timeout: 30_000 });
+      await page.getByRole('button', { name: /New chat/i }).first().click({ timeout: 5_000 }).catch(() => {});
+      await box.fill(`Prepare me for my JSS1 Basic Science exam in 5 weeks ${marker}`);
+      await t.shot('00-typed');
+      await page.getByRole('button', { name: 'Send message' }).click();
+      const scroll = () => page.evaluate(() => { for (const e of document.querySelectorAll('*')) if (e.scrollHeight > e.clientHeight + 40 && getComputedStyle(e).overflowY !== 'visible' && !e.closest('[data-workflow-pinned]')) e.scrollTop = e.scrollHeight; }).catch(() => {});
+      const seen = { thinking: false, pinned: false, ready: false };
+      let after = 0;
+      for (let i = 1; i <= 110 && after < 3; i += 1) {
+        await page.waitForTimeout(2000);
+        await scroll();
+        seen.thinking ||= await page.getByText(/Thinking|Thought for/).first().isVisible().catch(() => false);
+        seen.pinned ||= await page.locator('[data-workflow-pinned]').isVisible().catch(() => false);
+        seen.ready ||= await page.getByText(/plan is ready/).first().isVisible().catch(() => false);
+        if (seen.ready) after += 1;
+        await t.shot(String(i).padStart(2, '0'));
+      }
+      t.check('the agent thought and worked in the chat', seen.thinking);
+      t.check('the Study Prep card was pinned while it planned', seen.pinned);
+      t.check('the plan-ready message arrived in the chat', seen.ready);
+    },
+  },
+  {
     name: 'settings.agent_controls',
     description: 'Settings → Agent: one switch per part (Suggestions and ideas, Learn from my conversations, Task check-ins), quiet hours and time zone — each saves and survives a reload — and this week\'s background budget.',
     async run(t) {

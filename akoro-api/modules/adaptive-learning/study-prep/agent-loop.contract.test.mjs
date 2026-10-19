@@ -175,3 +175,32 @@ test("the step cap after the plan is already waiting leaves it waiting — no 40
   assert.equal(after.status, "awaiting_confirmation", "the plan card still waits for the learner");
   assert.equal(store.events.filter((event) => event.decision_node === "session_paused").length, 0);
 });
+
+test("deep research: proposing before the required reads is refused as an observation; after them it goes through", async () => {
+  const store = new MemoryStore();
+  const harness = createHarness({ store, topicWorkflow, syllabus, now: () => "2026-01-01T00:00:00Z" });
+  const session = await harness.createSession({ learnerId: LEARNER, goal: "Prepare", subject: "Basic Science" });
+  const calls = [];
+  const registry = {
+    catalogue: [],
+    execute: async (name, args) => {
+      calls.push(name);
+      if (name === "syllabus.resolve") return { topics: SYLLABUS };
+      if (name === "propose_plan") return harness.proposePlan({ sessionId: session.id, learnerId: LEARNER, topicIds: args.topics });
+      return { ok: true };
+    },
+  };
+  const agent = stubAgent([
+    { tool: "syllabus.resolve", args: {}, intent: "Syllabus first." },
+    { tool: "propose_plan", args: { topics: ["water-cycle"] }, intent: "Too early." },
+    { tool: "learner.get_state", args: {}, intent: "Their state." },
+    { tool: "propose_plan", args: { topics: ["water-cycle"] }, intent: "Now." },
+  ]);
+  const result = await runAgentStep({ sessionId: session.id, goal: session.goal, agent, registry, store, harness, requireReads: ["syllabus.resolve", "learner.get_state"] });
+  assert.equal(result.ended, "terminal");
+  assert.deepEqual(calls, ["syllabus.resolve", "learner.get_state", "propose_plan"], "the early propose never ran");
+  assert.ok(result.observations.some((o) => o.code === "research_incomplete" && /learner\.get_state/.test(o.message)));
+  assert.equal((await store.getSession(session.id)).status, "awaiting_confirmation");
+  // What each read found is kept as a learner-safe line on its observation.
+  assert.ok(store.events.some((e) => e.event_type === "observation" && e.tool === "syllabus.resolve" && /topics? found/.test(e.facts?.summary || "")));
+});

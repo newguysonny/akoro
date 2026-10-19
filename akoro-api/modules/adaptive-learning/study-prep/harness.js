@@ -849,6 +849,8 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
   }
 
   return {
+    // The guarded store (definition checks + workflow mirror): the agent loop writes through it too.
+    store,
     createSession, proposePlan, confirmPlan, adjustPlan,
     startTopicPractice, submitPractice, completeAgentCheck, confirmTeachBack, offerStrategy,
     advanceTopic, deferTopic, retryDeferredTopic, flagTopic,

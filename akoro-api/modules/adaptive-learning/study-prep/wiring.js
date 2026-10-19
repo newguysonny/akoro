@@ -166,7 +166,7 @@ export async function runStudyPrepPlanningStep({ sessionId, learnerId }) {
     setName: "planning",
     goal: view.session.goal,
     session: view.session,
-    dynamic: { hint: "Inspect the syllabus and the learner's state, then propose one plan." },
+    dynamic: { hint: "Research before you plan: the syllabus, the learner's state, their practice history, what earlier sessions showed (memory) and the prerequisites. Then validate and propose one plan, ordered weakest-first within the prerequisites." },
   });
   const sessionReadTools = {
     ...readTools,
@@ -174,8 +174,13 @@ export async function runStudyPrepPlanningStep({ sessionId, learnerId }) {
   };
   const registry = buildRegistry({ readTools: sessionReadTools, harness, learnerId, sessionId });
   const agent = makeLlmAgent({ system: context.system, learnerId });
+  // Through the harness's guarded store, so every step reaches the workflow
+  // stream (the card) — the raw store skipped the mirror. Deep research: the
+  // planner reads the syllabus, the learner's state, history, memory and the
+  // prerequisites before it may propose (on its last decision it always may).
   const step = await runAgentStep({
-    sessionId, goal: view.session.goal, agent, registry, store, harness, contextSetName: "planning",
+    sessionId, goal: view.session.goal, agent, registry, store: harness.store || store, harness, contextSetName: "planning",
+    requireReads: PLANNING_READS,
   });
   const after = await harness.getSessionView({ sessionId, learnerId });
   return { ...after, loop: { ended: step.ended, iterations: step.iterations, terminal: step.terminal } };
@@ -195,6 +200,9 @@ export async function startStudyPrepSession({ learnerId, goal, subject, classLev
   }
   return runStudyPrepPlanningStep({ sessionId: session.id, learnerId });
 }
+
+/** What the planner reads before proposing (deep research, 2026-10-19). */
+export const PLANNING_READS = Object.freeze(["syllabus.resolve", "learner.get_state", "learner.get_history", "learner.get_relevant_memory", "concept.get_prerequisites"]);
 
 const planning = new Set();
 /**

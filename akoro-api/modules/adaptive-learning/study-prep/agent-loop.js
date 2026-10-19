@@ -18,6 +18,7 @@ import { POLICY } from "./state-machine.js";
 import { makeEvent, publicEvent } from "./events.js";
 import { runAgentLoop, observationFor as runtimeObservationFor } from "../../agent-runtime/loop.js";
 import { capsFor } from "../../agent-runtime/caps.js";
+import { studyPrepResultLine } from "./workflow.js";
 
 export const TERMINAL_ACTIONS = Object.freeze([
   "propose_plan", "advance_topic", "defer_topic", "conclude_session",
@@ -34,8 +35,25 @@ export const observationFor = runtimeObservationFor;
  */
 export async function runAgentStep({
   sessionId, topicId = null, goal, agent, registry, store, harness,
-  contextSetName = "planning", maxIterations = POLICY.MAX_ITERATIONS_PER_STEP,
+  contextSetName = "planning", maxIterations = POLICY.MAX_ITERATIONS_PER_STEP, requireReads = null,
 }) {
+  // Deep research: propose_plan is refused (as an observation the agent reads)
+  // until each required read has run this step — except on the last decision.
+  const read = new Set();
+  let decisions = 0;
+  if (requireReads?.length) {
+    const inner = registry;
+    registry = {
+      ...inner,
+      validate(name, args) {
+        const missing = requireReads.filter((r) => !read.has(r));
+        if (name === "propose_plan" && missing.length && decisions < maxIterations) {
+          return { ok: false, code: "research_incomplete", message: `Read these first, then propose: ${missing.join(", ")}.` };
+        }
+        return inner.validate ? inner.validate(name, args) : { ok: true };
+      },
+    };
+  }
   // Planning ends only by proposing a plan — never by concluding the session.
   const finalActions = contextSetName === "planning" ? ["propose_plan"] : TERMINAL_ACTIONS;
   const append = (row) => store.appendEvents(sessionId, [makeEvent({ sequence: 0, ...row })]);
@@ -64,6 +82,8 @@ export async function runAgentStep({
       }
       if (entry.kind === "decision") {
         const step = entry.step;
+        decisions = entry.iteration;
+        if (step.tool) read.add(step.tool);
         return append({
           iteration, eventType: step.tool ? "agent_tool_call" : "agent_action", origin: "agent_stated_intent",
           topicId: topicId || null, tool: step.tool || null, action: step.action || null,
@@ -71,7 +91,9 @@ export async function runAgentStep({
         });
       }
       if (entry.kind === "observation") {
-        return append({ iteration, eventType: "observation", origin: "harness", topicId: topicId || null, tool: entry.tool || null, facts: entry.observation });
+        // What it found, in one learner-safe line — worked out before the facts are bounded (they drop nested lists).
+        const summary = studyPrepResultLine(entry.tool, entry.observation);
+        return append({ iteration, eventType: "observation", origin: "harness", topicId: topicId || null, tool: entry.tool || null, facts: { ...entry.observation, ...(summary ? { summary } : {}) } });
       }
       return null;
     },
