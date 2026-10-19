@@ -19,7 +19,9 @@ export class R2UnavailableError extends ProviderUnavailableError {
 
 const breaker = makeBreaker(
   "r2",
-  ([client, command]) => client.send(command),
+  // fire() passes its arguments through as they are — (client, command), not one array.
+  // (It destructured an array: every R2 call threw "not iterable" before reaching R2, and opened the breaker.)
+  (client, command) => client.send(command),
   { errorClass: R2UnavailableError },
 );
 
