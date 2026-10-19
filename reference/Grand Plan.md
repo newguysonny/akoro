@@ -224,6 +224,10 @@ session mode" (`fresh | continuation | decay`); "Adaptive Learning Workflow"
 | D48 | Where Ideas live | An **Ideas** section in the agent tab beside To do / Done / Suggestions (keeps the "no new top-level surface" decision), not a bottom-bar tab. The UI is previewed and approved before it is built. | User decision (2026-10-18); the "no learner UI change without a preview" rule. |
 | D49 | How proactive messages arrive | **In the learner's agent chat, as an agent message with reply buttons**, the same message also listed in Suggestions; posted only when the chat is idle, never in quiet hours, at most one a day. | The reference conversation: noticing, the ready fix, the go-ahead and the report all live in one thread. |
 | D50 | Quiet learning is guidance, not evidence | Memories shape what the agent says and proposes; they never move mastery, scores, goals' status or gates. Sensitive struggle types are never remembered. Learner can see and delete every memory. | Rules 4, 10, 24 and D38. |
+| D51 | Chat uploads go to the Library | **Saved automatically**: every file a learner drops into Agent Chat becomes a Library record in a folder the protégé creates (named from the topic) or picks, with an *Undo* on the chat message. Extraction runs as for a Library upload. | One copy of the file serves the chat, the reader (citations), `search_my_library`, Study Prep and the study tools. User decision (2026-10-19). |
+| D52 | Where "similar materials" come from | **Akoro's own content only** — the learner's Library, Discover/shared records, courses, blogs, activities. Every suggestion is a real row with an in-app link; never the open web. | Links can be checked and routed (chat-materials whitelist); no source/safety policy for the web yet. User decision (2026-10-19). |
+| D53 | Past papers are private | A learner's uploaded past papers (and the questions parsed from them) are visible to that learner only; sharing to a community is a separate, explicit act. | Copyright and exam-board material. User decision (2026-10-19). |
+| D54 | Materials → study plan: new workflow or not? | **Extend, don't fork.** Study Prep gains a fourth syllabus source, `materials` (a folder); its topic loop is unchanged. Only the ingest — upload → folder → extraction → structure → offer more — is a new, small workflow (`material_ingest`) on the engine, because it is long-running, retried, idempotent and waits on the learner. Everything else is tools. | Reuses the Phase 1 engine, the records pipeline (hanji-parse on RunPod reads scanned/photographed pages) and the reader study tools. |
 | D10 | Who writes narration? | **Harness templates** (`ActivityNarrator`, grown from `narration.js:deliberate()`) for facts; the agent's `intent` (≤ 240 chars, sanitised, untrusted display text) for "why". v3's `narration` field **is** `intent`. | Deterministic where possible (v3 §40), already built (v7). |
 | D11 | Event store | New generic `edu.workflow_events`. `study_prep_events` is kept read-only and backfilled. | One stream model for four workflows (v3 §43). |
 | D12 | Live transport | **Event store is the source of truth; transport is replaceable.** Teaching and Decay keep the existing Socket.IO connection. Study Prep and Practice use SSE (same heartbeat pattern as `/chat/agent`). Both carry the identical event envelope. Replay: `GET /api/workflows/:id/events?after=N`. | v3 §42–43; reuses what already works. |
@@ -1772,6 +1776,74 @@ gets nothing from that part; an instructor run never reads a learner's chats.
 
 ---
 
+### 7.17 Materials to study — chat uploads, folders, past papers (D51–D54) 🆕
+
+**The idea.** A learner drops unstructured material — lecture notes, a
+textbook chapter, photographed past papers — into Agent Chat. The protégé
+files it in a Library folder, reads it, turns it into structured material,
+offers to enrich the folder with Akoro material on the same topics, and then
+offers the next step: a study plan built from *these* materials and papers,
+flashcards, a quiz, notes, a teach session. Unstructured in, structured out.
+
+#### 7.17.1 What exists (2026-10-19)
+- Library records (upload, link, paste) and **folders** (`/api/records/folders`).
+- Extraction: text PDFs in code; scanned PDFs and images through the
+  hanji-parse worker on RunPod (`records/extractLib.js`); Office and A/V paths.
+- Page search over a record (`searchRecordChunks`), the reader's cited guide,
+  and study tools — Quiz, Notes, Summary, Podcast (`records/toolsLib.js`).
+- Agent Chat reads attachments for one turn only (`processAttachments`) —
+  nothing is kept. `search_my_library` and clickable material chips (shipped).
+- Study Prep's syllabus resolver: class → school → platform; the plan is
+  checked against real topics.
+- Paper parsing for activities (`self-study/questionPaper.js`, `paperSchema.js`).
+
+#### 7.17.2 The `material_ingest` workflow (new, small)
+`received → filed → extracting → structured → offering_more → ready` (+ `failed`).
+- **received/filed**: the chat upload becomes a record (D51) in a folder —
+  an existing folder when the topic matches one, else a new one. The chat
+  message says *"Saved to Library › Biology — Cells"* with *Undo*.
+- **extracting**: the records pipeline (auto-extract; hanji for scans). The
+  chat turn never waits: the protégé answers from what is ready and the
+  workflow posts back when extraction lands.
+- **structured**: per record — document type (notes / textbook / past
+  paper / syllabus), subject, topics with page citations; for past papers,
+  the questions with year, number, marks and topic (private, D53).
+- **offering_more**: *"Want me to add similar material to this folder?"* —
+  only Akoro content (D52), each a real row; the learner picks what goes in.
+- **ready**: the folder is a study source; suggestions offer the next step.
+
+Idempotent per (record, stage); a re-upload of the same file reuses its record.
+
+#### 7.17.3 Study Prep from materials (extends Workflow 1)
+- New syllabus source `materials` (ref = folder id): topics come from the
+  folder's structured records, each keeping its page citations.
+- Past papers **weight** the plan: topics ranked by how often and how
+  heavily they recur across years ("Osmosis — in 5 of 6 papers").
+- Past-paper questions become the practice for their topic (tagged, private);
+  where a topic has none, practice is generated from the material as today.
+- The teach loop, Agent Check (D45) and completion are unchanged.
+
+#### 7.17.4 Tools (Agent Chat)
+`save_to_library` (file / move into a folder) · `analyse_past_papers`
+(recurring topics and patterns, cited) · `find_similar_materials` (D52) ·
+`build_study_material` (flashcards, quiz, summary, notes — the reader tools on
+a record or folder) · `start_study_prep_from_folder`.
+
+#### 7.17.5 Suggestions pick up uploads
+The suggestions call carries the turn's attachments (`{ name, kind,
+recordId }`). After an upload one chip is always the study step — *"Make a
+study plan from <file>"* (past papers: *"Find the topics that keep coming
+up"*) — and the rest come from the file's content and the agent's live
+capabilities (quiz me on it, summarise it, find similar material).
+
+#### 7.17.6 Exit (one Verification Gate scenario each)
+1. A chat upload is a Library record in a folder, extracted; *Undo* removes it.
+2. A photographed past paper is read (hanji), its questions parsed and tagged, private.
+3. "Find similar" adds only Akoro rows, each opening in the app.
+4. A Study Prep plan from a folder uses only its topics, ordered by past-paper
+   frequency, with past-paper questions as practice.
+5. After an upload the first chip is the study step.
+
 ## 8. Workflow 1 — Study Prep
 
 **Purpose:** prepare a learner for an exam across a planned set of syllabus topics.
@@ -3014,6 +3086,13 @@ planning loop's tool names, the double practice charge, empty syllabus data).
 - **Exit:** the §7.16.8 exit list, one Verification Gate scenario each, all
   green on the sandbox. (D46–D48 locked 2026-10-18.)
 
+
+### Phase 14 — Materials to study (§7.17)
+- Builds on the shipped records pipeline, folders and the Phase 1 engine.
+  Order: suggestions pick up uploads (§7.17.5) → chat uploads saved to a
+  folder (D51) → `material_ingest` structure step → past-paper parsing →
+  find similar (D52) → Study Prep `materials` source → study-material tools.
+- **Exit:** the §7.17.6 list, all green on the sandbox. (D51–D54 locked 2026-10-19.)
 ---
 
 ## 18. Acceptance tests
