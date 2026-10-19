@@ -96,7 +96,7 @@ import {
   scheduleAutonomyReviewForTask,
   setLearnerAutonomy,
 } from "./learner-autonomy.js";
-import { requiresAgentCapabilitiesTool, requiresActivityPreparation, isDraftFollowUp, requiredLearnerDataTool, requiredStudyPrepTool } from "./agent-chat-intent.js";
+import { requiresAgentCapabilitiesTool, requiresActivityPreparation, isDraftFollowUp, requiredLearnerDataTool, requiredStudyPrepTool, classForExam } from "./agent-chat-intent.js";
 import { agentToolActivity } from "../../lib/agentActivity.js";
 import { noteChatTurn } from "../agent-memory/quietLearning.js";
 import { createChatTrace, decisionNarration } from "./chat-trace.js";
@@ -987,6 +987,16 @@ export const CHAT_TOOLS = [
     },
   },
   {
+    name: "cancel_study_prep_session",
+    description: "Cancel the learner's study-prep session when THEY ask to cancel, stop or remove their study plan. A plan not yet approved is cancelled at once (nothing was charged). A plan already under way (studying or paused) keeps its recorded progress but stops: call first without confirm, tell them what is lost, and call again with confirm: true only after they say yes.",
+    featureGate: "study_prep",
+    input_schema: {
+      type: "object",
+      properties: { confirm: { type: "boolean", description: "Only for a plan already under way: true once the learner has said yes to ending it." } },
+      required: [],
+    },
+  },
+  {
     name: "get_study_prep_session",
     description: "Read the learner's current study-prep session: status, topics with their states, the plan-card estimate, and the recent agent activity log. Use for progress/resume questions. Never returns answer keys.",
     featureGate: "study_prep",
@@ -1242,7 +1252,7 @@ async function resolveLearnerSchoolContext(studentId) {
  */
 export const SIDE_EFFECT_TOOLS = ["create_task", "suggest_help", "schedule_chat_follow_up", "post_to_chat", "create_tool", "cancel_scheduled_chat_follow_up", "submit_tool_request", "prepare_activity", "revise_activity_draft",
           "create_goal", "update_goal_progress", "save_blog_draft", "publish_blog", "update_agent_network_settings", "block_agent", "log_past_question_practice",
-          "challenge_agent", "post_challenge_request", "accept_challenge_request", "cancel_challenge_request", "rematch_battle", "message_agent", "reply_to_agent", "start_study_prep_session",
+          "challenge_agent", "post_challenge_request", "accept_challenge_request", "cancel_challenge_request", "rematch_battle", "message_agent", "reply_to_agent", "start_study_prep_session", "cancel_study_prep_session",
           "consult_peer_agents", "discard_activity_draft", "schedule_activity_routine", "cancel_activity_routine"];
 /** The multi-action tools change things only on their writing actions. */
 export const isSideEffectingAction = (tool, input) =>
@@ -2441,20 +2451,30 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       // echoing it mounts a plan-less card the learner can never confirm —
       // the 2026-10-03 "study session could not be loaded" dead end.
       const hasPlan = (session) => Array.isArray(session?.plan) && session.plan.length > 0;
-      const unconfirmed = (summary.sessions || [])
+      let unconfirmed = (summary.sessions || [])
         .find((session) => session.status === "awaiting_confirmation" || (session.status === "planning" && hasPlan(session)));
+      // A plan for ANOTHER subject, never approved (nothing charged), is not what they asked for:
+      // it is set aside and the new one starts (2026-10-19: a Biology request kept getting an old Maths card).
+      const asked = String(input?.subject || "").trim().toLowerCase();
+      let replaced = null;
+      if (unconfirmed && asked && unconfirmed.subject && unconfirmed.subject.trim().toLowerCase() !== asked) {
+        const { getHarness } = await import("./study-prep/wiring.js");
+        const cancelled = await getHarness().cancelSession({ sessionId: unconfirmed.sessionId, learnerId: studentId }).catch(() => null);
+        if (cancelled) { replaced = unconfirmed.subject; unconfirmed = null; summary.sessions = (summary.sessions || []).filter((s) => s.sessionId !== cancelled.session.id); }
+      }
       if (unconfirmed) {
         return {
           enabled: true, sessionId: unconfirmed.sessionId, status: unconfirmed.status,
           plan: unconfirmed.plan, estimate: unconfirmed.estimate,
-          note: "An unconfirmed study-prep session already exists — present its plan card; nothing is charged until the learner approves it.",
+          subject: unconfirmed.subject || null,
+          note: `An unconfirmed ${unconfirmed.subject || ""} study-prep plan already exists — present its plan card; nothing is charged until the learner approves it. If they want a different plan, they can cancel this one (cancel_study_prep_session).`,
         };
       }
       // Zombie self-heal: re-run the planning step for the stalled session
       // instead of creating a second one. If planning faults again the tool
       // call fails honestly and no dead session card is echoed to the chat.
       const stalled = (summary.sessions || [])
-        .find((session) => session.status === "planning" && !hasPlan(session));
+        .find((session) => session.status === "planning" && !hasPlan(session) && (!asked || !session.subject || session.subject.trim().toLowerCase() === asked));
       if (stalled) {
         // Re-run its planning in the background (or leave the run already going); the card streams it.
         const { planInBackground } = await import("./study-prep/wiring.js");
@@ -2470,9 +2490,15 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       const running = (summary.sessions || []).find((session) => ["topic_active", "replanning", "paused"].includes(session.status));
       if (running) {
         return {
-          enabled: true, sessionId: running.sessionId, status: running.status, plan: running.plan,
-          note: `A study-prep session is already ${running.status === "paused" ? "paused" : "under way"}${running.subject ? ` (${running.subject})` : ""} — offer to continue it; a new one can start once it's finished or ended.`,
+          enabled: true, sessionId: running.sessionId, status: running.status, plan: running.plan, subject: running.subject || null,
+          note: `A study-prep session is already ${running.status === "paused" ? "paused" : "under way"}${running.subject ? ` (${running.subject})` : ""} — offer to continue it, or to end it (cancel_study_prep_session, after they say yes) so a new one can start.`,
         };
+      }
+      // A planning leftover for another subject (no plan yet, nothing charged) is set aside too.
+      const leftover = (summary.sessions || []).find((session) => session.status === "planning");
+      if (leftover) {
+        const { getHarness } = await import("./study-prep/wiring.js");
+        if (await getHarness().cancelSession({ sessionId: leftover.sessionId, learnerId: studentId }).catch(() => null)) replaced ||= leftover.subject || "another subject";
       }
       const goal = String(input?.goal || "").trim();
       // From their own materials (§7.17.3): the folder of the paper they uploaded here, or one they named.
@@ -2489,7 +2515,8 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         learnerId: studentId,
         goal: goal.slice(0, 300),
         subject: subject.slice(0, 180),
-        classLevel: String(input?.classLevel || "JSS1").slice(0, 40),
+        // No class given: the exam says it (WAEC/NECO/JAMB are taken in SS3, BECE in JSS3).
+        classLevel: String(input?.classLevel || classForExam(input?.examBoard) || "JSS1").slice(0, 40),
         examBoard: String(input?.examBoard || "WAEC").slice(0, 80),
         ...(materials ? { materials: { folderId: materials.folderId, name: materials.name } } : {}),
         // The planner researches for up to 10 decisions: it runs after this turn,
@@ -2499,12 +2526,37 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       return {
         enabled: true, sessionId: view.session.id, status: view.session.status, planning: true,
         ...(materials ? { from: materials.name } : {}),
-        note: `Study Prep has started${materials ? ` from their materials in "${materials.name}"` : ""} and is planning now — the card shows each step live, and the plan will be posted in this chat when it's ready. Say that briefly; don't describe or guess a plan (there isn't one yet). Nothing is charged until they approve it on the card.`,
+        ...(replaced ? { replaced } : {}),
+        note: `${replaced ? `Their earlier ${replaced} plan was never approved, so it was set aside (nothing was charged) — say so in one line. ` : ""}Study Prep has started${materials ? ` from their materials in "${materials.name}"` : ""} and is planning now — the card shows each step live, and the plan will be posted in this chat when it's ready. Say that briefly; don't describe or guess a plan (there isn't one yet). Nothing is charged until they approve it on the card.`,
       };
     }
     case "get_study_prep_session": {
       const { getStudyPrepSessionSummary } = await import("./study-prep/chat-tool-handlers.js");
       return getStudyPrepSessionSummary(studentId);
+    }
+    case "cancel_study_prep_session": {
+      if (!studyPrepEnabled) return { enabled: false, message: "Study-prep sessions are not enabled for this learner." };
+      const { getStudyPrepSessionSummary } = await import("./study-prep/chat-tool-handlers.js");
+      const summary = await getStudyPrepSessionSummary(studentId);
+      const session = (summary.sessions || [])[0];
+      if (!session) return { cancelled: false, note: "They have no study-prep session to cancel — say so." };
+      const underWay = ["topic_active", "replanning", "paused"].includes(session.status);
+      const understood = (session.topics || []).filter((t) => t.status === "understood").length;
+      if (underWay && input?.confirm !== true) {
+        return {
+          cancelled: false, needsConfirmation: true, sessionId: session.sessionId, subject: session.subject, status: session.status,
+          understood, topics: (session.topics || []).length,
+          note: `Their ${session.subject} plan is under way (${understood} of ${(session.topics || []).length} topics understood). Ask whether to end it: what they learnt stays recorded, but the plan stops and the coins already spent aren't returned. Call again with confirm: true only after they say yes.`,
+        };
+      }
+      const { getHarness } = await import("./study-prep/wiring.js");
+      const done = await getHarness().cancelSession({ sessionId: session.sessionId, learnerId: studentId });
+      return {
+        cancelled: true, sessionId: done.session.id, subject: session.subject, wasApproved: underWay,
+        note: underWay
+          ? `Their ${session.subject} plan is ended. What they learnt stays recorded. A new plan can start whenever they like.`
+          : `Their ${session.subject} plan was never approved, so it is cancelled and nothing was charged. A new plan can start whenever they like.`,
+      };
     }
     case "submit_tool_request": {
       let request;

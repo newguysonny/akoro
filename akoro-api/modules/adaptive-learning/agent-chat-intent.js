@@ -143,9 +143,13 @@ const UPCOMING_TEST_MENTION_RE = new RegExp(String.raw
   `\b${EXAM_NOUN}s?\b[^.?!]{0,48}\b${EXAM_TIMING}\b`
   + String.raw`|\b${EXAM_NOUN}\b[^.?!]{0,32}\b(?:tomorrow|friday|monday|tuesday|wednesday|thursday|saturday|sunday)\b`, "i");
 
+// "Cancel the plan" / "stop my study prep" — never read as a yes to starting one (2026-10-19).
+const STUDY_PREP_CANCEL_RE = /\b(?:cancel|stop|end|delete|remove|discard|scrap|drop|get\s+rid\s+of)\b[^.?!]{0,32}\b(?:(?:study\s+)?plan|study[\s-]?prep|exam[\s-]?prep|prep\s+session|session)\b/i;
+
 export function requiredStudyPrepTool(message, history = []) {
   const text = String(message || "").replace(/\s+/g, " ").trim();
   if (!text) return null;
+  if (STUDY_PREP_CANCEL_RE.test(text)) return "cancel_study_prep_session";
   // "Quiz me on Algebra" / "test me on this" is tutoring in chat.
   if (/^\s*(?:quiz|test)\s+me\b/i.test(text)) return null;
   if (STUDY_PREP_READ_RE.test(text)) return "get_study_prep_session";
@@ -165,4 +169,12 @@ export function requiredStudyPrepTool(message, history = []) {
   if (/^\s*(?:explain|define|describe|teach|tell|quiz|solve|calculate|compute|what|why|how|when|where|who)\b/i.test(plain)) return null;
   if (SHORT_CONFIRM_RE.test(plain)) return "start_study_prep_session";
   return !plain.includes("?") && SHORT_ANSWER_RE.test(plain) ? "start_study_prep_session" : null;
+}
+
+/** The class an exam is usually taken in, when the learner didn't say (study prep's syllabus needs one). */
+export function classForExam(examBoard) {
+  const exam = String(examBoard || "").trim().toUpperCase();
+  if (["WAEC", "WASSCE", "NECO", "JAMB", "UTME", "GCE", "NABTEB"].includes(exam)) return "SS3";
+  if (["BECE", "JSCE"].includes(exam)) return "JSS3";
+  return null;
 }

@@ -55,6 +55,7 @@ export const TOOL_EXAMPLES = Object.freeze({
   search_my_study_knowledge: e("teaching", "What did I teach you about fractions?"),
   start_study_prep_session: e("teaching", "I have WAEC Biology in 6 weeks — make me a study plan."),
   get_study_prep_session: e("teaching", "How far am I in my study prep?"),
+  cancel_study_prep_session: e("teaching", "Cancel my study plan."),
   consult_peer_agents: e("teaching", "Ask other agents how they learnt simultaneous equations."),
 
   // Tasks, goals and reminders

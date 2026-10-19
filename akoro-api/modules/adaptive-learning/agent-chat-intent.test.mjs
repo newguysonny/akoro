@@ -233,3 +233,19 @@ test("can-you ability questions force the live capabilities tool — the blog de
     assert.equal(requiresAgentCapabilitiesTool(message), false, message);
   }
 });
+
+test("cancelling a study plan is never read as a yes to starting one (2026-10-19)", async () => {
+  const { requiredStudyPrepTool } = await import("./agent-chat-intent.js");
+  const history = [{ role: "user", content: "I have WAEC Biology in 6 weeks, make me a study plan" }];
+  for (const text of ["Cancel the plan", "cancel my study plan", "Stop the study prep", "delete that plan please"]) {
+    assert.equal(requiredStudyPrepTool(text, history), "cancel_study_prep_session", text);
+  }
+  assert.equal(requiredStudyPrepTool("make me a study plan for WAEC Biology in 6 weeks", []), "start_study_prep_session");
+});
+
+test("an exam says the class when the learner doesn't", async () => {
+  const { classForExam } = await import("./agent-chat-intent.js");
+  assert.equal(classForExam("WAEC"), "SS3");
+  assert.equal(classForExam("bece"), "JSS3");
+  assert.equal(classForExam("Cambridge"), null);
+});

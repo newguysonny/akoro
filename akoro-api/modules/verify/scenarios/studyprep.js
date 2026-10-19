@@ -430,3 +430,45 @@ export const agentWakes = {
     await harness.cancelSession({ sessionId: session.id, learnerId: me.id }).catch(() => {});
   },
 };
+
+// 2026-10-19 (a learner's chat): an unapproved Mathematics plan kept coming back
+// for a WAEC Biology request, and "Cancel the plan" couldn't be done. A plan for
+// another subject that was never approved is set aside; the learner can cancel.
+export const replaceAndCancel = {
+  name: "studyprep.replace_and_cancel", area: "study-prep", risk: "write",
+  description: "Asking for a Biology plan while an unapproved Mathematics plan exists sets the old one aside (nothing charged) and starts Biology, with the class taken from the exam; the learner can then cancel it from the chat.",
+  params: { learner: { default: "@tester15" } },
+  async run(ctx, p) {
+    const me = await ctx.as(p.learner);
+    await ctx.db.deleteOwned("edu.study_prep_sessions", { ownerColumn: "learner_id", ownerId: me.id, filters: { goal: { like: "[verify:%" } } });
+    const { getHarness } = await import("../../adaptive-learning/study-prep/wiring.js");
+    const harness = getHarness();
+    const active = await ctx.http({ as: p.learner, path: "/api/adaptive/study-prep/sessions" });
+    if (active.body?.session?.id) await harness.cancelSession({ sessionId: active.body.session.id, learnerId: me.id }).catch(() => {});
+    ctx.cleanup(() => ctx.db.deleteOwned("edu.study_prep_sessions", { ownerColumn: "learner_id", ownerId: me.id, filters: { goal: { like: `${ctx.marker}%` } } }));
+
+    // The old card: Mathematics, proposed, never approved.
+    const old = await harness.createSession({ learnerId: me.id, goal: `${ctx.marker} plan for a test`, subject: "Mathematics", classLevel: "JSS1", examBoard: "WAEC" });
+    const syllabus = await harness.resolveSyllabus({ sessionId: old.id, learnerId: me.id });
+    if (!syllabus.found || !syllabus.topics.length) ctx.expect.blocked("no JSS1 Mathematics syllabus to plan the old card from");
+    await harness.proposePlan({ sessionId: old.id, learnerId: me.id, topicIds: [syllabus.topics[0].id] });
+
+    const started = await ctx.agent.tool({ as: p.learner, tool: "start_study_prep_session", mode: "live",
+      input: { goal: `${ctx.marker} I have WAEC Biology in 6 weeks`, subject: "Biology", examBoard: "WAEC" } });
+    ctx.note(`start: ${JSON.stringify(started).slice(0, 300)}`);
+    ctx.expect.eq("the old Mathematics card was set aside", started?.replaced, "Mathematics");
+    const [oldRow] = await ctx.db.rows("edu.study_prep_sessions", { id: old.id }, { columns: "status", limit: 1 });
+    ctx.expect.eq("…cancelled, never approved", oldRow?.status, "cancelled");
+    const [fresh] = started?.sessionId ? await ctx.db.rows("edu.study_prep_sessions", { id: started.sessionId }, { columns: "subject, class_level, status", limit: 1 }) : [];
+    ctx.expect.eq("a Biology plan started", fresh?.subject, "Biology");
+    ctx.expect.eq("WAEC → planned for SS3", fresh?.class_level, "SS3");
+
+    const cancelled = await ctx.agent.tool({ as: p.learner, tool: "cancel_study_prep_session", mode: "live", input: {} });
+    ctx.note(`cancel: ${JSON.stringify(cancelled).slice(0, 300)}`);
+    ctx.expect.eq("the learner can cancel it from the chat", cancelled?.cancelled, true);
+    const [after] = started?.sessionId ? await ctx.db.rows("edu.study_prep_sessions", { id: started.sessionId }, { columns: "status", limit: 1 }) : [];
+    ctx.expect.eq("…and it is cancelled", after?.status, "cancelled");
+    const none = await ctx.agent.tool({ as: p.learner, tool: "cancel_study_prep_session", mode: "live", input: {} });
+    ctx.expect.eq("nothing left to cancel", none?.cancelled, false);
+  },
+};
