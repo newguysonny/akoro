@@ -747,6 +747,7 @@ export const EN = {
   'agent.filed_read':            'Read',
   'agent.filed_pages':           '{n} pages',
   'agent.filed_failed':          "Saved, but I couldn't read it",
+  'agent.filed_questions':       '{n} questions found',
   'agent.filed_private':         'Only you can see this',
   'agent.filed_open':            'Open folder',
   'agent.filed_undo':            'Undo',

@@ -59,7 +59,7 @@ export function protegeMoves(executions) {
 
 /* Only the app's own pages, deduped, at most 8 (the API builds these from
    tool results; the client still refuses anything that isn't a known route). */
-const MATERIAL_HREF = [/^\/blog\/[\w-]+$/, /^\/write\/blog\/[\w-]+$/, /^\/course\/[\w-]+$/, /^\/library\?record=[0-9a-f-]{36}$/i, /^\/activities\/[\w-]+$/];
+const MATERIAL_HREF = [/^\/blog\/[\w-]+$/, /^\/write\/blog\/[\w-]+$/, /^\/course\/[\w-]+$/, /^\/library\?record=[0-9a-f-]{36}$/i, /^\/library\?folder=[0-9a-f-]{36}$/i, /^\/activities\/[\w-]+$/];
 export function cleanMaterials(list) {
   const seen = new Set();
   const out = [];

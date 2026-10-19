@@ -7,7 +7,25 @@
  * API and deletes it at the end.
  */
 
-import { makePdf } from './reader.mjs';
+/** A two-page past paper (numbered questions, printed marks), printed by the browser itself. */
+async function pastPaperPdf(browser) {
+  const ctx = await browser.newContext();
+  const p = await ctx.newPage();
+  const qs = [
+    ['1', '(a) Define osmosis. (b) Describe an experiment using potato strips to show osmosis in plant tissue.', 12],
+    ['2', 'Explain how the rate of diffusion is affected by temperature and concentration gradient.', 8],
+    ['3', '(a) Construct a food web for a pond habitat with five organisms. (b) Explain the role of decomposers in an ecosystem.', 15],
+    ['4', 'Using a genetic diagram, show the result of crossing a heterozygous tall pea plant with a dwarf pea plant.', 10],
+    ['5', 'Describe the structure of the mammalian heart and explain how blood flows through it.', 15],
+  ];
+  const q = (x) => `<p><b>${x[0]}.</b> ${x[1]} <i>[${x[2]} marks]</i></p>`;
+  await p.setContent(`<style>body{font:14px Georgia,serif;margin:48px} p{margin:26px 0;line-height:1.5}</style>
+    <h3>WEST AFRICAN SENIOR SCHOOL CERTIFICATE EXAMINATION 2019 — BIOLOGY PAPER 2 (Essay)</h3><p>Answer all questions.</p>
+    ${qs.slice(0, 3).map(q).join('')}<div style="page-break-after:always"></div>${qs.slice(3).map(q).join('')}`);
+  const pdf = await p.pdf({ format: 'A4' });
+  await ctx.close();
+  return pdf;
+}
 
 const newMarker = () => `[ui-gate:${Math.random().toString(16).slice(2, 8)}]`;
 const TOTAL = 13;
@@ -123,7 +141,7 @@ export const scenarios = [
       const marker = newMarker();
       const tag = marker.replace(/[^a-z0-9]/gi, '').slice(-6);
       const fileName = `WAEC Biology${tag} 2019 Paper 2.pdf`;
-      const pdf = await makePdf(context.browser());
+      const pdf = await pastPaperPdf(context.browser());
       t.cleanup(async () => {
         const chats = await t.api('GET', '/api/adaptive/chat/sessions');
         for (const c of (chats.body?.sessions || chats.body?.data || []).filter((x) => String(x.title || '').includes(tag))) await t.api('DELETE', `/api/adaptive/chat/sessions/${c.id}`);
@@ -153,8 +171,14 @@ export const scenarios = [
       t.note(`calls: ${calls.join(' · ')}`);
       t.check('…saved to the Library in a past-papers folder, private', /Saved to Library › .*Past papers/.test(text) && /Only you can see this/.test(text), { actual: text });
       t.check('…and read', ready && /Read/.test(text), { actual: text });
-      const chips = page.getByRole('button', { name: 'Find the topics that keep coming up' });
-      t.check('the first chip is the study step', await chips.first().waitFor({ timeout: 30_000 }).then(() => true, () => false));
+      // Read into its topics and questions, the protégé says what it found — the study step first.
+      const said = page.getByText(/The paper tests \d+ topics?/).last();
+      t.check('the protégé says what the paper tests', await said.waitFor({ timeout: 120_000 }).then(() => true, () => false));
+      const textNow = (await card.innerText().catch(() => '')).replace(/\s+/g, ' ');
+      t.note(`card after reading: ${textNow}`);
+      t.check('…the card counts its questions', /\d+ questions found/.test(textNow), { actual: textNow });
+      t.check('…and the first chip is the study step', await page.getByRole('button', { name: 'Make a study plan from this paper' }).first().waitFor({ timeout: 10_000 }).then(() => true, () => false));
+      t.check('…with a link to the folder', await page.locator('button[data-material="folder"]').last().isVisible().catch(() => false));
 
       // Saved with the reply: the record is in a private folder.
       const recs = (await t.api('GET', '/api/records')).body?.data || [];

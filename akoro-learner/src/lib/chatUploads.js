@@ -7,6 +7,7 @@
  *
  *   startIngest({ files, ask, chatSessionId, replaces })   → the ingest (folder picked)
  *   fileIngest(ingest, files, onUpdate)                     uploads, files, reads — onUpdate(ingest) on each step
+ *   structureIngest(id)                                     reads it into topics (+ a past paper's questions) → { data, message }
  *   undoIngest(id) · getIngest(id)
  */
 import { apiGet, apiPost } from '../services/api.js';
@@ -67,6 +68,12 @@ export async function fileIngest(ingest, files, onUpdate = () => {}) {
   } catch (e) {
     return set(await progress(ingest.id, 'failed', { error: e?.message || 'Saving failed.' }).catch(() => ({ ...current, state: 'failed', error: e?.message })));
   }
+}
+
+/** Once read: what it covers, posted back into the chat by the API. Slow (one model pass over the pages). */
+export async function structureIngest(id) {
+  const d = await apiPost(`${BASE}/${id}/structure`, {}, { timeout: 120000 });
+  return { data: d?.data ?? null, message: d?.message ?? null };
 }
 
 export const undoIngest = (id) => apiPost(`${BASE}/${id}/undo`, {}).then((d) => d?.data ?? null);

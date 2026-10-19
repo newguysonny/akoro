@@ -34,7 +34,7 @@ import AgentCards from '../network/AgentCards.jsx';
 import ChallengeRequestCards from '../network/ChallengeRequestCards.jsx';
 import ConfirmChangeCard from './agentChat/ConfirmChangeCard.jsx';
 import IngestCard from './agentChat/IngestCard.jsx';
-import { fileIngest, getIngest, isLibraryFile, startIngest, undoIngest } from '../../lib/chatUploads.js';
+import { fileIngest, getIngest, isLibraryFile, startIngest, structureIngest, undoIngest } from '../../lib/chatUploads.js';
 import { useVoiceAnswer } from '../../hooks/useVoiceAnswer.js';
 import { useSpeakReply } from '../../hooks/useSpeakReply.js';
 
@@ -85,7 +85,7 @@ function ThoughtBlock({ thinking, streaming }) {
   );
 }
 
-const MATERIAL_ICON = { blog:"ti-article", my_blog:"ti-pencil", course:"ti-school", record:"ti-paperclip", topic:"ti-chalkboard", activity:"ti-list-check" };
+const MATERIAL_ICON = { folder:"ti-folder", blog:"ti-article", my_blog:"ti-pencil", course:"ti-school", record:"ti-paperclip", topic:"ti-chalkboard", activity:"ti-list-check" };
 
 function AgentChatTab({
   onStartTeach, onTeachTopic, onStartExamPrep, onOpenConceptTracker, onOpenAdaptiveControls, agentNameProp, agentEmojiProp, onChatActive,
@@ -312,6 +312,7 @@ function AgentChatTab({
     ...(m.role !== "user" && m.meta?.proposal ? { proposal: m.meta.proposal } : {}),
     ...(m.role !== "user" && Array.isArray(m.meta?.materials) && m.meta.materials.length ? { materials: cleanMaterials(m.meta.materials) } : {}),
     ...(m.role !== "user" && m.meta?.ingest?.id ? { ingestId: m.meta.ingest.id } : {}),
+    ...(m.role !== "user" && Array.isArray(m.meta?.ideas) && m.meta.ideas.length ? { ideas: cleanIdeas(m.meta.ideas) } : {}),
   });
 
   const openSession = async (id) => {
@@ -664,6 +665,16 @@ function AgentChatTab({
     });
   };
 
+  // Upload → read → what it covers, said back in the chat (the API posts it; shown here at once).
+  const runIngest = async (ingest, files, chatId) => {
+    const done = await fileIngest(ingest, files, putIngest);
+    if (done?.state !== 'ready') return;
+    const r = await structureIngest(done.id).catch(() => null);
+    if (r?.data) putIngest(r.data);
+    if (r?.message && sessionIdRef.current === chatId) {
+      setMessages((prev) => (prev.some((m) => m.id === r.message.id) ? prev : [...prev, fromSaved({ ...r.message, role: 'agent' })]));
+    }
+  };
   // "Save it again" after an Undo: a fresh upload that takes over the same message.
   const saveAgain = async (oldId) => {
     const files = ingestFilesRef.current[oldId];
@@ -673,7 +684,7 @@ function AgentChatTab({
     ingestFilesRef.current[next.id] = files;
     putIngest(next);
     setMessages((prev) => prev.map((m) => (m.ingestId === oldId ? { ...m, ingestId: next.id } : m)));
-    await fileIngest(next, files, putIngest);
+    await runIngest(next, files, sessionIdRef.current);
   };
   // A reopened chat: each saved reply's upload card reads its current state.
   useEffect(() => {
@@ -713,7 +724,7 @@ function AgentChatTab({
     if (ingest) {
       putIngest(ingest);
       ingestFilesRef.current[ingest.id] = libFiles;
-      void fileIngest(ingest, libFiles, putIngest);
+      void runIngest(ingest, libFiles, sid);
     }
     const mode = thinkMode ? "think" : researchMode ? "research" : "default";
     const statusKey = { grounding:'agent.status_grounding', attachments:'agent.status_attachments', thinking:'agent.status_thinking', synthesis:'agent.status_synthesis' };

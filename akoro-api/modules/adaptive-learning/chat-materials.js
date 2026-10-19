@@ -5,11 +5,11 @@
  * only to the app's own pages.
  *
  *   { kind, title, href? , action? }
- *     href     an in-app route (/blog/…, /course/…, /library?record=…)
+ *     href     an in-app route (/blog/…, /course/…, /library?record=…, /library?folder=…)
  *     action   { type: "teach", topic, subject } — a topic opens a teaching session
  */
 
-const ALLOWED = [/^\/blog\/[\w-]+$/, /^\/write\/blog\/[\w-]+$/, /^\/course\/[\w-]+$/, /^\/library\?record=[0-9a-f-]{36}$/i, /^\/activities\/[\w-]+$/];
+const ALLOWED = [/^\/blog\/[\w-]+$/, /^\/write\/blog\/[\w-]+$/, /^\/course\/[\w-]+$/, /^\/library\?record=[0-9a-f-]{36}$/i, /^\/library\?folder=[0-9a-f-]{36}$/i, /^\/activities\/[\w-]+$/];
 const MAX = 8;
 const clip = (s, n = 90) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 const link = (kind, title, href) => (title && ALLOWED.some((re) => re.test(href)) ? { kind, title: clip(title), href } : null);
@@ -31,6 +31,7 @@ export function materialsFrom(tool, result) {
       return (r.courses || []).map((c) => (c.slug ? link("course", c.title, `/course/${c.slug}`) : null));
     case "get_learning_overview":
       return (r.courses || []).map((c) => (c.slug ? link("course", c.title, `/course/${c.slug}`) : null));
+    case "analyse_past_papers":
     case "search_my_library":
       return (r.records || []).map((x) => link("record", x.name, `/library?record=${x.recordId}`));
     case "get_weak_topics":

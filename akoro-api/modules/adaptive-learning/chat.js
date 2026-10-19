@@ -21,6 +21,7 @@ import { buildSuggestionMessages, notTaughtFrom, guideChip, uploadsFrom, uploadC
 import { resolveAskTargetFor } from "../records/access.js";
 import { materialsFrom, collectMaterials } from "./chat-materials.js";
 import { renderRelevantMemory } from "./chat-memory.js";
+import { recurringTopics } from "../materials/structureCore.js";
 import { gatherPassages, extractCitations } from "../records/askLib.js";
 import { searchRecordChunks } from "../records/searchLib.js";
 import { loadTaughtKnowledge, renderTaughtContext, buildGuideMessages, shapeGuideAnswer, teachRequest } from "./protege.js";
@@ -911,6 +912,14 @@ export const CHAT_TOOLS = [
       type: "object",
       properties: { query: { type: "string", description: "The topic or document to look for (3 to 200 characters)." } },
       required: ["query"],
+    },
+  },
+  {
+    name: "analyse_past_papers",
+    description: "Across the past papers the signed-in learner uploaded (read into questions by topic): which topics keep coming back — in how many papers and which years, how many questions and marks. Use for 'which topics keep coming up?', 'what should I focus on for WAEC Biology?', or after they upload a past paper. Answer only from this result; with one paper, say more years would show the pattern. Their papers are private to them.",
+    input_schema: {
+      type: "object",
+      properties: { subject: { type: "string", description: "Only this subject, e.g. Biology (optional)." } },
     },
   },
   {
@@ -2365,6 +2374,24 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         const records = [...byId.values()].slice(0, 5);
         return records.length ? { records } : { records: [], note: "Nothing in their Library matches — say so; don't invent a document." };
       } catch (error) { return { error: "Their Library is unavailable right now" }; }
+    }
+    case "analyse_past_papers": {
+      // The learner's own parsed past papers only (D53).
+      try {
+        let q = db.schema("edu").from("material_questions").select("ingest_id, record_id, exam, subject, year, number, marks, topic")
+          .eq("user_id", studentId).limit(2000);
+        const subject = String(input?.subject || "").trim().slice(0, 50);
+        if (subject) q = q.ilike("subject", `%${subject.replace(/[%_]/g, "")}%`);
+        const { data, error } = await q;
+        if (error) throw error;
+        const rows = data || [];
+        if (!rows.length) return { papers: 0, topics: [], note: "No past papers read yet — ask them to upload one (a photo or PDF) in this chat." };
+        const { papers, topics } = recurringTopics(rows);
+        const recordIds = [...new Set(rows.map((r) => r.record_id).filter(Boolean))].slice(0, 6);
+        const { data: recs } = await db.schema("edu").from("records").select("id, name").eq("user_id", studentId).in("id", recordIds);
+        return { papers, topics, records: (recs || []).map((r) => ({ recordId: r.id, name: r.name })),
+          ...(papers < 2 ? { note: "Only one paper so far — the pattern needs more years." } : {}) };
+      } catch (error) { return { error: "Their past papers are unavailable right now" }; }
     }
     case "get_concept_tracker_summary":
       return getConceptTrackerSummary(studentId, input).catch(asToolError("the concept tracker"));

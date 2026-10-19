@@ -43,7 +43,8 @@ export default function IngestCard({ ingest, onOpenFolder, onUndo, onRedo }) {
     <><Spinner size={10} color={BRAND}/> {ingest.state === 'received' ? t('agent.filed_saving')
       : n ? t('agent.filed_reading_n').replace('{done}', String(ingest.reading?.done ?? 0)).replace('{n}', String(n)) : t('agent.filed_reading')}</>
   ) : (
-    <><Icon name="ti-check" size={12} color={GREEN}/> {t('agent.filed_read')}{n ? <>{dot}{t('agent.filed_pages').replace('{n}', String(n))}</> : null}</>
+    <><Icon name="ti-check" size={12} color={GREEN}/> {t('agent.filed_read')}{n ? <>{dot}{t('agent.filed_pages').replace('{n}', String(n))}</> : null}
+      {ingest.questions ? <>{dot}{t('agent.filed_questions').replace('{n}', String(ingest.questions))}</> : null}</>
   );
 
   return (

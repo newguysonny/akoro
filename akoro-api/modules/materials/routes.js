@@ -8,6 +8,8 @@
  *   POST /api/agent/materials/ingest/:id/records    { recordIds }
  *        → the uploaded records go into the folder → filed
  *   POST /api/agent/materials/ingest/:id/progress   { state: extracting|ready|failed, pages?, error? }
+ *   POST /api/agent/materials/ingest/:id/structure  → reads it: topics (+ a past paper's questions,
+ *        private, D53), posts what it found into the chat → ready
  *   POST /api/agent/materials/ingest/:id/undo       → removes exactly what it made → undone
  *   GET  /api/agent/materials/ingest/:id
  *
@@ -22,6 +24,8 @@ import db from "../../db.js";
 import { authenticateToken } from "../auth/routes.js";
 import { openai } from "../../lib/aiModel.js";
 import { removeRecordFile } from "../records/lib/storage.js";
+import { getExtraction } from "../records/extractLib.js";
+import { cleanStructure, structureChips, structureMessage, structureMessages, structureSchema, STRUCTURE_LIMITS } from "./structureCore.js";
 import { assertTransition, TransitionError } from "../workflows/definition.js";
 import {
   INGEST_LIMITS, ingestWorkflow, classifyMessages, classifySchema, folderItemFor, folderNameFor, guessKind, ingestToApi, shapeClassification,
@@ -147,6 +151,97 @@ router.post("/ingest/:id/progress", asyncHandler(async (req, res) => {
   res.json({ success: true, data: ingestToApi(await move(row, to, patch)) });
 }));
 
+/** A record's pages as text: parsed/extracted pages, or a paste split into parts. */
+async function pagesOfRecord(record) {
+  if (record.kind === "paste") {
+    const parts = String(record.content || "").split(/\n{2,}/).reduce((acc, para) => {
+      const last = acc[acc.length - 1];
+      if (last && last.length + para.length < STRUCTURE_LIMITS.PAGE_CHARS) acc[acc.length - 1] = `${last}\n\n${para}`; else acc.push(para);
+      return acc;
+    }, []);
+    return parts.map((text, i) => ({ pageNumber: i + 1, text }));
+  }
+  if (!record.file_key) return [];
+  const ext = await getExtraction(record.file_key).catch(() => ({ pages: [] }));
+  return (ext.pages || []).map((p) => ({ pageNumber: p.pageNumber, text: p.markdown || "" })).filter((p) => p.text.trim());
+}
+
+const STRUCTURE_FILES = 3;
+router.post("/ingest/:id/structure", asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  let row = await loadOwn(req.params.id, userId);
+  if (!row) return res.status(404).json({ success: false, message: "Upload not found." });
+  // Once per upload: a second call returns what the first found.
+  if (row.structure) return res.json({ success: true, data: ingestToApi(row), message: null });
+  if (row.state !== "ready") return res.status(409).json({ success: false, code: "not_ready", message: "It isn't read yet." });
+  const ids = (row.record_ids || []).slice(0, STRUCTURE_FILES);
+  const { data: records } = await edu().from("records").select("id, name, kind, mime, file_key, content").eq("user_id", userId).in("id", ids);
+  row = await move(row, "structured");
+
+  const items = [];
+  const questions = [];
+  for (const record of records || []) {
+    const pages = await pagesOfRecord(record);
+    if (!pages.length) continue;
+    let raw = "{}";
+    try {
+      const out = await openai.chat.completions.create({
+        __role: "background", messages: structureMessages({ names: [record.name], kindHint: row.doc_kind, pages }),
+        temperature: 0, max_tokens: STRUCTURE_LIMITS.MAX_TOKENS, response_format: structureSchema(),
+        __payer: "platform", __feature: "material_structure", __userId: userId, __timeoutMs: 75_000, __maxRetries: 1,
+      });
+      raw = out?.choices?.[0]?.message?.content || "{}";
+    } catch (error) {
+      console.warn("[materials] structure call failed:", String(error?.message || error).slice(0, 160));
+    }
+    const s = cleanStructure(raw, { pageNumbers: pages.map((p) => p.pageNumber), fallbackKind: row.doc_kind || "other" });
+    items.push({ recordId: record.id, name: record.name, pages: pages.length, ...s, questions: undefined, questionCount: s.questions.length });
+    for (const q of s.questions) questions.push({ ...q, record_id: record.id, exam: s.exam, subject: s.subject || row.subject, year: s.year });
+  }
+
+  const main = items[0] || null;
+  const structure = {
+    items: items.map(({ dropped, ...it }) => it),
+    topics: [...new Map(items.flatMap((it) => it.topics).map((t) => [t.name.toLowerCase(), t])).values()].slice(0, 30),
+    questionCount: questions.length,
+  };
+  if (questions.length) {
+    const { error } = await edu().from("material_questions").insert(questions.map((q) => ({
+      user_id: userId, ingest_id: row.id, record_id: q.record_id, exam: q.exam, subject: q.subject, year: q.year,
+      number: q.number, marks: q.marks, topic: q.topic, page: q.page, text: q.text,
+    })));
+    if (error) console.warn("[materials] questions not saved:", error.message);
+  }
+  // A folder this upload made under "From chat — …" gets its real name once the subject is known.
+  const subject = main?.subject || row.subject;
+  const kind = main?.kind || row.doc_kind;
+  if (row.folder_id && row.folder_created && /^From chat/.test(row.folder_name || "") && subject) {
+    const better = folderNameFor({ subject, kind });
+    const { error } = await edu().from("library_folders").update({ name: better, updated_at: now() }).eq("id", row.folder_id).eq("user_id", userId);
+    if (!error) row.folder_name = better;
+  }
+  row = await move(row, "ready", { structure, subject, doc_kind: kind, folder_name: row.folder_name });
+
+  // What it found, said in the chat it came from (written by code from what was kept).
+  let message = null;
+  if (row.chat_session_id && items.length) {
+    const text = items.length === 1
+      ? structureMessage({ ...main, questions: questions.filter((q) => q.record_id === main.recordId) }, { pages: main.pages })
+      : items.map((it) => `**${it.title || it.name}** — ${structureMessage({ ...it, questions: questions.filter((q) => q.record_id === it.recordId) }, { pages: it.pages }).replace(/^I've read it\.?\s*/, "")}`).join("\n\n");
+    const materials = [
+      ...(row.folder_id ? [{ kind: "folder", title: row.folder_name, href: `/library?folder=${row.folder_id}` }] : []),
+      ...items.map((it) => ({ kind: "record", title: it.title || it.name, href: `/library?record=${it.recordId}` })),
+    ].slice(0, 6);
+    const meta = { ingest: { id: row.id }, materials, ideas: main ? structureChips({ ...main, questions }) : [] };
+    const { data: msg } = await db.from("chat_messages").insert({ session_id: row.chat_session_id, user_id: userId, role: "agent", text, meta }).select("id, text, meta, created_at").single();
+    if (msg) {
+      message = msg;
+      await db.from("chat_sessions").update({ last_message_at: now() }).eq("id", row.chat_session_id).eq("user_id", userId);
+    }
+  }
+  res.json({ success: true, data: ingestToApi(row), message });
+}));
+
 router.post("/ingest/:id/undo", asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const row = await loadOwn(req.params.id, userId);
@@ -161,6 +256,7 @@ router.post("/ingest/:id/undo", asyncHandler(async (req, res) => {
     await edu().from("records").delete().eq("user_id", userId).in("id", ids);
     for (const r of records || []) void removeRecordFile(r.file_key);
   }
+  await edu().from("material_questions").delete().eq("user_id", userId).eq("ingest_id", row.id);
   // The folder goes only if this upload made it and nothing else is in it now.
   let folderRemoved = false;
   if (row.folder_id && row.folder_created) {

@@ -3,12 +3,41 @@
  * dropped into chat is filed in a private Library folder named from it, read,
  * and Undo removes exactly what the upload made. Everything is deleted.
  */
+import { PDFDocument, StandardFonts } from "pdf-lib";
 import { textPdf } from "./reader.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function uploadRecord(ctx, as, name) {
-  const bytes = await textPdf();
+/** A two-page past paper: numbered questions with printed marks. */
+const QUESTIONS = [
+  ["1", "(a) Define osmosis. (b) Describe an experiment using potato strips to show osmosis in plant tissue.", 12],
+  ["2", "Explain how the rate of diffusion is affected by temperature and concentration gradient.", 8],
+  ["3", "(a) Construct a food web for a pond habitat with five organisms. (b) Explain the role of decomposers in an ecosystem.", 15],
+  ["4", "Using a genetic diagram, show the result of crossing a heterozygous tall pea plant with a dwarf pea plant.", 10],
+  ["5", "Describe the structure of the mammalian heart and explain how blood flows through it.", 15],
+];
+export async function pastPaperPdf() {
+  const pdf = await PDFDocument.create();
+  const font = await pdf.embedFont(StandardFonts.TimesRoman);
+  const pages = [pdf.addPage([595.28, 841.89]), pdf.addPage([595.28, 841.89])];
+  pages[0].drawText("WEST AFRICAN SENIOR SCHOOL CERTIFICATE EXAMINATION 2019 — BIOLOGY PAPER 2 (Essay)", { x: 40, y: 790, size: 11, font });
+  pages[0].drawText("Answer all questions. Marks are shown in brackets.", { x: 40, y: 770, size: 10, font });
+  QUESTIONS.forEach(([n, text, marks], i) => {
+    const page = pages[i < 3 ? 0 : 1];
+    let y = (i < 3 ? 730 : 780) - (i % 3) * 120;
+    const words = `${n}. ${text} [${marks} marks]`.split(" ");
+    let line = "";
+    for (const w of words) {
+      if ((line + " " + w).length > 90) { page.drawText(line.trim(), { x: 40, y, size: 11, font }); y -= 16; line = ""; }
+      line += " " + w;
+    }
+    page.drawText(line.trim(), { x: 40, y, size: 11, font });
+  });
+  return Buffer.from(await pdf.save());
+}
+
+async function uploadRecord(ctx, as, name, bytesIn = null) {
+  const bytes = bytesIn || await textPdf();
   const up = await ctx.http({ as, method: "POST", path: "/api/records/upload-url", body: { name, mime: "application/pdf", size: bytes.length } });
   if (up.status !== 200 || !up.body?.data?.uploadUrl) ctx.expect.blocked(`upload-url answered ${up.status}: ${up.body?.message || ""}`);
   const put = await fetch(up.body.data.uploadUrl, { method: "PUT", headers: { "Content-Type": "application/pdf" }, body: bytes }).catch((e) => ({ status: String(e.message) }));
@@ -91,5 +120,66 @@ export const chatUploadFiled = {
     const chips = await ctx.http({ as: p.learner, method: "POST", path: "/api/adaptive/chat/suggestions",
       body: { role: "student", ask: "Help me with this", reply: "I've saved it and I'm reading it now.", attachments: [{ name: names[0], kind: "past_paper" }] } });
     ctx.expect.eq("the first chip after a past paper", (chips.body?.suggestions || [])[0], "Find the topics that keep coming up");
+  },
+};
+
+export const pastPaperStructured = {
+  name: "materials.past_paper_structured", area: "materials", risk: "write",
+  description: "A past paper dropped into chat is read into topics and its questions (with marks, private), the protégé posts what it found into that chat, the agent's past-paper analysis uses them, and Undo removes them.",
+  params: { learner: { default: "@tester18" } },
+  async run(ctx, p) {
+    const as = p.learner;
+    const chat = await ctx.http({ as, method: "POST", path: "/api/adaptive/chat/sessions", body: { title: `${ctx.marker} past paper` } });
+    const chatId = chat.body?.session?.id;
+    ctx.expect.ok("a chat to post into", !!chatId, chat.body);
+    if (!chatId) return;
+    ctx.cleanup(() => ctx.http({ as, method: "DELETE", path: `/api/adaptive/chat/sessions/${chatId}` }));
+    const name = `${ctx.marker} WAEC Biology 2019 Paper 2.pdf`;
+    const a = await ctx.http({ as, method: "POST", path: "/api/agent/materials/ingest", body: { names: [name], ask: "Help me prepare with this paper", chatSessionId: chatId } });
+    const ingest = a.body?.data;
+    if (!ingest?.id) { ctx.expect.ok("the upload is received", false, a.body); return; }
+    if (ingest.folder?.id && ingest.folder.created) ctx.cleanup(() => ctx.http({ as, method: "DELETE", path: `/api/records/folders/${ingest.folder.id}` }));
+    const rec = await uploadRecord(ctx, as, name, await pastPaperPdf());
+    if (!rec?.id) { ctx.expect.ok("the record is saved", false); return; }
+    await ctx.http({ as, method: "POST", path: `/api/agent/materials/ingest/${ingest.id}/records`, body: { recordIds: [rec.id] } });
+    let pages = 0;
+    for (let i = 0; i < 12; i++) {
+      const ext = await ctx.http({ as, method: "POST", path: "/api/records/extract/text", body: { recordId: rec.id } });
+      if (ext.status !== 202) { pages = ext.body?.data?.pages?.length || 0; break; }
+      await sleep(5_000);
+    }
+    ctx.expect.eq("the paper's two pages are read", pages, 2);
+    await ctx.http({ as, method: "POST", path: `/api/agent/materials/ingest/${ingest.id}/progress`, body: { state: "extracting" } });
+    await ctx.http({ as, method: "POST", path: `/api/agent/materials/ingest/${ingest.id}/progress`, body: { state: "ready", pages } });
+
+    // Structure: topics on real pages, the questions with their marks, said back in the chat.
+    const st = await ctx.http({ as, method: "POST", path: `/api/agent/materials/ingest/${ingest.id}/structure` });
+    const data = st.body?.data;
+    ctx.note(`topics: ${(data?.topics || []).join(" · ")} · questions ${data?.questions}`);
+    ctx.note(`message: ${String(st.body?.message?.text || "").slice(0, 400)}`);
+    ctx.expect.eq("structured, then ready again", data?.state, "ready");
+    ctx.expect.gte("topics found", (data?.topics || []).length, 3);
+    ctx.expect.ok("…the paper's own topics", (data?.topics || []).some((t) => /osmosis|diffusion/i.test(t)) && (data?.topics || []).some((t) => /ecolog|food|ecosystem/i.test(t)), data?.topics);
+    ctx.expect.gte("its questions are found", data?.questions ?? 0, 4);
+    const text = String(st.body?.message?.text || "");
+    ctx.expect.ok("the protégé says what it found, in that chat", /The paper tests \*\*\d+ topics?\*\*/.test(text) && /marks/.test(text), text);
+    ctx.expect.ok("…with the study step first and links to the folder and paper",
+      st.body?.message?.meta?.ideas?.[0] === "Make a study plan from this paper" && (st.body?.message?.meta?.materials || []).some((m) => m.href === `/library?record=${rec.id}`), st.body?.message?.meta);
+    const msgs = await ctx.http({ as, method: "GET", path: `/api/adaptive/chat/sessions/${chatId}/messages?limit=10` });
+    ctx.expect.ok("…saved in the chat", (msgs.body?.messages || []).some((m) => m.id === st.body?.message?.id));
+    const again = await ctx.http({ as, method: "POST", path: `/api/agent/materials/ingest/${ingest.id}/structure` });
+    ctx.expect.ok("once per upload: a second call posts nothing", again.status === 200 && again.body?.message === null);
+
+    // The agent's analysis reads them — only this learner's.
+    const an = await ctx.agent.tool({ as, tool: "analyse_past_papers", input: { subject: "Biology" } });
+    ctx.note(`analysis: ${JSON.stringify(an).slice(0, 400)}`);
+    ctx.expect.ok("the past-paper analysis uses its questions", (an?.topics || []).some((t) => /osmosis|diffusion/i.test(t.topic) && t.marks > 0), an);
+
+    // Undo takes the questions with it.
+    await ctx.http({ as, method: "POST", path: `/api/agent/materials/ingest/${ingest.id}/undo` });
+    const after = await ctx.agent.tool({ as, tool: "analyse_past_papers", input: { subject: "Biology" } });
+    const before = (an?.topics || []).reduce((n, t) => n + t.questions, 0);
+    const left = (after?.topics || []).reduce((n, t) => n + t.questions, 0);
+    ctx.expect.ok("…and Undo removes them", left <= before - (data?.questions ?? 0), { before, left });
   },
 };

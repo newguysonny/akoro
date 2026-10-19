@@ -112,6 +112,7 @@ export function ingestToApi(row) {
     folder: row.folder_id ? { id: row.folder_id, name: row.folder_name, created: !!row.folder_created } : (row.folder_name ? { id: null, name: row.folder_name, created: false } : null),
     kind: row.doc_kind || null, kindLabel: kindLabel(row.doc_kind), subject: row.subject || null,
     pages: row.pages ?? null, error: row.error || null,
+    topics: (row.structure?.topics || []).map((t) => t.name), questions: row.structure?.questionCount ?? null,
     chatSessionId: row.chat_session_id || null, chatMessageId: row.chat_message_id || null,
     createdAt: row.created_at, updatedAt: row.updated_at,
   };
