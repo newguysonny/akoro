@@ -12,7 +12,7 @@ import { bridgePersists } from "./teaching.js";
 import { conceptCurve } from "./decay.js";
 import { suggestionsAnswer, suggestionsSurviveRefresh, studyToolRouting, untaughtFlashcards } from "./suggestions.js";
 import { tailoredChips } from "./tailored.js";
-import { chatUploadFiled, pastPaperStructured } from "./materials.js";
+import { chatUploadFiled, pastPaperStructured, sortOwnFolders } from "./materials.js";
 import { voiceSpeak, voiceLive } from "./voice.js";
 import { paperStructured, chatToSubmissionScenarios } from "./activities.js";
 import { authoringVersionsParts, authoringDiagramsEdits } from "./authoring.js";
@@ -25,7 +25,7 @@ import { socketSession } from "./socket.js";
 
 const ALL = [healthBuild, toolsCatalogue, scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity,
   privacyEdges, rateLimitCountedOnce, battleEntryGates, followUpDeliverIntoChat, taskDueInMinutes, noResidue,
-  viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, suggestionsSurviveRefresh, studyToolRouting, untaughtFlashcards, tailoredChips, chatUploadFiled, pastPaperStructured, voiceSpeak, voiceLive, sweepStale, agentCheckBattle, classSyllabusFirst, historyPages, workflowMirror, paperStructured, ...chatToSubmissionScenarios, authoringVersionsParts, authoringDiagramsEdits, inboxOneList, quietLearningPass, plannerRichGather, proactiveInChat, readerBackend, socketSession];
+  viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, suggestionsSurviveRefresh, studyToolRouting, untaughtFlashcards, tailoredChips, chatUploadFiled, pastPaperStructured, sortOwnFolders, voiceSpeak, voiceLive, sweepStale, agentCheckBattle, classSyllabusFirst, historyPages, workflowMirror, paperStructured, ...chatToSubmissionScenarios, authoringVersionsParts, authoringDiagramsEdits, inboxOneList, quietLearningPass, plannerRichGather, proactiveInChat, readerBackend, socketSession];
 
 export const SCENARIOS = Object.fromEntries(ALL.map((s) => [s.name, s]));
 
@@ -54,7 +54,7 @@ export const SUITES = {
   voice: ["voice.speak_deepgram", "voice.live_deepgram"],
   // Clear what cut-short runs left on the test learners, then prove it is gone.
   sweep: ["writes.sweep_stale", "writes.no_residue"],
-  materials: ["materials.chat_upload_filed", "materials.past_paper_structured", "writes.no_residue"],
+  materials: ["materials.chat_upload_filed", "materials.past_paper_structured", "materials.sort_own_folders", "writes.no_residue"],
   "study-prep": ["studyprep.plan_completes", "studyprep.practice_charged_once", "studyprep.generated_outline", "studyprep.class_syllabus_first", "studyprep.workflow_mirror", "writes.no_residue"],
   "agent-check": ["studyprep.agent_check_battle", "writes.no_residue"],
   "agent-network": ["network.privacy_edges"],

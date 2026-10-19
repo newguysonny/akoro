@@ -135,7 +135,7 @@ export const scenarios = [
   },
   {
     name: 'chat.upload_saved',
-    description: "A file dropped into Agent Chat is saved to a private Library folder named from it, read, and the reply's card says so; the first chip is the study step; Undo removes it.",
+    description: "A file dropped into Agent Chat is saved to a private Library folder for its subject, read, and the reply's card says so; the first chip is the study step; Undo moves it to Recently deleted and Restore brings it back.",
     async run(t) {
       const { page, context } = t;
       const marker = newMarker();
@@ -173,7 +173,7 @@ export const scenarios = [
       const text = (await card.innerText().catch(() => '')).replace(/\s+/g, ' ');
       t.note(`card: ${text}`);
       t.note(`calls: ${calls.join(' · ')}`);
-      t.check('…saved to the Library in a past-papers folder, private', /Saved to Library › .*Past papers/.test(text) && /Only you can see this/.test(text), { actual: text });
+      t.check('…saved to the Library in a Biology folder, private', /1 file › .*(Biology|Bio)/i.test(text) && /Only you/.test(text), { actual: text });
       t.check('…and read', ready && /Read/.test(text), { actual: text });
       // Read into its topics and questions, the protégé says what it found — the study step first.
       const said = page.getByText(/The paper tests \d+ topics?/).last();
@@ -188,24 +188,33 @@ export const scenarios = [
       const recs = (await t.api('GET', '/api/records')).body?.data || [];
       const rec = recs.find((r) => r.name === fileName);
       t.check('the file is a Library record', !!rec);
+      // Deleted by id at the end: after Undo it is in Recently deleted, out of the records list.
+      if (rec?.id) t.cleanup(() => t.api('DELETE', `/api/records/${rec.id}`));
       const folders = (await t.api('GET', '/api/records/folders')).body?.data || [];
       let folder = null;
-      for (const f of folders.filter((x) => /past papers$/i.test(x.name))) {
+      for (const f of folders) {
         const items = (await t.api('GET', `/api/records/folders/${f.id}/items`)).body?.data || [];
         if (items.some((it) => it.itemRef === rec?.id)) { folder = f; break; }
       }
-      t.check('…in a private past-papers folder', folder?.visibility === 'private', { actual: folder });
+      t.check('…in a private folder', folder?.visibility === 'private', { actual: folder });
 
 
-      // Undo: the card says so, the record is gone.
+      // Undo: Recently deleted — the card says so and offers Restore; the record is out of the Library.
       await card.getByRole('button', { name: 'Undo' }).click();
-      t.check('Undo shows it removed', await page.locator('[data-ingest="undone"]').last().waitFor({ timeout: 20_000 }).then(() => true, () => false));
+      const gone = page.locator('[data-ingest="undone"]').last();
+      t.check('Undo moves it to Recently deleted', await gone.waitFor({ timeout: 20_000 }).then(() => true, () => false)
+        && /Recently deleted.*30 days/.test((await gone.innerText().catch(() => '')).replace(/\s+/g, ' ')));
       const after = (await t.api('GET', '/api/records')).body?.data || [];
-      t.check('…and the record is gone', !after.some((r) => r.name === fileName));
+      t.check('…the record is out of the Library', !after.some((r) => r.name === fileName));
       if (folder) {
         const items = (await t.api('GET', `/api/records/folders/${folder.id}/items`)).body;
         t.check('…and out of its folder', !(items?.data || []).some((it) => it.itemRef === rec?.id));
       }
+      // Restore: back in the Library and its folder.
+      await gone.getByRole('button', { name: 'Restore' }).click();
+      t.check('Restore brings the card back', await page.locator('[data-ingest="ready"]').last().waitFor({ timeout: 20_000 }).then(() => true, () => false));
+      const again = (await t.api('GET', '/api/records')).body?.data || [];
+      t.check('…and the record', again.some((r) => r.id === rec?.id));
     },
   },
   {

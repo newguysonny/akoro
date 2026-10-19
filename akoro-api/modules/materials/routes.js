@@ -235,6 +235,8 @@ router.post("/ingest/:id/progress", asyncHandler(async (req, res) => {
   if (!row) return res.status(404).json({ success: false, message: "Upload not found." });
   const to = String(req.body?.state || "");
   if (!PROGRESS.has(to)) return res.status(400).json({ success: false, message: "state: extracting, ready or failed." });
+  // Undone is Recently deleted: only Restore brings it back, never a late step of the read.
+  if (row.state === "undone") return res.status(409).json({ success: false, code: "invalid_state_transition", message: "This upload was undone." });
   const patch = {};
   if (Number.isFinite(Number(req.body?.pages))) patch.pages = Math.max(0, Math.min(2000, Math.round(Number(req.body.pages))));
   if (to === "failed") patch.error = String(req.body?.error || "Couldn't read it.").slice(0, 300);

@@ -221,3 +221,72 @@ export const pastPaperStructured = {
     ctx.expect.ok("…and Undo removes them", left <= before - (data?.questions ?? 0), { before, left });
   },
 };
+
+// Sorting (§7.17, D51): files sent together go to their own subjects, into the
+// folders the learner already keeps — a new folder only when none fits.
+export const sortOwnFolders = {
+  name: "materials.sort_own_folders", area: "materials", risk: "write",
+  description: "Files sent together are sorted per subject: Agric papers into the learner's own 'Agric' folder (no new folder), Commerce notes into their own; two Agric folders → the card asks and the pick is remembered; Undo on one card leaves the other; Restore brings it back.",
+  params: { learner: { default: "@tester18" } },
+  async run(ctx, p) {
+    const as = p.learner;
+    const me = await ctx.as(as);
+    const m = ctx.marker.replace(/[^a-z0-9]/gi, "").slice(-6);
+    const api = "/api/agent/materials/ingest";
+    const ingest = async (names, ask = "") => (await ctx.http({ as, method: "POST", path: api, body: { names, ask } })).body || {};
+    const made = new Set();   // folders this run made: removed at the end
+    ctx.cleanup(async () => {
+      const all = (await ctx.http({ as, path: "/api/records/folders" })).body?.data || [];
+      for (const f of all) if (made.has(f.id) || f.name.includes(m)) await ctx.http({ as, method: "DELETE", path: `/api/records/folders/${f.id}` });
+    });
+    const ingestIds = [];
+    ctx.cleanup(() => Promise.all(ingestIds.map((id) => ctx.db.deleteOwned("edu.material_ingests", { ownerColumn: "user_id", ownerId: me.id, filters: { id } }))));
+    ctx.cleanup(() => ctx.db.deleteOwned("edu.material_folder_defaults", { ownerColumn: "user_id", ownerId: me.id, filters: { subject_key: "agricultural science" } }));
+    await ctx.db.deleteOwned("edu.material_folder_defaults", { ownerColumn: "user_id", ownerId: me.id, filters: { subject_key: "agricultural science" } }).catch(() => {});
+    const folder = async (name) => {
+      const r = await ctx.http({ as, method: "POST", path: "/api/records/folders", body: { name } });
+      if (!r.body?.data?.id) ctx.expect.blocked(`making the folder "${name}" answered ${r.status}`);
+      made.add(r.body.data.id);
+      return r.body.data;
+    };
+
+    // 1. The learner keeps Agric in their own folder, named their way.
+    const agric = await folder(`Agric ${m}`);
+    const batch = await ingest([`WAEC Agric 2019 ${m}.pdf`, `WAEC Agricultural Science 2021 ${m}.pdf`, `Commerce notes ${m}.docx`], "my papers and notes for this term");
+    const ups = batch.ingests || [];
+    ups.forEach((u) => ingestIds.push(u.id));
+    ctx.note(`batch: ${JSON.stringify(ups.map((u) => [u.names, u.subject, u.kind, u.folder?.name, u.folder?.created]))}`);
+    ctx.expect.eq("three files, two subjects → two uploads", ups.length, 2);
+    const ag = ups.find((u) => /agric/i.test(u.names?.[0] || ""));
+    const co = ups.find((u) => /commerce/i.test(u.names?.[0] || ""));
+    ctx.expect.ok("…one batch", !!batch.batchId && ups.every((u) => u.batchId === batch.batchId), { batchId: batch.batchId });
+    ctx.expect.ok("both Agric papers go to the learner's own 'Agric' folder — no new folder", ag?.folder?.id === agric.id && ag?.folder?.created === false && ag?.names?.length === 2, ag);
+    ctx.expect.ok("the Commerce notes go to a Commerce folder of their own", /^commerce — notes$/i.test(co?.folder?.name || "") && co?.folder?.id !== agric.id, co?.folder);
+    if (co?.folder?.created) made.add(co.folder.id);
+
+    // 2. Two folders fit equally → the card asks (the fuller first); the pick is remembered.
+    const ss2 = await folder(`SS2 Agric ${m}`);
+    const ask = (await ingest([`Agric notes ${m}.docx`])).ingests?.[0];
+    if (ask?.id) ingestIds.push(ask.id);
+    ctx.expect.ok("two Agric folders → it asks which, the fuller one first", ask?.folder === null && (ask?.choices || [])[0]?.id === agric.id && ask.choices.some((c) => c.id === ss2.id), { folder: ask?.folder, choices: ask?.choices });
+    const picked = await ctx.http({ as, method: "POST", path: `${api}/${ask?.id}/folder`, body: { folderId: ss2.id } });
+    ctx.expect.ok("…the learner picks 'SS2 Agric'", picked.body?.data?.folder?.id === ss2.id && !picked.body?.data?.choices, picked.body?.data);
+    const next = (await ingest([`Agric notes week 2 ${m}.docx`])).ingests?.[0];
+    if (next?.id) ingestIds.push(next.id);
+    ctx.expect.eq("…and the next Agric notes go straight there", next?.folder?.id, ss2.id);
+
+    // 3. Undo one card: Recently deleted (restorable); the other card is untouched.
+    const undo = await ctx.http({ as, method: "POST", path: `${api}/${co?.id}/undo` });
+    ctx.expect.eq("Undo on the Commerce card", undo.body?.data?.state, "undone");
+    ctx.expect.ok("…restorable for 30 days", !!undo.body?.data?.restorableUntil && Date.parse(undo.body.data.restorableUntil) - Date.now() > 29 * 86_400_000, undo.body?.data?.restorableUntil);
+    const agAfter = await ctx.http({ as, path: `${api}/${ag?.id}` });
+    ctx.expect.ok("…the Agric card is untouched", agAfter.body?.data?.state !== "undone" && agAfter.body?.data?.folder?.id === agric.id, agAfter.body?.data);
+    const revive = await ctx.http({ as, method: "POST", path: `${api}/${co?.id}/progress`, body: { state: "ready" } });
+    ctx.expect.status("a late reading step doesn't bring it back (409)", revive, 409);
+
+    // 4. Restore: back, in a Commerce folder again.
+    const back = await ctx.http({ as, method: "POST", path: `${api}/${co?.id}/restore` });
+    ctx.expect.ok("Restore brings it back", back.body?.data?.state === "ready" && /^commerce — notes$/i.test(back.body?.data?.folder?.name || "") && !back.body?.data?.restorableUntil, back.body?.data);
+    if (back.body?.data?.folder?.id && (co?.folder?.created || undo.body?.data?.folderRemoved)) made.add(back.body.data.folder.id);
+  },
+};
