@@ -76,7 +76,8 @@ export const practiceChargedOnce = {
     const flat = recent.filter((t) => t.feature === "study_prep_practice");
     ctx.expect.eq("one flat practice charge", flat.length, 1);
     ctx.expect.eq("flat charge is 2 coins", flat[0]?.delta, -2);
-    ctx.expect.eq("question generation not billed to the learner", recent.filter((t) => t.feature !== "study_prep_practice").length, 0);
+    // The agent's wake after the approval is part of the session and billed as such (study_prep_wake).
+    ctx.expect.eq("question generation not billed to the learner", recent.filter((t) => !["study_prep_practice", "study_prep_wake"].includes(t.feature)).length, 0);
   },
 };
 
@@ -212,7 +213,7 @@ export const agentCheckBattle = {
       .filter((t) => t.created_at >= t0 && t.type === "debit");
     ctx.note(`debits: ${JSON.stringify(debits.map((t) => ({ feature: t.feature, delta: t.delta })))}`);
     ctx.expect.eq("one flat practice charge", debits.filter((t) => t.feature === "study_prep_practice").length, 1);
-    ctx.expect.eq("nothing else billed (questions and answers are the platform's)", debits.filter((t) => t.feature !== "study_prep_practice").length, 0);
+    ctx.expect.eq("nothing else billed (questions and answers are the platform's)", debits.filter((t) => !["study_prep_practice", "study_prep_wake"].includes(t.feature)).length, 0);
 
     const events = await ctx.db.rows("edu.study_prep_events", { session_id: id, event_type: "engine_result" }, { columns: "facts", limit: 5 });
     const engine = events.find((e) => e.facts?.source === "agent_recall");
@@ -387,11 +388,11 @@ export const agentWakes = {
     // Platform-paid: the learner approved the plan's coins, not the agent's thinking.
     const [acct] = await ctx.db.rows("coin_accounts", { owner_id: me.id }, { columns: "id", limit: 1 });
     if (acct) {
-      // Nothing at all: its model calls and its reads (the notes search, its rerank) are the platform's.
+      // Only the wake itself (part of the session, study_prep_wake): its reads (the notes search, its rerank) stay the platform's.
       const wakeDebits = (await ctx.db.rows("coin_transactions", { account_id: acct.id }, { columns: "feature, type, created_at", limit: 30, order: { column: "created_at", ascending: false } }))
         .filter((t) => t.created_at >= approvedAt && t.type === "debit");
       ctx.note(`debits during the wake: ${JSON.stringify(wakeDebits.map((t) => t.feature))}`);
-      ctx.expect.eq("the wake isn't billed to the learner", wakeDebits.length, 0);
+      ctx.expect.eq("only the wake is billed to the learner", wakeDebits.filter((t) => t.feature !== "study_prep_wake").length, 0);
     }
 
     const [after] = await ctx.db.rows("edu.study_prep_sessions", { id: session.id }, { columns: "status, paused_reason", limit: 1 });

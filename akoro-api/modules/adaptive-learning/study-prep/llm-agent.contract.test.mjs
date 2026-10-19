@@ -38,7 +38,7 @@ test("replies are mapped back to registry names; the call is bounded and labelle
   const wrapper = readFileSync(new URL("./llm-agent.js", import.meta.url), "utf8");
   assert.match(wrapper, /feature = "study_prep_planning", maxTokens = 1600/, "planning is billed as planning, 1600 tokens a decision");
   assert.match(wrapper, /feature, payer, timeoutMs: 60_000, maxRetries: 1, maxTokens, think: true, talk: true/);
-  assert.match(readFileSync(new URL("./wiring.js", import.meta.url), "utf8"), /feature: "study_prep_wake", maxTokens: 1200, payer: "platform"/, "a wake is platform-paid");
+  assert.match(readFileSync(new URL("./wiring.js", import.meta.url), "utf8"), /feature: "study_prep_wake", maxTokens: 1200,(?! payer)/, "a wake is billed to the learner, as part of their session");
   const loop = readFileSync(new URL("./agent-loop.js", import.meta.url), "utf8");
   assert.match(loop, /action: "agent_error"/, "a provider failure is recorded in the session's events");
 });

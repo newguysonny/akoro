@@ -42,6 +42,12 @@ export const SETS = Object.freeze({
     consumer: "study-prep agent-loop — teaching step",
     files: Object.freeze(["AGENT.md", "learning/LEARNING.md", "learning/TEACHING.md", "learning/MASTERY.md"]),
   }),
+  // After the plan is approved: the agent's short turns (wakes, 2026-10-19).
+  wake: Object.freeze({
+    mode: "joined",
+    consumer: "study-prep wake runner — the agent's turns after the plan is approved",
+    files: Object.freeze(["AGENT.md", "reasoning/WAKES.md", "learning/TEACHING.md", "learning/ASSESSMENT.md", "policies/EDUCATION_RULES.md"]),
+  }),
   reflection: Object.freeze({
     mode: "joined",
     consumer: "study-prep agent-loop — reflection step",

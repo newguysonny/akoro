@@ -288,7 +288,8 @@ export function wakeStudyPrep({ sessionId, learnerId = null, trigger, facts = {}
   if (!entry.queue.some((q) => q.trigger === trigger)) entry.queue.push({ learnerId, trigger, facts });
   if (entry.running) return true;
   entry.running = true;
-  // Outside the request that woke it (its AI context would bill the learner for the wake's platform-paid reads).
+  // Outside the request that woke it: the wake bills its own model calls to the learner by name
+  // (study_prep_wake); the request's context would also bill its platform-paid reads (the notes search).
   aiContext.exit(() => setImmediate(async () => {
     try {
       while (entry.queue.length) {
@@ -324,15 +325,16 @@ export async function runStudyPrepWake({ sessionId, learnerId = null, trigger, f
   let step = null;
   try {
     const context = await buildAgentContext({
-      setName: "teaching", goal: view.session.goal, session: view.session,
+      // The wake doctrine (reasoning/WAKES.md): its rules, what runs by itself, what to do after a check.
+      setName: "wake", goal: view.session.goal, session: view.session,
       dynamic: { hint: wakeGoal(trigger, facts) },
     });
     const registry = buildRegistry({ readTools: { ...readTools, getSessionState: readToolsModule.makeSessionStateReader(harness).bind(null) }, harness, learnerId: owner, sessionId });
-    // Platform-paid: the learner approved the plan's coins, not the agent's thinking about each step.
-    const agent = makeLlmAgent({ system: context.system, learnerId: owner, feature: "study_prep_wake", maxTokens: 1200, payer: "platform",
+    // Billed to the learner, like planning: a wake is part of their session (study_prep_wake).
+    const agent = makeLlmAgent({ system: context.system, learnerId: owner, feature: "study_prep_wake", maxTokens: 1200,
       finishHint: "This is your last decision: end the turn — wait_for_learner, or move the session on if that is what the result calls for." });
     step = await runAgentStep({
-      sessionId, goal: wakeGoal(trigger, facts), agent, registry, store: harness.store || store, harness, contextSetName: "teaching",
+      sessionId, goal: wakeGoal(trigger, facts), agent, registry, store: harness.store || store, harness, contextSetName: "wake",
       maxIterations: WAKE_DECISIONS, terminalActions: [...TERMINAL_ACTIONS, "wait_for_learner"], finalActions: WAKE_FINAL_ACTIONS, pauseOnCap: false,
       // Developer view: its notes per decision, tagged with the wake (iterations restart at 1 each wake).
       onThought: view.session.workflowId ? (t) => publishLiveDeveloper(view.session.workflowId, { ...t, wakeId }) : null,
