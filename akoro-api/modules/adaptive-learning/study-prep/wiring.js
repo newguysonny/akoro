@@ -326,7 +326,8 @@ export async function runStudyPrepWake({ sessionId, learnerId = null, trigger, f
       dynamic: { hint: wakeGoal(trigger, facts) },
     });
     const registry = buildRegistry({ readTools: { ...readTools, getSessionState: readToolsModule.makeSessionStateReader(harness).bind(null) }, harness, learnerId: owner, sessionId });
-    const agent = makeLlmAgent({ system: context.system, learnerId: owner, feature: "study_prep_wake", maxTokens: 1200,
+    // Platform-paid: the learner approved the plan's coins, not the agent's thinking about each step.
+    const agent = makeLlmAgent({ system: context.system, learnerId: owner, feature: "study_prep_wake", maxTokens: 1200, payer: "platform",
       finishHint: "This is your last decision: end the turn — wait_for_learner, or move the session on if that is what the result calls for." });
     step = await runAgentStep({
       sessionId, goal: wakeGoal(trigger, facts), agent, registry, store: harness.store || store, harness, contextSetName: "teaching",

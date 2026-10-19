@@ -482,6 +482,60 @@ export const scenarios = [
     },
   },
   {
+    name: 'chat.study_prep_wakes_film',
+    description: 'After the plan is ready (2026-10-19), filmed on the sandbox: the plan arrives, the learner taps Approve & Start, the agent wakes and works in the chat under its own message (thought → tool → message, up to 4 decisions), and the card counts down to the Agent Check that starts by itself. A screenshot every 2 seconds; for a person to look at.',
+    async run(t) {
+      const { page } = t;
+      const marker = newMarker();
+      const clear = async () => {
+        for (let i = 0; i < 4; i += 1) {
+          const a = await t.api('GET', '/api/adaptive/study-prep/sessions');
+          const id = a.body?.session?.id;
+          if (!id) break;
+          await t.api('POST', `/api/adaptive/study-prep/sessions/${id}/cancel`, {});
+        }
+      };
+      await clear();
+      t.cleanup(async () => {
+        await clear();
+        const list = await t.api('GET', '/api/adaptive/chat/sessions');
+        for (const c of (list.body?.sessions || []).filter((x) => String(x.title || '').includes(marker) || String(x.preview || '').includes(marker))) await t.api('DELETE', `/api/adaptive/chat/sessions/${c.id}`);
+      });
+      if (process.env.UI_GATE_DEV_VIEW === '1') await page.addInitScript(() => { try { localStorage.setItem('ak.agentChat.devView', '1'); } catch { /* */ } });
+      await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
+      const box = page.getByRole('textbox').last();
+      await box.waitFor({ timeout: 30_000 });
+      await page.getByRole('button', { name: 'Chats' }).first().click({ timeout: 10_000 }).catch(() => {});
+      await page.getByRole('button', { name: /New chat/i }).first().click({ timeout: 10_000 }).catch(() => {});
+      await page.waitForTimeout(800);
+      await box.fill(`Prepare me for my JSS1 Basic Science exam in 5 weeks ${marker}`);
+      await page.getByRole('button', { name: 'Send message' }).click();
+      const scroll = () => page.evaluate(() => { for (const e of document.querySelectorAll('*')) if (e.scrollHeight > e.clientHeight + 40 && getComputedStyle(e).overflowY !== 'visible' && !e.closest('[data-workflow-pinned]')) e.scrollTop = e.scrollHeight; }).catch(() => {});
+      // Planning runs unfilmed (chat.study_prep_film films it): wait for the plan card's Approve & Start.
+      const approve = page.getByRole('button', { name: 'Approve & Start' }).last();
+      await approve.waitFor({ timeout: 300_000 }).catch(() => {});
+      if (!(await approve.isVisible().catch(() => false))) t.block('the plan did not arrive within 5 minutes');
+      await approve.scrollIntoViewIfNeeded().catch(() => {});
+      await t.shot('00-plan-ready');
+      await approve.click();
+      const seen = { wake: false, said: false, countdown: false, started: false };
+      for (let i = 1; i <= 50; i += 1) {
+        await page.waitForTimeout(2000);
+        await scroll();
+        seen.wake ||= await page.locator('[data-workflow-wake="plan_confirmed"]').first().isVisible().catch(() => false);
+        seen.said ||= (await page.locator('[data-workflow-wake] [data-workflow-run]').count()) > 0;
+        seen.countdown ||= await page.locator('[data-auto-start]').first().isVisible().catch(() => false);
+        seen.started ||= await page.getByText(/Agent Check running|Watch the|nothing to check|no notes on/i).first().isVisible().catch(() => false);
+        await t.shot(String(i).padStart(2, '0'));
+        if (seen.started && i > 40) break;
+      }
+      t.check('approving woke the agent: its own message in the chat', seen.wake);
+      t.check('…with its run (thought → tool → message)', seen.said);
+      t.check('the card counted down to the Agent Check', seen.countdown);
+      t.check('the Agent Check started by itself (or found no notes)', seen.started);
+    },
+  },
+  {
     name: 'settings.agent_controls',
     description: 'Settings → Agent: one switch per part (Suggestions and ideas, Learn from my conversations, Task check-ins), quiet hours and time zone — each saves and survives a reload — and this week\'s background budget.',
     async run(t) {

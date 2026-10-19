@@ -362,6 +362,7 @@ export const agentWakes = {
     ctx.cleanup(() => ctx.db.deleteOwned("edu.workflow_instances", { ownerColumn: "learner_id", ownerId: me.id, filters: { id: wfId } }));
 
     // The learner approves on the card, in this chat.
+    const approvedAt = new Date(Date.now() - 1000).toISOString();
     const confirmed = await ctx.http({ as: p.learner, method: "POST", path: `${base}/${session.id}/confirm`, body: { conversationId: chatId } });
     ctx.expect.status("plan approved", confirmed, 200);
 
@@ -383,6 +384,13 @@ export const agentWakes = {
     ctx.note(`wake: ${decisions} decision(s); said: ${JSON.stringify(said).slice(0, 600)}`);
     ctx.expect.ok("1–4 decisions", decisions >= 1 && decisions <= 4, decisions);
     ctx.expect.gte("it talked to the learner", said.length, 1);
+    // Platform-paid: the learner approved the plan's coins, not the agent's thinking.
+    const [acct] = await ctx.db.rows("coin_accounts", { owner_id: me.id }, { columns: "id", limit: 1 });
+    if (acct) {
+      const wakeDebits = (await ctx.db.rows("coin_transactions", { account_id: acct.id, feature: "study_prep_wake" }, { columns: "created_at", limit: 20, order: { column: "created_at", ascending: false } }))
+        .filter((t) => t.created_at >= approvedAt);
+      ctx.expect.eq("the wake isn't billed to the learner", wakeDebits.length, 0);
+    }
 
     const [after] = await ctx.db.rows("edu.study_prep_sessions", { id: session.id }, { columns: "status, paused_reason", limit: 1 });
     ctx.expect.eq("the session keeps running (a wake never pauses it)", after?.status, "topic_active");

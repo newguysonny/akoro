@@ -40,6 +40,8 @@ export function makeLlmAgent({
   maxTokens = 700, timeoutMs = 45_000, maxRetries = 1,
   finishHint = "This is your last step: finish now with the best you can make from what you found.",
   think = false, thinkMaxChars = 900, talk = false, talkMaxChars = 400,
+  // payer "platform": the app pays for the calls (work the learner didn't ask to be billed for).
+  payer = null,
 }) {
   const toRegistry = new Map(catalogue.map((tool) => [providerToolName(tool.name), tool.name]));
   if (toRegistry.size !== catalogue.length) throw new Error(`${feature}: tool names collide once made provider-safe`);
@@ -89,7 +91,7 @@ export function makeLlmAgent({
         __role: "controller", ...(learnerChoice ? { __learnerChoice: learnerChoice } : {}),
         max_tokens: maxTokens, messages, tools: offered.length ? offered : tools, tool_choice: "required",
         __feature: feature, __timeoutMs: timeoutMs, __maxRetries: maxRetries,
-        ...(learnerId ? { __userId: learnerId } : {}),
+        ...(learnerId ? { __userId: learnerId } : {}), ...(payer === "platform" ? { __payer: "platform" } : {}),
       });
       const call = response.choices?.[0]?.message?.tool_calls?.[0];
       if (!call?.function?.name) return { tool: null, action: null, args: {}, intent: null };
