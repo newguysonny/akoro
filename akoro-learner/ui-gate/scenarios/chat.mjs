@@ -158,6 +158,10 @@ export const scenarios = [
       await page.waitForTimeout(2_000);
       await page.getByRole('button', { name: 'Chats', exact: true }).first().click({ timeout: 30_000 });
       await page.getByRole('button', { name: /New chat/ }).first().click();
+      // A new chat is empty — a slower load of the last chat must not come back over it.
+      await page.waitForTimeout(2_500);
+      const stale = await page.getByText(/The paper tests \d+ topics?/).count();
+      t.check('the new chat stays new (no earlier chat loads over it)', stale === 0, { actual: stale });
       await page.locator('input[type=file]').first().setInputFiles({ name: fileName, mimeType: 'application/pdf', buffer: pdf });
       const box = page.getByRole('textbox', { name: /^Ask / }).last();
       await box.fill(`Help me prepare for Biology${tag} with this`);

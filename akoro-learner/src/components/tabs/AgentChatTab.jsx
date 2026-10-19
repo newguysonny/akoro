@@ -181,6 +181,16 @@ function AgentChatTab({
   // §13.4). `running` spans the WHOLE turn (loading only covers the wait for
   // the first step); while it is true the send arrow is a ■ stop button.
   const [running,      setRunning]      = useState(false);
+  // What the protégé found in an upload can be ready before its reply is: it waits
+  // and lands after the reply, so the reply never answers below it.
+  const runningRef = useRef(false);
+  const heldPostsRef = useRef([]);
+  useEffect(() => {
+    runningRef.current = running;
+    if (running || !heldPostsRef.current.length) return;
+    const held = heldPostsRef.current; heldPostsRef.current = [];
+    setMessages((prev) => [...prev, ...held.filter((h) => !prev.some((m) => m.id === h.id))]);
+  }, [running]);
   // Developer view: raw tool name / arguments / output on each tool row.
   // A per-device preference — storage can be unavailable, so never required.
   const [devView, setDevView] = useState(() => { try { return localStorage.getItem(DEV_VIEW_KEY) === '1'; } catch { return false; } });
@@ -317,11 +327,18 @@ function AgentChatTab({
     ...(m.role !== "user" && Array.isArray(m.meta?.ideas) && m.meta.ideas.length ? { ideas: cleanIdeas(m.meta.ideas) } : {}),
   });
 
-  const openSession = async (id) => {
+  // Which chat the learner asked for last: a slower load of an earlier choice
+  // (the resume on mount) must never replace a New chat or a later pick.
+  const openSeqRef = useRef(0);
+  const choseChatRef = useRef(false);
+  const openSession = async (id, { auto = false } = {}) => {
     setDrawerOpen(false);
     if (id === sessionIdRef.current) return;
+    if (!auto) choseChatRef.current = true;
+    const seq = ++openSeqRef.current;
     try {
       const d = await apiGet(`${CHAT_BASE}/sessions/${id}/messages?limit=${HISTORY_PAGE}`);
+      if (seq !== openSeqRef.current) return;
       const msgs = (d?.messages ?? []).map(fromSaved);
       setSession(id);
       atBottomRef.current = true;
@@ -382,6 +399,8 @@ function AgentChatTab({
   };
 
   const newChat = () => {
+    choseChatRef.current = true;
+    openSeqRef.current += 1;   // a chat still loading doesn't come back over this one
     setDrawerOpen(false);
     setSession(null);
     olderRef.current = { hasMore: false, before: null, loading: false };
@@ -481,7 +500,7 @@ function AgentChatTab({
   useEffect(() => {
     (async () => {
       const list = await loadSessions();
-      if (list.length && !sessionIdRef.current) openSession(list[0].id);
+      if (list.length && !sessionIdRef.current && !choseChatRef.current) openSession(list[0].id, { auto: true });
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -695,7 +714,9 @@ function AgentChatTab({
     }
     if (r?.data) putIngest(r.data);
     if (r?.message && sessionIdRef.current === chatId) {
-      setMessages((prev) => (prev.some((m) => m.id === r.message.id) ? prev : [...prev, fromSaved({ ...r.message, role: 'agent' })]));
+      const post = fromSaved({ ...r.message, role: 'agent' });
+      if (runningRef.current) heldPostsRef.current.push(post);
+      else setMessages((prev) => (prev.some((m) => m.id === post.id) ? prev : [...prev, post]));
     }
   };
   // "Save it again" after an Undo: a fresh upload that takes over the same message.
@@ -721,6 +742,8 @@ function AgentChatTab({
     const raw=(overrideText??input).trim();
     const text=raw || (attachments.length ? t('agent.attach_default_msg') : "");
     if(!text||loading||running) return;
+    // Talking here is choosing this chat: the resume on mount must not swap it out.
+    if(!sessionIdRef.current){ choseChatRef.current=true; openSeqRef.current+=1; }
     if(!overrideText) setInput("");
     const spokenTurn=voiceTurnRef.current; voiceTurnRef.current=false;
     tts.stop();
