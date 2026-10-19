@@ -34,9 +34,11 @@ test("the fallback is a FAILURE lane, not the primary — R2 stays primary", () 
   assert.match(storageSrc, /records\/\$\{userId\}\/\$\{Date\.now\(\)\}-\$\{safe\}/, "R2 keys keep the records/ prefix");
 });
 
-test("liveness: a HeadBucket probe through the r2 breaker, trusted for 60s", () => {
-  assert.match(storageSrc, /HeadBucketCommand/, "HeadBucketCommand is imported — presigning alone cannot see an outage");
-  assert.match(storageSrc, /await r2Send\(s3, new HeadBucketCommand\(\{ Bucket: BUCKET \}\)\)/, "the probe rides the SAME breaker as every other R2 op — a tripped breaker answers instantly");
+test("liveness: a tiny PUT probe through the r2 breaker, trusted for 60s", () => {
+  // 2026-10-19: HeadBucket is refused to an object-scoped token (the app's keys) — every probe failed,
+  // small files all went to the fallback, and the failures opened the shared r2 breaker. A PUT is what uploads need.
+  assert.doesNotMatch(storageSrc, /new HeadBucketCommand/, "no bucket-level probe");
+  assert.match(storageSrc, /await r2Send\(s3, new PutObjectCommand\(\{ Bucket: BUCKET, Key: R2_PROBE_KEY, Body: "1"/, "the probe rides the SAME breaker as every other R2 op — a tripped breaker answers instantly");
   assert.match(storageSrc, /R2_PROBE_OK_MS = 60 \* 1000/, "one probe per minute, not one per upload");
   assert.match(storageSrc, /r2ProbeOkUntil = Date\.now\(\) \+ R2_PROBE_OK_MS/, "a success is cached");
 });

@@ -55,3 +55,11 @@ test("steps merge by id and stay bounded", () => {
   const many = Array.from({ length: 60 }, (_, i) => ({ id: `s${i}`, type: "tool" }));
   assert.equal(appendSteps([], many).length, STEP_LIMIT);
 });
+
+test("a failed read is shown as such (Read it again), and is gone once it's read", async () => {
+  const { ingestToApi } = await import("./ingestCore.js");
+  const base = { id: "i1", state: "ready", names: ["a.pdf"], filing: {} };
+  assert.equal(ingestToApi({ ...base, steps: [{ id: "read:i1:failed", type: "tool" }] }).readFailed, true);
+  assert.equal(ingestToApi({ ...base, structure: { topics: [] }, steps: [{ id: "read:i1:failed", type: "tool" }] }).readFailed, false, "read since");
+  assert.equal(ingestToApi({ ...base, steps: [] }).readFailed, false);
+});

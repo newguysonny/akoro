@@ -21,7 +21,7 @@ const dot = <span style={{ width: 3, height: 3, borderRadius: '50%', background:
 const fileIcon = (name) => (/\.(png|jpe?g|webp|heic|gif)$/i.test(name || '') ? 'ti-photo' : /\.(mp3|m4a|wav|ogg|aac|flac)$/i.test(name || '') ? 'ti-music' : /\.(mp4|mov|webm|mkv|m4v)$/i.test(name || '') ? 'ti-video' : 'ti-file-text');
 const shortName = (name) => String(name || '').replace(/\.(pdf|docx?|pptx?|txt|md|csv)$/i, '');
 
-export default function IngestCard({ ingest, onOpenFolder, onUndo, onRestore, onChooseFolder, onChooseSubject }) {
+export default function IngestCard({ ingest, onOpenFolder, onUndo, onRestore, onChooseFolder, onChooseSubject, onReadAgain }) {
   const { t } = useLang();
   const [busy, setBusy] = useState(null);
   const [other, setOther] = useState(null);   // "Other…" subject being typed
@@ -57,8 +57,12 @@ export default function IngestCard({ ingest, onOpenFolder, onUndo, onRestore, on
   const moved = !!ingest.movedFrom && !!folder;
   const n = ingest.reading?.total || ingest.pages || 0;
 
+  // Saved, but the read failed (the model was unavailable): it says so, never "Read".
+  const unread = !failed && !reading && ingest.readFailed;
   const status = failed ? (
     <><Icon name="ti-alert-circle" size={12} color="#B45309"/> {t('agent.filed_failed')}</>
+  ) : unread ? (
+    <><Icon name="ti-alert-circle" size={12} color="#B45309"/> Saved · couldn't read it yet</>
   ) : reading ? (
     <><Spinner size={10} color={BRAND}/> {ingest.state === 'received' ? t('agent.filed_saving')
       : n ? t('agent.filed_reading_n').replace('{done}', String(ingest.reading?.done ?? 0)).replace('{n}', String(n)) : t('agent.filed_reading')}
@@ -104,6 +108,11 @@ export default function IngestCard({ ingest, onOpenFolder, onUndo, onRestore, on
         {!reading && !choices && !asking && ingest.folder?.id && onOpenFolder && (
           <button type="button" onClick={() => onOpenFolder(ingest.folder.id)} style={{ ...btn, border: '1.5px solid var(--ak-border2)', background: 'var(--ak-surface)', color: 'var(--ak-text)' }}>
             <Icon name="ti-folder" size={13}/> {t('agent.filed_open')}
+          </button>
+        )}
+        {unread && onReadAgain && (
+          <button type="button" data-action="read-again" onClick={run('read', onReadAgain)} disabled={!!busy} style={{ ...btn, border: '1.5px solid var(--ak-border2)', background: 'var(--ak-surface)', color: BRAND }}>
+            {busy === 'read' ? <Spinner size={11} color={BRAND}/> : <Icon name="ti-refresh" size={13}/>} Read it again
           </button>
         )}
         {ingest.state !== 'received' && onUndo && (

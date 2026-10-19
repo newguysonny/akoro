@@ -151,6 +151,8 @@ export function ingestToApi(row) {
     restorableUntil, purged: !!f.purged,
     // What the protégé did with it, step by step (stepsCore.js): the chat shows them under the upload's message.
     steps: Array.isArray(row.steps) ? row.steps : [],
+    // Its read failed (the model was unavailable) and it isn't read yet: the card offers Read it again.
+    readFailed: !row.structure && (row.steps || []).some((st) => st?.id === `read:${row.id}:failed`),
     createdAt: row.created_at, updatedAt: row.updated_at,
   };
 }

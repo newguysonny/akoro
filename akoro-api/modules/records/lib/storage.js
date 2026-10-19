@@ -22,7 +22,7 @@
  * deletes keep dispatching on the key, and only NEW uploads move to R2.
  */
 
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadBucketCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl }                       from "@aws-sdk/s3-request-presigner";
 import config                                 from "../../../config/index.js";
 import db                                     from "../../../db.js";
@@ -83,13 +83,21 @@ function ensureFallbackBucket() {
  * a tripped breaker answers instantly instead of hanging the upload-url
  * request. A success is trusted for 60s — one probe per minute, not one
  * per upload; if R2 dies inside that minute the client's PUT fails
- * exactly as it would have before this fallback existed. */
+ * exactly as it would have before this fallback existed.
+ *
+ * The probe WRITES a tiny object (2026-10-19): it used to be HeadBucket,
+ * which an object-scoped R2 token (Object Read & Write — what the app's
+ * keys are) is refused. Every probe failed, every file ≤ 5 MB went to the
+ * Supabase fallback, and the failures opened the shared "r2" breaker — so
+ * the server's own reads of R2 files (extraction) were refused too. A PUT
+ * is exactly the permission uploads need. */
+export const R2_PROBE_KEY = "records/_probe/live";
 const R2_PROBE_OK_MS = 60 * 1000;
 let r2ProbeOkUntil = 0;
 async function r2Reachable() {
   if (Date.now() < r2ProbeOkUntil) return true;
   try {
-    await r2Send(s3, new HeadBucketCommand({ Bucket: BUCKET }));
+    await r2Send(s3, new PutObjectCommand({ Bucket: BUCKET, Key: R2_PROBE_KEY, Body: "1", ContentType: "text/plain" }));
     r2ProbeOkUntil = Date.now() + R2_PROBE_OK_MS;
     return true;
   } catch (err) {

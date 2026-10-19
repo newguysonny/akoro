@@ -59,7 +59,7 @@ test("recurring topics across papers: most papers first, then marks", () => {
 
 test("wiring: once per upload, platform-paid, private questions, posted into the chat; the purge removes them", async () => {
   assert.match(routes, /if \(row\.structure\) return res\.json/, "a second call returns the first result");
-  assert.match(routes, /if \(calls && failures === calls\) \{\s*const back = await move\(row, "ready"\);[\s\S]{0,300}?return res\.status\(503\)/, "a failed read keeps nothing and can be retried");
+  assert.match(routes, /if \(calls && failures === calls\) \{\s*const back = await move\(row, "ready"\);[\s\S]{0,1200}?return res\.status\(503\)/, "a failed read keeps nothing and can be retried");
   assert.match(routes, /__payer: "platform", __feature: "material_structure"/);
   assert.match(routes, /from\("material_questions"\)\.insert/);
   const purge = await readFile(new URL("./purge.js", import.meta.url), "utf8");

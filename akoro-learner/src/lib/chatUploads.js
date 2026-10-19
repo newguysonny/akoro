@@ -79,8 +79,9 @@ export async function fileIngest(ingest, files, onUpdate = () => {}) {
 }
 
 /** Once read: what it covers, posted back into the chat by the API. Slow (one model pass over the pages). */
-export async function structureIngest(id) {
-  const d = await apiPost(`${BASE}/${id}/structure`, {}, { timeout: 120000 });
+export async function structureIngest(id, { final = false } = {}) {
+  // final: the last try — a failure then is said in the chat, with Read it again on the card.
+  const d = await apiPost(`${BASE}/${id}/structure`, final ? { final: true } : {}, { timeout: 120000 });
   return { data: d?.data ?? null, message: d?.message ?? null };
 }
 

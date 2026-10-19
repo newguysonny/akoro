@@ -811,8 +811,19 @@ function AgentChatTab({
     let r = null;
     for (let i = 0; i < 3 && !r; i++) {
       if (i) await new Promise((ok) => setTimeout(ok, 20000));
-      r = await structureIngest(done.id).catch(() => null);
+      r = await structureIngest(done.id, { final: i === 2 }).catch(() => null);
     }
+    // A failed try is a step on the upload: re-read it so the run and the card show it.
+    if (!r) { const now = await getIngest(done.id).catch(() => null); if (now) putIngest(now); }
+    await postStructure(r, chatId);
+  };
+  // "Read it again" on the card, after the reads failed.
+  const readAgain = async (id) => {
+    const r = await structureIngest(id, { final: true }).catch(() => null);
+    if (!r) { const now = await getIngest(id).catch(() => null); if (now) putIngest(now); return; }
+    await postStructure(r, sessionIdRef.current);
+  };
+  const postStructure = async (r, chatId) => {
     if (r?.data) putIngest(r.data);
     if (r?.message && sessionIdRef.current === chatId) {
       const post = fromSaved({ ...r.message, role: 'agent' });
@@ -1245,7 +1256,8 @@ function AgentChatTab({
                           onUndo={async()=>{ const r=await undoIngest(id).catch(()=>null); if(r) putIngest(r); }}
                           onRestore={async()=>{ const r=await restoreIngest(id).catch(()=>null); if(r) putIngest(r,{restored:true}); }}
                           onChooseFolder={async(fid)=>{ const r=await chooseFolder(id,fid).catch(()=>null); if(r) putIngest(r); }}
-                          onChooseSubject={async(subject)=>{ const r=await chooseSubject(id,subject).catch(()=>null); if(r) putIngest(r); }}/>
+                          onChooseSubject={async(subject)=>{ const r=await chooseSubject(id,subject).catch(()=>null); if(r) putIngest(r); }}
+                          onReadAgain={()=>readAgain(id)}/>
                       ))}
                     </div>
                   )}

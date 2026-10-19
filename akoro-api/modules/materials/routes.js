@@ -45,7 +45,7 @@ import {
 } from "./ingestCore.js";
 import { pickFolder, subjectKey, subjectLabel, UNSORTED_FOLDER } from "./folderMatch.js";
 import { filingSentence } from "./structureCore.js";
-import { appendSteps, filedSteps, folderSteps, readSteps, similarSteps, sortSteps, toolStep } from "./stepsCore.js";
+import { appendSteps, filedSteps, folderSteps, messageStep, readSteps, similarSteps, sortSteps, toolStep } from "./stepsCore.js";
 
 const router = Router();
 router.use(authenticateToken);
@@ -335,7 +335,12 @@ router.post("/ingest/:id/structure", asyncHandler(async (req, res) => {
   // Every read failed (the model was unavailable): keep nothing, say nothing — it can be tried again.
   if (calls && failures === calls) {
     const back = await move(row, "ready");
-    await addSteps(back, [toolStep(`read:${row.id}:failed:${Date.now()}`, "material.read", "Reading your file", { result: "Couldn't read it just now — trying again", ok: false })]);
+    // One failed-read step, updated in place; the app's last try (final) says so and offers Read it again on the card.
+    const final = req.body?.final === true;
+    await addSteps(back, [
+      toolStep(`read:${row.id}:failed`, "material.read", `Reading ${row.names?.length === 1 ? row.names[0] : "your files"}`, { result: final ? "Couldn't read it" : "Couldn't read it just now — trying again", ok: false }),
+      ...(final ? [messageStep(`read:${row.id}:failed:say`, "I couldn't read it just now — it's saved in your folder, nothing is lost. Tap **Read it again** on the card in a minute and I'll go through it.")] : []),
+    ]);
     return res.status(503).json({ success: false, code: "structure_unavailable", message: "Couldn't read it just now — try again in a moment." });
   }
   const main = items[0] || null;
@@ -368,7 +373,9 @@ router.post("/ingest/:id/structure", asyncHandler(async (req, res) => {
     filing = { needsSubject: true, subjectOptions: [...new Set((main?.subjectGuesses || []).map(subjectLabel).filter(Boolean))].slice(0, 3) };
   }
   row = await move(row, "ready", { structure, subject, doc_kind: kind, ...filePatch, ...withFiling(row, filing) });
-  row = await addSteps(row, readSteps({ ingestId: row.id, items, moved: filing.movedFrom ? { to: row.folder_name, subject: row.subject } : null }));
+  // A failed try before this one is gone once it's read.
+  row = await addSteps({ ...row, steps: (row.steps || []).filter((st) => !String(st.id).startsWith(`read:${row.id}:failed`)) },
+    readSteps({ ingestId: row.id, items, moved: filing.movedFrom ? { to: row.folder_name, subject: row.subject } : null }));
 
   // What it found, said in the chat it came from (written by code from what was kept).
   let message = null;
