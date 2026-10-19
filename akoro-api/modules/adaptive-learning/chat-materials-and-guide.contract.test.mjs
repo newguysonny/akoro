@@ -75,3 +75,12 @@ test("the chips under a reply survive a refresh (saved on its meta)", () => {
   assert.match(chat, /\.eq\("role", "agent"\)\.order\("created_at", \{ ascending: false \}\)\.limit\(1\)/, "only the latest agent message");
   assert.match(chat, /if \(!last \|\| norm\(last\.text\) !== norm\(reply\)\) return false;/, "only the reply they were made for");
 });
+
+test("not taught yet: Akoro's own material on the topic, as links; never study material from general knowledge", async () => {
+  assert.deepEqual(materialsFrom("ask_to_be_taught", { materials: [{ kind: "course", title: "Photosynthesis basics", href: "/course/photosynthesis-basics" }, { kind: "blog", title: "x", href: "https://evil.example" }] }),
+    [{ kind: "course", title: "Photosynthesis basics", href: "/course/photosynthesis-basics" }, null]);
+  assert.match(chat, /const materials = await akoroMaterialFor\(teach\.topic\)/);
+  assert.match(chat, /don't explain it or write study material \(flashcards, notes, a quiz\) on it yourself/);
+  const protege = await readFile(new URL("../../akoro-agent/policies/PROTEGE.md", import.meta.url), "utf8");
+  assert.match(protege, /Flashcards, notes, summaries and quizzes are study material: write them only from what you were taught/);
+});

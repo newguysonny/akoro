@@ -76,3 +76,37 @@ export const studyToolRouting = {
     ctx.expect.ok("…and doesn't write flashcards in chat", !/\b(front|back)\s*:|card\s*1\b|Q1[:.)]/i.test(String(turn.reply || "")), turn.reply);
   },
 };
+
+// "Make me flashcards on photosynthesis" with nothing taught and nothing in the Library:
+// the protégé doesn't write them from general knowledge — it says it wasn't taught,
+// gives Teach me, offers Akoro's own material on it, and the first chip is the guide.
+export const untaughtFlashcards = {
+  name: "chat.untaught_flashcards", area: "chat", risk: "write",
+  description: "Flashcards on a topic the protégé wasn't taught, with no material: no cards from general knowledge — 'not taught', Teach me, Akoro material offered, the teaching-guide chip first.",
+  params: { learner: { default: "@tester01" }, topic: { default: "photosynthesis" } },
+  async run(ctx, p) {
+    const lib = await ctx.http({ as: p.learner, method: "GET", path: "/api/records" });
+    const mine = (lib.body?.data || []).filter((r) => new RegExp(p.topic, "i").test(r.name || ""));
+    if (mine.length) ctx.expect.blocked(`${p.learner} has ${p.topic} material in their Library — this checks the no-material case`);
+
+    const turn = await ctx.agent.chat({ as: p.learner, prompt: `Make me flashcards on ${p.topic}.` });
+    const reply = String(turn.reply || "");
+    const ask = turn.tools.find((t) => t.tool === "ask_to_be_taught");
+    ctx.note(`tools: ${turn.tools.map((t) => t.tool).join(", ") || "(none)"} · reply: ${reply.slice(0, 400)}`);
+    if (!ask && /\[T\d+\]/.test(reply)) ctx.expect.blocked(`${p.learner} has taught ${p.topic} — the reply cites their notes`);
+    ctx.expect.ok("asks to be taught (Teach me button)", !!ask, turn.tools.map((t) => t.tool));
+    ctx.expect.ok("says it wasn't taught", /\b(haven['’]?t|have not|not yet|wasn['’]?t|never)\b[^.]{0,40}\b(taught|teach)/i.test(reply), reply.slice(0, 300));
+    const cardLines = reply.split("\n").filter((l) => /^\s*(?:\d+[.)]|[-*•]|\*\*)?\s*(?:Q(?:uestion)?\s*\d*|Front|Card\s*\d+)\b[^:]{0,12}:/i.test(l) || /^\s*\d+[.)].*\?\s*$/.test(l));
+    ctx.expect.ok("writes no flashcards from general knowledge", cardLines.length < 2, cardLines.slice(0, 4));
+
+    const offered = ask?.result?.materials || [];
+    ctx.note(`Akoro material offered: ${offered.map((m) => `${m.kind}:${m.title}`).join(" · ") || "(none on the sandbox)"}`);
+    ctx.expect.ok("Akoro material, if offered, is real courses/posts with in-app links", offered.every((m) => ["course", "blog"].includes(m.kind) && /^\/(course|blog)\//.test(m.href)), offered);
+
+    const chips = await ctx.http({ as: p.learner, method: "POST", path: "/api/adaptive/chat/suggestions",
+      body: { role: "student", ask: `Make me flashcards on ${p.topic}.`, reply, tools: turn.tools.map((t) => ({ tool: t.tool, topic: t.input?.topic || null })) } });
+    const first = String((chips.body?.suggestions || [])[0] || "");
+    ctx.note(`chips: ${JSON.stringify(chips.body?.suggestions || [])}`);
+    ctx.expect.ok("the first chip is the teaching guide", /^Ask your teaching guide/i.test(first), chips.body?.suggestions);
+  },
+};

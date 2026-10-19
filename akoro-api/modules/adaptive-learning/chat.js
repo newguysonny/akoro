@@ -24,6 +24,7 @@ import { renderRelevantMemory } from "./chat-memory.js";
 import { scrubInternalIds } from "./reply-scrub.js";
 import { recurringTopics } from "../materials/structureCore.js";
 import { resolveMaterialsFolder } from "../materials/studySource.js";
+import { akoroMaterialFor } from "../materials/akoroMaterial.js";
 import { gatherPassages, extractCitations } from "../records/askLib.js";
 import { searchRecordChunks } from "../records/searchLib.js";
 import { loadTaughtKnowledge, renderTaughtContext, buildGuideMessages, shapeGuideAnswer, teachRequest } from "./protege.js";
@@ -1800,7 +1801,14 @@ export async function executeChatTool(name, input, studentId, { conversationId =
     case "ask_to_be_taught": {
       const teach = teachRequest(input);
       if (!teach) return clarify("topic", "Which topic should the learner teach you?", { error: "topic_required" });
-      return { asked: true, ...teach, note: "The learner now sees a Teach me button for this topic. Say you haven't been taught it, point to where they can read about it first, and wait." };
+      // Somewhere to read about it first: Akoro's own courses and posts on the topic (D52), shown as links.
+      const materials = await akoroMaterialFor(teach.topic).catch(() => []);
+      return {
+        asked: true, ...teach, ...(materials.length ? { materials } : {}),
+        note: materials.length
+          ? "The learner now sees a Teach me button for this topic, and Akoro's material on it as links under your reply. Say you haven't been taught it, suggest they open one of those to learn it, then teach you — don't explain it or write study material (flashcards, notes, a quiz) on it yourself. Don't list the links; they're shown."
+          : "The learner now sees a Teach me button for this topic. Say you haven't been taught it, point to where they can read about it first (the syllabus topics shown, their Library), and wait — don't explain it or write study material (flashcards, notes, a quiz) on it yourself.",
+      };
     }
     case "consult_teaching_guide": {
       const question = String(input?.question || "").trim();

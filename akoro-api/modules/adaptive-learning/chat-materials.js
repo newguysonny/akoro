@@ -37,6 +37,9 @@ export function materialsFrom(tool, result) {
       // With a study tool asked for, the link opens the reader on it ("Quiz · Cell notes").
       return (r.records || []).map((x) => link(x.tool ? "study_tool" : "record", x.tool ? `${TOOL_LABEL[x.tool] || x.tool} · ${x.name}` : x.name,
         `/library?record=${x.recordId}${x.tool ? `&tool=${x.tool}` : ""}`));
+    case "ask_to_be_taught":
+      // Not taught yet: Akoro's own courses and posts on it, to read before teaching the protégé.
+      return (r.materials || []).map((m) => link(m.kind, m.title, m.href));
     case "get_weak_topics":
       return (r.weak_topics || []).map((t) => teach(t.topic, t.subject));
     default:
