@@ -4,6 +4,7 @@ import test from "node:test";
 import { collectMaterials, materialsFrom } from "./chat-materials.js";
 import { buildCitedLearnSuggestionMessages, buildSuggestionMessages, guideChip, notTaughtFrom, shapeCitedLearnSuggestions } from "./chatSuggestions.js";
 import { guidePassagesBlock } from "./documentGrounding.js";
+import { memoryForPrompt, renderRelevantMemory } from "./chat-memory.js";
 
 const chat = await readFile(new URL("./chat.js", import.meta.url), "utf8");
 const ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
@@ -49,4 +50,14 @@ test("reader: cited learn suggestions and guide tips point at real passages only
   assert.equal(guidePassagesBlock(null), "");
   assert.equal(guidePassagesBlock({ text: "x" }), "", "no cited passages, no block");
   assert.match(guidePassagesBlock({ cited: true, text: "[1] ATP", name: "Bio" }), /cite the passage[\s\S]*<reference_material>/);
+});
+
+test("memory from other chats: the learner's ask travels, the agent's old reply never does (D50)", () => {
+  const summary = { kind: "conversation_summary", content: "Latest learner request: Do I have notes on mitochondria?\nLatest Akoro response: Yes — Record ID: 77d17a49-7615-411e-a07c-595a9479b16d" };
+  assert.equal(memoryForPrompt(summary), "Earlier the learner asked: Do I have notes on mitochondria?");
+  assert.equal(memoryForPrompt({ kind: "conversation_summary", content: "They revised titration and want more practice." }), "They revised titration and want more practice.");
+  const block = renderRelevantMemory([summary, { kind: "study_preference", content: "Likes diagrams" }]);
+  assert.doesNotMatch(block, /77d17a49|Record ID/);
+  assert.match(block, /never evidence[\s\S]*call the tool/);
+  assert.equal(renderRelevantMemory([]), "");
 });
