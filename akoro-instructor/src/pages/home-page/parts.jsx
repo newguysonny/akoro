@@ -52,32 +52,37 @@ const MOCK_SESSIONS = [
 ];
 
 /* ── Stat card ──────────────────────────────────────────────────────── */
-function StatCard({ icon: Icon, label, value, sub, color = AMBER, loading }) {
+function StatCard({ icon: Icon, label, value, sub, color = AMBER, loading, progress = 0.75 }) {
   if (loading) return (
-    <div style={{ background: WHITE, borderRadius: 16, padding: '20px', border: `1px solid ${BORDER}` }}>
+    <div style={{ background: BX.white, borderRadius: 10, padding: '18px', border: `1px solid ${BX.border}` }}>
       <Skeleton height={14} width={80} style={{ marginBottom: 12 }} />
       <Skeleton height={32} width={60} style={{ marginBottom: 6 }} />
       <Skeleton height={12} width={100} />
     </div>
   );
+  const r = 22, c = 2 * Math.PI * r;
+  const offset = c * (1 - Math.max(0, Math.min(1, progress)));
   return (
     <div style={{
-      background: WHITE, borderRadius: 16, padding: '20px',
-      border: `1px solid ${BORDER}`,
-      display: 'flex', flexDirection: 'column', gap: 8,
+      background: BX.white, borderRadius: 10, padding: '18px',
+      border: `1px solid ${BX.border}`,
+      display: 'flex', alignItems: 'center', gap: 12,
+      fontFamily: BX.font,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{
-          width: 36, height: 36, borderRadius: 10,
-          background: `${color}15`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <Icon size={18} color={color} />
-        </div>
-        <span style={{ fontSize: 12, color: MUTED, fontWeight: 500, fontFamily: FONT }}>{label}</span>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 11, color: BX.muted, fontWeight: 500, marginBottom: 6 }}>{label}</div>
+        <div style={{ fontSize: 22, fontWeight: 600, color: BX.ink, lineHeight: 1 }}>{value}</div>
+        {sub && <div style={{ fontSize: 11, color: BX.muted, marginTop: 4 }}>{sub}</div>}
       </div>
-      <div style={{ fontSize: 28, fontWeight: 800, color: INK, fontFamily: FONT, lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 12, color: MUTED, fontFamily: FONT }}>{sub}</div>}
+      <svg width="52" height="52" viewBox="0 0 52 52" style={{ flexShrink: 0 }}>
+        <circle cx="26" cy="26" r={r} fill="none" stroke="#F1F1F4" strokeWidth="5" />
+        <circle cx="26" cy="26" r={r} fill="none" stroke={BX.primary} strokeWidth="5"
+          strokeLinecap="round" strokeDasharray={c.toFixed(1)} strokeDashoffset={offset.toFixed(1)}
+          transform="rotate(-90 26 26)" />
+        <g transform="translate(17,17)">
+          <Icon size={18} color={BX.primary} />
+        </g>
+      </svg>
     </div>
   );
 }

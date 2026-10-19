@@ -3,7 +3,7 @@
    the shell around it; flip to dark later by re-declaring them under
    [data-theme="dark"] exactly as the reference does. */
 .akhdr {
-  --akhd-purple: #6C3BFF; --akhd-purple-soft: #F1ECFF;
+  --akhd-purple: #4A5CD5; --akhd-purple-soft: rgba(74,92,213,.08);
   --akhd-danger: #EF4444; --akhd-danger-text: #B91C1C; --akhd-danger-soft: #FEF2F2;
   --akhd-bg: #F9FAFB; --akhd-surface: #FFFFFF; --akhd-surface-hover: #F9FAFB;
   --akhd-border: #F3F4F6; --akhd-border2: #E5E7EB; --akhd-border3: #D1D5DB;
