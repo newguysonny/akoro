@@ -7,6 +7,8 @@
  *   POST /api/admin/agent-tools/:id/status       { status: active|disabled|revoked }
  *   POST /api/admin/agent-tools/:id/promote      { name?, label?, goal?, replaces?: [ids] }
  *   GET  /api/admin/self-tooling/analytics?days=
+ *   GET  /api/admin/agent-capabilities/tools      built-in + promoted, with examples
+ *   GET  /api/admin/agent-capabilities/features   what the agent does that isn't a tool
  *
  * Promotion runs the gate scenario selftool.promotion_check first and only
  * goes through on PASS; the run id is stored with the platform tool.
@@ -14,6 +16,7 @@
 import { Router } from "express";
 
 import { authenticateToken, requireRole } from "../auth/routes.js";
+import { agentFeaturesCatalogue, agentToolsCatalogue } from "../agent-capabilities/catalogue.js";
 import { listTools, getTool, setToolStatus, promoteTool, similarTools, analytics } from "../self-tooling/library.js";
 
 const router = Router();
@@ -64,6 +67,14 @@ router.post("/agent-tools/:id/promote", adminOnly, asyncHandler(async (req, res)
 
 router.get("/self-tooling/analytics", adminOnly, asyncHandler(async (req, res) => {
   res.json({ success: true, analytics: await analytics({ days: req.query.days }) });
+}));
+
+router.get("/agent-capabilities/tools", adminOnly, asyncHandler(async (_req, res) => {
+  res.json({ success: true, ...await agentToolsCatalogue() });
+}));
+
+router.get("/agent-capabilities/features", adminOnly, asyncHandler(async (_req, res) => {
+  res.json({ success: true, ...await agentFeaturesCatalogue() });
 }));
 
 export default router;

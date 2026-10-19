@@ -1,6 +1,7 @@
 /**
- * Agent tools — every tool learners' agents built (self-tooling), the ones
- * promoted to everyone, merge candidates, and how create_tool goals end.
+ * Learners' tools — the tools learners' (and instructors') own agents built
+ * (self-tooling) and not yet promoted, merge candidates, and how create_tool
+ * goals end. Promoted tools are listed on Agent capabilities → Agent tools.
  *
  * Promotion runs the Verification Gate's promotion check on three test
  * learners first; it only goes through on PASS.
@@ -41,7 +42,7 @@ export default function AgentToolsPage() {
   const refresh = () => setReload((n) => n + 1);
 
   return (
-    <PageLayout title="Agent tools" subtitle="Tools learners' agents built, and the ones promoted to everyone"
+    <PageLayout title="Learners’ tools" subtitle="Tools learners’ and instructors’ own agents built, not yet promoted to everyone"
       action={<Btn variant="secondary" size="sm" onClick={refresh}><RefreshCw size={14} /> Refresh</Btn>}>
       {toast && <Toast {...toast} onClose={() => setToast(null)} />}
       <div style={{ maxWidth: 1220, margin: '0 auto' }}>
@@ -62,7 +63,7 @@ export default function AgentToolsPage() {
 }
 
 function Library({ reload, onOpen, onToast }) {
-  const [scope, setScope] = useState('');
+  const scope = 'learner';
   const [status, setStatus] = useState('active');
   const [search, setSearch] = useState('');
   const [term, setTerm] = useState('');
@@ -87,8 +88,6 @@ function Library({ reload, onOpen, onToast }) {
   return <>
     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {chip('', scope, setScope, 'All tools')}{chip('learner', scope, setScope, 'Learners’')}{chip('platform', scope, setScope, 'For everyone')}
-        <span style={{ width: 8 }} />
         {chip('active', status, setStatus, 'On')}{chip('disabled', status, setStatus, 'Off')}{chip('revoked', status, setStatus, 'Revoked')}{chip('archived', status, setStatus, 'Archived')}{chip('', status, setStatus, 'Any status')}
       </div>
       <form onSubmit={(e) => { e.preventDefault(); setTerm(search.trim()); }} style={{ display: 'flex', gap: 8, flex: '1 1 240px', maxWidth: 360 }}>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import AkoroLogo from './common/AkoroLogo.jsx';
-import {LayoutDashboard, Users, GraduationCap, BookOpen, BookMarked, LayoutTemplate, FileText, Briefcase, Bell, Settings, LogOut, BarChart2, CreditCard, Star, Tag, DollarSign, FileBarChart, Inbox, Megaphone, Building2, Bot, ChevronDown, Menu, Store, Library, Cpu, FlaskConical, Wrench, Layers, School, History, Repeat, Receipt, Ticket, RefreshCw, X, Home, BookCopy, FolderOpen, ClipboardCheck, ShieldCheck, Search, Eye } from 'lucide-react';
+import {LayoutDashboard, Users, GraduationCap, BookOpen, BookMarked, LayoutTemplate, FileText, Briefcase, Bell, Settings, LogOut, BarChart2, CreditCard, Star, Tag, DollarSign, FileBarChart, Inbox, Megaphone, Building2, Bot, ChevronDown, Menu, Store, Library, Cpu, FlaskConical, Wrench, Layers, School, History, Repeat, Receipt, Ticket, RefreshCw, X, Home, BookCopy, FolderOpen, ClipboardCheck, ShieldCheck, Search, Eye, Sparkles } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import AppHeader from './AppHeader.jsx';
 
@@ -52,8 +52,12 @@ const NAV_GROUPS = [
     { to: '/ai-spend',  icon: Cpu,          label: 'AI spend' },
     { to: '/evals',     icon: FlaskConical, label: 'Evals' },
     { to: '/agent-tool-requests', icon: Wrench, label: 'Agent requests' },
-    { to: '/agent-tools', icon: Layers, label: 'Agent tools' },
     { to: '/real-account-checks', icon: ShieldCheck, label: 'Real-account checks' },
+  ] },
+  { label: 'Agent capabilities', icon: Bot, children: [
+    { to: '/agent-capabilities/tools',         icon: Layers,   label: 'Agent tools' },
+    { to: '/agent-capabilities/learner-tools', icon: Wrench,   label: 'Learners’ tools' },
+    { to: '/agent-capabilities/features',      icon: Sparkles, label: 'Agent features' },
   ] },
   { label: 'People', icon: Users, children: [
     { to: '/users',       icon: Users,         label: 'Users' },
