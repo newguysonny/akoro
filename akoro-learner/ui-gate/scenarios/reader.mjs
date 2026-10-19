@@ -617,7 +617,9 @@ export const scenarios = [
       const ask = page.locator(`[data-confirm-purge="${ingest.id}"]`);
       t.check('Delete forever asks first', await ask.waitFor({ timeout: 5_000 }).then(() => true, () => false) && /can't be undone/.test(await ask.innerText().catch(() => '')));
       await ask.getByRole('button', { name: 'Delete forever' }).click();
-      t.check('…then says it is deleted for good', await page.getByText('Deleted for good').first().waitFor({ timeout: 20_000 }).then(() => true, () => false));
+      // The toast exactly (the page's own note also says "deleted for good"), and the item gone, before checking the API.
+      t.check('…then says it is deleted for good', await page.getByText('Deleted for good', { exact: true }).first().waitFor({ timeout: 20_000 }).then(() => true, () => false));
+      t.check('…and it leaves the list', await ask.waitFor({ state: 'detached', timeout: 10_000 }).then(() => true, () => false));
       const restoreLate = await t.api('POST', `/api/agent/materials/ingest/${ingest.id}/restore`, {});
       t.check('…and it can no longer be restored', restoreLate.status === 410, { actual: restoreLate.status });
     },
