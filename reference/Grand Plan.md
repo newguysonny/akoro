@@ -2975,6 +2975,9 @@ planning loop's tool names, the double practice charge, empty syllabus data).
 - Study Prep dual-writes instance + events behind `WORKFLOW_ENGINE_ENABLED`.
 - **Exit:** all study-prep contract tests green; new engine contract tests
   (create/resume/pause/complete/cancel/abandon, CAS transitions, idempotent create).
+- **Status: ✅ done** — `modules/workflows/` (engine, registry, store,
+  definition); Study Prep status writes checked against its definition (F7)
+  and dual-written to the engine (gate `studyprep.workflow_mirror`).
 
 ### Phase 2 — Agent runtime generalisation
 - Promote `agent-loop.js`, `llm-agent.js` into `agent-runtime/`; add
@@ -2986,6 +2989,14 @@ planning loop's tool names, the double practice charge, empty syllabus data).
 - **Exit:** Study Prep runs through the generic runtime with identical
   behaviour (existing tests green); runtime contract tests with stub agents
   (cap, timeout → fallback, malformed → observation, terminal stop).
+- **Status: ✅ done (2026-10-19)** — `modules/agent-runtime/`: `loop.js` (one
+  loop: operation, caps, decision timeout → fallback), `tools.js` (one binder,
+  levels read/propose/execute/persona, display), `caps.js`, `llm-agent.js`,
+  `harness.js` (generic core: typed rejection, logged rejector, per-action
+  check plug-ins — Study Prep's are `STUDY_PREP_CHECKS`, codes and copy
+  unchanged). Model switching backend in `lib/modelRegistry.js` with `__role`
+  on `meteredCreate`. Study Prep runs on it; runtime + study-prep contract
+  tests green (186).
 
 ### Phase 3 — Event stream
 - v3 envelope; `ActivityNarrator` (templates for every event type, snapshot tests).

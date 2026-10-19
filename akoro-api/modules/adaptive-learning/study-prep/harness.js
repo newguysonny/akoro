@@ -17,6 +17,7 @@ import {
   POLICY, attemptCapGate, canTransitionSession, canTransitionTopic, teachBackGate, validatePlan,
 } from "./state-machine.js";
 import { makeEvent, stampThoughtType } from "./events.js";
+import { HarnessRejection, createChecker, createRejector, stateIs } from "../../agent-runtime/harness.js";
 import { deliberate } from "./narration.js";
 import { guardStudyPrepStore } from "./workflow.js";
 import {
@@ -28,10 +29,9 @@ export class InsufficientBalanceError extends Error {
   constructor(coins, balance) { super(`Insufficient coins: need ${coins}, have ${balance}`); this.code = "insufficient_balance"; this.coins = coins; this.balance = balance; }
 }
 
-/** A harness rejection: stable machine-readable code + HTTP status + copy. */
-export class HarnessRejection extends Error {
-  constructor(code, message, httpStatus = 409) { super(message); this.code = code; this.httpStatus = httpStatus; }
-}
+// The rejection type and check runner are the generic harness core (Phase 2);
+// Study Prep plugs in its codes (HTTP_FOR_CODE) and checks (STUDY_PREP_CHECKS).
+export { HarnessRejection };
 
 const HTTP_FOR_CODE = {
   study_prep_disabled: 409, session_not_found: 404, tool_not_permitted: 403, tool_schema_invalid: 422,
@@ -40,6 +40,20 @@ const HTTP_FOR_CODE = {
   deferred_retry_used: 409, insufficient_balance: 402, teach_back_gate: 409, agent_loop_cap: 409,
   session_tool_call_cap: 409, unknown_action: 400, syllabus_exists: 409, outline_invalid: 502,
 };
+
+/** Study Prep's check plug-in: the state each action needs (copy and codes unchanged). */
+export const STUDY_PREP_CHECKS = Object.freeze({
+  generate_syllabus: [stateIs(["planning", "replanning"], "An outline can only be drafted while planning")],
+  propose_plan: [stateIs(["planning", "replanning"], "A plan can only be proposed while planning")],
+  confirm_plan: [stateIs("awaiting_confirmation", "There is no plan waiting for confirmation")],
+  adjust_plan: [stateIs("awaiting_confirmation", "The plan can only be adjusted before it is confirmed")],
+  start_practice: [
+    stateIs("topic_active", "Practice can only start while a topic is active"),
+    stateIs("active", "That topic is not the active topic", { key: "topic" }),
+  ],
+  advance_topic: [stateIs("topic_active", "No topic is active")],
+  resume_session: [stateIs("paused", "The session is not paused")],
+});
 
 /** What the plan card says when the session plans against a generated outline (§8.7). */
 export const GENERATED_OUTLINE_LABEL = "AI-drafted outline — not your school's official syllabus";
@@ -57,15 +71,14 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
   // Every session and topic status write is checked against the workflow
   // definition (F7) and, with a mirror, dual-written to the engine (Phase 1).
   const store = guardStudyPrepStore(rawStore, { mirror: workflowMirror });
-  const reject = async (session, code, message, facts = {}) => {
-    if (session) {
-      await log(session.id, null, {
-        eventType: "harness_decision", origin: "harness", decisionNode: "harness_rejection",
-        facts: { code, ...facts }, narrative: deliberate("harness_rejection", { code })?.narrative,
-      });
-    }
-    throw new HarnessRejection(code, message, HTTP_FOR_CODE[code] ?? 409);
-  };
+  const reject = createRejector({
+    httpFor: HTTP_FOR_CODE,
+    onReject: (session, code, facts) => log(session.id, null, {
+      eventType: "harness_decision", origin: "harness", decisionNode: "harness_rejection",
+      facts: { code, ...facts }, narrative: deliberate("harness_rejection", { code })?.narrative,
+    }),
+  });
+  const check = createChecker({ checks: STUDY_PREP_CHECKS, reject });
 
   const log = async (sessionId, topicId, partial) => {
     const row = makeEvent({
@@ -173,9 +186,7 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
   async function generateSyllabus({ sessionId, learnerId, intent = null }) {
     const session = await ownedSession(sessionId, learnerId);
     if (!session) throw new HarnessRejection("session_not_found", "Study-prep session was not found", 404);
-    if (session.status !== "planning" && session.status !== "replanning") {
-      return reject(session, "invalid_state_transition", "An outline can only be drafted while planning");
-    }
+    await check("generate_syllabus", { session });
     if (!syllabus.generateOutline) return reject(session, "tool_not_permitted", "Outline drafting is not available");
     // Planned from the learner's own materials: those are the syllabus.
     if (session.syllabus_source === "documents") return reject(session, "syllabus_exists", "This plan comes from the learner's own materials — plan from syllabus.resolve");
@@ -243,9 +254,7 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
   async function proposePlan({ sessionId, learnerId, topicIds, intent = null }) {
     const session = await ownedSession(sessionId, learnerId);
     if (!session) throw new HarnessRejection("session_not_found", "Study-prep session was not found", 404);
-    if (session.status !== "planning" && session.status !== "replanning") {
-      return reject(session, "invalid_state_transition", "A plan can only be proposed while planning");
-    }
+    await check("propose_plan", { session });
     if (intent != null) {
       await log(session.id, null, {
         eventType: "agent_action", origin: "agent_stated_intent", action: "propose_plan",
@@ -279,9 +288,7 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
   async function confirmPlan({ sessionId, learnerId }) {
     const session = await ownedSession(sessionId, learnerId);
     if (!session) throw new HarnessRejection("session_not_found", "Study-prep session was not found", 404);
-    if (session.status !== "awaiting_confirmation") {
-      return reject(session, "invalid_state_transition", "There is no plan waiting for confirmation");
-    }
+    await check("confirm_plan", { session });
     // Concurrent confirm: exactly one winner flips awaiting_confirmation.
     const updated = await store.updateSessionConditional(session.id, "awaiting_confirmation", {
       status: "topic_active", paused_reason: null, updated_at: now(),
@@ -299,9 +306,7 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
   async function adjustPlan({ sessionId, learnerId, dropTopicIds = [] }) {
     const session = await ownedSession(sessionId, learnerId);
     if (!session) throw new HarnessRejection("session_not_found", "Study-prep session was not found", 404);
-    if (session.status !== "awaiting_confirmation") {
-      return reject(session, "invalid_state_transition", "The plan can only be adjusted before it is confirmed");
-    }
+    await check("adjust_plan", { session });
     const drop = new Set(dropTopicIds);
     const kept = (session.plan || []).filter((topic) => !drop.has(topic.syllabusTopicId));
     if (kept.length === 0) return reject(session, "tool_schema_invalid", "A plan needs at least one topic");
@@ -348,8 +353,7 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     const topics = await store.getTopics(session.id);
     const topic = topics.find((row) => row.id === topicId);
     if (!topic) return reject(session, "invalid_state_transition", "That topic is not part of this session");
-    if (session.status !== "topic_active") return reject(session, "invalid_state_transition", "Practice can only start while a topic is active");
-    if (topic.status !== "active") return reject(session, "invalid_state_transition", "That topic is not the active topic");
+    await check("start_practice", { session, topic });
 
     const policy = await topicWorkflow.policyFor({ examBoard: session.exam_board, subject: session.subject });
     const cap = attemptCapGate({ attemptsUsed: topic.attempts_used, maxAttempts: policy.max_attempts });
@@ -633,7 +637,7 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
   async function advanceTopic({ sessionId, learnerId, intent = null }) {
     const session = await ownedSession(sessionId, learnerId);
     if (!session) throw new HarnessRejection("session_not_found", "Study-prep session was not found", 404);
-    if (session.status !== "topic_active") return reject(session, "invalid_state_transition", "No topic is active");
+    await check("advance_topic", { session });
     const topics = await store.getTopics(session.id);
     const current = activeTopic(topics);
     if (current && ["understood", "capped_out", "deferred", "flagged_gap"].includes(current.status)) {
@@ -774,7 +778,7 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
   async function resumeSession({ sessionId, learnerId }) {
     const session = await ownedSession(sessionId, learnerId);
     if (!session) throw new HarnessRejection("session_not_found", "Study-prep session was not found", 404);
-    if (session.status !== "paused") return reject(session, "invalid_state_transition", "The session is not paused");
+    await check("resume_session", { session });
     // A paused session resumes into topic_active when a topic exists,
     // planning when the plan never completed (agent_loop_cap during planning).
     const topics = await store.getTopics(session.id);

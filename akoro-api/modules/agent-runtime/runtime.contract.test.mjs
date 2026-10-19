@@ -168,3 +168,21 @@ test("a workflow's own checks plug in after the generic ones", async () => {
   // Unknown names still fail the generic check first.
   assert.equal(registry.validate("nope", {}).code, "tool_not_permitted");
 });
+
+test("harness core: a workflow's checks run in order; the first failure is logged, then rejected with its code and HTTP status", async () => {
+  const { HarnessRejection, createChecker, createRejector, stateIs } = await import("./harness.js");
+  const logged = [];
+  const reject = createRejector({ httpFor: { invalid_state_transition: 409, plan_too_large: 422 }, onReject: async (s, code, facts) => logged.push([s.id, code, facts]) });
+  const check = createChecker({ reject, checks: {
+    start: [stateIs("active", "Not active"), stateIs("open", "Topic closed", { key: "topic" }), (ctx) => (ctx.n > 3 ? { code: "plan_too_large", message: "Too many", facts: { n: ctx.n } } : null)],
+  } });
+  assert.equal(await check("start", { session: { id: "s", status: "active" }, topic: { status: "open" }, n: 1 }), null);
+  assert.equal(await check("unknown_action", {}), null, "an action with no checks passes");
+  await assert.rejects(check("start", { session: { id: "s", status: "paused" }, topic: { status: "open" } }),
+    (e) => e instanceof HarnessRejection && e.code === "invalid_state_transition" && e.httpStatus === 409 && e.message === "Not active");
+  await assert.rejects(check("start", { session: { id: "s", status: "active" }, topic: { status: "done" } }), { message: "Topic closed" });
+  await assert.rejects(check("start", { session: { id: "s", status: "active" }, topic: { status: "open" }, n: 9 }), (e) => e.httpStatus === 422);
+  assert.deepEqual(logged.map((l) => l[1]), ["invalid_state_transition", "invalid_state_transition", "plan_too_large"]);
+  assert.deepEqual(logged[2][2], { n: 9 });
+  await assert.rejects(createRejector()(null, "x", "no subject"), (e) => e.httpStatus === 409, "no subject: nothing logged, still rejects");
+});
