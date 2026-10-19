@@ -10,6 +10,9 @@
  *   POST /api/agent/materials/ingest/:id/progress   { state: extracting|ready|failed, pages?, error? }
  *   POST /api/agent/materials/ingest/:id/structure  → reads it: topics (+ a past paper's questions,
  *        private, D53), posts what it found into the chat → ready
+ *   POST /api/agent/materials/ingest/:id/similar    → Akoro material on its topics (D52) → offering_more
+ *   POST /api/agent/materials/ingest/:id/similar/add { keys } → the chosen ones into the folder → ready
+ *   POST /api/agent/materials/ingest/:id/similar/dismiss      → "Not now" → ready
  *   POST /api/agent/materials/ingest/:id/undo       → removes exactly what it made → undone
  *   GET  /api/agent/materials/ingest/:id
  *
@@ -26,6 +29,8 @@ import { openai } from "../../lib/aiModel.js";
 import { removeRecordFile } from "../records/lib/storage.js";
 import { getExtraction } from "../records/extractLib.js";
 import { cleanStructure, structureChips, structureMessage, structureMessages, structureSchema, STRUCTURE_LIMITS } from "./structureCore.js";
+import { folderItemForCandidate, searchTopics, shapeCandidates, SIMILAR_LIMITS } from "./similarCore.js";
+import { searchBlogPosts } from "../adaptive-learning/blogResearch.js";
 import { assertTransition, TransitionError } from "../workflows/definition.js";
 import {
   INGEST_LIMITS, ingestWorkflow, classifyMessages, classifySchema, folderItemFor, folderNameFor, guessKind, ingestToApi, shapeClassification,
@@ -123,6 +128,8 @@ router.post("/ingest/:id/records", asyncHandler(async (req, res) => {
   if (!ids.length) return res.status(400).json({ success: false, message: "recordIds: at least one record is required." });
   const { data: records } = await edu().from("records").select("id, name, mime").eq("user_id", req.user.id).in("id", ids);
   if ((records || []).length !== ids.length) return res.status(403).json({ success: false, message: "One of those records isn't yours." });
+  // "Only you can see this": a chat upload never shows in Discover (D51, D53).
+  await edu().from("records").update({ private: true }).eq("user_id", req.user.id).in("id", ids);
   if (row.folder_id) {
     const { error } = await edu().from("library_folder_items")
       .upsert(records.map((r) => ({ folder_id: row.folder_id, user_id: req.user.id, ...folderItemFor(r, row.doc_kind) })), { onConflict: "folder_id,item_type,item_ref" });
@@ -252,6 +259,65 @@ router.post("/ingest/:id/structure", asyncHandler(async (req, res) => {
   res.json({ success: true, data: ingestToApi(row), message });
 }));
 
+/** Akoro's own material on the upload's topics: published courses and blog posts (D52). */
+async function findSimilar(row, userId) {
+  const topics = searchTopics(row.structure);
+  const { data: qs } = await edu().from("material_questions").select("topic, number").eq("user_id", userId).eq("ingest_id", row.id).limit(200);
+  const questionsByTopic = {};
+  for (const q of qs || []) (questionsByTopic[q.topic] ||= []).push(q.number);
+  const found = [];
+  for (const t of topics) {
+    const term = t.query.replace(/[,()%\\]/g, " ").trim();
+    const [blog, courses] = await Promise.all([
+      searchBlogPosts({ query: t.query, limit: SIMILAR_LIMITS.PER_TOPIC }).catch(() => ({ posts: [] })),
+      (async () => {
+        try {
+          const { data } = await db.from("courses").select("id, title, slug, subject").eq("is_published", true)
+            .or(`title.ilike.%${term}%,description.ilike.%${term}%`).limit(SIMILAR_LIMITS.PER_TOPIC);
+          return data || [];
+        } catch { return []; }
+      })(),
+    ]);
+    found.push({ topic: t.name, posts: blog?.posts || [], courses });
+  }
+  return shapeCandidates(found, { questionsByTopic });
+}
+
+router.post("/ingest/:id/similar", asyncHandler(async (req, res) => {
+  let row = await loadOwn(req.params.id, req.user.id);
+  if (!row) return res.status(404).json({ success: false, message: "Upload not found." });
+  if (!row.structure?.topics?.length) return res.status(409).json({ success: false, code: "not_structured", message: "I haven't read its topics yet." });
+  const candidates = await findSimilar(row, req.user.id);
+  if (row.state === "ready") row = await move(row, "offering_more", { structure: { ...row.structure, offered: candidates.map((c) => c.key) } });
+  res.json({ success: true, data: ingestToApi(row), candidates });
+}));
+
+router.post("/ingest/:id/similar/add", asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  let row = await loadOwn(req.params.id, userId);
+  if (!row) return res.status(404).json({ success: false, message: "Upload not found." });
+  if (row.state !== "offering_more") return res.status(409).json({ success: false, code: "not_offering", message: "Ask for similar material first." });
+  if (!row.folder_id) return res.status(409).json({ success: false, code: "no_folder", message: "This upload has no folder to add to." });
+  // Only what was offered, and only what still exists — re-found, never taken from the request.
+  const offered = new Set(row.structure?.offered || []);
+  const keys = [...new Set((Array.isArray(req.body?.keys) ? req.body.keys : []).map(String))].filter((k) => offered.has(k)).slice(0, SIMILAR_LIMITS.ADD);
+  const chosen = (await findSimilar(row, userId)).filter((c) => keys.includes(c.key));
+  if (chosen.length) {
+    const { error } = await edu().from("library_folder_items")
+      .upsert(chosen.map((c) => ({ folder_id: row.folder_id, user_id: userId, ...folderItemForCandidate(c) })), { onConflict: "folder_id,item_type,item_ref" });
+    if (error) throw error;
+  }
+  row = await move(row, "ready", { structure: { ...row.structure, added: [...new Set([...(row.structure?.added || []), ...chosen.map((c) => c.key)])] } });
+  res.json({ success: true, data: ingestToApi(row), added: chosen.map((c) => ({ key: c.key, title: c.title, href: c.href })) });
+}));
+
+router.post("/ingest/:id/similar/dismiss", asyncHandler(async (req, res) => {
+  let row = await loadOwn(req.params.id, req.user.id);
+  if (!row) return res.status(404).json({ success: false, message: "Upload not found." });
+  if (row.state === "offering_more") row = await move(row, "ready");
+  res.json({ success: true, data: ingestToApi(row) });
+}));
+
 router.post("/ingest/:id/undo", asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const row = await loadOwn(req.params.id, userId);
@@ -267,6 +333,11 @@ router.post("/ingest/:id/undo", asyncHandler(async (req, res) => {
     for (const r of records || []) void removeRecordFile(r.file_key);
   }
   await edu().from("material_questions").delete().eq("user_id", userId).eq("ingest_id", row.id);
+  // …and the similar material it added to the folder.
+  const added = (row.structure?.added || []).map(String);
+  if (row.folder_id && added.length) {
+    await edu().from("library_folder_items").delete().eq("folder_id", row.folder_id).eq("user_id", userId).eq("item_type", "library").in("item_ref", added);
+  }
   // The folder goes only if this upload made it and nothing else is in it now.
   let folderRemoved = false;
   if (row.folder_id && row.folder_created) {

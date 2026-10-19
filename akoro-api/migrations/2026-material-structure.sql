@@ -6,7 +6,11 @@
 -- uploaded them and are never shown to anyone else.
 -- =============================================================
 
-ALTER TABLE edu.material_ingests ADD COLUMN IF NOT EXISTS structure jsonb;     -- { title, summary, topics: [{ name, pages, weight }] }
+ALTER TABLE edu.material_ingests ADD COLUMN IF NOT EXISTS structure jsonb;
+
+-- A chat upload is private to its owner (D51/D53, "Only you can see this"):
+-- the Discover feed and shared-file access never show a private record.
+ALTER TABLE edu.records ADD COLUMN IF NOT EXISTS private boolean NOT NULL DEFAULT false;     -- { title, summary, topics: [{ name, pages, weight }] }
 
 CREATE TABLE IF NOT EXISTS edu.material_questions (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),

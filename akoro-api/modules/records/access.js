@@ -42,10 +42,12 @@ export async function resolveContentAccess({ userId, recordId: rawRecordId, cont
     // Shared content — the SAME rule the discovery feed opens under. The
     // earliest record holding the key owns it (a key can appear twice).
     const { data: rec, error } = await (await edu()).from("records")
-      .select("id, user_id, name, mime, file_key, kind").eq("file_key", contentKey)
+      .select("id, user_id, name, mime, file_key, kind, private").eq("file_key", contentKey)
       .order("created_at", { ascending: true }).limit(1).maybeSingle();
     if (error) throw error;
     if (!rec || rec.kind !== "upload") return { status: 404, message: "Content not found." };
+    // A private record (a chat upload, D53) is its owner's alone.
+    if (rec.private && rec.user_id !== userId) return { status: 404, message: "Content not found." };
     const premiumIds = await activePremiumUserIds();
     if (rec.user_id !== userId && premiumIds.includes(rec.user_id)) return { status: 404, message: "Content not found." };
     return { contentKey, name: rec.name, mime: rec.mime };

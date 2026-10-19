@@ -76,5 +76,10 @@ export async function structureIngest(id) {
   return { data: d?.data ?? null, message: d?.message ?? null };
 }
 
+/** "Find similar material" (D52): Akoro courses and posts on its topics; add the chosen ones, or not now. */
+export const similarFor = (id) => apiPost(`${BASE}/${id}/similar`, {}, { timeout: 30000 }).then((d) => ({ data: d?.data ?? null, candidates: d?.candidates || [] }));
+export const addSimilar = (id, keys) => apiPost(`${BASE}/${id}/similar/add`, { keys }, { timeout: 30000 }).then((d) => ({ data: d?.data ?? null, added: d?.added || [] }));
+export const dismissSimilar = (id) => apiPost(`${BASE}/${id}/similar/dismiss`, {}).then((d) => d?.data ?? null);
+
 export const undoIngest = (id) => apiPost(`${BASE}/${id}/undo`, {}).then((d) => d?.data ?? null);
 export const getIngest = (id) => apiGet(`${BASE}/${id}`).then((d) => d?.data ?? null);

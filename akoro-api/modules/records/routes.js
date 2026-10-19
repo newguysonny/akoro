@@ -326,6 +326,7 @@ router.get("/discover", authenticateToken, asyncHandler(async (req, res) => {
     .order("created_at", { ascending: false })
     .limit(limit);
   if (premiumIds.length) query = query.not("user_id", "in", `(${premiumIds.join(",")})`);
+  query = query.eq("private", false);   // chat uploads stay their owner's (D53)
   if (term) query = query.or(`name.ilike.%${term}%,content.ilike.%${term}%`);
   const { data: rows, error } = await query;
   if (error) throw error;
@@ -361,9 +362,10 @@ router.get("/discover", authenticateToken, asyncHandler(async (req, res) => {
 // were never in the feed, and a guessed or stale id must not leak them.
 router.get("/discover/:id/open", authenticateToken, asyncHandler(async (req, res) => {
   const { data: r, error } = await edu().from("records")
-    .select("id, user_id, kind, name, file_key, content")
+    .select("id, user_id, kind, name, file_key, content, private")
     .eq("id", req.params.id).maybeSingle();
   if (error || !r || !["upload", "paste"].includes(r.kind)) return res404(res, "Record not found.");
+  if (r.private && r.user_id !== req.user.id) return res404(res, "Record not found.");
   if (r.kind === "upload" && !r.file_key) return res400(res, "This record has no saved file.");
   const premiumIds = await activePremiumUserIds();
   if (premiumIds.includes(r.user_id)) return res404(res, "Record not found.");

@@ -181,6 +181,21 @@ export const pastPaperStructured = {
     ctx.note(`analysis: ${JSON.stringify(an).slice(0, 400)}`);
     ctx.expect.ok("the past-paper analysis uses its questions", (an?.topics || []).some((t) => /osmosis|diffusion/i.test(t.topic) && t.marks > 0), an);
 
+    // Find similar (D52): only Akoro's own courses and posts, each saying why; only what was offered goes in.
+    const sim = await ctx.http({ as, method: "POST", path: `/api/agent/materials/ingest/${ingest.id}/similar` });
+    const cands = sim.body?.candidates || [];
+    ctx.note(`similar: ${cands.map((c) => `${c.kind}:${c.title} (${c.why})`).join(" · ") || "(none on the sandbox)"}`);
+    ctx.expect.eq("offering similar material", sim.body?.data?.state, "offering_more");
+    ctx.expect.ok("…only Akoro courses and blog posts, each with an in-app link and why",
+      cands.every((c) => ["course", "blog"].includes(c.kind) && /^\/(course|blog)\//.test(c.href) && c.why), cands);
+    const add = await ctx.http({ as, method: "POST", path: `/api/agent/materials/ingest/${ingest.id}/similar/add`, body: { keys: [...cands.slice(0, 1).map((c) => c.key), "blog:not-offered"] } });
+    ctx.expect.eq("…added, back to ready", add.body?.data?.state, "ready");
+    ctx.expect.ok("…only what was offered goes in", (add.body?.added || []).every((a) => a.key !== "blog:not-offered") && (add.body?.added || []).length === Math.min(1, cands.length), add.body?.added);
+    if (ingest.folder?.id && cands.length) {
+      const items = (await ctx.http({ as, method: "GET", path: `/api/records/folders/${ingest.folder.id}/items` })).body?.data || [];
+      ctx.expect.ok("…into the folder", items.some((it) => it.itemRef === cands[0].key), items);
+    }
+
     // Undo takes the questions with it.
     await ctx.http({ as, method: "POST", path: `/api/agent/materials/ingest/${ingest.id}/undo` });
     const after = await ctx.agent.tool({ as, tool: "analyse_past_papers", input: { subject: "Biology" } });

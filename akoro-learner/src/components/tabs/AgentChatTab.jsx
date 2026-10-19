@@ -34,7 +34,8 @@ import AgentCards from '../network/AgentCards.jsx';
 import ChallengeRequestCards from '../network/ChallengeRequestCards.jsx';
 import ConfirmChangeCard from './agentChat/ConfirmChangeCard.jsx';
 import IngestCard from './agentChat/IngestCard.jsx';
-import { fileIngest, getIngest, isLibraryFile, startIngest, structureIngest, undoIngest } from '../../lib/chatUploads.js';
+import { addSimilar, dismissSimilar, fileIngest, getIngest, isLibraryFile, similarFor, startIngest, structureIngest, undoIngest } from '../../lib/chatUploads.js';
+import SimilarPicker from './agentChat/SimilarPicker.jsx';
 import { useVoiceAnswer } from '../../hooks/useVoiceAnswer.js';
 import { useSpeakReply } from '../../hooks/useSpeakReply.js';
 
@@ -85,6 +86,7 @@ function ThoughtBlock({ thinking, streaming }) {
   );
 }
 
+const FIND_SIMILAR = "Find similar material";   // the API's structureChips label
 const MATERIAL_ICON = { folder:"ti-folder", blog:"ti-article", my_blog:"ti-pencil", course:"ti-school", record:"ti-paperclip", topic:"ti-chalkboard", activity:"ti-list-check" };
 
 function AgentChatTab({
@@ -658,6 +660,9 @@ function AgentChatTab({
     return next;
   });
   const applyIdea=(fill)=>{
+    // "Find similar material" under an upload's reply opens the picker there (D52), not a chat turn.
+    const last = messages[messages.length - 1];
+    if (fill === FIND_SIMILAR && last?.ingestId) { openSimilar(last); return; }
     setInput(fill);
     requestAnimationFrame(()=>{
       const el=composerWrapRef.current?.querySelector('textarea,input[type="text"],input:not([type])');
@@ -665,6 +670,19 @@ function AgentChatTab({
     });
   };
 
+  // "Find similar material": message id → { loading | candidates | done, added }.
+  const [similar, setSimilar] = useState({});
+  const openSimilar = async (msg) => {
+    setSimilar((prev) => ({ ...prev, [msg.id]: { loading: true } }));
+    const r = await similarFor(msg.ingestId).catch(() => null);
+    if (r?.data) putIngest(r.data);
+    setSimilar((prev) => ({ ...prev, [msg.id]: { candidates: r?.candidates || [] } }));
+  };
+  const finishSimilar = async (msg, keys) => {
+    const r = keys ? await addSimilar(msg.ingestId, keys).catch(() => null) : { data: await dismissSimilar(msg.ingestId).catch(() => null), added: [] };
+    if (r?.data) putIngest(r.data);
+    setSimilar((prev) => ({ ...prev, [msg.id]: { done: true, added: r?.added || [] } }));
+  };
   // Upload → read → what it covers, said back in the chat (the API posts it; shown here at once).
   const runIngest = async (ingest, files, chatId) => {
     const done = await fileIngest(ingest, files, putIngest);
@@ -1140,6 +1158,10 @@ function AgentChatTab({
                         </button>
                       ))}
                     </div>
+                  )}
+                  {!isMe&&similar[msg.id]&&(
+                    <SimilarPicker state={similar[msg.id]} folderName={ingests[msg.ingestId]?.folder?.name}
+                      onAdd={(keys)=>finishSimilar(msg, keys)} onDismiss={()=>finishSimilar(msg, null)} onOpen={(href)=>navigate(href)}/>
                   )}
                   {!isMe&&msg.syllabus?.length>0&&(
                     <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5 }}>
