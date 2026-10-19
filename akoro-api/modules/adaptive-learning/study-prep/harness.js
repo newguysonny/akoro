@@ -330,6 +330,9 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
   function activeTopic(topics) { return topics.find((topic) => topic.status === "active") || null; }
 
   async function pause(session, reason, extraFacts = {}) {
+    // Only from a state that can pause: a plan already waiting on the learner
+    // stays waiting (the step cap after a proposed plan is not the learner's error).
+    if (!canTransitionSession(session.status, "paused")) return null;
     const paused = await store.updateSessionConditional(session.id, session.status, {
       status: "paused", paused_reason: reason, updated_at: now(),
     });

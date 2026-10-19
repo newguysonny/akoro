@@ -89,6 +89,37 @@ const NODE_TYPE = {
 /** The harness's "thought type" stamp as a controlled category (D14). */
 const CATEGORY = { research: "research", draft: "draft", verification: "verification", action: "action", reflection: "reflection", synthesis: "synthesis" };
 
+/**
+ * What a planning read found, in one learner-safe line (counts, topic labels,
+ * percentages — never the raw result). null when there's nothing to say.
+ */
+const pctOf = (v) => Math.round(Math.max(0, Math.min(1, Number(v) || 0)) * 100);
+const many = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+export function studyPrepResultLine(tool, observation) {
+  if (!observation || observation.ok === false) return null;
+  const r = observation.result && typeof observation.result === "object" ? observation.result : {};
+  const list = (v) => (Array.isArray(v) ? v : []);
+  switch (tool) {
+    case "syllabus.resolve": case "syllabus.resolve_class": case "syllabus.resolve_school": case "syllabus.resolve_platform": {
+      if (r.found === false || !list(r.topics).length) return "No syllabus found for this class";
+      const n = list(r.topics).length;
+      return `${n >= 12 ? "12+" : n} topic${n === 1 ? "" : "s"} found`;
+    }
+    case "syllabus.generate": return list(r.topics).length ? `An outline of ${many(list(r.topics).length, "topic")}` : null;
+    case "learner.get_state": {
+      const entries = Object.entries(r.topics && typeof r.topics === "object" ? r.topics : {}).filter(([, v]) => Number.isFinite(Number(v)));
+      if (!entries.length) return "No recorded evidence on this subject yet";
+      const weak = entries.sort((a, b) => Number(a[1]) - Number(b[1])).slice(0, 3).map(([k, v]) => `${String(k).slice(0, 40)} ${pctOf(v)}%`);
+      return `Weakest: ${weak.join(", ")}`;
+    }
+    case "learner.get_history": return list(r.runs).length ? `${many(list(r.runs).length, "past practice run")} found` : "No past practice on this subject yet";
+    case "learner.get_relevant_memory": return list(r.memories).length ? `${many(list(r.memories).length, "note")} from earlier sessions` : "Nothing noted on this subject yet";
+    case "concept.get_prerequisites": return list(r.edges).length ? `${many(list(r.edges).length, "prerequisite link")} to respect` : "No prerequisite links recorded";
+    case "plan.validate": return r.ok === false ? null : "The plan passes the checks";
+    default: return null;
+  }
+}
+
 /** A study_prep_events row as a v3 workflow_events row (Phase 3). */
 export function workflowEventFor(row) {
   const kind = row.event_type || row.eventType;
@@ -120,6 +151,7 @@ export function workflowEventFor(row) {
       decisionNode: node, narrative: row.narrative || null, tool, action, intent,
       durationMs: row.duration_ms ?? row.durationMs ?? null,
       ...(failed ? { code: facts.code || null } : {}),
+      ...(kind === "observation" && studyPrepResultLine(tool, facts) ? { resultLine: studyPrepResultLine(tool, facts) } : {}),
       ...(facts?.topicLabel || facts?.topic ? { topicLabel: facts.topicLabel || facts.topic } : {}),
       ...(facts?.score != null ? { score: facts.score, total: facts.total ?? null, percentage: facts.percentage ?? null } : {}),
       facts, origin: row.origin || null,

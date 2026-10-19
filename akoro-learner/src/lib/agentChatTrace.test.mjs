@@ -192,3 +192,36 @@ test('workflow v3 events become trace rows: narrated headline and detail, quiet 
   assert.equal(rows[0].description, "Looking for your class's topics");
   assert.equal(workflowEventBlocks([ev(2, 'activity', { headline: 'x' })], { from: Date.parse(at) + 1 }).length, 0, 'outside the turn');
 });
+
+test('the workflow card: a tool step runs until its result; decisions are done; rejections fail; lifecycle moves are not steps', async () => {
+  const { workflowCardSteps, studyPrepCardHead, AI_DRAFTED_TAG } = await import('./agentChatTrace.js');
+  const n = (headline, result = '') => ({ headline, description: '', result, narration: headline });
+  const ev = (sequence, type, narration, payload = {}) => ({ sequence, type, narration, payload });
+  const events = [
+    ev(0, 'workflow.created', n('Started Study Prep')),
+    ev(1, 'tool.started', n('Checking your class syllabus'), { tool: 'syllabus.resolve_class' }),
+    ev(2, 'tool.completed', n('Checking your class syllabus', 'Done'), { tool: 'syllabus.resolve_class', durationMs: 400 }),
+    ev(3, 'activity', n('Outline drafted'), { decisionNode: 'syllabus_generated' }),
+    ev(4, 'workflow.state_changed', n('Moved on')),
+    ev(5, 'decision.rejected', n('Not allowed')),
+    ev(6, 'tool.started', n('Ordering the topics'), { tool: 'concept.get_prerequisites' }),
+  ];
+  const steps = workflowCardSteps(events);
+  assert.deepEqual(steps.map((s) => [s.headline, s.status, s.ms]), [
+    ['Checking your class syllabus', 'done', 400], ['Outline drafted', 'done', null], ['Not allowed', 'failed', null], ['Ordering the topics', 'running', null],
+  ]);
+  assert.equal(steps[1].tag, AI_DRAFTED_TAG);
+  assert.equal(workflowCardSteps(events, { running: false }).at(-1).status, 'done', 'not working now: nothing spins');
+  assert.deepEqual(studyPrepCardHead('awaiting_confirmation'), { title: 'Your study plan', badge: 'Waiting for you', tone: 'wait' });
+  assert.equal(studyPrepCardHead('topic_active', 'Cells').title, 'Studying: Cells');
+});
+
+test('the workflow card keeps why a step was taken and what it found', async () => {
+  const { workflowCardSteps } = await import('./agentChatTrace.js');
+  const n = (headline, result = '') => ({ headline, description: '', result, narration: headline });
+  const steps = workflowCardSteps([
+    { sequence: 1, type: 'tool.started', narration: n('Reviewing what you know'), payload: { tool: 'learner.get_state', intent: 'Find their weakest topics first.' } },
+    { sequence: 2, type: 'tool.completed', narration: n('Reviewing what you know', 'Weakest: Cells 21%'), payload: { tool: 'learner.get_state', resultLine: 'Weakest: Cells 21%' } },
+  ]);
+  assert.deepEqual([steps.length, steps[0].why, steps[0].result, steps[0].status], [1, 'Find their weakest topics first.', 'Weakest: Cells 21%', 'done']);
+});

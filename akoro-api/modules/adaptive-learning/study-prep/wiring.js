@@ -20,6 +20,9 @@ import { buildRegistry } from "../tools/registry.js";
 import { buildAgentContext } from "./context-manager.js";
 import { runAgentStep } from "./agent-loop.js";
 import { pauseCopy } from "./narration.js";
+import { planReadyMessage } from "./planReady.js";
+
+export { planReadyMessage };
 import db from "../../../db.js";
 import { createWorkflowEngine } from "../../workflows/engine.js";
 import { makeSupabaseWorkflowStore } from "../../workflows/store.js";
@@ -178,12 +181,57 @@ export async function runStudyPrepPlanningStep({ sessionId, learnerId }) {
   return { ...after, loop: { ended: step.ended, iterations: step.iterations, terminal: step.terminal } };
 }
 
-/** Start a session and run one planning step (the chat tool + REST entry). */
-export async function startStudyPrepSession({ learnerId, goal, subject, classLevel, examBoard, materials = null }) {
+/**
+ * Start a session and run one planning step (the chat tool + REST entry).
+ * background: the step runs after this returns (the chat tool) — the card
+ * streams it live, and the plan-ready message lands in `conversationId`.
+ */
+export async function startStudyPrepSession({ learnerId, goal, subject, classLevel, examBoard, materials = null, background = false, conversationId = null }) {
   const harness = getHarness();
   const session = await harness.createSession({ learnerId, goal, subject, classLevel, examBoard, materials });
-  const view = await runStudyPrepPlanningStep({ sessionId: session.id, learnerId });
-  return view;
+  if (background) {
+    planInBackground({ sessionId: session.id, learnerId, conversationId });
+    return harness.getSessionView({ sessionId: session.id, learnerId, eventLimit: 10 });
+  }
+  return runStudyPrepPlanningStep({ sessionId: session.id, learnerId });
+}
+
+const planning = new Set();
+/**
+ * Run the planning step without holding the chat turn. One run per session at
+ * a time. When it ends, the agent says so in the chat (after the turn's own
+ * reply is saved, so the order reads right) and the open chat is told.
+ */
+export function planInBackground({ sessionId, learnerId, conversationId = null }) {
+  if (planning.has(sessionId)) return false;
+  planning.add(sessionId);
+  setImmediate(async () => {
+    let view = null;
+    try { view = await runStudyPrepPlanningStep({ sessionId, learnerId }); }
+    catch (error) { console.warn(`[study-prep] background planning failed for ${sessionId}: ${error?.message || error}`); }
+    finally { planning.delete(sessionId); }
+    if (!conversationId) return;
+    if (!view) view = await getHarness().getSessionView({ sessionId, learnerId, eventLimit: 1 }).catch(() => null);
+    await postToConversation({ learnerId, conversationId, text: planReadyMessage(view?.session) }).catch(() => null);
+  });
+  return true;
+}
+export const planningInBackground = (sessionId) => planning.has(sessionId);
+
+async function postToConversation({ learnerId, conversationId, text }) {
+  // The turn that started the plan saves its reply when it ends: wait for it (≤ 30s).
+  for (let i = 0; i < 15; i += 1) {
+    const { data: last } = await db.from("chat_messages").select("role").eq("session_id", conversationId).eq("user_id", learnerId)
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (!last || last.role !== "user") break;
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  const { data: msg } = await db.from("chat_messages")
+    .insert({ session_id: conversationId, user_id: learnerId, role: "agent", text, meta: { studyPrepReady: true } }).select("id").single();
+  if (!msg) return null;
+  await db.from("chat_sessions").update({ last_message_at: new Date().toISOString() }).eq("id", conversationId).eq("user_id", learnerId);
+  try { global.io?.to(`user:${learnerId}`).emit("chat_follow_up_ready", { sessionId: conversationId }); } catch { /* opening the chat shows it */ }
+  return msg;
 }
 
 export { InsufficientBalanceError, pauseCopy };

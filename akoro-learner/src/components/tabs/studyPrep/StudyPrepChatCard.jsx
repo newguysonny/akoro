@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { BRAND, GREEN, RED } from '../../../constants.js';
 import BattleModal from '../../battles/BattleModal.jsx';
 import { Icon } from '../../common/Icons.jsx';
-import { workflowEventBlocks } from '../../../lib/agentChatTrace.js';
-import { openWorkflowStream, rememberSeen, seenSequence } from '../../../lib/workflowStream.js';
+import { studyPrepCardHead, workflowCardSteps } from '../../../lib/agentChatTrace.js';
+import { cacheEvents, cachedEvents, openWorkflowStream, rememberSeen, seenSequence } from '../../../lib/workflowStream.js';
+import { WorkflowHead, WorkflowSteps } from './WorkflowSteps.jsx';
 import {
   adjustStudyPrepPlan, advanceStudyPrepTopic, confirmStudyPrepPlan, confirmStudyPrepTeachBack,
   concludeStudyPrepSession, deferStudyPrepTopic, fetchStudyPrepSession, generateStudyPrepPractice,
@@ -42,8 +43,22 @@ const TOPIC_STATUS_LABEL = {
   flagged_gap: 'gap flagged', capped_out: 'capped out', deferred: 'deferred',
 };
 
-export default function StudyPrepChatCard({ sessionId, onEvents }) {
-  const [view, setView] = useState(null);
+/** Session views and "away" counts kept across a card moving between the chat and the pinned spot. */
+const viewCache = new Map();
+const awayCache = new Map();
+
+/**
+ * pinned: the compact card docked above the message box while the workflow
+ * runs (head + latest steps). onRunning(sessionId, running) tells the chat
+ * whether to pin it.
+ */
+export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinned = false }) {
+  const [view, setViewState] = useState(() => viewCache.get(sessionId) || null);
+  const setView = useCallback((next) => setViewState((previous) => {
+    const value = typeof next === 'function' ? next(previous) : next;
+    if (value) viewCache.set(sessionId, value);
+    return value;
+  }), [sessionId]);
   const [attempt, setAttempt] = useState(null);
   const [answers, setAnswers] = useState({});
   const [result, setResult] = useState(null);
@@ -95,29 +110,36 @@ export default function StudyPrepChatCard({ sessionId, onEvents }) {
   // (replayed from the start, then pushed). Without a workflow — an older API —
   // the session view's own event list is used, as before.
   const workflowId = view?.session?.workflowId || null;
-  const [wfEvents, setWfEvents] = useState(null);
-  const [away, setAway] = useState(0);
+  const [wfEvents, setWfEvents] = useState(() => (workflowId && cachedEvents(workflowId)) || null);
+  const [away, setAwayState] = useState(() => awayCache.get(sessionId) || 0);
+  const setAway = useCallback((n) => { awayCache.set(sessionId, n); setAwayState(n); }, [sessionId]);
   useEffect(() => {
     if (!workflowId) return undefined;
     const seen = seenSequence(workflowId);
-    let list = [];
+    let list = cachedEvents(workflowId) || [];
+    // Picking up from steps this card already had (it moved): everything that arrives is new.
+    const resumed = list.length > 0;
+    if (resumed) setWfEvents(list);
     const close = openWorkflowStream({
       workflowId,
+      after: list.length ? list[list.length - 1].sequence : -1,
       onEvent: (event, { live }) => {
         list = [...list, event];
+        cacheEvents(workflowId, list);
         setWfEvents(list);
         rememberSeen(workflowId, event.sequence);
         // A step that moves the session: re-read it so the card's buttons match.
-        if (live && STATE_EVENTS.has(event.type)) refresh();
+        if ((live || resumed) && STATE_EVENTS.has(event.type)) refresh();
       },
       // "While you were away": steps this device hadn't shown yet.
-      onCaughtUp: (replayed) => { if (seen != null) setAway(workflowEventBlocks(replayed.filter((e) => e.sequence > seen)).length); },
+      onCaughtUp: (replayed) => { if (!resumed && seen != null && replayed.length) setAway(workflowCardSteps(replayed.filter((e) => e.sequence > seen)).length); },
       onError: () => setWfEvents(null),
     });
     return close;
-  }, [workflowId, refresh]);
+  }, [workflowId, refresh, setAway]);
 
-  // The session's steps go to the chat's trace, not the card (AgentChatTab).
+  // With a workflow stream the steps are the card's own; an older API's
+  // session steps still go to the chat's trace (AgentChatTab), as before.
   const events = view?.events;
   useEffect(() => {
     if (wfEvents) onEvents?.(sessionId, { v3: wfEvents });
@@ -131,6 +153,16 @@ export default function StudyPrepChatCard({ sessionId, onEvents }) {
     const timer = setInterval(refresh, 5000);
     return () => clearInterval(timer);
   }, [checkRunning, refresh]);
+
+  // Running = the workflow is working right now: planning (with a step in
+  // the last few minutes — a session left in planning isn't running), or an
+  // Agent Check under way. While running, the chat pins the card.
+  const status = view?.session?.status;
+  const lastAt = wfEvents?.length ? Date.parse(wfEvents[wfEvents.length - 1].timestamp || '') || 0 : 0;
+  const planningNow = ['planning', 'replanning'].includes(status) && Date.now() - lastAt < 3 * 60_000;
+  const running = !!wfEvents && (planningNow || checkRunning);
+  const steps = useMemo(() => workflowCardSteps(wfEvents || [], { running }), [wfEvents, running]);
+  useEffect(() => { onRunning?.(sessionId, running); }, [sessionId, running, onRunning]);
 
   if (!view) {
     return (
@@ -163,6 +195,7 @@ export default function StudyPrepChatCard({ sessionId, onEvents }) {
   } : null;
   const shownResult = agentMode ? checkResult : result;
   const checkLive = agentMode && !!shownTopic?.checkBattleId && !shownTopic.checkScoredAt;
+  const head = studyPrepCardHead(session.status, activeTopic?.label || null);
   const watch = () => setWatching({ id: shownTopic.checkBattleId, title: `Agent Check: ${shownTopic.label}`, topic: shownTopic.label, status: 'lobby', type: 'check' });
 
   const confirmPlan = () => void run(() => confirmStudyPrepPlan(session.id), (response) => {
@@ -212,17 +245,23 @@ export default function StudyPrepChatCard({ sessionId, onEvents }) {
 
   return (
     <div style={{ ...card, marginTop: 6, maxWidth: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-        <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--ak-text)', display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="ti-target" size={15} color={BRAND}/> Study Prep · {session.subject}</div>
-        <div style={caption}>{session.status.replace(/_/g, ' ')}</div>
-      </div>
+      {wfEvents ? <WorkflowHead head={head} subject={session.subject}/> : (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+          <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--ak-text)', display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="ti-target" size={15} color={BRAND}/> Study Prep · {session.subject}</div>
+          <div style={caption}>{session.status.replace(/_/g, ' ')}</div>
+        </div>
+      )}
       {away > 0 && (
         <div data-workflow-away={away} role="status" style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 10px', borderRadius: 10, background: `${BRAND}12`, border: `1px solid ${BRAND}30`, color: BRAND, fontSize: 12, fontWeight: 800 }}>
           <Icon name="ti-refresh" size={14} color={BRAND}/> While you were away · {away} step{away === 1 ? '' : 's'}
           <button type="button" aria-label="Dismiss" onClick={() => setAway(0)} style={{ marginLeft: 'auto', border: 0, background: 'transparent', color: 'inherit', cursor: 'pointer', padding: 0, display: 'flex' }}><Icon name="ti-x" size={13} color={BRAND}/></button>
         </div>
       )}
+      {wfEvents && <WorkflowSteps steps={steps} limit={pinned ? 4 : 8}/>}
       {error && <div role="alert" style={errorBox}>{error}</div>}
+
+      {/* Pinned (running): the head and the latest steps only — the full card is back at its message once it settles. */}
+      {pinned ? (checkLive && <button type="button" onClick={watch} style={primary}>Watch the Agent Check</button>) : <>
 
       {/* ── the plan card: Approve & Start / Adjust (the only spend gate) ── */}
       {['planning', 'awaiting_confirmation'].includes(session.status) && (
@@ -402,7 +441,7 @@ export default function StudyPrepChatCard({ sessionId, onEvents }) {
       {/* ── ended ──────────────────────────────────────────────────────── */}
       {['completed', 'cancelled', 'abandoned'].includes(session.status) && (
         <div style={{ display: 'grid', gap: 7 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 900, color: 'var(--ak-text)' }}>{session.status === 'completed' ? 'Session complete 🎉' : 'Session ended'}</div>
+          <div style={{ fontSize: 12.5, fontWeight: 900, color: 'var(--ak-text)' }}>{session.status === 'completed' ? 'Session complete' : 'Session ended'}</div>
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
             {topics.map((topic) => {
               const style = TOPIC_STATUS_STYLE[topic.status] || TOPIC_STATUS_STYLE.queued;
@@ -412,6 +451,8 @@ export default function StudyPrepChatCard({ sessionId, onEvents }) {
           <div style={caption}>Understanding is recorded from your attempts — future sessions and your teacher's gap report build on it.</div>
         </div>
       )}
+
+      </>}
 
       {watching && <BattleModal battle={watching} onClose={() => { setWatching(null); refresh(); }} />}
     </div>

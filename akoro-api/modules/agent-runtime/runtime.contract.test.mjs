@@ -186,3 +186,13 @@ test("harness core: a workflow's checks run in order; the first failure is logge
   assert.deepEqual(logged[2][2], { n: 9 });
   await assert.rejects(createRejector()(null, "x", "no subject"), (e) => e.httpStatus === 409, "no subject: nothing logged, still rejects");
 });
+
+test("think: the agent's notes come back to it on its next step, never into what is recorded", async () => {
+  const seen = [];
+  const recorded = [];
+  const agent = { next: async ({ observations }) => { seen.push(observations.map((o) => o.yourNotes || null)); return seen.length < 3 ? { tool: "read", args: {}, intent: "Read.", thinking: `note ${seen.length}` } : { action: "finish", args: {}, intent: "Done.", thinking: "final" }; } };
+  const registry = { catalogue: [], execute: async () => ({ ok: true }) };
+  await runAgentLoop({ agent, registry, goal: "g", caps: { maxIterations: 5 }, terminalActions: ["finish"], record: async (e) => recorded.push(JSON.stringify(e.kind === "decision" ? { tool: e.step.tool, args: e.step.args } : e)) });
+  assert.deepEqual(seen, [[], ["note 1"], ["note 1", "note 2"]]);
+  assert.ok(recorded.every((r) => !r.includes("note ")), "notes never reach the recorded log through what the workflow stores");
+});

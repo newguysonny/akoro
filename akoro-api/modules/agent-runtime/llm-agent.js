@@ -6,7 +6,13 @@
  * model never gets to freestyle state.
  *
  *   makeLlmAgent({ system, catalogue, feature, learnerId, learnerChoice,
- *                  intentMaxChars, maxTokens, timeoutMs, finishHint })
+ *                  intentMaxChars, maxTokens, timeoutMs, finishHint, think })
+ *
+ * think: before each decision the agent writes its reasoning (what it knows,
+ * what is missing, what this step should establish). Model-agnostic: it is a
+ * field of the call, not a provider's reasoning API. The notes go back to the
+ * agent with the next observations, so the analysis builds across the step's
+ * decisions; they are never stored in events or shown (only the intent is).
  *
  * The model is the `controller` role's (lib/modelRegistry.js): the learner's
  * choice when they may make one, else the role's env default, else the
@@ -30,6 +36,7 @@ export function makeLlmAgent({
   system, catalogue, feature, learnerId = null, learnerChoice = null, intentMaxChars = 240,
   maxTokens = 700, timeoutMs = 45_000, maxRetries = 1,
   finishHint = "This is your last step: finish now with the best you can make from what you found.",
+  think = false, thinkMaxChars = 900,
 }) {
   const toRegistry = new Map(catalogue.map((tool) => [providerToolName(tool.name), tool.name]));
   if (toRegistry.size !== catalogue.length) throw new Error(`${feature}: tool names collide once made provider-safe`);
@@ -41,10 +48,11 @@ export function makeLlmAgent({
       parameters: {
         type: "object",
         properties: {
+          ...(think ? { thinking: { type: "string", description: `Think it through first (max ${thinkMaxChars} characters): what you know so far, what is still missing or uncertain, and what this step should establish. Your notes come back to you on the next step.` } } : {}),
           intent: { type: "string", description: `One short sentence stating why you are doing this (max ${intentMaxChars} characters).` },
           args: { ...(tool.args || { type: "object" }), description: "The tool arguments." },
         },
-        required: ["intent", "args"],
+        required: think ? ["thinking", "intent", "args"] : ["intent", "args"],
       },
     },
   }));
@@ -65,6 +73,7 @@ export function makeLlmAgent({
             maxIterations
               ? `Iteration ${iteration} of ${maxIterations}.${finalOnly ? ` ${finishHint}` : " Read only what you need, then act — the step ends at the last iteration."}`
               : `Iteration: ${iteration}.`,
+            ...(think && !finalOnly ? ["Research properly before you act: each step should add something you didn't know. Use what your notes and the observations already establish; don't repeat a read."] : []),
             observations.length
               ? `Observations so far:\n${observations.map((observation, index) => `${index + 1}. ${JSON.stringify(observation)}`).join("\n").slice(0, 6000)}`
               : "No observations yet — start by inspecting what you need.",
@@ -86,7 +95,10 @@ export function makeLlmAgent({
         const parsed = JSON.parse(call.function.arguments || "{}");
         const args = parsed?.args && typeof parsed.args === "object" ? parsed.args : parsed || {};
         // Propose actions ARE tool names in these registries.
-        return { tool: name, action: name, args, intent: typeof parsed?.intent === "string" ? parsed.intent.slice(0, intentMaxChars) : null };
+        return {
+          tool: name, action: name, args, intent: typeof parsed?.intent === "string" ? parsed.intent.slice(0, intentMaxChars) : null,
+          ...(think && typeof parsed?.thinking === "string" ? { thinking: parsed.thinking.slice(0, thinkMaxChars) } : {}),
+        };
       } catch {
         return { tool: name, action: name, args: {}, intent: null };
       }

@@ -12,6 +12,10 @@
 import { streamGet } from '../services/api.js';
 
 const KEY = (id) => `ak.wf.seen.${id}`;
+/** Steps already received, per workflow, so a card that moves (pinned ↔ in the chat) picks up where it was. */
+const received = new Map();
+export const cachedEvents = (workflowId) => received.get(workflowId) || null;
+export const cacheEvents = (workflowId, list) => { received.set(workflowId, list); };
 export function seenSequence(workflowId) {
   try { const v = localStorage.getItem(KEY(workflowId)); return v == null ? null : Number(v); } catch { return null; }
 }
@@ -42,7 +46,8 @@ export function openWorkflowStream({ workflowId, after = -1, onEvent, onCaughtUp
             if (name !== 'workflow_event' || !Number.isFinite(data?.sequence) || data.sequence <= last) return;
             last = data.sequence;
             if (!caughtUp) replayed.push(data);
-            onEvent?.(data, { live: caughtUp });
+            // After the first catch-up everything is new, even what a reconnect replays.
+            onEvent?.(data, { live: caughtUp || !firstCatchUp });
           },
         });
       } catch (err) {

@@ -154,3 +154,24 @@ test("malformed agent iterations are recorded and never crash the loop", async (
   const malformed = store.events.filter((event) => event.action === "malformed");
   assert.equal(malformed.length, 2, "both empty iterations are on the log");
 });
+
+test("the step cap after the plan is already waiting leaves it waiting — no 409, no pause", async () => {
+  const store = new MemoryStore();
+  const harness = createHarness({ store, topicWorkflow, syllabus, now: () => "2026-01-01T00:00:00Z" });
+  const session = await harness.createSession({ learnerId: LEARNER, goal: "Prepare", subject: "Basic Science" });
+  let proposed = false;
+  const registry = {
+    catalogue: [],
+    // The plan lands on the first call, but the agent never takes a terminal action.
+    execute: async () => {
+      if (!proposed) { proposed = true; await harness.proposePlan({ sessionId: session.id, learnerId: LEARNER, topicIds: ["water-cycle"] }); }
+      return { ok: true };
+    },
+  };
+  const agent = { next: async () => ({ tool: "syllabus.resolve", args: {}, intent: "Looping." }) };
+  const result = await runAgentStep({ sessionId: session.id, goal: session.goal, agent, registry, store, harness });
+  assert.equal(result.ended, "agent_loop_cap");
+  const after = await store.getSession(session.id);
+  assert.equal(after.status, "awaiting_confirmation", "the plan card still waits for the learner");
+  assert.equal(store.events.filter((event) => event.decision_node === "session_paused").length, 0);
+});

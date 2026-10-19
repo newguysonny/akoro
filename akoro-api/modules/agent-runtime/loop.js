@@ -125,7 +125,8 @@ export async function runAgentLoop({
       }
     }
     // The agent's transcript names the tool each observation answers.
-    observations.push({ tool: requested, ...observation });
+    // With think, the agent's own notes for the step ride along, so its analysis builds across decisions.
+    observations.push({ tool: requested, ...(step.thinking ? { yourNotes: String(step.thinking).slice(0, 900) } : {}), ...observation });
     await record({ kind: "observation", iteration, observation, tool: requested });
     if (stopped) return { ended: `stop:${stopped}`, iterations: iteration, terminal: null, observations };
     if (terminal) return { ended: "terminal", iterations: iteration, terminal, observations };

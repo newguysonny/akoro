@@ -224,3 +224,50 @@ export function workflowEventBlocks(events, { from = 0, to = Infinity } = {}) {
       result: event.narration.result || '',
     }));
 }
+
+/**
+ * The workflow card's step list (Phase 3, the card streams the workflow's
+ * state; the chat's own steps stay outside it). A tool step shows running
+ * from its start until its result; a decision, check or result is a done
+ * step; a rejection or failed tool is failed. Lifecycle moves aren't steps.
+ * `running` false settles any step left open (the workflow isn't working now).
+ */
+const CARD_SKIP = new Set(['workflow.created', 'workflow.started', 'workflow.state_changed', 'decision.proposed', 'decision.fallback', 'operation.started', 'context.loaded']);
+export const AI_DRAFTED_TAG = "AI-drafted — not your school's official syllabus";
+export function workflowCardSteps(events, { running = true } = {}) {
+  const steps = [];
+  for (const event of events || []) {
+    if (!event?.narration?.headline || CARD_SKIP.has(event.type)) continue;
+    const p = event.payload || {};
+    const base = {
+      id: `wf_${event.sequence}`, headline: event.narration.headline, description: event.narration.description || '',
+      result: event.narration.result || '', ms: p.durationMs ?? null,
+      ...(p.decisionNode === 'syllabus_generated' ? { tag: AI_DRAFTED_TAG } : {}),
+      // Why the agent took this step (its stated intent) — sanitised and capped server-side.
+      ...(p.intent ? { why: String(p.intent) } : {}),
+    };
+    if (event.type === 'tool.started') { steps.push({ ...base, tool: p.tool || null, status: 'running', result: '' }); continue; }
+    if (event.type === 'tool.completed' || event.type === 'tool.failed') {
+      const open = [...steps].reverse().find((s) => s.status === 'running' && s.tool === (p.tool || null));
+      const status = event.type === 'tool.failed' ? 'failed' : 'done';
+      if (open) Object.assign(open, { status, ms: base.ms ?? open.ms, result: base.result, ...(base.tag ? { tag: base.tag } : {}), ...(base.why && !open.why ? { why: base.why } : {}) });
+      else steps.push({ ...base, tool: p.tool || null, status });
+      continue;
+    }
+    steps.push({ ...base, status: event.type === 'decision.rejected' ? 'failed' : 'done' });
+  }
+  if (!running) for (const s of steps) if (s.status === 'running') s.status = 'done';
+  return steps;
+}
+
+/** The card's header for a Study Prep session state. */
+export function studyPrepCardHead(status, activeTopicLabel = null) {
+  switch (status) {
+    case 'planning': case 'replanning': return { title: 'Building your study plan', badge: 'Planning', tone: 'live' };
+    case 'awaiting_confirmation': return { title: 'Your study plan', badge: 'Waiting for you', tone: 'wait' };
+    case 'topic_active': return { title: activeTopicLabel ? `Studying: ${activeTopicLabel}` : 'Studying', badge: 'In progress', tone: 'live' };
+    case 'paused': return { title: 'Study plan paused', badge: 'Paused', tone: 'wait' };
+    case 'completed': return { title: 'Study plan done', badge: 'Done', tone: 'done' };
+    default: return { title: 'Study plan stopped', badge: 'Stopped', tone: 'done' };
+  }
+}

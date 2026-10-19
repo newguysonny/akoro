@@ -328,53 +328,62 @@ export const scenarios = [
   },
   {
     name: 'chat.study_prep_live',
-    description: 'A Study Prep card\'s steps come live from its workflow\'s event stream: they show in the chat in the learner\'s words, a dropped stream reconnects from the last step without repeats, and steps that happened while the learner was away are announced ("While you were away · N steps"). (The chat, the session and the stream are served by the test; the server side is the backend gate\'s workflow.event_stream.)',
+    description: 'The Study Prep card streams its workflow: while it runs it is pinned above the message box (a spinner on the step in progress, a note at its message); when the plan is ready it goes back to its message saying "Waiting for you", every step ticked, with Approve & Start. The steps are in the card, not in the chat\'s own step rows; a dropped stream reconnects from the last step without repeats; steps from while the learner was away are announced. (Chat, session and stream are served by the test; the server side is the backend gate\'s workflow.event_stream.)',
     async run(t) {
       const { page } = t;
       const chatId = '00000000-0000-4000-8000-0000000000d1', spId = '00000000-0000-4000-8000-0000000000d2', wfId = '00000000-0000-4000-8000-0000000000d3';
-      const at = new Date(Date.now() - 60_000).toISOString();
+      const at = (s) => new Date(Date.now() - s * 1000).toISOString();
       const nar = (headline, description = '', result = '') => ({ headline, description, result, narration: headline });
       const all = [
-        { sequence: 0, type: 'workflow.created', narration: nar('Started Study Prep', 'Basic Science'), payload: {} },
-        { sequence: 1, type: 'tool.completed', narration: nar('Checking your class syllabus', 'Your school\'s topics for your class', 'Done'), payload: { tool: 'syllabus.resolve_class', durationMs: 400 } },
-        { sequence: 2, type: 'activity', narration: nar('Outline drafted', 'I drafted an outline from the national curriculum. It\'s an AI-drafted outline, not your school\'s official syllabus.'), payload: { decisionNode: 'syllabus_generated', narrative: 'x' } },
-        { sequence: 3, type: 'tool.completed', narration: nar('Ordering the topics', 'What has to come before what', 'Done'), payload: { tool: 'concept.get_prerequisites', durationMs: 900 } },
-        { sequence: 4, type: 'decision.accepted', narration: nar('Plan checked', 'Checked the plan against the syllabus, prerequisite order and your coin balance — everything lines up.'), payload: { decisionNode: 'plan_validated', narrative: 'x' } },
-      ].map((e) => ({ v: 3, workflowId: wfId, workflowType: 'study_prep', timestamp: at, visibility: 'learner', actor: 'system', ...e }));
+        { sequence: 0, type: 'workflow.created', narration: nar('Started Study Prep'), payload: {} },
+        { sequence: 1, type: 'tool.completed', narration: nar('Checking your class syllabus', 'No Basic Science syllabus for JSS1 at your school', 'Done'), payload: { tool: 'syllabus.resolve_class', durationMs: 400 } },
+        { sequence: 2, type: 'activity', narration: nar('Outline drafted', 'I drafted an outline from the national curriculum.'), payload: { decisionNode: 'syllabus_generated', narrative: 'x' } },
+        { sequence: 3, type: 'tool.started', narration: nar('Ordering the topics', 'What has to come before what'), payload: { tool: 'concept.get_prerequisites' } },
+        { sequence: 4, type: 'tool.completed', narration: nar('Ordering the topics', 'What has to come before what', 'Done'), payload: { tool: 'concept.get_prerequisites', durationMs: 900 } },
+        { sequence: 5, type: 'decision.accepted', narration: nar('Plan checked', 'Everything lines up.'), payload: { decisionNode: 'plan_validated', narrative: 'x' } },
+      ].map((e) => ({ v: 3, workflowId: wfId, workflowType: 'study_prep', timestamp: at(5 - e.sequence * 0.5), visibility: 'learner', actor: 'system', ...e }));
       const asked = [];
-      await page.route('**/api/adaptive/chat/sessions', (r) => r.fulfill({ json: { success: true, sessions: [{ id: chatId, title: 'Basic Science prep', updated_at: at, created_at: at }] } }));
+      let planned = false;
+      await page.route('**/api/adaptive/chat/sessions', (r) => r.fulfill({ json: { success: true, sessions: [{ id: chatId, title: 'Basic Science prep', updated_at: at(60), created_at: at(60) }] } }));
       await page.route(`**/api/adaptive/chat/sessions/${chatId}/messages**`, (r) => r.fulfill({ json: { success: true, messages: [
-        { id: 'm1', role: 'user', text: 'Prepare me for my JSS1 Basic Science exam in 5 weeks', created_at: new Date(Date.now() - 120_000).toISOString() },
-        { id: 'm2', role: 'agent', text: 'Here is your plan.', created_at: new Date(Date.now() - 119_000).toISOString(), meta: { studyPrepSessionId: spId } },
+        { id: 'm1', role: 'user', text: 'Prepare me for my JSS1 Basic Science exam in 5 weeks', created_at: at(30) },
+        { id: 'm2', role: 'agent', text: 'Building your plan now.', created_at: at(29), meta: { studyPrepSessionId: spId } },
       ], hasMore: false } }));
       await page.route(`**/api/adaptive/study-prep/sessions/${spId}`, (r) => r.fulfill({ json: { success: true, session: {
-        id: spId, goal: 'JSS1 Basic Science exam', subject: 'Basic Science', status: 'awaiting_confirmation', workflowId: wfId,
-        plan: [{ syllabusTopicId: 't1', label: 'Living and non-living things', position: 1 }, { syllabusTopicId: 't2', label: 'Cells', position: 2 }],
-        estimate: { totalCoins: 12 }, syllabusSource: 'generated', syllabusLabel: "AI-drafted outline — not your school's official syllabus" }, topics: [], events: [] } }));
-      // The stream: the first connection sends steps 0–2 and drops; the reconnect asks from 2 and gets the rest.
-      await page.route(`**/api/workflows/${wfId}/stream**`, (r) => {
+        id: spId, goal: 'JSS1 Basic Science exam', subject: 'Basic Science', status: planned ? 'awaiting_confirmation' : 'planning', workflowId: wfId,
+        plan: planned ? [{ syllabusTopicId: 't1', label: 'Living and non-living things', position: 1 }, { syllabusTopicId: 't2', label: 'Cells', position: 2 }] : null,
+        estimate: planned ? { totalCoins: 12 } : null, syllabusSource: 'generated' }, topics: [], events: [] } }));
+      // First connection: steps 0–3 (3 still running), then it drops. The reconnect (after 3) brings the rest — the plan is ready.
+      await page.route(`**/api/workflows/${wfId}/stream**`, async (r) => {
         const after = Number(new URL(r.request().url()).searchParams.get('after'));
         asked.push(after);
-        const out = asked.length === 1 ? all.filter((e) => e.sequence > after && e.sequence <= 2) : all.filter((e) => e.sequence > after);
+        if (asked.length === 2) await new Promise((res) => setTimeout(res, 2500));   // long enough to see it pinned
+        if (asked.length >= 2) planned = true;
+        const out = all.filter((e) => e.sequence > after && (asked.length === 1 ? e.sequence <= 3 : true));
         const body = out.map((e) => `event: workflow_event\ndata: ${JSON.stringify(e)}\n\n`).join('') + `event: caught_up\ndata: ${JSON.stringify({ last: out.length ? out[out.length - 1].sequence : after })}\n\n`;
         return r.fulfill({ status: 200, headers: { 'Content-Type': 'text/event-stream' }, body });
       });
-      // This device last showed step 1: steps 2–4 happened while the learner was away.
+      // This device last showed step 1: steps 2–3 happened while the learner was away.
       await page.addInitScript((id) => { try { localStorage.setItem(`ak.wf.seen.${id}`, '1'); } catch { /* */ } }, wfId);
 
       await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
-      const away = page.locator('[data-workflow-away]');
-      t.check('the card says what happened while you were away', await away.waitFor({ timeout: 30_000 }).then(() => true, () => false));
-      t.check('…counting the steps after the last one this device showed', /While you were away · 1 step/.test(await away.innerText().catch(() => '')), await away.innerText().catch(() => ''));
-      t.check('the steps show in the chat in the learner\'s words', await page.getByText(/Study Prep · \d+ steps?|Checking your class syllabus/).first().waitFor({ timeout: 20_000 }).then(() => true, () => false));
-      await page.getByText(/Study Prep · \d+ steps?/).first().click().catch(() => {});
-      t.check('…including the AI-drafted outline step', await page.getByText('Outline drafted').first().isVisible().catch(() => false));
-      for (let i = 0; i < 20 && asked.length < 2; i += 1) await page.waitForTimeout(250);
-      t.check('a dropped stream reconnected from the last step it had', asked[0] === -1 && asked[1] === 2, JSON.stringify(asked));
-      await page.getByText('Plan checked').first().waitFor({ timeout: 15_000 }).catch(() => {});
-      t.check('…and the rest arrived once each', await page.getByText('Plan checked').count() === 1 && await page.getByText('Ordering the topics').count() === 1);
-      t.check('the card itself is unchanged: the plan and Approve & Start', await page.getByRole('button', { name: 'Approve & Start' }).first().isVisible().catch(() => false));
-      await t.shot('study-prep-live');
+      const dock = page.locator('[data-workflow-pinned]');
+      t.check('while it runs, the card is pinned above the message box', await dock.waitFor({ timeout: 30_000 }).then(() => true, () => false));
+      t.check('…with a spinner on the step in progress', await dock.locator('[data-workflow-step="running"]').first().isVisible().catch(() => false));
+      t.check('…saying it is planning', await dock.locator('[data-workflow-badge="Planning"]').isVisible().catch(() => false));
+      t.check('…and a note where it sits in the chat', await page.locator('[data-workflow-pinned-note]').isVisible().catch(() => false));
+      t.check('steps from while you were away are announced', await page.locator('[data-workflow-away]').first().isVisible().catch(() => false));
+      await t.shot('pinned-running');
+
+      t.check('when the plan is ready it goes back to its message', await dock.waitFor({ state: 'detached', timeout: 20_000 }).then(() => true, () => false));
+      const card = page.locator('[data-workflow-badge="Waiting for you"]');
+      t.check('…saying Waiting for you', await card.waitFor({ timeout: 15_000 }).then(() => true, () => false));
+      t.check('…every step ticked, none spinning', await page.locator('[data-workflow-step="running"]').count() === 0 && await page.locator('[data-workflow-step="done"]').count() === 4);
+      t.check('…the AI-drafted outline is labelled', await page.getByText("AI-drafted — not your school's official syllabus").first().isVisible().catch(() => false));
+      t.check('…with the plan and Approve & Start', await page.getByRole('button', { name: 'Approve & Start' }).first().isVisible().catch(() => false));
+      t.check('the steps are in the card, not the chat\'s own step rows', !(await page.getByText(/Study Prep · \d+ steps?/).first().isVisible().catch(() => false)) && await page.getByText('Plan checked').count() === 1);
+      t.check('a dropped stream reconnected from the last step it had', asked[0] === -1 && asked[1] === 3, JSON.stringify(asked));
+      await t.shot('settled');
     },
   },
   {

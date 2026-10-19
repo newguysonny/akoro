@@ -27,7 +27,7 @@ import { useInFlight } from '../../hooks/useInFlight.js';
 import StudyPrepChatCard from './studyPrep/StudyPrepChatCard.jsx';
 import { fetchActiveStudyPrepSession } from '../../services/studyPrepApi.js';
 import TraceBlocks from './agentChat/TraceBlocks.jsx';
-import { applyTraceEvent, blocksFromSavedTrace, promoteActivity, settleRunning, studyPrepEventBlocks, workflowEventBlocks } from '../../lib/agentChatTrace.js';
+import { applyTraceEvent, blocksFromSavedTrace, promoteActivity, settleRunning, studyPrepEventBlocks } from '../../lib/agentChatTrace.js';
 import { CHAT_STARTERS, cleanIdeas, cleanMaterials, protegeMoves } from '../../lib/chatIdeas.js';
 import { useNavigate } from 'react-router-dom';
 import AgentCards from '../network/AgentCards.jsx';
@@ -129,8 +129,18 @@ function AgentChatTab({
   const onStudyPrepEvents = useCallback((sessionId, events) => {
     setStudyPrepEvents((previous) => (previous[sessionId] === events ? previous : { ...previous, [sessionId]: events }));
   }, []);
+  // A workflow card is pinned above the message box while it runs, and goes
+  // back to its message when it is waiting for the learner or done.
+  const [runningPrep, setRunningPrep] = useState({});
+  const onStudyPrepRunning = useCallback((sessionId, running) => {
+    setRunningPrep((previous) => (!!previous[sessionId] === running ? previous : { ...previous, [sessionId]: running }));
+  }, []);
   // A card's steps, split by turn: from this card's message (the first card
   // of the session takes everything before it) up to the session's next card.
+  // The running card of this chat (its latest one), and the message it moves out of.
+  const prepCards = messages.filter((m) => m.from !== "me" && m.studyPrepSessionId);
+  const pinnedPrep = [...prepCards].reverse().find((m) => runningPrep[m.studyPrepSessionId])?.studyPrepSessionId || null;
+  const lastPrepCardId = pinnedPrep ? [...prepCards].reverse().find((m) => m.studyPrepSessionId === pinnedPrep)?.id : null;
   const studyPrepSteps = (msg) => {
     const sessionId = msg.from !== "me" && msg.studyPrepSessionId;
     if (!sessionId || !studyPrepEvents[sessionId]) return [];
@@ -138,9 +148,10 @@ function AgentChatTab({
     const cards = messages.filter((m) => m.from !== "me" && m.studyPrepSessionId === sessionId);
     const index = cards.indexOf(msg);
     const range = { from: index <= 0 ? 0 : msgAt(msg), to: index >= 0 && cards[index + 1] ? msgAt(cards[index + 1]) : Infinity };
-    // Phase 3: a workflow's v3 events; an older API sends the session's own list.
+    // Phase 3: a workflow's steps live in its card (it streams them); only an
+    // older API's session steps still join the chat's trace.
     const reported = studyPrepEvents[sessionId];
-    return reported.v3 ? workflowEventBlocks(reported.v3, range) : studyPrepEventBlocks(reported, range);
+    return reported.v3 ? [] : studyPrepEventBlocks(reported, range);
   };
   const [input,      setInput]      = useState("");
   const [loading,    setLoading]    = useState(false);
@@ -1219,7 +1230,9 @@ function AgentChatTab({
                       <span style={{ width:8,height:8,borderRadius:2,background:"var(--ak-text-muted)",display:"inline-block" }}/>{t('agent.stopped')}
                     </div>
                   )}
-                  {!isMe&&msg.studyPrepSessionId&&<StudyPrepChatCard sessionId={msg.studyPrepSessionId} onEvents={onStudyPrepEvents}/>}
+                  {!isMe&&msg.studyPrepSessionId&&(pinnedPrep===msg.studyPrepSessionId&&lastPrepCardId===msg.id
+                    ? <div data-workflow-pinned-note="" style={{ display:"flex",alignItems:"center",gap:6,marginTop:6,fontSize:11.5,fontWeight:750,color:"var(--ak-text-muted)" }}><Icon name="ti-pin" size={13}/>Study Prep is running — pinned above the message box</div>
+                    : <StudyPrepChatCard sessionId={msg.studyPrepSessionId} onEvents={onStudyPrepEvents} onRunning={onStudyPrepRunning}/>)}
                   {!isMe&&msg.proposal?.status==="proposed"&&msg.proposal.preview&&<ProposalPreview preview={msg.proposal.preview}/>}
                   {!isMe&&msg.proposal&&(msg.proposal.status==="proposed"?(
                     <div style={{ display:"flex",flexWrap:"wrap",gap:7,marginTop:9 }}>
@@ -1349,6 +1362,11 @@ function AgentChatTab({
                     <button onClick={()=>removeAttachment(a.id)} title={t('agent.attach_remove')} aria-label={t('agent.attach_remove')} style={{ position:"absolute",top:-6,right:-6,width:19,height:19,borderRadius:"50%",border:"none",background:"var(--ak-text)",color:"var(--ak-surface)",fontSize:10,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 4px rgba(0,0,0,.25)" }}><Icon name="ti-x" size={10}/></button>
                   </div>
                 ))}
+              </div>
+            )}
+            {pinnedPrep && (
+              <div data-workflow-pinned="" style={{ width:"min(560px,100%)",maxHeight:"42vh",overflowY:"auto",margin:"0 0 8px",boxShadow:"0 4px 18px rgba(30,20,60,.12)",borderRadius:14 }}>
+                <StudyPrepChatCard sessionId={pinnedPrep} onEvents={onStudyPrepEvents} onRunning={onStudyPrepRunning} pinned/>
               </div>
             )}
             <div ref={composerWrapRef}>

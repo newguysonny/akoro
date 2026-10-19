@@ -127,3 +127,23 @@ test("Agent Chat: every live event carries the envelope; names and fields unchan
     assert.ok(CHAT_EVENT_NAMES.includes(name), name);
   }
 });
+
+test("a planning read says what it found, in learner-safe words", async () => {
+  const { studyPrepResultLine } = await import("../adaptive-learning/study-prep/workflow.js");
+  assert.equal(studyPrepResultLine("learner.get_state", { ok: true, result: { topics: { Cells: 0.21, Habitats: 0.34, Water: 0.9, Air: 0.5 } } }), "Weakest: Cells 21%, Habitats 34%, Air 50%");
+  assert.equal(studyPrepResultLine("syllabus.resolve", { ok: true, result: { found: false, topics: [] } }), "No syllabus found for this class");
+  assert.equal(studyPrepResultLine("syllabus.resolve", { ok: true, result: { found: true, topics: Array(12).fill({}) } }), "12+ topics found");
+  assert.equal(studyPrepResultLine("learner.get_history", { ok: true, result: { runs: [{}] } }), "1 past practice run found");
+  assert.equal(studyPrepResultLine("learner.get_state", { ok: false, code: "x" }), null);
+  const row = workflowEventFor({ event_type: "observation", origin: "harness", tool: "concept.get_prerequisites", facts: { ok: true, result: { edges: [{}, {}] } } });
+  assert.equal(row.payload.resultLine, "2 prerequisite links to respect");
+  assert.equal(narrate({ type: "tool.completed", payload: row.payload }).result, "2 prerequisite links to respect");
+});
+
+test("planning in the background: the plan-ready message is written from the plan", async () => {
+  const { planReadyMessage } = await import("../adaptive-learning/study-prep/planReady.js");
+  assert.equal(planReadyMessage({ status: "awaiting_confirmation", subject: "Basic Science", plan: [{ label: "Cells" }, { label: "Habitats" }], estimate: { totalCoins: 12 }, syllabusSource: "generated" }),
+    "Your Basic Science plan is ready: 2 topics, starting with **Cells**. It costs 12 coins in total, charged one topic at a time — nothing is charged until you approve it on the card. It's built on an AI-drafted outline of the national curriculum, not your school's official syllabus.");
+  assert.match(planReadyMessage({ status: "paused", subject: "Maths" }), /got stuck while planning your Maths/);
+  assert.match(planReadyMessage({ status: "planning", subject: "Maths" }), /couldn't finish planning/);
+});

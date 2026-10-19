@@ -177,7 +177,7 @@ test("test/exam preparation forces the study-prep session tool — the questionn
   // "planning" zombie from a failed planning step is re-planned, not echoed.)
   assert.match(source, /session\.status === "awaiting_confirmation" \|\| \(session\.status === "planning" && hasPlan\(session\)\)/,
     "start_study_prep_session must reuse an unconfirmed PLANNED session instead of creating another");
-  assert.match(source, /runStudyPrepPlanningStep\(\{ sessionId: stalled\.sessionId, learnerId: studentId \}\)/,
+  assert.match(source, /planInBackground\(\{ sessionId: stalled\.sessionId, learnerId: studentId, conversationId \}\)/,
     "a stalled plan-less planning session must be re-planned, never echoed as a dead card");
   // The doctrine owns the rule: test preparation is a session, never a chat
   // questionnaire, and the plan card is where the learner approves the cost.

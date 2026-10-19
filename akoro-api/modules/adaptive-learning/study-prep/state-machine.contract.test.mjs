@@ -47,7 +47,7 @@ test("the harness policy constants are the decided numbers", () => {
   assert.equal(POLICY.DEFAULT_MAX_ATTEMPTS, 3);
   assert.equal(POLICY.CRAM_MAX_ATTEMPTS, 1);
   assert.equal(POLICY.PASS_THRESHOLD, 0.7);
-  assert.equal(POLICY.MAX_ITERATIONS_PER_STEP, 6);
+  assert.equal(POLICY.MAX_ITERATIONS_PER_STEP, 10);
   assert.equal(POLICY.SESSION_TOOL_CALL_CAP, 40);
   assert.equal(POLICY.DEFERRED_RETRIES_PER_SESSION, 1);
   assert.equal(POLICY.INTENT_MAX_CHARS, 240);

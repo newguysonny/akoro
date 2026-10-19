@@ -2456,12 +2456,12 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       const stalled = (summary.sessions || [])
         .find((session) => session.status === "planning" && !hasPlan(session));
       if (stalled) {
-        const { runStudyPrepPlanningStep } = await import("./study-prep/wiring.js");
-        const view = await runStudyPrepPlanningStep({ sessionId: stalled.sessionId, learnerId: studentId });
+        // Re-run its planning in the background (or leave the run already going); the card streams it.
+        const { planInBackground } = await import("./study-prep/wiring.js");
+        planInBackground({ sessionId: stalled.sessionId, learnerId: studentId, conversationId });
         return {
-          enabled: true, sessionId: view.session.id, status: view.session.status,
-          plan: view.session.plan, estimate: view.session.estimate,
-          note: "Plan proposed — nothing is charged until the learner approves it on the plan card.",
+          enabled: true, sessionId: stalled.sessionId, status: "planning", planning: true, subject: stalled.subject || null,
+          note: "Planning is running now — the card shows each step live, and you'll post the plan in this chat when it's ready. Say so briefly; don't describe a plan (there isn't one yet).",
         };
       }
       // A session already under way (studying, replanning, paused): one at a
@@ -2492,12 +2492,14 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         classLevel: String(input?.classLevel || "JSS1").slice(0, 40),
         examBoard: String(input?.examBoard || "WAEC").slice(0, 80),
         ...(materials ? { materials: { folderId: materials.folderId, name: materials.name } } : {}),
+        // The planner researches for up to 10 decisions: it runs after this turn,
+        // streamed on the card; the plan-ready message lands in this chat.
+        background: true, conversationId,
       });
       return {
-        enabled: true, sessionId: view.session.id, status: view.session.status,
-        plan: view.session.plan, estimate: view.session.estimate,
+        enabled: true, sessionId: view.session.id, status: view.session.status, planning: true,
         ...(materials ? { from: materials.name } : {}),
-        note: `Plan proposed${materials ? ` from their materials in "${materials.name}", the most-tested topics first` : ""} — nothing is charged until the learner approves it on the plan card.`,
+        note: `Study Prep has started${materials ? ` from their materials in "${materials.name}"` : ""} and is planning now — the card shows each step live, and the plan will be posted in this chat when it's ready. Say that briefly; don't describe or guess a plan (there isn't one yet). Nothing is charged until they approve it on the card.`,
       };
     }
     case "get_study_prep_session": {
@@ -3896,7 +3898,8 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         // "planning" leftover or a finished one (the card would load nothing).
         ...(() => {
           const live = (x) => x && Array.isArray(x.plan) && x.plan.length > 0 && !["completed", "abandoned", "cancelled", "ended", "failed"].includes(x.status);
-          if (tool === "start_study_prep_session" && toolResult?.sessionId && live(toolResult)) return { session: { id: toolResult.sessionId } };
+          // A session being planned in the background shows its card at once: it streams the planning.
+          if (tool === "start_study_prep_session" && toolResult?.sessionId && (live(toolResult) || toolResult.planning)) return { session: { id: toolResult.sessionId } };
           if (tool === "get_study_prep_session") { const s0 = (toolResult?.sessions || []).find(live); if (s0) return { session: { id: s0.sessionId } }; }
           return {};
         })(),

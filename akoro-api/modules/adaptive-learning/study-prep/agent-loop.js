@@ -4,7 +4,7 @@
  *   context → LLM → ONE structured action (+ bounded intent) → harness
  *   validate → execute or reject → event → observation → LLM → …
  *
- * Bounded: maxIterations per step is a HARNESS CONSTANT (6), not a model
+ * Bounded: maxIterations per step is a HARNESS CONSTANT (10), not a model
  * choice. Terminal actions end the step. A loop that never terminates pauses
  * the session with agent_loop_cap and the learner sees "I got stuck — tap to
  * retry or adjust." Never a silent continuation, never partial state.

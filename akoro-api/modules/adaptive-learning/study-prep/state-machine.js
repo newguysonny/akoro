@@ -55,7 +55,7 @@ export const POLICY = Object.freeze({
   DEFAULT_MAX_ATTEMPTS: 3,        // policy table may override; exam-confidence default
   CRAM_MAX_ATTEMPTS: 1,           // Decision 6
   PASS_THRESHOLD: 0.70,           // policy table may override
-  MAX_ITERATIONS_PER_STEP: 6,     // Decision 1 — harness constant, not a model choice
+  MAX_ITERATIONS_PER_STEP: 10,    // Decision 1 — harness constant, not a model choice (10 since 2026-10-19: deeper planning)
   SESSION_TOOL_CALL_CAP: 40,      // S4 max-turns guard
   DEFERRED_RETRIES_PER_SESSION: 1,// Decision 5
   INTENT_MAX_CHARS: 240,          // S5 still-open, adopted
