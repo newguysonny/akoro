@@ -33,7 +33,7 @@ const table = (name) => {
   return schema === "public" ? db.from(t) : db.schema(schema).from(t);
 };
 
-export function createContext({ scenario, sink, evidence, realUsers, runId = "local", approval = null }) {
+export function createContext({ scenario, sink, evidence, realUsers, runId = "local", approval = null, accountIds = null }) {
   // Everything a write scenario creates carries this, so leftovers are findable.
   const marker = `[verify:${String(runId).slice(0, 8)}]`;
   const accounts = new Map();
@@ -48,6 +48,7 @@ export function createContext({ scenario, sink, evidence, realUsers, runId = "lo
     const acct = await resolveAccount(handle);
     assertMayActAs(acct, risk, { approval });
     if (!acct.tester) realUsers.add(acct.id);
+    accountIds?.add(acct.id);   // whose model calls this run's cost counts (usage.js)
     accounts.set(key, acct);
     evidence.accounts.push({ username: acct.username, role: acct.role, tester: acct.tester });
     return acct;

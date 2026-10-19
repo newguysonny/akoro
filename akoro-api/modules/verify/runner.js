@@ -16,6 +16,7 @@ import { repeatVerdict, combineRepeats, combineSuite, BlockedError } from "./ass
 import { LIMITS, TARGET, PolicyError } from "./policy.js";
 import { capEvidence } from "./evidence.js";
 import { SCENARIOS, SUITES } from "./scenarios/index.js";
+import { runUsage } from "./usage.js";
 
 const edu = () => db.schema("edu");
 const live = new Map();          // runId → run (in progress and recent), newest kept
@@ -62,7 +63,7 @@ async function persistEnd(run) {
   }
   const { error } = await edu().from("verify_runs").update({
     status: "done", verdict: run.verdict, reason: run.reason, real_user: run.realUser, ms: run.ms,
-    evidence: capEvidence({ scenarios: run.scenarios.map((s) => ({ name: s.name, verdict: s.verdict, reason: s.reason, repeats: s.repeats, evidence: s.evidence })) }),
+    evidence: capEvidence({ scenarios: run.scenarios.map((s) => ({ name: s.name, verdict: s.verdict, reason: s.reason, repeats: s.repeats, evidence: s.evidence })), ...(run.usage ? { usage: run.usage } : {}) }),
     finished_at: new Date().toISOString(),
   }).eq("id", run.id);
   if (error) console.warn(`[verify] run ${run.id} end not saved: ${error.message}`);
@@ -79,11 +80,11 @@ async function auditRealUsers(run, ids) {
   if (error) console.warn(`[verify] audit log failed for ${run.id}: ${error.message}`);
 }
 
-async function runScenarioOnce(def, params, repeat, runId, approval) {
+async function runScenarioOnce(def, params, repeat, runId, approval, accountIds) {
   const sink = [];
   const evidence = { accounts: [], http: [], agent: [], tools: [], db: [], logs: [], notes: [] };
   const realUsers = new Set();
-  const ctx = createContext({ scenario: def, sink, evidence, realUsers, runId, approval });
+  const ctx = createContext({ scenario: def, sink, evidence, realUsers, runId, approval, accountIds });
   let error = null, timer;
   try {
     await Promise.race([
@@ -107,13 +108,13 @@ async function runScenarioOnce(def, params, repeat, runId, approval) {
   };
 }
 
-async function runScenario(def, params, runId, approval) {
+async function runScenario(def, params, runId, approval, accountIds) {
   // An approved real-account run is exactly one pass (V4).
   const repeats = approval ? 1 : Math.min(LIMITS.maxRepeats, Math.max(1, Number(params?.repeats) || def.repeats || 1));
   const merged = { ...defaultsOf(def), ...(params || {}) };
   const results = [];
   for (let i = 1; i <= repeats; i++) {
-    const r = await runScenarioOnce(def, merged, i, runId, approval);
+    const r = await runScenarioOnce(def, merged, i, runId, approval, accountIds);
     results.push(r);
     if (r.verdict === "BLOCKED" || r.verdict === "ERROR") break;   // repeating can't fix a precondition
   }
@@ -155,6 +156,7 @@ export function startRun({ scenario, suite, params = {}, expectSha = null, actor
     params, expectSha: expectSha ? String(expectSha).slice(0, 64) : null, sha: buildSha(), target: TARGET,
     status: "queued", verdict: null, reason: null, scenarios: [], realUser: false,
     createdAt: new Date().toISOString(), finishedAt: null, ms: null, persisted: false,
+    accountIds: new Set(), usage: null,
   };
   live.set(run.id, run);
   if (live.size > 200) live.delete(live.keys().next().value);
@@ -176,7 +178,7 @@ export function startRun({ scenario, suite, params = {}, expectSha = null, actor
           : names.map((n) => ({ name: n, params }));
         for (const step of plan) {
           const t0s = Date.now();
-          const res = await runScenario(SCENARIOS[step.name], step.params, run.id, approval);
+          const res = await runScenario(SCENARIOS[step.name], step.params, run.id, approval, run.accountIds);
           res.realUsers.forEach((id) => realUsers.add(id));
           delete res.realUsers;
           if (step.label) { res.name = step.label; res.model = step.params.model; }
@@ -200,10 +202,16 @@ export function startRun({ scenario, suite, params = {}, expectSha = null, actor
       run.status = "done";
       run.ms = Date.now() - t0;
       run.finishedAt = new Date().toISOString();
+      // What it cost: the model calls of the accounts it used, start to end.
+      if (run.accountIds.size) {
+        run.usage = await runUsage({ accountIds: [...run.accountIds], from: new Date(t0).toISOString(), to: run.finishedAt })
+          .catch((e) => ({ unavailable: e.message }));
+      }
       await persistEnd(run).catch(() => {});
       if (!nested) release();
       endWriteTurn?.();
-      console.log(`[verify] ${run.kind} ${run.name} → ${run.verdict} (${run.ms} ms, run ${run.id})`);
+      const cost = run.usage && !run.usage.unavailable ? `, ${run.usage.calls} model calls, ${run.usage.tokensIn + run.usage.tokensOut} tokens, $${run.usage.costUsd}` : "";
+      console.log(`[verify] ${run.kind} ${run.name} → ${run.verdict} (${run.ms} ms${cost}, run ${run.id})`);
     }
     return run;
   })();
@@ -213,7 +221,7 @@ export function startRun({ scenario, suite, params = {}, expectSha = null, actor
 export function publicRun(run, { full = true } = {}) {
   const base = { id: run.id, kind: run.kind, name: run.name, status: run.status, verdict: run.verdict, reason: run.reason,
     sha: run.sha, expectedSha: run.expectSha, target: run.target, ms: run.ms, createdAt: run.createdAt, finishedAt: run.finishedAt,
-    persisted: run.persisted, verified: run.verdict === "PASS", ...(run.compare ? { compare: run.compare } : {}) };
+    persisted: run.persisted, verified: run.verdict === "PASS", ...(run.compare ? { compare: run.compare } : {}), ...(run.usage ? { usage: run.usage } : {}) };
   if (!full) return base;
   return { ...base, scenarios: run.scenarios.map((s) => ({ name: s.name, verdict: s.verdict, repeats: s.repeats, reason: s.reason,
     failed: s.assertions.filter((a) => !a.passed), assertions: s.assertions, evidence: s.evidence })) };
@@ -238,6 +246,7 @@ export async function getRun(id) {
     verdict: interrupted ? "ERROR" : data.verdict, reason: interrupted ? "interrupted — the server restarted during the run" : data.reason,
     sha: data.build_sha, expectedSha: data.expected_sha, target: data.target, ms: data.ms,
     createdAt: data.created_at, finishedAt: data.finished_at, persisted: true, verified: !interrupted && data.verdict === "PASS",
+    ...(data.evidence?.usage ? { usage: data.evidence.usage } : {}),
     scenarios: ev.map((s) => ({ ...s, assertions: byScenario.get(s.name) || [], failed: (byScenario.get(s.name) || []).filter((a) => !a.passed) })),
   };
 }
