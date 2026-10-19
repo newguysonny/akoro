@@ -8,6 +8,8 @@ import { useLang } from '../contexts/LanguageContext.jsx';
 import AddRecordModal from '../components/dashboard/AddRecordModal.jsx';
 import CreateFolderSheet from '../components/library/CreateFolderSheet.jsx';
 import LibraryFolderPage from '../components/library/LibraryFolderPage.jsx';
+import RecentlyDeletedPage from '../components/library/RecentlyDeletedPage.jsx';
+import { listDeleted } from '../lib/chatUploads.js';
 import AddToFolderPage from '../components/library/AddToFolderPage.jsx';
 import AddToTargetSheet from '../components/library/AddToTargetSheet.jsx';
 import AddToCommunityPage from '../components/communities/AddToCommunityPage.jsx';
@@ -346,6 +348,10 @@ export default function LibraryPage() {
   // school layout at a higher-ed learner while the tier revalidates.
   const higherEd = useHigherEd();
   const [toast, setToast] = useState('');
+  // Recently deleted (§7.17, D55): chat uploads undone in the last 30 days — a tile at the end of Folders.
+  const [deletedCount, setDeletedCount] = useState(0);
+  const [deletedOpen, setDeletedOpen] = useState(false);
+  const closeDeleted = () => { setDeletedOpen(false); load(); };
   useEffect(() => {
     if (searchParams.get('add')) setSheetOpen(true);
   }, [searchParams]);
@@ -360,14 +366,16 @@ export default function LibraryPage() {
       // The shelf is three feeds now: the school/higher-ed library, the
       // learner's own records, and their folders. One failing shouldn't
       // blank the others.
-      const [lib, recs, flds] = await Promise.all([
+      const [lib, recs, flds, gone] = await Promise.all([
         fetchMyLibrary().catch(() => []),
         listRecords().catch(() => []),
         listFolders().catch(() => []),
+        listDeleted().catch(() => []),
       ]);
       setItems(lib);
       setRecords(recs);
       setFolders(flds);
+      setDeletedCount(gone.length);
       // Deep link (Discover search results): /library?folder=<id> opens
       // that folder full-screen once the shelf lands.
       const folderParam = searchParams.get('folder');
@@ -557,6 +565,18 @@ export default function LibraryPage() {
      becomes the page body — sidebar visible, the shell's tablet now-bar
      on the bottom edge — instead of the floating phone-column overlay.
      Mobile (≤768px) keeps the fixed overlay exactly as before. */
+  if (deletedOpen && !isMobile) {
+    return (
+      <AppShell nowStudying={shellNowStudying}>
+        <RecentlyDeletedPage shellMode onClose={closeDeleted} onChanged={setDeletedCount} onToast={setToast}/>
+        {toast && (
+          <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 3000, background: 'var(--ak-text)', color: '#fff', fontSize: 12.5, fontWeight: 800, padding: '9px 18px', borderRadius: 100, boxShadow: '0 6px 20px rgba(0,0,0,.25)' }}>
+            {toast}
+          </div>
+        )}
+      </AppShell>
+    );
+  }
   if (folderPage && !isMobile) {
     return (
       <AppShell nowStudying={shellNowStudying}>
@@ -629,7 +649,7 @@ export default function LibraryPage() {
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px 80px' }}>
         {/* Folders — the shelf's organization layer. Created from the
             Add-to-library sheet; opening one (adding items) comes next. */}
-        {!loading && folders.length > 0 && (
+        {!loading && (folders.length > 0 || deletedCount > 0) && (
           <div style={{ marginBottom: 16 }}>
             <p style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--ak-text-muted)', margin: '0 0 8px', letterSpacing: .3 }}>FOLDERS</p>
             <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
@@ -651,6 +671,20 @@ export default function LibraryPage() {
                   </div>
                 </button>
               ))}
+              {deletedCount > 0 && (
+                <button type="button" data-recently-deleted-tile="" onClick={() => setDeletedOpen(true)} title="Recently deleted"
+                  style={{ flex: '0 0 128px', borderRadius: 14, overflow: 'hidden', border: '1px solid var(--ak-border)', background: 'var(--ak-surface)', cursor: 'pointer', textAlign: 'left', padding: 0, fontFamily: "'Nunito',sans-serif" }}>
+                  <div style={{ width: '100%', height: 72, background: 'var(--ak-surface-hover)', borderBottom: '1px dashed var(--ak-border2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon name="ti-trash" size={26} color="var(--ak-text-muted)"/>
+                  </div>
+                  <div style={{ padding: '8px 10px' }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--ak-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Recently deleted</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2, fontSize: 10.5, fontWeight: 700, color: 'var(--ak-text-muted)' }}>
+                      <Icon name="ti-clock" size={11}/> {deletedCount} · 30 days
+                    </div>
+                  </div>
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -776,6 +810,8 @@ export default function LibraryPage() {
         onClose={() => setFolderSheetOpen(false)}
         onCreated={(f) => { setFolders((fs) => [f, ...fs]); setToast(`Folder “${f.name}” created`); }}
       />
+
+      {deletedOpen && <RecentlyDeletedPage onClose={closeDeleted} onChanged={setDeletedCount} onToast={setToast}/>}
 
       {/* A folder opened full-screen — the Pharm.D folder UI, with
           rename + delete in its more sheet. */}

@@ -568,6 +568,60 @@ export const scenarios = [
       t.check('…on this document', await page.getByText(`${marker} Cell notes`).first().isVisible().catch(() => false));
     },
   },
+  {
+    name: 'library.recently_deleted',
+    description: "A chat upload the learner undid is in the Library's Recently deleted (a tile after Folders) with the days left; Restore puts it back; Delete forever asks, then it's gone for good.",
+    async run(t) {
+      const { page } = t;
+      const marker = newMarker();
+      const name = `${marker} Ecology notes`;
+      // A chat upload: an ingest with a (pasted) record filed in it, then undone — as Undo in the chat does.
+      const up = await t.api('POST', '/api/agent/materials/ingest', { names: [`${name}.docx`], ask: '' });
+      const ingest = up.body?.data;
+      if (!ingest?.id) t.block(`starting the upload answered ${up.status}: ${up.body?.message || ''}`);
+      const made = await t.api('POST', '/api/records', { kind: 'paste', name, content: PARAS.join('\n\n') });
+      const record = made.body?.data?.record || made.body?.data;
+      if (!record?.id) t.block(`saving the record answered ${made.status}`);
+      t.cleanup(async () => {
+        await t.api('DELETE', `/api/records/${record.id}`);
+        const folders = (await t.api('GET', '/api/records/folders')).body?.data || [];
+        if (ingest.folder?.created) for (const f of folders.filter((x) => x.id === ingest.folder.id)) await t.api('DELETE', `/api/records/folders/${f.id}`);
+      });
+      await t.api('POST', `/api/agent/materials/ingest/${ingest.id}/records`, { recordIds: [record.id] });
+      const undo = async () => t.api('POST', `/api/agent/materials/ingest/${ingest.id}/undo`, {});
+      await undo();
+
+      await page.goto(`${t.app}/library`, { waitUntil: 'domcontentloaded' });
+      const tile = page.locator('[data-recently-deleted-tile]');
+      t.check('a Recently deleted tile after the folders', await tile.waitFor({ timeout: 45_000 }).then(() => true, () => false));
+      await tile.click();
+      const row = page.locator(`[data-deleted-item="${ingest.id}"]`);
+      t.check('…listing the undone upload', await row.waitFor({ timeout: 20_000 }).then(() => true, () => false));
+      const rowText = (await row.innerText().catch(() => '')).replace(/\s+/g, ' ');
+      t.check('…with the days left', /\b(29|30) days left\b/.test(rowText), { actual: rowText });
+
+      // Restore: off the list, back in the Library.
+      await row.getByRole('button', { name: 'Restore' }).click();
+      t.check('Restore says where it went back to', await page.getByText(/^Restored to /).first().waitFor({ timeout: 20_000 }).then(() => true, () => false));
+      t.check('…and it leaves the list', await row.waitFor({ state: 'detached', timeout: 10_000 }).then(() => true, () => false));
+      const recs = (await t.api('GET', '/api/records')).body?.data || [];
+      t.check('…the record is back in the Library', recs.some((r) => r.id === record.id));
+
+      // Delete forever: asks first, then gone for good.
+      await undo();
+      await page.goto(`${t.app}/library`, { waitUntil: 'domcontentloaded' });
+      await page.locator('[data-recently-deleted-tile]').click({ timeout: 45_000 });
+      const again = page.locator(`[data-deleted-item="${ingest.id}"]`);
+      await again.waitFor({ timeout: 20_000 }).catch(() => {});
+      await again.getByRole('button', { name: 'Delete forever' }).click();
+      const ask = page.locator(`[data-confirm-purge="${ingest.id}"]`);
+      t.check('Delete forever asks first', await ask.waitFor({ timeout: 5_000 }).then(() => true, () => false) && /can't be undone/.test(await ask.innerText().catch(() => '')));
+      await ask.getByRole('button', { name: 'Delete forever' }).click();
+      t.check('…then says it is deleted for good', await page.getByText('Deleted for good').first().waitFor({ timeout: 20_000 }).then(() => true, () => false));
+      const restoreLate = await t.api('POST', `/api/agent/materials/ingest/${ingest.id}/restore`, {});
+      t.check('…and it can no longer be restored', restoreLate.status === 410, { actual: restoreLate.status });
+    },
+  },
 ];
 
 /* Suite "reader-podcast" — run on demand (it writes and narrates a whole

@@ -20,6 +20,8 @@
  *   POST /api/agent/materials/ingest/:id/restore    → back where it was → ready
  *   GET  /api/agent/materials/ingest/:id
  *   GET  /api/agent/materials/chat/:chatId           → "Files in this chat"
+ *   GET  /api/agent/materials/deleted                → Recently deleted (within 30 days)
+ *   POST /api/agent/materials/ingest/:id/purge       → delete forever now
  *
  * The bytes go up the way a Library upload does (presign → PUT → POST
  * /api/records) and the uploader's browser runs the same extraction (hanji
@@ -33,6 +35,7 @@ import db from "../../db.js";
 import { authenticateToken } from "../auth/routes.js";
 import { openai } from "../../lib/aiModel.js";
 import { getExtraction } from "../records/extractLib.js";
+import { removeRecordFile } from "../records/lib/storage.js";
 import { cleanStructure, structureChips, structureMessage, structureMessages, structureSchema, STRUCTURE_LIMITS } from "./structureCore.js";
 import { folderItemForCandidate, searchTopics, shapeCandidates, SIMILAR_LIMITS } from "./similarCore.js";
 import { searchBlogPosts } from "../adaptive-learning/blogResearch.js";
@@ -527,6 +530,36 @@ router.post("/ingest/:id/restore", asyncHandler(async (req, res) => {
   }
   const done = await move(row, "ready", { folder_id: folderId || null, folder_name: folderName, folder_created: !!created, ...withFiling(row, { deletedAt: null, trash: null }) });
   res.json({ success: true, data: ingestToApi(done) });
+}));
+
+/** Recently deleted: the learner's undone uploads still within their 30 days, newest first. */
+router.get("/deleted", asyncHandler(async (req, res) => {
+  const since = new Date(Date.now() - RESTORE_DAYS * 86_400_000).toISOString();
+  const { data } = await edu().from("material_ingests").select("*").eq("user_id", req.user.id).eq("state", "undone")
+    .gte("updated_at", since).order("updated_at", { ascending: false }).limit(100);
+  const items = (data || []).map(ingestToApi).filter((x) => x.restorableUntil)
+    .map((x) => ({ ...x, deletedAt: (data.find((r) => r.id === x.id)?.filing || {}).deletedAt || null,
+      folderName: (data.find((r) => r.id === x.id)?.filing?.trash?.folderRemoved) || x.folder?.name || null }));
+  res.json({ success: true, items });
+}));
+
+/** Delete forever now, without waiting the 30 days: the files, their text and questions. */
+router.post("/ingest/:id/purge", asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const row = await loadOwn(req.params.id, userId);
+  if (!row) return res.status(404).json({ success: false, message: "Upload not found." });
+  if (row.state !== "undone") return res.status(409).json({ success: false, code: "not_deleted", message: "Undo it first." });
+  const ids = (row.record_ids || []).map(String);
+  if (ids.length) {
+    const { data: recs } = await edu().from("records").select("id, file_key").eq("user_id", userId).in("id", ids).not("deleted_at", "is", null);
+    if (recs?.length) {
+      await edu().from("records").delete().eq("user_id", userId).in("id", recs.map((r) => r.id));
+      for (const r of recs) if (r.file_key) void removeRecordFile(r.file_key);
+    }
+  }
+  await edu().from("material_questions").delete().eq("user_id", userId).eq("ingest_id", row.id);
+  const { data } = await edu().from("material_ingests").update({ filing: { ...(row.filing || {}), purged: true, trash: null }, updated_at: now() }).eq("id", row.id).select("*").single();
+  res.json({ success: true, data: ingestToApi(data) });
 }));
 
 /** "Files in this chat": every upload this chat brought in that isn't deleted, newest last. */

@@ -12,6 +12,7 @@
  *   chooseFolder(id, folderId) · chooseSubject(id, subject|null)   the card's questions answered
  *   undoIngest(id) (→ Recently deleted, 30 days) · restoreIngest(id) · getIngest(id)
  *   chatFiles(chatId)                                       "Files in this chat"
+ *   listDeleted() · purgeIngest(id)                         Recently deleted · Delete forever
  */
 import { apiGet, apiPost } from '../services/api.js';
 import { createRecord, extractStoredRecordText, getRecordExtraction, presignRecordUpload, putFileTo } from '../services/recordsApi.js';
@@ -93,4 +94,7 @@ export const restoreIngest = (id) => apiPost(`${BASE}/${id}/restore`, {}).then((
 export const chooseFolder = (id, folderId) => apiPost(`${BASE}/${id}/folder`, { folderId }).then((d) => d?.data ?? null);
 export const chooseSubject = (id, subject) => apiPost(`${BASE}/${id}/subject`, { subject }).then((d) => d?.data ?? null);
 export const chatFiles = (chatId) => apiGet(`/api/agent/materials/chat/${chatId}`).then((d) => d?.files || []);
+/** Recently deleted (30 days): the learner's undone uploads; Delete forever doesn't wait. */
+export const listDeleted = () => apiGet('/api/agent/materials/deleted').then((d) => d?.items || []);
+export const purgeIngest = (id) => apiPost(`${BASE}/${id}/purge`, {}).then((d) => d?.data ?? null);
 export const getIngest = (id) => apiGet(`${BASE}/${id}`).then((d) => d?.data ?? null);

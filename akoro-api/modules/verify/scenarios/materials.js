@@ -226,7 +226,7 @@ export const pastPaperStructured = {
 // folders the learner already keeps — a new folder only when none fits.
 export const sortOwnFolders = {
   name: "materials.sort_own_folders", area: "materials", risk: "write",
-  description: "Files sent together are sorted per subject: Agric papers into the learner's own 'Agric' folder (no new folder), Commerce notes into their own; two Agric folders → the card asks and the pick is remembered; Undo on one card leaves the other; Restore brings it back.",
+  description: "Files sent together are sorted per subject: Agric papers into the learner's own 'Agric' folder (no new folder), Commerce notes into their own; two Agric folders → the card asks and the pick is remembered; Undo on one card leaves the other; Restore brings it back; Recently deleted lists it and Delete forever doesn't wait.",
   params: { learner: { default: "@tester18" } },
   async run(ctx, p) {
     const as = p.learner;
@@ -288,5 +288,15 @@ export const sortOwnFolders = {
     const back = await ctx.http({ as, method: "POST", path: `${api}/${co?.id}/restore` });
     ctx.expect.ok("Restore brings it back", back.body?.data?.state === "ready" && /^commerce — notes$/i.test(back.body?.data?.folder?.name || "") && !back.body?.data?.restorableUntil, back.body?.data);
     if (back.body?.data?.folder?.id && (co?.folder?.created || undo.body?.data?.folderRemoved)) made.add(back.body.data.folder.id);
+
+    // 5. Recently deleted lists what's undone (not what's restored); Delete forever doesn't wait.
+    const listed = async () => ((await ctx.http({ as, path: "/api/agent/materials/deleted" })).body?.items || []).map((x) => x.id);
+    await ctx.http({ as, method: "POST", path: `${api}/${next?.id}/undo` });
+    const inList = await listed();
+    ctx.expect.ok("Recently deleted lists the undone upload, not the restored one", inList.includes(next?.id) && !inList.includes(co?.id), inList);
+    const gone = await ctx.http({ as, method: "POST", path: `${api}/${next?.id}/purge` });
+    ctx.expect.ok("Delete forever: gone for good, off the list", gone.body?.data?.purged === true && !(await listed()).includes(next?.id), gone.body?.data);
+    const late = await ctx.http({ as, method: "POST", path: `${api}/${next?.id}/restore` });
+    ctx.expect.status("…and can't be restored (410)", late, 410);
   },
 };
