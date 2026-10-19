@@ -72,6 +72,7 @@ export const studyToolRouting = {
     ctx.expect.ok("it searches the Library with the Flashcards tool", call?.input?.tool === "flashcards", turn.tools);
     ctx.expect.ok("…finds the note, linked to open the reader on Flashcards",
       (call?.result?.records || []).some((r) => r.recordId === record.id && r.tool === "flashcards"), call?.result);
+    ctx.expect.ok("…without claiming it can't read the document", !/\bcan(?:'|no)?t\s+(?:see|read|open|access)\b[^.]*\b(?:document|notes?|file|inside)\b/i.test(String(turn.reply || "")), turn.reply);
     ctx.expect.ok("…and doesn't write flashcards in chat", !/\b(front|back)\s*:|card\s*1\b|Q1[:.)]/i.test(String(turn.reply || "")), turn.reply);
   },
 };
