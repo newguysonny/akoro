@@ -22,6 +22,7 @@
  * care which source filled it.
  */
 
+import { basedOnBlock } from "./basedOn.js";
 import db from "../../db.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
 import { chargeForAI, schoolBillTo, InsufficientCoins, coinsAvailable } from "../../lib/coins.js";
@@ -198,8 +199,9 @@ export async function generate({
   // the only way "cheaper without quality loss" is more than an assertion.
   model = OPENAI_MODEL,
   feature = "battle_generate",
+  basedOn = [],
 }) {
-  const style = styleBlock(exemplars);
+  const style = styleBlock(exemplars) + basedOnBlock(basedOn);
   const syllabus = await curriculumGrounding(subject, topic);
   const level = classLabel ? ` for ${classLabel} students` : " for Nigerian junior-secondary students";
   const optionCount = exemplars.length
@@ -296,6 +298,8 @@ export async function buildQuestions({
   // placed — not across `total`, because a battle that could only be filled
   // with 9 of 15 questions still has the whole duration to spend.
   durationSeconds = null,
+  // The learner's own past-paper questions to base generated ones on (§7.17.3).
+  basedOn = [],
 }) {
   const bankOf = courseId
     ? () => fromCourseBank({ courseId, topic, subject, difficulty, limit: total })
@@ -319,6 +323,7 @@ export async function buildQuestions({
     const res = await generate({
       subject, topic, difficulty, count: need, classLabel, userId,
       exemplars: source === "ai" ? exemplars : questions,
+      ...(basedOn?.length ? { basedOn } : {}),
     });
     charged = res.charged;
     generated = res.questions.length;

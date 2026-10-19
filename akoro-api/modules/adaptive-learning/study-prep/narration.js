@@ -43,7 +43,9 @@ const TEMPLATES = {
   session_paused: (f) => PAUSE_COPY[f.reason] || "Session paused. Tap resume when you are ready.",
   harness_rejection: (f) => REJECTION_COPY[f.code] || `That action was not allowed (${f.code}).`,
   // Which syllabus the plan comes from (§8.7): the learner's own class or school first.
-  syllabus_resolved: (f) => f.source === "class"
+  syllabus_resolved: (f) => f.source === "documents"
+    ? `Planning from your own materials${f.folder ? ` in “${f.folder}”` : ""} — the topics your past papers test most come first.`
+    : f.source === "class"
     ? `Planning from your school's ${f.className || "class"} ${f.subject || ""} syllabus${f.term ? ` for the ${f.term} term` : ""}.`.replace(/\s+/g, " ")
     : f.source === "school"
       ? `Your class has no ${f.subject || "subject"} syllabus at your school yet, so I'm planning from your school's ${f.subject || "subject"} topics for other classes.`

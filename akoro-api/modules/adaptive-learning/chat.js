@@ -22,6 +22,7 @@ import { resolveAskTargetFor } from "../records/access.js";
 import { materialsFrom, collectMaterials } from "./chat-materials.js";
 import { renderRelevantMemory } from "./chat-memory.js";
 import { recurringTopics } from "../materials/structureCore.js";
+import { resolveMaterialsFolder } from "../materials/studySource.js";
 import { gatherPassages, extractCitations } from "../records/askLib.js";
 import { searchRecordChunks } from "../records/searchLib.js";
 import { loadTaughtKnowledge, renderTaughtContext, buildGuideMessages, shapeGuideAnswer, teachRequest } from "./protege.js";
@@ -964,7 +965,7 @@ export const CHAT_TOOLS = [
   },
   {
     name: "start_study_prep_session",
-    description: "Start a study-prep session for the learner: resolves the approved syllabus, inspects their recorded knowledge, and proposes an ordered plan with a coin estimate. Plan-only — no practice is generated and nothing is charged until the learner approves the plan card. Use when they ask to prepare for a test or exam covering multiple topics.",
+    description: "Start a study-prep session for the learner: resolves the approved syllabus, inspects their recorded knowledge, and proposes an ordered plan with a coin estimate. Plan-only — no practice is generated and nothing is charged until the learner approves the plan card. Use when they ask to prepare for a test or exam covering multiple topics. When they ask for a study plan from a file, paper or folder they uploaded (\"make a study plan from this paper\"), pass from_materials: true — the plan then comes from that material's topics, the most-tested first, and its practice from their own past-paper questions.",
     featureGate: "study_prep",
     input_schema: {
       type: "object",
@@ -973,8 +974,10 @@ export const CHAT_TOOLS = [
         subject: { type: "string", description: "The subject, e.g. 'Basic Science'." },
         classLevel: { type: "string", description: "Class level, e.g. 'JSS1' or 'SS2'." },
         examBoard: { type: "string", description: "Exam board, e.g. 'WAEC', 'NECO', 'JAMB'." },
+        from_materials: { type: "boolean", description: "Plan from the material they uploaded in this chat (or the folder named in `folder`), not the school syllabus." },
+        folder: { type: "string", description: "With from_materials: the Library folder to plan from, if they named one." },
       },
-      required: ["goal", "subject"],
+      required: ["goal"],
     },
   },
   {
@@ -2453,7 +2456,14 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         };
       }
       const goal = String(input?.goal || "").trim();
-      const subject = String(input?.subject || "").trim();
+      // From their own materials (§7.17.3): the folder of the paper they uploaded here, or one they named.
+      const materials = input?.from_materials === true || input?.folder
+        ? await resolveMaterialsFolder({ learnerId: studentId, folder: input?.folder, conversationId }).catch(() => null)
+        : null;
+      if ((input?.from_materials === true || input?.folder) && !materials) {
+        return { enabled: true, started: false, note: "No read material to plan from yet — their upload may still be being read. Say so, or offer a plan from the syllabus." };
+      }
+      const subject = String(input?.subject || materials?.subject || "").trim();
       if (goal.length < 3) return clarify("goal", "What's the goal — which test or exam, and when?", { action: "start_study_prep_session" });
       if (!subject) return clarify("subject", "Which subject is the test in?", { action: "start_study_prep_session" });
       const view = await startStudyPrepSession({
@@ -2462,11 +2472,13 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         subject: subject.slice(0, 180),
         classLevel: String(input?.classLevel || "JSS1").slice(0, 40),
         examBoard: String(input?.examBoard || "WAEC").slice(0, 80),
+        ...(materials ? { materials: { folderId: materials.folderId, name: materials.name } } : {}),
       });
       return {
         enabled: true, sessionId: view.session.id, status: view.session.status,
         plan: view.session.plan, estimate: view.session.estimate,
-        note: "Plan proposed — nothing is charged until the learner approves it on the plan card.",
+        ...(materials ? { from: materials.name } : {}),
+        note: `Plan proposed${materials ? ` from their materials in "${materials.name}", the most-tested topics first` : ""} — nothing is charged until the learner approves it on the plan card.`,
       };
     }
     case "get_study_prep_session": {

@@ -13,6 +13,7 @@ import { InsufficientBalanceError, createHarness } from "./harness.js";
 import { supabaseStore as store } from "./store.js";
 import { prerequisiteEdges, resolveTopics, resolveSyllabusChain, topicsForSource } from "./syllabus-resolver.js";
 import { generateOutline, generatedTopics } from "./syllabus-generator.js";
+import { materialQuestions, materialTopics } from "../../materials/studySource.js";
 import * as readToolsModule from "./read-tools.js";
 import { makeLlmAgent } from "./llm-agent.js";
 import { buildRegistry } from "../tools/registry.js";
@@ -39,7 +40,8 @@ const topicWorkflow = {
 };
 
 // generateOutline / generatedTopics: the AI-drafted outline fallback (§8.7).
-const syllabus = { resolveTopics, prerequisiteEdges, generateOutline, generatedTopics, resolveSyllabusChain, topicsForSource };
+// materialTopics / materialQuestions: a learner's own materials folder as the syllabus (§7.17.3).
+const syllabus = { resolveTopics, prerequisiteEdges, generateOutline, generatedTopics, resolveSyllabusChain, topicsForSource, materialTopics, materialQuestions };
 
 /**
  * D45: practice as an Agent Check battle — ON by default, no env needed.
@@ -58,9 +60,9 @@ const makeAgentCheck = ({ questions, secondsPerQuestion } = {}) => ({
     const n = notes?.length || 0;
     return { notes: n, strength: n === 0 ? "none" : n < 3 ? "thin" : "good" };
   },
-  async start({ learnerId, subject, topic, studyPrepTopicId, mode }) {
+  async start({ learnerId, subject, topic, studyPrepTopicId, mode, basedOn = [] }) {
     const { createCheckBattle } = await import("../../battle/agentCheck.js");
-    return createCheckBattle({ learnerId, subject, topic, studyPrepTopicId, mode,
+    return createCheckBattle({ learnerId, subject, topic, studyPrepTopicId, mode, basedOn,
       ...(questions ? { total: questions } : {}), ...(secondsPerQuestion ? { secondsPerQuestion } : {}) });
   },
   async results(battleId) {
@@ -160,9 +162,9 @@ export async function runStudyPrepPlanningStep({ sessionId, learnerId }) {
 }
 
 /** Start a session and run one planning step (the chat tool + REST entry). */
-export async function startStudyPrepSession({ learnerId, goal, subject, classLevel, examBoard }) {
+export async function startStudyPrepSession({ learnerId, goal, subject, classLevel, examBoard, materials = null }) {
   const harness = getHarness();
-  const session = await harness.createSession({ learnerId, goal, subject, classLevel, examBoard });
+  const session = await harness.createSession({ learnerId, goal, subject, classLevel, examBoard, materials });
   const view = await runStudyPrepPlanningStep({ sessionId: session.id, learnerId });
   return view;
 }

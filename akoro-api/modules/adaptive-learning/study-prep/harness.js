@@ -103,6 +103,8 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
    */
   const topicsFor = (session) => {
     const source = session.syllabus_source;
+    // The learner's own materials folder (§7.17.3): its topics, most-tested first.
+    if (source === "documents" && session.syllabus_ref && syllabus.materialTopics) return syllabus.materialTopics({ folderId: session.syllabus_ref, learnerId: session.learner_id });
     if (source === "generated" && session.syllabus_ref && syllabus.generatedTopics) return syllabus.generatedTopics(session.syllabus_ref);
     if ((source === "class" || source === "school") && syllabus.topicsForSource) {
       return syllabus.topicsForSource({ source, ref: session.syllabus_ref, learnerId: session.learner_id, subject: session.subject, classLevel: session.class_level, exam: session.exam_board });
@@ -126,6 +128,16 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     const session = await ownedSession(sessionId, learnerId);
     if (!session) throw new HarnessRejection("session_not_found", "Study-prep session was not found", 404);
     const base = { subject: session.subject, classLevel: session.class_level };
+    // Planned from the learner's own materials: those topics, with how often their papers test each.
+    if (session.syllabus_source === "documents" && session.syllabus_ref) {
+      const topics = await topicsFor(session);
+      if (!topics.length) return { ...base, topics: [], found: false, source: "documents", next: "Their materials folder has no read topics yet — tell them it's still being read, or plan from the syllabus instead." };
+      return {
+        ...base, found: true, source: "documents",
+        note: "These are the topics in the learner's own materials. Order the plan by how often their past papers test each (papers, then marks), unless a prerequisite says otherwise; say why in one line.",
+        topics: topics.map((t) => ({ id: t.id, label: t.label, ...(t.papers ? { papers: t.papers, years: t.years, marks: t.marks, questions: t.questions } : {}) })),
+      };
+    }
     if (session.syllabus_source === "generated" && session.syllabus_ref) {
       const topics = await topicsFor(session);
       return { ...base, found: true, source: "generated", label: GENERATED_OUTLINE_LABEL, topics: topics.map((t) => ({ id: t.id, label: t.label })) };
@@ -165,6 +177,8 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
       return reject(session, "invalid_state_transition", "An outline can only be drafted while planning");
     }
     if (!syllabus.generateOutline) return reject(session, "tool_not_permitted", "Outline drafting is not available");
+    // Planned from the learner's own materials: those are the syllabus.
+    if (session.syllabus_source === "documents") return reject(session, "syllabus_exists", "This plan comes from the learner's own materials — plan from syllabus.resolve");
     // Only after the class, school and platform syllabi all came back empty.
     const real = await realSyllabus(session);
     if (real.topics.length) {
@@ -200,14 +214,23 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
 
   // ── Session lifecycle ────────────────────────────────────────────────────
 
-  async function createSession({ learnerId, goal, subject, classLevel = "JSS1", examBoard = "WAEC", entryMode = "syllabus" }) {
+  async function createSession({ learnerId, goal, subject, classLevel = "JSS1", examBoard = "WAEC", entryMode = "syllabus", materials = null }) {
     const active = await store.findActiveSession(learnerId);
     if (active) throw new HarnessRejection("invalid_state_transition", "You already have an active study-prep session — finish or cancel it first", 409);
+    // From a materials folder (§7.17.3): the folder is the syllabus from the start.
+    const fromMaterials = materials?.folderId ? { entry_mode: "material", syllabus_source: "documents", syllabus_ref: materials.folderId } : { entry_mode: entryMode };
     const session = await store.createSession({
-      learner_id: learnerId, goal, subject, class_level: classLevel, entry_mode: entryMode,
+      learner_id: learnerId, goal, subject, class_level: classLevel, ...fromMaterials,
       exam_board: examBoard, status: "planning", policy_version: "study-prep-v1",
     });
-    await log(session.id, null, { eventType: "observation", origin: "harness", facts: { goal, subject, classLevel, entryMode } });
+    await log(session.id, null, { eventType: "observation", origin: "harness", facts: { goal, subject, classLevel, entryMode: fromMaterials.entry_mode, ...(materials?.folderId ? { materials: materials.name || "folder" } : {}) } });
+    if (materials?.folderId) {
+      await log(session.id, null, {
+        eventType: "harness_decision", origin: "harness", decisionNode: "syllabus_resolved",
+        facts: { source: "documents", folder: materials.name || null, subject },
+        narrative: deliberate("syllabus_resolved", { source: "documents", folder: materials.name, subject })?.narrative,
+      });
+    }
     return publicSession(session);
   }
 
@@ -414,7 +437,11 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
 
     let check;
     try {
-      check = await agentCheck.start({ learnerId, subject: session.subject, topic: topic.label, studyPrepTopicId: topic.id, mode });
+      // Planned from the learner's papers: the check asks what those papers ask (§7.17.3).
+      const basedOn = session.syllabus_source === "documents" && session.syllabus_ref && syllabus.materialQuestions
+        ? await syllabus.materialQuestions({ folderId: session.syllabus_ref, learnerId, topic: topic.label }).catch(() => [])
+        : [];
+      check = await agentCheck.start({ learnerId, subject: session.subject, topic: topic.label, studyPrepTopicId: topic.id, mode, ...(basedOn.length ? { basedOn } : {}) });
     } catch (error) {
       // The check never ran — refund, keep the session intact.
       await store.refundCoins({ charge, feature: "study_prep_practice", ref: `study_prep:${session.id}` });

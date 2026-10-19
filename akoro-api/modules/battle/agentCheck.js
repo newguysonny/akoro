@@ -36,7 +36,7 @@ async function protegeOf(learnerId) {
  * Starts on its own after START_DELAY_MS, so the learner can open the arena
  * first; the learner's sockets are told to join its room.
  */
-export async function createCheckBattle({ learnerId, subject, topic, total = CHECK_DEFAULTS.QUESTIONS, studyPrepTopicId = null, mode = "diagnostic", secondsPerQuestion = CHECK_DEFAULTS.SECONDS_PER_QUESTION }) {
+export async function createCheckBattle({ learnerId, subject, topic, total = CHECK_DEFAULTS.QUESTIONS, studyPrepTopicId = null, mode = "diagnostic", secondsPerQuestion = CHECK_DEFAULTS.SECONDS_PER_QUESTION, basedOn = [] }) {
   const agentId = await protegeOf(learnerId);
   if (!agentId) throw fail("Create your agent first — the Agent Check is your agent answering.", 409);
   const count = Math.max(3, Math.min(10, Number(total) || CHECK_DEFAULTS.QUESTIONS));
@@ -63,6 +63,8 @@ export async function createCheckBattle({ learnerId, subject, topic, total = CHE
     fill = await buildQuestions({
       battleId: battle.id, source: "ai", total: count, subject, topic,
       difficulty: "intermediate", classLabel: null, userId: null, durationSeconds: count * seconds,
+      // Planned from the learner's own past papers: ask what those papers ask (§7.17.3).
+      ...(basedOn?.length ? { basedOn } : {}),
     });
   } catch (e) {
     await db.from("battles").delete().eq("id", battle.id);

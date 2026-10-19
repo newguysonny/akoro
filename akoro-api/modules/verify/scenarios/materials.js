@@ -196,6 +196,23 @@ export const pastPaperStructured = {
       ctx.expect.ok("…into the folder", items.some((it) => it.itemRef === cands[0].key), items);
     }
 
+    // Study Prep from the folder (§7.17.3): the plan uses only its topics, the session records the folder.
+    const me = await ctx.as(as);
+    const spBase = "/api/adaptive/study-prep/sessions";
+    await ctx.db.deleteOwned("edu.study_prep_sessions", { ownerColumn: "learner_id", ownerId: me.id, filters: { goal: { like: "[verify:%" } } });
+    const active = await ctx.http({ as, path: spBase });
+    if (active.body?.session?.id) await ctx.http({ as, method: "POST", path: `${spBase}/${active.body.session.id}/cancel`, body: {} });
+    ctx.cleanup(() => ctx.db.deleteOwned("edu.study_prep_sessions", { ownerColumn: "learner_id", ownerId: me.id, filters: { goal: { like: `${ctx.marker}%` } } }));
+    const sp = await ctx.agent.tool({ as, tool: "start_study_prep_session", mode: "live",
+      input: { goal: `${ctx.marker} WAEC Biology from my past paper`, from_materials: true, folder: data?.folder?.name || ingest.folder?.name } });
+    ctx.note(`study prep: ${JSON.stringify({ from: sp?.from, status: sp?.status, plan: (sp?.plan || []).map((t) => t.label) }).slice(0, 400)}`);
+    ctx.expect.ok("Study Prep plans from the folder", !!sp?.from && /past papers/i.test(sp.from), sp);
+    const topicSet = new Set((data?.topics || []).map((t) => t.toLowerCase()));
+    ctx.expect.ok("…its plan uses only the paper's topics", (sp?.plan || []).length > 0 && sp.plan.every((t) => topicSet.has(String(t.label).toLowerCase())), { plan: sp?.plan, topics: data?.topics });
+    const [row] = await ctx.db.rows("edu.study_prep_sessions", { learner_id: me.id, goal: { like: `${ctx.marker}%` } }, { columns: "syllabus_source, syllabus_ref, entry_mode", limit: 1 });
+    ctx.expect.ok("…and the session records the folder as its syllabus", row?.syllabus_source === "documents" && row?.syllabus_ref === (data?.folder?.id || ingest.folder?.id) && row?.entry_mode === "material", row);
+    if (sp?.sessionId) await ctx.http({ as, method: "POST", path: `${spBase}/${sp.sessionId}/cancel`, body: {} });
+
     // Undo takes the questions with it.
     await ctx.http({ as, method: "POST", path: `/api/agent/materials/ingest/${ingest.id}/undo` });
     const after = await ctx.agent.tool({ as, tool: "analyse_past_papers", input: { subject: "Biology" } });
