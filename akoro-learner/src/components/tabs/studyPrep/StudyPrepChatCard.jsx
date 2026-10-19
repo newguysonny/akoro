@@ -248,7 +248,7 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
 
   return (
     <div style={{ ...card, marginTop: 6, maxWidth: '100%' }}>
-      {wfEvents ? <WorkflowHead head={head} subject={session.subject}/> : (
+      {wfEvents || workflowId ? <WorkflowHead head={head} subject={session.subject}/> : (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
           <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--ak-text)', display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="ti-target" size={15} color={BRAND}/> Study Prep · {session.subject}</div>
           <div style={caption}>{session.status.replace(/_/g, ' ')}</div>
@@ -267,7 +267,8 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
       {pinned ? (checkLive && <button type="button" onClick={watch} style={primary}>Watch the Agent Check</button>) : <>
 
       {/* ── the plan card: Approve & Start / Adjust (the only spend gate) ── */}
-      {['planning', 'awaiting_confirmation'].includes(session.status) && (
+      {/* With a workflow, an empty plan isn't shown while it plans — the steps above are the progress. */}
+      {(session.status === 'awaiting_confirmation' || (session.status === 'planning' && (!workflowId || session.plan?.length > 0))) && (
         <div style={{ display: 'grid', gap: 8 }}>
           <div style={{ textAlign: 'center', display: 'grid', gap: 2, padding: '4px 0' }}>
             <div style={{ fontSize: 13.5, fontWeight: 900, letterSpacing: 1, color: 'var(--ak-text)' }}>YOUR {session.subject.toUpperCase()} PLAN</div>
@@ -291,7 +292,7 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
                   <button type="button" disabled={busy} onClick={() => setAdjusting(true)} style={secondary}>Adjust</button>
                 </div>
               )}
-              {session.status === 'planning' && <div style={caption}>The agent is still planning…</div>}
+              {session.status === 'planning' && !workflowId && <div style={caption}>The agent is still planning…</div>}
             </>
           ) : (
             <>
