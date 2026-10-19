@@ -2389,7 +2389,7 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         const tool = ["quiz", "flashcards", "summary", "notes", "podcast"].includes(input?.tool) ? input.tool : null;
         const records = [...byId.values()].slice(0, 5).map((r) => (tool ? { ...r, tool } : r));
         return records.length
-          ? { records, ...(tool ? { note: `Each link opens the document in the reader on its ${tool} tool, which builds it from the whole document — point them there in one line; don't write the ${tool} in chat, and don't say you can't read the document (the reader does).` } : {}) }
+          ? { records, ...(tool ? { note: `Each link opens the document in the reader on its ${tool} tool, which builds it from the whole document — point them there in one line; don't write the ${tool} in chat, don't comment on the document's title or contents, and don't say what you can or can't see inside it (the reader reads all of it).` } : {}) }
           : { records: [], note: "Nothing in their Library matches — say so; don't invent a document." };
       } catch (error) { return { error: "Their Library is unavailable right now" }; }
     }
