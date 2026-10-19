@@ -87,7 +87,7 @@ function ThoughtBlock({ thinking, streaming }) {
 }
 
 const FIND_SIMILAR = "Find similar material";   // the API's structureChips label
-const MATERIAL_ICON = { folder:"ti-folder", blog:"ti-article", my_blog:"ti-pencil", course:"ti-school", record:"ti-paperclip", topic:"ti-chalkboard", activity:"ti-list-check" };
+const MATERIAL_ICON = { study_tool:"ti-layout-grid", folder:"ti-folder", blog:"ti-article", my_blog:"ti-pencil", course:"ti-school", record:"ti-paperclip", topic:"ti-chalkboard", activity:"ti-list-check" };
 
 function AgentChatTab({
   onStartTeach, onTeachTopic, onStartExamPrep, onOpenConceptTracker, onOpenAdaptiveControls, agentNameProp, agentEmojiProp, onChatActive,
@@ -910,6 +910,7 @@ function AgentChatTab({
     if(finalReply && !controller?.signal.aborted){
       apiPost('/api/adaptive/chat/suggestions', { ask: text, reply: finalReply, role: 'student',
         tools: turnTools.map((x)=>({ tool: x?.tool, topic: x?.teach?.topic || x?.guide?.teach?.topic || null })),
+        conversationId: sid,   // the chips are saved with the reply, so a refresh keeps them
         ...(ingest ? { attachments: ingest.names.map((name)=>({ name, kind: ingest.kind })) } : {}) })
         .then((r)=>{
           const ideas=cleanIdeas(r?.suggestions);

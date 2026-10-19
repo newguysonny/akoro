@@ -61,3 +61,17 @@ test("memory from other chats: the learner's ask travels, the agent's old reply 
   assert.match(block, /never evidence[\s\S]*call the tool/);
   assert.equal(renderRelevantMemory([]), "");
 });
+
+test("study tools: the agent sends learners to the reader, the link opens it on the tool", () => {
+  const out = materialsFrom("search_my_library", { records: [{ recordId: ID, name: "Cell notes", tool: "quiz" }] });
+  assert.deepEqual(out, [{ kind: "study_tool", title: "Quiz · Cell notes", href: `/library?record=${ID}&tool=quiz` }]);
+  assert.equal(materialsFrom("search_my_library", { records: [{ recordId: ID, name: "x", tool: "essay" }] })[0], null, "an unknown tool never makes a link");
+  assert.match(chat, /tool: \{ type: "string", enum: \["quiz", "flashcards", "summary", "notes", "podcast"\]/);
+  assert.match(chat, /don't write them in chat/);
+});
+
+test("the chips under a reply survive a refresh (saved on its meta)", () => {
+  assert.match(chat, /void saveReplyIdeas\(\{ userId: req\.user\?\.id, conversationId: req\.body\?\.conversationId, reply, ideas: suggestions \}\)/);
+  assert.match(chat, /\.eq\("role", "agent"\)\.order\("created_at", \{ ascending: false \}\)\.limit\(1\)/, "only the latest agent message");
+  assert.match(chat, /if \(!last \|\| norm\(last\.text\) !== norm\(reply\)\) return false;/, "only the reply they were made for");
+});

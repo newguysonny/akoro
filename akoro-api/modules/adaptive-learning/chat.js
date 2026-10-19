@@ -909,10 +909,13 @@ export const CHAT_TOOLS = [
   },
   {
     name: "search_my_library",
-    description: "Find documents in the signed-in learner's own Library (uploads, links, pasted notes) by name or by what is inside them. Use when recommending study material, or when they ask for their notes or a document; the reply then shows each one as a link that opens it in the reader. Search again every time (the Library changes; an earlier answer in this chat may be out of date). Never invent a document — mention only what this returns, by name; never show record ids, the app shows each as a link.",
+    description: "Find documents in the signed-in learner's own Library (uploads, links, pasted notes) by name or by what is inside them. Use when recommending study material, or when they ask for their notes or a document; the reply then shows each one as a link that opens it in the reader. When they ask for flashcards, a quiz, a summary, notes or a podcast FROM their material, call this with `tool` set: the reader builds those from the document itself (cited, saved with it), and the link opens it on that tool — say so in one line and don't write them in chat. Search again every time (the Library changes; an earlier answer in this chat may be out of date). Never invent a document — mention only what this returns, by name; never show record ids, the app shows each as a link.",
     input_schema: {
       type: "object",
-      properties: { query: { type: "string", description: "The topic or document to look for (3 to 200 characters)." } },
+      properties: {
+        query: { type: "string", description: "The topic or document to look for (3 to 200 characters)." },
+        tool: { type: "string", enum: ["quiz", "flashcards", "summary", "notes", "podcast"], description: "The reader's study tool they asked for, if any — the link opens the document on it." },
+      },
       required: ["query"],
     },
   },
@@ -2375,8 +2378,11 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         const byId = new Map();
         for (const n of named) byId.set(n.id, { recordId: n.id, name: n.name, snippet: null });
         for (const h of hits) if (h.recordId && !byId.has(h.recordId)) byId.set(h.recordId, { recordId: h.recordId, name: h.name, snippet: h.snippet || null, page: h.pageNumber ?? null });
-        const records = [...byId.values()].slice(0, 5);
-        return records.length ? { records } : { records: [], note: "Nothing in their Library matches — say so; don't invent a document." };
+        const tool = ["quiz", "flashcards", "summary", "notes", "podcast"].includes(input?.tool) ? input.tool : null;
+        const records = [...byId.values()].slice(0, 5).map((r) => (tool ? { ...r, tool } : r));
+        return records.length
+          ? { records, ...(tool ? { note: `Each link opens the document in the reader on its ${tool} tool — point them there in one line; don't write the ${tool} in chat.` } : {}) }
+          : { records: [], note: "Nothing in their Library matches — say so; don't invent a document." };
       } catch (error) { return { error: "Their Library is unavailable right now" }; }
     }
     case "analyse_past_papers": {
@@ -3930,6 +3936,23 @@ router.get("/models", (_req, res) => {
  * reply arrives, so the reply never waits; any failure returns none.
  * Body: { ask, reply, role?, context? }
  */
+/**
+ * The chips under a reply survive a refresh: saved on the reply's meta (meta.ideas,
+ * which a reopened chat reads). Only the learner's own latest agent message in
+ * that chat, and only when it is the reply the chips were made for. Never throws.
+ */
+export async function saveReplyIdeas({ userId, conversationId, reply, ideas }) {
+  try {
+    if (!userId || !/^[0-9a-f-]{36}$/i.test(String(conversationId || "")) || !Array.isArray(ideas) || !ideas.length) return false;
+    const { data: last } = await db.from("chat_messages").select("id, text, meta").eq("session_id", conversationId).eq("user_id", userId)
+      .eq("role", "agent").order("created_at", { ascending: false }).limit(1).maybeSingle();
+    const norm = (t) => String(t || "").replace(/\s+/g, " ").trim();
+    if (!last || norm(last.text) !== norm(reply)) return false;
+    const { error } = await db.from("chat_messages").update({ meta: { ...(last.meta || {}), ideas: ideas.slice(0, 3) } }).eq("id", last.id).eq("user_id", userId);
+    return !error;
+  } catch { return false; }
+}
+
 router.post("/suggestions", async (req, res) => {
   const reply = String(req.body?.reply || "").trim();
   if (!reply) return res.json({ success: true, suggestions: [] });
@@ -3961,10 +3984,13 @@ router.post("/suggestions", async (req, res) => {
       __userId: req.user?.id, __feature: "chat_suggestions",
     });
     const ideas = shapeSuggestions(completion.choices?.[0]?.message?.content);
-    res.json({ success: true, suggestions: fixed.length ? [...fixed, ...ideas.filter((x) => !isFixed(x))].slice(0, 3) : ideas });
+    const suggestions = fixed.length ? [...fixed, ...ideas.filter((x) => !isFixed(x))].slice(0, 3) : ideas;
+    res.json({ success: true, suggestions });
+    void saveReplyIdeas({ userId: req.user?.id, conversationId: req.body?.conversationId, reply, ideas: suggestions });
   } catch (e) {
     console.warn("[chat/suggestions] none this time:", String(e?.message || e).slice(0, 120));
     res.json({ success: true, suggestions: fixed });
+    if (fixed.length) void saveReplyIdeas({ userId: req.user?.id, conversationId: req.body?.conversationId, reply, ideas: fixed });
   }
 });
 

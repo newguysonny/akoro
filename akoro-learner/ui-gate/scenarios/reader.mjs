@@ -552,6 +552,22 @@ export const scenarios = [
       t.check('…as its own words', /mitochondria/i.test(text) && /cell wall/i.test(text), { actual: text.slice(0, 100) });
     },
   },
+  {
+    name: 'reader.tool_link',
+    description: "A link from Agent Chat (/library?record=…&tool=quiz) opens the document in the reader with the Quiz tool ready.",
+    async run(t) {
+      const { page } = t;
+      const marker = newMarker();
+      const made = await t.api('POST', '/api/records', { kind: 'paste', name: `${marker} Cell notes`, content: PARAS.join('\n\n') });
+      const record = made.body?.data?.record || made.body?.data;
+      if (!record?.id) t.block(`saving the pasted record answered ${made.status}: ${made.body?.message || ''}`);
+      t.cleanup(async () => { await t.api('DELETE', `/api/records/${record.id}`); });
+      await page.goto(`${t.app}/library?record=${record.id}&tool=quiz`, { waitUntil: 'domcontentloaded' });
+      const menu = page.locator('.sreader-menu');
+      t.check('the reader opens on the Quiz tool', await menu.getByRole('button', { name: 'Build quiz' }).first().waitFor({ timeout: 45_000 }).then(() => true, () => false));
+      t.check('…on this document', await page.getByText(`${marker} Cell notes`).first().isVisible().catch(() => false));
+    },
+  },
 ];
 
 /* Suite "reader-podcast" — run on demand (it writes and narrates a whole

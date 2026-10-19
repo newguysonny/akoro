@@ -1050,6 +1050,7 @@ export default function SessionReaderModal({
   sourceName = "Session guide",
   pages = [],
   onClose,
+  initialTool = null,   // open on this study tool's form (an Agent Chat link)
   chatNode = null,
   onOpenChat,
   onExplainSelection,
@@ -1303,6 +1304,15 @@ export default function SessionReaderModal({
       setPrefillFocus("");
     }
   }
+
+  // Opened from a link naming a study tool: its form shows, once.
+  const initialToolDone = useRef(false);
+  useEffect(() => {
+    if (!initialTool || initialToolDone.current) return;
+    if (!TOOL_DEFS.some((t) => t.id === initialTool && !t.community && !t.needsAsk)) return;
+    initialToolDone.current = true;
+    openForm(initialTool);
+  }, [initialTool]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   function openForm(toolId, focus = "") {
     setActiveTabId("reader");

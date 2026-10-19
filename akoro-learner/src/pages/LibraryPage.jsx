@@ -293,6 +293,9 @@ function LibraryItem({ item, onOpen, onMore }) {
   return <ItemCard item={item} onMore={onMore} />;
 }
 
+/* The reader's study tools a link may open directly (SessionReaderModal's tool ids). */
+const READER_TOOLS = new Set(['summary', 'quiz', 'flashcards', 'notes', 'podcast']);
+
 export default function LibraryPage() {
   const navigate = useNavigate();
   const { t } = useLang();
@@ -307,6 +310,8 @@ export default function LibraryPage() {
   const [loading, setLoading]   = useState(true);
   const [filter, setFilter]     = useState('all');
   const [viewer, setViewer]     = useState(null);   // the record open as a session
+  // ?tool= from an Agent Chat link: the reader opens on that study tool (Quiz, Flashcards…).
+  const [viewerTool, setViewerTool] = useState(null);
 
   /* Semantic search — the server searches INSIDE your records (what a paste
      says, what a scanned PDF contains, what a recording was about), fused
@@ -374,6 +379,8 @@ export default function LibraryPage() {
       const recordParam = searchParams.get('record');
       if (recordParam) {
         const target = (recs || []).find((r) => `${r.id}` === `${recordParam}`);
+        const tool = searchParams.get('tool');
+        if (target && READER_TOOLS.has(tool)) setViewerTool(tool);
         if (target) openRecordRef.current?.(target);
       }
     } finally { setLoading(false); }
@@ -813,8 +820,9 @@ export default function LibraryPage() {
       {viewer && (
         <RecordTeachSession
           record={viewer}
-          onClose={() => setViewer(null)}
-          onMinimize={() => setViewer(null)}
+          openTool={viewerTool}
+          onClose={() => { setViewer(null); setViewerTool(null); }}
+          onMinimize={() => { setViewer(null); setViewerTool(null); }}
           onOpened={handleRecordOpened}
           onProgress={handleRecordProgress}
         />
