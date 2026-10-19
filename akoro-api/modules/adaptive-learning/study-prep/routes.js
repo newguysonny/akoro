@@ -9,7 +9,7 @@
 import express from "express";
 
 import { HarnessRejection } from "./harness.js";
-import { afterLearnerAction, studyPrepEnabled, getHarness, runStudyPrepPlanningStep, startStudyPrepSession } from "./wiring.js";
+import { afterLearnerAction, sayNothingToCheck, studyPrepEnabled, getHarness, runStudyPrepPlanningStep, startStudyPrepSession } from "./wiring.js";
 import { supabaseStore } from "./store.js";
 import { publicEvent } from "./events.js";
 import { pauseCopy } from "./narration.js";
@@ -135,9 +135,12 @@ router.post("/sessions/:id/topics/:topicId/practice", async (req, res) => {
       sessionId: id, learnerId: req.user.id, topicId, mode,
       intent: null, // learner-initiated: the harness narrates, no agent intent
     });
+    if (result.skipped) sayNothingToCheck(id, result.topic?.label).catch(() => {});
     return res.status(201).json({
       success: true, session: result.session, topic: result.topic,
       run: result.run, attempt: result.attempt,
+      // The Agent Check: started (its battle), or nothing to check yet (no notes, nothing charged).
+      ...(result.check ? { check: result.check } : {}), ...(result.skipped ? { skipped: result.skipped } : {}),
     });
   } catch (error) { return rejection(res, error); }
 });

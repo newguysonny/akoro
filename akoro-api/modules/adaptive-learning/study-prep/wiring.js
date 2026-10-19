@@ -422,13 +422,21 @@ export async function autoStartDueChecks({ nowMs = Date.now(), sessionId = null 
     if (Date.parse(due.at) > nowMs) continue;
     try {
       const done = await harness.startTopicPractice({ sessionId: session.id, learnerId: session.learner_id, topicId: topic.id, mode: due.mode, withinEstimateOnly: true });
-      if (done?.skipped) skipped += 1; else started += 1;
+      if (done?.skipped) { skipped += 1; await sayNothingToCheck(session.id, topic.label); } else started += 1;
     } catch (error) {
       failedAt.set(row.id, nowMs);
       console.warn(`[study-prep] auto-start failed for topic ${row.id}: ${error?.message || error}`);
     }
   }
   return { started, skipped };
+}
+
+/** An Agent Check found no notes to check: the agent says so in the chat (code-written, no model call). */
+export async function sayNothingToCheck(sessionId, topicLabel) {
+  if (!workflowEngineEnabled()) return;
+  await workflowMirror().agentMessage(sessionId, store, {
+    text: `I went to start the Agent Check on ${topicLabel || "this topic"}, but you haven't taught me anything on it yet — so there's nothing to check, and nothing was charged. Teach me about it here, then tap Start Agent Check on the card.`,
+  }).catch(() => null);
 }
 
 let autoStartTimer = null;

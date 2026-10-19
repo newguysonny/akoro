@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { BRAND, GREEN, RED } from '../../../constants.js';
 import BattleModal from '../../battles/BattleModal.jsx';
@@ -187,8 +187,18 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
     const timer = setInterval(refresh, 5000);
     return () => clearInterval(timer);
   }, [counting, dueIn != null && dueIn <= 0, refresh]);
+  // The server starts a due check; if it hasn't 8 s after, this card does (inside the approved coins only — counting excludes past them).
+  const fallbackFor = useRef(null);
+  useEffect(() => {
+    if (!counting || dueIn == null || dueIn > -8000) return;
+    const key = `${nextCheck.topicId}:${nextCheck.at}`;
+    if (fallbackFor.current === key) return;
+    fallbackFor.current = key;
+    generateStudyPrepPractice(sessionId, nextCheck.topicId, nextCheck.mode).then(refresh, refresh);
+  }, [counting, dueIn, nextCheck, sessionId, refresh]);
+  // Pinned while the agent works — and while its next check counts down (the learner can start it now).
+  useEffect(() => { onRunning?.(sessionId, running || counting); }, [sessionId, running, counting, onRunning]);
   const steps = useMemo(() => workflowCardSteps(wfEvents || [], { running }), [wfEvents, running]);
-  useEffect(() => { onRunning?.(sessionId, running); }, [sessionId, running, onRunning]);
 
   if (!view) {
     return (
@@ -426,7 +436,7 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
                     </>
                   ) : (
                     <>
-                      <div style={caption}>{noNotes
+                      <div style={caption}>{(noNotes || shownTopic.checkMode === 'skipped')
                         ? `Your agent has no notes on ${shownTopic.label} yet, so there's nothing to check. Teach it first — nothing was charged.`
                         : 'Your agent is checked first: your teaching guide asks, your agent answers only from what you taught it, and Sergeant judges every answer.'}</div>
                       {checkStarter(<div><button type="button" disabled={busy} onClick={() => generate('diagnostic')} style={primary}>Start Agent Check (2 coins)</button></div>)}
