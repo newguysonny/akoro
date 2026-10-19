@@ -1382,6 +1382,13 @@ function AgentChatTab({
                 ))}
               </div>
             )}
+            {pinnedPrep && devView && prepNotes[pinnedPrep]?.length>0 && (
+              // Developer view, while it runs: the planner's latest notes at the live edge, just above the pinned card.
+              <div data-workflow-notes-live="" style={{ width:"min(560px,100%)",margin:"0 0 6px" }}>
+                <div style={{ fontSize:10.5,fontWeight:800,color:"var(--ak-text-muted)",letterSpacing:.3,textTransform:"uppercase",margin:"0 0 2px" }}>Developer · planner's notes{prepNotes[pinnedPrep].length>2?` · ${prepNotes[pinnedPrep].length-2} earlier`:''}</div>
+                <TraceBlocks blocks={prepNotes[pinnedPrep].slice(-2)}/>
+              </div>
+            )}
             {pinnedPrep && (
               <div data-workflow-pinned="" style={{ width:"min(560px,100%)",maxHeight:"42vh",overflowY:"auto",margin:"0 0 8px",boxShadow:"0 4px 18px rgba(30,20,60,.12)",borderRadius:14 }}>
                 <StudyPrepChatCard sessionId={pinnedPrep} onEvents={onStudyPrepEvents} onRunning={onStudyPrepRunning} pinned developer={devView} onNotes={onStudyPrepNotes}/>

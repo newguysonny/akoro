@@ -441,6 +441,8 @@ export const scenarios = [
         const list = await t.api('GET', '/api/adaptive/chat/sessions');
         for (const c of (list.body?.sessions || []).filter((x) => String(x.title || '').includes(marker) || String(x.preview || '').includes(marker))) await t.api('DELETE', `/api/adaptive/chat/sessions/${c.id}`);
       });
+      // UI_GATE_DEV_VIEW=1 films it with the developer view on (the planner's notes show).
+      if (process.env.UI_GATE_DEV_VIEW === '1') await page.addInitScript(() => { try { localStorage.setItem('ak.agentChat.devView', '1'); } catch { /* */ } });
       await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
       const box = page.getByRole('textbox').last();
       await box.waitFor({ timeout: 30_000 });
