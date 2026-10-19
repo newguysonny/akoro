@@ -79,7 +79,7 @@ const ACTOR = { agent_stated_intent: "agent", agent: "agent", harness: "system",
 /** Study Prep's decision nodes as v3 event types (§7.9.2). */
 const NODE_TYPE = {
   harness_rejection: "decision.rejected", plan_validated: "decision.accepted",
-  plan_confirmed: "learner.action_received", plan_adjusted: "learner.action_received", teach_back_confirmed: "learner.action_received",
+  plan_confirmed: "learner.action_received", plan_adjusted: "learner.action_received", coins_approved: "learner.action_received", teach_back_confirmed: "learner.action_received",
   topic_started: "topic.state_changed", topic_advanced: "topic.state_changed", topic_deferred: "topic.state_changed", topic_flagged: "topic.state_changed",
   practice_generated: "assessment.started", agent_check_started: "assessment.started",
   practice_scored: "assessment.completed", agent_check_scored: "assessment.completed",

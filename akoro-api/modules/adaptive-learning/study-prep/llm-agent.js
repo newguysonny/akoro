@@ -11,12 +11,12 @@ import { POLICY } from "./state-machine.js";
 
 export { providerToolName };
 
-export function makeLlmAgent({ system, contentSearchEnabled = false, learnerId = null, feature = "study_prep_planning", maxTokens = 1600, finishHint = null, payer = null }) {
+export function makeLlmAgent({ system, contentSearchEnabled = false, learnerId = null, feature = "study_prep_planning", maxTokens = 1600, finishHint = null, payer = null, ref = null }) {
   return makeRuntimeAgent({
     system, learnerId,
     catalogue: llmFacingTools({ includeContentSearch: contentSearchEnabled }),
     // Think (2026-10-19): it reasons before each of its (up to 10) decisions.
-    feature, payer, timeoutMs: 60_000, maxRetries: 1, maxTokens, think: true, talk: true,
+    feature, payer, ref, timeoutMs: 60_000, maxRetries: 1, maxTokens, think: true, talk: true,
     intentMaxChars: POLICY.INTENT_MAX_CHARS,
     finishHint: finishHint || "This is your last step: finish now with the best plan you can make from what you found.",
   });

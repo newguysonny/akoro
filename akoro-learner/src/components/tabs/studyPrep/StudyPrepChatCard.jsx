@@ -7,7 +7,7 @@ import { countdownLabel, studyPrepCardHead, wakeOpen, workflowCardSteps } from '
 import { cacheEvents, cachedEvents, openWorkflowStream, rememberSeen, seenSequence } from '../../../lib/workflowStream.js';
 import { WorkflowHead, WorkflowSteps } from './WorkflowSteps.jsx';
 import {
-  adjustStudyPrepPlan, advanceStudyPrepTopic, confirmStudyPrepPlan, confirmStudyPrepTeachBack,
+  adjustStudyPrepPlan, advanceStudyPrepTopic, approveMoreStudyPrepCoins, confirmStudyPrepPlan, confirmStudyPrepTeachBack,
   concludeStudyPrepSession, deferStudyPrepTopic, fetchStudyPrepSession, generateStudyPrepPractice,
   resumeStudyPrepSession, retryStudyPrepDeferred, submitStudyPrepPractice,
 } from '../../../services/studyPrepApi.js';
@@ -281,20 +281,24 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
     refresh();
   });
 
-  // The next check, as the card offers it: a countdown with Start now, or — past the approved coins — the learner's OK.
+  // Past the approved coins nothing runs by itself — not a check, not the agent's turn: the learner approves more first.
+  const coins = view.coins || null;
+  const outOfCoins = agentMode && session.status === 'topic_active' && !!coins && (coins.wakeDecisions < 1 || !!nextCheck?.overEstimate);
+  const approveMore = () => void run(() => approveMoreStudyPrepCoins(session.id, conversationId), () => refresh());
+  const coinsAsk = outOfCoins && (
+    <div data-over-estimate="" style={{ display: 'grid', gap: 6, padding: '8px 10px', borderRadius: 10, background: '#FFF7ED', border: '1px solid #F59E0B55' }}>
+      <div style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 12, fontWeight: 800, color: '#B45309' }}>
+        <Icon name="ti-coin" size={15} color="#B45309"/> You've used {coins.spent} of the {coins.approved} coins you approved.
+      </div>
+      <div style={caption}>The agent's turns and the Agent Checks stop here until you say so — nothing goes past what you approved.</div>
+      <div><button type="button" disabled={busy} onClick={approveMore} style={primary}>Approve 10 more coins</button></div>
+    </div>
+  );
+
+  // The next check, as the card offers it: a countdown with Start now (past the approved coins, the ask above instead).
   const checkStarter = (fallback) => {
     if (!agentMode || !nextCheck || nextCheck.topicId !== activeTopic?.id) return fallback;
-    if (nextCheck.overEstimate) {
-      return (
-        <div data-over-estimate="" style={{ display: 'grid', gap: 6, padding: '8px 10px', borderRadius: 10, background: '#FFF7ED', border: '1px solid #F59E0B55' }}>
-          <div style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 12, fontWeight: 800, color: '#B45309' }}>
-            <Icon name="ti-coin" size={15} color="#B45309"/> The coins you approved are used up{nextCheck.coinsLeft ? ` (${nextCheck.coinsLeft} left)` : ''}.
-          </div>
-          <div style={caption}>The next Agent Check costs {nextCheck.coins ?? 2} coins more than the plan's estimate. It only starts if you say so.</div>
-          <div><button type="button" disabled={busy} onClick={() => generate(nextCheck.mode)} style={primary}>Go on · {nextCheck.coins ?? 2} coins</button></div>
-        </div>
-      );
-    }
+    if (nextCheck.overEstimate) return coinsAsk || fallback;
     return (
       <div data-auto-start="" style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 10px', borderRadius: 10, background: `${BRAND}0F`, border: `1px solid ${BRAND}30` }}>
         <Icon name="ti-clock" size={15} color={BRAND}/>
@@ -334,7 +338,7 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
       {error && <div role="alert" style={errorBox}>{error}</div>}
 
       {/* Pinned (running): the head and the latest steps only — the full card is back at its message once it settles. */}
-      {pinned ? (checkLive ? <button type="button" onClick={watch} style={primary}>Watch the Agent Check</button> : (counting && checkStarter(null))) : <>
+      {pinned ? (checkLive ? <button type="button" onClick={watch} style={primary}>Watch the Agent Check</button> : (counting ? checkStarter(null) : coinsAsk)) : <>
 
       {/* ── the plan card: Approve & Start / Adjust (the only spend gate) ── */}
       {/* With a workflow, an empty plan isn't shown while it plans — the steps above are the progress. */}
@@ -420,6 +424,7 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
             })}
           </div>
 
+          {outOfCoins && !nextCheck?.overEstimate && coinsAsk}
           {shownTopic && (
             <div style={{ display: 'grid', gap: 8, padding: '9px 10px', border: '1px solid var(--ak-border2)', borderRadius: 11, background: 'var(--ak-surface-hover)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline' }}>

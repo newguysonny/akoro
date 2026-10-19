@@ -135,6 +135,16 @@ export const supabaseStore = {
     return (data || []).reverse();
   },
 
+  /**
+   * What the session has charged the learner, net of refunds: every charge
+   * carrying its ref (its Agent Checks and the agent's wakes).
+   */
+  async sessionCoinsSpent(sessionId) {
+    const { data, error } = await db.from("coin_transactions").select("delta").eq("ref", `study_prep:${sessionId}`).limit(2000);
+    if (error) throw error;
+    return Math.max(0, -(data || []).reduce((sum, row) => sum + Number(row.delta || 0), 0));
+  },
+
   /** Wallet-first charge (§4.11). Maps lib/coins InsufficientCoins onto the harness error. */
   async chargeCoins({ learnerId, coins, feature, ref }) {
     try {

@@ -9,7 +9,7 @@
 import express from "express";
 
 import { HarnessRejection } from "./harness.js";
-import { afterLearnerAction, sayNothingToCheck, studyPrepEnabled, getHarness, runStudyPrepPlanningStep, startStudyPrepSession } from "./wiring.js";
+import { afterLearnerAction, resumeHeldWake, sayNothingToCheck, studyPrepEnabled, getHarness, runStudyPrepPlanningStep, startStudyPrepSession } from "./wiring.js";
 import { supabaseStore } from "./store.js";
 import { publicEvent } from "./events.js";
 import { pauseCopy } from "./narration.js";
@@ -120,6 +120,19 @@ router.post("/sessions/:id/adjust", async (req, res) => {
     const result = await getHarness().adjustPlan({ sessionId: id, learnerId: req.user.id, dropTopicIds: drop, order });
     wake(req, id, "adjust");
     return res.json({ success: true, session: result.session, plan: result.plan, estimate: result.estimate });
+  } catch (error) { return rejection(res, error); }
+});
+
+// POST /study-prep/sessions/:id/approve-more — the learner lets the plan go past its coins by a fixed amount.
+router.post("/sessions/:id/approve-more", async (req, res) => {
+  if (!guard(res)) return;
+  const id = paramId(res, req.params.id, "session id");
+  if (!id) return;
+  try {
+    const result = await getHarness().approveMoreCoins({ sessionId: id, learnerId: req.user.id });
+    // The agent picks up where it stopped (a wake it held for the coins).
+    resumeHeldWake({ sessionId: id, learnerId: req.user.id, conversationId: chatOf(req) });
+    return res.json({ success: true, session: result.session, coins: result.coins });
   } catch (error) { return rejection(res, error); }
 });
 
@@ -287,6 +300,8 @@ function shapeView(view) {
     agentCheck: !!view.agentCheck,
     // The next Agent Check: when it starts by itself, or that it needs the learner's OK (past the estimate).
     nextCheck: view.nextCheck || undefined,
+    // The coins approved for the plan and what's spent (checks + the agent's wakes).
+    coins: view.coins || undefined,
   };
 }
 

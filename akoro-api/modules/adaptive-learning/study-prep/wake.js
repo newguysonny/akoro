@@ -17,6 +17,9 @@
  */
 import { STUDY_PREP_COST } from "./education-engine.js";
 
+/** About what one decision of a wake costs (measured 2026-10-19 on the sandbox: ~3 coins). */
+export const COINS_PER_DECISION = 3;
+
 /** Decisions per wake (the user's call, 2026-10-19 — adjustable later). */
 export const WAKE_DECISIONS = 4;
 /** An Agent Check starts by itself after this long without a tap (first checks and retests). */
@@ -32,6 +35,7 @@ const GOALS = {
   check_scored: "An Agent Check was just marked. Read the result (session.get_state). Passed: say so and advance_topic (or conclude_session when no topic is left). Below the pass mark with tries left: name what you missed and ask them to teach it, then wait. Out of tries: defer_topic (one deferred retry per session) or advance_topic, and say why.",
   teach_back: "The learner says they taught you what you missed. Acknowledge it in one line: the new Agent Check starts by itself in a minute, or when they tap Start now. Then wait.",
   over_estimate: "The next Agent Check would go past the coins the learner approved. Tell them how many coins are left of the estimate and that the next check needs their OK (the card has the button). Then wait.",
+  coins_approved: "The learner approved more coins. Say what happens next with them (the check that was waiting starts by itself), then wait.",
 };
 export const WAKE_TRIGGERS = Object.freeze(Object.keys(GOALS));
 
@@ -39,6 +43,7 @@ export const WAKE_TRIGGERS = Object.freeze(Object.keys(GOALS));
 export const WAKE_LABELS = Object.freeze({
   plan_adjusted: "You adjusted the plan", plan_confirmed: "You approved the plan", topic_started: "A new topic started",
   check_scored: "An Agent Check was marked", teach_back: "You taught it back", over_estimate: "The estimate is used up",
+  coins_approved: "You approved more coins",
 });
 
 export function wakeGoal(trigger, facts = {}) {
@@ -48,14 +53,18 @@ export function wakeGoal(trigger, facts = {}) {
 }
 
 /**
- * The approved estimate for Agent Checks (the plan's practice coins) against
- * what has been charged so far. `spent` is the sum of the checks started.
+ * The coins the learner approved for the session (the plan's estimate, plus
+ * any "Approve N more") against what the session has charged: its Agent
+ * Checks and the agent's wakes. Neither goes past it without asking.
  */
 export function checkBudget(session, spent = 0) {
-  const approved = Number(session?.estimate?.practiceCoins ?? session?.estimate?.totalCoins ?? 0) || 0;
+  const approved = (Number(session?.estimate?.totalCoins ?? 0) || 0) + (Number(session?.estimate?.extraCoins ?? 0) || 0);
   const coins = STUDY_PREP_COST.COINS_PER_PRACTICE;
   const used = Math.max(0, Number(spent) || 0);
-  return { approved, spent: used, left: Math.max(0, approved - used), next: coins, withinEstimate: used + coins <= approved };
+  const left = Math.max(0, approved - used);
+  return { approved, spent: used, left, next: coins, withinEstimate: used + coins <= approved,
+    // The decisions the agent can take in a wake inside what's left (0 = it asks first).
+    wakeDecisions: Math.min(WAKE_DECISIONS, Math.floor(left / COINS_PER_DECISION)) };
 }
 
 /** Coins charged by the checks this session started (from its events). */

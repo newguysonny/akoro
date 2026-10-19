@@ -33,6 +33,11 @@ export async function adjustStudyPrepPlan(sessionId, drop, { order = null, conve
   return apiPost(`${BASE}/sessions/${sessionId}/adjust`, { drop, ...(order ? { order } : {}), ...inChat(conversationId) });
 }
 
+/** The learner lets the plan go past its approved coins by a fixed amount (the card says how much). */
+export async function approveMoreStudyPrepCoins(sessionId, conversationId = null) {
+  return apiPost(`${BASE}/sessions/${sessionId}/approve-more`, inChat(conversationId));
+}
+
 export async function generateStudyPrepPractice(sessionId, topicId, mode) {
   return apiPost(`${BASE}/sessions/${sessionId}/topics/${topicId}/practice`, { mode });
 }

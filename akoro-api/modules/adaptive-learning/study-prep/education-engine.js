@@ -75,13 +75,18 @@ export const STUDY_PREP_COST = Object.freeze({
   COINS_PER_PRACTICE: 2,
   PRACTICES_PER_TOPIC: 2,          // diagnostic + one retest band
   LOOP_LLM_COINS_PER_STEP: 1,      // rounded per-step loop overhead
+  // The agent's turns per topic after approval (its wakes: a topic starting, a check marked, a teach-back…).
+  // Measured 2026-10-19 at ~3 coins a decision; the plan's estimate counts this per topic.
+  WAKE_COINS_PER_TOPIC: Math.max(1, Math.round(Number(process.env.STUDY_PREP_WAKE_COINS_PER_TOPIC ?? 1)) || 1),
+  // What the learner approves at a time when the coins run out ("Approve N more").
+  APPROVE_MORE_COINS: 10,
 });
 
 export function estimateSessionCost({ topicCount, maxIterationsPerStep = 6 }) {
   const topics = Math.max(0, Math.min(Number(topicCount) || 0, 12));
   const practice = topics * STUDY_PREP_COST.COINS_PER_PRACTICE * STUDY_PREP_COST.PRACTICES_PER_TOPIC;
   const planningLoop = STUDY_PREP_COST.LOOP_LLM_COINS_PER_STEP;                 // one planning step
-  const topicLoops = topics * STUDY_PREP_COST.LOOP_LLM_COINS_PER_STEP;           // one step per topic settle
+  const topicLoops = topics * STUDY_PREP_COST.WAKE_COINS_PER_TOPIC;              // the agent's wakes per topic
   return {
     practiceCoins: practice,
     loopCoins: planningLoop + topicLoops,

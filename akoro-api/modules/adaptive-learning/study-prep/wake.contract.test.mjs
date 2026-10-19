@@ -94,10 +94,15 @@ test("no auto-start while a check runs, after a marked check without a teach-bac
 });
 
 test("past the approved estimate it never starts by itself — the learner is asked", () => {
-  const due = autoStartFor(topicRow(), running, { spent: 8, maxAttempts: 3 });
+  const due = autoStartFor(topicRow(), running, { spent: 10, maxAttempts: 3 });
   assert.equal(due.blocked, "over_estimate");
-  assert.deepEqual(checkBudget(running, 6), { approved: 8, spent: 6, left: 2, next: 2, withinEstimate: true });
-  assert.equal(checkBudget(running, 7).withinEstimate, false);
+  // The whole approved total (checks and the agent's own turns), plus any "Approve N more".
+  assert.deepEqual(checkBudget(running, 6), { approved: 11, spent: 6, left: 5, next: 2, withinEstimate: true, wakeDecisions: 1 });
+  assert.equal(checkBudget(running, 10).withinEstimate, false);
+  assert.equal(checkBudget({ estimate: { totalCoins: 11, extraCoins: 10 } }, 10).withinEstimate, true, "approved more");
+  assert.equal(checkBudget(running, 0).wakeDecisions, 3, "11 coins pay for 3 decisions of ~3");
+  assert.equal(checkBudget({ estimate: { totalCoins: 40 } }, 0).wakeDecisions, 4, "never more than 4");
+  assert.equal(checkBudget(running, 9).wakeDecisions, 0, "nothing left: the agent asks first");
 });
 
 test("the coins spent on checks come from the session's own events", () => {
@@ -126,8 +131,9 @@ test("every wake has a goal that names its 4-decision budget", () => {
 
 test("the harness: an automatic start stays inside the estimate; the learner's own tap may go on", async () => {
   const { store, harness } = build();
-  const s = await activeTopic(harness);   // 2 topics → 8 coins approved for checks
-  store.events.push(...[1, 2, 3, 4].map(() => ({ session_id: s.id, decision_node: "agent_check_started", facts: { coins: 2 } })));
+  const s = await activeTopic(harness);   // 2 topics → the estimate's total is approved
+  const approved = store.sessions.get(s.id).estimate.totalCoins;
+  store.events.push(...Array.from({ length: Math.ceil(approved / 2) }, (_, i) => i).map(() => ({ session_id: s.id, decision_node: "agent_check_started", facts: { coins: 2 } })));
   const refused = await harness.startTopicPractice({ sessionId: s.id, learnerId: LEARNER, topicId: "t1", mode: "diagnostic", withinEstimateOnly: true }).catch((e) => e);
   assert.equal(refused.code, "over_estimate");
   assert.equal(store.charges.length, 0, "nothing charged");
@@ -207,4 +213,17 @@ test("no notes is found (and said) once: a second try is quiet", async () => {
   assert.equal(first.skipped.already, undefined);
   assert.equal(second.skipped.already, true);
   assert.equal(store.events.filter((e) => e.decision_node === "agent_check_skipped").length, 1);
+});
+
+test("approve more: the learner lets the plan go past its coins, once per tap, and it is recorded", async () => {
+  const { store, harness } = build();
+  const s = await activeTopic(harness);
+  const before = (await harness.budgetFor(store.sessions.get(s.id))).approved;
+  const r = await harness.approveMoreCoins({ sessionId: s.id, learnerId: LEARNER });
+  assert.equal(r.coins.approved, before + 10);
+  assert.ok(store.events.some((e) => e.decision_node === "coins_approved"));
+  const planning = new Store();
+  const h2 = createHarness({ store: planning, topicWorkflow, syllabus, now: () => "x" });
+  const s2 = await h2.createSession({ learnerId: LEARNER, goal: "g", subject: "Biology" });
+  assert.equal((await h2.approveMoreCoins({ sessionId: s2.id, learnerId: LEARNER }).catch((e) => e)).code, "invalid_state_transition", "only a running plan");
 });

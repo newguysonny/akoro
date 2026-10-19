@@ -10,6 +10,7 @@ import {
   examPrepPolicyFor, publicAttempt, publicRun, startExamPrepRetest, startExamPrepRun, submitExamPrepAttempt,
 } from "../exam-prep-service.js";
 import { InsufficientBalanceError, createHarness } from "./harness.js";
+import { STUDY_PREP_COST } from "./education-engine.js";
 import { supabaseStore as store } from "./store.js";
 import { prerequisiteEdges, resolveTopics, resolveSyllabusChain, topicsForSource } from "./syllabus-resolver.js";
 import { generateOutline, generatedTopics } from "./syllabus-generator.js";
@@ -316,14 +317,23 @@ export async function runStudyPrepWake({ sessionId, learnerId = null, trigger, f
   const live = trigger === "plan_adjusted" ? ["awaiting_confirmation"] : ["topic_active"];
   if (!live.includes(view.session.status)) return null;
 
+  // Inside the coins the learner approved (2026-10-19): after approval a wake takes only the
+  // decisions what's left can pay for; none left → it asks first, and runs when they approve more.
+  const approved = view.session.status === "topic_active" && view.session.estimate;
+  const budget = approved ? await harness.budgetFor({ id: sessionId, estimate: view.session.estimate }).catch(() => null) : null;
+  const decisions = budget ? budget.wakeDecisions : WAKE_DECISIONS;
+
   const wakeId = `${trigger}:${Date.now().toString(36)}`;
   const label = WAKE_LABELS[trigger] || "Working on your plan";
   const conversationId = await conversationOf(sessionId, owner).catch(() => null);
   if (conversationId) await postToConversation({ learnerId: owner, conversationId, text: label, meta: { studyPrepWake: { sessionId, wakeId, trigger, label } } }).catch(() => null);
   await workflowMirror().wakeMark(sessionId, store, { wakeId, trigger, label, phase: "started" });
-
   let step = null;
-  try {
+  const heldForCoins = decisions < 1;
+  if (heldForCoins) {
+    held.set(sessionId, { learnerId: owner, trigger, facts });
+    await workflowMirror().agentMessage(sessionId, store, { text: askForCoinsLine(budget) });
+  } else try {
     const context = await buildAgentContext({
       // The wake doctrine (reasoning/WAKES.md): its rules, what runs by itself, what to do after a check.
       setName: "wake", goal: view.session.goal, session: view.session,
@@ -331,11 +341,12 @@ export async function runStudyPrepWake({ sessionId, learnerId = null, trigger, f
     });
     const registry = buildRegistry({ readTools: { ...readTools, getSessionState: readToolsModule.makeSessionStateReader(harness).bind(null) }, harness, learnerId: owner, sessionId });
     // Billed to the learner, like planning: a wake is part of their session (study_prep_wake).
-    const agent = makeLlmAgent({ system: context.system, learnerId: owner, feature: "study_prep_wake", maxTokens: 1200,
+    // ref: its charges count against the session's approved coins (with its checks).
+    const agent = makeLlmAgent({ system: context.system, learnerId: owner, feature: "study_prep_wake", maxTokens: 1200, ref: `study_prep:${sessionId}`,
       finishHint: "This is your last decision: end the turn — wait_for_learner, or move the session on if that is what the result calls for." });
     step = await runAgentStep({
       sessionId, goal: wakeGoal(trigger, facts), agent, registry, store: harness.store || store, harness, contextSetName: "wake",
-      maxIterations: WAKE_DECISIONS, terminalActions: [...TERMINAL_ACTIONS, "wait_for_learner"], finalActions: WAKE_FINAL_ACTIONS, pauseOnCap: false,
+      maxIterations: decisions, terminalActions: [...TERMINAL_ACTIONS, "wait_for_learner"], finalActions: WAKE_FINAL_ACTIONS, pauseOnCap: false,
       // Developer view: its notes per decision, tagged with the wake (iterations restart at 1 each wake).
       onThought: view.session.workflowId ? (t) => publishLiveDeveloper(view.session.workflowId, { ...t, wakeId }) : null,
       onMessage: async ({ iteration, text, seen }) => {
@@ -362,7 +373,23 @@ export async function runStudyPrepWake({ sessionId, learnerId = null, trigger, f
   await workflowMirror().wakeMark(sessionId, store, { wakeId, trigger, label, phase: "completed" });
   // A new topic is a new wake (its own message in the chat).
   if (moved === "advance") wakeStudyPrep({ sessionId, learnerId: owner, trigger: "topic_started", facts: { topic: (await harness.getSessionView({ sessionId, learnerId: owner, eventLimit: 1 }).catch(() => null))?.topics?.find((t) => t.status === "active")?.label } });
-  return { wakeId, ended: step?.ended || null, terminal: step?.terminal || null, moved };
+  return { wakeId, ended: step?.ended || null, terminal: step?.terminal || null, moved, ...(heldForCoins ? { held: true, budget } : {}) };
+}
+
+const held = new Map();   // session id → the wake waiting for the learner's OK on more coins
+
+/** The agent asks before going past the approved coins (code-written, no model call — it costs nothing). */
+export function askForCoinsLine(budget) {
+  const spent = budget?.spent ?? 0;
+  const approved = budget?.approved ?? 0;
+  return `You've used ${spent} of the ${approved} coins you approved for this plan, so I've stopped here instead of going past them. Tap "Approve ${STUDY_PREP_COST.APPROVE_MORE_COINS} more" on the card and I'll carry on from where I stopped.`;
+}
+
+/** The learner approved more coins: the held wake (if any) runs now. */
+export function resumeHeldWake({ sessionId, learnerId, conversationId = null }) {
+  const pending = held.get(sessionId);
+  held.delete(sessionId);
+  return wakeStudyPrep({ sessionId, learnerId, trigger: pending?.trigger || "coins_approved", facts: pending?.facts || {}, conversationId });
 }
 
 /** The session's end, in one code-written line (when code concluded it). */

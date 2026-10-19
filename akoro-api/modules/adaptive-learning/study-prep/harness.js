@@ -381,7 +381,7 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     // The agent and the auto-start stay inside the coins the learner approved;
     // past it, only the learner's own tap goes on (they were asked).
     if (withinEstimateOnly && session.estimate) {
-      const budget = checkBudget(session, spentOnChecks(await store.listEvents(session.id, { limit: 500 })));
+      const budget = await budgetFor(session);
       if (!budget.withinEstimate) return reject(session, "over_estimate", `The next check needs ${budget.next} coins and ${budget.left} are left of the approved estimate — ask the learner first`, { left: budget.left });
     }
 
@@ -833,9 +833,35 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     return { topic: topic.label, notes: coverage?.notes ?? null, strength: coverage?.strength || "unknown" };
   }
 
-  /** The coins approved for checks, and what is spent (the plan's estimate). */
-  async function budgetFor(session) {
-    return checkBudget(session, spentOnChecks(await store.listEvents(session.id, { limit: 500 })));
+  /** What the session has charged: its charges by ref when the store can sum them, else its checks' events. */
+  async function coinsSpent(session, events = null) {
+    if (store.sessionCoinsSpent) return store.sessionCoinsSpent(session.id);
+    return spentOnChecks(events || await store.listEvents(session.id, { limit: 500 }));
+  }
+
+  /** The coins the learner approved (estimate + any approved since), and what is spent. */
+  async function budgetFor(session, events = null) {
+    return checkBudget(session, await coinsSpent(session, events));
+  }
+
+  /** "Approve N more": the learner lets the session go past its estimate by a fixed amount. */
+  async function approveMoreCoins({ sessionId, learnerId }) {
+    const session = await ownedSession(sessionId, learnerId);
+    if (!session) throw new HarnessRejection("session_not_found", "Study-prep session was not found", 404);
+    if (!["topic_active", "paused"].includes(session.status) || !session.estimate) {
+      return reject(session, "invalid_state_transition", "More coins can only be approved for a running plan");
+    }
+    const add = STUDY_PREP_COST.APPROVE_MORE_COINS;
+    const estimate = { ...session.estimate, extraCoins: (Number(session.estimate.extraCoins) || 0) + add };
+    const updated = await store.updateSessionConditional(session.id, session.status, { estimate, updated_at: now() });
+    if (!updated) return reject(session, "invalid_state_transition", "The session moved on — refresh and try again");
+    const budget = await budgetFor(updated);
+    await log(session.id, null, {
+      eventType: "human_gate", origin: "harness", decisionNode: "coins_approved",
+      facts: { coins: add, approved: budget.approved },
+      narrative: deliberate("coins_approved", { coins: add, approved: budget.approved })?.narrative,
+    });
+    return { session: publicSession(updated), coins: budget };
   }
 
   /** plan.validate dry-run — the agent sees exactly what the harness would check. */
@@ -865,8 +891,10 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     const active = view.topics.find((t) => t.status === "active");
     if (agentCheck && active && session.status === "topic_active") {
       const policy = await topicWorkflow.policyFor({ examBoard: session.exam_board, subject: session.subject }).catch(() => null);
-      const spent = spentOnChecks(eventLimit >= 200 ? events : await store.listEvents(session.id, { limit: 500 }).catch(() => events));
+      const spent = await coinsSpent(session, eventLimit >= 200 ? events : null).catch(() => spentOnChecks(events));
       const due = autoStartFor(active, view.session, { spent, maxAttempts: policy?.max_attempts ?? Infinity });
+      // The approved coins and what's spent: the card asks for more when the agent can't go on.
+      view.coins = checkBudget(view.session, spent);
       if (due) view.nextCheck = { topicId: active.id, mode: due.mode, at: due.at || null, overEstimate: due.blocked === "over_estimate", coinsLeft: due.budget?.left ?? null, coins: due.budget?.next ?? null };
     }
     return view;
@@ -902,6 +930,6 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     advanceTopic, deferTopic, retryDeferredTopic, flagTopic,
     concludeSession, pauseSession, resumeSession, cancelSession,
     validateProposedPlan, getSessionView, sessionNext, generateSyllabus, resolveSyllabus,
-    publicSession, publicTopic, pause, log, topicNotes, budgetFor,
+    publicSession, publicTopic, pause, log, topicNotes, budgetFor, approveMoreCoins,
   };
 }

@@ -25,6 +25,7 @@ const label = (facts) => facts?.topicLabel || facts?.topic || "the topic";
 const TEMPLATES = {
   plan_validated: (f) => `Checked the plan against the syllabus, prerequisite order and your coin balance — everything lines up.`,
   plan_confirmed: (f) => `You approved the plan${f.topicCount ? ` (${f.topicCount} topics)` : ""}. Nothing was charged until now.`,
+  coins_approved: (f) => `You approved ${f.coins || "more"} more coins for this plan${f.approved ? ` (${f.approved} in all)` : ""}. I'll carry on, and ask again before going past them.`,
   plan_adjusted: (f) => `Plan adjusted${f.dropped ? ` — removed ${f.dropped}` : ""}. The cost estimate was updated to match.`,
   topic_started: (f) => `Starting ${label(f)}. A short diagnostic comes first — it shows what you already know.`,
   practice_generated: (f) => `Fresh practice generated for ${label(f)}${f.attemptNumber ? ` (attempt ${f.attemptNumber})` : ""}. ${f.coins ? `${f.coins} coins charged.` : ""}`.trim(),

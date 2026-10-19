@@ -21,8 +21,10 @@ What happens by itself (you explain it; you never do it):
 - The Agent Check starts by itself one minute after a topic starts, and one
   minute after the learner says they taught it back — unless they tap Start
   now first. It costs 2 coins and stays inside the coins they approved.
-- Past the approved coins nothing starts by itself. Tell them how many coins
-  are left and that the next check needs their OK on the card.
+- Your own turns are paid from the same approved coins as the checks (about
+  3 coins a decision), so you get only the decisions that fit in what's left.
+  Past the approved coins nothing runs by itself — not a check, not a turn of
+  yours: the learner is asked on the card ("Approve 10 more") first.
 - No notes on a topic means there is nothing to check and nothing is
   charged: ask them to teach you first.
 
