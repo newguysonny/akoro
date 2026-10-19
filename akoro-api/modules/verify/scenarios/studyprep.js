@@ -313,8 +313,10 @@ export const workflowMirror = {
     const spEvents = await ctx.db.rows("edu.study_prep_events", { session_id: session.id }, { columns: "sequence", limit: 200, order: { column: "sequence", ascending: true } });
     const wfEvents = await ctx.db.rows("edu.workflow_events", { workflow_id: wfId }, { columns: "sequence, payload", limit: 200, order: { column: "sequence", ascending: true } });
     ctx.note(`${spEvents.length} study-prep events, ${wfEvents.length} workflow events`);
-    ctx.expect.eq("every session event is in the workflow stream", wfEvents.length, spEvents.length);
+    // Phase 3: the stream also holds the workflow's own lifecycle events (created, moves).
     ctx.expect.ok("in order, numbered from 0", wfEvents.every((e, i) => e.sequence === i), JSON.stringify(wfEvents.map((e) => e.sequence)));
-    ctx.expect.ok("each points back at its session event", wfEvents.every((e, i) => e.payload?.studyPrepSequence === spEvents[i]?.sequence));
+    const copied = wfEvents.filter((e) => e.payload?.studyPrepSequence != null);
+    ctx.expect.eq("every session event is in the workflow stream", copied.length, spEvents.length);
+    ctx.expect.ok("each points back at its session event, in order", copied.every((e, i) => e.payload.studyPrepSequence === spEvents[i]?.sequence));
   },
 };

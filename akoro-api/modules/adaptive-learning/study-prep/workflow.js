@@ -27,7 +27,9 @@ export const studyPrepWorkflow = registerWorkflow(defineWorkflow({
   machines: { topic: { states: TOPIC_STATES, transitions: TOPIC_TRANSITIONS } },
 }));
 
-export const workflowEngineEnabled = () => String(process.env.WORKFLOW_ENGINE_ENABLED ?? "false").toLowerCase() === "true";
+// On by default since Phase 3: the live step stream reads the engine's events.
+// WORKFLOW_ENGINE_ENABLED=false turns the dual-write off.
+export const workflowEngineEnabled = () => String(process.env.WORKFLOW_ENGINE_ENABLED ?? "true").toLowerCase() !== "false";
 
 /**
  * Wrap a Study Prep store so a status change is checked before it is written.
@@ -74,20 +76,53 @@ export function guardStudyPrepStore(store, { mirror = null } = {}) {
 
 const ACTOR = { agent_stated_intent: "agent", agent: "agent", harness: "system", engine: "system" };
 
-/** A study_prep_events row as a workflow_events row. */
+/** Study Prep's decision nodes as v3 event types (§7.9.2). */
+const NODE_TYPE = {
+  harness_rejection: "decision.rejected", plan_validated: "decision.accepted",
+  plan_confirmed: "learner.action_received", plan_adjusted: "learner.action_received", teach_back_confirmed: "learner.action_received",
+  topic_started: "topic.state_changed", topic_advanced: "topic.state_changed", topic_deferred: "topic.state_changed", topic_flagged: "topic.state_changed",
+  practice_generated: "assessment.started", agent_check_started: "assessment.started",
+  practice_scored: "assessment.completed", agent_check_scored: "assessment.completed",
+  strategy_offered: "strategy.selected", session_concluded: "workflow.completed", session_paused: "workflow.paused",
+  syllabus_resolved: "activity", syllabus_generated: "activity", agent_check_skipped: "activity",
+};
+/** The harness's "thought type" stamp as a controlled category (D14). */
+const CATEGORY = { research: "research", draft: "draft", verification: "verification", action: "action", reflection: "reflection", synthesis: "synthesis" };
+
+/** A study_prep_events row as a v3 workflow_events row (Phase 3). */
 export function workflowEventFor(row) {
-  const type = row.event_type || row.eventType;
+  const kind = row.event_type || row.eventType;
+  const node = row.decision_node || row.decisionNode || null;
+  const facts = row.facts || null;
+  const tool = row.tool || null;
+  const action = row.action || null;
+  const failed = kind === "observation" && facts && facts.ok === false;
+  const type = node && NODE_TYPE[node] ? NODE_TYPE[node]
+    : kind === "agent_tool_call" ? "tool.started"
+    : kind === "observation" ? (failed ? "tool.failed" : "tool.completed")
+    : kind === "agent_action" ? (action === "agent_error" || action === "malformed" ? "decision.fallback" : "decision.proposed")
+    : kind === "engine_result" ? "assessment.completed"
+    : kind === "human_gate" ? "learner.action_received"
+    : "decision.accepted";
+  // The learner sees the harness's narrated steps, the tools the agent ran and
+  // what it said it was doing — never a provider failure or raw facts.
+  const learner = Boolean(row.narrative) || type.startsWith("tool.") || (type === "decision.proposed" && (row.agent_intent || row.agentIntent));
+  const intent = row.origin === "agent_stated_intent" ? (row.agent_intent || row.agentIntent || null) : null;
   return {
     event_type: type,
-    category: type === "harness_decision" || type === "engine_result" ? "decision" : type === "human_gate" ? "gate" : "step",
-    operation: row.action || row.tool || null,
+    category: CATEGORY[row.thought_type || row.thoughtType] || null,
+    operation: action || tool || null,
     workflow_state: null,
-    actor: type === "human_gate" ? "learner" : (ACTOR[row.origin] || "system"),
-    visibility: row.narrative ? "learner" : "developer",
+    actor: kind === "human_gate" ? "learner" : (ACTOR[row.origin] || "system"),
+    visibility: learner ? "learner" : "developer",
     payload: {
       studyPrepSequence: row.sequence ?? null, topicId: row.topic_id || row.topicId || null,
-      decisionNode: row.decision_node || row.decisionNode || null, narrative: row.narrative || null,
-      facts: row.facts || null, origin: row.origin || null,
+      decisionNode: node, narrative: row.narrative || null, tool, action, intent,
+      durationMs: row.duration_ms ?? row.durationMs ?? null,
+      ...(failed ? { code: facts.code || null } : {}),
+      ...(facts?.topicLabel || facts?.topic ? { topicLabel: facts.topicLabel || facts.topic } : {}),
+      ...(facts?.score != null ? { score: facts.score, total: facts.total ?? null, percentage: facts.percentage ?? null } : {}),
+      facts, origin: row.origin || null,
     },
   };
 }
@@ -115,6 +150,12 @@ export function makeWorkflowMirror(engine, { log = console } = {}) {
       if (!id) return;
       bySession.set(session.id, id);
       session.workflow_id = id;
+      if (made.created) {
+        await engine.appendEvent(id, {
+          event_type: "workflow.created", actor: "learner", visibility: "learner",
+          payload: { label: "Study Prep", subject: session.subject || null },
+        }).catch(quiet("created event"));
+      }
       // Point the session at it (no status change, so no guard needed).
       await store.updateSessionConditional(session.id, session.status, { workflow_id: id }).catch(quiet("link session"));
     },
@@ -124,6 +165,29 @@ export function makeWorkflowMirror(engine, { log = console } = {}) {
       bySession.set(session.id, id);
       const moved = await engine.transition(id, { from, to, reason: session.paused_reason || null }).catch(quiet(`move ${from} → ${to}`));
       if (moved === null) log.warn?.(`[study-prep] workflow mirror: ${id} was not in ${from} (out of step)`);
+      if (moved) {
+        await engine.appendEvent(id, {
+          event_type: "workflow.state_changed", actor: "system", visibility: "developer",
+          payload: { from, to, reason: session.paused_reason || null },
+        }).catch(quiet("state event"));
+      }
+    },
+    /**
+     * Backfill (Phase 3): a session from before the engine gets its workflow,
+     * and its Study Prep events are copied over once, in order. Idempotent —
+     * the create is keyed, and events already copied are recognised.
+     */
+    async ensure(session, store) {
+      if (!session) return null;
+      if (!session.workflow_id) await this.sessionCreated(session, store);
+      const id = session.workflow_id || bySession.get(session.id);
+      if (!id) return null;
+      const have = await engine.events(id, { limit: 500 }).catch(() => null);
+      if (have && !have.some((e) => e.payload?.studyPrepSequence != null)) {
+        const rows = await store.listEvents(session.id, { limit: 500 }).catch(() => []);
+        for (const row of rows) await engine.appendEvent(id, workflowEventFor(row)).catch(quiet("backfill event"));
+      }
+      return id;
     },
     async eventsWritten(sessionId, rows, store) {
       const id = await workflowIdOf(sessionId, store).catch(() => null);

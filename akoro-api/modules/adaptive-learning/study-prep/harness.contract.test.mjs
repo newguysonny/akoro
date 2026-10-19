@@ -477,9 +477,13 @@ test("dual-write: the session's run and its events mirror into the engine, step 
 
   // Every Study Prep event is in the workflow's stream, in order.
   const spEvents = store.events.filter((e) => e.session_id === session.id);
-  const wfEvents = await engine.events(wfId);
+  // Phase 3: the workflow also records its own lifecycle (created, each move).
+  const all = await engine.events(wfId);
+  assert.deepEqual(all.map((e) => e.sequence), all.map((_, i) => i));
+  assert.equal(all[0].event_type, "workflow.created");
+  assert.ok(all.some((e) => e.event_type === "workflow.state_changed" && e.payload.to === "topic_active"));
+  const wfEvents = all.filter((e) => e.payload.studyPrepSequence != null);
   assert.equal(wfEvents.length, spEvents.length);
-  assert.deepEqual(wfEvents.map((e) => e.sequence), wfEvents.map((_, i) => i));
   assert.deepEqual(wfEvents.map((e) => e.payload.studyPrepSequence), spEvents.map((e) => e.sequence));
   assert.ok(wfEvents.some((e) => e.payload.decisionNode === "plan_confirmed" && e.visibility === "learner"));
 

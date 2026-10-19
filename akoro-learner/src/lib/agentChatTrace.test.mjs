@@ -176,3 +176,19 @@ test('study-prep rows carry the agent\'s stated intent and only real durations',
   assert.equal(rows[0].ms, 840);
   assert.equal(rows[1].ms, null, 'no recorded duration, none shown');
 });
+
+test('workflow v3 events become trace rows: narrated headline and detail, quiet lifecycle rows hidden, failures shown as failed', async () => {
+  const { workflowEventBlocks } = await import('./agentChatTrace.js');
+  const at = '2026-10-19T10:00:00Z';
+  const ev = (sequence, type, narration, payload = {}) => ({ workflowId: 'w', sequence, type, timestamp: at, narration, payload });
+  const rows = workflowEventBlocks([
+    ev(0, 'workflow.created', { headline: 'Started Study Prep' }),
+    ev(1, 'tool.started', { headline: 'Checking the syllabus' }),
+    ev(2, 'tool.completed', { headline: 'Checking the syllabus', description: "Looking for your class's topics", result: 'Done' }, { durationMs: 420 }),
+    ev(3, 'decision.accepted', { headline: 'Plan checked', description: 'Everything lines up.' }, { narrative: 'Everything lines up.' }),
+    ev(4, 'tool.failed', { headline: 'Preparing practice', result: "Couldn't finish" }),
+  ]);
+  assert.deepEqual(rows.map((r) => [r.headline, r.ok, r.ms]), [['Checking the syllabus', true, 420], ['Plan checked', true, null], ['Preparing practice', false, null]]);
+  assert.equal(rows[0].description, "Looking for your class's topics");
+  assert.equal(workflowEventBlocks([ev(2, 'activity', { headline: 'x' })], { from: Date.parse(at) + 1 }).length, 0, 'outside the turn');
+});

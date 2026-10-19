@@ -71,7 +71,7 @@ export async function runAgentStep({
         });
       }
       if (entry.kind === "observation") {
-        return append({ iteration, eventType: "observation", origin: "harness", topicId: topicId || null, facts: entry.observation });
+        return append({ iteration, eventType: "observation", origin: "harness", topicId: topicId || null, tool: entry.tool || null, facts: entry.observation });
       }
       return null;
     },

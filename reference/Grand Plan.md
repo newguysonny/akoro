@@ -3008,6 +3008,24 @@ planning loop's tool names, the double practice charge, empty syllabus data).
 - Backfill `study_prep_events`.
 - **Exit:** reconnect test replays missing events in order; narrator contract
   test fails on any event type without a template.
+- **Status: ✅ built (2026-10-19)** — `modules/workflows/envelope.js` (v3
+  envelope, the §7.9.2 types, categories → pills, bounded payloads,
+  learner/developer visibility), `narrator.js` (a template per type, Study
+  Prep's tools and decision nodes in learner words), `bus.js` + `engine.appendEvent`
+  (written first, then pushed: SSE listeners and Socket.IO `workflow_event`),
+  `stream.js` (replay the gap → `caught_up` → live; a table poll covers other
+  instances), `routes.js` (`GET /api/workflows/:id/events?after=N`,
+  `GET /api/workflows/:id/stream?after=N`, `GET /api/workflows/study-prep/:sessionId`,
+  admin backfill). Study Prep's events are written as v3 types with the
+  workflow's own lifecycle; the dual-write is on by default
+  (`WORKFLOW_ENGINE_ENABLED=false` turns it off); older sessions are backfilled
+  on first open. Agent Chat's live events carry the envelope under `envelope`
+  (names and fields unchanged); the app reads either. Learner app: the Study
+  Prep card's steps come live from the stream (a live step that moves the
+  session re-reads it), with "While you were away · N steps". Gates: contract
+  tests (narrator coverage, reconnect order), backend `workflow.event_stream`,
+  UI `chat.live_steps`, `chat.envelope_stream`, `chat.study_prep_live`.
+  Teaching / Decay / Practice join as they become workflows (Phases 6–9).
 
 ### Phase 4 — Context Manager wiring
 - Operation → set mapping per controller; replace hard-coded `"planning"` in `wiring.js`.

@@ -88,6 +88,23 @@ const protege = {
 let _mirror = null;
 const workflowMirror = () => (_mirror ||= makeWorkflowMirror(createWorkflowEngine({ store: makeSupabaseWorkflowStore(db) })));
 
+/** The session's workflow id, made (and its events backfilled) on first ask — owner only. */
+export async function ensureStudyPrepWorkflow(sessionId, learnerId) {
+  const session = await store.getSession(sessionId).catch(() => null);
+  if (!session || session.learner_id !== learnerId) return null;
+  return workflowMirror().ensure(session, store);
+}
+
+/** Backfill every Study Prep session without a workflow (idempotent; admin). */
+export async function backfillStudyPrepWorkflows({ limit = 200 } = {}) {
+  const { data, error } = await db.schema("edu").from("study_prep_sessions").select("*").is("workflow_id", null)
+    .order("created_at", { ascending: true }).limit(Math.max(1, Math.min(Number(limit) || 200, 1000)));
+  if (error) throw error;
+  let done = 0;
+  for (const session of data || []) if (await workflowMirror().ensure(session, store).catch(() => null)) done += 1;
+  return { checked: (data || []).length, backfilled: done };
+}
+
 export function getHarness() {
   return createHarness({ store, topicWorkflow, syllabus,
     ...(agentCheckEnabled() ? { agentCheck, protege } : {}),

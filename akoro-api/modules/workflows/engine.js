@@ -13,6 +13,7 @@
  *   engine.emitOutcome(id, outcome) · engine.listForLearner(learnerId, { active })
  *   engine.appendEvent(id, event) · engine.events(id)
  */
+import { publishWorkflowEvent } from "./bus.js";
 import { assertTransition, isTerminalStatus, statusFor, TransitionError, WORKFLOW_TYPES } from "./definition.js";
 import { workflowController, workflowDefinition } from "./registry.js";
 
@@ -22,7 +23,7 @@ export class WorkflowError extends Error {
 
 const STAMP = { completed: "completed_at", abandoned: "abandoned_at", cancelled: "cancelled_at" };
 
-export function createWorkflowEngine({ store, definitionOf = workflowDefinition, controllerOf = workflowController, now = () => new Date().toISOString() }) {
+export function createWorkflowEngine({ store, definitionOf = workflowDefinition, controllerOf = workflowController, now = () => new Date().toISOString(), publish = publishWorkflowEvent }) {
   const defFor = (type) => {
     const def = definitionOf(type);
     if (!def) throw new WorkflowError("unknown_workflow_type", `No workflow is registered as "${type}"`);
@@ -125,7 +126,10 @@ export function createWorkflowEngine({ store, definitionOf = workflowDefinition,
   async function appendEvent(id, event) {
     const instance = await store.getInstance(id);
     if (!instance) throw new WorkflowError("workflow_not_found", "That workflow was not found", 404);
-    return store.appendEvent(id, { workflow_state: instance.state, ...event });
+    const row = await store.appendEvent(id, { workflow_state: instance.state, ...event });
+    // Written first, then pushed live (§7.9.6).
+    if (row) publish(row, instance);
+    return row;
   }
 
   const events = (id, opts) => store.listEvents(id, opts);

@@ -126,7 +126,7 @@ export async function runAgentLoop({
     }
     // The agent's transcript names the tool each observation answers.
     observations.push({ tool: requested, ...observation });
-    await record({ kind: "observation", iteration, observation });
+    await record({ kind: "observation", iteration, observation, tool: requested });
     if (stopped) return { ended: `stop:${stopped}`, iterations: iteration, terminal: null, observations };
     if (terminal) return { ended: "terminal", iterations: iteration, terminal, observations };
   }

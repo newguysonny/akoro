@@ -27,7 +27,7 @@ import { useInFlight } from '../../hooks/useInFlight.js';
 import StudyPrepChatCard from './studyPrep/StudyPrepChatCard.jsx';
 import { fetchActiveStudyPrepSession } from '../../services/studyPrepApi.js';
 import TraceBlocks from './agentChat/TraceBlocks.jsx';
-import { applyTraceEvent, blocksFromSavedTrace, promoteActivity, settleRunning, studyPrepEventBlocks } from '../../lib/agentChatTrace.js';
+import { applyTraceEvent, blocksFromSavedTrace, promoteActivity, settleRunning, studyPrepEventBlocks, workflowEventBlocks } from '../../lib/agentChatTrace.js';
 import { CHAT_STARTERS, cleanIdeas, cleanMaterials, protegeMoves } from '../../lib/chatIdeas.js';
 import { useNavigate } from 'react-router-dom';
 import AgentCards from '../network/AgentCards.jsx';
@@ -137,10 +137,10 @@ function AgentChatTab({
     const msgAt = (m) => Date.parse(m.at || "") || (typeof m.id === "number" ? Math.floor(m.id) : 0);
     const cards = messages.filter((m) => m.from !== "me" && m.studyPrepSessionId === sessionId);
     const index = cards.indexOf(msg);
-    return studyPrepEventBlocks(studyPrepEvents[sessionId], {
-      from: index <= 0 ? 0 : msgAt(msg),
-      to: index >= 0 && cards[index + 1] ? msgAt(cards[index + 1]) : Infinity,
-    });
+    const range = { from: index <= 0 ? 0 : msgAt(msg), to: index >= 0 && cards[index + 1] ? msgAt(cards[index + 1]) : Infinity };
+    // Phase 3: a workflow's v3 events; an older API sends the session's own list.
+    const reported = studyPrepEvents[sessionId];
+    return reported.v3 ? workflowEventBlocks(reported.v3, range) : studyPrepEventBlocks(reported, range);
   };
   const [input,      setInput]      = useState("");
   const [loading,    setLoading]    = useState(false);

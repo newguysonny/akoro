@@ -396,6 +396,58 @@ const TRACE_EVENTS = new Set([
   'think_start', 'think_delta', 'think_end', 'tool_start', 'tool_end',
   'activity', 'activity_start', 'activity_delta', 'activity_end', 'activity_promote', 'activity_drop',
 ]);
+/* The v3 envelope (Grand Plan §7.9.7) rides on every live event; when an
+   event's name isn't one this client knows, its envelope type says what it is. */
+const NAME_FOR_TYPE = {
+  'agent.narration.start': 'think_start', 'agent.narration.delta': 'think_delta', 'agent.narration': 'think_end',
+  'tool.started': 'tool_start', 'tool.completed': 'tool_end', 'tool.failed': 'tool_end',
+  'activity.start': 'activity_start', 'activity.delta': 'activity_delta',
+  'activity.promote': 'activity_promote', 'activity.drop': 'activity_drop',
+  'reply.delta': 'delta', 'reply': 'done',
+};
+export function eventNameOf(event, data) {
+  const known = event === 'delta' || event === 'done' || event === 'status' || event === 'error' || event === 'thinking' || TRACE_EVENTS.has(event);
+  return known ? event : (NAME_FOR_TYPE[data?.envelope?.type] || event);
+}
+
+/** One parsed SSE block → [event, data], or null. */
+function parseSseBlock(raw) {
+  let event = 'message', data = '';
+  for (const line of raw.split('\n')) {
+    if (line.startsWith('event:')) event = line.slice(6).trim();
+    else if (line.startsWith('data:')) data += line.slice(5).trim();
+  }
+  if (!data) return null;
+  try { return [event, JSON.parse(data)]; } catch { return null; }
+}
+
+/**
+ * GET a Server-Sent Events stream (a workflow's event stream, §7.9.6).
+ * onEvent(event, data) for each event; resolves when the server ends the
+ * stream, throws on a non-2xx answer; abort `signal` to close it.
+ */
+export async function streamGet(path, { onEvent, signal } = {}) {
+  const r = await authedFetch(`${API}${path}`, {
+    ...BASE_OPTS, method: 'GET', headers: { ...BASE_OPTS.headers, Accept: 'text/event-stream' }, ...(signal ? { signal } : {}),
+  });
+  if (!r.ok) throw await apiError(r, 'GET', path);
+  if (!r.body) return;
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buffer.indexOf('\n\n')) !== -1) {
+      const parsed = parseSseBlock(buffer.slice(0, idx));
+      buffer = buffer.slice(idx + 2);
+      if (parsed) onEvent?.(parsed[0], parsed[1]);
+    }
+  }
+}
+
 export async function streamPost(path, body, { onDelta, onDone, onThinking, onStatus, onTrace, signal } = {}) {
   const r = await authedFetch(`${API}${path}`, {
     ...BASE_OPTS,
@@ -420,13 +472,10 @@ export async function streamPost(path, body, { onDelta, onDone, onThinking, onSt
   let think  = '';
 
   const handleEvent = (raw) => {
-    let event = 'message', data = '';
-    for (const line of raw.split('\n')) {
-      if (line.startsWith('event:')) event = line.slice(6).trim();
-      else if (line.startsWith('data:')) data += line.slice(5).trim();
-    }
-    if (!data) return;
-    let parsed; try { parsed = JSON.parse(data); } catch { return; }
+    const block = parseSseBlock(raw);
+    if (!block) return;
+    const parsed = block[1];
+    const event = eventNameOf(block[0], parsed);
     if (event === 'delta' && parsed.text != null) { full += parsed.text; onDelta?.(parsed.text); }
     else if (event === 'thinking' && parsed.text) { think += parsed.text; onThinking?.(parsed.text, think); }
     else if (event === 'status')  { onStatus?.(parsed); }

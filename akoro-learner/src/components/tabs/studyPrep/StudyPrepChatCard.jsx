@@ -2,6 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { BRAND, GREEN, RED } from '../../../constants.js';
 import BattleModal from '../../battles/BattleModal.jsx';
+import { Icon } from '../../common/Icons.jsx';
+import { workflowEventBlocks } from '../../../lib/agentChatTrace.js';
+import { openWorkflowStream, rememberSeen, seenSequence } from '../../../lib/workflowStream.js';
 import {
   adjustStudyPrepPlan, advanceStudyPrepTopic, confirmStudyPrepPlan, confirmStudyPrepTeachBack,
   concludeStudyPrepSession, deferStudyPrepTopic, fetchStudyPrepSession, generateStudyPrepPractice,
@@ -28,6 +31,12 @@ const TOPIC_STATUS_STYLE = {
   capped_out: { background: `${RED}12`, color: RED, border: `${RED}40` },
   deferred: { background: 'var(--ak-surface-hover)', color: 'var(--ak-text-muted)', border: 'var(--ak-border2)' },
 };
+/** Live events that move the session: the card re-reads it on these. */
+const STATE_EVENTS = new Set([
+  'workflow.state_changed', 'workflow.paused', 'workflow.resumed', 'workflow.completed', 'workflow.cancelled',
+  'topic.state_changed', 'assessment.completed', 'learner.action_received', 'decision.accepted',
+]);
+
 const TOPIC_STATUS_LABEL = {
   queued: 'queued', active: 'active', understood: 'understood',
   flagged_gap: 'gap flagged', capped_out: 'capped out', deferred: 'deferred',
@@ -82,9 +91,38 @@ export default function StudyPrepChatCard({ sessionId, onEvents }) {
     fetchStudyPrepSession(sessionId).then((response) => { if (response?.session) setView(response); }).catch(() => {});
   }, [sessionId]);
 
+  // Phase 3: the session's steps arrive live from its workflow's event stream
+  // (replayed from the start, then pushed). Without a workflow — an older API —
+  // the session view's own event list is used, as before.
+  const workflowId = view?.session?.workflowId || null;
+  const [wfEvents, setWfEvents] = useState(null);
+  const [away, setAway] = useState(0);
+  useEffect(() => {
+    if (!workflowId) return undefined;
+    const seen = seenSequence(workflowId);
+    let list = [];
+    const close = openWorkflowStream({
+      workflowId,
+      onEvent: (event, { live }) => {
+        list = [...list, event];
+        setWfEvents(list);
+        rememberSeen(workflowId, event.sequence);
+        // A step that moves the session: re-read it so the card's buttons match.
+        if (live && STATE_EVENTS.has(event.type)) refresh();
+      },
+      // "While you were away": steps this device hadn't shown yet.
+      onCaughtUp: (replayed) => { if (seen != null) setAway(workflowEventBlocks(replayed.filter((e) => e.sequence > seen)).length); },
+      onError: () => setWfEvents(null),
+    });
+    return close;
+  }, [workflowId, refresh]);
+
   // The session's steps go to the chat's trace, not the card (AgentChatTab).
   const events = view?.events;
-  useEffect(() => { if (events) onEvents?.(sessionId, events); }, [sessionId, events, onEvents]);
+  useEffect(() => {
+    if (wfEvents) onEvents?.(sessionId, { v3: wfEvents });
+    else if (events) onEvents?.(sessionId, events);
+  }, [sessionId, events, wfEvents, onEvents]);
 
   // An Agent Check runs on the server; the card picks up its score when it lands.
   const checkRunning = !!view?.topics?.some((topic) => topic.status === 'active' && topic.checkBattleId && !topic.checkScoredAt);
@@ -175,9 +213,15 @@ export default function StudyPrepChatCard({ sessionId, onEvents }) {
   return (
     <div style={{ ...card, marginTop: 6, maxWidth: '100%' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-        <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--ak-text)' }}>🎯 Study Prep · {session.subject}</div>
+        <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--ak-text)', display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="ti-target" size={15} color={BRAND}/> Study Prep · {session.subject}</div>
         <div style={caption}>{session.status.replace(/_/g, ' ')}</div>
       </div>
+      {away > 0 && (
+        <div data-workflow-away={away} role="status" style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 10px', borderRadius: 10, background: `${BRAND}12`, border: `1px solid ${BRAND}30`, color: BRAND, fontSize: 12, fontWeight: 800 }}>
+          <Icon name="ti-refresh" size={14} color={BRAND}/> While you were away · {away} step{away === 1 ? '' : 's'}
+          <button type="button" aria-label="Dismiss" onClick={() => setAway(0)} style={{ marginLeft: 'auto', border: 0, background: 'transparent', color: 'inherit', cursor: 'pointer', padding: 0, display: 'flex' }}><Icon name="ti-x" size={13} color={BRAND}/></button>
+        </div>
+      )}
       {error && <div role="alert" style={errorBox}>{error}</div>}
 
       {/* ── the plan card: Approve & Start / Adjust (the only spend gate) ── */}

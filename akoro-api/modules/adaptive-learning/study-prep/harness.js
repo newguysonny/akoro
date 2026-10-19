@@ -107,6 +107,7 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     completedAt: row.completed_at || null, topics: topics ? topics.map(publicTopic) : undefined,
     syllabusSource: row.syllabus_source || "platform",
     syllabusLabel: row.syllabus_source === "generated" ? GENERATED_OUTLINE_LABEL : null,
+    workflowId: row.workflow_id || null,
   });
 
   /**

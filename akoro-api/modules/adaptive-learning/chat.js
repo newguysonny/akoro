@@ -11,6 +11,7 @@
 //   POST /decay/run                   — manually trigger decay check
 // =============================================================
 
+import { chatEnvelope } from "../workflows/envelope.js";
 import express from "express";
 import { isDryRun, runDry, runInspected, isInspected } from "../../lib/dryRunContext.js";
 import { jsonbArray, jsonbObject } from "../../lib/jsonb.js";
@@ -4084,8 +4085,14 @@ router.post("/agent", async (req, res) => {
     }, 20_000);
     heartbeat.unref?.();
   };
+  // Every live event also carries the v3 envelope (§7.9.7) under `envelope`;
+  // the event names and fields stay exactly as they were.
+  const turnId = `turn_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  let liveSequence = 0;
   const send = (event, data) => {
-    if (!res.destroyed && !res.writableEnded) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    if (res.destroyed || res.writableEnded) return;
+    const envelope = data && typeof data === "object" ? chatEnvelope(event, data, { turnId, sequence: liveSequence++ }) : null;
+    res.write(`event: ${event}\ndata: ${JSON.stringify(envelope ? { ...data, envelope } : data)}\n\n`);
   };
   const status = (step, label) => send("status", { step, label });
   // Stop (■): set by POST /agent/stop for this learner's turn; checked

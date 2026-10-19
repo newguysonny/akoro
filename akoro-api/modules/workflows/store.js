@@ -64,9 +64,10 @@ export function makeSupabaseWorkflowStore(db) {
       }
       throw new Error("workflow_events: could not allocate a sequence");
     },
-    async listEvents(workflowId, { limit = 500 } = {}) {
-      const { data, error } = await edu().from("workflow_events").select("*")
-        .eq("workflow_id", workflowId).order("sequence", { ascending: true }).limit(limit);
+    async listEvents(workflowId, { limit = 500, after = null } = {}) {
+      let q = edu().from("workflow_events").select("*").eq("workflow_id", workflowId);
+      if (Number.isInteger(after)) q = q.gt("sequence", after);
+      const { data, error } = await q.order("sequence", { ascending: true }).limit(limit);
       if (error) throw error;
       return data || [];
     },
@@ -111,6 +112,8 @@ export function memoryWorkflowStore() {
       events.set(workflowId, list);
       return { ...r };
     },
-    async listEvents(workflowId) { return (events.get(workflowId) || []).map((r) => ({ ...r })); },
+    async listEvents(workflowId, { limit = 500, after = null } = {}) {
+      return (events.get(workflowId) || []).filter((r) => !Number.isInteger(after) || r.sequence > after).slice(0, limit).map((r) => ({ ...r }));
+    },
   };
 }

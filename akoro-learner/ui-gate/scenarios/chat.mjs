@@ -257,6 +257,127 @@ export const scenarios = [
     },
   },
   {
+    name: 'chat.live_steps',
+    description: 'A real Agent Chat turn: the steps show live (a thinking row, then tool rows in the learner\'s words), Stop is there while it runs, the reply arrives, and reopening the chat after a reload shows the same steps.',
+    async run(t) {
+      const { page } = t;
+      const marker = newMarker();
+      t.cleanup(async () => {
+        const list = await t.api('GET', '/api/adaptive/chat/sessions');
+        for (const c of (list.body?.sessions || []).filter((x) => String(x.title || '').includes(marker) || String(x.preview || '').includes(marker))) await t.api('DELETE', `/api/adaptive/chat/sessions/${c.id}`);
+      });
+      await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
+      const box = page.getByRole('textbox').last();
+      await box.waitFor({ timeout: 30_000 });
+      await page.getByRole('button', { name: /New chat/i }).first().click({ timeout: 5_000 }).catch(() => {});
+      await box.fill(`${marker} What are my weak topics, and what's on my to-do list?`);
+      await page.getByRole('button', { name: 'Send message' }).click();
+      t.check('Stop shows while the turn runs', await page.getByRole('button', { name: 'Stop' }).first().waitFor({ timeout: 15_000 }).then(() => true, () => false));
+      t.check('a thinking row appears', await page.getByText(/Thinking|Thought for/).first().waitFor({ timeout: 60_000 }).then(() => true, () => false));
+      // One tool row, or several grouped under "Checked N things" (collapsed once the next step starts).
+      t.check('tool rows in the learner\'s words (no tool names)', await page.getByText(/^(Checking|Reviewing|Looking|Reading|Checked \d+ things|Ran \d+ steps|Did \d+ things)/).first().waitFor({ state: 'attached', timeout: 90_000 }).then(() => true, () => false)
+        && !(await page.getByText(/get_weak_topics|list_tasks/).first().isVisible().catch(() => false)));
+      const done = await page.getByRole('button', { name: 'Stop' }).first().waitFor({ state: 'detached', timeout: 120_000 }).then(() => true, () => false);
+      t.check('the turn finishes (Stop goes away)', done);
+      await t.shot('live-steps');
+      const rowsBefore = await page.getByText(/Thought for|Checked \d+ things|Checking|Reviewing/).count();
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.getByText(marker).first().waitFor({ timeout: 30_000 }).catch(() => {});
+      const rowsAfter = await page.getByText(/Thought for|Checked \d+ things|Checking|Reviewing/).count();
+      t.check(`after a reload the chat shows its steps again (${rowsBefore} → ${rowsAfter})`, rowsAfter > 0);
+    },
+  },
+  {
+    name: 'chat.envelope_stream',
+    description: 'The chat reads the live stream in the shared event format (Grand Plan §7.9.7): every event carries its envelope, and an event the app has no name for is read by its envelope type. Thinking streams its text, tool rows fill in, text and reply appear, Think\'s reasoning shows. (The stream is served by the test — no model call.)',
+    async run(t) {
+      const { page } = t;
+      const env = (type, sequence) => ({ envelope: { v: 3, type, sequence, turnId: 'turn_ui', workflowType: 'agent_chat', actor: 'agent', visibility: 'learner' } });
+      const ev = (name, data, type, n) => `event: ${name}\ndata: ${JSON.stringify({ ...data, ...env(type, n) })}\n\n`;
+      const body = [
+        ev('think_start', { id: 'think_1' }, 'agent.narration.start', 0),
+        ev('think_delta', { id: 'think_1', text: 'They asked about weak topics — check those first.' }, 'agent.narration.delta', 1),
+        ev('think_end', { id: 'think_1', type: 'thinking', ms: 1800, text: 'They asked about weak topics — check those first.', source: 'reasoning' }, 'agent.narration', 2),
+        ev('tool_start', { id: 'tool_1', category: 'research', headline: 'Checking your weak topics', description: 'Topics where your confidence is low' }, 'tool.started', 3),
+        // A name this app version has no case for: read by its envelope type.
+        ev('tool.completed', { id: 'tool_1', ok: true, result: '2 weak topics found', ms: 140 }, 'tool.completed', 4),
+        ev('activity', { id: 'act_1', text: 'Your weakest topic is Osmosis.' }, 'activity', 5),
+        ev('delta', { text: 'Start with **Osmosis** today.' }, 'reply.delta', 6),
+        ev('done', { reply: 'Start with **Osmosis** today.', thinking: '', mode: 'think', metadata: {}, toolExecutions: [] }, 'reply', 7),
+      ].join('');
+      await page.route('**/api/adaptive/chat/agent**', (r) => r.fulfill({ status: 200, headers: { 'Content-Type': 'text/event-stream' }, body }));
+      await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
+      const box = page.getByRole('textbox').last();
+      await box.waitFor({ timeout: 30_000 });
+      await page.getByRole('button', { name: /New chat/i }).first().click({ timeout: 5_000 }).catch(() => {});
+      await box.fill('What should I revise today?');
+      await page.getByRole('button', { name: 'Send message' }).click();
+      t.check('the reply arrives', await page.getByText('Osmosis', { exact: false }).last().waitFor({ timeout: 20_000 }).then(() => true, () => false));
+      t.check('the thinking row says how long it thought', await page.getByText(/Thought for 2 seconds/).first().isVisible().catch(() => false));
+      const toolRow = page.getByText('Checking your weak topics').first();
+      t.check('the tool row is there in the learner\'s words', await toolRow.isVisible().catch(() => false));
+      await toolRow.click().catch(() => {});
+      t.check('…and it filled in from the envelope-typed event (result + time)', await page.getByText(/2 weak topics found/).first().isVisible().catch(() => false) && await page.getByText('140ms').first().isVisible().catch(() => false));
+      t.check('the agent\'s text between steps shows', await page.getByText('Your weakest topic is Osmosis.').first().isVisible().catch(() => false));
+      // The row collapses when done; open it (if it isn't already) to read the reasoning.
+      const reasoning = page.getByText(/check those first/).first();
+      if (!(await reasoning.isVisible().catch(() => false))) await page.getByText(/Thought for 2 seconds/).first().click().catch(() => {});
+      await t.shot('envelope-stream');
+      t.check('Think\'s reasoning summary is in the thinking row', await reasoning.waitFor({ timeout: 5_000 }).then(() => true, () => false));
+    },
+  },
+  {
+    name: 'chat.study_prep_live',
+    description: 'A Study Prep card\'s steps come live from its workflow\'s event stream: they show in the chat in the learner\'s words, a dropped stream reconnects from the last step without repeats, and steps that happened while the learner was away are announced ("While you were away · N steps"). (The chat, the session and the stream are served by the test; the server side is the backend gate\'s workflow.event_stream.)',
+    async run(t) {
+      const { page } = t;
+      const chatId = '00000000-0000-4000-8000-0000000000d1', spId = '00000000-0000-4000-8000-0000000000d2', wfId = '00000000-0000-4000-8000-0000000000d3';
+      const at = new Date(Date.now() - 60_000).toISOString();
+      const nar = (headline, description = '', result = '') => ({ headline, description, result, narration: headline });
+      const all = [
+        { sequence: 0, type: 'workflow.created', narration: nar('Started Study Prep', 'Basic Science'), payload: {} },
+        { sequence: 1, type: 'tool.completed', narration: nar('Checking your class syllabus', 'Your school\'s topics for your class', 'Done'), payload: { tool: 'syllabus.resolve_class', durationMs: 400 } },
+        { sequence: 2, type: 'activity', narration: nar('Outline drafted', 'I drafted an outline from the national curriculum. It\'s an AI-drafted outline, not your school\'s official syllabus.'), payload: { decisionNode: 'syllabus_generated', narrative: 'x' } },
+        { sequence: 3, type: 'tool.completed', narration: nar('Ordering the topics', 'What has to come before what', 'Done'), payload: { tool: 'concept.get_prerequisites', durationMs: 900 } },
+        { sequence: 4, type: 'decision.accepted', narration: nar('Plan checked', 'Checked the plan against the syllabus, prerequisite order and your coin balance — everything lines up.'), payload: { decisionNode: 'plan_validated', narrative: 'x' } },
+      ].map((e) => ({ v: 3, workflowId: wfId, workflowType: 'study_prep', timestamp: at, visibility: 'learner', actor: 'system', ...e }));
+      const asked = [];
+      await page.route('**/api/adaptive/chat/sessions', (r) => r.fulfill({ json: { success: true, sessions: [{ id: chatId, title: 'Basic Science prep', updated_at: at, created_at: at }] } }));
+      await page.route(`**/api/adaptive/chat/sessions/${chatId}/messages**`, (r) => r.fulfill({ json: { success: true, messages: [
+        { id: 'm1', role: 'user', text: 'Prepare me for my JSS1 Basic Science exam in 5 weeks', created_at: new Date(Date.now() - 120_000).toISOString() },
+        { id: 'm2', role: 'agent', text: 'Here is your plan.', created_at: new Date(Date.now() - 119_000).toISOString(), meta: { studyPrepSessionId: spId } },
+      ], hasMore: false } }));
+      await page.route(`**/api/adaptive/study-prep/sessions/${spId}`, (r) => r.fulfill({ json: { success: true, session: {
+        id: spId, goal: 'JSS1 Basic Science exam', subject: 'Basic Science', status: 'awaiting_confirmation', workflowId: wfId,
+        plan: [{ syllabusTopicId: 't1', label: 'Living and non-living things', position: 1 }, { syllabusTopicId: 't2', label: 'Cells', position: 2 }],
+        estimate: { totalCoins: 12 }, syllabusSource: 'generated', syllabusLabel: "AI-drafted outline — not your school's official syllabus" }, topics: [], events: [] } }));
+      // The stream: the first connection sends steps 0–2 and drops; the reconnect asks from 2 and gets the rest.
+      await page.route(`**/api/workflows/${wfId}/stream**`, (r) => {
+        const after = Number(new URL(r.request().url()).searchParams.get('after'));
+        asked.push(after);
+        const out = asked.length === 1 ? all.filter((e) => e.sequence > after && e.sequence <= 2) : all.filter((e) => e.sequence > after);
+        const body = out.map((e) => `event: workflow_event\ndata: ${JSON.stringify(e)}\n\n`).join('') + `event: caught_up\ndata: ${JSON.stringify({ last: out.length ? out[out.length - 1].sequence : after })}\n\n`;
+        return r.fulfill({ status: 200, headers: { 'Content-Type': 'text/event-stream' }, body });
+      });
+      // This device last showed step 1: steps 2–4 happened while the learner was away.
+      await page.addInitScript((id) => { try { localStorage.setItem(`ak.wf.seen.${id}`, '1'); } catch { /* */ } }, wfId);
+
+      await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
+      const away = page.locator('[data-workflow-away]');
+      t.check('the card says what happened while you were away', await away.waitFor({ timeout: 30_000 }).then(() => true, () => false));
+      t.check('…counting the steps after the last one this device showed', /While you were away · 1 step/.test(await away.innerText().catch(() => '')), await away.innerText().catch(() => ''));
+      t.check('the steps show in the chat in the learner\'s words', await page.getByText(/Study Prep · \d+ steps?|Checking your class syllabus/).first().waitFor({ timeout: 20_000 }).then(() => true, () => false));
+      await page.getByText(/Study Prep · \d+ steps?/).first().click().catch(() => {});
+      t.check('…including the AI-drafted outline step', await page.getByText('Outline drafted').first().isVisible().catch(() => false));
+      for (let i = 0; i < 20 && asked.length < 2; i += 1) await page.waitForTimeout(250);
+      t.check('a dropped stream reconnected from the last step it had', asked[0] === -1 && asked[1] === 2, JSON.stringify(asked));
+      await page.getByText('Plan checked').first().waitFor({ timeout: 15_000 }).catch(() => {});
+      t.check('…and the rest arrived once each', await page.getByText('Plan checked').count() === 1 && await page.getByText('Ordering the topics').count() === 1);
+      t.check('the card itself is unchanged: the plan and Approve & Start', await page.getByRole('button', { name: 'Approve & Start' }).first().isVisible().catch(() => false));
+      await t.shot('study-prep-live');
+    },
+  },
+  {
     name: 'settings.agent_controls',
     description: 'Settings → Agent: one switch per part (Suggestions and ideas, Learn from my conversations, Task check-ins), quiet hours and time zone — each saves and survives a reload — and this week\'s background budget.',
     async run(t) {

@@ -201,3 +201,26 @@ export function studyPrepEventBlocks(events, { from = 0, to = Infinity } = {}) {
       };
     });
 }
+
+/**
+ * A workflow's v3 events (Phase 3) as trace rows, for the chat turn they
+ * happened in: the narrator's headline and detail, real durations only.
+ * Lifecycle-only events (created, moved) are not rows.
+ */
+const QUIET_TYPES = new Set(['workflow.created', 'workflow.started', 'workflow.state_changed', 'tool.started', 'decision.accepted']);
+export function workflowEventBlocks(events, { from = 0, to = Infinity } = {}) {
+  return (events || [])
+    .filter((event) => event?.narration?.headline && !(QUIET_TYPES.has(event.type) && !event.payload?.narrative))
+    .filter((event) => {
+      const at = Date.parse(event.timestamp || '') || 0;
+      return at >= from && at < to;
+    })
+    .map((event) => ({
+      type: 'tool', id: `wf_${event.workflowId}_${event.sequence}`, status: 'done', ok: event.type !== 'tool.failed' && event.type !== 'decision.rejected',
+      ms: event.payload?.durationMs != null ? event.payload.durationMs : null,
+      category: 'study_prep',
+      headline: event.narration.headline,
+      description: event.narration.description || '',
+      result: event.narration.result || '',
+    }));
+}
