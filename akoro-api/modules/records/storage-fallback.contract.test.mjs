@@ -45,8 +45,8 @@ test("liveness: a tiny PUT probe through the r2 breaker, trusted for 60s", () =>
 
 test("the size gate: ≤5 MB may fall back; bigger files are R2-only and skip the probe", () => {
   assert.match(storageSrc, /sizeBytes > MAX_FALLBACK_FILE_BYTES/, "the cap is THE cap — no second number");
-  assert.match(storageSrc, /tooBigForFallback \|\| \(await r2Reachable\(\)\)/, "oversize short-circuits past the probe — no plan B exists for it");
-  assert.match(storageSrc, /\{ sizeBytes \} = \{\}/, "size arrives as an optional 4th arg — unknown size stays fallback-eligible (Supabase's fileSizeLimit backstops the PUT)");
+  assert.match(storageSrc, /tooBigForFallback \|\| \(\(await r2AcceptsOrigin\(origin\)\) && \(await r2Reachable\(\)\)\)/, "oversize short-circuits past the probe — no plan B exists for it");
+  assert.match(storageSrc, /\{ sizeBytes, origin = null \} = \{\}/, "size arrives as an optional 4th arg — unknown size stays fallback-eligible (Supabase's fileSizeLimit backstops the PUT)");
 });
 
 test("both branches return a store marker on the same protocol", () => {
@@ -58,11 +58,11 @@ test("both branches return a store marker on the same protocol", () => {
 
 test("the records route passes the size it already requires, and surfaces the store", () => {
   assert.match(recordsRoutesSrc, /if \(!Number\.isFinite\(bytes\) \|\| bytes <= 0\) return res400\(res, "A file size is required\."\);/, "size is mandatory at the route — the gate always has a real number");
-  assert.match(recordsRoutesSrc, /createPresignedUpload\(String\(name\)\.trim\(\), mime, req\.user\.id, \{ sizeBytes: bytes \}\)/, "the known size flows down");
+  assert.match(recordsRoutesSrc, /createPresignedUpload\(String\(name\)\.trim\(\), mime, req\.user\.id, \{ sizeBytes: bytes, origin: req\.headers\.origin \|\| null \}\)/, "the known size flows down");
   assert.match(recordsRoutesSrc, /res200\(res, \{ uploadUrl, fileKey, store \}\)/, "the response says which store took it");
   assert.match(recordsRoutesSrc, /!recordsStorageEnabled\(\) && bytes > MAX_FALLBACK_FILE_BYTES/, "the no-R2 503 for big files is intact");
 });
 
 test("the tasks upload route passes the sizeBytes it already accepts", () => {
-  assert.match(tasksRoutesSrc, /createPresignedUpload\(fileName, fileType, req\.user\.id, \{ sizeBytes \}\)/, "task files get the same failure lane");
+  assert.match(tasksRoutesSrc, /createPresignedUpload\(fileName, fileType, req\.user\.id, \{ sizeBytes, origin: req\.headers\.origin \|\| null \}\)/, "task files get the same failure lane");
 });

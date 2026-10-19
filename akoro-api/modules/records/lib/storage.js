@@ -27,6 +27,7 @@ import { getSignedUrl }                       from "@aws-sdk/s3-request-presigne
 import config                                 from "../../../config/index.js";
 import db                                     from "../../../db.js";
 import { r2Send } from "../../../lib/r2Breaker.js";
+import { makeOriginCheck } from "../../../lib/r2Cors.js";
 
 const s3 = new S3Client({
   region:    "auto",
@@ -106,6 +107,19 @@ async function r2Reachable() {
   }
 }
 
+/**
+ * Will R2 take a PUT straight from this page's site (CORS)? The browser's
+ * upload is cross-origin: without a CORS rule on the bucket for the app's
+ * origin, R2 refuses the preflight and the upload fails in the browser even
+ * though the presigned URL is valid (2026-10-19: the bucket had no CORS rule).
+ * Asked with the same preflight a browser sends; cached per origin for 10
+ * minutes. No origin (a server or a gate calling) → yes.
+ */
+export const r2AcceptsOrigin = makeOriginCheck({
+  enabled: () => recordsStorageEnabled(),
+  url: () => `https://${BUCKET}.${config.r2.accountId}.r2.cloudflarestorage.com/${R2_PROBE_KEY}`,
+});
+
 /** Presign a PUT for one record file. Key is always under the owner's prefix.
  *  R2 is PRIMARY. `sizeBytes` (when the caller knows it) decides the failure
  *  lane: files over MAX_FALLBACK_FILE_BYTES are R2-only and skip the probe
@@ -114,12 +128,13 @@ async function r2Reachable() {
  *  R2 is unreachable. Unknown size conservatively stays fallback-eligible —
  *  Supabase's own fileSizeLimit backstops the PUT. Returns
  *  { uploadUrl, fileKey, store } — store is "r2" or "supabase". */
-export async function createPresignedUpload(fileName, fileType, userId, { sizeBytes } = {}) {
+export async function createPresignedUpload(fileName, fileType, userId, { sizeBytes, origin = null } = {}) {
   const safe = String(fileName || "record").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120);
 
   if (recordsStorageEnabled()) {
     const tooBigForFallback = Number.isFinite(sizeBytes) && sizeBytes > MAX_FALLBACK_FILE_BYTES;
-    if (tooBigForFallback || (await r2Reachable())) {
+    // origin: the page uploading — R2 must take a PUT from its site (CORS), or the fallback does.
+    if (tooBigForFallback || ((await r2AcceptsOrigin(origin)) && (await r2Reachable()))) {
       const key  = `records/${userId}/${Date.now()}-${safe}`;
       const cmd  = new PutObjectCommand({ Bucket: BUCKET, Key: key, ContentType: fileType || "application/octet-stream" });
       const uploadUrl = await getSignedUrl(s3, cmd, { expiresIn: 900 });

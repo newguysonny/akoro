@@ -184,7 +184,7 @@ router.post("/upload-url", authenticateToken, asyncHandler(async (req, res) => {
     }
   }
 
-  const { uploadUrl, fileKey, store } = await createPresignedUpload(String(name).trim(), mime, req.user.id, { sizeBytes: bytes });
+  const { uploadUrl, fileKey, store } = await createPresignedUpload(String(name).trim(), mime, req.user.id, { sizeBytes: bytes, origin: req.headers.origin || null });
   res200(res, { uploadUrl, fileKey, store });
 }));
 

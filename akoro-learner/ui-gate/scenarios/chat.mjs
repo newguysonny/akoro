@@ -182,6 +182,13 @@ export const scenarios = [
       t.note(`card after reading: ${textNow}`);
       t.check('…the card counts its questions', /\d+ questions found/.test(textNow), { actual: textNow });
       t.check('…and the first chip is the study step', await page.getByRole('button', { name: 'Make a study plan from this paper' }).first().waitFor({ timeout: 10_000 }).then(() => true, () => false));
+      // 2026-10-19: each step in the chat under the upload's message — tool rows and what the protégé said.
+      const run = page.locator('[data-ingest-run]').last();
+      const runText = (await run.innerText().catch(() => '')).replace(/\s+/g, ' ');
+      t.note(`steps: ${runText.slice(0, 600)}`);
+      t.check('the steps are in the chat: sorted, folder, filed, read', ['Sorting your file', 'Checking your folders', 'Filing into', 'Reading'].every((w) => runText.includes(w)), { actual: runText });
+      t.check('…and it says what it found at each', /It's \S+ a Biology|past paper/i.test(runText) && /tests \d+ topics?/.test(runText), { actual: runText });
+      await t.shot('upload-steps');
       t.check('…with a link to the folder', await page.locator('button[data-material="folder"]').last().isVisible().catch(() => false));
 
       // Saved with the reply: the record is in a private folder.
