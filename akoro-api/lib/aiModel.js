@@ -13,7 +13,7 @@ import { makeAiBreaker } from "./circuitBreaker.js";
 import { aiContext } from "./aiContext.js";
 import { AI_DEFAULT_MAX_TOKENS, usdCost, cachedTokensOf } from "./aiPricing.js";
 import { recordAiCall, errorKindOf } from "./aiTelemetry.js";
-import { modelRegistry } from "./modelRegistry.js";
+import { modelRegistry, forcedModelFor } from "./modelRegistry.js";
 import { makeOpenAICompatibleAdapter } from "./providers/openaiCompatible.js";
 import { makeAnthropicAdapter } from "./providers/anthropic.js";
 
@@ -71,9 +71,13 @@ async function meteredCreate(params = {}) {
   delete clean.__role; delete clean.__learnerChoice; delete clean.__allowedModels;
   // Which model (§7.11.3): the caller's own `model`, else resolved from the
   // role and the learner's choice. Either way the catalogue says who serves it.
-  const entry = clean.model
+  let entry = clean.model
     ? (modelRegistry.get(clean.model) || modelRegistry.catalogue.find((e) => e.apiModel === clean.model) || null)
     : modelRegistry.resolveModel({ role: params.__role || "chat", learnerChoice: params.__learnerChoice || null, allowedModels: params.__allowedModels || null });
+  // AI_FORCE_MODEL (a test sandbox switch, e.g. OpenAI out of credit): every
+  // chat call that would go to OpenAI is served by this catalogue model instead.
+  const forced = forcedModelFor(entry, clean.model);
+  if (forced) entry = forced;
   if (entry) clean.model = entry.apiModel;
   const adapter = entry && entry.provider !== "openai" ? adapters[entry.provider] : null;
   const fire = (body, opts) => (adapter ? adapter.create(body, opts, entry) : chatBreaker.fire(body, opts));

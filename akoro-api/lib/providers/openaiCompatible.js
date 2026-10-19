@@ -32,7 +32,28 @@ export function makeOpenAICompatibleAdapter({ env = process.env, clientFor = nul
   return {
     /** params already carry `model` = the entry's apiModel. */
     create(params, reqOpts, entry) {
-      return breakerFor(entry).fire(entry, params, reqOpts);
+      return breakerFor(entry).fire(entry, compatParams(params), reqOpts);
     },
   };
+}
+
+/**
+ * What these providers accept: DeepSeek and most OpenAI-compatible APIs take
+ * `json_object` but not `json_schema` structured output. The schema becomes an
+ * instruction (the word "JSON" included, which json_object mode requires), and
+ * code still checks every answer as before. OpenAI-only stream options go too.
+ */
+export function compatParams(params) {
+  const out = { ...params };
+  const rf = out.response_format;
+  if (rf?.type === "json_schema" && rf.json_schema?.schema) {
+    out.response_format = { type: "json_object" };
+    const rule = `Return only a JSON object that matches this JSON schema exactly (every required key present; null where the schema allows it):\n${JSON.stringify(rf.json_schema.schema)}`;
+    const messages = Array.isArray(out.messages) ? [...out.messages] : [];
+    const i = messages.findIndex((m) => m?.role === "system" && typeof m.content === "string");
+    if (i >= 0) messages[i] = { ...messages[i], content: `${messages[i].content}\n\n${rule}` };
+    else messages.unshift({ role: "system", content: rule });
+    out.messages = messages;
+  }
+  return out;
 }

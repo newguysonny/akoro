@@ -195,3 +195,18 @@ export function createModelRegistry(env = process.env) {
 // The app's registry, built once at boot — a bad AI_MODELS fails here, loudly.
 export const modelRegistry = createModelRegistry();
 export const resolveModel = (opts) => modelRegistry.resolveModel(opts);
+
+/** The AI_FORCE_MODEL stand-in for an OpenAI-bound chat call, or null (unset, unknown, unavailable). */
+export function forcedModelFor(entry, requestedModel, { registry, env = process.env } = {}) {
+  registry ||= modelRegistry;
+  const id = String(env.AI_FORCE_MODEL || "").trim();
+  if (!id) return null;
+  const goesToOpenAI = entry ? entry.provider === "openai" : Boolean(requestedModel);
+  if (!goesToOpenAI) return null;
+  const target = registry.get(id);
+  if (!target || !availabilityOf(target, env).available) {
+    if (!forcedModelFor.warned) { forcedModelFor.warned = true; console.warn(`[ai] AI_FORCE_MODEL=${id} is not callable here (its API key, DEEPSEEK_MODEL or AI_MODELS price is missing) — not forcing`); }
+    return null;
+  }
+  return target;
+}
