@@ -387,8 +387,10 @@ export const agentWakes = {
     // Platform-paid: the learner approved the plan's coins, not the agent's thinking.
     const [acct] = await ctx.db.rows("coin_accounts", { owner_id: me.id }, { columns: "id", limit: 1 });
     if (acct) {
-      const wakeDebits = (await ctx.db.rows("coin_transactions", { account_id: acct.id, feature: "study_prep_wake" }, { columns: "created_at", limit: 20, order: { column: "created_at", ascending: false } }))
-        .filter((t) => t.created_at >= approvedAt);
+      // Nothing at all: its model calls and its reads (the notes search, its rerank) are the platform's.
+      const wakeDebits = (await ctx.db.rows("coin_transactions", { account_id: acct.id }, { columns: "feature, type, created_at", limit: 30, order: { column: "created_at", ascending: false } }))
+        .filter((t) => t.created_at >= approvedAt && t.type === "debit");
+      ctx.note(`debits during the wake: ${JSON.stringify(wakeDebits.map((t) => t.feature))}`);
       ctx.expect.eq("the wake isn't billed to the learner", wakeDebits.length, 0);
     }
 

@@ -28,6 +28,7 @@ import { createWorkflowEngine } from "../../workflows/engine.js";
 import { makeSupabaseWorkflowStore } from "../../workflows/store.js";
 import { publishLiveDeveloper } from "../../workflows/bus.js";
 import { keepFactual } from "../../agent-runtime/factFilter.js";
+import { aiContext } from "../../../lib/aiContext.js";
 import { makeWorkflowMirror, workflowEngineEnabled } from "./workflow.js";
 import { AUTO_START_MS, WAKE_DECISIONS, WAKE_FINAL_ACTIONS, WAKE_LABELS, autoStartFor, settleStep, spentOnChecks, wakeGoal } from "./wake.js";
 import { TERMINAL_ACTIONS } from "./agent-loop.js";
@@ -287,7 +288,8 @@ export function wakeStudyPrep({ sessionId, learnerId = null, trigger, facts = {}
   if (!entry.queue.some((q) => q.trigger === trigger)) entry.queue.push({ learnerId, trigger, facts });
   if (entry.running) return true;
   entry.running = true;
-  setImmediate(async () => {
+  // Outside the request that woke it (its AI context would bill the learner for the wake's platform-paid reads).
+  aiContext.exit(() => setImmediate(async () => {
     try {
       while (entry.queue.length) {
         const next = entry.queue.shift();
@@ -295,7 +297,7 @@ export function wakeStudyPrep({ sessionId, learnerId = null, trigger, facts = {}
         catch (error) { console.warn(`[study-prep] wake ${next.trigger} failed for ${sessionId}: ${error?.message || error}`); }
       }
     } finally { entry.running = false; wakes.delete(sessionId); }
-  });
+  }));
   return true;
 }
 export const wakeRunning = (sessionId) => Boolean(wakes.get(sessionId)?.running);
