@@ -29,6 +29,8 @@ import { makeSupabaseWorkflowStore } from "../../workflows/store.js";
 import { publishLiveDeveloper } from "../../workflows/bus.js";
 import { keepFactual } from "../../agent-runtime/factFilter.js";
 import { makeWorkflowMirror, workflowEngineEnabled } from "./workflow.js";
+import { AUTO_START_MS, WAKE_DECISIONS, WAKE_FINAL_ACTIONS, WAKE_LABELS, autoStartFor, settleStep, spentOnChecks, wakeGoal } from "./wake.js";
+import { TERMINAL_ACTIONS } from "./agent-loop.js";
 
 // Default-on kill switch: study-prep ships enabled; =false removes every surface.
 export const studyPrepEnabled = () => String(process.env.AKORO_STUDY_PREP_ENABLED ?? "true").toLowerCase() !== "false";
@@ -143,7 +145,11 @@ export function getPracticeHarness() {
 
 /** The battle worker's hook when an Agent Check ends. Scores even if the switch was turned off meanwhile. */
 export async function completeAgentCheckBattle(battleId) {
-  return createHarness({ store, topicWorkflow, syllabus, agentCheck, protege }).completeAgentCheck({ battleId });
+  const done = await createHarness({ store, topicWorkflow, syllabus, agentCheck, protege,
+    ...(workflowEngineEnabled() ? { workflowMirror: workflowMirror() } : {}) }).completeAgentCheck({ battleId });
+  // The agent wakes on the result: explains it, and moves on, sets the topic aside or asks for a teach-back.
+  if (done?.session?.id) wakeStudyPrep({ sessionId: done.session.id, learnerId: done.session.learnerId || null, trigger: "check_scored", facts: { topic: done.topic?.label } });
+  return done;
 }
 
 const readTools = {
@@ -227,6 +233,7 @@ export function planInBackground({ sessionId, learnerId, conversationId = null }
     try { view = await runStudyPrepPlanningStep({ sessionId, learnerId }); }
     catch (error) { console.warn(`[study-prep] background planning failed for ${sessionId}: ${error?.message || error}`); }
     finally { planning.delete(sessionId); }
+    if (conversationId) rememberConversation(sessionId, conversationId);
     if (!conversationId) return;
     if (!view) view = await getHarness().getSessionView({ sessionId, learnerId, eventLimit: 1 }).catch(() => null);
     await postToConversation({ learnerId, conversationId, text: planReadyMessage(view?.session) }).catch(() => null);
@@ -235,7 +242,7 @@ export function planInBackground({ sessionId, learnerId, conversationId = null }
 }
 export const planningInBackground = (sessionId) => planning.has(sessionId);
 
-async function postToConversation({ learnerId, conversationId, text }) {
+async function postToConversation({ learnerId, conversationId, text, meta = { studyPrepReady: true } }) {
   // The turn that started the plan saves its reply when it ends: wait for it (≤ 30s).
   for (let i = 0; i < 15; i += 1) {
     const { data: last } = await db.from("chat_messages").select("role").eq("session_id", conversationId).eq("user_id", learnerId)
@@ -244,7 +251,7 @@ async function postToConversation({ learnerId, conversationId, text }) {
     await new Promise((r) => setTimeout(r, 2000));
   }
   const { data: msg } = await db.from("chat_messages")
-    .insert({ session_id: conversationId, user_id: learnerId, role: "agent", text, meta: { studyPrepReady: true } }).select("id").single();
+    .insert({ session_id: conversationId, user_id: learnerId, role: "agent", text, meta }).select("id").single();
   if (!msg) return null;
   await db.from("chat_sessions").update({ last_message_at: new Date().toISOString() }).eq("id", conversationId).eq("user_id", learnerId);
   try { global.io?.to(`user:${learnerId}`).emit("chat_follow_up_ready", { sessionId: conversationId }); } catch { /* opening the chat shows it */ }
@@ -252,3 +259,179 @@ async function postToConversation({ learnerId, conversationId, text }) {
 }
 
 export { InsufficientBalanceError, pauseCopy };
+
+// ── The agent after the plan is ready (wakes, 2026-10-19) ──────────────────
+
+const conversations = new Map();   // session id → the chat it lives in
+const rememberConversation = (sessionId, conversationId) => { if (sessionId && conversationId) conversations.set(sessionId, conversationId); };
+
+/** The chat a session lives in: remembered, else the chat whose turn started it. */
+async function conversationOf(sessionId, learnerId) {
+  if (conversations.has(sessionId)) return conversations.get(sessionId);
+  const { data } = await db.from("chat_messages").select("session_id").eq("user_id", learnerId)
+    .contains("meta", { studyPrepSessionId: sessionId }).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (data?.session_id) conversations.set(sessionId, data.session_id);
+  return data?.session_id || null;
+}
+
+const wakes = new Map();   // session id → { running, queue }
+/**
+ * Wake the agent for a session (fire and forget). One wake runs per session
+ * at a time; triggers that arrive meanwhile run after it, in order.
+ */
+export function wakeStudyPrep({ sessionId, learnerId = null, trigger, facts = {}, conversationId = null }) {
+  if (!studyPrepEnabled() || !sessionId || !trigger) return false;
+  if (conversationId) rememberConversation(sessionId, conversationId);
+  const entry = wakes.get(sessionId) || { running: false, queue: [] };
+  wakes.set(sessionId, entry);
+  if (!entry.queue.some((q) => q.trigger === trigger)) entry.queue.push({ learnerId, trigger, facts });
+  if (entry.running) return true;
+  entry.running = true;
+  setImmediate(async () => {
+    try {
+      while (entry.queue.length) {
+        const next = entry.queue.shift();
+        try { await runStudyPrepWake({ sessionId, ...next }); }
+        catch (error) { console.warn(`[study-prep] wake ${next.trigger} failed for ${sessionId}: ${error?.message || error}`); }
+      }
+    } finally { entry.running = false; wakes.delete(sessionId); }
+  });
+  return true;
+}
+export const wakeRunning = (sessionId) => Boolean(wakes.get(sessionId)?.running);
+
+/**
+ * One wake: a chat message opens it (what the learner did), the agent runs up
+ * to WAKE_DECISIONS decisions (thought → tool → message each, streamed on the
+ * session's workflow), then code takes any step the agent left undone.
+ */
+export async function runStudyPrepWake({ sessionId, learnerId = null, trigger, facts = {} }) {
+  const owner = learnerId || (await store.getSession(sessionId).catch(() => null))?.learner_id;
+  if (!owner) return null;
+  const harness = getHarness();
+  const view = await harness.getSessionView({ sessionId, learnerId: owner, eventLimit: 10 });
+  const live = trigger === "plan_adjusted" ? ["awaiting_confirmation"] : ["topic_active"];
+  if (!live.includes(view.session.status)) return null;
+
+  const wakeId = `${trigger}:${Date.now().toString(36)}`;
+  const label = WAKE_LABELS[trigger] || "Working on your plan";
+  const conversationId = await conversationOf(sessionId, owner).catch(() => null);
+  if (conversationId) await postToConversation({ learnerId: owner, conversationId, text: label, meta: { studyPrepWake: { sessionId, wakeId, trigger, label } } }).catch(() => null);
+  await workflowMirror().wakeMark(sessionId, store, { wakeId, trigger, label, phase: "started" });
+
+  let step = null;
+  try {
+    const context = await buildAgentContext({
+      setName: "teaching", goal: view.session.goal, session: view.session,
+      dynamic: { hint: wakeGoal(trigger, facts) },
+    });
+    const registry = buildRegistry({ readTools: { ...readTools, getSessionState: readToolsModule.makeSessionStateReader(harness).bind(null) }, harness, learnerId: owner, sessionId });
+    const agent = makeLlmAgent({ system: context.system, learnerId: owner, feature: "study_prep_wake", maxTokens: 1200,
+      finishHint: "This is your last decision: end the turn — wait_for_learner, or move the session on if that is what the result calls for." });
+    step = await runAgentStep({
+      sessionId, goal: wakeGoal(trigger, facts), agent, registry, store: harness.store || store, harness, contextSetName: "teaching",
+      maxIterations: WAKE_DECISIONS, terminalActions: [...TERMINAL_ACTIONS, "wait_for_learner"], finalActions: WAKE_FINAL_ACTIONS, pauseOnCap: false,
+      // Developer view: its notes per decision, tagged with the wake (iterations restart at 1 each wake).
+      onThought: view.session.workflowId ? (t) => publishLiveDeveloper(view.session.workflowId, { ...t, wakeId }) : null,
+      onMessage: async ({ iteration, text, seen }) => {
+        const kept = keepFactual(text, `${seen} ${view.session.subject || ""} ${view.session.goal || ""} ${facts.topic || ""}`);
+        if (kept) await workflowMirror().agentMessage(sessionId, store, { iteration, text: kept });
+      },
+    });
+  } catch (error) {
+    console.warn(`[study-prep] wake agent failed for ${sessionId}: ${error?.message || error}`);
+  }
+
+  // Code takes the step the session needs if the agent didn't: the next topic, or the end.
+  const after = await harness.getSessionView({ sessionId, learnerId: owner, eventLimit: 1 });
+  const settle = settleStep(after);
+  let moved = step?.terminal === "advance_topic" ? "advance" : step?.terminal === "conclude_session" ? "conclude" : null;
+  if (!moved && settle === "advance") moved = (await harness.advanceTopic({ sessionId, learnerId: owner }).catch(() => null)) ? "advance" : null;
+  if (!moved && settle === "conclude") {
+    const done = await harness.concludeSession({ sessionId, learnerId: owner }).catch(() => null);
+    if (done) {
+      moved = "conclude";
+      await workflowMirror().agentMessage(sessionId, store, { text: sessionSummaryLine(done) });
+    }
+  }
+  await workflowMirror().wakeMark(sessionId, store, { wakeId, trigger, label, phase: "completed" });
+  // A new topic is a new wake (its own message in the chat).
+  if (moved === "advance") wakeStudyPrep({ sessionId, learnerId: owner, trigger: "topic_started", facts: { topic: (await harness.getSessionView({ sessionId, learnerId: owner, eventLimit: 1 }).catch(() => null))?.topics?.find((t) => t.status === "active")?.label } });
+  return { wakeId, ended: step?.ended || null, terminal: step?.terminal || null, moved };
+}
+
+/** The session's end, in one code-written line (when code concluded it). */
+export function sessionSummaryLine(done) {
+  const topics = done?.session?.topics || [];
+  const understood = topics.filter((t) => t.status === "understood").map((t) => t.label);
+  const left = topics.filter((t) => t.status !== "understood").map((t) => t.label);
+  return [
+    `That's the plan done: ${understood.length} of ${topics.length} topic${topics.length === 1 ? "" : "s"} understood.`,
+    left.length ? `Still to work on: ${left.slice(0, 4).join(", ")}.` : null,
+  ].filter(Boolean).join(" ");
+}
+
+/**
+ * The learner did something on the card (approve, adjust, taught it back):
+ * the agent wakes on it. conversationId: the chat the card is in.
+ */
+export function afterLearnerAction({ sessionId, learnerId, action, conversationId = null, facts = {} }) {
+  const trigger = { confirm: "plan_confirmed", adjust: "plan_adjusted", teach_back: "teach_back", advance: "topic_started" }[action];
+  if (!trigger) return false;
+  return wakeStudyPrep({ sessionId, learnerId, trigger, facts, conversationId });
+}
+
+/**
+ * The 1-minute auto-start (2026-10-19): every few seconds, an active topic
+ * whose next Agent Check is due (a first check a minute after the topic
+ * started, a retest a minute after the teach-back) starts it — inside the
+ * approved estimate only. Past the estimate the agent asks, once.
+ */
+const asked = new Set();
+const failedAt = new Map();
+export async function autoStartDueChecks({ nowMs = Date.now(), sessionId = null } = {}) {
+  if (!studyPrepEnabled() || !agentCheckEnabled()) return { started: 0, skipped: 0 };
+  const cutoff = new Date(nowMs - AUTO_START_MS).toISOString();
+  // sessionId: one session only (the gate's, run with a later clock).
+  let query = db.schema("edu").from("study_prep_topics").select("id, session_id")
+    .eq("status", "active").lte("updated_at", cutoff);
+  if (sessionId) query = query.eq("session_id", sessionId);
+  const { data: rows, error } = await query.order("updated_at", { ascending: true }).limit(25);
+  if (error) throw error;
+  let started = 0;
+  let skipped = 0;
+  for (const row of rows || []) {
+    if (nowMs - (failedAt.get(row.id) || 0) < 10 * 60_000) continue;
+    const session = await store.getSession(row.session_id).catch(() => null);
+    if (!session || session.status !== "topic_active" || wakeRunning(session.id)) continue;
+    const harness = getHarness();
+    const view = await harness.getSessionView({ sessionId: session.id, learnerId: session.learner_id, eventLimit: 500 }).catch(() => null);
+    const topic = view?.topics?.find((t) => t.id === row.id);
+    if (!topic) continue;
+    const policy = await topicWorkflow.policyFor({ examBoard: session.exam_board, subject: session.subject }).catch(() => null);
+    const due = autoStartFor(topic, view.session, { spent: spentOnChecks(view.events), maxAttempts: policy?.max_attempts ?? Infinity });
+    if (!due) continue;
+    if (due.blocked === "over_estimate") {
+      const key = `${topic.id}:${topic.attemptsUsed}`;
+      if (!asked.has(key)) { asked.add(key); wakeStudyPrep({ sessionId: session.id, learnerId: session.learner_id, trigger: "over_estimate", facts: { topic: topic.label } }); }
+      continue;
+    }
+    if (Date.parse(due.at) > nowMs) continue;
+    try {
+      const done = await harness.startTopicPractice({ sessionId: session.id, learnerId: session.learner_id, topicId: topic.id, mode: due.mode, withinEstimateOnly: true });
+      if (done?.skipped) skipped += 1; else started += 1;
+    } catch (error) {
+      failedAt.set(row.id, nowMs);
+      console.warn(`[study-prep] auto-start failed for topic ${row.id}: ${error?.message || error}`);
+    }
+  }
+  return { started, skipped };
+}
+
+let autoStartTimer = null;
+export function startStudyPrepAutoStart({ everyMs = 15_000 } = {}) {
+  if (autoStartTimer) return autoStartTimer;
+  autoStartTimer = setInterval(() => { autoStartDueChecks().catch((e) => console.warn(`[study-prep] auto-start sweep: ${e?.message || e}`)); }, everyMs);
+  autoStartTimer.unref?.();
+  return autoStartTimer;
+}

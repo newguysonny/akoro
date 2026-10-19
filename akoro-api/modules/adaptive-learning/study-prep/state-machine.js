@@ -88,6 +88,7 @@ export const REJECTION_CODES = Object.freeze([
   "unknown_action",
   "syllabus_exists",
   "outline_invalid",
+  "over_estimate",
 ]);
 
 /** The closed decision-node enum deliberate() may narrate (§4.7). */

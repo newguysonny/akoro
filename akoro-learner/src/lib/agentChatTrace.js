@@ -239,6 +239,8 @@ export function workflowCardSteps(events, { running = true } = {}) {
   for (const event of events || []) {
     if (!event?.narration?.headline || CARD_SKIP.has(event.type)) continue;
     const p = event.payload || {};
+    // A wake's bounds are the chat's (its own agent message), never a step of the card.
+    if (p.operation === 'wake') continue;
     // The agent's own words are its turn in the chat, never a step of the card.
     if (event.type === 'activity' && p.message) continue;
     const base = {
@@ -308,4 +310,51 @@ export function workflowRunBlocks(events, { notes = [], running = false } = {}) 
     blocks.push({ type: 'thinking', id: 'wfth_live', status: 'running', startedAt: Date.now(), ms: 0, text: '' });
   }
   return blocks;
+}
+
+/**
+ * The agent's wakes after the plan is ready (2026-10-19): each learner action
+ * or result wakes it for a short run, marked in the workflow's stream by
+ * operation.started / operation.completed { operation: 'wake', wakeId }.
+ *   before   the events before the first wake (the planning run, under the card's message)
+ *   wakes    wakeId → { events, open, startedAt, trigger, label } (each under its own chat message)
+ */
+export function splitWakes(events) {
+  const before = [];
+  const wakes = new Map();
+  let current = null;
+  for (const event of events || []) {
+    const p = event.payload || {};
+    if (p.operation === 'wake' && p.wakeId) {
+      if (event.type === 'operation.started') {
+        current = { wakeId: p.wakeId, trigger: p.trigger || null, label: p.label || null, events: [], open: true, startedAt: Date.parse(event.timestamp || '') || 0 };
+        wakes.set(p.wakeId, current);
+      } else if (event.type === 'operation.completed') {
+        const done = wakes.get(p.wakeId);
+        if (done) done.open = false;
+        if (current?.wakeId === p.wakeId) current = null;
+      }
+      continue;
+    }
+    if (current) current.events.push(event);
+    else if (!wakes.size) before.push(event);
+    else {
+      // Between wakes (an auto-started check, a battle result): with the latest wake.
+      const last = [...wakes.values()].pop();
+      last.events.push(event);
+    }
+  }
+  return { before, wakes };
+}
+
+/** The agent is working on a wake right now (started, not ended, within a few minutes). */
+export function wakeOpen(events, nowMs = Date.now()) {
+  const { wakes } = splitWakes(events);
+  return [...wakes.values()].some((w) => w.open && nowMs - w.startedAt < 3 * 60_000);
+}
+
+/** "0:42" for the auto-start countdown. */
+export function countdownLabel(ms) {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 }

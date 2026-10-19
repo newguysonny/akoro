@@ -324,3 +324,98 @@ export const workflowMirror = {
     ctx.expect.ok("each points back at its session event, in order", copied.every((e, i) => e.payload.studyPrepSequence === spEvents[i]?.sequence));
   },
 };
+
+// 2026-10-19: the agent keeps working after the plan is ready. Approving the
+// plan wakes it: a chat message opens the wake, it runs up to 4 decisions
+// (thought → tool → message) in the workflow's stream, and ends by waiting —
+// the session is never paused by it. Then the 1-minute auto-start, run with
+// a clock 70 s ahead for this session only.
+export const agentWakes = {
+  name: "studyprep.agent_wakes", area: "study-prep", risk: "write",
+  timeoutMs: 240_000,
+  description: "Approving a Study Prep plan wakes the agent: its run (≤ 4 decisions, with messages to the learner) streams under its own chat message and ends waiting; a minute later the Agent Check starts by itself.",
+  params: { learner: { default: "@tester16" }, subject: { default: "Basic Science" }, classLevel: { default: "JSS3" } },
+  async run(ctx, p) {
+    const me = await ctx.as(p.learner);
+    const base = "/api/adaptive/study-prep/sessions";
+    await ctx.db.deleteOwned("edu.study_prep_sessions", { ownerColumn: "learner_id", ownerId: me.id, filters: { goal: { like: "[verify:%" } } });
+    const { getHarness, autoStartDueChecks } = await import("../../adaptive-learning/study-prep/wiring.js");
+    const harness = getHarness();
+    const active = await ctx.http({ as: p.learner, path: base });
+    if (active.body?.session?.id) await harness.cancelSession({ sessionId: active.body.session.id, learnerId: me.id }).catch(() => {});
+    ctx.cleanup(() => ctx.db.deleteOwned("edu.study_prep_sessions", { ownerColumn: "learner_id", ownerId: me.id, filters: { goal: { like: `${ctx.marker}%` } } }));
+
+    const chat = await ctx.http({ as: p.learner, method: "POST", path: "/api/adaptive/chat/sessions", body: { title: `${ctx.marker} wakes` } });
+    const chatId = chat.body?.session?.id;
+    if (!chatId) ctx.expect.blocked(`couldn't open a chat (${chat.status})`);
+    ctx.cleanup(() => ctx.db.deleteOwned("chat_messages", { ownerColumn: "user_id", ownerId: me.id, filters: { session_id: chatId } }));
+    ctx.cleanup(() => ctx.db.deleteOwned("chat_sessions", { ownerColumn: "user_id", ownerId: me.id, filters: { id: chatId } }));
+
+    // A plan straight from the harness (planning itself is studyprep.plan_completes).
+    const session = await harness.createSession({ learnerId: me.id, goal: `${ctx.marker} Revise ${p.subject}`, subject: p.subject, classLevel: p.classLevel, examBoard: "BECE" });
+    const syllabus = await harness.resolveSyllabus({ sessionId: session.id, learnerId: me.id });
+    if (!syllabus.found || syllabus.topics.length < 2) ctx.expect.blocked(`no ${p.classLevel} ${p.subject} syllabus to plan from`);
+    await harness.proposePlan({ sessionId: session.id, learnerId: me.id, topicIds: syllabus.topics.slice(0, 2).map((t) => t.id) });
+    const [linked] = await ctx.db.rows("edu.study_prep_sessions", { id: session.id }, { columns: "workflow_id", limit: 1 });
+    const wfId = linked?.workflow_id;
+    if (!wfId) ctx.expect.blocked("the session has no workflow");
+    ctx.cleanup(() => ctx.db.deleteOwned("edu.workflow_instances", { ownerColumn: "learner_id", ownerId: me.id, filters: { id: wfId } }));
+
+    // The learner approves on the card, in this chat.
+    const confirmed = await ctx.http({ as: p.learner, method: "POST", path: `${base}/${session.id}/confirm`, body: { conversationId: chatId } });
+    ctx.expect.status("plan approved", confirmed, 200);
+
+    const marks = async () => (await ctx.db.rows("edu.workflow_events", { workflow_id: wfId }, { columns: "sequence, event_type, payload", limit: 300, order: { column: "sequence", ascending: true } }));
+    let events = [];
+    for (let i = 0; i < 40; i += 1) {
+      events = await marks();
+      if (events.some((e) => e.event_type === "operation.completed" && e.payload?.operation === "wake")) break;
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+    const start = events.findIndex((e) => e.event_type === "operation.started" && e.payload?.operation === "wake");
+    const end = events.findIndex((e) => e.event_type === "operation.completed" && e.payload?.operation === "wake");
+    ctx.expect.ok("the approval woke the agent", start >= 0, JSON.stringify(events.slice(-5).map((e) => e.event_type)));
+    ctx.expect.eq("woken by the approval", events[start]?.payload?.trigger, "plan_confirmed");
+    ctx.expect.ok("the wake ended", end > start, `start ${start}, end ${end}`);
+    const run = events.slice(start + 1, end);
+    const decisions = run.filter((e) => e.event_type === "tool.started").length;
+    const said = run.filter((e) => e.event_type === "activity" && e.payload?.message).map((e) => e.payload.message);
+    ctx.note(`wake: ${decisions} decision(s); said: ${JSON.stringify(said).slice(0, 600)}`);
+    ctx.expect.ok("1–4 decisions", decisions >= 1 && decisions <= 4, decisions);
+    ctx.expect.gte("it talked to the learner", said.length, 1);
+
+    const [after] = await ctx.db.rows("edu.study_prep_sessions", { id: session.id }, { columns: "status, paused_reason", limit: 1 });
+    ctx.expect.eq("the session keeps running (a wake never pauses it)", after?.status, "topic_active");
+    const posted = await ctx.db.rows("chat_messages", { session_id: chatId }, { columns: "role, text, meta", limit: 10 });
+    const opener = posted.find((m) => m.meta?.studyPrepWake);
+    ctx.expect.ok("the wake opened its own message in the chat", !!opener, JSON.stringify(posted.map((m) => m.meta)).slice(0, 300));
+    ctx.expect.eq("…for this session", opener?.meta?.studyPrepWake?.sessionId, session.id);
+
+    // The countdown the card shows, then the auto-start (a clock 70 s ahead, this session only).
+    const view = await ctx.http({ as: p.learner, path: `${base}/${session.id}` });
+    const next = view.body?.nextCheck;
+    ctx.note(`nextCheck: ${JSON.stringify(next)}`);
+    if (!view.body?.agentCheck) ctx.expect.blocked("the Agent Check is switched off here");
+    ctx.expect.ok("the card has a countdown for the first check", !!next?.at && next.mode === "diagnostic", JSON.stringify(next));
+    const msLeft = Date.parse(next?.at || "") - Date.now();
+    ctx.expect.ok("about a minute after the topic started", msLeft > 0 && msLeft <= 60_000, msLeft);
+    const swept = await autoStartDueChecks({ nowMs: Date.now() + 70_000, sessionId: session.id });
+    ctx.note(`auto-start: ${JSON.stringify(swept)}`);
+    const checkEvents = await ctx.db.rows("edu.study_prep_events", { session_id: session.id }, { columns: "decision_node, facts", limit: 200 });
+    const startedCheck = checkEvents.find((e) => e.decision_node === "agent_check_started");
+    const skippedCheck = checkEvents.find((e) => e.decision_node === "agent_check_skipped");
+    ctx.expect.ok("the check started by itself (or found no notes to check)", !!startedCheck || !!skippedCheck);
+    if (startedCheck?.facts?.battleId) {
+      const battleId = startedCheck.facts.battleId;
+      ctx.cleanup(async () => {
+        const { discardCheckBattle } = await import("../../battle/agentCheck.js");
+        await discardCheckBattle(battleId, me.id);
+      });
+    }
+    if (skippedCheck) {
+      const again = await autoStartDueChecks({ nowMs: Date.now() + 140_000, sessionId: session.id });
+      ctx.expect.eq("no notes: it doesn't try again every minute", again.started + again.skipped, 0);
+    }
+    await harness.cancelSession({ sessionId: session.id, learnerId: me.id }).catch(() => {});
+  },
+};

@@ -27,7 +27,7 @@ import { useInFlight } from '../../hooks/useInFlight.js';
 import StudyPrepChatCard from './studyPrep/StudyPrepChatCard.jsx';
 import { fetchActiveStudyPrepSession } from '../../services/studyPrepApi.js';
 import TraceBlocks from './agentChat/TraceBlocks.jsx';
-import { applyTraceEvent, blocksFromSavedTrace, promoteActivity, settleRunning, studyPrepEventBlocks, workflowRunBlocks } from '../../lib/agentChatTrace.js';
+import { applyTraceEvent, blocksFromSavedTrace, promoteActivity, settleRunning, splitWakes, studyPrepEventBlocks, workflowRunBlocks } from '../../lib/agentChatTrace.js';
 import { CHAT_STARTERS, cleanIdeas, cleanMaterials, protegeMoves } from '../../lib/chatIdeas.js';
 import { useNavigate } from 'react-router-dom';
 import AgentCards from '../network/AgentCards.jsx';
@@ -137,15 +137,25 @@ function AgentChatTab({
   const onStudyPrepNotes = useCallback((sessionId, env) => {
     setPrepNotes((previous) => {
       const list = previous[sessionId] || [];
-      if (list.some((n) => n.payload?.iteration === env.payload?.iteration)) return previous;
+      // Iterations restart at 1 in each wake: a note is one decision of one run.
+      if (list.some((n) => n.payload?.iteration === env.payload?.iteration && (n.payload?.wakeId || null) === (env.payload?.wakeId || null))) return previous;
       return { ...previous, [sessionId]: [...list, env] };
     });
   }, []);
   // The workflow's run as the agent's own turn under the card's message: thought → tool → what it said, per decision.
+  // After the plan is ready, each wake is its own agent message: the planning run stays under the card's message.
+  const notesOf = (sid, wakeId = null) => (devView ? (prepNotes[sid] || []).filter((n) => (n.payload?.wakeId || null) === wakeId) : []);
   const workflowRun = (sid) => {
     const reported = studyPrepEvents[sid];
     if (!reported?.v3) return [];
-    return workflowRunBlocks(reported.v3, { notes: devView ? (prepNotes[sid] || []) : [], running: !!runningPrep[sid] });
+    const { before, wakes } = splitWakes(reported.v3);
+    return workflowRunBlocks(before, { notes: notesOf(sid), running: !wakes.size && !!runningPrep[sid] });
+  };
+  const wakeRun = (sid, wakeId) => {
+    const reported = studyPrepEvents[sid];
+    const wake = reported?.v3 ? splitWakes(reported.v3).wakes.get(wakeId) : null;
+    if (!wake) return null;
+    return workflowRunBlocks(wake.events, { notes: notesOf(sid, wakeId), running: wake.open && !!runningPrep[sid] });
   };
   const onStudyPrepRunning = useCallback((sessionId, running) => {
     setRunningPrep((previous) => (!!previous[sessionId] === running ? previous : { ...previous, [sessionId]: running }));
@@ -367,6 +377,8 @@ function AgentChatTab({
     ...(m.role !== "user" && m.meta?.proposal ? { proposal: m.meta.proposal } : {}),
     // A suggestion's report: a study plan comes back as its plan card (§7.16.2 "Report").
     ...(m.role !== "user" && m.meta?.studyPrepSessionId ? { studyPrepSessionId: m.meta.studyPrepSessionId } : {}),
+    // The agent woke on a Study Prep step (approve, a new topic, a marked check…): its run is this message.
+    ...(m.role !== "user" && m.meta?.studyPrepWake?.wakeId ? { studyPrepWake: m.meta.studyPrepWake } : {}),
     ...(m.role !== "user" && Array.isArray(m.meta?.materials) && m.meta.materials.length ? { materials: cleanMaterials(m.meta.materials) } : {}),
     ...(m.role !== "user" && (m.meta?.ingests?.length || m.meta?.ingest?.id) ? (() => {
       const ids = (Array.isArray(m.meta.ingests) ? m.meta.ingests.map((x) => x?.id) : [m.meta.ingest.id]).filter(Boolean);
@@ -423,10 +435,12 @@ function AgentChatTab({
           setMessages((prev) => {
             const ids = new Set(prev.map((m) => m.id));
             const texts = new Set(prev.map((m) => m.text));
+            // A wake's opening line repeats ("A new topic started"): those are told apart by id, not text.
             const fresh = (d?.messages ?? [])
-              .filter((m) => m.role !== "user" && !ids.has(m.id) && !texts.has(m.text))
+              .filter((m) => m.role !== "user" && !ids.has(m.id) && (m.meta?.studyPrepWake || !texts.has(m.text)))
               .map((m) => ({ id: m.id, from: "agent", text: m.text, ...(m.meta?.proposal ? { proposal: m.meta.proposal } : {}),
-                time: new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }));
+                ...(m.meta?.studyPrepWake?.wakeId ? { studyPrepWake: m.meta.studyPrepWake } : {}),
+                at: m.created_at, time: new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }));
             return fresh.length ? [...prev, ...fresh] : prev;
           });
         } catch { /* it is saved — opening the chat again shows it */ }
@@ -1199,6 +1213,18 @@ function AgentChatTab({
                   </div>
                 </div>
               );
+              if(msg.studyPrepWake){
+                const wake=msg.studyPrepWake;
+                const run=wakeRun(wake.sessionId,wake.wakeId)||[];
+                const byLearner=["plan_confirmed","plan_adjusted","teach_back"].includes(wake.trigger);
+                return (
+                  <div key={msg.id} data-workflow-wake={wake.trigger} style={{ display:"flex",flexDirection:"column",alignItems:"stretch",minWidth:0,paddingLeft:REPLY_INSET,gap:6 }}>
+                    {byLearner&&<div style={{ alignSelf:"flex-end",display:"inline-flex",alignItems:"center",gap:6,padding:"5px 11px",borderRadius:11,border:"1px dashed var(--ak-border2)",background:"var(--ak-surface-hover)",color:"var(--ak-text-sub)",fontSize:12,fontWeight:800 }}><Icon name="ti-circle-check" size={13}/>{wake.label||msg.text}</div>}
+                    {run.length>0&&<div data-workflow-run=""><TraceBlocks blocks={run}/></div>}
+                    <div style={{ fontSize:10,color:"var(--ak-text-muted)" }}>{msg.time}</div>
+                  </div>
+                );
+              }
               return (
                 <div key={msg.id} style={{ display:"flex",flexDirection:"column",alignItems:"stretch",minWidth:0,paddingLeft:REPLY_INSET }}>
                   {(msg.blocks?.length>0||studyPrepSteps(msg).length>0)&&<TraceBlocks blocks={[...(msg.blocks||[]),...studyPrepSteps(msg)]}/>}
@@ -1248,7 +1274,7 @@ function AgentChatTab({
                   )}
                   {!isMe&&msg.studyPrepSessionId&&(pinnedPrep===msg.studyPrepSessionId&&lastPrepCardId===msg.id
                     ? <div data-workflow-pinned-note="" style={{ display:"flex",alignItems:"center",gap:6,marginTop:6,fontSize:11.5,fontWeight:750,color:"var(--ak-text-muted)" }}><Icon name="ti-pin" size={13}/>Study Prep is running — pinned above the message box</div>
-                    : <StudyPrepChatCard sessionId={msg.studyPrepSessionId} onEvents={onStudyPrepEvents} onRunning={onStudyPrepRunning} developer={devView} onNotes={onStudyPrepNotes}/>)}
+                    : <StudyPrepChatCard sessionId={msg.studyPrepSessionId} onEvents={onStudyPrepEvents} onRunning={onStudyPrepRunning} developer={devView} onNotes={onStudyPrepNotes} conversationId={sessionId}/>)}
                   {!isMe&&msg.proposal?.status==="proposed"&&msg.proposal.preview&&<ProposalPreview preview={msg.proposal.preview}/>}
                   {!isMe&&msg.proposal&&(msg.proposal.status==="proposed"?(
                     <div style={{ display:"flex",flexWrap:"wrap",gap:7,marginTop:9 }}>
@@ -1384,7 +1410,7 @@ function AgentChatTab({
             )}
             {pinnedPrep && (
               <div data-workflow-pinned="" style={{ width:"min(560px,100%)",maxHeight:"42vh",overflowY:"auto",margin:"0 0 8px",boxShadow:"0 4px 18px rgba(30,20,60,.12)",borderRadius:14 }}>
-                <StudyPrepChatCard sessionId={pinnedPrep} onEvents={onStudyPrepEvents} onRunning={onStudyPrepRunning} pinned developer={devView} onNotes={onStudyPrepNotes}/>
+                <StudyPrepChatCard sessionId={pinnedPrep} onEvents={onStudyPrepEvents} onRunning={onStudyPrepRunning} pinned developer={devView} onNotes={onStudyPrepNotes} conversationId={sessionId}/>
               </div>
             )}
             <div ref={composerWrapRef}>

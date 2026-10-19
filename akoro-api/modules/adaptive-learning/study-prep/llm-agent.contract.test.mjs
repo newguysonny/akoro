@@ -36,7 +36,8 @@ test("replies are mapped back to registry names; the call is bounded and labelle
   assert.match(src, /toRegistry\.get\(call\.function\.name\)/);
   assert.match(src, /__feature: feature, __timeoutMs: timeoutMs, __maxRetries: maxRetries/);
   const wrapper = readFileSync(new URL("./llm-agent.js", import.meta.url), "utf8");
-  assert.match(wrapper, /feature: "study_prep_planning", timeoutMs: 60_000, maxRetries: 1, maxTokens: 1600, think: true, talk: true/);
+  assert.match(wrapper, /feature = "study_prep_planning", maxTokens = 1600/, "planning is billed as planning, 1600 tokens a decision");
+  assert.match(wrapper, /feature, timeoutMs: 60_000, maxRetries: 1, maxTokens, think: true, talk: true/);
   const loop = readFileSync(new URL("./agent-loop.js", import.meta.url), "utf8");
   assert.match(loop, /action: "agent_error"/, "a provider failure is recorded in the session's events");
 });
@@ -72,7 +73,7 @@ test("the agent knows its budget and its last step can only finish", () => {
   const runtimeLoop = readFileSync(RUNTIME_LOOP, "utf8");
   assert.match(runtimeLoop, /finalOnly: iteration === maxIterations \? finals : null/);
   const loop = readFileSync(new URL("./agent-loop.js", import.meta.url), "utf8");
-  assert.match(loop, /contextSetName === "planning" \? \["propose_plan"\] : TERMINAL_ACTIONS/);
+  assert.match(loop, /finals \|\| \(contextSetName === "planning" \? \["propose_plan"\] : terminalActions\)/);
   const src = readFileSync(RUNTIME_AGENT, "utf8");
   assert.match(src, /finalOnly\.includes\(toRegistry\.get\(t\.function\.name\)\)/);
   assert.match(src, /Iteration \$\{iteration\} of \$\{maxIterations\}/);

@@ -36,6 +36,8 @@ export const TOOL_HEADLINES = Object.freeze({
   advance_topic: ["Moving on", "To the next topic"],
   defer_topic: ["Setting a topic aside", "To come back to later"],
   conclude_session: ["Wrapping up", "Ending the session"],
+  "topic.get_notes": ["Reviewing what you taught me", "Your notes on this topic"],
+  wait_for_learner: ["Waiting for you", "Your turn"],
   offer_strategy: ["Suggesting a way to learn it", "A strategy for this topic"],
 });
 const toolRow = (p) => TOOL_HEADLINES[p.tool] || TOOL_HEADLINES[p.action] || null;

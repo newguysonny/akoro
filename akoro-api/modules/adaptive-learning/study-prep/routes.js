@@ -9,7 +9,7 @@
 import express from "express";
 
 import { HarnessRejection } from "./harness.js";
-import { studyPrepEnabled, getHarness, runStudyPrepPlanningStep, startStudyPrepSession } from "./wiring.js";
+import { afterLearnerAction, studyPrepEnabled, getHarness, runStudyPrepPlanningStep, startStudyPrepSession } from "./wiring.js";
 import { supabaseStore } from "./store.js";
 import { publicEvent } from "./events.js";
 import { pauseCopy } from "./narration.js";
@@ -38,6 +38,10 @@ const guard = (res) => {
 // answered 422 for every real session and topic id.)
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const paramId = (res, value, label) => (UUID.test(value || "") ? value : (fail(res, 422, "tool_schema_invalid", `Invalid ${label}`), null));
+// The chat the card is in (optional): the agent's wake posts its message there.
+const chatOf = (req) => (UUID.test(req.body?.conversationId || "") ? req.body.conversationId : null);
+// The agent wakes on what the learner just did — after the response, never holding it.
+const wake = (req, id, action, facts = {}) => afterLearnerAction({ sessionId: id, learnerId: req.user.id, action, conversationId: chatOf(req), facts });
 
 // POST /study-prep/sessions — create + one planning agent step. No generation, no spend.
 router.post("/sessions", async (req, res) => {
@@ -100,6 +104,7 @@ router.post("/sessions/:id/confirm", async (req, res) => {
   if (!id) return;
   try {
     const result = await getHarness().confirmPlan({ sessionId: id, learnerId: req.user.id });
+    wake(req, id, "confirm");
     return res.json({ success: true, session: result.session, topics: result.topics });
   } catch (error) { return rejection(res, error); }
 });
@@ -111,7 +116,9 @@ router.post("/sessions/:id/adjust", async (req, res) => {
   if (!id) return;
   try {
     const drop = Array.isArray(req.body?.drop) ? req.body.drop.map((topic) => text(topic, 120)).slice(0, 12) : [];
-    const result = await getHarness().adjustPlan({ sessionId: id, learnerId: req.user.id, dropTopicIds: drop });
+    const order = Array.isArray(req.body?.order) ? req.body.order.map((topic) => text(topic, 120)).slice(0, 12) : null;
+    const result = await getHarness().adjustPlan({ sessionId: id, learnerId: req.user.id, dropTopicIds: drop, order });
+    wake(req, id, "adjust");
     return res.json({ success: true, session: result.session, plan: result.plan, estimate: result.estimate });
   } catch (error) { return rejection(res, error); }
 });
@@ -159,6 +166,7 @@ router.post("/sessions/:id/topics/:topicId/teach-back-done", async (req, res) =>
   if (!id || !topicId) return;
   try {
     const result = await getHarness().confirmTeachBack({ sessionId: id, learnerId: req.user.id, topicId });
+    wake(req, id, "teach_back", { topic: result.topic?.label });
     return res.json({ success: true, session: result.session, topic: result.topic });
   } catch (error) { return rejection(res, error); }
 });
@@ -181,6 +189,7 @@ router.post("/sessions/:id/advance", async (req, res) => {
   if (!id) return;
   try {
     const result = await getHarness().advanceTopic({ sessionId: id, learnerId: req.user.id, intent: null });
+    wake(req, id, "advance", { topic: result.topic?.label });
     return res.json({ success: true, session: result.session, topic: result.topic });
   } catch (error) { return rejection(res, error); }
 });
@@ -273,6 +282,8 @@ function shapeView(view) {
     loop: view.loop || undefined,
     // D45: practice is the Agent Check — the card words its buttons for it.
     agentCheck: !!view.agentCheck,
+    // The next Agent Check: when it starts by itself, or that it needs the learner's OK (past the estimate).
+    nextCheck: view.nextCheck || undefined,
   };
 }
 

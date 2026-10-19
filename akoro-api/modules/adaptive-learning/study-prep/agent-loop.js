@@ -37,6 +37,9 @@ export async function runAgentStep({
   sessionId, topicId = null, goal, agent, registry, store, harness,
   contextSetName = "planning", maxIterations = POLICY.MAX_ITERATIONS_PER_STEP, requireReads = null,
   onThought = null, onMessage = null,
+  // A wake (after the plan is ready) ends by waiting for the learner too, and
+  // never pauses the session at its cap — code takes the safe next step.
+  terminalActions = TERMINAL_ACTIONS, finalActions: finals = null, pauseOnCap = true,
 }) {
   // onMessage({ iteration, text, seen }): the agent's words to the learner for this decision; `seen` is what it has observed so far (for the fact filter).
   const seenSoFar = [];
@@ -60,7 +63,7 @@ export async function runAgentStep({
     };
   }
   // Planning ends only by proposing a plan — never by concluding the session.
-  const finalActions = contextSetName === "planning" ? ["propose_plan"] : TERMINAL_ACTIONS;
+  const finalActions = finals || (contextSetName === "planning" ? ["propose_plan"] : terminalActions);
   const append = (row) => store.appendEvents(sessionId, [makeEvent({ sequence: 0, ...row })]);
   // Paused from the state it is really in — the conditional write pins it,
   // and a guessed status would silently miss (F7).
@@ -72,7 +75,7 @@ export async function runAgentStep({
   const run = await runAgentLoop({
     agent, registry, goal, operation: contextSetName,
     caps: capsFor("study_prep", { maxIterations, maxToolCalls: POLICY.SESSION_TOOL_CALL_CAP }),
-    terminalActions: TERMINAL_ACTIONS, finalActions,
+    terminalActions, finalActions,
     // A 402 ends the step — the harness already paused the session resumable
     // inside the practice op. The agent still SEES the code.
     stopCodes: ["insufficient_balance"],
@@ -115,9 +118,9 @@ export async function runAgentStep({
       return null;
     },
     // Session-level tool-call guard (S4 max-turns, ~40 calls).
-    onToolCallCap: () => pauseAsItIs({ reason: "session_tool_call_cap" }),
+    onToolCallCap: () => (pauseOnCap ? pauseAsItIs({ reason: "session_tool_call_cap" }) : null),
     // Loop cap reached without a terminal action — pause, honestly.
-    onLoopCap: ({ iterations }) => pauseAsItIs({ iterations }),
+    onLoopCap: ({ iterations }) => (pauseOnCap ? pauseAsItIs({ iterations }) : null),
   });
 
   // Study Prep's own names for how a step ended (pinned by its contract tests).

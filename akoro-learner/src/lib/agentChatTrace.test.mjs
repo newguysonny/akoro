@@ -245,3 +245,31 @@ test('a workflow run reads as the agent working: thought → tool (found) → wh
   assert.equal(done.at(-1).status, 'running', 'between decisions: Thinking…');
   assert.ok(workflowRunBlocks(events, { running: false }).every((b) => b.status !== 'running'));
 });
+
+test('wakes: each is its own run; the planning run stays before them; a wake bound is never a card step', async () => {
+  const { splitWakes, wakeOpen, workflowCardSteps, countdownLabel } = await import('./agentChatTrace.js');
+  const at = (s) => new Date(Date.UTC(2026, 9, 19, 12, 0, s)).toISOString();
+  const ev = (sequence, type, payload = {}, headline = 'x') => ({ sequence, type, timestamp: at(sequence), payload, narration: { headline } });
+  const events = [
+    ev(1, 'tool.started', { tool: 'syllabus.resolve', iteration: 1 }),
+    ev(2, 'tool.completed', { tool: 'syllabus.resolve', iteration: 1 }),
+    ev(3, 'operation.started', { operation: 'wake', wakeId: 'w1', trigger: 'plan_confirmed', label: 'You approved the plan' }, 'You approved the plan'),
+    ev(4, 'tool.started', { tool: 'topic.get_notes', iteration: 1 }),
+    ev(5, 'activity', { message: 'You have 2 notes.', iteration: 1 }),
+    ev(6, 'operation.completed', { operation: 'wake', wakeId: 'w1' }, 'You approved the plan'),
+    ev(7, 'assessment.started', { topicLabel: 'Cells' }),
+    ev(8, 'operation.started', { operation: 'wake', wakeId: 'w2', trigger: 'check_scored' }, 'An Agent Check was marked'),
+    ev(9, 'tool.started', { tool: 'session.get_state', iteration: 1 }),
+  ];
+  const { before, wakes } = splitWakes(events);
+  assert.deepEqual(before.map((e) => e.sequence), [1, 2]);
+  assert.deepEqual(wakes.get('w1').events.map((e) => e.sequence), [4, 5, 7], 'between wakes: with the latest one');
+  assert.equal(wakes.get('w1').open, false);
+  assert.equal(wakes.get('w2').open, true);
+  assert.equal(wakeOpen(events, Date.parse(at(30))), true);
+  assert.equal(wakeOpen(events, Date.parse(at(9)) + 4 * 60_000), false, 'a wake left open for minutes is not running');
+  assert.ok(!workflowCardSteps(events).some((s) => s.id === 'wf_6'), 'the end of a wake is not a step');
+  assert.equal(countdownLabel(42_000), '0:42');
+  assert.equal(countdownLabel(60_000), '1:00');
+  assert.equal(countdownLabel(-5), '0:00');
+});

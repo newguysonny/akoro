@@ -49,7 +49,7 @@ test("the plan card reproduces the reference sketch: Approve & Start / Adjust", 
 
 test("the teach-back gate is the learner's own button hitting the harness endpoint", () => {
   assert.match(card, /I've taught it back — unlock retest/);
-  assert.match(card, /confirmStudyPrepTeachBack\(session\.id, activeTopic\.id\)/);
+  assert.match(card, /confirmStudyPrepTeachBack\(session\.id, activeTopic\.id(, conversationId)?\)/);
   assert.match(api, /teach-back-done/);
 });
 

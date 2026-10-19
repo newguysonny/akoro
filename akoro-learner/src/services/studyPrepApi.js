@@ -22,12 +22,15 @@ export async function fetchStudyPrepSession(sessionId) {
   return apiGet(`${BASE}/sessions/${sessionId}`);
 }
 
-export async function confirmStudyPrepPlan(sessionId) {
-  return apiPost(`${BASE}/sessions/${sessionId}/confirm`, {});
+// conversationId (optional): the chat the card is in — the agent's wake posts its message there.
+const inChat = (conversationId) => (conversationId ? { conversationId } : {});
+
+export async function confirmStudyPrepPlan(sessionId, conversationId = null) {
+  return apiPost(`${BASE}/sessions/${sessionId}/confirm`, inChat(conversationId));
 }
 
-export async function adjustStudyPrepPlan(sessionId, drop) {
-  return apiPost(`${BASE}/sessions/${sessionId}/adjust`, { drop });
+export async function adjustStudyPrepPlan(sessionId, drop, { order = null, conversationId = null } = {}) {
+  return apiPost(`${BASE}/sessions/${sessionId}/adjust`, { drop, ...(order ? { order } : {}), ...inChat(conversationId) });
 }
 
 export async function generateStudyPrepPractice(sessionId, topicId, mode) {
@@ -38,16 +41,16 @@ export async function submitStudyPrepPractice(sessionId, topicId, answers) {
   return apiPost(`${BASE}/sessions/${sessionId}/topics/${topicId}/submit`, { answers });
 }
 
-export async function confirmStudyPrepTeachBack(sessionId, topicId) {
-  return apiPost(`${BASE}/sessions/${sessionId}/topics/${topicId}/teach-back-done`, {});
+export async function confirmStudyPrepTeachBack(sessionId, topicId, conversationId = null) {
+  return apiPost(`${BASE}/sessions/${sessionId}/topics/${topicId}/teach-back-done`, inChat(conversationId));
 }
 
 export async function studyPrepNext(sessionId) {
   return apiPost(`${BASE}/sessions/${sessionId}/next`, {});
 }
 
-export async function advanceStudyPrepTopic(sessionId) {
-  return apiPost(`${BASE}/sessions/${sessionId}/advance`, {});
+export async function advanceStudyPrepTopic(sessionId, conversationId = null) {
+  return apiPost(`${BASE}/sessions/${sessionId}/advance`, inChat(conversationId));
 }
 
 export async function deferStudyPrepTopic(sessionId, topicId, reasonCode) {

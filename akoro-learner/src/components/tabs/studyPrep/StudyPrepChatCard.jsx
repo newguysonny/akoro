@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BRAND, GREEN, RED } from '../../../constants.js';
 import BattleModal from '../../battles/BattleModal.jsx';
 import { Icon } from '../../common/Icons.jsx';
-import { studyPrepCardHead, workflowCardSteps } from '../../../lib/agentChatTrace.js';
+import { countdownLabel, studyPrepCardHead, wakeOpen, workflowCardSteps } from '../../../lib/agentChatTrace.js';
 import { cacheEvents, cachedEvents, openWorkflowStream, rememberSeen, seenSequence } from '../../../lib/workflowStream.js';
 import { WorkflowHead, WorkflowSteps } from './WorkflowSteps.jsx';
 import {
@@ -35,7 +35,9 @@ const TOPIC_STATUS_STYLE = {
 /** Live events that move the session: the card re-reads it on these. */
 const STATE_EVENTS = new Set([
   'workflow.state_changed', 'workflow.paused', 'workflow.resumed', 'workflow.completed', 'workflow.cancelled',
-  'topic.state_changed', 'assessment.completed', 'learner.action_received', 'decision.accepted',
+  'topic.state_changed', 'assessment.completed', 'assessment.started', 'learner.action_received', 'decision.accepted',
+  // The agent's wake ended: re-read for the next check's countdown.
+  'operation.completed',
 ]);
 
 const TOPIC_STATUS_LABEL = {
@@ -52,7 +54,7 @@ const awayCache = new Map();
  * runs (head + latest steps). onRunning(sessionId, running) tells the chat
  * whether to pin it.
  */
-export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinned = false, developer = false, onNotes }) {
+export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinned = false, developer = false, onNotes, conversationId = null }) {
   const [view, setViewState] = useState(() => viewCache.get(sessionId) || null);
   const setView = useCallback((next) => setViewState((previous) => {
     const value = typeof next === 'function' ? next(previous) : next;
@@ -66,6 +68,7 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
   const [error, setError] = useState('');
   const [adjusting, setAdjusting] = useState(false);
   const [dropPick, setDropPick] = useState({});
+  const [order, setOrder] = useState(null);
   const [noNotes, setNoNotes] = useState(false);
   const [watching, setWatching] = useState(null);
 
@@ -164,7 +167,26 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
   const status = view?.session?.status;
   const lastAt = wfEvents?.length ? Date.parse(wfEvents[wfEvents.length - 1].timestamp || '') || 0 : 0;
   const planningNow = ['planning', 'replanning'].includes(status) && Date.now() - lastAt < 3 * 60_000;
-  const running = !!wfEvents && (planningNow || checkRunning);
+  // After the plan: the agent working on a wake (approve, a new topic, a marked check…) also runs.
+  const waking = !!wfEvents && wakeOpen(wfEvents);
+  const running = !!wfEvents && (planningNow || checkRunning || waking);
+
+  // The next Agent Check starts by itself (a minute after its topic or the teach-back): the countdown.
+  const nextCheck = view?.nextCheck || null;
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const counting = !!nextCheck?.at && !nextCheck.overEstimate && !checkRunning;
+  useEffect(() => {
+    if (!counting) return undefined;
+    const tick = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(tick);
+  }, [counting]);
+  const dueIn = counting ? Date.parse(nextCheck.at) - nowMs : null;
+  // Due: the server starts it within a few seconds — re-read until it has.
+  useEffect(() => {
+    if (!counting || dueIn > 0) return undefined;
+    const timer = setInterval(refresh, 5000);
+    return () => clearInterval(timer);
+  }, [counting, dueIn != null && dueIn <= 0, refresh]);
   const steps = useMemo(() => workflowCardSteps(wfEvents || [], { running }), [wfEvents, running]);
   useEffect(() => { onRunning?.(sessionId, running); }, [sessionId, running, onRunning]);
 
@@ -202,17 +224,28 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
   const head = studyPrepCardHead(session.status, activeTopic?.label || null);
   const watch = () => setWatching({ id: shownTopic.checkBattleId, title: `Agent Check: ${shownTopic.label}`, topic: shownTopic.label, status: 'lobby', type: 'check' });
 
-  const confirmPlan = () => void run(() => confirmStudyPrepPlan(session.id), (response) => {
+  const confirmPlan = () => void run(() => confirmStudyPrepPlan(session.id, conversationId), (response) => {
     setView((previous) => ({ ...previous, session: response.session, topics: response.topics }));
     setAdjusting(false);
   });
 
+  const planIds = (session.plan || []).map((topic) => topic.syllabusTopicId);
+  const shownOrder = order || planIds;
+  const move = (id, by) => {
+    const list = [...shownOrder];
+    const at = list.indexOf(id);
+    const to = at + by;
+    if (at < 0 || to < 0 || to >= list.length) return;
+    [list[at], list[to]] = [list[to], list[at]];
+    setOrder(list);
+  };
   const saveAdjust = () => {
     const drop = Object.keys(dropPick).filter((key) => dropPick[key]);
-    if (!drop.length) { setAdjusting(false); return; }
-    void run(() => adjustStudyPrepPlan(session.id, drop), (response) => {
+    const reordered = order && order.join('|') !== planIds.join('|') ? order.filter((id) => !dropPick[id]) : null;
+    if (!drop.length && !reordered) { setAdjusting(false); setOrder(null); return; }
+    void run(() => adjustStudyPrepPlan(session.id, drop, { order: reordered, conversationId }), (response) => {
       setView((previous) => ({ ...previous, session: response.session }));
-      setAdjusting(false); setDropPick({});
+      setAdjusting(false); setDropPick({}); setOrder(null);
     });
   };
 
@@ -233,11 +266,37 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
     });
   };
 
-  const teachBackDone = () => void run(() => confirmStudyPrepTeachBack(session.id, activeTopic.id), (response) => {
+  const teachBackDone = () => void run(() => confirmStudyPrepTeachBack(session.id, activeTopic.id, conversationId), (response) => {
     setView((previous) => ({ ...previous, topics: previous.topics.map((topic) => topic.id === response.topic.id ? response.topic : topic) }));
+    refresh();
   });
 
-  const advance = () => void run(() => advanceStudyPrepTopic(session.id), (response) => {
+  // The next check, as the card offers it: a countdown with Start now, or — past the approved coins — the learner's OK.
+  const checkStarter = (fallback) => {
+    if (!agentMode || !nextCheck || nextCheck.topicId !== activeTopic?.id) return fallback;
+    if (nextCheck.overEstimate) {
+      return (
+        <div data-over-estimate="" style={{ display: 'grid', gap: 6, padding: '8px 10px', borderRadius: 10, background: '#FFF7ED', border: '1px solid #F59E0B55' }}>
+          <div style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 12, fontWeight: 800, color: '#B45309' }}>
+            <Icon name="ti-coin" size={15} color="#B45309"/> The coins you approved are used up{nextCheck.coinsLeft ? ` (${nextCheck.coinsLeft} left)` : ''}.
+          </div>
+          <div style={caption}>The next Agent Check costs {nextCheck.coins ?? 2} coins more than the plan's estimate. It only starts if you say so.</div>
+          <div><button type="button" disabled={busy} onClick={() => generate(nextCheck.mode)} style={primary}>Go on · {nextCheck.coins ?? 2} coins</button></div>
+        </div>
+      );
+    }
+    return (
+      <div data-auto-start="" style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 10px', borderRadius: 10, background: `${BRAND}0F`, border: `1px solid ${BRAND}30` }}>
+        <Icon name="ti-clock" size={15} color={BRAND}/>
+        <span style={{ fontSize: 12, fontWeight: 800, color: BRAND }}>
+          {dueIn != null && dueIn > 0 ? `Agent Check starts in ${countdownLabel(dueIn)}` : 'Starting the Agent Check…'} · {nextCheck.coins ?? 2} coins
+        </span>
+        <button type="button" disabled={busy} onClick={() => generate(nextCheck.mode)} style={{ ...primary, marginLeft: 'auto', padding: '7px 11px' }}>Start now</button>
+      </div>
+    );
+  };
+
+  const advance = () => void run(() => advanceStudyPrepTopic(session.id, conversationId), (response) => {
     setView((previous) => ({ ...previous, topics: previous.topics.map((topic) => topic.id === response.topic.id ? response.topic : topic) }));
     setResult(null); setAttempt(null); setNoNotes(false);
   });
@@ -265,7 +324,7 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
       {error && <div role="alert" style={errorBox}>{error}</div>}
 
       {/* Pinned (running): the head and the latest steps only — the full card is back at its message once it settles. */}
-      {pinned ? (checkLive && <button type="button" onClick={watch} style={primary}>Watch the Agent Check</button>) : <>
+      {pinned ? (checkLive ? <button type="button" onClick={watch} style={primary}>Watch the Agent Check</button> : (counting && checkStarter(null))) : <>
 
       {/* ── the plan card: Approve & Start / Adjust (the only spend gate) ── */}
       {/* With a workflow, an empty plan isn't shown while it plans — the steps above are the progress. */}
@@ -298,16 +357,23 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
           ) : (
             <>
               <div style={{ display: 'grid', gap: 5 }}>
-                {(session.plan || []).map((topic) => (
-                  <label key={topic.syllabusTopicId} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, color: 'var(--ak-text-sub)', fontWeight: 700, padding: '6px 9px', border: '1px solid var(--ak-border2)', borderRadius: 9 }}>
-                    <input type="checkbox" checked={!!dropPick[topic.syllabusTopicId]} onChange={(event) => setDropPick({ ...dropPick, [topic.syllabusTopicId]: event.target.checked })} />
-                    {topic.position}. {topic.label}
-                  </label>
-                ))}
+                <div style={caption}>Tick a topic to drop it; the arrows change the order (it's checked again).</div>
+                {shownOrder.map((id, index) => {
+                  const topic = (session.plan || []).find((t) => t.syllabusTopicId === id);
+                  if (!topic) return null;
+                  return (
+                    <div key={id} data-adjust-topic={id} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, color: 'var(--ak-text-sub)', fontWeight: 700, padding: '6px 9px', border: '1px solid var(--ak-border2)', borderRadius: 9 }}>
+                      <input type="checkbox" aria-label={`Drop ${topic.label}`} checked={!!dropPick[id]} onChange={(event) => setDropPick({ ...dropPick, [id]: event.target.checked })} />
+                      <span style={{ flex: 1, textDecoration: dropPick[id] ? 'line-through' : 'none' }}>{index + 1}. {topic.label}</span>
+                      <button type="button" aria-label={`Move ${topic.label} up`} disabled={index === 0} onClick={() => move(id, -1)} style={arrow}><Icon name="ti-chevron-up" size={14}/></button>
+                      <button type="button" aria-label={`Move ${topic.label} down`} disabled={index === shownOrder.length - 1} onClick={() => move(id, 1)} style={arrow}><Icon name="ti-chevron-down" size={14}/></button>
+                    </div>
+                  );
+                })}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button type="button" disabled={busy} onClick={saveAdjust} style={primary}>Save adjustment</button>
-                <button type="button" onClick={() => { setAdjusting(false); setDropPick({}); }} style={secondary}>Cancel</button>
+                <button type="button" onClick={() => { setAdjusting(false); setDropPick({}); setOrder(null); }} style={secondary}>Cancel</button>
               </div>
             </>
           )}
@@ -363,7 +429,7 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
                       <div style={caption}>{noNotes
                         ? `Your agent has no notes on ${shownTopic.label} yet, so there's nothing to check. Teach it first — nothing was charged.`
                         : 'Your agent is checked first: your teaching guide asks, your agent answers only from what you taught it, and Sergeant judges every answer.'}</div>
-                      <div><button type="button" disabled={busy} onClick={() => generate('diagnostic')} style={primary}>Start Agent Check (2 coins)</button></div>
+                      {checkStarter(<div><button type="button" disabled={busy} onClick={() => generate('diagnostic')} style={primary}>Start Agent Check (2 coins)</button></div>)}
                     </>
                   )}
                 </div>
@@ -421,7 +487,7 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
                       <div><button type="button" disabled={busy} onClick={teachBackDone} style={primary}>I've taught it back — unlock retest</button></div>
                     </div>
                   )}
-                  {shownTopic.learnerConfirmedReady && !attempt && shownResult.outcome === 'retest_offered' && (
+                  {shownTopic.learnerConfirmedReady && !attempt && shownResult.outcome === 'retest_offered' && checkStarter(
                     <div><button type="button" disabled={busy} onClick={() => generate('retest')} style={primary}>{agentMode ? 'Start a fresh Agent Check (2 coins)' : 'Start fresh retest (2 coins)'}</button></div>
                   )}
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -470,5 +536,6 @@ const caption = { fontSize: 10.5, color: 'var(--ak-text-muted)', fontWeight: 650
 const primary = { border: 0, borderRadius: 10, padding: '9px 12px', background: `linear-gradient(135deg,${BRAND},#4C1DCC)`, color: '#fff', fontWeight: 850, fontSize: 11.5, cursor: 'pointer' };
 const secondary = { border: '1px solid var(--ak-border2)', borderRadius: 10, padding: '8px 12px', background: 'var(--ak-surface-hover)', color: 'var(--ak-text-sub)', fontWeight: 800, fontSize: 11.5, cursor: 'pointer' };
 const errorBox = { padding: '8px 10px', borderRadius: 9, background: `${RED}12`, color: RED, border: `1px solid ${RED}35`, fontSize: 11.5, fontWeight: 700 };
+const arrow = { border: '1px solid var(--ak-border2)', borderRadius: 7, background: 'var(--ak-surface)', color: 'var(--ak-text-sub)', padding: '3px 5px', cursor: 'pointer', display: 'flex' };
 const chip = { display: 'inline-flex', alignItems: 'center', padding: '4px 9px', borderRadius: 999, fontSize: 11, fontWeight: 800 };
 const optionStyle = { display: 'flex', gap: 7, alignItems: 'flex-start', padding: '7px 8px', border: '1px solid', borderRadius: 8, fontSize: 12, color: 'var(--ak-text-sub)', cursor: 'pointer' };

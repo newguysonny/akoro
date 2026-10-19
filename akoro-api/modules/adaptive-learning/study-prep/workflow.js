@@ -115,7 +115,18 @@ export function studyPrepResultLine(tool, observation) {
     case "learner.get_history": return list(r.runs).length ? `${many(list(r.runs).length, "past practice run")} found` : "No past practice on this subject yet";
     case "learner.get_relevant_memory": return list(r.memories).length ? `${many(list(r.memories).length, "note")} from earlier sessions` : "Nothing noted on this subject yet";
     case "concept.get_prerequisites": return list(r.edges).length ? `${many(list(r.edges).length, "prerequisite link")} to respect` : "No prerequisite links recorded";
-    case "plan.validate": return r.ok === false ? null : "The plan passes the checks";
+    case "plan.validate": return r.ok === false ? null : r.estimate?.totalCoins != null ? `The plan passes the checks · ${r.estimate.totalCoins} coins` : "The plan passes the checks";
+    case "topic.get_notes": return r.notes == null ? null : r.notes ? many(r.notes, "note") : "No notes on it yet";
+    case "session.get_state": {
+      const active = list(r.topics).find((t) => t.status === "active");
+      if (active?.lastCheck?.total) return `${active.label}: ${active.lastCheck.correct} of ${active.lastCheck.total} on the last check`;
+      const done = list(r.topics).filter((t) => t.status === "understood").length;
+      return list(r.topics).length ? `${done} of ${list(r.topics).length} topics understood` : null;
+    }
+    case "practice.generate": return r.check ? "Agent Check started" : r.skipped ? "Nothing to check yet — teach it first" : null;
+    case "advance_topic": return r.topic?.label ? `Now on: ${r.topic.label}` : null;
+    case "defer_topic": return r.topic?.label ? `${r.topic.label} set aside for later` : null;
+    case "conclude_session": return r.summary ? `${r.summary.understood} of ${r.summary.topics} topics understood` : null;
     default: return null;
   }
 }
@@ -138,7 +149,8 @@ export function workflowEventFor(row) {
   // The learner sees the harness's narrated steps, the tools the agent ran and
   // what it said it was doing — never a provider failure or raw facts.
   // An observation with no tool (the harness noting the session's inputs) is not a step.
-  const learner = Boolean(row.narrative) || (type.startsWith("tool.") && Boolean(tool)) || (type === "decision.proposed" && (row.agent_intent || row.agentIntent));
+  // Waiting for the learner is how a wake ends — its message says so; the call itself is not a step.
+  const learner = Boolean(row.narrative) || (type.startsWith("tool.") && Boolean(tool) && tool !== "wait_for_learner") || (type === "decision.proposed" && (row.agent_intent || row.agentIntent));
   const intent = row.origin === "agent_stated_intent" ? (row.agent_intent || row.agentIntent || null) : null;
   return {
     event_type: type,
@@ -229,6 +241,18 @@ export function makeWorkflowMirror(engine, { log = console } = {}) {
       const id = await workflowIdOf(sessionId, store).catch(() => null);
       if (!id) return;
       await engine.appendEvent(id, { event_type: "activity", category: "synthesis", actor: "agent", visibility: "learner", payload: { message: text, iteration } }).catch(quiet("agent message"));
+    },
+    /**
+     * A wake's bounds (the agent's run after a learner action): operation.started
+     * / operation.completed with the wake's id — the chat splits the run there.
+     */
+    async wakeMark(sessionId, store, { wakeId, trigger, label = null, phase = "started" }) {
+      const id = await workflowIdOf(sessionId, store).catch(() => null);
+      if (!id) return null;
+      return engine.appendEvent(id, {
+        event_type: phase === "completed" ? "operation.completed" : "operation.started", category: "action", operation: "wake",
+        actor: "agent", visibility: "learner", payload: { operation: "wake", wakeId, trigger, label },
+      }).catch(quiet("wake mark"));
     },
     async eventsWritten(sessionId, rows, store) {
       const id = await workflowIdOf(sessionId, store).catch(() => null);

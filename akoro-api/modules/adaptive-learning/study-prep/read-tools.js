@@ -123,7 +123,11 @@ export function makeSessionStateReader(harness) {
       topics: view.topics.map((topic) => ({
         id: topic.id, label: topic.label, syllabusTopicId: topic.syllabusTopicId, position: topic.position,
         status: topic.status, attemptsUsed: topic.attemptsUsed, learnerConfirmedReady: topic.learnerConfirmedReady,
+        // The topic's last Agent Check, as marked (never the questions' answers).
+        ...(topic.checkResult ? { lastCheck: { correct: topic.checkResult.correct, total: topic.checkResult.total, guessed: topic.checkResult.guessed, gaps: (topic.checkResult.gaps || []).slice(0, 4) } } : {}),
+        ...(topic.checkBattleId && !topic.checkScoredAt ? { checkRunning: true } : {}),
       })),
+      ...(view.session.estimate && harness.budgetFor ? { coins: await harness.budgetFor({ id: view.session.id, estimate: view.session.estimate }).catch(() => undefined) } : {}),
       recentEvents: view.events.map((event) => ({
         sequence: event.sequence, eventType: event.event_type, action: event.action || null,
         narrative: event.narrative || null,

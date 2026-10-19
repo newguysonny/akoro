@@ -55,6 +55,9 @@ export const AGENT_FEATURES = Object.freeze([
   { key: "teaching.agent_check", who: "learner", area: "teaching", name: "Agent Check",
     what: "A free 5-question check the agent answers from what the learner taught it; the gaps show what to teach next.",
     examples: ["Start an Agent Check on osmosis."], since: "D45", isOn: off("AKORO_STUDY_PREP_AGENT_CHECK") },
+  { key: "teaching.study_prep_wakes", who: "learner", area: "teaching", name: "Study Prep keeps working after the plan",
+    what: "After the plan is ready, each approve, adjust, new topic and marked Agent Check wakes the agent for up to 4 decisions, shown in the chat. A check starts by itself a minute after its topic or teach-back, inside the approved coins; past them the agent asks first.",
+    examples: ["Prepare me for my Basic Science exam in 5 weeks", "(approve the plan on the card)"], since: "2026-10-19", isOn: off("AKORO_STUDY_PREP_ENABLED") },
 
   // In the chat
   { key: "chat.trace", who: "shared", area: "other", name: "Live steps",

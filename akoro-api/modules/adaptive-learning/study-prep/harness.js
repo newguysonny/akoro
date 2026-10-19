@@ -20,6 +20,7 @@ import { makeEvent, stampThoughtType } from "./events.js";
 import { HarnessRejection, createChecker, createRejector, stateIs } from "../../agent-runtime/harness.js";
 import { deliberate } from "./narration.js";
 import { guardStudyPrepStore } from "./workflow.js";
+import { autoStartFor, checkBudget, spentOnChecks } from "./wake.js";
 import {
   STRATEGY_LIBRARY, STUDY_PREP_COST, applyThreshold, estimateSessionCost, isPermittedStrategy, masteryWriteBack,
 } from "./education-engine.js";
@@ -37,7 +38,7 @@ const HTTP_FOR_CODE = {
   study_prep_disabled: 409, session_not_found: 404, tool_not_permitted: 403, tool_schema_invalid: 422,
   invalid_state_transition: 409, attempt_cap_exceeded: 409, strategy_not_permitted: 422,
   prerequisite_violation: 422, topic_not_in_syllabus: 422, plan_too_large: 422, duplicate_topic: 422,
-  deferred_retry_used: 409, insufficient_balance: 402, teach_back_gate: 409, agent_loop_cap: 409,
+  deferred_retry_used: 409, insufficient_balance: 402, over_estimate: 409, teach_back_gate: 409, agent_loop_cap: 409,
   session_tool_call_cap: 409, unknown_action: 400, syllabus_exists: 409, outline_invalid: 502,
 };
 
@@ -97,6 +98,7 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     learnerConfirmedReady: Boolean(row.learner_confirmed_ready),
     checkBattleId: row.check_battle_id || null, checkMode: row.check_mode || null,
     checkScoredAt: row.check_scored_at || null, checkResult: row.check_result || null,
+    updatedAt: row.updated_at || null,
   });
 
   const publicSession = (row, topics = null) => ({
@@ -304,13 +306,22 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     return { session: publicSession(updated, topics), topics: topics.map(publicTopic) };
   }
 
-  async function adjustPlan({ sessionId, learnerId, dropTopicIds = [] }) {
+  async function adjustPlan({ sessionId, learnerId, dropTopicIds = [], order = null }) {
     const session = await ownedSession(sessionId, learnerId);
     if (!session) throw new HarnessRejection("session_not_found", "Study-prep session was not found", 404);
     await check("adjust_plan", { session });
     const drop = new Set(dropTopicIds);
-    const kept = (session.plan || []).filter((topic) => !drop.has(topic.syllabusTopicId));
+    let kept = (session.plan || []).filter((topic) => !drop.has(topic.syllabusTopicId));
     if (kept.length === 0) return reject(session, "tool_schema_invalid", "A plan needs at least one topic");
+    // A new order (the learner moved topics): the same topics, re-checked against the prerequisites.
+    const reordered = Array.isArray(order) && order.length ? order.filter((id) => kept.some((t) => t.syllabusTopicId === id)) : null;
+    if (reordered) {
+      if (reordered.length !== kept.length) return reject(session, "tool_schema_invalid", "The new order must list every kept topic once");
+      const prerequisites = await syllabus.prerequisiteEdges({ subject: session.subject });
+      const validation = validatePlan({ proposedTopics: reordered, syllabusTopics: kept.map((t) => ({ id: t.syllabusTopicId })), prerequisites });
+      if (!validation.ok) return reject(session, validation.code, validation.message, { topics: reordered });
+      kept = reordered.map((id) => kept.find((t) => t.syllabusTopicId === id));
+    }
     const plan = kept.map((topic, index) => ({ ...topic, position: index + 1 }));
     const estimate = estimateFor(plan.length);
     const updated = await store.updateSessionConditional(session.id, "awaiting_confirmation", {
@@ -319,7 +330,7 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     if (!updated) return reject(session, "invalid_state_transition", "The plan changed — refresh and try again");
     await log(session.id, null, {
       eventType: "harness_decision", origin: "harness", decisionNode: "plan_adjusted",
-      facts: { dropped: dropTopicIds.length, topicCount: plan.length, totalCoins: estimate.totalCoins },
+      facts: { dropped: dropTopicIds.length, reordered: Boolean(reordered), topicCount: plan.length, totalCoins: estimate.totalCoins },
       narrative: deliberate("plan_adjusted", { dropped: dropTopicIds.length })?.narrative,
     });
     return { session: publicSession(updated), plan, estimate };
@@ -351,7 +362,7 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
    * nothing else changes. mode 'diagnostic' starts a run, 'retest' requires
    * the learner's own teach-back confirmation (hard gate).
    */
-  async function startTopicPractice({ sessionId, learnerId, topicId, mode = "diagnostic", intent = null }) {
+  async function startTopicPractice({ sessionId, learnerId, topicId, mode = "diagnostic", intent = null, withinEstimateOnly = false }) {
     const session = await ownedSession(sessionId, learnerId);
     if (!session) throw new HarnessRejection("session_not_found", "Study-prep session was not found", 404);
     const topics = await store.getTopics(session.id);
@@ -367,6 +378,12 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     }
     const gate = teachBackGate({ mode, learnerConfirmedReady: topic.learner_confirmed_ready });
     if (!gate.ok) return reject(session, gate.code, gate.message, { topic: topic.label });
+    // The agent and the auto-start stay inside the coins the learner approved;
+    // past it, only the learner's own tap goes on (they were asked).
+    if (withinEstimateOnly && session.estimate) {
+      const budget = checkBudget(session, spentOnChecks(await store.listEvents(session.id, { limit: 500 })));
+      if (!budget.withinEstimate) return reject(session, "over_estimate", `The next check needs ${budget.next} coins and ${budget.left} are left of the approved estimate — ask the learner first`, { left: budget.left });
+    }
 
     if (agentCheck) return startAgentCheck({ session, topic, learnerId, mode });
 
@@ -428,6 +445,8 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
         facts: { topic: topic.label, notes: 0 },
         narrative: deliberate("agent_check_skipped", { topicLabel: topic.label })?.narrative,
       });
+      // Nothing to check yet: no auto-start until they teach it and say so.
+      await store.updateTopicConditional(topic.id, "active", { check_mode: "skipped", updated_at: now() }).catch(() => null);
       return { session: publicSession(session), topic: publicTopic(topic), skipped: { reason: "no_notes", next: "teach" } };
     }
 
@@ -801,6 +820,22 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     return { session: publicSession(updated) };
   }
 
+  /** topic.get_notes — how much the learner has taught the agent on a topic (no charge). */
+  async function topicNotes({ sessionId, learnerId, topicId = null }) {
+    const session = await ownedSession(sessionId, learnerId);
+    if (!session) throw new HarnessRejection("session_not_found", "Study-prep session was not found", 404);
+    const topics = await store.getTopics(session.id);
+    const topic = topics.find((row) => row.id === topicId) || activeTopic(topics);
+    if (!topic) return reject(session, "invalid_state_transition", "No topic is active");
+    const coverage = agentCheck ? await agentCheck.coverage({ learnerId, topic: topic.label, subject: session.subject }).catch(() => null) : null;
+    return { topic: topic.label, notes: coverage?.notes ?? null, strength: coverage?.strength || "unknown" };
+  }
+
+  /** The coins approved for checks, and what is spent (the plan's estimate). */
+  async function budgetFor(session) {
+    return checkBudget(session, spentOnChecks(await store.listEvents(session.id, { limit: 500 })));
+  }
+
   /** plan.validate dry-run — the agent sees exactly what the harness would check. */
   async function validateProposedPlan({ sessionId, learnerId, topicIds }) {
     const session = await ownedSession(sessionId, learnerId);
@@ -823,7 +858,16 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     ]);
     // agentCheck: practice is the Agent Check (D45) — the card words its
     // buttons for it before the learner taps anything.
-    return { session: publicSession(session, topics), topics: topics.map(publicTopic), events, agentCheck: !!agentCheck };
+    const view = { session: publicSession(session, topics), topics: topics.map(publicTopic), events, agentCheck: !!agentCheck };
+    // When the next check starts by itself (the card's countdown), or that it needs the learner's OK.
+    const active = view.topics.find((t) => t.status === "active");
+    if (agentCheck && active && session.status === "topic_active") {
+      const policy = await topicWorkflow.policyFor({ examBoard: session.exam_board, subject: session.subject }).catch(() => null);
+      const spent = spentOnChecks(eventLimit >= 200 ? events : await store.listEvents(session.id, { limit: 500 }).catch(() => events));
+      const due = autoStartFor(active, view.session, { spent, maxAttempts: policy?.max_attempts ?? Infinity });
+      if (due) view.nextCheck = { topicId: active.id, mode: due.mode, at: due.at || null, overEstimate: due.blocked === "over_estimate", coinsLeft: due.budget?.left ?? null, coins: due.budget?.next ?? null };
+    }
+    return view;
   }
 
   /**
@@ -856,6 +900,6 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     advanceTopic, deferTopic, retryDeferredTopic, flagTopic,
     concludeSession, pauseSession, resumeSession, cancelSession,
     validateProposedPlan, getSessionView, sessionNext, generateSyllabus, resolveSyllabus,
-    publicSession, publicTopic, pause, log,
+    publicSession, publicTopic, pause, log, topicNotes, budgetFor,
   };
 }

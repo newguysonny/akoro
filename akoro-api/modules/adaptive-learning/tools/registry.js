@@ -48,6 +48,8 @@ export const TOOL_ARGS = Object.freeze({
   "topic.flag": obj({ topicId: TOPIC_ID, reason: str("A short reason.") }, ["topicId", "reason"]),
   "session.replan": obj({ topics: TOPIC_LIST }, ["topics"]),
   "conclude_session": obj(),
+  "topic.get_notes": obj({ topicId: str("The topic's id from session.get_state (default: the active topic).") }),
+  "wait_for_learner": obj({ waitingFor: str("What you are waiting for, e.g. 'the Agent Check' or 'their approval'.") }),
   "practice.generate": obj({ topicId: TOPIC_ID, mode: { type: "string", enum: ["diagnostic", "retest"] } }, ["topicId", "mode"]),
   "practice.submit": obj({ topicId: TOPIC_ID, answers: { type: "array", items: obj({ questionId: str("Question id."), answerIndex: { type: "integer" } }, ["questionId", "answerIndex"]) } }, ["topicId", "answers"]),
 });
@@ -70,6 +72,8 @@ export const TOOL_DEFINITIONS = Object.freeze([
   { name: "topic.flag", level: "propose", description: "Propose flagging the active topic as a knowledge gap with a short reason." },
   { name: "session.replan", level: "propose", description: "Propose replanning the remaining topics from the current session state." },
   { name: "conclude_session", level: "propose", description: "Propose concluding the session with a summary of what was understood (terminal action)." },
+  { name: "topic.get_notes", level: "read", description: "How much the learner has taught you on a topic (the notes the Agent Check answers from): a count and a strength (none, thin, good). No charge." },
+  { name: "wait_for_learner", level: "propose", description: "End this turn: you have said what happens next and are waiting for the learner (or for the Agent Check that starts by itself). Use it whenever there is nothing more to do now." },
   { name: "practice.generate", level: "execute", description: "Generate practice for the active topic (mode: diagnostic or retest). Costs coins — charged by the harness BEFORE generation; a retest additionally requires the learner's teach-back confirmation." },
   { name: "practice.submit", level: "execute", description: "Submit the learner's answers for the open practice. The Education Engine scores deterministically; the LLM never scores." },
 ]);
@@ -121,7 +125,10 @@ export function buildRegistry({ readTools, harness, learnerId, sessionId, conten
     "topic.flag": (args, intent) => harness.flagTopic({ ...s, topicId: args.topicId, reason: args.reason, intent }),
     "session.replan": (args, intent) => harness.proposePlan({ ...s, topicIds: args.topics, intent }),
     "conclude_session": (_args, intent) => harness.concludeSession({ ...s, intent }),
-    "practice.generate": (args, intent) => harness.startTopicPractice({ ...s, topicId: args.topicId, mode: args.mode, intent }),
+    // The agent stays inside the coins the learner approved; past it, the learner is asked.
+    "practice.generate": (args, intent) => harness.startTopicPractice({ ...s, topicId: args.topicId, mode: args.mode, intent, withinEstimateOnly: true }),
+    "topic.get_notes": (args) => harness.topicNotes({ ...s, topicId: args.topicId || null }),
+    "wait_for_learner": (args) => ({ waiting: true, for: String(args.waitingFor || "the learner").slice(0, 80) }),
     "practice.submit": (args, intent) => harness.submitPractice({ ...s, topicId: args.topicId, answers: args.answers, intent }),
   };
   return bindRegistry({

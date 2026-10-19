@@ -727,6 +727,13 @@ if (process.env.REDIS_URL && !skipJob("battle worker")) {
     console.error("[chat-follow-ups] worker failed to start:", e.message);
   }
 
+  // Study Prep (2026-10-19): an Agent Check starts by itself a minute after its topic (or the teach-back), inside the approved coins.
+  if (!skipJob("study prep auto-start")) {
+    import("./modules/adaptive-learning/study-prep/wiring.js")
+      .then((m) => { m.startStudyPrepAutoStart(); console.log("[study-prep] auto-start sweep started at boot"); })
+      .catch((e) => console.error("[study-prep] auto-start failed to start:", e.message));
+  }
+
   // Quiet learning (Grand Plan §7.16.6): a settled chat gets one background
   // pass — a real summary and merged memories, platform-paid, consent-gated.
   if (!skipJob("quiet learning worker")) {
