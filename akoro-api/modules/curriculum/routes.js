@@ -341,25 +341,28 @@ async function topicContext(topic) {
 }
 
 // POST /api/curriculum/reembed — fill in missing vectors (SQL-seeded rows).
+/** Embed up to `limit` topics that have no vector. Also the embeddings switch's re-embed (lib/embeddingCutover.js). */
+export async function reembedMissingCurriculum({ limit = 100 } = {}) {
+  const { data: rows } = await db.schema("edu").from("curriculum_topics")
+    .select("*").is("embedding", null).limit(Math.min(Number(limit) || 100, 300));
+  if (!rows?.length) return { embedded: 0, remaining: 0 };
+  let embedded = 0;
+  for (const t of rows) {
+    try {
+      const ctx = await topicContext(t);
+      await db.schema("edu").from("curriculum_topics")
+        .update({ embedding: await embed(topicEmbedText(t, ctx)) }).eq("id", t.id);
+      embedded++;
+    } catch (e) { console.warn("[curriculum] embed failed:", t.id, e.message); }
+  }
+  const { count } = await db.schema("edu").from("curriculum_topics")
+    .select("id", { count: "exact", head: true }).is("embedding", null);
+  return { embedded, remaining: count ?? 0 };
+}
+
 router.post("/reembed", adminOnly, async (req, res) => {
   try {
-    const limit = Math.min(Number(req.body?.limit) || 100, 300);
-    const { data: rows } = await db.schema("edu").from("curriculum_topics")
-      .select("*").is("embedding", null).limit(limit);
-    if (!rows?.length) return res.json({ success: true, data: { embedded: 0, remaining: 0 } });
-
-    let embedded = 0;
-    for (const t of rows) {
-      try {
-        const ctx = await topicContext(t);
-        await db.schema("edu").from("curriculum_topics")
-          .update({ embedding: await embed(topicEmbedText(t, ctx)) }).eq("id", t.id);
-        embedded++;
-      } catch (e) { console.warn("[curriculum] embed failed:", t.id, e.message); }
-    }
-    const { count } = await db.schema("edu").from("curriculum_topics")
-      .select("id", { count: "exact", head: true }).is("embedding", null);
-    res.json({ success: true, data: { embedded, remaining: count ?? 0 } });
+    res.json({ success: true, data: await reembedMissingCurriculum({ limit: req.body?.limit }) });
   } catch (e) { serverError(res, e, req); }
 });
 

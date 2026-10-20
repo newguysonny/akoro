@@ -19,6 +19,8 @@
 //       fusion treats a missing arm as one unvote, so keyword search
 //       keeps working through exactly the outage that killed vectors.
 
+import { canEmbed } from "../../lib/embeddingProvider.js";   // pure — no db, no client
+
 const dbLazy = async () => (await import("../../db.js")).default;
 
 /** The one embedding dimension the platform standardises on. */
@@ -27,7 +29,8 @@ export const EMBED_DIM = 1536;
 /** Chunks are embedded pieces, not archives — ~a page of speech. */
 const MAX_CHUNK_CHARS = 1200;
 
-const hasOpenAI = () => !!process.env.OPENAI_API_KEY;
+// Can this server embed? Our RunPod endpoint or OpenAI (lib/embeddingProvider.js).
+const hasOpenAI = () => canEmbed();
 
 /* ── Pure shaping ──────────────────────────────────────────────────────────── */
 

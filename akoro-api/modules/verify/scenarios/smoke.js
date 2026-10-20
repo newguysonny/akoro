@@ -59,3 +59,32 @@ export const r2Live = {
     ctx.expect.eq("…and delete it", del, "ok");
   },
 };
+
+// Embeddings (2026-10-20): the provider the app uses (OpenAI, or our RunPod
+// Qwen3-Embedding-0.6B padded to 1536) answers, and its vectors make sense —
+// a sentence is closer to one about the same thing than to an unrelated one.
+export const embeddingsLive = {
+  name: "smoke.embeddings_live", area: "smoke", risk: "read",
+  description: "The embedding provider answers through the app's seam with 1536-wide vectors (self-hosted: 1024 real dims + zeros), and related text scores higher than unrelated text.",
+  async run(ctx) {
+    const { embeddingsProvider, SELF_HOSTED_DIMENSIONS } = await import("../../../lib/embeddingProvider.js");
+    const { openai } = await import("../../../lib/aiModel.js");
+    const provider = embeddingsProvider();
+    const texts = ["Mitochondria are the sites of aerobic respiration in a cell.", "Which part of the cell releases energy from glucose?", "The Niger Delta has many oil fields and creeks."];
+    let res = null, error = null;
+    const t0 = Date.now();
+    try { res = await openai.embeddings.create({ model: "text-embedding-3-small", input: texts, __payer: "platform", __feature: "embedding_probe" }); } catch (e) { error = String(e?.message || e).slice(0, 240); }
+    ctx.note(`provider ${provider} · model ${res?.model || "?"} · ${Date.now() - t0} ms${error ? ` · error: ${error}` : ""}`);
+    ctx.expect.ok("the embedding provider answers", !!res && !error, error);
+    const v = (res?.data || []).sort((a, b) => a.index - b.index).map((d) => d.embedding);
+    ctx.expect.eq("one vector per text", v.length, 3);
+    ctx.expect.ok("1536 wide (the columns)", v.every((x) => x?.length === 1536), v.map((x) => x?.length));
+    if (provider === "runpod") ctx.expect.ok("self-hosted: 1024 real dims, zeros after", v.every((x) => x.slice(SELF_HOSTED_DIMENSIONS).every((n) => n === 0) && x.slice(0, SELF_HOSTED_DIMENSIONS).some((n) => n !== 0)));
+    const cos = (a, b) => a.reduce((s, x, i) => s + x * b[i], 0) / Math.sqrt(a.reduce((s, x) => s + x * x, 0) * b.reduce((s, x) => s + x * x, 0));
+    if (v.length === 3) {
+      const related = cos(v[0], v[1]), unrelated = cos(v[0], v[2]);
+      ctx.note(`cosine: related ${related.toFixed(3)} · unrelated ${unrelated.toFixed(3)}`);
+      ctx.expect.ok("related text is closer than unrelated text", related > unrelated, { related, unrelated });
+    }
+  },
+};

@@ -30,6 +30,8 @@ const MODEL_PRICES = {
   "o3-mini":           { in: 1.10, out: 4.40 },
   "o3":                { in: 2.00, out: 8.00 },
   "text-embedding-3-small": { in: 0.02, out: 0.0 },
+  // Self-hosted on RunPod (embed-worker): GPU time, roughly — a warm worker embeds ~1M tokens for a few cents.
+  "qwen3-embedding-0.6b": { in: 0.01, out: 0.0 },
   "text-embedding-3-large": { in: 0.13, out: 0.0 },
 };
 const DEFAULT_PRICE = MODEL_PRICES["gpt-4o-mini"];

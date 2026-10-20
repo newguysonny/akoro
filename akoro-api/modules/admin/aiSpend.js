@@ -130,7 +130,25 @@ router.get("/embeddings", adminOnly, asyncHandler(async (req, res) => {
     // embeddings is not degraded, it is partly invisible, and before this there
     // was no way to see that from outside.
     totalMissing: stores.reduce((n, s) => n + (s.missing ?? 0), 0),
+    // A model switch in progress (POST /embeddings/reembed-all).
+    reembed: (await import("../../lib/embeddingCutover.js")).cutoverState(),
   });
+}));
+
+/**
+ * Embeddings provider + the model switch (lib/embeddingCutover.js).
+ * GET  /api/admin/embeddings/provider       — which provider, and a live probe
+ * POST /api/admin/embeddings/reembed-all    — { confirm: true }: probe, clear every vector, refill in the background
+ */
+router.get("/embeddings/provider", adminOnly, asyncHandler(async (req, res) => {
+  const { probeEmbeddings, cutoverState } = await import("../../lib/embeddingCutover.js");
+  res.json({ success: true, probe: await probeEmbeddings(), reembed: cutoverState() });
+}));
+router.post("/embeddings/reembed-all", adminOnly, asyncHandler(async (req, res) => {
+  if (req.body?.confirm !== true) return res.status(400).json({ success: false, message: "This clears every stored vector and re-embeds them all with the current provider. Send { confirm: true }." });
+  const { startReembedAll } = await import("../../lib/embeddingCutover.js");
+  const out = await startReembedAll({ allowOpenAI: req.body?.allowOpenAI === true });
+  res.status(out.started ? 202 : 409).json({ success: out.started, ...out });
 }));
 
 /** POST /api/admin/embeddings/sweep — fill some in now instead of waiting. */

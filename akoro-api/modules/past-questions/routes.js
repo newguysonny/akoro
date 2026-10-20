@@ -368,12 +368,11 @@ router.get("/review", adminOnly, async (req, res) => {
 // POST /api/past-questions/reembed — fill in missing embeddings.
 // Questions written by SQL seed have no vector, so they'd be invisible to
 // semantic search until this runs. Bounded per call so it can't hang a request.
-router.post("/reembed", adminOnly, async (req, res) => {
-  try {
-    const limit = Math.min(Number(req.body?.limit) || 100, 300);
+/** Embed up to `limit` questions that have no vector. Also the embeddings switch's re-embed (lib/embeddingCutover.js). */
+export async function reembedMissingPastQuestions({ limit = 100 } = {}) {
     const { data: rows } = await db.schema("edu").from("past_questions")
-      .select("id, paper_id, stem, options, subject, topic").is("embedding", null).limit(limit);
-    if (!rows?.length) return res.json({ success: true, data: { embedded: 0, remaining: 0 } });
+      .select("id, paper_id, stem, options, subject, topic").is("embedding", null).limit(Math.min(Number(limit) || 100, 300));
+    if (!rows?.length) return { embedded: 0, remaining: 0 };
 
     const paperIds = [...new Set(rows.map((r) => r.paper_id))];
     const { data: papers } = await db.schema("edu").from("past_papers")
@@ -391,7 +390,12 @@ router.post("/reembed", adminOnly, async (req, res) => {
 
     const { count } = await db.schema("edu").from("past_questions")
       .select("id", { count: "exact", head: true }).is("embedding", null);
-    res.json({ success: true, data: { embedded, remaining: count ?? 0 } });
+    return { embedded, remaining: count ?? 0 };
+}
+
+router.post("/reembed", adminOnly, async (req, res) => {
+  try {
+    res.json({ success: true, data: await reembedMissingPastQuestions({ limit: req.body?.limit }) });
   } catch (e) { serverError(res, e, req); }
 });
 
