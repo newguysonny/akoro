@@ -563,6 +563,17 @@ async function revealQuestion(battleId, questionOrder) {
 
   const { data: battleInfo } = await db.from("battles").select("total_questions").eq("id", battleId).single();
 
+  // An Agent Check reports each marked question to Study Prep's run in the chat (2026-10-20):
+  // answered from the notes / guessed / wrong / no answer. Best effort — never holds the battle.
+  if (btype?.battle_type === "check") {
+    const ans = (answers ?? [])[0] || null;
+    const guessedIt = ans?.answer_basis === "unknown";
+    const outcome = !ans ? "unknown" : ans.is_correct ? (guessedIt ? "guessed_right" : "correct") : (guessedIt ? "guessed" : "wrong");
+    import("../adaptive-learning/study-prep/wiring.js")
+      .then((w) => w.reportCheckQuestion({ battleId, order: questionOrder, total: battleInfo?.total_questions ?? null, outcome, note: ans?.recalled_topic || null, gap: q.topic || null }))
+      .catch((e) => console.warn("[battle-worker] check question report:", e?.message || e));
+  }
+
   // Who just ran out of HP: from here they watch, unranked.
   let stillIn = players.length;
   if (!isReviewBattle) {

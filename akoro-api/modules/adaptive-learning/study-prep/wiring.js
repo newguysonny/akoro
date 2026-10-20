@@ -33,6 +33,7 @@ import { aiContext } from "../../../lib/aiContext.js";
 import { makeWorkflowMirror, studyPrepWorkflow, workflowEngineEnabled } from "./workflow.js";
 import { registerWorkflow } from "../../workflows/registry.js";
 import { makeTeachingHandoff } from "./teaching-handoff.js";
+import { makeAgentCheckRun } from "./agent-check-run.js";
 import { HANDOFF_AUTO_APPROVE_MS, teachingView } from "../teaching-session/workflow.js";
 import { AUTO_START_MS, WAKE_DECISIONS, WAKE_FINAL_ACTIONS, WAKE_LABELS, autoStartFor, settleStep, spentOnChecks, wakeGoal } from "./wake.js";
 import { TERMINAL_ACTIONS } from "./agent-loop.js";
@@ -135,11 +136,7 @@ export const teachingHandoff = () => (_handoff ||= makeTeachingHandoff({
     return data || [];
   },
   studyPrep: {
-    // The run's own message in the chat the plan lives in (like a wake's).
-    async openWake({ sessionId, learnerId, wakeId, trigger, label }) {
-      const conversationId = await conversationOf(sessionId, learnerId).catch(() => null);
-      if (conversationId) await postToConversation({ learnerId, conversationId, text: label, meta: { studyPrepWake: { sessionId, wakeId, trigger, label } } });
-    },
+    openWake: openRunMessage,
     confirmTeachBack: ({ sessionId, learnerId, topicId }) => getHarness().confirmTeachBack({ sessionId, learnerId, topicId }),
     // start_teaching_session's row: an ordinary teaching session in the dashboard's list, with one
     // opening note (so the list offers it to continue, and the modal opens it by id).
@@ -160,6 +157,32 @@ export const teachingHandoff = () => (_handoff ||= makeTeachingHandoff({
 }));
 // The engine hands a finished teaching session's outcome to Study Prep through this.
 registerWorkflow(studyPrepWorkflow, { onChildOutcome: (parent, args) => teachingHandoff().controller.onChildOutcome(parent, args) });
+
+/** A code-written run's own message in the chat the plan lives in (like a wake's); extraMeta rides along (a check's card). */
+async function openRunMessage({ sessionId, learnerId, wakeId, trigger, label, extraMeta = null }) {
+  const conversationId = await conversationOf(sessionId, learnerId).catch(() => null);
+  if (conversationId) await postToConversation({ learnerId, conversationId, text: label, meta: { studyPrepWake: { sessionId, wakeId, trigger, label }, ...(extraMeta || {}) } });
+}
+
+// ── The Agent Check's own workflow and run (2026-10-20) ─────────────────────
+let _checkRun = null;
+export const agentCheckRun = () => (_checkRun ||= makeAgentCheckRun({
+  engine: workflowEngine(),
+  async findByBattle(battleId) {
+    const { data, error } = await workflowRows().select("*").eq("workflow_type", "practice").eq("metadata->>battleId", String(battleId))
+      .order("created_at", { ascending: false }).limit(1);
+    if (error) throw error;
+    return data?.[0] || null;
+  },
+  studyPrep: { openWake: openRunMessage },
+}));
+const checkRunOrNull = () => (workflowEngineEnabled() ? agentCheckRun() : null);
+
+/** The battle worker: Sergeant marked a question of an Agent Check. */
+export function reportCheckQuestion(args) {
+  if (!workflowEngineEnabled()) return Promise.resolve(null);
+  return agentCheckRun().question(args);
+}
 
 /** The teaching session on a topic (offered, waiting or under way) — for the card. */
 export async function teachingForTopic(workflowId, topicId) {
@@ -186,7 +209,7 @@ export async function backfillStudyPrepWorkflows({ limit = 200 } = {}) {
 
 export function getHarness() {
   return createHarness({ store, topicWorkflow, syllabus,
-    ...(agentCheckEnabled() ? { agentCheck, protege } : {}),
+    ...(agentCheckEnabled() ? { agentCheck, protege, checkRun: checkRunOrNull() } : {}),
     ...(workflowEngineEnabled() ? { workflowMirror: workflowMirror() } : {}) });
 }
 
@@ -195,7 +218,7 @@ export function getHarness() {
  * gate's scenario (a test learner), never for a learner's request.
  */
 export function getWorkflowHarness() {
-  return createHarness({ store, topicWorkflow, syllabus, ...(agentCheckEnabled() ? { agentCheck, protege } : {}), workflowMirror: workflowMirror() });
+  return createHarness({ store, topicWorkflow, syllabus, ...(agentCheckEnabled() ? { agentCheck, protege, checkRun: agentCheckRun() } : {}), workflowMirror: workflowMirror() });
 }
 
 /**
@@ -217,7 +240,7 @@ export function getPracticeHarness() {
 
 /** The battle worker's hook when an Agent Check ends. Scores even if the switch was turned off meanwhile. */
 export async function completeAgentCheckBattle(battleId) {
-  const done = await createHarness({ store, topicWorkflow, syllabus, agentCheck, protege,
+  const done = await createHarness({ store, topicWorkflow, syllabus, agentCheck, protege, checkRun: checkRunOrNull(),
     ...(workflowEngineEnabled() ? { workflowMirror: workflowMirror() } : {}) }).completeAgentCheck({ battleId, teachingHandoff: workflowEngineEnabled() });
   // Below the mark with tries left: a teaching session on what it missed is offered first (Phase 6),
   // so the wake can talk about it.

@@ -68,7 +68,7 @@ export const GENERATED_OUTLINE_LABEL = "AI-drafted outline — not your school's
  * protege.say({ learnerId, session, text, battle }) — the protégé's message in chat.
  * Without agentCheck the legacy human-answered practice (topicWorkflow) runs.
  */
-export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentCheck = null, protege = null, workflowMirror = null, now = () => new Date().toISOString() }) {
+export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentCheck = null, protege = null, workflowMirror = null, checkRun = null, now = () => new Date().toISOString() }) {
   // Every session and topic status write is checked against the workflow
   // definition (F7) and, with a mirror, dual-written to the engine (Phase 1).
   const store = guardStudyPrepStore(rawStore, { mirror: workflowMirror });
@@ -385,7 +385,7 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
       if (!budget.withinEstimate) return reject(session, "over_estimate", `The next check needs ${budget.next} coins and ${budget.left} are left of the approved estimate — ask the learner first`, { left: budget.left });
     }
 
-    if (agentCheck) return startAgentCheck({ session, topic, learnerId, mode });
+    if (agentCheck) return startAgentCheck({ session, topic, learnerId, mode, auto: withinEstimateOnly === true });
 
     // Charge first (§4.11). Never generate on credit.
     const coins = STUDY_PREP_COST.COINS_PER_PRACTICE;
@@ -434,7 +434,7 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
    * charged, go and teach. Otherwise: charge once (§7.12.2), create the
    * battle, and the protégé says so in chat with the battle to watch.
    */
-  async function startAgentCheck({ session, topic, learnerId, mode }) {
+  async function startAgentCheck({ session, topic, learnerId, mode, auto = false }) {
     if (topic.check_battle_id && !topic.check_scored_at) {
       return reject(session, "invalid_state_transition", "An Agent Check on this topic is still running — watch it finish first");
     }
@@ -488,11 +488,18 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
       facts: { topic: topic.label, mode, battleId: check.battleId, questions: check.placed, coins, attemptNumber: Number(topic.attempts_used) + 1 },
       narrative: deliberate("agent_check_started", { topicLabel: topic.label, mode, coins })?.narrative,
     });
-    await protege?.say({
-      learnerId, session,
-      text: `I've asked my teaching guide to check what you taught me about ${topic.label}${mode === "retest" ? " again" : ""}. I can only answer from your notes, and Sergeant judges every answer. Watch me answer.`,
-      battle: { id: check.battleId, kind: "agent_check", topic: topic.label, mode },
-    }).catch(() => {});
+    // The check's own run in the Study Prep chat (its card, each question, the result) — or, without
+    // the workflow engine, the protégé's message as before.
+    const ran = checkRun
+      ? await checkRun.started({ session, topic: { id: topic.id, label: topic.label }, battleId: check.battleId, mode, questions: check.placed, coins, auto }).catch(() => null)
+      : null;
+    if (!ran) {
+      await protege?.say({
+        learnerId, session,
+        text: `I've asked my teaching guide to check what you taught me about ${topic.label}${mode === "retest" ? " again" : ""}. I can only answer from your notes, and Sergeant judges every answer. Watch me answer.`,
+        battle: { id: check.battleId, kind: "agent_check", topic: topic.label, mode },
+      }).catch(() => {});
+    }
     return {
       session: publicSession(session), topic: publicTopic(updatedTopic || topic),
       check: { battleId: check.battleId, mode, questions: check.placed },
@@ -558,6 +565,11 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
           // Phase 6: a teaching session on the gaps is offered on the card (study-prep/teaching-handoff.js).
           ? `That's below the ${thresholdPercentage}% pass mark. I've set up a teaching session on what I missed — confirm it on the card (it's set up by itself in a minute), then teach me from your dashboard. My retest starts when you finish.`
           : `That's below the ${thresholdPercentage}% pass mark. Teach me what I missed, then tap "I've taught it" and I'll be checked again.`;
+    // The check's run closes with its result (the agent's wake then says what's next); the protégé's
+    // message is for a session without the workflow engine.
+    if (checkRun && await checkRun.scored({ battleId, result, outcome, thresholdPercentage }).catch(() => null)) {
+      return { session: publicSession(session), topic: publicTopic(updatedTopic), result, outcome, mastery };
+    }
     const gapLine = result.gaps.length ? ` I couldn't answer from your notes on: ${result.gaps.slice(0, 4).join("; ")}.` : "";
     const guessLine = result.guessed ? ` I had to guess on ${result.guessed} — a guess doesn't count.` : "";
     await protege?.say({

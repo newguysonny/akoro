@@ -299,7 +299,8 @@ export function workflowRunBlocks(events, { notes = [], running = false } = {}) 
     } else if (event.type === 'tool.completed' || event.type === 'tool.failed') {
       const open = [...blocks].reverse().find((b) => b.type === 'tool' && b.status === 'running' && b.tool === (p.tool || null));
       const result = event.type === 'tool.failed' ? (event.narration?.result || "Couldn't finish") : (p.resultLine || '');
-      if (open) Object.assign(open, { status: 'done', ok: event.type !== 'tool.failed', result });
+      // ok:false on a completed row: it ran, and the result was a miss (an Agent Check's guessed question).
+      if (open) Object.assign(open, { status: 'done', ok: event.type !== 'tool.failed' && p.ok !== false, result });
     } else if (event.type === 'activity' && p.message) {
       blocks.push({ type: 'activity', id: `wfa_${event.sequence}`, text: String(p.message) });
     }
@@ -336,7 +337,10 @@ export function splitWakes(events) {
       }
       continue;
     }
-    if (current) current.events.push(event);
+    // A row that names its run (an Agent Check's questions) lands in it, whatever ran meanwhile.
+    const owner = p.runId ? wakes.get(p.runId) : null;
+    if (owner) owner.events.push(event);
+    else if (current) current.events.push(event);
     else if (!wakes.size) before.push(event);
     else {
       // Between wakes (an auto-started check, a battle result): with the latest wake.
