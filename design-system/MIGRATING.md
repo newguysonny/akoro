@@ -71,6 +71,12 @@ fonts and icons only.
   colours.
 - **`background: C.ink` with white text** is wrong in dark mode (ink becomes
   light). Use `C.hero`.
+- **CSS files** (e.g. `pages/course-creator/cc.css`): use the variables
+  directly, `var(--ak-brand)`, `var(--ak-text)`…, with the same legacy values
+  as in `src/theme/legacyVars.js`.
+- **Icon names are checked:** a contract test fails on any `ti-*` name that
+  isn't in the installed font. Look names up in
+  `node_modules/@tabler/icons-webfont/dist/tabler-icons.min.css`.
 - **Never** edit `src/ui/*`, `Layout.jsx`, `AppHeader.jsx`,
   `NextLayout.jsx`, `src/theme/*` or another wave's files. If you need a
   colour name that doesn't exist, say so in your report; don't add one.
@@ -83,7 +89,8 @@ before starting.
 
 ## Done means
 
-- The build passes; the console-ui-kit and mobile-gate contract tests pass as
-  before.
+- The build passes (`cd akoro-instructor && npm run build`).
+- `node --test akoro-api/modules/console-ui-kit.contract.test.mjs` passes.
+  The mobile-gate test has 3 failures that were already there; no new ones.
 - Your report lists every file changed and every leftover hex or icon you
   weren't sure of.

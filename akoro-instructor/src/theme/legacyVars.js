@@ -54,6 +54,9 @@ export const BX_NEXT = {
   '--ak-bx-bg': 'var(--ak-bg)',
   '--ak-bx-font': 'var(--ak-font)',
   '--ak-bx-track': 'var(--ak-border2)',
+  // Loading placeholders (GlobalStyles .skeleton): unset on legacy, so its own colours stay.
+  '--ak-skel-1': 'var(--ak-border)',
+  '--ak-skel-2': 'var(--ak-surface-hover)',
 };
 
 export const legacyVars = () => ({ ...LEGACY_VARS, ...BX_LEGACY });

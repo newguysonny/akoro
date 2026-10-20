@@ -52,7 +52,7 @@ export function instructorNav({ isAdmin = false, joinRequests = 0 } = {}) {
       { key: 'self-study', label: 'AI Self Study', to: '/self-study', ti: 'ti-sparkles' },
       { key: 'assessments', label: 'Assessments', to: '/assessments', ti: 'ti-shield-check' },
       { key: 'documents', label: 'Documents', to: '/documents', ti: 'ti-file-text' },
-      { key: 'library', label: 'Library', to: '/library', ti: 'ti-building-library' },
+      { key: 'library', label: 'Library', to: '/library', ti: 'ti-library' },
     ] },
     { section: 'More', items: [
       { key: 'wallet', label: 'Wallet & Credits', to: '/wallet', icon: 'wallet' },

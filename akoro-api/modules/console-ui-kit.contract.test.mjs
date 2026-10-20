@@ -33,7 +33,7 @@ test("the kit's look is the learner app's: theme variables and nav icons identic
 
 test("the instructor's legacy look sets every variable the next look sets", () => {
   const keys = (src) => [...src.matchAll(/'(--ak-[a-z0-9-]+)':/g)].map((m) => m[1]).sort();
-  const legacy = keys(read("akoro-instructor/src/theme/legacyVars.js")).filter((k) => !k.startsWith("--ak-bx-"));
+  const legacy = keys(read("akoro-instructor/src/theme/legacyVars.js")).filter((k) => !k.startsWith("--ak-bx-") && !k.startsWith("--ak-skel-"));
   const next = keys(read("design-system/ui/tokens.js").replace(/export const DARK_VARS[\s\S]*?\n\};/, "")).concat("--ak-brand", "--ak-font").sort();
   assert.deepEqual(legacy, [...new Set(next)].sort());
 });
@@ -56,4 +56,18 @@ test("the instructor's next nav reaches every page the legacy nav does (and noth
   legacy.add("/course-creator/review");   // the admin-only Review Queue, appended in the legacy Sidebar
   const next = paths(read("akoro-instructor/src/components/NextLayout.jsx"));
   assert.deepEqual([...next].sort(), [...legacy].sort());
+});
+
+test("every Tabler icon name the instructor app uses exists in the icon font (no blank icons)", async () => {
+  const { readdir } = await import("node:fs/promises");
+  const css = read("akoro-instructor/node_modules/@tabler/icons-webfont/dist/tabler-icons.min.css");
+  const known = new Set([...css.matchAll(/\.(ti-[a-z0-9-]+):before/g)].map((m) => m[1]));
+  assert.ok(known.size > 3000, "the font's icon list was read");
+  const files = (await readdir(new URL("akoro-instructor/src/", root), { recursive: true })).filter((f) => /\.(jsx|js)$/.test(f));
+  const missing = [];
+  for (const f of files) {
+    const src = read(`akoro-instructor/src/${f}`);
+    for (const m of src.matchAll(/(?:ti[=:]\s*|name[=:]\s*)["'`](ti-[a-z0-9-]+)["'`]/g)) if (!known.has(m[1])) missing.push(`${f}: ${m[1]}`);
+  }
+  assert.deepEqual(missing, []);
 });

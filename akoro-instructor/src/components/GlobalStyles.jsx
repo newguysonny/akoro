@@ -89,7 +89,7 @@ export default function GlobalStyles() {
 
       /* Skeleton shimmer */
       .skeleton {
-        background: linear-gradient(90deg, #EDE8E1 25%, #F5F2EE 50%, #EDE8E1 75%);
+        background: linear-gradient(90deg, var(--ak-skel-1, #EDE8E1) 25%, var(--ak-skel-2, #F5F2EE) 50%, var(--ak-skel-1, #EDE8E1) 75%);
         background-size: 200% 100%;
         animation: shimmer 1.5s infinite;
         border-radius: 8px;
