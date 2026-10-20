@@ -121,16 +121,23 @@ export const searchTextFallback = {
   async run(ctx) {
     const { default: db } = await import("../../../db.js");
     const { embedForSearch } = await import("../../../lib/searchEmbedding.js");
+    // Search with words from a real row of each store, so the check doesn't depend on which seed data the server has.
+    const sample = async (table, cols, pick) => {
+      const { data } = await db.schema("edu").from(table).select(cols).limit(1);
+      return data?.[0] ? pick(data[0]) : null;
+    };
+    const words = (t) => String(t || "").replace(/[^A-Za-z ]+/g, " ").split(/\s+/).filter((w) => w.length > 3).slice(0, 4).join(" ");
     const calls = [
-      ["match_curriculum", { p_query_embedding: null, p_limit: 5, p_query_text: "photosynthesis in green plants" }],
-      ["match_past_questions", { p_query_embedding: null, p_limit: 5, p_query_text: "photosynthesis chlorophyll light" }],
-      ["match_syllabus", { p_query_embedding: null, p_match_count: 5, p_query_text: "photosynthesis chlorophyll" }],
+      ["match_curriculum", await sample("curriculum_topics", "title", (r) => words(r.title)), (q) => ({ p_query_embedding: null, p_limit: 5, p_query_text: q })],
+      ["match_past_questions", await sample("past_questions", "stem, topic", (r) => words(`${r.topic || ""} ${r.stem || ""}`)), (q) => ({ p_query_embedding: null, p_limit: 5, p_query_text: q })],
+      ["match_syllabus", await sample("syllabus_chunks", "topic_title, content", (r) => words(`${r.topic_title || ""} ${r.content || ""}`)), (q) => ({ p_query_embedding: null, p_match_count: 5, p_query_text: q })],
     ];
-    for (const [fn, args] of calls) {
+    for (const [fn, q, args] of calls) {
+      if (!q) { ctx.note(`${fn}: its store is empty here — skipped`); continue; }
       const t0 = Date.now();
-      const { data, error } = await db.rpc(fn, args);
+      const { data, error } = await db.rpc(fn, args(q));
       const rows = data || [];
-      ctx.note(`${fn}: ${error ? `error ${error.message}` : `${rows.length} rows on text`} (${Date.now() - t0} ms)${rows[0] ? ` · first: ${String(rows[0].topic || rows[0].topic_title || rows[0].stem || "").slice(0, 80)}` : ""}`);
+      ctx.note(`${fn} "${q}": ${error ? `error ${error.message}` : `${rows.length} rows on text`} (${Date.now() - t0} ms)${rows[0] ? ` · first: ${String(rows[0].topic || rows[0].topic_title || rows[0].stem || "").slice(0, 80)}` : ""}`);
       ctx.expect.ok(`${fn} answers without a vector`, !error, error?.message);
       ctx.expect.ok(`${fn} finds text matches`, rows.length > 0, rows.length);
       ctx.expect.ok(`${fn} marks them as text matches`, rows.every((r) => r.lexical === true), rows.map((r) => r.lexical));
