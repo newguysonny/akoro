@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
 import GlobalStyles from './components/GlobalStyles.jsx';
+import { isNextUi } from './theme/uiMode.js';
 import SigninPage         from './pages/auth/SigninPage.jsx';
 import SignupPage         from './pages/auth/SignupPage.jsx';
 import OnboardingPage     from './pages/auth/OnboardingPage.jsx';
@@ -105,7 +106,8 @@ function AppRoutes() {
     <Routes>
       {/* Protected */}
       <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
-      <Route path="/courses" element={<ProtectedRoute><CoursesPage /></ProtectedRoute>} />
+      {/* The next look has no Courses page: Course Creator (with Schedule sessions) replaces it. */}
+      <Route path="/courses" element={<ProtectedRoute>{isNextUi() ? <Navigate to="/course-creator" replace /> : <CoursesPage />}</ProtectedRoute>} />
       <Route path="/courses/new-live"    element={<ProtectedRoute><CoursesPage /></ProtectedRoute>} />
       <Route path="/courses/new-ondemand" element={<ProtectedRoute><CoursesPage /></ProtectedRoute>} />
       <Route path="/courses/schedule"    element={<ProtectedRoute><CoursesPage /></ProtectedRoute>} />

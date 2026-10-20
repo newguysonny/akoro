@@ -54,6 +54,10 @@ test("the instructor's next nav reaches every page the legacy nav does (and noth
   const legacySrc = read("akoro-instructor/src/components/Layout.jsx");
   const legacy = paths(legacySrc.slice(legacySrc.indexOf("const NAV = ["), legacySrc.indexOf("function NavItem")));
   legacy.add("/course-creator/review");   // the admin-only Review Queue, appended in the legacy Sidebar
+  // Dropped on purpose in the next nav: the Courses page (Course Creator replaces it, /courses redirects
+  // there on next); added: Schedule sessions (one of the Courses page's own screens) in the Course Creator group.
+  legacy.delete("/courses");
+  legacy.add("/courses/schedule");
   const next = paths(read("akoro-instructor/src/components/NextLayout.jsx"));
   assert.deepEqual([...next].sort(), [...legacy].sort());
 });

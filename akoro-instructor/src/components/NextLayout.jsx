@@ -19,17 +19,18 @@ export function instructorNav({ isAdmin = false, joinRequests = 0 } = {}) {
   return [
     { section: null, items: [
       { key: 'home', label: 'Home', to: '/', icon: 'sessions' },
-      { key: 'courses', label: 'Courses', to: '/courses', icon: 'library' },
+      // Course Creator replaces the Courses page; its own Schedule sessions page joins the group.
+      { key: 'course-creator', label: 'Course Creator', short: 'Courses', to: '/course-creator', icon: 'library', children: [
+        { label: 'Home', to: '/course-creator', end: true },
+        { label: 'My Courses', to: '/course-creator/courses' },
+        { label: 'Content Library', to: '/course-creator/library' },
+        { label: 'Schedule sessions', to: '/courses/schedule' },
+        ...(isAdmin ? [{ label: 'Review Queue', to: '/course-creator/review' }] : []),
+      ] },
       { key: 'battles', label: 'Battles', to: '/battles', icon: 'battles' },
       { key: 'agent', label: 'Agent', to: '/chat', icon: 'agent', dot: true },
     ] },
     { section: 'Teaching', items: [
-      { key: 'course-creator', label: 'Course Creator', ti: 'ti-books', children: [
-        { label: 'Home', to: '/course-creator', end: true },
-        { label: 'My Courses', to: '/course-creator/courses' },
-        { label: 'Content Library', to: '/course-creator/library' },
-        ...(isAdmin ? [{ label: 'Review Queue', to: '/course-creator/review' }] : []),
-      ] },
       { key: 'student-info', label: 'Student Information', icon: 'communities', children: [
         { label: 'My Students', to: '/mgmt/students' },
         { label: 'Join Requests', to: '/mgmt/join-requests', badge: joinRequests },
@@ -65,7 +66,7 @@ export function instructorNav({ isAdmin = false, joinRequests = 0 } = {}) {
     ] },
   ];
 }
-export const INSTRUCTOR_BOTTOM = ['home', 'courses', 'battles', 'agent'];
+export const INSTRUCTOR_BOTTOM = ['home', 'course-creator', 'battles', 'agent'];
 
 /* Unread notifications for the bell — refetched on the server's push, like the legacy BellButton. */
 function useUnreadNotifications(userId) {
@@ -106,8 +107,8 @@ function useAgentXp() {
   return xp;
 }
 
-// Forms keep their own readable width; every other page spans the frame.
-const NARROW = ['/profile', '/settings', '/onboarding', '/privacy', '/terms'];
+// Every page spans the frame, like the learner app's (onboarding keeps its card width).
+const NARROW = ['/onboarding'];
 
 export default function NextLayout({ children, title, subtitle, action, bare = false }) {
   const { user } = useAuth();

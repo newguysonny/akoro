@@ -814,7 +814,7 @@ export default function ChatPage() {
       `}</style>
 
       <div style={next
-        ? { flex: 1, minHeight: 0, width: '100%', display: innerTab === 'chat' ? 'flex' : 'none', flexDirection: 'column', padding: isMobile ? '0 12px' : '0 18px' }
+        ? { flex: 1, minHeight: 0, width: '100%', display: innerTab === 'chat' ? 'flex' : 'none', flexDirection: 'column' }
         : { maxWidth: previewDraft ? 'min(1180px, 97vw)' : 720, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', height: isMobile ? 'calc(100vh - 86px)' : 'calc(100vh - 150px)' }}>
         <div style={{ display: 'flex', gap: 14, flex: 1, minHeight: 0 }}>
         <div className="ci-chat-col" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -837,7 +837,9 @@ export default function ChatPage() {
 
         {/* Tool commands — only the instructor's UNLOCKED Tools & Assets show
             here. A new agent has none until items are purchased. */}
-        <div className="ci-quickbar">
+        {/* The next look has no "Unlock tools" row (the learner chat doesn't); unlocked tools still show. */}
+        {(!next || myTools.length > 0) && (
+        <div className="ci-quickbar" style={next ? { padding: '8px 18px 0' } : undefined}>
           {myTools.length > 0 ? (
             myTools.map((t) => {
               const active = taskChips.includes(t.name);
@@ -853,9 +855,10 @@ export default function ChatPage() {
             </button>
           )}
         </div>
+        )}
 
         {/* Message feed */}
-        <div ref={feedRef} onScroll={(e) => { if (e.currentTarget.scrollTop < 80) loadOlder(); }} style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '8px 2px' }}>
+        <div ref={feedRef} onScroll={(e) => { if (e.currentTarget.scrollTop < 80) loadOlder(); }} style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: next ? (isMobile ? '12px 12px' : '14px 18px') : '8px 2px' }}>
           {loadingOlder && (
             <div role="status" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 12, color: C.muted }}>
               <Ico lucide={Loader} ti="ti-loader-2" size={12} className="spinner" /> Loading earlier messages…
@@ -982,7 +985,7 @@ export default function ChatPage() {
         </div>
 
         {/* Input bar */}
-        <div style={{ paddingTop: 10 }}>
+        <div style={next ? { padding: isMobile ? '10px 12px 0' : '10px 18px 0' } : { paddingTop: 10 }}>
           {!isTask && input === '' && !messages.some((m) => m.from === 'me') && (
             <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8 }}>
               {STARTERS.map((chip) => (

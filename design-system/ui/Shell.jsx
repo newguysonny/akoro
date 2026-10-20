@@ -11,7 +11,7 @@
  *     title subtitle action                               // the page heading
  *   >page</Shell>
  *
- *   Item: { key, label, to, end?, icon? (NavIcon name) | ti? ('ti-*'), badge?, badgeColor?, dot?,
+ *   Item: { key, label, short? (bottom-nav label), to, end?, icon? (NavIcon name) | ti? ('ti-*'), badge?, badgeColor?, dot?,
  *           children?: [{ label, to, end?, badge? }] }  — a group: a dropdown in the
  *           open sidebar, a flyout beside its icon on the collapsed rail (the admin app's
  *           pattern), a section in the phone's More sheet.
@@ -277,7 +277,7 @@ function BottomNav({ nav, bottom, onMore, moreOpen }) {
               {item.badge > 0 && <span style={{ position: 'absolute', top: -3, right: -6, minWidth: 14, height: 14, borderRadius: 7, background: item.badgeColor || BRAND, color: '#fff', fontSize: 8, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>{item.badge}</span>}
               {item.dot && <span style={{ position: 'absolute', top: -2, right: -4, width: 8, height: 8, borderRadius: '50%', background: GREEN, border: '1.5px solid var(--ak-surface)' }}/>}
             </span>
-            <span style={{ fontSize: 10.5, fontWeight: active ? 800 : 600 }}>{item.label}</span>
+            <span style={{ fontSize: 10.5, fontWeight: active ? 800 : 600 }}>{item.short || item.label}</span>
           </button>
         );
       })}
@@ -292,7 +292,8 @@ function MoreSheet({ nav, bottom, onClose }) {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
-  const rest = nav.map((s) => ({ ...s, items: s.items.filter((i) => !bottom.includes(i.key)) })).filter((s) => s.items.length);
+  // A group stays listed even when it has a bottom-nav slot: its pages live here.
+  const rest = nav.map((s) => ({ ...s, items: s.items.filter((i) => !bottom.includes(i.key) || i.children) })).filter((s) => s.items.length);
   const row = (to, label, glyph, badge, end) => (
     <NavLink key={to} to={to} end={!!end} onClick={onClose} style={({ isActive }) => ({ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 12, textDecoration: 'none',
       fontSize: 14, fontWeight: isActive ? 800 : 700, color: isActive ? BRAND : 'var(--ak-text)', background: isActive ? `${BRAND}12` : 'transparent' })}>
