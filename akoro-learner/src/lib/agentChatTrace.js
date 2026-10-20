@@ -241,6 +241,8 @@ export function workflowCardSteps(events, { running = true } = {}) {
     const p = event.payload || {};
     // A wake's bounds are the chat's (its own agent message), never a step of the card.
     if (p.operation === 'wake') continue;
+    // A row of a named run (an Agent Check's questions and result) is that run's, in the chat.
+    if (p.runId) continue;
     // The agent's own words are its turn in the chat, never a step of the card.
     if (event.type === 'activity' && p.message) continue;
     const base = {

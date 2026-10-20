@@ -212,6 +212,11 @@ test('the workflow card: a tool step runs until its result; decisions are done; 
   ]);
   assert.equal(steps[1].tag, AI_DRAFTED_TAG);
   assert.equal(workflowCardSteps(events, { running: false }).at(-1).status, 'done', 'not working now: nothing spins');
+  const check = [
+    ev(7, 'tool.started', n('Agent Check created: Cells'), { tool: 'study_prep.start_agent_check', runId: 'check:b1' }),
+    ev(8, 'tool.completed', n('Q1 of 5 · answered from your notes'), { tool: 'study_prep.check_question', runId: 'check:b1' }),
+  ];
+  assert.equal(workflowCardSteps([...events, ...check]).length, steps.length, "an Agent Check's rows are its run's, in the chat — never the card's");
   assert.deepEqual(studyPrepCardHead('awaiting_confirmation'), { title: 'Your study plan', badge: 'Waiting for you', tone: 'wait' });
   assert.equal(studyPrepCardHead('topic_active', 'Cells').title, 'Studying: Cells');
 });

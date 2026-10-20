@@ -596,6 +596,101 @@ export const scenarios = [
     },
   },
   {
+    name: 'chat.agent_check_film',
+    description: 'The Agent Check as its own run, filmed on the sandbox: the plan is approved, the check starts as a battle in Battles; the chat shows the check\'s card (one tracking line + Watch in Battles) and a row per question as Sergeant marks it; mid-check the learner asks "how far?" and gets the progress and the link; Watch in Battles opens the usual battle modal. A screenshot every 2 seconds; for a person to look at.',
+    async run(t) {
+      const { page } = t;
+      const marker = newMarker();
+      const clear = async () => {
+        for (let i = 0; i < 4; i += 1) {
+          const a = await t.api('GET', '/api/adaptive/study-prep/sessions');
+          const id = a.body?.session?.id;
+          if (!id) break;
+          await t.api('POST', `/api/adaptive/study-prep/sessions/${id}/cancel`, {});
+        }
+      };
+      await clear();
+      t.cleanup(async () => {
+        await clear();
+        const list = await t.api('GET', '/api/adaptive/chat/sessions');
+        for (const c of (list.body?.sessions || []).filter((x) => String(x.title || '').includes(marker) || String(x.preview || '').includes(marker))) await t.api('DELETE', `/api/adaptive/chat/sessions/${c.id}`);
+      });
+      let n = 0;
+      const shot = (tag) => t.shot(`${String(n++).padStart(2, '0')}-${tag}`);
+      const scroll = () => page.evaluate(() => { for (const e of document.querySelectorAll('*')) if (e.scrollHeight > e.clientHeight + 40 && getComputedStyle(e).overflowY !== 'visible' && !e.closest('[data-workflow-pinned]')) e.scrollTop = e.scrollHeight; }).catch(() => {});
+      const film = async (tag, frames, until = null) => {
+        for (let i = 0; i < frames; i += 1) {
+          await page.waitForTimeout(2000);
+          await scroll();
+          await shot(tag);
+          if (until && await until()) return true;
+        }
+        return until ? until() : true;
+      };
+
+      // 1. A plan, approved.
+      await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
+      const box = page.getByRole('textbox').last();
+      await box.waitFor({ timeout: 30_000 });
+      await page.getByRole('button', { name: 'Chats' }).first().click({ timeout: 10_000 }).catch(() => {});
+      await page.getByRole('button', { name: /New chat/i }).first().click({ timeout: 10_000 }).catch(() => {});
+      await page.waitForTimeout(800);
+      await box.fill(`Prepare me for my SS1 Biology exam in 5 weeks, start with the cell ${marker}`);
+      await page.getByRole('button', { name: 'Send message' }).click();
+      const approve = page.getByRole('button', { name: 'Approve & Start' }).last();
+      await approve.waitFor({ timeout: 300_000 }).catch(() => {});
+      if (!(await approve.isVisible().catch(() => false))) t.block('the plan did not arrive within 5 minutes');
+      await approve.click();
+      let session = null; let topic = null;
+      for (let i = 0; i < 20 && !topic; i += 1) {
+        await page.waitForTimeout(1500);
+        session = (await t.api('GET', '/api/adaptive/study-prep/sessions')).body;
+        topic = (session?.topics || []).find((x) => x.status === 'active') || null;
+      }
+      if (!topic) t.block('no active topic after approving');
+      await film('approved', 2);
+
+      // 2. The check starts (its battle is in Battles); its card and rows in the chat.
+      const started = await t.api('POST', `/api/adaptive/study-prep/sessions/${session.session.id}/topics/${topic.id}/practice`, { mode: 'diagnostic' });
+      if (started.status >= 300) t.block(`starting the check answered ${started.status}: ${JSON.stringify(started.body).slice(0, 200)}`);
+      if (started.body?.skipped) t.block(`no notes on "${topic.label}" to check`);
+      const card = page.locator('[data-agent-check]').last();
+      const shown = await film('check-started', 15, async () => await card.isVisible().catch(() => false));
+      t.check('the check\'s card: one tracking line and Watch in Battles', shown && await page.getByRole('button', { name: 'Watch in Battles' }).last().isVisible().catch(() => false));
+      const firstRow = await film('questions', 25, async () => await page.getByText(/Q1 of \d+ ·/).first().isVisible().catch(() => false));
+      t.check('a row per question as Sergeant marks it', firstRow);
+
+      // 3. Mid-check, the learner asks; the agent answers with the progress and the link.
+      await box.fill('How far is the Agent Check? Send me the link.');
+      await page.getByRole('button', { name: 'Send message' }).click();
+      const replied = await film('asked', 25, async () => await page.getByText(/answered|Battles/).last().isVisible().catch(() => false) && (await page.locator('a[href*="tab=battles"]').count()) > 0);
+      t.check('the agent replies with the progress and the battle link', replied);
+      {
+        const list = await t.api('GET', '/api/adaptive/chat/sessions');
+        const thread = (list.body?.sessions || []).find((x) => String(x.title || '').includes(marker) || String(x.preview || '').includes(marker));
+        const msgs = thread ? (await t.api('GET', `/api/adaptive/chat/sessions/${thread.id}/messages?limit=6`)).body : null;
+        const rows = msgs?.messages || msgs?.data || [];
+        const reply = [...rows].reverse().find((m) => m.role !== 'user');
+        t.note(`reply: ${String(reply?.text || '').slice(0, 600)}`);
+        t.note(`reply tools: ${JSON.stringify(reply?.meta?.toolsUsed || reply?.meta?.tools || Object.keys(reply?.meta || {}))}`);
+      }
+
+      // 4. Watch in Battles → the usual battle modal.
+      const watch = page.getByRole('button', { name: 'Watch in Battles' }).last();
+      if (await watch.isVisible().catch(() => false)) {
+        await watch.click();
+        await film('battle', 6);
+        t.check('Watch in Battles opens the battle', /tab=battles/.test(page.url()));
+        await page.goBack().catch(() => {});
+      }
+
+      // 5. Back in the chat until it's marked: the result row, the card says so.
+      await page.waitForTimeout(3000);
+      const marked = await film('marked', 150, async () => await page.locator('[data-agent-check="marked"], [data-agent-check="passed"]').last().isVisible().catch(() => false));
+      t.check('the result closes the run; the card shows it', marked);
+    },
+  },
+  {
     name: 'chat.teaching_handoff_film',
     description: 'Phase 6, filmed on the sandbox: a missed Agent Check (simulated for a test account) offers a teaching session — the card shows one tracking line and Confirm, the agent works in the chat; Confirm runs start_teaching_session; the session is an ordinary item in My Sessions → Agent; the normal teaching modal opens on its parts; ending it brings the agent\'s report and the retest countdown back in the chat. A screenshot every 2 seconds; for a person to look at.',
     async run(t) {
