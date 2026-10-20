@@ -7,9 +7,14 @@
  * Supported (the subset the agent prompts promise):
  *   ### Heading (up to ####)      **bold**   *italic* / _italic_   `code`
  *   - bullet / * bullet           1. numbered          --- horizontal rule
+ *   [label](/app?…)               an in-app link (only /app paths — anything
+ *                                 else stays literal text)
  * Blank lines split paragraphs; a single line break continues the paragraph.
  * Anything unterminated (**ab, `ab) stays literal text.
  */
+
+// [label](/app…) — a link inside the app only; the label is plain text.
+const LINK = /^\[([^\]\n]{1,120})\]\((\/app(?:[/?#][^\s)]*)?)\)/;
 
 const inline = (text) => {
   const out = [];
@@ -28,6 +33,13 @@ const inline = (text) => {
   // (we are inside the span) always closes. Unterminated openers stay literal.
   for (let i = 0; i < text.length; i++) {
     const rest = text.slice(i);
+    const link = !code && rest.startsWith("[") ? rest.match(LINK) : null;
+    if (link) {
+      flush();
+      out.push({ text: link[1], bold, italic, code: false, href: link[2] });
+      i += link[0].length - 1;
+      continue;
+    }
     if (!code && rest.startsWith("**")) {
       if (bold || hasCloser("**", i + 2)) { flush(); bold = !bold; i += 1; }
       else { buf += "**"; i += 1; }   // literal — both stars consumed as text

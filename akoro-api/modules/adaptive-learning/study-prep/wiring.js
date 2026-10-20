@@ -254,12 +254,17 @@ export async function runningWork(learnerId) {
         topic: active.label, mode: active.checkMode, battleId: active.checkBattleId,
         answered: Number(check?.metadata?.answered) || 0, total: Number(check?.metadata?.total) || null,
         link: `/app?tab=battles&battle=${active.checkBattleId}`,
+        markdown: `[Watch in Battles](/app?tab=battles&battle=${active.checkBattleId})`,
       });
     }
   }
-  out.teachingSessions = (await teachingHandoff().listOpen(learnerId).catch(() => [])).map((t) => ({
-    topic: t.topic, state: t.state, focus: t.focus, progress: t.progress, link: "/app?tab=sessions",
-  }));
+  // Only the live plan's: a teaching session whose plan has ended (or was removed) isn't running.
+  out.teachingSessions = row ? (await teachingHandoff().listOpen(learnerId).catch(() => []))
+    .filter((t) => t.from?.sessionId === row.id)
+    .map((t) => ({
+      topic: t.topic, state: t.state, focus: t.focus, progress: t.progress, link: "/app?tab=sessions",
+      markdown: "[Open your sessions](/app?tab=sessions)",
+    })) : [];
   return out;
 }
 

@@ -12,7 +12,16 @@ const H_STYLE = {
   3: { fontSize: '1em', fontWeight: 800, margin: '8px 0 3px' },
 };
 
+// An in-app link: the router's own navigation (it listens to popstate), no page reload.
+const openInApp = (e, href) => {
+  if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+  e.preventDefault();
+  window.history.pushState({}, '', href);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+};
+
 function Span({ s }) {
+  if (s.href) return <a href={s.href} onClick={(e) => openInApp(e, s.href)} style={{ color: 'inherit', fontWeight: 800, textDecoration: 'underline', textUnderlineOffset: 2 }}>{s.text}</a>;
   if (s.code) return <code style={{ background: 'rgba(255,255,255,.14)', padding: '1px 5px', borderRadius: 5, fontSize: '0.92em', fontFamily: 'ui-monospace, monospace' }}>{s.text}</code>;
   return <span style={{ fontWeight: s.bold ? 800 : undefined, fontStyle: s.italic ? 'italic' : undefined }}>{s.text}</span>;
 }

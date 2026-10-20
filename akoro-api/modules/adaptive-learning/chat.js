@@ -3796,8 +3796,8 @@ async function runningWorkBrief(learnerId) {
   const { runningWork } = await import("./study-prep/wiring.js");
   const work = await runningWork(learnerId);
   const live = [
-    ...work.agentChecks.map((c) => `- Agent Check on ${c.topic} running in Battles: ${c.answered} of ${c.total ?? "?"} answered. Link: ${c.link}`),
-    ...work.teachingSessions.map((t) => `- Teaching session on ${t.topic} (${t.state === "scheduled" ? "waiting on their dashboard" : "under way"}${t.progress?.of ? `, ${t.progress.done || 0} of ${t.progress.of} parts taught` : ""}). Link: ${t.link}`),
+    ...work.agentChecks.map((c) => `- Agent Check on ${c.topic} running in Battles: ${c.answered} of ${c.total ?? "?"} answered. Link: ${c.markdown || c.link}`),
+    ...work.teachingSessions.map((t) => `- Teaching session on ${t.topic} (${t.state === "scheduled" ? "waiting on their dashboard" : "under way"}${t.progress?.of ? `, ${t.progress.done || 0} of ${t.progress.of} parts taught` : ""}). Link: ${t.markdown || t.link}`),
   ];
   if (!live.length) return "";
   const doctrine = await loadDoctrine("reasoning/RUNNING_WORK.md").catch(() => "");
