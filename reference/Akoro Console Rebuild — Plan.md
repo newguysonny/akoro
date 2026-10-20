@@ -16,6 +16,15 @@ review); this work is frontend only.
 3. **Dark mode:** on, from the shared theme tokens (the learner's
    `ThemeContext` light and dark sets).
 4. **Order:** done alongside Phase 7, in turns.
+5. **Nav groups (pages with sections):** a group (Course Creator, Student
+   Information, Academic, and the like in school and admin) is a dropdown in
+   the open sidebar: its pages indented under it, with a purple bar on the
+   current page. In the collapsed icon rail, tapping a group's icon opens a
+   **flyout** beside it — the admin app's pattern (`akoro-admin/src/components/Layout.jsx`):
+   the group's label on top, then its pages; it closes on a page tap, an
+   outside click or Escape, and when the sidebar is opened. Styled with the
+   learner tokens (surface, border, radius 14, purple active state), light and
+   dark. It is part of the shared frame, so every console gets it.
 
 ## Where things stand
 
