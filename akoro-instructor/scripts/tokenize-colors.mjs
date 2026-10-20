@@ -19,15 +19,21 @@ const NAMES = { AMBER: 'C.brand', INK: 'C.ink', MUTED2: 'C.muted2', MUTED: 'C.mu
 const BX = { white: 'C.surface', primary: 'C.bxPrimary', primaryHover: 'C.bxPrimary', ink: 'C.bxInk', muted: 'C.bxMuted', border: 'C.bxBorder', bg: 'C.bxBg', sidebarBg: 'C.bxBg', font: 'C.bxFont' };
 const pct = (hex2) => Math.round((parseInt(hex2, 16) / 255) * 100);
 
+/** A file with its own local colour constants (`const INK = …`) is done by hand: the swap would break it. */
+export const ownsPalette = (src) => /\bconst\s+(AMBER|INK|MUTED2?|BORDER|LIGHT|WHITE|FONT)\s*=/.test(src);
+
 export function tokenize(src) {
+  if (ownsPalette(src)) return src;
   let s = src;
   // `${AMBER}18` (a whole template literal) → tint(9); `${color}18` → tint(9, color)
   s = s.replace(/`\$\{AMBER\}([0-9A-Fa-f]{2})`/g, (_, a) => `tint(${pct(a)})`);
   s = s.replace(/`\$\{([a-zA-Z_.]+)\}([0-9A-Fa-f]{2})`/g, (m, v, a) => (['GREEN', 'RED', 'BLUE', 'PURPLE', 'GOLD'].includes(v) ? m : `tint(${pct(a)}, ${v})`));
   // inside a longer template: ${AMBER}44 → ${tint(27)}
   s = s.replace(/\$\{AMBER\}([0-9A-Fa-f]{2})(?![0-9A-Fa-f])/g, (_, a) => `\${tint(${pct(a)})}`);
-  // white TEXT stays white; white SURFACES follow the theme
-  s = s.replace(/color:\s*WHITE\b/g, "color: '#fff'").replace(/color=\{WHITE\}/g, "color=\"#fff\"");
+  // white TEXT stays white (also inside a conditional: color: on ? WHITE : INK); white SURFACES follow the theme
+  let prev;
+  do { prev = s; s = s.replace(/((?:^|[\s{,])color:\s*[^,\n}]*?)\bWHITE\b/g, "$1'#fff'"); } while (s !== prev);
+  s = s.replace(/color=\{WHITE\}/g, "color=\"#fff\"").replace(/color=\{([^}]*?)\bWHITE\b/g, "color={$1'#fff'");
   s = s.replace(/\bWHITE\b(?!\s*[,}]\s*from)/g, 'C.surface');
   for (const [k, v] of Object.entries(NAMES)) s = s.replace(new RegExp(`(?<![\\w.'"])${k}(?![\\w'"])`, 'g'), v);
   s = s.replace(/\bBX\.(\w+)/g, (m, k) => BX[k] || m);
@@ -56,6 +62,7 @@ export function leftovers(s) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   for (const f of process.argv.slice(2)) {
     const before = readFileSync(f, 'utf8');
+    if (ownsPalette(before)) { console.log(`${path.relative(process.cwd(), f)} — SKIPPED: it defines its own colour constants; migrate it by hand`); continue; }
     const after = tokenize(before);
     if (after !== before) writeFileSync(f, after);
     console.log(`${path.relative(process.cwd(), f)}${after === before ? ' (unchanged)' : ''}`);

@@ -4,6 +4,7 @@ import {
   Send, Plus, Brain, CheckSquare, X, Paperclip, Camera,
   Upload, FileText, ScanLine, Loader, CheckCircle2,
   History, Copy, Check, Lightbulb, MoreVertical, Pencil, Trash2, CloudOff,  Bot, Lock , Cpu } from 'lucide-react';
+import { Ico } from '../theme/Ico.jsx';
 import { PageLayout, useIsMobile } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, FileUploadZone, Toast } from '../components/Primitives.jsx';
 import TrainingProgress from '../components/TrainingProgress.jsx';
@@ -72,20 +73,19 @@ function CopyMsgButton({ text }) {
       style={{
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         width: 22, height: 18, padding: 0, border: 'none', background: 'transparent',
-        cursor: 'pointer', color: MUTED2, opacity: .6, borderRadius: 5,
+        cursor: 'pointer', color: C.muted2, opacity: .6, borderRadius: 5,
       }}
       onMouseEnter={(e) => { e.currentTarget.style.opacity = 1; }}
       onMouseLeave={(e) => { e.currentTarget.style.opacity = .6; }}
     >
-      {done ? <Check size={12} color={GREEN} /> : <Copy size={12} />}
+      {done ? <Ico lucide={Check} ti="ti-check" size={12} color={GREEN} /> : <Ico lucide={Copy} ti="ti-copy" size={12} />}
     </button>
   );
 }
 
 import { useAuth } from '../contexts/AuthContext.jsx';
-import {
-  AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, PURPLE, BLUE, FONT,
-} from '../constants.js';
+import { GREEN, RED, PURPLE, BLUE } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
 
 const bdr = (w, c) => `${w}px solid ${c}`;
 
@@ -764,19 +764,19 @@ export default function ChatPage() {
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       <style>{`
-        .ci-task-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px 3px 9px;border-radius:20px;background:linear-gradient(135deg,rgba(232,136,74,.18),rgba(240,160,75,.14));border:1.5px solid rgba(232,136,74,.5);color:${AMBER};font-size:11px;font-weight:700;white-space:nowrap;flex-shrink:0}
-        .ci-task-chip button{display:flex;align-items:center;background:none;border:none;cursor:pointer;padding:0;color:${AMBER};opacity:.7;line-height:1}
-        .ci-qp{flex-shrink:0;padding:5px 11px;border-radius:20px;border:1.5px solid ${BORDER};background:#fff;color:${MUTED};font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:${FONT};transition:all .15s;display:inline-flex;align-items:center;gap:4px}
-        .ci-qp:hover{border-color:${AMBER};color:${AMBER}}
-        .ci-qp.active{border-color:${AMBER};color:${AMBER};background:rgba(232,136,74,.12)}
+        .ci-task-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px 3px 9px;border-radius:20px;background:linear-gradient(135deg,${tint(18)},rgba(240,160,75,.14));border:1.5px solid ${tint(50)};color:${C.brand};font-size:11px;font-weight:700;white-space:nowrap;flex-shrink:0}
+        .ci-task-chip button{display:flex;align-items:center;background:none;border:none;cursor:pointer;padding:0;color:${C.brand};opacity:.7;line-height:1}
+        .ci-qp{flex-shrink:0;padding:5px 11px;border-radius:20px;border:1.5px solid ${C.border};background:${C.surface};color:${C.muted};font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:${C.font};transition:all .15s;display:inline-flex;align-items:center;gap:4px}
+        .ci-qp:hover{border-color:${C.brand};color:${C.brand}}
+        .ci-qp.active{border-color:${C.brand};color:${C.brand};background:${tint(12)}}
         .ci-qp.ci-tool{border-color:rgba(16,185,129,.4);color:${GREEN};background:rgba(16,185,129,.08)}
         .ci-qp.ci-tool.active{border-color:${GREEN};background:rgba(16,185,129,.16)}
         .ci-quickbar{display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;scrollbar-width:none}
         .ci-quickbar::-webkit-scrollbar{display:none}
-        .ci-attach-menu{position:absolute;bottom:48px;left:0;background:#fff;border-radius:16px;border:1px solid ${BORDER};box-shadow:0 8px 32px rgba(0,0,0,.12);padding:8px;min-width:210px;z-index:50}
-        .ci-attach-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;cursor:pointer;border:none;background:transparent;width:100%;font-family:${FONT};text-align:left}
-        .ci-attach-item:hover{background:${LIGHT}}
-        .ci-typing{display:inline-block;width:6px;height:6px;border-radius:50%;background:${MUTED2};margin:0 2px;animation:ciTyping 1.4s infinite ease-in-out}
+        .ci-attach-menu{position:absolute;bottom:48px;left:0;background:${C.surface};border-radius:16px;border:1px solid ${C.border};box-shadow:0 8px 32px rgba(0,0,0,.12);padding:8px;min-width:210px;z-index:50}
+        .ci-attach-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;cursor:pointer;border:none;background:transparent;width:100%;font-family:${C.font};text-align:left}
+        .ci-attach-item:hover{background:${C.bg}}
+        .ci-typing{display:inline-block;width:6px;height:6px;border-radius:50%;background:${C.muted2};margin:0 2px;animation:ciTyping 1.4s infinite ease-in-out}
         @keyframes ciTyping{0%,80%,100%{transform:scale(0);opacity:0}40%{transform:scale(1);opacity:1}}
         /* Fortizo split (matches the learner's reader + session view): the
            preview docks BESIDE the chat from 768px up — a laptop at 125%
@@ -796,15 +796,15 @@ export default function ChatPage() {
             drawer (the list reloads on every open — never stale) and the
             quick-command chips scroll. Agent identity lives in the drawer;
             the conversation gets the room. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 14px 8px', overflowX: 'auto', scrollbarWidth: 'none', borderBottom: `1px solid ${BORDER}`, flexShrink: 0, background: WHITE }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 14px 8px', overflowX: 'auto', scrollbarWidth: 'none', borderBottom: `1px solid ${C.border}`, flexShrink: 0, background: C.surface }}>
           <button onClick={() => { loadChatSessions(); setDrawerOpen(true); }} title="Chats" aria-label="Chats"
-            style={{ flexShrink: 0, width: 30, height: 30, borderRadius: 9, border: `1px solid ${BORDER}`, background: LIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}>
-            <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke={MUTED} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
+            style={{ flexShrink: 0, width: 30, height: 30, borderRadius: 9, border: `1px solid ${C.border}`, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}>
+            <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
           </button>
-          <div style={{ width: 1, height: 18, background: BORDER, flexShrink: 0 }} />
+          <div style={{ width: 1, height: 18, background: C.border, flexShrink: 0 }} />
           {QUICK_COMMANDS.map((p) => (
             <button key={p} onClick={() => sendText(p)}
-              style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, border: `1px solid ${AMBER}30`, background: `${AMBER}08`, color: AMBER, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>{p}</button>
+              style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, border: `1px solid ${tint(19)}`, background: tint(3), color: C.brand, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: C.font, whiteSpace: 'nowrap' }}>{p}</button>
           ))}
         </div>
 
@@ -816,13 +816,13 @@ export default function ChatPage() {
               const active = taskChips.includes(t.name);
               return (
                 <button key={t.id} className={'ci-qp ci-tool' + (active ? ' active' : '')} onClick={() => (active ? removeChip(t.name) : handleQuickPrompt(t.name))} title={t.description}>
-                  <span style={{ fontSize: 10, fontWeight: 900, color: MUTED }}>{(t.name || 'T').charAt(0).toUpperCase()}</span>{t.name}{active && <X size={9} />}
+                  <span style={{ fontSize: 10, fontWeight: 900, color: C.muted }}>{(t.name || 'T').charAt(0).toUpperCase()}</span>{t.name}{active && <Ico lucide={X} ti="ti-x" size={9} />}
                 </button>
               );
             })
           ) : (
             <button className="ci-qp" onClick={() => navigate('/marketplace')} title="Unlock tools & assets for your agent">
-              <Lock size={11} style={{ verticalAlign: '-2px', marginRight: 3 }} />Unlock tools
+              <Ico lucide={Lock} ti="ti-lock" size={11} style={{ verticalAlign: '-2px', marginRight: 3 }} />Unlock tools
             </button>
           )}
         </div>
@@ -830,8 +830,8 @@ export default function ChatPage() {
         {/* Message feed */}
         <div ref={feedRef} onScroll={(e) => { if (e.currentTarget.scrollTop < 80) loadOlder(); }} style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '8px 2px' }}>
           {loadingOlder && (
-            <div role="status" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 12, color: MUTED }}>
-              <Loader size={12} className="spinner" /> Loading earlier messages…
+            <div role="status" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 12, color: C.muted }}>
+              <Ico lucide={Loader} ti="ti-loader-2" size={12} className="spinner" /> Loading earlier messages…
             </div>
           )}
           {messages.map((msg, mi) => {
@@ -841,43 +841,43 @@ export default function ChatPage() {
             const textPart = chips.length ? msg.text.replace(chips.join(' · '), '').replace(/^\n/, '').trim() : msg.text;
             return (
               <div key={msg.id} style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: 8 }}>
-                {!isMe && <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#FEF0E6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}><Bot size={15} color={AMBER} /></div>}
+                {!isMe && <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#FEF0E6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}><Ico lucide={Bot} ti="ti-robot" size={15} color={C.brand} /></div>}
                 <div style={{ maxWidth: '80%' }}>
                   {isMe && msg.isTask && (
                     <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 10px', borderRadius: 20, background: 'rgba(232,136,74,.12)', border: '1.5px solid rgba(232,136,74,.35)', color: AMBER, fontSize: 11, fontWeight: 700 }}><CheckSquare size={10} />Task assigned</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 10px', borderRadius: 20, background: tint(12), border: `1.5px solid ${tint(35)}`, color: C.brand, fontSize: 11, fontWeight: 700 }}><Ico lucide={CheckSquare} ti="ti-square-check" size={10} />Task assigned</span>
                     </div>
                   )}
                   <div style={{
                     padding: '10px 13px',
                     borderRadius: isMe ? '17px 17px 4px 17px' : '17px 17px 17px 4px',
-                    background: isMe ? (msg.isTask ? 'linear-gradient(135deg,#E8884A,#F0A04B)' : INK) : '#F0ECE6',
-                    color: isMe ? WHITE : INK, fontSize: 13, lineHeight: 1.55,
+                    background: isMe ? (msg.isTask ? 'linear-gradient(135deg,#E8884A,#F0A04B)' : C.hero) : '#F0ECE6',
+                    color: isMe ? '#fff' : C.ink, fontSize: 13, lineHeight: 1.55,
                   }}>
                     {chips.length > 0 && (
                       <div style={{ marginBottom: textPart ? 6 : 0, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                         {chips.map((c) => (
-                          <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 9px', borderRadius: 20, background: 'rgba(255,255,255,.25)', border: '1px solid rgba(255,255,255,.4)', fontSize: 10.5, fontWeight: 700, color: '#fff' }}><CheckSquare size={9} />{c}</span>
+                          <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 9px', borderRadius: 20, background: 'rgba(255,255,255,.25)', border: '1px solid rgba(255,255,255,.4)', fontSize: 10.5, fontWeight: 700, color: '#fff' }}><Ico lucide={CheckSquare} ti="ti-square-check" size={9} />{c}</span>
                         ))}
                       </div>
                     )}
                     {textPart && (isMe
                       ? <span style={{ whiteSpace: 'pre-wrap' }}>{textPart}</span>
-                      : <RichText text={textPart} color={INK} />)}
+                      : <RichText text={textPart} color={C.ink} />)}
                   </div>
                   {!isMe && msg.proposal && (msg.proposal.status === 'proposed' ? (
                     <div data-proposal={msg.proposal.kind} style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 8 }}>
                       <button type="button" disabled={!!proposalBusy} onClick={() => decideProposal(msg, 'accept')}
-                        style={{ padding: '8px 14px', borderRadius: 20, border: 'none', background: PURPLE, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: proposalBusy ? 'wait' : 'pointer', fontFamily: FONT }}>
+                        style={{ padding: '8px 14px', borderRadius: 20, border: 'none', background: PURPLE, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: proposalBusy ? 'wait' : 'pointer', fontFamily: C.font }}>
                         {proposalBusy === msg.id ? 'Working…' : msg.proposal.yes || 'Yes, go ahead'}
                       </button>
                       <button type="button" disabled={!!proposalBusy} onClick={() => decideProposal(msg, 'wrong_time')}
-                        style={{ padding: '8px 14px', borderRadius: 20, border: bdr(1.5, BORDER), background: WHITE, color: INK, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Not now</button>
+                        style={{ padding: '8px 14px', borderRadius: 20, border: bdr(1.5, C.border), background: C.surface, color: C.ink, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>Not now</button>
                       <button type="button" disabled={!!proposalBusy} onClick={() => decideProposal(msg, 'not_useful')}
-                        style={{ padding: '8px 14px', borderRadius: 20, border: 'none', background: 'none', color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Not useful</button>
+                        style={{ padding: '8px 14px', borderRadius: 20, border: 'none', background: 'none', color: C.muted, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>Not useful</button>
                     </div>
                   ) : (
-                    <div style={{ marginTop: 8, fontSize: 11.5, fontWeight: 800, color: msg.proposal.status === 'executed' ? GREEN : MUTED }}>
+                    <div style={{ marginTop: 8, fontSize: 11.5, fontWeight: 800, color: msg.proposal.status === 'executed' ? GREEN : C.muted }}>
                       {msg.proposal.status === 'executed' ? 'Done' : msg.proposal.status === 'failed' ? "Couldn't do that" : 'Closed'}
                     </div>
                   ))}
@@ -901,7 +901,7 @@ export default function ChatPage() {
                     if (!ideas.length) return null;
                     return (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }} aria-label="Suggestions">
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 800, color: MUTED2, fontFamily: FONT }}><Lightbulb size={11} /> {last ? 'Ideas' : 'Try next'}</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 800, color: C.muted2, fontFamily: C.font }}><Ico lucide={Lightbulb} ti="ti-bulb" size={11} /> {last ? 'Ideas' : 'Try next'}</span>
                         {ideas.map((it) => (
                           <button key={it.label} type="button" className="ci-qp" onClick={() => { setInput(it.fill); inputRef.current?.focus(); }}
                             title="Tap to put it in the message box — change it if you like, then send">
@@ -911,7 +911,7 @@ export default function ChatPage() {
                       </div>
                     );
                   })()}
-                  <div style={{ fontSize: 10, color: MUTED2, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
+                  <div style={{ fontSize: 10, color: C.muted2, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
                     {msg.time}
                     <CopyMsgButton text={textPart} />
                   </div>
@@ -921,10 +921,10 @@ export default function ChatPage() {
           })}
 
           {trainingInChat && !trainRunId && (
-            <div style={{ background: INK, borderRadius: 20, padding: 24, color: WHITE, fontFamily: FONT }}>
+            <div style={{ background: C.hero, borderRadius: 20, padding: 24, color: '#fff', fontFamily: C.font }}>
               <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Uploading recording…</div>
               <div style={{ height: 6, background: 'rgba(255,255,255,.1)', borderRadius: 3, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${uploadPct}%`, borderRadius: 3, background: `linear-gradient(90deg, ${AMBER}, ${PURPLE})`, transition: 'width .2s' }} />
+                <div style={{ height: '100%', width: `${uploadPct}%`, borderRadius: 3, background: `linear-gradient(90deg, ${C.brand}, ${PURPLE})`, transition: 'width .2s' }} />
               </div>
               <div style={{ textAlign: 'right', fontSize: 11, color: 'rgba(255,255,255,.5)', marginTop: 6 }}>{uploadPct}%</div>
             </div>
@@ -940,7 +940,7 @@ export default function ChatPage() {
 
           {!trainingInChat && messages[messages.length - 1]?.from === 'me' && !messages[messages.length - 1]?.isTask && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#FEF0E6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}><Bot size={15} color={AMBER} /></div>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#FEF0E6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}><Ico lucide={Bot} ti="ti-robot" size={15} color={C.brand} /></div>
               <div style={{ padding: '10px 15px', borderRadius: '17px 17px 17px 4px', background: '#F0ECE6', display: 'flex', gap: 2 }}>
                 <span className="ci-typing" /><span className="ci-typing" style={{ animationDelay: '.2s' }} /><span className="ci-typing" style={{ animationDelay: '.4s' }} />
               </div>
@@ -948,8 +948,8 @@ export default function ChatPage() {
           )}
           {!trainingInChat && aiStatus && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '-4px 0 0 36px' }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: AMBER, display: 'inline-block', animation: 'ciTyping 1.4s infinite ease-in-out' }} />
-              <span style={{ fontSize: 11, fontWeight: 700, color: MUTED, fontFamily: FONT }}>{aiStatus}</span>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.brand, display: 'inline-block', animation: 'ciTyping 1.4s infinite ease-in-out' }} />
+              <span style={{ fontSize: 11, fontWeight: 700, color: C.muted, fontFamily: C.font }}>{aiStatus}</span>
             </div>
           )}
         </div>
@@ -967,9 +967,9 @@ export default function ChatPage() {
             </div>
           )}
           {isTask && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderRadius: 10, background: 'rgba(232,136,74,.1)', border: bdr(1, 'rgba(232,136,74,.3)'), marginBottom: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><CheckSquare size={12} color={AMBER} /><span style={{ fontSize: 11.5, fontWeight: 700, color: AMBER }}>Sending as task</span></div>
-              <button onClick={() => { setIsTask(false); setTaskChips([]); }} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: MUTED, fontFamily: FONT, fontWeight: 600 }}><X size={11} />Clear</button>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderRadius: 10, background: tint(10), border: bdr(1, tint(30)), marginBottom: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Ico lucide={CheckSquare} ti="ti-square-check" size={12} color={C.brand} /><span style={{ fontSize: 11.5, fontWeight: 700, color: C.brand }}>Sending as task</span></div>
+              <button onClick={() => { setIsTask(false); setTaskChips([]); }} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: C.muted, fontFamily: C.font, fontWeight: 600 }}><Ico lucide={X} ti="ti-x" size={11} />Clear</button>
             </div>
           )}
 
@@ -977,7 +977,7 @@ export default function ChatPage() {
           {taskChips.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, paddingBottom: 8 }}>
               {taskChips.map((chip) => (
-                <span key={chip} className="ci-task-chip"><CheckSquare size={9} />{chip}<button onClick={() => removeChip(chip)} tabIndex={-1}><X size={9} /></button></span>
+                <span key={chip} className="ci-task-chip"><Ico lucide={CheckSquare} ti="ti-square-check" size={9} />{chip}<button onClick={() => removeChip(chip)} tabIndex={-1}><Ico lucide={X} ti="ti-x" size={9} /></button></span>
               ))}
             </div>
           )}
@@ -1018,24 +1018,25 @@ export default function ChatPage() {
                 onModelChange={setChatMode}
                 disabled={running}
                 icon={Cpu}
+                iconTi="ti-cpu"
               />
             </div>
             {attachMenu && (
               <div className="ci-attach-menu">
                   {[
-                    { icon: <Camera size={15} color={GREEN} />, label: 'Photo / Image OCR', desc: 'Scan & extract text', act: () => { setAttachType('ocr'); setAttachModal(true); setAttachMenu(false); } },
-                    { icon: <Upload size={15} color={PURPLE} />, label: 'Upload file', desc: 'PDF, Word, Excel…', act: () => { setAttachType('file'); setAttachModal(true); setAttachMenu(false); } },
-                    { icon: <FileText size={15} color={BLUE} />, label: 'Upload document', desc: 'Lesson notes, worksheets', act: () => { setAttachType('doc'); setAttachModal(true); setAttachMenu(false); } },
+                    { icon: <Ico lucide={Camera} ti="ti-camera" size={15} color={GREEN} />, label: 'Photo / Image OCR', desc: 'Scan & extract text', act: () => { setAttachType('ocr'); setAttachModal(true); setAttachMenu(false); } },
+                    { icon: <Ico lucide={Upload} ti="ti-upload" size={15} color={PURPLE} />, label: 'Upload file', desc: 'PDF, Word, Excel…', act: () => { setAttachType('file'); setAttachModal(true); setAttachMenu(false); } },
+                    { icon: <Ico lucide={FileText} ti="ti-file-text" size={15} color={BLUE} />, label: 'Upload document', desc: 'Lesson notes, worksheets', act: () => { setAttachType('doc'); setAttachModal(true); setAttachMenu(false); } },
                   ].map((item) => (
                     <button key={item.label} className="ci-attach-item" onClick={item.act}>
-                      <div style={{ width: 32, height: 32, borderRadius: 9, background: LIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{item.icon}</div>
-                      <div><div style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>{item.label}</div><div style={{ fontSize: 11, color: MUTED }}>{item.desc}</div></div>
+                      <div style={{ width: 32, height: 32, borderRadius: 9, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{item.icon}</div>
+                      <div><div style={{ fontSize: 12.5, fontWeight: 700, color: C.ink }}>{item.label}</div><div style={{ fontSize: 11, color: C.muted }}>{item.desc}</div></div>
                     </button>
                   ))}
-                  <div style={{ height: 1, background: BORDER, margin: '4px 0' }} />
+                  <div style={{ height: 1, background: C.border, margin: '4px 0' }} />
                   <button className="ci-attach-item" onClick={() => { setTaskModal(true); setAttachMenu(false); }}>
-                    <div style={{ width: 32, height: 32, borderRadius: 9, background: 'rgba(232,136,74,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><CheckSquare size={15} color={AMBER} /></div>
-                    <div><div style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>Assign task</div><div style={{ fontSize: 11, color: MUTED }}>Create a structured task</div></div>
+                    <div style={{ width: 32, height: 32, borderRadius: 9, background: tint(10), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Ico lucide={CheckSquare} ti="ti-square-check" size={15} color={C.brand} /></div>
+                    <div><div style={{ fontSize: 12.5, fontWeight: 700, color: C.ink }}>Assign task</div><div style={{ fontSize: 11, color: C.muted }}>Create a structured task</div></div>
                   </button>
                 </div>
               )}
@@ -1065,47 +1066,47 @@ export default function ChatPage() {
       {drawerOpen && (
         <>
           <div onClick={() => setDrawerOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(23,23,23,.5)', backdropFilter: 'blur(4px)' }} />
-          <div style={{ position: 'fixed', top: 0, bottom: 0, left: 0, zIndex: 2100, width: 'min(86vw, 320px)', background: WHITE, boxShadow: '6px 0 40px rgba(23,23,23,.2)', animation: 'ci-drawer-in .28s cubic-bezier(.32,1,.64,1)', fontFamily: FONT, display: 'flex', flexDirection: 'column' }}>
-            <style>{`@keyframes ci-drawer-in{from{transform:translateX(-100%)}to{transform:translateX(0)}}.ci-sess-item:hover{background:${LIGHT}}`}</style>
+          <div style={{ position: 'fixed', top: 0, bottom: 0, left: 0, zIndex: 2100, width: 'min(86vw, 320px)', background: C.surface, boxShadow: '6px 0 40px rgba(23,23,23,.2)', animation: 'ci-drawer-in .28s cubic-bezier(.32,1,.64,1)', fontFamily: C.font, display: 'flex', flexDirection: 'column' }}>
+            <style>{`@keyframes ci-drawer-in{from{transform:translateX(-100%)}to{transform:translateX(0)}}.ci-sess-item:hover{background:${C.bg}}`}</style>
             {/* Agent header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 16px 13px', borderBottom: bdr(1, BORDER), flexShrink: 0 }}>
-              <div style={{ width: 46, height: 46, borderRadius: '50%', background: '#FEF0E6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 23, boxShadow: `0 0 0 2px #fff, 0 0 0 3.5px ${AMBER}`, flexShrink: 0 }}><Bot size={23} color={AMBER} /></div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 16px 13px', borderBottom: bdr(1, C.border), flexShrink: 0 }}>
+              <div style={{ width: 46, height: 46, borderRadius: '50%', background: '#FEF0E6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 23, boxShadow: `0 0 0 2px #fff, 0 0 0 3.5px ${C.brand}`, flexShrink: 0 }}><Ico lucide={Bot} ti="ti-robot" size={23} color={C.brand} /></div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 14.5, fontWeight: 900, color: INK, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{agentName}</p>
-                <div style={{ fontSize: 11, color: trainingInChat ? AMBER : GREEN, display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: trainingInChat ? AMBER : GREEN, display: 'inline-block', animation: trainingInChat ? 'pulse-dot 1.4s ease-in-out infinite' : 'none' }} />
+                <p style={{ fontSize: 14.5, fontWeight: 900, color: C.ink, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{agentName}</p>
+                <div style={{ fontSize: 11, color: trainingInChat ? C.brand : GREEN, display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: trainingInChat ? C.brand : GREEN, display: 'inline-block', animation: trainingInChat ? 'pulse-dot 1.4s ease-in-out infinite' : 'none' }} />
                   {trainingInChat ? 'Training in progress…' : `Online · Lv ${agentLevel}`}
                 </div>
               </div>
-              <button onClick={() => setDrawerOpen(false)} title="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex' }}><X size={17} color={MUTED2} /></button>
+              <button onClick={() => setDrawerOpen(false)} title="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex' }}><Ico lucide={X} ti="ti-x" size={17} color={C.muted2} /></button>
             </div>
             {/* New chat + Train agent */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 16px', flexShrink: 0 }}>
-              <button onClick={newChat} style={{ width: '100%', padding: 11, borderRadius: 12, border: 'none', background: 'linear-gradient(135deg,#E8884A,#F0A04B)', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
-                <Plus size={14} strokeWidth={2.6} /> New chat
+              <button onClick={newChat} style={{ width: '100%', padding: 11, borderRadius: 12, border: 'none', background: 'linear-gradient(135deg,#E8884A,#F0A04B)', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: C.font, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+                <Ico lucide={Plus} ti="ti-plus" size={14} strokeWidth={2.6} /> New chat
               </button>
               <button onClick={() => { setTrainModal(true); }} disabled={trainingInChat} title={trainingInChat ? 'Training already in progress' : 'Train your agent on a lesson recording or document'}
-                style={{ width: '100%', padding: 11, borderRadius: 12, border: bdr(1.5, trainingInChat ? BORDER : `${AMBER}66`), background: trainingInChat ? LIGHT : 'rgba(232,136,74,.07)', color: trainingInChat ? MUTED2 : AMBER, fontSize: 13, fontWeight: 800, cursor: trainingInChat ? 'wait' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
-                <Brain size={14} /> {trainingInChat ? 'Training in progress…' : 'Train agent'}
+                style={{ width: '100%', padding: 11, borderRadius: 12, border: bdr(1.5, trainingInChat ? C.border : tint(40)), background: trainingInChat ? C.bg : tint(7), color: trainingInChat ? C.muted2 : C.brand, fontSize: 13, fontWeight: 800, cursor: trainingInChat ? 'wait' : 'pointer', fontFamily: C.font, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+                <Ico lucide={Brain} ti="ti-brain" size={14} /> {trainingInChat ? 'Training in progress…' : 'Train agent'}
               </button>
             </div>
             {/* Sessions */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px 6px', flexShrink: 0 }}>
-              <p style={{ fontSize: 11, fontWeight: 900, letterSpacing: .5, textTransform: 'uppercase', color: MUTED2, margin: 0 }}>Chats</p>
+              <p style={{ fontSize: 11, fontWeight: 900, letterSpacing: .5, textTransform: 'uppercase', color: C.muted2, margin: 0 }}>Chats</p>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '0 10px 16px' }}>
               {sessionsLoading && chatSessions.length === 0 ? (
-                <p style={{ textAlign: 'center', fontSize: 12, color: MUTED2, padding: '20px 0' }}>Loading…</p>
+                <p style={{ textAlign: 'center', fontSize: 12, color: C.muted2, padding: '20px 0' }}>Loading…</p>
               ) : chatSessions.length === 0 ? (
                 historyError ? (
-                  <div style={{ textAlign: 'center', padding: '28px 16px', color: AMBER }}>
-                    <CloudOff size={34} style={{ opacity: .5 }} />
+                  <div style={{ textAlign: 'center', padding: '28px 16px', color: C.brand }}>
+                    <Ico lucide={CloudOff} ti="ti-cloud-off" size={34} style={{ opacity: .5 }} />
                     <p style={{ fontSize: 12.5, fontWeight: 700, marginTop: 8, lineHeight: 1.5 }}>Couldn&apos;t load your chat history — check your connection. Your chats are safe.</p>
-                    <button onClick={retryHistoryLoad} style={{ marginTop: 10, border: 'none', background: 'rgba(232,136,74,.1)', color: AMBER, cursor: 'pointer', fontSize: 11, fontWeight: 900, padding: '6px 14px', borderRadius: 8, fontFamily: FONT }}>Try again</button>
+                    <button onClick={retryHistoryLoad} style={{ marginTop: 10, border: 'none', background: tint(10), color: C.brand, cursor: 'pointer', fontSize: 11, fontWeight: 900, padding: '6px 14px', borderRadius: 8, fontFamily: C.font }}>Try again</button>
                   </div>
                 ) : (
-                  <div style={{ textAlign: 'center', padding: '28px 16px', color: MUTED2 }}>
-                    <History size={34} style={{ opacity: .3 }} />
+                  <div style={{ textAlign: 'center', padding: '28px 16px', color: C.muted2 }}>
+                    <Ico lucide={History} ti="ti-history" size={34} style={{ opacity: .3 }} />
                     <p style={{ fontSize: 12.5, fontWeight: 700, marginTop: 8 }}>No chats yet. Conversations with your agent will appear here.</p>
                   </div>
                 )
@@ -1113,41 +1114,41 @@ export default function ChatPage() {
                 const active = s.id === chatSessionRef.current;
                 return (
                   <div key={s.id} style={{ marginBottom: 2 }}>
-                    <div onClick={() => openChatSession(s.id)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 10px', borderRadius: 10, cursor: renamingId === s.id ? 'default' : 'pointer', background: active ? 'rgba(232,136,74,.12)' : 'transparent', border: bdr(1, active ? `${AMBER}30` : 'transparent') }}>
+                    <div onClick={() => openChatSession(s.id)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 10px', borderRadius: 10, cursor: renamingId === s.id ? 'default' : 'pointer', background: active ? tint(12) : 'transparent', border: bdr(1, active ? tint(19) : 'transparent') }}>
                       {renamingId === s.id ? (
                         <div data-session-menu onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
                           <input autoFocus value={renameDraft} onChange={(e) => setRenameDraft(e.target.value)}
                             onKeyDown={(e) => { if (e.key === 'Enter') saveRename(s); else if (e.key === 'Escape') setRenamingId(null); }}
                             maxLength={80} aria-label="Chat name"
-                            style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: INK, background: LIGHT, border: bdr(1.5, `${AMBER}55`), borderRadius: 8, padding: '6px 9px', outline: 'none', fontFamily: FONT }} />
-                          <button type="button" onClick={() => saveRename(s)} title="Save name" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', flexShrink: 0 }}><Check size={15} color={GREEN} /></button>
-                          <button type="button" onClick={() => setRenamingId(null)} title="Cancel" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', flexShrink: 0 }}><X size={15} color={MUTED2} /></button>
+                            style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: C.ink, background: C.bg, border: bdr(1.5, tint(33)), borderRadius: 8, padding: '6px 9px', outline: 'none', fontFamily: C.font }} />
+                          <button type="button" onClick={() => saveRename(s)} title="Save name" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', flexShrink: 0 }}><Ico lucide={Check} ti="ti-check" size={15} color={GREEN} /></button>
+                          <button type="button" onClick={() => setRenamingId(null)} title="Cancel" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', flexShrink: 0 }}><Ico lucide={X} ti="ti-x" size={15} color={C.muted2} /></button>
                         </div>
                       ) : (
                         <>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontSize: 13, fontWeight: active ? 800 : 700, color: active ? AMBER : INK, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.title || 'New chat'}</p>
-                            <p style={{ fontSize: 10.5, color: MUTED2, margin: '2px 0 0' }}>{relTime(s.last_message_at)}</p>
+                            <p style={{ fontSize: 13, fontWeight: active ? 800 : 700, color: active ? C.brand : C.ink, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.title || 'New chat'}</p>
+                            <p style={{ fontSize: 10.5, color: C.muted2, margin: '2px 0 0' }}>{relTime(s.last_message_at)}</p>
                           </div>
                           <button data-session-menu onClick={(e) => { e.stopPropagation(); setMenuFor(menuFor === s.id ? null : s.id); setDeleteArmId(null); }} title="Chat options" aria-expanded={menuFor === s.id}
                             style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 5, display: 'flex', flexShrink: 0, opacity: .6 }}>
-                            <MoreVertical size={14} color={MUTED2} />
+                            <Ico lucide={MoreVertical} ti="ti-dots-vertical" size={14} color={C.muted2} />
                           </button>
                         </>
                       )}
                     </div>
                     {menuFor === s.id && renamingId !== s.id && (
-                      <div data-session-menu role="menu" aria-label="Chat options" onClick={(e) => e.stopPropagation()} style={{ margin: '4px 4px 8px', background: WHITE, border: bdr(1, BORDER), borderRadius: 12, boxShadow: '0 6px 18px rgba(23,23,23,.14)', padding: 4, animation: 'ci-drawer-in .16s ease' }}>
+                      <div data-session-menu role="menu" aria-label="Chat options" onClick={(e) => e.stopPropagation()} style={{ margin: '4px 4px 8px', background: C.surface, border: bdr(1, C.border), borderRadius: 12, boxShadow: '0 6px 18px rgba(23,23,23,.14)', padding: 4, animation: 'ci-drawer-in .16s ease' }}>
                         {[
-                          { key: 'copy',   icon: copiedId === s.id ? Check : Copy,   label: copiedId === s.id ? 'Copied' : 'Copy chat', color: copiedId === s.id ? GREEN : INK, run: () => { setMenuFor(null); copySession(s); } },
-                          { key: 'rename', icon: Pencil, label: 'Rename', color: INK, run: () => { setMenuFor(null); setRenamingId(s.id); setRenameDraft(s.title || ''); } },
+                          { key: 'copy',   icon: copiedId === s.id ? Check : Copy, ti: copiedId === s.id ? 'ti-check' : 'ti-copy', label: copiedId === s.id ? 'Copied' : 'Copy chat', color: copiedId === s.id ? GREEN : C.ink, run: () => { setMenuFor(null); copySession(s); } },
+                          { key: 'rename', icon: Pencil, ti: 'ti-pencil', label: 'Rename', color: C.ink, run: () => { setMenuFor(null); setRenamingId(s.id); setRenameDraft(s.title || ''); } },
                           deleteArmId === s.id
-                            ? { key: 'delete', icon: Trash2, label: 'Tap again to delete', color: RED, run: () => { setMenuFor(null); setDeleteArmId(null); removeChatSession(s.id); } }
-                            : { key: 'delete', icon: Trash2, label: 'Delete', color: RED, run: () => setDeleteArmId(s.id) },
+                            ? { key: 'delete', icon: Trash2, ti: 'ti-trash', label: 'Tap again to delete', color: RED, run: () => { setMenuFor(null); setDeleteArmId(null); removeChatSession(s.id); } }
+                            : { key: 'delete', icon: Trash2, ti: 'ti-trash', label: 'Delete', color: RED, run: () => setDeleteArmId(s.id) },
                         ].map((it) => (
                           <button key={it.key} type="button" role="menuitem" className="ci-sess-item" onClick={it.run}
-                            style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '11px 12px', borderRadius: 8, border: 'none', background: 'none', cursor: 'pointer', fontFamily: FONT, textAlign: 'left' }}>
-                            <it.icon size={14} color={it.color} />
+                            style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '11px 12px', borderRadius: 8, border: 'none', background: 'none', cursor: 'pointer', fontFamily: C.font, textAlign: 'left' }}>
+                            <Ico lucide={it.icon} ti={it.ti} size={14} color={it.color} />
                             <span style={{ fontSize: 12.5, fontWeight: 800, color: it.color }}>{it.label}</span>
                           </button>
                         ))}
@@ -1184,7 +1185,7 @@ export default function ChatPage() {
               console.warn('[chat] task create failed:', e.message);
               pushAgent(`Task "${title}" noted.`);
             }
-          }}><Send size={14} />Assign task</Btn>
+          }}><Ico lucide={Send} ti="ti-send" size={14} />Assign task</Btn>
         </div>
       </Modal>
 
@@ -1194,35 +1195,35 @@ export default function ChatPage() {
           <div>
             <FileUploadZone label="Upload an image to scan" accept="image/*" onUploaded={handleOcrUploaded} />
             {ocrRunning && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0', fontSize: 13, color: MUTED }}>
-                <Loader size={13} className="spinner" /> Extracting text…
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0', fontSize: 13, color: C.muted }}>
+                <Ico lucide={Loader} ti="ti-loader-2" size={13} className="spinner" /> Extracting text…
               </div>
             )}
             {ocrError && <p style={{ fontSize: 12, color: RED, margin: '12px 0', fontWeight: 600 }}>{ocrError}</p>}
             {ocrText && (
               <>
                 <Txa label="Extracted text — edit if needed" value={ocrText} onChange={(e) => setOcrText(e.target.value)} rows={5} />
-                <Btn variant="primary" style={{ width: '100%' }} onClick={sendAttachment}><Send size={13} />Send to {agentName}</Btn>
+                <Btn variant="primary" style={{ width: '100%' }} onClick={sendAttachment}><Ico lucide={Send} ti="ti-send" size={13} />Send to {agentName}</Btn>
               </>
             )}
           </div>
         ) : (
           <div>
             <FileUploadZone label={attachType === 'doc' ? 'Upload a document' : 'Upload a file'} accept={attachType === 'doc' ? '.pdf,.doc,.docx,.pptx,.xlsx' : '*'} onUploaded={handleAttachUploaded} />
-            <Btn variant="primary" style={{ width: '100%', marginTop: 14 }} onClick={sendAttachment} disabled={!attachFile}><Paperclip size={13} />Attach & send</Btn>
+            <Btn variant="primary" style={{ width: '100%', marginTop: 14 }} onClick={sendAttachment} disabled={!attachFile}><Ico lucide={Paperclip} ti="ti-paperclip" size={13} />Attach & send</Btn>
           </div>
         )}
       </Modal>
 
       {/* Train modal */}
       <Modal open={trainModal} onClose={() => setTrainModal(false)} title="Train Your Agent">
-        <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.55, marginBottom: 16 }}>Upload content for {agentName} to learn from.</p>
+        <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.55, marginBottom: 16 }}>Upload content for {agentName} to learn from.</p>
         <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
           {[['audio', 'Audio', 'Voice & lectures'], ['video', 'Video', 'Recordings'], ['live', 'Live', 'Stream from device']].map(([k, l, d]) => (
-            <button key={k} onClick={() => { setTrainType(k); setTrainFile(null); }} style={{ flex: 1, padding: '10px 6px', borderRadius: 12, border: bdr(1.5, trainType === k ? AMBER : BORDER), background: trainType === k ? 'rgba(232,136,74,.08)' : WHITE, cursor: 'pointer', textAlign: 'center', fontFamily: FONT }}>
+            <button key={k} onClick={() => { setTrainType(k); setTrainFile(null); }} style={{ flex: 1, padding: '10px 6px', borderRadius: 12, border: bdr(1.5, trainType === k ? C.brand : C.border), background: trainType === k ? tint(8) : C.surface, cursor: 'pointer', textAlign: 'center', fontFamily: C.font }}>
               <div style={{ fontSize: 16, marginBottom: 3 }}>{l.split(' ')[0]}</div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: trainType === k ? AMBER : INK }}>{l.split(' ').slice(1).join(' ')}</div>
-              <div style={{ fontSize: 10, color: MUTED, marginTop: 1 }}>{d}</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: trainType === k ? C.brand : C.ink }}>{l.split(' ').slice(1).join(' ')}</div>
+              <div style={{ fontSize: 10, color: C.muted, marginTop: 1 }}>{d}</div>
             </button>
           ))}
         </div>
@@ -1238,7 +1239,7 @@ export default function ChatPage() {
         <Sel label="Assign to subject" value={trainSubj} onChange={(e) => setTrainSubj(e.target.value)}>
           {['Mathematics', 'Chemistry', 'Physics', 'Biology', 'English', 'Economics', 'Computer Science', 'General'].map((s) => <option key={s} value={s}>{s}</option>)}
         </Sel>
-        <Btn variant="primary" style={{ width: '100%' }} onClick={startTraining}><Brain size={14} />Start training {agentName}</Btn>
+        <Btn variant="primary" style={{ width: '100%' }} onClick={startTraining}><Ico lucide={Brain} ti="ti-brain" size={14} />Start training {agentName}</Btn>
       </Modal>
     </PageLayout>
   );

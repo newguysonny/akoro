@@ -13,13 +13,14 @@
  */
 import { useEffect, useRef, useState, isValidElement } from 'react';
 import { Mic, Paperclip, ArrowUp, Sparkles, ChevronDown, Check, CheckSquare, AudioLines } from 'lucide-react';
-import { AMBER, INK, BORDER, FONT } from '../../constants.js';
+import { Ico } from '../../theme/Ico.jsx';
+import { C, tint } from '../../theme/colors.js';
 
 const SURFACE = '#F8F9FC';
 const RAIL_BORDER = '#DFE3ED';
 const MUTED_RAIL = '#526078';
 
-function ComposerTool({ icon: Icon, label, onClick, disabled = false, active = false }) {
+function ComposerTool({ icon: Icon, ti, label, onClick, disabled = false, active = false }) {
   const unavailable = disabled && !active;
   return (
     <button
@@ -34,13 +35,13 @@ function ComposerTool({ icon: Icon, label, onClick, disabled = false, active = f
         justifyContent: 'center', border: 'none', borderRadius: 10, cursor: unavailable ? 'default' : 'pointer',
         transition: 'background .16s, color .16s, transform .16s',
         color: active ? '#fff' : MUTED_RAIL,
-        background: active ? AMBER : '#fff',
+        background: active ? C.brand : '#fff',
         boxShadow: '0 1px 4px rgba(30,41,59,.06)',
       }}
-      onMouseEnter={e => { if (!unavailable && !active) { e.currentTarget.style.background = AMBER; e.currentTarget.style.color = '#fff'; e.currentTarget.style.transform = 'translateY(-1px)'; } }}
+      onMouseEnter={e => { if (!unavailable && !active) { e.currentTarget.style.background = C.brand; e.currentTarget.style.color = '#fff'; e.currentTarget.style.transform = 'translateY(-1px)'; } }}
       onMouseLeave={e => { if (!unavailable && !active) { e.currentTarget.style.background = '#fff'; e.currentTarget.style.color = MUTED_RAIL; e.currentTarget.style.transform = 'none'; } }}
     >
-      <Icon size={16} />
+      <Ico lucide={Icon} ti={ti} size={16} />
     </button>
   );
 }
@@ -52,7 +53,7 @@ function ComposerTool({ icon: Icon, label, onClick, disabled = false, active = f
  * is shown but can't be picked. The menu scrolls, opens above the rail, and
  * carries the full radio semantics.
  */
-export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelChange, disabled = false, unavailableTitle = '', icon: ChipIcon }) {
+export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelChange, disabled = false, unavailableTitle = '', icon: ChipIcon, iconTi }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const selectable = !disabled && modelOptions.length > 0 && typeof onModelChange === 'function';
@@ -77,7 +78,7 @@ export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelCha
           display: 'flex', alignItems: 'center', gap: 5, maxWidth: 190, padding: '7px 10px',
           border: 'none', borderRadius: 17, cursor: selectable ? 'pointer' : 'default',
           color: '#4B5871', background: '#fff',
-          fontSize: 11, fontWeight: 800, fontFamily: FONT, whiteSpace: 'nowrap', overflow: 'hidden',
+          fontSize: 11, fontWeight: 800, fontFamily: C.font, whiteSpace: 'nowrap', overflow: 'hidden',
           opacity: selectable ? 1 : .78,
         }}
       >
@@ -85,12 +86,12 @@ export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelCha
             branch on typeof); an element renders as-is, carrying its own
             props. Rendering a component object as a child is React #31. */}
         {ChipIcon == null
-          ? <Sparkles size={13} color={AMBER} />
+          ? <Ico lucide={Sparkles} ti="ti-sparkles" size={13} color={C.brand} />
           : isValidElement(ChipIcon)
             ? ChipIcon
-            : <ChipIcon size={13} color={AMBER} />}
+            : <Ico lucide={ChipIcon} ti={iconTi} size={13} color={C.brand} />}
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{modelLabel}</span>
-        {selectable && <ChevronDown size={12} color="#8792A7" />}
+        {selectable && <Ico lucide={ChevronDown} ti="ti-chevron-down" size={12} color="#8792A7" />}
       </button>
 
       {open && (
@@ -98,7 +99,7 @@ export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelCha
           position: 'absolute', zIndex: 20, bottom: 42, left: 0, width: 270, padding: 5,
           maxHeight: 'min(70vh, 460px)', overflowY: 'auto',
           border: '1px solid #E2E5ED', borderRadius: 13,
-          color: INK, background: '#fff',
+          color: C.ink, background: C.surface,
           boxShadow: '0 13px 34px rgba(22,28,45,.24)',
         }}>
           {modelOptions.map(option => {
@@ -107,16 +108,16 @@ export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelCha
             return (
               <div key={option.id}>
                 {option.section && (
-                  <div style={{ padding: '8px 9px 3px', fontSize: 9.5, fontWeight: 900, letterSpacing: '.07em', textTransform: 'uppercase', color: '#98A1B2', fontFamily: FONT }}>{option.section}</div>
+                  <div style={{ padding: '8px 9px 3px', fontSize: 9.5, fontWeight: 900, letterSpacing: '.07em', textTransform: 'uppercase', color: '#98A1B2', fontFamily: C.font }}>{option.section}</div>
                 )}
                 <button type="button" role="menuitemradio" aria-checked={selected} aria-disabled={off}
                   title={off ? (option.note || 'Coming soon') : undefined}
                   onClick={() => { if (off) return; onModelChange?.(option.id); setOpen(false); }} style={{
                     width: '100%', padding: '8px 9px', border: 'none', borderRadius: 9,
                     display: 'flex', alignItems: 'flex-start', gap: 7, textAlign: 'left', cursor: off ? 'not-allowed' : 'pointer',
-                    color: selected ? AMBER : 'inherit', background: selected ? `${AMBER}14` : 'transparent',
+                    color: selected ? C.brand : 'inherit', background: selected ? tint(8) : 'transparent',
                     opacity: off ? .55 : 1,
-                    fontFamily: FONT,
+                    fontFamily: C.font,
                   }}>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
@@ -127,7 +128,7 @@ export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelCha
                     </span>
                     {option.description && <span style={{ display: 'block', marginTop: 1, color: '#8791A3', fontSize: 10, fontWeight: 500, lineHeight: 1.35 }}>{option.description}</span>}
                   </span>
-                  {selected && <Check size={14} color={AMBER} />}
+                  {selected && <Ico lucide={Check} ti="ti-check" size={14} color={C.brand} />}
                 </button>
               </div>
             );
@@ -195,25 +196,25 @@ export default function FortizoChatComposer({
         placeholder={placeholder}
         disabled={disabled}
         aria-label={placeholder}
-        onFocus={event => { event.currentTarget.parentElement.style.borderColor = AMBER; event.currentTarget.parentElement.style.boxShadow = `0 0 0 3px ${AMBER}1C`; }}
+        onFocus={event => { event.currentTarget.parentElement.style.borderColor = C.brand; event.currentTarget.parentElement.style.boxShadow = `0 0 0 3px ${tint(11)}`; }}
         onBlur={event => { event.currentTarget.parentElement.style.borderColor = RAIL_BORDER; event.currentTarget.parentElement.style.boxShadow = '0 4px 14px rgba(30,41,59,.055)'; }}
         style={{
           display: 'block', width: '100%', height: 34, padding: '0 3px 8px', border: 0,
-          outline: 'none', background: 'transparent', color: INK, fontSize: 13,
-          fontWeight: 600, fontFamily: FONT,
+          outline: 'none', background: 'transparent', color: C.ink, fontSize: 13,
+          fontWeight: 600, fontFamily: C.font,
         }}
       />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
         {/* Task toggle renders only when the host provides it (instructor). */}
         {taskAction && (
-          <ComposerTool icon={CheckSquare} label={taskLabel} onClick={taskAction} active={taskActive} />
+          <ComposerTool icon={CheckSquare} ti="ti-square-check" label={taskLabel} onClick={taskAction} active={taskActive} />
         )}
-        <ComposerTool icon={Mic} label={voiceLabel} onClick={voiceAction}
+        <ComposerTool icon={Mic} ti="ti-microphone" label={voiceLabel} onClick={voiceAction}
           disabled={disabled || !voiceAction} active={voiceActive} />
-        <ComposerTool icon={Paperclip} label={attachmentLabel} onClick={attachmentAction}
+        <ComposerTool icon={Paperclip} ti="ti-paperclip" label={attachmentLabel} onClick={attachmentAction}
           disabled={disabled || attachmentUnavailable || !attachmentAction} />
-        <ComposerTool icon={AudioLines} label={audioLabel} onClick={audioAction}
+        <ComposerTool icon={AudioLines} ti="ti-wave-sine" label={audioLabel} onClick={audioAction}
           disabled={disabled || audioUnavailable || !audioAction} active={audioActive} />
 
         {!hideModelMenu && (
@@ -236,7 +237,7 @@ export default function FortizoChatComposer({
               background: '#fff',
             }}
           >
-            <span style={{ width: 11, height: 11, borderRadius: 2, background: INK, display: 'block' }} />
+            <span style={{ width: 11, height: 11, borderRadius: 2, background: C.ink, display: 'block' }} />
           </button>
         ) : (
           <button
@@ -248,12 +249,12 @@ export default function FortizoChatComposer({
             style={{
               width: 33, height: 33, padding: 0, border: 'none', borderRadius: 10, display: 'inline-flex',
               alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#fff',
-              background: canSend ? AMBER : BORDER,
-              boxShadow: canSend ? `0 5px 13px ${AMBER}42` : 'none', cursor: canSend ? 'pointer' : 'not-allowed',
+              background: canSend ? C.brand : C.border,
+              boxShadow: canSend ? `0 5px 13px ${tint(26)}` : 'none', cursor: canSend ? 'pointer' : 'not-allowed',
               transition: 'background .16s, transform .16s',
             }}
           >
-            <ArrowUp size={17} color={canSend ? '#fff' : '#9490A0'} />
+            <Ico lucide={ArrowUp} ti="ti-arrow-up" size={17} color={canSend ? '#fff' : '#9490A0'} />
           </button>
         )}
       </div>

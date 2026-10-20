@@ -17,8 +17,10 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { Loader2, ArrowLeft, Copy, Check, Clock, Sparkles } from 'lucide-react';
+import { Ico } from '../theme/Ico.jsx';
 import { apiGet, apiPost } from '../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, FONT } from '../constants.js';
+import { GREEN } from '../constants.js';
+import { C } from '../theme/colors.js';
 
 /* ── One rendered card of a doc output ───────────────────────────── */
 // The server returns { title, subtitle, cards:[{ heading, blocks:[…] }] } and
@@ -27,24 +29,24 @@ import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, FONT } from '..
 function Block({ block }) {
   const bold = (s) => String(s ?? '').split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
     part.startsWith('**') && part.endsWith('**')
-      ? <strong key={i} style={{ color: INK }}>{part.slice(2, -2)}</strong>
+      ? <strong key={i} style={{ color: C.ink }}>{part.slice(2, -2)}</strong>
       : <span key={i}>{part}</span>);
 
   return (
     <div style={{ marginBottom: 14 }}>
       {block.label && (
-        <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: '.06em',
-          textTransform: 'uppercase', color: MUTED2, marginBottom: 5 }}>{block.label}</div>
+        <div style={{ fontFamily: C.font, fontSize: 11, fontWeight: 700, letterSpacing: '.06em',
+          textTransform: 'uppercase', color: C.muted2, marginBottom: 5 }}>{block.label}</div>
       )}
       {block.text && (
-        <p style={{ fontFamily: FONT, fontSize: 14, lineHeight: 1.65, color: MUTED, margin: 0 }}>
+        <p style={{ fontFamily: C.font, fontSize: 14, lineHeight: 1.65, color: C.muted, margin: 0 }}>
           {bold(block.text)}
         </p>
       )}
       {Array.isArray(block.bullets) && (
         <ul style={{ margin: 0, paddingLeft: 18 }}>
           {block.bullets.map((b, i) => (
-            <li key={i} style={{ fontFamily: FONT, fontSize: 14, lineHeight: 1.6, color: MUTED, marginBottom: 4 }}>
+            <li key={i} style={{ fontFamily: C.font, fontSize: 14, lineHeight: 1.6, color: C.muted, marginBottom: 4 }}>
               {bold(b)}
             </li>
           ))}
@@ -53,8 +55,8 @@ function Block({ block }) {
       {Array.isArray(block.chips) && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {block.chips.map((c, i) => (
-            <span key={i} style={{ fontFamily: FONT, fontSize: 12, padding: '3px 9px', borderRadius: 999,
-              background: LIGHT, border: `1px solid ${BORDER}`, color: INK }}>{c}</span>
+            <span key={i} style={{ fontFamily: C.font, fontSize: 12, padding: '3px 9px', borderRadius: 999,
+              background: C.bg, border: `1px solid ${C.border}`, color: C.ink }}>{c}</span>
           ))}
         </div>
       )}
@@ -84,21 +86,21 @@ function DocOutput({ doc }) {
     <div>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
         <div>
-          <h3 style={{ fontFamily: FONT, fontSize: 19, fontWeight: 800, color: INK, margin: 0 }}>{doc.title}</h3>
-          {doc.subtitle && <p style={{ fontFamily: FONT, fontSize: 13.5, color: MUTED, margin: '4px 0 0' }}>{doc.subtitle}</p>}
+          <h3 style={{ fontFamily: C.font, fontSize: 19, fontWeight: 800, color: C.ink, margin: 0 }}>{doc.title}</h3>
+          {doc.subtitle && <p style={{ fontFamily: C.font, fontSize: 13.5, color: C.muted, margin: '4px 0 0' }}>{doc.subtitle}</p>}
         </div>
         <button onClick={copy} style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
-          fontFamily: FONT, fontSize: 12.5, fontWeight: 600, padding: '7px 12px', borderRadius: 8,
-          border: `1px solid ${BORDER}`, background: WHITE, color: INK, cursor: 'pointer' }}>
-          {copied ? <Check size={13} color={GREEN}/> : <Copy size={13}/>} {copied ? 'Copied' : 'Copy'}
+          fontFamily: C.font, fontSize: 12.5, fontWeight: 600, padding: '7px 12px', borderRadius: 8,
+          border: `1px solid ${C.border}`, background: C.surface, color: C.ink, cursor: 'pointer' }}>
+          {copied ? <Ico lucide={Check} ti="ti-check" size={13} color={GREEN}/> : <Ico lucide={Copy} ti="ti-copy" size={13}/>} {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
 
       <div style={{ display: 'grid', gap: 12 }}>
         {(doc.cards || []).map((card, i) => (
-          <div key={i} style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '16px 18px' }}>
+          <div key={i} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 18px' }}>
             {card.heading && (
-              <div style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: INK, marginBottom: 12 }}>
+              <div style={{ fontFamily: C.font, fontSize: 15, fontWeight: 700, color: C.ink, marginBottom: 12 }}>
                 {card.heading}
               </div>
             )}
@@ -126,17 +128,17 @@ function ScriptOutput({ doc }) {
   const speakers = [...new Set((doc.turns || []).map((t) => t.speaker))];
   return (
     <div>
-      <h3 style={{ fontFamily: FONT, fontSize: 19, fontWeight: 800, color: INK, margin: 0 }}>{doc.title}</h3>
-      {doc.summary && <p style={{ fontFamily: FONT, fontSize: 13.5, color: MUTED, margin: '4px 0 16px' }}>{doc.summary}</p>}
+      <h3 style={{ fontFamily: C.font, fontSize: 19, fontWeight: 800, color: C.ink, margin: 0 }}>{doc.title}</h3>
+      {doc.summary && <p style={{ fontFamily: C.font, fontSize: 13.5, color: C.muted, margin: '4px 0 16px' }}>{doc.summary}</p>}
       <div style={{ display: 'grid', gap: 10 }}>
         {(doc.turns || []).map((t, i) => {
           const mine = speakers.indexOf(t.speaker) === 0;
           return (
-            <div key={i} style={{ background: WHITE, border: `1px solid ${BORDER}`,
-              borderLeft: `3px solid ${mine ? AMBER : GREEN}`, borderRadius: 10, padding: '11px 14px' }}>
-              <div style={{ fontFamily: FONT, fontSize: 11.5, fontWeight: 800, letterSpacing: '.04em',
-                color: mine ? AMBER : GREEN, marginBottom: 4 }}>{t.speaker}</div>
-              <p style={{ fontFamily: FONT, fontSize: 14, lineHeight: 1.6, color: MUTED, margin: 0 }}>{t.text}</p>
+            <div key={i} style={{ background: C.surface, border: `1px solid ${C.border}`,
+              borderLeft: `3px solid ${mine ? C.brand : GREEN}`, borderRadius: 10, padding: '11px 14px' }}>
+              <div style={{ fontFamily: C.font, fontSize: 11.5, fontWeight: 800, letterSpacing: '.04em',
+                color: mine ? C.brand : GREEN, marginBottom: 4 }}>{t.speaker}</div>
+              <p style={{ fontFamily: C.font, fontSize: 14, lineHeight: 1.6, color: C.muted, margin: 0 }}>{t.text}</p>
             </div>
           );
         })}
@@ -148,20 +150,20 @@ function ScriptOutput({ doc }) {
 function VocabOutput({ doc }) {
   return (
     <div>
-      <h3 style={{ fontFamily: FONT, fontSize: 19, fontWeight: 800, color: INK, margin: '0 0 16px' }}>{doc.title}</h3>
+      <h3 style={{ fontFamily: C.font, fontSize: 19, fontWeight: 800, color: C.ink, margin: '0 0 16px' }}>{doc.title}</h3>
       <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))' }}>
         {(doc.cards || []).map((c, i) => (
-          <div key={i} style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '14px 16px' }}>
-            <div style={{ fontFamily: FONT, fontSize: 15, fontWeight: 800, color: INK, marginBottom: 6 }}>{c.term}</div>
-            <p style={{ fontFamily: FONT, fontSize: 13.5, lineHeight: 1.55, color: MUTED, margin: '0 0 8px' }}>{c.definition}</p>
+          <div key={i} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 16px' }}>
+            <div style={{ fontFamily: C.font, fontSize: 15, fontWeight: 800, color: C.ink, marginBottom: 6 }}>{c.term}</div>
+            <p style={{ fontFamily: C.font, fontSize: 13.5, lineHeight: 1.55, color: C.muted, margin: '0 0 8px' }}>{c.definition}</p>
             {c.example && (
-              <p style={{ fontFamily: FONT, fontSize: 13, lineHeight: 1.5, color: MUTED2, margin: '0 0 6px', fontStyle: 'italic' }}>
+              <p style={{ fontFamily: C.font, fontSize: 13, lineHeight: 1.5, color: C.muted2, margin: '0 0 6px', fontStyle: 'italic' }}>
                 {c.example}
               </p>
             )}
             {c.tip && (
-              <div style={{ fontFamily: FONT, fontSize: 12.5, color: INK, background: LIGHT,
-                border: `1px solid ${BORDER}`, borderRadius: 8, padding: '7px 10px' }}>{c.tip}</div>
+              <div style={{ fontFamily: C.font, fontSize: 12.5, color: C.ink, background: C.bg,
+                border: `1px solid ${C.border}`, borderRadius: 8, padding: '7px 10px' }}>{c.tip}</div>
             )}
           </div>
         ))}
@@ -177,48 +179,48 @@ function GradesOutput({ doc }) {
   return (
     <div style={{ display: 'grid', gap: 14 }}>
       {(doc.grades || []).map((g, i) => (
-        <div key={i} style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '16px 18px' }}>
+        <div key={i} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 18px' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
-            <span style={{ fontFamily: FONT, fontSize: 15, fontWeight: 800, color: INK }}>{g.label || `Essay ${i + 1}`}</span>
-            <span style={{ fontFamily: FONT, fontSize: 17, fontWeight: 800, color: INK, fontVariantNumeric: 'tabular-nums' }}>
-              {g.score}<span style={{ fontSize: 13, color: MUTED2 }}> / {g.outOf}</span>
+            <span style={{ fontFamily: C.font, fontSize: 15, fontWeight: 800, color: C.ink }}>{g.label || `Essay ${i + 1}`}</span>
+            <span style={{ fontFamily: C.font, fontSize: 17, fontWeight: 800, color: C.ink, fontVariantNumeric: 'tabular-nums' }}>
+              {g.score}<span style={{ fontSize: 13, color: C.muted2 }}> / {g.outOf}</span>
             </span>
           </div>
 
           {(g.breakdown || []).map((b, j) => (
             <div key={j} style={{ marginBottom: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 3 }}>
-                <span style={{ fontFamily: FONT, fontSize: 13, color: INK }}>{b.criterion}</span>
-                <span style={{ fontFamily: FONT, fontSize: 12.5, color: MUTED, fontVariantNumeric: 'tabular-nums' }}>
+                <span style={{ fontFamily: C.font, fontSize: 13, color: C.ink }}>{b.criterion}</span>
+                <span style={{ fontFamily: C.font, fontSize: 12.5, color: C.muted, fontVariantNumeric: 'tabular-nums' }}>
                   {b.score}/{b.outOf}
                 </span>
               </div>
-              <div style={{ height: 5, borderRadius: 3, background: LIGHT, overflow: 'hidden' }}>
+              <div style={{ height: 5, borderRadius: 3, background: C.bg, overflow: 'hidden' }}>
                 <div style={{ width: `${bar(b.score, b.outOf)}%`, height: '100%',
-                  background: bar(b.score, b.outOf) >= 70 ? GREEN : AMBER }}/>
+                  background: bar(b.score, b.outOf) >= 70 ? GREEN : C.brand }}/>
               </div>
               {b.comment && (
-                <p style={{ fontFamily: FONT, fontSize: 12.5, color: MUTED, margin: '4px 0 0', lineHeight: 1.5 }}>{b.comment}</p>
+                <p style={{ fontFamily: C.font, fontSize: 12.5, color: C.muted, margin: '4px 0 0', lineHeight: 1.5 }}>{b.comment}</p>
               )}
             </div>
           ))}
 
-          {[['Strengths', g.strengths, GREEN], ['To improve', g.improvements, AMBER]].map(([label, items, colour]) =>
+          {[['Strengths', g.strengths, GREEN], ['To improve', g.improvements, C.brand]].map(([label, items, colour]) =>
             (items || []).length ? (
               <div key={label} style={{ marginTop: 10 }}>
-                <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: '.06em',
+                <div style={{ fontFamily: C.font, fontSize: 11, fontWeight: 700, letterSpacing: '.06em',
                   textTransform: 'uppercase', color: colour, marginBottom: 4 }}>{label}</div>
                 <ul style={{ margin: 0, paddingLeft: 18 }}>
                   {items.map((x, k) => (
-                    <li key={k} style={{ fontFamily: FONT, fontSize: 13.5, lineHeight: 1.55, color: MUTED }}>{x}</li>
+                    <li key={k} style={{ fontFamily: C.font, fontSize: 13.5, lineHeight: 1.55, color: C.muted }}>{x}</li>
                   ))}
                 </ul>
               </div>
             ) : null)}
 
           {g.feedback && (
-            <p style={{ fontFamily: FONT, fontSize: 13.5, lineHeight: 1.6, color: MUTED,
-              marginTop: 12, paddingTop: 10, borderTop: `1px solid ${BORDER}` }}>{g.feedback}</p>
+            <p style={{ fontFamily: C.font, fontSize: 13.5, lineHeight: 1.6, color: C.muted,
+              marginTop: 12, paddingTop: 10, borderTop: `1px solid ${C.border}` }}>{g.feedback}</p>
           )}
         </div>
       ))}
@@ -234,8 +236,8 @@ export function Output({ doc }) {
   if (Array.isArray(doc?.cards) && doc.cards.some((c) => c.term)) return <VocabOutput doc={doc}/>;
   if (Array.isArray(doc?.cards))  return <DocOutput doc={doc}/>;
   return (
-    <pre style={{ fontFamily: FONT, fontSize: 13, whiteSpace: 'pre-wrap', color: MUTED,
-      background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 16 }}>
+    <pre style={{ fontFamily: C.font, fontSize: 13, whiteSpace: 'pre-wrap', color: C.muted,
+      background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 }}>
       {JSON.stringify(doc, null, 2)}
     </pre>
   );
@@ -304,39 +306,39 @@ export default function ToolWorkbench({ toolKey, onBack }) {
   };
 
   if (error && !tool) {
-    return <div style={{ fontFamily: FONT, color: MUTED, padding: 20 }}>{error}</div>;
+    return <div style={{ fontFamily: C.font, color: C.muted, padding: 20 }}>{error}</div>;
   }
   if (!tool) {
-    return <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 20, fontFamily: FONT, color: MUTED }}>
-      <Loader2 size={15} className="spin"/> Loading…
+    return <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 20, fontFamily: C.font, color: C.muted }}>
+      <Ico lucide={Loader2} ti="ti-loader-2" size={15} className="spin"/> Loading…
     </div>;
   }
 
   return (
     <div>
       <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16,
-        fontFamily: FONT, fontSize: 13, fontWeight: 600, color: MUTED, background: 'none',
+        fontFamily: C.font, fontSize: 13, fontWeight: 600, color: C.muted, background: 'none',
         border: 'none', padding: 0, cursor: 'pointer' }}>
-        <ArrowLeft size={14}/> All tools
+        <Ico lucide={ArrowLeft} ti="ti-arrow-left" size={14}/> All tools
       </button>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
         <span style={{ fontSize: 26 }}>{tool.emoji}</span>
-        <h2 style={{ fontFamily: FONT, fontSize: 22, fontWeight: 800, color: INK, margin: 0 }}>{tool.name}</h2>
+        <h2 style={{ fontFamily: C.font, fontSize: 22, fontWeight: 800, color: C.ink, margin: 0 }}>{tool.name}</h2>
       </div>
-      <p style={{ fontFamily: FONT, fontSize: 14, color: MUTED, margin: '0 0 20px', maxWidth: '60ch', lineHeight: 1.6 }}>
+      <p style={{ fontFamily: C.font, fontSize: 14, color: C.muted, margin: '0 0 20px', maxWidth: '60ch', lineHeight: 1.6 }}>
         {tool.blurb}
       </p>
 
       {/* The form is built from the tool's OWN field declarations, so a tool
           added on the server needs no change here to become usable. */}
-      <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: 18, marginBottom: 20 }}>
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 18, marginBottom: 20 }}>
         <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))' }}>
           {(tool.fields || []).map((f) => (
             <label key={f.name} style={{ display: 'block', gridColumn: f.long ? '1 / -1' : 'auto' }}>
-              <span style={{ display: 'block', fontFamily: FONT, fontSize: 12.5, fontWeight: 600,
-                color: INK, marginBottom: 5 }}>
-                {f.label}{f.required && <span style={{ color: AMBER }}> *</span>}
+              <span style={{ display: 'block', fontFamily: C.font, fontSize: 12.5, fontWeight: 600,
+                color: C.ink, marginBottom: 5 }}>
+                {f.label}{f.required && <span style={{ color: C.brand }}> *</span>}
               </span>
               {f.type === 'select' ? (
                 <select
@@ -351,7 +353,7 @@ export default function ToolWorkbench({ toolKey, onBack }) {
                   value={values[f.name] ?? ''}
                   placeholder={f.placeholder || ''}
                   onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))}
-                  style={{ ...inputStyle, resize: 'vertical', fontFamily: FONT }}/>
+                  style={{ ...inputStyle, resize: 'vertical', fontFamily: C.font }}/>
               ) : (
                 <input
                   value={values[f.name] ?? ''}
@@ -364,15 +366,15 @@ export default function ToolWorkbench({ toolKey, onBack }) {
         </div>
 
         {error && (
-          <div style={{ marginTop: 14, fontFamily: FONT, fontSize: 13, color: '#B45309' }}>{error}</div>
+          <div style={{ marginTop: 14, fontFamily: C.font, fontSize: 13, color: '#B45309' }}>{error}</div>
         )}
 
         <button onClick={run} disabled={busy} style={{
           marginTop: 16, display: 'inline-flex', alignItems: 'center', gap: 7,
-          fontFamily: FONT, fontSize: 14, fontWeight: 700, padding: '10px 18px', borderRadius: 10,
-          border: 'none', background: busy ? BORDER : AMBER, color: busy ? MUTED : WHITE,
+          fontFamily: C.font, fontSize: 14, fontWeight: 700, padding: '10px 18px', borderRadius: 10,
+          border: 'none', background: busy ? C.border : C.brand, color: busy ? C.muted : '#fff',
           cursor: busy ? 'default' : 'pointer' }}>
-          {busy ? <Loader2 size={15} className="spin"/> : <Sparkles size={15}/>}
+          {busy ? <Ico lucide={Loader2} ti="ti-loader-2" size={15} className="spin"/> : <Ico lucide={Sparkles} ti="ti-sparkles" size={15}/>}
           {busy ? 'Working…' : `Run ${tool.name}`}
         </button>
       </div>
@@ -385,20 +387,20 @@ export default function ToolWorkbench({ toolKey, onBack }) {
 
       {past.length > 0 && (
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: FONT, fontSize: 12,
-            fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: MUTED2, marginBottom: 10 }}>
-            <Clock size={12}/> Earlier runs
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: C.font, fontSize: 12,
+            fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.muted2, marginBottom: 10 }}>
+            <Ico lucide={Clock} ti="ti-clock" size={12}/> Earlier runs
           </div>
           <div style={{ display: 'grid', gap: 8 }}>
             {past.slice(0, 8).map((o) => (
               <button key={o.id} onClick={() => openPast(o)}
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
-                  textAlign: 'left', background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 10,
+                  textAlign: 'left', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10,
                   padding: '10px 13px', cursor: 'pointer' }}>
-                <span style={{ fontFamily: FONT, fontSize: 13.5, color: INK, fontWeight: 600 }}>
+                <span style={{ fontFamily: C.font, fontSize: 13.5, color: C.ink, fontWeight: 600 }}>
                   {o.title || 'Untitled'}
                 </span>
-                <span style={{ fontFamily: FONT, fontSize: 11.5, color: MUTED2 }}>
+                <span style={{ fontFamily: C.font, fontSize: 11.5, color: C.muted2 }}>
                   {o.created_at ? new Date(o.created_at).toLocaleDateString('en-GB',
                     { day: 'numeric', month: 'short' }) : ''}
                 </span>
@@ -412,7 +414,7 @@ export default function ToolWorkbench({ toolKey, onBack }) {
 }
 
 const inputStyle = {
-  width: '100%', boxSizing: 'border-box', fontFamily: FONT, fontSize: 14,
-  padding: '9px 11px', borderRadius: 9, border: `1px solid ${BORDER}`,
-  background: WHITE, color: INK, outline: 'none',
+  width: '100%', boxSizing: 'border-box', fontFamily: C.font, fontSize: 14,
+  padding: '9px 11px', borderRadius: 9, border: `1px solid ${C.border}`,
+  background: C.surface, color: C.ink, outline: 'none',
 };

@@ -19,11 +19,13 @@ import { Sparkles, Copy, Check, Printer, Loader2, ArrowLeft, Volume2, Play, Paus
   SkipBack, SkipForward, Download, RotateCcw,
   AlertCircle, CheckCircle2, HelpCircle, Lightbulb, Briefcase, Link2, Clock, Package, Target,
   ListChecks, MessageCircle, GraduationCap, Users, FileText, Award , Lock } from 'lucide-react';
+import { Ico } from '../../theme/Ico.jsx';
 import { apiGet, apiPost } from '../../services/api.js';
+import { C } from '../../theme/colors.js';
 
-const FONT = "'Nunito', sans-serif";
-const BRAND = '#6C3BFF', AMBER = '#E8853A', MUTED = '#6B6B80', MUTED2 = '#9A96A8',
-      BORDER = '#EDE8E1', INK = '#1A1A2E', LIGHT = '#F7F5F2', WHITE = '#fff', GREEN = '#16A34A', RED = '#DC2626';
+const TT_FONT = "'Nunito', sans-serif";
+const BRAND = '#6C3BFF', TT_AMBER = '#E8853A', TT_MUTED2 = '#9A96A8',
+      TT_LIGHT = '#F7F5F2', GREEN = '#16A34A', RED = '#DC2626';
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
@@ -31,22 +33,22 @@ const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
    rather than an exact list — a tool can invent a label and still get a sensible
    icon and colour instead of falling out of the design. */
 const LABEL_STYLES = [
-  [/misconception|watch for|struggle/i,        { icon: AlertCircle,   color: '#DC2626' }],
-  [/clarification|correct|answer|truth/i,      { icon: CheckCircle2,  color: '#16A34A' }],
-  [/why|because|reason/i,                      { icon: HelpCircle,    color: '#2563EB' }],
-  [/fix|strateg|support|tip/i,                 { icon: Lightbulb,     color: '#7C3AED' }],
-  [/profession|career|job/i,                   { icon: Briefcase,     color: '#7C3AED' }],
-  [/context|connection|application|real/i,     { icon: Link2,         color: '#0EA5E9' }],
-  [/timing|time|duration/i,                    { icon: Clock,         color: '#D97706' }],
-  [/material|resource|equipment/i,             { icon: Package,       color: '#0891B2' }],
-  [/objective|outcome|end|goal|bridge/i,       { icon: Target,        color: '#DB2777' }],
-  [/question|quick check|check for/i,          { icon: ListChecks,    color: '#059669' }],
-  [/discussion|talk|prompt/i,                  { icon: MessageCircle, color: '#2563EB' }],
-  [/teacher does|instruction|for students/i,   { icon: GraduationCap, color: '#7C3AED' }],
-  [/students do|group|activity|try this/i,     { icon: Users,         color: '#EA580C' }],
-  [/mark|score|grade|total/i,                  { icon: Award,         color: '#CA8A04' }],
+  [/misconception|watch for|struggle/i,        { icon: AlertCircle, ti: 'ti-alert-circle',   color: '#DC2626' }],
+  [/clarification|correct|answer|truth/i,      { icon: CheckCircle2, ti: 'ti-circle-check',  color: '#16A34A' }],
+  [/why|because|reason/i,                      { icon: HelpCircle, ti: 'ti-help-circle',    color: '#2563EB' }],
+  [/fix|strateg|support|tip/i,                 { icon: Lightbulb, ti: 'ti-bulb',     color: '#7C3AED' }],
+  [/profession|career|job/i,                   { icon: Briefcase, ti: 'ti-briefcase',     color: '#7C3AED' }],
+  [/context|connection|application|real/i,     { icon: Link2, ti: 'ti-link',         color: '#0EA5E9' }],
+  [/timing|time|duration/i,                    { icon: Clock, ti: 'ti-clock',         color: '#D97706' }],
+  [/material|resource|equipment/i,             { icon: Package, ti: 'ti-package',       color: '#0891B2' }],
+  [/objective|outcome|end|goal|bridge/i,       { icon: Target, ti: 'ti-target',        color: '#DB2777' }],
+  [/question|quick check|check for/i,          { icon: ListChecks, ti: 'ti-list-check',    color: '#059669' }],
+  [/discussion|talk|prompt/i,                  { icon: MessageCircle, ti: 'ti-message-circle', color: '#2563EB' }],
+  [/teacher does|instruction|for students/i,   { icon: GraduationCap, ti: 'ti-school', color: '#7C3AED' }],
+  [/students do|group|activity|try this/i,     { icon: Users, ti: 'ti-users',         color: '#EA580C' }],
+  [/mark|score|grade|total/i,                  { icon: Award, ti: 'ti-award',         color: '#CA8A04' }],
 ];
-const styleFor = (label) => (LABEL_STYLES.find(([re]) => re.test(label || ''))?.[1]) || { icon: FileText, color: BRAND };
+const styleFor = (label) => (LABEL_STYLES.find(([re]) => re.test(label || ''))?.[1]) || { icon: FileText, ti: 'ti-file-text', color: BRAND };
 
 /* ── Minimal Markdown → HTML. Enough for headings, bold, italic, lists and
    rules, which is all the tool prompts ask the model to produce. Escaped
@@ -108,30 +110,30 @@ function Doc({ data }) {
   return (
     <div>
       {(data.cards || []).map((c, n) => (
-        <div key={n} style={{ border: `1px solid ${BORDER}`, borderRadius: 14, padding: '16px 18px', marginBottom: 12, background: WHITE }}>
-          <div style={{ fontSize: 15, fontWeight: 900, color: INK, marginBottom: 12 }}>{c.heading}</div>
+        <div key={n} style={{ border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', marginBottom: 12, background: C.surface }}>
+          <div style={{ fontSize: 15, fontWeight: 900, color: C.ink, marginBottom: 12 }}>{c.heading}</div>
           {(c.blocks || []).map((b, k) => {
-            const { icon: Icon, color } = styleFor(b.label);
+            const { icon: Icon, ti, color } = styleFor(b.label);
             return (
               <div key={k} style={{ marginBottom: 14 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
                   <span style={{ width: 22, height: 22, borderRadius: 7, background: `${color}14`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Icon size={12} color={color} />
+                    <Ico lucide={Icon} ti={ti} size={12} color={color} />
                   </span>
                   <span style={{ fontSize: 12.5, fontWeight: 800, color }}>{b.label}</span>
                 </div>
                 {b.chips?.length ? (
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', paddingLeft: 29 }}>
                     {b.chips.map((x, j) => (
-                      <span key={j} style={{ padding: '5px 11px', borderRadius: 8, background: LIGHT, border: `1px solid ${BORDER}`, fontSize: 12, fontWeight: 700, color: INK }}>{x}</span>
+                      <span key={j} style={{ padding: '5px 11px', borderRadius: 8, background: TT_LIGHT, border: `1px solid ${C.border}`, fontSize: 12, fontWeight: 700, color: C.ink }}>{x}</span>
                     ))}
                   </div>
                 ) : b.bullets?.length ? (
-                  <ul style={{ margin: 0, paddingLeft: 48, color: INK, fontSize: 13.5, lineHeight: 1.65 }}>
+                  <ul style={{ margin: 0, paddingLeft: 48, color: C.ink, fontSize: 13.5, lineHeight: 1.65 }}>
                     {b.bullets.map((x, j) => <li key={j} style={{ marginBottom: 4 }}><Bold>{x}</Bold></li>)}
                   </ul>
                 ) : (
-                  <p style={{ margin: 0, paddingLeft: 29, fontSize: 13.5, color: INK, lineHeight: 1.65 }}><Bold>{b.text}</Bold></p>
+                  <p style={{ margin: 0, paddingLeft: 29, fontSize: 13.5, color: C.ink, lineHeight: 1.65 }}><Bold>{b.text}</Bold></p>
                 )}
               </div>
             );
@@ -155,10 +157,10 @@ function Flashcards({ data }) {
       <div>
         <button onClick={() => setListMode(false)} style={chip}>Flashcards</button>
         {cards.map((k, n) => (
-          <div key={n} style={{ borderTop: n === 0 ? 'none' : `1px solid ${BORDER}`, padding: '10px 0' }}>
-            <div style={{ fontSize: 13.5, fontWeight: 800, color: INK }}>{k.term}</div>
-            <div style={{ fontSize: 12.5, color: MUTED, marginTop: 2 }}>{k.definition}</div>
-            {k.example && <div style={{ fontSize: 12, color: MUTED2, fontStyle: 'italic', marginTop: 3 }}>{k.example}</div>}
+          <div key={n} style={{ borderTop: n === 0 ? 'none' : `1px solid ${C.border}`, padding: '10px 0' }}>
+            <div style={{ fontSize: 13.5, fontWeight: 800, color: C.ink }}>{k.term}</div>
+            <div style={{ fontSize: 12.5, color: C.muted, marginTop: 2 }}>{k.definition}</div>
+            {k.example && <div style={{ fontSize: 12, color: TT_MUTED2, fontStyle: 'italic', marginTop: 3 }}>{k.example}</div>}
           </div>
         ))}
       </div>
@@ -168,24 +170,24 @@ function Flashcards({ data }) {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: MUTED }}>{i + 1} / {cards.length}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: C.muted }}>{i + 1} / {cards.length}</span>
         <button onClick={() => setListMode(true)} style={chip}>See all</button>
       </div>
       <div
         onClick={() => setFlipped((f) => !f)}
-        style={{ minHeight: 168, borderRadius: 14, border: `1.5px solid ${flipped ? BRAND : BORDER}`,
-          background: flipped ? `${BRAND}08` : WHITE, padding: '22px 20px', cursor: 'pointer',
+        style={{ minHeight: 168, borderRadius: 14, border: `1.5px solid ${flipped ? BRAND : C.border}`,
+          background: flipped ? `${BRAND}08` : C.surface, padding: '22px 20px', cursor: 'pointer',
           display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center' }}>
         {!flipped ? (
-          <div style={{ fontSize: 20, fontWeight: 900, color: INK }}>{c.term}</div>
+          <div style={{ fontSize: 20, fontWeight: 900, color: C.ink }}>{c.term}</div>
         ) : (
           <>
-            <div style={{ fontSize: 14, color: INK, fontWeight: 600, lineHeight: 1.55 }}>{c.definition}</div>
-            {c.example && <div style={{ fontSize: 12.5, color: MUTED, fontStyle: 'italic', marginTop: 10 }}>{c.example}</div>}
-            {c.tip && <div style={{ fontSize: 12, color: AMBER, fontWeight: 700, marginTop: 8 }}><Lightbulb size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />{c.tip}</div>}
+            <div style={{ fontSize: 14, color: C.ink, fontWeight: 600, lineHeight: 1.55 }}>{c.definition}</div>
+            {c.example && <div style={{ fontSize: 12.5, color: C.muted, fontStyle: 'italic', marginTop: 10 }}>{c.example}</div>}
+            {c.tip && <div style={{ fontSize: 12, color: TT_AMBER, fontWeight: 700, marginTop: 8 }}><Ico lucide={Lightbulb} ti="ti-bulb" size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />{c.tip}</div>}
           </>
         )}
-        <div style={{ fontSize: 10.5, color: MUTED2, marginTop: 14 }}>{flipped ? 'Tap to hide' : 'Tap to reveal'}</div>
+        <div style={{ fontSize: 10.5, color: TT_MUTED2, marginTop: 14 }}>{flipped ? 'Tap to hide' : 'Tap to reveal'}</div>
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
         <button onClick={() => { setI((n) => Math.max(0, n - 1)); setFlipped(false); }} disabled={i === 0} style={{ ...ghost, flex: 1 }}>Previous</button>
@@ -262,7 +264,7 @@ function Podcast({ data, tool, onError }) {
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: compact ? 0 : 12 }}>
         {[['First voice', voiceA, setVoiceA], ['Second voice', voiceB, setVoiceB]].map(([label, val, set]) => (
           <label key={label} style={{ flex: '1 1 180px', minWidth: 160 }}>
-            <span style={{ display: 'block', fontSize: 11, fontWeight: 800, color: MUTED, marginBottom: 4 }}>{label}</span>
+            <span style={{ display: 'block', fontSize: 11, fontWeight: 800, color: C.muted, marginBottom: 4 }}>{label}</span>
             <select value={val} onChange={(e) => set(e.target.value)} style={{ ...input, padding: '8px 10px' }}>
               {voiceOptions.map((o) => <option key={o} value={o}>{o}</option>)}
             </select>
@@ -293,12 +295,12 @@ function Podcast({ data, tool, onError }) {
           {voicePickers()}
           <button onClick={narrate} disabled={busy} style={{ ...primary, width: '100%', justifyContent: 'center', marginBottom: 14 }}>
             {busy
-              ? <><Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> Recording the episode…</>
-              : <><Volume2 size={15} /> Generate audio</>}
+              ? <><Ico lucide={Loader2} ti="ti-loader-2" size={15} style={{ animation: 'spin .8s linear infinite' }} /> Recording the episode…</>
+              : <><Ico lucide={Volume2} ti="ti-volume" size={15} /> Generate audio</>}
           </button>
         </>
       ) : (
-        <div style={{ background: LIGHT, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '14px 16px', marginBottom: 14 }}>
+        <div style={{ background: TT_LIGHT, border: `1px solid ${C.border}`, borderRadius: 14, padding: '14px 16px', marginBottom: 14 }}>
           <audio ref={ref} src={audio} preload="metadata"
             onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
             onEnded={() => { setPlaying(false); setTime(0); }}
@@ -310,61 +312,61 @@ function Podcast({ data, tool, onError }) {
           <input type="range" min={0} max={duration || 0} step={0.1} value={time}
             onChange={(e) => seek(Number(e.target.value))}
             style={{ width: '100%', accentColor: BRAND, cursor: 'pointer' }} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: MUTED2, fontWeight: 700, marginTop: -2 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: TT_MUTED2, fontWeight: 700, marginTop: -2 }}>
             <span>{fmtTime(time)}</span><span>{fmtTime(duration)}</span>
           </div>
 
           {/* Transport */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, marginTop: 10 }}>
-            <button onClick={() => nudge(-10)} title="Back 10 seconds" style={iconBtn}><SkipBack size={16} /></button>
+            <button onClick={() => nudge(-10)} title="Back 10 seconds" style={iconBtn}><Ico lucide={SkipBack} ti="ti-player-skip-back" size={16} /></button>
             <button onClick={toggle} style={playBtn}>
-              {playing ? <Pause size={19} color={WHITE} /> : <Play size={19} color={WHITE} style={{ marginLeft: 2 }} />}
+              {playing ? <Ico lucide={Pause} ti="ti-player-pause" size={19} color="#fff" /> : <Ico lucide={Play} ti="ti-player-play" size={19} color="#fff" style={{ marginLeft: 2 }} />}
             </button>
-            <button onClick={() => nudge(10)} title="Forward 10 seconds" style={iconBtn}><SkipForward size={16} /></button>
+            <button onClick={() => nudge(10)} title="Forward 10 seconds" style={iconBtn}><Ico lucide={SkipForward} ti="ti-player-skip-forward" size={16} /></button>
           </div>
 
           {/* Speed · volume · download */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 11, fontWeight: 800, color: MUTED, letterSpacing: .3 }}>SPEED</span>
+            <span style={{ fontSize: 11, fontWeight: 800, color: C.muted, letterSpacing: .3 }}>SPEED</span>
             {SPEEDS.map((sp) => (
               <button key={sp} onClick={() => setSpeed(sp)}
                 style={{ ...chip, padding: '4px 9px',
-                  borderColor: speed === sp ? BRAND : BORDER,
+                  borderColor: speed === sp ? BRAND : C.border,
                   background: speed === sp ? `${BRAND}12` : 'transparent',
-                  color: speed === sp ? BRAND : MUTED, fontWeight: speed === sp ? 800 : 600 }}>
+                  color: speed === sp ? BRAND : C.muted, fontWeight: speed === sp ? 800 : 600 }}>
                 {sp}×
               </button>
             ))}
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginLeft: 6 }}>
-              <Volume2 size={13} color={MUTED} />
+              <Ico lucide={Volume2} ti="ti-volume" size={13} color={C.muted} />
               <input type="range" min={0} max={1} step={0.05} value={volume}
                 onChange={(e) => setVolume(Number(e.target.value))}
                 style={{ width: 74, accentColor: BRAND, cursor: 'pointer' }} />
             </div>
             <a href={audio} download="podcast.mp3" style={{ ...ghost, textDecoration: 'none', marginLeft: 'auto' }}>
-              <Download size={13} /> Download
+              <Ico lucide={Download} ti="ti-download" size={13} /> Download
             </a>
           </div>
 
           {Object.keys(voices).length > 0 && (
-            <div style={{ fontSize: 11, color: MUTED2, marginTop: 9 }}>
+            <div style={{ fontSize: 11, color: TT_MUTED2, marginTop: 9 }}>
               {Object.entries(voices).map(([who, v]) => `${who} — ${v}`).join('   ·   ')}
             </div>
           )}
 
           {/* Change the cast without regenerating the script */}
           {voiceOptions.length > 0 && (
-            <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
               {voicePickers(true)}
               <button onClick={narrate} disabled={busy || !voicesChanged}
                 title={voicesChanged ? 'Records the same script again with the new voices' : 'Pick different voices to re-record'}
                 style={{ ...ghost, marginTop: 10, opacity: busy || !voicesChanged ? .55 : 1 }}>
                 {busy
-                  ? <><Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> Re-recording…</>
-                  : <><RotateCcw size={13} /> Re-narrate with these voices</>}
+                  ? <><Ico lucide={Loader2} ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> Re-recording…</>
+                  : <><Ico lucide={RotateCcw} ti="ti-rotate" size={13} /> Re-narrate with these voices</>}
               </button>
               {voicesChanged && !busy && (
-                <span style={{ fontSize: 11, color: MUTED2, marginLeft: 10 }}>Charged again — the script is reused, the audio is new.</span>
+                <span style={{ fontSize: 11, color: TT_MUTED2, marginLeft: 10 }}>Charged again — the script is reused, the audio is new.</span>
               )}
             </div>
           )}
@@ -377,7 +379,7 @@ function Podcast({ data, tool, onError }) {
 
       {showScript && (
         <div style={{ marginTop: 12 }}>
-          {data.summary && <p style={{ fontSize: 12.5, color: MUTED, marginBottom: 12 }}>{data.summary}</p>}
+          {data.summary && <p style={{ fontSize: 12.5, color: C.muted, marginBottom: 12 }}>{data.summary}</p>}
           {(data.turns || []).map((t, n) => {
             const at = startOf(n);
             const on = n === currentTurn;
@@ -393,9 +395,9 @@ function Podcast({ data, tool, onError }) {
                 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                   <span style={{ fontSize: 11.5, fontWeight: 900, color: BRAND }}>{t.speaker}</span>
-                  {at != null && <span style={{ fontSize: 10.5, color: MUTED2, fontWeight: 700 }}>{fmtTime(at)}</span>}
+                  {at != null && <span style={{ fontSize: 10.5, color: TT_MUTED2, fontWeight: 700 }}>{fmtTime(at)}</span>}
                 </div>
-                <div style={{ fontSize: 13.5, color: INK, lineHeight: 1.6 }}>{t.text}</div>
+                <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.6 }}>{t.text}</div>
               </div>
             );
           })}
@@ -410,20 +412,20 @@ function Grades({ data }) {
     <div>
       {(data.grades || []).map((g, n) => {
         const pct = g.outOf ? Math.round((g.score / g.outOf) * 100) : 0;
-        const col = pct >= 70 ? GREEN : pct >= 50 ? AMBER : RED;
+        const col = pct >= 70 ? GREEN : pct >= 50 ? TT_AMBER : RED;
         return (
-          <div key={n} style={{ border: `1px solid ${BORDER}`, borderRadius: 12, padding: 14, marginBottom: 12 }}>
+          <div key={n} style={{ border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
-              <span style={{ fontSize: 14, fontWeight: 800, color: INK }}>{g.label}</span>
-              <span style={{ fontSize: 15, fontWeight: 900, color: col }}>{g.score}/{g.outOf} <span style={{ fontSize: 11.5, color: MUTED }}>({pct}%)</span></span>
+              <span style={{ fontSize: 14, fontWeight: 800, color: C.ink }}>{g.label}</span>
+              <span style={{ fontSize: 15, fontWeight: 900, color: col }}>{g.score}/{g.outOf} <span style={{ fontSize: 11.5, color: C.muted }}>({pct}%)</span></span>
             </div>
             {(g.breakdown || []).map((b, k) => (
-              <div key={k} style={{ display: 'flex', gap: 10, fontSize: 12.5, padding: '5px 0', borderTop: k === 0 ? 'none' : `1px solid ${BORDER}` }}>
-                <span style={{ fontWeight: 700, color: INK, minWidth: 0, flex: 1 }}>{b.criterion}</span>
-                <span style={{ fontWeight: 800, color: MUTED, flexShrink: 0 }}>{b.score}/{b.outOf}</span>
+              <div key={k} style={{ display: 'flex', gap: 10, fontSize: 12.5, padding: '5px 0', borderTop: k === 0 ? 'none' : `1px solid ${C.border}` }}>
+                <span style={{ fontWeight: 700, color: C.ink, minWidth: 0, flex: 1 }}>{b.criterion}</span>
+                <span style={{ fontWeight: 800, color: C.muted, flexShrink: 0 }}>{b.score}/{b.outOf}</span>
               </div>
             ))}
-            {g.feedback && <p style={{ fontSize: 12.5, color: MUTED, marginTop: 10, lineHeight: 1.55 }}>{g.feedback}</p>}
+            {g.feedback && <p style={{ fontSize: 12.5, color: C.muted, marginTop: 10, lineHeight: 1.55 }}>{g.feedback}</p>}
           </div>
         );
       })}
@@ -448,7 +450,7 @@ export default function TeachingTools({ onInsert, compact = false }) {
     return (
       <div>
         <button onClick={() => setTool(null)} style={{ ...ghost, marginBottom: 14 }}>
-          <ArrowLeft size={13} /> All tools
+          <Ico lucide={ArrowLeft} ti="ti-arrow-left" size={13} /> All tools
         </button>
         <ToolRunner tool={tool} onInsert={onInsert} showHeader />
       </div>
@@ -464,15 +466,15 @@ export default function TeachingTools({ onInsert, compact = false }) {
             style={{ ...toolCard, opacity: t.locked ? .55 : 1, cursor: t.locked ? 'default' : 'pointer' }}>
             <span style={{ fontSize: 15, fontWeight: 900, color: '#6B7280' }}>{(t.name || 'T').trim().charAt(0).toUpperCase()}</span>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 800, color: INK }}>{t.name}{t.locked && <Lock size={11} style={{ marginLeft: 4, verticalAlign: '-1px' }} />}</div>
-              <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.45, marginTop: 2 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 800, color: C.ink }}>{t.name}{t.locked && <Ico lucide={Lock} ti="ti-lock" size={11} style={{ marginLeft: 4, verticalAlign: '-1px' }} />}</div>
+              <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.45, marginTop: 2 }}>
                 {t.locked ? 'Unlock this in Tools & Assets' : t.blurb}
               </div>
             </div>
           </button>
         ))}
       </div>
-      {!tools.length && !error && <div style={{ color: MUTED2, fontSize: 13, padding: 20 }}>Loading tools…</div>}
+      {!tools.length && !error && <div style={{ color: TT_MUTED2, fontSize: 13, padding: 20 }}>Loading tools…</div>}
     </div>
   );
 }
@@ -511,15 +513,15 @@ export function ToolRunner({ tool, onInsert, onDone, showHeader = false }) {
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 4 }}>
             <span style={{ fontSize: 20 }}>{tool.emoji}</span>
-            <div style={{ fontSize: 15, fontWeight: 900, color: INK }}>{tool.name}</div>
+            <div style={{ fontSize: 15, fontWeight: 900, color: C.ink }}>{tool.name}</div>
           </div>
-          <p style={{ fontSize: 12.5, color: MUTED, margin: '0 0 16px' }}>{tool.blurb}</p>
+          <p style={{ fontSize: 12.5, color: C.muted, margin: '0 0 16px' }}>{tool.blurb}</p>
         </>
       )}
 
       {tool.fields.map((f) => (
         <div key={f.name} style={{ marginBottom: 12 }}>
-          <label style={{ fontSize: 11.5, fontWeight: 800, color: MUTED, display: 'block', marginBottom: 5 }}>
+          <label style={{ fontSize: 11.5, fontWeight: 800, color: C.muted, display: 'block', marginBottom: 5 }}>
             {f.label}{f.required && <span style={{ color: RED }}> *</span>}
           </label>
           {f.type === 'select' ? (
@@ -537,7 +539,7 @@ export function ToolRunner({ tool, onInsert, onDone, showHeader = false }) {
       ))}
 
       <button onClick={run} disabled={busy} style={{ ...primary, width: '100%', justifyContent: 'center' }}>
-        {busy ? <><Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> Working…</> : <><Sparkles size={15} /> Generate</>}
+        {busy ? <><Ico lucide={Loader2} ti="ti-loader-2" size={15} style={{ animation: 'spin .8s linear infinite' }} /> Working…</> : <><Ico lucide={Sparkles} ti="ti-sparkles" size={15} /> Generate</>}
       </button>
       {error && <div style={errBox}>{error}</div>}
 
@@ -574,21 +576,21 @@ function Result({ tool, out, onInsert, onError = () => {}, title }) {
   };
 
   return (
-    <div style={{ marginTop: 18, borderTop: `1px solid ${BORDER}`, paddingTop: 16 }}>
+    <div style={{ marginTop: 18, borderTop: `1px solid ${C.border}`, paddingTop: 16 }}>
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-        <button onClick={copy} style={ghost}>{copied ? <Check size={13} color={GREEN} /> : <Copy size={13} />} {copied ? 'Copied' : 'Copy'}</button>
-        <button onClick={print} style={ghost}><Printer size={13} /> Save as PDF</button>
-        {onInsert && <button onClick={() => onInsert(out.content || '')} style={ghost}><MessageSquarePlus size={13} /> Send to chat</button>}
-        {out.coinsCharged > 0 && <span style={{ fontSize: 11, color: MUTED2, alignSelf: 'center' }}>{out.coinsCharged.toLocaleString()} coins</span>}
+        <button onClick={copy} style={ghost}>{copied ? <Ico lucide={Check} ti="ti-check" size={13} color={GREEN} /> : <Ico lucide={Copy} ti="ti-copy" size={13} />} {copied ? 'Copied' : 'Copy'}</button>
+        <button onClick={print} style={ghost}><Ico lucide={Printer} ti="ti-printer" size={13} /> Save as PDF</button>
+        {onInsert && <button onClick={() => onInsert(out.content || '')} style={ghost}><Ico lucide={MessageSquarePlus} ti="ti-message-plus" size={13} /> Send to chat</button>}
+        {out.coinsCharged > 0 && <span style={{ fontSize: 11, color: TT_MUTED2, alignSelf: 'center' }}>{out.coinsCharged.toLocaleString()} coins</span>}
       </div>
 
       {tool.output === 'doc' && (
         <>
           <div style={{ textAlign: 'center', marginBottom: 16 }}>
-            <div style={{ fontSize: 19, fontWeight: 900, color: INK }}>{out.title || title}</div>
-            {out.subtitle && <div style={{ fontSize: 12.5, color: MUTED, marginTop: 4 }}>{out.subtitle}</div>}
+            <div style={{ fontSize: 19, fontWeight: 900, color: C.ink }}>{out.title || title}</div>
+            {out.subtitle && <div style={{ fontSize: 12.5, color: C.muted, marginTop: 4 }}>{out.subtitle}</div>}
             <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap', marginTop: 9 }}>
-              {out.subject && <span style={{ ...pill, background: `${AMBER}18`, color: AMBER }}>{out.subject}</span>}
+              {out.subject && <span style={{ ...pill, background: `${TT_AMBER}18`, color: TT_AMBER }}>{out.subject}</span>}
               {out.class   && <span style={{ ...pill, background: `${BRAND}18`, color: BRAND }}>{out.class}</span>}
             </div>
           </div>
@@ -599,19 +601,19 @@ function Result({ tool, out, onInsert, onError = () => {}, title }) {
       {tool.output === 'script' && <Podcast data={out} tool={tool} onError={onError} />}
       {tool.output === 'grades' && <Grades data={out} />}
       {tool.output === 'markdown' && (
-        <div style={{ fontSize: 13.5, color: INK, lineHeight: 1.7 }} dangerouslySetInnerHTML={{ __html: mdToHtml(out.content || '') }} />
+        <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.7 }} dangerouslySetInnerHTML={{ __html: mdToHtml(out.content || '') }} />
       )}
     </div>
   );
 }
 ToolRunner.Result = Result;
 
-const input = { width: '100%', padding: '10px 12px', borderRadius: 9, border: `1px solid ${BORDER}`, fontSize: 13, fontFamily: FONT, color: INK, background: WHITE, boxSizing: 'border-box' };
-const primary = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 18px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg,${BRAND},#5326CC)`, color: WHITE, fontSize: 13.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT };
-const ghost = { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 13px', borderRadius: 9, border: `1px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT };
-const chip = { display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 11px', borderRadius: 999, border: `1px solid ${BORDER}`, background: 'transparent', color: MUTED, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT };
-const toolCard = { display: 'flex', gap: 11, alignItems: 'flex-start', textAlign: 'left', padding: '14px 15px', borderRadius: 12, border: `1px solid ${BORDER}`, background: WHITE, cursor: 'pointer', fontFamily: FONT };
-const iconBtn = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: '50%', border: `1px solid ${BORDER}`, background: WHITE, color: MUTED, cursor: 'pointer' };
+const input = { width: '100%', padding: '10px 12px', borderRadius: 9, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: TT_FONT, color: C.ink, background: C.surface, boxSizing: 'border-box' };
+const primary = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 18px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg,${BRAND},#5326CC)`, color: '#fff', fontSize: 13.5, fontWeight: 800, cursor: 'pointer', fontFamily: TT_FONT };
+const ghost = { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 13px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.surface, color: C.muted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: TT_FONT };
+const chip = { display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 11px', borderRadius: 999, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: TT_FONT };
+const toolCard = { display: 'flex', gap: 11, alignItems: 'flex-start', textAlign: 'left', padding: '14px 15px', borderRadius: 12, border: `1px solid ${C.border}`, background: C.surface, cursor: 'pointer', fontFamily: TT_FONT };
+const iconBtn = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: '50%', border: `1px solid ${C.border}`, background: C.surface, color: C.muted, cursor: 'pointer' };
 const playBtn = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 46, height: 46, borderRadius: '50%', border: 'none', background: `linear-gradient(135deg,${BRAND},#5326CC)`, cursor: 'pointer', boxShadow: `0 4px 14px ${BRAND}55` };
-const pill = { padding: '4px 12px', borderRadius: 999, fontSize: 11.5, fontWeight: 800, fontFamily: FONT };
+const pill = { padding: '4px 12px', borderRadius: 999, fontSize: 11.5, fontWeight: 800, fontFamily: TT_FONT };
 const errBox = { marginTop: 12, padding: '10px 12px', borderRadius: 9, background: `${RED}0F`, border: `1px solid ${RED}33`, color: RED, fontSize: 12.5, fontWeight: 700 };
