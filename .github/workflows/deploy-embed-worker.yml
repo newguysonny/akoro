@@ -9,18 +9,26 @@
 #   bge-m3  Model field + EMBED_MODEL_ID = BAAI/bge-m3
 # Once one is chosen, delete the other endpoint and its template (and secret).
 #
-# One-time setup, per model:
-#   1. RunPod console → Serverless → New Endpoint (like the hanji endpoint):
+# One-time setup, per model (template first, then the endpoint on it — as
+# for the hanji worker):
+#   1. RunPod console → Serverless → Templates → New Template:
+#        - Name: akoro-embed-qwen3 / akoro-embed-bge-m3
+#        - Type: Serverless
 #        - Container image: ghcr.io/<owner>/akoro-embed-worker:latest
-#        - Model field: the model above (cached, unbilled pull)
-#        - Env: EMBED_MODEL_ID = the same model id
+#        - Container disk: 20 GB
+#        - Env: EMBED_MODEL_ID = Qwen/Qwen3-Embedding-0.6B / BAAI/bge-m3
+#        - Registry credentials: as on the hanji template, if it has them
+#      Its id (Templates list) is the GitHub secret in step 3.
+#   1b. Serverless → New Endpoint → pick that template:
+#        - Model field: the same model id (cached, unbilled pull)
 #        - GPU: the smallest available (16 GB is plenty; each model is ~1-2 GB)
 #        - Active workers: 0 (scales to zero; the first search after idle waits
-#          for a cold start), Max workers: 1-2
+#          for a cold start), Max workers: 1-2, FlashBoot on
+#      Its id (endpoint page) goes in the API's env in step 4.
 #   2. GHCR: the akoro-embed-worker package Public, or GHCR credentials in RunPod.
 #   3. Repo Settings → Secrets → Actions (RUNPOD_API_KEY is already set):
-#        RUNPOD_EMBED_TEMPLATE_ID      — the Qwen3 endpoint's template id
-#        RUNPOD_EMBED_BGE_TEMPLATE_ID  — the bge-m3 endpoint's template id
+#        RUNPOD_EMBED_TEMPLATE_ID      — the Qwen3 template's id
+#        RUNPOD_EMBED_BGE_TEMPLATE_ID  — the bge-m3 template's id
 #   4. API (Render env): RUNPOD_EMBED_ENDPOINT_ID (Qwen3),
 #      RUNPOD_EMBED_BGE_ENDPOINT_ID (bge-m3), RUNPOD_API_KEY. Compare with
 #      POST /api/admin/embeddings/compare (stores untouched); only then

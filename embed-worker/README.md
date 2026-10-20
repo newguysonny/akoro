@@ -24,9 +24,9 @@ template says which model it runs; each model gets what its card prescribes:
 ## Deploy
 `.github/workflows/deploy-embed-worker.yml` — same pattern as the hanji parse
 worker, on changes to `embed-worker/**`; it updates both templates. One-time
-setup is in the workflow header. Per endpoint: Model field and
-`EMBED_MODEL_ID` = the model, the smallest GPU, **Active workers 0**
-(scale to zero), Max workers 1–2.
+setup is in the workflow header — per model, a **template first** (this image,
+`EMBED_MODEL_ID` = the model), then an **endpoint on that template** (Model
+field = the same model, the smallest GPU, **Active workers 0**, Max 1–2).
 
 ## API
 ```json
