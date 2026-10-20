@@ -2396,11 +2396,25 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         ]);
         const byId = new Map();
         for (const n of named) byId.set(n.id, { recordId: n.id, name: n.name, snippet: null });
-        for (const h of hits) if (h.recordId && !byId.has(h.recordId)) byId.set(h.recordId, { recordId: h.recordId, name: h.name, snippet: h.snippet || null, page: h.pageNumber ?? null });
+        // A passage for a document also found by name fills it in (it used to be dropped as a
+        // duplicate, so "what do my Cell notes say about…" came back with no passage at all).
+        for (const h of hits) {
+          if (!h.recordId) continue;
+          const known = byId.get(h.recordId);
+          if (!known) byId.set(h.recordId, { recordId: h.recordId, name: h.name, snippet: h.snippet || null, page: h.pageNumber ?? null });
+          else if (!known.snippet && h.snippet) Object.assign(known, { snippet: h.snippet, page: h.pageNumber ?? null });
+        }
+        // Found by name only: look inside it for the question (works without embeddings too — lexical).
+        const words = q.replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter((w) => w.length > 3).slice(0, 8).join(" ");
+        await Promise.all([...byId.values()].filter((r) => !r.snippet && words).slice(0, 2).map(async (r) => {
+          const inside = await searchRecordChunks({ userId: studentId, q: words, limit: 2, recordId: r.recordId }).catch(() => []);
+          if (inside[0]?.snippet) Object.assign(r, { snippet: inside[0].snippet, page: inside[0].pageNumber ?? null });
+        }));
         const tool = ["quiz", "flashcards", "summary", "notes", "podcast"].includes(input?.tool) ? input.tool : null;
         const records = [...byId.values()].slice(0, 5).map((r) => (tool ? { ...r, tool } : r));
         return records.length
-          ? { records, ...(tool ? { note: `Each link opens the document in the reader on its ${tool} tool, which builds it from the whole document — point them there in one line; don't write the ${tool} in chat, don't comment on the document's title or contents, and don't say what you can or can't see inside it (the reader reads all of it).` } : {}) }
+          ? { records, ...(!tool && records.every((r) => !r.snippet) ? { note: "None of their passages matched the question — say that, and offer to open the document in the reader (it reads all of it). Never say you can't read or see inside their documents." } : {}),
+            ...(tool ? { note: `Each link opens the document in the reader on its ${tool} tool, which builds it from the whole document — point them there in one line; don't write the ${tool} in chat, don't comment on the document's title or contents, and don't say what you can or can't see inside it (the reader reads all of it).` } : {}) }
           : { records: [], note: "Nothing in their Library matches — say so; don't invent a document." };
       } catch (error) { return { error: "Their Library is unavailable right now" }; }
     }

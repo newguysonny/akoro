@@ -112,7 +112,7 @@ export const scenarios = [
       // A reader study tool: the step, then what it found, then the reader link.
       await box.fill(`Make flashcards from my "${name}"`);
       await box.press('Enter');
-      const link = page.locator('button[data-material="record"]', { hasText: marker }).first();
+      const link = page.locator('button[data-material]', { hasText: 'Flashcards' }).filter({ hasText: 'Cell notes' }).first();
       t.check('the reader link to the notes is under the reply', await link.waitFor({ timeout: 120_000 }).then(() => true, () => false));
       await settle();
       let text = await feed();
@@ -120,6 +120,7 @@ export const scenarios = [
       t.note(`after the row: ${text.slice(row, row + 400)}`);
       t.check("the step is shown: Finding it for the reader's flashcards", row >= 0, { actual: text.slice(-600) });
       t.check('…then a message about what it found, naming the notes', row >= 0 && text.slice(row + 30).includes('Cell notes'), { actual: text.slice(row, row + 400) });
+      await page.getByText("Finding it for the reader's flashcards").last().scrollIntoViewIfNeeded().catch(() => {});
       await t.shot('reader-tool');
 
       // A Library question: the search step, then the answer from the notes.
@@ -132,6 +133,7 @@ export const scenarios = [
       t.note(`after the search: ${text.slice(search, search + 500)}`);
       t.check('the step is shown: Searching your library', search >= 0, { actual: text.slice(-600) });
       t.check('…then the answer from the notes', search >= 0 && /aerobic respiration|energy/i.test(text.slice(search)), { actual: text.slice(search, search + 500) });
+      await page.getByText('Searching your library').last().scrollIntoViewIfNeeded().catch(() => {});
       await t.shot('library-question');
     },
   },
