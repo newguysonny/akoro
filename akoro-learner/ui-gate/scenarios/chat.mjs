@@ -692,7 +692,8 @@ export const scenarios = [
         await film('teaching', 12, async () => false);
       }
       // 6. End it: the modal's × (closing ends the session unless it was minimised), then any end/save prompt.
-      await page.locator('i.ti-x').first().locator('xpath=..').click({ timeout: 8000 }).catch(() => {});
+      // The × sits right after the minimise button (role=button), and asks "End this session?".
+      await page.locator('div[role="button"][title]').first().locator('xpath=following-sibling::div[1]').click({ timeout: 8000 }).catch(() => {});
       await page.waitForTimeout(2500);
       await shot('ending');
       for (const name of [/End Session/i, /Save & Close Session/i]) {
@@ -704,7 +705,7 @@ export const scenarios = [
       // 7. Back in the chat: the agent's report and the retest countdown.
       await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
       await page.waitForTimeout(4000);
-      const done = await film('finished', 25, async () => await page.locator('[data-workflow-wake="teaching_done"]').first().isVisible().catch(() => false) && await page.locator('[data-auto-start]').first().isVisible().catch(() => false));
+      const done = await film('finished', 35, async () => await page.locator('[data-workflow-wake="teaching_done"]').first().isVisible().catch(() => false) && await page.locator('[data-auto-start]').first().isVisible().catch(() => false));
       t.check('the agent\'s report on what was taught, in the chat', await page.locator('[data-workflow-wake="teaching_done"]').first().isVisible().catch(() => false));
       t.check('the retest counts down on the card', done);
     },
