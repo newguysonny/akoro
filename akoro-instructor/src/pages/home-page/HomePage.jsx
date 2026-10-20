@@ -11,14 +11,10 @@ import { useStatsAPI } from '../../hooks/useStatsAPI.js';
 import { useCoursesAPI } from '../../hooks/useCoursesAPI.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { apiGet, apiPost, apiDelete, API } from '../../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, FONT } from '../../constants.js';
+import { GREEN, PURPLE, BLUE } from '../../constants.js';
+import { C } from '../../theme/colors.js';
+import { Ico } from '../../theme/Ico.jsx';
 
-// Bachs design tokens
-const BX = {
-  primary: '#4A5CD5', ink: '#1A1B25', muted: '#6B7280',
-  border: '#E8E8EE', white: '#FFFFFF', bg: '#F7F7F9',
-  font: "Inter, system-ui, sans-serif",
-};
 
 /* Zeroes, not samples. A stat that failed to load must read as "nothing yet",
    never as a plausible invented number. */
@@ -115,16 +111,16 @@ export default function HomePage() {
           <div style={{
             display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16,
             padding: '11px 14px', borderRadius: 12,
-            background: '#FEF3C7', border: '1px solid #FDE68A', fontFamily: FONT,
+            background: '#FEF3C7', border: '1px solid #FDE68A', fontFamily: C.font,
           }}>
-            <span style={{ display: 'flex' }}><AlertTriangle size={16} color="#B45309" /></span>
+            <span style={{ display: 'flex' }}><Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={16} color="#B45309" /></span>
             <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: '#92400E' }}>
               {loadError} These figures may be incomplete.
             </span>
             <button onClick={() => { setLoading(true); setReloadKey(k => k + 1); }} style={{
               padding: '6px 13px', borderRadius: 9, border: '1px solid #FDE68A',
-              background: WHITE, color: '#92400E', fontSize: 12, fontWeight: 800,
-              cursor: 'pointer', fontFamily: FONT,
+              background: C.surface, color: '#92400E', fontSize: 12, fontWeight: 800,
+              cursor: 'pointer', fontFamily: C.font,
             }}>Retry</button>
           </div>
         )}
@@ -136,14 +132,14 @@ export default function HomePage() {
           gap: 16, marginBottom: 28,
         }}>
           <div onClick={() => navigate('/wallet')} style={{ cursor: 'pointer' }} title="View wallet & top up">
-            <StatCard icon={Wallet} label="Coin Balance" value={coins == null ? '—' : coins.toLocaleString()} sub="tap to top up" color={AMBER} loading={coins == null} />
+            <StatCard icon={Wallet} ti="ti-wallet" label="Coin Balance" value={coins == null ? '—' : coins.toLocaleString()} sub="tap to top up" color={C.brand} loading={coins == null} />
           </div>
-          <StatCard icon={Users}    label="Total Students" value={(stats?.total_students ?? 0).toLocaleString()} sub="enrolled across all courses" color={BLUE}   loading={loading} />
-          <StatCard icon={BookOpen} label="Active Courses" value={stats?.active_courses ?? 0}                   sub="currently live"               color={AMBER}  loading={loading} />
-          <StatCard icon={Layers}   label="Total Courses"  value={stats?.total_courses ?? 0}                    sub="published & draft"            color={PURPLE} loading={loading} />
-          <StatCard icon={Wallet}   label="Revenue"        value={`₦${(stats?.total_revenue ?? 0).toLocaleString()}`} sub="from enrollments"      color={GREEN}  loading={loading} />
-          <StatCard icon={Zap}      label="Agent XP"       value={(stats?.agent_xp ?? 0).toLocaleString()}      sub={`Level ${stats?.agent_level ?? 1}`} color={AMBER} loading={loading} />
-          <StatCard icon={Flame}    label="Streak"         value={`${stats?.streak_days ?? 0}d`}                sub="keep it going"                color={GREEN}  loading={loading} />
+          <StatCard icon={Users} ti="ti-users" label="Total Students" value={(stats?.total_students ?? 0).toLocaleString()} sub="enrolled across all courses" color={BLUE}   loading={loading} />
+          <StatCard icon={BookOpen} ti="ti-book" label="Active Courses" value={stats?.active_courses ?? 0}                   sub="currently live"               color={C.brand}  loading={loading} />
+          <StatCard icon={Layers} ti="ti-stack-2" label="Total Courses"  value={stats?.total_courses ?? 0}                    sub="published & draft"            color={PURPLE} loading={loading} />
+          <StatCard icon={Wallet} ti="ti-cash" label="Revenue"        value={`₦${(stats?.total_revenue ?? 0).toLocaleString()}`} sub="from enrollments"      color={GREEN}  loading={loading} />
+          <StatCard icon={Zap} ti="ti-bolt" label="Agent XP"       value={(stats?.agent_xp ?? 0).toLocaleString()}      sub={`Level ${stats?.agent_level ?? 1}`} color={C.brand} loading={loading} />
+          <StatCard icon={Flame} ti="ti-flame" label="Streak"         value={`${stats?.streak_days ?? 0}d`}                sub="keep it going"                color={GREEN}  loading={loading} />
         </div>
 
         <style>{`@media (max-width: 900px){.inst-dash{grid-template-columns:1fr !important;}.inst-qa{grid-template-columns:repeat(2,1fr) !important;}}`}</style>
@@ -152,20 +148,20 @@ export default function HomePage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
             {/* Quick actions */}
             <div>
-              <h2 style={{ fontSize: 16, fontWeight: 700, color: INK, margin: '0 0 14px', fontFamily: FONT }}>Quick Actions</h2>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: C.ink, margin: '0 0 14px', fontFamily: C.font }}>Quick Actions</h2>
               <div className="inst-qa" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-                <QuickAction icon={Video}    label="New Live Class"   desc="Schedule a live session"     color={AMBER}  onClick={() => navigate('/courses')} />
-                <QuickAction icon={Eye}      label="View Students"    desc="Manage your enrolled learners" color={BLUE} onClick={() => navigate('/mgmt/students')} />
-                <QuickAction icon={Plus}     label="Add Student"      desc="Enroll a new learner"         color={GREEN}  onClick={() => navigate('/mgmt/students?add=1')} />
-                <QuickAction icon={Swords}   label="Create Battle"    desc="Launch a quiz battle"         color={PURPLE} onClick={() => navigate('/battles')} />
-                <QuickAction icon={BookOpen} label="New On-Demand"    desc="Build a video course"         color={BLUE}   onClick={() => navigate('/courses')} />
-                <QuickAction icon={Bot}      label="AI Assistant"     desc="Chat with your AI tutor"      color={AMBER}  onClick={() => navigate('/chat')} />
+                <QuickAction icon={Video} ti="ti-video" label="New Live Class"   desc="Schedule a live session"     color={C.brand}  onClick={() => navigate('/courses')} />
+                <QuickAction icon={Eye} ti="ti-eye" label="View Students"    desc="Manage your enrolled learners" color={BLUE} onClick={() => navigate('/mgmt/students')} />
+                <QuickAction icon={Plus} ti="ti-user-plus" label="Add Student"      desc="Enroll a new learner"         color={GREEN}  onClick={() => navigate('/mgmt/students?add=1')} />
+                <QuickAction icon={Swords} ti="ti-swords" label="Create Battle"    desc="Launch a quiz battle"         color={PURPLE} onClick={() => navigate('/battles')} />
+                <QuickAction icon={BookOpen} ti="ti-player-play" label="New On-Demand"    desc="Build a video course"         color={BLUE}   onClick={() => navigate('/courses')} />
+                <QuickAction icon={Bot} ti="ti-robot" label="AI Assistant"     desc="Chat with your AI tutor"      color={C.brand}  onClick={() => navigate('/chat')} />
               </div>
             </div>
 
             {/* Today's schedule */}
             <div>
-              <h2 style={{ fontSize: 16, fontWeight: 700, color: INK, margin: '0 0 14px', fontFamily: FONT }}>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: C.ink, margin: '0 0 14px', fontFamily: C.font }}>
                 Today's Schedule
               </h2>
               {loading ? (
@@ -175,13 +171,13 @@ export default function HomePage() {
                 </div>
               ) : sessions.length === 0 ? (
                 <div style={{
-                  background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14,
+                  background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14,
                   padding: '32px', textAlign: 'center',
                 }}>
-                  <Clock size={28} color={MUTED} style={{ marginBottom: 10 }} />
-                  <p style={{ fontSize: 14, color: MUTED, fontFamily: FONT, margin: 0 }}>No sessions scheduled for today</p>
+                  <Ico lucide={Clock} ti="ti-clock" size={28} color={C.muted} style={{ marginBottom: 10 }} />
+                  <p style={{ fontSize: 14, color: C.muted, fontFamily: C.font, margin: 0 }}>No sessions scheduled for today</p>
                   <Btn size="sm" style={{ marginTop: 12 }} onClick={() => navigate('/courses')}>
-                    <Plus size={14} /> Schedule one
+                    <Ico lucide={Plus} ti="ti-plus" size={14} /> Schedule one
                   </Btn>
                 </div>
               ) : (
@@ -196,13 +192,13 @@ export default function HomePage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {/* Profile card */}
             <div style={{
-              background: INK, borderRadius: 20, padding: '24px',
-              color: WHITE, fontFamily: FONT,
+              background: C.hero, borderRadius: 20, padding: '24px',
+              color: '#fff', fontFamily: C.font,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
                 <div style={{
                   width: 48, height: 48, borderRadius: '50%',
-                  background: `linear-gradient(135deg, ${AMBER}, #D4651E)`,
+                  background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 20,
                 }}>
@@ -227,8 +223,8 @@ export default function HomePage() {
 
             {/* Agent panel */}
             <div style={{
-              background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 20, padding: '20px',
-              fontFamily: FONT,
+              background: C.surface, border: `1px solid ${C.border}`, borderRadius: 20, padding: '20px',
+              fontFamily: C.font,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -237,11 +233,11 @@ export default function HomePage() {
                     background: `linear-gradient(135deg, ${PURPLE}, ${BLUE})`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>
-                    <Bot size={16} color={WHITE} />
+                    <Ico lucide={Bot} ti="ti-robot" size={16} color="#fff" />
                   </div>
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: INK }}>{loading ? '…' : (profile?.agent?.agent_name || profile?.agentName || 'AI Agent')}</div>
-                    <div style={{ fontSize: 10, color: MUTED }}>Teaching Assistant</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>{loading ? '…' : (profile?.agent?.agent_name || profile?.agentName || 'AI Agent')}</div>
+                    <div style={{ fontSize: 10, color: C.muted }}>Teaching Assistant</div>
                   </div>
                 </div>
                 <span style={{
@@ -251,17 +247,17 @@ export default function HomePage() {
                   Active
                 </span>
               </div>
-              <p style={{ fontSize: 12, color: MUTED, margin: '0 0 14px', lineHeight: 1.5 }}>
+              <p style={{ fontSize: 12, color: C.muted, margin: '0 0 14px', lineHeight: 1.5 }}>
                 {loading ? 'Loading…' : (profile?.agentDescription || 'Your AI teaching assistant handles student questions 24/7.')}
               </p>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <div style={{ textAlign: 'center', background: LIGHT, borderRadius: 10, padding: '10px' }}>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: INK }}>{loading ? '—' : (profile?.totalResponses ?? 342)}</div>
-                  <div style={{ fontSize: 10, color: MUTED }}>Responses</div>
+                <div style={{ textAlign: 'center', background: C.bg, borderRadius: 10, padding: '10px' }}>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: C.ink }}>{loading ? '—' : (profile?.totalResponses ?? 342)}</div>
+                  <div style={{ fontSize: 10, color: C.muted }}>Responses</div>
                 </div>
-                <div style={{ textAlign: 'center', background: LIGHT, borderRadius: 10, padding: '10px' }}>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: INK }}>{loading ? '—' : `${profile?.studentsSatisfied ?? 94}%`}</div>
-                  <div style={{ fontSize: 10, color: MUTED }}>Satisfaction</div>
+                <div style={{ textAlign: 'center', background: C.bg, borderRadius: 10, padding: '10px' }}>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: C.ink }}>{loading ? '—' : `${profile?.studentsSatisfied ?? 94}%`}</div>
+                  <div style={{ fontSize: 10, color: C.muted }}>Satisfaction</div>
                 </div>
               </div>
               <Btn
@@ -270,7 +266,7 @@ export default function HomePage() {
                 style={{ marginTop: 12, width: '100%', justifyContent: 'center', color: PURPLE, background: `${PURPLE}10` }}
                 onClick={() => navigate('/chat')}
               >
-                <Zap size={14} /> Train Agent <ChevronRight size={12} />
+                <Ico lucide={Zap} ti="ti-bolt" size={14} /> Train Agent <Ico lucide={ChevronRight} ti="ti-chevron-right" size={12} />
               </Btn>
             </div>
 

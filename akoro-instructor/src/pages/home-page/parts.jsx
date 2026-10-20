@@ -10,14 +10,10 @@ import { useStatsAPI } from '../../hooks/useStatsAPI.js';
 import { useCoursesAPI } from '../../hooks/useCoursesAPI.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { apiGet, apiPost, apiDelete, API } from '../../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, FONT } from '../../constants.js';
+import { GREEN, PURPLE, BLUE } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
+import { Ico } from '../../theme/Ico.jsx';
 
-// Bachs design tokens
-const BX = {
-  primary: '#4A5CD5', ink: '#1A1B25', muted: '#6B7280',
-  border: '#E8E8EE', white: '#FFFFFF', bg: '#F7F7F9',
-  font: "Inter, system-ui, sans-serif",
-};
 
 /* ── Mock fallback data (matches backend snake_case shape) ──────────── */
 
@@ -52,9 +48,9 @@ const MOCK_SESSIONS = [
 ];
 
 /* ── Stat card ──────────────────────────────────────────────────────── */
-function StatCard({ icon: Icon, label, value, sub, color = AMBER, loading, progress = 0.75 }) {
+function StatCard({ icon: Icon, ti, label, value, sub, color = C.brand, loading, progress = 0.75 }) {
   if (loading) return (
-    <div style={{ background: BX.white, borderRadius: 10, padding: '18px', border: `1px solid ${BX.border}` }}>
+    <div style={{ background: C.surface, borderRadius: 10, padding: '18px', border: `1px solid ${C.bxBorder}` }}>
       <Skeleton height={14} width={80} style={{ marginBottom: 12 }} />
       <Skeleton height={32} width={60} style={{ marginBottom: 6 }} />
       <Skeleton height={12} width={100} />
@@ -64,24 +60,24 @@ function StatCard({ icon: Icon, label, value, sub, color = AMBER, loading, progr
   const offset = c * (1 - Math.max(0, Math.min(1, progress)));
   return (
     <div style={{
-      background: BX.white, borderRadius: 10, padding: '18px',
-      border: `1px solid ${BX.border}`,
+      background: C.surface, borderRadius: 10, padding: '18px',
+      border: `1px solid ${C.bxBorder}`,
       display: 'flex', alignItems: 'center', gap: 12,
-      fontFamily: BX.font,
+      fontFamily: C.bxFont,
     }}>
       <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 11, color: BX.muted, fontWeight: 500, marginBottom: 6 }}>{label}</div>
-        <div style={{ fontSize: 22, fontWeight: 600, color: BX.ink, lineHeight: 1 }}>{value}</div>
-        {sub && <div style={{ fontSize: 11, color: BX.muted, marginTop: 4 }}>{sub}</div>}
+        <div style={{ fontSize: 11, color: C.bxMuted, fontWeight: 500, marginBottom: 6 }}>{label}</div>
+        <div style={{ fontSize: 22, fontWeight: 600, color: C.bxInk, lineHeight: 1 }}>{value}</div>
+        {sub && <div style={{ fontSize: 11, color: C.bxMuted, marginTop: 4 }}>{sub}</div>}
       </div>
       <svg width="52" height="52" viewBox="0 0 52 52" style={{ flexShrink: 0 }}>
-        <circle cx="26" cy="26" r={r} fill="none" stroke="#F1F1F4" strokeWidth="5" />
-        <circle cx="26" cy="26" r={r} fill="none" stroke={BX.primary} strokeWidth="5"
+        <circle cx="26" cy="26" r={r} fill="none" stroke={C.bxTrack} strokeWidth="5" />
+        <circle cx="26" cy="26" r={r} fill="none" stroke={C.bxPrimary} strokeWidth="5"
           strokeLinecap="round" strokeDasharray={c.toFixed(1)} strokeDashoffset={offset.toFixed(1)}
           transform="rotate(-90 26 26)" />
-        <g transform="translate(17,17)">
-          <Icon size={18} color={BX.primary} />
-        </g>
+        <foreignObject x="17" y="17" width="18" height="18">
+          <Ico lucide={Icon} ti={ti} size={18} color={C.bxPrimary} />
+        </foreignObject>
       </svg>
     </div>
   );
@@ -93,21 +89,21 @@ function SessionItem({ session }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 12,
-      padding: '12px 16px', background: WHITE, borderRadius: 12,
-      border: `1px solid ${BORDER}`,
+      padding: '12px 16px', background: C.surface, borderRadius: 12,
+      border: `1px solid ${C.border}`,
     }}>
       <div style={{
-        width: 40, height: 40, borderRadius: 10, background: `${AMBER}15`,
+        width: 40, height: 40, borderRadius: 10, background: tint(8),
         display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
       }}>
-        <Video size={18} color={AMBER} />
+        <Ico lucide={Video} ti="ti-video" size={18} color={C.brand} />
       </div>
       <div style={{ flex: 1, overflow: 'hidden' }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: INK, fontFamily: FONT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, fontFamily: C.font, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {session.title}
         </div>
-        <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 4 }}>
-          <Clock size={10} /> {time} · {session.enrolledCount || 0} enrolled
+        <div style={{ fontSize: 11, color: C.muted, fontFamily: C.font, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <Ico lucide={Clock} ti="ti-clock" size={10} /> {time} · {session.enrolledCount || 0} enrolled
         </div>
       </div>
       <Btn size="sm" variant="outline">Join</Btn>
@@ -116,27 +112,27 @@ function SessionItem({ session }) {
 }
 
 /* ── Quick action card ──────────────────────────────────────────────── */
-function QuickAction({ icon: Icon, label, desc, color, onClick }) {
+function QuickAction({ icon: Icon, ti, label, desc, color, onClick }) {
   return (
     <button
       onClick={onClick}
       style={{
-        background: BX.white, border: `1px solid ${BX.border}`, borderRadius: 10,
+        background: C.surface, border: `1px solid ${C.bxBorder}`, borderRadius: 10,
         padding: '16px', cursor: 'pointer', textAlign: 'left',
         display: 'flex', flexDirection: 'column', gap: 8, transition: 'all .15s',
-        fontFamily: BX.font,
+        fontFamily: C.bxFont,
       }}
       onMouseEnter={e => e.currentTarget.style.borderColor = color}
-      onMouseLeave={e => e.currentTarget.style.borderColor = BORDER}
+      onMouseLeave={e => e.currentTarget.style.borderColor = C.border}
     >
       <div style={{
-        width: 40, height: 40, borderRadius: 10, background: `${color}15`,
+        width: 40, height: 40, borderRadius: 10, background: tint(8, color),
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <Icon size={18} color={color} />
+        <Ico lucide={Icon} ti={ti} size={18} color={color} />
       </div>
-      <div style={{ fontSize: 13, fontWeight: 600, color: BX.ink }}>{label}</div>
-      <div style={{ fontSize: 12, color: BX.muted }}>{desc}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: C.bxInk }}>{label}</div>
+      <div style={{ fontSize: 12, color: C.bxMuted }}>{desc}</div>
     </button>
   );
 }
@@ -238,38 +234,38 @@ function StreamingPanel({ onToast }) {
   };
 
   return (
-    <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 20, padding: '20px', fontFamily: FONT }}>
+    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 20, padding: '20px', fontFamily: C.font }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-        <Video size={16} color={AMBER} />
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: INK, margin: 0 }}>Streaming Platforms</h3>
+        <Ico lucide={Video} ti="ti-video" size={16} color={C.brand} />
+        <h3 style={{ fontSize: 14, fontWeight: 700, color: C.ink, margin: 0 }}>Streaming Platforms</h3>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {state === null
           ? [0, 1, 2].map((i) => <Skeleton key={i} height={44} />)
           : state.map((p) => {
-            const meta = STREAM_META[p.platform] ?? { label: p.platform, color: MUTED };
+            const meta = STREAM_META[p.platform] ?? { label: p.platform, color: C.muted };
             const sub = p.connected
               ? (p.method === 'oauth' ? 'Connected · OAuth' : 'Connected · Manual link')
               : 'Not connected';
             return (
-              <div key={p.platform} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: `1px solid ${BORDER}`, borderRadius: 12 }}>
-                <div style={{ width: 30, height: 30, borderRadius: 8, background: `${meta.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <Video size={15} color={meta.color} />
+              <div key={p.platform} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 12 }}>
+                <div style={{ width: 30, height: 30, borderRadius: 8, background: tint(8, meta.color), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Ico lucide={Video} ti="ti-video" size={15} color={meta.color} />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: INK }}>{meta.label}</div>
-                  <div style={{ fontSize: 10.5, color: p.connected ? GREEN : MUTED, display: 'flex', alignItems: 'center', gap: 3 }}>
-                    {p.connected && <CheckCircle2 size={10} />}{sub}
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: C.ink }}>{meta.label}</div>
+                  <div style={{ fontSize: 10.5, color: p.connected ? GREEN : C.muted, display: 'flex', alignItems: 'center', gap: 3 }}>
+                    {p.connected && <Ico lucide={CheckCircle2} ti="ti-circle-check" size={10} />}{sub}
                   </div>
                 </div>
                 {p.connected ? (
-                  <Btn size="sm" variant="ghost" disabled={busy === p.platform} onClick={() => disconnect(p)} style={{ color: MUTED }}>
+                  <Btn size="sm" variant="ghost" disabled={busy === p.platform} onClick={() => disconnect(p)} style={{ color: C.muted }}>
                     {busy === p.platform ? '…' : 'Disconnect'}
                   </Btn>
                 ) : (
                   <div style={{ display: 'flex', gap: 6 }}>
                     <Btn size="sm" variant="outline" onClick={() => startOAuth(p.platform)}>Connect</Btn>
-                    <Btn size="sm" variant="ghost" onClick={() => setConnectFor(p.platform)} style={{ color: MUTED }}>Use link</Btn>
+                    <Btn size="sm" variant="ghost" onClick={() => setConnectFor(p.platform)} style={{ color: C.muted }}>Use link</Btn>
                   </div>
                 )}
               </div>
@@ -280,7 +276,7 @@ function StreamingPanel({ onToast }) {
       <Modal open={!!connectFor} onClose={() => { setConnectFor(null); setRoomUrl(''); setHostEmail(''); }}
         title={`Connect ${STREAM_META[connectFor]?.label ?? ''} with a link`}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <p style={{ fontSize: 12.5, color: MUTED, margin: 0, fontFamily: FONT, lineHeight: 1.5 }}>
+          <p style={{ fontSize: 12.5, color: C.muted, margin: 0, fontFamily: C.font, lineHeight: 1.5 }}>
             Prefer <b>Connect</b> to authorize with your account so links are generated automatically.
             Or paste a personal meeting room link to reuse for every session.
           </p>

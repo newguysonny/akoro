@@ -4,6 +4,8 @@ import AkoroLogo from './common/AkoroLogo.jsx';
 import { Home, BookOpen, Eye, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings, UserCircle, ShieldCheck, Store, Library, LayoutGrid, FileText, ClipboardList, ClipboardCheck, ListChecks, BookMarked, CalendarDays, CalendarClock, GraduationCap, Menu, Search, ChevronDown, Wallet, BookOpenCheck, X, MessageCircleQuestion } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import AppHeader, { ReferenceChatIcon } from './AppHeader.jsx';
+import NextLayout from './NextLayout.jsx';
+import { isNextUi } from '../theme/uiMode.js';
 
 /* Setup progress for the header ring — a fraction of the profile that is
    actually filled in (plus an app-specific extra, e.g. a created business).
@@ -100,7 +102,7 @@ function NavItem({ to, icon: Icon, label, compact }) {
 /* Pending join-request count for the nav badge — event-driven over the
    socket (join-requests-changed) instead of polling every minute: the
    platform's command quota is spent on learners, not on idle badges. */
-function useJoinRequestCount() {
+export function useJoinRequestCount() {
   const [count, setCount] = useState(0);
   const { user } = useAuth();
   const { on, off } = useInstructorSocket(user?.id);
@@ -425,7 +427,13 @@ export function useIsMobile() {
   return mobile;
 }
 
-export function PageLayout({ children, title, subtitle, action, hideTopBarOnMobile = false }) {
+// The page frame: the legacy layout, or the shared frame when this browser is on
+// the next look (?ui=next — src/theme/uiMode.js). The mode is fixed at start-up.
+export function PageLayout(props) {
+  return isNextUi() ? <NextLayout {...props}/> : <LegacyPageLayout {...props}/>;
+}
+
+function LegacyPageLayout({ children, title, subtitle, action, hideTopBarOnMobile = false }) {
   const [collapsed, setCollapsed] = useState(false);
   const mobile = useIsMobile();
   const { user, logout } = useAuth();

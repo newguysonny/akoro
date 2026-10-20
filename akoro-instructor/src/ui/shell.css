@@ -1,0 +1,48 @@
+/* GENERATED from design-system/ui/shell.css — edit it there, then run: node design-system/sync.mjs */
+/* shell.css — the shared frame's layout rules (the learner app's sidebar
+   rules from akoro-learner/src/index.css, plus the console groups). */
+.ak-sidebar {
+  width: 240px;
+  transition: width .15s;
+  flex-shrink: 0;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--ak-surface);
+  border-right: 1px solid var(--ak-border);
+  display: flex;
+  flex-direction: column;
+}
+.ak-sidebar.ak-collapsed { width: 76px; }
+.ak-collapsed .ak-sb-label,
+.ak-collapsed .ak-sb-brand-text,
+.ak-collapsed .ak-sb-section,
+.ak-collapsed .ak-sb-chevron { display: none !important; }
+.ak-collapsed .ak-sb-brand { padding: 20px 0 14px; justify-content: center; }
+.ak-collapsed .ak-sb-item {
+  justify-content: center;
+  gap: 0;
+  padding: 12px 0;
+  margin: 3px auto;
+  width: 48px;
+}
+.ak-collapsed .ak-sb-badge {
+  position: absolute;
+  top: 3px;
+  left: calc(50% + 7px);
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  font-size: 9px;
+}
+.ak-sb-item:hover:not(.ak-active) { background: var(--ak-surface-hover) !important; }
+.ak-sb-child:hover:not(.ak-active) { background: var(--ak-surface-hover); }
+
+/* Phone (≤768px): no sidebar — the bottom nav and its More sheet carry the nav. */
+.ak-bottom-nav { display: none; }
+@media (max-width: 768px) {
+  .ak-sidebar { display: none; }
+  .ak-sb-toggle { display: none !important; }
+  .ak-bottom-nav { display: flex; }
+  .ak-shell-main { padding-bottom: 84px !important; }
+  .ak-hdr-wide { display: none !important; }
+}

@@ -1,0 +1,63 @@
+/* GENERATED from design-system/ui/base.css — edit it there, then run: node design-system/sync.mjs */
+/* base.css — the learner app's theme-independent scaffolding (from
+   akoro-learner/src/index.css): radius, type, space, layers, motion and the
+   status hues. Theme colours come from theme.jsx. The focus ring and the
+   font apply only to the next look ([data-ui="next"]), so a console's
+   legacy look is untouched. */
+:root {
+  /* Radius — the 5 shapes the app actually draws (maps 17 legacy values:
+     ≤9→sm, 10–13→md, 14–18→lg, 20–24→xl, 50%/99/100→full). */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+  --r-full: 999px;
+
+  /* Type — 5 steps cover the 38 legacy sizes (half-points snap to nearest). */
+  --fs-xs: 10px;
+  --fs-sm: 12px;
+  --fs-md: 13.5px;
+  --fs-lg: 16px;
+  --fs-xl: 21px;
+
+  /* Space — 4px base grid. */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-6: 24px;
+  --s-8: 32px;
+
+  /* Z-index — named layers, replaces 27 loose values. Order matters:
+     nav < bar < fab < sheet-backdrop < sheet < toast. */
+  --z-nav: 200;
+  --z-bar: 850;
+  --z-fab: 900;
+  --z-sheet-back: 2000;
+  --z-sheet: 2100;
+  --z-toast: 4000;
+
+  /* Motion — the three durations the app already gravitated to, plus its
+     de-facto spring curve (bottom sheets use it everywhere). */
+  --t-fast: .15s;
+  --t-med: .2s;
+  --t-slow: .3s;
+  --ease-spring: cubic-bezier(.32, 1.2, .64, 1);
+
+  /* Status — mid-lightness hues that read on light AND dark backgrounds.
+     For status TEXT with proper contrast per theme, use the theme tokens
+     --ak-success-text / --ak-warn-text / --ak-danger-text in ThemeContext. */
+  --ak-success: #10B981;
+  --ak-warn: #F59E0B;
+  --ak-danger: #EF4444;
+}
+
+[data-ui="next"] :focus-visible {
+  outline: 2px solid var(--ak-brand, #6C3BFF) !important;
+  outline-offset: 2px;
+}
+[data-ui="next"] body {
+  font-family: var(--ak-font);
+  color: var(--ak-text);
+  background: var(--ak-bg);
+}

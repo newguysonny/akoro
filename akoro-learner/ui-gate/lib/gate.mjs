@@ -39,6 +39,8 @@ export const TESTER = /^tester\d{2}$/i;
 export const DEVICES = {
   // An Android phone with touch — how most learners use the app.
   phone: { ...pwDevices['Pixel 7'] },
+  // An iPad Air in portrait: the console rebuild's collapsed-rail size.
+  tablet: { viewport: { width: 820, height: 1180 }, deviceScaleFactor: 1, hasTouch: true },
   desktop: { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 },
 };
 

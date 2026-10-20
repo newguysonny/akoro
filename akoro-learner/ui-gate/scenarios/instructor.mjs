@@ -9,7 +9,39 @@
  */
 import { historyPagesCheck } from './chat.mjs';
 
+// Every instructor route with no id in it (the console rebuild's baseline and
+// its legacy/next pairs — reference/Akoro Console Rebuild — Plan.md).
+export const INSTRUCTOR_ROUTES = [
+  '/', '/courses', '/courses/schedule', '/courses/manage', '/course-creator', '/course-creator/courses', '/course-creator/library',
+  '/sales', '/orders', '/students', '/battles', '/tasks', '/self-study', '/activities', '/submissions', '/wallet',
+  '/lesson-review', '/documents', '/assessments', '/chat',
+  '/mgmt/students', '/mgmt/join-requests', '/mgmt/attendance', '/mgmt/behavior', '/mgmt/curriculum', '/mgmt/syllabus',
+  '/mgmt/subjects', '/mgmt/gradebook', '/mgmt/my-timetable', '/mgmt/timetable', '/mgmt/weekly-forecast', '/mgmt/daily-schedule',
+  '/settings', '/agent-tools', '/profile', '/marketplace', '/apps', '/library', '/notifications', '/privacy', '/terms',
+];
+
 export const scenarios = [
+  {
+    name: 'instructor.routes_baseline',
+    portal: 'instructor',
+    description: 'A screenshot of every instructor route (no ids) — the console rebuild\'s before/after record. UI_GATE_UI=legacy|next adds ?ui= to each; UI_GATE_THEME=dark sets the dark theme. For a person to look at; a route that throws is a failed check.',
+    async run(t) {
+      const { page } = t;
+      const ui = process.env.UI_GATE_UI || '';
+      const theme = process.env.UI_GATE_THEME || '';
+      if (theme) await page.addInitScript((m) => { try { localStorage.setItem('akoro_display_mode', m); } catch { /* private mode */ } }, theme);
+      const errors = [];
+      page.on('pageerror', (e) => errors.push(`${page.url()}: ${e.message}`));
+      for (const route of INSTRUCTOR_ROUTES) {
+        const url = `${t.app}${route}${ui ? `${route.includes('?') ? '&' : '?'}ui=${ui}` : ''}`;
+        await page.goto(url, { waitUntil: 'domcontentloaded' }).catch(() => {});
+        await page.waitForTimeout(2500);
+        await t.shot(`${(route === '/' ? 'home' : route.slice(1)).replace(/\//g, '_')}${ui ? `.${ui}` : ''}${theme ? `.${theme}` : ''}`);
+      }
+      t.note(`${INSTRUCTOR_ROUTES.length} routes`);
+      t.check('no route threw', errors.length === 0, { errors: errors.slice(0, 10) });
+    },
+  },
   {
     name: 'instructor.chat_history_pages',
     portal: 'instructor',
