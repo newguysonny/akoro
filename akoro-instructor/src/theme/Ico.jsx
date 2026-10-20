@@ -5,7 +5,8 @@
 import { Icon } from '../ui/Icon.jsx';
 import { isNextUi } from './uiMode.js';
 
-export function Ico({ lucide: Lucide, ti, size = 16, color, style, ...rest }) {
-  if (isNextUi() && ti) return <Icon name={ti} size={size} color={color} style={style}/>;
-  return Lucide ? <Lucide size={size} color={color} style={style} {...rest}/> : null;
+export function Ico({ lucide: Lucide, ti, size = 16, color, style, className, ...rest }) {
+  // className (e.g. "spinner") applies on both looks.
+  if (isNextUi() && ti) return <Icon name={ti} size={size} color={color} style={style} className={className}/>;
+  return Lucide ? <Lucide size={size} color={color} style={style} className={className} {...rest}/> : null;
 }
