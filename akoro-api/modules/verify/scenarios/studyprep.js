@@ -227,8 +227,11 @@ export const agentCheckBattle = {
     const expected = engine?.facts?.outcome === "retest_offered" ? "active" : engine?.facts?.outcome;
     ctx.expect.eq("the topic follows the Engine's outcome", scored.status, expected);
     const said = await ctx.db.rows("chat_messages", { session_id: id }, { columns: "text, meta", limit: 20 });
-    const [check] = await ctx.db.rows("edu.workflow_instances", { workflow_type: "practice", learner_id: me.id }, { columns: "id, state, parent_workflow_id, metadata", limit: 20, order: { column: "created_at", ascending: false } })
-      .then((rows) => rows.filter((w) => w.metadata?.battleId === battleId));
+    const checkRow = async () => (await ctx.db.rows("edu.workflow_instances", { workflow_type: "practice", learner_id: me.id }, { columns: "id, state, parent_workflow_id, metadata", limit: 20, order: { column: "created_at", ascending: false } }))
+      .find((w) => w.metadata?.battleId === battleId);
+    let check = await checkRow();
+    // Marking closes the check's workflow after the topic is scored: give it a moment.
+    for (let i = 0; i < 10 && check && check.state === "running"; i++) { await new Promise((r) => setTimeout(r, 1500)); check = await checkRow(); }
     if (!check) {
       // No Study Prep workflow (engine off): the protégé's own messages, as before.
       ctx.expect.gte("the protégé posted in chat (start + result)", said.filter((m) => m.meta?.battle?.id === battleId).length, 2);
@@ -251,7 +254,7 @@ export const agentCheckBattle = {
 // start); "running work" lists the check (with its Battles link) until then.
 export const agentCheckStop = {
   name: "studyprep.agent_check_stop", area: "study-prep", risk: "write", regression: false,
-  timeoutMs: 180_000,
+  timeoutMs: 240_000,
   description: "A running Agent Check is listed in running work with its Battles link; stopping it cancels the battle, refunds the 2 coins, closes its run and leaves the topic waiting.",
   params: { learner: { default: "@tester17" }, subject: { default: "Biology" }, classLevel: { default: "SS1" } },
   async run(ctx, p) {

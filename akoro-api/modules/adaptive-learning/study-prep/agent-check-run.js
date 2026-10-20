@@ -79,6 +79,7 @@ export function makeAgentCheckRun({ engine, findByBattle, studyPrep, now = () =>
     const label = auto ? (retest ? "The retest started by itself" : "The Agent Check started by itself") : (retest ? "You started the retest" : "You started the Agent Check");
     // The run's message carries the check's own card.
     await studyPrep.openWake?.({ sessionId: session.id, learnerId: session.learner_id, wakeId: runId, trigger: "check_started", label,
+      threadTitle: `Study Prep: ${session.goal || session.subject || "your plan"}`,
       extraMeta: { agentCheck: { workflowId: child.id, battleId, topic: topic.label, mode, total: questions, title } } }).catch(quiet("run message"));
     await toParent(parentId, { event_type: "operation.started", category: "action", operation: "wake", payload: { operation: "wake", wakeId: runId, trigger: "check_started", label } });
     await toolPair(parentId, runId, { tool: START_CHECK_TOOL, headline: `Agent Check created: ${topic.label}${retest ? " (retest)" : ""}`, resultLine: `In Battles · ${questions} questions · ${coins} coins` });

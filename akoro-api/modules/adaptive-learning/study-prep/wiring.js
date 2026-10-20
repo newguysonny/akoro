@@ -159,9 +159,14 @@ export const teachingHandoff = () => (_handoff ||= makeTeachingHandoff({
 registerWorkflow(studyPrepWorkflow, { onChildOutcome: (parent, args) => teachingHandoff().controller.onChildOutcome(parent, args) });
 
 /** A code-written run's own message in the chat the plan lives in (like a wake's); extraMeta rides along (a check's card). */
-async function openRunMessage({ sessionId, learnerId, wakeId, trigger, label, extraMeta = null }) {
+async function openRunMessage({ sessionId, learnerId, wakeId, trigger, label, extraMeta = null, createThread = null }) {
+  const meta = { studyPrepWake: { sessionId, wakeId, trigger, label }, ...(extraMeta || {}) };
   const conversationId = await conversationOf(sessionId, learnerId).catch(() => null);
-  if (conversationId) await postToConversation({ learnerId, conversationId, text: label, meta: { studyPrepWake: { sessionId, wakeId, trigger, label }, ...(extraMeta || {}) } });
+  if (conversationId) return postToConversation({ learnerId, conversationId, text: label, meta });
+  // No chat thread for this plan yet: the protégé's Study Prep thread (as protege.say makes it).
+  if (!createThread) return null;
+  const { postIntoChat } = await import("../../self-tooling/escalation.js");
+  return postIntoChat({ userId: learnerId, conversationId: null, createId: sessionId, title: createThread.slice(0, 80), text: label, kind: "agent_check", meta: { ...meta, studyPrepSessionId: sessionId } });
 }
 
 // ── The Agent Check's own workflow and run (2026-10-20) ─────────────────────
@@ -169,7 +174,7 @@ let _checkRun = null;
 export const agentCheckRun = () => (_checkRun ||= makeAgentCheckRun({
   engine: workflowEngine(),
   findByBattle: (battleId) => findCheckByBattle(battleId),
-  studyPrep: { openWake: openRunMessage },
+  studyPrep: { openWake: (m) => openRunMessage({ ...m, createThread: m.threadTitle || "Study Prep" }) },
 }));
 const checkRunOrNull = () => (workflowEngineEnabled() ? agentCheckRun() : null);
 
@@ -195,7 +200,7 @@ async function liveStudyPrepSession(learnerId) {
  */
 export async function stopAgentCheck({ learnerId, restart = false }) {
   const row = await liveStudyPrepSession(learnerId);
-  if (!row || row.status !== "topic_active") return { stopped: false, reason: "no_study_plan_running" };
+  if (!row) return { stopped: false, reason: "no_study_plan_running" };
   const harness = getHarness();
   const view = await harness.getSessionView({ sessionId: row.id, learnerId, eventLimit: 1 });
   const topic = view.topics.find((t) => t.status === "active" && t.checkBattleId && !t.checkScoredAt);
