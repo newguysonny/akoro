@@ -14,11 +14,15 @@ import {
   loadListingId, saveListingId,
 } from '../../services/settingsApi.js';
 import { apiGet, apiPut } from '../../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, FONT } from '../../constants.js';
+import { GREEN, RED } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
+import { Ico } from '../../theme/Ico.jsx';
 
 
-const BRAND = AMBER;
-const FONTF = FONT;
+const BRAND = C.brand;
+/* Data, not styling: the stored default accent/agent colour is the literal hex (saved to the API as before). */
+const ACCENT_DEFAULT = '#E8884A';
+const FONTF = C.font;
 
 /* ─── Reference data ──────────────────────────────────────────── */
 const ALL_SUBJECTS = [
@@ -31,22 +35,22 @@ const SCHOOL_TYPES = ['Primary School', 'Junior Secondary School', 'Senior Secon
 const COUNTRIES    = ['Nigeria', 'Ghana', 'Kenya', 'South Africa', 'Uganda', 'Tanzania', 'UK', 'USA', 'Canada', 'Other'];
 /* Icon choices render as lucide icons; the paired emoji is what we store in
    agent_emoji so the learner/admin apps (which still render emoji) stay in sync. */
-const AGENT_ICONS = [[Bot, '🤖'], [Brain, '🧠'], [Gamepad2, '👾'], [Bird, '🦉'], [GraduationCap, '🎓'], [Zap, '⚡'], [Sparkles, '🌟'], [Wand2, '🔮'], [Flower2, '🦋'], [Target, '🎯'], [Rocket, '🚀'], [Lightbulb, '💡'], [Squirrel, '🦁'], [Dog, '🐺'], [Rabbit, '🦊'], [Drama, '🎭'], [Trophy, '🏆'], [Gem, '💎']];
-const ACCENTS      = [AMBER, '#6C3BFF', '#3B82F6', '#10B981', '#EC4899', '#F59E0B', '#EF4444', '#8B5CF6'];
+const AGENT_ICONS = [[Bot, '🤖', 'ti-robot'], [Brain, '🧠', 'ti-brain'], [Gamepad2, '👾', 'ti-device-gamepad-2'], [Bird, '🦉', 'ti-feather'], [GraduationCap, '🎓', 'ti-school'], [Zap, '⚡', 'ti-bolt'], [Sparkles, '🌟', 'ti-sparkles'], [Wand2, '🔮', 'ti-wand'], [Flower2, '🦋', 'ti-flower'], [Target, '🎯', 'ti-target'], [Rocket, '🚀', 'ti-rocket'], [Lightbulb, '💡', 'ti-bulb'], [Squirrel, '🦁', 'ti-paw'], [Dog, '🐺', 'ti-dog'], [Rabbit, '🦊', 'ti-paw'], [Drama, '🎭', 'ti-masks-theater'], [Trophy, '🏆', 'ti-trophy'], [Gem, '💎', 'ti-diamond']];
+const ACCENTS      = ['#E8884A', '#6C3BFF', '#3B82F6', '#10B981', '#EC4899', '#F59E0B', '#EF4444', '#8B5CF6'];
 
 /* ─── Micro-components ────────────────────────────────────────── */
 function ProgressBar({ pct, color }) {
   return (
-    <div style={{ height: 5, background: '#F3F4F6', borderRadius: 99, overflow: 'hidden' }}>
-      <div style={{ height: '100%', width: `${pct}%`, borderRadius: 99, background: `linear-gradient(90deg,${color},${color}CC)` }} />
+    <div style={{ height: 5, background: C.tagBg, borderRadius: 99, overflow: 'hidden' }}>
+      <div style={{ height: '100%', width: `${pct}%`, borderRadius: 99, background: `linear-gradient(90deg,${color},${tint(80, color)})` }} />
     </div>
   );
 }
 function SubjectChip({ label, onRemove, color = BRAND }) {
   return (
-    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 20, background: `${color}10`, border: `1px solid ${color}25`, fontSize: 12, fontWeight: 700, color }}>
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 20, background: tint(6, color), border: `1px solid ${tint(15, color)}`, fontSize: 12, fontWeight: 700, color }}>
       {label}
-      {onRemove && <span onClick={(e) => { e.stopPropagation(); onRemove(label); }} style={{ width: 14, height: 14, borderRadius: '50%', background: `${color}25`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', marginLeft: 1, fontSize: 9 }}>✕</span>}
+      {onRemove && <span onClick={(e) => { e.stopPropagation(); onRemove(label); }} style={{ width: 14, height: 14, borderRadius: '50%', background: tint(15, color), display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', marginLeft: 1, fontSize: 9 }}>✕</span>}
     </div>
   );
 }
@@ -54,27 +58,27 @@ function Section({ title, children }) {
   return (
     <div style={{ marginBottom: 20 }}>
       <p style={{ fontSize: 11, fontWeight: 900, color: BRAND, letterSpacing: 1.5, textTransform: 'uppercase', padding: '0 0', margin: '0 0 8px', fontFamily: FONTF }}>{title}</p>
-      <div style={{ background: '#fff', borderRadius: 16, boxShadow: '0 1px 4px rgba(0,0,0,.05)', overflow: 'hidden', border: `1px solid ${BORDER}` }}>{children}</div>
+      <div style={{ background: C.surface, borderRadius: 16, boxShadow: '0 1px 4px rgba(0,0,0,.05)', overflow: 'hidden', border: `1px solid ${C.border}` }}>{children}</div>
     </div>
   );
 }
-const rowBase = { display: 'flex', alignItems: 'center', padding: '13px 16px', borderBottom: `1px solid ${BORDER}`, background: '#fff', fontFamily: FONTF };
-function Row({ icon: Icon, label, value, sub, onClick, noArrow, children }) {
+const rowBase = { display: 'flex', alignItems: 'center', padding: '13px 16px', borderBottom: `1px solid ${C.border}`, background: C.surface, fontFamily: FONTF };
+function Row({ icon: Icon, ti, label, value, sub, onClick, noArrow, children }) {
   return (
     <div style={{ ...rowBase, cursor: onClick ? 'pointer' : 'default' }}
-      onMouseEnter={(e) => onClick && (e.currentTarget.style.background = LIGHT)}
-      onMouseLeave={(e) => (e.currentTarget.style.background = '#fff')}
+      onMouseEnter={(e) => onClick && (e.currentTarget.style.background = C.bg)}
+      onMouseLeave={(e) => (e.currentTarget.style.background = C.surface)}
       onClick={onClick}>
       <span style={{ width: 28, flexShrink: 0, display: 'flex', alignItems: 'center' }}>
-        {Icon && <Icon size={17} color={MUTED} />}
+        {Icon && <Ico lucide={Icon} ti={ti} size={17} color={C.muted} />}
       </span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 13.5, fontWeight: 700, margin: 0, color: INK }}>{label}</p>
-        {sub && <p style={{ fontSize: 11.5, color: MUTED2, marginTop: 2, margin: 0 }}>{sub}</p>}
+        <p style={{ fontSize: 13.5, fontWeight: 700, margin: 0, color: C.ink }}>{label}</p>
+        {sub && <p style={{ fontSize: 11.5, color: C.muted2, marginTop: 2, margin: 0 }}>{sub}</p>}
       </div>
-      {value !== undefined && <span style={{ fontSize: 12.5, fontWeight: 600, color: MUTED, marginRight: 4, flexShrink: 0 }}>{value}</span>}
+      {value !== undefined && <span style={{ fontSize: 12.5, fontWeight: 600, color: C.muted, marginRight: 4, flexShrink: 0 }}>{value}</span>}
       {children}
-      {onClick && !noArrow && <ChevronRight size={16} color="#D1D5DB" />}
+      {onClick && !noArrow && <Ico lucide={ChevronRight} ti="ti-chevron-right" size={16} color="#D1D5DB" />}
     </div>
   );
 }
@@ -83,11 +87,11 @@ function Row({ icon: Icon, label, value, sub, onClick, noArrow, children }) {
 function AvatarCircle({ photoUrl, monogram, color, size = 60, onPhotoClick }) {
   return (
     <div style={{ position: 'relative', flexShrink: 0 }}>
-      <div style={{ width: size, height: size, borderRadius: '50%', background: `${color}18`, border: `2px solid ${color}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer' }} onClick={onPhotoClick}>
+      <div style={{ width: size, height: size, borderRadius: '50%', background: tint(9, color), border: `2px solid ${tint(25, color)}`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer' }} onClick={onPhotoClick}>
         {photoUrl ? <img src={photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />  : <span style={{ fontSize: size * 0.38, fontWeight: 900, color }}>{String(monogram || '?').trim().charAt(0).toUpperCase() || '?'}</span>}
       </div>
-      <div style={{ position: 'absolute', bottom: 0, right: 0, width: 20, height: 20, borderRadius: '50%', background: color, border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} onClick={onPhotoClick}>
-        <Pencil size={9} color="#fff" />
+      <div style={{ position: 'absolute', bottom: 0, right: 0, width: 20, height: 20, borderRadius: '50%', background: color, border: `2px solid ${C.surface}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} onClick={onPhotoClick}>
+        <Ico lucide={Pencil} ti="ti-pencil" size={9} color="#fff" />
       </div>
     </div>
   );
@@ -98,7 +102,7 @@ function Sheet({ children, onClose }) {
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,.45)', backdropFilter: 'blur(4px)' }} />
-      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 3100, background: '#fff', borderRadius: '22px 22px 0 0', padding: '0 18px 40px', boxShadow: '0 -8px 40px rgba(0,0,0,.12)', animation: 'sheet-up .3s ease', fontFamily: FONTF, maxHeight: '88vh', overflowY: 'auto', maxWidth: 480, margin: '0 auto' }}>
+      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 3100, background: C.surface, borderRadius: '22px 22px 0 0', padding: '0 18px 40px', boxShadow: '0 -8px 40px rgba(0,0,0,.12)', animation: 'sheet-up .3s ease', fontFamily: FONTF, maxHeight: '88vh', overflowY: 'auto', maxWidth: 480, margin: '0 auto' }}>
         <div style={{ width: 36, height: 4, borderRadius: 2, background: '#D1D5DB', margin: '14px auto 18px' }} />
         {children}
       </div>
@@ -108,8 +112,8 @@ function Sheet({ children, onClose }) {
 function SheetButtons({ onClose, onSave, saveLabel = 'Save', danger, disabled }) {
   return (
     <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-      <button onClick={onClose} style={{ flex: 1, padding: '13px', borderRadius: 14, border: `1.5px solid ${BORDER}`, background: LIGHT, fontSize: 13, fontWeight: 800, color: MUTED, cursor: 'pointer', fontFamily: FONTF }}>Cancel</button>
-      <button onClick={onSave} disabled={disabled} style={{ flex: 1.5, padding: '13px', borderRadius: 14, border: 'none', background: disabled ? '#E5E7EB' : danger ? RED : `linear-gradient(135deg,${BRAND},#D4651E)`, color: disabled ? '#9CA3AF' : '#fff', fontSize: 13, fontWeight: 800, cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: FONTF }}>{saveLabel}</button>
+      <button onClick={onClose} style={{ flex: 1, padding: '13px', borderRadius: 14, border: `1.5px solid ${C.border}`, background: C.bg, fontSize: 13, fontWeight: 800, color: C.muted, cursor: 'pointer', fontFamily: FONTF }}>Cancel</button>
+      <button onClick={onSave} disabled={disabled} style={{ flex: 1.5, padding: '13px', borderRadius: 14, border: 'none', background: disabled ? '#E5E7EB' : danger ? RED : `linear-gradient(135deg,${BRAND},${C.brandDeep})`, color: disabled ? '#9CA3AF' : '#fff', fontSize: 13, fontWeight: 800, cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: FONTF }}>{saveLabel}</button>
     </div>
   );
 }
@@ -128,17 +132,17 @@ function AvatarPickerSheet({ current, onClose, onSavePhoto, onSaveEmoji, color }
   };
   return (
     <Sheet onClose={onClose}>
-      <p style={{ fontSize: 16, fontWeight: 900, color: INK, margin: '0 0 16px' }}>Change Photo</p>
-      <div style={{ display: 'flex', background: '#F3F4F6', borderRadius: 12, padding: 3, marginBottom: 20, gap: 3 }}>
+      <p style={{ fontSize: 16, fontWeight: 900, color: C.ink, margin: '0 0 16px' }}>Change Photo</p>
+      <div style={{ display: 'flex', background: C.tagBg, borderRadius: 12, padding: 3, marginBottom: 20, gap: 3 }}>
         {[['emoji', 'Choose icon'], ['photo', 'Upload photo']].map(([t, l]) => (
-          <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: '8px 0', borderRadius: 10, border: 'none', background: tab === t ? '#fff' : 'transparent', cursor: 'pointer', fontSize: 12.5, fontWeight: 800, fontFamily: FONTF, color: tab === t ? INK : MUTED, boxShadow: tab === t ? '0 1px 4px rgba(0,0,0,.08)' : 'none' }}>{l}</button>
+          <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: '8px 0', borderRadius: 10, border: 'none', background: tab === t ? C.surface : 'transparent', cursor: 'pointer', fontSize: 12.5, fontWeight: 800, fontFamily: FONTF, color: tab === t ? C.ink : C.muted, boxShadow: tab === t ? '0 1px 4px rgba(0,0,0,.08)' : 'none' }}>{l}</button>
         ))}
       </div>
       {tab === 'emoji' && (
         <>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
-            {AGENT_ICONS.map(([Icon, em]) => (
-              <div key={em} onClick={() => setSelEmoji(em)} style={{ width: 46, height: 46, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: selEmoji === em ? `${color}15` : LIGHT, border: `1.5px solid ${selEmoji === em ? color : BORDER}` }}><Icon size={22} color={selEmoji === em ? color : MUTED} /></div>
+            {AGENT_ICONS.map(([Icon, em, ti]) => (
+              <div key={em} onClick={() => setSelEmoji(em)} style={{ width: 46, height: 46, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: selEmoji === em ? tint(8, color) : C.bg, border: `1.5px solid ${selEmoji === em ? color : C.border}` }}><Ico lucide={Icon} ti={ti} size={22} color={selEmoji === em ? color : C.muted} /></div>
             ))}
           </div>
           <SheetButtons onClose={onClose} onSave={() => { onSaveEmoji(selEmoji); onClose(); }} saveLabel="Save Emoji" />
@@ -153,10 +157,10 @@ function AvatarPickerSheet({ current, onClose, onSavePhoto, onSaveEmoji, color }
               <button onClick={() => setPreview(null)} style={{ fontSize: 12.5, fontWeight: 700, color: RED, background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONTF }}>Remove photo</button>
             </div>
           ) : (
-            <div onClick={() => fileRef.current?.click()} style={{ border: `2px dashed ${BORDER}`, borderRadius: 16, padding: '32px 20px', textAlign: 'center', cursor: 'pointer', marginBottom: 20 }}>
-              <Upload size={28} color={MUTED2} style={{ display: 'block', margin: '0 auto 10px' }} />
-              <p style={{ fontSize: 14, fontWeight: 800, color: INK, margin: '0 0 4px' }}>Tap to upload photo</p>
-              <p style={{ fontSize: 12, color: MUTED2, margin: 0 }}>JPG, PNG or WebP · Max 5MB</p>
+            <div onClick={() => fileRef.current?.click()} style={{ border: `2px dashed ${C.border}`, borderRadius: 16, padding: '32px 20px', textAlign: 'center', cursor: 'pointer', marginBottom: 20 }}>
+              <Ico lucide={Upload} ti="ti-upload" size={28} color={C.muted2} style={{ display: 'block', margin: '0 auto 10px' }} />
+              <p style={{ fontSize: 14, fontWeight: 800, color: C.ink, margin: '0 0 4px' }}>Tap to upload photo</p>
+              <p style={{ fontSize: 12, color: C.muted2, margin: 0 }}>JPG, PNG or WebP · Max 5MB</p>
             </div>
           )}
           <SheetButtons onClose={onClose} onSave={() => { if (preview) { onSavePhoto(preview); onClose(); } }} saveLabel="Save Photo" disabled={!preview} />
@@ -176,19 +180,19 @@ function SubjectsSheet({ current, onClose, onSave, color = BRAND }) {
   return (
     <Sheet onClose={onClose}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <p style={{ fontSize: 16, fontWeight: 900, color: INK, margin: 0 }}>Subjects You Teach</p>
-        <span style={{ fontSize: 12, color: MUTED, fontWeight: 600 }}>{selected.length} selected</span>
+        <p style={{ fontSize: 16, fontWeight: 900, color: C.ink, margin: 0 }}>Subjects You Teach</p>
+        <span style={{ fontSize: 12, color: C.muted, fontWeight: 600 }}>{selected.length} selected</span>
       </div>
       {selected.length > 0 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>{selected.map((s) => <SubjectChip key={s} label={s} color={color} onRemove={(x) => setSelected((p) => p.filter((y) => y !== x))} />)}</div>}
       <div style={{ position: 'relative', marginBottom: 10 }}>
-        <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: MUTED2 }} />
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search subjects…" style={{ width: '100%', padding: '10px 13px 10px 34px', borderRadius: 12, border: `1.5px solid ${BORDER}`, outline: 'none', fontSize: 13, fontFamily: FONTF, color: INK, boxSizing: 'border-box' }} />
+        <Ico lucide={Search} ti="ti-search" size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: C.muted2 }} />
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search subjects…" style={{ width: '100%', padding: '10px 13px 10px 34px', borderRadius: 12, border: `1.5px solid ${C.border}`, outline: 'none', fontSize: 13, fontFamily: FONTF, color: C.ink, boxSizing: 'border-box' }} />
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, maxHeight: 160, overflowY: 'auto', marginBottom: 14 }}>
-        {available.map((s) => <div key={s} onClick={() => { setSelected((p) => [...p, s]); setSearch(''); }} style={{ padding: '6px 12px', borderRadius: 20, border: `1px solid ${BORDER}`, background: LIGHT, fontSize: 12, fontWeight: 700, color: '#374151', cursor: 'pointer' }}>{s} +</div>)}
+        {available.map((s) => <div key={s} onClick={() => { setSelected((p) => [...p, s]); setSearch(''); }} style={{ padding: '6px 12px', borderRadius: 20, border: `1px solid ${C.border}`, background: C.bg, fontSize: 12, fontWeight: 700, color: '#374151', cursor: 'pointer' }}>{s} +</div>)}
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
-        <input value={custom} onChange={(e) => setCustom(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addCustom()} placeholder="Custom subject…" style={{ flex: 1, padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${BORDER}`, outline: 'none', fontSize: 13, fontFamily: FONTF, color: INK }} />
+        <input value={custom} onChange={(e) => setCustom(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addCustom()} placeholder="Custom subject…" style={{ flex: 1, padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${C.border}`, outline: 'none', fontSize: 13, fontFamily: FONTF, color: C.ink }} />
         <button onClick={addCustom} style={{ padding: '11px 16px', borderRadius: 12, border: 'none', background: custom.trim() ? BRAND : '#E5E7EB', color: custom.trim() ? '#fff' : '#9CA3AF', fontSize: 13, fontWeight: 800, cursor: custom.trim() ? 'pointer' : 'default', fontFamily: FONTF, flexShrink: 0 }}>Add</button>
       </div>
       <SheetButtons onClose={onClose} onSave={() => { onSave(selected); onClose(); }} saveLabel="Save Subjects" />
@@ -199,17 +203,17 @@ function SubjectsSheet({ current, onClose, onSave, color = BRAND }) {
 /* ─── Generic field editor sheet ──────────────────────────────── */
 function GenericSheet({ label, type, options, value, onClose, onSave, field }) {
   const [val, setVal] = useState(value ?? '');
-  const inp = { width: '100%', padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${BORDER}`, outline: 'none', fontSize: 14, fontFamily: FONTF, color: INK, boxSizing: 'border-box', marginTop: 6 };
+  const inp = { width: '100%', padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${C.border}`, outline: 'none', fontSize: 14, fontFamily: FONTF, color: C.ink, boxSizing: 'border-box', marginTop: 6 };
   return (
     <Sheet onClose={onClose}>
-      <p style={{ fontSize: 16, fontWeight: 900, color: INK, margin: '0 0 16px' }}>{label}</p>
+      <p style={{ fontSize: 16, fontWeight: 900, color: C.ink, margin: '0 0 16px' }}>{label}</p>
       {type === 'text' && <input autoFocus value={val} onChange={(e) => setVal(e.target.value)} placeholder={`Enter ${label.toLowerCase()}`} style={inp} />}
       {type === 'textarea' && <textarea autoFocus value={val} onChange={(e) => setVal(e.target.value)} placeholder={`Enter ${label.toLowerCase()}`} rows={3} style={{ ...inp, resize: 'vertical', lineHeight: 1.6 }} />}
       {type === 'select' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {options.map((o) => (
-            <div key={o} onClick={() => setVal(o)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderRadius: 12, cursor: 'pointer', border: `1.5px solid ${val === o ? BRAND : BORDER}`, background: val === o ? `${BRAND}08` : '#fff' }}>
-              <div style={{ width: 18, height: 18, borderRadius: '50%', flexShrink: 0, border: `2px solid ${val === o ? BRAND : '#D1D5DB'}`, background: val === o ? BRAND : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div key={o} onClick={() => setVal(o)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderRadius: 12, cursor: 'pointer', border: `1.5px solid ${val === o ? BRAND : C.border}`, background: val === o ? tint(3, BRAND) : '#fff' }}>
+              <div style={{ width: 18, height: 18, borderRadius: '50%', flexShrink: 0, border: `2px solid ${val === o ? BRAND : '#D1D5DB'}`, background: val === o ? BRAND : C.surface, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {val === o && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />}
               </div>
               <span style={{ fontSize: 13.5, fontWeight: 700, color: val === o ? BRAND : '#374151' }}>{o}</span>
@@ -219,7 +223,7 @@ function GenericSheet({ label, type, options, value, onClose, onSave, field }) {
       )}
       {type === 'accent' && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-          {ACCENTS.map((c) => <div key={c} onClick={() => setVal(c)} style={{ width: 40, height: 40, borderRadius: '50%', background: c, cursor: 'pointer', border: `2px solid ${c}`, outline: val === c ? `3px solid ${INK}` : '3px solid transparent', outlineOffset: 2, transition: 'all .2s' }} />)}
+          {ACCENTS.map((c) => <div key={c} onClick={() => setVal(c)} style={{ width: 40, height: 40, borderRadius: '50%', background: c, cursor: 'pointer', border: `2px solid ${c}`, outline: val === c ? `3px solid ${C.ink}` : '3px solid transparent', outlineOffset: 2, transition: 'all .2s' }} />)}
         </div>
       )}
       <SheetButtons onClose={onClose} onSave={() => { onSave(field, val); onClose(); }} saveLabel="Save Changes" />
@@ -234,11 +238,11 @@ function PublishSheet({ agent, defaultTitle, subjects, onClose, onPublish }) {
   const [description, setDesc]  = useState(agent.personality || '');
   const [price, setPrice]       = useState('0');
   const [busy, setBusy]         = useState(false);
-  const inp = { width: '100%', padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${BORDER}`, outline: 'none', fontSize: 14, fontFamily: FONTF, color: INK, boxSizing: 'border-box', marginTop: 6 };
+  const inp = { width: '100%', padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${C.border}`, outline: 'none', fontSize: 14, fontFamily: FONTF, color: C.ink, boxSizing: 'border-box', marginTop: 6 };
   return (
     <Sheet onClose={onClose}>
-      <p style={{ fontSize: 16, fontWeight: 900, color: INK, margin: '0 0 6px' }}>Publish to Marketplace</p>
-      <p style={{ fontSize: 13, color: MUTED, margin: '0 0 18px', lineHeight: 1.5 }}>List your trained agent so students can discover and use it. You can unpublish anytime.</p>
+      <p style={{ fontSize: 16, fontWeight: 900, color: C.ink, margin: '0 0 6px' }}>Publish to Marketplace</p>
+      <p style={{ fontSize: 13, color: C.muted, margin: '0 0 18px', lineHeight: 1.5 }}>List your trained agent so students can discover and use it. You can unpublish anytime.</p>
       <label style={{ fontSize: 12, fontWeight: 800, color: '#374151' }}>Listing title</label>
       <input value={title} onChange={(e) => setTitle(e.target.value)} style={inp} />
       <label style={{ fontSize: 12, fontWeight: 800, color: '#374151', display: 'block', marginTop: 14 }}>Subject</label>
@@ -263,14 +267,14 @@ function PublishSheet({ agent, defaultTitle, subjects, onClose, onPublish }) {
 function SubjectsRow({ subjects, onClick, color = BRAND }) {
   return (
     <div style={{ ...rowBase, flexDirection: 'column', alignItems: 'stretch', cursor: 'pointer' }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = LIGHT)}
-      onMouseLeave={(e) => (e.currentTarget.style.background = '#fff')}
+      onMouseEnter={(e) => (e.currentTarget.style.background = C.bg)}
+      onMouseLeave={(e) => (e.currentTarget.style.background = C.surface)}
       onClick={onClick}>
       <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-        <span style={{ width: 28, flexShrink: 0, display: 'flex', alignItems: 'center' }}><BookOpen size={17} color={MUTED} /></span>
-        <div style={{ flex: 1 }}><p style={{ fontSize: 13.5, fontWeight: 700, margin: 0, color: INK }}>Subjects Taught</p></div>
-        <span style={{ fontSize: 12.5, fontWeight: 600, color: MUTED, marginRight: 4 }}>{subjects.length} added</span>
-        <ChevronRight size={16} color="#D1D5DB" />
+        <span style={{ width: 28, flexShrink: 0, display: 'flex', alignItems: 'center' }}><Ico lucide={BookOpen} ti="ti-book" size={17} color={C.muted} /></span>
+        <div style={{ flex: 1 }}><p style={{ fontSize: 13.5, fontWeight: 700, margin: 0, color: C.ink }}>Subjects Taught</p></div>
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: C.muted, marginRight: 4 }}>{subjects.length} added</span>
+        <Ico lucide={ChevronRight} ti="ti-chevron-right" size={16} color="#D1D5DB" />
       </div>
       {subjects.length > 0 && (
         <div style={{ paddingLeft: 28, paddingTop: 8, paddingBottom: 2, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -313,20 +317,20 @@ function ToolTemplatesSection() {
           <div key={target} style={{ ...rowBase, alignItems: 'center' }}>
             <span style={{ width: 28, flexShrink: 0, fontSize: 16 }}>{icon}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontSize: 13.5, fontWeight: 700, margin: 0, color: INK }}>{label}</p>
-              <p style={{ fontSize: 11.5, color: val ? GREEN : MUTED2, margin: '2px 0 0', fontWeight: val ? 700 : 400 }}>
+              <p style={{ fontSize: 13.5, fontWeight: 700, margin: 0, color: C.ink }}>{label}</p>
+              <p style={{ fontSize: 11.5, color: val ? GREEN : C.muted2, margin: '2px 0 0', fontWeight: val ? 700 : 400 }}>
                 {val ? 'Using template' : 'AI default (no template)'}
               </p>
             </div>
             <select value={val} onChange={(e) => choose(target, e.target.value)}
-              style={{ maxWidth: 150, padding: '7px 9px', borderRadius: 10, border: `1.5px solid ${val ? AMBER : BORDER}`, fontSize: 12.5, fontFamily: FONTF, color: INK, background: '#fff', cursor: 'pointer' }}>
+              style={{ maxWidth: 150, padding: '7px 9px', borderRadius: 10, border: `1.5px solid ${val ? C.brand : C.border}`, fontSize: 12.5, fontFamily: FONTF, color: C.ink, background: C.surface, cursor: 'pointer' }}>
               <option value="">AI default</option>
               {opts.map((o) => <option key={o.id} value={o.id}>{o.title}{o.is_sample ? ' (sample)' : ''}</option>)}
             </select>
           </div>
         );
       })}
-      <div style={{ padding: '10px 16px 12px', fontSize: 11.5, color: MUTED2, lineHeight: 1.5 }}>
+      <div style={{ padding: '10px 16px 12px', fontSize: 11.5, color: C.muted2, lineHeight: 1.5 }}>
         Pick a default template per tool. If none is chosen, the agent generates directly.
       </div>
     </Section>
@@ -338,46 +342,46 @@ function ProfileTab({ profile, setProfile, stats, onSaveField }) {
   const [sheet, setSheet]           = useState(null);
   const [subjectSheet, setSubSheet] = useState(false);
   const [avatarSheet, setAvSheet]   = useState(false);
-  const color = profile.accentColor || BRAND;
+  const color = profile.accentColor || ACCENT_DEFAULT;
   const open  = (field, label, type, options) => setSheet({ field, label, type, options });
 
   return (
     <div>
       {/* Header card */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#fff', marginBottom: 20, borderRadius: 18, padding: '18px 16px', border: `1px solid ${BORDER}`, boxShadow: '0 1px 6px rgba(0,0,0,.05)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, background: C.surface, marginBottom: 20, borderRadius: 18, padding: '18px 16px', border: `1px solid ${C.border}`, boxShadow: '0 1px 6px rgba(0,0,0,.05)' }}>
         <AvatarCircle photoUrl={profile.avatarUrl} monogram={profile.fullName} color={color} size={60} onPhotoClick={() => setAvSheet(true)} />
         <div style={{ flex: 1 }}>
-          <p style={{ margin: '0 0 2px', fontSize: 15, fontWeight: 900, color: INK }}>{profile.fullName || '—'}</p>
-          <p style={{ margin: '0 0 6px', fontSize: 12.5, color: MUTED }}>@{profile.username || profile.email?.split('@')[0]}</p>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: `${color}12`, borderRadius: 8, padding: '3px 10px' }}>
-            <GraduationCap size={11} color={color} />
+          <p style={{ margin: '0 0 2px', fontSize: 15, fontWeight: 900, color: C.ink }}>{profile.fullName || '—'}</p>
+          <p style={{ margin: '0 0 6px', fontSize: 12.5, color: C.muted }}>@{profile.username || profile.email?.split('@')[0]}</p>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: tint(7, color), borderRadius: 8, padding: '3px 10px' }}>
+            <Ico lucide={GraduationCap} ti="ti-school" size={11} color={color} />
             <span style={{ fontSize: 11, fontWeight: 800, color }}>Instructor</span>
           </div>
         </div>
       </div>
 
       <Section title="Personal Info">
-        <Row icon={User}         label="Full Name"  value={profile.fullName} onClick={() => open('fullName', 'Full Name', 'text')} />
-        <Row icon={AtSign}       label="Username"   value={`@${profile.username || '—'}`} onClick={() => open('username', 'Username', 'text')} />
-        <Row icon={Mail}         label="Email"      value={profile.email} />
-        <Row icon={Pencil}       label="Bio"        sub={(profile.bio || 'Tell students about yourself').slice(0, 44)} onClick={() => open('bio', 'Bio', 'textarea')} />
-        <Row icon={Phone}        label="Phone"      value={profile.phone || 'Not set'} onClick={() => open('phone', 'Phone Number', 'text')} />
-        <Row icon={MapPin}       label="Country"    value={profile.country || 'Not set'} onClick={() => open('country', 'Country', 'select', COUNTRIES)} />
+        <Row icon={User} ti="ti-user"         label="Full Name"  value={profile.fullName} onClick={() => open('fullName', 'Full Name', 'text')} />
+        <Row icon={AtSign} ti="ti-at"       label="Username"   value={`@${profile.username || '—'}`} onClick={() => open('username', 'Username', 'text')} />
+        <Row icon={Mail} ti="ti-mail"         label="Email"      value={profile.email} />
+        <Row icon={Pencil} ti="ti-pencil"       label="Bio"        sub={(profile.bio || 'Tell students about yourself').slice(0, 44)} onClick={() => open('bio', 'Bio', 'textarea')} />
+        <Row icon={Phone} ti="ti-phone"        label="Phone"      value={profile.phone || 'Not set'} onClick={() => open('phone', 'Phone Number', 'text')} />
+        <Row icon={MapPin} ti="ti-map-pin"       label="Country"    value={profile.country || 'Not set'} onClick={() => open('country', 'Country', 'select', COUNTRIES)} />
       </Section>
 
       <Section title="Teaching">
-        <Row icon={Building2}    label="School / Centre"   value={profile.school || 'Not set'} onClick={() => open('school', 'School / Centre', 'text')} />
-        <Row icon={GraduationCap} label="Institution Type" value={profile.schoolType || 'Not set'} onClick={() => open('schoolType', 'Institution Type', 'select', SCHOOL_TYPES)} />
+        <Row icon={Building2} ti="ti-building"    label="School / Centre"   value={profile.school || 'Not set'} onClick={() => open('school', 'School / Centre', 'text')} />
+        <Row icon={GraduationCap} ti="ti-school" label="Institution Type" value={profile.schoolType || 'Not set'} onClick={() => open('schoolType', 'Institution Type', 'select', SCHOOL_TYPES)} />
         <SubjectsRow subjects={profile.subjects || []} onClick={() => setSubSheet(true)} color={color} />
       </Section>
 
       <ToolTemplatesSection />
 
       <Section title="Overview">
-        <Row icon={BookOpen}  label="Active Courses"  value={stats.active_courses ?? 0} />
-        <Row icon={GraduationCap} label="Total Students" value={(stats.total_students ?? 0).toLocaleString()} />
-        <Row icon={BarChart3} label="Revenue"         value={`₦${(stats.total_revenue ?? 0).toLocaleString()}`} />
-        <Row icon={Bolt}      label="Agent XP"        value={`${(stats.agent_xp ?? 0).toLocaleString()} XP`} />
+        <Row icon={BookOpen} ti="ti-book"  label="Active Courses"  value={stats.active_courses ?? 0} />
+        <Row icon={GraduationCap} ti="ti-school" label="Total Students" value={(stats.total_students ?? 0).toLocaleString()} />
+        <Row icon={BarChart3} ti="ti-chart-bar" label="Revenue"         value={`₦${(stats.total_revenue ?? 0).toLocaleString()}`} />
+        <Row icon={Bolt} ti="ti-bolt"      label="Agent XP"        value={`${(stats.agent_xp ?? 0).toLocaleString()} XP`} />
       </Section>
 
       {avatarSheet && (
@@ -405,7 +409,7 @@ function AgentTab({ agent, setAgent, profile, onSaveAgent, onPublish, onUnpublis
   const [sheet, setSheet]           = useState(null);
   const [avatarSheet, setAvSheet]   = useState(false);
   const [publishSheet, setPubSheet] = useState(false);
-  const color     = agent.color || BRAND;
+  const color     = agent.color || ACCENT_DEFAULT;
   const published = !!listingId;
   const openSheet = (field, label, type, options) => setSheet({ field, label, type, options });
   const saveField = (field, val) => { setAgent((a) => ({ ...a, [field]: val })); onSaveAgent({ [field]: val }); };
@@ -414,49 +418,49 @@ function AgentTab({ agent, setAgent, profile, onSaveAgent, onPublish, onUnpublis
   return (
     <div>
       {/* Agent card */}
-      <div style={{ background: '#fff', marginBottom: 16, borderRadius: 18, padding: '18px 16px', border: `1.5px solid ${color}25`, boxShadow: '0 1px 6px rgba(0,0,0,.04)', display: 'flex', alignItems: 'center', gap: 14 }}>
+      <div style={{ background: C.surface, marginBottom: 16, borderRadius: 18, padding: '18px 16px', border: `1.5px solid ${tint(15, color)}`, boxShadow: '0 1px 6px rgba(0,0,0,.04)', display: 'flex', alignItems: 'center', gap: 14 }}>
         <AvatarCircle photoUrl={agent.photoUrl} monogram={agent.name} color={color} size={64} onPhotoClick={() => setAvSheet(true)} />
         <div style={{ flex: 1 }}>
-          <p style={{ margin: '0 0 2px', fontSize: 17, fontWeight: 900, color: INK }}>{agent.name || 'My Agent'}</p>
-          <p style={{ margin: '0 0 8px', fontSize: 12.5, color: MUTED }}>Your teaching AI agent</p>
+          <p style={{ margin: '0 0 2px', fontSize: 17, fontWeight: 900, color: C.ink }}>{agent.name || 'My Agent'}</p>
+          <p style={{ margin: '0 0 8px', fontSize: 12.5, color: C.muted }}>Your teaching AI agent</p>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 8, background: `${color}15`, color }}>Lv.{agent.level || 1}</span>
-            {published && <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 8, background: `${GREEN}15`, color: GREEN }}>● Marketplace</span>}
+            <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 8, background: tint(8, color), color }}>Lv.{agent.level || 1}</span>
+            {published && <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 8, background: tint(8, GREEN), color: GREEN }}>● Marketplace</span>}
           </div>
         </div>
       </div>
 
       {/* XP bar */}
-      <div style={{ background: '#fff', marginBottom: 16, borderRadius: 14, padding: '14px 16px', border: `1px solid ${BORDER}` }}>
+      <div style={{ background: C.surface, marginBottom: 16, borderRadius: 14, padding: '14px 16px', border: `1px solid ${C.border}` }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={{ fontSize: 12, fontWeight: 800, color: '#374151', display: 'flex', alignItems: 'center', gap: 5 }}><Star size={13} color={color} />Agent Level {agent.level || 1}</span>
-          <span style={{ fontSize: 11.5, fontWeight: 600, color: MUTED2 }}>{(agent.xpEarned || 0).toLocaleString()} XP</span>
+          <span style={{ fontSize: 12, fontWeight: 800, color: '#374151', display: 'flex', alignItems: 'center', gap: 5 }}><Ico lucide={Star} ti="ti-star" size={13} color={color} />Agent Level {agent.level || 1}</span>
+          <span style={{ fontSize: 11.5, fontWeight: 600, color: C.muted2 }}>{(agent.xpEarned || 0).toLocaleString()} XP</span>
         </div>
         <ProgressBar pct={levelPct} color={color} />
       </div>
 
       <Section title="Agent Profile">
-        <Row icon={Tag}      label="Agent Name"    value={agent.name} onClick={() => openSheet('name', 'Agent Name', 'text')} />
-        <Row icon={Sparkles} label="Agent Icon" onClick={() => setAvSheet(true)}>
-          <span style={{ display: 'flex', alignItems: 'center' }}>{(() => { const hit = AGENT_ICONS.find(([, em]) => em === (agent.emoji || '🤖')); const I = hit ? hit[0] : Bot; return <I size={16} color={MUTED} />; })()}</span>
+        <Row icon={Tag} ti="ti-tag"      label="Agent Name"    value={agent.name} onClick={() => openSheet('name', 'Agent Name', 'text')} />
+        <Row icon={Sparkles} ti="ti-sparkles" label="Agent Icon" onClick={() => setAvSheet(true)}>
+          <span style={{ display: 'flex', alignItems: 'center' }}>{(() => { const hit = AGENT_ICONS.find(([, em]) => em === (agent.emoji || '🤖')); const I = hit ? hit[0] : Bot; const iti = hit ? hit[2] : 'ti-robot'; return <Ico lucide={I} ti={iti} size={16} color={C.muted} />; })()}</span>
         </Row>
-        <Row icon={Palette}  label="Agent Colour"  onClick={() => openSheet('color', 'Agent Colour', 'accent')}>
+        <Row icon={Palette} ti="ti-palette"  label="Agent Colour"  onClick={() => openSheet('color', 'Agent Colour', 'accent')}>
           <div style={{ width: 18, height: 18, borderRadius: '50%', background: color, marginRight: 6, flexShrink: 0 }} />
         </Row>
       </Section>
 
       <Section title="Marketplace">
         <div style={rowBase}>
-          <span style={{ width: 28, flexShrink: 0, display: 'flex', alignItems: 'center' }}><Store size={17} color={MUTED} /></span>
+          <span style={{ width: 28, flexShrink: 0, display: 'flex', alignItems: 'center' }}><Ico lucide={Store} ti="ti-building-store" size={17} color={C.muted} /></span>
           <div style={{ flex: 1 }}>
-            <p style={{ fontSize: 13.5, fontWeight: 700, margin: 0, color: INK }}>Publish to Marketplace</p>
-            <p style={{ fontSize: 11.5, color: MUTED2, marginTop: 2, margin: 0 }}>{published ? 'Your agent is live and discoverable' : 'List your trained agent for students'}</p>
+            <p style={{ fontSize: 13.5, fontWeight: 700, margin: 0, color: C.ink }}>Publish to Marketplace</p>
+            <p style={{ fontSize: 11.5, color: C.muted2, marginTop: 2, margin: 0 }}>{published ? 'Your agent is live and discoverable' : 'List your trained agent for students'}</p>
           </div>
           <div onClick={() => { if (published) onUnpublish(); else setPubSheet(true); }} style={{ width: 42, height: 23, borderRadius: 12, position: 'relative', background: published ? BRAND : '#E5E7EB', transition: 'background .25s', cursor: 'pointer', flexShrink: 0 }}>
             <div style={{ position: 'absolute', top: 2.5, left: published ? 21 : 2.5, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .25s', boxShadow: '0 1px 3px rgba(0,0,0,.2)' }} />
           </div>
         </div>
-        {published && <Row icon={CheckCircle2} label="Listing Status" value="Active" noArrow />}
+        {published && <Row icon={CheckCircle2} ti="ti-circle-check" label="Listing Status" value="Active" noArrow />}
       </Section>
 
       {avatarSheet && (
@@ -484,7 +488,7 @@ function LoadingSkeleton() {
   return (
     <div>
       {[80, 60, 120, 100, 90].map((w, i) => (
-        <div key={i} style={{ height: 16, width: `${w}%`, background: '#F3F4F6', borderRadius: 8, marginBottom: 16, animation: 'pulse-dot 1.5s ease-in-out infinite' }} />
+        <div key={i} style={{ height: 16, width: `${w}%`, background: C.tagBg, borderRadius: 8, marginBottom: 16, animation: 'pulse-dot 1.5s ease-in-out infinite' }} />
       ))}
     </div>
   );
@@ -492,4 +496,4 @@ function LoadingSkeleton() {
 
 /* ─── Main page ───────────────────────────────────────────────── */
 
-export { BRAND, FONTF, ALL_SUBJECTS, SCHOOL_TYPES, COUNTRIES, AGENT_ICONS, ACCENTS, ProgressBar, SubjectChip, Section, rowBase, Row, AvatarCircle, Sheet, SheetButtons, AvatarPickerSheet, SubjectsSheet, GenericSheet, PublishSheet, SubjectsRow, TPL_TOOLS, ToolTemplatesSection, ProfileTab, AgentTab, LoadingSkeleton };
+export { ACCENT_DEFAULT, BRAND, FONTF, ALL_SUBJECTS, SCHOOL_TYPES, COUNTRIES, AGENT_ICONS, ACCENTS, ProgressBar, SubjectChip, Section, rowBase, Row, AvatarCircle, Sheet, SheetButtons, AvatarPickerSheet, SubjectsSheet, GenericSheet, PublishSheet, SubjectsRow, TPL_TOOLS, ToolTemplatesSection, ProfileTab, AgentTab, LoadingSkeleton };

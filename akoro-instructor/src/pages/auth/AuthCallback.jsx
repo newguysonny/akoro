@@ -2,8 +2,8 @@ import AkoroLogo from '../../components/common/AkoroLogo.jsx';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, REDIRECT_KEY } from '../../contexts/AuthContext.jsx';
+import { C, tint } from '../../theme/colors.js';
 
-const AMBER = '#E8884A';
 
 export default function AuthCallback() {
   const navigate                = useNavigate();
@@ -54,13 +54,13 @@ export default function AuthCallback() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center', background: '#FAF8F5',
-      fontFamily: "'DM Sans', sans-serif" }}>
+      alignItems: 'center', justifyContent: 'center', background: C.bg,
+      fontFamily: C.font }}>
       <div style={{ width: 48, height: 48, borderRadius: '50%',
-        border: `3px solid ${AMBER}22`, borderTop: `3px solid ${AMBER}`,
+        border: `3px solid ${tint(13)}`, borderTop: `3px solid ${C.brand}`,
         animation: 'spin 0.8s linear infinite', marginBottom: 20 }} />
-      <p style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E' }}>{status}</p>
-      <p style={{ fontSize: 12, color: '#9490A0', marginTop: 6 }}>Akoro · Instructor Portal</p>
+      <p style={{ fontSize: 15, fontWeight: 700, color: C.ink }}>{status}</p>
+      <p style={{ fontSize: 12, color: C.muted2, marginTop: 6 }}>Akoro · Instructor Portal</p>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );

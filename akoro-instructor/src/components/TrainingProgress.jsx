@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { Brain, Zap, CheckCircle, AlertTriangle, Sparkles } from 'lucide-react';
 import { pollTrainingRun } from '../services/trainingApi.js';
-import { AMBER, INK, WHITE, GREEN, RED, PURPLE, FONT } from '../constants.js';
+import { GREEN, RED, PURPLE } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 
 /* Maps backend pipeline phases → human labels. */
 const PHASE_LABELS = {
@@ -16,7 +18,7 @@ const PHASE_LABELS = {
   calibrate:     'Calculating XP…',
 };
 
-const TAG_COLOR = { ok: GREEN, info: 'rgba(255,255,255,.6)', warn: '#F0A04B', err: RED, xp: AMBER, sys: PURPLE };
+const TAG_COLOR = { ok: GREEN, info: 'rgba(255,255,255,.6)', warn: '#F0A04B', err: RED, xp: C.brand, sys: PURPLE };
 
 /**
  * Real training progress, driven by polling the backend run.
@@ -51,31 +53,31 @@ export default function TrainingProgress({ runId, agentName = 'Your Agent', onCo
 
   const totalXP = insights.reduce((s, i) => s + (i.xp || 0), 0);
   const label = failed ? 'Training failed' : (PHASE_LABELS[phase] || 'Working…');
-  const Icon = failed ? AlertTriangle : (pct >= 100 ? CheckCircle : (phase === 'orchestration' ? Sparkles : Brain));
+  const [Icon, iconTi] = failed ? [AlertTriangle, 'ti-alert-triangle'] : (pct >= 100 ? [CheckCircle, 'ti-circle-check'] : (phase === 'orchestration' ? [Sparkles, 'ti-sparkles'] : [Brain, 'ti-brain']));
 
   return (
     <div style={{
-      background: INK, borderRadius: 20, padding: 24,
+      background: C.hero, borderRadius: 20, padding: 24,
       display: 'flex', flexDirection: 'column', gap: 18,
-      color: WHITE, fontFamily: FONT,
+      color: '#fff', fontFamily: C.font,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
         <div style={{
           width: 56, height: 56, borderRadius: '50%',
-          background: failed ? `linear-gradient(135deg, ${RED}, #B91C1C)` : `linear-gradient(135deg, ${AMBER}, ${PURPLE})`,
+          background: failed ? `linear-gradient(135deg, ${RED}, #B91C1C)` : `linear-gradient(135deg, ${C.brand}, ${PURPLE})`,
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
           animation: (pct < 100 && !failed) ? 'pulse-dot 1.5s infinite' : 'none',
-          boxShadow: `0 0 32px ${AMBER}44`,
+          boxShadow: `0 0 32px ${tint(27)}`,
         }}>
-          <Icon size={26} color={WHITE} />
+          <Ico lucide={Icon} ti={iconTi} size={26} color="#fff" />
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 16, fontWeight: 700 }}>{agentName}</div>
           <div style={{ fontSize: 12, color: 'rgba(255,255,255,.6)' }}>{label}</div>
         </div>
         {totalXP > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 700, color: AMBER }}>
-            <Zap size={14} />+{totalXP} XP
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 700, color: C.brand }}>
+            <Ico lucide={Zap} ti="ti-bolt" size={14} />+{totalXP} XP
           </div>
         )}
       </div>
@@ -85,7 +87,7 @@ export default function TrainingProgress({ runId, agentName = 'Your Agent', onCo
         <div style={{ height: 6, background: 'rgba(255,255,255,.1)', borderRadius: 3, overflow: 'hidden', marginBottom: 6 }}>
           <div style={{
             height: '100%', borderRadius: 3, width: `${pct}%`,
-            background: failed ? RED : `linear-gradient(90deg, ${AMBER}, ${PURPLE})`,
+            background: failed ? RED : `linear-gradient(90deg, ${C.brand}, ${PURPLE})`,
             transition: 'width .4s ease',
           }} />
         </div>
@@ -118,7 +120,7 @@ export default function TrainingProgress({ runId, agentName = 'Your Agent', onCo
           {insights.slice(-6).map((i) => (
             <span key={i.id} style={{
               fontSize: 10.5, fontWeight: 700, padding: '3px 9px', borderRadius: 20,
-              background: 'rgba(232,136,74,.18)', border: `1px solid ${AMBER}55`, color: AMBER,
+              background: tint(18), border: `1px solid ${tint(33)}`, color: C.brand,
             }}>
               {(i.concept || i.type)}{i.xp ? ` +${i.xp}` : ''}
             </span>

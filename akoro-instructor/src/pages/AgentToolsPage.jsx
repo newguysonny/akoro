@@ -11,25 +11,27 @@ import { Wrench, Trash2, Pencil, Check, X, Hourglass, Calendar, CheckCircle2, XC
 import { PageLayout } from '../components/Layout.jsx';
 import { apiGet, apiPatch, apiPost } from '../services/api.js';
 import { confirmDialog } from '../components/ConfirmHost.jsx';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, RED, FONT } from '../constants.js';
+import { RED } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 
 const when = (iso) => (iso ? new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short' }) : null);
 
 const REQUEST_STATUS = {
-  new:          { icon: Hourglass,   text: 'Waiting for an admin' },
-  under_review: { icon: Hourglass,   text: 'Being reviewed' },
-  planned:      { icon: Calendar,    text: 'Planned by the Akoro team' },
-  approved:     { icon: CheckCircle2, text: 'Approved — your agent is finishing it' },
-  implemented:  { icon: CheckCircle2, text: 'Approved — answered in your chat' },
-  declined:     { icon: XCircle,      text: 'Not approved' },
-  expired:      { icon: Clock,       text: 'Expired without a decision' },
+  new:          { icon: Hourglass, ti: 'ti-hourglass',   text: 'Waiting for an admin' },
+  under_review: { icon: Hourglass, ti: 'ti-hourglass',   text: 'Being reviewed' },
+  planned:      { icon: Calendar, ti: 'ti-calendar',    text: 'Planned by the Akoro team' },
+  approved:     { icon: CheckCircle2, ti: 'ti-circle-check', text: 'Approved — your agent is finishing it' },
+  implemented:  { icon: CheckCircle2, ti: 'ti-circle-check', text: 'Approved — answered in your chat' },
+  declined:     { icon: XCircle, ti: 'ti-circle-x',      text: 'Not approved' },
+  expired:      { icon: Clock, ti: 'ti-clock',       text: 'Expired without a decision' },
 };
 
 function Toggle({ on, onChange, label }) {
   return (
     <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={onChange} style={{
       width: 42, height: 23, borderRadius: 12, position: 'relative', border: 'none', padding: 0,
-      background: on ? AMBER : '#E5E7EB', transition: 'background .25s', cursor: 'pointer', flexShrink: 0,
+      background: on ? C.brand : '#E5E7EB', transition: 'background .25s', cursor: 'pointer', flexShrink: 0,
     }}>
       <span style={{
         position: 'absolute', top: 2.5, left: on ? 21 : 2.5, width: 18, height: 18, borderRadius: '50%',
@@ -42,30 +44,30 @@ function Toggle({ on, onChange, label }) {
 function Section({ title, children }) {
   return (
     <div style={{ marginBottom: 24 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: MUTED2, letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: FONT, marginBottom: 8 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: C.muted2, letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: C.font, marginBottom: 8 }}>
         {title}
       </div>
-      <div style={{ background: WHITE, borderRadius: 14, border: `1px solid ${BORDER}`, overflow: 'hidden' }}>{children}</div>
+      <div style={{ background: C.surface, borderRadius: 14, border: `1px solid ${C.border}`, overflow: 'hidden' }}>{children}</div>
     </div>
   );
 }
 
-function Row({ icon: Icon, label, sublabel, right, muted }) {
+function Row({ icon: Icon, ti, label, sublabel, right, muted }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderBottom: `1px solid ${BORDER}` }}>
-      <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, background: `${AMBER}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: AMBER, opacity: muted ? 0.55 : 1 }}>
-        <Icon size={16} />
+    <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderBottom: `1px solid ${C.border}` }}>
+      <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, background: tint(9), display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.brand, opacity: muted ? 0.55 : 1 }}>
+        <Ico lucide={Icon} ti={ti} size={16} />
       </div>
       <div style={{ flex: 1, minWidth: 0, opacity: muted ? 0.55 : 1 }}>
-        <div style={{ fontSize: 14, fontWeight: 500, fontFamily: FONT, color: INK, overflowWrap: 'anywhere' }}>{label}</div>
-        {sublabel && <div style={{ fontSize: 12, color: MUTED2, fontFamily: FONT, marginTop: 2, lineHeight: 1.45 }}>{sublabel}</div>}
+        <div style={{ fontSize: 14, fontWeight: 500, fontFamily: C.font, color: C.ink, overflowWrap: 'anywhere' }}>{label}</div>
+        {sublabel && <div style={{ fontSize: 12, color: C.muted2, fontFamily: C.font, marginTop: 2, lineHeight: 1.45 }}>{sublabel}</div>}
       </div>
       {right}
     </div>
   );
 }
 
-const iconBtn = { width: 30, height: 30, borderRadius: 8, border: `1px solid ${BORDER}`, background: WHITE, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, color: MUTED };
+const iconBtn = { width: 30, height: 30, borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, color: C.muted };
 
 export default function AgentToolsPage() {
   const navigate = useNavigate();
@@ -107,7 +109,7 @@ export default function AgentToolsPage() {
     } catch (e) { setErr(e?.message || 'Could not withdraw that.'); }
   };
 
-  const note = (text) => <div style={{ padding: '14px 16px', fontSize: 13, color: MUTED, fontFamily: FONT, lineHeight: 1.55 }}>{text}</div>;
+  const note = (text) => <div style={{ padding: '14px 16px', fontSize: 13, color: C.muted, fontFamily: C.font, lineHeight: 1.55 }}>{text}</div>;
 
   return (
     <PageLayout title="My agent tools" subtitle="Tools your AI Chat agent built to answer your questions">
@@ -119,35 +121,35 @@ export default function AgentToolsPage() {
               <>
                 {note('When you ask your AI Chat agent something none of its tools can answer — like "which of my students haven\'t started Activity 2?" — it can build a small tool for you. Your tools only ever see your own classes, and they show up here.')}
                 <div style={{ padding: '0 16px 14px' }}>
-                  <button type="button" onClick={() => navigate('/chat')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: FONT, fontSize: 13, fontWeight: 600, padding: '8px 12px', borderRadius: 10, border: 'none', background: AMBER, color: WHITE, cursor: 'pointer' }}>
-                    <MessageSquare size={14} /> Open AI Chat
+                  <button type="button" onClick={() => navigate('/chat')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: C.font, fontSize: 13, fontWeight: 600, padding: '8px 12px', borderRadius: 10, border: 'none', background: C.brand, color: '#fff', cursor: 'pointer' }}>
+                    <Ico lucide={MessageSquare} ti="ti-message" size={14} /> Open AI Chat
                   </button>
                 </div>
               </>
             ) : state.tools.map((t) => editing?.id === t.id ? (
-              <Row key={t.id} icon={Wrench} label={
+              <Row key={t.id} icon={Wrench} ti="ti-tool" label={
                 <input autoFocus value={editing.label} maxLength={60} aria-label="Tool name"
                   onChange={(e) => setEditing({ ...editing, label: e.target.value })}
                   onKeyDown={(e) => { if (e.key === 'Enter') rename(); if (e.key === 'Escape') setEditing(null); }}
-                  style={{ width: '100%', fontFamily: FONT, fontSize: 14, padding: '6px 8px', borderRadius: 8, border: `1px solid ${BORDER}`, background: LIGHT, color: INK, boxSizing: 'border-box' }} />
+                  style={{ width: '100%', fontFamily: C.font, fontSize: 14, padding: '6px 8px', borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg, color: C.ink, boxSizing: 'border-box' }} />
               } right={
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <button type="button" onClick={rename} aria-label="Save name" style={{ ...iconBtn, color: AMBER }}><Check size={15} /></button>
-                  <button type="button" onClick={() => setEditing(null)} aria-label="Cancel" style={iconBtn}><X size={15} /></button>
+                  <button type="button" onClick={rename} aria-label="Save name" style={{ ...iconBtn, color: C.brand }}><Ico lucide={Check} ti="ti-check" size={15} /></button>
+                  <button type="button" onClick={() => setEditing(null)} aria-label="Cancel" style={iconBtn}><Ico lucide={X} ti="ti-x" size={15} /></button>
                 </div>
               } />
             ) : (
-              <Row key={t.id} icon={Wrench} label={t.label} muted={t.status !== 'active'}
+              <Row key={t.id} icon={Wrench} ti="ti-tool" label={t.label} muted={t.status !== 'active'}
                 sublabel={[t.goal, t.uses ? `used ${t.uses}×` : 'not used yet', t.lastUsedAt ? `last ${when(t.lastUsedAt)}` : null, t.status !== 'active' ? 'off' : null].filter(Boolean).join(' · ')}
                 right={
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <Toggle on={t.status === 'active'} onChange={() => toggle(t)} label={`${t.status === 'active' ? 'Turn off' : 'Turn on'} ${t.label}`} />
-                    <button type="button" onClick={() => setEditing({ id: t.id, label: t.label })} aria-label={`Rename ${t.label}`} style={iconBtn}><Pencil size={14} /></button>
-                    <button type="button" onClick={() => remove(t)} aria-label={`Delete ${t.label}`} style={iconBtn}><Trash2 size={14} /></button>
+                    <button type="button" onClick={() => setEditing({ id: t.id, label: t.label })} aria-label={`Rename ${t.label}`} style={iconBtn}><Ico lucide={Pencil} ti="ti-pencil" size={14} /></button>
+                    <button type="button" onClick={() => remove(t)} aria-label={`Delete ${t.label}`} style={iconBtn}><Ico lucide={Trash2} ti="ti-trash" size={14} /></button>
                   </div>
                 } />
             ))}
-          {err && <div style={{ padding: '8px 16px 12px', fontSize: 12, color: RED, fontFamily: FONT }}>{err}</div>}
+          {err && <div style={{ padding: '8px 16px 12px', fontSize: 12, color: RED, fontFamily: C.font }}>{err}</div>}
         </Section>
 
         {requests.length > 0 && (
@@ -156,10 +158,10 @@ export default function AgentToolsPage() {
               const s = REQUEST_STATUS[r.status] || REQUEST_STATUS.new;
               const waiting = ['new', 'under_review'].includes(r.status);
               return (
-                <Row key={r.id} icon={s.icon} label={r.label || r.permission}
+                <Row key={r.id} icon={s.icon} ti={s.ti} label={r.label || r.permission}
                   sublabel={[s.text, r.note, `asked ${when(r.createdAt)}`].filter(Boolean).join(' · ')}
                   right={waiting && (
-                    <button type="button" onClick={() => withdraw(r)} style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, padding: '6px 10px', borderRadius: 8, border: `1px solid ${BORDER}`, background: WHITE, color: MUTED, cursor: 'pointer' }}>
+                    <button type="button" onClick={() => withdraw(r)} style={{ fontSize: 12, fontFamily: C.font, fontWeight: 600, padding: '6px 10px', borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.muted, cursor: 'pointer' }}>
                       Withdraw
                     </button>
                   )} />

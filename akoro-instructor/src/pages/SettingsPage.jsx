@@ -6,13 +6,15 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { PageLayout } from '../components/Layout.jsx';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, RED, FONT } from '../constants.js';
+import { RED } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 
-const BRAND = AMBER;
-const FONTF = FONT;
+const BRAND = C.brand;
+const FONTF = C.font;
 
 const LANGUAGES = ['English', 'Yoruba', 'Igbo', 'Hausa', 'Pidgin', 'French', 'Arabic'];
-const ACCENTS   = [AMBER, '#6C3BFF', '#3B82F6', '#10B981', '#EC4899', '#F59E0B', '#EF4444', '#8B5CF6'];
+const ACCENTS   = [C.brand, '#6C3BFF', '#3B82F6', '#10B981', '#EC4899', '#F59E0B', '#EF4444', '#8B5CF6'];
 
 /* ── Micro-components ────────────────────────────────────────────────── */
 function Toggle({ on, onChange }) {
@@ -34,44 +36,44 @@ function Toggle({ on, onChange }) {
 function Section({ title, children }) {
   return (
     <div style={{ marginBottom: 24 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: MUTED2, letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: FONTF, marginBottom: 8 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: C.muted2, letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: FONTF, marginBottom: 8 }}>
         {title}
       </div>
-      <div style={{ background: WHITE, borderRadius: 14, border: `1px solid ${BORDER}`, overflow: 'hidden' }}>
+      <div style={{ background: C.surface, borderRadius: 14, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
         {children}
       </div>
     </div>
   );
 }
 
-function Row({ icon: Icon, label, sublabel, right, onClick, danger }) {
+function Row({ icon: Icon, ti, label, sublabel, right, onClick, danger }) {
   return (
     <div
       onClick={onClick}
       style={{
         display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px',
-        borderBottom: `1px solid ${BORDER}`, cursor: onClick ? 'pointer' : 'default',
-        color: danger ? RED : INK,
+        borderBottom: `1px solid ${C.border}`, cursor: onClick ? 'pointer' : 'default',
+        color: danger ? RED : C.ink,
         transition: 'background .1s',
       }}
-      onMouseEnter={e => { if (onClick) e.currentTarget.style.background = LIGHT; }}
+      onMouseEnter={e => { if (onClick) e.currentTarget.style.background = C.bg; }}
       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
     >
       {Icon && (
         <div style={{
           width: 34, height: 34, borderRadius: 9, flexShrink: 0,
-          background: danger ? `${RED}15` : `${BRAND}18`,
+          background: danger ? tint(8, RED) : tint(9, BRAND),
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           color: danger ? RED : BRAND,
         }}>
-          <Icon size={16} />
+          <Ico lucide={Icon} ti={ti} size={16} />
         </div>
       )}
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: 14, fontWeight: 500, fontFamily: FONTF }}>{label}</div>
-        {sublabel && <div style={{ fontSize: 12, color: MUTED2, fontFamily: FONTF, marginTop: 2 }}>{sublabel}</div>}
+        {sublabel && <div style={{ fontSize: 12, color: C.muted2, fontFamily: FONTF, marginTop: 2 }}>{sublabel}</div>}
       </div>
-      {right ?? (onClick && <ChevronRight size={16} color={MUTED2} />)}
+      {right ?? (onClick && <Ico lucide={ChevronRight} ti="ti-chevron-right" size={16} color={C.muted2} />)}
     </div>
   );
 }
@@ -83,7 +85,7 @@ export default function SettingsPage() {
 
   const [lang, setLang]         = useState('English');
   const [darkMode, setDarkMode] = useState(false);
-  const [accent, setAccent]     = useState(AMBER);
+  const [accent, setAccent]     = useState(C.brand);
 
   const [notif, setNotif] = useState({
     newStudent: true, sessionReminder: true, battleChallenge: true,
@@ -101,29 +103,29 @@ export default function SettingsPage() {
         {/* Billing */}
         <Section title="Billing">
           <Row
-            icon={Receipt}
+            icon={Receipt} ti="ti-receipt"
             label="Order history"
             sublabel="Your tool & asset purchases"
             onClick={() => navigate('/orders')}
-            right={<ChevronRight size={18} color={MUTED} />}
+            right={<Ico lucide={ChevronRight} ti="ti-chevron-right" size={18} color={C.muted} />}
           />
         </Section>
 
         {/* AI agent */}
         <Section title="AI agent">
           <Row
-            icon={Wrench}
+            icon={Wrench} ti="ti-tool"
             label="My agent tools"
             sublabel="Tools your AI Chat agent built for you"
             onClick={() => navigate('/agent-tools')}
-            right={<ChevronRight size={18} color={MUTED} />}
+            right={<Ico lucide={ChevronRight} ti="ti-chevron-right" size={18} color={C.muted} />}
           />
         </Section>
 
         {/* Personalization */}
         <Section title="Personalization">
           <Row
-            icon={Languages}
+            icon={Languages} ti="ti-language"
             label="Language"
             sublabel={lang}
             right={
@@ -131,9 +133,9 @@ export default function SettingsPage() {
                 value={lang}
                 onChange={e => setLang(e.target.value)}
                 style={{
-                  border: `1.5px solid ${BORDER}`, borderRadius: 8,
+                  border: `1.5px solid ${C.border}`, borderRadius: 8,
                   padding: '6px 10px', fontFamily: FONTF, fontSize: 13,
-                  background: WHITE, color: INK, cursor: 'pointer',
+                  background: C.surface, color: C.ink, cursor: 'pointer',
                 }}
               >
                 {LANGUAGES.map(l => <option key={l}>{l}</option>)}
@@ -141,13 +143,13 @@ export default function SettingsPage() {
             }
           />
           <Row
-            icon={Moon}
+            icon={Moon} ti="ti-moon"
             label="Dark Mode"
             sublabel="Currently in preview"
             right={<Toggle on={darkMode} onChange={() => setDarkMode(p => !p)} />}
           />
           <Row
-            icon={Palette}
+            icon={Palette} ti="ti-palette"
             label="Accent Colour"
             right={
               <div style={{ display: 'flex', gap: 6 }}>
@@ -169,36 +171,36 @@ export default function SettingsPage() {
 
         {/* Notifications */}
         <Section title="Notifications">
-          <Row icon={Bell}        label="New student enrolled"   right={<Toggle on={notif.newStudent}        onChange={() => tog('newStudent')} />} />
-          <Row icon={Bell}        label="Session reminders"      right={<Toggle on={notif.sessionReminder}   onChange={() => tog('sessionReminder')} />} />
-          <Row icon={Bell}        label="Battle challenges"      right={<Toggle on={notif.battleChallenge}   onChange={() => tog('battleChallenge')} />} />
-          <Row icon={Bell}        label="Task deadlines"         right={<Toggle on={notif.taskDeadline}      onChange={() => tog('taskDeadline')} />} />
-          <Row icon={Bell}        label="Platform updates"       right={<Toggle on={notif.platformUpdates}   onChange={() => tog('platformUpdates')} />} />
-          <Row icon={MessageCircle} label="In-app sounds"        right={<Toggle on={notif.inAppSound}        onChange={() => tog('inAppSound')} />} />
-          <Row icon={Bell}        label="Desktop push"           right={<Toggle on={notif.desktopPush}       onChange={() => tog('desktopPush')} />} />
+          <Row icon={Bell} ti="ti-bell"        label="New student enrolled"   right={<Toggle on={notif.newStudent}        onChange={() => tog('newStudent')} />} />
+          <Row icon={Bell} ti="ti-bell"        label="Session reminders"      right={<Toggle on={notif.sessionReminder}   onChange={() => tog('sessionReminder')} />} />
+          <Row icon={Bell} ti="ti-bell"        label="Battle challenges"      right={<Toggle on={notif.battleChallenge}   onChange={() => tog('battleChallenge')} />} />
+          <Row icon={Bell} ti="ti-bell"        label="Task deadlines"         right={<Toggle on={notif.taskDeadline}      onChange={() => tog('taskDeadline')} />} />
+          <Row icon={Bell} ti="ti-bell"        label="Platform updates"       right={<Toggle on={notif.platformUpdates}   onChange={() => tog('platformUpdates')} />} />
+          <Row icon={MessageCircle} ti="ti-message-circle" label="In-app sounds"        right={<Toggle on={notif.inAppSound}        onChange={() => tog('inAppSound')} />} />
+          <Row icon={Bell} ti="ti-bell"        label="Desktop push"           right={<Toggle on={notif.desktopPush}       onChange={() => tog('desktopPush')} />} />
         </Section>
 
         {/* Privacy & Security */}
         <Section title="Privacy & Security">
-          <Row icon={Key}        label="Change Password"       sublabel="Update your account password"          onClick={() => navigate('/profile')} />
-          <Row icon={Shield}     label="Two-Factor Auth"       sublabel="Add an extra layer of security"        onClick={() => navigate('/profile')} />
-          <Row icon={Lock}       label="Active Sessions"       sublabel="View and revoke active sessions"       onClick={() => {}} />
-          <Row icon={PauseCircle} label="Deactivate Account"  sublabel="Temporarily disable your account"      onClick={() => {}} danger />
-          <Row icon={Trash2}     label="Delete Account"        sublabel="Permanently remove all your data"      onClick={() => {}} danger />
+          <Row icon={Key} ti="ti-key"        label="Change Password"       sublabel="Update your account password"          onClick={() => navigate('/profile')} />
+          <Row icon={Shield} ti="ti-shield"     label="Two-Factor Auth"       sublabel="Add an extra layer of security"        onClick={() => navigate('/profile')} />
+          <Row icon={Lock} ti="ti-lock"       label="Active Sessions"       sublabel="View and revoke active sessions"       onClick={() => {}} />
+          <Row icon={PauseCircle} ti="ti-player-pause" label="Deactivate Account"  sublabel="Temporarily disable your account"      onClick={() => {}} danger />
+          <Row icon={Trash2} ti="ti-trash"     label="Delete Account"        sublabel="Permanently remove all your data"      onClick={() => {}} danger />
         </Section>
 
         {/* Help & Support */}
         <Section title="Help & Support">
-          <Row icon={HelpCircle} label="Help Centre"     sublabel="Browse guides and FAQs"       onClick={() => {}} />
-          <Row icon={Bug}        label="Report a Bug"    sublabel="Something not working right?"  onClick={() => {}} />
-          <Row icon={MessageCircle} label="Contact Us"   sublabel="Talk to the Akoro team"        onClick={() => {}} />
+          <Row icon={HelpCircle} ti="ti-help-circle" label="Help Centre"     sublabel="Browse guides and FAQs"       onClick={() => {}} />
+          <Row icon={Bug} ti="ti-bug"        label="Report a Bug"    sublabel="Something not working right?"  onClick={() => {}} />
+          <Row icon={MessageCircle} ti="ti-message-circle" label="Contact Us"   sublabel="Talk to the Akoro team"        onClick={() => {}} />
         </Section>
 
         {/* About */}
         <Section title="About">
-          <Row icon={FileText} label="Terms of Service"  onClick={() => {}} />
-          <Row icon={FileText} label="Privacy Policy"    onClick={() => {}} />
-          <Row icon={Info}     label="App Version"       right={<span style={{ fontSize: 13, color: MUTED2, fontFamily: FONTF }}>1.0.0</span>} />
+          <Row icon={FileText} ti="ti-file-text" label="Terms of Service"  onClick={() => {}} />
+          <Row icon={FileText} ti="ti-file-text" label="Privacy Policy"    onClick={() => {}} />
+          <Row icon={Info} ti="ti-info-circle"     label="App Version"       right={<span style={{ fontSize: 13, color: C.muted2, fontFamily: FONTF }}>1.0.0</span>} />
         </Section>
 
         {/* Sign Out */}
@@ -208,7 +210,7 @@ export default function SettingsPage() {
               onClick={() => setShowLogout(true)}
               style={{
                 width: '100%', padding: '14px', borderRadius: 12,
-                border: `1.5px solid ${RED}40`, background: `${RED}08`,
+                border: `1.5px solid ${tint(25, RED)}`, background: tint(3, RED),
                 color: RED, fontFamily: FONTF, fontSize: 14, fontWeight: 600,
                 cursor: 'pointer',
               }}
@@ -217,10 +219,10 @@ export default function SettingsPage() {
             </button>
           ) : (
             <div style={{
-              background: WHITE, border: `1.5px solid ${BORDER}`,
+              background: C.surface, border: `1.5px solid ${C.border}`,
               borderRadius: 14, padding: 20, textAlign: 'center',
             }}>
-              <p style={{ fontFamily: FONTF, fontSize: 14, color: INK, marginBottom: 16 }}>
+              <p style={{ fontFamily: FONTF, fontSize: 14, color: C.ink, marginBottom: 16 }}>
                 Sign out of Akoro?
               </p>
               <div style={{ display: 'flex', gap: 10 }}>
@@ -228,8 +230,8 @@ export default function SettingsPage() {
                   onClick={() => setShowLogout(false)}
                   style={{
                     flex: 1, padding: '11px', borderRadius: 10,
-                    border: `1.5px solid ${BORDER}`, background: WHITE,
-                    fontFamily: FONTF, fontSize: 14, cursor: 'pointer', color: INK,
+                    border: `1.5px solid ${C.border}`, background: C.surface,
+                    fontFamily: FONTF, fontSize: 14, cursor: 'pointer', color: C.ink,
                   }}
                 >
                   Cancel
@@ -240,7 +242,7 @@ export default function SettingsPage() {
                     flex: 1, padding: '11px', borderRadius: 10,
                     border: 'none', background: RED,
                     fontFamily: FONTF, fontSize: 14, cursor: 'pointer',
-                    color: WHITE, fontWeight: 600,
+                    color: '#fff', fontWeight: 600,
                   }}
                 >
                   Sign Out

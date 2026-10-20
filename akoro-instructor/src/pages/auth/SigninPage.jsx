@@ -2,8 +2,8 @@ import AkoroLogo from '../../components/common/AkoroLogo.jsx';
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext.jsx';
+import { C, tint } from '../../theme/colors.js';
 
-const AMBER = '#E8884A';
 const RED   = '#EF4444';
 
 function GoogleIcon() {
@@ -66,35 +66,35 @@ export default function SigninPage() {
 
   const inp = {
     width: '100%', padding: '11px 14px', borderRadius: 12,
-    border: '1.5px solid #EDE8E1', outline: 'none', fontSize: 14,
-    fontFamily: "'DM Sans', sans-serif", color: '#1A1A2E', boxSizing: 'border-box',
-    background: '#fff',
+    border: `1.5px solid ${C.border}`, outline: 'none', fontSize: 14,
+    fontFamily: C.font, color: C.ink, boxSizing: 'border-box',
+    background: C.surface,
   };
 
   return (
     <div style={{
       minHeight: '100vh', display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center', background: '#FAF8F5',
-      padding: '24px 20px', fontFamily: "'DM Sans', sans-serif",
+      alignItems: 'center', justifyContent: 'center', background: C.bg,
+      padding: '24px 20px', fontFamily: C.font,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 32 }}>
         <AkoroLogo size={40} radius={12} />
         <div>
-          <span style={{ fontSize: 20, fontWeight: 800, color: '#1A1A2E', display: 'block' }}>Akoro</span>
-          <span style={{ fontSize: 11, color: '#9490A0', display: 'block', marginTop: -2 }}>Instructor Portal</span>
+          <span style={{ fontSize: 20, fontWeight: 800, color: C.ink, display: 'block' }}>Akoro</span>
+          <span style={{ fontSize: 11, color: C.muted2, display: 'block', marginTop: -2 }}>Instructor Portal</span>
         </div>
       </div>
 
       {/* Card */}
       <div style={{
-        width: '100%', maxWidth: 420, background: '#fff', borderRadius: 24,
+        width: '100%', maxWidth: 420, background: C.surface, borderRadius: 24,
         padding: '32px 28px', boxShadow: '0 4px 32px rgba(0,0,0,.07)',
-        border: '1px solid #EDE8E1',
+        border: `1px solid ${C.border}`,
       }}>
-        <h1 style={{ fontSize: 24, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>
+        <h1 style={{ fontSize: 24, fontWeight: 800, color: C.ink, margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>
           {challenge ? 'Two-factor verification' : 'Welcome, Tutor'}
         </h1>
-        <p style={{ fontSize: 14, color: '#6B6B80', margin: '0 0 24px' }}>
+        <p style={{ fontSize: 14, color: C.muted, margin: '0 0 24px' }}>
           {challenge ? 'Enter the 6-digit code from your authenticator app' : 'Sign in to your instructor dashboard'}
         </p>
 
@@ -115,16 +115,16 @@ export default function SigninPage() {
               />
               <button type="submit" disabled={loading} style={{
                 width: '100%', padding: '13px', borderRadius: 14, border: 'none',
-                background: loading ? '#EDE8E1' : `linear-gradient(135deg, ${AMBER}, #D4651E)`,
-                color: loading ? '#9490A0' : '#fff', fontSize: 14, fontWeight: 700,
-                cursor: loading ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif",
+                background: loading ? C.border : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`,
+                color: loading ? C.muted2 : '#fff', fontSize: 14, fontWeight: 700,
+                cursor: loading ? 'not-allowed' : 'pointer', fontFamily: C.font,
               }}>
                 {loading ? 'Verifying…' : 'Verify & sign in'}
               </button>
             </form>
             <button onClick={() => { setChallenge(null); setCode(''); setFormErr(''); }} style={{
               width: '100%', marginTop: 14, background: 'none', border: 'none',
-              color: '#9490A0', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              color: C.muted2, fontSize: 13, fontWeight: 600, cursor: 'pointer',
             }}>
               ← Back to sign in
             </button>
@@ -136,9 +136,9 @@ export default function SigninPage() {
           onClick={() => loginWithGoogle('/')}
           style={{
             width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            gap: 10, padding: '12px', borderRadius: 14, border: '1.5px solid #EDE8E1',
-            background: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 600,
-            color: '#1A1A2E', marginBottom: 20, fontFamily: "'DM Sans', sans-serif",
+            gap: 10, padding: '12px', borderRadius: 14, border: `1.5px solid ${C.border}`,
+            background: C.surface, cursor: 'pointer', fontSize: 14, fontWeight: 600,
+            color: C.ink, marginBottom: 20, fontFamily: C.font,
           }}
         >
           <GoogleIcon /> Continue with Google
@@ -146,9 +146,9 @@ export default function SigninPage() {
 
         {/* Divider */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-          <div style={{ flex: 1, height: 1, background: '#EDE8E1' }} />
-          <span style={{ fontSize: 11, fontWeight: 600, color: '#9490A0' }}>or</span>
-          <div style={{ flex: 1, height: 1, background: '#EDE8E1' }} />
+          <div style={{ flex: 1, height: 1, background: C.border }} />
+          <span style={{ fontSize: 11, fontWeight: 600, color: C.muted2 }}>or</span>
+          <div style={{ flex: 1, height: 1, background: C.border }} />
         </div>
 
         {/* Error */}
@@ -168,7 +168,7 @@ export default function SigninPage() {
         {/* Form */}
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: 14 }}>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#1A1A2E', marginBottom: 6 }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 6 }}>
               Email
             </label>
             <input type="email" value={email} onChange={e => setEmail(e.target.value)}
@@ -176,12 +176,12 @@ export default function SigninPage() {
           </div>
           <div style={{ marginBottom: 24 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#1A1A2E' }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: C.ink }}>
                 Password
               </label>
               <button type="button" onClick={() => navigate('/forgot-password')}
-                style={{ background: 'none', border: 'none', color: AMBER, fontWeight: 700,
-                  cursor: 'pointer', fontSize: 12, fontFamily: "'DM Sans', sans-serif", padding: 0 }}>
+                style={{ background: 'none', border: 'none', color: C.brand, fontWeight: 700,
+                  cursor: 'pointer', fontSize: 12, fontFamily: C.font, padding: 0 }}>
                 Forgot password?
               </button>
             </div>
@@ -193,26 +193,26 @@ export default function SigninPage() {
             disabled={loading}
             style={{
               width: '100%', padding: '13px', borderRadius: 14, border: 'none',
-              background: loading ? '#EDE8E1' : `linear-gradient(135deg, ${AMBER}, #D4651E)`,
-              color: loading ? '#9490A0' : '#fff', fontSize: 14, fontWeight: 700,
+              background: loading ? C.border : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`,
+              color: loading ? C.muted2 : '#fff', fontSize: 14, fontWeight: 700,
               cursor: loading ? 'not-allowed' : 'pointer',
-              fontFamily: "'DM Sans', sans-serif",
-              boxShadow: loading ? 'none' : `0 4px 14px ${AMBER}44`,
+              fontFamily: C.font,
+              boxShadow: loading ? 'none' : `0 4px 14px ${tint(27)}`,
             }}
           >
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
-        <p style={{ textAlign: 'center', fontSize: 11.5, color: '#9490A0', marginTop: 14, marginBottom: 0, lineHeight: 1.6 }}>
+        <p style={{ textAlign: 'center', fontSize: 11.5, color: C.muted2, marginTop: 14, marginBottom: 0, lineHeight: 1.6 }}>
           By signing in, you agree to our{' '}
-          <a href="https://akoro.app/terms" target="_blank" rel="noreferrer" style={{ color: AMBER, fontWeight: 700, textDecoration: 'none' }}>Terms of Service</a>{' '}and{' '}
-          <a href="https://akoro.app/privacy" target="_blank" rel="noreferrer" style={{ color: AMBER, fontWeight: 700, textDecoration: 'none' }}>Privacy Policy</a>.
+          <a href="https://akoro.app/terms" target="_blank" rel="noreferrer" style={{ color: C.brand, fontWeight: 700, textDecoration: 'none' }}>Terms of Service</a>{' '}and{' '}
+          <a href="https://akoro.app/privacy" target="_blank" rel="noreferrer" style={{ color: C.brand, fontWeight: 700, textDecoration: 'none' }}>Privacy Policy</a>.
         </p>
-        <p style={{ textAlign: 'center', fontSize: 13, color: '#6B6B80', marginTop: 16, marginBottom: 0 }}>
+        <p style={{ textAlign: 'center', fontSize: 13, color: C.muted, marginTop: 16, marginBottom: 0 }}>
           New instructor?{' '}
           <button
             onClick={() => navigate('/signup')}
-            style={{ background: 'none', border: 'none', color: AMBER, fontWeight: 700, cursor: 'pointer', fontSize: 13, fontFamily: "'DM Sans', sans-serif", padding: 0 }}
+            style={{ background: 'none', border: 'none', color: C.brand, fontWeight: 700, cursor: 'pointer', fontSize: 13, fontFamily: C.font, padding: 0 }}
           >
             Create an account
           </button>
@@ -221,7 +221,7 @@ export default function SigninPage() {
         )}
       </div>
 
-      <p style={{ fontSize: 12, color: '#9490A0', marginTop: 20, textAlign: 'center' }}>
+      <p style={{ fontSize: 12, color: C.muted2, marginTop: 20, textAlign: 'center' }}>
         This portal is exclusively for instructors and administrators.
       </p>
     </div>

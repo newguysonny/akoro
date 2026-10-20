@@ -8,7 +8,7 @@
  * bullets with no text).
  */
 import { parseRich } from './richText.js';
-import { INK, MUTED, FONT } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
 
 const H_STYLE = {
   1: { fontSize: 16.5, fontWeight: 800, margin: '10px 0 4px' },
@@ -23,20 +23,20 @@ function Span({ s }) {
 
 const SpanRun = ({ spans }) => <>{spans.map((s, i) => <Span key={i} s={s} />)}</>;
 
-export default function RichText({ text, color = INK }) {
+export default function RichText({ text, color = C.ink }) {
   const blocks = parseRich(text);
   if (!blocks.length) return null;
   return (
-    <div style={{ color, fontFamily: FONT, fontSize: 13, lineHeight: 1.55 }}>
+    <div style={{ color, fontFamily: C.font, fontSize: 13, lineHeight: 1.55 }}>
       {blocks.map((b, i) => {
-        if (b.type === 'hr') return <div key={i} style={{ borderTop: `1px solid ${MUTED}33`, margin: '8px 0' }} />;
+        if (b.type === 'hr') return <div key={i} style={{ borderTop: `1px solid ${tint(20, C.muted)}`, margin: '8px 0' }} />;
         if (b.type === 'h') return <div key={i} style={H_STYLE[b.level]}><SpanRun spans={b.spans} /></div>;
         if (b.type === 'ul' || b.type === 'ol') {
           return (
             <div key={i} style={{ margin: '2px 0 4px', paddingLeft: 4 }}>
               {b.items.map((item, j) => (
                 <div key={j} style={{ display: 'flex', gap: 7, margin: '3px 0' }}>
-                  <span style={{ color: MUTED, flexShrink: 0, fontWeight: 700 }}>{b.type === 'ul' ? '•' : `${j + 1}.`}</span>
+                  <span style={{ color: C.muted, flexShrink: 0, fontWeight: 700 }}>{b.type === 'ul' ? '•' : `${j + 1}.`}</span>
                   <span><SpanRun spans={item} /></span>
                 </div>
               ))}

@@ -1,14 +1,15 @@
 import { AlertTriangle, Ban, Bot, ClipboardList, Copyright, CreditCard, GraduationCap, Link2, Lock, LogOut, Mail, PencilLine, Ruler, Scale, ScrollText, Settings, ShieldCheck, User , Archive } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AMBER, INK, MUTED, BORDER, WHITE, LIGHT, FONT } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 
-const A = AMBER;
+const A = C.brand;
 
 const SECTIONS = [
   {
     id: 'what-we-collect',
-    icon: ClipboardList,
+    icon: ClipboardList, ti: 'ti-clipboard-list',
     title: 'What We Collect',
     badge: 'Data Collection',
     badgeColor: '#6366F1',
@@ -21,7 +22,7 @@ const SECTIONS = [
   },
   {
     id: 'how-we-use',
-    icon: Settings,
+    icon: Settings, ti: 'ti-settings',
     title: 'How We Use Your Data',
     badge: 'Purpose',
     badgeColor: '#7C3AED',
@@ -34,7 +35,7 @@ const SECTIONS = [
   },
   {
     id: 'student-data-access',
-    icon: GraduationCap,
+    icon: GraduationCap, ti: 'ti-school',
     title: 'Student Data Access',
     badge: 'Your Responsibilities',
     badgeColor: '#059669',
@@ -46,7 +47,7 @@ const SECTIONS = [
   },
   {
     id: 'ai-training',
-    icon: Bot,
+    icon: Bot, ti: 'ti-robot',
     title: 'AI Training Data',
     badge: 'Content You Upload',
     badgeColor: '#D97706',
@@ -58,7 +59,7 @@ const SECTIONS = [
   },
   {
     id: 'data-sharing',
-    icon: Link2,
+    icon: Link2, ti: 'ti-link',
     title: 'Data Sharing',
     badge: 'Third Parties',
     badgeColor: '#6366F1',
@@ -70,7 +71,7 @@ const SECTIONS = [
   },
   {
     id: 'security',
-    icon: Lock,
+    icon: Lock, ti: 'ti-lock',
     title: 'Security',
     badge: 'Protection Measures',
     badgeColor: '#DC2626',
@@ -82,7 +83,7 @@ const SECTIONS = [
   },
   {
     id: 'retention',
-    icon: Archive,
+    icon: Archive, ti: 'ti-archive',
     title: 'Data Retention',
     badge: 'How Long We Keep Data',
     badgeColor: '#6B7280',
@@ -94,7 +95,7 @@ const SECTIONS = [
   },
   {
     id: 'your-rights',
-    icon: Scale,
+    icon: Scale, ti: 'ti-scale',
     title: 'Your Rights',
     badge: 'Data Subject Rights',
     badgeColor: '#7C3AED',
@@ -107,7 +108,7 @@ const SECTIONS = [
   },
 ];
 
-const TOC = SECTIONS.map(({ id, title, icon: Icon }) => ({ id, title, icon: Icon }));
+const TOC = SECTIONS.map(({ id, title, icon: Icon, ti }) => ({ id, title, icon: Icon, ti }));
 
 export default function PrivacyPolicyPage() {
   const navigate = useNavigate();
@@ -119,38 +120,38 @@ export default function PrivacyPolicyPage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: LIGHT, fontFamily: FONT }}>
+    <div style={{ minHeight: '100vh', background: C.bg, fontFamily: C.font }}>
       <style>{`
-        .ip-toc-btn:hover{background:${A}18!important;color:${A}!important}
+        .ip-toc-btn:hover{background:${tint(9, A)}!important;color:${A}!important}
         .ip-section{scroll-margin-top:80px}
       `}</style>
 
       {/* Sticky header */}
-      <div style={{ background: 'rgba(255,255,255,.96)', backdropFilter: 'blur(12px)', borderBottom: `1px solid ${BORDER}`, padding: '14px 24px', display: 'flex', alignItems: 'center', gap: 14, position: 'sticky', top: 0, zIndex: 200 }}>
+      <div style={{ background: 'rgba(255,255,255,.96)', backdropFilter: 'blur(12px)', borderBottom: `1px solid ${C.border}`, padding: '14px 24px', display: 'flex', alignItems: 'center', gap: 14, position: 'sticky', top: 0, zIndex: 200 }}>
         <button onClick={() => navigate(-1)}
-          style={{ background: `${A}15`, border: 'none', cursor: 'pointer', color: A, padding: '8px 14px', borderRadius: 10, fontSize: 14, fontWeight: 700, fontFamily: FONT }}>
+          style={{ background: tint(8, A), border: 'none', cursor: 'pointer', color: A, padding: '8px 14px', borderRadius: 10, fontSize: 14, fontWeight: 700, fontFamily: C.font }}>
           ← Back
         </button>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: INK, fontFamily: FONT }}>Privacy Policy</div>
-          <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT }}>Effective: 1 June 2025 · Akoro Technologies Ltd</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: C.ink, fontFamily: C.font }}>Privacy Policy</div>
+          <div style={{ fontSize: 11, color: C.muted, fontFamily: C.font }}>Effective: 1 June 2025 · Akoro Technologies Ltd</div>
         </div>
         <button onClick={() => navigate('/terms')}
-          style={{ background: `${A}15`, border: `1px solid ${A}40`, cursor: 'pointer', color: A, padding: '7px 14px', borderRadius: 10, fontSize: 12, fontWeight: 700, fontFamily: FONT }}>
+          style={{ background: tint(8, A), border: `1px solid ${tint(25, A)}`, cursor: 'pointer', color: A, padding: '7px 14px', borderRadius: 10, fontSize: 12, fontWeight: 700, fontFamily: C.font }}>
           Terms of Service →
         </button>
       </div>
 
       {/* Hero */}
       <div style={{ background: `linear-gradient(135deg, ${A} 0%, #C07020 100%)`, padding: '44px 24px 48px', textAlign: 'center' }}>
-        <div style={{ marginBottom: 10 }}><Lock size={40} color={A} /></div>
-        <h1 style={{ fontSize: 'clamp(22px,3.5vw,32px)', fontWeight: 700, color: WHITE, marginBottom: 12, fontFamily: FONT }}>Instructor Privacy Policy</h1>
-        <p style={{ fontSize: 14, color: 'rgba(255,255,255,.85)', maxWidth: 520, margin: '0 auto 22px', lineHeight: 1.7, fontFamily: FONT }}>
+        <div style={{ marginBottom: 10 }}><Ico lucide={Lock} ti="ti-lock" size={40} color={A} /></div>
+        <h1 style={{ fontSize: 'clamp(22px,3.5vw,32px)', fontWeight: 700, color: '#fff', marginBottom: 12, fontFamily: C.font }}>Instructor Privacy Policy</h1>
+        <p style={{ fontSize: 14, color: 'rgba(255,255,255,.85)', maxWidth: 520, margin: '0 auto 22px', lineHeight: 1.7, fontFamily: C.font }}>
           We collect only what we need to run the platform and pay you fairly. Your course content and your students' data are never sold.
         </p>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
           {['NDPR Compliant','GDPR Aligned','TLS Encrypted','No Data Selling','DPA Available'].map(b => (
-            <span key={b} style={{ background: 'rgba(255,255,255,.2)', border: '1px solid rgba(255,255,255,.35)', borderRadius: 20, padding: '4px 12px', fontSize: 11, fontWeight: 700, color: WHITE, fontFamily: FONT }}>{b}</span>
+            <span key={b} style={{ background: 'rgba(255,255,255,.2)', border: '1px solid rgba(255,255,255,.35)', borderRadius: 20, padding: '4px 12px', fontSize: 11, fontWeight: 700, color: '#fff', fontFamily: C.font }}>{b}</span>
           ))}
         </div>
       </div>
@@ -160,15 +161,15 @@ export default function PrivacyPolicyPage() {
         {/* Summary cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 14, marginBottom: 32 }}>
           {[
-            { icon: Ban, title: 'No data selling', desc: 'We never sell your data or your students\' data.' },
-            { icon: Bot, title: 'AI content stays yours', desc: 'Training materials are only used for your courses.' },
-            { icon: Lock, title: 'Encrypted', desc: 'TLS in transit, encrypted at rest.' },
-            { icon: PencilLine, title: 'Full control', desc: 'Access, edit, export or delete any time.' },
-          ].map(({ icon: Icon, title, desc }) => (
-            <div key={title} style={{ background: WHITE, borderRadius: 12, padding: '16px', border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <span style={{ display: 'flex' }}><Icon size={24} color={A} /></span>
-              <div style={{ fontSize: 13, fontWeight: 700, color: INK, fontFamily: FONT }}>{title}</div>
-              <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.5, fontFamily: FONT }}>{desc}</div>
+            { icon: Ban, ti: 'ti-ban', title: 'No data selling', desc: 'We never sell your data or your students\' data.' },
+            { icon: Bot, ti: 'ti-robot', title: 'AI content stays yours', desc: 'Training materials are only used for your courses.' },
+            { icon: Lock, ti: 'ti-lock', title: 'Encrypted', desc: 'TLS in transit, encrypted at rest.' },
+            { icon: PencilLine, ti: 'ti-pencil', title: 'Full control', desc: 'Access, edit, export or delete any time.' },
+          ].map(({ icon: Icon, ti, title, desc }) => (
+            <div key={title} style={{ background: C.surface, borderRadius: 12, padding: '16px', border: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <span style={{ display: 'flex' }}><Ico lucide={Icon} ti={ti} size={24} color={A} /></span>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.ink, fontFamily: C.font }}>{title}</div>
+              <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, fontFamily: C.font }}>{desc}</div>
             </div>
           ))}
         </div>
@@ -177,13 +178,13 @@ export default function PrivacyPolicyPage() {
 
           {/* TOC */}
           <div style={{ position: 'sticky', top: 80 }}>
-            <div style={{ background: WHITE, borderRadius: 12, padding: '14px', border: `1px solid ${BORDER}` }}>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: MUTED, marginBottom: 10, fontFamily: FONT }}>Contents</div>
+            <div style={{ background: C.surface, borderRadius: 12, padding: '14px', border: `1px solid ${C.border}` }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.muted, marginBottom: 10, fontFamily: C.font }}>Contents</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {TOC.map(({ id, title, icon: Icon }) => (
+                {TOC.map(({ id, title, icon: Icon, ti }) => (
                   <button key={id} className="ip-toc-btn" onClick={() => scrollTo(id)}
-                    style={{ background: active === id ? `${A}14` : 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', padding: '7px 10px', borderRadius: 8, fontSize: 12, fontWeight: active === id ? 700 : 500, color: active === id ? A : '#4B5563', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 8, transition: 'all .15s' }}>
-                    <Icon size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />{title}
+                    style={{ background: active === id ? tint(8, A) : 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', padding: '7px 10px', borderRadius: 8, fontSize: 12, fontWeight: active === id ? 700 : 500, color: active === id ? A : '#4B5563', fontFamily: C.font, display: 'flex', alignItems: 'center', gap: 8, transition: 'all .15s' }}>
+                    <Ico lucide={Icon} ti={ti} size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />{title}
                   </button>
                 ))}
               </div>
@@ -192,29 +193,29 @@ export default function PrivacyPolicyPage() {
 
           {/* Content */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <div style={{ background: `${A}10`, borderRadius: 12, padding: '18px 20px', borderLeft: `4px solid ${A}` }}>
-              <p style={{ fontSize: 13.5, lineHeight: 1.8, color: INK, fontFamily: FONT }}>
+            <div style={{ background: tint(6, A), borderRadius: 12, padding: '18px 20px', borderLeft: `4px solid ${A}` }}>
+              <p style={{ fontSize: 13.5, lineHeight: 1.8, color: C.ink, fontFamily: C.font }}>
                 <strong>Akoro Technologies Ltd</strong> ("Akoro", "we", "us") operates the Akoro Instructor portal. This policy explains what data we collect from instructors, how we use it, and your rights. It also covers your obligations regarding the student data you access through our platform.
               </p>
             </div>
 
-            {SECTIONS.map(({ id, icon, title, badge, badgeColor, body }) => (
+            {SECTIONS.map(({ id, icon: Icon, ti, title, badge, badgeColor, body }) => (
               <div key={id} id={id} className="ip-section"
-                style={{ background: WHITE, borderRadius: 14, overflow: 'hidden', border: `1px solid ${BORDER}` }}>
-                <div style={{ padding: '18px 22px 14px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                  <div style={{ width: 42, height: 42, borderRadius: 10, background: `${badgeColor}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={20} color={A} /></div>
+                style={{ background: C.surface, borderRadius: 14, overflow: 'hidden', border: `1px solid ${C.border}` }}>
+                <div style={{ padding: '18px 22px 14px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                  <div style={{ width: 42, height: 42, borderRadius: 10, background: tint(7, badgeColor), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Ico lucide={Icon} ti={ti} size={20} color={A} /></div>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                      <h2 style={{ fontSize: 15, fontWeight: 700, color: INK, fontFamily: FONT }}>{title}</h2>
-                      <span style={{ background: `${badgeColor}12`, color: badgeColor, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20 }}>{badge}</span>
+                      <h2 style={{ fontSize: 15, fontWeight: 700, color: C.ink, fontFamily: C.font }}>{title}</h2>
+                      <span style={{ background: tint(7, badgeColor), color: badgeColor, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20 }}>{badge}</span>
                     </div>
                   </div>
                 </div>
                 <div style={{ padding: '14px 22px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
                   {body.map(({ subtitle, text }) => (
                     <div key={subtitle}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: INK, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: FONT }}>{subtitle}</div>
-                      <p style={{ fontSize: 13.5, lineHeight: 1.75, color: MUTED, fontFamily: FONT }}>{text}</p>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: C.ink, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: C.font }}>{subtitle}</div>
+                      <p style={{ fontSize: 13.5, lineHeight: 1.75, color: C.muted, fontFamily: C.font }}>{text}</p>
                     </div>
                   ))}
                 </div>
@@ -222,23 +223,23 @@ export default function PrivacyPolicyPage() {
             ))}
 
             {/* Contact */}
-            <div style={{ background: `${A}10`, borderRadius: 14, padding: '26px 22px', border: `1px solid ${A}30`, textAlign: 'center' }}>
-              <div style={{ marginBottom: 10 }}><Mail size={30} color={A} /></div>
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: INK, marginBottom: 8, fontFamily: FONT }}>Questions about your data?</h3>
-              <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.6, marginBottom: 18, fontFamily: FONT }}>We respond to all requests within 30 days.</p>
+            <div style={{ background: tint(6, A), borderRadius: 14, padding: '26px 22px', border: `1px solid ${tint(19, A)}`, textAlign: 'center' }}>
+              <div style={{ marginBottom: 10 }}><Ico lucide={Mail} ti="ti-mail" size={30} color={A} /></div>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: C.ink, marginBottom: 8, fontFamily: C.font }}>Questions about your data?</h3>
+              <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, marginBottom: 18, fontFamily: C.font }}>We respond to all requests within 30 days.</p>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
                 <a href="mailto:privacy@akoro.app"
-                  style={{ background: A, color: WHITE, padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 700, textDecoration: 'none', fontFamily: FONT }}>
+                  style={{ background: A, color: '#fff', padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 700, textDecoration: 'none', fontFamily: C.font }}>
                   privacy@akoro.app
                 </a>
                 <button onClick={() => navigate('/terms')}
-                  style={{ background: WHITE, color: A, border: `1.5px solid ${A}40`, padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
+                  style={{ background: C.surface, color: A, border: `1.5px solid ${tint(25, A)}`, padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>
                   Read Terms of Service
                 </button>
               </div>
             </div>
 
-            <p style={{ fontSize: 11, color: MUTED, textAlign: 'center', lineHeight: 1.6, fontFamily: FONT }}>
+            <p style={{ fontSize: 11, color: C.muted, textAlign: 'center', lineHeight: 1.6, fontFamily: C.font }}>
               Akoro Technologies Ltd · RC 1234567 · Lagos, Nigeria<br/>
               Last updated: 1 June 2025
             </p>

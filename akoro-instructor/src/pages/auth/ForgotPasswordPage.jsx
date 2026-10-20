@@ -3,8 +3,9 @@ import AkoroLogo from '../../components/common/AkoroLogo.jsx';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API } from '../../services/api.js';
+import { C, tint } from '../../theme/colors.js';
+import { Ico } from '../../theme/Ico.jsx';
 
-const AMBER = '#E8884A';
 const RED   = '#EF4444';
 
 export default function ForgotPasswordPage() {
@@ -36,56 +37,56 @@ export default function ForgotPasswordPage() {
 
   const inp = {
     width: '100%', padding: '11px 14px', borderRadius: 12,
-    border: '1.5px solid #EDE8E1', outline: 'none', fontSize: 14,
-    fontFamily: "'DM Sans', sans-serif", color: '#1A1A2E',
-    background: '#fff', boxSizing: 'border-box',
+    border: `1.5px solid ${C.border}`, outline: 'none', fontSize: 14,
+    fontFamily: C.font, color: C.ink,
+    background: C.surface, boxSizing: 'border-box',
   };
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center', background: '#FAF8F5',
-      padding: '24px 20px', fontFamily: "'DM Sans', sans-serif" }}>
+      alignItems: 'center', justifyContent: 'center', background: C.bg,
+      padding: '24px 20px', fontFamily: C.font }}>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 32 }}>
         <AkoroLogo size={40} radius={12} />
         <div>
-          <span style={{ fontSize: 20, fontWeight: 800, color: '#1A1A2E', display: 'block' }}>Akoro</span>
-          <span style={{ fontSize: 11, color: '#9490A0', display: 'block', marginTop: -2 }}>Instructor Portal</span>
+          <span style={{ fontSize: 20, fontWeight: 800, color: C.ink, display: 'block' }}>Akoro</span>
+          <span style={{ fontSize: 11, color: C.muted2, display: 'block', marginTop: -2 }}>Instructor Portal</span>
         </div>
       </div>
 
-      <div style={{ width: '100%', maxWidth: 420, background: '#fff', borderRadius: 24,
+      <div style={{ width: '100%', maxWidth: 420, background: C.surface, borderRadius: 24,
         padding: '32px 28px', boxShadow: '0 4px 32px rgba(0,0,0,.07)',
-        border: '1px solid #EDE8E1' }}>
+        border: `1px solid ${C.border}` }}>
 
         <div style={{ width: 52, height: 52, borderRadius: 16,
-          background: `linear-gradient(135deg,${AMBER},#D4651E)`,
+          background: `linear-gradient(135deg,${C.brand},${C.brandDeep})`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          marginBottom: 20 }}><KeyRound size={24} color="#1A1A2E" /></div>
+          marginBottom: 20 }}><Ico lucide={KeyRound} ti="ti-key" size={24} color={C.ink} /></div>
 
         {sent ? (
           <>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 8px', fontFamily: "'Instrument Serif', serif" }}>Check your email</h1>
-            <p style={{ fontSize: 14, color: '#6B6B80', margin: '0 0 24px', lineHeight: 1.6 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: C.ink, margin: '0 0 8px', fontFamily: "'Instrument Serif', serif" }}>Check your email</h1>
+            <p style={{ fontSize: 14, color: C.muted, margin: '0 0 24px', lineHeight: 1.6 }}>
               We've sent a password reset link to <strong>{email}</strong>. It expires in 1 hour.
             </p>
-            <p style={{ fontSize: 13, color: '#9490A0', margin: '0 0 24px' }}>
+            <p style={{ fontSize: 13, color: C.muted2, margin: '0 0 24px' }}>
               Didn't receive it? Check your spam folder or{' '}
               <button onClick={() => setSent(false)} style={{ background: 'none', border: 'none',
-                color: AMBER, fontWeight: 700, cursor: 'pointer', fontSize: 13,
-                fontFamily: "'DM Sans', sans-serif", padding: 0 }}>try again</button>.
+                color: C.brand, fontWeight: 700, cursor: 'pointer', fontSize: 13,
+                fontFamily: C.font, padding: 0 }}>try again</button>.
             </p>
             <button onClick={() => navigate('/signin')} style={{ width: '100%', padding: '13px',
-              borderRadius: 14, border: 'none', background: `linear-gradient(135deg,${AMBER},#D4651E)`,
+              borderRadius: 14, border: 'none', background: `linear-gradient(135deg,${C.brand},${C.brandDeep})`,
               color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer',
-              fontFamily: "'DM Sans', sans-serif", boxShadow: `0 4px 14px ${AMBER}44` }}>
+              fontFamily: C.font, boxShadow: `0 4px 14px ${tint(27)}` }}>
               Back to sign in
             </button>
           </>
         ) : (
           <>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 8px', fontFamily: "'Instrument Serif', serif" }}>Forgot password?</h1>
-            <p style={{ fontSize: 14, color: '#6B6B80', margin: '0 0 24px' }}>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: C.ink, margin: '0 0 8px', fontFamily: "'Instrument Serif', serif" }}>Forgot password?</h1>
+            <p style={{ fontSize: 14, color: C.muted, margin: '0 0 24px' }}>
               Enter your email and we'll send you a reset link.
             </p>
 
@@ -97,23 +98,23 @@ export default function ForgotPasswordPage() {
             <form onSubmit={handleSubmit}>
               <div style={{ marginBottom: 20 }}>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 700,
-                  color: '#1A1A2E', marginBottom: 6 }}>Email address</label>
+                  color: C.ink, marginBottom: 6 }}>Email address</label>
                 <input type="email" value={email} onChange={e => setEmail(e.target.value)}
                   placeholder="you@school.edu" style={inp} autoFocus />
               </div>
               <button type="submit" disabled={loading} style={{ width: '100%', padding: '13px',
                 borderRadius: 14, border: 'none',
-                background: loading ? '#EDE8E1' : `linear-gradient(135deg,${AMBER},#D4651E)`,
-                color: loading ? '#9490A0' : '#fff', fontSize: 14, fontWeight: 700,
-                cursor: loading ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif",
-                boxShadow: loading ? 'none' : `0 4px 14px ${AMBER}44` }}>
+                background: loading ? C.border : `linear-gradient(135deg,${C.brand},${C.brandDeep})`,
+                color: loading ? C.muted2 : '#fff', fontSize: 14, fontWeight: 700,
+                cursor: loading ? 'not-allowed' : 'pointer', fontFamily: C.font,
+                boxShadow: loading ? 'none' : `0 4px 14px ${tint(27)}` }}>
                 {loading ? 'Sending…' : 'Send reset link'}
               </button>
             </form>
 
             <button onClick={() => navigate('/signin')} style={{ width: '100%', marginTop: 14,
-              background: 'none', border: 'none', color: '#9490A0', fontSize: 13,
-              fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}>
+              background: 'none', border: 'none', color: C.muted2, fontSize: 13,
+              fontWeight: 600, cursor: 'pointer', fontFamily: C.font }}>
               ← Back to sign in
             </button>
           </>

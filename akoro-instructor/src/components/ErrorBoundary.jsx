@@ -13,7 +13,8 @@ import { Frown } from 'lucide-react';
  * instead of accusing the user's work of failing.
  */
 import { Component } from 'react';
-import { AMBER, INK, MUTED, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 
 const CHUNK_RE = /Loading chunk|Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i;
 const RELOADED_KEY = 'akoro_chunk_reloaded_at';
@@ -55,7 +56,7 @@ export default class ErrorBoundary extends Component {
       return (
         <div style={wrap}>
           <div style={{ ...spinner, animation: 'ak-eb-spin .7s linear infinite' }} />
-          <div style={{ fontSize: 14, fontWeight: 800, color: INK }}>Updating to the latest version…</div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: C.ink }}>Updating to the latest version…</div>
           <style>{'@keyframes ak-eb-spin{to{transform:rotate(360deg)}}'}</style>
         </div>
       );
@@ -63,11 +64,11 @@ export default class ErrorBoundary extends Component {
 
     return (
       <div style={wrap}>
-        <div><Frown size={44} color="#9490A0" /></div>
-        <h1 style={{ fontSize: 19, fontWeight: 800, color: INK, margin: '4px 0 0' }}>
+        <div><Ico lucide={Frown} ti="ti-mood-sad" size={44} color={C.muted2} /></div>
+        <h1 style={{ fontSize: 19, fontWeight: 800, color: C.ink, margin: '4px 0 0' }}>
           This page ran into a problem
         </h1>
-        <p style={{ fontSize: 13.5, color: MUTED, margin: 0, maxWidth: 420, textAlign: 'center', lineHeight: 1.6 }}>
+        <p style={{ fontSize: 13.5, color: C.muted, margin: 0, maxWidth: 420, textAlign: 'center', lineHeight: 1.6 }}>
           Nothing you had saved is affected. Reloading usually clears it — if it keeps
           happening, tell us what you were doing and we'll fix it.
         </p>
@@ -79,7 +80,7 @@ export default class ErrorBoundary extends Component {
 
         {/* Collapsed by default: useful when someone is reporting it, noise otherwise. */}
         <details style={{ marginTop: 10, maxWidth: 560, width: '100%' }}>
-          <summary style={{ fontSize: 11.5, color: MUTED, cursor: 'pointer', fontFamily: FONT }}>
+          <summary style={{ fontSize: 11.5, color: C.muted, cursor: 'pointer', fontFamily: C.font }}>
             Technical details
           </summary>
           <pre style={pre}>{String(error?.stack || error?.message || error)}</pre>
@@ -92,24 +93,24 @@ export default class ErrorBoundary extends Component {
 const wrap = {
   minHeight: '100vh', display: 'flex', flexDirection: 'column',
   alignItems: 'center', justifyContent: 'center', gap: 12,
-  padding: '32px 24px', background: LIGHT, fontFamily: FONT, boxSizing: 'border-box',
+  padding: '32px 24px', background: C.bg, fontFamily: C.font, boxSizing: 'border-box',
 };
 const spinner = {
   width: 34, height: 34, borderRadius: '50%',
-  border: `3px solid ${AMBER}40`, borderTopColor: AMBER,
+  border: `3px solid ${tint(25)}`, borderTopColor: C.brand,
 };
 const primaryBtn = {
   padding: '10px 18px', borderRadius: 11, border: 'none',
-  background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE,
-  fontSize: 13.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT,
+  background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: '#fff',
+  fontSize: 13.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font,
 };
 const secondaryBtn = {
-  padding: '10px 18px', borderRadius: 11, border: `1.5px solid ${BORDER}`,
-  background: WHITE, color: INK, fontSize: 13.5, fontWeight: 700,
-  cursor: 'pointer', fontFamily: FONT,
+  padding: '10px 18px', borderRadius: 11, border: `1.5px solid ${C.border}`,
+  background: C.surface, color: C.ink, fontSize: 13.5, fontWeight: 700,
+  cursor: 'pointer', fontFamily: C.font,
 };
 const pre = {
-  marginTop: 8, padding: 12, borderRadius: 10, background: WHITE,
-  border: `1px solid ${BORDER}`, fontSize: 11, color: MUTED,
+  marginTop: 8, padding: 12, borderRadius: 10, background: C.surface,
+  border: `1px solid ${C.border}`, fontSize: 11, color: C.muted,
   overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 220,
 };

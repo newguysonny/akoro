@@ -15,9 +15,10 @@ import {
   loadListingId, saveListingId,
 } from '../../services/settingsApi.js';
 import { apiGet, apiPut } from '../../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, FONT } from '../../constants.js';
+import { GREEN, RED } from '../../constants.js';
+import { C } from '../../theme/colors.js';
 
-import { BRAND, FONTF, ALL_SUBJECTS, SCHOOL_TYPES, COUNTRIES, EMOJI_LIST, ACCENTS, ProgressBar, SubjectChip, Section, rowBase, Row, AvatarCircle, Sheet, SheetButtons, AvatarPickerSheet, SubjectsSheet, GenericSheet, PublishSheet, SubjectsRow, TPL_TOOLS, ToolTemplatesSection, ProfileTab, AgentTab, LoadingSkeleton } from './parts.jsx';
+import { ACCENT_DEFAULT, BRAND, FONTF, ALL_SUBJECTS, SCHOOL_TYPES, COUNTRIES, EMOJI_LIST, ACCENTS, ProgressBar, SubjectChip, Section, rowBase, Row, AvatarCircle, Sheet, SheetButtons, AvatarPickerSheet, SubjectsSheet, GenericSheet, PublishSheet, SubjectsRow, TPL_TOOLS, ToolTemplatesSection, ProfileTab, AgentTab, LoadingSkeleton } from './parts.jsx';
 
 export default function ProfilePage() {
   const { user } = useAuth();
@@ -43,11 +44,11 @@ export default function ProfilePage() {
           fullName: d.full_name || d.fullName, avatarUrl: d.avatar_url,
           bio: d.bio, phone: d.phone, country: d.country, school: d.school_name,
           schoolType: d.school_type, subjects: d.subjects || [],
-          accentColor: d.accent_color || BRAND,
+          accentColor: d.accent_color || ACCENT_DEFAULT,
         });
         setAgent({
           name: a.agent_name || 'My Agent', emoji: a.agent_emoji || '🤖', photoUrl: null,
-          color: a.agent_color || BRAND, personality: a.personality || '',
+          color: a.agent_color || ACCENT_DEFAULT, personality: a.personality || '',
           level: a.level || 1, xpEarned: a.xp || 0, streakDays: a.streak_days || 0,
         });
       })
@@ -55,9 +56,9 @@ export default function ProfilePage() {
         setProfile({
           id: user?.id, email: user?.email,
           username: user?.username || user?.email?.split('@')[0],
-          fullName: user?.fullName, subjects: [], accentColor: BRAND,
+          fullName: user?.fullName, subjects: [], accentColor: ACCENT_DEFAULT,
         });
-        setAgent({ name: 'My Agent', emoji: '🤖', color: BRAND, personality: '', level: 1, xpEarned: 0, streakDays: 0 });
+        setAgent({ name: 'My Agent', emoji: '🤖', color: ACCENT_DEFAULT, personality: '', level: 1, xpEarned: 0, streakDays: 0 });
         showToast('Offline — showing cached data');
       })
       .finally(() => setLoading(false));
@@ -112,18 +113,18 @@ export default function ProfilePage() {
     } catch (e) { showToast('Unpublish failed: ' + e.message); }
   }, [listingId, user]);
 
-  const color = profile?.accentColor || BRAND;
+  const color = profile?.accentColor || ACCENT_DEFAULT;
 
   return (
     <PageLayout title="Profile" subtitle="Manage your info and AI agent">
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
         {/* Tabs */}
-        <div style={{ display: 'flex', background: '#fff', borderRadius: 12, padding: 4, marginBottom: 24, border: `1px solid ${BORDER}`, gap: 4 }}>
+        <div style={{ display: 'flex', background: C.surface, borderRadius: 12, padding: 4, marginBottom: 24, border: `1px solid ${C.border}`, gap: 4 }}>
           {[['profile', 'Profile'], ['agent', 'Agent']].map(([t, label]) => (
             <button key={t} onClick={() => setTab(t)} style={{
               flex: 1, padding: '9px 0', borderRadius: 9, border: 'none',
               background: tab === t ? BRAND : 'transparent',
-              color: tab === t ? '#fff' : MUTED2,
+              color: tab === t ? '#fff' : C.muted2,
               fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONTF, transition: 'all .2s',
             }}>{label}</button>
           ))}
@@ -137,7 +138,7 @@ export default function ProfilePage() {
       </div>
 
       {toast && (
-        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>{toast}</div>
+        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.ink, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>{toast}</div>
       )}
     </PageLayout>
   );
