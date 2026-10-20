@@ -693,7 +693,7 @@ export const scenarios = [
       }
       // 6. End it: the modal's × (closing ends the session unless it was minimised), then any end/save prompt.
       // The × sits right after the minimise button (role=button), and asks "End this session?".
-      await page.locator('div[role="button"][title]').first().locator('xpath=following-sibling::div[1]').click({ timeout: 8000 }).catch(() => {});
+      await page.locator('div[role="button"][title="Minimize & continue later"]').first().locator('xpath=following-sibling::div[1]').click({ timeout: 8000 }).catch(() => {});
       await page.waitForTimeout(2500);
       await shot('ending');
       for (const name of [/End Session/i, /Save & Close Session/i]) {
