@@ -77,13 +77,18 @@ export async function compareEmbeddings({ env = process.env, embed = null, list 
     const { embeddingsProvider } = await import("./embeddingProvider.js");
     cands = candidates(env, { provider: embeddingsProvider(env) });
   }
+  // Wake every endpoint at once: cold starts overlap instead of adding up.
+  const first = await Promise.all(cands.map(async (c) => {
+    const t = nowMs();
+    try { await run(c, [QUERIES[0].q], { query: true }); return { ms: nowMs() - t }; } catch (e) { return { error: e }; }
+  }));
   const results = [];
-  for (const c of cands) {
+  for (const [i, c] of cands.entries()) {
     const r = { key: c.key, model: c.model, via: c.via };
     try {
-      let t = nowMs();
-      await run(c, [QUERIES[0].q], { query: true });
-      r.firstCallMs = nowMs() - t;
+      if (first[i].error) throw first[i].error;
+      r.firstCallMs = first[i].ms;
+      let t;
       const passageVectors = await run(c, PASSAGES.map((p) => p.text), { query: false });
       const queryVectors = await run(c, QUERIES.map((q) => q.q), { query: true });
       Object.assign(r, scoreRetrieval({ passages: PASSAGES, passageVectors, queries: QUERIES, queryVectors }));

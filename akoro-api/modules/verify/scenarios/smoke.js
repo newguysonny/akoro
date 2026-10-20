@@ -94,7 +94,7 @@ export const embeddingsLive = {
 // a verdict on which is better: it fails only when a model can't run or
 // finds almost nothing.
 export const embeddingsCompare = {
-  name: "smoke.embeddings_compare", area: "smoke", risk: "read",
+  name: "smoke.embeddings_compare", area: "smoke", risk: "read", timeoutMs: 480000,  // cold endpoints
   description: "Embeds the fixed test set (lib/embeddingEvalSet.js) with each deployed embedding model and reports recall@1, recall@5, MRR, by language, first-call and per-search time. Never touches the stores.",
   async run(ctx) {
     const { compareEmbeddings } = await import("../../../lib/embeddingCompare.js");
