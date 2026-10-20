@@ -529,22 +529,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
                       ))}
                     </div>
                   )}
-                  {/* The mark sheet: every question, what the agent chose, the answer. */}
-                  {results.markSheet?.length > 0 && (
-                    <div style={{ marginTop: 12, textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 5 }}>
-                      {results.markSheet.map((m) => (
-                        <div key={m.order} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: '#E2E8F0', lineHeight: 1.4 }}>
-                          <Icon name={!m.answered ? 'ti-minus' : m.isCorrect ? 'ti-check' : 'ti-x'} size={13} color={!m.answered ? 'rgba(255,255,255,.4)' : m.isCorrect ? '#4ADE80' : '#F87171'} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <b>Q{m.order}.</b> {m.question}
-                            <div style={{ fontSize: 11, color: 'rgba(255,255,255,.5)' }}>
-                              {m.answered ? `Chose ${m.chosenAnswer}` : 'Not answered'}{m.guessed ? ' (a guess — not in your notes)' : ''}{!m.isCorrect ? ` · Answer: ${m.correctAnswer}` : ''}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  {/* Each question is in the Questions and Log tabs, as for every battle. */}
                 </div>
               )}
 

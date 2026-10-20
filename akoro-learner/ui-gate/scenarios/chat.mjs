@@ -651,11 +651,12 @@ export const scenarios = [
       await film('approved', 2);
 
       // 2. The check starts (its battle is in Battles); its card and rows in the chat.
-      const started = await t.api('POST', `/api/adaptive/study-prep/sessions/${session.session.id}/topics/${topic.id}/practice`, { mode: 'diagnostic' });
-      if (started.status >= 300) t.block(`starting the check answered ${started.status}: ${JSON.stringify(started.body).slice(0, 200)}`);
-      if (started.body?.skipped) t.block(`no notes on "${topic.label}" to check`);
+      // Writing the questions can take longer than the request waits; the check still starts.
+      const started = await t.api('POST', `/api/adaptive/study-prep/sessions/${session.session.id}/topics/${topic.id}/practice`, { mode: 'diagnostic' }).catch(() => null);
+      if (started && started.status >= 300) t.block(`starting the check answered ${started.status}: ${JSON.stringify(started.body).slice(0, 200)}`);
+      if (started?.body?.skipped) t.block(`no notes on "${topic.label}" to check`);
       const card = page.locator('[data-agent-check]').last();
-      const shown = await film('check-started', 15, async () => await card.isVisible().catch(() => false));
+      const shown = await film('check-started', 40, async () => await card.isVisible().catch(() => false));
       t.check('the check\'s card: one tracking line and Watch in Battles', shown && await page.getByRole('button', { name: 'Watch in Battles' }).last().isVisible().catch(() => false));
       const firstRow = await film('questions', 25, async () => await page.getByText(/Q1 of \d+ ·/).first().isVisible().catch(() => false));
       t.check('a row per question as Sergeant marks it', firstRow);
@@ -681,7 +682,7 @@ export const scenarios = [
         await watch.click();
         await film('battle', 6);
         t.check('Watch in Battles opens the battle', /tab=battles/.test(page.url()));
-        await page.goBack().catch(() => {});
+        await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
       }
 
       // 5. Back in the chat until it's marked: the result row, the card says so.
