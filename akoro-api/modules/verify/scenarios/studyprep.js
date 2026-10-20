@@ -268,7 +268,7 @@ export const agentCheckStop = {
     const [battle] = await ctx.db.rows("battles", { id: battleId }, { columns: "status", limit: 1 });
     ctx.expect.eq("battle cancelled", battle?.status, "cancelled");
     const moves = (await ctx.db.rows("coin_transactions", { account_id: acct.id }, { columns: "delta, type, feature, created_at", limit: 30, order: { column: "created_at", ascending: false } }))
-      .filter((t) => t.created_at >= t0 && t.feature === "study_prep_practice");
+      .filter((t) => t.created_at >= t0 && String(t.feature || "").startsWith("study_prep_practice"));
     ctx.note(`coins: ${JSON.stringify(moves.map((t) => ({ type: t.type, delta: t.delta })))}`);
     ctx.expect.eq("the charge was refunded (net zero)", moves.reduce((sum, t) => sum + Number(t.delta || 0), 0), 0);
 
@@ -277,10 +277,9 @@ export const agentCheckStop = {
     ctx.expect.eq("no check on the topic", row?.check_battle_id ?? null, null);
     const [check] = await ctx.db.rows("edu.workflow_instances", { workflow_type: "practice", learner_id: me.id }, { columns: "id, state, metadata", limit: 20, order: { column: "created_at", ascending: false } })
       .then((rows) => rows.filter((w) => w.metadata?.battleId === battleId));
-    if (check) {
-      ctx.cleanup(() => ctx.db.deleteOwned("edu.workflow_instances", { ownerColumn: "learner_id", ownerId: me.id, filters: { id: check.id } }));
-      ctx.expect.eq("its workflow is stopped", check.state, "stopped");
-    }
+    ctx.expect.ok("the check had its own workflow", !!check);
+    if (check) ctx.cleanup(() => ctx.db.deleteOwned("edu.workflow_instances", { ownerColumn: "learner_id", ownerId: me.id, filters: { id: check.id } }));
+    ctx.expect.eq("its workflow is stopped", check?.state, "stopped");
     ctx.expect.eq("running work no longer lists it", (await runningWork(me.id)).agentChecks.length, 0);
     ctx.expect.eq("a second stop finds nothing", (await stopAgentCheck({ learnerId: me.id })).stopped, false);
   },

@@ -307,7 +307,8 @@ export function getWorkflowHarness() {
  * `questions` / `secondsPerQuestion` shorten the battle for a gate run.
  */
 export function getAgentCheckHarness({ questions, secondsPerQuestion } = {}) {
-  return createHarness({ store, topicWorkflow, syllabus, agentCheck: makeAgentCheck({ questions, secondsPerQuestion }), protege });
+  return createHarness({ store, topicWorkflow, syllabus, agentCheck: makeAgentCheck({ questions, secondsPerQuestion }), protege,
+    checkRun: agentCheckRun(), workflowMirror: workflowMirror() });
 }
 
 /**
