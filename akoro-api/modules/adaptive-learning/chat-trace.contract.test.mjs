@@ -259,3 +259,9 @@ test("after a Library search, a reader tool or the past papers, the agent says w
   assert.equal(talkAfterTool("check_progress", {}, {}), null, "other tools stay as they are");
   assert.equal(talkAfterTool("search_my_library", {}, { error: "x" }), null);
 });
+
+test("the Library search opening a reader tool names it on its row", async () => {
+  const { chatToolDisplayFor } = await import("./chat-trace.js");
+  assert.equal(chatToolDisplayFor("search_my_library", { tool: "flashcards" }).headline, "Finding it for the reader's flashcards");
+  assert.equal(chatToolDisplayFor("search_my_library", {}).headline, "Searching your library");
+});

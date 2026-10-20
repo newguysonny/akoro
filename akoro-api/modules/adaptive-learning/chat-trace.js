@@ -113,6 +113,16 @@ export function chatToolDisplay(tool) {
   return display;
 }
 
+/** The row for this call: the Library search opening a reader study tool says so (2026-10-19). */
+const READER_TOOL_WORDS = { quiz: "a quiz", flashcards: "flashcards", summary: "a summary", notes: "notes", podcast: "a podcast" };
+export function chatToolDisplayFor(tool, input = {}) {
+  const display = chatToolDisplay(tool);
+  if (tool === "search_my_library" && READER_TOOL_WORDS[input?.tool]) {
+    return { ...display, category: "action", headline: `Finding it for the reader's ${input.tool}`, description: `The reader builds ${READER_TOOL_WORDS[input.tool]} from the whole document` };
+  }
+  return display;
+}
+
 const MAX_RESULT_CHARS = 120;
 const clip = (text, max) => {
   const value = String(text ?? "").replace(/\s+/g, " ").trim();
@@ -326,7 +336,7 @@ export function createChatTrace({ send = null, now = () => Date.now(), developer
     },
     toolStart(tool, input = {}) {
       const id = nextId("tool");
-      const display = chatToolDisplay(tool);
+      const display = chatToolDisplayFor(tool, input);
       open.set(id, now());
       emit("tool_start", { id, ...display, ...(developer ? { raw: { name: String(tool || ""), args: rawJson(input) } } : {}) });
       return { id, display, tool, input };

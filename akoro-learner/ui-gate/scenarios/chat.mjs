@@ -85,6 +85,57 @@ export const scenarios = [
     },
   },
   {
+    name: 'chat.reader_tool_steps',
+    description: "2026-10-19: a reader study tool and a Library question asked in Agent Chat each show their step and what the agent found: \"Make flashcards from my notes\" → a 'Finding it for the reader's flashcards' row, then a message and the reader link; \"What do my notes say about…\" → a 'Searching your library' row, then the answer from the notes.",
+    async run(t) {
+      const { page } = t;
+      const marker = newMarker();
+      const name = `${marker} Cell notes`;
+      const made = await t.api('POST', '/api/records', { kind: 'paste', name,
+        content: ['Mitochondria are the sites of aerobic respiration. Mitochondria release the energy stored in glucose, so active cells such as muscle cells contain many mitochondria.',
+          'The nucleus controls the activities of the cell. The nucleus contains chromosomes made of DNA.', 'Chloroplasts absorb light energy for photosynthesis.'].join('\n\n') });
+      const record = made.body?.data?.record || made.body?.data;
+      if (!record?.id) t.block(`saving the pasted record answered ${made.status}: ${made.body?.message || ''}`);
+      t.cleanup(async () => { await t.api('DELETE', `/api/records/${record.id}`); });
+      t.cleanup(async () => {
+        const list = await t.api('GET', '/api/adaptive/chat/sessions');
+        for (const c of (list.body?.sessions || list.body?.data || []).filter((x) => String(x.title || '').includes(marker))) await t.api('DELETE', `/api/adaptive/chat/sessions/${c.id}`);
+      });
+      await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
+      await page.getByRole('button', { name: 'Chats', exact: true }).first().click({ timeout: 30_000 });
+      await page.getByRole('button', { name: /New chat/ }).first().click();
+      const box = page.getByRole('textbox', { name: /^Ask / }).last();
+      await box.waitFor({ timeout: 30_000 });
+      const feed = async () => (await page.locator('main, body').first().innerText().catch(() => '')).replace(/\s+/g, ' ');
+      const settle = async () => { await page.getByRole('button', { name: 'Send message' }).last().waitFor({ timeout: 120_000 }).catch(() => {}); await page.waitForTimeout(2_500); };
+
+      // A reader study tool: the step, then what it found, then the reader link.
+      await box.fill(`Make flashcards from my "${name}"`);
+      await box.press('Enter');
+      const link = page.locator('button[data-material="record"]', { hasText: marker }).first();
+      t.check('the reader link to the notes is under the reply', await link.waitFor({ timeout: 120_000 }).then(() => true, () => false));
+      await settle();
+      let text = await feed();
+      const row = text.lastIndexOf("Finding it for the reader's flashcards");
+      t.note(`after the row: ${text.slice(row, row + 400)}`);
+      t.check("the step is shown: Finding it for the reader's flashcards", row >= 0, { actual: text.slice(-600) });
+      t.check('…then a message about what it found, naming the notes', row >= 0 && text.slice(row + 30).includes('Cell notes'), { actual: text.slice(row, row + 400) });
+      await t.shot('reader-tool');
+
+      // A Library question: the search step, then the answer from the notes.
+      await box.fill(`What do my "${name}" say about mitochondria?`);
+      await box.press('Enter');
+      await page.waitForTimeout(4_000);
+      await settle();
+      text = await feed();
+      const search = text.lastIndexOf('Searching your library');
+      t.note(`after the search: ${text.slice(search, search + 500)}`);
+      t.check('the step is shown: Searching your library', search >= 0, { actual: text.slice(-600) });
+      t.check('…then the answer from the notes', search >= 0 && /aerobic respiration|energy/i.test(text.slice(search)), { actual: text.slice(search, search + 500) });
+      await t.shot('library-question');
+    },
+  },
+  {
     name: 'chat.materials_links',
     description: "Materials the agent finds show as links under its reply: a Library record opens in the Library; the record is deleted afterwards.",
     async run(t) {
