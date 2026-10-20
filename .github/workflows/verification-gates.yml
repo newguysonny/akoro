@@ -35,7 +35,8 @@ name: Verification Gates
 
 on:
   push:
-    branches: [main, "arena/**"]
+    # main only (2026-10-20): every arena push ran ~30 min of Actions while the gates ran from the session anyway.
+    branches: [main]
     paths: ["akoro-api/**", "akoro-learner/**", ".github/workflows/verification-gates.yml", ".github/scripts/gate-*.sh"]
   workflow_dispatch:
     inputs:
