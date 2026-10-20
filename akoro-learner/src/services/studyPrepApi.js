@@ -50,6 +50,11 @@ export async function confirmStudyPrepTeachBack(sessionId, topicId, conversation
   return apiPost(`${BASE}/sessions/${sessionId}/topics/${topicId}/teach-back-done`, inChat(conversationId));
 }
 
+/** Phase 6: confirm the teaching session offered after a missed Agent Check (it waits on the dashboard). */
+export async function approveStudyPrepTeaching(sessionId, topicId, conversationId = null) {
+  return apiPost(`${BASE}/sessions/${sessionId}/topics/${topicId}/teaching/approve`, inChat(conversationId));
+}
+
 export async function studyPrepNext(sessionId) {
   return apiPost(`${BASE}/sessions/${sessionId}/next`, {});
 }

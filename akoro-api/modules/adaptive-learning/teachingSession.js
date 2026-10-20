@@ -196,6 +196,8 @@ router.get("/sessions", authenticateToken, async (req, res) => {
         unread:         0,
         priority:       "medium",
         scheduleBucket: "later",
+        // Phase 6: a session start_teaching_session made for Study Prep (it teaches what a check missed).
+        fromStudyPrep:  !!s.objectives?.studyPrep?.workflowId,
         // Continuation context
         hasHistory,
         avgConfidence:  avgConf,

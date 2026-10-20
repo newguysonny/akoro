@@ -386,3 +386,27 @@ export function ingestRunBlocks(ingests = []) {
   }
   return blocks;
 }
+
+/**
+ * Planner notes for learners (2026-10-20, on for everyone): the planning run's
+ * decisions as a short list — each step's tool line with its plain reason (the
+ * agent's stated intent, never its raw thinking), what it found, and whether
+ * it's still running. The agent's own messages stay outside the list.
+ * blocks: workflowRunBlocks() output. → { steps, said }
+ */
+export function plannerNotes(blocks) {
+  const steps = [];
+  const said = [];
+  let reason = '';
+  for (const b of blocks || []) {
+    if (b.type === 'thinking') { reason = b.source === 'reasoning' ? '' : String(b.text || '').trim(); continue; }
+    if (b.type === 'tool') {
+      steps.push({ id: b.id, headline: b.headline || 'Working on your plan', reason: reason.slice(0, 160), result: b.result || '', running: b.status === 'running', ok: b.ok !== false });
+      reason = '';
+      continue;
+    }
+    if (b.type === 'activity') said.push(b);
+  }
+  const running = (blocks || []).some((b) => b.status === 'running');
+  return { steps, said, running };
+}

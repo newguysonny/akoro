@@ -61,6 +61,9 @@ export const AGENT_FEATURES = Object.freeze([
   { key: "teaching.study_prep_handoff", who: "learner", area: "teaching", name: "Teaching session from a missed Agent Check",
     what: "Below the pass mark, Study Prep offers a teaching session on exactly what the agent missed. A tap — or a minute — sets it up on the dashboard (the normal teaching session). The chat and the card follow its parts; finishing it unlocks the retest, which starts a minute later.",
     examples: ["(an Agent Check below the pass mark)", "(Dashboard → Continue teaching)"], since: "Phase 6", isOn: off("WORKFLOW_ENGINE_ENABLED") },
+  { key: "teaching.planner_notes", who: "learner", area: "teaching", name: "How I'm planning",
+    what: "While a Study Prep plan is made, its steps show in the chat as a short list in plain words — what the agent is checking and why, never its raw thinking. It folds once the plan is ready. On for everyone; the developer view shows the raw notes.",
+    examples: ["Prepare me for WAEC Biology in 5 weeks"], since: "2026-10-20" },
 
   // In the chat
   { key: "chat.trace", who: "shared", area: "other", name: "Live steps",

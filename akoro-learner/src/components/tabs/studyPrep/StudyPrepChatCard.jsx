@@ -7,7 +7,7 @@ import { countdownLabel, studyPrepCardHead, wakeOpen, workflowCardSteps } from '
 import { cacheEvents, cachedEvents, openWorkflowStream, rememberSeen, seenSequence } from '../../../lib/workflowStream.js';
 import { WorkflowHead, WorkflowSteps } from './WorkflowSteps.jsx';
 import {
-  adjustStudyPrepPlan, advanceStudyPrepTopic, approveMoreStudyPrepCoins, confirmStudyPrepPlan, confirmStudyPrepTeachBack,
+  adjustStudyPrepPlan, advanceStudyPrepTopic, approveMoreStudyPrepCoins, approveStudyPrepTeaching, confirmStudyPrepPlan, confirmStudyPrepTeachBack,
   concludeStudyPrepSession, deferStudyPrepTopic, fetchStudyPrepSession, generateStudyPrepPractice,
   resumeStudyPrepSession, retryStudyPrepDeferred, submitStudyPrepPractice,
 } from '../../../services/studyPrepApi.js';
@@ -38,6 +38,8 @@ const STATE_EVENTS = new Set([
   'topic.state_changed', 'assessment.completed', 'assessment.started', 'learner.action_received', 'decision.accepted',
   // The agent's wake ended: re-read for the next check's countdown.
   'operation.completed',
+  // Phase 6: the teaching session — offered, set up, under way, finished.
+  'learner.action_required', 'workflow.handoff_created', 'teaching.phase_changed', 'workflow.handoff_completed',
 ]);
 
 const TOPIC_STATUS_LABEL = {
@@ -196,8 +198,23 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
     fallbackFor.current = key;
     generateStudyPrepPractice(sessionId, nextCheck.topicId, nextCheck.mode).then(refresh, refresh);
   }, [counting, dueIn, nextCheck, sessionId, refresh]);
-  // Pinned while the agent works — and while its next check counts down (the learner can start it now).
-  useEffect(() => { onRunning?.(sessionId, running || counting); }, [sessionId, running, counting, onRunning]);
+  // Phase 6: the teaching session offered after a missed check — it sets itself up after a minute.
+  const teaching = view?.teaching || null;
+  const offering = teaching?.state === 'proposed' && !!teaching.autoApproveAt;
+  useEffect(() => {
+    if (!offering) return undefined;
+    const tick = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(tick);
+  }, [offering]);
+  const offerIn = offering ? Date.parse(teaching.autoApproveAt) - nowMs : null;
+  // Past its minute the server's sweep sets it up (every 15 s): re-read until it has.
+  useEffect(() => {
+    if (!offering || offerIn > 0) return undefined;
+    const timer = setInterval(refresh, 5000);
+    return () => clearInterval(timer);
+  }, [offering, offerIn != null && offerIn <= 0, refresh]);
+  // Pinned while the agent works, while its next check counts down, and while the teaching session waits for an OK.
+  useEffect(() => { onRunning?.(sessionId, running || counting || offering); }, [sessionId, running, counting, offering, onRunning]);
   const steps = useMemo(() => workflowCardSteps(wfEvents || [], { running }), [wfEvents, running]);
 
   if (!view) {
@@ -280,6 +297,33 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
     setView((previous) => ({ ...previous, topics: previous.topics.map((topic) => topic.id === response.topic.id ? response.topic : topic) }));
     refresh();
   });
+  const approveTeaching = () => void run(() => approveStudyPrepTeaching(session.id, activeTopic.id, conversationId), (response) => {
+    setView((previous) => ({ ...previous, teaching: response.teaching || previous.teaching }));
+    refresh();
+  });
+
+  // Phase 6: the teaching session as the card shows it — ONE tracking line, and the OK while it waits for one.
+  // Everything else (what was missed, the session's parts, the agent's report) is in the chat.
+  const teachingLine = teaching && ({
+    proposed: offerIn != null && offerIn > 0 ? `Teaching session offered · sets itself up in ${countdownLabel(offerIn)}` : 'Setting up your teaching session…',
+    scheduled: 'Teaching session on your dashboard',
+    teaching_active: teaching.progress?.of ? `Teaching · ${teaching.progress.done || 0} of ${teaching.progress.of} parts taught` : 'Teaching on your dashboard',
+    adapt_strategy: teaching.progress?.of ? `Teaching · ${teaching.progress.done || 0} of ${teaching.progress.of} parts taught` : 'Teaching on your dashboard',
+  })[teaching.state];
+  const teachingTrack = teachingLine && activeTopic && (
+    <div data-teaching-handoff={teaching.state} style={{ display: 'grid', gap: 7, padding: '8px 10px', borderRadius: 10, background: `${BRAND}0F`, border: `1px solid ${BRAND}30` }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, fontWeight: 800, color: BRAND }}>
+        <Icon name={teaching.state === 'proposed' ? 'ti-clock' : 'ti-school'} size={15} color={BRAND}/>
+        <span>{teachingLine}</span>
+      </div>
+      {teaching.state === 'proposed' && (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button type="button" disabled={busy} onClick={approveTeaching} style={primary}>Confirm teaching session</button>
+          <button type="button" disabled={busy} onClick={teachBackDone} style={{ border: 0, background: 'transparent', color: 'var(--ak-text-muted)', fontWeight: 800, fontSize: 11, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>I taught it elsewhere</button>
+        </div>
+      )}
+    </div>
+  );
 
   // Past the approved coins nothing runs by itself — not a check, not the agent's turn: the learner approves more first.
   const coins = view.coins || null;
@@ -338,7 +382,7 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
       {error && <div role="alert" style={errorBox}>{error}</div>}
 
       {/* Pinned (running): the head and the latest steps only — the full card is back at its message once it settles. */}
-      {pinned ? (checkLive ? <button type="button" onClick={watch} style={primary}>Watch the Agent Check</button> : (counting ? checkStarter(null) : coinsAsk)) : <>
+      {pinned ? (checkLive ? <button type="button" onClick={watch} style={primary}>Watch the Agent Check</button> : (counting ? checkStarter(null) : (teachingTrack || coinsAsk))) : <>
 
       {/* ── the plan card: Approve & Start / Adjust (the only spend gate) ── */}
       {/* With a workflow, an empty plan isn't shown while it plans — the steps above are the progress. */}
@@ -495,7 +539,8 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
                       ))}
                     </div>
                   )}
-                  {shownResult.outcome === 'retest_offered' && !shownTopic.learnerConfirmedReady && (
+                  {shownResult.outcome === 'retest_offered' && !shownTopic.learnerConfirmedReady && teachingTrack}
+                  {shownResult.outcome === 'retest_offered' && !shownTopic.learnerConfirmedReady && !teachingTrack && (
                     <div style={{ display: 'grid', gap: 6, padding: '8px 9px', border: '1px dashed var(--ak-border2)', borderRadius: 9 }}>
                       <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--ak-text)' }}>Teach it back</div>
                       <div style={caption}>Explain {shownTopic.label} in your own words — out loud or in writing. It is retrieval practice for you; the retest unlocks only when YOU confirm.</div>

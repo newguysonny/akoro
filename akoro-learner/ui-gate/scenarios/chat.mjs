@@ -596,6 +596,117 @@ export const scenarios = [
     },
   },
   {
+    name: 'chat.teaching_handoff_film',
+    description: 'Phase 6, filmed on the sandbox: a missed Agent Check (simulated for a test account) offers a teaching session — the card shows one tracking line and Confirm, the agent works in the chat; Confirm runs start_teaching_session; the session is an ordinary item in My Sessions → Agent; the normal teaching modal opens on its parts; ending it brings the agent\'s report and the retest countdown back in the chat. A screenshot every 2 seconds; for a person to look at.',
+    async run(t) {
+      const { page } = t;
+      const marker = newMarker();
+      const clear = async () => {
+        for (let i = 0; i < 4; i += 1) {
+          const a = await t.api('GET', '/api/adaptive/study-prep/sessions');
+          const id = a.body?.session?.id;
+          if (!id) break;
+          await t.api('POST', `/api/adaptive/study-prep/sessions/${id}/cancel`, {});
+        }
+      };
+      await clear();
+      t.cleanup(async () => {
+        await clear();
+        const list = await t.api('GET', '/api/adaptive/chat/sessions');
+        for (const c of (list.body?.sessions || []).filter((x) => String(x.title || '').includes(marker) || String(x.preview || '').includes(marker))) await t.api('DELETE', `/api/adaptive/chat/sessions/${c.id}`);
+      });
+      let n = 0;
+      const shot = (tag) => t.shot(`${String(n++).padStart(2, '0')}-${tag}`);
+      const scroll = () => page.evaluate(() => { for (const e of document.querySelectorAll('*')) if (e.scrollHeight > e.clientHeight + 40 && getComputedStyle(e).overflowY !== 'visible' && !e.closest('[data-workflow-pinned]')) e.scrollTop = e.scrollHeight; }).catch(() => {});
+      const film = async (tag, frames, until = null) => {
+        for (let i = 0; i < frames; i += 1) {
+          await page.waitForTimeout(2000);
+          await scroll();
+          await shot(tag);
+          if (until && await until()) return true;
+        }
+        return until ? until() : true;
+      };
+
+      // 1. A plan, approved.
+      await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
+      const box = page.getByRole('textbox').last();
+      await box.waitFor({ timeout: 30_000 });
+      await page.getByRole('button', { name: 'Chats' }).first().click({ timeout: 10_000 }).catch(() => {});
+      await page.getByRole('button', { name: /New chat/i }).first().click({ timeout: 10_000 }).catch(() => {});
+      await page.waitForTimeout(800);
+      await box.fill(`Prepare me for my JSS1 Basic Science exam in 5 weeks ${marker}`);
+      await page.getByRole('button', { name: 'Send message' }).click();
+      const approve = page.getByRole('button', { name: 'Approve & Start' }).last();
+      await approve.waitFor({ timeout: 300_000 }).catch(() => {});
+      if (!(await approve.isVisible().catch(() => false))) t.block('the plan did not arrive within 5 minutes');
+      await scroll(); await shot('plan-ready-notes');
+      await approve.click();
+      let session = null; let topic = null;
+      for (let i = 0; i < 20 && !topic; i += 1) {
+        await page.waitForTimeout(1500);
+        session = (await t.api('GET', '/api/adaptive/study-prep/sessions')).body;
+        topic = (session?.topics || []).find((x) => x.status === 'active') || null;
+      }
+      if (!topic) t.block('no active topic after approving');
+      await film('approved', 3);
+
+      // 2. The missed check (test accounts only) → the offer on the card, the agent in the chat.
+      const miss = await t.api('POST', `/api/adaptive/study-prep/sessions/${session.session.id}/topics/${topic.id}/teaching/simulate-miss`, { gaps: ['Why water moves into a cell', 'What plasmolysis is'] });
+      if (miss.status !== 200) t.block(`simulate-miss answered ${miss.status}: ${JSON.stringify(miss.body).slice(0, 200)}`);
+      const offered = await film('offered', 12, async () => (await page.locator('[data-workflow-wake="check_scored"] [data-workflow-run]').count()) > 0 && await page.locator('[data-teaching-handoff="proposed"]').first().isVisible().catch(() => false));
+      t.check('the card offers the session: one tracking line and Confirm', await page.locator('[data-teaching-handoff="proposed"]').first().isVisible().catch(() => false));
+      t.check('the agent works on the result in the chat', offered);
+
+      // 3. Confirm → start_teaching_session runs in the chat.
+      await page.getByRole('button', { name: 'Confirm teaching session' }).last().click({ timeout: 15_000 });
+      const created = await film('confirmed', 10, async () => await page.getByText(/Teaching session created/).first().isVisible().catch(() => false));
+      t.check('"Teaching session created · On your dashboard" in the chat', created);
+      t.check('the card: on your dashboard', await page.locator('[data-teaching-handoff="scheduled"]').first().isVisible().catch(() => false));
+
+      // 4. The dashboard as it is: My Sessions → Agent → the item.
+      await page.goto(`${t.app}/app`, { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(5000);
+      await page.locator('button', { hasText: /^Agent\s*\d+$/ }).first().click({ timeout: 15_000 }).catch(() => {});
+      await page.waitForTimeout(2500);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await shot('dashboard');
+      const item = page.getByText('From Study Prep').first();
+      t.check('an ordinary item in My Sessions → Agent, from Study Prep', await item.isVisible().catch(() => false));
+      await item.click({ timeout: 15_000 });
+      await page.waitForTimeout(1500);
+      await shot('session-sheet');
+      await page.getByRole('button', { name: /Continue Teaching|Start Teaching/ }).first().click({ timeout: 15_000 });
+
+      // 5. The normal teaching modal, on the check's gaps.
+      await page.waitForTimeout(8000);
+      await shot('modal-open');
+      const teach = page.getByRole('textbox').last();
+      await teach.waitFor({ timeout: 60_000 }).catch(() => {});
+      for (const line of [
+        'Water moves into a cell by osmosis: from where there is more water to where there is less, through the partially permeable membrane. The cell sap has less water, so water goes in.',
+        'Plasmolysis is when a plant cell loses water in a strong salt solution and the cytoplasm pulls away from the cell wall.',
+      ]) {
+        await teach.fill(line);
+        await teach.press('Enter');
+        await film('teaching', 12, async () => false);
+      }
+      // 6. End it.
+      for (const name of [/End Session/i, /End Session/i, /Save & Close Session/i]) {
+        await page.getByRole('button', { name }).last().click({ timeout: 8000 }).catch(() => {});
+        await page.waitForTimeout(2500);
+        await shot('ending');
+      }
+
+      // 7. Back in the chat: the agent's report and the retest countdown.
+      await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(4000);
+      const done = await film('finished', 25, async () => await page.locator('[data-workflow-wake="teaching_done"]').first().isVisible().catch(() => false) && await page.locator('[data-auto-start]').first().isVisible().catch(() => false));
+      t.check('the agent\'s report on what was taught, in the chat', await page.locator('[data-workflow-wake="teaching_done"]').first().isVisible().catch(() => false));
+      t.check('the retest counts down on the card', done);
+    },
+  },
+  {
     name: 'settings.agent_controls',
     description: 'Settings → Agent: one switch per part (Suggestions and ideas, Learn from my conversations, Task check-ins), quiet hours and time zone — each saves and survives a reload — and this week\'s background budget.',
     async run(t) {

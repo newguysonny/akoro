@@ -47,10 +47,14 @@ function SessionCard({ session, onTap, decayAlert, agentProfile }) {
             borderRadius:5,padding:"1px 7px",flexShrink:0,display:"inline-flex",alignItems:"center",gap:4 }}>
             <Icon name={SUBJECTS[session.subject]?.icon || "ti-book"} size={11} color={isDecay?RED:sc}/>{isDecay ? decayAlert.topic : SUBJECTS[session.subject]?.label}
           </span>
+          {/* Phase 6: made by Study Prep after a missed Agent Check — it teaches what the check missed. */}
+          {!isDecay && session.fromStudyPrep && (
+            <span style={{ fontSize:10,fontWeight:800,color:"#B45309",background:"#FFF7ED",borderRadius:5,padding:"1px 7px",flexShrink:0 }}>From Study Prep</span>
+          )}
           <span style={{ fontSize:10,fontWeight:600,color:"var(--ak-text-muted)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
             {isDecay
               ? `${agentProfile?.name || t('card.agent')} · ${t('card.needs_your_help')}`
-              : session.topic}
+              : session.fromStudyPrep && session.subtopicList?.length ? `Teach: ${session.subtopicList.join(' · ')}` : session.topic}
           </span>
         </div>
 

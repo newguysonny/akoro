@@ -290,3 +290,20 @@ test('an upload\'s steps: tool rows and messages in time order, across its uploa
   assert.equal(blocks[4].headline, 'Reading BIO111.pdf');
   assert.equal(ingestRunBlocks([{ id: 'x', state: 'ready', steps: [] }]).length, 0, 'an older upload without steps shows nothing new');
 });
+
+test('planner notes for learners: each step with its plain reason, never the raw thinking; the messages kept apart', async () => {
+  const { plannerNotes } = await import('./agentChatTrace.js');
+  const out = plannerNotes([
+    { type: 'thinking', id: 'a', text: 'Looking at the WAEC Biology syllabus' },
+    { type: 'tool', id: 'b', headline: 'Reading the syllabus', result: '32 topics', status: 'done', ok: true },
+    { type: 'thinking', id: 'c', text: 'raw chain of thought…', source: 'reasoning' },
+    { type: 'tool', id: 'd', headline: 'Putting topics in order', status: 'running' },
+    { type: 'activity', id: 'e', text: 'Your plan is ready.' },
+  ]);
+  assert.deepEqual(out.steps.map((s) => [s.headline, s.reason, s.result, s.running]), [
+    ['Reading the syllabus', 'Looking at the WAEC Biology syllabus', '32 topics', false],
+    ['Putting topics in order', '', '', true],
+  ]);
+  assert.deepEqual(out.said.map((b) => b.text), ['Your plan is ready.']);
+  assert.equal(out.running, true);
+});

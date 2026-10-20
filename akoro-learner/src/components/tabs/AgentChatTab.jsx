@@ -26,6 +26,7 @@ import Spinner from '../common/Spinner.jsx';
 import { useInFlight } from '../../hooks/useInFlight.js';
 import StudyPrepChatCard from './studyPrep/StudyPrepChatCard.jsx';
 import { fetchActiveStudyPrepSession } from '../../services/studyPrepApi.js';
+import PlannerNotes from './agentChat/PlannerNotes.jsx';
 import TraceBlocks from './agentChat/TraceBlocks.jsx';
 import { applyTraceEvent, blocksFromSavedTrace, ingestRunBlocks, promoteActivity, settleRunning, splitWakes, studyPrepEventBlocks, workflowRunBlocks } from '../../lib/agentChatTrace.js';
 import { CHAT_STARTERS, cleanIdeas, cleanMaterials, protegeMoves } from '../../lib/chatIdeas.js';
@@ -1370,7 +1371,7 @@ function AgentChatTab({
                     )}
                   </div>
                   {/* The agent keeps working after its reply: the workflow's run, live (thought → tool → its words). */}
-                  {!isMe&&msg.studyPrepSessionId&&lastPrepCardIdOf(msg.studyPrepSessionId)===msg.id&&(()=>{ const run=workflowRun(msg.studyPrepSessionId); return run.length>0&&<div data-workflow-run="" style={{ marginTop:10 }}><TraceBlocks blocks={run}/></div>; })()}
+                  {!isMe&&msg.studyPrepSessionId&&lastPrepCardIdOf(msg.studyPrepSessionId)===msg.id&&(()=>{ const run=workflowRun(msg.studyPrepSessionId); return run.length>0&&<div data-workflow-run="" style={{ marginTop:10 }}>{devView?<TraceBlocks blocks={run}/>:<PlannerNotes blocks={run}/>}</div>; })()}
                 </div>
               );
             })}

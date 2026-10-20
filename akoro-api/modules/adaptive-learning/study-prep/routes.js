@@ -9,7 +9,10 @@
 import express from "express";
 
 import { HarnessRejection } from "./harness.js";
-import { afterLearnerAction, resumeHeldWake, sayNothingToCheck, studyPrepEnabled, getHarness, runStudyPrepPlanningStep, startStudyPrepSession, teachingForTopic, teachingHandoff } from "./wiring.js";
+import { afterLearnerAction, resumeHeldWake, sayNothingToCheck, studyPrepEnabled, getHarness, runStudyPrepPlanningStep, startStudyPrepSession, teachingForTopic, teachingHandoff, wakeStudyPrep } from "./wiring.js";
+import { randomUUID } from "node:crypto";
+import db from "../../../db.js";
+import { isTester } from "../../verify/policy.js";
 import { supabaseStore } from "./store.js";
 import { publicEvent } from "./events.js";
 import { pauseCopy } from "./narration.js";
@@ -203,6 +206,39 @@ router.post("/sessions/:id/topics/:topicId/teaching/approve", async (req, res) =
     if (!offered) return res.status(404).json({ success: false, error: { code: "no_teaching_session", message: "There's no teaching session offered for that topic" } });
     const teaching = await teachingHandoff().approve({ workflowId: offered.workflowId, learnerId: req.user.id });
     return res.json({ success: true, teaching });
+  } catch (error) { return rejection(res, error); }
+});
+
+// POST /study-prep/sessions/:id/topics/:topicId/teaching/simulate-miss — TEST ACCOUNTS ONLY
+// (tester##@demo.akoro.app; anyone else gets 403). The frontend gate films the
+// handoff without a real battle: it records a below-the-mark Agent Check on the
+// active topic (2 of 5, with these gaps) — then everything after is the real
+// path: the offer, the agent's wake on it, the card, the dashboard, the session.
+router.post("/sessions/:id/topics/:topicId/teaching/simulate-miss", async (req, res) => {
+  if (!guard(res)) return;
+  const id = paramId(res, req.params.id, "session id");
+  const topicId = paramId(res, req.params.topicId, "topic id");
+  if (!id || !topicId) return;
+  try {
+    const { data: me } = await db.from("users").select("username, email").eq("id", req.user.id).maybeSingle();
+    if (!isTester(me)) return res.status(403).json({ success: false, error: { code: "testers_only", message: "This is for test accounts only" } });
+    const gaps = (Array.isArray(req.body?.gaps) ? req.body.gaps : ["Why water moves into a cell", "What plasmolysis is"])
+      .map((g) => String(g || "").trim().slice(0, 120)).filter(Boolean).slice(0, 4);
+    const harness = getHarness();
+    const view = await harness.getSessionView({ sessionId: id, learnerId: req.user.id, eventLimit: 1 });
+    const topic = view.topics.find((t) => t.id === topicId && t.status === "active");
+    if (!topic) return res.status(409).json({ success: false, error: { code: "invalid_state_transition", message: "That topic is not active" } });
+    const at = new Date().toISOString();
+    const scored = await supabaseStore.updateTopicConditional(topic.id, "active", {
+      check_battle_id: randomUUID(), check_mode: "diagnostic", check_scored_at: at, attempts_used: Number(topic.attemptsUsed || 0) + 1,
+      check_result: { correct: 2, guessed: 0, wrong: 3, unknown: 0, total: 5, score: 0.4, perQuestion: [], gaps, simulated: true },
+      learner_confirmed_ready: false, updated_at: at,
+    });
+    if (!scored) return res.status(409).json({ success: false, error: { code: "invalid_state_transition", message: "The topic moved meanwhile" } });
+    const [row] = (await db.schema("edu").from("study_prep_sessions").select("*").eq("id", id).limit(1)).data || [];
+    const teaching = await teachingHandoff().propose({ session: row, topic: { id: topic.id, label: topic.label, attemptsUsed: Number(topic.attemptsUsed || 0) + 1 }, outcome: "retest_offered", gaps });
+    wakeStudyPrep({ sessionId: id, learnerId: req.user.id, trigger: "check_scored", facts: { topic: topic.label }, conversationId: chatOf(req) });
+    return res.json({ success: true, simulated: true, teaching });
   } catch (error) { return rejection(res, error); }
 });
 
