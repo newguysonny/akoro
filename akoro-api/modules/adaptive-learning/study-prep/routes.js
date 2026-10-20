@@ -9,7 +9,7 @@
 import express from "express";
 
 import { HarnessRejection } from "./harness.js";
-import { afterLearnerAction, resumeHeldWake, sayNothingToCheck, studyPrepEnabled, getHarness, runStudyPrepPlanningStep, startStudyPrepSession } from "./wiring.js";
+import { afterLearnerAction, resumeHeldWake, sayNothingToCheck, studyPrepEnabled, getHarness, runStudyPrepPlanningStep, startStudyPrepSession, teachingForTopic, teachingHandoff } from "./wiring.js";
 import { supabaseStore } from "./store.js";
 import { publicEvent } from "./events.js";
 import { pauseCopy } from "./narration.js";
@@ -62,7 +62,7 @@ router.get("/sessions", async (req, res) => {
   if (!guard(res)) return;
   try {
     const active = await getActiveSessionView(req.user.id);
-    return res.json(active ? shapeView(active) : { success: true, session: null });
+    return res.json(active ? shapeView(await withTeaching(active)) : { success: true, session: null });
   } catch (error) { return rejection(res, error); }
 });
 
@@ -73,7 +73,7 @@ router.get("/sessions/:id", async (req, res) => {
   if (!id) return;
   try {
     const view = await getHarness().getSessionView({ sessionId: id, learnerId: req.user.id });
-    return res.json(shapeView(view));
+    return res.json(shapeView(await withTeaching(view)));
   } catch (error) { return rejection(res, error); }
 });
 
@@ -182,8 +182,35 @@ router.post("/sessions/:id/topics/:topicId/teach-back-done", async (req, res) =>
   if (!id || !topicId) return;
   try {
     const result = await getHarness().confirmTeachBack({ sessionId: id, learnerId: req.user.id, topicId });
+    // Taught it elsewhere: the teaching session offered for it (if any) is no longer needed.
+    if (result.session?.workflowId) await teachingHandoff().cancelFor({ parentId: result.session.workflowId, topicId, reason: "taught_elsewhere" }).catch(() => null);
     wake(req, id, "teach_back", { topic: result.topic?.label });
     return res.json({ success: true, session: result.session, topic: result.topic });
+  } catch (error) { return rejection(res, error); }
+});
+
+// POST /study-prep/sessions/:id/topics/:topicId/teaching/approve — the learner
+// confirms the teaching session offered after a missed check (Phase 6); without
+// a tap it approves itself after a minute. It then waits on the dashboard.
+router.post("/sessions/:id/topics/:topicId/teaching/approve", async (req, res) => {
+  if (!guard(res)) return;
+  const id = paramId(res, req.params.id, "session id");
+  const topicId = paramId(res, req.params.topicId, "topic id");
+  if (!id || !topicId) return;
+  try {
+    const view = await getHarness().getSessionView({ sessionId: id, learnerId: req.user.id, eventLimit: 1 });
+    const offered = await teachingForTopic(view.session.workflowId, topicId);
+    if (!offered) return res.status(404).json({ success: false, error: { code: "no_teaching_session", message: "There's no teaching session offered for that topic" } });
+    const teaching = await teachingHandoff().approve({ workflowId: offered.workflowId, learnerId: req.user.id });
+    return res.json({ success: true, teaching });
+  } catch (error) { return rejection(res, error); }
+});
+
+// GET /study-prep/teaching-sessions — the learner's teaching sessions waiting on the dashboard.
+router.get("/teaching-sessions", async (req, res) => {
+  if (!guard(res)) return;
+  try {
+    return res.json({ success: true, sessions: await teachingHandoff().listOpen(req.user.id) });
   } catch (error) { return rejection(res, error); }
 });
 
@@ -290,6 +317,13 @@ async function getActiveSessionView(learnerId) {
 
 // ── shaping ────────────────────────────────────────────────────────────────
 
+/** The active topic's teaching session (offered, waiting or under way), for the card. */
+async function withTeaching(view) {
+  const active = (view.topics || []).find((t) => t.status === "active");
+  const teaching = active ? await teachingForTopic(view.session?.workflowId, active.id).catch(() => null) : null;
+  return teaching ? { ...view, teaching } : view;
+}
+
 function shapeView(view) {
   return {
     success: true,
@@ -302,6 +336,8 @@ function shapeView(view) {
     nextCheck: view.nextCheck || undefined,
     // The coins approved for the plan and what's spent (checks + the agent's wakes).
     coins: view.coins || undefined,
+    // Phase 6: the active topic's teaching session — offered (with its auto-approve time), on the dashboard, or under way.
+    teaching: view.teaching || undefined,
   };
 }
 

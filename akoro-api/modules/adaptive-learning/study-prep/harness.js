@@ -505,7 +505,7 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
    * a retest, mastery evidence is written as the agent's (agent_recall), and
    * the protégé reports in chat. Scored once per check.
    */
-  async function completeAgentCheck({ battleId }) {
+  async function completeAgentCheck({ battleId, teachingHandoff = false }) {
     if (!agentCheck) return null;
     const result = await agentCheck.results(battleId);
     if (!result?.studyPrepTopicId) return null;
@@ -554,7 +554,10 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
 
     const next = outcome === "understood" ? "That's above the pass mark — this topic is understood."
       : outcome === "capped_out" ? "That was the last attempt on this topic, so we'll move on and come back to it."
-        : `That's below the ${thresholdPercentage}% pass mark. Teach me what I missed, then tap "I've taught it" and I'll be checked again.`;
+        : teachingHandoff
+          // Phase 6: a teaching session on the gaps is offered on the card (study-prep/teaching-handoff.js).
+          ? `That's below the ${thresholdPercentage}% pass mark. I've set up a teaching session on what I missed — confirm it on the card (it's set up by itself in a minute), then teach me from your dashboard. My retest starts when you finish.`
+          : `That's below the ${thresholdPercentage}% pass mark. Teach me what I missed, then tap "I've taught it" and I'll be checked again.`;
     const gapLine = result.gaps.length ? ` I couldn't answer from your notes on: ${result.gaps.slice(0, 4).join("; ")}.` : "";
     const guessLine = result.guessed ? ` I had to guess on ${result.guessed} — a guess doesn't count.` : "";
     await protege?.say({

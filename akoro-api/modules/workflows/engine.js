@@ -123,6 +123,13 @@ export function createWorkflowEngine({ store, definitionOf = workflowDefinition,
 
   const listForLearner = (learnerId, { active = false } = {}) => store.listInstances(learnerId, { active });
 
+  /** Merge into a run's metadata without moving it (CAS on its current state; null if it moved meanwhile). */
+  async function annotate(id, metadata = {}) {
+    const instance = await store.getInstance(id);
+    if (!instance) throw new WorkflowError("workflow_not_found", "That workflow was not found", 404);
+    return store.updateInstanceConditional(id, instance.state, { metadata: { ...(instance.metadata || {}), ...metadata }, updated_at: now() });
+  }
+
   async function appendEvent(id, event) {
     const instance = await store.getInstance(id);
     if (!instance) throw new WorkflowError("workflow_not_found", "That workflow was not found", 404);
@@ -134,5 +141,5 @@ export function createWorkflowEngine({ store, definitionOf = workflowDefinition,
 
   const events = (id, opts) => store.listEvents(id, opts);
 
-  return { create, get, resume, transition, pause, complete, abandon, cancel, emitOutcome, listForLearner, appendEvent, events };
+  return { create, get, resume, transition, pause, complete, abandon, cancel, emitOutcome, listForLearner, annotate, appendEvent, events };
 }

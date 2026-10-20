@@ -55,7 +55,10 @@ export function guardStudyPrepStore(store, { mirror = null } = {}) {
     },
     async updateTopicConditional(topicId, expectedStatus, patch) {
       if (moves(expectedStatus, patch)) assertTransition(studyPrepWorkflow, expectedStatus, patch.status, "topic");
-      return call("updateTopicConditional", topicId, expectedStatus, patch);
+      const updated = await call("updateTopicConditional", topicId, expectedStatus, patch);
+      // A topic leaving "active" (understood, set aside, capped out…) closes its teaching session, if any.
+      if (mirror?.topicLeft && updated && expectedStatus === "active" && moves(expectedStatus, patch)) await mirror.topicLeft(updated, store);
+      return updated;
     },
     async appendEvents(sessionId, rows) {
       const written = await call("appendEvents", sessionId, rows);
@@ -174,7 +177,7 @@ export function workflowEventFor(row) {
 }
 
 /** The dual-write into the engine. Every call swallows (and logs) its own failure. */
-export function makeWorkflowMirror(engine, { log = console } = {}) {
+export function makeWorkflowMirror(engine, { log = console, hooks = {} } = {}) {
   const bySession = new Map();   // session id → workflow id
   const quiet = (what) => (error) => { log.warn?.(`[study-prep] workflow mirror: ${what} failed: ${error?.message || error}`); return null; };
 
@@ -217,6 +220,14 @@ export function makeWorkflowMirror(engine, { log = console } = {}) {
           payload: { from, to, reason: session.paused_reason || null },
         }).catch(quiet("state event"));
       }
+      // The plan ended (done, cancelled, abandoned): its open teaching sessions close with it.
+      if (["completed", "cancelled", "abandoned"].includes(to)) if (hooks.sessionEnded) await Promise.resolve(hooks.sessionEnded(id, to)).catch(quiet("close teaching"));
+    },
+    /** A topic left "active": its open teaching session (if any) closes. */
+    async topicLeft(topic, store) {
+      if (!hooks.topicLeft) return;
+      const id = await workflowIdOf(topic.session_id, store).catch(() => null);
+      if (id) await Promise.resolve(hooks.topicLeft(id, topic)).catch(quiet("close topic teaching"));
     },
     /**
      * Backfill (Phase 3): a session from before the engine gets its workflow,

@@ -472,3 +472,81 @@ export const replaceAndCancel = {
     ctx.expect.eq("nothing left to cancel", none?.cancelled, false);
   },
 };
+
+// Phase 6 (2026-10-20): Study Prep → Teaching → Study Prep. A missed Agent
+// Check (simulated: the handoff is offered with its gaps, no battle is run)
+// offers a teaching session on the card; the learner's tap sets it up on the
+// dashboard (the start_teaching_session tool row in the chat); the dashboard's
+// session is tied to the live teaching socket, reports its parts, and its end
+// unlocks the retest. The session is cancelled at the end, before any retest
+// could start. The auto-approve after a minute is unit-tested (it would
+// approve real learners' offers early if run here with a later clock).
+export const teachingHandoff = {
+  name: "studyprep.teaching_handoff", area: "study-prep", risk: "write",
+  description: "A missed check offers a teaching session on its gaps (card: proposed + auto-approve time); a tap puts it on the dashboard with a 'Teaching session created' tool row; the live session ties to it, its parts reach the Study Prep stream, and its end confirms the teach-back.",
+  params: { learner: { default: "@tester16" }, subject: { default: "Basic Science" }, classLevel: { default: "JSS3" } },
+  async run(ctx, p) {
+    const me = await ctx.as(p.learner);
+    const { getWorkflowHarness, teachingHandoff: handoffOf } = await import("../../adaptive-learning/study-prep/wiring.js");
+    const harness = getWorkflowHarness();
+    const handoff = handoffOf();
+    const active = await ctx.http({ as: p.learner, path: "/api/adaptive/study-prep/sessions" });
+    if (active.body?.session?.id) await harness.cancelSession({ sessionId: active.body.session.id, learnerId: me.id }).catch(() => {});
+
+    const session = await harness.createSession({ learnerId: me.id, goal: `${ctx.marker} Revise ${p.subject}`, subject: p.subject, classLevel: p.classLevel, examBoard: "BECE" });
+    const [linked] = await ctx.db.rows("edu.study_prep_sessions", { id: session.id }, { columns: "*", limit: 1 });
+    const wfId = linked?.workflow_id;
+    if (!wfId) ctx.expect.blocked("the session has no workflow instance");
+    ctx.cleanup(async () => {
+      await harness.cancelSession({ sessionId: session.id, learnerId: me.id }).catch(() => {});
+      await ctx.db.deleteOwned("edu.workflow_instances", { ownerColumn: "learner_id", ownerId: me.id, filters: { parent_workflow_id: wfId } });
+      await ctx.db.deleteOwned("edu.workflow_instances", { ownerColumn: "learner_id", ownerId: me.id, filters: { id: wfId } });
+      await ctx.db.deleteOwned("edu.study_prep_sessions", { ownerColumn: "learner_id", ownerId: me.id, filters: { id: session.id } });
+    });
+    const syllabus = await harness.resolveSyllabus({ sessionId: session.id, learnerId: me.id });
+    if (!syllabus.found || !syllabus.topics.length) ctx.expect.blocked(`no ${p.classLevel} ${p.subject} syllabus to plan from`);
+    await harness.proposePlan({ sessionId: session.id, learnerId: me.id, topicIds: [syllabus.topics[0].id] });
+    await harness.confirmPlan({ sessionId: session.id, learnerId: me.id });
+    const view = await harness.getSessionView({ sessionId: session.id, learnerId: me.id, eventLimit: 1 });
+    const topic = view.topics.find((t) => t.status === "active");
+    if (!topic) ctx.expect.blocked("no active topic after confirming");
+    const [row] = await ctx.db.rows("edu.study_prep_sessions", { id: session.id }, { columns: "*", limit: 1 });
+
+    // 1. The missed check's offer.
+    const offered = await handoff.propose({ session: row, topic, outcome: "retest_offered", gaps: ["Why water moves into a cell", "What plasmolysis is"] });
+    ctx.expect.eq("offered on the card first", offered?.state, "proposed");
+    const card = await ctx.http({ as: p.learner, path: `/api/adaptive/study-prep/sessions/${session.id}` });
+    ctx.expect.eq("the card's view carries the offer", card.body?.teaching?.workflowId, offered?.workflowId);
+    ctx.expect.ok("…with when it sets itself up", !!card.body?.teaching?.autoApproveAt, card.body?.teaching);
+    const listed0 = await ctx.http({ as: p.learner, path: "/api/adaptive/study-prep/teaching-sessions" });
+    ctx.expect.ok("not on the dashboard before it's approved", !(listed0.body?.sessions || []).some((s) => s.workflowId === offered?.workflowId));
+
+    // 2. The learner's tap: start_teaching_session.
+    const approved = await ctx.http({ as: p.learner, method: "POST", path: `/api/adaptive/study-prep/sessions/${session.id}/topics/${topic.id}/teaching/approve`, body: {} });
+    ctx.expect.eq("the tap sets it up", approved.body?.teaching?.state, "scheduled");
+    const listed = await ctx.http({ as: p.learner, path: "/api/adaptive/study-prep/teaching-sessions" });
+    const onDash = (listed.body?.sessions || []).find((s) => s.workflowId === offered?.workflowId);
+    ctx.expect.ok("on the dashboard", !!onDash, listed.body);
+    ctx.expect.eq("…with what to teach", JSON.stringify(onDash?.focus || []), JSON.stringify(["Why water moves into a cell", "What plasmolysis is"]));
+
+    // 3–5. The live session (what the socket does), its parts, its end.
+    const bound = await handoff.bind({ workflowId: offered.workflowId, learnerId: me.id, liveSessionId: `fresh_${me.id}_${Date.now()}` });
+    ctx.expect.eq("opened from the dashboard: teaching", bound?.state, "teaching_active");
+    await handoff.progress({ workflowId: offered.workflowId, result: { subtopicIdx: 1, totalSubtopics: 2, currentPhase: "PHASE_1" } });
+    const finished = await handoff.finish({ workflowId: offered.workflowId, endResult: { totalTurns: 4, learnerEvidenceScore: 60 }, notesAdded: 3 });
+    ctx.expect.eq("ended: completed", finished?.view?.state, "completed");
+    const [after] = await ctx.db.rows("edu.study_prep_topics", { id: topic.id }, { columns: "learner_confirmed_ready, status", limit: 1 });
+    ctx.expect.eq("the end confirmed the teach-back (the retest unlocks)", after?.learner_confirmed_ready, true);
+
+    const events = await ctx.db.rows("edu.workflow_events", { workflow_id: wfId }, { columns: "event_type, visibility, payload", limit: 300, order: { column: "sequence", ascending: true } });
+    const of = (type) => events.filter((e) => e.event_type === type);
+    ctx.note(events.filter((e) => e.payload?.narrative && e.visibility === "learner").map((e) => `${e.event_type}: ${e.payload.narrative}`).slice(-8).join(" | "));
+    ctx.expect.ok("the card was asked", of("learner.action_required").some((e) => e.payload?.kind === "teaching_handoff"));
+    ctx.expect.ok("the chat shows the tool row", of("tool.completed").some((e) => e.payload?.tool === "teaching.start_session" && e.payload?.resultLine === "On your dashboard"));
+    ctx.expect.ok("…and where to find it", of("activity").some((e) => /on your dashboard/i.test(e.payload?.message || "")));
+    ctx.expect.ok("a part taught reached Study Prep", of("teaching.phase_changed").some((e) => /1 of 2 parts taught/.test(e.payload?.narrative || "")));
+    ctx.expect.ok("…and the end", of("workflow.handoff_completed").some((e) => /You finished teaching/.test(e.payload?.narrative || "")));
+    // The retest would start a minute after the teach-back: end the plan now (the cleanup cancels it too).
+    await harness.cancelSession({ sessionId: session.id, learnerId: me.id }).catch(() => {});
+  },
+};

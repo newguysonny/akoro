@@ -58,6 +58,9 @@ export const AGENT_FEATURES = Object.freeze([
   { key: "teaching.study_prep_wakes", who: "learner", area: "teaching", name: "Study Prep keeps working after the plan",
     what: "After the plan is ready, each approve, adjust, new topic and marked Agent Check wakes the agent for up to 4 decisions, shown in the chat. A check starts by itself a minute after its topic or teach-back, inside the approved coins; past them the agent asks first. A wake is billed to the learner as part of the session; its rules are reasoning/WAKES.md.",
     examples: ["Prepare me for my Basic Science exam in 5 weeks", "(approve the plan on the card)"], since: "2026-10-19", isOn: off("AKORO_STUDY_PREP_ENABLED") },
+  { key: "teaching.study_prep_handoff", who: "learner", area: "teaching", name: "Teaching session from a missed Agent Check",
+    what: "Below the pass mark, Study Prep offers a teaching session on exactly what the agent missed. A tap — or a minute — sets it up on the dashboard (the normal teaching session). The chat and the card follow its parts; finishing it unlocks the retest, which starts a minute later.",
+    examples: ["(an Agent Check below the pass mark)", "(Dashboard → Continue teaching)"], since: "Phase 6", isOn: off("WORKFLOW_ENGINE_ENABLED") },
 
   // In the chat
   { key: "chat.trace", who: "shared", area: "other", name: "Live steps",

@@ -114,6 +114,11 @@ export async function resolveSyllabusTool({ subject, classLevel, exam }) {
 export function makeSessionStateReader(harness) {
   return async ({ learnerId, sessionId }) => {
     const view = await harness.getSessionView({ sessionId, learnerId, eventLimit: 20 });
+    // The active topic's teaching session, if one was handed over (Phase 6): offered, waiting or under way.
+    const active = view.topics.find((t) => t.status === "active");
+    const teaching = active && view.session.workflowId
+      ? await import("./wiring.js").then((w) => w.teachingForTopic(view.session.workflowId, active.id)).catch(() => null)
+      : null;
     return {
       session: {
         id: view.session.id, status: view.session.status, goal: view.session.goal,
@@ -126,6 +131,7 @@ export function makeSessionStateReader(harness) {
         // The topic's last Agent Check, as marked (never the questions' answers).
         ...(topic.checkResult ? { lastCheck: { correct: topic.checkResult.correct, total: topic.checkResult.total, guessed: topic.checkResult.guessed, gaps: (topic.checkResult.gaps || []).slice(0, 4) } } : {}),
         ...(topic.checkBattleId && !topic.checkScoredAt ? { checkRunning: true } : {}),
+        ...(teaching && active?.id === topic.id ? { teachingSession: { state: teaching.state, focus: teaching.focus, progress: teaching.progress, autoApproveAt: teaching.autoApproveAt } } : {}),
       })),
       ...(view.session.estimate && harness.budgetFor ? { coins: await harness.budgetFor({ id: view.session.id, estimate: view.session.estimate }).catch(() => undefined) } : {}),
       recentEvents: view.events.map((event) => ({

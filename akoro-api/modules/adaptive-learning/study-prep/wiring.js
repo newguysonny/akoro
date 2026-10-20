@@ -30,7 +30,10 @@ import { makeSupabaseWorkflowStore } from "../../workflows/store.js";
 import { publishLiveDeveloper } from "../../workflows/bus.js";
 import { keepFactual } from "../../agent-runtime/factFilter.js";
 import { aiContext } from "../../../lib/aiContext.js";
-import { makeWorkflowMirror, workflowEngineEnabled } from "./workflow.js";
+import { makeWorkflowMirror, studyPrepWorkflow, workflowEngineEnabled } from "./workflow.js";
+import { registerWorkflow } from "../../workflows/registry.js";
+import { makeTeachingHandoff } from "./teaching-handoff.js";
+import { HANDOFF_AUTO_APPROVE_MS, teachingView } from "../teaching-session/workflow.js";
 import { AUTO_START_MS, WAKE_DECISIONS, WAKE_FINAL_ACTIONS, WAKE_LABELS, autoStartFor, settleStep, spentOnChecks, wakeGoal } from "./wake.js";
 import { TERMINAL_ACTIONS } from "./agent-loop.js";
 
@@ -94,8 +97,61 @@ const protege = {
 };
 
 // Phase 1: the generic workflow engine, dual-written behind WORKFLOW_ENGINE_ENABLED.
+let _engine = null;
+const workflowEngine = () => (_engine ||= createWorkflowEngine({ store: makeSupabaseWorkflowStore(db) }));
 let _mirror = null;
-const workflowMirror = () => (_mirror ||= makeWorkflowMirror(createWorkflowEngine({ store: makeSupabaseWorkflowStore(db) })));
+const workflowMirror = () => (_mirror ||= makeWorkflowMirror(workflowEngine(), {
+  // A topic or a plan that moves on closes its open teaching session (Phase 6).
+  hooks: {
+    topicLeft: (parentId, topic) => teachingHandoff().cancelFor({ parentId, topicId: topic.id }),
+    sessionEnded: (parentId, to) => closeTeachingFor(parentId, `study_prep_${to}`),
+  },
+}));
+
+// ── Study Prep → Teaching → Study Prep (Phase 6, 2026-10-20) ────────────────
+const OPEN_STATUSES = ["created", "active", "waiting_learner", "waiting_child", "paused"];
+const workflowRows = () => db.schema("edu").from("workflow_instances");
+
+/** The open teaching session a Study Prep topic handed over, if any. */
+async function findOpenTeaching(parentId, topicId) {
+  const { data, error } = await workflowRows().select("*").eq("workflow_type", "teaching")
+    .eq("source_workflow_id", parentId).eq("source_topic_id", topicId).in("status", OPEN_STATUSES)
+    .order("created_at", { ascending: false }).limit(1);
+  if (error) throw error;
+  return data?.[0] || null;
+}
+async function closeTeachingFor(parentId, reason) {
+  const { data } = await workflowRows().select("id").eq("workflow_type", "teaching").eq("source_workflow_id", parentId).in("status", OPEN_STATUSES);
+  for (const row of data || []) await workflowEngine().cancel(row.id, reason).catch(() => null);
+}
+let _handoff = null;
+export const teachingHandoff = () => (_handoff ||= makeTeachingHandoff({
+  engine: workflowEngine(),
+  findOpen: findOpenTeaching,
+  async listDueProposals(nowIso) {
+    const cutoff = new Date(Date.parse(nowIso) - HANDOFF_AUTO_APPROVE_MS).toISOString();
+    const { data, error } = await workflowRows().select("*").eq("workflow_type", "teaching").eq("state", "proposed").lte("created_at", cutoff).limit(25);
+    if (error) throw error;
+    return data || [];
+  },
+  studyPrep: {
+    // The run's own message in the chat the plan lives in (like a wake's).
+    async openWake({ sessionId, learnerId, wakeId, trigger, label }) {
+      const conversationId = await conversationOf(sessionId, learnerId).catch(() => null);
+      if (conversationId) await postToConversation({ learnerId, conversationId, text: label, meta: { studyPrepWake: { sessionId, wakeId, trigger, label } } });
+    },
+    confirmTeachBack: ({ sessionId, learnerId, topicId }) => getHarness().confirmTeachBack({ sessionId, learnerId, topicId }),
+    wake: (args) => wakeStudyPrep(args),
+  },
+}));
+// The engine hands a finished teaching session's outcome to Study Prep through this.
+registerWorkflow(studyPrepWorkflow, { onChildOutcome: (parent, args) => teachingHandoff().controller.onChildOutcome(parent, args) });
+
+/** The teaching session on a topic (offered, waiting or under way) — for the card. */
+export async function teachingForTopic(workflowId, topicId) {
+  if (!workflowId || !topicId) return null;
+  return teachingView(await findOpenTeaching(workflowId, topicId).catch(() => null));
+}
 
 /** The session's workflow id, made (and its events backfilled) on first ask — owner only. */
 export async function ensureStudyPrepWorkflow(sessionId, learnerId) {
@@ -148,8 +204,14 @@ export function getPracticeHarness() {
 /** The battle worker's hook when an Agent Check ends. Scores even if the switch was turned off meanwhile. */
 export async function completeAgentCheckBattle(battleId) {
   const done = await createHarness({ store, topicWorkflow, syllabus, agentCheck, protege,
-    ...(workflowEngineEnabled() ? { workflowMirror: workflowMirror() } : {}) }).completeAgentCheck({ battleId });
-  // The agent wakes on the result: explains it, and moves on, sets the topic aside or asks for a teach-back.
+    ...(workflowEngineEnabled() ? { workflowMirror: workflowMirror() } : {}) }).completeAgentCheck({ battleId, teachingHandoff: workflowEngineEnabled() });
+  // Below the mark with tries left: a teaching session on what it missed is offered first (Phase 6),
+  // so the wake can talk about it.
+  if (done?.outcome === "retest_offered" && workflowEngineEnabled()) {
+    const row = await store.getSession(done.session.id).catch(() => null);
+    if (row) done.teaching = await teachingHandoff().propose({ session: row, topic: done.topic, outcome: done.outcome, gaps: done.result?.gaps || [] }).catch(() => null);
+  }
+  // The agent wakes on the result: explains it, and moves on, sets the topic aside or points to the teaching session.
   if (done?.session?.id) wakeStudyPrep({ sessionId: done.session.id, learnerId: done.session.learnerId || null, trigger: "check_scored", facts: { topic: done.topic?.label } });
   return done;
 }
@@ -471,7 +533,11 @@ export async function sayNothingToCheck(sessionId, topicLabel) {
 let autoStartTimer = null;
 export function startStudyPrepAutoStart({ everyMs = 15_000 } = {}) {
   if (autoStartTimer) return autoStartTimer;
-  autoStartTimer = setInterval(() => { autoStartDueChecks().catch((e) => console.warn(`[study-prep] auto-start sweep: ${e?.message || e}`)); }, everyMs);
+  autoStartTimer = setInterval(() => {
+    autoStartDueChecks().catch((e) => console.warn(`[study-prep] auto-start sweep: ${e?.message || e}`));
+    // A teaching session nobody confirmed for a minute is set up by itself.
+    if (studyPrepEnabled() && workflowEngineEnabled()) teachingHandoff().autoApproveDue().catch((e) => console.warn(`[study-prep] teaching auto-approve: ${e?.message || e}`));
+  }, everyMs);
   autoStartTimer.unref?.();
   return autoStartTimer;
 }

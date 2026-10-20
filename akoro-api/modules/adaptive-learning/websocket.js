@@ -269,6 +269,7 @@ export function setupWebSocket(io) {
       document,                   // { recordId } | { contentKey } — a library document to search per turn
       teacherAgentId,             // the learner's chosen guide (ownership checked in the registry)
       userId,
+      workflowId,                 // Phase 6: a teaching session handed over from Study Prep (ownership checked)
     }) => {
       if (!studentId || !topic)
         return socket.emit("error", { message: "studentId and topic required" });
@@ -284,13 +285,26 @@ export function setupWebSocket(io) {
         // Socket payloads are client-controlled. Only retain the capped,
         // text-only reference produced by the authenticated upload endpoint.
         const sessionReference = normalizeSessionReference(reference);
+        // Phase 6: a teaching workflow from the dashboard — only the authenticated
+        // learner's own, and only while it is open. Its focus (what the Agent Check
+        // missed) becomes the session's parts.
+        const handoff = typeof workflowId === "string" && /^[0-9a-f-]{36}$/i.test(workflowId)
+          ? await import("./study-prep/wiring.js").then((w) => w.teachingHandoff()).catch(() => null)
+          : null;
+        const owner = socket.data?.user?.id || caller;
+        const teaching = handoff ? (await handoff.listOpen(owner).catch(() => [])).find((t) => t.workflowId === workflowId) || null : null;
         // One preparation for every transport (teaching-session/start.js):
         // continuation / decay loading, the gated student session, the ladder.
         const { orchestrator, init, sessionType, decayPayload, historyBlocks, priorBlocks, ladder } = await prepareTeachingSession({
           studentId, caller, topic, subject, mode,
           prevSessionId, notificationId, reference: sessionReference, document, teacherAgentId,
+          focus: teaching?.focus || null,
         });
         const id   = `${mode}_${studentId}_${Date.now()}`;
+        if (teaching) {
+          orchestrator.teachingWorkflowId = teaching.workflowId;
+          await handoff.bind({ workflowId: teaching.workflowId, learnerId: owner, liveSessionId: id }).catch((e) => console.warn("[teaching handoff] bind:", e.message));
+        }
 
         activeSessions.set(id, orchestrator);
         socket.join(`session:${id}`);
@@ -349,6 +363,8 @@ export function setupWebSocket(io) {
           studentId, topic, subject,
           openingBlocks: carryForward(priorBlocks, init.openingBlocks),
         }).then(rowId => {
+          // The dashboard's Continue reopens this row for the handed-over session.
+          if (rowId && teaching) handoff.saved({ workflowId: teaching.workflowId, adaptiveSessionId: rowId }).catch(() => null);
           socket.emit("session_saved", {
             sessionId: id,
             saved:     !!rowId,
@@ -426,6 +442,11 @@ export function setupWebSocket(io) {
         // Persist the turn and compact server-owned evidence before another
         // socket event (especially end_session) can observe this session.
         await appendSessionBlocks(orchestrator, [{ type: "user", text: message }, ...blocks]);
+        // Phase 6: a handed-over session tells Study Prep each part taught (its card and chat follow).
+        if (orchestrator.teachingWorkflowId) {
+          import("./study-prep/wiring.js").then((w) => w.teachingHandoff().progress({ workflowId: orchestrator.teachingWorkflowId, result }))
+            .catch((e) => console.warn("[teaching handoff] progress:", e.message));
+        }
       } catch (err) {
         console.error("[teacher_message]", err);
         socket.emit("student_done"); socket.emit("guide_done");
@@ -528,6 +549,12 @@ export function setupWebSocket(io) {
         const formatted = fmtSessionEnd(endResult);
         await ensureSessionRecord(orchestrator);
         await completeSessionRecord(orchestrator);   // mark the session row complete
+        // Phase 6: a handed-over session's outcome goes back to Study Prep (its retest unlocks).
+        if (orchestrator.teachingWorkflowId) {
+          await import("./study-prep/wiring.js")
+            .then((w) => w.teachingHandoff().finish({ workflowId: orchestrator.teachingWorkflowId, endResult, notesAdded: orchestrator.stats?.agentKnowledgeAdded || 0 }))
+            .catch((e) => console.warn("[teaching handoff] finish:", e.message));
+        }
         activeSessions.delete(sessionId);
         await clearStateCache(agentId);
         socket.emit("session_ended", {

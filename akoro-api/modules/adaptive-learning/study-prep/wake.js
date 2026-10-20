@@ -32,10 +32,11 @@ const GOALS = {
   plan_adjusted: "The learner adjusted the plan. Check the new plan (plan.validate on the new order) and tell them what changed and what it now costs. Then wait for them to approve it.",
   plan_confirmed: "The learner approved the plan. Look at the first topic (session.get_state, topic.get_notes) and tell them how it will start: the Agent Check starts by itself in a minute, or when they tap Start now. Then wait.",
   topic_started: "A new topic just started. Review what the learner has taught you on it (topic.get_notes) and their past practice, tell them what to expect from the Agent Check (it starts by itself in a minute), then wait.",
-  check_scored: "An Agent Check was just marked. Read the result (session.get_state). Passed: say so and advance_topic (or conclude_session when no topic is left). Below the pass mark with tries left: name what you missed and ask them to teach it, then wait. Out of tries: defer_topic (one deferred retry per session) or advance_topic, and say why.",
+  check_scored: "An Agent Check was just marked. Read the result (session.get_state). Passed: say so and advance_topic (or conclude_session when no topic is left). Below the pass mark with tries left: a teaching session on what you missed has been offered on the card (session.get_state shows it) — name what you missed, and say the session is set up by itself in a minute if they don't confirm, then waits on their dashboard; the retest starts when they finish teaching. Then wait. Out of tries: defer_topic (one deferred retry per session) or advance_topic, and say why.",
   teach_back: "The learner says they taught you what you missed. Acknowledge it in one line: the new Agent Check starts by itself in a minute, or when they tap Start now. Then wait.",
   over_estimate: "The next Agent Check would go past the coins the learner approved. Tell them how many coins are left of the estimate and that the next check needs their OK (the card has the button). Then wait.",
   coins_approved: "The learner approved more coins. Say what happens next with them (the check that was waiting starts by itself), then wait.",
+  teaching_done: "The learner finished the teaching session on this topic (from their dashboard). Read what it covered (session.get_state, topic.get_notes): name one or two things they taught you, in their words where you can. The retest starts by itself in a minute, or when they tap Start now. Then wait.",
 };
 export const WAKE_TRIGGERS = Object.freeze(Object.keys(GOALS));
 
@@ -43,7 +44,7 @@ export const WAKE_TRIGGERS = Object.freeze(Object.keys(GOALS));
 export const WAKE_LABELS = Object.freeze({
   plan_adjusted: "You adjusted the plan", plan_confirmed: "You approved the plan", topic_started: "A new topic started",
   check_scored: "An Agent Check was marked", teach_back: "You taught it back", over_estimate: "The estimate is used up",
-  coins_approved: "You approved more coins",
+  coins_approved: "You approved more coins", teaching_done: "You finished teaching",
 });
 
 export function wakeGoal(trigger, facts = {}) {
