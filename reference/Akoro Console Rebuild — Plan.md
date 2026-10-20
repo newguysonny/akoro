@@ -45,6 +45,64 @@ checks the console headers, drawers and the no-emoji rule.
 
 `design-system/` is reference notes only; no app imports it.
 
+## Old and new look side by side (the switch)
+
+No copied app folder. Each console keeps one codebase and gets a switch between
+its **legacy** look (today's) and the **next** look (the learner's), so the two
+can be compared on the same pages with the same data until the rebuild is done.
+
+How it works:
+
+- **Two themes, one set of tokens.** Phase 3 replaces hard-coded colours with
+  tokens. The legacy theme sets those tokens to today's values (amber, cream,
+  ink, DM Sans), so a migrated page looks exactly as before; the next theme
+  sets the learner's values (purple, Nunito, light + dark). Fonts and icons go
+  through the same switch.
+- **Two frames.** The old `Layout.jsx` sidebar and `AppHeader.jsx` stay until
+  the end; the shared frame sits beside them. The switch picks one.
+- **The default is legacy** (build setting `VITE_CONSOLE_UI`, `legacy` until the
+  flip). Real instructors see no change until then, so other work on this
+  branch can reach `main` while the rebuild is half done.
+
+### Trying it
+
+On the live instructor app (`instructors.akoro.name.ng`), add `?ui=` to any page:
+
+| URL | Shows |
+|---|---|
+| `instructors.akoro.name.ng/chat?ui=next` | the new look |
+| `instructors.akoro.name.ng/chat?ui=legacy` | today's look |
+| `instructors.akoro.name.ng/chat?ui=reset` | back to the default |
+
+- Not case-sensitive: `?UI=next` works too.
+- The choice sticks in that browser while you move around the app, until
+  another `?ui=` changes it.
+- To compare, open the same page in two tabs (or a normal and a private
+  window), one `next` and one `legacy`.
+- There's no button in the app for it, so nobody switches by accident.
+
+When it's live: the instructor app builds from `main`, so the links work once
+this work is merged there (safe, since the default stays legacy). Before that:
+
+- each step comes with legacy/next screenshot pairs of the same pages, from the
+  ui-gate, in one grid;
+- if Vercel builds this branch, each push has its own preview URL where the
+  same `?ui=` links work (Vercel → instructor project → Deployments; the setting
+  is under Project → Settings → Git).
+
+### The flip, and removing the legacy look
+
+1. Every route reviewed in `next`, light and dark, phone/tablet/desktop.
+2. The default becomes `next`; `?ui=legacy` still works for a short while.
+3. Then the legacy theme values, `Layout.jsx`, `AppHeader.jsx` and the switch
+   are deleted — one small, contained change.
+
+Phase 0's screenshots of every route stay as the frozen record of the old app.
+While both looks exist, a ui-gate check confirms that each migrated page still
+matches its legacy screenshot with the switch on `legacy`.
+
+School and admin follow the same approach (`?ui=` on their own domains).
+
 ## How the apps share the kit
 
 The kit's source lives in one place, `design-system/ui/`. A sync script copies
@@ -79,6 +137,9 @@ Lifted out of the learner app, unchanged in look:
 
 Then the learner app imports its own pieces from the kit (no visible change),
 and the sync script and drift test land.
+
+The `?ui=` switch is built here too, in the instructor app, before anything
+visible changes: the legacy and next token sets, and the frame choice.
 
 ### Phase 2 — Instructor frame swap (2 days)
 
