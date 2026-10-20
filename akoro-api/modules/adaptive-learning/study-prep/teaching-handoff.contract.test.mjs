@@ -123,8 +123,18 @@ test("a tap approves at once; the dashboard opens it; parts are reported; the en
   assert.equal((await w.engine.get(offered.workflowId)).state, "adapt_strategy");
   await w.handoff.progress({ workflowId: offered.workflowId, result: { subtopicIdx: 1, totalSubtopics: 2, currentPhase: "PHASE_1" } });
   assert.equal((await w.engine.get(offered.workflowId)).state, "teaching_active", "back on track");
-  const progressed = (await w.parentEvents(parent.id)).filter((e) => e.event_type === "teaching.phase_changed").map((e) => e.payload.narrative);
+  const parentEvents = await w.parentEvents(parent.id);
+  const progressed = parentEvents.filter((e) => e.event_type === "teaching.phase_changed").map((e) => e.payload.narrative);
   assert.deepEqual(progressed, ["You started teaching Osmosis", "Teaching Osmosis: 1 of 2 parts taught"]);
+  // Each is its own run in the chat (the card only re-reads its tracking line): a message, a tool row, what it means.
+  assert.deepEqual(w.calls.wakeMessages.map((m) => m.trigger), ["teaching_created", "teaching_started", "teaching_progress"]);
+  const said = parentEvents.filter((e) => e.event_type === "activity").map((e) => e.payload.message);
+  assert.ok(said.includes("I'm following along. First: why water moves in."), said);
+  assert.ok(said.includes("You've taught me why water moves in. Next: plasmolysis."), said);
+  assert.ok(parentEvents.filter((e) => e.event_type === "tool.completed").some((e) => e.payload.tool === "teaching.track_session" && e.payload.resultLine === "Why water moves in"));
+  // The last part: the end is the learner's call.
+  await w.handoff.progress({ workflowId: offered.workflowId, result: { subtopicIdx: 1, totalSubtopics: 2, currentPhase: "MASTERY", phaseChanged: true } });
+  assert.match((await w.parentEvents(parent.id)).filter((e) => e.event_type === "activity").pop().payload.message, /That's every part — plasmolysis too\. End the session when you're ready/);
 
   assert.deepEqual((await w.handoff.finish({ workflowId: offered.workflowId, endResult: { totalTurns: 0 } })).ignored, "nothing_taught", "an empty session stays open");
   assert.equal(w.calls.confirm.length, 0);
@@ -133,7 +143,7 @@ test("a tap approves at once; the dashboard opens it; parts are reported; the en
   assert.deepEqual(w.calls.confirm, [{ sessionId: "s1", learnerId: L, topicId: "t1" }], "the retest unlocks");
   assert.equal(w.calls.wake[0].trigger, "teaching_done");
   assert.equal(w.calls.wake[0].facts.notesAdded, 6);
-  assert.match((await w.parentEvents(parent.id)).find((e) => e.event_type === "workflow.handoff_completed").payload.narrative, /You finished teaching Osmosis · 1 of 2 parts/);
+  assert.match((await w.parentEvents(parent.id)).find((e) => e.event_type === "workflow.handoff_completed").payload.narrative, /You finished teaching Osmosis · 2 of 2 parts/);
   assert.equal((await w.handoff.listOpen(L)).length, 0);
 });
 

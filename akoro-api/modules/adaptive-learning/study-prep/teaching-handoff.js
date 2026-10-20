@@ -23,6 +23,8 @@
 import { autoApproveAt, dueForAutoApprove, handoffFromCheck, OPEN_TEACHING_STATES, teachingOutcome, teachingProgress, teachingView } from "../teaching-session/workflow.js";
 
 export const START_TEACHING_TOOL = "teaching.start_session";
+/** The tool row for following a live session (started, each part taught). */
+export const TRACK_TEACHING_TOOL = "teaching.track_session";
 const list = (items) => (items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`);
 
 export function makeTeachingHandoff({ engine, findOpen, listDueProposals, studyPrep, now = () => new Date().toISOString(), log = console }) {
@@ -133,8 +135,15 @@ export function makeTeachingHandoff({ engine, findOpen, listDueProposals, studyP
     if (child.state === "scheduled") {
       const moved = await engine.transition(child.id, { from: "scheduled", to: "teaching_active", patch: { metadata: { liveSessionId, startedAt: now() } } });
       if (moved) {
+        const m = moved.metadata || {};
         await engine.appendEvent(moved.id, { event_type: "workflow.started", actor: "learner", visibility: "learner", payload: { narrative: "You started teaching" } }).catch(quiet("child started"));
-        await toParent(moved.parent_workflow_id, { event_type: "teaching.phase_changed", category: "teaching", actor: "learner", payload: { teachingWorkflowId: moved.id, stage: "started", topic: moved.metadata?.topic, narrative: `You started teaching ${moved.metadata?.topic}` } });
+        // Its own run in the Study Prep chat; the card only re-reads its one tracking line.
+        await run(moved, {
+          trigger: "teaching_started", label: "You started teaching", tool: TRACK_TEACHING_TOOL,
+          headline: `You started teaching ${m.topic}`, resultLine: m.focus?.length ? `${m.focus.length} part${m.focus.length === 1 ? "" : "s"}` : "",
+          extra: [{ event_type: "teaching.phase_changed", category: "teaching", actor: "learner", payload: { teachingWorkflowId: moved.id, stage: "started", topic: m.topic, narrative: `You started teaching ${m.topic}` } }],
+          message: m.focus?.length ? `I'm following along. First: ${m.focus[0].toLowerCase()}.` : "I'm following along.",
+        });
         return teachingView(moved);
       }
     }
@@ -160,11 +169,22 @@ export function makeTeachingHandoff({ engine, findOpen, listDueProposals, studyP
     else if (!p.drift && state === "adapt_strategy") state = (await engine.transition(child.id, { from: state, to: "teaching_active" }).catch(() => null))?.state || state;
     const changed = p.part !== previous.part || p.of !== previous.of || p.done !== previous.done || p.phase !== previous.phase;
     if (changed) await engine.annotate(child.id, { progress: { part: p.part, of: p.of, done: p.done, phase: p.phase, mastery: p.mastery } }).catch(quiet("progress"));
-    if (p.milestone) {
-      const topic = child.metadata?.topic || "this topic";
-      const narrative = p.of ? `Teaching ${topic}: ${p.done} of ${p.of} part${p.of === 1 ? "" : "s"} taught` : `Teaching ${topic}: next step`;
+    // A part taught (not every turn): its own run in the Study Prep chat — the tool row and what it means.
+    if (p.milestone && p.done > (Number(previous.done) || 0)) {
+      const m = child.metadata || {};
+      const topic = m.topic || "this topic";
+      const focus = Array.isArray(m.focus) ? m.focus : [];
+      const narrative = p.of ? `Teaching ${topic}: ${p.done} of ${p.of} part${p.of === 1 ? "" : "s"} taught` : `Teaching ${topic}: a part taught`;
+      const taught = focus[p.done - 1];
+      const next = focus[p.done];
       await engine.appendEvent(child.id, { event_type: "teaching.phase_changed", category: "teaching", actor: "system", visibility: "learner", payload: { ...p, narrative } }).catch(quiet("child progress"));
-      await toParent(child.parent_workflow_id, { event_type: "teaching.phase_changed", category: "teaching", payload: { teachingWorkflowId: child.id, stage: "progress", topic, done: p.done, of: p.of, narrative } });
+      await run(child, {
+        trigger: "teaching_progress", label: narrative, tool: TRACK_TEACHING_TOOL, headline: narrative, resultLine: taught || "",
+        extra: [{ event_type: "teaching.phase_changed", category: "teaching", payload: { teachingWorkflowId: child.id, stage: "progress", topic, done: p.done, of: p.of, narrative } }],
+        message: p.of && p.done >= p.of
+          ? `That's every part${taught ? ` — ${taught.toLowerCase()} too` : ""}. End the session when you're ready, and my retest starts a minute later.`
+          : `${taught ? `You've taught me ${taught.toLowerCase()}.` : "That part is taught."}${next ? ` Next: ${next.toLowerCase()}.` : ""}`,
+      });
     }
     return p;
   }
