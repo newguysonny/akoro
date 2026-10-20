@@ -110,3 +110,35 @@ export const embeddingsCompare = {
     }
   },
 };
+
+// Search without a vector (2026-10-20): a late or failed query embedding
+// (lib/searchEmbedding.js) leaves the search its text half — including the
+// curriculum, past-question and syllabus searches, which used to be
+// vector-only and answer nothing.
+export const searchTextFallback = {
+  name: "smoke.search_text_fallback", area: "smoke", risk: "read",
+  description: "With no query vector, match_curriculum / match_past_questions / match_syllabus still answer on text (lexical rows), and a question's embedding gives up at its time limit instead of holding the search.",
+  async run(ctx) {
+    const { default: db } = await import("../../../db.js");
+    const { embedForSearch } = await import("../../../lib/searchEmbedding.js");
+    const calls = [
+      ["match_curriculum", { p_query_embedding: null, p_limit: 5, p_query_text: "photosynthesis in green plants" }],
+      ["match_past_questions", { p_query_embedding: null, p_limit: 5, p_query_text: "photosynthesis chlorophyll light" }],
+      ["match_syllabus", { p_query_embedding: null, p_match_count: 5, p_query_text: "photosynthesis chlorophyll" }],
+    ];
+    for (const [fn, args] of calls) {
+      const t0 = Date.now();
+      const { data, error } = await db.rpc(fn, args);
+      const rows = data || [];
+      ctx.note(`${fn}: ${error ? `error ${error.message}` : `${rows.length} rows on text`} (${Date.now() - t0} ms)${rows[0] ? ` · first: ${String(rows[0].topic || rows[0].topic_title || rows[0].stem || "").slice(0, 80)}` : ""}`);
+      ctx.expect.ok(`${fn} answers without a vector`, !error, error?.message);
+      ctx.expect.ok(`${fn} finds text matches`, rows.length > 0, rows.length);
+      ctx.expect.ok(`${fn} marks them as text matches`, rows.every((r) => r.lexical === true), rows.map((r) => r.lexical));
+    }
+    const t0 = Date.now();
+    const v = await embedForSearch("photosynthesis", { timeoutMs: 250, create: () => new Promise((r) => setTimeout(() => r({ data: [{ embedding: [1] }] }), 5000)) });
+    const waited = Date.now() - t0;
+    ctx.note(`a slow embedding: gave up after ${waited} ms`);
+    ctx.expect.ok("a slow embedding gives up at its limit", v === null && waited < 1500, { v, waited });
+  },
+};

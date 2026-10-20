@@ -1,5 +1,5 @@
 // The scenario registry. Add a scenario: export it from an area file and list it here.
-import { healthBuild, toolsCatalogue, r2Live, embeddingsLive, embeddingsCompare } from "./smoke.js";
+import { healthBuild, toolsCatalogue, r2Live, embeddingsLive, embeddingsCompare, searchTextFallback, searchTextFallback } from "./smoke.js";
 import { scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity, historyPages } from "./chat.js";
 import { followUpDeliverIntoChat, taskDueInMinutes, noResidue, sweepStale } from "./writes.js";
 import { viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds } from "./selftool.js";
@@ -36,6 +36,7 @@ export const SUITES = {
   storage: ["smoke.r2_live"],
   embeddings: ["smoke.embeddings_live"],
   "embeddings-compare": ["smoke.embeddings_compare"],
+  search: ["smoke.search_text_fallback"],
   "agent-chat": ["chat.schedule_message_here", "chat.tool_error_honesty", "chat.past_questions_truth", "chat.history_tools", "chat.read_tools_run", "chat.dry_run_no_writes", "chat.protege_identity"],
   "chat-history": ["chat.history_pages", "writes.no_residue"],
   // Assignments on paper: structured AI output, cropped drawings, the submission template.
