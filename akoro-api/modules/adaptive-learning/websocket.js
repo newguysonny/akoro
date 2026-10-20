@@ -288,11 +288,16 @@ export function setupWebSocket(io) {
         // Phase 6: a teaching workflow from the dashboard — only the authenticated
         // learner's own, and only while it is open. Its focus (what the Agent Check
         // missed) becomes the session's parts.
-        const handoff = typeof workflowId === "string" && /^[0-9a-f-]{36}$/i.test(workflowId)
+        // It is found by its workflow id, or — opened from the dashboard's sessions list like any
+        // session — by its row (the continuation's sessionId).
+        const isId = (v) => typeof v === "string" && /^[0-9a-f-]{36}$/i.test(v);
+        const handoff = isId(workflowId) || (mode === "continuation" && isId(prevSessionId))
           ? await import("./study-prep/wiring.js").then((w) => w.teachingHandoff()).catch(() => null)
           : null;
         const owner = socket.data?.user?.id || caller;
-        const teaching = handoff ? (await handoff.listOpen(owner).catch(() => [])).find((t) => t.workflowId === workflowId) || null : null;
+        const teaching = !handoff ? null
+          : isId(workflowId) ? (await handoff.listOpen(owner).catch(() => [])).find((t) => t.workflowId === workflowId) || null
+            : await handoff.forSessionRow({ learnerId: owner, adaptiveSessionId: prevSessionId }).catch(() => null);
         // One preparation for every transport (teaching-session/start.js):
         // continuation / decay loading, the gated student session, the ladder.
         const { orchestrator, init, sessionType, decayPayload, historyBlocks, priorBlocks, ladder } = await prepareTeachingSession({
@@ -303,6 +308,8 @@ export function setupWebSocket(io) {
         const id   = `${mode}_${studentId}_${Date.now()}`;
         if (teaching) {
           orchestrator.teachingWorkflowId = teaching.workflowId;
+          // Its first opening teaches into the row start_teaching_session made — no second row in the list.
+          if (teaching.state === "scheduled" && teaching.adaptiveSessionId && teaching.adaptiveSessionId === prevSessionId) orchestrator.dbSessionId = prevSessionId;
           await handoff.bind({ workflowId: teaching.workflowId, learnerId: owner, liveSessionId: id }).catch((e) => console.warn("[teaching handoff] bind:", e.message));
         }
 

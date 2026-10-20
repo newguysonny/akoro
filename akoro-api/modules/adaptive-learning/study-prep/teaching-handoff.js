@@ -97,7 +97,12 @@ export function makeTeachingHandoff({ engine, findOpen, listDueProposals, studyP
     if (child.state !== "proposed") return teachingView(child);   // already done — idempotent
     const moved = await engine.transition(child.id, { from: "proposed", to: "scheduled", patch: { metadata: { approvedAt: now(), approvedBy: auto ? "auto" : "learner" } } });
     if (!moved) return teachingView(await engine.get(workflowId, learnerId));   // raced: the other one did it
-    const m = moved.metadata || {};
+    let latest = moved;
+    const m0 = moved.metadata || {};
+    // The session itself, in the dashboard's own sessions list (edu.adaptive_sessions), like any other.
+    const adaptiveSessionId = await studyPrep.createSessionRow?.({ learnerId: moved.learner_id, workflowId: moved.id, topic: m0.topic, subject: m0.subject, focus: m0.focus || [] }).catch(quiet("session row"));
+    if (adaptiveSessionId) latest = (await engine.annotate(moved.id, { adaptiveSessionId }).catch(quiet("link row"))) || { ...moved, metadata: { ...m0, adaptiveSessionId } };
+    const m = latest.metadata || {};
     await engine.appendEvent(moved.id, { event_type: "workflow.state_changed", actor: auto ? "system" : "learner", visibility: "learner", payload: { from: "proposed", to: "scheduled", narrative: "Waiting on your dashboard" } }).catch(quiet("child scheduled"));
     const focus = m.focus?.length ? ` — ${list(m.focus.map((f) => f.toLowerCase()))}` : "";
     await run(moved, {
@@ -106,7 +111,7 @@ export function makeTeachingHandoff({ engine, findOpen, listDueProposals, studyP
       extra: [{ event_type: "workflow.handoff_created", category: "teaching", payload: { teachingWorkflowId: moved.id, topicId: m.topicId, topic: m.topic, focus: m.focus || [], narrative: `Teaching session on ${m.topic}: on your dashboard` } }],
       message: `Your teaching session on ${m.topic} is on your dashboard. Open it there and teach me what I missed${focus}. I'll follow along here, and my retest starts by itself a minute after you finish.`,
     });
-    return teachingView(moved);
+    return teachingView(latest);
   }
 
   /** The sweep: proposals nobody tapped for a minute approve themselves. */
@@ -208,6 +213,12 @@ export function makeTeachingHandoff({ engine, findOpen, listDueProposals, studyP
     return { view: teachingView(done), outcome };
   }
 
+  /** The open teaching workflow behind a dashboard session row (the modal opens rows by id). */
+  async function forSessionRow({ learnerId, adaptiveSessionId }) {
+    if (!learnerId || !adaptiveSessionId) return null;
+    return (await listOpen(learnerId)).find((t) => t.adaptiveSessionId === adaptiveSessionId) || null;
+  }
+
   /** The dashboard's list: teaching sessions waiting for the learner. */
   async function listOpen(learnerId) {
     const rows = await engine.listForLearner(learnerId, { active: true }).catch(() => []);
@@ -234,5 +245,5 @@ export function makeTeachingHandoff({ engine, findOpen, listDueProposals, studyP
     },
   };
 
-  return { propose, approve, autoApproveDue, cancelFor, bind, saved, progress, finish, listOpen, controller, findOpen };
+  return { propose, approve, autoApproveDue, cancelFor, bind, saved, progress, finish, listOpen, forSessionRow, controller, findOpen };
 }

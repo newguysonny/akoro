@@ -528,6 +528,16 @@ export const teachingHandoff = {
     const onDash = (listed.body?.sessions || []).find((s) => s.workflowId === offered?.workflowId);
     ctx.expect.ok("on the dashboard", !!onDash, listed.body);
     ctx.expect.eq("…with what to teach", JSON.stringify(onDash?.focus || []), JSON.stringify(["Why water moves into a cell", "What plasmolysis is"]));
+    // It is an ordinary session in the dashboard's own list (My Sessions → Agent), opened by its row.
+    const rowId = approved.body?.teaching?.adaptiveSessionId;
+    if (rowId) ctx.cleanup(() => ctx.db.deleteOwned("edu.adaptive_sessions", { ownerColumn: "student_id", ownerId: me.id, filters: { id: rowId } }));
+    const dashList = await ctx.http({ as: p.learner, path: "/api/adaptive/teaching/sessions" });
+    const rows = dashList.body?.sessions || dashList.body?.data || [];
+    const item = rows.find((r) => r.id === rowId || r.sessionId === rowId);
+    ctx.expect.ok("start_teaching_session made a session in the dashboard's list", !!item, { rowId, listed: rows.length });
+    ctx.expect.ok("…that the list offers to continue (it has its opening note)", item ? (item.hasHistory !== false) : false, item);
+    const byRow = await handoff.forSessionRow({ learnerId: me.id, adaptiveSessionId: rowId });
+    ctx.expect.eq("the modal opening that row finds its workflow", byRow?.workflowId, offered?.workflowId);
 
     // 3–5. The live session (what the socket does), its parts, its end.
     const bound = await handoff.bind({ workflowId: offered.workflowId, learnerId: me.id, liveSessionId: `fresh_${me.id}_${Date.now()}` });

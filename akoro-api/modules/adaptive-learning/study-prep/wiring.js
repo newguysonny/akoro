@@ -141,6 +141,20 @@ export const teachingHandoff = () => (_handoff ||= makeTeachingHandoff({
       if (conversationId) await postToConversation({ learnerId, conversationId, text: label, meta: { studyPrepWake: { sessionId, wakeId, trigger, label } } });
     },
     confirmTeachBack: ({ sessionId, learnerId, topicId }) => getHarness().confirmTeachBack({ sessionId, learnerId, topicId }),
+    // start_teaching_session's row: an ordinary teaching session in the dashboard's list, with one
+    // opening note (so the list offers it to continue, and the modal opens it by id).
+    async createSessionRow({ learnerId, workflowId, topic, subject, focus }) {
+      const what = focus.length ? ` — teach me ${focus.map((f) => f.toLowerCase()).join(" and ")}` : "";
+      const at = new Date().toISOString();
+      const { data, error } = await db.schema("edu").from("adaptive_sessions").insert({
+        student_id: learnerId, topic: topic || "Untitled session", subject: subject || "General",
+        subtopics: focus, objectives: { studyPrep: { workflowId } }, current_subtopic_idx: 0, current_phase: "1",
+        status: "active", started_at: at, updated_at: at, session_history: [], objectives_covered: {}, confidence_by_subtopic: {},
+        block_history: [{ type: "guide", text: `From your Study Prep${what}. When you finish, my retest starts a minute later.`, source: "study_prep_handoff" }],
+      }).select("id").single();
+      if (error) throw error;
+      return data?.id || null;
+    },
     wake: (args) => wakeStudyPrep(args),
   },
 }));

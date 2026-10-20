@@ -107,7 +107,7 @@ export async function prepareTeachingSession({
   // A session handed over from Study Prep (Phase 6) teaches exactly what the
   // Agent Check missed: those are its parts, in place of the ladder's.
   const parts = Array.isArray(focus) ? focus.map((f) => String(f || "").trim().slice(0, 120)).filter(Boolean).slice(0, 6) : [];
-  if (parts.length && mode === "fresh") orchestrator.presetMustKnow = parts;
+  if (parts.length) orchestrator.presetMustKnow = parts;
 
   const init = await orchestrator.initialize(studentId, topic);
   // Identity for persistence: lifecycle.js saves the session from this.

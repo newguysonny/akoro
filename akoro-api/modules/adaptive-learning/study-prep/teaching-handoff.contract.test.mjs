@@ -32,6 +32,7 @@ function world() {
       openWake: async (args) => { calls.wakeMessages.push(args); },
       confirmTeachBack: async (args) => { calls.confirm.push(args); return { ok: true }; },
       wake: (args) => { calls.wake.push(args); },
+      createSessionRow: async (args) => { calls.rows = [...(calls.rows || []), args]; return `row-${(calls.rows || []).length}`; },
     },
   });
   return { store, engine, handoff, calls, tick: (ms) => { clock += ms; }, parentEvents: async (id) => store.listEvents(id) };
@@ -116,7 +117,11 @@ test("a tap approves at once; the dashboard opens it; parts are reported; the en
   const bound = await w.handoff.bind({ workflowId: offered.workflowId, learnerId: L, liveSessionId: "fresh_x_1" });
   assert.equal(bound.state, "teaching_active");
   assert.deepEqual(bound.focus, ["Why water moves in", "Plasmolysis"], "the modal teaches exactly the gaps");
-  await w.handoff.saved({ workflowId: offered.workflowId, adaptiveSessionId: "row-1" });
+  // start_teaching_session made a row in the dashboard's own sessions list; the modal opens it by id.
+  assert.deepEqual(w.calls.rows, [{ learnerId: L, workflowId: offered.workflowId, topic: "Osmosis", subject: "Biology", focus: ["Why water moves in", "Plasmolysis"] }]);
+  assert.equal(approved.adaptiveSessionId, "row-1");
+  assert.equal((await w.handoff.forSessionRow({ learnerId: L, adaptiveSessionId: "row-1" })).workflowId, offered.workflowId);
+  assert.equal(await w.handoff.forSessionRow({ learnerId: "someone-else", adaptiveSessionId: "row-1" }), null);
 
   assert.equal((await w.handoff.progress({ workflowId: offered.workflowId, result: { subtopicIdx: 0, totalSubtopics: 2, currentPhase: "PHASE_1" } })).milestone, false);
   assert.equal((await w.handoff.progress({ workflowId: offered.workflowId, result: { type: "drift_warning", subtopicIdx: 0, totalSubtopics: 2, currentPhase: "PHASE_1" } })).drift, true);
