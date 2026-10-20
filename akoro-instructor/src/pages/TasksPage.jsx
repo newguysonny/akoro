@@ -4,7 +4,9 @@ import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, Badge, Toast } from '../components/Primitives.jsx';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
 import NoAgentModal, { isNoAgentError } from '../components/NoAgentModal.jsx';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../constants.js';
+import { GREEN, PURPLE, BLUE, RED } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 import { confirmDialog } from '../components/ConfirmHost.jsx';
 
 /* datetime-local speaks local wall-clock; the API speaks ISO/UTC. */
@@ -111,7 +113,7 @@ function TaskModal({ open, onClose, onSubmit, editing }) {
 
         {!editing && !form.title && (
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: MUTED2, fontFamily: FONT, marginBottom: 6 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted2, fontFamily: C.font, marginBottom: 6 }}>
               Your agent can set battles, assign self study and run your teaching tools. Try:
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -121,8 +123,8 @@ function TaskModal({ open, onClose, onSubmit, editing }) {
                   onClick={() => setForm(f => ({ ...f, title: ex.title, description: ex.description }))}
                   style={{
                     padding: '5px 10px', borderRadius: 20, cursor: 'pointer', textAlign: 'left',
-                    border: `1px solid ${BORDER}`, background: LIGHT, color: MUTED,
-                    fontSize: 11, fontWeight: 600, fontFamily: FONT,
+                    border: `1px solid ${C.border}`, background: C.bg, color: C.muted,
+                    fontSize: 11, fontWeight: 600, fontFamily: C.font,
                   }}>{ex.title}</button>
               ))}
             </div>
@@ -149,7 +151,7 @@ function TaskModal({ open, onClose, onSubmit, editing }) {
             value={form.dueAt}
             onChange={e => setField('dueAt', e.target.value)}
           />
-          <div style={{ fontSize: 10.5, color: MUTED2, fontFamily: FONT, marginTop: 4 }}>
+          <div style={{ fontSize: 10.5, color: C.muted2, fontFamily: C.font, marginTop: 4 }}>
             {form.repeat === 'none'
               ? 'Leave empty to run it straight away. A future time schedules it.'
               : 'The repeat schedule takes over after the first run.'}
@@ -160,7 +162,7 @@ function TaskModal({ open, onClose, onSubmit, editing }) {
           <Inp label="Cron expression" value={form.customCron} onChange={e => setField('customCron', e.target.value)} placeholder="0 8 * * 1-5" />
         )}
 
-        {error && <div style={{ fontSize: 12, color: RED, fontWeight: 700, fontFamily: FONT }}>{error}</div>}
+        {error && <div style={{ fontSize: 12, color: RED, fontWeight: 700, fontFamily: C.font }}>{error}</div>}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
           <Btn variant="secondary" type="button" onClick={onClose}>Cancel</Btn>
@@ -177,8 +179,8 @@ function TaskModal({ open, onClose, onSubmit, editing }) {
 function PriorityBadge({ priority }) {
   const map = {
     high:   { color: RED,    bg: '#FEE2E2', label: 'High' },
-    medium: { color: AMBER,  bg: '#FFF7ED', label: 'Medium' },
-    low:    { color: MUTED,  bg: LIGHT,     label: 'Low' },
+    medium: { color: C.brand,  bg: C.brandSoft, label: 'Medium' },
+    low:    { color: C.muted,  bg: C.bg,     label: 'Low' },
   };
   const cfg = map[priority] || map.low;
   return <Badge color={cfg.color} bg={cfg.bg}>{cfg.label}</Badge>;
@@ -186,10 +188,10 @@ function PriorityBadge({ priority }) {
 
 function TypeBadge({ type }) {
   const map = {
-    course:  { color: AMBER,  bg: '#FFF7ED' },
+    course:  { color: C.brand,  bg: C.brandSoft },
     review:  { color: BLUE,   bg: '#EFF6FF' },
     battle:  { color: PURPLE, bg: '#EDE9FE' },
-    general: { color: MUTED,  bg: LIGHT },
+    general: { color: C.muted,  bg: C.bg },
   };
   const cfg = map[type] || map.general;
   return <Badge color={cfg.color} bg={cfg.bg}>{type || 'general'}</Badge>;
@@ -199,10 +201,10 @@ function StatusBadge({ status }) {
   const map = {
     done:      { color: GREEN, bg: '#DCFCE7' },
     running:   { color: BLUE,  bg: '#EFF6FF' },
-    queued:    { color: AMBER, bg: '#FFF7ED' },
-    pending:   { color: MUTED, bg: LIGHT },
+    queued:    { color: C.brand, bg: C.brandSoft },
+    pending:   { color: C.muted, bg: C.bg },
     failed:    { color: RED,   bg: '#FEE2E2' },
-    cancelled: { color: MUTED, bg: LIGHT },
+    cancelled: { color: C.muted, bg: C.bg },
   };
   const cfg = map[status] || map.pending;
   return <Badge color={cfg.color} bg={cfg.bg}>{status}</Badge>;
@@ -218,28 +220,28 @@ function TaskRow({ task, onToggle, onEdit, onDelete, onRun }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 14,
-      padding: '12px 16px', background: WHITE, borderRadius: 12,
-      border: `1px solid ${isOverdue ? '#FECACA' : BORDER}`,
+      padding: '12px 16px', background: C.surface, borderRadius: 12,
+      border: `1px solid ${isOverdue ? '#FECACA' : C.border}`,
       opacity: isDone ? 0.7 : 1, transition: 'opacity .2s',
     }}>
       <button
         onClick={() => onToggle(task)}
-        style={{ background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, padding: 0, color: isDone ? GREEN : MUTED }}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, padding: 0, color: isDone ? GREEN : C.muted }}
         title={isDone ? 'Mark as pending' : 'Mark as done'}
       >
-        {isDone ? <CheckSquare size={20} /> : <Square size={20} />}
+        {isDone ? <Ico lucide={CheckSquare} ti="ti-square-check" size={20} /> : <Ico lucide={Square} ti="ti-square" size={20} />}
       </button>
 
       <div style={{ flex: 1, overflow: 'hidden' }}>
         <div style={{
-          fontSize: 13, fontWeight: 600, color: isDone ? MUTED : INK,
-          fontFamily: FONT, textDecoration: isDone ? 'line-through' : 'none',
+          fontSize: 13, fontWeight: 600, color: isDone ? C.muted : C.ink,
+          fontFamily: C.font, textDecoration: isDone ? 'line-through' : 'none',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
           {task.title}
         </div>
         {task.description && (
-          <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: 11, color: C.muted, fontFamily: C.font, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {task.description}
           </div>
         )}
@@ -250,28 +252,28 @@ function TaskRow({ task, onToggle, onEdit, onDelete, onRun }) {
         <PriorityBadge priority={task.priority} />
         <StatusBadge status={task.status} />
         {task.is_recurring && (
-          <span title="Repeats on a schedule" style={{ color: PURPLE, display: 'flex' }}><Repeat size={12} /></span>
+          <span title="Repeats on a schedule" style={{ color: PURPLE, display: 'flex' }}><Ico lucide={Repeat} ti="ti-repeat" size={12} /></span>
         )}
         {due && (
-          <span style={{ fontSize: 11, color: isOverdue ? RED : MUTED, display: 'flex', alignItems: 'center', gap: 3, fontFamily: FONT, whiteSpace: 'nowrap' }}>
-            <Clock size={10} />
+          <span style={{ fontSize: 11, color: isOverdue ? RED : C.muted, display: 'flex', alignItems: 'center', gap: 3, fontFamily: C.font, whiteSpace: 'nowrap' }}>
+            <Ico lucide={Clock} ti="ti-clock" size={10} />
             {due.toLocaleDateString()} {due.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </span>
         )}
 
         <button onClick={() => onRun(task)} disabled={isRunning} title="Run now"
-          style={iconBtn(isRunning)}><Play size={13} /></button>
+          style={iconBtn(isRunning)}><Ico lucide={Play} ti="ti-player-play" size={13} /></button>
         <button onClick={() => onEdit(task)} disabled={isRunning} title="Edit"
-          style={iconBtn(isRunning)}><Pencil size={13} /></button>
+          style={iconBtn(isRunning)}><Ico lucide={Pencil} ti="ti-pencil" size={13} /></button>
         <button onClick={() => onDelete(task)} disabled={isRunning} title="Delete"
-          style={iconBtn(isRunning, RED)}><Trash2 size={13} /></button>
+          style={iconBtn(isRunning, RED)}><Ico lucide={Trash2} ti="ti-trash" size={13} /></button>
       </div>
     </div>
   );
 }
 
-const iconBtn = (disabled, color = MUTED) => ({
-  background: 'none', border: `1px solid ${BORDER}`, borderRadius: 8,
+const iconBtn = (disabled, color = C.muted) => ({
+  background: 'none', border: `1px solid ${C.border}`, borderRadius: 8,
   padding: '5px 6px', cursor: disabled ? 'not-allowed' : 'pointer',
   color, display: 'flex', opacity: disabled ? 0.4 : 1,
 });
@@ -394,18 +396,18 @@ export default function TasksPage() {
     <PageLayout
       title="Tasks"
       subtitle="Schedule work for your agent — once, or on a repeat"
-      action={<Btn size="sm" onClick={openNew}><Plus size={14} /> New Task</Btn>}
+      action={<Btn size="sm" onClick={openNew}><Ico lucide={Plus} ti="ti-plus" size={14} /> New Task</Btn>}
     >
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 24, maxWidth: 480 }}>
         {[
-          { label: 'Pending', value: pending, color: AMBER },
+          { label: 'Pending', value: pending, color: C.brand },
           { label: 'Completed', value: done, color: GREEN },
           { label: 'Overdue', value: overdue, color: RED },
         ].map(({ label, value, color }) => (
-          <div key={label} style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '14px', textAlign: 'center' }}>
-            <div style={{ fontSize: 24, fontWeight: 800, color, fontFamily: FONT }}>{loading ? '—' : value}</div>
-            <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT }}>{label}</div>
+          <div key={label} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px', textAlign: 'center' }}>
+            <div style={{ fontSize: 24, fontWeight: 800, color, fontFamily: C.font }}>{loading ? '—' : value}</div>
+            <div style={{ fontSize: 11, color: C.muted, fontFamily: C.font }}>{label}</div>
           </div>
         ))}
       </div>
@@ -423,10 +425,10 @@ export default function TasksPage() {
             onClick={() => setFilter(key)}
             style={{
               padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600,
-              background: filter === key ? AMBER : WHITE,
-              color: filter === key ? WHITE : MUTED,
-              border: `1.5px solid ${filter === key ? AMBER : BORDER}`,
-              cursor: 'pointer', fontFamily: FONT,
+              background: filter === key ? C.brand : C.surface,
+              color: filter === key ? '#fff' : C.muted,
+              border: `1.5px solid ${filter === key ? C.brand : C.border}`,
+              cursor: 'pointer', fontFamily: C.font,
             }}
           >
             {label}
@@ -440,12 +442,12 @@ export default function TasksPage() {
           {[1,2,3,4].map(i => <div key={i} className="skeleton" style={{ height: 62, borderRadius: 12 }} />)}
         </div>
       ) : filtered.length === 0 ? (
-        <div style={{ background: WHITE, border: `1px dashed ${BORDER}`, borderRadius: 16, padding: '48px', textAlign: 'center' }}>
-          <CheckSquare size={32} color={MUTED} style={{ marginBottom: 12 }} />
-          <p style={{ fontSize: 14, color: MUTED, fontFamily: FONT, margin: '0 0 16px' }}>
+        <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 16, padding: '48px', textAlign: 'center' }}>
+          <Ico lucide={CheckSquare} ti="ti-square-check" size={32} color={C.muted} style={{ marginBottom: 12 }} />
+          <p style={{ fontSize: 14, color: C.muted, fontFamily: C.font, margin: '0 0 16px' }}>
             {filter === 'done' ? 'No completed tasks yet' : 'No tasks here'}
           </p>
-          <Btn onClick={openNew}><Plus size={14} /> Add a task</Btn>
+          <Btn onClick={openNew}><Ico lucide={Plus} ti="ti-plus" size={14} /> Add a task</Btn>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

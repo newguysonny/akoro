@@ -10,13 +10,15 @@ import { CalendarDays, Loader2, Save, Check } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import ResourcePage, { inputStyle } from '../../components/mgmt/ResourcePage.jsx';
 import { apiGet, apiPost } from '../../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../../constants.js';
+import { GREEN, RED, BLUE } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
+import { Ico } from '../../theme/Ico.jsx';
 
 const BASE = '/api/school/mgmt';
 const STATUSES = [
   { v: 'present', label: 'P', full: 'Present', c: GREEN },
   { v: 'absent',  label: 'A', full: 'Absent',  c: RED },
-  { v: 'late',    label: 'L', full: 'Late',    c: AMBER },
+  { v: 'late',    label: 'L', full: 'Late',    c: '#E8884A' },
   { v: 'excused', label: 'E', full: 'Excused', c: BLUE },
 ];
 
@@ -72,13 +74,13 @@ export function StudentAttendancePage() {
         <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} style={{ ...inputStyle, width: 140, cursor: 'pointer' }}>
           <option value="">All sections</option>{sections.filter((s) => s.class_id === classId).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CalendarDays size={15} color={MUTED2} /><input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ ...inputStyle, width: 160 }} /></div>
-        {roster?.length > 0 && <button onClick={allPresent} style={{ ...pillBtn(GREEN) }}><Check size={13} /> All present</button>}
-        {roster?.length > 0 && <button onClick={save} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>{busy ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={13} />} Save</button>}
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Ico lucide={CalendarDays} ti="ti-calendar" size={15} color={C.muted2} /><input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ ...inputStyle, width: 160 }} /></div>
+        {roster?.length > 0 && <button onClick={allPresent} style={{ ...pillBtn(GREEN) }}><Ico lucide={Check} ti="ti-check" size={13} /> All present</button>}
+        {roster?.length > 0 && <button onClick={save} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>{busy ? <Ico lucide={Loader2} ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico lucide={Save} ti="ti-device-floppy" size={13} />} Save</button>}
       </div>
 
       {roster?.length > 0 && (
-        <div style={{ display: 'flex', gap: 14, marginBottom: 12, fontSize: 12, fontWeight: 700, color: MUTED }}>
+        <div style={{ display: 'flex', gap: 14, marginBottom: 12, fontSize: 12, fontWeight: 700, color: C.muted }}>
           {STATUSES.map((s) => <span key={s.v} style={{ color: s.c }}>{s.full}: {counts[s.v] || 0}</span>)}
           <span>Total: {roster.length}</span>
         </div>
@@ -87,22 +89,22 @@ export function StudentAttendancePage() {
       {!classId ? (
         <div style={emptyBox}>Pick a class and date to take attendance.</div>
       ) : roster === null ? (
-        <div style={{ padding: 40, textAlign: 'center', color: MUTED2 }}><Loader2 size={20} style={{ animation: 'spin .8s linear infinite' }} /></div>
+        <div style={{ padding: 40, textAlign: 'center', color: C.muted2 }}><Ico lucide={Loader2} ti="ti-loader-2" size={20} style={{ animation: 'spin .8s linear infinite' }} /></div>
       ) : roster.length === 0 ? (
         <div style={emptyBox}>No active students in this class.</div>
       ) : (
-        <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden' }}>
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
           {roster.map((s, i) => (
-            <div key={s.student_id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderTop: i ? `1px solid ${BORDER}` : 'none' }}>
-              <span style={{ width: 22, fontSize: 11, color: MUTED2, fontWeight: 700 }}>{i + 1}</span>
+            <div key={s.student_id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderTop: i ? `1px solid ${C.border}` : 'none' }}>
+              <span style={{ width: 22, fontSize: 11, color: C.muted2, fontWeight: 700 }}>{i + 1}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 700, color: INK }}>{s.name || 'Student'}</div>
-                <div style={{ fontSize: 11, color: MUTED2 }}>{s.admission_no}</div>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: C.ink }}>{s.name || 'Student'}</div>
+                <div style={{ fontSize: 11, color: C.muted2 }}>{s.admission_no}</div>
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
                 {STATUSES.map((st) => (
                   <button key={st.v} onClick={() => setStatus(s.student_id, st.v)} title={st.full}
-                    style={{ width: 34, height: 34, borderRadius: 8, border: `1.5px solid ${s.status === st.v ? st.c : BORDER}`, background: s.status === st.v ? st.c : WHITE, color: s.status === st.v ? WHITE : MUTED, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+                    style={{ width: 34, height: 34, borderRadius: 8, border: `1.5px solid ${s.status === st.v ? st.c : C.border}`, background: s.status === st.v ? st.c : C.surface, color: s.status === st.v ? '#fff' : C.muted, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
                     {st.label}
                   </button>
                 ))}
@@ -116,9 +118,9 @@ export function StudentAttendancePage() {
   );
 }
 
-const pillBtn = (c) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 13px', borderRadius: 9, border: `1px solid ${c}55`, background: `${c}12`, color: c, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT });
-const emptyBox = { padding: 44, textAlign: 'center', color: MUTED2, fontSize: 13.5, fontFamily: FONT, background: WHITE, border: `1.5px dashed ${BORDER}`, borderRadius: 14 };
-const toastStyle = { position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 };
+const pillBtn = (c) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 13px', borderRadius: 9, border: `1px solid ${c}55`, background: tint(7, c), color: c, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: C.font });
+const emptyBox = { padding: 44, textAlign: 'center', color: C.muted2, fontSize: 13.5, fontFamily: C.font, background: C.surface, border: `1.5px dashed ${C.border}`, borderRadius: 14 };
+const toastStyle = { position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.hero, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 };
 
 export function BehaviorRecordsPage() {
   return <ResourcePage title="Behavior Records" subtitle="Log positive and negative behavior" resource="behavior-records"

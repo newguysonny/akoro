@@ -13,7 +13,15 @@
  * (MathText, Figure, SectionHead, PassageBox) the grading view reuses.
  */
 import { paperBlocks, passageRange, figureSrc, mathRuns, letterOf } from '../../lib/paper.js';
-import { INK, MUTED, MUTED2, BORDER, GREEN, PURPLE, AMBER, FONT } from '../../constants.js';
+// The sheet is paper: fixed colours in both looks (not theme names).
+const P_INK = '#1A1A2E';
+const P_MUTED = '#6B6B80';
+const P_MUTED2 = '#9490A0';
+const P_BORDER = '#EDE8E1';
+const GREEN = '#10B981';
+const PURPLE = '#7C3AED';
+const P_AMBER = '#E8884A';
+const P_FONT = "'DM Sans', sans-serif";
 
 export const PAPER_FONT = "Georgia, 'Times New Roman', serif";
 
@@ -31,7 +39,7 @@ export function Figure({ figure, maxHeight = 220, style }) {
   return (
     <figure style={{ margin: '8px 0 10px', textAlign: 'center', ...style }}>
       <img src={src} alt={figure.alt || figure.caption || 'Figure'} style={{ maxWidth: '100%', maxHeight, objectFit: 'contain', background: '#fff' }} />
-      {figure.caption && <figcaption style={{ fontSize: 11.5, color: MUTED, fontStyle: 'italic', marginTop: 3 }}>{figure.caption}</figcaption>}
+      {figure.caption && <figcaption style={{ fontSize: 11.5, color: P_MUTED, fontStyle: 'italic', marginTop: 3 }}>{figure.caption}</figcaption>}
     </figure>
   );
 }
@@ -40,8 +48,8 @@ export function SectionHead({ section, style }) {
   if (!section) return null;
   return (
     <div style={{ textAlign: 'center', margin: '4px 0 12px', ...style }}>
-      {section.title && <div style={{ fontWeight: 700, fontSize: 13.5, letterSpacing: .6, textTransform: 'uppercase', color: INK }}>{section.title}</div>}
-      {section.instructions && <div style={{ fontSize: 13, fontStyle: 'italic', color: INK, marginTop: 4, lineHeight: 1.5 }}>{section.instructions}</div>}
+      {section.title && <div style={{ fontWeight: 700, fontSize: 13.5, letterSpacing: .6, textTransform: 'uppercase', color: P_INK }}>{section.title}</div>}
+      {section.instructions && <div style={{ fontSize: 13, fontStyle: 'italic', color: P_INK, marginTop: 4, lineHeight: 1.5 }}>{section.instructions}</div>}
     </div>
   );
 }
@@ -49,11 +57,11 @@ export function SectionHead({ section, style }) {
 export function PassageBox({ passage, range, style }) {
   if (!passage) return null;
   return (
-    <div style={{ border: `1px solid ${INK}33`, borderRadius: 4, padding: '10px 12px', margin: '0 0 12px', background: '#FFFEFB', ...style }}>
-      <div style={{ fontWeight: 700, fontSize: 12.5, color: INK, marginBottom: 6 }}>
-        {passage.title || 'Read the passage'}{range && <span style={{ fontWeight: 400, fontStyle: 'italic', color: MUTED }}> — {range}</span>}
+    <div style={{ border: `1px solid ${P_INK}33`, borderRadius: 4, padding: '10px 12px', margin: '0 0 12px', background: '#FFFEFB', ...style }}>
+      <div style={{ fontWeight: 700, fontSize: 12.5, color: P_INK, marginBottom: 6 }}>
+        {passage.title || 'Read the passage'}{range && <span style={{ fontWeight: 400, fontStyle: 'italic', color: P_MUTED }}> — {range}</span>}
       </div>
-      <div style={{ fontSize: 13, lineHeight: 1.6, color: INK, whiteSpace: 'pre-wrap' }}>{passage.text}</div>
+      <div style={{ fontSize: 13, lineHeight: 1.6, color: P_INK, whiteSpace: 'pre-wrap' }}>{passage.text}</div>
     </div>
   );
 }
@@ -67,9 +75,9 @@ const ptsOf = (q) => {
 export function FigureSlot({ note, style }) {
   if (!note) return null;
   return (
-    <div style={{ margin: '8px 0 10px', padding: '10px 12px', border: `1.5px dashed ${AMBER}`, borderRadius: 8, background: '#FFF8F1', fontFamily: FONT, ...style }}>
-      <div style={{ fontSize: 11, fontWeight: 900, color: AMBER, letterSpacing: .3 }}>ADD A FIGURE</div>
-      <div style={{ fontSize: 12, color: INK, marginTop: 2, lineHeight: 1.45 }}>{note}</div>
+    <div style={{ margin: '8px 0 10px', padding: '10px 12px', border: `1.5px dashed ${P_AMBER}`, borderRadius: 8, background: '#FFF8F1', fontFamily: P_FONT, ...style }}>
+      <div style={{ fontSize: 11, fontWeight: 900, color: P_AMBER, letterSpacing: .3 }}>ADD A FIGURE</div>
+      <div style={{ fontSize: 12, color: P_INK, marginTop: 2, lineHeight: 1.45 }}>{note}</div>
     </div>
   );
 }
@@ -85,14 +93,14 @@ function PaperQuestion({ q, i, showKey, change, versionLabel }) {
   const look = CHANGE_LOOK[change];
   return (
     <div style={{ breakInside: 'avoid', pageBreakInside: 'avoid', margin: look ? '0 -8px 14px' : '0 0 14px', ...(look ? { background: look.bg, borderRadius: 6, padding: '6px 8px' } : {}) }}>
-      <div style={{ display: 'flex', gap: 7, fontSize: 13.5, lineHeight: 1.5, color: INK }}>
+      <div style={{ display: 'flex', gap: 7, fontSize: 13.5, lineHeight: 1.5, color: P_INK }}>
         <b style={{ flexShrink: 0, minWidth: 20 }}>{i + 1}.</b>
         <span style={{ flex: 1 }}>
           {obj.format === 'assertion_reason' && obj.assertion
             ? <><b>Assertion:</b> <MathText text={obj.assertion} /><br /><b>Reason:</b> <MathText text={obj.reason || ''} /></>
             : <span style={{ whiteSpace: 'pre-line' }}><MathText text={obj.q || ''} /></span>}
-          {pts && <span style={{ fontSize: 11, color: MUTED2, whiteSpace: 'nowrap', fontFamily: FONT }}> [{pts} mark{pts === 1 ? '' : 's'}]</span>}
-          {look && <span style={{ fontFamily: FONT, fontSize: 9.5, fontWeight: 900, color: look.fg, background: look.chipBg, borderRadius: 5, padding: '1px 6px', marginLeft: 6, whiteSpace: 'nowrap' }}>{look.chip}{versionLabel ? ` IN ${versionLabel}` : ''}</span>}
+          {pts && <span style={{ fontSize: 11, color: P_MUTED2, whiteSpace: 'nowrap', fontFamily: P_FONT }}> [{pts} mark{pts === 1 ? '' : 's'}]</span>}
+          {look && <span style={{ fontFamily: P_FONT, fontSize: 9.5, fontWeight: 900, color: look.fg, background: look.chipBg, borderRadius: 5, padding: '1px 6px', marginLeft: 6, whiteSpace: 'nowrap' }}>{look.chip}{versionLabel ? ` IN ${versionLabel}` : ''}</span>}
         </span>
       </div>
       <Figure figure={obj.figure} style={{ marginLeft: 27 }} />
@@ -104,7 +112,7 @@ function PaperQuestion({ q, i, showKey, change, versionLabel }) {
               <b style={{ minWidth: 22 }}>{l}</b>
               {showKey && obj.answer?.[l]
                 ? <span style={{ color: GREEN, fontWeight: 700 }}>{obj.answer[l]} ✓</span>
-                : <span style={{ flex: 1, borderBottom: `1px dashed ${BORDER}`, height: 16 }} aria-hidden />}
+                : <span style={{ flex: 1, borderBottom: `1px dashed ${P_BORDER}`, height: 16 }} aria-hidden />}
             </div>
           ))}
         </div>
@@ -113,14 +121,14 @@ function PaperQuestion({ q, i, showKey, change, versionLabel }) {
           {obj.options.map((o, oi) => {
             const key = showKey && obj.correct != null && Number(obj.correct) === oi;
             return (
-              <div key={oi} style={{ fontSize: 13.5, lineHeight: 1.45, color: key ? GREEN : INK, fontWeight: key ? 700 : 400 }}>
+              <div key={oi} style={{ fontSize: 13.5, lineHeight: 1.45, color: key ? GREEN : P_INK, fontWeight: key ? 700 : 400 }}>
                 <span style={{ display: 'inline-block', minWidth: 22 }}>{letterOf(oi)}.</span><MathText text={o} />{key && ' ✓'}
               </div>
             );
           })}
         </div>
       ) : (
-        <div style={{ marginLeft: 27, marginTop: 6, borderBottom: `1px dashed ${BORDER}`, height: 18 }} aria-hidden />
+        <div style={{ marginLeft: 27, marginTop: 6, borderBottom: `1px dashed ${P_BORDER}`, height: 18 }} aria-hidden />
       )}
     </div>
   );
@@ -137,10 +145,10 @@ export default function PaperView({ details, title, instructions, showKey = fals
   // the paper is long or has sections, like the printed papers.
   const twoCols = (details?.questions?.length || 0) > 8 || blocks.some((b) => b.section || b.passage);
   return (
-    <div style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8, padding: '20px 22px', fontFamily: PAPER_FONT, color: INK, boxShadow: '0 1px 6px rgba(0,0,0,.05)', ...style }}>
+    <div style={{ background: '#fff', border: `1px solid ${P_BORDER}`, borderRadius: 8, padding: '20px 22px', fontFamily: PAPER_FONT, color: P_INK, boxShadow: '0 1px 6px rgba(0,0,0,.05)', ...style }}>
       {title && <div style={{ textAlign: 'center', fontWeight: 700, fontSize: 15, marginBottom: instructions ? 4 : 14, textTransform: 'uppercase', letterSpacing: .5 }}>{title}</div>}
       {instructions && <div style={{ textAlign: 'center', fontStyle: 'italic', fontSize: 13, color: '#333', marginBottom: 16 }}>{instructions}</div>}
-      <div style={twoCols ? { columns: '2 300px', columnGap: 28, columnRule: `1px solid ${BORDER}` } : undefined}>
+      <div style={twoCols ? { columns: '2 300px', columnGap: 28, columnRule: `1px solid ${P_BORDER}` } : undefined}>
         {blocks.map((b, bi) => (
           <div key={bi}>
             {b.newSection && <SectionHead section={b.section} style={{ breakInside: 'avoid', marginTop: bi ? 10 : 4 }} />}

@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import { Btn, Inp, Txa, Sel } from '../Primitives.jsx';
 import AudiencePicker, { parseHandles, BLANK_AUDIENCE } from '../AudiencePicker.jsx';
 import { apiGet } from '../../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, WHITE, RED, FONT } from '../../constants.js';
+import { RED } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
+import { Ico } from '../../theme/Ico.jsx';
 
 /* datetime-local wants local wall-clock, not the ISO Z string. */
 function toLocalInput(iso) {
@@ -137,7 +139,7 @@ export default function BattleForm({ onSubmit, onCancel, courses = [], editing =
             past-questions bank for a subject the class studies. */}
         {!editing && (
           <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, marginBottom: 7 }}>Battle type *</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.ink, fontFamily: C.font, marginBottom: 7 }}>Battle type *</div>
             <div style={{ display: 'flex', gap: 6 }}>
               {[
                 { key: 'course', label: 'Course battle', hint: courses.length ? "From a course's question bank" : 'No courses yet', off: !courses.length },
@@ -150,13 +152,13 @@ export default function BattleForm({ onSubmit, onCancel, courses = [], editing =
                   onClick={() => setField('kind', o.key)}
                   style={{
                     flex: 1, padding: '9px 8px', borderRadius: 10, textAlign: 'left',
-                    border: `1.5px solid ${form.kind === o.key ? AMBER : BORDER}`,
-                    background: form.kind === o.key ? `${AMBER}12` : WHITE,
+                    border: `1.5px solid ${form.kind === o.key ? C.brand : C.border}`,
+                    background: form.kind === o.key ? tint(7) : C.surface,
                     cursor: o.off ? 'not-allowed' : 'pointer', opacity: o.off ? 0.5 : 1,
-                    fontFamily: FONT,
+                    fontFamily: C.font,
                   }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, color: form.kind === o.key ? AMBER : INK }}>{o.label}</div>
-                  <div style={{ fontSize: 10.5, color: MUTED }}>{o.hint}</div>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: form.kind === o.key ? C.brand : C.ink }}>{o.label}</div>
+                  <div style={{ fontSize: 10.5, color: C.muted }}>{o.hint}</div>
                 </button>
               ))}
             </div>
@@ -222,7 +224,7 @@ export default function BattleForm({ onSubmit, onCancel, courses = [], editing =
         {form.kind !== 'review' && (
           <Inp label="Minimum XP to join (0 = open to all)" type="number" min="0" value={form.minXp} onChange={e => setField('minXp', e.target.value)} />
         )}
-        <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT, marginTop: -6 }}>
+        <div style={{ fontSize: 11, color: C.muted, fontFamily: C.font, marginTop: -6 }}>
           {(() => {
             const h = Math.min(50, Math.max(0, parseInt(form.hpPerMiss, 10) || 0));
             return h ? `Every agent starts on 100 HP and loses ${h} for each question it misses — out after ${Math.ceil(100 / h)} misses (then it watches, unranked).`
@@ -233,7 +235,7 @@ export default function BattleForm({ onSubmit, onCancel, courses = [], editing =
             The number on its own told a teacher nothing — and until now it did
             nothing either: every battle ran at a hard 15 seconds a question
             whatever was typed here. */}
-        <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT, marginTop: -6 }}>
+        <div style={{ fontSize: 11, color: C.muted, fontFamily: C.font, marginTop: -6 }}>
           {(() => {
             const q = parseInt(form.totalQuestions, 10);
             const m = parseInt(form.duration, 10);
@@ -246,7 +248,7 @@ export default function BattleForm({ onSubmit, onCancel, courses = [], editing =
 
         {!editing && (
           <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, marginBottom: 7 }}>Questions *</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.ink, fontFamily: C.font, marginBottom: 7 }}>Questions *</div>
             <div style={{ display: 'flex', gap: 6 }}>
               {[
                 { key: 'auto', label: 'Bank + AI', hint: 'Real questions first, AI for the rest' },
@@ -255,16 +257,16 @@ export default function BattleForm({ onSubmit, onCancel, courses = [], editing =
               ].map(o => (
                 <button key={o.key} type="button" onClick={() => setField('questionSource', o.key)} style={{
                   flex: 1, padding: '9px 8px', borderRadius: 10, textAlign: 'left', cursor: 'pointer',
-                  border: `1.5px solid ${form.questionSource === o.key ? AMBER : BORDER}`,
-                  background: form.questionSource === o.key ? `${AMBER}12` : WHITE, fontFamily: FONT,
+                  border: `1.5px solid ${form.questionSource === o.key ? C.brand : C.border}`,
+                  background: form.questionSource === o.key ? tint(7) : C.surface, fontFamily: C.font,
                 }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, color: form.questionSource === o.key ? AMBER : INK }}>{o.label}</div>
-                  <div style={{ fontSize: 10.5, color: MUTED }}>{o.hint}</div>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: form.questionSource === o.key ? C.brand : C.ink }}>{o.label}</div>
+                  <div style={{ fontSize: 10.5, color: C.muted }}>{o.hint}</div>
                 </button>
               ))}
             </div>
             {form.questionSource !== 'bank' && (
-              <div style={{ fontSize: 10.5, color: MUTED2, fontFamily: FONT, marginTop: 5, lineHeight: 1.45 }}>
+              <div style={{ fontSize: 10.5, color: C.muted2, fontFamily: C.font, marginTop: 5, lineHeight: 1.45 }}>
                 Generated questions are modelled on real exam questions for this subject and cost coins.
                 Nothing is charged if generation fails.
               </div>
@@ -281,7 +283,7 @@ export default function BattleForm({ onSubmit, onCancel, courses = [], editing =
           <Inp label="Schedule for (optional)" type="datetime-local" value={form.scheduledAt} onChange={e => setField('scheduledAt', e.target.value)} />
         </div>
 
-        {error && <div style={{ fontSize: 12, color: RED, fontWeight: 700, fontFamily: FONT }}>{error}</div>}
+        {error && <div style={{ fontSize: 12, color: RED, fontWeight: 700, fontFamily: C.font }}>{error}</div>}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
           {onCancel && <Btn variant="secondary" type="button" onClick={onCancel}>Cancel</Btn>}

@@ -33,7 +33,9 @@ import BattleForm from '../components/battles/BattleForm.jsx';
 import { useBattlesAPI } from '../hooks/useBattlesAPI.js';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../constants.js';
+import { GREEN, PURPLE, BLUE, RED } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 import { confirmDialog } from '../components/ConfirmHost.jsx';
 import ActivityPreviewPanel from '../components/ActivityPreviewPanel.jsx';
 
@@ -46,7 +48,7 @@ const SUBJECTS = [
 /* ── The activity types — the rail of the workbench ──────────────────────── */
 const ACTIVITY_TYPES = [
   {
-    key: 'self_study', name: 'Self study', icon: BookOpen, color: PURPLE,
+    key: 'self_study', name: 'Self study', icon: BookOpen, ti: 'ti-book', color: PURPLE,
     blurb: 'A topic each learner works through with their own AI agent.',
     note: ['Practice that adapts to each learner.',
       'Assign a topic; every learner gets their own agent session and goes at their own pace. Use it for revision, catch-up after an absence, or stretch work that should not wait for you.'],
@@ -54,7 +56,7 @@ const ACTIVITY_TYPES = [
     planHint: 'Subtopics the learner will move through, in order.',
   },
   {
-    key: 'assignment', name: 'Assignment', icon: Pencil, color: BLUE,
+    key: 'assignment', name: 'Assignment', icon: Pencil, ti: 'ti-pencil', color: BLUE,
     blurb: 'Set work with a deadline and a clear task breakdown.',
     note: ['One measurable check for understanding.',
       'Questions or tasks every learner answers on their own. Use it right after a lesson, when you want evidence of what stuck — the AI drafts the task breakdown, you correct it before anything is sent.'],
@@ -62,7 +64,7 @@ const ACTIVITY_TYPES = [
     planHint: 'The tasks or question areas learners must complete.',
   },
   {
-    key: 'project', name: 'Project', icon: FolderKanban, color: GREEN,
+    key: 'project', name: 'Project', icon: FolderKanban, ti: 'ti-layout-kanban', color: GREEN,
     blurb: 'A deliverable learners build over days, not minutes.',
     note: ['When depth matters more than speed.',
       'Research, an artefact, a presentation. Use it when the process is the point: the AI drafts milestones, you set the bar, and learners work toward a finished thing you can assess.'],
@@ -70,7 +72,7 @@ const ACTIVITY_TYPES = [
     planHint: 'The stages a finished project must pass through.',
   },
   {
-    key: 'live_course', name: 'Live course', icon: MonitorPlay, color: AMBER,
+    key: 'live_course', name: 'Live course', icon: MonitorPlay, ti: 'ti-device-tv', color: C.brand,
     blurb: 'You, live, at a scheduled time with a join link.',
     note: ['First exposure belongs to a human.',
       'A scheduled session with a start time and a link. Use it for introducing something new, discussion, and anything learners cannot do alone — then let assignments and self study carry the practice.'],
@@ -78,7 +80,7 @@ const ACTIVITY_TYPES = [
     planHint: null,
   },
   {
-    key: 'battle', name: 'Battle', icon: Swords, color: RED,
+    key: 'battle', name: 'Battle', icon: Swords, ti: 'ti-swords', color: RED,
     blurb: 'A timed quiz duel from your question bank — the same battle form.',
     note: ['Energy that makes recall competitive.',
       'Timed questions, an XP prize, a leaderboard moment. Use it to revise a finished topic — the competition surfaces who recalls what, faster than a quiz ever will.'],
@@ -86,7 +88,7 @@ const ACTIVITY_TYPES = [
     planHint: null,
   },
   {
-    key: 'multi_stage', name: 'Multi stage', icon: ListChecks, color: '#A855F7',
+    key: 'multi_stage', name: 'Multi stage', icon: ListChecks, ti: 'ti-list-check', color: '#A855F7',
     blurb: 'Chain activities into one journey: learn, practise, compete.',
     note: ['One journey, several kinds of work.',
       'Chain self study, assignments, projects and battles into an ordered path — e.g. study the topic, then the assignment, then the battle. Learners see the roadmap; each step is real, tracked work.'],
@@ -108,8 +110,8 @@ function toLocalInput(iso) {
 
 /* ── Creation form — the AI Self Study form, adapted per type ────────────── */
 const Q_INP = {
-  padding: '7px 10px', borderRadius: 8, border: `1px solid ${BORDER}`,
-  fontFamily: FONT, fontSize: 12, fontWeight: 600, color: INK, outline: 'none', background: WHITE,
+  padding: '7px 10px', borderRadius: 8, border: `1px solid ${C.border}`,
+  fontFamily: C.font, fontSize: 12, fontWeight: 600, color: C.ink, outline: 'none', background: C.surface,
 };
 const BLANK = {
   title: '', subject: 'Basic Science', topic: '', instructions: '',
@@ -240,12 +242,12 @@ function MarkingToggle({ on, onChange, label, hint }) {
   return (
     <button type="button" onClick={() => onChange(!on)} style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%',
-      padding: '9px 11px', borderRadius: 10, border: `1.5px solid ${BORDER}`, background: WHITE,
-      cursor: 'pointer', fontFamily: FONT, textAlign: 'left',
+      padding: '9px 11px', borderRadius: 10, border: `1.5px solid ${C.border}`, background: C.surface,
+      cursor: 'pointer', fontFamily: C.font, textAlign: 'left',
     }}>
       <span style={{ minWidth: 0 }}>
-        <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: INK }}>{label}</span>
-        {hint && <span style={{ display: 'block', fontSize: 10.5, color: MUTED2, marginTop: 1 }}>{hint}</span>}
+        <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: C.ink }}>{label}</span>
+        {hint && <span style={{ display: 'block', fontSize: 10.5, color: C.muted2, marginTop: 1 }}>{hint}</span>}
       </span>
       <span style={{ width: 38, height: 22, borderRadius: 100, background: on ? GREEN : '#E5E7EB', position: 'relative', flexShrink: 0, transition: 'background .15s' }}>
         <span style={{ position: 'absolute', top: 3, left: on ? 19 : 3, width: 16, height: 16, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.2)', transition: 'left .15s' }} />
@@ -432,20 +434,20 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
   };
 
   return (
-    <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14, fontFamily: FONT }}>
+    <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14, fontFamily: C.font }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 2 }}>
-        <div style={{ width: 40, height: 40, borderRadius: 12, background: `${meta.color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <meta.icon size={19} color={meta.color} />
+        <div style={{ width: 40, height: 40, borderRadius: 12, background: tint(9, meta.color), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Ico lucide={meta.icon} ti={meta.ti} size={19} color={meta.color} />
         </div>
         <div>
-          <div style={{ fontSize: 15.5, fontWeight: 900, color: INK }}>New {meta.name.toLowerCase()}</div>
-          <div style={{ fontSize: 11.5, color: MUTED }}>{meta.blurb}</div>
+          <div style={{ fontSize: 15.5, fontWeight: 900, color: C.ink }}>New {meta.name.toLowerCase()}</div>
+          <div style={{ fontSize: 11.5, color: C.muted }}>{meta.blurb}</div>
         </div>
       </div>
 
       {done && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 12px', borderRadius: 10, background: '#DCFCE7', border: '1px solid #BBF7D0', fontSize: 12.5, fontWeight: 800, color: GREEN }}>
-          <CheckCircle2 size={14} /> {done}
+          <Ico lucide={CheckCircle2} ti="ti-circle-check" size={14} /> {done}
         </div>
       )}
 
@@ -478,18 +480,18 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
       {!isLive && (
         <div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT }}>{meta.planLabel} *</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.ink, fontFamily: C.font }}>{meta.planLabel} *</div>
             <Btn size="sm" variant="secondary" type="button" onClick={draft} disabled={drafting}>
               {drafting
-                ? <><Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> Drafting…</>
-                : <><Sparkles size={13} /> {form.subtopics.length ? 'Redraft with AI' : 'Draft with AI'}</>}
+                ? <><Ico lucide={Loader2} ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> Drafting…</>
+                : <><Ico lucide={Sparkles} ti="ti-sparkles" size={13} /> {form.subtopics.length ? 'Redraft with AI' : 'Draft with AI'}</>}
             </Btn>
           </div>
           <PlanEditor
             subtopics={form.subtopics} objectives={form.objectives}
             onChange={(subtopics, objectives) => setForm(f => ({ ...f, subtopics, objectives }))}
           />
-          <div style={{ fontSize: 10.5, color: MUTED2, fontFamily: FONT, marginTop: 6 }}>
+          <div style={{ fontSize: 10.5, color: C.muted2, fontFamily: C.font, marginTop: 6 }}>
             {meta.planHint} Nothing is assigned until you save — edit or remove anything the AI drafted.
           </div>
         </div>
@@ -499,8 +501,8 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
           generation and creator.md). Everything question-level is drafted
           by the AI onto each question; the instructor always overrides. */}
       {type === 'assignment' && (
-        <div style={{ border: `1px solid ${BORDER}`, borderRadius: 12, padding: 12, background: WHITE }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, marginBottom: 10 }}>Marking</div>
+        <div style={{ border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, background: C.surface }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.ink, fontFamily: C.font, marginBottom: 10 }}>Marking</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 10 }}>
             <div>
               <Inp label="Total points *" type="number" min={1} value={form.totalPoints}
@@ -509,11 +511,11 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
                 {[10, 20, 50, 100].map(v => (
                   <button key={v} type="button" onClick={() => setField('totalPoints', String(v))}
                     style={{
-                      padding: '4px 10px', borderRadius: 100, cursor: 'pointer', fontFamily: FONT,
+                      padding: '4px 10px', borderRadius: 100, cursor: 'pointer', fontFamily: C.font,
                       fontSize: 11, fontWeight: 800,
-                      border: `1.5px solid ${Number(form.totalPoints) === v ? BLUE : BORDER}`,
-                      background: Number(form.totalPoints) === v ? '#EFF6FF' : WHITE,
-                      color: Number(form.totalPoints) === v ? BLUE : MUTED,
+                      border: `1.5px solid ${Number(form.totalPoints) === v ? BLUE : C.border}`,
+                      background: Number(form.totalPoints) === v ? '#EFF6FF' : C.surface,
+                      color: Number(form.totalPoints) === v ? BLUE : C.muted,
                     }}>{v}</button>
                 ))}
               </div>
@@ -527,7 +529,7 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
           </div>
 
           <div style={{ marginTop: 12 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, marginBottom: 6 }}>Question types</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.ink, fontFamily: C.font, marginBottom: 6 }}>Question types</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {QUESTION_TYPES.map(qt => {
                 const on = form.questionTypes.includes(qt);
@@ -536,27 +538,27 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
                     onClick={() => setForm(f => ({ ...f, questionTypes: on ? f.questionTypes.filter(x => x !== qt) : [...f.questionTypes, qt] }))}
                     style={{
                       display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 100,
-                      cursor: 'pointer', fontFamily: FONT, fontSize: 11.5, fontWeight: 800,
-                      border: `1.5px solid ${on ? BLUE : BORDER}`,
-                      background: on ? '#EFF6FF' : WHITE,
-                      color: on ? BLUE : MUTED,
+                      cursor: 'pointer', fontFamily: C.font, fontSize: 11.5, fontWeight: 800,
+                      border: `1.5px solid ${on ? BLUE : C.border}`,
+                      background: on ? '#EFF6FF' : C.surface,
+                      color: on ? BLUE : C.muted,
                     }}>
-                    {on && <Check size={11} />} {qt}
+                    {on && <Ico lucide={Check} ti="ti-check" size={11} />} {qt}
                   </button>
                 );
               })}
             </div>
-            <div style={{ fontSize: 10.5, color: MUTED2, fontFamily: FONT, marginTop: 5 }}>
+            <div style={{ fontSize: 10.5, color: C.muted2, fontFamily: C.font, marginTop: 5 }}>
               The AI uses exactly these when drafting the questions — tick as many as you want.
             </div>
           </div>
 
           <div style={{ marginTop: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.ink, fontFamily: C.font }}>
                 Rubric
                 {form.rubric.length > 0 && (
-                  <span style={{ color: MUTED2, fontWeight: 600 }}>
+                  <span style={{ color: C.muted2, fontWeight: 600 }}>
                     {' '}— {form.rubric.reduce((n, r) => n + (Number(r.points) || 0), 0)}
                     {Number(form.totalPoints) ? ` of ${form.totalPoints}` : ''} points
                   </span>
@@ -564,12 +566,12 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
               </div>
               <Btn size="sm" variant="secondary" type="button" onClick={draftRubric} disabled={rubricDrafting}>
                 {rubricDrafting
-                  ? <><Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> Drafting…</>
-                  : <><Sparkles size={13} /> {form.rubric.length ? 'Redraft with AI' : 'Draft with AI'}</>}
+                  ? <><Ico lucide={Loader2} ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> Drafting…</>
+                  : <><Ico lucide={Sparkles} ti="ti-sparkles" size={13} /> {form.rubric.length ? 'Redraft with AI' : 'Draft with AI'}</>}
               </Btn>
             </div>
             {form.rubric.length === 0 ? (
-              <div style={{ fontSize: 10.5, color: MUTED2, fontFamily: FONT }}>
+              <div style={{ fontSize: 10.5, color: C.muted2, fontFamily: C.font }}>
                 Criteria the marks are shared across — draft them with AI or add your own.
               </div>
             ) : (
@@ -581,11 +583,11 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
                     <input type="number" min={0} value={r.points} onChange={e => setForm(f => ({ ...f, rubric: f.rubric.map((x, i) => i === ri ? { ...x, points: e.target.value } : x) }))}
                       title="Points for this criterion" style={{ ...Q_INP, width: 74 }} />
                     <button type="button" onClick={() => setForm(f => ({ ...f, rubric: f.rubric.filter((_, i) => i !== ri) }))}
-                      style={{ border: 'none', background: 'none', color: MUTED2, cursor: 'pointer', fontSize: 15, padding: '2px 5px' }} title="Remove criterion">×</button>
+                      style={{ border: 'none', background: 'none', color: C.muted2, cursor: 'pointer', fontSize: 15, padding: '2px 5px' }} title="Remove criterion">×</button>
                   </div>
                 ))}
                 <button type="button" onClick={() => setForm(f => ({ ...f, rubric: [...f.rubric, { criterion: '', points: '' }] }))}
-                  style={{ border: 'none', background: 'none', color: PURPLE, cursor: 'pointer', fontSize: 11, fontWeight: 800, fontFamily: FONT, textAlign: 'left', padding: '2px 0' }}>+ criterion</button>
+                  style={{ border: 'none', background: 'none', color: PURPLE, cursor: 'pointer', fontSize: 11, fontWeight: 800, fontFamily: C.font, textAlign: 'left', padding: '2px 0' }}>+ criterion</button>
               </div>
             )}
           </div>
@@ -599,11 +601,11 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
       {/* Questions (optional) — when set, learners answer these on the
           activity's details page before they can submit. */}
       {!isLive && (
-        <div style={{ border: `1px solid ${BORDER}`, borderRadius: 12, padding: '10px 12px 12px', background: form.questions.length ? WHITE : 'transparent' }}>
+        <div style={{ border: `1px solid ${C.border}`, borderRadius: 12, padding: '10px 12px 12px', background: form.questions.length ? C.surface : 'transparent' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT }}>Questions <span style={{ color: MUTED2, fontWeight: 600 }}>(optional)</span></div>
-              <div style={{ fontSize: 10.5, color: MUTED2, fontFamily: FONT, marginTop: 2 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.ink, fontFamily: C.font }}>Questions <span style={{ color: C.muted2, fontWeight: 600 }}>(optional)</span></div>
+              <div style={{ fontSize: 10.5, color: C.muted2, fontFamily: C.font, marginTop: 2 }}>
                 {form.questions.length
                   ? `${cleanQuestions(form.questions).length} question${cleanQuestions(form.questions).length === 1 ? '' : 's'} will ride with this activity — learners answer them on submit.`
                   : type === 'assignment'
@@ -615,8 +617,8 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
               {type === 'assignment' && (
                 <Btn size="sm" variant="secondary" type="button" onClick={draftQuestions} disabled={qDrafting}>
                   {qDrafting
-                    ? <><Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> Drafting…</>
-                    : <><Sparkles size={13} /> {form.questions.length ? 'Redraft questions' : 'Draft questions'}</>}
+                    ? <><Ico lucide={Loader2} ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> Drafting…</>
+                    : <><Ico lucide={Sparkles} ti="ti-sparkles" size={13} /> {form.questions.length ? 'Redraft questions' : 'Draft questions'}</>}
                 </Btn>
               )}
               <Btn size="sm" variant="secondary" type="button"
@@ -629,7 +631,7 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
                   };
                   return { ...f, questions: [...f.questions, { ...BLANK_QUESTION, options: ['', ''], ...at }] };
                 })}>
-                <Plus size={13} /> Add question
+                <Ico lucide={Plus} ti="ti-plus" size={13} /> Add question
               </Btn>
             </div>
           </div>
@@ -642,8 +644,8 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
               style={{ ...Q_INP, width: '100%', boxSizing: 'border-box', marginTop: 9, fontSize: 12.5 }} />
           )}
           {qWarning && (
-            <div style={{ marginTop: 8, padding: '7px 10px', borderRadius: 9, background: '#FFF7ED', border: '1px solid #FED7AA', fontSize: 11.5, fontWeight: 700, color: '#B45309', fontFamily: FONT }}>
-              <AlertTriangle size={12} color="#B45309" style={{ verticalAlign: '-2px', marginRight: 3 }} />{qWarning} Edit below, or draft again.
+            <div style={{ marginTop: 8, padding: '7px 10px', borderRadius: 9, background: C.brandSoft, border: '1px solid #FED7AA', fontSize: 11.5, fontWeight: 700, color: '#B45309', fontFamily: C.font }}>
+              <Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={12} color="#B45309" style={{ verticalAlign: '-2px', marginRight: 3 }} />{qWarning} Edit below, or draft again.
             </div>
           )}
           {form.questions.length > 0 && (
@@ -668,7 +670,7 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
           ))}
         </Sel>
         {!classesLoading && !classes.length && (
-          <div style={{ fontSize: 11, color: MUTED2, fontFamily: FONT, marginTop: 5 }}>
+          <div style={{ fontSize: 11, color: C.muted2, fontFamily: C.font, marginTop: 5 }}>
             Create one under Academics → Classes, then come back.
           </div>
         )}
@@ -686,11 +688,11 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
 
       <Inp label="Due (optional)" type="datetime-local" value={form.dueAt} onChange={e => setField('dueAt', e.target.value)} />
 
-      {error && <div style={{ fontSize: 12, color: RED, fontWeight: 700, fontFamily: FONT }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: RED, fontWeight: 700, fontFamily: C.font }}>{error}</div>}
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
         <Btn type="submit" disabled={saving}>
-          {saving ? 'Assigning…' : <><Users size={14} /> Assign to learners</>}
+          {saving ? 'Assigning…' : <><Ico lucide={Users} ti="ti-users" size={14} /> Assign to learners</>}
         </Btn>
       </div>
     </form>
@@ -729,14 +731,14 @@ function PastActivities({ type, refreshKey, onOpen }) {
   };
 
   return (
-    <div style={{ marginTop: 22, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '16px 18px', fontFamily: FONT }}>
+    <div style={{ marginTop: 22, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: '16px 18px', fontFamily: C.font }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={{ fontSize: 13, fontWeight: 800, color: INK }}>Past {meta.name.toLowerCase()} activities</div>
-        <div style={{ fontSize: 11, color: MUTED2 }}>swipe →</div>
+        <div style={{ fontSize: 13, fontWeight: 800, color: C.ink }}>Past {meta.name.toLowerCase()} activities</div>
+        <div style={{ fontSize: 11, color: C.muted2 }}>swipe →</div>
       </div>
 
       {past === null ? (
-        <div style={{ display: 'flex', gap: 12 }}>{[0, 1, 2].map(i => <div key={i} style={{ flex: '0 0 224px', height: 128, borderRadius: 12, background: LIGHT }} />)}</div>
+        <div style={{ display: 'flex', gap: 12 }}>{[0, 1, 2].map(i => <div key={i} style={{ flex: '0 0 224px', height: 128, borderRadius: 12, background: C.bg }} />)}</div>
       ) : (
         <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4, scrollSnapType: 'x proximity' }}>
           {past.map(a => {
@@ -749,28 +751,28 @@ function PastActivities({ type, refreshKey, onOpen }) {
             const pct = p.assigned ? Math.round((p.complete / p.assigned) * 100) : 0;
             return (
               <div key={a.id} onClick={() => onOpen(a)} title="See who's done it"
-                style={{ flex: '0 0 auto', width: 224, scrollSnapAlign: 'start', cursor: 'pointer', border: `1px solid ${overdue ? '#FECACA' : BORDER}`, borderRadius: 12, padding: '12px 13px', display: 'flex', flexDirection: 'column', gap: 6 }}
+                style={{ flex: '0 0 auto', width: 224, scrollSnapAlign: 'start', cursor: 'pointer', border: `1px solid ${overdue ? '#FECACA' : C.border}`, borderRadius: 12, padding: '12px 13px', display: 'flex', flexDirection: 'column', gap: 6 }}
                 onMouseEnter={(e) => { e.currentTarget.style.borderColor = meta.color; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = overdue ? '#FECACA' : BORDER; }}>
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = overdue ? '#FECACA' : C.border; }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                    <span style={{ display: 'flex', flexShrink: 0 }}><meta.icon size={14} color={meta.color} /></span>
-                    <span style={{ fontSize: 12.5, fontWeight: 700, color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.title}</span>
+                    <span style={{ display: 'flex', flexShrink: 0 }}><Ico lucide={meta.icon} ti={meta.ti} size={14} color={meta.color} /></span>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.title}</span>
                   </span>
-                  <button onClick={(e) => remove(a, e)} title="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED2, padding: 0, flexShrink: 0 }}><Trash2 size={13} /></button>
+                  <button onClick={(e) => remove(a, e)} title="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted2, padding: 0, flexShrink: 0 }}><Ico lucide={Trash2} ti="ti-trash" size={13} /></button>
                 </div>
                 <span style={{ fontSize: 10, fontWeight: 800, color: meta.color }}>{a.subject}</span>
                 <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                  <Badge color={BLUE} bg="#EFF6FF"><Users size={10} style={{ marginRight: 2 }} />{p.assigned} assigned</Badge>
-                  <Badge color={AMBER} bg="#FFF7ED">{p.started} started</Badge>
-                  <Badge color={GREEN} bg="#DCFCE7"><CheckCircle2 size={10} style={{ marginRight: 2 }} />{p.complete} done</Badge>
+                  <Badge color={BLUE} bg="#EFF6FF"><Ico lucide={Users} ti="ti-users" size={10} style={{ marginRight: 2 }} />{p.assigned} assigned</Badge>
+                  <Badge color={C.brand} bg={C.brandSoft}>{p.started} started</Badge>
+                  <Badge color={GREEN} bg="#DCFCE7"><Ico lucide={CheckCircle2} ti="ti-circle-check" size={10} style={{ marginRight: 2 }} />{p.complete} done</Badge>
                 </div>
                 {/* Same progress bar the self-study cards carry. */}
-                <div style={{ height: 6, borderRadius: 3, background: LIGHT, overflow: 'hidden' }}>
-                  <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg, ${AMBER}, ${GREEN})`, transition: 'width .3s' }} />
+                <div style={{ height: 6, borderRadius: 3, background: C.bg, overflow: 'hidden' }}>
+                  <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg, ${C.brand}, ${GREEN})`, transition: 'width .3s' }} />
                 </div>
-                <div style={{ fontSize: 10, color: overdue ? RED : MUTED2, marginTop: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <Clock size={10} />{whenLabel} {when || '—'}
+                <div style={{ fontSize: 10, color: overdue ? RED : C.muted2, marginTop: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Ico lucide={Clock} ti="ti-clock" size={10} />{whenLabel} {when || '—'}
                 </div>
               </div>
             );
@@ -793,7 +795,7 @@ export function DetailPage({ activity, onDeleted, onClose }) {
   }, [activity?.id]);
 
   const STATUS = {
-    assigned: { color: MUTED,  bg: LIGHT,     label: 'Not started' },
+    assigned: { color: C.muted,  bg: C.bg,     label: 'Not started' },
     started:  { color: BLUE,   bg: '#EFF6FF', label: 'In progress' },
     complete: { color: GREEN,  bg: '#DCFCE7', label: 'Complete' },
   };
@@ -844,49 +846,49 @@ export function DetailPage({ activity, onDeleted, onClose }) {
   };
   if (!activity?.id) return (
     <PageLayout title="Activity" subtitle="Details">
-      <div style={{ fontFamily: FONT, color: MUTED }}>This activity is no longer available.</div>
+      <div style={{ fontFamily: C.font, color: C.muted }}>This activity is no longer available.</div>
       <div style={{ marginTop: 14 }}><Btn onClick={() => onClose()}>Back to activities</Btn></div>
     </PageLayout>
   );
 
   return (
     <PageLayout title={data?.title || activity?.title || 'Activity'} subtitle="Activity details">
-      <div style={{ maxWidth: 640, margin: '0 auto', fontFamily: FONT }}>
-        <button onClick={onClose} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 14, background: 'none', border: 'none', cursor: 'pointer', color: MUTED, fontSize: 12.5, fontWeight: 700, fontFamily: FONT, padding: 0 }}>
+      <div style={{ maxWidth: 640, margin: '0 auto', fontFamily: C.font }}>
+        <button onClick={onClose} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 14, background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontSize: 12.5, fontWeight: 700, fontFamily: C.font, padding: 0 }}>
           <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
           Back to activities
         </button>
       {!data ? (
-        <div style={{ fontSize: 13, color: MUTED, fontFamily: FONT, padding: '10px 0' }}>Loading…</div>
+        <div style={{ fontSize: 13, color: C.muted, fontFamily: C.font, padding: '10px 0' }}>Loading…</div>
       ) : (
-        <div style={{ fontFamily: FONT }}>
+        <div style={{ fontFamily: C.font }}>
           {/* The brief — same data the self-study detail shows, whatever the kind. */}
-          <div style={{ fontSize: 12, color: MUTED, marginBottom: 10 }}>
-            <meta.icon size={12} color={meta.color} style={{ verticalAlign: '-2px', marginRight: 4 }} />{data.subject} · {data.topic}
+          <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>
+            <Ico lucide={meta.icon} ti={meta.ti} size={12} color={meta.color} style={{ verticalAlign: '-2px', marginRight: 4 }} />{data.subject} · {data.topic}
             {data.difficulty ? ` · ${data.difficulty}` : ''}
           </div>
 
           {data.details?.scheduled_at && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: AMBER, marginBottom: 10 }}>
-              <Clock size={12} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: C.brand, marginBottom: 10 }}>
+              <Ico lucide={Clock} ti="ti-clock" size={12} />
               Holds {new Date(data.details.scheduled_at).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
               {data.details.duration_mins ? ` · ${data.details.duration_mins} minutes` : ''}
             </div>
           )}
           {data.due_at && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: MUTED, marginBottom: 10 }}>
-              <Clock size={12} /> Due {new Date(data.due_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 10 }}>
+              <Ico lucide={Clock} ti="ti-clock" size={12} /> Due {new Date(data.due_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
             </div>
           )}
 
           {data.instructions && (
-            <div style={{ fontSize: 12, color: MUTED, background: LIGHT, borderRadius: 10, padding: '9px 12px', marginBottom: 12, lineHeight: 1.55 }}>{data.instructions}</div>
+            <div style={{ fontSize: 12, color: C.muted, background: C.bg, borderRadius: 10, padding: '9px 12px', marginBottom: 12, lineHeight: 1.55 }}>{data.instructions}</div>
           )}
 
           {/* Questions riding with the brief — learners answer these on submit. */}
           {(data.details?.questions ?? []).length > 0 && (
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: .5, color: MUTED2, marginBottom: 7 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: .5, color: C.muted2, marginBottom: 7 }}>
                 QUESTIONS · {(data.details.questions ?? []).length}
               </div>
               <PaperView details={data.details} showKey style={{ padding: '14px 16px' }} />
@@ -897,21 +899,21 @@ export function DetailPage({ activity, onDeleted, onClose }) {
               labelled the way the creation form labelled them. */}
           {(data.subtopics ?? []).length > 0 && (
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: .5, color: MUTED2, marginBottom: 7 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: .5, color: C.muted2, marginBottom: 7 }}>
                 {(byKey(data.type || 'self_study')?.planLabel || 'Plan').toUpperCase()}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                 {(data.subtopics ?? []).map((st, i) => (
-                  <div key={i} style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: '8px 11px', background: WHITE }}>
+                  <div key={i} style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: '8px 11px', background: C.surface }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, background: `${meta.color}18`, color: meta.color, fontSize: 10.5, fontWeight: 900, textAlign: 'center', lineHeight: '18px' }}>{i + 1}</span>
-                      <span style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>{st}</span>
+                      <span style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, background: tint(9, meta.color), color: meta.color, fontSize: 10.5, fontWeight: 900, textAlign: 'center', lineHeight: '18px' }}>{i + 1}</span>
+                      <span style={{ fontSize: 12.5, fontWeight: 700, color: C.ink }}>{st}</span>
                     </div>
                     {(data.objectives?.[st] ?? []).length > 0 && (
                       <div style={{ paddingLeft: 26, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 2 }}>
                         {data.objectives[st].map((o, j) => (
-                          <div key={j} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: MUTED }}>
-                            <span style={{ width: 3.5, height: 3.5, borderRadius: '50%', background: MUTED2, flexShrink: 0 }} />{o}
+                          <div key={j} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: C.muted }}>
+                            <span style={{ width: 3.5, height: 3.5, borderRadius: '50%', background: C.muted2, flexShrink: 0 }} />{o}
                           </div>
                         ))}
                       </div>
@@ -930,30 +932,30 @@ export function DetailPage({ activity, onDeleted, onClose }) {
             return (
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
-                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: .5, color: MUTED2 }}>ASSIGNED LEARNERS</div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: MUTED }}>{done} of {targets.length} done</div>
+                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: .5, color: C.muted2 }}>ASSIGNED LEARNERS</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: C.muted }}>{done} of {targets.length} done</div>
                 </div>
                 {targets.length > 0 && (
-                  <div style={{ height: 6, borderRadius: 3, background: LIGHT, overflow: 'hidden', marginBottom: 10 }}>
-                    <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg, ${AMBER}, ${GREEN})`, transition: 'width .3s' }} />
+                  <div style={{ height: 6, borderRadius: 3, background: C.bg, overflow: 'hidden', marginBottom: 10 }}>
+                    <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg, ${C.brand}, ${GREEN})`, transition: 'width .3s' }} />
                   </div>
                 )}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 300, overflowY: 'auto' }}>
                   {targets.map(t => {
                     const st = STATUS[t.status] || STATUS.assigned;
                     return (
-                      <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 11px', border: `1px solid ${BORDER}`, borderRadius: 10, background: WHITE }}>
+                      <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 10, background: C.surface }}>
                         <span style={{ fontSize: 13, fontWeight: 900, color: '#6B7280' }}>{(t.full_name || 'L').trim().charAt(0).toUpperCase()}</span>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>{t.full_name}</div>
-                          <div style={{ fontSize: 11, color: MUTED }}>@{t.username}</div>
+                          <div style={{ fontSize: 12.5, fontWeight: 700, color: C.ink }}>{t.full_name}</div>
+                          <div style={{ fontSize: 11, color: C.muted }}>@{t.username}</div>
                         </div>
                         <Badge color={st.color} bg={st.bg}>{st.label}</Badge>
                       </div>
                     );
                   })}
                   {targets.length === 0 && (
-                    <div style={{ fontSize: 12, color: MUTED, padding: '10px 0' }}>Nobody is assigned yet.</div>
+                    <div style={{ fontSize: 12, color: C.muted, padding: '10px 0' }}>Nobody is assigned yet.</div>
                   )}
                 </div>
               </div>
@@ -961,26 +963,26 @@ export function DetailPage({ activity, onDeleted, onClose }) {
           })()}
 
           {pdfErr && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 11px', borderRadius: 10, background: '#FEF2F2', border: '1px solid #FECACA', fontSize: 12, fontWeight: 700, color: RED, fontFamily: FONT, marginTop: 12 }}>
-              <AlertTriangle size={13} /> Couldn't build the PDF — try again.
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 11px', borderRadius: 10, background: '#FEF2F2', border: '1px solid #FECACA', fontSize: 12, fontWeight: 700, color: RED, fontFamily: C.font, marginTop: 12 }}>
+              <Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={13} /> Couldn't build the PDF — try again.
             </div>
           )}
           <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginTop: 14 }}>
             <div style={{ display: 'flex', gap: 8 }}>
               <Btn size="sm" variant="secondary" onClick={downloadPdf} disabled={!canPdf}
                 title="Download this activity as a PDF">
-                <Download size={13} /> {questions.length ? 'Download paper' : 'Download PDF'}
+                <Ico lucide={Download} ti="ti-download" size={13} /> {questions.length ? 'Download paper' : 'Download PDF'}
               </Btn>
               {questions.length > 0 && (
                 <Btn size="sm" variant="secondary" onClick={() => printPaper('teacher')} title="Download the marking scheme (teacher copy)">
-                  <Download size={13} /> Marking scheme
+                  <Ico lucide={Download} ti="ti-download" size={13} /> Marking scheme
                 </Btn>
               )}
-              <Btn size="sm" variant="secondary" onClick={del}><Trash2 size={13} /> Delete activity</Btn>
+              <Btn size="sm" variant="secondary" onClick={del}><Ico lucide={Trash2} ti="ti-trash" size={13} /> Delete activity</Btn>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <Btn size="sm" variant="secondary" onClick={() => navigate(`/self-study/${activity.id}/analytics`)}>
-                <BarChart3 size={13} /> Analytics
+                <Ico lucide={BarChart3} ti="ti-chart-bar" size={13} /> Analytics
               </Btn>
               <Btn size="sm" variant="secondary" onClick={onClose}>Close</Btn>
             </div>
@@ -1022,28 +1024,28 @@ function DraftsStrip({ refreshKey, onResolved }) {
 
   if (loading || (!drafts.length && !routines.length)) return null;
   return (
-    <div style={{ background: `${PURPLE}08`, border: '1px solid rgba(168,85,247,.3)', borderRadius: 14, padding: '12px 16px', marginBottom: 18, fontFamily: FONT }}>
+    <div style={{ background: `${PURPLE}08`, border: '1px solid rgba(168,85,247,.3)', borderRadius: 14, padding: '12px 16px', marginBottom: 18, fontFamily: C.font }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <Sparkles size={14} color={PURPLE} />
+        <Ico lucide={Sparkles} ti="ti-sparkles" size={14} color={PURPLE} />
         <span style={{ fontSize: 12, fontWeight: 900, color: PURPLE, letterSpacing: .3 }}>
           {drafts.length} AI-prepared draft{drafts.length === 1 ? '' : 's'} awaiting your review
         </span>
-        <span style={{ fontSize: 11, color: MUTED2 }}>— nothing was sent to learners.</span>
+        <span style={{ fontSize: 11, color: C.muted2 }}>— nothing was sent to learners.</span>
       </div>
       {/* Weekly routines — preparation is automated, assignment stays human. */}
       {routines.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginBottom: drafts.length ? 8 : 0 }}>
-          <span style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: .4, color: MUTED2, textTransform: 'uppercase' }}>Weekly routines</span>
+          <span style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: .4, color: C.muted2, textTransform: 'uppercase' }}>Weekly routines</span>
           {routines.map(r => (
-            <span key={r.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 6px 4px 11px', borderRadius: 20, background: WHITE, border: `1px solid ${BORDER}`, fontSize: 11, fontWeight: 700, color: MUTED, fontFamily: FONT }}>
-              <span style={{ color: r.status === 'active' ? GREEN : MUTED2 }}>{'\u{1F501}'}</span>
+            <span key={r.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 6px 4px 11px', borderRadius: 20, background: C.surface, border: `1px solid ${C.border}`, fontSize: 11, fontWeight: 700, color: C.muted, fontFamily: C.font }}>
+              <span style={{ color: r.status === 'active' ? GREEN : C.muted2 }}>{'\u{1F501}'}</span>
               {DAY[r.day_of_week]} · {r.title}
               <button onClick={() => flipRoutine(r)} title={r.status === 'active' ? 'Pause' : 'Resume'}
-                style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 10.5, fontWeight: 800, color: r.status === 'active' ? AMBER : GREEN, fontFamily: FONT, padding: '2px 4px' }}>
+                style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 10.5, fontWeight: 800, color: r.status === 'active' ? C.brand : GREEN, fontFamily: C.font, padding: '2px 4px' }}>
                 {r.status === 'active' ? 'Pause' : 'Resume'}
               </button>
               <button onClick={() => dropRoutine(r)} title="Cancel routine"
-                style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 11, color: RED, fontFamily: FONT, padding: '2px 5px' }}>×</button>
+                style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 11, color: RED, fontFamily: C.font, padding: '2px 5px' }}>×</button>
             </span>
           ))}
         </div>
@@ -1053,8 +1055,8 @@ function DraftsStrip({ refreshKey, onResolved }) {
           <button key={d.id} onClick={() => navigate(`/activities?draft=${d.id}`)}
             title="Preview this draft — assigning is your call"
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 20,
-              border: '1px solid rgba(168,85,247,.45)', background: WHITE, color: PURPLE,
-              fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, maxWidth: 320 }}>
+              border: '1px solid rgba(168,85,247,.45)', background: C.surface, color: PURPLE,
+              fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font, maxWidth: 320 }}>
             <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.title}</span>
             <span style={{ fontSize: 9.5, fontWeight: 900, background: 'rgba(168,85,247,.14)', padding: '1px 7px', borderRadius: 8, textTransform: 'uppercase', flexShrink: 0 }}>
               {(d.type || '').replace('_', ' ')}
@@ -1094,7 +1096,7 @@ function DraftRoute({ draftId }) {
   if (!draftId) {
     return (
       <PageLayout title="AI-prepared activity" subtitle="Review & assign — human-in-the-loop">
-        <div style={{ fontFamily: FONT, color: MUTED }}>No draft was specified.</div>
+        <div style={{ fontFamily: C.font, color: C.muted }}>No draft was specified.</div>
         <div style={{ marginTop: 14 }}><Btn onClick={() => navigate('/activities')}>Back to activities</Btn></div>
       </PageLayout>
     );
@@ -1133,29 +1135,29 @@ function ActivitiesHome() {
     <PageLayout
       title="Activities"
       subtitle="Create work, assign it to learners, and see what has been done"
-      action={<Btn size="sm" onClick={() => setRefreshKey(k => k + 1)}><Plus size={14} /> Refresh</Btn>}
+      action={<Btn size="sm" onClick={() => setRefreshKey(k => k + 1)}><Ico lucide={Plus} ti="ti-plus" size={14} /> Refresh</Btn>}
     >
       <DraftsStrip refreshKey={refreshKey} onResolved={() => setRefreshKey(k => k + 1)} />
       <div style={{ display: 'flex', gap: 22, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         {/* Left rail — the activity types */}
         <aside style={{ width: 268, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1, color: MUTED2, padding: '8px 13px 6px', fontFamily: FONT }}>ACTIVITY TYPES</div>
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1, color: C.muted2, padding: '8px 13px 6px', fontFamily: C.font }}>ACTIVITY TYPES</div>
             {ACTIVITY_TYPES.map(t => {
               const on = t.key === key;
               return (
                 <button key={t.key} onClick={() => setKey(t.key)} style={{
                   display: 'flex', alignItems: 'flex-start', gap: 10, width: '100%', textAlign: 'left',
                   padding: '11px 13px', borderRadius: 10, border: 'none', cursor: 'pointer',
-                  background: on ? t.color : 'transparent', color: on ? WHITE : MUTED,
-                  fontSize: 13.5, fontWeight: on ? 700 : 600, fontFamily: FONT, transition: 'all .12s',
+                  background: on ? t.color : 'transparent', color: on ? C.surface : C.muted,
+                  fontSize: 13.5, fontWeight: on ? 700 : 600, fontFamily: C.font, transition: 'all .12s',
                 }}
-                  onMouseEnter={(e) => { if (!on) e.currentTarget.style.background = LIGHT; }}
+                  onMouseEnter={(e) => { if (!on) e.currentTarget.style.background = C.bg; }}
                   onMouseLeave={(e) => { if (!on) e.currentTarget.style.background = 'transparent'; }}>
                   <span style={{ fontSize: 12, fontWeight: 900, flexShrink: 0, marginTop: 1, color: 'rgba(255,255,255,.85)' }}>{(t.name || 'T').trim().charAt(0).toUpperCase()}</span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: 'block' }}>{t.name}</span>
-                    <span style={{ display: 'block', fontSize: 11, fontWeight: 600, lineHeight: 1.4, marginTop: 2, color: on ? 'rgba(255,255,255,.82)' : MUTED2 }}>{t.blurb}</span>
+                    <span style={{ display: 'block', fontSize: 11, fontWeight: 600, lineHeight: 1.4, marginTop: 2, color: on ? 'rgba(255,255,255,.82)' : C.muted2 }}>{t.blurb}</span>
                   </span>
                 </button>
               );
@@ -1163,19 +1165,19 @@ function ActivitiesHome() {
           </div>
 
           {note && (
-            <div style={{ background: `${AMBER}0A`, border: `1px solid ${AMBER}33`, borderRadius: 14, padding: '13px 15px', fontFamily: FONT }}>
+            <div style={{ background: tint(4), border: `1px solid ${tint(20)}`, borderRadius: 14, padding: '13px 15px', fontFamily: C.font }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                <Info size={13} color={AMBER} />
-                <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: .5, color: AMBER }}>WHEN TO USE IT</span>
+                <Ico lucide={Info} ti="ti-info-circle" size={13} color={C.brand} />
+                <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: .5, color: C.brand }}>WHEN TO USE IT</span>
               </div>
-              <div style={{ fontSize: 12.5, fontWeight: 800, color: INK, marginBottom: 5 }}>{note[0]}</div>
-              <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.55 }}>{note[1]}</div>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: C.ink, marginBottom: 5 }}>{note[0]}</div>
+              <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.55 }}>{note[1]}</div>
             </div>
           )}
         </aside>
 
         {/* Right card — the creation form for the picked type */}
-        <section style={{ flex: 1, minWidth: 300, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '22px 24px' }}>
+        <section style={{ flex: 1, minWidth: 300, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: '22px 24px' }}>
           {key === 'battle'
             ? <BattlePanel onDone={() => setRefreshKey(k => k + 1)} />
             : key === 'multi_stage'
@@ -1241,14 +1243,14 @@ function BattlePanel({ onDone }) {
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
         <div style={{ width: 40, height: 40, borderRadius: 12, background: `${RED}18`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Swords size={19} color={RED} />
+          <Ico lucide={Swords} ti="ti-swords" size={19} color={RED} />
         </div>
         <div>
-          <div style={{ fontSize: 15.5, fontWeight: 900, color: INK }}>New battle</div>
-          <div style={{ fontSize: 11.5, color: MUTED }}>The same battle you create on the Battles page — timed questions, XP, leaderboard.</div>
+          <div style={{ fontSize: 15.5, fontWeight: 900, color: C.ink }}>New battle</div>
+          <div style={{ fontSize: 11.5, color: C.muted }}>The same battle you create on the Battles page — timed questions, XP, leaderboard.</div>
         </div>
       </div>
-      {error && <div style={{ fontSize: 12, color: RED, fontWeight: 700, fontFamily: FONT, marginBottom: 8 }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: RED, fontWeight: 700, fontFamily: C.font, marginBottom: 8 }}>{error}</div>}
       <BattleForm onSubmit={submit} courses={courses} submitLabel="Create battle" embedded />
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </>
@@ -1259,8 +1261,8 @@ function BattlePanel({ onDone }) {
 const BATTLE_STATUS = {
   live:      { color: GREEN, bg: '#DCFCE7', label: 'Live' },
   scheduled: { color: BLUE,  bg: '#EFF6FF', label: 'Scheduled' },
-  completed: { color: MUTED, bg: LIGHT,     label: 'Completed' },
-  draft:     { color: MUTED, bg: LIGHT,     label: 'Draft' },
+  completed: { color: C.muted, bg: C.bg,     label: 'Completed' },
+  draft:     { color: C.muted, bg: C.bg,     label: 'Draft' },
 };
 
 function BattlePastStrip({ refreshKey }) {
@@ -1276,26 +1278,26 @@ function BattlePastStrip({ refreshKey }) {
   if (past && past.length === 0) return null;
 
   return (
-    <div style={{ marginTop: 22, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '16px 18px', fontFamily: FONT }}>
+    <div style={{ marginTop: 22, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: '16px 18px', fontFamily: C.font }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={{ fontSize: 13, fontWeight: 800, color: INK }}>Past battles</div>
-        <div style={{ fontSize: 11, color: MUTED2 }}>manage on the Battles page</div>
+        <div style={{ fontSize: 13, fontWeight: 800, color: C.ink }}>Past battles</div>
+        <div style={{ fontSize: 11, color: C.muted2 }}>manage on the Battles page</div>
       </div>
       {past === null ? (
-        <div style={{ display: 'flex', gap: 12 }}>{[0, 1, 2].map(i => <div key={i} style={{ flex: '0 0 224px', height: 96, borderRadius: 12, background: LIGHT }} />)}</div>
+        <div style={{ display: 'flex', gap: 12 }}>{[0, 1, 2].map(i => <div key={i} style={{ flex: '0 0 224px', height: 96, borderRadius: 12, background: C.bg }} />)}</div>
       ) : (
         <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4, scrollSnapType: 'x proximity' }}>
           {past.slice(0, 12).map(b => {
             const st = BATTLE_STATUS[b.status] || BATTLE_STATUS.draft;
             return (
-              <div key={b.id} style={{ flex: '0 0 auto', width: 224, scrollSnapAlign: 'start', border: `1px solid ${BORDER}`, borderRadius: 12, padding: '12px 13px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div key={b.id} style={{ flex: '0 0 auto', width: 224, scrollSnapAlign: 'start', border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 13px', display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                  <span style={{ display: 'flex', flexShrink: 0 }}><Swords size={14} color="#DC2626" /></span>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.title}</span>
+                  <span style={{ display: 'flex', flexShrink: 0 }}><Ico lucide={Swords} ti="ti-swords" size={14} color="#DC2626" /></span>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.title}</span>
                 </div>
                 <Badge color={st.color} bg={st.bg}>{st.label}</Badge>
-                <div style={{ fontSize: 10, color: MUTED2, marginTop: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <Clock size={10} />{b.scheduled_start || b.scheduledAt ? fmtWhen(b.scheduled_start || b.scheduledAt) : b.topic || '—'}
+                <div style={{ fontSize: 10, color: C.muted2, marginTop: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Ico lucide={Clock} ti="ti-clock" size={10} />{b.scheduled_start || b.scheduledAt ? fmtWhen(b.scheduled_start || b.scheduledAt) : b.topic || '—'}
                 </div>
               </div>
             );
@@ -1442,20 +1444,20 @@ function MultiStageForm({ onAssigned }) {
 
   return (
     <>
-    <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14, fontFamily: FONT }}>
+    <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14, fontFamily: C.font }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 2 }}>
         <div style={{ width: 40, height: 40, borderRadius: 12, background: '#A855F718', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <ListChecks size={19} color="#A855F7" />
+          <Ico lucide={ListChecks} ti="ti-list-check" size={19} color="#A855F7" />
         </div>
         <div>
-          <div style={{ fontSize: 15.5, fontWeight: 900, color: INK }}>New multi-stage activity</div>
-          <div style={{ fontSize: 11.5, color: MUTED }}>Chain activities into one ordered journey — learners see the roadmap.</div>
+          <div style={{ fontSize: 15.5, fontWeight: 900, color: C.ink }}>New multi-stage activity</div>
+          <div style={{ fontSize: 11.5, color: C.muted }}>Chain activities into one ordered journey — learners see the roadmap.</div>
         </div>
       </div>
 
       {done && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 12px', borderRadius: 10, background: '#DCFCE7', border: '1px solid #BBF7D0', fontSize: 12.5, fontWeight: 800, color: GREEN }}>
-          <CheckCircle2 size={14} /> {done}
+          <Ico lucide={CheckCircle2} ti="ti-circle-check" size={14} /> {done}
         </div>
       )}
 
@@ -1463,9 +1465,9 @@ function MultiStageForm({ onAssigned }) {
 
       {/* Stages */}
       <div>
-        <div style={{ fontSize: 12, fontWeight: 700, color: INK, marginBottom: 8 }}>Stages * <span style={{ fontWeight: 600, color: MUTED2 }}>— learners do them top to bottom</span></div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 8 }}>Stages * <span style={{ fontWeight: 600, color: C.muted2 }}>— learners do them top to bottom</span></div>
         {stages.length === 0 && (
-          <div style={{ padding: '18px', textAlign: 'center', border: `1px dashed ${BORDER}`, borderRadius: 12, background: LIGHT, fontSize: 12, color: MUTED }}>
+          <div style={{ padding: '18px', textAlign: 'center', border: `1px dashed ${C.border}`, borderRadius: 12, background: C.bg, fontSize: 12, color: C.muted }}>
             No stages yet — add the first one below.
           </div>
         )}
@@ -1473,24 +1475,24 @@ function MultiStageForm({ onAssigned }) {
           {stages.map((st, i) => {
             const meta = STAGE_KINDS.find(k => k.key === st.kind);
             return (
-              <div key={st.key} style={{ border: `1px solid ${BORDER}`, borderRadius: 12, padding: '12px 14px', background: WHITE }}>
+              <div key={st.key} style={{ border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', background: C.surface }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: st.kind === 'battle' ? 0 : 10 }}>
                   <span style={{ width: 22, height: 22, borderRadius: 7, flexShrink: 0, background: '#A855F718', color: '#A855F7', fontSize: 11, fontWeight: 900, textAlign: 'center', lineHeight: '22px' }}>{i + 1}</span>
-                  <span style={{ fontSize: 12.5, fontWeight: 800, color: INK }}>{meta.label}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 800, color: C.ink }}>{meta.label}</span>
                   <span style={{ flex: 1 }} />
                   <button type="button" onClick={() => moveStage(i, -1)} disabled={i === 0} title="Move up"
-                    style={{ background: 'none', border: 'none', cursor: i === 0 ? 'default' : 'pointer', color: i === 0 ? BORDER : MUTED, display: 'flex', padding: 2 }}><ArrowUp size={13} /></button>
+                    style={{ background: 'none', border: 'none', cursor: i === 0 ? 'default' : 'pointer', color: i === 0 ? C.border : C.muted, display: 'flex', padding: 2 }}><Ico lucide={ArrowUp} ti="ti-arrow-up" size={13} /></button>
                   <button type="button" onClick={() => moveStage(i, 1)} disabled={i === stages.length - 1} title="Move down"
-                    style={{ background: 'none', border: 'none', cursor: i === stages.length - 1 ? 'default' : 'pointer', color: i === stages.length - 1 ? BORDER : MUTED, display: 'flex', padding: 2 }}><ArrowDown size={13} /></button>
+                    style={{ background: 'none', border: 'none', cursor: i === stages.length - 1 ? 'default' : 'pointer', color: i === stages.length - 1 ? C.border : C.muted, display: 'flex', padding: 2 }}><Ico lucide={ArrowDown} ti="ti-arrow-down" size={13} /></button>
                   <button type="button" onClick={() => removeStage(st.key)} title="Remove stage"
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: RED, display: 'flex', padding: 2 }}><Trash2 size={13} /></button>
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: RED, display: 'flex', padding: 2 }}><Ico lucide={Trash2} ti="ti-trash" size={13} /></button>
                 </div>
 
                 {st.kind === 'battle' ? (
                   st.battle
                     ? <div style={{ fontSize: 12, fontWeight: 700, color: GREEN }}>{st.battle.title} — battle is live for its audience</div>
                     : <Btn size="sm" variant="secondary" type="button" onClick={() => setBattleFor(st.key)}>
-                        <Swords size={13} /> Create the battle for this stage
+                        <Ico lucide={Swords} ti="ti-swords" size={13} /> Create the battle for this stage
                       </Btn>
                 ) : (
                   <>
@@ -1504,11 +1506,11 @@ function MultiStageForm({ onAssigned }) {
                     <Txa label="Instructions" value={st.instructions} onChange={e => patchStage(st.key, { instructions: e.target.value })} rows={2} style={{ marginTop: 8 }} />
 
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '10px 0 6px' }}>
-                      <div style={{ fontSize: 11.5, fontWeight: 700, color: INK }}>Stage plan *</div>
+                      <div style={{ fontSize: 11.5, fontWeight: 700, color: C.ink }}>Stage plan *</div>
                       <Btn size="sm" variant="secondary" type="button" onClick={() => draftStage(st)} disabled={draftingKey === st.key}>
                         {draftingKey === st.key
-                          ? <><Loader2 size={12} style={{ animation: 'spin .8s linear infinite' }} /> Drafting…</>
-                          : <><Sparkles size={12} /> {st.subtopics.length ? 'Redraft' : 'Draft with AI'}</>}
+                          ? <><Ico lucide={Loader2} ti="ti-loader-2" size={12} style={{ animation: 'spin .8s linear infinite' }} /> Drafting…</>
+                          : <><Ico lucide={Sparkles} ti="ti-sparkles" size={12} /> {st.subtopics.length ? 'Redraft' : 'Draft with AI'}</>}
                       </Btn>
                     </div>
                     <PlanEditor
@@ -1525,7 +1527,7 @@ function MultiStageForm({ onAssigned }) {
         <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
           {STAGE_KINDS.map(k => (
             <button key={k.key} type="button" onClick={() => addStage(k.key)}
-              style={{ padding: '7px 13px', borderRadius: 20, border: `1px solid ${BORDER}`, background: WHITE, cursor: 'pointer', fontSize: 11.5, fontWeight: 800, color: INK, fontFamily: FONT }}>
+              style={{ padding: '7px 13px', borderRadius: 20, border: `1px solid ${C.border}`, background: C.surface, cursor: 'pointer', fontSize: 11.5, fontWeight: 800, color: C.ink, fontFamily: C.font }}>
               + {k.label}
             </button>
           ))}
@@ -1554,11 +1556,11 @@ function MultiStageForm({ onAssigned }) {
 
       <Inp label="Due for every stage (optional)" type="datetime-local" value={dueAt} onChange={e => setDueAt(e.target.value)} />
 
-      {error && <div style={{ fontSize: 12, color: RED, fontWeight: 700, fontFamily: FONT }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: RED, fontWeight: 700, fontFamily: C.font }}>{error}</div>}
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
         <Btn type="submit" disabled={saving}>
-          {saving ? 'Assigning…' : <><ListChecks size={14} /> Assign journey</>}
+          {saving ? 'Assigning…' : <><Ico lucide={ListChecks} ti="ti-list-check" size={14} /> Assign journey</>}
         </Btn>
       </div>
 

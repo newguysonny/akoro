@@ -15,22 +15,24 @@
  */
 import { useRef, useState } from 'react';
 import { ArrowUp, ArrowDown, ImagePlus, Trash2, Eye, Pencil, Plus } from 'lucide-react';
-import { INK, MUTED, MUTED2, BORDER, WHITE, LIGHT, GREEN, PURPLE, BLUE, RED, FONT } from '../../constants.js';
+import { GREEN, PURPLE, BLUE, RED } from '../../constants.js';
+import { C } from '../../theme/colors.js';
+import { Ico } from '../../theme/Ico.jsx';
 import { letterOf, removeRef, imageFileToDataUrl, AR_OPTIONS, TF_OPTIONS } from '../../lib/paper.js';
 import PaperView, { Figure, FigureSlot } from './PaperView.jsx';
 
 export const MAX_OPTIONS = 5;   // A–E, as on the papers
 
 const INP = {
-  padding: '7px 10px', borderRadius: 8, border: `1px solid ${BORDER}`,
-  fontFamily: FONT, fontSize: 12, fontWeight: 600, color: INK, outline: 'none', background: WHITE, boxSizing: 'border-box',
+  padding: '7px 10px', borderRadius: 8, border: `1px solid ${C.border}`,
+  fontFamily: C.font, fontSize: 12, fontWeight: 600, color: C.ink, outline: 'none', background: C.surface, boxSizing: 'border-box',
 };
 const CHIP = {
   fontSize: 10, fontWeight: 800, color: BLUE, background: '#EFF6FF',
-  borderRadius: 100, padding: '2px 8px', fontFamily: FONT, whiteSpace: 'nowrap',
+  borderRadius: 100, padding: '2px 8px', fontFamily: C.font, whiteSpace: 'nowrap',
 };
-const LINK = { border: 'none', background: 'none', color: PURPLE, cursor: 'pointer', fontSize: 11, fontWeight: 800, fontFamily: FONT, padding: '2px 0', display: 'inline-flex', alignItems: 'center', gap: 4 };
-const ICON_BTN = { border: 'none', background: 'none', color: MUTED2, cursor: 'pointer', padding: '2px 4px', display: 'inline-flex', alignItems: 'center' };
+const LINK = { border: 'none', background: 'none', color: PURPLE, cursor: 'pointer', fontSize: 11, fontWeight: 800, fontFamily: C.font, padding: '2px 0', display: 'inline-flex', alignItems: 'center', gap: 4 };
+const ICON_BTN = { border: 'none', background: 'none', color: C.muted2, cursor: 'pointer', padding: '2px 4px', display: 'inline-flex', alignItems: 'center' };
 const sectionName = (i) => `Section ${letterOf(i)}`;
 
 /* The answer kinds the editor offers, and what switching to each sets up. */
@@ -97,34 +99,34 @@ export default function PaperBuilder({ questions, sections, passages, onChange, 
     }
   };
 
-  const seg = (key, Icon, label) => (
+  const seg = (key, Icon, ti, label) => (
     <button type="button" onClick={() => setView(key)} aria-pressed={view === key}
-      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 11.5, fontWeight: 800,
-        background: view === key ? WHITE : 'transparent', color: view === key ? INK : MUTED, boxShadow: view === key ? '0 1px 3px rgba(0,0,0,.08)' : 'none' }}>
-      <Icon size={12} /> {label}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: C.font, fontSize: 11.5, fontWeight: 800,
+        background: view === key ? C.surface : 'transparent', color: view === key ? C.ink : C.muted, boxShadow: view === key ? '0 1px 3px rgba(0,0,0,.08)' : 'none' }}>
+      <Ico lucide={Icon} ti={ti} size={12} /> {label}
     </button>
   );
 
   return (
-    <div style={{ marginTop: 10, fontFamily: FONT }}>
+    <div style={{ marginTop: 10, fontFamily: C.font }}>
       <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={onFile} style={{ display: 'none' }} />
 
       {/* Toolbar: Edit | Paper preview, and the paper's furniture */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
         {/* Embedded (a draft version), the host has its own Edit / Paper preview switch. */}
         {!embedded && (
-          <div style={{ display: 'inline-flex', gap: 2, padding: 2, borderRadius: 10, background: LIGHT, border: `1px solid ${BORDER}` }}>
-            {seg('edit', Pencil, 'Edit')}
-            {seg('paper', Eye, 'Paper preview')}
+          <div style={{ display: 'inline-flex', gap: 2, padding: 2, borderRadius: 10, background: C.bg, border: `1px solid ${C.border}` }}>
+            {seg('edit', Pencil, 'ti-pencil', 'Edit')}
+            {seg('paper', Eye, 'ti-eye', 'Paper preview')}
           </div>
         )}
         {view === 'edit' ? (
           <div style={{ display: 'flex', gap: 12, marginLeft: 'auto' }}>
-            <button type="button" style={LINK} onClick={() => onChange({ sections: [...sections, { title: sectionName(sections.length), instructions: '' }] })}><Plus size={12} /> Section</button>
-            <button type="button" style={LINK} onClick={() => onChange({ passages: [...passages, { title: '', text: '' }] })}><Plus size={12} /> Passage</button>
+            <button type="button" style={LINK} onClick={() => onChange({ sections: [...sections, { title: sectionName(sections.length), instructions: '' }] })}><Ico lucide={Plus} ti="ti-plus" size={12} /> Section</button>
+            <button type="button" style={LINK} onClick={() => onChange({ passages: [...passages, { title: '', text: '' }] })}><Ico lucide={Plus} ti="ti-plus" size={12} /> Passage</button>
           </div>
         ) : (
-          <label style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: MUTED, cursor: 'pointer' }}>
+          <label style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: C.muted, cursor: 'pointer' }}>
             <input type="checkbox" checked={showKey} onChange={(e) => setShowKey(e.target.checked)} style={{ accentColor: GREEN }} /> Show answer key
           </label>
         )}
@@ -133,17 +135,17 @@ export default function PaperBuilder({ questions, sections, passages, onChange, 
       {view === 'paper' ? (
         <>
           <PaperView details={previewDetails({ questions, sections, passages })} title={title} instructions={instructions} showKey={showKey} />
-          <div style={{ fontSize: 10.5, color: MUTED2, marginTop: 6 }}>How the paper reads. Learners answer one question at a time, each with its section's instructions, passage and figure.</div>
+          <div style={{ fontSize: 10.5, color: C.muted2, marginTop: 6 }}>How the paper reads. Learners answer one question at a time, each with its section's instructions, passage and figure.</div>
         </>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {/* Sections */}
           {sections.map((s, si) => (
-            <div key={`s${si}`} style={{ border: `1px solid ${BORDER}`, borderLeft: `3px solid ${PURPLE}`, borderRadius: 10, padding: '9px 11px', background: '#FBFAFF' }}>
+            <div key={`s${si}`} style={{ border: `1px solid ${C.border}`, borderLeft: `3px solid ${PURPLE}`, borderRadius: 10, padding: '9px 11px', background: '#FBFAFF' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                 <span style={{ fontSize: 10, fontWeight: 900, letterSpacing: .5, color: PURPLE, flexShrink: 0 }}>SECTION {letterOf(si)}</span>
                 <input value={s.title} onChange={(e) => setSection(si, { title: e.target.value })} placeholder="Title, e.g. Section A — Multiple choice" style={{ ...INP, flex: 1 }} maxLength={120} />
-                <button type="button" style={ICON_BTN} title="Remove section (its questions stay)" onClick={() => dropSection(si)}><Trash2 size={13} /></button>
+                <button type="button" style={ICON_BTN} title="Remove section (its questions stay)" onClick={() => dropSection(si)}><Ico lucide={Trash2} ti="ti-trash" size={13} /></button>
               </div>
               <textarea value={s.instructions} onChange={(e) => setSection(si, { instructions: e.target.value })} rows={2} maxLength={1200}
                 placeholder="Instructions learners see above these questions, e.g. Choose the correct option from A to E."
@@ -153,14 +155,14 @@ export default function PaperBuilder({ questions, sections, passages, onChange, 
 
           {/* Passages */}
           {passages.map((p, pi) => (
-            <div key={`p${pi}`} style={{ border: `1px solid ${BORDER}`, borderLeft: `3px solid ${BLUE}`, borderRadius: 10, padding: '9px 11px', background: '#F8FBFF' }}>
+            <div key={`p${pi}`} style={{ border: `1px solid ${C.border}`, borderLeft: `3px solid ${BLUE}`, borderRadius: 10, padding: '9px 11px', background: '#F8FBFF' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                 <span style={{ fontSize: 10, fontWeight: 900, letterSpacing: .5, color: BLUE, flexShrink: 0 }}>PASSAGE {pi + 1}</span>
                 <input value={p.title} onChange={(e) => setPassage(pi, { title: e.target.value })} placeholder="Title (optional)" style={{ ...INP, flex: 1 }} maxLength={160} />
-                <span style={{ fontSize: 10.5, color: MUTED2, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: 10.5, color: C.muted2, fontWeight: 700, whiteSpace: 'nowrap' }}>
                   {questions.filter((r) => r.passage === pi).length} question{questions.filter((r) => r.passage === pi).length === 1 ? '' : 's'}
                 </span>
-                <button type="button" style={ICON_BTN} title="Remove passage" onClick={() => dropPassage(pi)}><Trash2 size={13} /></button>
+                <button type="button" style={ICON_BTN} title="Remove passage" onClick={() => dropPassage(pi)}><Ico lucide={Trash2} ti="ti-trash" size={13} /></button>
               </div>
               <textarea value={p.text} onChange={(e) => setPassage(pi, { text: e.target.value })} rows={4} maxLength={8000}
                 placeholder="The passage the linked questions are about." style={{ ...INP, width: '100%', resize: 'vertical', lineHeight: 1.55, fontWeight: 500 }} />
@@ -179,14 +181,14 @@ export default function PaperBuilder({ questions, sections, passages, onChange, 
                     <span style={{ flex: 1, height: 1, background: `${PURPLE}33` }} />
                   </div>
                 )}
-                <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: '10px 11px', background: WHITE }}>
+                <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 11px', background: C.surface }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 7 }}>
-                    <span style={{ fontSize: 13, fontWeight: 900, color: INK, flexShrink: 0, minWidth: 20, paddingTop: 6 }}>{qi + 1}.</span>
+                    <span style={{ fontSize: 13, fontWeight: 900, color: C.ink, flexShrink: 0, minWidth: 20, paddingTop: 6 }}>{qi + 1}.</span>
                     {row.format === 'assertion_reason' ? (
                       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}>
                         {[['assertion', 'Assertion', 'One statement'], ['reason', 'Reason', 'The statement offered as its explanation']].map(([k, label, ph]) => (
                           <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                            <span style={{ width: 62, fontSize: 10.5, fontWeight: 900, color: MUTED, letterSpacing: .3 }}>{label.toUpperCase()}</span>
+                            <span style={{ width: 62, fontSize: 10.5, fontWeight: 900, color: C.muted, letterSpacing: .3 }}>{label.toUpperCase()}</span>
                             <input value={row[k] || ''} onChange={(e) => setRow(qi, { [k]: e.target.value })} placeholder={ph} aria-label={`${label} for question ${qi + 1}`} style={{ ...INP, flex: 1, fontSize: 12.5 }} />
                           </label>
                         ))}
@@ -201,8 +203,8 @@ export default function PaperBuilder({ questions, sections, passages, onChange, 
                       {KIND_CHOICES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                     </select>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <button type="button" style={{ ...ICON_BTN, opacity: qi === 0 ? .3 : 1 }} disabled={qi === 0} onClick={() => move(qi, -1)} title="Move up"><ArrowUp size={12} /></button>
-                      <button type="button" style={{ ...ICON_BTN, opacity: qi === questions.length - 1 ? .3 : 1 }} disabled={qi === questions.length - 1} onClick={() => move(qi, 1)} title="Move down"><ArrowDown size={12} /></button>
+                      <button type="button" style={{ ...ICON_BTN, opacity: qi === 0 ? .3 : 1 }} disabled={qi === 0} onClick={() => move(qi, -1)} title="Move up"><Ico lucide={ArrowUp} ti="ti-arrow-up" size={12} /></button>
+                      <button type="button" style={{ ...ICON_BTN, opacity: qi === questions.length - 1 ? .3 : 1 }} disabled={qi === questions.length - 1} onClick={() => move(qi, 1)} title="Move down"><Ico lucide={ArrowDown} ti="ti-arrow-down" size={12} /></button>
                     </div>
                     <button type="button" onClick={() => onChange({ questions: questions.filter((_, i) => i !== qi) })}
                       style={{ ...ICON_BTN, fontSize: 15 }} title="Remove question">×</button>
@@ -230,7 +232,7 @@ export default function PaperBuilder({ questions, sections, passages, onChange, 
                       </select>
                     )}
                     {assignment && (
-                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 700, color: MUTED2, marginLeft: 'auto' }}>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 700, color: C.muted2, marginLeft: 'auto' }}>
                         Points
                         <input type="number" min={0} value={row.max_points == null ? '' : row.max_points}
                           onChange={(e) => setRow(qi, { max_points: e.target.value === '' ? null : Number(e.target.value) })}
@@ -242,24 +244,24 @@ export default function PaperBuilder({ questions, sections, passages, onChange, 
                   {/* The figure — between the question text and its options */}
                   <div style={{ paddingLeft: 28, marginBottom: row.kind === 'mcq' ? 6 : 0 }}>
                     {row.figure ? (
-                      <div style={{ border: `1px dashed ${BORDER}`, borderRadius: 8, padding: '6px 8px', background: LIGHT }}>
+                      <div style={{ border: `1px dashed ${C.border}`, borderRadius: 8, padding: '6px 8px', background: C.bg }}>
                         <Figure figure={row.figure} maxHeight={170} style={{ margin: '2px 0 6px' }} />
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <input value={row.figure.caption || ''} maxLength={200} placeholder="Caption (optional), e.g. Fig. 1"
                             onChange={(e) => setRow(qi, { figure: { ...row.figure, caption: e.target.value } })} style={{ ...INP, flex: 1, padding: '4px 8px', fontSize: 11 }} />
-                          <button type="button" style={LINK} onClick={() => pickFigure(qi)}><ImagePlus size={12} /> Replace</button>
-                          <button type="button" style={{ ...LINK, color: RED }} onClick={() => setRow(qi, { figure: null })}><Trash2 size={12} /> Remove</button>
+                          <button type="button" style={LINK} onClick={() => pickFigure(qi)}><Ico lucide={ImagePlus} ti="ti-photo-plus" size={12} /> Replace</button>
+                          <button type="button" style={{ ...LINK, color: RED }} onClick={() => setRow(qi, { figure: null })}><Ico lucide={Trash2} ti="ti-trash" size={12} /> Remove</button>
                         </div>
-                        {row.figure.svg && <div style={{ fontSize: 10, color: MUTED2, marginTop: 4 }}>Drawn by the AI — check it matches the question, or replace it with your own image.</div>}
+                        {row.figure.svg && <div style={{ fontSize: 10, color: C.muted2, marginTop: 4 }}>Drawn by the AI — check it matches the question, or replace it with your own image.</div>}
                       </div>
                     ) : row.figure_note ? (
                       <div>
                         <FigureSlot note={row.figure_note} style={{ margin: '0 0 4px' }} />
-                        <button type="button" style={LINK} onClick={() => pickFigure(qi)}><ImagePlus size={12} /> Upload the figure</button>
-                        <button type="button" style={{ ...LINK, color: MUTED, marginLeft: 12 }} onClick={() => setRow(qi, { figure_note: undefined })}>No figure needed</button>
+                        <button type="button" style={LINK} onClick={() => pickFigure(qi)}><Ico lucide={ImagePlus} ti="ti-photo-plus" size={12} /> Upload the figure</button>
+                        <button type="button" style={{ ...LINK, color: C.muted, marginLeft: 12 }} onClick={() => setRow(qi, { figure_note: undefined })}>No figure needed</button>
                       </div>
                     ) : (
-                      <button type="button" style={{ ...LINK, color: MUTED }} onClick={() => pickFigure(qi)}><ImagePlus size={12} /> Add figure</button>
+                      <button type="button" style={{ ...LINK, color: C.muted }} onClick={() => pickFigure(qi)}><Ico lucide={ImagePlus} ti="ti-photo-plus" size={12} /> Add figure</button>
                     )}
                     {figErr[qi] && <div style={{ fontSize: 10.5, color: RED, fontWeight: 700, marginTop: 3 }}>{figErr[qi]}</div>}
                   </div>
@@ -272,9 +274,9 @@ export default function PaperBuilder({ questions, sections, passages, onChange, 
                           <input type="radio" name={`q-correct-${qi}`} checked={(row.correct ?? 0) === oi}
                             onChange={() => setRow(qi, { correct: oi })}
                             title="Mark as the correct option" style={{ accentColor: GREEN, cursor: 'pointer', flexShrink: 0 }} />
-                          <span style={{ fontSize: 12, fontWeight: 900, color: (row.correct ?? 0) === oi ? GREEN : MUTED, width: 14 }}>{letterOf(oi)}.</span>
+                          <span style={{ fontSize: 12, fontWeight: 900, color: (row.correct ?? 0) === oi ? GREEN : C.muted, width: 14 }}>{letterOf(oi)}.</span>
                           {row.format === 'true_false' || row.format === 'assertion_reason'
-                            ? <span style={{ flex: 1, fontSize: 12, color: INK, lineHeight: 1.4, padding: '4px 0' }}>{opt}</span>
+                            ? <span style={{ flex: 1, fontSize: 12, color: C.ink, lineHeight: 1.4, padding: '4px 0' }}>{opt}</span>
                             : <input value={opt} onChange={(e) => setRow(qi, { options: row.options.map((o, j) => (j === oi ? e.target.value : o)) })}
                               placeholder={`Option ${letterOf(oi)}`} style={{ flex: 1, ...INP }} />}
                           {(row.options ?? []).length > 2 && !row.format && (
@@ -287,7 +289,7 @@ export default function PaperBuilder({ questions, sections, passages, onChange, 
                         <button type="button" onClick={() => setRow(qi, { options: [...(row.options ?? []), ''] })}
                           style={{ ...LINK, paddingLeft: 21 }}>+ option {letterOf((row.options ?? []).length)}</button>
                       )}
-                      <div style={{ fontSize: 10, color: MUTED2, paddingLeft: 21 }}>
+                      <div style={{ fontSize: 10, color: C.muted2, paddingLeft: 21 }}>
                         {row.format === 'assertion_reason' ? 'The four standard options — tick the one that is right.' : row.format === 'true_false' ? 'Tick whether the statement is true or false.' : 'The ticked option is marked correct when grading.'}
                       </div>
                     </div>
@@ -318,7 +320,7 @@ export default function PaperBuilder({ questions, sections, passages, onChange, 
                         <button type="button" style={{ ...LINK, paddingLeft: 0 }}
                           onClick={() => setRow(qi, { labels: [...(row.labels ?? []), String.fromCharCode(80 + (row.labels ?? []).length)] })}>+ part</button>
                       )}
-                      <div style={{ fontSize: 10, color: MUTED2 }}>Learners write what each marked part is. {row.figure ? '' : 'Add the diagram above.'}</div>
+                      <div style={{ fontSize: 10, color: C.muted2 }}>Learners write what each marked part is. {row.figure ? '' : 'Add the diagram above.'}</div>
                     </div>
                   )}
                 </div>

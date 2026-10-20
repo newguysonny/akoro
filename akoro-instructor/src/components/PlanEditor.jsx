@@ -8,7 +8,9 @@ import {
   Plus, Sparkles, X,
 } from 'lucide-react';
 import { Btn } from './Primitives.jsx';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, PURPLE, FONT } from '../constants.js';
+import { PURPLE } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 
 /* ── Subtopic + objective editor ─────────────────────────────────────────
    The AI drafts; the teacher decides. Every line here is editable and
@@ -38,13 +40,13 @@ function PlanEditor({ subtopics, objectives, onChange }) {
 
   if (!subtopics.length) {
     return (
-      <div style={{ padding: '20px', textAlign: 'center', border: `1px dashed ${BORDER}`, borderRadius: 12, background: LIGHT }}>
-        <Sparkles size={20} color={MUTED} style={{ marginBottom: 6 }} />
-        <div style={{ fontSize: 12, color: MUTED, fontFamily: FONT }}>
+      <div style={{ padding: '20px', textAlign: 'center', border: `1px dashed ${C.border}`, borderRadius: 12, background: C.bg }}>
+        <Ico lucide={Sparkles} ti="ti-sparkles" size={20} color={C.muted} style={{ marginBottom: 6 }} />
+        <div style={{ fontSize: 12, color: C.muted, fontFamily: C.font }}>
           Enter a subject and topic, then draft the plan — or add subtopics yourself.
         </div>
         <Btn size="sm" variant="secondary" style={{ marginTop: 10 }} onClick={addSubtopic}>
-          <Plus size={13} /> Add a subtopic
+          <Ico lucide={Plus} ti="ti-plus" size={13} /> Add a subtopic
         </Btn>
       </div>
     );
@@ -53,7 +55,7 @@ function PlanEditor({ subtopics, objectives, onChange }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {subtopics.map((st, i) => (
-        <div key={i} style={{ border: `1px solid ${BORDER}`, borderRadius: 12, padding: '10px 12px', background: WHITE }}>
+        <div key={i} style={{ border: `1px solid ${C.border}`, borderRadius: 12, padding: '10px 12px', background: C.surface }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <span style={{
               width: 20, height: 20, borderRadius: 6, flexShrink: 0, background: `${PURPLE}18`,
@@ -64,37 +66,37 @@ function PlanEditor({ subtopics, objectives, onChange }) {
               placeholder="Subtopic"
               style={{
                 flex: 1, border: 'none', outline: 'none', background: 'transparent',
-                fontSize: 13, fontWeight: 700, color: INK, fontFamily: FONT,
+                fontSize: 13, fontWeight: 700, color: C.ink, fontFamily: C.font,
               }}
             />
             <button type="button" onClick={() => removeSubtopic(i)} title="Remove subtopic"
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, display: 'flex', padding: 2 }}>
-              <X size={14} />
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, display: 'flex', padding: 2 }}>
+              <Ico lucide={X} ti="ti-x" size={14} />
             </button>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5, paddingLeft: 28 }}>
             {(objectives[st] ?? []).map((obj, j) => (
               <div key={j} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ width: 4, height: 4, borderRadius: '50%', background: MUTED2, flexShrink: 0 }} />
+                <span style={{ width: 4, height: 4, borderRadius: '50%', background: C.muted2, flexShrink: 0 }} />
                 <input
                   value={obj} onChange={e => setObjective(st, j, e.target.value)}
                   placeholder="Learning objective"
                   style={{
                     flex: 1, border: 'none', outline: 'none', background: 'transparent',
-                    fontSize: 12, color: MUTED, fontFamily: FONT,
+                    fontSize: 12, color: C.muted, fontFamily: C.font,
                   }}
                 />
                 <button type="button" onClick={() => removeObjective(st, j)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED2, display: 'flex', padding: 2 }}>
-                  <X size={12} />
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted2, display: 'flex', padding: 2 }}>
+                  <Ico lucide={X} ti="ti-x" size={12} />
                 </button>
               </div>
             ))}
             <button type="button" onClick={() => addObjective(st)}
               style={{
                 alignSelf: 'flex-start', background: 'none', border: 'none', cursor: 'pointer',
-                color: AMBER, fontSize: 11, fontWeight: 700, fontFamily: FONT, padding: '2px 0',
+                color: C.brand, fontSize: 11, fontWeight: 700, fontFamily: C.font, padding: '2px 0',
               }}>
               + objective
             </button>
@@ -102,7 +104,7 @@ function PlanEditor({ subtopics, objectives, onChange }) {
         </div>
       ))}
       <Btn size="sm" variant="secondary" type="button" onClick={addSubtopic} style={{ alignSelf: 'flex-start' }}>
-        <Plus size={13} /> Add a subtopic
+        <Ico lucide={Plus} ti="ti-plus" size={13} /> Add a subtopic
       </Btn>
     </div>
   );

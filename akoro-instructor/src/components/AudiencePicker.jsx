@@ -24,12 +24,14 @@ import { useState, useEffect } from 'react';
 import { Search, Users, GraduationCap, UserCheck } from 'lucide-react';
 import { Inp, Sel, Badge } from './Primitives.jsx';
 import { apiGet } from '../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, FONT } from '../constants.js';
+import { GREEN } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 
 const MODES = [
-  { key: 'course', label: 'Everyone on the course', hint: 'All active enrolments', Icon: Users },
-  { key: 'class',  label: 'A class',                hint: 'e.g. JSS1',            Icon: GraduationCap },
-  { key: 'picked', label: 'Chosen learners',        hint: 'One or more',          Icon: UserCheck },
+  { key: 'course', label: 'Everyone on the course', hint: 'All active enrolments', Icon: Users, ti: 'ti-users' },
+  { key: 'class',  label: 'A class',                hint: 'e.g. JSS1',            Icon: GraduationCap, ti: 'ti-school' },
+  { key: 'picked', label: 'Chosen learners',        hint: 'One or more',          Icon: UserCheck, ti: 'ti-user-check' },
 ];
 
 /** Parse the free-text username box the same way the server will. */
@@ -116,23 +118,23 @@ export default function AudiencePicker({
 
   return (
     <div>
-      <div style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, marginBottom: 7 }}>Send to *</div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: C.ink, fontFamily: C.font, marginBottom: 7 }}>Send to *</div>
 
       <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-        {MODE_LIST.map(({ key, label, hint, Icon }) => {
+        {MODE_LIST.map(({ key, label, hint, Icon, ti }) => {
           const on = mode === key;
           return (
             <button key={key} type="button" onClick={() => set({ mode: key })} style={{
               flex: 1, padding: '9px 8px', borderRadius: 10, cursor: 'pointer',
-              fontFamily: FONT, textAlign: 'left',
-              border: `1.5px solid ${on ? AMBER : BORDER}`,
-              background: on ? `${AMBER}12` : WHITE,
+              fontFamily: C.font, textAlign: 'left',
+              border: `1.5px solid ${on ? C.brand : C.border}`,
+              background: on ? tint(7) : C.surface,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
-                <Icon size={12} color={on ? AMBER : MUTED} />
-                <span style={{ fontSize: 12, fontWeight: 800, color: on ? AMBER : INK }}>{label}</span>
+                <Ico lucide={Icon} ti={ti} size={12} color={on ? C.brand : C.muted} />
+                <span style={{ fontSize: 12, fontWeight: 800, color: on ? C.brand : C.ink }}>{label}</span>
               </div>
-              <div style={{ fontSize: 10.5, color: MUTED }}>{hint}</div>
+              <div style={{ fontSize: 10.5, color: C.muted }}>{hint}</div>
             </button>
           );
         })}
@@ -149,7 +151,7 @@ export default function AudiencePicker({
             ))}
           </Sel>
           {classes.length === 0 && (
-            <div style={{ fontSize: 11, color: MUTED2, fontFamily: FONT, marginTop: 5 }}>
+            <div style={{ fontSize: 11, color: C.muted2, fontFamily: C.font, marginTop: 5 }}>
               No classes set up yet. Create one under Academics → Classes.
             </div>
           )}
@@ -157,7 +159,7 @@ export default function AudiencePicker({
             <div style={{
               marginTop: 7, padding: '8px 10px', borderRadius: 9,
               background: '#FEF3C7', border: '1px solid #FDE68A',
-              fontSize: 11, color: '#92400E', fontFamily: FONT, lineHeight: 1.5,
+              fontSize: 11, color: '#92400E', fontFamily: C.font, lineHeight: 1.5,
             }}>
               A battle uses the course's question bank, so only learners in this class who are
               also enrolled on the course can take part. Anyone left out is listed after you create it.
@@ -167,18 +169,18 @@ export default function AudiencePicker({
       )}
 
       {mode === 'picked' && (
-        <div style={{ border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderBottom: `1px solid ${BORDER}`, background: LIGHT }}>
-            <Search size={13} color={MUTED} />
+        <div style={{ border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderBottom: `1px solid ${C.border}`, background: C.bg }}>
+            <Ico lucide={Search} ti="ti-search" size={13} color={C.muted} />
             <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search learners by name or username…"
-              style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', fontSize: 12.5, fontFamily: FONT, color: INK }} />
+              style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', fontSize: 12.5, fontFamily: C.font, color: C.ink }} />
           </div>
 
           <div style={{ maxHeight: 190, overflowY: 'auto' }}>
             {rLoading ? (
-              <div style={{ padding: 14, fontSize: 12, color: MUTED, fontFamily: FONT }}>Loading roster…</div>
+              <div style={{ padding: 14, fontSize: 12, color: C.muted, fontFamily: C.font }}>Loading roster…</div>
             ) : shown.length === 0 ? (
-              <div style={{ padding: 14, fontSize: 12, color: MUTED, fontFamily: FONT }}>
+              <div style={{ padding: 14, fontSize: 12, color: C.muted, fontFamily: C.font }}>
                 {roster.length === 0 ? 'Nobody enrolled on this course yet.' : 'No match.'}
               </div>
             ) : shown.map(r => {
@@ -192,38 +194,38 @@ export default function AudiencePicker({
                   title={blocked ? 'This learner has no agent yet, so they cannot battle' : ''}
                   style={{
                     width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px',
-                    border: 'none', borderBottom: `1px solid ${BORDER}`, textAlign: 'left',
-                    background: on ? `${AMBER}12` : WHITE,
+                    border: 'none', borderBottom: `1px solid ${C.border}`, textAlign: 'left',
+                    background: on ? tint(7) : C.surface,
                     cursor: blocked ? 'not-allowed' : 'pointer', opacity: blocked ? 0.45 : 1,
-                    fontFamily: FONT,
+                    fontFamily: C.font,
                   }}>
                   <span style={{
                     width: 18, height: 18, borderRadius: 5, flexShrink: 0,
-                    border: `1.5px solid ${on ? AMBER : BORDER}`, background: on ? AMBER : WHITE,
-                    color: WHITE, fontSize: 11, fontWeight: 900, lineHeight: '16px', textAlign: 'center',
+                    border: `1.5px solid ${on ? C.brand : C.border}`, background: on ? C.brand : C.surface,
+                    color: '#fff', fontSize: 11, fontWeight: 900, lineHeight: '16px', textAlign: 'center',
                   }}>{on ? '✓' : ''}</span>
                   <span style={{ fontSize: 13, fontWeight: 900, color: '#6B7280', width: 16, textAlign: 'center' }}>{(r.full_name || r.username || 'L').trim().charAt(0).toUpperCase()}</span>
                   <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: INK }}>{r.full_name}</span>
-                    <span style={{ display: 'block', fontSize: 11, color: MUTED }}>@{r.username}</span>
+                    <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: C.ink }}>{r.full_name}</span>
+                    <span style={{ display: 'block', fontSize: 11, color: C.muted }}>@{r.username}</span>
                   </span>
-                  {blocked && <Badge color={MUTED} bg={LIGHT}>no agent</Badge>}
+                  {blocked && <Badge color={C.muted} bg={C.bg}>no agent</Badge>}
                 </button>
               );
             })}
           </div>
 
-          <div style={{ padding: '9px 10px', borderTop: `1px solid ${BORDER}`, background: LIGHT }}>
+          <div style={{ padding: '9px 10px', borderTop: `1px solid ${C.border}`, background: C.bg }}>
             <Inp label="…or type usernames" value={typed} onChange={e => set({ typed: e.target.value })}
               placeholder="priya, amaka, jss1_mate3" />
-            <div style={{ fontSize: 10.5, color: MUTED2, fontFamily: FONT, marginTop: 4 }}>
+            <div style={{ fontSize: 10.5, color: C.muted2, fontFamily: C.font, marginTop: 4 }}>
               Comma-separated usernames or emails. Unknown names are reported before anything is created.
             </div>
           </div>
         </div>
       )}
 
-      <div style={{ fontSize: 11, color: count ? GREEN : MUTED, fontWeight: 700, fontFamily: FONT, marginTop: 7 }}>
+      <div style={{ fontSize: 11, color: count ? GREEN : C.muted, fontWeight: 700, fontFamily: C.font, marginTop: 7 }}>
         {mode === 'class' && !classroomId
           ? 'Pick a class to see how many learners that is.'
           : `${count} learner${count === 1 ? '' : 's'} will get this`}

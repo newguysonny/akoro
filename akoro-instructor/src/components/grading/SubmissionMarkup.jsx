@@ -15,16 +15,18 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { Check, X, MessageSquare, Highlighter, MousePointer2, Undo2, Trash2, Loader2 } from 'lucide-react';
-import { INK, MUTED, MUTED2, BORDER, WHITE, PURPLE, GREEN, RED, FONT } from '../../constants.js';
+import { PURPLE, GREEN, RED } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
+import { Ico } from '../../theme/Ico.jsx';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
 const TOOLS = [
-  { id: 'select',    label: 'Select',    Icon: MousePointer2, key: 'v' },
-  { id: 'tick',      label: 'Tick',      Icon: Check,         key: 't', color: GREEN },
-  { id: 'cross',     label: 'Cross',     Icon: X,             key: 'x', color: RED },
-  { id: 'comment',   label: 'Comment',   Icon: MessageSquare, key: 'c', color: PURPLE },
-  { id: 'highlight', label: 'Highlight', Icon: Highlighter,   key: 'h', color: '#CA8A04' },
+  { id: 'select',    label: 'Select',    Icon: MousePointer2, ti: 'ti-pointer', key: 'v' },
+  { id: 'tick',      label: 'Tick',      Icon: Check,         ti: 'ti-check', key: 't', color: GREEN },
+  { id: 'cross',     label: 'Cross',     Icon: X,             ti: 'ti-x', key: 'x', color: RED },
+  { id: 'comment',   label: 'Comment',   Icon: MessageSquare, ti: 'ti-message', key: 'c', color: PURPLE },
+  { id: 'highlight', label: 'Highlight', Icon: Highlighter,   ti: 'ti-highlight', key: 'h', color: '#CA8A04' },
 ];
 
 let seq = 0;
@@ -94,7 +96,7 @@ function MarkupPage({ pdf, pageNumber, width, tool, marks, numbers, selectedId, 
 
   const size = Math.max(16, width * 0.032);
   return (
-    <div data-markup-page={pageNumber} style={{ position: 'relative', width, height: width * aspect, background: WHITE, boxShadow: '0 1px 3px rgba(0,0,0,.25)', margin: '0 auto 14px' }}>
+    <div data-markup-page={pageNumber} style={{ position: 'relative', width, height: width * aspect, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.25)', margin: '0 auto 14px' }}>
       <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
       <div ref={layerRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
         style={{ position: 'absolute', inset: 0, cursor: tool === 'select' ? 'default' : tool === 'highlight' ? 'crosshair' : 'copy', touchAction: tool === 'highlight' ? 'none' : 'auto' }}>
@@ -111,7 +113,7 @@ function MarkupPage({ pdf, pageNumber, width, tool, marks, numbers, selectedId, 
           const common = { position: 'absolute', left: `${m.x * 100}%`, top: `${m.y * 100}%`, transform: 'translate(-50%, -50%)', cursor: 'pointer', outline: sel ? `2px solid ${PURPLE}` : 'none', outlineOffset: 2, borderRadius: 6, lineHeight: 1 };
           if (m.type === 'comment') {
             return <div key={m.id} data-mark="comment" onPointerDown={pick} title={m.text || 'Comment'}
-              style={{ ...common, width: size, height: size, borderRadius: '50%', background: PURPLE, color: WHITE, fontSize: size * 0.55, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT, boxShadow: '0 2px 6px rgba(76,29,204,.35)' }}>
+              style={{ ...common, width: size, height: size, borderRadius: '50%', background: PURPLE, color: '#fff', fontSize: size * 0.55, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: C.font, boxShadow: '0 2px 6px rgba(76,29,204,.35)' }}>
               {numbers.get(m.id) || '·'}
             </div>;
           }
@@ -201,26 +203,26 @@ export default function SubmissionMarkup({ blob, marks, onChange, saveState = 'i
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {/* Toolbar */}
-      <div role="toolbar" aria-label="Marking tools" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', position: 'sticky', top: 0, zIndex: 2, background: WHITE, padding: '6px 0' }}>
-        {TOOLS.map(({ id, label, Icon, color, key }) => (
+      <div role="toolbar" aria-label="Marking tools" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', position: 'sticky', top: 0, zIndex: 2, background: C.surface, padding: '6px 0' }}>
+        {TOOLS.map(({ id, label, Icon, ti, color, key }) => (
           <button key={id} type="button" onClick={() => setTool(id)} aria-pressed={tool === id} title={`${label} (${key.toUpperCase()})`}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 8, border: `1.5px solid ${tool === id ? PURPLE : BORDER}`, background: tool === id ? '#F1ECFF' : WHITE, color: tool === id ? PURPLE : (color || MUTED), fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-            <Icon size={13} /> {label}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 8, border: `1.5px solid ${tool === id ? PURPLE : C.border}`, background: tool === id ? '#F1ECFF' : C.surface, color: tool === id ? PURPLE : (color || C.muted), fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
+            <Ico lucide={Icon} ti={ti} size={13} /> {label}
           </button>
         ))}
         <button type="button" onClick={undo} disabled={!history.current.length} title="Undo (Ctrl+Z)"
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 8, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, opacity: history.current.length ? 1 : .45 }}>
-          <Undo2 size={13} /> Undo
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 8, border: `1.5px solid ${C.border}`, background: C.surface, color: C.muted, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: C.font, opacity: history.current.length ? 1 : .45 }}>
+          <Ico lucide={Undo2} ti="ti-arrow-back-up" size={13} /> Undo
         </button>
         {selectedId && (
           <button type="button" onClick={() => remove(selectedId)} title="Delete the selected mark (Delete)"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 8, border: `1.5px solid ${RED}55`, background: WHITE, color: RED, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-            <Trash2 size={13} /> Delete mark
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 8, border: `1.5px solid ${RED}55`, background: C.surface, color: RED, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
+            <Ico lucide={Trash2} ti="ti-trash" size={13} /> Delete mark
           </button>
         )}
-        <span style={{ marginLeft: 'auto', fontSize: 11.5, fontWeight: 700, color: MUTED2, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ marginLeft: 'auto', fontSize: 11.5, fontWeight: 700, color: C.muted2, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           {counts.tick} ✓ · {counts.cross} ✗ · {counts.comment} comment{counts.comment === 1 ? '' : 's'}
-          <span style={{ color: saveState === 'error' ? RED : MUTED2 }}>
+          <span style={{ color: saveState === 'error' ? RED : C.muted2 }}>
             {saveState === 'saving' ? '· saving…' : saveState === 'saved' ? '· marks saved' : saveState === 'error' ? '· not saved — retrying' : ''}
           </span>
         </span>
@@ -236,10 +238,10 @@ export default function SubmissionMarkup({ blob, marks, onChange, saveState = 'i
             onChange={(e) => setText(editingMark.id, e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) closeEditor(); if (e.key === 'Escape') closeEditor(); }}
             placeholder="What should the learner see here?"
-            style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 8, border: `1px solid ${BORDER}`, fontSize: 13, fontFamily: FONT, color: INK, resize: 'vertical', outline: 'none' }} />
+            style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: C.font, color: C.ink, resize: 'vertical', outline: 'none' }} />
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 6 }}>
-            <button type="button" onClick={() => remove(editingMark.id)} style={{ fontSize: 12, fontWeight: 800, color: RED, background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT }}>Delete</button>
-            <button type="button" onClick={closeEditor} style={{ fontSize: 12, fontWeight: 800, color: WHITE, background: PURPLE, border: 'none', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontFamily: FONT }}>Done</button>
+            <button type="button" onClick={() => remove(editingMark.id)} style={{ fontSize: 12, fontWeight: 800, color: RED, background: 'none', border: 'none', cursor: 'pointer', fontFamily: C.font }}>Delete</button>
+            <button type="button" onClick={closeEditor} style={{ fontSize: 12, fontWeight: 800, color: '#fff', background: PURPLE, border: 'none', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontFamily: C.font }}>Done</button>
           </div>
         </div>
       )}
@@ -247,15 +249,15 @@ export default function SubmissionMarkup({ blob, marks, onChange, saveState = 'i
 
       {/* Pages */}
       <div ref={wrapRef} style={{ background: '#525659', borderRadius: 10, padding: '12px 0', maxHeight: '76vh', overflowY: 'auto' }}>
-        {error ? <div style={{ color: WHITE, fontSize: 13, fontWeight: 700, padding: 20, textAlign: 'center' }}>{error}</div>
-          : !pdf || !width ? <div style={{ color: '#ddd', fontSize: 13, fontWeight: 700, padding: 40, display: 'flex', justifyContent: 'center', gap: 8 }}><Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> Loading pages…</div>
+        {error ? <div style={{ color: '#fff', fontSize: 13, fontWeight: 700, padding: 20, textAlign: 'center' }}>{error}</div>
+          : !pdf || !width ? <div style={{ color: '#ddd', fontSize: 13, fontWeight: 700, padding: 40, display: 'flex', justifyContent: 'center', gap: 8 }}><Ico lucide={Loader2} ti="ti-loader-2" size={15} style={{ animation: 'spin .8s linear infinite' }} /> Loading pages…</div>
           : Array.from({ length: pdf.numPages }, (_, i) => (
             <MarkupPage key={i + 1} pdf={pdf} pageNumber={i + 1} width={width} tool={tool}
               marks={marks.filter((m) => m.page === i + 1)} numbers={numbers} selectedId={selectedId}
               onAdd={add} onSelect={setSelectedId} onCommentOpen={setEditing} />
           ))}
       </div>
-      <div style={{ fontSize: 11, color: MUTED2, fontWeight: 600 }}>
+      <div style={{ fontSize: 11, color: C.muted2, fontWeight: 600 }}>
         Marks save as you go and reach the learner inside their marked copy when you publish the grade. Keys: V select · T tick · X cross · C comment · H highlight · Delete · Ctrl+Z.
       </div>
     </div>

@@ -38,7 +38,9 @@ import { openSubmittedFile } from './openFile.js';
 import { Sparkles } from 'lucide-react';
 import { readChoice } from '../../lib/paper.js';
 import { saveDraft, loadDraft, clearDraft } from './gradingDrafts.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../../constants.js';
+import { GREEN, PURPLE, BLUE, RED } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
+import { Ico } from '../../theme/Ico.jsx';
 
 /* The default rubric — overall judgement of the submission against the brief.
    Levels carry teacher-facing words so a 2 never feels arbitrary. */
@@ -94,8 +96,8 @@ function SubmittedPaper({ current, brief, only = null }) {
   const hasWork = (sub.text || '').trim() || answerKeys.length || files.length;
   if (!hasWork) {
     return (
-      <div style={{ background: LIGHT, border: `1px dashed ${BORDER}`, borderRadius: 10, padding: '12px 14px', fontSize: 12.5, color: MUTED, lineHeight: 1.6 }}>
-        <b style={{ color: INK, fontWeight: 800 }}>
+      <div style={{ background: C.bg, border: `1px dashed ${C.border}`, borderRadius: 10, padding: '12px 14px', fontSize: 12.5, color: C.muted, lineHeight: 1.6 }}>
+        <b style={{ color: C.ink, fontWeight: 800 }}>
           {current.status === 'complete' ? `${current.student.name.split(' ')[0]} finished this activity` : `${current.student.name.split(' ')[0]} is still working on it`}
         </b>
         {current.completedAt && <> — completed {fmtWhen(current.completedAt)}</>}. No written submission was captured — grade against the brief with the panel on the right.
@@ -104,10 +106,10 @@ function SubmittedPaper({ current, brief, only = null }) {
   }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: .6, color: MUTED2 }}>WHAT THEY SUBMITTED {current.completedAt && <span style={{ fontWeight: 600 }}>· {fmtWhen(current.completedAt)}</span>}</div>
+      <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: .6, color: C.muted2 }}>WHAT THEY SUBMITTED {current.completedAt && <span style={{ fontWeight: 600 }}>· {fmtWhen(current.completedAt)}</span>}</div>
       {(sub.text || '').trim() && (
-        <div style={{ background: '#FBFAF8', border: `1px solid ${BORDER}`, borderLeft: `3px solid ${PURPLE}`, borderRadius: 10, padding: '12px 14px' }}>
-          <p style={{ margin: 0, fontSize: 13.5, color: INK, lineHeight: 1.65, whiteSpace: 'pre-wrap', fontFamily: FONT }}>{sub.text}</p>
+        <div style={{ background: '#FBFAF8', border: `1px solid ${C.border}`, borderLeft: `3px solid ${PURPLE}`, borderRadius: 10, padding: '12px 14px' }}>
+          <p style={{ margin: 0, fontSize: 13.5, color: C.ink, lineHeight: 1.65, whiteSpace: 'pre-wrap', fontFamily: C.font }}>{sub.text}</p>
         </div>
       )}
       {answerKeys.length > 0 && (
@@ -120,10 +122,10 @@ function SubmittedPaper({ current, brief, only = null }) {
             const chosen = pick != null ? q.options[pick] : null;
             const correct = qMcq && q.correct != null && pick != null && Number(q.correct) === pick;
             return (
-              <div key={k} style={{ background: WHITE, border: `1px solid ${correct === false && qMcq ? 'rgba(239,68,68,.35)' : BORDER}`, borderRadius: 10, padding: '10px 13px' }}>
-                {q && <div style={{ fontSize: 11, fontWeight: 800, color: MUTED2, marginBottom: 4 }}>Q{Number(k) + 1}. {qText(q)}</div>}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 800, color: INK, fontFamily: FONT }}>
-                  {qMcq && <span style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${correct ? GREEN : BORDER}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 9, color: GREEN }}>{correct ? <Check size={10} /> : null}</span>}
+              <div key={k} style={{ background: C.surface, border: `1px solid ${correct === false && qMcq ? 'rgba(239,68,68,.35)' : C.border}`, borderRadius: 10, padding: '10px 13px' }}>
+                {q && <div style={{ fontSize: 11, fontWeight: 800, color: C.muted2, marginBottom: 4 }}>Q{Number(k) + 1}. {qText(q)}</div>}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 800, color: C.ink, fontFamily: C.font }}>
+                  {qMcq && <span style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${correct ? GREEN : C.border}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 9, color: GREEN }}>{correct ? <Ico lucide={Check} ti="ti-check" size={10} /> : null}</span>}
                   {chosen != null ? `${letterOf(pick)}. ${chosen}` : String(raw)}
                   {qMcq && correct && <span style={{ fontSize: 10, fontWeight: 800, color: GREEN, background: '#E6F6EE', borderRadius: 999, padding: '2px 8px' }}>correct</span>}
                 </div>
@@ -135,16 +137,16 @@ function SubmittedPaper({ current, brief, only = null }) {
       {files.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {files.map((f) => (
-            <div key={f.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 6px 6px 12px', borderRadius: 10, border: `1px solid ${BORDER}`, background: WHITE, fontFamily: FONT }}>
-              <span style={{ width: 26, height: 26, borderRadius: 8, background: `${PURPLE}14`, color: PURPLE, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><FileText size={13} /></span>
+            <div key={f.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 6px 6px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, fontFamily: C.font }}>
+              <span style={{ width: 26, height: 26, borderRadius: 8, background: `${PURPLE}14`, color: PURPLE, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Ico lucide={FileText} ti="ti-file-text" size={13} /></span>
               <span style={{ textAlign: 'left' }}>
-                <span style={{ display: 'block', fontSize: 12, fontWeight: 800, color: INK, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
-                <span style={{ display: 'block', fontSize: 10, fontWeight: 700, color: MUTED2 }}>{fmtSize(f.size)}</span>
+                <span style={{ display: 'block', fontSize: 12, fontWeight: 800, color: C.ink, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                <span style={{ display: 'block', fontSize: 10, fontWeight: 700, color: C.muted2 }}>{fmtSize(f.size)}</span>
               </span>
               <button onClick={() => openActivityFile(f.id).catch(() => {})} title="Open" aria-label={`Open ${f.name}`}
-                style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'transparent', color: PURPLE, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ExternalLink size={13} /></button>
+                style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'transparent', color: PURPLE, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ico lucide={ExternalLink} ti="ti-external-link" size={13} /></button>
               <button onClick={() => downloadActivityFile(f.id, f.name).catch(() => {})} title="Download" aria-label={`Download ${f.name}`}
-                style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'transparent', color: MUTED, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Download size={13} /></button>
+                style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'transparent', color: C.muted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ico lucide={Download} ti="ti-download" size={13} /></button>
             </div>
           ))}
         </div>
@@ -175,14 +177,14 @@ function PaperAnswers({ current, brief, marks, focus }) {
   const open = openSubmittedFile;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: .6, color: MUTED2 }}>WHAT THEY SUBMITTED {current.completedAt && <span style={{ fontWeight: 600 }}>· {fmtWhen(current.completedAt)}</span>}</div>
+      <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: .6, color: C.muted2 }}>WHAT THEY SUBMITTED {current.completedAt && <span style={{ fontWeight: 600 }}>· {fmtWhen(current.completedAt)}</span>}</div>
       {(sub.text || '').trim() && (
-        <div style={{ background: '#FBFAF8', border: `1px solid ${BORDER}`, borderLeft: `3px solid ${PURPLE}`, borderRadius: 10, padding: '12px 14px' }}>
-          <p style={{ margin: 0, fontSize: 13.5, color: INK, lineHeight: 1.65, whiteSpace: 'pre-wrap', fontFamily: FONT }}>{sub.text}</p>
+        <div style={{ background: '#FBFAF8', border: `1px solid ${C.border}`, borderLeft: `3px solid ${PURPLE}`, borderRadius: 10, padding: '12px 14px' }}>
+          <p style={{ margin: 0, fontSize: 13.5, color: C.ink, lineHeight: 1.65, whiteSpace: 'pre-wrap', fontFamily: C.font }}>{sub.text}</p>
         </div>
       )}
       {sub.late && <div style={{ alignSelf: 'flex-start', fontSize: 11.5, fontWeight: 800, color: '#B45309', background: '#FEF3C7', borderRadius: 999, padding: '3px 10px' }}>Handed in late{sub.lateByMinutes ? ` · ${fmtLate(sub.lateByMinutes)} after the due date` : ''}</div>}
-      <AnswerPaper details={brief.details} title={brief?.title || ''} answers={sub.answers || {}} files={files} marks={rows} showKey label="Answer" onOpenFile={open} sans={FONT} />
+      <AnswerPaper details={brief.details} title={brief?.title || ''} answers={sub.answers || {}} files={files} marks={rows} showKey label="Answer" onOpenFile={open} sans={C.font} />
     </div>
   );
 }
@@ -214,20 +216,20 @@ function SubmissionPdfView({ targetId, version, name, marks, onMarks, markState 
   };
 
   if (state.status === 'loading') {
-    return <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: MUTED, fontSize: 13, fontWeight: 700 }}><Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> Preparing the submission PDF…</div>;
+    return <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.muted, fontSize: 13, fontWeight: 700 }}><Ico lucide={Loader2} ti="ti-loader-2" size={15} style={{ animation: 'spin .8s linear infinite' }} /> Preparing the submission PDF…</div>;
   }
   if (state.status === 'error') {
-    return <div style={{ background: LIGHT, border: `1px dashed ${BORDER}`, borderRadius: 10, padding: '12px 14px', fontSize: 12.5, color: RED, fontWeight: 700 }}>{state.error} — the Answers tab still shows the work.</div>;
+    return <div style={{ background: C.bg, border: `1px dashed ${C.border}`, borderRadius: 10, padding: '12px 14px', fontSize: 12.5, color: RED, fontWeight: 700 }}>{state.error} — the Answers tab still shows the work.</div>;
   }
   const fileName = `${(name || 'submission').replace(/[^\w .-]/g, '').trim() || 'submission'}.pdf`;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ display: 'flex', gap: 14, justifyContent: 'flex-end' }}>
-        <button type="button" onClick={previewMarked} disabled={previewing} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: PURPLE, background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT, padding: 0 }}>
-          {previewing ? <Loader2 size={12} style={{ animation: 'spin .8s linear infinite' }} /> : <FileText size={12} />} Preview marked copy
+        <button type="button" onClick={previewMarked} disabled={previewing} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: PURPLE, background: 'none', border: 'none', cursor: 'pointer', fontFamily: C.font, padding: 0 }}>
+          {previewing ? <Ico lucide={Loader2} ti="ti-loader-2" size={12} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico lucide={FileText} ti="ti-file-text" size={12} />} Preview marked copy
         </button>
-        <a href={state.url} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: MUTED, textDecoration: 'none' }}><ExternalLink size={12} /> Original</a>
-        <a href={state.url} download={fileName} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: MUTED, textDecoration: 'none' }}><Download size={12} /> Download</a>
+        <a href={state.url} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: C.muted, textDecoration: 'none' }}><Ico lucide={ExternalLink} ti="ti-external-link" size={12} /> Original</a>
+        <a href={state.url} download={fileName} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: C.muted, textDecoration: 'none' }}><Ico lucide={Download} ti="ti-download" size={12} /> Download</a>
       </div>
       <SubmissionMarkup blob={state.blob} marks={marks} onChange={onMarks} saveState={markState} />
     </div>
@@ -237,45 +239,45 @@ function SubmissionPdfView({ targetId, version, name, marks, onMarks, markState 
 /* The AI's draft marks — shown for approval, never published by itself. */
 function AiDraftCard({ ai, onApply, onRequest, requesting }) {
   const box = { border: `1px solid ${PURPLE}33`, background: '#FBFAFF', borderRadius: 10, padding: '11px 13px' };
-  const head = (extra) => <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 900, letterSpacing: .5, color: PURPLE }}><Sparkles size={12} /> AI DRAFT {extra}</div>;
+  const head = (extra) => <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 900, letterSpacing: .5, color: PURPLE }}><Ico lucide={Sparkles} ti="ti-sparkles" size={12} /> AI DRAFT {extra}</div>;
   if (!ai || ai.status === 'failed') {
     return (
       <div style={box}>
         {head()}
         {ai?.status === 'failed' && <div style={{ fontSize: 12, color: RED, fontWeight: 700, marginTop: 6 }}>{ai.error || 'The draft failed.'}</div>}
-        <div style={{ fontSize: 12, color: MUTED, margin: '6px 0 8px', lineHeight: 1.5 }}>Let AI suggest marks per answer, rubric levels and feedback. You approve them before anything is published.</div>
+        <div style={{ fontSize: 12, color: C.muted, margin: '6px 0 8px', lineHeight: 1.5 }}>Let AI suggest marks per answer, rubric levels and feedback. You approve them before anything is published.</div>
         <button type="button" onClick={onRequest} disabled={requesting}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: 'none', background: PURPLE, color: WHITE, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-          {requesting ? <Loader2 size={12} style={{ animation: 'spin .8s linear infinite' }} /> : <Sparkles size={12} />} Draft marks with AI
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: 'none', background: PURPLE, color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
+          {requesting ? <Ico lucide={Loader2} ti="ti-loader-2" size={12} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico lucide={Sparkles} ti="ti-sparkles" size={12} />} Draft marks with AI
         </button>
       </div>
     );
   }
   if (ai.status === 'making') {
-    return <div style={box}>{head()}<div style={{ fontSize: 12, color: MUTED, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}><Loader2 size={12} style={{ animation: 'spin .8s linear infinite' }} /> Reading the submission and drafting marks…</div></div>;
+    return <div style={box}>{head()}<div style={{ fontSize: 12, color: C.muted, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}><Ico lucide={Loader2} ti="ti-loader-2" size={12} style={{ animation: 'spin .8s linear infinite' }} /> Reading the submission and drafting marks…</div></div>;
   }
   return (
     <div style={box}>
-      {head(ai.score != null ? <span style={{ marginLeft: 'auto', fontSize: 16, color: INK, letterSpacing: 0 }}>{ai.score}%</span> : null)}
+      {head(ai.score != null ? <span style={{ marginLeft: 'auto', fontSize: 16, color: C.ink, letterSpacing: 0 }}>{ai.score}%</span> : null)}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 8 }}>
         {(ai.questions || []).map((q) => (
-          <div key={q.index} style={{ fontSize: 12, color: INK, lineHeight: 1.45 }}>
-            <b>Q{q.index + 1}</b> {q.awarded}/{q.max}{q.auto ? <span style={{ color: MUTED2, fontWeight: 700 }}> · auto</span> : null} <span style={{ color: MUTED }}>— {q.why}</span>
+          <div key={q.index} style={{ fontSize: 12, color: C.ink, lineHeight: 1.45 }}>
+            <b>Q{q.index + 1}</b> {q.awarded}/{q.max}{q.auto ? <span style={{ color: C.muted2, fontWeight: 700 }}> · auto</span> : null} <span style={{ color: C.muted }}>— {q.why}</span>
           </div>
         ))}
         {(ai.rubric || []).map((r) => (
-          <div key={r.name} style={{ fontSize: 12, color: INK, lineHeight: 1.45 }}>
-            <b>{r.name}</b> {r.level ?? '–'}/{r.max}{r.why ? <span style={{ color: MUTED }}> — {r.why}</span> : null}
+          <div key={r.name} style={{ fontSize: 12, color: C.ink, lineHeight: 1.45 }}>
+            <b>{r.name}</b> {r.level ?? '–'}/{r.max}{r.why ? <span style={{ color: C.muted }}> — {r.why}</span> : null}
           </div>
         ))}
-        {ai.feedback && <div style={{ fontSize: 12, color: MUTED, fontStyle: 'italic', lineHeight: 1.5 }}>“{ai.feedback}”</div>}
-        {(ai.notes || []).map((n, i) => <div key={i} style={{ fontSize: 11, color: '#B45309', fontWeight: 700, display: 'flex', gap: 5, alignItems: 'flex-start' }}><AlertTriangle size={12} style={{ marginTop: 1, flexShrink: 0 }} /> {n}</div>)}
+        {ai.feedback && <div style={{ fontSize: 12, color: C.muted, fontStyle: 'italic', lineHeight: 1.5 }}>“{ai.feedback}”</div>}
+        {(ai.notes || []).map((n, i) => <div key={i} style={{ fontSize: 11, color: '#B45309', fontWeight: 700, display: 'flex', gap: 5, alignItems: 'flex-start' }}><Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={12} style={{ marginTop: 1, flexShrink: 0 }} /> {n}</div>)}
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 9 }}>
         <button type="button" onClick={onApply}
-          style={{ padding: '6px 12px', borderRadius: 8, border: 'none', background: PURPLE, color: WHITE, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Apply to the panel</button>
+          style={{ padding: '6px 12px', borderRadius: 8, border: 'none', background: PURPLE, color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>Apply to the panel</button>
         <button type="button" onClick={onRequest} disabled={requesting}
-          style={{ padding: '6px 12px', borderRadius: 8, border: `1px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Redraft</button>
+          style={{ padding: '6px 12px', borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.muted, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>Redraft</button>
       </div>
     </div>
   );
@@ -565,40 +567,40 @@ export default function GradeSubmissionModal({
   const published = current.grade != null;
 
   return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 3600, background: '#F1EFF6', display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
+    <div style={{ position: 'absolute', inset: 0, zIndex: 3600, background: '#F1EFF6', display: 'flex', flexDirection: 'column', fontFamily: C.font }}>
       {/* ── Topbar ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 22px', background: WHITE, borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 22px', background: C.surface, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
         <button onClick={onClose} title="Back to the workbench"
-          style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: MUTED2, fontSize: 12.5, fontWeight: 700, fontFamily: FONT, padding: '4px 0' }}>
-          <ArrowLeft size={14} /> Workbench
+          style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: C.muted2, fontSize: 12.5, fontWeight: 700, fontFamily: C.font, padding: '4px 0' }}>
+          <Ico lucide={ArrowLeft} ti="ti-arrow-left" size={14} /> Workbench
         </button>
-        <div style={{ width: 1, height: 24, background: BORDER }} />
+        <div style={{ width: 1, height: 24, background: C.border }} />
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 14.5, fontWeight: 800, color: INK, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ fontSize: 14.5, fontWeight: 800, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             Grade submission — {brief?.title}
           </div>
-          <div style={{ fontSize: 11, color: MUTED2, fontWeight: 600 }}>{brief?.subject} · {brief?.topic}</div>
+          <div style={{ fontSize: 11, color: C.muted2, fontWeight: 600 }}>{brief?.subject} · {brief?.topic}</div>
         </div>
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
           {/* Autosave label */}
-          <span style={{ fontSize: 11.5, fontWeight: 700, color: saveState === 'saving' ? AMBER : MUTED2, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: saveState === 'saving' ? C.brand : C.muted2, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             {saveState === 'saving'
-              ? <><Loader2 size={11} style={{ animation: 'spin .8s linear infinite' }} /> Saving…</>
-              : saveState === 'saved' ? <><Check size={11} color={GREEN} /> Draft saved</>
+              ? <><Ico lucide={Loader2} ti="ti-loader-2" size={11} style={{ animation: 'spin .8s linear infinite' }} /> Saving…</>
+              : saveState === 'saved' ? <><Ico lucide={Check} ti="ti-check" size={11} color={GREEN} /> Draft saved</>
               : 'Draft autosaves locally'}
           </span>
 
           {/* Student stepper */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <button onClick={() => setIndex(i => Math.max(0, i - 1))} disabled={index === 0}
-              style={{ width: 30, height: 30, borderRadius: 999, border: `1px solid ${BORDER}`, background: WHITE, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: index === 0 ? 'not-allowed' : 'pointer', color: MUTED, opacity: index === 0 ? .35 : 1 }}>
-              <ChevronLeft size={15} />
+              style={{ width: 30, height: 30, borderRadius: 999, border: `1px solid ${C.border}`, background: C.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: index === 0 ? 'not-allowed' : 'pointer', color: C.muted, opacity: index === 0 ? .35 : 1 }}>
+              <Ico lucide={ChevronLeft} ti="ti-chevron-left" size={15} />
             </button>
-            <span style={{ fontSize: 12.5, color: MUTED, fontWeight: 700, whiteSpace: 'nowrap' }}>{index + 1} of {students.length}</span>
+            <span style={{ fontSize: 12.5, color: C.muted, fontWeight: 700, whiteSpace: 'nowrap' }}>{index + 1} of {students.length}</span>
             <button onClick={() => setIndex(i => Math.min(students.length - 1, i + 1))} disabled={index >= students.length - 1}
-              style={{ width: 30, height: 30, borderRadius: 999, border: `1px solid ${BORDER}`, background: WHITE, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: index >= students.length - 1 ? 'not-allowed' : 'pointer', color: MUTED, opacity: index >= students.length - 1 ? .35 : 1 }}>
-              <ChevronRight size={15} />
+              style={{ width: 30, height: 30, borderRadius: 999, border: `1px solid ${C.border}`, background: C.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: index >= students.length - 1 ? 'not-allowed' : 'pointer', color: C.muted, opacity: index >= students.length - 1 ? .35 : 1 }}>
+              <Ico lucide={ChevronRight} ti="ti-chevron-right" size={15} />
             </button>
           </div>
 
@@ -608,13 +610,13 @@ export default function GradeSubmissionModal({
 
           {published && (
             <button onClick={unpublish} disabled={publishing} title="Take the grade back — the learner stops seeing it; your marks stay as a draft"
-              style={{ padding: '8px 12px', borderRadius: 10, border: `1px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12.5, fontWeight: 800, fontFamily: FONT, cursor: publishing ? 'default' : 'pointer' }}>
+              style={{ padding: '8px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.muted, fontSize: 12.5, fontWeight: 800, fontFamily: C.font, cursor: publishing ? 'default' : 'pointer' }}>
               Unpublish
             </button>
           )}
           <button onClick={publish} disabled={finalScore == null || publishing}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 10, border: 'none', cursor: finalScore == null ? 'not-allowed' : 'pointer', background: finalScore == null ? BORDER : PURPLE, color: WHITE, fontSize: 13, fontWeight: 800, fontFamily: FONT, opacity: finalScore == null ? .75 : 1 }}>
-            {publishing ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Check size={13} />}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 10, border: 'none', cursor: finalScore == null ? 'not-allowed' : 'pointer', background: finalScore == null ? C.border : PURPLE, color: '#fff', fontSize: 13, fontWeight: 800, fontFamily: C.font, opacity: finalScore == null ? .75 : 1 }}>
+            {publishing ? <Ico lucide={Loader2} ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico lucide={Check} ti="ti-check" size={13} />}
             Publish grade
           </button>
         </div>
@@ -624,24 +626,24 @@ export default function GradeSubmissionModal({
       <div style={{ flex: 1, overflowY: 'auto', padding: '22px 24px 60px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: 22, maxWidth: 1440, margin: '0 auto', alignItems: 'start' }}>
           {/* Paper — the work, question by question */}
-          <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, boxShadow: '0 1px 2px rgba(33,31,53,.04), 0 12px 28px -12px rgba(33,31,53,.18)', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 20px', borderBottom: `1px solid ${BORDER}`, background: '#F7F6F3' }}>
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, boxShadow: '0 1px 2px rgba(33,31,53,.04), 0 12px 28px -12px rgba(33,31,53,.18)', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 20px', borderBottom: `1px solid ${C.border}`, background: '#F7F6F3' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} role="tablist">
                 {submitted && [['answers', hasQuestions ? 'Paper' : 'Answers'], ['pdf', 'Submission PDF']].map(([id, label]) => (
                   <button key={id} role="tab" aria-selected={view === id} onClick={() => setView(id)}
-                    style={{ padding: '5px 12px', borderRadius: 999, border: `1px solid ${view === id ? PURPLE : BORDER}`, background: view === id ? '#F1ECFF' : WHITE, color: view === id ? PURPLE : MUTED, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+                    style={{ padding: '5px 12px', borderRadius: 999, border: `1px solid ${view === id ? PURPLE : C.border}`, background: view === id ? '#F1ECFF' : C.surface, color: view === id ? PURPLE : C.muted, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
                     {label}
                   </button>
                 ))}
                 {(!submitted || view === 'answers') && (
-                  <span style={{ fontSize: 12.5, fontWeight: 800, color: MUTED, marginLeft: submitted ? 6 : 0 }}>Question {Math.min(qIndex + 1, questions.length)} of {questions.length}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 800, color: C.muted, marginLeft: submitted ? 6 : 0 }}>Question {Math.min(qIndex + 1, questions.length)} of {questions.length}</span>
                 )}
               </div>
               <div style={{ display: 'flex', gap: 6, visibility: submitted && view === 'pdf' ? 'hidden' : 'visible' }}>
                 <button onClick={() => setQIndex(i => Math.max(0, i - 1))} disabled={qIndex === 0}
-                  style={{ width: 28, height: 28, borderRadius: 999, border: `1px solid ${BORDER}`, background: WHITE, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: qIndex === 0 ? 'not-allowed' : 'pointer', color: MUTED, opacity: qIndex === 0 ? .35 : 1 }}><ChevronLeft size={14} /></button>
+                  style={{ width: 28, height: 28, borderRadius: 999, border: `1px solid ${C.border}`, background: C.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: qIndex === 0 ? 'not-allowed' : 'pointer', color: C.muted, opacity: qIndex === 0 ? .35 : 1 }}><Ico lucide={ChevronLeft} ti="ti-chevron-left" size={14} /></button>
                 <button onClick={() => setQIndex(i => Math.min(questions.length - 1, i + 1))} disabled={qIndex >= questions.length - 1}
-                  style={{ width: 28, height: 28, borderRadius: 999, border: `1px solid ${BORDER}`, background: WHITE, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: qIndex >= questions.length - 1 ? 'not-allowed' : 'pointer', color: MUTED, opacity: qIndex >= questions.length - 1 ? .35 : 1 }}><ChevronRight size={14} /></button>
+                  style={{ width: 28, height: 28, borderRadius: 999, border: `1px solid ${C.border}`, background: C.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: qIndex >= questions.length - 1 ? 'not-allowed' : 'pointer', color: C.muted, opacity: qIndex >= questions.length - 1 ? .35 : 1 }}><Ico lucide={ChevronRight} ti="ti-chevron-right" size={14} /></button>
               </div>
             </div>
             {submitted && view === 'pdf' ? (
@@ -660,12 +662,12 @@ export default function GradeSubmissionModal({
               )
             ) : (
             <div style={{ padding: '24px 28px 30px' }}>
-              <h2 style={{ margin: '0 0 10px', fontSize: 19, fontWeight: 700, color: INK, fontFamily: 'Lora, Georgia, serif', lineHeight: 1.35 }}>{q.title}</h2>
+              <h2 style={{ margin: '0 0 10px', fontSize: 19, fontWeight: 700, color: C.ink, fontFamily: 'Lora, Georgia, serif', lineHeight: 1.35 }}>{q.title}</h2>
               {q.points.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: .6, color: MUTED2, marginBottom: 6 }}>WHAT THEY WERE ASKED</div>
+                  <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: .6, color: C.muted2, marginBottom: 6 }}>WHAT THEY WERE ASKED</div>
                   {q.points.map((p, i) => (
-                    <div key={i} style={{ display: 'flex', gap: 8, fontSize: 13.5, color: MUTED, lineHeight: 1.6, marginBottom: 4 }}>
+                    <div key={i} style={{ display: 'flex', gap: 8, fontSize: 13.5, color: C.muted, lineHeight: 1.6, marginBottom: 4 }}>
                       <span style={{ color: PURPLE, fontWeight: 900 }}>•</span>{p}
                     </div>
                   ))}
@@ -677,15 +679,15 @@ export default function GradeSubmissionModal({
           </div>
 
           {/* Grading panel */}
-          <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, boxShadow: '0 1px 2px rgba(33,31,53,.04), 0 12px 28px -12px rgba(33,31,53,.18)', overflow: 'hidden' }}>
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, boxShadow: '0 1px 2px rgba(33,31,53,.04), 0 12px 28px -12px rgba(33,31,53,.18)', overflow: 'hidden' }}>
             {/* Student header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '14px 18px', borderBottom: `1px solid ${BORDER}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '14px 18px', borderBottom: `1px solid ${C.border}` }}>
               <div style={{ width: 38, height: 38, borderRadius: '50%', background: `${PURPLE}18`, color: PURPLE, fontWeight: 900, fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 {initialsOf(current.student.name)}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 800, color: INK }}>{current.student.name}</div>
-                <div style={{ fontSize: 11, color: MUTED2, fontWeight: 600 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 800, color: C.ink }}>{current.student.name}</div>
+                <div style={{ fontSize: 11, color: C.muted2, fontWeight: 600 }}>
                   @{current.student.username || '—'}{current.completedAt ? ` · finished ${fmtWhen(current.completedAt)}` : ' · still working'}
                 </div>
               </div>
@@ -708,27 +710,27 @@ export default function GradeSubmissionModal({
               {/* Review: every question's mark at a glance (tap to change one) */}
               {hasQuestions && (
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: .6, color: MUTED2, marginBottom: 6 }}>REVIEW · MARKS BY QUESTION</div>
-                  <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, overflow: 'hidden' }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: .6, color: C.muted2, marginBottom: 6 }}>REVIEW · MARKS BY QUESTION</div>
+                  <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
                     {qList.map((qq, i) => {
                       const m = qMarks[i];
                       const done = m?.awarded != null && m.awarded !== '';
                       return (
                         <button key={i} type="button" onClick={() => goStep(i)}
-                          style={{ display: 'flex', alignItems: 'flex-start', gap: 10, width: '100%', textAlign: 'left', padding: '9px 12px', border: 'none', borderTop: i ? `1px solid ${BORDER}` : 'none', background: WHITE, cursor: 'pointer', fontFamily: FONT }}>
-                          <span style={{ fontSize: 12, fontWeight: 900, color: MUTED2, width: 26, flexShrink: 0 }}>Q{i + 1}</span>
+                          style={{ display: 'flex', alignItems: 'flex-start', gap: 10, width: '100%', textAlign: 'left', padding: '9px 12px', border: 'none', borderTop: i ? `1px solid ${C.border}` : 'none', background: C.surface, cursor: 'pointer', fontFamily: C.font }}>
+                          <span style={{ fontSize: 12, fontWeight: 900, color: C.muted2, width: 26, flexShrink: 0 }}>Q{i + 1}</span>
                           <span style={{ flex: 1, minWidth: 0 }}>
-                            <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: INK, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{(typeof qq === 'object' && qq ? qq.q : qq) || `Question ${i + 1}`}</span>
-                            {m?.comment && <span style={{ display: 'block', fontSize: 11.5, color: MUTED, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>“{m.comment}”</span>}
+                            <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{(typeof qq === 'object' && qq ? qq.q : qq) || `Question ${i + 1}`}</span>
+                            {m?.comment && <span style={{ display: 'block', fontSize: 11.5, color: C.muted, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>“{m.comment}”</span>}
                           </span>
-                          <span style={{ fontSize: 12.5, fontWeight: 900, color: done ? INK : '#E4572E', whiteSpace: 'nowrap' }}>{done ? `${m.awarded} / ${pointsOf(qq)}` : 'not marked'}</span>
+                          <span style={{ fontSize: 12.5, fontWeight: 900, color: done ? C.ink : '#E4572E', whiteSpace: 'nowrap' }}>{done ? `${m.awarded} / ${pointsOf(qq)}` : 'not marked'}</span>
                         </button>
                       );
                     })}
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, padding: '10px 12px', background: '#F7F6F3', borderTop: `1px solid ${BORDER}` }}>
-                      <span style={{ fontSize: 12, fontWeight: 800, color: MUTED2 }}>Total</span>
-                      <span style={{ marginLeft: 'auto', fontSize: 20, fontWeight: 900, color: totals.complete ? GREEN : INK, fontFamily: 'Lora, Georgia, serif' }}>{totals.got}</span>
-                      <span style={{ fontSize: 12.5, fontWeight: 700, color: MUTED2 }}>/ {totals.max}{totals.complete ? ` · ${totals.pct}%` : ' — mark every question'}</span>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, padding: '10px 12px', background: '#F7F6F3', borderTop: `1px solid ${C.border}` }}>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: C.muted2 }}>Total</span>
+                      <span style={{ marginLeft: 'auto', fontSize: 20, fontWeight: 900, color: totals.complete ? GREEN : C.ink, fontFamily: 'Lora, Georgia, serif' }}>{totals.got}</span>
+                      <span style={{ fontSize: 12.5, fontWeight: 700, color: C.muted2 }}>/ {totals.max}{totals.complete ? ` · ${totals.pct}%` : ' — mark every question'}</span>
                     </div>
                   </div>
                 </div>
@@ -736,17 +738,17 @@ export default function GradeSubmissionModal({
 
               {/* How the score is set */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: .6, color: MUTED2, marginRight: 'auto' }}>SCORE FROM</span>
+                <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: .6, color: C.muted2, marginRight: 'auto' }}>SCORE FROM</span>
                 {[...(hasQuestions ? [['questions', 'Question marks']] : []), ['rubric', 'Rubric'], ['manual', 'Manual']].map(([id, label]) => (
                   <button key={id} type="button" onClick={() => { setMode(id); touch({ mode: id }); }} aria-pressed={mode === id}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 999, border: `1.5px solid ${mode === id ? PURPLE : BORDER}`, background: mode === id ? '#F1ECFF' : WHITE, color: mode === id ? PURPLE : MUTED, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-                    {id === 'manual' && <PenLine size={10} />}{label}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 999, border: `1.5px solid ${mode === id ? PURPLE : C.border}`, background: mode === id ? '#F1ECFF' : C.surface, color: mode === id ? PURPLE : C.muted, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
+                    {id === 'manual' && <Ico lucide={PenLine} ti="ti-pencil" size={10} />}{label}
                   </button>
                 ))}
               </div>
 
               {mode === 'questions' ? (
-                <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.5 }}>
+                <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
                   The score is the question marks: {totals.got} of {totals.max}{totals.complete ? ` = ${totals.pct}%` : ' — mark every question to publish'}.
                 </div>
               ) : mode === 'rubric' ? (
@@ -754,15 +756,15 @@ export default function GradeSubmissionModal({
                   {RUBRIC.map((crit, ci) => (
                     <div key={crit.name}>
                       <div style={{ marginBottom: 6 }}>
-                        <span style={{ fontSize: 12.5, fontWeight: 800, color: INK }}>{crit.name}</span>
-                        <span style={{ fontSize: 11, color: MUTED2, marginLeft: 6 }}>{crit.desc}</span>
+                        <span style={{ fontSize: 12.5, fontWeight: 800, color: C.ink }}>{crit.name}</span>
+                        <span style={{ fontSize: 11, color: C.muted2, marginLeft: 6 }}>{crit.desc}</span>
                       </div>
                       <div style={{ display: 'flex', gap: 5 }}>
                         {Array.from({ length: crit.max + 1 }, (_, lvl) => (
                           <button key={lvl} onClick={() => setRubricLevel(ci, lvl)}
-                            style={{ flex: 1, height: 32, borderRadius: 8, cursor: 'pointer', fontFamily: FONT,
-                              border: `1.5px solid ${rubric[ci] === lvl ? PURPLE : BORDER}`,
-                              background: rubric[ci] === lvl ? '#F1ECFF' : WHITE, color: rubric[ci] === lvl ? PURPLE : MUTED, fontSize: 12.5, fontWeight: 800 }}>
+                            style={{ flex: 1, height: 32, borderRadius: 8, cursor: 'pointer', fontFamily: C.font,
+                              border: `1.5px solid ${rubric[ci] === lvl ? PURPLE : C.border}`,
+                              background: rubric[ci] === lvl ? '#F1ECFF' : C.surface, color: rubric[ci] === lvl ? PURPLE : C.muted, fontSize: 12.5, fontWeight: 800 }}>
                             {lvl}
                           </button>
                         ))}
@@ -773,37 +775,37 @@ export default function GradeSubmissionModal({
                     </div>
                   ))}
                   {/* Total */}
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, background: '#F7F6F3', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '11px 14px' }}>
-                    <span style={{ fontSize: 26, fontWeight: 900, color: rubric.every(v => v != null) ? GREEN : INK, fontFamily: 'Lora, Georgia, serif' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, background: '#F7F6F3', border: `1px solid ${C.border}`, borderRadius: 10, padding: '11px 14px' }}>
+                    <span style={{ fontSize: 26, fontWeight: 900, color: rubric.every(v => v != null) ? GREEN : C.ink, fontFamily: 'Lora, Georgia, serif' }}>
                       {rubricTotal}
                     </span>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: MUTED2 }}>/ {RUBRIC_MAX} {rubric.every(v => v != null) ? `· ${rubricPct}%` : '— pick a level in every row'}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: C.muted2 }}>/ {RUBRIC_MAX} {rubric.every(v => v != null) ? `· ${rubricPct}%` : '— pick a level in every row'}</span>
                   </div>
                 </>
               ) : (
                 <div>
-                  <div style={{ fontSize: 12.5, fontWeight: 800, color: INK, marginBottom: 6 }}>Score (0–100)</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 800, color: C.ink, marginBottom: 6 }}>Score (0–100)</div>
                   <input value={manualScore} onChange={e => onManual(e.target.value)} placeholder="e.g. 78" inputMode="numeric"
-                    style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px', borderRadius: 10, border: `1.5px solid ${BORDER}`, outline: 'none', fontSize: 16, fontWeight: 800, fontFamily: FONT, color: INK }} />
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px', borderRadius: 10, border: `1.5px solid ${C.border}`, outline: 'none', fontSize: 16, fontWeight: 800, fontFamily: C.font, color: C.ink }} />
                 </div>
               )}
 
               {/* Written feedback */}
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 800, color: INK, display: 'inline-flex', alignItems: 'center', gap: 5 }}><FileText size={12} color={MUTED2} /> Written feedback</span>
-                  <span style={{ fontSize: 10.5, color: MUTED2, fontWeight: 700 }}>{feedbackText.length}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 800, color: C.ink, display: 'inline-flex', alignItems: 'center', gap: 5 }}><Ico lucide={FileText} ti="ti-file-text" size={12} color={C.muted2} /> Written feedback</span>
+                  <span style={{ fontSize: 10.5, color: C.muted2, fontWeight: 700 }}>{feedbackText.length}</span>
                 </div>
                 <textarea value={feedbackText} onChange={e => onFeedback(e.target.value)}
                   placeholder="What they did well, what to fix, what to try next…"
                   rows={5}
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: 10, border: `1.5px solid ${BORDER}`, outline: 'none', fontSize: 13, lineHeight: 1.6, fontFamily: FONT, color: INK, resize: 'vertical' }} />
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: 10, border: `1.5px solid ${C.border}`, outline: 'none', fontSize: 13, lineHeight: 1.6, fontFamily: C.font, color: C.ink, resize: 'vertical' }} />
               </div>
 
               {error && <div style={{ fontSize: 12, color: RED, fontWeight: 700 }}>{error}</div>}
 
-              <div style={{ fontSize: 11, color: MUTED2, lineHeight: 1.55, display: 'flex', alignItems: 'center', gap: 5 }}>
-                <Check size={11} color={GREEN} /> Publishing notifies {current.student.name.split(' ')[0]} and files this under their graded work. Drafts stay on this device until then.
+              <div style={{ fontSize: 11, color: C.muted2, lineHeight: 1.55, display: 'flex', alignItems: 'center', gap: 5 }}>
+                <Ico lucide={Check} ti="ti-check" size={11} color={GREEN} /> Publishing notifies {current.student.name.split(' ')[0]} and files this under their graded work. Drafts stay on this device until then.
               </div>
               </>)}
             </div>

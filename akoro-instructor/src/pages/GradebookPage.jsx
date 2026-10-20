@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Scale, SlidersHorizontal , LibraryBig, Inbox, Users } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Toast } from '../components/Primitives.jsx';
-import {
-  AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, PURPLE, BLUE, FONT,
-} from '../constants.js';
+import { GREEN, RED, PURPLE, BLUE } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 import { apiGet, apiPatch } from '../services/api.js';
 
 /**
@@ -36,8 +36,8 @@ const TYPES = [
   { type: 'live_course', label: 'Live course', color: '#E11D48' },
   { type: 'multi_stage', label: 'Multi stage', color: '#3B82F6' },
 ];
-const typeMeta = (t) => TYPES.find((x) => x.type === t) || { type: t, label: t || 'Activity', color: MUTED2 };
-const RAIL_COLORS = [AMBER, '#3B82F6', '#10B981', '#0D9488', '#F59E0B', '#8B5CF6', '#EF4444', '#059669'];
+const typeMeta = (t) => TYPES.find((x) => x.type === t) || { type: t, label: t || 'Activity', color: C.muted2 };
+const RAIL_COLORS = [C.brand, '#3B82F6', '#10B981', '#0D9488', '#F59E0B', '#8B5CF6', '#EF4444', '#059669'];
 const TABS = ['Overall', 'By Assignment', 'By Student', 'Assignments', 'Final Grades by Student', 'Final Grades by Class'];
 
 const INITIAL_SCALE = [
@@ -99,15 +99,15 @@ function GradingSystemModal({ open, onClose, className, types, settings, onSave 
 
   return (
     <Modal open={open} onClose={onClose} title="Grading System" width={460}>
-      <p style={{ fontSize: 12.5, fontWeight: 500, color: MUTED, margin: '0 0 16px' }}>
+      <p style={{ fontSize: 12.5, fontWeight: 500, color: C.muted, margin: '0 0 16px' }}>
         How much each activity type counts toward the Final, for{' '}
-        <strong style={{ color: INK }}>{className}</strong>.
+        <strong style={{ color: C.ink }}>{className}</strong>.
       </p>
 
       <p style={SECTION_LABEL}>Type weights</p>
       {types.map((t) => (
-        <div key={t.type} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '9px 0', borderBottom: `1px solid ${BORDER}` }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 700, color: INK }}>
+        <div key={t.type} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '9px 0', borderBottom: `1px solid ${C.border}` }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 700, color: C.ink }}>
             <span style={{ width: 9, height: 9, borderRadius: '50%', background: t.color, flexShrink: 0 }} />
             {t.label}
           </span>
@@ -115,21 +115,21 @@ function GradingSystemModal({ open, onClose, className, types, settings, onSave 
             <input type="number" min="0" max="100" step="1" value={draft[t.type] ?? 0}
               onChange={(e) => setDraft((w) => ({ ...w, [t.type]: e.target.value }))}
               style={WEIGHT_INPUT} />
-            <span style={{ fontSize: 12, fontWeight: 700, color: MUTED2 }}>%</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: C.muted2 }}>%</span>
           </span>
         </div>
       ))}
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 14, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: MUTED }}>Total</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: C.muted }}>Total</span>
         <span style={{ fontSize: 14, fontWeight: 800, color: total === 100 ? '#047857' : '#B45309' }}>{total}%</span>
       </div>
-      <p style={{ fontSize: 10.5, fontWeight: 500, color: MUTED2, margin: '5px 0 0' }}>
+      <p style={{ fontSize: 10.5, fontWeight: 500, color: C.muted2, margin: '5px 0 0' }}>
         Doesn't need to add up to 100 — it'll scale automatically when you save. A type only counts when it has graded work.
       </p>
 
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${BORDER}`, fontSize: 12, fontWeight: 600, color: MUTED, cursor: 'pointer' }}>
-        <input type="checkbox" checked={applyAll} onChange={(e) => setApplyAll(e.target.checked)} style={{ accentColor: AMBER, cursor: 'pointer' }} />
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}`, fontSize: 12, fontWeight: 600, color: C.muted, cursor: 'pointer' }}>
+        <input type="checkbox" checked={applyAll} onChange={(e) => setApplyAll(e.target.checked)} style={{ accentColor: C.brand, cursor: 'pointer' }} />
         <span>Apply to all classes, not just this one</span>
       </label>
 
@@ -163,7 +163,7 @@ function GradingScaleModal({ open, onClose, scale, onSave }) {
 
   return (
     <Modal open={open} onClose={onClose} title="Grading Scale" width={460}>
-      <p style={{ fontSize: 12.5, fontWeight: 500, color: MUTED, margin: '0 0 16px' }}>
+      <p style={{ fontSize: 12.5, fontWeight: 500, color: C.muted, margin: '0 0 16px' }}>
         How a Final percentage maps to a letter grade — applies school-wide.
       </p>
 
@@ -172,20 +172,20 @@ function GradingScaleModal({ open, onClose, scale, onSave }) {
         const upper = above ? Math.max(band.min, (Number(draft[above.grade]) || 0) - 1) : 100;
         const floor = Number(draft[band.grade]) || 0;
         return (
-          <div key={band.grade} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: `1px solid ${BORDER}` }}>
+          <div key={band.grade} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: `1px solid ${C.border}` }}>
             <span style={{
               width: 30, height: 30, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 12.5, fontWeight: 800, color: WHITE, background: band.color, flexShrink: 0,
+              fontSize: 12.5, fontWeight: 800, color: '#fff', background: band.color, flexShrink: 0,
             }}>{band.grade}</span>
-            <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: MUTED }}>
+            <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: C.muted }}>
               {band.grade === 'F' ? `below ${draft[sorted[i - 1]?.grade] ?? 60}%` : `${floor}–${Math.min(upper, 100)}%`}
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <input type="number" min="0" max="100" step="1" value={draft[band.grade]}
                 disabled={band.grade === 'F'}
                 onChange={(e) => setDraft((d) => ({ ...d, [band.grade]: e.target.value }))}
-                style={{ ...WEIGHT_INPUT, ...(band.grade === 'F' ? { background: LIGHT, color: MUTED2 } : {}) }} />
-              <span style={{ fontSize: 12, fontWeight: 700, color: MUTED2 }}>% min</span>
+                style={{ ...WEIGHT_INPUT, ...(band.grade === 'F' ? { background: C.bg, color: C.muted2 } : {}) }} />
+              <span style={{ fontSize: 12, fontWeight: 700, color: C.muted2 }}>% min</span>
             </span>
           </div>
         );
@@ -202,17 +202,17 @@ function GradingScaleModal({ open, onClose, scale, onSave }) {
 /* ── Page ───────────────────────────────────────────────────────────────── */
 
 const SECTION_LABEL = {
-  fontSize: 11, fontWeight: 800, color: MUTED2, textTransform: 'uppercase',
+  fontSize: 11, fontWeight: 800, color: C.muted2, textTransform: 'uppercase',
   letterSpacing: '0.03em', margin: '0 0 10px',
 };
 const WEIGHT_INPUT = {
   width: 56, textAlign: 'right', padding: '6px 8px', borderRadius: 8,
-  border: `1px solid ${BORDER}`, fontFamily: FONT, fontSize: 12.5,
-  fontWeight: 700, color: INK, outline: 'none',
+  border: `1px solid ${C.border}`, fontFamily: C.font, fontSize: 12.5,
+  fontWeight: 700, color: C.ink, outline: 'none',
 };
 const FILTER_SELECT = {
-  width: '100%', padding: '7px 10px', borderRadius: 9, border: `1px solid ${BORDER}`,
-  background: WHITE, fontFamily: FONT, fontSize: 12, fontWeight: 600, color: INK,
+  width: '100%', padding: '7px 10px', borderRadius: 9, border: `1px solid ${C.border}`,
+  background: C.surface, fontFamily: C.font, fontSize: 12, fontWeight: 600, color: C.ink,
   marginBottom: 7, cursor: 'pointer', outline: 'none',
 };
 
@@ -378,14 +378,14 @@ export default function GradebookPage() {
       <style>{`
         .gb-shell{ display:flex; gap:18px; align-items:flex-start; }
         .gb-table{ width:100%; border-collapse:collapse; min-width:640px; }
-        .gb-table th, .gb-table td{ padding:9px 14px; text-align:center; font-size:12.5px; white-space:nowrap; border-bottom:1px solid ${BORDER}; font-family:${FONT}; }
-        .gb-table thead th{ vertical-align:top; padding-top:12px; padding-bottom:12px; border-bottom:1px solid ${BORDER}; background:${LIGHT}; }
-        .gb-table thead th:first-child, .gb-table tbody td:first-child{ text-align:left; position:sticky; left:0; background:${LIGHT}; z-index:2; }
-        .gb-table tbody td:first-child{ background:${WHITE}; font-weight:700; color:${INK}; }
-        .gb-table tbody tr:hover td{ background:${LIGHT}; }
-        .gb-score{ width:52px; text-align:center; font-family:${FONT}; font-size:12.5px; font-weight:700; color:${INK}; border:1px solid transparent; border-radius:8px; padding:4px 2px; background:transparent; outline:none; }
-        .gb-score:hover{ border-color:${BORDER}; }
-        .gb-score:focus{ border-color:${AMBER}; background:${AMBER}08; }
+        .gb-table th, .gb-table td{ padding:9px 14px; text-align:center; font-size:12.5px; white-space:nowrap; border-bottom:1px solid ${C.border}; font-family:${C.font}; }
+        .gb-table thead th{ vertical-align:top; padding-top:12px; padding-bottom:12px; border-bottom:1px solid ${C.border}; background:${C.bg}; }
+        .gb-table thead th:first-child, .gb-table tbody td:first-child{ text-align:left; position:sticky; left:0; background:${C.bg}; z-index:2; }
+        .gb-table tbody td:first-child{ background:${C.surface}; font-weight:700; color:${C.ink}; }
+        .gb-table tbody tr:hover td{ background:${C.bg}; }
+        .gb-score{ width:52px; text-align:center; font-family:${C.font}; font-size:12.5px; font-weight:700; color:${C.ink}; border:1px solid transparent; border-radius:8px; padding:4px 2px; background:transparent; outline:none; }
+        .gb-score:hover{ border-color:${C.border}; }
+        .gb-score:focus{ border-color:${C.brand}; background:${tint(3)}; }
         @media (max-width: 1080px){ .gb-sidebar{ display:none; } }
       `}</style>
 
@@ -393,10 +393,10 @@ export default function GradebookPage() {
         {/* ── Sidebar: filters + class rail ── */}
         <aside style={{ width: 240, flexShrink: 0, position: 'sticky', top: 0 }}>
           <Btn style={{ width: '100%', marginBottom: 16 }} onClick={() => navigate('/activities')}>
-            <Plus size={13} /> Add Assignment
+            <Ico lucide={Plus} ti="ti-plus" size={13} /> Add Assignment
           </Btn>
 
-          <div style={{ background: LIGHT, borderRadius: 14, padding: 12, marginBottom: 16, border: `1px solid ${BORDER}` }}>
+          <div style={{ background: C.bg, borderRadius: 14, padding: 12, marginBottom: 16, border: `1px solid ${C.border}` }}>
             <p style={SECTION_LABEL}>Filters</p>
             <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ ...FILTER_SELECT, marginBottom: 0 }}>
               <option value="all">All Types</option>
@@ -406,19 +406,19 @@ export default function GradebookPage() {
 
           <p style={SECTION_LABEL}>Classes</p>
           {classes === null ? (
-            [1, 2, 3].map((i) => <div key={i} style={{ height: 34, borderRadius: 10, background: LIGHT, marginBottom: 4 }} />)
+            [1, 2, 3].map((i) => <div key={i} style={{ height: 34, borderRadius: 10, background: C.bg, marginBottom: 4 }} />)
           ) : classes.map((c, i) => {
             const active = c.id === currentClass;
             return (
               <button key={c.id} onClick={() => setCurrentClass(c.id)} style={{
                 display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '8px 10px',
-                borderRadius: 10, border: 'none', background: active ? `${AMBER}12` : 'transparent',
-                fontFamily: FONT, fontSize: 12.5, fontWeight: active ? 700 : 600,
-                color: active ? AMBER : MUTED, cursor: 'pointer', textAlign: 'left', marginBottom: 2,
+                borderRadius: 10, border: 'none', background: active ? tint(7) : 'transparent',
+                fontFamily: C.font, fontSize: 12.5, fontWeight: active ? 700 : 600,
+                color: active ? C.brand : C.muted, cursor: 'pointer', textAlign: 'left', marginBottom: 2,
               }}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: RAIL_COLORS[i % RAIL_COLORS.length], flexShrink: 0 }} />
                 <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
-                <span style={{ fontSize: 10, fontWeight: 700, color: MUTED2, flexShrink: 0 }}>{c.student_count ?? ''}</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: C.muted2, flexShrink: 0 }}>{c.student_count ?? ''}</span>
               </button>
             );
           })}
@@ -426,12 +426,12 @@ export default function GradebookPage() {
 
         {/* ── Main: tabs, header, matrix ── */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', gap: 22, borderBottom: `1px solid ${BORDER}`, marginBottom: 18, overflowX: 'auto' }}>
+          <div style={{ display: 'flex', gap: 22, borderBottom: `1px solid ${C.border}`, marginBottom: 18, overflowX: 'auto' }}>
             {TABS.map((t, i) => (
               <button key={t} style={{
-                background: 'none', border: 'none', fontFamily: FONT, fontSize: 12.5,
-                fontWeight: i === 0 ? 700 : 600, color: i === 0 ? AMBER : MUTED2,
-                padding: '0 0 10px', borderBottom: `2px solid ${i === 0 ? AMBER : 'transparent'}`,
+                background: 'none', border: 'none', fontFamily: C.font, fontSize: 12.5,
+                fontWeight: i === 0 ? 700 : 600, color: i === 0 ? C.brand : C.muted2,
+                padding: '0 0 10px', borderBottom: `2px solid ${i === 0 ? C.brand : 'transparent'}`,
                 marginBottom: -1, cursor: 'default', whiteSpace: 'nowrap',
               }}>{t}</button>
             ))}
@@ -439,10 +439,10 @@ export default function GradebookPage() {
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap', marginBottom: 16 }}>
             <div>
-              <h1 style={{ fontSize: 19, fontWeight: 800, margin: '0 0 3px', color: INK, fontFamily: FONT, letterSpacing: '-0.01em' }}>
+              <h1 style={{ fontSize: 19, fontWeight: 800, margin: '0 0 3px', color: C.ink, fontFamily: C.font, letterSpacing: '-0.01em' }}>
                 {classObj ? classObj.name : 'Pick a class'}
               </h1>
-              <p style={{ fontSize: 12, fontWeight: 600, color: MUTED, margin: 0, fontFamily: FONT }}>
+              <p style={{ fontSize: 12, fontWeight: 600, color: C.muted, margin: 0, fontFamily: C.font }}>
                 {classObj
                   ? `${students.length} learner${students.length === 1 ? '' : 's'} with assigned work · ${assignments?.length ?? 0} activit${(assignments?.length ?? 0) === 1 ? 'y' : 'ies'}`
                   : 'Choose a class from the rail to see its gradebook'}
@@ -459,45 +459,45 @@ export default function GradebookPage() {
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 10 }}>
             <Btn variant="secondary" size="sm" onClick={() => setScaleOpen(true)}>
-              <Scale size={14} /> Grading Scale
+              <Ico lucide={Scale} ti="ti-scale" size={14} /> Grading Scale
             </Btn>
             <Btn variant="secondary" size="sm" disabled={!classTypes.length} onClick={() => setWeightsOpen(true)}>
-              <SlidersHorizontal size={14} /> Grading System
+              <Ico lucide={SlidersHorizontal} ti="ti-adjustments-horizontal" size={14} /> Grading System
             </Btn>
           </div>
 
           {/* ── matrix ── */}
           {classes === null || assignments === null ? (
-            <div style={{ background: WHITE, borderRadius: 16, border: `1px solid ${BORDER}`, padding: 20 }}>
-              {[1, 2, 3, 4].map((i) => <div key={i} style={{ height: 38, borderRadius: 10, background: LIGHT, marginBottom: 8, opacity: 0.6 }} />)}
+            <div style={{ background: C.surface, borderRadius: 16, border: `1px solid ${C.border}`, padding: 20 }}>
+              {[1, 2, 3, 4].map((i) => <div key={i} style={{ height: 38, borderRadius: 10, background: C.bg, marginBottom: 8, opacity: 0.6 }} />)}
             </div>
           ) : !classObj ? (
-            <EmptyState icon={<LibraryBig size={36} color="#9490A0" />} title="Pick a class" sub="Your classes appear in the rail on the left." />
+            <EmptyState icon={<Ico lucide={LibraryBig} ti="ti-books" size={36} color="#9490A0" />} title="Pick a class" sub="Your classes appear in the rail on the left." />
           ) : !assignments.length ? (
-            <EmptyState icon={<Inbox size={36} color="#9490A0" />} title="No activities in this class yet"
+            <EmptyState icon={<Ico lucide={Inbox} ti="ti-inbox" size={36} color="#9490A0" />} title="No activities in this class yet"
               sub="Assign work from the activities workbench and it lands here."
-              action={<Btn size="sm" onClick={() => navigate('/activities')}><Plus size={13} /> Add Assignment</Btn>} />
+              action={<Btn size="sm" onClick={() => navigate('/activities')}><Ico lucide={Plus} ti="ti-plus" size={13} /> Add Assignment</Btn>} />
           ) : !students.length ? (
-            <EmptyState icon={<Users size={36} color="#9490A0" />} title="No learners assigned yet"
+            <EmptyState icon={<Ico lucide={Users} ti="ti-users" size={36} color="#9490A0" />} title="No learners assigned yet"
               sub="This class's activities have no learners on them — assign them from the workbench." />
           ) : (
-            <div style={{ background: WHITE, borderRadius: 16, border: `1px solid ${BORDER}`, boxShadow: '0 2px 10px rgba(26,26,46,0.05)', overflow: 'hidden' }}>
+            <div style={{ background: C.surface, borderRadius: 16, border: `1px solid ${C.border}`, boxShadow: '0 2px 10px rgba(26,26,46,0.05)', overflow: 'hidden' }}>
               <div style={{ overflowX: 'auto' }}>
                 <table className="gb-table">
                   <thead>
                     <tr>
                       <th style={{ textAlign: 'left' }}>Student</th>
-                      <th style={{ fontSize: 10.5, fontWeight: 800, color: MUTED2, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Final</th>
+                      <th style={{ fontSize: 10.5, fontWeight: 800, color: C.muted2, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Final</th>
                       {visibleAssignments.map((a) => {
                         const tm = typeMeta(a.type ?? 'self_study');
                         return (
                           <th key={a.id}>
                             <button onClick={() => navigate(`/submissions?activity=${a.id}`)}
                               title="Open this activity's submissions"
-                              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: FONT, textAlign: 'center' }}>
-                              <div style={{ fontSize: 12, fontWeight: 700, color: INK, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.title}</div>
+                              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: C.font, textAlign: 'center' }}>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: C.ink, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.title}</div>
                               <div style={{ fontSize: 10, fontWeight: 600, color: tm.color, marginTop: 2 }}>{tm.label} · {fmtDue(a.due_at) || 'no due date'}</div>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: MUTED2, marginTop: 1 }}>0–100</div>
+                              <div style={{ fontSize: 10, fontWeight: 600, color: C.muted2, marginTop: 1 }}>0–100</div>
                             </button>
                           </th>
                         );
@@ -514,12 +514,12 @@ export default function GradebookPage() {
                             {f ? (
                               <span style={{
                                 display: 'inline-flex', fontSize: 12.5, fontWeight: 800, padding: '4px 12px',
-                                borderRadius: 20, background: `${f.band.color}14`, color: f.band.color, fontFamily: FONT,
+                                borderRadius: 20, background: tint(8, f.band.color), color: f.band.color, fontFamily: C.font,
                               }}>
                                 {f.pct} <small style={{ opacity: 0.75 }}>· {f.band.grade}</small>
                               </span>
                             ) : (
-                              <span style={{ fontSize: 11, fontWeight: 600, color: MUTED2, fontFamily: FONT }}>—</span>
+                              <span style={{ fontSize: 11, fontWeight: 600, color: C.muted2, fontFamily: C.font }}>—</span>
                             )}
                           </td>
                           {visibleAssignments.map((a) => {
@@ -541,7 +541,7 @@ export default function GradebookPage() {
                                     if (v === '') { setOverrides((ov) => { const row = { ...(ov[a.id] ?? {}) }; delete row[s.id]; return { ...ov, [a.id]: row }; }); return; }
                                     setCell(a.id, s.id, String(Math.max(0, Math.min(100, Math.round(Number(v) || 0)))));
                                   }}
-                                  style={edited ? { borderColor: `${AMBER}88`, background: `${AMBER}08` } : undefined}
+                                  style={edited ? { borderColor: tint(53), background: tint(3) } : undefined}
                                 />
                               </td>
                             );
@@ -579,10 +579,10 @@ export default function GradebookPage() {
 
 function EmptyState({ icon, title, sub, action }) {
   return (
-    <div style={{ background: WHITE, borderRadius: 16, border: `1px solid ${BORDER}`, padding: '48px 20px', textAlign: 'center' }}>
+    <div style={{ background: C.surface, borderRadius: 16, border: `1px solid ${C.border}`, padding: '48px 20px', textAlign: 'center' }}>
       <div style={{ fontSize: 36, marginBottom: 10 }}>{icon}</div>
-      <p style={{ fontSize: 14, fontWeight: 800, color: INK, margin: '0 0 4px', fontFamily: FONT }}>{title}</p>
-      <p style={{ fontSize: 12.5, fontWeight: 500, color: MUTED, margin: 0, fontFamily: FONT }}>{sub}</p>
+      <p style={{ fontSize: 14, fontWeight: 800, color: C.ink, margin: '0 0 4px', fontFamily: C.font }}>{title}</p>
+      <p style={{ fontSize: 12.5, fontWeight: 500, color: C.muted, margin: 0, fontFamily: C.font }}>{sub}</p>
       {action && <div style={{ marginTop: 16 }}>{action}</div>}
     </div>
   );

@@ -16,9 +16,11 @@ import { apiGet } from '../services/api.js';
 import GradeSubmissionModal from '../components/grading/GradeSubmissionModal.jsx';
 import NowGrading from '../components/grading/NowGrading.jsx';
 import { loadDraft } from '../components/grading/gradingDrafts.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../constants.js';
+import { GREEN, PURPLE, BLUE, RED } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 
-const TYPE_ICON = { self_study: BookOpen, assignment: PencilLine, project: FolderKanban, live_course: MonitorPlay, multi_stage: ListChecks };
+const TYPE_ICON = { self_study: [BookOpen, 'ti-book'], assignment: [PencilLine, 'ti-pencil'], project: [FolderKanban, 'ti-layout-kanban'], live_course: [MonitorPlay, 'ti-device-desktop'], multi_stage: [ListChecks, 'ti-list-check'] };
 
 const fmtWhen = (iso) => {
   if (!iso) return null;
@@ -124,7 +126,7 @@ export default function SubmissionsPage() {
     <PageLayout
       title="Submissions"
       subtitle="Grade submitted work, activity by activity"
-      action={<Btn size="sm" variant="secondary" onClick={() => navigate('/activities')}><ClipboardCheck size={14} /> New activity</Btn>}
+      action={<Btn size="sm" variant="secondary" onClick={() => navigate('/activities')}><Ico lucide={ClipboardCheck} ti="ti-clipboard-check" size={14} /> New activity</Btn>}
     >
       {/* Drafts waiting to be finished — survives closed tabs and dead networks */}
       <NowGrading onResume={resumeDraft} />
@@ -132,11 +134,11 @@ export default function SubmissionsPage() {
       <div style={{ display: 'flex', gap: 22, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         {/* Left rail — the submitted activities */}
         <aside style={{ width: 268, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1, color: MUTED2, padding: '8px 13px 6px', fontFamily: FONT }}>SUBMITTED ACTIVITIES</div>
-            {activities === null && <div style={{ padding: '10px 13px', fontSize: 12.5, color: MUTED2, fontFamily: FONT }}>Loading…</div>}
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1, color: C.muted2, padding: '8px 13px 6px', fontFamily: C.font }}>SUBMITTED ACTIVITIES</div>
+            {activities === null && <div style={{ padding: '10px 13px', fontSize: 12.5, color: C.muted2, fontFamily: C.font }}>Loading…</div>}
             {activities?.length === 0 && (
-              <div style={{ padding: '12px 13px', fontSize: 12.5, color: MUTED2, fontFamily: FONT, lineHeight: 1.5 }}>
+              <div style={{ padding: '12px 13px', fontSize: 12.5, color: C.muted2, fontFamily: C.font, lineHeight: 1.5 }}>
                 Nothing assigned yet. Create one under Activities.
               </div>
             )}
@@ -146,20 +148,20 @@ export default function SubmissionsPage() {
                 <button key={a.id} onClick={() => setKey(a.id)} style={{
                   display: 'flex', alignItems: 'flex-start', gap: 10, width: '100%', textAlign: 'left',
                   padding: '11px 13px', borderRadius: 10, border: 'none', cursor: 'pointer',
-                  background: on ? PURPLE : 'transparent', color: on ? WHITE : MUTED,
-                  fontSize: 13.5, fontWeight: on ? 700 : 600, fontFamily: FONT, transition: 'all .12s',
+                  background: on ? PURPLE : 'transparent', color: on ? '#fff' : C.muted,
+                  fontSize: 13.5, fontWeight: on ? 700 : 600, fontFamily: C.font, transition: 'all .12s',
                 }}
-                  onMouseEnter={(e) => { if (!on) e.currentTarget.style.background = LIGHT; }}
+                  onMouseEnter={(e) => { if (!on) e.currentTarget.style.background = C.bg; }}
                   onMouseLeave={(e) => { if (!on) e.currentTarget.style.background = 'transparent'; }}>
-                  <span style={{ display: 'flex', flexShrink: 0, marginTop: 1 }}>{(() => { const I = TYPE_ICON[a.type] || Pin; return <I size={14} color="#6B7280" />; })()}</span>
+                  <span style={{ display: 'flex', flexShrink: 0, marginTop: 1 }}>{(() => { const [I, ti] = TYPE_ICON[a.type] || [Pin, 'ti-pin']; return <Ico lucide={I} ti={ti} size={14} color="#6B7280" />; })()}</span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.title}</span>
-                    <span style={{ display: 'block', fontSize: 11, fontWeight: 600, lineHeight: 1.4, marginTop: 2, color: on ? 'rgba(255,255,255,.82)' : MUTED2 }}>
+                    <span style={{ display: 'block', fontSize: 11, fontWeight: 600, lineHeight: 1.4, marginTop: 2, color: on ? 'rgba(255,255,255,.82)' : C.muted2 }}>
                       {a.subject} · {a.submitted}/{a.assigned} submitted
                     </span>
                   </span>
                   {a.submitted > 0 && (
-                    <span style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 900, background: on ? 'rgba(255,255,255,.22)' : '#E6F6EE', color: on ? WHITE : GREEN, borderRadius: 999, padding: '2px 8px', marginTop: 1 }}>
+                    <span style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 900, background: on ? 'rgba(255,255,255,.22)' : '#E6F6EE', color: on ? '#fff' : GREEN, borderRadius: 999, padding: '2px 8px', marginTop: 1 }}>
                       {a.submitted}
                     </span>
                   )}
@@ -169,27 +171,27 @@ export default function SubmissionsPage() {
           </div>
 
           {/* Guidance note, in the workbench's WHEN TO USE IT voice */}
-          <div style={{ background: `${AMBER}0A`, border: `1px solid ${AMBER}33`, borderRadius: 14, padding: '13px 15px', fontFamily: FONT }}>
+          <div style={{ background: tint(4), border: `1px solid ${tint(20)}`, borderRadius: 14, padding: '13px 15px', fontFamily: C.font }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-              <Info size={13} color={AMBER} />
-              <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: .5, color: AMBER }}>WHO TO GRADE FIRST</span>
+              <Ico lucide={Info} ti="ti-info-circle" size={13} color={C.brand} />
+              <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: .5, color: C.brand }}>WHO TO GRADE FIRST</span>
             </div>
             {activities === null ? (
-              <div style={{ fontSize: 12, color: MUTED }}>Counting submissions…</div>
+              <div style={{ fontSize: 12, color: C.muted }}>Counting submissions…</div>
             ) : ungraded > 0 ? (
               <>
-                <div style={{ fontSize: 12.5, fontWeight: 800, color: INK, marginBottom: 5 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: C.ink, marginBottom: 5 }}>
                   {ungraded} submission{ungraded === 1 ? '' : 's'} waiting in “{activity?.title ?? 'this activity'}”.
                 </div>
-                <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.55 }}>
+                <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.55 }}>
                   Grades publish the moment you press Publish — everything before that autosaves on this device,
                   so it is safe to stop and continue later.
                 </div>
               </>
             ) : (
               <>
-                <div style={{ fontSize: 12.5, fontWeight: 800, color: INK, marginBottom: 5 }}>All caught up here.</div>
-                <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.55 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: C.ink, marginBottom: 5 }}>All caught up here.</div>
+                <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.55 }}>
                   New submissions appear the moment a learner finishes their work.
                 </div>
               </>
@@ -198,27 +200,27 @@ export default function SubmissionsPage() {
         </aside>
 
         {/* Right card — the roster */}
-        <section style={{ flex: 1, minWidth: 300, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '20px 22px', fontFamily: FONT }}>
+        <section style={{ flex: 1, minWidth: 300, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: '20px 22px', fontFamily: C.font }}>
           {!activity ? (
-            <div style={{ color: MUTED2, fontSize: 13 }}>Pick an activity to see its submissions.</div>
+            <div style={{ color: C.muted2, fontSize: 13 }}>Pick an activity to see its submissions.</div>
           ) : detailLoading ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: MUTED2, fontSize: 13 }}>
-              <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> Loading the roster…
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.muted2, fontSize: 13 }}>
+              <Ico lucide={Loader2} ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> Loading the roster…
             </div>
           ) : (
             <>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
                 <div>
-                  <div style={{ fontSize: 15, fontWeight: 900, color: INK }}>{activity.title}</div>
-                  <div style={{ fontSize: 11.5, color: MUTED }}>{activity.subject} · {activity.topic}</div>
+                  <div style={{ fontSize: 15, fontWeight: 900, color: C.ink }}>{activity.title}</div>
+                  <div style={{ fontSize: 11.5, color: C.muted }}>{activity.subject} · {activity.topic}</div>
                 </div>
-                <Badge color={ungraded ? AMBER : GREEN} bg={ungraded ? '#FFF7ED' : '#DCFCE7'}>
-                  <Users size={10} style={{ marginRight: 3 }} />{ungraded} to grade
+                <Badge color={ungraded ? C.brand : GREEN} bg={ungraded ? C.brandSoft : '#DCFCE7'}>
+                  <Ico lucide={Users} ti="ti-users" size={10} style={{ marginRight: 3 }} />{ungraded} to grade
                 </Badge>
               </div>
 
               {(detail?.targets ?? []).length === 0 && (
-                <div style={{ fontSize: 12.5, color: MUTED, padding: '10px 0' }}>Nobody is assigned yet.</div>
+                <div style={{ fontSize: 12.5, color: C.muted, padding: '10px 0' }}>Nobody is assigned yet.</div>
               )}
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
@@ -227,21 +229,21 @@ export default function SubmissionsPage() {
                   const graded = t.grade != null;
                   return (
                     <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px',
-                      border: `1px solid ${graded ? '#BBF7D0' : BORDER}`, borderRadius: 12,
-                      background: graded ? '#F0FDF4' : WHITE, opacity: gradeable ? 1 : .75 }}>
+                      border: `1px solid ${graded ? '#BBF7D0' : C.border}`, borderRadius: 12,
+                      background: graded ? '#F0FDF4' : C.surface, opacity: gradeable ? 1 : .75 }}>
                       <span style={{ fontSize: 14, fontWeight: 900, color: '#6B7280' }}>{(t.full_name || 'L').trim().charAt(0).toUpperCase()}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12.5, fontWeight: 800, color: INK }}>{t.full_name}</div>
-                        <div style={{ fontSize: 11, color: MUTED2 }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 800, color: C.ink }}>{t.full_name}</div>
+                        <div style={{ fontSize: 11, color: C.muted2 }}>
                           @{t.username || '—'}{t.completed_at ? ` · finished ${fmtWhen(t.completed_at)}` : t.status === 'started' ? ' · working' : ' · not started'}
-                          {t.submission?.late && <span style={{ color: AMBER, fontWeight: 800 }}> · late</span>}
+                          {t.submission?.late && <span style={{ color: C.brand, fontWeight: 800 }}> · late</span>}
                         </div>
                       </div>
                       {graded ? (
-                        <Badge color={GREEN} bg="#DCFCE7"><CheckCircle2 size={10} style={{ marginRight: 2 }} />{t.grade}%</Badge>
+                        <Badge color={GREEN} bg="#DCFCE7"><Ico lucide={CheckCircle2} ti="ti-circle-check" size={10} style={{ marginRight: 2 }} />{t.grade}%</Badge>
                       ) : (
-                        <Badge color={t.status === 'complete' ? BLUE : t.status === 'started' ? AMBER : MUTED}
-                          bg={t.status === 'complete' ? '#EFF6FF' : t.status === 'started' ? '#FFF7ED' : LIGHT}>
+                        <Badge color={t.status === 'complete' ? BLUE : t.status === 'started' ? C.brand : C.muted}
+                          bg={t.status === 'complete' ? '#EFF6FF' : t.status === 'started' ? C.brandSoft : C.bg}>
                           {t.status === 'complete' ? 'Submitted' : t.status === 'started' ? 'In progress' : 'Not started'}
                         </Badge>
                       )}
@@ -256,7 +258,7 @@ export default function SubmissionsPage() {
               </div>
 
               {queue.length === 0 && (detail?.targets ?? []).length > 0 && (
-                <div style={{ marginTop: 12, fontSize: 12, color: MUTED2, lineHeight: 1.55 }}>
+                <div style={{ marginTop: 12, fontSize: 12, color: C.muted2, lineHeight: 1.55 }}>
                   No submissions to grade yet — learners appear here as soon as they start working.
                 </div>
               )}
@@ -280,7 +282,7 @@ export default function SubmissionsPage() {
         />
       )}
 
-      {err && <div style={{ color: RED, fontSize: 13.5, fontWeight: 700, fontFamily: FONT }}>{err}</div>}
+      {err && <div style={{ color: RED, fontSize: 13.5, fontWeight: 700, fontFamily: C.font }}>{err}</div>}
     </PageLayout>
   );
 }

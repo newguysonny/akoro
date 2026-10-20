@@ -19,7 +19,9 @@ import { downloadActivityPdf } from '../lib/activityPdf.js';
 import { printPaperHtml } from './paper/PaperFrame.jsx';
 import { apiBlob } from '../services/api.js';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, RED, FONT } from '../constants.js';
+import { GREEN, PURPLE, RED } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 import { ActivityForm, byKey, rowsFromQuestions } from '../pages/ActivitiesPage.jsx';
 import DraftVersions, { versionsOf } from './paper/DraftVersions.jsx';
 import { apiPut } from '../services/api.js';
@@ -63,14 +65,14 @@ function prefillFrom(payload, version = null) {
   };
 }
 
-const Chip = ({ children, color = MUTED, bg = LIGHT }) => (
-  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 9px', borderRadius: 100, fontSize: 10.5, fontWeight: 800, color, background: bg, fontFamily: FONT }}>{children}</span>
+const Chip = ({ children, color = C.muted, bg = C.bg }) => (
+  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 9px', borderRadius: 100, fontSize: 10.5, fontWeight: 800, color, background: bg, fontFamily: C.font }}>{children}</span>
 );
 
 const Row = ({ label, children }) => (
   <div style={{ marginBottom: 12 }}>
-    <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase', color: MUTED2, marginBottom: 4, fontFamily: FONT }}>{label}</div>
-    <div style={{ fontSize: 13, color: INK, lineHeight: 1.55, fontFamily: FONT }}>{children}</div>
+    <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase', color: C.muted2, marginBottom: 4, fontFamily: C.font }}>{label}</div>
+    <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.55, fontFamily: C.font }}>{children}</div>
   </div>
 );
 
@@ -189,18 +191,18 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
 
   if (phase === 'loading') {
     return (
-      <div style={{ height: '100%', background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, fontFamily: FONT }}>
-        <Loader2 size={20} color={AMBER} style={{ animation: 'spin .8s linear infinite' }} />
-        <div style={{ fontSize: 12.5, color: MUTED, fontWeight: 700 }}>Loading the draft…</div>
+      <div style={{ height: '100%', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, fontFamily: C.font }}>
+        <Ico lucide={Loader2} ti="ti-loader-2" size={20} color={C.brand} style={{ animation: 'spin .8s linear infinite' }} />
+        <div style={{ fontSize: 12.5, color: C.muted, fontWeight: 700 }}>Loading the draft…</div>
       </div>
     );
   }
 
   if (phase === 'error' || !draft) {
     return (
-      <div style={{ height: '100%', background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 24, fontFamily: FONT }}>
-        <AlertTriangle size={20} color={RED} />
-        <div style={{ fontSize: 12.5, color: MUTED, fontWeight: 700, textAlign: 'center' }}>{error || 'Draft not found.'}</div>
+      <div style={{ height: '100%', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 24, fontFamily: C.font }}>
+        <Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={20} color={RED} />
+        <div style={{ fontSize: 12.5, color: C.muted, fontWeight: 700, textAlign: 'center' }}>{error || 'Draft not found.'}</div>
         <Btn2 onClick={load}>Try again</Btn2>
         <Btn2 onClick={onClose}>Back to chat</Btn2>
       </div>
@@ -248,13 +250,13 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
     return (
       <Frame onClose={onClose} meta={meta} type={draft.type}>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, textAlign: 'center', padding: 20 }}>
-          <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CheckCircle2 size={26} color={GREEN} /></div>
-          <div style={{ fontSize: 16, fontWeight: 900, color: INK }}>Assigned ✓</div>
-          <div style={{ fontSize: 12.5, color: MUTED, lineHeight: 1.55, maxWidth: 280 }}>
+          <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ico lucide={CheckCircle2} ti="ti-circle-check" size={26} color={GREEN} /></div>
+          <div style={{ fontSize: 16, fontWeight: 900, color: C.ink }}>Assigned ✓</div>
+          <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.55, maxWidth: 280 }}>
             {isBattle ? 'The battle is live from your draft.' : `“${draft.title}” is now on your learners' Activities feed${assignedCount ? ` — ${assignedCount} learner${assignedCount === 1 ? '' : 's'} notified` : ''}.`}
           </div>
-          <a href="/activities" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 6, padding: '9px 16px', borderRadius: 12, background: INK, color: WHITE, fontSize: 12.5, fontWeight: 800, textDecoration: 'none', fontFamily: FONT }}>
-            <ExternalLink size={13} /> Open the workbench
+          <a href="/activities" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 6, padding: '9px 16px', borderRadius: 12, background: C.hero, color: '#fff', fontSize: 12.5, fontWeight: 800, textDecoration: 'none', fontFamily: C.font }}>
+            <Ico lucide={ExternalLink} ti="ti-external-link" size={13} /> Open the workbench
           </a>
           <Btn2 onClick={onClose}>Back to chat</Btn2>
         </div>
@@ -266,9 +268,9 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
     return (
       <Frame onClose={onClose} meta={meta} type={draft.type}>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, textAlign: 'center', padding: 20 }}>
-          <div style={{ width: 52, height: 52, borderRadius: '50%', background: LIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Trash2 size={22} color={MUTED} /></div>
-          <div style={{ fontSize: 15, fontWeight: 900, color: INK }}>Draft discarded</div>
-          <div style={{ fontSize: 12.5, color: MUTED }}>Nothing was sent to anyone.</div>
+          <div style={{ width: 52, height: 52, borderRadius: '50%', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ico lucide={Trash2} ti="ti-trash" size={22} color={C.muted} /></div>
+          <div style={{ fontSize: 15, fontWeight: 900, color: C.ink }}>Draft discarded</div>
+          <div style={{ fontSize: 12.5, color: C.muted }}>Nothing was sent to anyone.</div>
           <Btn2 onClick={onClose}>Back to chat</Btn2>
         </div>
       </Frame>
@@ -279,8 +281,8 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
     <Frame onClose={onClose} meta={meta} type={draft.type}>
       {/* The AI-prepared banner — honest about who made this and what it is */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 11px', borderRadius: 10, background: 'rgba(168,85,247,.08)', border: '1px solid rgba(168,85,247,.3)', marginBottom: 14 }}>
-        <Sparkles size={13} color={PURPLE} />
-        <span style={{ fontSize: 11.5, fontWeight: 800, color: PURPLE, fontFamily: FONT }}>
+        <Ico lucide={Sparkles} ti="ti-sparkles" size={13} color={PURPLE} />
+        <span style={{ fontSize: 11.5, fontWeight: 800, color: PURPLE, fontFamily: C.font }}>
           {phase === 'editing' ? 'Editing before assign — you can change anything.' : 'AI prepared — nothing is sent until you assign.'}
         </span>
       </div>
@@ -288,9 +290,9 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
       {/* What the agent last changed in chat — re-preview at a glance. */}
       {payload.last_change?.note && phase === 'ready' && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 11px', borderRadius: 10, background: 'rgba(232,136,74,.09)', border: '1px solid rgba(232,136,74,.35)', marginBottom: 12 }}>
-          <Pencil size={12} color={AMBER} />
-          <span style={{ fontSize: 11.5, fontWeight: 700, color: AMBER, fontFamily: FONT, flex: 1 }}>{payload.last_change.note}</span>
-          {payload.last_change.at && <span style={{ fontSize: 10, color: MUTED2, fontFamily: FONT, flexShrink: 0 }}>
+          <Ico lucide={Pencil} ti="ti-pencil" size={12} color={C.brand} />
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: C.brand, fontFamily: C.font, flex: 1 }}>{payload.last_change.note}</span>
+          {payload.last_change.at && <span style={{ fontSize: 10, color: C.muted2, fontFamily: C.font, flexShrink: 0 }}>
             {new Date(payload.last_change.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </span>}
         </div>
@@ -313,7 +315,7 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
       ) : isBattle ? (
         <div style={{ flex: 1, overflowY: 'auto', paddingRight: 2 }}>
           <Row label="Audience">{audience.label || '—'}</Row>
-          <div style={{ fontSize: 11.5, color: MUTED, fontFamily: FONT, margin: '4px 0 12px', lineHeight: 1.5 }}>
+          <div style={{ fontSize: 11.5, color: C.muted, fontFamily: C.font, margin: '4px 0 12px', lineHeight: 1.5 }}>
             Finish it with the same battle form as the workbench — pick the questions and stakes, then create. The draft closes when the battle goes live.
           </div>
           <BattleForm onSubmit={battleSubmit} courses={courses || []} submitLabel="Create battle & close draft" embedded />
@@ -321,22 +323,22 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
       ) : isJourney ? (
         <div style={{ flex: 1, overflowY: 'auto', paddingRight: 2 }}>
           <Row label="Audience">{audience.label || '—'}</Row>
-          <Row label="Instructions">{payload.instructions || <span style={{ color: MUTED2 }}>None</span>}</Row>
+          <Row label="Instructions">{payload.instructions || <span style={{ color: C.muted2 }}>None</span>}</Row>
           <Row label={`Roadmap — ${stages.length} stage${stages.length === 1 ? '' : 's'}`}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
               {stages.map((st, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 11px', borderRadius: 10, background: LIGHT, border: `1px solid ${BORDER}` }}>
-                  <span style={{ width: 22, height: 22, borderRadius: '50%', background: PURPLE, color: WHITE, fontSize: 11, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 11px', borderRadius: 10, background: C.bg, border: `1px solid ${C.border}` }}>
+                  <span style={{ width: 22, height: 22, borderRadius: '50%', background: PURPLE, color: '#fff', fontSize: 11, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 800, color: INK }}>{st.title}</div>
-                    <div style={{ fontSize: 10.5, color: MUTED2 }}>{st.subject} · {st.topic}</div>
+                    <div style={{ fontSize: 12.5, fontWeight: 800, color: C.ink }}>{st.title}</div>
+                    <div style={{ fontSize: 10.5, color: C.muted2 }}>{st.subject} · {st.topic}</div>
                   </div>
                   <Chip color={PURPLE} bg="rgba(168,85,247,.1)">{st.kind?.replace('_', ' ')}</Chip>
                 </div>
               ))}
             </div>
           </Row>
-          <div style={{ fontSize: 11, color: MUTED2, fontFamily: FONT, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 11, color: C.muted2, fontFamily: C.font, lineHeight: 1.5 }}>
             Assigning creates each stage as real work (same path as the workbench), then chains them into the journey.
           </div>
         </div>
@@ -344,14 +346,14 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
         <div style={{ flex: 1, overflowY: 'auto', paddingRight: 2 }}>
           {/* The brief at a glance: class, subject, topic, due — then who gets it. */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0 14px' }}>
-            <Row label="Class">{audience.class_name || <span style={{ color: MUTED2 }}>Not set — choose one in Edit details</span>}</Row>
-            <Row label="Subject">{payload.subject || <span style={{ color: MUTED2 }}>—</span>}</Row>
+            <Row label="Class">{audience.class_name || <span style={{ color: C.muted2 }}>Not set — choose one in Edit details</span>}</Row>
+            <Row label="Subject">{payload.subject || <span style={{ color: C.muted2 }}>—</span>}</Row>
             <Row label={isLive ? 'Session focus' : 'Topic'}>{payload.topic}</Row>
             <Row label="Due">
-              {isLive ? (payload.due_hint || <span style={{ color: MUTED2 }}>—</span>) : (
+              {isLive ? (payload.due_hint || <span style={{ color: C.muted2 }}>—</span>) : (
                 <>
                   <input type="datetime-local" value={dueValue} aria-label="Due date" onChange={(e) => setDueLocal(e.target.value)}
-                    style={{ padding: '5px 7px', borderRadius: 8, border: `1px solid ${dueUnset ? RED : BORDER}`, fontSize: 12, fontFamily: FONT, color: INK, maxWidth: '100%' }} />
+                    style={{ padding: '5px 7px', borderRadius: 8, border: `1px solid ${dueUnset ? RED : C.border}`, fontSize: 12, fontFamily: C.font, color: C.ink, maxWidth: '100%' }} />
                   {payload.due_hint && !dueValue && <div style={{ fontSize: 11, color: RED, marginTop: 3 }}>You said “{payload.due_hint}” — pick the exact date and time.</div>}
                 </>
               )}
@@ -362,14 +364,14 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
             {audience.resolved_count ? <Chip color={GREEN} bg="#DCFCE7">{audience.resolved_count} learner{audience.resolved_count === 1 ? '' : 's'}</Chip> : null}
             {(audience.names || []).length > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
-                {audience.names.map((n) => <Chip key={n} color={INK} bg={LIGHT}>@{n}</Chip>)}
+                {audience.names.map((n) => <Chip key={n} color={C.ink} bg={C.bg}>@{n}</Chip>)}
                 {(audience.resolved_count || 0) > audience.names.length && (
-                  <Chip color={MUTED2} bg={LIGHT}>+{audience.resolved_count - audience.names.length} more</Chip>
+                  <Chip color={C.muted2} bg={C.bg}>+{audience.resolved_count - audience.names.length} more</Chip>
                 )}
               </div>
             )}
           </Row>
-          {!versions.length && <Row label="Instructions to learners">{payload.instructions || <span style={{ color: MUTED2 }}>None</span>}</Row>}
+          {!versions.length && <Row label="Instructions to learners">{payload.instructions || <span style={{ color: C.muted2 }}>None</span>}</Row>}
           {versions.length > 0 && (
             <div style={{ marginBottom: 14 }}>
               <DraftVersions draft={draft} selected={shown?.n} onSelect={setVSel}
@@ -384,11 +386,11 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
             <Row label={meta.planLabel || 'Plan'}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {(payload.subtopics || []).map((st, i) => (
-                  <div key={i} style={{ padding: '8px 11px', borderRadius: 10, background: LIGHT, border: `1px solid ${BORDER}` }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 800, color: INK }}>{i + 1}. {st}</div>
+                  <div key={i} style={{ padding: '8px 11px', borderRadius: 10, background: C.bg, border: `1px solid ${C.border}` }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 800, color: C.ink }}>{i + 1}. {st}</div>
                     {(payload.objectives?.[st] || []).length > 0 && (
                       <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
-                        {payload.objectives[st].map((o, j) => <li key={j} style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.5 }}>{o}</li>)}
+                        {payload.objectives[st].map((o, j) => <li key={j} style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5 }}>{o}</li>)}
                       </ul>
                     )}
                   </div>
@@ -401,52 +403,52 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
       )}
 
       {error && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 11px', borderRadius: 10, background: '#FEF2F2', border: '1px solid #FECACA', fontSize: 12, fontWeight: 700, color: RED, fontFamily: FONT, marginTop: 10 }}>
-          <AlertTriangle size={13} /> {error}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 11px', borderRadius: 10, background: '#FEF2F2', border: '1px solid #FECACA', fontSize: 12, fontWeight: 700, color: RED, fontFamily: C.font, marginTop: 10 }}>
+          <Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={13} /> {error}
         </div>
       )}
 
       {/* Footer — the human decision. Assign is the ONLY path to learners. */}
       {phase !== 'editing' && !isBattle && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 12, borderTop: `1px solid ${BORDER}`, marginTop: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 12, borderTop: `1px solid ${C.border}`, marginTop: 12 }}>
           <button onClick={downloadPdf} disabled={!isJourney && !questionsExist && !(payload.subtopics || []).length}
             title="Download this activity as a PDF"
-            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '9px 13px', borderRadius: 11, border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-            <Download size={13} /> PDF
+            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '9px 13px', borderRadius: 11, border: `1px solid ${C.border}`, background: C.surface, color: C.ink, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
+            <Ico lucide={Download} ti="ti-download" size={13} /> PDF
           </button>
           <button onClick={discard}
-            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '9px 13px', borderRadius: 11, border: `1px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-            <Trash2 size={13} /> Discard
+            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '9px 13px', borderRadius: 11, border: `1px solid ${C.border}`, background: C.surface, color: C.muted, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
+            <Ico lucide={Trash2} ti="ti-trash" size={13} /> Discard
           </button>
           {(phase === 'ready') && !isJourney && !vEditing && (!shown || shown.status === 'ready') && (
             <button onClick={() => setPhase('editing')}
               title={shown ? `Title, due date, who it's for — with Version ${shown.n}'s questions` : undefined}
-              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '9px 13px', borderRadius: 11, border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-              <Pencil size={13} /> {shown ? 'Edit details' : 'Edit'}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '9px 13px', borderRadius: 11, border: `1px solid ${C.border}`, background: C.surface, color: C.ink, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
+              <Ico lucide={Pencil} ti="ti-pencil" size={13} /> {shown ? 'Edit details' : 'Edit'}
             </button>
           )}
           <div style={{ flex: 1 }} />
           {assignBlock ? (
-            <span style={{ fontSize: 11.5, color: RED, fontWeight: 700, fontFamily: FONT, textAlign: 'right' }}>{assignBlock}</span>
+            <span style={{ fontSize: 11.5, color: RED, fontWeight: 700, fontFamily: C.font, textAlign: 'right' }}>{assignBlock}</span>
           ) : shown && (
-            <span style={{ fontSize: 11.5, color: MUTED, fontWeight: 700, fontFamily: FONT, textAlign: 'right' }}>
-              Assigns <b style={{ color: INK }}>Version {shown.n}</b>{audience.label ? <> to {audience.label}</> : null}
+            <span style={{ fontSize: 11.5, color: C.muted, fontWeight: 700, fontFamily: C.font, textAlign: 'right' }}>
+              Assigns <b style={{ color: C.ink }}>Version {shown.n}</b>{audience.label ? <> to {audience.label}</> : null}
             </span>
           )}
           <button onClick={() => assign(assignOverrides())} disabled={phase === 'assigning' || vEditing || (shown && shown.status !== 'ready') || !!assignBlock}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 11, border: 'none', background: phase === 'assigning' || assignBlock ? BORDER : INK, color: WHITE, fontSize: 12.5, fontWeight: 900, cursor: phase === 'assigning' ? 'wait' : assignBlock ? 'not-allowed' : 'pointer', fontFamily: FONT }}>
-            {phase === 'assigning' ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Send size={13} />}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 11, border: 'none', background: phase === 'assigning' || assignBlock ? C.border : C.hero, color: '#fff', fontSize: 12.5, fontWeight: 900, cursor: phase === 'assigning' ? 'wait' : assignBlock ? 'not-allowed' : 'pointer', fontFamily: C.font }}>
+            {phase === 'assigning' ? <Ico lucide={Loader2} ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico lucide={Send} ti="ti-send" size={13} />}
             {phase === 'assigning' ? 'Assigning…' : 'Assign'}
           </button>
         </div>
       )}
       {phase !== 'editing' && isBattle && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTop: `1px solid ${BORDER}`, marginTop: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTop: `1px solid ${C.border}`, marginTop: 12 }}>
           <button onClick={discard}
-            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '9px 13px', borderRadius: 11, border: `1px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-            <Trash2 size={13} /> Discard draft
+            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '9px 13px', borderRadius: 11, border: `1px solid ${C.border}`, background: C.surface, color: C.muted, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
+            <Ico lucide={Trash2} ti="ti-trash" size={13} /> Discard draft
           </button>
-          <span style={{ fontSize: 11, color: MUTED2, fontFamily: FONT }}>Creating the battle closes this draft.</span>
+          <span style={{ fontSize: 11, color: C.muted2, fontFamily: C.font }}>Creating the battle closes this draft.</span>
         </div>
       )}
     </Frame>
@@ -458,14 +460,14 @@ function Frame({ children, onClose, meta, type }) {
   const Icon = meta.icon || ClipboardList;
   const color = meta.color || PURPLE;
   return (
-    <div style={{ height: '100%', background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, display: 'flex', flexDirection: 'column', padding: '18px 18px 16px', overflow: 'hidden' }}>
+    <div style={{ height: '100%', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, display: 'flex', flexDirection: 'column', padding: '18px 18px 16px', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexShrink: 0 }}>
-        <div style={{ width: 38, height: 38, borderRadius: 11, background: `${color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon size={18} color={color} /></div>
+        <div style={{ width: 38, height: 38, borderRadius: 11, background: tint(9, color), display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ico lucide={Icon} ti={meta.ti || 'ti-clipboard-list'} size={18} color={color} /></div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 900, color: INK, fontFamily: FONT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{meta.name || 'Activity'} · preview</div>
-          <div style={{ fontSize: 10.5, color: MUTED2, fontFamily: FONT }}>Human-in-the-loop — you decide</div>
+          <div style={{ fontSize: 13, fontWeight: 900, color: C.ink, fontFamily: C.font, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{meta.name || 'Activity'} · preview</div>
+          <div style={{ fontSize: 10.5, color: C.muted2, fontFamily: C.font }}>Human-in-the-loop — you decide</div>
         </div>
-        <button onClick={onClose} title="Back to chat" style={{ width: 28, height: 28, borderRadius: '50%', border: `1px solid ${BORDER}`, background: LIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><X size={14} color={MUTED} /></button>
+        <button onClick={onClose} title="Back to chat" style={{ width: 28, height: 28, borderRadius: '50%', border: `1px solid ${C.border}`, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><Ico lucide={X} ti="ti-x" size={14} color={C.muted} /></button>
       </div>
       {children}
     </div>
@@ -474,6 +476,6 @@ function Frame({ children, onClose, meta, type }) {
 
 function Btn2({ children, onClick }) {
   return (
-    <button onClick={onClick} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>{children}</button>
+    <button onClick={onClick} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.ink, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>{children}</button>
   );
 }

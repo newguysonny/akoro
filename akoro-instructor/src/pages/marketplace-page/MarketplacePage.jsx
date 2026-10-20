@@ -8,7 +8,9 @@ import { PageLayout } from '../../components/Layout.jsx';
 import { apiGet, apiPost, API } from '../../services/api.js';
 import { useNavigate } from 'react-router-dom';
 import { uploadAndOcr } from '../../services/uploadApi.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, GREEN, RED, FONT } from '../../constants.js';
+import { GREEN, RED } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
+import { Ico } from '../../theme/Ico.jsx';
 
 import { BRAND, FONTF, naira, TEMPLATE_TARGETS, CreateTemplateModal, ViewTemplateModal, ItemCard } from './parts.jsx';
 
@@ -95,7 +97,7 @@ export default function MarketplacePage() {
     <PageLayout title="Tools & Assets" subtitle="Your unlocked tools, assets & templates">
       <div style={{ maxWidth: tab === 'tools' ? 1040 : 600, margin: '0 auto' }}>
         {/* Tabs */}
-        <div style={{ display: 'flex', background: '#fff', borderRadius: 12, padding: 4, marginBottom: 18, border: `1px solid ${BORDER}`, gap: 4 }}>
+        <div style={{ display: 'flex', background: C.surface, borderRadius: 12, padding: 4, marginBottom: 18, border: `1px solid ${C.border}`, gap: 4 }}>
           {(() => {
             const ot = tools.filter((i) => i.owned).length, oa = assets.filter((i) => i.owned).length;
             return [['tools', `Tools${ot ? ` (${ot})` : ''}`], ['assets', `Assets${oa ? ` (${oa})` : ''}`]];
@@ -103,7 +105,7 @@ export default function MarketplacePage() {
             <button key={t} onClick={() => setTab(t)} style={{
               flex: 1, padding: '9px 0', borderRadius: 9, border: 'none',
               background: tab === t ? BRAND : 'transparent',
-              color: tab === t ? '#fff' : MUTED2,
+              color: tab === t ? '#fff' : C.muted2,
               fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONTF, transition: 'all .2s',
             }}>{label}</button>
           ))}
@@ -121,27 +123,27 @@ export default function MarketplacePage() {
           <div style={{ marginBottom: 22 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, padding: '0 2px' }}>
               <p style={{ fontSize: 11, fontWeight: 900, color: BRAND, letterSpacing: 1.5, textTransform: 'uppercase', margin: 0 }}>My Templates</p>
-              <button onClick={() => setShowTpl(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 20, border: `1.5px solid ${BRAND}`, background: 'rgba(232,136,74,.08)', color: BRAND, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONTF }}>
-                <Plus size={13} /> Create template
+              <button onClick={() => setShowTpl(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 20, border: `1.5px solid ${BRAND}`, background: tint(8), color: BRAND, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONTF }}>
+                <Ico lucide={Plus} ti="ti-plus" size={13} /> Create template
               </button>
             </div>
             {templates.length === 0 ? (
-              <div style={{ padding: '18px', borderRadius: 14, border: `1.5px dashed ${BORDER}`, background: LIGHT, textAlign: 'center', fontSize: 12.5, color: MUTED }}>
+              <div style={{ padding: '18px', borderRadius: 14, border: `1.5px dashed ${C.border}`, background: C.bg, textAlign: 'center', fontSize: 12.5, color: C.muted }}>
                 Upload a photo of your notes or worksheet to make a reusable template your agent copies.
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {templates.map((t) => (
-                  <div key={t.id} onClick={() => setViewTpl(t)} style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 12, padding: '11px 13px', cursor: 'pointer' }}>
-                    <div style={{ width: 36, height: 36, flexShrink: 0, borderRadius: 9, background: `${BRAND}12`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FileText size={16} color={BRAND} /></div>
+                  <div key={t.id} onClick={() => setViewTpl(t)} style={{ display: 'flex', alignItems: 'center', gap: 11, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '11px 13px', cursor: 'pointer' }}>
+                    <div style={{ width: 36, height: 36, flexShrink: 0, borderRadius: 9, background: tint(7, BRAND), display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ico lucide={FileText} ti="ti-file-text" size={16} color={BRAND} /></div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                        <span style={{ fontSize: 13, fontWeight: 800, color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</span>
+                        <span style={{ fontSize: 13, fontWeight: 800, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</span>
                         {t.is_sample && <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 7px', borderRadius: 20, background: `${GREEN}15`, color: GREEN, flexShrink: 0 }}>SAMPLE</span>}
                       </div>
-                      <div style={{ fontSize: 11, color: MUTED2 }}>{(TEMPLATE_TARGETS.find((x) => x.value === t.tool_target) || {}).label || t.tool_target}</div>
+                      <div style={{ fontSize: 11, color: C.muted2 }}>{(TEMPLATE_TARGETS.find((x) => x.value === t.tool_target) || {}).label || t.tool_target}</div>
                     </div>
-                    {!t.is_sample && <button onClick={(e) => { e.stopPropagation(); deleteTemplate(t.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED2, padding: 4 }}><Trash2 size={15} /></button>}
+                    {!t.is_sample && <button onClick={(e) => { e.stopPropagation(); deleteTemplate(t.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted2, padding: 4 }}><Ico lucide={Trash2} ti="ti-trash" size={15} /></button>}
                   </div>
                 ))}
               </div>
@@ -154,18 +156,18 @@ export default function MarketplacePage() {
           <p style={{ fontSize: 11, fontWeight: 900, color: BRAND, letterSpacing: 1.5, textTransform: 'uppercase', margin: 0 }}>
             {tab === 'tools' ? 'Other unlocked tools' : 'Exam Resources'}
           </p>
-          {!loading && <span style={{ fontSize: 12, fontWeight: 700, color: MUTED }}>{ownedCount} unlocked</span>}
+          {!loading && <span style={{ fontSize: 12, fontWeight: 700, color: C.muted }}>{ownedCount} unlocked</span>}
         </div>
 
         {/* List */}
         {loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {[0, 1, 2, 3].map((i) => (
-              <div key={i} style={{ height: 92, borderRadius: 16, background: '#F3F4F6', animation: 'pulse-dot 1.5s ease-in-out infinite' }} />
+              <div key={i} style={{ height: 92, borderRadius: 16, background: C.tagBg, animation: 'pulse-dot 1.5s ease-in-out infinite' }} />
             ))}
           </div>
         ) : items.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px 24px', color: MUTED2, fontSize: 13.5, lineHeight: 1.6 }}>
+          <div style={{ textAlign: 'center', padding: '40px 24px', color: C.muted2, fontSize: 13.5, lineHeight: 1.6 }}>
             You haven’t unlocked any {tab} yet.<br />
             <a href="/apps" style={{ color: BRAND, fontWeight: 800, textDecoration: 'none' }}>Browse the App Center →</a>
           </div>
@@ -188,7 +190,7 @@ export default function MarketplacePage() {
       {viewTpl && <ViewTemplateModal tpl={viewTpl} onClose={() => setViewTpl(null)} />}
 
       {toast && (
-        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>{toast}</div>
+        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.hero, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>{toast}</div>
       )}
     </PageLayout>
   );

@@ -8,7 +8,9 @@ import { CalendarRange, School, Rows3, BookOpen, Clock3, Grid3x3, Loader2, Save,
 import { PageLayout } from '../../components/Layout.jsx';
 import ResourcePage, { inputStyle } from '../../components/mgmt/ResourcePage.jsx';
 import { apiGet, apiPost, apiPut, apiDelete } from '../../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../constants.js';
+import { GREEN, RED, BLUE, PURPLE } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
+import { Ico } from '../../theme/Ico.jsx';
 import { confirmDialog } from '../../components/ConfirmHost.jsx';
 
 const BASE = '/api/school/mgmt';
@@ -127,8 +129,8 @@ const SPECIAL_LABEL = {
   activity: 'GAMES · CLUBS & SOCIETIES · CAREER GUIDANCE',
 };
 const specialStyle = (type) => type === 'break' || type === 'lunch'
-  ? { bg: `${AMBER}14`, fg: '#B45309' }
-  : { bg: `${INK}0A`, fg: INK };
+  ? { bg: tint(8), fg: '#B45309' }
+  : { bg: tint(4, C.ink), fg: C.ink };
 const hhmm = (t) => (t ? String(t).slice(0, 5) : '');
 
 export function ClassTimetablePage() {
@@ -237,7 +239,7 @@ export function ClassTimetablePage() {
 
   const approved = !!metaForm.approved;
   const badge = (
-    <span style={{ display: 'inline-block', padding: '3px 12px', borderRadius: 6, background: GREEN, color: WHITE, fontSize: 11, fontWeight: 900, letterSpacing: .5, transform: 'rotate(-4deg)' }}>APPROVED</span>
+    <span style={{ display: 'inline-block', padding: '3px 12px', borderRadius: 6, background: GREEN, color: '#fff', fontSize: 11, fontWeight: 900, letterSpacing: .5, transform: 'rotate(-4deg)' }}>APPROVED</span>
   );
 
   return (
@@ -246,6 +248,8 @@ export function ClassTimetablePage() {
         body * { visibility: hidden !important; }
         #tt-print, #tt-print * { visibility: visible !important; }
         #tt-print { position: absolute; left: 0; top: 0; width: 100%; border: none !important; }
+        /* Paper is always light: the sheet's theme colours print as the light set, whatever the look. */
+        #tt-print { --ak-surface: #FFFFFF; --ak-bg: #FAF8F5; --ak-text: #1A1A2E; --ak-text-muted: #9490A0; }
         .tt-controls, .tt-noprint { display: none !important; }
       }`}</style>
       <div className="tt-controls" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
@@ -255,21 +259,21 @@ export function ClassTimetablePage() {
         <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} style={{ ...inputStyle, width: 150, cursor: 'pointer' }}>
           <option value="">All sections</option>{sections.filter((s) => s.class_id === classId).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
-        {classId && <button onClick={loadTemplate} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${AMBER}66`, background: `${AMBER}0C`, color: '#B45309', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}><Sparkles size={14} /> Load starter template</button>}
-        {classId && <button onClick={() => window.print()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}><Printer size={14} /> Print</button>}
+        {classId && <button onClick={loadTemplate} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${tint(40)}`, background: tint(5), color: '#B45309', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}><Ico lucide={Sparkles} ti="ti-sparkles" size={14} /> Load starter template</button>}
+        {classId && <button onClick={() => window.print()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.surface, color: C.ink, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}><Ico lucide={Printer} ti="ti-printer" size={14} /> Print</button>}
       </div>
 
       {!classId ? (
-        <div style={{ padding: 40, textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT, background: WHITE, border: `1.5px dashed ${BORDER}`, borderRadius: 14 }}>
+        <div style={{ padding: 40, textAlign: 'center', color: C.muted2, fontSize: 13, fontFamily: C.font, background: C.surface, border: `1.5px dashed ${C.border}`, borderRadius: 14 }}>
           Pick a class to view and edit its timetable.
         </div>
       ) : (
-        <div id="tt-print" style={{ background: WHITE, border: `2px solid ${INK}`, borderRadius: 6, padding: 14, fontFamily: FONT }}>
+        <div id="tt-print" style={{ background: C.surface, border: `2px solid ${C.ink}`, borderRadius: 6, padding: 14, fontFamily: C.font }}>
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
             {approved ? badge : <span />}
             <div style={{ textAlign: 'center', flex: 1 }}>
-              <div style={{ fontSize: 16, fontWeight: 900, color: INK, letterSpacing: .3 }}>{className.toUpperCase()} — {metaForm.title || 'TIMETABLE'}</div>
+              <div style={{ fontSize: 16, fontWeight: 900, color: C.ink, letterSpacing: .3 }}>{className.toUpperCase()} — {metaForm.title || 'TIMETABLE'}</div>
             </div>
             {approved ? badge : <span />}
           </div>
@@ -297,7 +301,7 @@ export function ClassTimetablePage() {
                         if (di !== 0) return null;   // merged across all day rows
                         const { bg, fg } = specialStyle(p.type);
                         return (
-                          <td key={p.id} rowSpan={DAYS.length} style={{ border: `1px solid ${INK}`, background: bg, padding: 2, textAlign: 'center', verticalAlign: 'middle' }}>
+                          <td key={p.id} rowSpan={DAYS.length} style={{ border: `1px solid ${C.ink}`, background: bg, padding: 2, textAlign: 'center', verticalAlign: 'middle' }}>
                             <div style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', margin: '0 auto', fontSize: 11, fontWeight: 900, color: fg, letterSpacing: .5, whiteSpace: 'nowrap' }}>
                               {SPECIAL_LABEL[p.type] || p.name}
                             </div>
@@ -308,13 +312,13 @@ export function ClassTimetablePage() {
                       const code = codeOf(slot?.subject_id);
                       const alt = codeOf(slot?.alt_subject_id);
                       return (
-                        <td key={p.id} onClick={() => openCell(d.n, p)} style={{ border: `1px solid ${INK}`, padding: '6px 3px', textAlign: 'center', cursor: 'pointer', height: 44, background: code ? WHITE : `${LIGHT}` }}>
+                        <td key={p.id} onClick={() => openCell(d.n, p)} style={{ border: `1px solid ${C.ink}`, padding: '6px 3px', textAlign: 'center', cursor: 'pointer', height: 44, background: code ? C.surface : `${C.bg}` }}>
                           {code ? (
-                            <div style={{ fontSize: 12, fontWeight: 800, color: INK, lineHeight: 1.15 }}>
+                            <div style={{ fontSize: 12, fontWeight: 800, color: C.ink, lineHeight: 1.15 }}>
                               {code}
-                              {alt && <><div style={{ fontSize: 9, fontWeight: 600, color: MUTED2, fontStyle: 'italic' }}>or</div><div>{alt}</div></>}
+                              {alt && <><div style={{ fontSize: 9, fontWeight: 600, color: C.muted2, fontStyle: 'italic' }}>or</div><div>{alt}</div></>}
                             </div>
-                          ) : <span style={{ color: MUTED2, fontSize: 13 }}>+</span>}
+                          ) : <span style={{ color: C.muted2, fontSize: 13 }}>+</span>}
                         </td>
                       );
                     })}
@@ -326,25 +330,25 @@ export function ClassTimetablePage() {
 
           {/* Key + footer */}
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 12 }}>
-            <div style={{ flex: '1 1 240px', border: `1px solid ${INK}`, borderRadius: 6, padding: '10px 12px', background: `${AMBER}0A` }}>
-              <div style={{ fontSize: 11, fontWeight: 900, color: INK, marginBottom: 6, letterSpacing: .5 }}>KEY</div>
+            <div style={{ flex: '1 1 240px', border: `1px solid ${C.ink}`, borderRadius: 6, padding: '10px 12px', background: tint(4) }}>
+              <div style={{ fontSize: 11, fontWeight: 900, color: C.ink, marginBottom: 6, letterSpacing: .5 }}>KEY</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px 12px' }}>
                 {legend.length ? legend.map((s) => (
-                  <div key={s.id} style={{ fontSize: 10.5, color: INK }}><b>{s.code || s.name}</b>{s.code ? ` – ${s.name}` : ''}</div>
-                )) : <span style={{ fontSize: 11, color: MUTED2 }}>No subjects placed yet.</span>}
+                  <div key={s.id} style={{ fontSize: 10.5, color: C.ink }}><b>{s.code || s.name}</b>{s.code ? ` – ${s.name}` : ''}</div>
+                )) : <span style={{ fontSize: 11, color: C.muted2 }}>No subjects placed yet.</span>}
               </div>
             </div>
-            <div className="tt-footer" style={{ flex: '1 1 300px', border: `1px solid ${INK}`, borderRadius: 6, padding: '10px 12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, alignItems: 'center' }}>
+            <div className="tt-footer" style={{ flex: '1 1 300px', border: `1px solid ${C.ink}`, borderRadius: 6, padding: '10px 12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, alignItems: 'center' }}>
               <FooterField label="Time table Prepared by" value={metaForm.prepared_by} onChange={(v) => setMetaForm((f) => ({ ...f, prepared_by: v }))} />
               <FooterField label="Time table Approved by" value={metaForm.approved_by} onChange={(v) => setMetaForm((f) => ({ ...f, approved_by: v }))} />
               <FooterField label="Head of Curriculum" value={metaForm.head_of_curriculum} onChange={(v) => setMetaForm((f) => ({ ...f, head_of_curriculum: v }))} />
               <FooterField label="Date" type="date" value={metaForm.approved_on || ''} onChange={(v) => setMetaForm((f) => ({ ...f, approved_on: v }))} />
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 700, color: INK, cursor: 'pointer' }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 700, color: C.ink, cursor: 'pointer' }}>
                 <input type="checkbox" checked={approved} onChange={(e) => setMetaForm((f) => ({ ...f, approved: e.target.checked }))} style={{ width: 15, height: 15, accentColor: GREEN }} />
-                <CheckCircle2 size={14} color={approved ? GREEN : MUTED2} /> Approved
+                <Ico lucide={CheckCircle2} ti="ti-circle-check" size={14} color={approved ? GREEN : C.muted2} /> Approved
               </label>
-              <button className="tt-noprint" onClick={saveMeta} disabled={busy} style={{ justifySelf: 'end', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 15px', borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-                {busy ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={13} />} Save
+              <button className="tt-noprint" onClick={saveMeta} disabled={busy} style={{ justifySelf: 'end', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 15px', borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
+                {busy ? <Ico lucide={Loader2} ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico lucide={Save} ti="ti-device-floppy" size={13} />} Save
               </button>
             </div>
           </div>
@@ -354,42 +358,42 @@ export function ClassTimetablePage() {
       {/* Cell editor */}
       {cell && (
         <div onClick={() => setCell(null)} style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 380, background: WHITE, borderRadius: 16, padding: '20px 20px 22px', fontFamily: FONT }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 380, background: C.surface, borderRadius: 16, padding: '20px 20px 22px', fontFamily: C.font }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-              <p style={{ fontSize: 14.5, fontWeight: 800, color: INK, margin: 0 }}>{DAYS.find((d) => d.n === cell.day)?.label} · {hhmm(cell.period.starts_at)}–{hhmm(cell.period.ends_at)}</p>
-              <button onClick={() => setCell(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED2 }}><X size={17} /></button>
+              <p style={{ fontSize: 14.5, fontWeight: 800, color: C.ink, margin: 0 }}>{DAYS.find((d) => d.n === cell.day)?.label} · {hhmm(cell.period.starts_at)}–{hhmm(cell.period.ends_at)}</p>
+              <button onClick={() => setCell(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted2 }}><Ico lucide={X} ti="ti-x" size={17} /></button>
             </div>
-            <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 5 }}>Subject</label>
+            <label style={{ fontSize: 12, fontWeight: 700, color: C.ink, display: 'block', marginBottom: 5 }}>Subject</label>
             <select value={cellSubject} onChange={(e) => setCellSubject(e.target.value)} style={{ ...inputStyle, cursor: 'pointer', marginBottom: 12 }}>
               <option value="">— none —</option>{subjects.map((s) => <option key={s.id} value={s.id}>{s.code ? `${s.code} — ${s.name}` : s.name}</option>)}
             </select>
-            <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 5 }}>Optional alternative (shown as “or”)</label>
+            <label style={{ fontSize: 12, fontWeight: 700, color: C.ink, display: 'block', marginBottom: 5 }}>Optional alternative (shown as “or”)</label>
             <select value={cellAlt} onChange={(e) => setCellAlt(e.target.value)} style={{ ...inputStyle, cursor: 'pointer', marginBottom: 16 }}>
               <option value="">— none —</option>{subjects.filter((s) => s.id !== cellSubject).map((s) => <option key={s.id} value={s.id}>{s.code ? `${s.code} — ${s.name}` : s.name}</option>)}
             </select>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              {cell.slot && <button onClick={clearCell} disabled={busy} style={{ padding: '9px 15px', borderRadius: 9, border: `1.5px solid ${RED}44`, background: `${RED}0C`, color: RED, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Clear</button>}
-              <button onClick={saveCell} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-                {busy ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={13} />} Save
+              {cell.slot && <button onClick={clearCell} disabled={busy} style={{ padding: '9px 15px', borderRadius: 9, border: `1.5px solid ${RED}44`, background: `${RED}0C`, color: RED, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>Clear</button>}
+              <button onClick={saveCell} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
+                {busy ? <Ico lucide={Loader2} ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico lucide={Save} ti="ti-device-floppy" size={13} />} Save
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
+      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.hero, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
     </PageLayout>
   );
 }
 
-const ttTh = { border: `1px solid ${INK}`, padding: '5px 3px', fontSize: 10, fontWeight: 800, color: INK, textAlign: 'center', background: LIGHT, lineHeight: 1.2 };
-const ttDay = { border: `1px solid ${INK}`, padding: '6px 8px', fontSize: 11.5, fontWeight: 900, color: INK, textAlign: 'center', background: LIGHT, whiteSpace: 'nowrap' };
+const ttTh = { border: `1px solid ${C.ink}`, padding: '5px 3px', fontSize: 10, fontWeight: 800, color: C.ink, textAlign: 'center', background: C.bg, lineHeight: 1.2 };
+const ttDay = { border: `1px solid ${C.ink}`, padding: '6px 8px', fontSize: 11.5, fontWeight: 900, color: C.ink, textAlign: 'center', background: C.bg, whiteSpace: 'nowrap' };
 
 function FooterField({ label, value, onChange, type = 'text' }) {
   return (
     <div>
-      <div style={{ fontSize: 9.5, fontWeight: 700, color: MUTED2, marginBottom: 2 }}>{label}</div>
-      <input type={type} value={value || ''} onChange={(e) => onChange(e.target.value)} style={{ width: '100%', border: 'none', borderBottom: `1px solid ${BORDER}`, fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, outline: 'none', padding: '2px 0', background: 'transparent' }} />
+      <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted2, marginBottom: 2 }}>{label}</div>
+      <input type={type} value={value || ''} onChange={(e) => onChange(e.target.value)} style={{ width: '100%', border: 'none', borderBottom: `1px solid ${C.border}`, fontSize: 12, fontWeight: 700, color: C.ink, fontFamily: C.font, outline: 'none', padding: '2px 0', background: 'transparent' }} />
     </div>
   );
 }
@@ -496,18 +500,18 @@ export function WeeklyForecastPage() {
           <option value="">All sections</option>{ctx.sections.filter((s) => s.class_id === classId).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
         <input type="date" value={weekStart} onChange={(e) => setWeekStart(mondayOf(e.target.value))} style={{ ...inputStyle, width: 160 }} title="Any day — snaps to that week's Monday" />
-        {classId && <button onClick={save} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>{busy ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={13} />} Save</button>}
-        {classId && <button onClick={() => window.print()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}><Printer size={14} /> Print</button>}
+        {classId && <button onClick={save} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>{busy ? <Ico lucide={Loader2} ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico lucide={Save} ti="ti-device-floppy" size={13} />} Save</button>}
+        {classId && <button onClick={() => window.print()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.surface, color: C.ink, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}><Ico lucide={Printer} ti="ti-printer" size={14} /> Print</button>}
       </div>
 
       {!classId ? (
-        <div style={{ padding: 40, textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT, background: WHITE, border: `1.5px dashed ${BORDER}`, borderRadius: 14 }}>Pick a class and week to plan.</div>
+        <div style={{ padding: 40, textAlign: 'center', color: C.muted2, fontSize: 13, fontFamily: C.font, background: C.surface, border: `1.5px dashed ${C.border}`, borderRadius: 14 }}>Pick a class and week to plan.</div>
       ) : (
-        <div id="wf-print" style={{ background: WHITE, border: `2px solid ${INK}`, borderRadius: 8, padding: 14, fontFamily: FONT }}>
+        <div id="wf-print" style={{ background: C.surface, border: `2px solid ${C.ink}`, borderRadius: 8, padding: 14, fontFamily: C.font }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
-            <div style={{ fontSize: 17, fontWeight: 900, color: INK }}>WEEKLY FORECAST — {className.toUpperCase()}</div>
+            <div style={{ fontSize: 17, fontWeight: 900, color: C.ink }}>WEEKLY FORECAST — {className.toUpperCase()}</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ padding: '6px 12px', borderRadius: 8, background: LIGHT, fontSize: 12.5, fontWeight: 700, color: INK }}>Week: {prettyDate(weekStart)} – {prettyDate(addDays(weekStart, 4))}</span>
+              <span style={{ padding: '6px 12px', borderRadius: 8, background: C.bg, fontSize: 12.5, fontWeight: 700, color: C.ink }}>Week: {prettyDate(weekStart)} – {prettyDate(addDays(weekStart, 4))}</span>
               <input value={theme} onChange={(e) => setTheme(e.target.value)} placeholder="Theme…" style={{ ...inputStyle, width: 200, padding: '6px 10px' }} />
             </div>
           </div>
@@ -527,14 +531,14 @@ export function WeeklyForecastPage() {
                       if (p.type && p.type !== 'teaching') {
                         if (di !== 0) return null;
                         const { bg, fg } = specialStyle(p.type);
-                        return <td key={p.id} rowSpan={DAYS.length} style={{ border: `1px solid ${INK}`, background: bg, padding: 2, textAlign: 'center', verticalAlign: 'middle' }}><div style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', margin: '0 auto', fontSize: 11, fontWeight: 900, color: fg, whiteSpace: 'nowrap' }}>{SPECIAL_LABEL[p.type] || p.name}</div></td>;
+                        return <td key={p.id} rowSpan={DAYS.length} style={{ border: `1px solid ${C.ink}`, background: bg, padding: 2, textAlign: 'center', verticalAlign: 'middle' }}><div style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', margin: '0 auto', fontSize: 11, fontWeight: 900, color: fg, whiteSpace: 'nowrap' }}>{SPECIAL_LABEL[p.type] || p.name}</div></td>;
                       }
                       const subj = ctx.subjectLabel(d.n, p.id);
                       return (
-                        <td key={p.id} style={{ border: `1px solid ${INK}`, padding: 4, verticalAlign: 'top' }}>
-                          <div style={{ fontSize: 10, fontWeight: 800, color: subj ? BLUE : MUTED2, marginBottom: 2 }}>{subj || '—'}</div>
+                        <td key={p.id} style={{ border: `1px solid ${C.ink}`, padding: 4, verticalAlign: 'top' }}>
+                          <div style={{ fontSize: 10, fontWeight: 800, color: subj ? BLUE : C.muted2, marginBottom: 2 }}>{subj || '—'}</div>
                           <textarea value={cellMap[`${d.n}_${p.id}`] || ''} onChange={(e) => setCell(d.n, p.id, e.target.value)} placeholder="…" rows={2}
-                            style={{ width: '100%', border: 'none', outline: 'none', resize: 'none', fontSize: 11, color: INK, fontFamily: FONT, background: 'transparent', lineHeight: 1.3 }} />
+                            style={{ width: '100%', border: 'none', outline: 'none', resize: 'none', fontSize: 11, color: C.ink, fontFamily: C.font, background: 'transparent', lineHeight: 1.3 }} />
                         </td>
                       );
                     })}
@@ -544,12 +548,12 @@ export function WeeklyForecastPage() {
             </table>
           </div>
           <div className="wf-noprint" style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: MUTED2 }}>Prepared by</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: C.muted2 }}>Prepared by</span>
             <input value={preparedBy} onChange={(e) => setPreparedBy(e.target.value)} style={{ ...inputStyle, width: 220, padding: '6px 10px' }} />
           </div>
         </div>
       )}
-      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
+      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.hero, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
     </PageLayout>
   );
 }
@@ -599,17 +603,17 @@ export function DailySchedulePage() {
           <option value="">All sections</option>{ctx.sections.filter((s) => s.class_id === classId).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ ...inputStyle, width: 160 }} />
-        {classId && <button onClick={save} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>{busy ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={13} />} Save</button>}
-        {classId && <button onClick={() => window.print()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}><Printer size={14} /> Print</button>}
+        {classId && <button onClick={save} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>{busy ? <Ico lucide={Loader2} ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico lucide={Save} ti="ti-device-floppy" size={13} />} Save</button>}
+        {classId && <button onClick={() => window.print()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.surface, color: C.ink, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}><Ico lucide={Printer} ti="ti-printer" size={14} /> Print</button>}
       </div>
 
       {!classId ? (
-        <div style={{ padding: 40, textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT, background: WHITE, border: `1.5px dashed ${BORDER}`, borderRadius: 14 }}>Pick a class and date.</div>
+        <div style={{ padding: 40, textAlign: 'center', color: C.muted2, fontSize: 13, fontFamily: C.font, background: C.surface, border: `1.5px dashed ${C.border}`, borderRadius: 14 }}>Pick a class and date.</div>
       ) : dow > 5 ? (
-        <div style={{ padding: 40, textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT, background: WHITE, border: `1.5px dashed ${BORDER}`, borderRadius: 14 }}>{DOW_NAMES[dow - 1]} is a weekend — no scheduled periods.</div>
+        <div style={{ padding: 40, textAlign: 'center', color: C.muted2, fontSize: 13, fontFamily: C.font, background: C.surface, border: `1.5px dashed ${C.border}`, borderRadius: 14 }}>{DOW_NAMES[dow - 1]} is a weekend — no scheduled periods.</div>
       ) : (
-        <div id="ds-print" style={{ background: WHITE, border: `2px solid ${INK}`, borderRadius: 8, padding: 14, fontFamily: FONT, maxWidth: 720 }}>
-          <div style={{ fontSize: 16, fontWeight: 900, color: INK, marginBottom: 10 }}>{className.toUpperCase()} — {DOW_NAMES[dow - 1].toUpperCase()}, {prettyDate(date)}</div>
+        <div id="ds-print" style={{ background: C.surface, border: `2px solid ${C.ink}`, borderRadius: 8, padding: 14, fontFamily: C.font, maxWidth: 720 }}>
+          <div style={{ fontSize: 16, fontWeight: 900, color: C.ink, marginBottom: 10 }}>{className.toUpperCase()} — {DOW_NAMES[dow - 1].toUpperCase()}, {prettyDate(date)}</div>
           <table style={{ borderCollapse: 'collapse', width: '100%' }}>
             <thead>
               <tr>
@@ -621,19 +625,19 @@ export function DailySchedulePage() {
             <tbody>
               {ctx.cols.map((p) => {
                 const special = p.type && p.type !== 'teaching';
-                const { bg, fg } = special ? specialStyle(p.type) : { bg: WHITE, fg: INK };
+                const { bg, fg } = special ? specialStyle(p.type) : { bg: C.surface, fg: C.ink };
                 const subj = special ? '' : ctx.subjectLabel(dow, p.id);
                 return (
                   <tr key={p.id}>
-                    <td style={{ border: `1px solid ${INK}`, padding: '6px 8px', fontSize: 11.5, fontWeight: 700, color: INK, whiteSpace: 'nowrap', background: special ? bg : LIGHT }}>{hhmm(p.starts_at)}–{hhmm(p.ends_at)}</td>
+                    <td style={{ border: `1px solid ${C.ink}`, padding: '6px 8px', fontSize: 11.5, fontWeight: 700, color: C.ink, whiteSpace: 'nowrap', background: special ? bg : C.bg }}>{hhmm(p.starts_at)}–{hhmm(p.ends_at)}</td>
                     {special ? (
-                      <td colSpan={2} style={{ border: `1px solid ${INK}`, padding: '6px 10px', background: bg, color: fg, fontWeight: 900, fontSize: 12, letterSpacing: .5 }}>{SPECIAL_LABEL[p.type] || p.name}</td>
+                      <td colSpan={2} style={{ border: `1px solid ${C.ink}`, padding: '6px 10px', background: bg, color: fg, fontWeight: 900, fontSize: 12, letterSpacing: .5 }}>{SPECIAL_LABEL[p.type] || p.name}</td>
                     ) : (
                       <>
-                        <td style={{ border: `1px solid ${INK}`, padding: '6px 8px', fontSize: 12, fontWeight: 800, color: subj ? BLUE : MUTED2 }}>{subj || '—'}</td>
-                        <td style={{ border: `1px solid ${INK}`, padding: 4 }}>
+                        <td style={{ border: `1px solid ${C.ink}`, padding: '6px 8px', fontSize: 12, fontWeight: 800, color: subj ? BLUE : C.muted2 }}>{subj || '—'}</td>
+                        <td style={{ border: `1px solid ${C.ink}`, padding: 4 }}>
                           <textarea value={cellMap[p.id] || ''} onChange={(e) => setCellMap((m) => ({ ...m, [p.id]: e.target.value }))} placeholder="…" rows={1}
-                            style={{ width: '100%', border: 'none', outline: 'none', resize: 'vertical', fontSize: 12, color: INK, fontFamily: FONT, background: 'transparent', lineHeight: 1.35 }} />
+                            style={{ width: '100%', border: 'none', outline: 'none', resize: 'vertical', fontSize: 12, color: C.ink, fontFamily: C.font, background: 'transparent', lineHeight: 1.35 }} />
                         </td>
                       </>
                     )}
@@ -644,7 +648,7 @@ export function DailySchedulePage() {
           </table>
         </div>
       )}
-      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
+      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.hero, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
     </PageLayout>
   );
 }
@@ -665,7 +669,7 @@ export function MyTimetablePage() {
   const [data, setData] = useState(null);   // { periods, cells, teaches }
   useEffect(() => { apiGet(`${BASE}/timetable/my`).then((r) => setData(r.data)).catch(() => setData({ periods: [], cells: [], teaches: false })); }, []);
 
-  if (!data) return <PageLayout title="My Timetable" subtitle="Your weekly teaching schedule"><div style={{ padding: 40, textAlign: 'center', color: MUTED2 }}><Loader2 size={20} style={{ animation: 'spin .8s linear infinite' }} /></div></PageLayout>;
+  if (!data) return <PageLayout title="My Timetable" subtitle="Your weekly teaching schedule"><div style={{ padding: 40, textAlign: 'center', color: C.muted2 }}><Ico lucide={Loader2} ti="ti-loader-2" size={20} style={{ animation: 'spin .8s linear infinite' }} /></div></PageLayout>;
 
   const cols = (data.periods || []).slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   const cellAt = (day, pid) => (data.cells || []).find((c) => c.day_of_week === day && c.period_id === pid);
@@ -673,11 +677,11 @@ export function MyTimetablePage() {
   return (
     <PageLayout title="My Timetable" subtitle="Your weekly teaching schedule">
       {!data.teaches ? (
-        <div style={{ padding: 44, textAlign: 'center', color: MUTED2, fontSize: 13.5, fontFamily: FONT, background: WHITE, border: `1.5px dashed ${BORDER}`, borderRadius: 14 }}>
+        <div style={{ padding: 44, textAlign: 'center', color: C.muted2, fontSize: 13.5, fontFamily: C.font, background: C.surface, border: `1.5px dashed ${C.border}`, borderRadius: 14 }}>
           You have no subjects assigned yet. Ask your school to assign you to classes/subjects.
         </div>
       ) : (
-        <div style={{ background: WHITE, border: `2px solid ${INK}`, borderRadius: 8, padding: 12, overflowX: 'auto' }}>
+        <div style={{ background: C.surface, border: `2px solid ${C.ink}`, borderRadius: 8, padding: 12, overflowX: 'auto' }}>
           <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 780, tableLayout: 'fixed' }}>
             <thead>
               <tr>
@@ -693,17 +697,17 @@ export function MyTimetablePage() {
                     if (p.type && p.type !== 'teaching') {
                       if (di !== 0) return null;
                       const { bg, fg } = specialStyle(p.type);
-                      return <td key={p.id} rowSpan={DAYS.length} style={{ border: `1px solid ${INK}`, background: bg, padding: 2, textAlign: 'center', verticalAlign: 'middle' }}><div style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', margin: '0 auto', fontSize: 11, fontWeight: 900, color: fg, whiteSpace: 'nowrap' }}>{SPECIAL_LABEL[p.type] || p.name}</div></td>;
+                      return <td key={p.id} rowSpan={DAYS.length} style={{ border: `1px solid ${C.ink}`, background: bg, padding: 2, textAlign: 'center', verticalAlign: 'middle' }}><div style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', margin: '0 auto', fontSize: 11, fontWeight: 900, color: fg, whiteSpace: 'nowrap' }}>{SPECIAL_LABEL[p.type] || p.name}</div></td>;
                     }
                     const c = cellAt(d.n, p.id);
                     return (
-                      <td key={p.id} style={{ border: `1px solid ${INK}`, padding: '6px 4px', textAlign: 'center', height: 46, background: c ? `${AMBER}0C` : WHITE }}>
+                      <td key={p.id} style={{ border: `1px solid ${C.ink}`, padding: '6px 4px', textAlign: 'center', height: 46, background: c ? tint(5) : C.surface }}>
                         {c ? (
                           <div style={{ lineHeight: 1.2 }}>
-                            <div style={{ fontSize: 12, fontWeight: 800, color: INK }}>{c.subject}{c.alt ? ` / ${c.alt}` : ''}</div>
+                            <div style={{ fontSize: 12, fontWeight: 800, color: C.ink }}>{c.subject}{c.alt ? ` / ${c.alt}` : ''}</div>
                             <div style={{ fontSize: 10, fontWeight: 700, color: BLUE }}>{c.class_name}</div>
                           </div>
-                        ) : <span style={{ color: MUTED2, fontSize: 11 }}>—</span>}
+                        ) : <span style={{ color: C.muted2, fontSize: 11 }}>—</span>}
                       </td>
                     );
                   })}

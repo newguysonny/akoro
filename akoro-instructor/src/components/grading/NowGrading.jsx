@@ -8,7 +8,8 @@
 import { useState, useEffect } from 'react';
 import { X, Play } from 'lucide-react';
 import { listDrafts, clearDraft } from './gradingDrafts.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, WHITE, FONT } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
+import { Ico } from '../../theme/Ico.jsx';
 
 const fmtAgo = (ts) => {
   const mins = Math.round((Date.now() - ts) / 60000);
@@ -38,29 +39,29 @@ export default function NowGrading({ onResume }) {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20, fontFamily: FONT }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20, fontFamily: C.font }}>
       {drafts.map(d => (
         <div key={`${d.assignmentId}:${d.studentId}`} onClick={() => onResume?.(d)}
-          style={{ display: 'flex', alignItems: 'center', gap: 12, background: `linear-gradient(135deg, ${WHITE}, #FFF9F0)`,
-            border: `1px solid ${AMBER}44`, borderRadius: 14, padding: '11px 14px', cursor: 'pointer',
+          style={{ display: 'flex', alignItems: 'center', gap: 12, background: `linear-gradient(135deg, ${C.surface}, #FFF9F0)`,
+            border: `1px solid ${tint(27)}`, borderRadius: 14, padding: '11px 14px', cursor: 'pointer',
             boxShadow: '0 1px 6px rgba(33,31,53,.05)' }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = AMBER; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = `${AMBER}44`; }}>
+          onMouseEnter={e => { e.currentTarget.style.borderColor = C.brand; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = tint(27); }}>
           <span style={{ fontSize: 14, fontWeight: 900, color: '#6B7280' }}>{(d.studentName || 'L').trim().charAt(0).toUpperCase()}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 800, color: INK }}>
+            <div style={{ fontSize: 12.5, fontWeight: 800, color: C.ink }}>
               Now grading — {d.studentName}
             </div>
-            <div style={{ fontSize: 11, color: MUTED, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 11, color: C.muted, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {d.assignmentTitle}{d.subject ? ` · ${d.subject}` : ''} · draft from {fmtAgo(d.savedAt || 0)}
             </div>
           </div>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 13px', borderRadius: 9, background: AMBER, color: WHITE, fontSize: 12, fontWeight: 800, flexShrink: 0 }}>
-            <Play size={11} /> Continue
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 13px', borderRadius: 9, background: C.brand, color: '#fff', fontSize: 12, fontWeight: 800, flexShrink: 0 }}>
+            <Ico lucide={Play} ti="ti-player-play" size={11} /> Continue
           </span>
           <button onClick={(e) => dismiss(d, e)} title="Discard this draft"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED2, display: 'flex', padding: 3, flexShrink: 0 }}>
-            <X size={14} />
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted2, display: 'flex', padding: 3, flexShrink: 0 }}>
+            <Ico lucide={X} ti="ti-x" size={14} />
           </button>
         </div>
       ))}

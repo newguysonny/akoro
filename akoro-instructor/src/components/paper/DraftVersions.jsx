@@ -13,7 +13,9 @@
  */
 import { useEffect, useState } from 'react';
 import { Sparkles, AlertTriangle, Loader2, RotateCcw, Eye, Pencil } from 'lucide-react';
-import { INK, MUTED, MUTED2, BORDER, WHITE, LIGHT, GREEN, PURPLE, AMBER, RED, FONT } from '../../constants.js';
+import { GREEN, PURPLE, RED } from '../../constants.js';
+import { C } from '../../theme/colors.js';
+import { Ico } from '../../theme/Ico.jsx';
 import PaperFrame from './PaperFrame.jsx';
 import { apiBlob } from '../../services/api.js';
 
@@ -26,13 +28,13 @@ function Tab({ v, on, onClick }) {
   return (
     <button type="button" role="tab" aria-selected={on} onClick={onClick}
       style={{ padding: '7px 13px', borderRadius: '9px 9px 0 0', position: 'relative', top: 1,
-        borderTop: `1px solid ${on ? BORDER : 'transparent'}`, borderLeft: `1px solid ${on ? BORDER : 'transparent'}`, borderRight: `1px solid ${on ? BORDER : 'transparent'}`, borderBottom: 'none',
-        background: on ? WHITE : 'transparent', color: on ? PURPLE : v.status === 'failed' ? RED : MUTED, cursor: 'pointer', fontFamily: FONT, fontSize: 12.5, fontWeight: 800,
+        borderTop: `1px solid ${on ? C.border : 'transparent'}`, borderLeft: `1px solid ${on ? C.border : 'transparent'}`, borderRight: `1px solid ${on ? C.border : 'transparent'}`, borderBottom: 'none',
+        background: on ? C.surface : 'transparent', color: on ? PURPLE : v.status === 'failed' ? RED : C.muted, cursor: 'pointer', fontFamily: C.font, fontSize: 12.5, fontWeight: 800,
         display: 'inline-flex', alignItems: 'center', gap: 4 }}>
       V{v.n}
-      {v.status === 'drafting' && <Loader2 size={11} style={{ animation: 'spin .8s linear infinite' }} />}
-      {v.status === 'failed' && <AlertTriangle size={11} />}
-      {v.edited && <span style={{ fontSize: 10.5, fontWeight: 700, color: AMBER }}>· edited</span>}
+      {v.status === 'drafting' && <Ico lucide={Loader2} ti="ti-loader-2" size={11} style={{ animation: 'spin .8s linear infinite' }} />}
+      {v.status === 'failed' && <Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={11} />}
+      {v.edited && <span style={{ fontSize: 10.5, fontWeight: 700, color: C.brand }}>· edited</span>}
     </button>
   );
 }
@@ -50,7 +52,7 @@ function VersionPaper({ draftId, v, showKey }) {
       .catch(() => { if (live) setErr(true); });
     return () => { live = false; };
   }, [draftId, v.n, showKey, stamp]);
-  if (err) return <div style={{ fontSize: 12, color: MUTED, padding: 12 }}>Couldn't load the paper — try again.</div>;
+  if (err) return <div style={{ fontSize: 12, color: C.muted, padding: 12 }}>Couldn't load the paper — try again.</div>;
   return <PaperFrame html={html} title={`Version ${v.n}`} />;
 }
 
@@ -81,62 +83,62 @@ export default function DraftVersions({ draft, selected, onSelect, onSave, onRet
   };
 
   return (
-    <div style={{ fontFamily: FONT }}>
-      <div role="tablist" aria-label="Versions" style={{ display: 'flex', gap: 3, borderBottom: `1px solid ${BORDER}`, marginBottom: 10 }}>
+    <div style={{ fontFamily: C.font }}>
+      <div role="tablist" aria-label="Versions" style={{ display: 'flex', gap: 3, borderBottom: `1px solid ${C.border}`, marginBottom: 10 }}>
         {versions.map((x) => <Tab key={x.n} v={x} on={x.n === v.n} onClick={() => { if (!editing) onSelect(x.n); }} />)}
       </div>
 
       {v.status === 'drafting' ? (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '40px 12px', color: MUTED, textAlign: 'center' }}>
-          <Loader2 size={20} color={PURPLE} style={{ animation: 'spin .8s linear infinite' }} />
-          <div style={{ fontSize: 13, fontWeight: 800, color: INK }}>Drafting version {v.n}…</div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '40px 12px', color: C.muted, textAlign: 'center' }}>
+          <Ico lucide={Loader2} ti="ti-loader-2" size={20} color={PURPLE} style={{ animation: 'spin .8s linear infinite' }} />
+          <div style={{ fontSize: 13, fontWeight: 800, color: C.ink }}>Drafting version {v.n}…</div>
           <div style={{ fontSize: 12, maxWidth: 360, lineHeight: 1.5 }}>“{v.request}” — usually ready within a minute. You can keep chatting meanwhile.</div>
         </div>
       ) : v.status === 'failed' ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '36px 12px', textAlign: 'center' }}>
-          <AlertTriangle size={20} color={RED} />
-          <div style={{ fontSize: 13, fontWeight: 800, color: INK }}>Version {v.n} couldn't be drafted</div>
-          <div style={{ fontSize: 12, color: MUTED }}>{v.error || 'Something went wrong.'}</div>
+          <Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={20} color={RED} />
+          <div style={{ fontSize: 13, fontWeight: 800, color: C.ink }}>Version {v.n} couldn't be drafted</div>
+          <div style={{ fontSize: 12, color: C.muted }}>{v.error || 'Something went wrong.'}</div>
           <button type="button" onClick={() => onRetry(v.n)} disabled={busy}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 13px', borderRadius: 9, border: `1px solid ${BORDER}`, background: WHITE, fontFamily: FONT, fontSize: 12, fontWeight: 800, cursor: 'pointer', color: INK }}>
-            <RotateCcw size={12} /> Try again
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 13px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.surface, fontFamily: C.font, fontSize: 12, fontWeight: 800, cursor: 'pointer', color: C.ink }}>
+            <Ico lucide={RotateCcw} ti="ti-rotate" size={12} /> Try again
           </button>
         </div>
       ) : (
         <>
           {/* What this round changed, and anything it missed */}
           {v.note && !editing && (
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, padding: '8px 11px', borderRadius: 10, background: LIGHT, border: `1px solid ${BORDER}`, fontSize: 12, color: MUTED, lineHeight: 1.5, marginBottom: 8 }}>
-              <Sparkles size={13} color={PURPLE} style={{ marginTop: 2, flexShrink: 0 }} />
-              <span><b style={{ color: INK }}>Version {v.n}</b>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, padding: '8px 11px', borderRadius: 10, background: C.bg, border: `1px solid ${C.border}`, fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 8 }}>
+              <Ico lucide={Sparkles} ti="ti-sparkles" size={13} color={PURPLE} style={{ marginTop: 2, flexShrink: 0 }} />
+              <span><b style={{ color: C.ink }}>Version {v.n}</b>
                 {v.basedOn ? <> — from {versions.find((x) => x.n === v.basedOn)?.edited ? 'your edited ' : ''}V{v.basedOn}</> : null}: {v.note}
-                {v.edited && <span style={{ color: AMBER, fontWeight: 700 }}> · you edited this version</span>}
+                {v.edited && <span style={{ color: C.brand, fontWeight: 700 }}> · you edited this version</span>}
               </span>
             </div>
           )}
           {v.warning && !editing && (
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, padding: '8px 11px', borderRadius: 10, background: '#FFF7ED', border: '1px solid #FED7AA', fontSize: 12, fontWeight: 700, color: '#B45309', lineHeight: 1.5, marginBottom: 8 }}>
-              <AlertTriangle size={13} style={{ marginTop: 2, flexShrink: 0 }} />
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, padding: '8px 11px', borderRadius: 10, background: C.brandSoft, border: '1px solid #FED7AA', fontSize: 12, fontWeight: 700, color: '#B45309', lineHeight: 1.5, marginBottom: 8 }}>
+              <Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={13} style={{ marginTop: 2, flexShrink: 0 }} />
               <span>Not quite what you asked for: {v.warning} Ask in the chat to fix it, or edit it yourself.</span>
             </div>
           )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0 10px', flexWrap: 'wrap' }}>
-            <div style={{ display: 'inline-flex', gap: 2, padding: 2, borderRadius: 10, background: LIGHT, border: `1px solid ${BORDER}` }}>
-              {[['edit', Pencil, `Edit V${v.n}`], ['paper', Eye, 'Paper preview']].map(([k, Icon, label]) => {
+            <div style={{ display: 'inline-flex', gap: 2, padding: 2, borderRadius: 10, background: C.bg, border: `1px solid ${C.border}` }}>
+              {[['edit', Pencil, 'ti-pencil', `Edit V${v.n}`], ['paper', Eye, 'ti-eye', 'Paper preview']].map(([k, Icon, ti, label]) => {
                 const on = (k === 'edit') === !!editing;
                 return (
                   <button key={k} type="button" aria-pressed={on} onClick={() => setEditing(k === 'edit')}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 11.5, fontWeight: 800,
-                      background: on ? WHITE : 'transparent', color: on ? INK : MUTED, boxShadow: on ? '0 1px 3px rgba(0,0,0,.08)' : 'none' }}>
-                    <Icon size={12} /> {label}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: C.font, fontSize: 11.5, fontWeight: 800,
+                      background: on ? C.surface : 'transparent', color: on ? C.ink : C.muted, boxShadow: on ? '0 1px 3px rgba(0,0,0,.08)' : 'none' }}>
+                    <Ico lucide={Icon} ti={ti} size={12} /> {label}
                   </button>
                 );
               })}
             </div>
-            <span style={{ fontSize: 12, color: MUTED, fontWeight: 700 }}>{v.summary?.line}</span>
+            <span style={{ fontSize: 12, color: C.muted, fontWeight: 700 }}>{v.summary?.line}</span>
             {!editing && (
-              <label style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: MUTED, cursor: 'pointer' }}>
+              <label style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: C.muted, cursor: 'pointer' }}>
                 <input type="checkbox" checked={showKey} onChange={(e) => setShowKey(e.target.checked)} style={{ accentColor: GREEN }} /> Show answer key
               </label>
             )}
@@ -150,10 +152,10 @@ export default function DraftVersions({ draft, selected, onSelect, onSave, onRet
               {saveErr && <div style={{ fontSize: 12, fontWeight: 700, color: RED, marginTop: 8 }}>{saveErr}</div>}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
                 <button type="button" onClick={() => setEditing(false)} disabled={busy}
-                  style={{ padding: '8px 13px', borderRadius: 10, border: `1px solid ${BORDER}`, background: WHITE, color: MUTED, fontFamily: FONT, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Cancel</button>
+                  style={{ padding: '8px 13px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.muted, fontFamily: C.font, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Cancel</button>
                 <button type="button" onClick={save} disabled={busy}
-                  style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: PURPLE, color: WHITE, fontFamily: FONT, fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  {busy && <Loader2 size={12} style={{ animation: 'spin .8s linear infinite' }} />} Save to V{v.n}
+                  style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: PURPLE, color: '#fff', fontFamily: C.font, fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  {busy && <Ico lucide={Loader2} ti="ti-loader-2" size={12} style={{ animation: 'spin .8s linear infinite' }} />} Save to V{v.n}
                 </button>
               </div>
             </>
@@ -161,12 +163,12 @@ export default function DraftVersions({ draft, selected, onSelect, onSave, onRet
             <VersionPaper draftId={draft.id} v={v} showKey={showKey} />
           )}
           {!editing && (v.paper?.questions || []).some((q) => q.figure_note && !q.figure) && (
-            <div style={{ fontSize: 11.5, color: AMBER, fontWeight: 700, marginTop: 8 }}>Some questions need a figure — add it in Edit before assigning.</div>
+            <div style={{ fontSize: 11.5, color: C.brand, fontWeight: 700, marginTop: 8 }}>Some questions need a figure — add it in Edit before assigning.</div>
           )}
         </>
       )}
       {!editing && v.status === 'ready' && (
-        <div style={{ fontSize: 11, color: MUTED2, marginTop: 8 }}>Want changes? Ask in the chat — each round becomes a new version.</div>
+        <div style={{ fontSize: 11, color: C.muted2, marginTop: 8 }}>Want changes? Ask in the chat — each round becomes a new version.</div>
       )}
     </div>
   );

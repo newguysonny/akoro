@@ -12,7 +12,9 @@
 import { useEffect, useState } from 'react';
 import { Eye, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { apiGet } from '../../services/api.js';
-import { INK, MUTED, MUTED2, BORDER, WHITE, LIGHT, GREEN, PURPLE, RED, FONT } from '../../constants.js';
+import { GREEN, PURPLE, RED } from '../../constants.js';
+import { C } from '../../theme/colors.js';
+import { Ico } from '../../theme/Ico.jsx';
 
 const POLL_MS = 4000;
 const POLL_FOR_MS = 5 * 60 * 1000;
@@ -48,26 +50,26 @@ export default function DraftCard({ preview, state = null, label = 'Preview', on
   const audience = draft?.audience?.label || preview.audience || '';
 
   return (
-    <div style={{ border: `1px solid ${BORDER}`, borderRadius: 12, background: WHITE, padding: '10px 12px', maxWidth: 380, fontFamily: FONT }}>
+    <div style={{ border: `1px solid ${C.border}`, borderRadius: 12, background: C.surface, padding: '10px 12px', maxWidth: 380, fontFamily: C.font }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         {versioned && <span style={{ fontSize: 10.5, fontWeight: 900, color: PURPLE, background: '#F1ECFF', borderRadius: 6, padding: '2px 7px' }}>V{preview.version}</span>}
-        <span style={{ fontSize: 13, fontWeight: 800, color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{preview.title}</span>
+        <span style={{ fontSize: 13, fontWeight: 800, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{preview.title}</span>
       </div>
-      <div style={{ fontSize: 11.5, color: MUTED, marginTop: 3, lineHeight: 1.45, display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+      <div style={{ fontSize: 11.5, color: C.muted, marginTop: 3, lineHeight: 1.45, display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
         {!versioned ? <span>{[audience, due].filter(Boolean).join(' · ') || 'Ready to preview'}</span>
-          : !v || v.status === 'drafting' ? <><Loader2 size={11} color={PURPLE} style={{ animation: 'spin .8s linear infinite' }} /> Drafting questions…</>
-          : v.status === 'failed' ? <span style={{ color: RED, display: 'inline-flex', alignItems: 'center', gap: 4 }}><AlertTriangle size={11} /> Couldn't draft the questions — open to try again</span>
+          : !v || v.status === 'drafting' ? <><Ico lucide={Loader2} ti="ti-loader-2" size={11} color={PURPLE} style={{ animation: 'spin .8s linear infinite' }} /> Drafting questions…</>
+          : v.status === 'failed' ? <span style={{ color: RED, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={11} /> Couldn't draft the questions — open to try again</span>
           : <span>{[v.summary?.line, audience, due && `due ${due}`].filter(Boolean).join(' · ')}{v.basedOn && v.note ? <><br />{v.note}</> : null}</span>}
       </div>
-      {versioned && v?.warning && <div style={{ fontSize: 11, color: '#B45309', fontWeight: 700, marginTop: 4 }}><AlertTriangle size={11} style={{ verticalAlign: '-2px', marginRight: 3 }} />{v.warning}</div>}
+      {versioned && v?.warning && <div style={{ fontSize: 11, color: '#B45309', fontWeight: 700, marginTop: 4 }}><Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={11} style={{ verticalAlign: '-2px', marginRight: 3 }} />{v.warning}</div>}
       <div style={{ marginTop: 8 }}>
         <button type="button" disabled={!!state} onClick={() => onOpen(preview.id, versioned ? preview.version : null)}
           title={state ? undefined : 'Preview this draft — assigning is your call'}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 9, cursor: state ? 'default' : 'pointer', fontFamily: FONT, fontSize: 11.5, fontWeight: 800,
-            border: state === 'assigned' ? '1px solid #BBF7D0' : state === 'discarded' ? `1px solid ${BORDER}` : 'none',
-            background: state === 'assigned' ? '#DCFCE7' : state === 'discarded' ? LIGHT : PURPLE,
-            color: state === 'assigned' ? GREEN : state === 'discarded' ? MUTED2 : WHITE }}>
-          {state === 'assigned' ? <><CheckCircle2 size={12} /> Assigned ✓</> : state === 'discarded' ? 'Discarded' : <><Eye size={12} /> {label}</>}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 9, cursor: state ? 'default' : 'pointer', fontFamily: C.font, fontSize: 11.5, fontWeight: 800,
+            border: state === 'assigned' ? '1px solid #BBF7D0' : state === 'discarded' ? `1px solid ${C.border}` : 'none',
+            background: state === 'assigned' ? '#DCFCE7' : state === 'discarded' ? C.bg : PURPLE,
+            color: state === 'assigned' ? GREEN : state === 'discarded' ? C.muted2 : '#fff' }}>
+          {state === 'assigned' ? <><Ico lucide={CheckCircle2} ti="ti-circle-check" size={12} /> Assigned ✓</> : state === 'discarded' ? 'Discarded' : <><Ico lucide={Eye} ti="ti-eye" size={12} /> {label}</>}
         </button>
       </div>
     </div>
