@@ -302,6 +302,14 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
     refresh();
   });
 
+  // The Agent Check runs in Battles, with its own card in the chat (and its link there): here, one tracking line.
+  const checkRunningLine = (
+    <div data-check-running="" style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 10px', borderRadius: 10, background: '#FFF5F5', border: '1px solid #FECACA', fontSize: 12, fontWeight: 800, color: '#B91C1C' }}>
+      <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: RED, flexShrink: 0 }} />
+      {shownTopic?.checkMode === 'retest' ? 'Retest running in Battles' : 'Agent Check running in Battles'}
+    </div>
+  );
+
   // Phase 6: the teaching session as the card shows it — ONE tracking line, and the OK while it waits for one.
   // Everything else (what was missed, the session's parts, the agent's report) is in the chat.
   const teachingLine = teaching && ({
@@ -382,7 +390,7 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
       {error && <div role="alert" style={errorBox}>{error}</div>}
 
       {/* Pinned (running): the head and the latest steps only — the full card is back at its message once it settles. */}
-      {pinned ? (checkLive ? <button type="button" onClick={watch} style={primary}>Watch the Agent Check</button> : (counting ? checkStarter(null) : (teachingTrack || coinsAsk))) : <>
+      {pinned ? (checkLive ? (wfEvents ? checkRunningLine : <button type="button" onClick={watch} style={primary}>Watch the Agent Check</button>) : (counting ? checkStarter(null) : (teachingTrack || coinsAsk))) : <>
 
       {/* ── the plan card: Approve & Start / Adjust (the only spend gate) ── */}
       {/* With a workflow, an empty plan isn't shown while it plans — the steps above are the progress. */}
@@ -494,7 +502,8 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
                 </div>
               )}
 
-              {checkLive && (
+              {checkLive && wfEvents && checkRunningLine}
+              {checkLive && !wfEvents && (
                 <div style={{ display: 'grid', gap: 7 }}>
                   <div style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)' }}>
                     <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: RED, flexShrink: 0 }} />

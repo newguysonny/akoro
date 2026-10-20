@@ -491,7 +491,7 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     // The check's own run in the Study Prep chat (its card, each question, the result) — or, without
     // the workflow engine, the protégé's message as before.
     const ran = checkRun
-      ? await checkRun.started({ session, topic: { id: topic.id, label: topic.label }, battleId: check.battleId, mode, questions: check.placed, coins, auto }).catch(() => null)
+      ? await checkRun.started({ session, topic: { id: topic.id, label: topic.label }, battleId: check.battleId, mode, questions: check.placed, coins, auto, charge: charge?.applied || null }).catch(() => null)
       : null;
     if (!ran) {
       await protege?.say({

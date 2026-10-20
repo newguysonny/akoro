@@ -126,6 +126,58 @@ export const generatedOutline = {
   },
 };
 
+// A confirmed plan with its first Agent Check started (the agent-check scenarios' setup).
+async function startAgentCheckFor(ctx, p) {
+  const me = await ctx.as(p.learner);
+  const base = "/api/adaptive/study-prep/sessions";
+  await ctx.db.deleteOwned("edu.study_prep_sessions", { ownerColumn: "learner_id", ownerId: me.id, filters: { goal: { like: "[verify:%" } } });
+  const active = await ctx.http({ as: p.learner, path: base });
+  if (active.body?.session?.id) await ctx.http({ as: p.learner, method: "POST", path: `${base}/${active.body.session.id}/cancel`, body: {} });
+  ctx.cleanup(() => ctx.db.deleteOwned("edu.study_prep_sessions", { ownerColumn: "learner_id", ownerId: me.id, filters: { goal: { like: `${ctx.marker}%` } } }));
+
+  const made = await ctx.http({ as: p.learner, method: "POST", path: base,
+    body: { goal: `${ctx.marker} Revise ${p.subject} cells before my test`, subject: p.subject, classLevel: p.classLevel, examBoard: "WAEC" } });
+  const id = made.body?.session?.id;
+  if (made.body?.session?.status !== "awaiting_confirmation") ctx.expect.blocked(`planning didn't reach a plan (${made.body?.session?.status || made.status})`);
+  // The protégé's thread for this session, and its notifications.
+  ctx.cleanup(() => ctx.db.deleteOwned("chat_messages", { ownerColumn: "user_id", ownerId: me.id, filters: { session_id: id } }));
+  ctx.cleanup(() => ctx.db.deleteOwned("chat_sessions", { ownerColumn: "user_id", ownerId: me.id, filters: { id } }));
+  ctx.cleanup(() => ctx.db.deleteOwned("notifications", { ownerColumn: "user_id", ownerId: me.id, filters: { related_id: id } }));
+  const confirmed = await ctx.http({ as: p.learner, method: "POST", path: `${base}/${id}/confirm`, body: {} });
+  ctx.expect.status("plan confirmed", confirmed, [200, 201]);
+  const topic = (confirmed.body?.topics || []).find((t) => t.status === "active");
+  if (!topic) ctx.expect.blocked("no active topic after confirming the plan");
+
+  const [acct] = await ctx.db.rows("coin_accounts", { owner_id: me.id }, { columns: "id, balance", limit: 1 });
+  if (!acct) ctx.expect.blocked(`${p.learner} has no coin account`);
+  const t0 = new Date(Date.now() - 1000).toISOString();
+  const { getAgentCheckHarness } = await import("../../adaptive-learning/study-prep/wiring.js");
+  const harness = getAgentCheckHarness({ questions: 3, secondsPerQuestion: 10 });
+  let started;
+  try {
+    started = await harness.startTopicPractice({ sessionId: id, learnerId: me.id, topicId: topic.id, mode: "diagnostic" });
+  } catch (e) {
+    if (e.code === "insufficient_balance") ctx.expect.blocked(`${p.learner} can't afford a practice`);
+    throw e;
+  }
+  if (started.skipped) {
+    ctx.note(`${p.learner} has no notes on "${topic.label}" — the check was skipped with nothing charged (the no-notes rule)`);
+    const debits = (await ctx.db.rows("coin_transactions", { account_id: acct.id }, { columns: "delta, type, feature, created_at", limit: 10, order: { column: "created_at", ascending: false } }))
+      .filter((t) => t.created_at >= t0 && t.type === "debit");
+    ctx.expect.eq("nothing charged when there is nothing to check", debits.length, 0);
+    ctx.expect.blocked(`no notes on "${topic.label}" to check — teach ${p.learner}'s agent this topic, or pick a learner with notes on it`);
+  }
+  const battleId = started.check?.battleId;
+  ctx.expect.ok("a check battle was created", !!battleId, JSON.stringify(started.check || null));
+  // Registered after the session's cleanup, so it runs first (cleanups run newest first).
+  ctx.cleanup(async () => {
+    const { discardCheckBattle } = await import("../../battle/agentCheck.js");
+    await discardCheckBattle(battleId, me.id);
+  });
+  ctx.note(`topic "${topic.label}", battle ${battleId}, ${started.check?.questions} questions`);
+  return { me, id, topic, acct, t0, battleId, started };
+}
+
 // D45 (§7.12): Study Prep practice as an Agent Check battle, end to end —
 // the harness charges once, a 'check' battle runs (the protégé answers from
 // the learner's notes, Sergeant judges), the Engine scores it as the agent's,
@@ -138,53 +190,7 @@ export const agentCheckBattle = {
   description: "An Agent Check runs as a real battle: one 2-coin charge, the protégé answers from the learner's notes, Sergeant rules, the result is scored as the agent's and posted in chat.",
   params: { learner: { default: "@tester17" }, subject: { default: "Biology" }, classLevel: { default: "SS1" } },
   async run(ctx, p) {
-    const me = await ctx.as(p.learner);
-    const base = "/api/adaptive/study-prep/sessions";
-    await ctx.db.deleteOwned("edu.study_prep_sessions", { ownerColumn: "learner_id", ownerId: me.id, filters: { goal: { like: "[verify:%" } } });
-    const active = await ctx.http({ as: p.learner, path: base });
-    if (active.body?.session?.id) await ctx.http({ as: p.learner, method: "POST", path: `${base}/${active.body.session.id}/cancel`, body: {} });
-    ctx.cleanup(() => ctx.db.deleteOwned("edu.study_prep_sessions", { ownerColumn: "learner_id", ownerId: me.id, filters: { goal: { like: `${ctx.marker}%` } } }));
-
-    const made = await ctx.http({ as: p.learner, method: "POST", path: base,
-      body: { goal: `${ctx.marker} Revise ${p.subject} cells before my test`, subject: p.subject, classLevel: p.classLevel, examBoard: "WAEC" } });
-    const id = made.body?.session?.id;
-    if (made.body?.session?.status !== "awaiting_confirmation") ctx.expect.blocked(`planning didn't reach a plan (${made.body?.session?.status || made.status})`);
-    // The protégé's thread for this session, and its notifications.
-    ctx.cleanup(() => ctx.db.deleteOwned("chat_messages", { ownerColumn: "user_id", ownerId: me.id, filters: { session_id: id } }));
-    ctx.cleanup(() => ctx.db.deleteOwned("chat_sessions", { ownerColumn: "user_id", ownerId: me.id, filters: { id } }));
-    ctx.cleanup(() => ctx.db.deleteOwned("notifications", { ownerColumn: "user_id", ownerId: me.id, filters: { related_id: id } }));
-    const confirmed = await ctx.http({ as: p.learner, method: "POST", path: `${base}/${id}/confirm`, body: {} });
-    ctx.expect.status("plan confirmed", confirmed, [200, 201]);
-    const topic = (confirmed.body?.topics || []).find((t) => t.status === "active");
-    if (!topic) ctx.expect.blocked("no active topic after confirming the plan");
-
-    const [acct] = await ctx.db.rows("coin_accounts", { owner_id: me.id }, { columns: "id, balance", limit: 1 });
-    if (!acct) ctx.expect.blocked(`${p.learner} has no coin account`);
-    const t0 = new Date(Date.now() - 1000).toISOString();
-    const { getAgentCheckHarness } = await import("../../adaptive-learning/study-prep/wiring.js");
-    const harness = getAgentCheckHarness({ questions: 3, secondsPerQuestion: 10 });
-    let started;
-    try {
-      started = await harness.startTopicPractice({ sessionId: id, learnerId: me.id, topicId: topic.id, mode: "diagnostic" });
-    } catch (e) {
-      if (e.code === "insufficient_balance") ctx.expect.blocked(`${p.learner} can't afford a practice`);
-      throw e;
-    }
-    if (started.skipped) {
-      ctx.note(`${p.learner} has no notes on "${topic.label}" — the check was skipped with nothing charged (the no-notes rule)`);
-      const debits = (await ctx.db.rows("coin_transactions", { account_id: acct.id }, { columns: "delta, type, feature, created_at", limit: 10, order: { column: "created_at", ascending: false } }))
-        .filter((t) => t.created_at >= t0 && t.type === "debit");
-      ctx.expect.eq("nothing charged when there is nothing to check", debits.length, 0);
-      ctx.expect.blocked(`no notes on "${topic.label}" to check — teach ${p.learner}'s agent this topic, or pick a learner with notes on it`);
-    }
-    const battleId = started.check?.battleId;
-    ctx.expect.ok("a check battle was created", !!battleId, JSON.stringify(started.check || null));
-    // Registered after the session's cleanup, so it runs first (cleanups run newest first).
-    ctx.cleanup(async () => {
-      const { discardCheckBattle } = await import("../../battle/agentCheck.js");
-      await discardCheckBattle(battleId, me.id);
-    });
-    ctx.note(`topic "${topic.label}", battle ${battleId}, ${started.check?.questions} questions`);
+    const { me, id, topic, acct, t0, battleId } = await startAgentCheckFor(ctx, p);
 
     // 3 questions × 10 s, a 6 s start and the end delay: scored within ~75 s.
     let scored = null;
@@ -220,8 +226,63 @@ export const agentCheckBattle = {
     ctx.expect.ok("the Engine scored it as the agent's answers", !!engine);
     const expected = engine?.facts?.outcome === "retest_offered" ? "active" : engine?.facts?.outcome;
     ctx.expect.eq("the topic follows the Engine's outcome", scored.status, expected);
-    const said = await ctx.db.rows("chat_messages", { session_id: id }, { columns: "text, meta", limit: 10 });
-    ctx.expect.gte("the protégé posted in chat (start + result)", said.filter((m) => m.meta?.battle?.id === battleId).length, 2);
+    const said = await ctx.db.rows("chat_messages", { session_id: id }, { columns: "text, meta", limit: 20 });
+    const [check] = await ctx.db.rows("edu.workflow_instances", { workflow_type: "practice", learner_id: me.id }, { columns: "id, state, parent_workflow_id, metadata", limit: 20, order: { column: "created_at", ascending: false } })
+      .then((rows) => rows.filter((w) => w.metadata?.battleId === battleId));
+    if (!check) {
+      // No Study Prep workflow (engine off): the protégé's own messages, as before.
+      ctx.expect.gte("the protégé posted in chat (start + result)", said.filter((m) => m.meta?.battle?.id === battleId).length, 2);
+      return;
+    }
+    ctx.cleanup(() => ctx.db.deleteOwned("edu.workflow_instances", { ownerColumn: "learner_id", ownerId: me.id, filters: { id: check.id } }));
+    // The check's own workflow, its card on the run's message, a row per question in that run.
+    ctx.expect.eq("the Agent Check's workflow completed", check.state, "completed");
+    ctx.expect.eq("one run message carries the check's card", said.filter((m) => m.meta?.agentCheck?.battleId === battleId).length, 1);
+    const rows = (await ctx.db.rows("edu.workflow_events", { workflow_id: check.parent_workflow_id }, { columns: "event_type, payload", limit: 300, order: { column: "sequence", ascending: true } }))
+      .filter((e) => e.payload?.runId === `check:${battleId}` && e.event_type === "tool.completed");
+    ctx.note(`run rows: ${JSON.stringify(rows.map((e) => e.payload.headline))}`);
+    ctx.expect.eq("a row per marked question", rows.filter((e) => e.payload.tool === "study_prep.check_question").length, r.total);
+    ctx.expect.eq("the result closes the run", rows.at(-1)?.payload?.tool, "study_prep.check_marked");
+  },
+};
+
+// The learner stops a running Agent Check from the chat (#77): the battle is
+// cancelled, the charge refunded, the run closed, the topic waits (no auto
+// start); "running work" lists the check (with its Battles link) until then.
+export const agentCheckStop = {
+  name: "studyprep.agent_check_stop", area: "study-prep", risk: "write", regression: false,
+  timeoutMs: 180_000,
+  description: "A running Agent Check is listed in running work with its Battles link; stopping it cancels the battle, refunds the 2 coins, closes its run and leaves the topic waiting.",
+  params: { learner: { default: "@tester17" }, subject: { default: "Biology" }, classLevel: { default: "SS1" } },
+  async run(ctx, p) {
+    const { me, topic, acct, t0, battleId } = await startAgentCheckFor(ctx, p);
+    const { runningWork, stopAgentCheck } = await import("../../adaptive-learning/study-prep/wiring.js");
+    const work = await runningWork(me.id);
+    const listed = work.agentChecks.find((c) => c.battleId === battleId);
+    ctx.expect.ok("running work lists the check", !!listed, JSON.stringify(work.agentChecks));
+    ctx.expect.eq("with its Battles link", listed?.link, `/app?tab=battles&battle=${battleId}`);
+
+    const stop = await stopAgentCheck({ learnerId: me.id });
+    ctx.note(`stop: ${JSON.stringify(stop)}`);
+    ctx.expect.eq("stopped", stop.stopped, true);
+    const [battle] = await ctx.db.rows("battles", { id: battleId }, { columns: "status", limit: 1 });
+    ctx.expect.eq("battle cancelled", battle?.status, "cancelled");
+    const moves = (await ctx.db.rows("coin_transactions", { account_id: acct.id }, { columns: "delta, type, feature, created_at", limit: 30, order: { column: "created_at", ascending: false } }))
+      .filter((t) => t.created_at >= t0 && t.feature === "study_prep_practice");
+    ctx.note(`coins: ${JSON.stringify(moves.map((t) => ({ type: t.type, delta: t.delta })))}`);
+    ctx.expect.eq("the charge was refunded (net zero)", moves.reduce((sum, t) => sum + Number(t.delta || 0), 0), 0);
+
+    const [row] = await ctx.db.rows("edu.study_prep_topics", { id: topic.id }, { columns: "check_battle_id, check_mode, status", limit: 1 });
+    ctx.expect.eq("the topic waits for the learner", row?.check_mode, "stopped");
+    ctx.expect.eq("no check on the topic", row?.check_battle_id ?? null, null);
+    const [check] = await ctx.db.rows("edu.workflow_instances", { workflow_type: "practice", learner_id: me.id }, { columns: "id, state, metadata", limit: 20, order: { column: "created_at", ascending: false } })
+      .then((rows) => rows.filter((w) => w.metadata?.battleId === battleId));
+    if (check) {
+      ctx.cleanup(() => ctx.db.deleteOwned("edu.workflow_instances", { ownerColumn: "learner_id", ownerId: me.id, filters: { id: check.id } }));
+      ctx.expect.eq("its workflow is stopped", check.state, "stopped");
+    }
+    ctx.expect.eq("running work no longer lists it", (await runningWork(me.id)).agentChecks.length, 0);
+    ctx.expect.eq("a second stop finds nothing", (await stopAgentCheck({ learnerId: me.id })).stopped, false);
   },
 };
 

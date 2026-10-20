@@ -168,15 +168,95 @@ async function openRunMessage({ sessionId, learnerId, wakeId, trigger, label, ex
 let _checkRun = null;
 export const agentCheckRun = () => (_checkRun ||= makeAgentCheckRun({
   engine: workflowEngine(),
-  async findByBattle(battleId) {
-    const { data, error } = await workflowRows().select("*").eq("workflow_type", "practice").eq("metadata->>battleId", String(battleId))
-      .order("created_at", { ascending: false }).limit(1);
-    if (error) throw error;
-    return data?.[0] || null;
-  },
+  findByBattle: (battleId) => findCheckByBattle(battleId),
   studyPrep: { openWake: openRunMessage },
 }));
 const checkRunOrNull = () => (workflowEngineEnabled() ? agentCheckRun() : null);
+
+async function findCheckByBattle(battleId) {
+  const { data, error } = await workflowRows().select("*").eq("workflow_type", "practice").eq("metadata->>battleId", String(battleId))
+    .order("created_at", { ascending: false }).limit(1);
+  if (error) throw error;
+  return data?.[0] || null;
+}
+
+/** The learner's live Study Prep session row (one at a time), if any. */
+async function liveStudyPrepSession(learnerId) {
+  const { data } = await db.schema("edu").from("study_prep_sessions").select("*").eq("learner_id", learnerId)
+    .in("status", ["topic_active", "awaiting_confirmation", "planning", "replanning", "paused"]).order("created_at", { ascending: false }).limit(1);
+  return data?.[0] || null;
+}
+
+/**
+ * Stop the running Agent Check (the learner asked — in the chat, through the agent): the
+ * battle is cancelled (the worker stops at its next step; a cancelled battle is never marked),
+ * its coins are refunded, the try isn't counted, and the topic waits — a stopped check never
+ * restarts by itself. restart: a new check right away (a new battle, its own card; charged).
+ */
+export async function stopAgentCheck({ learnerId, restart = false }) {
+  const row = await liveStudyPrepSession(learnerId);
+  if (!row || row.status !== "topic_active") return { stopped: false, reason: "no_study_plan_running" };
+  const harness = getHarness();
+  const view = await harness.getSessionView({ sessionId: row.id, learnerId, eventLimit: 1 });
+  const topic = view.topics.find((t) => t.status === "active" && t.checkBattleId && !t.checkScoredAt);
+  if (!topic) return { stopped: false, reason: "no_check_running", topic: view.topics.find((t) => t.status === "active")?.label || null };
+  const battleId = topic.checkBattleId;
+  const { data: halted } = await db.from("battles").update({ status: "cancelled" }).eq("id", battleId).in("status", ["lobby", "scheduled", "live"]).select("id");
+  if (!halted?.length) return { stopped: false, reason: "already_finished", topic: topic.label };
+  try { global.io?.to(`battle:${battleId}`).emit("battle:cancelled", { battleId, reason: "stopped_by_learner" }); } catch { /* the modal sees the status on its next read */ }
+  const check = await findCheckByBattle(battleId).catch(() => null);
+  const charge = check?.metadata?.charge;
+  const refundFailed = charge?.length ? await store.refundCoins({ charge: { applied: charge }, feature: "study_prep_practice", ref: `study_prep:${row.id}` }).catch(() => 1) : 0;
+  const coins = charge?.length && !refundFailed ? Number(check?.metadata?.coins) || STUDY_PREP_COST.COINS_PER_PRACTICE : 0;
+  const wasRetest = topic.checkMode === "retest";
+  await store.updateTopicConditional(topic.id, "active", {
+    check_battle_id: null, check_mode: "stopped", check_scored_at: null, check_result: null,
+    attempts_used: Math.max(0, Number(topic.attemptsUsed || 0) - 1),
+    // A stopped retest keeps the teach-back it used, so it can start again.
+    ...(wasRetest ? { learner_confirmed_ready: true } : {}),
+    updated_at: new Date().toISOString(),
+  });
+  await agentCheckRun().stopped({ battleId }).catch(() => null);
+  await harness.log(row.id, topic.id, {
+    eventType: "human_gate", origin: "harness", decisionNode: "agent_check_stopped",
+    facts: { topic: topic.label, battleId, refunded: coins, restart },
+    narrative: `The learner stopped the Agent Check on ${topic.label}${coins ? ` — ${coins} coins refunded` : ""}.`,
+  }).catch(() => null);
+  let restarted = null;
+  if (restart) {
+    restarted = await harness.startTopicPractice({ sessionId: row.id, learnerId, topicId: topic.id, mode: wasRetest ? "retest" : "diagnostic" })
+      .then((r) => (r?.check ? { battleId: r.check.battleId, mode: r.check.mode, questions: r.check.questions } : { skipped: r?.skipped || null }))
+      .catch((e) => ({ error: e?.message || String(e) }));
+  }
+  return { stopped: true, topic: topic.label, battleId, refunded: coins, wasRetest, restarted };
+}
+
+/** What's running for a learner right now: their plan, its Agent Check (with the battle's link), its teaching sessions. */
+export async function runningWork(learnerId) {
+  const row = await liveStudyPrepSession(learnerId);
+  const out = { studyPlan: null, agentChecks: [], teachingSessions: [] };
+  if (row) {
+    const view = await getHarness().getSessionView({ sessionId: row.id, learnerId, eventLimit: 1 }).catch(() => null);
+    const active = view?.topics?.find((t) => t.status === "active") || null;
+    out.studyPlan = view ? {
+      sessionId: row.id, subject: view.session.subject, status: view.session.status, goal: view.session.goal,
+      activeTopic: active?.label || null, topicsUnderstood: view.topics.filter((t) => t.status === "understood").length, topics: view.topics.length,
+      nextCheck: view.nextCheck || null, link: "/app?tab=agent",
+    } : null;
+    if (active?.checkBattleId && !active.checkScoredAt) {
+      const check = await findCheckByBattle(active.checkBattleId).catch(() => null);
+      out.agentChecks.push({
+        topic: active.label, mode: active.checkMode, battleId: active.checkBattleId,
+        answered: Number(check?.metadata?.answered) || 0, total: Number(check?.metadata?.total) || null,
+        link: `/app?tab=battles&battle=${active.checkBattleId}`,
+      });
+    }
+  }
+  out.teachingSessions = (await teachingHandoff().listOpen(learnerId).catch(() => [])).map((t) => ({
+    topic: t.topic, state: t.state, focus: t.focus, progress: t.progress, link: "/app?tab=sessions",
+  }));
+  return out;
+}
 
 /** The battle worker: Sergeant marked a question of an Agent Check. */
 export function reportCheckQuestion(args) {

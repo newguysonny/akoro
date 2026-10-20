@@ -60,7 +60,7 @@ export function makeAgentCheckRun({ engine, findByBattle, studyPrep, now = () =>
   };
 
   /** start_agent_check made the battle. session: the row; topic: { id, label }. → the check's view | null */
-  async function started({ session, topic, battleId, mode = "diagnostic", questions = 5, coins = 2, auto = false }) {
+  async function started({ session, topic, battleId, mode = "diagnostic", questions = 5, coins = 2, auto = false, charge = null }) {
     const parentId = session?.workflow_id || null;
     if (!parentId || !battleId) return null;
     const retest = mode === "retest";
@@ -68,7 +68,8 @@ export function makeAgentCheckRun({ engine, findByBattle, studyPrep, now = () =>
       workflowType: "practice", learnerId: session.learner_id, entryMode: "agent_check", state: "running",
       parent: parentId, source: { workflowId: parentId, topicId: topic.id, reason: `agent_check_${mode}` },
       idempotencyKey: `agent_check:${battleId}`,
-      metadata: { kind: "agent_check", battleId, mode, topic: topic.label, topicId: topic.id, total: questions, answered: 0, studyPrepSessionId: session.id, startedAt: now() },
+      // charge: what was debited, so a stopped check is refunded exactly.
+      metadata: { kind: "agent_check", battleId, mode, topic: topic.label, topicId: topic.id, total: questions, answered: 0, coins, studyPrepSessionId: session.id, startedAt: now(), ...(Array.isArray(charge) && charge.length ? { charge } : {}) },
     }).catch(quiet("create"));
     const child = made?.instance;
     if (!child) return null;

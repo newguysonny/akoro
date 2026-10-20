@@ -414,3 +414,23 @@ export function plannerNotes(blocks) {
   const running = (blocks || []).some((b) => b.status === 'running');
   return { steps, said, running };
 }
+
+/**
+ * An Agent Check's card (2026-10-20): ONE tracking line from its run's own
+ * events — its marked questions and its result row — and whether it still
+ * runs (then the card links to the battle in Battles).
+ * check: the run message's meta.agentCheck; events: that run's events.
+ * → { state: 'running'|'passed'|'marked'|'stopped', line, answered, total }
+ */
+export function agentCheckCard(check, events = []) {
+  const total = Number(check?.total) || null;
+  const done = (tool) => (events || []).filter((e) => e.type === 'tool.completed' && e.payload?.tool === tool);
+  const answered = done('study_prep.check_question').length;
+  const marked = done('study_prep.check_marked').pop();
+  if (marked) {
+    const headline = String(marked.payload?.headline || marked.narration?.headline || '');
+    const state = /stopped/i.test(headline) ? 'stopped' : /passed/i.test(headline) ? 'passed' : 'marked';
+    return { state, line: headline.replace(/^Marked:\s*/, '') || 'Marked', answered, total };
+  }
+  return { state: 'running', line: `Running in Battles · ${answered} of ${total ?? '?'} answered`, answered, total };
+}

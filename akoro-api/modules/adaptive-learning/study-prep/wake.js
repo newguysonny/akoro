@@ -89,6 +89,8 @@ export function autoStartFor(topic, session, { spent = 0, maxAttempts = Infinity
   const running = topic.checkBattleId && !topic.checkScoredAt;
   if (running) return null;
   if (Number(topic.attemptsUsed || 0) >= Number(maxAttempts)) return null;
+  // A check the learner stopped never restarts by itself — only when they (or the agent, asked) start one.
+  if (topic.checkMode === "stopped") return null;
   const firstCheck = !topic.checkBattleId && !topic.examPrepRunId && topic.checkMode !== "skipped";
   const retest = Boolean(topic.learnerConfirmedReady);
   if (!firstCheck && !retest) return null;

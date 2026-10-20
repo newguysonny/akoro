@@ -307,3 +307,15 @@ test('planner notes for learners: each step with its plain reason, never the raw
   assert.deepEqual(out.said.map((b) => b.text), ['Your plan is ready.']);
   assert.equal(out.running, true);
 });
+
+test('an Agent Check card: one tracking line from its run — running with the count, then the result', async () => {
+  const { agentCheckCard } = await import('./agentChatTrace.js');
+  const q = (n) => ({ type: 'tool.completed', payload: { tool: 'study_prep.check_question', headline: `Q${n} of 5` } });
+  const check = { total: 5, battleId: 'b1' };
+  assert.deepEqual(agentCheckCard(check, []), { state: 'running', line: 'Running in Battles · 0 of 5 answered', answered: 0, total: 5 });
+  assert.equal(agentCheckCard(check, [q(1), q(2), q(3)]).line, 'Running in Battles · 3 of 5 answered');
+  const marked = { type: 'tool.completed', payload: { tool: 'study_prep.check_marked', headline: 'Marked: 2 of 5 · below the pass mark (80%)' } };
+  assert.deepEqual(agentCheckCard(check, [q(1), marked]), { state: 'marked', line: '2 of 5 · below the pass mark (80%)', answered: 1, total: 5 });
+  assert.equal(agentCheckCard(check, [{ type: 'tool.completed', payload: { tool: 'study_prep.check_marked', headline: 'Marked: 5 of 5 · passed' } }]).state, 'passed');
+  assert.equal(agentCheckCard(check, [{ type: 'tool.completed', payload: { tool: 'study_prep.check_marked', headline: 'Agent Check stopped: Osmosis' } }]).state, 'stopped');
+});

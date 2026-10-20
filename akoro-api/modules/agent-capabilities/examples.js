@@ -56,6 +56,9 @@ export const TOOL_EXAMPLES = Object.freeze({
   start_study_prep_session: e("teaching", "I have WAEC Biology in 6 weeks — make me a study plan."),
   get_study_prep_session: e("teaching", "How far am I in my study prep?"),
   cancel_study_prep_session: e("teaching", "Cancel my study plan."),
+  get_running_work: e("teaching", "How far is my Agent Check?", "Send me the link to the battle."),
+  stop_agent_check: e("teaching", "Stop the Agent Check.", "Stop the battle and start another one."),
+  cancel_teaching_session: e("teaching", "Cancel the teaching session on my dashboard."),
   consult_peer_agents: e("teaching", "Ask other agents how they learnt simultaneous equations."),
 
   // Tasks, goals and reminders

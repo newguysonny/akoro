@@ -997,6 +997,31 @@ export const CHAT_TOOLS = [
     },
   },
   {
+    name: "get_running_work",
+    description: "What is running for the learner right now, outside this chat: their Study Prep plan (topic, status), an Agent Check battle (topic, how many questions answered so far, the link to watch it in Battles) and teaching sessions waiting on their dashboard (topic, parts, progress, link). Use when they ask about progress, ask for a link, or ask about a battle or session that is running.",
+    featureGate: "study_prep",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "stop_agent_check",
+    description: "Stop the learner's running Agent Check when THEY ask to stop (or stop and redo) it. Its battle is cancelled, its coins are refunded and the try isn't counted; a stopped check never restarts by itself. Call first without confirm and tell them that; call again with confirm: true only after they say yes. restart: true also starts a NEW check right away (a new battle, 2 coins from the plan's approved coins) — say so before confirming.",
+    featureGate: "study_prep",
+    input_schema: {
+      type: "object",
+      properties: {
+        confirm: { type: "boolean", description: "true once the learner has said yes." },
+        restart: { type: "boolean", description: "Also start a new Agent Check right away (charged)." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "cancel_teaching_session",
+    description: "Close the teaching session Study Prep offered (or set up on the dashboard) for the current topic, when THEY ask to cancel it. Call first without confirm, then with confirm: true after they say yes.",
+    featureGate: "study_prep",
+    input_schema: { type: "object", properties: { confirm: { type: "boolean", description: "true once the learner has said yes." } }, required: [] },
+  },
+  {
     name: "get_study_prep_session",
     description: "Read the learner's current study-prep session: status, topics with their states, the plan-card estimate, and the recent agent activity log. Use for progress/resume questions. Never returns answer keys.",
     featureGate: "study_prep",
@@ -2548,6 +2573,49 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       const { getStudyPrepSessionSummary } = await import("./study-prep/chat-tool-handlers.js");
       return getStudyPrepSessionSummary(studentId);
     }
+    case "get_running_work": {
+      if (!studyPrepEnabled) return { enabled: false, message: "Study-prep sessions are not enabled for this learner." };
+      const { runningWork } = await import("./study-prep/wiring.js");
+      const work = await runningWork(studentId);
+      const nothing = !work.studyPlan && !work.agentChecks.length && !work.teachingSessions.length;
+      return { ...work, ...(nothing ? { note: "Nothing is running for them right now — say so." } : {}) };
+    }
+    case "stop_agent_check": {
+      if (!studyPrepEnabled) return { enabled: false, message: "Study-prep sessions are not enabled for this learner." };
+      const { runningWork, stopAgentCheck } = await import("./study-prep/wiring.js");
+      const restart = input?.restart === true;
+      if (input?.confirm !== true) {
+        const check = (await runningWork(studentId)).agentChecks[0] || null;
+        if (!check) return { stopped: false, note: "No Agent Check is running for them — say so." };
+        return {
+          stopped: false, needsConfirmation: true, check,
+          note: `Their Agent Check on ${check.topic} is running (${check.answered} of ${check.total ?? "?"} answered). Stopping cancels the battle, refunds its coins and doesn't count the try; it won't start again by itself.${restart ? " A new check would start right away — a new battle, 2 coins from the plan's approved coins." : ""} Ask, and call again with confirm: true only after they say yes.`,
+        };
+      }
+      const done = await stopAgentCheck({ learnerId: studentId, restart });
+      if (!done.stopped) return { ...done, note: done.reason === "already_finished" ? "That check had already finished — read the result instead." : "No Agent Check is running for them — say so." };
+      return {
+        ...done,
+        note: `Stopped the Agent Check on ${done.topic}${done.refunded ? `; ${done.refunded} coins refunded` : ""}.${done.restarted?.battleId ? " A new check started — its card is in the chat, the battle is in Battles." : done.restarted ? ` A new check could not start: ${done.restarted.error || "it was skipped"}.` : " It won't start again by itself — they can start it from the card or ask you."}`,
+      };
+    }
+    case "cancel_teaching_session": {
+      if (!studyPrepEnabled) return { enabled: false, message: "Study-prep sessions are not enabled for this learner." };
+      const { runningWork, teachingHandoff, teachingForTopic, getHarness } = await import("./study-prep/wiring.js");
+      const work = await runningWork(studentId);
+      if (!work.studyPlan) return { cancelled: false, note: "No teaching session is open for them — say so." };
+      const view = await getHarness().getSessionView({ sessionId: work.studyPlan.sessionId, learnerId: studentId, eventLimit: 1 });
+      const topic = view.topics.find((t) => t.status === "active");
+      // Offered on the card, waiting on the dashboard, or under way.
+      const session = topic ? await teachingForTopic(view.session.workflowId, topic.id) : null;
+      if (!session) return { cancelled: false, note: "No teaching session is open for them — say so." };
+      const where = session.state === "proposed" ? "offered on the card" : session.state === "scheduled" ? "waiting on their dashboard" : "under way";
+      if (input?.confirm !== true) return { cancelled: false, needsConfirmation: true, session: { topic: session.topic, state: session.state, focus: session.focus }, note: `Their teaching session on ${session.topic} is ${where}. Ask whether to close it; call again with confirm: true after they say yes.` };
+      const closed = await teachingHandoff().cancelFor({ parentId: view.session.workflowId, topicId: topic.id, reason: "cancelled_by_learner" });
+      return closed
+        ? { cancelled: true, topic: session.topic, note: `Closed the teaching session on ${session.topic}. The retest unlocks when they teach it (or tap "I taught it elsewhere" on the card).` }
+        : { cancelled: false, note: "It was already closed." };
+    }
     case "cancel_study_prep_session": {
       if (!studyPrepEnabled) return { enabled: false, message: "Study-prep sessions are not enabled for this learner." };
       const { getStudyPrepSessionSummary } = await import("./study-prep/chat-tool-handlers.js");
@@ -3723,6 +3791,19 @@ async function appendBasicChatTurn({ conversationId, userId, userMessage, assist
   return { assistantMessageId: (inserted || []).find((row) => row.role === "agent")?.id ?? null };
 }
 
+/** The running-work rules + what runs now, for the turn's context — empty when nothing runs. */
+async function runningWorkBrief(learnerId) {
+  const { runningWork } = await import("./study-prep/wiring.js");
+  const work = await runningWork(learnerId);
+  const live = [
+    ...work.agentChecks.map((c) => `- Agent Check on ${c.topic} running in Battles: ${c.answered} of ${c.total ?? "?"} answered. Link: ${c.link}`),
+    ...work.teachingSessions.map((t) => `- Teaching session on ${t.topic} (${t.state === "scheduled" ? "waiting on their dashboard" : "under way"}${t.progress?.of ? `, ${t.progress.done || 0} of ${t.progress.of} parts taught` : ""}). Link: ${t.link}`),
+  ];
+  if (!live.length) return "";
+  const doctrine = await loadDoctrine("reasoning/RUNNING_WORK.md").catch(() => "");
+  return `\n\n${doctrine.trim()}\n\n## Running now\n${live.join("\n")}`;
+}
+
 /**
  * The preview affordances a reload must rebuild: drafts the tools created
  * during this reply (topic previews, assignment/quiz draft cards) plus which
@@ -4361,6 +4442,9 @@ router.post("/agent", async (req, res) => {
     const inboxCtx = role === "student" && agentNetworkEnabled
       ? (await inboxBrief(req.user.id).catch(() => "")) + (await buddyBrief(req.user.id).catch(() => ""))
       : "";
+    // Something is running outside the chat (an Agent Check battle, a teaching session): the
+    // rules for talking about it and changing it (akoro-agent/reasoning/RUNNING_WORK.md), and what it is.
+    const runningCtx = role === "student" && studyPrepEnabled ? await runningWorkBrief(req.user.id).catch(() => "") : "";
 
     let att = { visionParts: [], docContext: "", notes: [] };
     if (Array.isArray(rawAttachments) && rawAttachments.length) {
@@ -4425,7 +4509,7 @@ router.post("/agent", async (req, res) => {
       renderRelevantMemory(relevantMemories) +
       renderScratchpad(conversation?.scratchpad) +
       (goalsCtx || "") +
-      protegeCtx + inboxCtx + ingestCtx + selfToolCtx + draftsCtx +
+      protegeCtx + inboxCtx + runningCtx + ingestCtx + selfToolCtx + draftsCtx +
       (syllabusCtx ? `\n\n${syllabusCtx}` : "") +
       (pastCtx ? `\n\n${pastCtx}` : "") +
       (curriculumCtx ? `\n\n${curriculumCtx}` : "") +

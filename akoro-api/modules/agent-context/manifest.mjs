@@ -81,6 +81,13 @@ export const SETS = Object.freeze({
     consumer: "agent chat /agent route — student role, protégé rules (taught knowledge, the teaching guide)",
     files: Object.freeze(["identity/PROTEGE.md", "policies/PROTEGE.md"]),
   }),
+  // While something runs outside the chat (an Agent Check battle, a teaching
+  // session): appended by chat.js runningWorkBrief() with what is running.
+  chat_running_work: Object.freeze({
+    mode: "verbatim",
+    consumer: "agent chat /agent route — student role, while an Agent Check or teaching session runs",
+    files: Object.freeze(["reasoning/RUNNING_WORK.md"]),
+  }),
   chat_instructor: Object.freeze({
     mode: "verbatim",
     consumer: "agent chat /agent route — instructor copilot",

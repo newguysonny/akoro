@@ -77,6 +77,10 @@
     { "text": "Is autonomy on for you? What's your autonomy status?", "tool": "get_autonomy_status", "run": true },
     { "text": "Plan a study-prep session for my Mathematics test next Friday on quadratic equations.", "tool": "start_study_prep_session", "args": { "subject": "/math/i" } },
     { "text": "Show my current study-prep session and plan.", "tool": "get_study_prep_session", "run": true },
+    { "text": "Cancel my study plan, I don't need it any more.", "tool": "cancel_study_prep_session" },
+    { "text": "How far is my Agent Check? Send me the link to the battle.", "tool": "get_running_work", "run": true },
+    { "text": "Stop the Agent Check that's running and start a new one.", "tool": "stop_agent_check", "args": { "restart": true } },
+    { "text": "Cancel the teaching session you set up on my dashboard.", "tool": "cancel_teaching_session" },
     { "text": "Please ask the Akoro team to add a tool that turns my notes into flashcards.", "tool": "submit_tool_request" }
   ]
 }

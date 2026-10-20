@@ -177,6 +177,14 @@ export default function LearnerDashboard() {
   const [agentAutonomyLoaded, setAgentAutonomyLoaded] = useState(false);
   const [agentAutonomySaving, setAgentAutonomySaving] = useState(false);
   const [liveBattleModal,     setLiveBattleModal]     = useState(null);
+  // A link straight to one battle (?tab=battles&battle=<id>) — e.g. an Agent
+  // Check's "Watch in Battles" in the chat: the Battles tab, with that battle open.
+  useEffect(() => {
+    const id = new URLSearchParams(location.search).get("battle");
+    if (!id || !/^[0-9a-f-]{36}$/i.test(id)) return;
+    setTab("battles");
+    setLiveBattleModal((open) => (open?.id === id ? open : { id, status: "live" }));
+  }, [location.search]);
 
   // ── API-driven state ─────────────────────────────────────────────────────
   const [sessions,     setSessions]     = useState([]);
