@@ -96,7 +96,9 @@ export function narrate(env) {
   const base = (TEMPLATES[env?.type] || TEMPLATES.activity)(p);
   const tool = (env?.type || "").startsWith("tool.") || env?.type === "decision.proposed" ? toolRow(p) : null;
   const node = p.decisionNode && NODE_HEADLINES[p.decisionNode];
-  const headline = node || (tool ? tool[0] : base.headline);
+  // A tool row the table doesn't know may carry its own headline (code-written runs, e.g. the teaching handoff's).
+  const own = (env?.type || "").startsWith("tool.") && !tool && p.headline ? clip(p.headline, 120) : null;
+  const headline = node || own || (tool ? tool[0] : base.headline);
   const description = tool && !node ? tool[1] : base.description;
   const narrative = clip(p.narrative, 500);
   const why = p.intent ? clip(p.intent, 240) : "";

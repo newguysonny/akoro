@@ -46,8 +46,8 @@ export function makeTeachingHandoff({ engine, findOpen, listDueProposals, studyP
     });
     await mark("started");
     if (tool) {
-      await toParent(parentId, { event_type: "tool.started", category: "action", actor: "agent", payload: { tool, iteration: 1, narrative: headline } });
-      await toParent(parentId, { event_type: "tool.completed", category: "action", actor: "agent", payload: { tool, iteration: 1, narrative: headline, resultLine } });
+      await toParent(parentId, { event_type: "tool.started", category: "action", actor: "agent", payload: { tool, iteration: 1, headline, narrative: headline } });
+      await toParent(parentId, { event_type: "tool.completed", category: "action", actor: "agent", payload: { tool, iteration: 1, headline, narrative: headline, resultLine } });
     }
     for (const event of extra) await toParent(parentId, event);
     if (message) await toParent(parentId, { event_type: "activity", category: "synthesis", actor: "agent", payload: { message } });

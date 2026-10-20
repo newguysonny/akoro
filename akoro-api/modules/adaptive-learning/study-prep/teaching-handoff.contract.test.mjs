@@ -96,6 +96,8 @@ test("a missed check offers the session; nothing tapped for a minute sets it up 
   const tool = events.find((e) => e.event_type === "tool.completed");
   assert.equal(tool.payload.tool, START_TEACHING_TOOL);
   assert.equal(tool.payload.resultLine, "On your dashboard");
+  const { narrate } = await import("../../workflows/narrator.js");
+  assert.equal(narrate({ type: "tool.completed", payload: tool.payload }).headline, "Teaching session created: Osmosis", "the chat's tool row says what it did");
   assert.ok(types.includes("workflow.handoff_created"));
   assert.match(events.find((e) => e.event_type === "activity").payload.message, /on your dashboard.*why water moves in and plasmolysis/i);
   const started = events.find((e) => e.event_type === "operation.started");

@@ -3736,8 +3736,11 @@ function previewMetaFrom(toolExecutions) {
     .map((x) => x.draft);
   // The reply's material links come back on reload too.
   const materials = collectMaterials(execs.map((x) => x.materials || []));
-  if (!previews.length && !materials.length) return null;
-  return { ...(previews.length ? { previews } : {}), ...(materials.length ? { materials } : {}), tools: execs.map((x) => x.tool) };
+  // The Study Prep card the reply carries (the live chat reads it from the tool's session): a
+  // reload — or the server after a restart, looking for the plan's chat — finds it here.
+  const studyPrepSessionId = execs.find((x) => x.success && x.session?.id && ["start_study_prep_session", "get_study_prep_session"].includes(x.tool))?.session?.id || null;
+  if (!previews.length && !materials.length && !studyPrepSessionId) return null;
+  return { ...(previews.length ? { previews } : {}), ...(materials.length ? { materials } : {}), ...(studyPrepSessionId ? { studyPrepSessionId } : {}), tools: execs.map((x) => x.tool) };
 }
 
 /**

@@ -691,12 +691,15 @@ export const scenarios = [
         await teach.press('Enter');
         await film('teaching', 12, async () => false);
       }
-      // 6. End it.
-      for (const name of [/End Session/i, /End Session/i, /Save & Close Session/i]) {
-        await page.getByRole('button', { name }).last().click({ timeout: 8000 }).catch(() => {});
-        await page.waitForTimeout(2500);
-        await shot('ending');
+      // 6. End it: the modal's × (closing ends the session unless it was minimised), then any end/save prompt.
+      await page.locator('i.ti-x').first().locator('xpath=..').click({ timeout: 8000 }).catch(() => {});
+      await page.waitForTimeout(2500);
+      await shot('ending');
+      for (const name of [/End Session/i, /Save & Close Session/i]) {
+        const b = page.getByRole('button', { name }).last();
+        if (await b.isVisible().catch(() => false)) { await b.click().catch(() => {}); await page.waitForTimeout(2500); await shot('ending'); }
       }
+      await page.waitForTimeout(6000);
 
       // 7. Back in the chat: the agent's report and the retest countdown.
       await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
