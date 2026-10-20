@@ -1,25 +1,30 @@
-# Build + deploy the RunPod EMBEDDING worker (Qwen/Qwen3-Embedding-0.6B) —
-# ONLY when embed-worker/** changes. Same pattern as deploy-runpod-worker.yml
-# (the parse worker): contract tests → build (repo-root context) → push
-# ghcr.io/<owner>/akoro-embed-worker:<sha> → point its RunPod template at it.
-# A separate endpoint from the parse worker: one cached model per endpoint,
-# a small GPU instead of a 24 GB card, and one worker kept warm for searches.
+# Build + deploy the RunPod EMBEDDING worker — ONLY when embed-worker/**
+# changes. Same pattern as deploy-runpod-worker.yml (the hanji parse worker):
+# contract tests → build (repo-root context) → push
+# ghcr.io/<owner>/akoro-embed-worker:<sha> → point the RunPod templates at it.
 #
-# One-time setup:
-#   1. RunPod console → Serverless → New Endpoint:
+# ONE image, ONE endpoint (+ its template) PER MODEL — each endpoint caches
+# one model, and the template's EMBED_MODEL_ID tells the worker which it runs:
+#   Qwen3   Model field + EMBED_MODEL_ID = Qwen/Qwen3-Embedding-0.6B
+#   bge-m3  Model field + EMBED_MODEL_ID = BAAI/bge-m3
+# Once one is chosen, delete the other endpoint and its template (and secret).
+#
+# One-time setup, per model:
+#   1. RunPod console → Serverless → New Endpoint (like the hanji endpoint):
 #        - Container image: ghcr.io/<owner>/akoro-embed-worker:latest
-#        - Model field: Qwen/Qwen3-Embedding-0.6B (cached, unbilled pull)
-#        - GPU: the smallest available (16 GB is plenty; the model is ~1.2 GB)
-#        - Active workers: 1 (searches embed every question — no cold starts)
-#        - Max workers: 2–3
-#   2. GHCR visibility: make the akoro-embed-worker package Public, or add
-#      GHCR credentials to RunPod (as for the parse worker).
-#   3. Repo Settings → Secrets → Actions:
-#        RUNPOD_API_KEY            — already set for the parse worker
-#        RUNPOD_EMBED_TEMPLATE_ID  — this endpoint's template id
-#   4. API (Render env): EMBEDDINGS_PROVIDER=runpod,
-#      RUNPOD_EMBED_ENDPOINT_ID=<endpoint id>, RUNPOD_API_KEY=<key>;
-#      then re-embed everything once (POST /api/admin/embeddings/reembed-all).
+#        - Model field: the model above (cached, unbilled pull)
+#        - Env: EMBED_MODEL_ID = the same model id
+#        - GPU: the smallest available (16 GB is plenty; each model is ~1-2 GB)
+#        - Active workers: 0 (scales to zero; the first search after idle waits
+#          for a cold start), Max workers: 1-2
+#   2. GHCR: the akoro-embed-worker package Public, or GHCR credentials in RunPod.
+#   3. Repo Settings → Secrets → Actions (RUNPOD_API_KEY is already set):
+#        RUNPOD_EMBED_TEMPLATE_ID      — the Qwen3 endpoint's template id
+#        RUNPOD_EMBED_BGE_TEMPLATE_ID  — the bge-m3 endpoint's template id
+#   4. API (Render env): RUNPOD_EMBED_ENDPOINT_ID (Qwen3),
+#      RUNPOD_EMBED_BGE_ENDPOINT_ID (bge-m3), RUNPOD_API_KEY. Compare with
+#      POST /api/admin/embeddings/compare (stores untouched); only then
+#      EMBEDDINGS_PROVIDER=runpod + EMBEDDINGS_MODEL and a re-embed-all.
 #
 # Run manually: Actions tab → "Deploy RunPod embed worker" → Run workflow.
 
@@ -109,28 +114,34 @@ jobs:
       # Point the endpoint's template at the immutable SHA tag (not :latest),
       # so RunPod rolls workers onto exactly this build and a rollback is just
       # re-running an older commit's workflow.
-      - name: Update RunPod template
+      - name: Update RunPod templates
         env:
           RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
-          RUNPOD_EMBED_TEMPLATE_ID: ${{ secrets.RUNPOD_EMBED_TEMPLATE_ID }}
+          QWEN_TEMPLATE: ${{ secrets.RUNPOD_EMBED_TEMPLATE_ID }}
+          BGE_TEMPLATE: ${{ secrets.RUNPOD_EMBED_BGE_TEMPLATE_ID }}
           IMAGE: ${{ steps.image.outputs.tag }}
         run: |
-          if [ -z "$RUNPOD_API_KEY" ] || [ -z "$RUNPOD_EMBED_TEMPLATE_ID" ]; then
-            echo "::warning::RUNPOD_API_KEY / RUNPOD_EMBED_TEMPLATE_ID not set — image pushed, endpoint NOT updated."
-            echo "Set the template's container image to: $IMAGE"
+          if [ -z "$RUNPOD_API_KEY" ] || { [ -z "$QWEN_TEMPLATE" ] && [ -z "$BGE_TEMPLATE" ]; }; then
+            echo "::warning::RUNPOD_API_KEY / embed template ids not set — image pushed, endpoints NOT updated."
+            echo "Set the templates' container image to: $IMAGE"
             exit 0
           fi
-          status=$(curl -sS -o response.json -w '%{http_code}' -X PATCH \
-            "https://rest.runpod.io/v1/templates/${RUNPOD_EMBED_TEMPLATE_ID}" \
-            -H "Authorization: Bearer ${RUNPOD_API_KEY}" \
-            -H "Content-Type: application/json" \
-            -d "{\"imageName\": \"${IMAGE}\"}")
-          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
-            echo "::error::RunPod template update failed (HTTP $status)"
-            cat response.json
-            exit 1
-          fi
-          echo "RunPod template ${RUNPOD_EMBED_TEMPLATE_ID} → ${IMAGE}"
+          failed=0
+          for pair in "Qwen3:${QWEN_TEMPLATE}" "bge-m3:${BGE_TEMPLATE}"; do
+            label="${pair%%:*}"; id="${pair#*:}"
+            if [ -z "$id" ]; then echo "$label: no template id set — skipped"; continue; fi
+            status=$(curl -sS -o response.json -w '%{http_code}' -X PATCH \
+              "https://rest.runpod.io/v1/templates/${id}" \
+              -H "Authorization: Bearer ${RUNPOD_API_KEY}" \
+              -H "Content-Type: application/json" \
+              -d "{\"imageName\": \"${IMAGE}\"}")
+            if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+              echo "::error::$label template update failed (HTTP $status)"; cat response.json; failed=1
+            else
+              echo "$label template ${id} → ${IMAGE}"
+            fi
+          done
+          exit $failed
 
       - name: Summary
         run: |

@@ -18,9 +18,11 @@ test("boot is inert — the model loads lazily, once, under a lock", () => {
   assert.match(handler, /raise ModelUnavailable\(str\(e\)\) from e/, "a load failure fails the job, not the worker");
 });
 
-test("pooling and normalisation follow the model card: left padding, last token, L2", () => {
-  assert.match(handler, /padding_side="left"/);
-  assert.match(handler, /pooled = hidden\[:, -1\]/);
+test("pooling and normalisation follow each model card: Qwen3 last token (left padding), bge-m3 CLS; L2", () => {
+  assert.match(handler, /PROFILE = model_profile\(MODEL_ID\)/);
+  assert.match(handler, /padding_side=PROFILE\["padding_side"\]/);
+  assert.match(handler, /pooled = hidden\[:, 0\] if PROFILE\["pooling"\] == "cls" else hidden\[:, -1\]/);
+  assert.match(handler, /parse_input\(job\.get\("input"\) or \{\}, PROFILE\)/, "the dims and instruction rules are the model's");
   assert.match(handler, /F\.normalize\(pooled\[:, :dims\]\.float\(\), p=2, dim=1\)/, "cut to the MRL dims, then normalised");
 });
 

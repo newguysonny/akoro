@@ -88,3 +88,25 @@ export const embeddingsLive = {
     }
   },
 };
+
+// Choosing the self-hosted model (2026-10-20): the fixed test set on every
+// deployed model, side by side — the stores are never touched. A report, not
+// a verdict on which is better: it fails only when a model can't run or
+// finds almost nothing.
+export const embeddingsCompare = {
+  name: "smoke.embeddings_compare", area: "smoke", risk: "read",
+  description: "Embeds the fixed test set (lib/embeddingEvalSet.js) with each deployed embedding model and reports recall@1, recall@5, MRR, by language, first-call and per-search time. Never touches the stores.",
+  async run(ctx) {
+    const { compareEmbeddings } = await import("../../../lib/embeddingCompare.js");
+    const out = await compareEmbeddings();
+    ctx.note(`${out.passages} passages · ${out.queries} questions · ${out.results.length} models`);
+    ctx.expect.ok("at least one model to compare", out.results.length > 0, "set RUNPOD_EMBED_ENDPOINT_ID / RUNPOD_EMBED_BGE_ENDPOINT_ID");
+    for (const r of out.results) {
+      if (r.error) { ctx.note(`${r.key}: error ${r.error}`); ctx.expect.ok(`${r.key} runs`, false, r.error); continue; }
+      const lang = Object.entries(r.byLang).map(([l, v]) => `${l} R@1 ${v.recall1}`).join(" · ");
+      ctx.note(`${r.key}: R@1 ${r.recall1} · R@5 ${r.recall5} · MRR ${r.mrr} · ${lang} · first call ${r.firstCallMs} ms · per search ${r.searchEmbedMs} ms`);
+      for (const m of r.misses.slice(0, 8)) ctx.note(`  ${r.key} miss: "${m.q}" → ${m.got} (wanted ${m.want}, rank ${m.rank})`);
+      ctx.expect.ok(`${r.key} finds most answers in its top 5`, r.recall5 >= 0.6, r.recall5);
+    }
+  },
+};

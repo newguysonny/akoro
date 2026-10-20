@@ -139,6 +139,7 @@ router.get("/embeddings", adminOnly, asyncHandler(async (req, res) => {
  * Embeddings provider + the model switch (lib/embeddingCutover.js).
  * GET  /api/admin/embeddings/provider       — which provider, and a live probe
  * POST /api/admin/embeddings/reembed-all    — { confirm: true }: probe, clear every vector, refill in the background
+ * POST /api/admin/embeddings/compare        — the fixed test set on every deployed model, side by side (stores untouched)
  */
 router.get("/embeddings/provider", adminOnly, asyncHandler(async (req, res) => {
   const { probeEmbeddings, cutoverState } = await import("../../lib/embeddingCutover.js");
@@ -149,6 +150,11 @@ router.post("/embeddings/reembed-all", adminOnly, asyncHandler(async (req, res) 
   const { startReembedAll } = await import("../../lib/embeddingCutover.js");
   const out = await startReembedAll({ allowOpenAI: req.body?.allowOpenAI === true });
   res.status(out.started ? 202 : 409).json({ success: out.started, ...out });
+}));
+
+router.post("/embeddings/compare", adminOnly, asyncHandler(async (req, res) => {
+  const { compareEmbeddings } = await import("../../lib/embeddingCompare.js");
+  res.json({ success: true, ...(await compareEmbeddings()) });
 }));
 
 /** POST /api/admin/embeddings/sweep — fill some in now instead of waiting. */

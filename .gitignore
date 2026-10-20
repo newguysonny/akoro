@@ -7,3 +7,5 @@ dist/
 dump.rdb
 extracted/
 node_modules/
+
+__pycache__/

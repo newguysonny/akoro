@@ -1,5 +1,7 @@
 """
-RunPod Serverless worker — Qwen/Qwen3-Embedding-0.6B (text embeddings).
+RunPod Serverless worker — text embeddings: Qwen/Qwen3-Embedding-0.6B or
+BAAI/bge-m3, whichever EMBED_MODEL_ID names. One image, one endpoint per
+model (each endpoint caches its own model); both give 1024 dims.
 
 The API's single embedding seam (akoro-api lib/aiModel.js) calls this
 endpoint's /runsync with { input: [texts], dimensions: 1024 } and pads the
@@ -7,8 +9,8 @@ endpoint's /runsync with { input: [texts], dimensions: 1024 } and pads the
 similarity).
 
 Boot is INERT, like the parse worker: the model loads on the first job from
-RunPod's model cache (the endpoint's Model field = Qwen/Qwen3-Embedding-0.6B),
-offline; a load failure fails that job readably and the worker stays up.
+RunPod's model cache (the endpoint's Model field = EMBED_MODEL_ID), offline;
+a load failure fails that job readably and the worker stays up.
 
 Input  { "input": str | [str], "dimensions"?: 32..1024, "instruction"?: str }
 Output { "embeddings": [[float]], "dimensions": int, "model": str,
@@ -19,13 +21,14 @@ import threading
 
 import runpod
 
-from embedcore import BadInput, batches, parse_input, with_instruction
+from embedcore import BadInput, batches, model_profile, parse_input, with_instruction
 
 MODEL_ID = os.environ.get("EMBED_MODEL_ID", "Qwen/Qwen3-Embedding-0.6B")
 HF_CACHE_ROOT = os.environ.get("HF_CACHE_ROOT", "/runpod-volume/huggingface-cache/hub")
 ALLOW_DOWNLOAD = os.environ.get("RUNPOD_ALLOW_DOWNLOAD", "") == "1"
 MAX_TOKENS = int(os.environ.get("EMBED_MAX_TOKENS", "8192"))
 BATCH = int(os.environ.get("EMBED_BATCH", "16"))
+PROFILE = model_profile(MODEL_ID)
 
 _model_lock = threading.Lock()
 _tokenizer = None
@@ -72,8 +75,9 @@ def _ensure_model():
             from transformers import AutoModel, AutoTokenizer
             path = resolve_snapshot_path(MODEL_ID)
             print(f"[embed] loading {MODEL_ID} from {path}")
-            # Left padding: the last position is every sequence's last real token (last-token pooling).
-            _tokenizer = AutoTokenizer.from_pretrained(path, padding_side="left", local_files_only=not ALLOW_DOWNLOAD)
+            # Qwen3: left padding, so the last position is every sequence's last real
+            # token (last-token pooling). bge-m3: right padding, CLS at position 0.
+            _tokenizer = AutoTokenizer.from_pretrained(path, padding_side=PROFILE["padding_side"], local_files_only=not ALLOW_DOWNLOAD)
             _device = "cuda" if torch.cuda.is_available() else "cpu"
             dtype = torch.float16 if _device == "cuda" else torch.float32
             _model = AutoModel.from_pretrained(path, dtype=dtype, local_files_only=not ALLOW_DOWNLOAD).to(_device)
@@ -86,7 +90,8 @@ def _ensure_model():
 
 
 def embed(texts, dims):
-    """Last-token pooling, cut to `dims` (MRL), L2-normalised — as the model card prescribes."""
+    """Pooled as the model card prescribes (last token or CLS), cut to `dims`
+    (MRL, Qwen3 only — bge-m3 is always asked for its full 1024), L2-normalised."""
     import torch
     import torch.nn.functional as F
     tokenizer, model, device = _ensure_model()
@@ -96,7 +101,7 @@ def embed(texts, dims):
             batch = tokenizer(chunk, padding=True, truncation=True, max_length=MAX_TOKENS, return_tensors="pt").to(device)
             tokens += int(batch["attention_mask"].sum().item())
             hidden = model(**batch).last_hidden_state
-            pooled = hidden[:, -1]
+            pooled = hidden[:, 0] if PROFILE["pooling"] == "cls" else hidden[:, -1]
             vectors = F.normalize(pooled[:, :dims].float(), p=2, dim=1)
             out.extend(vectors.cpu().tolist())
     return out, tokens
@@ -104,7 +109,7 @@ def embed(texts, dims):
 
 def handler(job):
     try:
-        texts, dims, instruction = parse_input(job.get("input") or {})
+        texts, dims, instruction = parse_input(job.get("input") or {}, PROFILE)
     except BadInput as e:
         return {"error": f"bad_input: {e}"}
     try:

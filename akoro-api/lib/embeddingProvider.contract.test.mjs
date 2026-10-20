@@ -7,7 +7,7 @@ import test from "node:test";
  * endpoint, 1024 dims padded to the 1536 columns, behind the one embeddings
  * seam — and never mixed with OpenAI's vectors.
  */
-import { canEmbed, DB_DIMENSIONS, embeddingsProvider, padTo, runpodEmbeddings, SELF_HOSTED_DIMENSIONS, SELF_HOSTED_MODEL } from "./embeddingProvider.js";
+import { canEmbed, DB_DIMENSIONS, embeddingsProvider, padTo, runpodEmbeddings, selfHostedModel, SELF_HOSTED_DIMENSIONS, SELF_HOSTED_MODEL } from "./embeddingProvider.js";
 
 const env = { EMBEDDINGS_PROVIDER: "runpod", RUNPOD_EMBED_ENDPOINT_ID: "ep1", RUNPOD_API_KEY: "k" };
 
@@ -57,7 +57,7 @@ test("a worker error is an error — never an empty or partial result", async ()
 test("the seam: one breaker, either provider, never a fallback between them; billed under the model that answered", async () => {
   const src = await readFile(new URL("./aiModel.js", import.meta.url), "utf8");
   assert.match(src, /embeddingsProvider\(\) === "runpod" \? runpodEmbeddings\(params\) : rawClient\.embeddings\.create\(params\)/);
-  assert.match(src, /res\.model === SELF_HOSTED_MODEL \? SELF_HOSTED_MODEL/);
+  assert.match(src, /isSelfHostedModel\(res\.model\) \? res\.model/);
 });
 
 test("the switch covers every table that stores a vector", async () => {
@@ -75,4 +75,22 @@ test("the switch covers every table that stores a vector", async () => {
   const src = await readFile(new URL("./embeddingCutover.js", import.meta.url), "utf8");
   for (const t of tables) assert.match(src, new RegExp(`table: "${t}"`), `${t} is re-embedded on a switch`);
   assert.ok(tables.size >= 9, [...tables].join(", "));
+});
+
+test("two self-hosted models, one endpoint each: EMBEDDINGS_MODEL picks the app's; a model without an endpoint isn't used", async () => {
+  const both = { ...env, RUNPOD_EMBED_BGE_ENDPOINT_ID: "ep-bge" };
+  assert.equal(selfHostedModel(both), "qwen3-embedding-0.6b", "Qwen3 unless named");
+  assert.equal(selfHostedModel({ ...both, EMBEDDINGS_MODEL: "bge-m3" }), "bge-m3");
+  assert.equal(selfHostedModel({ ...both, EMBEDDINGS_MODEL: "nonsense" }), "qwen3-embedding-0.6b");
+  assert.equal(embeddingsProvider({ ...env, EMBEDDINGS_MODEL: "bge-m3" }), "openai", "bge-m3 chosen but not deployed → stays on OpenAI");
+  assert.equal(embeddingsProvider({ ...both, EMBEDDINGS_MODEL: "bge-m3" }), "runpod");
+  const calls = [];
+  const fetchImpl = async (url, init) => { calls.push({ url, body: JSON.parse(init.body) }); return { ok: true, status: 200, json: async () => ({ status: "COMPLETED", output: { embeddings: [[1]], usage: { prompt_tokens: 1 } } }) }; };
+  const bge = await runpodEmbeddings({ input: "a" }, { env: both, model: "bge-m3", fetchImpl });
+  assert.match(calls[0].url, /\/v2\/ep-bge\/runsync/);
+  assert.equal(bge.model, "bge-m3", "billed under the model that answered");
+  await runpodEmbeddings({ input: "q" }, { env: both, instruction: "Find the passage", fetchImpl });
+  assert.match(calls[1].url, /\/v2\/ep1\//);
+  assert.equal(calls[1].body.input.instruction, "Find the passage");
+  await assert.rejects(runpodEmbeddings({ input: "a" }, { env, model: "bge-m3", fetchImpl }), /RUNPOD_EMBED_BGE_ENDPOINT_ID/);
 });
