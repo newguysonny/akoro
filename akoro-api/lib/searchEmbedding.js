@@ -1,0 +1,54 @@
+/**
+ * lib/searchEmbedding.js — embedding a learner's QUESTION for a search, with
+ * a time limit (2026-10-20).
+ *
+ * A search must answer even when the embedding provider is slow: a RunPod
+ * endpoint scaled to zero takes 10–30 s to start, and an open breaker or an
+ * outage fails outright. So a search waits at most SEARCH_EMBED_TIMEOUT_MS
+ * (default 3 s) for its vector, then goes on without it — every match_* search
+ * ranks on its text half when the vector is null. A late answer is not wasted:
+ * the call still finishes in the background, which is what wakes a cold worker
+ * for the next search.
+ *
+ * Only for searches. Storing a vector (notes, chunks, topics) keeps the plain
+ * embed: a stored row may wait, and a missing vector is the sweeper's to fill.
+ */
+export const SEARCH_EMBED_TIMEOUT_MS = Math.max(250, Number(process.env.SEARCH_EMBED_TIMEOUT_MS) || 3000);
+
+const stats = { asked: 0, late: 0, failed: 0 };
+/** How often searches went without their vector since boot (admin/health). */
+export const searchEmbedStats = () => ({ ...stats, timeoutMs: SEARCH_EMBED_TIMEOUT_MS });
+
+/**
+ * → the query's vector, or null when it failed or took longer than the limit
+ * (the caller searches on text alone). Never throws.
+ */
+export async function embedForSearch(text, { userId = null, feature = "search_embedding", payer = null, timeoutMs = SEARCH_EMBED_TIMEOUT_MS, create = null } = {}) {
+  const input = String(text ?? "").trim().slice(0, 8000);
+  if (!input) return null;
+  stats.asked++;
+  const embed = create || (async (p) => (await import("./aiModel.js")).openai.embeddings.create(p));
+  const call = Promise.resolve().then(() => embed({
+    model: "text-embedding-3-small", input,
+    __feature: feature,
+    ...(payer === "platform" ? { __payer: "platform" } : userId ? { __userId: userId } : {}),
+  }));
+  let timer;
+  const late = new Promise((resolve) => { timer = setTimeout(() => resolve("late"), timeoutMs); });
+  try {
+    const res = await Promise.race([call, late]);
+    if (res === "late") {
+      stats.late++;
+      call.catch(() => {});   // finishes in the background (warms a cold worker); its failure is nobody's
+      console.warn(`[search-embed] no vector within ${timeoutMs} ms — searching on text (${feature})`);
+      return null;
+    }
+    return res?.data?.[0]?.embedding ?? null;
+  } catch (e) {
+    stats.failed++;
+    console.warn(`[search-embed] failed — searching on text (${feature}):`, String(e?.message || e).slice(0, 160));
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}

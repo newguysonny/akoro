@@ -10,6 +10,7 @@ import { Router } from "express";
 
 import db from "../../db.js";
 import { embedText } from "../../lib/embeddingSweeper.js";
+import { embedForSearch } from "../../lib/searchEmbedding.js";
 import {
   requireAgentToolsCredential,
   verifyAgentToolsCapability,
@@ -180,15 +181,11 @@ async function recentMemoryFallback(userId) {
 }
 
 async function relevantMemory({ query, subject, userId }) {
-  let embedding = null;
-  try {
-    // The private Akoro gateway, rather than the Python service, owns provider
-    // metering and embedding credentials. A failed embedding still permits the
-    // SQL function's lexical branch below.
-    embedding = await embedText(query, "learner_agent_memory_query", userId);
-  } catch (error) {
-    console.warn("[agent-tools/conversations] query embedding unavailable:", error?.message || error);
-  }
+  // The private Akoro gateway, rather than the Python service, owns provider
+  // metering and embedding credentials. A failed or late embedding (at most a
+  // few seconds — lib/searchEmbedding.js) still permits the SQL function's
+  // lexical branch below.
+  const embedding = await embedForSearch(query, { userId, feature: "learner_agent_memory_query" });
 
   try {
     const { data, error } = await db.rpc("match_learner_agent_memory", {

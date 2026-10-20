@@ -52,19 +52,10 @@ const MIN_SIMILARITY = 0.30;
 
 /** Embed a question once; every agent in the battle searches with the same vector. */
 export async function embedQuestion(text) {
-  try {
-    const res = await openai.embeddings.create({
-      model: "text-embedding-3-small",
-      input: String(text ?? "").slice(0, 8000),
-      __feature: "battle_recall",
-      // One vector shared by every agent in the battle — the app's, not one learner's.
-      __payer: "platform",
-    });
-    return res.data?.[0]?.embedding ?? null;
-  } catch (e) {
-    console.warn("[battle/recall] embedding failed:", e.message);
-    return null;
-  }
+  const { embedForSearch } = await import("../../lib/searchEmbedding.js");
+  // One vector shared by every agent in the battle — the app's, not one learner's.
+  // Late or failed → null, and recall ranks on its exact-label/text arm.
+  return embedForSearch(String(text ?? ""), { feature: "battle_recall", payer: "platform" });
 }
 
 /**

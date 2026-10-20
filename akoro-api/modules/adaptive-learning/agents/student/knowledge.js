@@ -40,6 +40,15 @@ export async function embed(text) {
  * rank on their lexical arm alone; a null stored vector with embedded_at null
  * is what lib/embeddingSweeper.js fills in once the provider is back.
  */
+/**
+ * A search's query vector: embedOrNull with a time limit (lib/searchEmbedding.js),
+ * so a slow or cold provider costs a search its vector arm, not the learner's wait.
+ */
+export async function embedQueryOrNull(text) {
+  const { embedForSearch } = await import("../../../../lib/searchEmbedding.js");
+  return embedForSearch(String(text ?? "").slice(0, 8000), { feature: "knowledge_search" });
+}
+
 export async function embedOrNull(text) {
   try {
     return await embed(text);
@@ -119,7 +128,7 @@ export async function incrementAgentStats(agentId, { turnsAdded, knowledgeAdded,
 // =============================================================
 
 export async function retrieveAgentKnowledge(agentId, query, limit = 6, subject = null) {
-  const embedding = await embedOrNull(query);
+  const embedding = await embedQueryOrNull(query);
 
   const { data, error } = await supabase.rpc("match_agent_knowledge", {
     p_agent_id:        agentId,
@@ -138,7 +147,7 @@ export async function retrieveAgentKnowledge(agentId, query, limit = 6, subject 
  * Used in decay review sessions to focus on one subject.
  */
 export async function retrieveAgentKnowledgeBySubject(agentId, subject, query, limit = 8) {
-  const embedding = await embedOrNull(query);
+  const embedding = await embedQueryOrNull(query);
 
   // First try subject-filtered similarity search
   const { data: bySubject } = await supabase
@@ -325,7 +334,7 @@ export async function getTopicsBySubject(agentId, subject) {
 // =============================================================
 
 export async function retrieveStudentKnowledge(studentId, query, limit = 5, subject = null) {
-  const embedding = await embedOrNull(query);
+  const embedding = await embedQueryOrNull(query);
 
   const { data, error } = await supabase.rpc("match_student_knowledge", {
     p_student_id:      studentId,
@@ -410,7 +419,7 @@ export async function saveStudentKnowledge({
 export async function retrieveTeacherChunks(teacherId, query, limit = 4, subject = null) {
   if (!teacherId) return [];
 
-  const embedding = await embedOrNull(query);
+  const embedding = await embedQueryOrNull(query);
 
   const { data, error } = await supabase.rpc("match_training_chunks", {
     p_teacher_id:      teacherId,

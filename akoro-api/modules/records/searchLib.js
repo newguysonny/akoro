@@ -256,13 +256,10 @@ export async function searchRecordChunks({ userId, q, limit = 12, recordId = nul
   const query = String(q || "").trim();
   if (!query) return [];
 
-  let embedding = null;
-  if (hasOpenAI()) {
-    try {
-      const [vec] = await embedMany([query], { userId });
-      embedding = vec;
-    } catch { /* lexical-only below */ }
-  }
+  // At most a few seconds for the vector (lib/searchEmbedding.js); without it, lexical only.
+  const embedding = hasOpenAI()
+    ? await (await import("../../lib/searchEmbedding.js")).embedForSearch(query, { userId, feature: "record_search" })
+    : null;
 
   const db = await dbLazy();
   const { data, error } = await db.rpc("match_record_chunks", {

@@ -98,7 +98,7 @@ test("searchSyllabus: embeds the query and calls match_syllabus with slug + limi
   assert.deepEqual(out, hits);
   assert.equal(embeds[0].model, "text-embedding-3-small");
   assert.equal(embeds[0].input, "quadratic equations");
-  assert.deepEqual(fake.rpcCalls[0], { name: "match_syllabus", args: { p_query_embedding: [0.5, 0.5], p_subject_slug: "general-mathematics", p_match_count: 3 } });
+  assert.deepEqual(fake.rpcCalls[0], { name: "match_syllabus", args: { p_query_embedding: [0.5, 0.5], p_subject_slug: "general-mathematics", p_match_count: 3, p_query_text: "quadratic equations" } });
 });
 
 test("searchSyllabus: defaults (no subject, limit 6); rpc error throws; null data → []", async (t) => {
@@ -158,9 +158,20 @@ test("getSyllabusGrounding: an embedding or rpc outage degrades to empty groundi
   assert.deepEqual(await getSyllabusGrounding("cells"), { context: "", refs: [] });
 });
 
-test("getSyllabusGrounding: embedding failure → empty grounding", async (t) => {
-  fakeFor(t, {}, { rpc: { match_syllabus: () => ({ data: [hit({})] }) } });
+test("getSyllabusGrounding: embedding failure → the text search answers (2026-10-20)", async (t) => {
+  // No vector (provider down, or a cold worker past the search limit): match_syllabus
+  // ranks on text, and a text match skips the cosine floor.
+  const fake = fakeFor(t, {}, { rpc: { match_syllabus: () => ({ data: [hit({ similarity: 0.05, lexical: true })] }) } });
   stubEmbeddings(t, { fail: true });
+  const out = await getSyllabusGrounding("cells");
+  assert.equal(fake.rpcCalls[0].args.p_query_embedding, null);
+  assert.equal(fake.rpcCalls[0].args.p_query_text, "cells");
+  assert.match(out.context, /Cell theory/);
+});
+
+test("getSyllabusGrounding: a weak VECTOR match is still dropped by the floor", async (t) => {
+  fakeFor(t, {}, { rpc: { match_syllabus: () => ({ data: [hit({ similarity: 0.1, lexical: false })] }) } });
+  stubEmbeddings(t);
   assert.deepEqual(await getSyllabusGrounding("cells"), { context: "", refs: [] });
 });
 

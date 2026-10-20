@@ -89,11 +89,12 @@ export async function ingestSubject(doc) {
 
 /** Semantic RAG search across the syllabus (optionally one subject). */
 export async function searchSyllabus(query, { subject = null, limit = 6 } = {}) {
-  const embedding = await embed(query);
+  const { embedForSearch } = await import("../../lib/searchEmbedding.js");
   const { data, error } = await db.rpc("match_syllabus", {
-    p_query_embedding: embedding,
+    p_query_embedding: await embedForSearch(query, { feature: "syllabus_search" }),
     p_subject_slug: subject ? slugify(subject) : null,
     p_match_count: limit,
+    p_query_text: String(query || ""),
   });
   if (error) throw new Error(error.message);
   return data || [];
@@ -115,7 +116,7 @@ export async function getSyllabusContext(query, opts = {}) {
  */
 export async function getSyllabusGrounding(query, { minSimilarity = 0.3, ...opts } = {}) {
   const hits = (await searchSyllabus(query, opts).catch(() => []))
-    .filter((h) => (h.similarity ?? 0) >= minSimilarity);
+    .filter((h) => h.lexical || (h.similarity ?? 0) >= minSimilarity);
   if (!hits.length) return { context: "", refs: [] };
 
   const context = "Relevant exam syllabus (WAEC/JAMB/NECO) references — ground your explanation in these and name the topic where it fits:\n" +

@@ -23,7 +23,7 @@ test("questions: the creator pays once (checked up front), a platform battle is 
 
 test("answers: each learner pays for their own agent; the shared question vector is the app's", () => {
   assert.match(recall, /__feature: payer === "platform" \? "agent_check_answer" : "battle_answer",\s*__userId: userId,/);
-  assert.match(recall, /__feature: "battle_recall",[\s\S]{0,200}__payer: "platform",/);
+  assert.match(recall, /feature: "battle_recall", payer: "platform"/);
   assert.match(worker, /coinsAvailable\(\{ userId: p\.user_id, billTo, min: 1 \}\)/);
   assert.match(worker, /e instanceof InsufficientCoins\) broke = true/);
 });

@@ -132,6 +132,8 @@ router.get("/embeddings", adminOnly, asyncHandler(async (req, res) => {
     totalMissing: stores.reduce((n, s) => n + (s.missing ?? 0), 0),
     // A model switch in progress (POST /embeddings/reembed-all).
     reembed: (await import("../../lib/embeddingCutover.js")).cutoverState(),
+    // Searches that went on without their vector (late or failed) since boot.
+    searchEmbeds: (await import("../../lib/searchEmbedding.js")).searchEmbedStats(),
   });
 }));
 

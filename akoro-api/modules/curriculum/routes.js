@@ -22,6 +22,7 @@ import db from "../../db.js";
 import { openai } from "../../lib/aiModel.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { embed } from "../adaptive-learning/syllabus.js";
+import { embedForSearch } from "../../lib/searchEmbedding.js";
 import { renderPdfToImages } from "../adaptive-learning/pdfRender.js";
 import { serverError } from "../../lib/httpError.js";
 
@@ -161,11 +162,12 @@ router.get("/search/topics", authenticateToken, async (req, res) => {
     if (!q) return res.status(400).json({ error: "q is required" });
 
     const { data, error } = await db.rpc("match_curriculum", {
-      p_query_embedding: await embed(q),
+      p_query_embedding: await embedForSearch(q, { userId: req.user?.id, feature: "curriculum_search" }),
       p_body: req.query.body || null,
       p_subject: req.query.subject || null,
       p_class: req.query.class || null,
       p_limit: limit,
+      p_query_text: q,
     });
     if (error) throw error;
     res.json({ success: true, data: data || [] });
@@ -182,10 +184,11 @@ router.get("/search/topics", authenticateToken, async (req, res) => {
 export async function getCurriculumGrounding(query, { body = null, subject = null, klass = null, limit = 4, minSimilarity = 0.32 } = {}) {
   try {
     const { data } = await db.rpc("match_curriculum", {
-      p_query_embedding: await embed(query),
-      p_body: body, p_subject: subject, p_class: klass, p_limit: limit,
+      p_query_embedding: await embedForSearch(query, { feature: "curriculum_grounding" }),
+      p_body: body, p_subject: subject, p_class: klass, p_limit: limit, p_query_text: query,
     });
-    const hits = (data || []).filter((h) => (h.similarity ?? 0) >= minSimilarity);
+    // A text match (no vector in time) already matched the words; the cosine floor is for vectors.
+    const hits = (data || []).filter((h) => h.lexical || (h.similarity ?? 0) >= minSimilarity);
     if (!hits.length) return { context: "", refs: [] };
 
     const list = (label, arr) => (arr?.length ? `\n   ${label}: ${arr.join("; ")}` : "");
@@ -234,10 +237,11 @@ export const CURRICULUM_TOOL = {
 
 export async function runCurriculumTool({ topic, body = null, subject = null, class: klass = null, limit = 4 }) {
   const { data } = await db.rpc("match_curriculum", {
-    p_query_embedding: await embed(String(topic || "")),
+    p_query_embedding: await embedForSearch(String(topic || ""), { feature: "curriculum_tool" }),
     p_body: body ? String(body).toLowerCase() : null,
     p_subject: subject || null, p_class: klass || null,
     p_limit: Math.min(Number(limit) || 4, 10),
+    p_query_text: String(topic || ""),
   });
   return {
     entries: (data || []).map((h) => ({

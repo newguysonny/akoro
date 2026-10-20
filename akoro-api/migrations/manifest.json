@@ -213,7 +213,8 @@
     "2026-study-prep-generated-syllabi.sql",
     "2026-agent-knowledge-retention.sql",
     "2026-study-prep-agent-check.sql",
-    "2026-workflow-engine.sql"
+    "2026-workflow-engine.sql",
+    "2026-search-text-fallback.sql"
   ],
   "demo": [
     "2026-seed-school-passwords.sql",

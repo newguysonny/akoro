@@ -24,6 +24,7 @@ import db from "../../db.js";
 import { openai } from "../../lib/aiModel.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { embed } from "../adaptive-learning/syllabus.js";
+import { embedForSearch } from "../../lib/searchEmbedding.js";
 import { renderPdfToImages } from "../adaptive-learning/pdfRender.js";
 import { serverError } from "../../lib/httpError.js";
 
@@ -115,10 +116,11 @@ router.get("/search", authenticateToken, async (req, res) => {
 
     if (q) {
       const { data, error } = await db.rpc("match_past_questions", {
-        p_query_embedding: await embed(q),
+        p_query_embedding: await embedForSearch(q, { userId: req.user?.id, feature: "past_question_search" }),
         p_exam: req.query.exam || null,
         p_subject: req.query.subject || null,
         p_limit: limit,
+        p_query_text: q,
       });
       if (error) throw error;
       return res.json({ success: true, data: data || [] });
@@ -173,10 +175,11 @@ router.get("/practice", authenticateToken, async (req, res) => {
 export async function getPastQuestionGrounding(query, { exam = null, subject = null, limit = 5, minSimilarity = 0.32 } = {}) {
   try {
     const { data } = await db.rpc("match_past_questions", {
-      p_query_embedding: await embed(query),
-      p_exam: exam, p_subject: subject, p_limit: limit,
+      p_query_embedding: await embedForSearch(query, { feature: "past_question_grounding" }),
+      p_exam: exam, p_subject: subject, p_limit: limit, p_query_text: query,
     });
-    const hits = (data || []).filter((h) => (h.similarity ?? 0) >= minSimilarity);
+    // A text match (no vector in time) already matched the words; the cosine floor is for vectors.
+    const hits = (data || []).filter((h) => h.lexical || (h.similarity ?? 0) >= minSimilarity);
     if (!hits.length) return { context: "", refs: [] };
 
     const context = "Past examination questions on this topic — use them to show the student how it is actually examined, and say which exam and year each came from:\n" +
@@ -221,10 +224,11 @@ export const PAST_QUESTIONS_TOOL = {
 /** Executor for the tool above — returns plain data for the model to answer from. */
 export async function runPastQuestionsTool({ topic, exam = null, subject = null, limit = 5 }) {
   const { data } = await db.rpc("match_past_questions", {
-    p_query_embedding: await embed(String(topic || "")),
+    p_query_embedding: await embedForSearch(String(topic || ""), { feature: "past_question_tool" }),
     p_exam: exam ? String(exam).toLowerCase() : null,
     p_subject: subject || null,
     p_limit: Math.min(Number(limit) || 5, 10),
+    p_query_text: String(topic || ""),
   });
   return {
     questions: (data || []).map((h) => ({
