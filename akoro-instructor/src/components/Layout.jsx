@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, createContext, useContext } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import AkoroLogo from './common/AkoroLogo.jsx';
 import { Home, BookOpen, Eye, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings, UserCircle, ShieldCheck, Store, Library, LayoutGrid, FileText, ClipboardList, ClipboardCheck, ListChecks, BookMarked, CalendarDays, CalendarClock, GraduationCap, Menu, Search, ChevronDown, Wallet, BookOpenCheck, X, MessageCircleQuestion } from 'lucide-react';
@@ -429,7 +429,13 @@ export function useIsMobile() {
 
 // The page frame: the legacy layout, or the shared frame when this browser is on
 // the next look (?ui=next — src/theme/uiMode.js). The mode is fixed at start-up.
+// Inside <PageEmbed>, a page renders without its frame (a page shown in a tab of another page).
+const PageEmbedContext = createContext(false);
+export const PageEmbed = ({ children }) => <PageEmbedContext.Provider value>{children}</PageEmbedContext.Provider>;
+
 export function PageLayout(props) {
+  const embedded = useContext(PageEmbedContext);
+  if (embedded) return <>{props.children}</>;
   return isNextUi() ? <NextLayout {...props}/> : <LegacyPageLayout {...props}/>;
 }
 

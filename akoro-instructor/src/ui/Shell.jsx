@@ -26,7 +26,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import AkoroLogo from './AkoroLogo.jsx';
 import { Icon } from './Icon.jsx';
 import { NavIcon } from './NavIcons.jsx';
-import { BRAND, GREEN, RED, FONT } from './tokens.js';
+import { BRAND, GREEN, RED, GOLD, FONT } from './tokens.js';
 import './shell.css';
 
 const COLLAPSE_KEY = 'akoro_console_sidebar_collapsed';
@@ -184,17 +184,58 @@ export function HeaderButton({ ti, label, badge = 0, onClick }) {
   );
 }
 
-/** The agent chip ("Agent online" / "Agent offline", or a label of the app's). */
-export function AgentChip({ online, label, onClick }) {
+const pillBtn = { position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${BRAND}12`, border: `1px solid ${BRAND}3D`, borderRadius: 100, width: 34, height: 34, cursor: 'pointer', flexShrink: 0 };
+const countDot = (n) => n > 0 && (
+  <span style={{ position: 'absolute', top: -3, right: -3, background: RED, color: '#fff', borderRadius: '50%', minWidth: 16, height: 16, padding: '0 4px', fontSize: 9, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid var(--ak-surface)' }}>{n > 9 ? '9+' : n}</span>
+);
+
+/** The coin balance pill (the learner header's; red when low). */
+export function CoinPill({ coins, low = false, onClick }) {
   return (
-    <button type="button" onClick={onClick} className="ak-hdr-wide" style={{ height: 34, borderRadius: 100, display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px', fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: FONT,
-      border: `1px solid ${BRAND}3D`, background: `${BRAND}0D`, color: online ? BRAND : 'var(--ak-text-muted)' }}>
-      <span style={{ width: 7, height: 7, borderRadius: '50%', background: online ? GREEN : 'var(--ak-border3)' }}/>{label || (online ? 'Agent online' : 'Agent offline')}
+    <button type="button" onClick={onClick} title={low ? 'Low balance — tap to top up' : 'Coin balance'} className="ak-hdr-wide"
+      style={{ display: 'flex', alignItems: 'center', gap: 5, background: low ? `${RED}14` : `${GOLD}1F`, border: `1px solid ${low ? `${RED}55` : `${GOLD}55`}`, borderRadius: 100, height: 34, padding: '0 12px', cursor: 'pointer', flexShrink: 0 }}>
+      <Icon name="ti-coins" size={15} color={GOLD}/>
+      <span style={{ fontSize: 12.5, fontWeight: 900, color: low ? 'var(--ak-danger-text)' : 'var(--ak-warn-text)', fontFamily: FONT }}>{(coins || 0).toLocaleString()}</span>
     </button>
   );
 }
 
-function Header({ user, headerRight, onToggle, collapsed, onProfile }) {
+/** The cart button (the learner header's). */
+export function CartButton({ count = 0, onClick }) {
+  return (
+    <button type="button" onClick={onClick} title="Cart" aria-label="Cart" style={pillBtn}>
+      <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={BRAND} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>
+      {countDot(count)}
+    </button>
+  );
+}
+
+/** The notifications bell (the learner header's). */
+export function BellButton({ count = 0, onClick }) {
+  return (
+    <button type="button" onClick={onClick} title="Notifications" aria-label="Notifications" style={pillBtn}>
+      <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={BRAND} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      {countDot(count)}
+    </button>
+  );
+}
+
+/** "Agent online / offline" — the learner header's toggle; it switches the agent's proactive work. */
+export function AgentToggle({ online, loaded = true, saving = false, onToggle, onTitle, offTitle }) {
+  return (
+    <button type="button" onClick={onToggle} aria-pressed={online} disabled={!loaded || saving}
+      aria-label={online ? 'Turn autonomous Agent offline' : 'Turn autonomous Agent online'}
+      title={online ? onTitle : offTitle}
+      style={{ display: 'flex', alignItems: 'center', background: `${BRAND}12`, borderRadius: 100, padding: 4, cursor: loaded && !saving ? 'pointer' : 'wait', border: `1px solid ${BRAND}3D`, opacity: loaded ? 1 : 0.7, flexShrink: 0 }}>
+      <span style={{ padding: '4px 12px', borderRadius: 100, background: online ? BRAND : 'transparent', color: online ? '#fff' : 'var(--ak-text-muted)', fontSize: 11, fontWeight: 700, transition: 'all .22s ease', display: 'flex', alignItems: 'center', gap: 5, fontFamily: FONT, whiteSpace: 'nowrap' }}>
+        {online && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff', display: 'inline-block' }}/>}
+        {saving ? 'Saving…' : online ? 'Agent online' : 'Agent offline'}
+      </span>
+    </button>
+  );
+}
+
+function Header({ user, headerRight, onToggle, collapsed, onProfile, online }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 18px', paddingTop: 'calc(12px + env(safe-area-inset-top, 0px))', background: 'var(--ak-surface)', borderBottom: '1px solid var(--ak-border)', flexShrink: 0, fontFamily: FONT }}>
       <button type="button" onClick={onToggle} className="ak-sb-toggle" title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} style={roundBtn}>
@@ -203,15 +244,15 @@ function Header({ user, headerRight, onToggle, collapsed, onProfile }) {
       <button type="button" onClick={onProfile} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', padding: 0, cursor: 'pointer', minWidth: 0, textAlign: 'left', fontFamily: FONT }}>
         <span style={{ position: 'relative', flexShrink: 0 }}>
           <span style={{ width: 36, height: 36, borderRadius: '50%', background: `linear-gradient(135deg, ${BRAND}, #8B5CF6)`, color: '#fff', fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{user?.initial || 'A'}</span>
-          <span style={{ position: 'absolute', right: -1, bottom: -1, width: 10, height: 10, borderRadius: '50%', background: GREEN, border: '2px solid var(--ak-surface)' }}/>
+          <span style={{ position: 'absolute', right: -1, bottom: -1, width: 10, height: 10, borderRadius: '50%', background: online === false ? 'var(--ak-text-muted)' : GREEN, border: '2px solid var(--ak-surface)' }}/>
         </span>
         <span style={{ lineHeight: 1.2, minWidth: 0 }}>
           <span style={{ display: 'block', fontWeight: 900, fontSize: 14.5, color: 'var(--ak-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.name || ''}</span>
-          {user?.role && <span style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.role}</span>}
+          {(user?.sub || user?.role) && <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: 'var(--ak-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.sub || user.role}</span>}
         </span>
       </button>
       <div style={{ flex: 1 }}/>
-      {headerRight}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>{headerRight}</div>
     </div>
   );
 }
@@ -286,7 +327,12 @@ function MoreSheet({ nav, bottom, onClose }) {
   );
 }
 
-export default function Shell({ brand, nav, bottom = [], user, headerRight, onProfile, title, subtitle, action, children }) {
+/**
+ * bare: the page owns the whole content area (a chat): no gutter, no heading.
+ * wide (default): lift the old layouts' width caps so lists and cards use the
+ * full width, like the learner app; false keeps a page's own readable width (forms).
+ */
+export default function Shell({ brand, nav, bottom = [], user, online, headerRight, onProfile, title, subtitle, action, bare = false, wide = true, children }) {
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [moreOpen, setMoreOpen] = useState(false);
   const { pathname } = useLocation();
@@ -296,9 +342,10 @@ export default function Shell({ brand, nav, bottom = [], user, headerRight, onPr
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--ak-bg)', fontFamily: FONT, color: 'var(--ak-text)' }}>
       <Sidebar brand={brand} nav={nav} collapsed={collapsed}/>
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
-        <Header user={user} headerRight={headerRight} onToggle={toggle} collapsed={collapsed} onProfile={onProfile}/>
-        <main className="ak-shell-main" style={{ flex: 1, overflowY: 'auto', padding: '20px 22px' }}>
-          {(title || subtitle || action) && (
+        <Header user={user} online={online} headerRight={headerRight} onToggle={toggle} collapsed={collapsed} onProfile={onProfile}/>
+        <main className={`ak-shell-main${bare ? ' ak-bare' : ''}${wide && !bare ? ' ak-wide' : ''}`}
+          style={bare ? { flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' } : { flex: 1, overflowY: 'auto', padding: 16 }}>
+          {!bare && (title || subtitle || action) && (
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 18 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 {title && <h1 style={{ fontSize: 21, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 3px' }}>{title}</h1>}

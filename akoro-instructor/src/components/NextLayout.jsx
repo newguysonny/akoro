@@ -6,8 +6,9 @@
  * the collapsed rail. See reference/Akoro Console Rebuild — Plan.md.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Shell, HeaderButton, AgentChip, Icon } from '../ui/index.js';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Shell, CoinPill, CartButton, BellButton, AgentToggle, Icon, GOLD } from '../ui/index.js';
+import { useAgentOnline } from '../hooks/useAgentOnline.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useInstructorSocket } from '../hooks/useWebSocket.js';
 import { apiGet } from '../services/api.js';
@@ -91,32 +92,54 @@ function useCoins() {
   return coins;
 }
 
-export default function NextLayout({ children, title, subtitle, action }) {
+/* The shared cart's item count (instructors buy Tools & Assets; the cart opens the marketplace). */
+function useCartCount() {
+  const [n, setN] = useState(0);
+  useEffect(() => { apiGet('/api/cart').then((r) => setN((r?.data ?? r)?.item_count ?? 0)).catch(() => {}); }, []);
+  return n;
+}
+
+/* The agent's XP, for the line under the name (as the learner header shows it). */
+function useAgentXp() {
+  const [xp, setXp] = useState(null);
+  useEffect(() => { apiGet('/api/instructor/stats').then((r) => setXp(r?.data?.agent_xp ?? null)).catch(() => {}); }, []);
+  return xp;
+}
+
+// Forms keep their own readable width; every other page spans the frame.
+const NARROW = ['/profile', '/settings', '/onboarding', '/privacy', '/terms'];
+
+export default function NextLayout({ children, title, subtitle, action, bare = false }) {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const joinRequests = useJoinRequestCount();
   const unread = useUnreadNotifications(user?.id);
   const coins = useCoins();
+  const cart = useCartCount();
+  const xp = useAgentXp();
+  const agent = useAgentOnline();
   const name = user?.fullName || user?.email || 'Instructor';
+  const role = user?.role === 'admin' ? 'Admin · Instructor' : 'Instructor';
   return (
     <Shell
       brand="Instructor"
       nav={instructorNav({ isAdmin: user?.role === 'admin', joinRequests })}
       bottom={INSTRUCTOR_BOTTOM}
-      user={{ name, role: user?.role === 'admin' ? 'Admin · Instructor' : 'Instructor', initial: name[0].toUpperCase() }}
+      online={agent.loaded ? agent.online : undefined}
+      user={{ name, initial: name[0].toUpperCase(),
+        sub: <><Icon name="ti-bolt" size={11} color={GOLD}/>{xp != null ? `${Number(xp).toLocaleString()} XP · ${role}` : role}</> }}
       onProfile={() => navigate('/profile')}
       title={title} subtitle={subtitle} action={action}
+      bare={bare} wide={!NARROW.some((p) => pathname === p || pathname.startsWith(`${p}/`))}
       headerRight={(
         <>
-          {coins != null && (
-            <button type="button" onClick={() => navigate('/wallet')} title="Wallet & Credits" className="ak-hdr-wide"
-              style={{ height: 34, borderRadius: 100, display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: 'var(--ak-font)',
-                background: '#FFF7E6', border: '1px solid #FDE68A', color: '#B45309' }}>
-              <Icon name="ti-coins" size={16}/>{coins.toLocaleString()}
-            </button>
-          )}
-          <HeaderButton ti="ti-bell" label="Notifications" badge={unread} onClick={() => navigate('/notifications')}/>
-          <AgentChip online label="AI Agent" onClick={() => navigate('/chat')}/>
+          {coins != null && <CoinPill coins={coins} low={coins < 50} onClick={() => navigate('/wallet')}/>}
+          <CartButton count={cart} onClick={() => navigate('/marketplace')}/>
+          <BellButton count={unread} onClick={() => navigate('/notifications')}/>
+          <AgentToggle online={agent.online} loaded={agent.loaded} saving={agent.saving} onToggle={agent.toggle}
+            onTitle="Agent online: it watches your classes and proposes next steps (missing work, low scores) for you to approve."
+            offTitle="Agent offline: no background work on your classes."/>
         </>
       )}
     >
@@ -124,5 +147,3 @@ export default function NextLayout({ children, title, subtitle, action }) {
     </Shell>
   );
 }
-
-

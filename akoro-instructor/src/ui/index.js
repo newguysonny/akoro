@@ -5,4 +5,4 @@ export * from './theme.jsx';
 export { Icon } from './Icon.jsx';
 export { default as AkoroLogo } from './AkoroLogo.jsx';
 export { NavIcon, NAV_ICONS, TabIcon } from './NavIcons.jsx';
-export { default as Shell, HeaderButton, AgentChip, routeActive } from './Shell.jsx';
+export { default as Shell, HeaderButton, CoinPill, CartButton, BellButton, AgentToggle, routeActive } from './Shell.jsx';

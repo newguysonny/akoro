@@ -5,7 +5,11 @@ import {
   Upload, FileText, ScanLine, Loader, CheckCircle2,
   History, Copy, Check, Lightbulb, MoreVertical, Pencil, Trash2, CloudOff,  Bot, Lock , Cpu } from 'lucide-react';
 import { Ico } from '../theme/Ico.jsx';
-import { PageLayout, useIsMobile } from '../components/Layout.jsx';
+import { Icon } from '../ui/Icon.jsx';
+import { PageLayout, PageEmbed, useIsMobile } from '../components/Layout.jsx';
+import { isNextUi } from '../theme/uiMode.js';
+import { useAgentOnline } from '../hooks/useAgentOnline.js';
+import TasksPage from './TasksPage.jsx';
 import { Btn, Modal, Inp, Txa, Sel, FileUploadZone, Toast } from '../components/Primitives.jsx';
 import TrainingProgress from '../components/TrainingProgress.jsx';
 import LiveRecorder from '../components/LiveRecorder.jsx';
@@ -156,6 +160,9 @@ export default function ChatPage() {
   const [agentName, setAgentName]   = useState('Your Agent');
   const [agentEmoji, setAgentEmoji] = useState('🤖');
   const [agentLevel, setAgentLevel] = useState(1);
+  const next = isNextUi();
+  const [innerTab, setInnerTab] = useState('chat');
+  const agentOnline = useAgentOnline();
   const [agentId, setAgentId]       = useState(null);
 
   const [trainModal, setTrainModal]   = useState(false);
@@ -760,7 +767,25 @@ export default function ChatPage() {
   const hasInput = taskChips.length > 0 || input.trim().length > 0;
 
   return (
-    <PageLayout title="Agent Chat" subtitle={`${agentName} · Lv ${agentLevel}`} hideTopBarOnMobile>
+    // The next look is the learner's Agent tab: no page heading, Chat / Tasks / Stats, the status row, full screen.
+    <PageLayout {...(next ? { bare: true } : { title: 'Agent Chat', subtitle: `${agentName} · Lv ${agentLevel}` })} hideTopBarOnMobile>
+      {next && (
+        <>
+          <div style={{ display: 'flex', borderBottom: `1px solid ${C.borderSoft}`, background: C.surface, flexShrink: 0 }}>
+            {[{ key: 'chat', label: 'Chat', icon: 'ti-message-circle' }, { key: 'tasks', label: 'Tasks', icon: 'ti-clipboard' }, { key: 'stats', label: 'Stats', icon: 'ti-chart-bar' }].map(({ key, label, icon }) => (
+              <button key={key} onClick={() => setInnerTab(key)} style={{ flex: 1, padding: '9px 4px 10px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: innerTab === key ? 800 : 600, color: innerTab === key ? C.brand : C.muted2, borderBottom: `2.5px solid ${innerTab === key ? C.brand : 'transparent'}`, fontFamily: C.font, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                <Icon name={icon} size={13}/>{label}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 16px', background: C.surface, borderBottom: `1px solid ${C.borderSoft}`, flexShrink: 0 }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: trainingInChat ? C.brand : C.muted2, animation: trainingInChat ? 'pulse-dot 1.4s ease-in-out infinite' : 'none' }}/>
+            <span style={{ fontSize: 10.5, fontWeight: trainingInChat ? 800 : 600, color: trainingInChat ? C.brand : C.muted2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {trainingInChat ? 'Training on your lesson…' : agentOnline.online ? 'Idle' : 'Agent offline'}
+            </span>
+          </div>
+        </>
+      )}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       <style>{`
@@ -788,7 +813,9 @@ export default function ChatPage() {
         }
       `}</style>
 
-      <div style={{ maxWidth: previewDraft ? 'min(1180px, 97vw)' : 720, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', height: isMobile ? 'calc(100vh - 86px)' : 'calc(100vh - 150px)' }}>
+      <div style={next
+        ? { flex: 1, minHeight: 0, width: '100%', display: innerTab === 'chat' ? 'flex' : 'none', flexDirection: 'column', padding: isMobile ? '0 12px' : '0 18px' }
+        : { maxWidth: previewDraft ? 'min(1180px, 97vw)' : 720, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', height: isMobile ? 'calc(100vh - 86px)' : 'calc(100vh - 150px)' }}>
         <div style={{ display: 'flex', gap: 14, flex: 1, minHeight: 0 }}>
         <div className="ci-chat-col" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
 
@@ -1058,6 +1085,13 @@ export default function ChatPage() {
         </div>
       </div>
 
+      {next && innerTab === 'tasks' && (
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: isMobile ? 12 : 16 }}>
+          <PageEmbed><TasksPage /></PageEmbed>
+        </div>
+      )}
+      {next && innerTab === 'stats' && <AgentStatsPanel agentName={agentName} agentLevel={agentLevel} isMobile={isMobile} />}
+
       {/* Task modal */}
       {/* Sessions drawer — the learner chat's drawer, instructor-dressed:
           full-height panel with backdrop, agent header, New chat, Train agent,
@@ -1242,5 +1276,41 @@ export default function ChatPage() {
         <Btn variant="primary" style={{ width: '100%' }} onClick={startTraining}><Ico lucide={Brain} ti="ti-brain" size={14} />Start training {agentName}</Btn>
       </Modal>
     </PageLayout>
+  );
+}
+
+/* The Stats tab (next look): the agent's level and XP and the instructor's
+   teaching numbers, in the learner Stats tab's card style. */
+function AgentStatsPanel({ agentName, agentLevel, isMobile }) {
+  const { getStats } = useStatsAPI();
+  const [stats, setStats] = useState(null);
+  useEffect(() => { getStats().then((r) => setStats(r?.data ?? {})).catch(() => setStats({})); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const cards = [
+    { icon: 'ti-bolt', label: 'Agent XP', value: (stats?.agent_xp ?? 0).toLocaleString(), sub: `Level ${stats?.agent_level ?? agentLevel}` },
+    { icon: 'ti-flame', label: 'Streak', value: `${stats?.streak_days ?? 0}d`, sub: 'days in a row' },
+    { icon: 'ti-users', label: 'Students', value: (stats?.total_students ?? 0).toLocaleString(), sub: 'across your courses' },
+    { icon: 'ti-book', label: 'Active courses', value: stats?.active_courses ?? 0, sub: `${stats?.total_courses ?? 0} in all` },
+  ];
+  return (
+    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: isMobile ? 12 : 16, fontFamily: C.font }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 16, borderRadius: 16, background: C.hero, color: '#fff', marginBottom: 14 }}>
+        <div style={{ width: 46, height: 46, borderRadius: '50%', background: 'rgba(255,255,255,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="ti-robot" size={24} color="#fff"/></div>
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 900 }}>{agentName}</div>
+          <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 700 }}>Teaching assistant · Level {stats?.agent_level ?? agentLevel}</div>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
+        {cards.map((c) => (
+          <div key={c.label} style={{ background: C.surface, border: `1px solid ${C.borderSoft}`, borderRadius: 16, padding: '12px 14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.muted2, fontSize: 11.5, fontWeight: 800 }}>
+              <span style={{ width: 26, height: 26, borderRadius: 8, background: tint(8), color: C.brand, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Icon name={c.icon} size={15}/></span>{c.label}
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 900, color: C.ink, marginTop: 6 }}>{stats ? c.value : '—'}</div>
+            <div style={{ fontSize: 11, color: C.muted2, fontWeight: 600 }}>{c.sub}</div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

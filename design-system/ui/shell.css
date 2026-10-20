@@ -42,6 +42,11 @@
   .ak-sidebar { display: none; }
   .ak-sb-toggle { display: none !important; }
   .ak-bottom-nav { display: flex; }
-  .ak-shell-main { padding-bottom: 84px !important; }
+  .ak-shell-main:not(.ak-bare) { padding: 12px 12px 84px !important; }
+  .ak-shell-main.ak-bare { padding-bottom: 74px !important; }
   .ak-hdr-wide { display: none !important; }
 }
+
+/* Wide pages: the old layouts centred their content in a fixed width; in the
+   shared frame it spans the page, like the learner app. */
+.ak-shell-main.ak-wide > * { max-width: none !important; }

@@ -32,15 +32,21 @@ export const scenarios = [
       if (theme) await page.addInitScript((m) => { try { localStorage.setItem('akoro_display_mode', m); } catch { /* private mode */ } }, theme);
       const errors = [];
       page.on('pageerror', (e) => errors.push(`${page.url()}: ${e.message}`));
+      // A render error the ErrorBoundary catches never reaches pageerror: it logs to the console instead.
+      page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|net::ERR_|WebSocket connection/.test(m.text())) errors.push(`${page.url()}: console: ${m.text().slice(0, 300)}`); });
+      const crashed = [];
       const only = (process.env.UI_GATE_ROUTES || '').split(',').map((r) => r.trim()).filter(Boolean);
       for (const route of only.length ? INSTRUCTOR_ROUTES.filter((r) => only.includes(r)) : INSTRUCTOR_ROUTES) {
         const url = `${t.app}${route}${ui ? `${route.includes('?') ? '&' : '?'}ui=${ui}` : ''}`;
         await page.goto(url, { waitUntil: 'domcontentloaded' }).catch(() => {});
         await page.waitForTimeout(2500);
+        if (await page.getByText('This page ran into a problem').first().isVisible().catch(() => false)) crashed.push(route);
         await t.shot(`${(route === '/' ? 'home' : route.slice(1)).replace(/\//g, '_')}${ui ? `.${ui}` : ''}${theme ? `.${theme}` : ''}`);
       }
       t.note(`${INSTRUCTOR_ROUTES.length} routes`);
-      t.check('no route threw', errors.length === 0, { errors: errors.slice(0, 10) });
+      if (errors.length) t.note(`errors: ${errors.slice(0, 8).join(' | ')}`);
+      t.check('no route showed the error screen', crashed.length === 0, { crashed });
+      t.check('no route threw', !errors.some((e) => !e.includes('console:')), { errors: errors.slice(0, 10) });
     },
   },
   {
