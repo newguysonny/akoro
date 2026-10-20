@@ -90,12 +90,26 @@ this work is merged there (safe, since the default stays legacy). Before that:
   same `?ui=` links work (Vercel → instructor project → Deployments; the setting
   is under Project → Settings → Git).
 
+### Decisions made during the build (instructor)
+
+- **Courses are made only in Course Creator.** On next there is no Courses
+  page and no live-class / on-demand wizards: `/courses`, `/courses/new-live`
+  and `/courses/new-ondemand` go to Course Creator. Its group is Home, My
+  Courses, Content Library, Schedule sessions.
+- **Agent chat** is the learner's Agent tab: Chat / Tasks / Stats, the status
+  row, full screen, no page heading, no "Unlock tools" row.
+- **Header** is the learner's: XP line, coins, cart (opens Tools & Assets), bell,
+  and the "Agent online" toggle (the instructor's proactive agent).
+- **Pages span the frame** (16px gutter, 12px on phones).
+
 ### The flip, and removing the legacy look
 
 1. Every route reviewed in `next`, light and dark, phone/tablet/desktop.
 2. The default becomes `next`; `?ui=legacy` still works for a short while.
 3. Then the legacy theme values, `Layout.jsx`, `AppHeader.jsx` and the switch
-   are deleted — one small, contained change.
+   are deleted — one small, contained change. The Courses page and the
+   wizards go with them: `pages/courses-page/` (all but its Schedule sessions
+   screen), `LiveClassWizard.jsx`, `OnDemandWizard.jsx` and their routes.
 
 Phase 0's screenshots of every route stay as the frozen record of the old app.
 While both looks exist, a ui-gate check confirms that each migrated page still

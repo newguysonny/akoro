@@ -14,6 +14,7 @@ import { apiGet, apiPost, apiDelete, API } from '../../services/api.js';
 import { GREEN, PURPLE, BLUE } from '../../constants.js';
 import { C } from '../../theme/colors.js';
 import { Ico } from '../../theme/Ico.jsx';
+import { isNextUi } from '../../theme/uiMode.js';
 
 
 /* Zeroes, not samples. A stat that failed to load must read as "nothing yet",
@@ -26,6 +27,7 @@ const EMPTY_STATS = {
 import { STREAM_META, StatCard, SessionItem, QuickAction, PLATFORM_KEYS, STREAM_ERRORS, StreamingPanel } from './parts.jsx';
 
 export default function HomePage() {
+  const next = isNextUi();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { getStats, getProfile } = useStatsAPI();
@@ -150,11 +152,15 @@ export default function HomePage() {
             <div>
               <h2 style={{ fontSize: 16, fontWeight: 700, color: C.ink, margin: '0 0 14px', fontFamily: C.font }}>Quick Actions</h2>
               <div className="inst-qa" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-                <QuickAction icon={Video} ti="ti-video" label="New Live Class"   desc="Schedule a live session"     color={C.brand}  onClick={() => navigate('/courses')} />
+                {next
+                  ? <QuickAction icon={BookOpen} ti="ti-books" label="New course" desc="Build it in Course Creator" color={C.brand} onClick={() => navigate('/course-creator/courses/new')} />
+                  : <QuickAction icon={Video} ti="ti-video" label="New Live Class"   desc="Schedule a live session"     color={C.brand}  onClick={() => navigate('/courses')} />}
                 <QuickAction icon={Eye} ti="ti-eye" label="View Students"    desc="Manage your enrolled learners" color={BLUE} onClick={() => navigate('/mgmt/students')} />
                 <QuickAction icon={Plus} ti="ti-user-plus" label="Add Student"      desc="Enroll a new learner"         color={GREEN}  onClick={() => navigate('/mgmt/students?add=1')} />
                 <QuickAction icon={Swords} ti="ti-swords" label="Create Battle"    desc="Launch a quiz battle"         color={PURPLE} onClick={() => navigate('/battles')} />
-                <QuickAction icon={BookOpen} ti="ti-player-play" label="New On-Demand"    desc="Build a video course"         color={BLUE}   onClick={() => navigate('/courses')} />
+                {next
+                  ? <QuickAction icon={Video} ti="ti-calendar-plus" label="Schedule a session" desc="Add a live session to a course" color={BLUE} onClick={() => navigate('/courses/schedule')} />
+                  : <QuickAction icon={BookOpen} ti="ti-player-play" label="New On-Demand"    desc="Build a video course"         color={BLUE}   onClick={() => navigate('/courses')} />}
                 <QuickAction icon={Bot} ti="ti-robot" label="AI Assistant"     desc="Chat with your AI tutor"      color={C.brand}  onClick={() => navigate('/chat')} />
               </div>
             </div>
@@ -176,7 +182,7 @@ export default function HomePage() {
                 }}>
                   <Ico lucide={Clock} ti="ti-clock" size={28} color={C.muted} style={{ marginBottom: 10 }} />
                   <p style={{ fontSize: 14, color: C.muted, fontFamily: C.font, margin: 0 }}>No sessions scheduled for today</p>
-                  <Btn size="sm" style={{ marginTop: 12 }} onClick={() => navigate('/courses')}>
+                  <Btn size="sm" style={{ marginTop: 12 }} onClick={() => navigate(next ? '/courses/schedule' : '/courses')}>
                     <Ico lucide={Plus} ti="ti-plus" size={14} /> Schedule one
                   </Btn>
                 </div>

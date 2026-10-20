@@ -108,8 +108,9 @@ function AppRoutes() {
       <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
       {/* The next look has no Courses page: Course Creator (with Schedule sessions) replaces it. */}
       <Route path="/courses" element={<ProtectedRoute>{isNextUi() ? <Navigate to="/course-creator" replace /> : <CoursesPage />}</ProtectedRoute>} />
-      <Route path="/courses/new-live"    element={<ProtectedRoute><CoursesPage /></ProtectedRoute>} />
-      <Route path="/courses/new-ondemand" element={<ProtectedRoute><CoursesPage /></ProtectedRoute>} />
+      {/* On next, courses are made only in Course Creator: the old wizards' paths go to its New course page. */}
+      <Route path="/courses/new-live"    element={<ProtectedRoute>{isNextUi() ? <Navigate to="/course-creator/courses/new" replace /> : <CoursesPage />}</ProtectedRoute>} />
+      <Route path="/courses/new-ondemand" element={<ProtectedRoute>{isNextUi() ? <Navigate to="/course-creator/courses/new" replace /> : <CoursesPage />}</ProtectedRoute>} />
       <Route path="/courses/schedule"    element={<ProtectedRoute><CoursesPage /></ProtectedRoute>} />
       <Route path="/courses/manage"      element={<ProtectedRoute><CoursesPage /></ProtectedRoute>} />
       {/* Course Creator — the marketplace course builder (sections, lessons, review flow). */}
