@@ -1,0 +1,851 @@
+‎Akoro: AI proteges for education and learning.
+‎Akoro helps students learn by teaching AI agents, building knowledge through interactivity, conversation, practice, and feedback.
+‎For the website/search setup, we can treat these as:
+‎Brand/title: Akoro: AI proteges for education and learning
+‎Core description: Akoro helps students learn by teaching AI agents, building knowledge through interactivity , conversation, practice, and feedback.
+‎
+‎
+‎The key is then to make the actual Akoro website, metadata, structured data, About page, and other public references all reinforce the same meaning
+‎
+‎
+‎Yes. I would approach this as building an entity + knowledge architecture for Akoro, not simply “doing SEO.”
+‎
+‎The goal is that when Google encounters:
+‎
+‎> Akoro
+‎
+‎
+‎
+‎it repeatedly gets the same clear answer:
+‎
+‎> Akoro: AI proteges for education and learning.
+‎Akoro helps students learn by teaching AI agents, building knowledge through conversation, practice, and feedback.
+‎
+‎
+‎
+‎Google says structured data helps it understand page content, and Organization markup can help Google identify an organization accurately. But structured data does not guarantee a particular search feature or AI Overview. 
+‎
+‎1. First, establish Akoro's core identity
+‎
+‎I'd make this the canonical description across the site:
+‎
+‎Brand
+‎
+‎Akoro
+‎
+‎Positioning
+‎
+‎AI proteges for education and learning.
+‎
+‎Description
+‎
+‎Akoro helps students learn by teaching AI agents, building knowledge through conversation, practice, and feedback.
+‎
+‎Entity concept
+‎
+‎Instead of presenting Akoro as just:
+‎
+‎> “an AI education startup”
+‎
+‎
+‎
+‎we want the website to consistently establish:
+‎
+‎> Akoro is an education and learning platform built around AI proteges.
+‎
+‎
+‎
+‎Then explain what an AI protege actually is.
+‎
+‎For example:
+‎
+‎> What is an AI protege?
+‎An AI protege is a personal AI learner that students teach, interact with, practice with, and develop over time. By teaching their protege, students reinforce their own understanding while the protege builds knowledge from those interactions.
+‎
+‎
+‎
+‎That gives Google substantially more semantic information to work with than repeating “AI learning platform” everywhere.
+‎
+‎
+‎---
+‎
+‎2. The website structure
+‎
+‎I'd start with something like:
+‎
+‎akoro.name.ng/
+‎│
+‎├── /
+‎├── /about
+‎├── /how-it-works
+‎├── /ai-protege
+‎├── /for-students
+‎├── /for-teachers
+‎├── /for-schools
+‎├── /learning
+‎├── /subjects
+‎├── /exam-prep
+‎│
+‎├── /product
+‎├── /pricing
+‎├── /faq
+‎├── /contact
+‎│
+‎└── /blog
+‎
+‎But the most important pages initially are:
+‎
+‎/
+‎
+‎The homepage establishes the entity.
+‎
+‎Akoro
+‎
+‎AI proteges for education and learning.
+‎
+‎Akoro helps students learn by teaching AI agents,
+‎building knowledge through conversation, practice,
+‎and feedback.
+‎
+‎Then explain:
+‎
+‎What is Akoro?
+‎
+‎How AI proteges work
+‎
+‎How students learn by teaching
+‎
+‎For students
+‎
+‎For teachers
+‎
+‎For schools
+‎
+‎
+‎---
+‎
+‎3. /about is extremely important
+‎
+‎This shouldn't just say:
+‎
+‎> “Akoro is an innovative AI company...”
+‎
+‎
+‎
+‎Instead, make it a proper entity page.
+‎
+‎For example:
+‎
+‎About Akoro
+‎
+‎> Akoro is an education and learning platform built around AI proteges.
+‎
+‎Akoro helps students learn by teaching AI agents. Students interact with their AI proteges through conversation, explanation, practice and feedback, allowing learning to become an active process rather than simply consuming information.
+‎
+‎
+‎
+‎Then:
+‎
+‎What Akoro means
+‎
+‎Explain the name if you want that public.
+‎
+‎What Akoro does
+‎
+‎Explain the platform.
+‎
+‎Who Akoro serves
+‎
+‎Students
+‎
+‎Teachers
+‎
+‎Schools
+‎
+‎
+‎How Akoro works
+‎
+‎Explain the learning loop.
+‎
+‎Contact
+‎
+‎Real organization/contact information.
+‎
+‎This aligns with Google's emphasis on clear information about who is behind a site and evidence of expertise/background. 
+‎
+‎
+‎---
+‎
+‎4. /ai-protege becomes a major concept page
+‎
+‎This could actually become one of Akoro's strongest pages.
+‎
+‎Title:
+‎
+‎> AI Proteges — A New Way to Learn | Akoro
+‎
+‎
+‎
+‎Then:
+‎
+‎> An AI protege is an AI learning companion that grows through teaching.
+‎
+‎
+‎
+‎Explain:
+‎
+‎Student
+‎   ↓
+‎Teaches protege
+‎   ↓
+‎Protege responds
+‎   ↓
+‎Student explains / corrects
+‎   ↓
+‎Practice
+‎   ↓
+‎Feedback
+‎   ↓
+‎Knowledge develops
+‎
+‎Then explain the distinction between:
+‎
+‎AI tutor
+‎
+‎and
+‎
+‎AI protege
+‎
+‎That's important because “AI tutor” is a crowded concept.
+‎
+‎Akoro's differentiation becomes:
+‎
+‎> You don't just ask your AI to teach you. You teach your AI.
+‎
+‎
+‎
+‎That is a much stronger conceptual entity.
+‎
+‎
+‎---
+‎
+‎5. Build pages around the actual Akoro ecosystem
+‎
+‎Based on the product you've been building, I'd eventually make the relationships explicit.
+‎
+‎/for-students
+‎
+‎Explain the learner experience.
+‎
+‎/for-teachers
+‎
+‎Explain:
+‎
+‎creating activities
+‎
+‎assigning work
+‎
+‎monitoring students
+‎
+‎AI-assisted teaching
+‎
+‎grading/feedback
+‎
+‎
+‎/for-schools
+‎
+‎Explain:
+‎
+‎school accounts
+‎
+‎classrooms
+‎
+‎teacher management
+‎
+‎student management
+‎
+‎curriculum
+‎
+‎school-level analytics
+‎
+‎
+‎/exam-prep
+‎
+‎This is particularly useful because it gives Akoro a concrete educational use case.
+‎
+‎You can have:
+‎
+‎> Akoro Exam Preparation
+‎
+‎
+‎
+‎and explain how students prepare using:
+‎
+‎syllabus
+‎
+‎topics
+‎
+‎concepts
+‎
+‎practice
+‎
+‎adaptive sessions
+‎
+‎feedback
+‎
+‎knowledge tracking
+‎
+‎
+‎
+‎---
+‎
+‎6. Then we add Schema.org
+‎
+‎This is where the technical implementation begins.
+‎
+‎Google supports Organization structured data and recommends properties such as name, url, logo, description, and sameAs where applicable. 
+‎
+‎For Akoro's homepage, I'd start with something like:
+‎
+‎<script type="application/ld+json">
+‎{
+‎  "@context": "https://schema.org",
+‎  "@type": "Organization",
+‎  "@id": "https://akoro.name.ng/#organization",
+‎  "name": "Akoro",
+‎  "url": "https://akoro.name.ng/",
+‎  "logo": "https://akoro.name.ng/images/akoro-logo.png",
+‎  "description": "Akoro helps students learn by teaching AI agents, building knowledge through conversation, practice, and feedback.",
+‎  "sameAs": [
+‎    "YOUR_LINKEDIN_URL",
+‎    "YOUR_X_URL",
+‎    "YOUR_YOUTUBE_URL"
+‎  ]
+‎}
+‎</script>
+‎
+‎But we should only put real profiles in sameAs. We shouldn't manufacture social URLs just for SEO.
+‎
+‎Google specifically documents sameAs as a way to provide URLs containing additional information about the organization, such as social profiles. 
+‎
+‎
+‎---
+‎
+‎7. We also create a WebSite entity
+‎
+‎On the homepage I'd include:
+‎
+‎<script type="application/ld+json">
+‎{
+‎  "@context": "https://schema.org",
+‎  "@type": "WebSite",
+‎  "@id": "https://akoro.name.ng/#website",
+‎  "url": "https://akoro.name.ng/",
+‎  "name": "Akoro",
+‎  "description": "AI proteges for education and learning.",
+‎  "publisher": {
+‎    "@id": "https://akoro.name.ng/#organization"
+‎  }
+‎}
+‎</script>
+‎
+‎This helps distinguish:
+‎
+‎Akoro the organization
+‎
+‎from
+‎
+‎akoro.name.ng the website.
+‎
+‎That's an important distinction once the entity grows.
+‎
+‎
+‎---
+‎
+‎8. Then connect the entities
+‎
+‎This is where I would be more deliberate than simply adding random Schema markup.
+‎
+‎Conceptually:
+‎
+‎AKORO
+‎                  │
+‎        ┌─────────┴─────────┐
+‎        │                   │
+‎   Organization          Website
+‎        │                   │
+‎        │                   │
+‎        └───────┬───────────┘
+‎                │
+‎          AI Proteges
+‎                │
+‎       ┌────────┼────────┐
+‎       │        │        │
+‎    Students Teachers Schools
+‎       │
+‎    Learning
+‎       │
+‎ ┌─────┼──────────────┐
+‎ │     │              │
+‎Chat  Practice     Feedback
+‎ │
+‎Knowledge
+‎ │
+‎Concepts / Skills
+‎
+‎The website content and structured data should reinforce this same model.
+‎
+‎
+‎---
+‎
+‎9. Don't make every page about SEO
+‎
+‎This is important.
+‎
+‎Google's current guidance emphasizes people-first content, useful information, expertise, originality and clear purpose rather than creating pages primarily to manipulate search rankings. 
+‎
+‎So instead of creating:
+‎
+‎> “What is AI learning?”
+‎“What is AI education?”
+‎“What is AI tutoring?”
+‎“What is AI learning platform?”
+‎
+‎
+‎
+‎just to capture keywords, we'd create pages because they are actually useful.
+‎
+‎For example:
+‎
+‎How Students Learn by Teaching AI
+‎
+‎could genuinely explain the pedagogy behind Akoro.
+‎
+‎That's much stronger.
+‎
+‎
+‎---
+‎
+‎10. Content should reinforce the same language
+‎
+‎Imagine Google encounters these:
+‎
+‎Akoro homepage
+‎
+‎> Akoro: AI proteges for education and learning.
+‎
+‎
+‎
+‎LinkedIn
+‎
+‎> Akoro is building AI proteges that help students learn by teaching.
+‎
+‎
+‎
+‎About page
+‎
+‎> Akoro is an education and learning platform built around AI proteges.
+‎
+‎
+‎
+‎AI Protege page
+‎
+‎> An AI protege is an AI learning companion that develops through teaching, conversation, practice and feedback.
+‎
+‎
+‎
+‎School page
+‎
+‎> Schools can use Akoro to give students AI proteges and provide teachers with tools for classroom learning.
+‎
+‎
+‎
+‎Now Google sees a consistent entity, rather than five different descriptions.
+‎
+‎
+‎---
+‎
+‎11. The Google Search side
+‎
+‎Once this is live, we connect:
+‎
+‎akoro.name.ng
+‎
+‎to:
+‎
+‎Google Search Console
+‎
+‎Then submit:
+‎
+‎https://akoro.name.ng/sitemap.xml
+‎
+‎and make sure:
+‎
+‎robots.txt
+‎sitemap.xml
+‎canonical URLs
+‎HTTPS
+‎mobile rendering
+‎indexability
+‎
+‎are all correct.
+‎
+‎Google's search documentation is explicit that structured data can help Google understand content, but it doesn't guarantee rich results or particular search appearances. 
+‎
+‎
+‎---
+‎
+‎12. Then we work on external entity signals
+‎
+‎This is the part many people miss.
+‎
+‎We don't want Akoro's identity to exist only on akoro.name.ng.
+‎
+‎Over time, legitimate public references can establish:
+‎
+‎Akoro
+‎│
+‎├── akoro.name.ng
+‎├── LinkedIn
+‎├── X
+‎├── YouTube
+‎├── GitHub
+‎├── startup/company profiles
+‎├── school partnerships
+‎├── founder/company profiles
+‎├── articles
+‎└── press/references
+‎
+‎And where appropriate, those profiles link back to Akoro.
+‎
+‎This creates a much stronger web presence than simply stuffing keywords into the homepage.
+‎
+‎
+‎---
+‎
+‎13. Eventually, this can produce the search result we're aiming for
+‎
+‎The goal isn't:
+‎
+‎> “Make Google show an AI Overview.”
+‎
+‎
+‎
+‎We can't command Google to do that.
+‎
+‎The goal is to make Google's understanding of Akoro so clear that when someone searches:
+‎
+‎> Akoro
+‎
+‎
+‎
+‎Google has enough consistent information to potentially produce something like:
+‎
+‎Akoro
+‎https://akoro.name.ng
+‎
+‎Akoro: AI proteges for education and learning
+‎
+‎Akoro helps students learn by teaching AI agents,
+‎building knowledge through conversation, practice,
+‎and feedback.
+‎
+‎And potentially, depending on Google's systems and available sources, an AI-generated overview could appear above it.
+‎
+‎
+‎---
+‎
+‎I would build this in 4 phases
+‎
+‎Phase 1 — Entity foundation
+‎
+‎Homepage
+‎About
+‎AI Protege
+‎How It Works
+‎Organization schema
+‎WebSite schema
+‎metadata
+‎sitemap
+‎robots.txt
+‎Search Console
+‎
+‎Phase 2 — Product understanding
+‎
+‎Students
+‎Teachers
+‎Schools
+‎Exam Prep
+‎Learning
+‎Practice
+‎
+‎Phase 3 — Entity signals
+‎
+‎LinkedIn
+‎GitHub
+‎YouTube
+‎X
+‎Company/startup profiles
+‎Founder profiles
+‎partnership references
+‎
+‎Phase 4 — Authority/content
+‎
+‎Akoro research
+‎learning methodology
+‎AI protege articles
+‎case studies
+‎school partnerships
+‎educational resources
+‎original research/data
+‎
+‎And I would not start Phase 4 by generating 100 AI-written SEO articles. Google's current guidance specifically stresses usefulness, originality and the purpose of the content rather than producing search-engine-targeted material at scale. 
+‎
+‎For Akoro specifically
+‎
+‎I think the next step should be Phase 1 implemented against your actual akoro.name.ng site — including the exact homepage title, meta description, OG tags, canonical, favicon, Organization JSON-LD, WebSite JSON-LD, robots.txt, sitemap.xml, and the /about + /ai-protege pages.
+‎
+‎That gives us the technical foundation before we start trying to build Akoro's broader web/entity presence.
+‎
+‎
+‎Yes — this is another Google Search feature, and it is different from the normal blue-link result.
+‎
+‎In your screenshot, under the Bachs result you have:
+‎
+‎Log in
+‎
+‎Bachs – Dashboard
+‎
+‎Pricing built for global builders
+‎
+‎Blog
+‎
+‎How money moves through …
+‎
+‎Introducing virtual accounts
+‎
+‎
+‎These are Google-generated sitelinks.
+‎
+‎What Google is doing
+‎
+‎Google has understood that these are important pages/sections of the Bachs website and is surfacing them directly underneath the main result.
+‎
+‎So the search result becomes roughly:
+‎
+‎Bachs
+‎https://bachs.io
+‎
+‎[description/snippet]
+‎
+‎Log in                         →
+‎Bachs - Dashboard              →
+‎Pricing built for global...    →
+‎Blog                           →
+‎How money moves through...     →
+‎Introducing virtual accounts  →
+‎
+‎The important point is:
+‎
+‎Bachs did not create that Google UI.
+‎
+‎The website has the underlying pages/links, but Google decides which links to display and how to display them.
+‎
+‎
+‎---
+‎
+‎And yes — this is something we should aim for with Akoro
+‎
+‎For example, imagine someone searches:
+‎
+‎> Akoro
+‎
+‎
+‎
+‎Google could eventually understand the site well enough to surface:
+‎
+‎Akoro
+‎https://akoro.name.ng
+‎
+‎Akoro: AI proteges for education and learning.
+‎Akoro helps students learn by teaching AI agents...
+‎
+‎About Akoro                         →
+‎AI Proteges                         →
+‎For Students                        →
+‎For Teachers                        →
+‎For Schools                         →
+‎Exam Preparation                    →
+‎How Akoro Works                     →
+‎
+‎Google determines whether and when those sitelinks appear, so we cannot force that exact presentation.
+‎
+‎But we can make the site much easier for Google to understand.
+‎
+‎
+‎---
+‎
+‎How we influence it
+‎
+‎This is where our previous architecture becomes useful.
+‎
+‎1. Give important pages clean URLs
+‎
+‎Instead of:
+‎
+‎akoro.name.ng/page?id=1837
+‎akoro.name.ng/app/feature1
+‎akoro.name.ng/content/abc123
+‎
+‎use meaningful URLs:
+‎
+‎akoro.name.ng/
+‎akoro.name.ng/about
+‎akoro.name.ng/ai-protege
+‎akoro.name.ng/how-it-works
+‎akoro.name.ng/for-students
+‎akoro.name.ng/for-teachers
+‎akoro.name.ng/for-schools
+‎akoro.name.ng/exam-prep
+‎
+‎
+‎---
+‎
+‎2. Make the navigation reflect those priorities
+‎
+‎Your actual website navigation could be:
+‎
+‎Akoro
+‎
+‎Learn
+‎AI Protege
+‎For Students
+‎For Teachers
+‎For Schools
+‎
+‎About
+‎
+‎Google can crawl those links and understand their relationship to the homepage.
+‎
+‎
+‎---
+‎
+‎3. Give every important page a descriptive title
+‎
+‎For example:
+‎
+‎<title>AI Proteges for Education and Learning | Akoro</title>
+‎
+‎Then:
+‎
+‎/ai-protege
+‎
+‎AI Proteges | Akoro
+‎
+‎/for-students
+‎
+‎Akoro for Students | Learn by Teaching AI
+‎
+‎/for-schools
+‎
+‎Akoro for Schools | AI-Powered Learning
+‎
+‎
+‎---
+‎
+‎4. Use descriptive anchor text
+‎
+‎Instead of:
+‎
+‎<a href="/page1">Click here</a>
+‎
+‎use:
+‎
+‎<a href="/ai-protege">Learn about AI Proteges</a>
+‎
+‎or:
+‎
+‎<a href="/for-schools">Akoro for Schools</a>
+‎
+‎That gives both users and search engines more context.
+‎
+‎
+‎---
+‎
+‎5. Don't create pages just to get sitelinks
+‎
+‎This is important.
+‎
+‎We shouldn't create:
+‎
+‎/about-us
+‎/about-akoro
+‎/company
+‎/who-we-are
+‎/our-story
+‎
+‎all containing basically the same information just because we want Google to show more links.
+‎
+‎Instead, each page should have a real purpose.
+‎
+‎
+‎---
+‎
+‎There's another interesting thing in your screenshot
+‎
+‎The Bachs result has both:
+‎
+‎Sitelinks
+‎
+‎Log in
+‎Dashboard
+‎Pricing
+‎Blog
+‎...
+‎
+‎and then:
+‎
+‎AI Overview
+‎
+‎✦ AI Overview
+‎
+‎Bachs is an all-in-one payment and billing...
+‎
+‎These are two separate Google systems.
+‎
+‎So your screenshot is actually a good example of the overall search architecture we're talking about:
+‎
+‎GOOGLE SEARCH
+‎                       │
+‎          ┌────────────┴────────────┐
+‎          │                         │
+‎   ORGANIC RESULT              AI OVERVIEW
+‎          │                         │
+‎    Bachs website             Google's AI synthesis
+‎          │
+‎     ┌────┴─────┐
+‎     │           │
+‎ Main result   Sitelinks
+‎     │
+‎     ├── Dashboard
+‎     ├── Pricing
+‎     ├── Blog
+‎     └── Articles
+‎
+‎For Akoro, our job is to build the underlying website so that Google can understand:
+‎
+‎Akoro
+‎│
+‎├── Homepage
+‎├── About
+‎├── AI Proteges
+‎├── How It Works
+‎├── Students
+‎├── Teachers
+‎├── Schools
+‎├── Exam Preparation
+‎└── Learning resources
+‎
+‎Then Google independently decides whether to show those pages as sitelinks and whether to generate an AI Overview.
+‎
+‎So yes, we should absolutely account for these sitelinks when designing akoro.name.ng. In fact, I would design the site's information architecture with both Google's organic result + potential sitelinks and AI Overview/entity understanding in mind from the beginning.
