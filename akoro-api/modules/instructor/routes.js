@@ -537,6 +537,10 @@ const listSessions = asyncHandler(async (req, res) => {
   }
 });
 
+/** Run a reminder step (workers/sessionNotifier.js) without ever failing the request over it. */
+const sessionReminders = (fn) => import("../../workers/sessionNotifier.js").then(fn)
+  .catch((e) => console.warn("[instructor] session reminders:", e.message));
+
 const createSession = asyncHandler(async (req, res) => {
   try {
     const b = req.body;
@@ -598,6 +602,8 @@ const createSession = asyncHandler(async (req, res) => {
       content:   `Starts ${new Date(scheduledStart).toLocaleString()}`,
       relatedId: data.id,
     });
+    // …and the 24 h / 1 h / 10 min reminders before it starts.
+    await sessionReminders((m) => m.scheduleSessionReminders({ sessionId: data.id, scheduledStart: data.scheduled_start, sessionTitle: title, meetingUrl }));
     created(res, mapSession(data));
   } catch (e) {
     err500(res, e);
@@ -649,6 +655,13 @@ const updateSession = asyncHandler(async (req, res) => {
     if (error) throw new Error(error.message);
     notify(req.user.id, { type: "session_updated", title: `Session "${data.title}" updated`, content: "Changes saved", relatedId: data.id });
     // Recipient side — only notify students when the time changes (avoid noise).
+    // A moved or cancelled session: its old reminders go; a moved one gets new ones.
+    if (updates.scheduled_start || (updates.status && updates.status !== "scheduled")) {
+      await sessionReminders(async (m) => {
+        await m.cancelSessionReminders(id);
+        if (data.status === "scheduled") await m.scheduleSessionReminders({ sessionId: id, scheduledStart: data.scheduled_start, sessionTitle: data.title, meetingUrl: data.meeting_url });
+      });
+    }
     if (updates.scheduled_start) {
       notifyMany(await enrolledStudentIds(session.course_id), {
         type:      "session_rescheduled",
@@ -686,6 +699,7 @@ const deleteSession = asyncHandler(async (req, res) => {
 
     const { error } = await db.from("live_sessions").delete().eq("id", id);
     if (error) throw new Error(error.message);
+    await sessionReminders((m) => m.cancelSessionReminders(id));
 
     notify(req.user.id, { type: "session_deleted", title: "Session deleted", content: "A live session was removed" });
     ok(res, { message: "Session deleted" });

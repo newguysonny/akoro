@@ -24,7 +24,7 @@ import { plannerRichGather } from "./richGather.js";
 import { proactiveInChat } from "./proactiveChat.js";
 import { readerBackend } from "./reader.js";
 import { socketSession } from "./socket.js";
-import { courseOneRecord } from "./courses.js";
+import { courseOneRecord, sessionReminders } from "./courses.js";
 import { teachingToolRouting, teachingToolRuns, activityToolRouting, draftLifecycle, routineLifecycle } from "./instructorTools.js";
 import { battleFromChat, battleReviewFromChat, selfStudyFull, assignmentPreviewAssign } from "./instructorActivities.js";
 import { teachingToolScenarios } from "./teachingTools.js";
@@ -34,7 +34,7 @@ const ALL = [healthBuild, toolsCatalogue, r2Live, embeddingsLive, embeddingsComp
   privacyEdges, rateLimitCountedOnce, battleEntryGates, followUpDeliverIntoChat, taskDueInMinutes, noResidue,
   viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, suggestionsSurviveRefresh, studyToolRouting, untaughtFlashcards, tailoredChips, chatUploadFiled, pastPaperStructured, sortOwnFolders, readyProposal, goalWork, ideasFlow, consentsQuietBudget, instructorProactive, voiceSpeak, voiceLive, sweepStale, agentCheckBattle, agentCheckStop, classSyllabusFirst, historyPages, workflowMirror, agentWakes, replaceAndCancel, teachingHandoff, eventStream, paperStructured, ...chatToSubmissionScenarios, authoringVersionsParts, authoringDiagramsEdits, inboxOneList, quietLearningPass, plannerRichGather, proactiveInChat, readerBackend, socketSession, courseOneRecord,
   teachingToolRouting, teachingToolRuns, activityToolRouting, draftLifecycle, routineLifecycle,
-  battleFromChat, battleReviewFromChat, selfStudyFull, assignmentPreviewAssign, ...teachingToolScenarios, deferredRelease];
+  battleFromChat, battleReviewFromChat, selfStudyFull, assignmentPreviewAssign, ...teachingToolScenarios, deferredRelease, sessionReminders];
 
 export const SCENARIOS = Object.fromEntries(ALL.map((s) => [s.name, s]));
 
@@ -60,7 +60,7 @@ export const SUITES = {
   // Phase V4 end to end (sandbox only: BLOCKED on production).
   "real-user": ["verify.real_user_run", "writes.no_residue"],
   // One course record: Course Creator edits the courses row learners and schedules read.
-  courses: ["courses.one_record"],
+  courses: ["courses.one_record", "courses.session_reminders"],
   // Redis idle cost: far-off jobs in Postgres, one background worker, drained old queues.
   redis: ["ops.deferred_release"],
   curriculum: ["curriculum.syllabus_coverage"],

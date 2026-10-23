@@ -830,6 +830,13 @@ if (!skipJob("alert worker")) {
 // 10 s for a job that is days away. Once the workers above have loaded, the
 // boot clean-up moves the old per-module queues' jobs onto the shared
 // background queue and pulls far-off / repeat jobs out of Redis.
+// Live-session reminders (24 h / 1 h / 10 min). Started at boot so its waiting
+// reminders are releasable after a restart, not only once a session is created.
+if (process.env.REDIS_URL && !skipJob("session notifier")) {
+  import("./workers/sessionNotifier.js")
+    .then((m) => { m.startSessionNotifier(); console.log("[sessionNotifier] worker started at boot"); })
+    .catch((e) => console.error("[sessionNotifier] failed to start:", e.message));
+}
 if (process.env.REDIS_URL && !skipJob("deferred jobs")) {
   import("./lib/deferredJobs.js")
     .then((m) => { m.startDeferredRelease(); console.log("[deferred-jobs] release clock started (every minute)"); })

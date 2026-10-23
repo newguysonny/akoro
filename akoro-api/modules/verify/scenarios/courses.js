@@ -73,3 +73,53 @@ export const courseOneRecord = {
     ctx.expect.eq("a second visit adds nothing", (await builderCourses()).filter((c) => c.courseId === oldId).length, 1);
   },
 };
+
+export const sessionReminders = {
+  name: "courses.session_reminders", area: "courses", risk: "write",
+  description: "Scheduling a live session queues its 24 h / 1 h / 10 min reminders (waiting in Postgres, not Redis); moving it replaces them; deleting it drops them.",
+  params: { instructor: { default: "@tester51" } },
+  async run(ctx, p) {
+    const me = await ctx.as(p.instructor);
+    if (me.role !== "instructor") ctx.expect.blocked(`${p.instructor} isn't an instructor (seed 2026-seed-instructor-testers.sql)`);
+    const as = p.instructor;
+    const probe = await ctx.db.probe("edu.deferred_jobs", "id");
+    if (!probe.ok) ctx.expect.blocked(`edu.deferred_jobs is not readable (migration 2026-deferred-jobs.sql): ${probe.error}`);
+
+    const made = await ctx.http({ as, method: "POST", path: "/api/course-builder/courses", body: { title: `${ctx.marker} Reminder class`, type: "live", platform: "Zoom" } });
+    const b = made.body?.data;
+    if (!b?.courseId) ctx.expect.blocked(`Course Creator gave no linked course: ${made.status}`);
+    let sessionId = null;
+    ctx.cleanup(async () => {
+      if (sessionId) await ctx.http({ as, method: "DELETE", path: `/api/instructor/sessions/${sessionId}` });
+      await ctx.http({ as, method: "DELETE", path: `/api/course-builder/courses/${b.id}` });
+    });
+    const waiting = () => ctx.db.rows("edu.deferred_jobs", { queue: "session-notifications", job_key: { like: `%-${sessionId}-%` } });
+
+    // 1. Three days out: all three reminders wait as rows.
+    const start = new Date(Date.now() + 3 * 86400_000);
+    start.setUTCSeconds(0, 0);
+    const s = await ctx.http({ as, method: "POST", path: "/api/instructor/sessions", body: { courseId: b.courseId, title: `${ctx.marker} Week 1`, startTime: start.toISOString(), duration: 45 } });
+    ctx.expect.ok("the session is scheduled", s.status === 200 || s.status === 201, s.body);
+    sessionId = s.body?.data?.id;
+    if (!sessionId) return;
+    const first = await waiting();
+    ctx.expect.eq("three reminders wait in Postgres", first.map((r) => r.name).sort(), ["reminder_10min", "reminder_1h", "reminder_24h"]);
+    ctx.expect.ok("…each carrying the start time in its id", first.every((r) => r.job_key.endsWith(`-${start.getTime()}`)), first.map((r) => r.job_key));
+    const r24 = first.find((r) => r.name === "reminder_24h");
+    ctx.expect.eq("the 24 h reminder is due a day before the start", Date.parse(r24?.due_at), start.getTime() - 86400_000);
+
+    // 2. Moved a day later: the old reminders go, three new ones wait.
+    const moved = new Date(start.getTime() + 86400_000);
+    const u = await ctx.http({ as, method: "PATCH", path: `/api/instructor/sessions/${sessionId}`, body: { startTime: moved.toISOString() } });
+    ctx.expect.status("the session moves", u, 200);
+    const second = await waiting();
+    ctx.expect.eq("still three reminders", second.length, 3);
+    ctx.expect.ok("…all for the new time", second.every((r) => r.job_key.endsWith(`-${moved.getTime()}`)), second.map((r) => r.job_key));
+
+    // 3. Deleted: none left.
+    const d = await ctx.http({ as, method: "DELETE", path: `/api/instructor/sessions/${sessionId}` });
+    ctx.expect.status("the session is deleted", d, 200);
+    ctx.expect.eq("its reminders are gone", (await waiting()).length, 0);
+    sessionId = null;   // nothing left for the clean-up to delete
+  },
+};
