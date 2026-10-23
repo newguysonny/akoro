@@ -31,6 +31,7 @@ import { DEFAULT_DOC_TEMPLATES, getDefaultDoc } from "../school/defaultDocs/inde
 import { openai, OPENAI_MODEL }            from "../../lib/aiModel.js";
 import { parseJsonLoose }                  from "../tasks/tools/_json.js";
 import { ensureBucket, uploadPublicFile } from "../school/templateStorage.js";
+import { linkUnlinked }                    from "../course-builder/link.js";
 
 // In-memory multer for course cover uploads (8 MB cap, images only).
 const upload = multerLib({ storage: multerLib.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
@@ -335,6 +336,8 @@ const updateAgent = asyncHandler(async (req, res) => {
 
 const listCourses = asyncHandler(async (req, res) => {
   try {
+    // Course Creator courses made before the link get their courses row, so Schedule sessions lists them.
+    await linkUnlinked(req.user.id).catch((e) => console.warn("[instructor] course link failed:", e.message));
     const { data: courses, error } = await db
       .from("courses")
       .select("*")

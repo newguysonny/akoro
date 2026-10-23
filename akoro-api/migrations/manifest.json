@@ -200,6 +200,7 @@
     "2026-battle-entry.sql",
     "2026-eval-run-options.sql",
     "2026-course-builder.sql",
+    "2026-course-builder-link.sql",
     "2026-follow-ups-into-existing-chat.sql",
     "2026-verify-gate.sql",
     "2026-self-tooling-grants.sql",

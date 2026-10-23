@@ -37,6 +37,7 @@
 import { Router }            from "express";
 import db                    from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
+import { adoptOldCourses, linkUnlinked, createLinkedCourse, publishLinkedCourse, removeLinkedCourse, syncLinkedCourse } from "./link.js";
 
 const edu = () => db.schema("edu");
 const router = Router();
@@ -73,6 +74,8 @@ const toCourse = (r, sections, ownerName) => ({
   price: r.price ?? "", pm: !!r.preview_mode, desc: r.description ?? "",
   learn: r.learn ?? "", color: r.color ?? 0, cover: r.cover_url ?? "",
   note: r.review_note ?? "", ownerId: r.owner_id, owner: ownerName ?? "",
+  // The platform course row this edits (live sessions, enrolments, payments use it).
+  courseId: r.course_id ?? null,
   createdAt: r.created_at, sections,
 });
 
@@ -102,6 +105,11 @@ async function guardLesson(req, res, id) {
 /* ── the tree ────────────────────────────────────────────────────────── */
 
 router.get("/courses", asyncHandler(async (req, res) => {
+  // Courses made on the old Courses page join My Courses (once; see link.js).
+  if (req.user.role === "instructor") {
+    await adoptOldCourses(req.user.id).catch((e) => console.warn("[course-builder] adopt failed:", e.message));
+    await linkUnlinked(req.user.id).catch((e) => console.warn("[course-builder] backfill failed:", e.message));
+  }
   let q = edu().from("builder_courses").select("*").order("created_at", { ascending: true });
   if (!isAdmin(req)) q = q.eq("owner_id", req.user.id);
   const { data: courses } = await q;
@@ -153,7 +161,9 @@ router.post("/courses", asyncHandler(async (req, res) => {
     color: Number.isInteger(req.body?.color) ? req.body.color : Math.floor(Math.random() * 6),
   }).select("*").single();
   if (error) throw error;
-  ok(res, toCourse(c, [], null));
+  // Its platform course row, unpublished, so it can be scheduled at once.
+  const linked = await createLinkedCourse(c).catch((e) => { console.warn("[course-builder] link failed:", e.message); return c; });
+  ok(res, toCourse(linked, [], null));
 }));
 
 router.patch("/courses/:id", asyncHandler(async (req, res) => {
@@ -186,6 +196,7 @@ router.patch("/courses/:id", asyncHandler(async (req, res) => {
   const { data: next, error } = await edu().from("builder_courses")
     .update(patch).eq("id", c.id).select("*").single();
   if (error) throw error;
+  await syncLinkedCourse(next);
   ok(res, toCourse(next, [], null));
 }));
 
@@ -193,6 +204,7 @@ router.delete("/courses/:id", asyncHandler(async (req, res) => {
   const c = await guardCourse(req, res, req.params.id);
   if (!c) return;
   await edu().from("builder_courses").delete().eq("id", c.id);
+  await removeLinkedCourse(c).catch((e) => console.warn("[course-builder] unlink failed:", e.message));
   ok(res, { deleted: true });
 }));
 
@@ -213,6 +225,8 @@ router.post("/courses/:id/status", asyncHandler(async (req, res) => {
   const { data: next, error } = await edu().from("builder_courses")
     .update(patch).eq("id", c.id).select("*").single();
   if (error) throw error;
+  // Published in Course Creator is what learners see.
+  await publishLinkedCourse(next, status === "published");
   ok(res, toCourse(next, [], null));
 }));
 

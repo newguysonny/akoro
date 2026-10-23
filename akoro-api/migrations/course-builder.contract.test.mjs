@@ -168,10 +168,11 @@ test("section css: scoped under .ccroot so nothing leaks into the shell", () => 
   for (const cls of [".pv", ".ps", ".pn", ".pf", ".chv", ".pr", ".pb", ".pbc"]) {
     assert.ok(sectionCss.includes(`.ccroot ${cls}`), `preview class ${cls}`);
   }
-  // Same components, Akoro instructor brand: amber accent on ink text,
-  // DM Sans — no Kpemu purple left anywhere.
-  assert.ok(sectionCss.includes("--fg:#E8884A"), "amber accent");
-  assert.ok(sectionCss.includes("--text:#1A1A2E"), "ink text");
+  // Same components, on the console theme: accent and text are the theme's
+  // brand and text tokens (amber on ink on ?ui=legacy, purple on ?ui=next,
+  // see src/theme/legacyVars.js) — no hard-coded Kpemu purple anywhere.
+  assert.ok(sectionCss.includes("--fg:var(--ak-brand)"), "brand accent");
+  assert.ok(sectionCss.includes("--text:var(--ak-text)"), "theme text");
   assert.ok(sectionCss.includes("'DM Sans'"), "brand font");
   for (const purple of ["#6c3cff", "#9a7dff", "#4b1fd1", "#a78bfa"]) {
     assert.ok(!sectionCss.includes(purple), `no reference purple ${purple}`);

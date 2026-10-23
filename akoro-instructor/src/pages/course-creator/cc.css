@@ -77,4 +77,4 @@
 .ccroot .lnk{color:var(--fg);cursor:pointer;text-decoration:underline;text-underline-offset:2px;background:none;border:0;padding:0;font-size:inherit}
 @media (prefers-reduced-motion:reduce){.ccroot .ccard,.ccroot .scard,.ccroot .chv{transition:none}}
 /* The next look: the learner font (the legacy stack is left as is). */
-[data-ui="next"] .ccroot{font-family:var(--ak-font)}
+.ccroot:is([data-ui="next"] *){font-family:var(--ak-font)}
