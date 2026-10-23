@@ -3080,12 +3080,36 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   fallback on timeout/malformed, loop stops on reply, cap enforced,
   `propose_complete` rejected until objective met, phases unchanged vs
   today's gate tests (`state-machine.test.mjs`, `runner.test.mjs` equivalents).
+- **Status: 🟡 partly built (2026-10-20), paused — we come back to it later.**
+  Built: a teaching session is a workflow of the engine
+  (`teaching-session/workflow.js`: proposed → scheduled → teaching_active ↔
+  adapt_strategy → assessment → completed); `start_adaptive_session` with
+  `workflowId` ties the live socket to it (owner and open state checked); its
+  parts are the check's gaps; `end_session` reports the outcome through
+  `onChildOutcome` (commit 849d364d and follow-ups). **Not built:** the
+  agent-driven turn runtime (`teaching/controller.js`, the agent tool catalogue,
+  `TEACHING_POLICY`, the §9.3 loop with cap 3 / end on reply / 8 s fallback),
+  Protégé / NaNa / Sargeant as `persona` tools — teaching still runs on the
+  existing fixed flow — the `learn_with_guide` mode and its `TeachAgentModal`
+  toggle, the direct create endpoint / resume / history, and the Exit
+  (Scenarios A and J, the teaching contract tests).
 
 ### Phase 7 — Handoff and completion callback
 - `request_teaching` → harness child creation (idempotent, one transaction).
 - Outcome delivery → `StudyPrepController.onChildOutcome` → `retest_ready`.
 - Abandon/unmet handling.
 - **Exit:** Scenario B (critical end-to-end) passes, including app close and later resume.
+- **Status: 🟡 mostly built (2026-10-20), paused with Phase 6.** Built
+  (`study-prep/teaching-handoff.js`): an Agent Check below the pass mark with
+  tries left offers a teaching session on its gaps (`learner.action_required`
+  card, auto-approve after a minute); approve → `start_teaching_session` puts it
+  on the dashboard with a run in the Study Prep chat; each part taught reaches
+  the Study Prep stream; the outcome confirms the teach-back, the retest starts a
+  minute later and the agent wakes (`teaching_done`); a topic or plan that moves
+  on closes the session. Gate: `studyprep.teaching_handoff` (happy path).
+  **Not built / not proven:** explicit abandon and objective-unmet outcomes (a
+  session ended before any teaching just stays open), and Scenario B's
+  app-close-and-resume leg in the gate.
 
 ### Phase 8 — Decay Review Workflow
 - Extract pure retention functions from `decayEngine.js` into the Education Engine.
