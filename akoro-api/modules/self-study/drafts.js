@@ -18,6 +18,7 @@
  * clarification instead of guessing.
  */
 
+import { mergePlanItems, wantsPlanEdit } from "./planEdit.js";
 import db from "../../db.js";
 import {
   nana, edu, ACTIVITY_TYPES, announceFor, mySchool,
@@ -566,9 +567,10 @@ export async function reviseDraftPayload(instructor, id, changes) {
       applied.push("questions");
     }
     // self_study | assignment | project: the plan (entries + their objectives).
-    const wantsPlan = Array.isArray(c.subtopics) || (c.objectives && typeof c.objectives === "object");
-    if (wantsPlan) {
-      const plan = asPlan(c.subtopics ?? payload.subtopics, c.objectives ?? {}, payload.objectives);
+    if (wantsPlanEdit(c)) {
+      // add/remove act on the STORED list; a full `subtopics` is a deliberate rewrite.
+      const items = mergePlanItems(payload.subtopics, { subtopics: c.subtopics, add: c.add_subtopics, remove: c.remove_subtopics });
+      const plan = asPlan(items, c.objectives ?? {}, payload.objectives);
       payload.subtopics = plan.items;
       payload.objectives = plan.objectives;
       applied.push("plan");

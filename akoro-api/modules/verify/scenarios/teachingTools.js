@@ -11,7 +11,7 @@
  * Two tools share a name with an activity type ("Activities Creator", "Assignment
  * Creator"); they are asked for without the word that would start an activity draft.
  */
-import { teacherOf, toolsOf, lastCall } from "./instructorTools.js";
+import { teacherOf, toolsOf, lastCall, cleanSlate } from "./instructorTools.js";
 
 const INSTRUCTOR = "@tester51";
 
@@ -70,6 +70,7 @@ function toolScenario(c) {
     params: { instructor: { default: INSTRUCTOR } },
     async run(ctx, p) {
       const teacher = await teacherOf(ctx, p.instructor);
+      await cleanSlate(ctx, teacher);
       const catalogue = await ctx.http({ as: p.instructor, path: "/api/teaching/tools" });
       const entry = (catalogue.body?.data || []).find((t) => t.key === c.key);
       ctx.expect.ok(`the ${c.name} tool exists`, !!entry, (catalogue.body?.data || []).map((t) => t.key));

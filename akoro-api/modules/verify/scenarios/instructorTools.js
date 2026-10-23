@@ -23,6 +23,16 @@ export async function teacherOf(ctx, who) {
   return teacher;
 }
 
+/**
+ * A write scenario starts from a clean slate: any pending draft left on the test
+ * instructor (by an earlier run cut short) changes how chat messages are read —
+ * "make a worksheet" becomes an edit of the old draft. Test accounts only.
+ */
+export async function cleanSlate(ctx, teacher) {
+  const n = await ctx.db.deleteOwned("activity_drafts", { ownerColumn: "created_by", ownerId: teacher.id, filters: { status: "draft" } });
+  if (n) ctx.note(`cleared ${n} stale pending draft(s) left on ${teacher.username || "the test instructor"}`);
+}
+
 export const toolsOf = (turn) => (turn.tools || []).map((t) => t.tool);
 export const lastCall = (turn, name) => (turn.tools || []).filter((t) => t.tool === name).at(-1) || null;
 
@@ -74,6 +84,7 @@ export const teachingToolRuns = {
   params: { instructor: { default: DEFAULT_INSTRUCTOR } },
   async run(ctx, p) {
     const teacher = await teacherOf(ctx, p.instructor);
+    await cleanSlate(ctx, teacher);
     const catalogue = await ctx.http({ as: p.instructor, path: "/api/teaching/tools" });
     const open = new Set((catalogue.body?.data || []).filter((t) => !t.locked).map((t) => t.key));
     const pick = RUNNABLE.find((r) => open.has(r.key));
@@ -166,6 +177,7 @@ export const draftLifecycle = {
   params: { instructor: { default: DEFAULT_INSTRUCTOR }, learner: { default: DEFAULT_LEARNER } },
   async run(ctx, p) {
     const teacher = await teacherOf(ctx, p.instructor);
+    await cleanSlate(ctx, teacher);
     const learner = await ctx.as(p.learner);
     const say = talk(ctx, p, teacher);
 

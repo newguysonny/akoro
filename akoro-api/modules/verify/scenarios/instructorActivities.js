@@ -15,7 +15,7 @@
  * agent, the instructor's own agent, coins for questions) are BLOCKED with the
  * reason, never a silent pass.
  */
-import { teacherOf, toolsOf, lastCall, talk } from "./instructorTools.js";
+import { teacherOf, toolsOf, lastCall, talk, cleanSlate } from "./instructorTools.js";
 
 const INSTRUCTOR = "@tester51";
 const LEARNER = "@tester19";
@@ -52,6 +52,7 @@ function battleScenario({ key, mode, learnersNeeded, description }) {
     params: { instructor: { default: INSTRUCTOR } },
     async run(ctx, p) {
       const teacher = await teacherOf(ctx, p.instructor);
+      await cleanSlate(ctx, teacher);
       const found = await battleClass(ctx, p.instructor, learnersNeeded);
       if (!found) ctx.expect.blocked(`${p.instructor} has no class with ${learnersNeeded} test learner(s) who have an agent — a battle needs them`);
       const { classroom, learners } = found;
@@ -91,8 +92,9 @@ function battleScenario({ key, mode, learnersNeeded, description }) {
       // 5. The battle form's own path: create the battle, then record it on the draft.
       const title = `${ctx.marker} Fractions ${review ? "review" : "battle"}`;
       const made = await ctx.http({ as: p.instructor, method: "POST", path: `/api/battle/classes/${classroom.id}/battles/invite`, body: {
-        title, subject: "Mathematics", topic: "Fractions", difficulty: "hard", total_questions: 5,
-        time_limit_seconds: 600, xp_prize: 100, question_source: "auto", expires_in_minutes: 60,
+        title, subject: "Mathematics", topic: "Fractions", difficulty: "hard", total_questions: 3,
+        // the question bank, not AI generation: bounded in time (AI-filled questions can outlast the gate's request limit)
+        time_limit_seconds: 600, xp_prize: 100, question_source: "bank", expires_in_minutes: 60,
         usernames: learners.map((l) => l.username), ...(review ? { mode: "review" } : {}),
       } });
       if (made.status >= 400 && made.status < 500) ctx.expect.blocked(`creating the battle was refused (${made.status}): ${made.body?.error || made.body?.message || "no reason given"}`);
@@ -143,6 +145,7 @@ export const selfStudyFull = {
   params: { instructor: { default: INSTRUCTOR }, learner: { default: LEARNER } },
   async run(ctx, p) {
     const teacher = await teacherOf(ctx, p.instructor);
+    await cleanSlate(ctx, teacher);
     const learner = await ctx.as(p.learner);
     const say = talk(ctx, p, teacher);
 
@@ -177,7 +180,9 @@ export const selfStudyFull = {
     ctx.expect.toolNotCalled(t2, "prepare_activity");
     const revised = await draftOf(ctx, p.instructor, draftId);
     ctx.expect.ok("the new subtopic is in the plan", (revised?.payload?.subtopics || []).some((s) => /light/i.test(s)), revised?.payload?.subtopics);
-    ctx.expect.ok("the earlier subtopics are kept", plan.every((s) => (revised?.payload?.subtopics || []).includes(s)) || (revised?.payload?.subtopics || []).length >= plan.length, revised?.payload?.subtopics);
+    const kept = plan.filter((s) => !(revised?.payload?.subtopics || []).includes(s));
+    ctx.expect.eq("every earlier subtopic is kept (adding must not replace the plan)", kept, []);
+    ctx.expect.eq("exactly one entry was added", (revised?.payload?.subtopics || []).length, plan.length + 1);
     ctx.expect.eq("difficulty is hard", revised?.payload?.difficulty, "hard");
 
     // 4. The instructor assigns it (the Assign tap on the preview).
@@ -226,6 +231,7 @@ export const assignmentPreviewAssign = {
   params: { instructor: { default: INSTRUCTOR }, learner: { default: LEARNER } },
   async run(ctx, p) {
     const teacher = await teacherOf(ctx, p.instructor);
+    await cleanSlate(ctx, teacher);
     const learner = await ctx.as(p.learner);
     const say = talk(ctx, p, teacher);
 

@@ -67,10 +67,16 @@ const SHORT_ANSWER_RE = /^(?:\w+[\s,.!?]*){1,6}$/;
      · a recurring ask — "every Friday, prepare…" (schedule_activity_routine);
      · managing a draft or routine that exists — "show me that draft",
        "cancel that routine", "discard it". */
-const TEACHING_RESOURCE_RE = /\b(?:lesson\s+plans?|lesson\s+hooks?|vocab(?:ulary)?\s+(?:list|builder)|podcast|misconceptions?|real[-\s]?world\s+connections?|essay\s+grad(?:er|ing)|grade\s+(?:this|these|the)\s+essays?)\b/i;
+const TEACHING_RESOURCE_RE = /\b(?:lesson\s+plans?|lesson\s+hooks?|vocab(?:ulary)?\s+(?:list|builder)|podcast|misconceptions?|homework\s+sheets?|work\s?sheets?|handouts?|real[-\s]?world\s+connections?|essay\s+grad(?:er|ing)|grade\s+(?:this|these|the)\s+essays?)\b/i;
 const RECURRING_RE = /\b(?:every|each)\s+(?:day|week|weekday|(?:mon|tues|wednes|thurs|fri|satur|sun)day)\b|\bweekly\b/i;
 const DRAFT_MANAGE_RE = /^\s*(?:please\s+)?(?:show|open|read|view|list|display|see|cancel|discard|scrap|stop|pause|resume|delete|remove|drop)\b[^.?!]{0,40}\b(?:drafts?|routines?|it|that|this|them)\b/i;
-const isTeachingResource = (text) => TEACHING_RESOURCE_RE.test(text) && !ACTIVITY_NOUN_RE.test(text);
+// A resource request that also names an activity for learners ("an assignment from my lesson plan") is
+// still an activity. "questions" alone doesn't make one: "a homework sheet with 10 questions" is a resource.
+const STRONG_ACTIVITY_NOUN_RE = /\b(?:assignments?|quiz(?:zes)?|tests?|projects?|self[-\s]?study|live\s+(?:course|class|lesson|session)|battles?|journeys?|multi[-\s]?stage)\b/i;
+const isTeachingResource = (text) => TEACHING_RESOURCE_RE.test(text) && !STRONG_ACTIVITY_NOUN_RE.test(text);
+// "Make it a hard battle", "turn this into…": the pronoun points at the pending draft, so it is an edit
+// even when the sentence also names an activity ("a hard battle" is not a NEW one).
+const POINTS_AT_DRAFT_RE = /^\s*(?:(?:please|now|also|and|then|ok(?:ay)?|can\s+you|could\s+you)[\s,!.]+)*(?:make|turn|change|set|keep|use)\s+(?:it|this|that|the\s+draft)\b/i;
 
 export function requiresActivityPreparation(message, history = []) {
   const text = String(message || "").trim();
@@ -101,7 +107,9 @@ const DRAFT_POINTER_RE = /\b(?:question|q|number|no\.)\s*\d+\b|\bversion\s*\d+\b
 
 export function isDraftFollowUp(message) {
   const text = String(message || "").trim();
-  if (!text || ACTIVITY_QUERY_RE.test(text) || NEW_ACTIVITY_RE.test(text)) return false;
+  if (!text) return false;
+  if (POINTS_AT_DRAFT_RE.test(text) && !isTeachingResource(text)) return true;
+  if (ACTIVITY_QUERY_RE.test(text) || NEW_ACTIVITY_RE.test(text)) return false;
   // A new Library resource, or a discard/cancel, is not an edit of the pending draft.
   if (isTeachingResource(text) || /^\s*(?:please\s+)?(?:cancel|discard|scrap)\b/i.test(text)) return false;
   return DRAFT_EDIT_RE.test(text) || DRAFT_POINTER_RE.test(text);

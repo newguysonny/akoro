@@ -471,3 +471,10 @@ test("run_teaching_tool tells the model every field the teaching tools take (the
   assert.match(chat, /REQUIRED for \$\{p\.required\.join/);
   assert.match(chat, /the essay grader needs the rubric and the essay text/);
 });
+
+test("revising a plan adds/removes on the stored list — the agent can't wipe a plan it never saw", () => {
+  assert.match(chat, /add_subtopics: \{ type: "array"/);
+  assert.match(chat, /remove_subtopics: \{ type: "array"/);
+  assert.match(chat, /Never send it to add or remove one entry/);
+  assert.match(drafts, /mergePlanItems\(payload\.subtopics, \{ subtopics: c\.subtopics, add: c\.add_subtopics, remove: c\.remove_subtopics \}\)/);
+});

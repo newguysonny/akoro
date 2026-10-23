@@ -1233,7 +1233,9 @@ export const INSTRUCTOR_TOOLS = [
           usernames: { type: "array", items: { type: "string" } }, user_ids: { type: "array", items: { type: "string" } },
         } },
         difficulty: { type: "string", enum: ["easy", "intermediate", "hard"] },
-        subtopics: { type: "array", items: { type: "string" }, description: "The FULL revised entry list for the plan (study plan / task breakdown / milestones), in order. Send every entry, changed or not." },
+        add_subtopics: { type: "array", items: { type: "string" }, description: "Entries to ADD to the plan (study plan / task breakdown / milestones) — use this for \"add a subtopic on…\". The stored plan is kept and these are appended; you do not need to know the existing entries." },
+        remove_subtopics: { type: "array", items: { type: "string" }, description: "Entries to REMOVE from the plan, by their title or key words. The rest of the stored plan is kept." },
+        subtopics: { type: "array", items: { type: "string" }, description: "ONLY to reorder or rewrite the WHOLE plan: the FULL list in order. Never send it to add or remove one entry, and never from memory — you usually have not seen the stored plan (call get_activity_draft first if you really must rewrite it)." },
         objectives: { type: "object", description: "Map of entry title to its objective lines. Omitted entries keep their existing objectives." },
         stages: { type: "array", description: "multi_stage only: the full revised ordered journey.", items: { type: "object", properties: {
           kind: { type: "string", enum: ["self_study", "assignment", "project"] },

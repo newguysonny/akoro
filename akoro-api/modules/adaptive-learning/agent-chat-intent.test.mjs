@@ -287,3 +287,18 @@ test("the guards still force and revise where they should", () => {
   assert.equal(isDraftFollowUp("Add a part with 2 true or false questions"), true);
   assert.equal(isDraftFollowUp("remove question 3"), true);
 });
+
+/* More from the gate: a battle edit, and Library resources that name "questions". */
+test("'make it …' edits the pending draft; homework sheets and worksheets are Library resources", () => {
+  assert.equal(isDraftFollowUp("Make it a hard battle, and add the note: bring a calculator."), true);
+  assert.equal(isDraftFollowUp("Make it harder"), true);
+  assert.equal(isDraftFollowUp("Please turn this into a shorter one"), true);
+  assert.equal(isDraftFollowUp("Make a new assignment on fractions"), false, "a NEW activity is still new");
+  assert.equal(isDraftFollowUp("Make a lesson plan for it"), false, "a resource request is not an edit");
+  for (const m of ["Make a homework sheet with a marking scheme on fractions for JSS1 Mathematics, 10 questions.",
+    "Give me a worksheet on photosynthesis with 8 questions", "Make a handout on the water cycle"]) {
+    assert.equal(isDraftFollowUp(m), false, `${m} is not an edit`);
+    assert.equal(requiresActivityPreparation(m, [{ role: "user", content: "Set a quiz for JSS1" }]), false, `${m} does not force a draft`);
+  }
+  assert.equal(requiresActivityPreparation("Create an assignment with 10 questions on fractions"), true, "an assignment is still an activity");
+});
