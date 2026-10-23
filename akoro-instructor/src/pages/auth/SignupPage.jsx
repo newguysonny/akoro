@@ -103,7 +103,7 @@ export default function SignupPage() {
         {/* Error */}
         {formErr && (
           <div style={{
-            background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10,
+            background: tint(9, RED), border: `1px solid ${tint(30, RED)}`, borderRadius: 10,
             padding: '10px 14px', marginBottom: 16, fontSize: 13, fontWeight: 600, color: RED,
           }}>
             {formErr}

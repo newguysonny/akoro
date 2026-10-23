@@ -11,7 +11,7 @@ import { Ico } from '../theme/Ico.jsx';
 import { Modal, Btn, Inp, Sel, Txa, Toast, Skeleton } from './Primitives.jsx';
 import { useBattlesAPI } from '../hooks/useBattlesAPI.js';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
-import { C } from '../theme/colors.js';
+import { C, tint } from '../theme/colors.js';
 
 const BLANK = { question_text: '', options: ['', '', '', ''], correct_answer_index: 0, topic: '', difficulty: 'intermediate', xp_value: 35 };
 
@@ -95,7 +95,7 @@ export default function QuestionBankModal({ open, onClose }) {
         </div>
 
         {/* AI generate */}
-        <div style={{ ...card, background: '#FBF7FF', borderColor: '#E9D8FF' }}>
+        <div style={{ ...card, background: tint(4), borderColor: '#E9D8FF' }}>
           <div style={{ fontSize: 13, fontWeight: 800, color: C.ink, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}><Ico lucide={Sparkles} ti="ti-sparkles" size={14} /> Generate with AI</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <Inp label="Topic" value={gen.topic} onChange={(e) => setGen({ ...gen, topic: e.target.value })} placeholder="e.g. Chain Rule" />

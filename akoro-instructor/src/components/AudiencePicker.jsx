@@ -158,7 +158,7 @@ export default function AudiencePicker({
           {courseBound && classroomId && (
             <div style={{
               marginTop: 7, padding: '8px 10px', borderRadius: 9,
-              background: '#FEF3C7', border: '1px solid #FDE68A',
+              background: tint(14, '#F59E0B'), border: `1px solid ${tint(35, '#F59E0B')}`,
               fontSize: 11, color: '#92400E', fontFamily: C.font, lineHeight: 1.5,
             }}>
               A battle uses the course's question bank, so only learners in this class who are

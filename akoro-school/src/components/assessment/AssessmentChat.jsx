@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react';
 import {Volume2, Mic, ShieldAlert, AlertTriangle, Zap, Lightbulb } from 'lucide-react';
-import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
+import { AMBER, BRAND, RED, GREEN, GOLD } from '../../constants.js';
 
 /**
  * AssessmentChat — renders the Sergeant proctored-exam transcript.

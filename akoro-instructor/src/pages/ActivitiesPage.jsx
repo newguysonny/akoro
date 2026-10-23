@@ -446,7 +446,7 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
       </div>
 
       {done && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 12px', borderRadius: 10, background: '#DCFCE7', border: '1px solid #BBF7D0', fontSize: 12.5, fontWeight: 800, color: GREEN }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 12px', borderRadius: 10, background: '#DCFCE7', border: `1px solid ${tint(30, GREEN)}`, fontSize: 12.5, fontWeight: 800, color: GREEN }}>
           <Ico lucide={CheckCircle2} ti="ti-circle-check" size={14} /> {done}
         </div>
       )}
@@ -963,7 +963,7 @@ export function DetailPage({ activity, onDeleted, onClose }) {
           })()}
 
           {pdfErr && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 11px', borderRadius: 10, background: '#FEF2F2', border: '1px solid #FECACA', fontSize: 12, fontWeight: 700, color: RED, fontFamily: C.font, marginTop: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 11px', borderRadius: 10, background: tint(9, RED), border: `1px solid ${tint(30, RED)}`, fontSize: 12, fontWeight: 700, color: RED, fontFamily: C.font, marginTop: 12 }}>
               <Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={13} /> Couldn't build the PDF — try again.
             </div>
           )}
@@ -1455,7 +1455,7 @@ function MultiStageForm({ onAssigned }) {
       </div>
 
       {done && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 12px', borderRadius: 10, background: '#DCFCE7', border: '1px solid #BBF7D0', fontSize: 12.5, fontWeight: 800, color: GREEN }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 12px', borderRadius: 10, background: '#DCFCE7', border: `1px solid ${tint(30, GREEN)}`, fontSize: 12.5, fontWeight: 800, color: GREEN }}>
           <Ico lucide={CheckCircle2} ti="ti-circle-check" size={14} /> {done}
         </div>
       )}

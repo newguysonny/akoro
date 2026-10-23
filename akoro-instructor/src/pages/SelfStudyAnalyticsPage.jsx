@@ -101,7 +101,7 @@ function ReportCard({ data, onRegenerate, generating, error }) {
               <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: .5, color: C.muted2, marginBottom: 7 }}>LIKELY MISCONCEPTIONS</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                 {r.misconceptions.map((m, i) => (
-                  <div key={i} style={{ border: `1px solid #FECACA`, background: '#FEF2F2', borderRadius: 10, padding: '9px 12px' }}>
+                  <div key={i} style={{ border: `1px solid ${tint(30, RED)}`, background: tint(9, RED), borderRadius: 10, padding: '9px 12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
                       <Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={12} color={RED} />
                       <span style={{ fontSize: 11.5, fontWeight: 900, color: RED }}>{m.learner}</span>

@@ -24,10 +24,11 @@ export const scenarios = [
   {
     name: 'instructor.routes_baseline',
     portal: 'instructor',
-    description: 'A screenshot of every instructor route (no ids) — the console rebuild\'s record. UI_GATE_THEME=dark sets the dark theme; UI_GATE_ROUTES=/,/chat limits the routes. For a person to look at; a route that throws is a failed check.',
+    description: 'A screenshot of every instructor route (no ids) — the console rebuild\'s record. UI_GATE_THEME=dark sets the dark theme; UI_GATE_ROUTES=/,/chat limits the routes; UI_GATE_FULL=1 also shoots each screen further down. For a person to look at; a route that throws is a failed check.',
     async run(t) {
       const { page } = t;
       const theme = process.env.UI_GATE_THEME || '';
+      const full = process.env.UI_GATE_FULL === '1';
       if (theme) await page.addInitScript((m) => { try { localStorage.setItem('akoro_display_mode', m); } catch { /* private mode */ } }, theme);
       const errors = [];
       page.on('pageerror', (e) => errors.push(`${page.url()}: ${e.message}`));
@@ -39,7 +40,21 @@ export const scenarios = [
         await page.goto(`${t.app}${route}`, { waitUntil: 'domcontentloaded' }).catch(() => {});
         await page.waitForTimeout(2500);
         if (await page.getByText('This page ran into a problem').first().isVisible().catch(() => false)) crashed.push(route);
-        await t.shot(`${(route === '/' ? 'home' : route.slice(1)).replace(/\//g, '_')}${theme ? `.${theme}` : ''}`);
+        const shotName = `${(route === '/' ? 'home' : route.slice(1)).replace(/\//g, '_')}${theme ? `.${theme}` : ''}`;
+        await t.shot(shotName);
+        // UI_GATE_FULL=1: the page scrolls inside the frame, so step down it and shoot each screen (up to 6).
+        for (let i = 2; full && i <= 6; i++) {
+          const moved = await page.evaluate(() => {
+            const scrolls = (e) => e && e.scrollHeight > e.clientHeight + 20 && !e.closest('.ak-sidebar');
+            const el = [document.querySelector('.ak-shell-main'), ...document.querySelectorAll('main, [style*="overflow"]'), document.scrollingElement].find(scrolls);
+            if (!el || el.scrollTop + el.clientHeight >= el.scrollHeight - 4) return false;
+            el.scrollBy(0, el.clientHeight - 60);
+            return true;
+          }).catch(() => false);
+          if (!moved) break;
+          await page.waitForTimeout(400);
+          await t.shot(`${shotName}.${i}`);
+        }
       }
       t.note(`${INSTRUCTOR_ROUTES.length} routes`);
       if (errors.length) t.note(`errors: ${errors.slice(0, 8).join(' | ')}`);

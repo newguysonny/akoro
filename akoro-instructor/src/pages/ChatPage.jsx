@@ -15,7 +15,7 @@ import LiveRecorder from '../components/LiveRecorder.jsx';
 import { uploadTraining } from '../services/trainingApi.js';
 import { useStatsAPI } from '../hooks/useStatsAPI.js';
 import { useInstructorSocket } from '../hooks/useWebSocket.js';
-import { apiGet, apiPost, apiDelete, API } from '../services/api.js';
+import { apiGet, apiPost, apiPatch, apiDelete, API } from '../services/api.js';
 import ActivityPreviewPanel from '../components/ActivityPreviewPanel.jsx';
 import DraftCard from '../components/paper/DraftCard.jsx';
 import { chatIdeas, STARTERS } from '../lib/chatIdeas.js';
@@ -241,8 +241,9 @@ export default function ChatPage() {
   };
 
   const loadChatSessions = () => apiGet(`${CHAT_BASE}/sessions`)
-    .then((d) => { const list = d?.sessions ?? []; setChatSessions(list); return list; })
-    .catch(() => []);
+    .then((d) => { const list = d?.sessions ?? []; setChatSessions(list); setHistoryError(false); return list; })
+    .catch(() => { setHistoryError(true); return []; });
+  const retryHistoryLoad = () => { setHistoryError(false); loadChatSessions(); };
 
   // Cards ride the persisted message meta — a reload rebuilds the same
   // topic/draft previews the live reply rendered, not a flat transcript.
@@ -807,7 +808,7 @@ export default function ChatPage() {
            small tablets (the learner's useIsMobileView threshold) take
            over the full screen. */
         @media (max-width: 767px){
-          .ci-preview-panel{position:fixed;inset:0;width:100%!important;z-index:400;background:#F7F5F1;padding:12px}
+          .ci-preview-panel{position:fixed;inset:0;width:100%!important;z-index:400;background:var(--ak-bg);padding:12px}
         }
       `}</style>
 
@@ -861,7 +862,7 @@ export default function ChatPage() {
             const textPart = chips.length ? msg.text.replace(chips.join(' · '), '').replace(/^\n/, '').trim() : msg.text;
             return (
               <div key={msg.id} style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: 8 }}>
-                {!isMe && <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#FEF0E6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}><Ico lucide={Bot} ti="ti-robot" size={15} color={C.brand} /></div>}
+                {!isMe && <div style={{ width: 28, height: 28, borderRadius: '50%', background: C.brandSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}><Ico lucide={Bot} ti="ti-robot" size={15} color={C.brand} /></div>}
                 <div style={{ maxWidth: '80%' }}>
                   {isMe && msg.isTask && (
                     <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
@@ -871,7 +872,7 @@ export default function ChatPage() {
                   <div style={{
                     padding: '10px 13px',
                     borderRadius: isMe ? '17px 17px 4px 17px' : '17px 17px 17px 4px',
-                    background: isMe ? (msg.isTask ? 'linear-gradient(135deg,#E8884A,#F0A04B)' : C.hero) : '#F0ECE6',
+                    background: isMe ? (msg.isTask ? `linear-gradient(135deg,${C.brand},${C.brandDeep})` : C.hero) : C.tagBg,
                     color: isMe ? '#fff' : C.ink, fontSize: 13, lineHeight: 1.55,
                   }}>
                     {chips.length > 0 && (
@@ -960,8 +961,8 @@ export default function ChatPage() {
 
           {!trainingInChat && messages[messages.length - 1]?.from === 'me' && !messages[messages.length - 1]?.isTask && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#FEF0E6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}><Ico lucide={Bot} ti="ti-robot" size={15} color={C.brand} /></div>
-              <div style={{ padding: '10px 15px', borderRadius: '17px 17px 17px 4px', background: '#F0ECE6', display: 'flex', gap: 2 }}>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: C.brandSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}><Ico lucide={Bot} ti="ti-robot" size={15} color={C.brand} /></div>
+              <div style={{ padding: '10px 15px', borderRadius: '17px 17px 17px 4px', background: C.tagBg, display: 'flex', gap: 2 }}>
                 <span className="ci-typing" /><span className="ci-typing" style={{ animationDelay: '.2s' }} /><span className="ci-typing" style={{ animationDelay: '.4s' }} />
               </div>
             </div>
@@ -1097,7 +1098,7 @@ export default function ChatPage() {
             <style>{`@keyframes ci-drawer-in{from{transform:translateX(-100%)}to{transform:translateX(0)}}.ci-sess-item:hover{background:${C.bg}}`}</style>
             {/* Agent header */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 16px 13px', borderBottom: bdr(1, C.border), flexShrink: 0 }}>
-              <div style={{ width: 46, height: 46, borderRadius: '50%', background: '#FEF0E6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 23, boxShadow: `0 0 0 2px #fff, 0 0 0 3.5px ${C.brand}`, flexShrink: 0 }}><Ico lucide={Bot} ti="ti-robot" size={23} color={C.brand} /></div>
+              <div style={{ width: 46, height: 46, borderRadius: '50%', background: C.brandSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 23, boxShadow: `0 0 0 2px ${C.surface}, 0 0 0 3.5px ${C.brand}`, flexShrink: 0 }}><Ico lucide={Bot} ti="ti-robot" size={23} color={C.brand} /></div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 14.5, fontWeight: 900, color: C.ink, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{agentName}</p>
                 <div style={{ fontSize: 11, color: trainingInChat ? C.brand : GREEN, display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
@@ -1109,7 +1110,7 @@ export default function ChatPage() {
             </div>
             {/* New chat + Train agent */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 16px', flexShrink: 0 }}>
-              <button onClick={newChat} style={{ width: '100%', padding: 11, borderRadius: 12, border: 'none', background: 'linear-gradient(135deg,#E8884A,#F0A04B)', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: C.font, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+              <button onClick={newChat} style={{ width: '100%', padding: 11, borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${C.brand},${C.brandDeep})`, color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: C.font, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
                 <Ico lucide={Plus} ti="ti-plus" size={14} strokeWidth={2.6} /> New chat
               </button>
               <button onClick={() => { setTrainModal(true); }} disabled={trainingInChat} title={trainingInChat ? 'Training already in progress' : 'Train your agent on a lesson recording or document'}

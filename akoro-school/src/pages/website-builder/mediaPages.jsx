@@ -15,6 +15,7 @@ import { API, apiGet, apiPost, apiPut, apiDelete } from '../../services/api.js';
 import { INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, AMBER, BLUE, PURPLE, RED, FONT } from '../../constants.js';
 import { BASE, slugify, pill, th, td, iconBtn, Tabs, addBtn, backBtn, toastEl, miniBtn } from './shared.jsx';
 import { confirmDialog } from '../../components/ConfirmHost.jsx';
+const labelStyle = { display: 'block', fontSize: 12.5, fontWeight: 700, color: INK, margin: '0 0 6px', fontFamily: FONT };
 
 /* ── Media library — WordPress-style table ───────────────────────────────── */
 const MEDIA_TYPES = [

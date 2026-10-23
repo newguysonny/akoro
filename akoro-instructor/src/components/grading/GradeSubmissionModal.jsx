@@ -108,7 +108,7 @@ function SubmittedPaper({ current, brief, only = null }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: .6, color: C.muted2 }}>WHAT THEY SUBMITTED {current.completedAt && <span style={{ fontWeight: 600 }}>· {fmtWhen(current.completedAt)}</span>}</div>
       {(sub.text || '').trim() && (
-        <div style={{ background: '#FBFAF8', border: `1px solid ${C.border}`, borderLeft: `3px solid ${PURPLE}`, borderRadius: 10, padding: '12px 14px' }}>
+        <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderLeft: `3px solid ${PURPLE}`, borderRadius: 10, padding: '12px 14px' }}>
           <p style={{ margin: 0, fontSize: 13.5, color: C.ink, lineHeight: 1.65, whiteSpace: 'pre-wrap', fontFamily: C.font }}>{sub.text}</p>
         </div>
       )}
@@ -127,7 +127,7 @@ function SubmittedPaper({ current, brief, only = null }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 800, color: C.ink, fontFamily: C.font }}>
                   {qMcq && <span style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${correct ? GREEN : C.border}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 9, color: GREEN }}>{correct ? <Ico lucide={Check} ti="ti-check" size={10} /> : null}</span>}
                   {chosen != null ? `${letterOf(pick)}. ${chosen}` : String(raw)}
-                  {qMcq && correct && <span style={{ fontSize: 10, fontWeight: 800, color: GREEN, background: '#E6F6EE', borderRadius: 999, padding: '2px 8px' }}>correct</span>}
+                  {qMcq && correct && <span style={{ fontSize: 10, fontWeight: 800, color: GREEN, background: tint(12, GREEN), borderRadius: 999, padding: '2px 8px' }}>correct</span>}
                 </div>
               </div>
             );
@@ -179,11 +179,11 @@ function PaperAnswers({ current, brief, marks, focus }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: .6, color: C.muted2 }}>WHAT THEY SUBMITTED {current.completedAt && <span style={{ fontWeight: 600 }}>· {fmtWhen(current.completedAt)}</span>}</div>
       {(sub.text || '').trim() && (
-        <div style={{ background: '#FBFAF8', border: `1px solid ${C.border}`, borderLeft: `3px solid ${PURPLE}`, borderRadius: 10, padding: '12px 14px' }}>
+        <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderLeft: `3px solid ${PURPLE}`, borderRadius: 10, padding: '12px 14px' }}>
           <p style={{ margin: 0, fontSize: 13.5, color: C.ink, lineHeight: 1.65, whiteSpace: 'pre-wrap', fontFamily: C.font }}>{sub.text}</p>
         </div>
       )}
-      {sub.late && <div style={{ alignSelf: 'flex-start', fontSize: 11.5, fontWeight: 800, color: '#B45309', background: '#FEF3C7', borderRadius: 999, padding: '3px 10px' }}>Handed in late{sub.lateByMinutes ? ` · ${fmtLate(sub.lateByMinutes)} after the due date` : ''}</div>}
+      {sub.late && <div style={{ alignSelf: 'flex-start', fontSize: 11.5, fontWeight: 800, color: '#B45309', background: tint(14, '#F59E0B'), borderRadius: 999, padding: '3px 10px' }}>Handed in late{sub.lateByMinutes ? ` · ${fmtLate(sub.lateByMinutes)} after the due date` : ''}</div>}
       <AnswerPaper details={brief.details} title={brief?.title || ''} answers={sub.answers || {}} files={files} marks={rows} showKey label="Answer" onOpenFile={open} sans={C.font} />
     </div>
   );
@@ -238,7 +238,7 @@ function SubmissionPdfView({ targetId, version, name, marks, onMarks, markState 
 
 /* The AI's draft marks — shown for approval, never published by itself. */
 function AiDraftCard({ ai, onApply, onRequest, requesting }) {
-  const box = { border: `1px solid ${PURPLE}33`, background: '#FBFAFF', borderRadius: 10, padding: '11px 13px' };
+  const box = { border: `1px solid ${PURPLE}33`, background: tint(4), borderRadius: 10, padding: '11px 13px' };
   const head = (extra) => <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 900, letterSpacing: .5, color: PURPLE }}><Ico lucide={Sparkles} ti="ti-sparkles" size={12} /> AI DRAFT {extra}</div>;
   if (!ai || ai.status === 'failed') {
     return (
@@ -567,7 +567,7 @@ export default function GradeSubmissionModal({
   const published = current.grade != null;
 
   return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 3600, background: '#F1EFF6', display: 'flex', flexDirection: 'column', fontFamily: C.font }}>
+    <div style={{ position: 'absolute', inset: 0, zIndex: 3600, background: tint(7), display: 'flex', flexDirection: 'column', fontFamily: C.font }}>
       {/* ── Topbar ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 22px', background: C.surface, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
         <button onClick={onClose} title="Back to the workbench"
@@ -627,7 +627,7 @@ export default function GradeSubmissionModal({
         <div style={{ display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: 22, maxWidth: 1440, margin: '0 auto', alignItems: 'start' }}>
           {/* Paper — the work, question by question */}
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, boxShadow: '0 1px 2px rgba(33,31,53,.04), 0 12px 28px -12px rgba(33,31,53,.18)', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 20px', borderBottom: `1px solid ${C.border}`, background: '#F7F6F3' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 20px', borderBottom: `1px solid ${C.border}`, background: C.bg }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} role="tablist">
                 {submitted && [['answers', hasQuestions ? 'Paper' : 'Answers'], ['pdf', 'Submission PDF']].map(([id, label]) => (
                   <button key={id} role="tab" aria-selected={view === id} onClick={() => setView(id)}
@@ -727,7 +727,7 @@ export default function GradeSubmissionModal({
                         </button>
                       );
                     })}
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, padding: '10px 12px', background: '#F7F6F3', borderTop: `1px solid ${C.border}` }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, padding: '10px 12px', background: C.bg, borderTop: `1px solid ${C.border}` }}>
                       <span style={{ fontSize: 12, fontWeight: 800, color: C.muted2 }}>Total</span>
                       <span style={{ marginLeft: 'auto', fontSize: 20, fontWeight: 900, color: totals.complete ? GREEN : C.ink, fontFamily: 'Lora, Georgia, serif' }}>{totals.got}</span>
                       <span style={{ fontSize: 12.5, fontWeight: 700, color: C.muted2 }}>/ {totals.max}{totals.complete ? ` · ${totals.pct}%` : ' — mark every question'}</span>
@@ -775,7 +775,7 @@ export default function GradeSubmissionModal({
                     </div>
                   ))}
                   {/* Total */}
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, background: '#F7F6F3', border: `1px solid ${C.border}`, borderRadius: 10, padding: '11px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: '11px 14px' }}>
                     <span style={{ fontSize: 26, fontWeight: 900, color: rubric.every(v => v != null) ? GREEN : C.ink, fontFamily: 'Lora, Georgia, serif' }}>
                       {rubricTotal}
                     </span>

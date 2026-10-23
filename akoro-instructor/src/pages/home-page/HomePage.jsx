@@ -12,7 +12,7 @@ import { useCoursesAPI } from '../../hooks/useCoursesAPI.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { apiGet, apiPost, apiDelete, API } from '../../services/api.js';
 import { GREEN, PURPLE, BLUE } from '../../constants.js';
-import { C } from '../../theme/colors.js';
+import { C, tint } from '../../theme/colors.js';
 import { Ico } from '../../theme/Ico.jsx';
 
 
@@ -111,14 +111,14 @@ export default function HomePage() {
           <div style={{
             display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16,
             padding: '11px 14px', borderRadius: 12,
-            background: '#FEF3C7', border: '1px solid #FDE68A', fontFamily: C.font,
+            background: tint(14, '#F59E0B'), border: `1px solid ${tint(35, '#F59E0B')}`, fontFamily: C.font,
           }}>
             <span style={{ display: 'flex' }}><Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={16} color="#B45309" /></span>
             <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: '#92400E' }}>
               {loadError} These figures may be incomplete.
             </span>
             <button onClick={() => { setLoading(true); setReloadKey(k => k + 1); }} style={{
-              padding: '6px 13px', borderRadius: 9, border: '1px solid #FDE68A',
+              padding: '6px 13px', borderRadius: 9, border: `1px solid ${tint(35, '#F59E0B')}`,
               background: C.surface, color: '#92400E', fontSize: 12, fontWeight: 800,
               cursor: 'pointer', fontFamily: C.font,
             }}>Retry</button>

@@ -333,7 +333,7 @@ function GeneratorPanel({ kind, onToast, onGenerated }) {
             <div style={{ fontSize: 17, fontWeight: 800, color: INK, marginBottom: 6 }}>Your {KIND_NOUN} is ready</div>
             <p style={{ fontSize: 12.5, color: MUTED, margin: '0 0 20px', lineHeight: 1.55 }}>It’s been added to your {cfg.pastLabel.toLowerCase()}. Post it now or open the full view.</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-              {lastCreation && <div style={{ display: 'flex', justifyContent: 'center' }}><AiPostPill creation={lastCreation} onUpdated={(c) => { setLastCreation(c); loadPast(); }} onToast={onToast} /></div>}
+              {lastCreation && <div style={{ display: 'flex', justifyContent: 'center' }}><AiPostPill creation={lastCreation} onUpdated={(c) => { setLastCreation(c); onGenerated?.(); }} onToast={onToast} /></div>}
               <button onClick={() => { setSuccess(false); if (lastCreation) navigate(`/content/creation/${lastCreation.id}`); }} style={{ padding: '10px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Open full view</button>
               <button onClick={() => setSuccess(false)} style={{ padding: '9px', borderRadius: 10, border: `1.5px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Close</button>
             </div>

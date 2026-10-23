@@ -95,7 +95,7 @@ function NotFound() {
     }}>
       <div style={{ fontSize: 64 }}>404</div>
       <p style={{ fontSize: 16, color: '#6B6B80' }}>Page not found</p>
-      <a href="/" style={{ color: '#E8884A', fontWeight: 600, textDecoration: 'none' }}>Go home</a>
+      <a href="/" style={{ color: 'var(--ak-brand)', fontWeight: 600, textDecoration: 'none' }}>Go home</a>
     </div>
   );
 }

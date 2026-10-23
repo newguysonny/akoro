@@ -7,6 +7,7 @@ import { API } from '../../services/api.js';
 import { COUNTRIES, NG_STATES } from '../../data/locations.js';
 
 const AMBER = '#E8884A';
+const MUTED2 = '#9490A0';
 const RED   = '#EF4444';
 const EDUCATION_LEVELS = ['Nursery / Pre-school', 'Primary', 'Junior Secondary', 'Senior Secondary'];
 const OWNERSHIP_TYPES  = ['Private', 'Public / Government', 'Faith-based / Mission', 'Community'];

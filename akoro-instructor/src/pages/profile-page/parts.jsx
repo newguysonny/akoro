@@ -21,7 +21,7 @@ import { Ico } from '../../theme/Ico.jsx';
 
 const BRAND = C.brand;
 /* Data, not styling: the stored default accent/agent colour is the literal hex (saved to the API as before). */
-const ACCENT_DEFAULT = '#E8884A';
+const ACCENT_DEFAULT = '#6C3BFF';
 const FONTF = C.font;
 
 /* ─── Reference data ──────────────────────────────────────────── */

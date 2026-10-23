@@ -210,7 +210,7 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
           </div>
           {isLive && (
             <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5, background: '#FEE2E2',
+              display: 'inline-flex', alignItems: 'center', gap: 5, background: tint(12, RED),
               color: RED, fontSize: 10.5, fontWeight: 800, padding: '4px 10px', borderRadius: 20,
             }}>
               <Ico lucide={Radio} ti="ti-broadcast" size={11} /> LIVE
@@ -232,7 +232,7 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
         </div>
 
         {error && (
-          <div style={{ margin: '14px 20px 0', padding: '10px 12px', borderRadius: 10, background: '#FEE2E2', color: RED, fontSize: 12.5 }}>
+          <div style={{ margin: '14px 20px 0', padding: '10px 12px', borderRadius: 10, background: tint(12, RED), color: RED, fontSize: 12.5 }}>
             {error}
           </div>
         )}
@@ -273,7 +273,7 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
             )}
 
             {over && (
-              <div style={{ marginTop: 14, padding: '12px 14px', borderRadius: 12, background: '#FFFBEB', border: `1px solid ${tint(27)}` }}>
+              <div style={{ marginTop: 14, padding: '12px 14px', borderRadius: 12, background: tint(10, '#F59E0B'), border: `1px solid ${tint(27)}` }}>
                 <div style={{ fontSize: 11, fontWeight: 800, color: C.brand, marginBottom: 6 }}>
                   <Ico lucide={Trophy} ti="ti-trophy" size={11} style={{ marginRight: 4, verticalAlign: -1 }} />RESULT
                 </div>

@@ -405,7 +405,7 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
       )}
 
       {error && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 11px', borderRadius: 10, background: '#FEF2F2', border: '1px solid #FECACA', fontSize: 12, fontWeight: 700, color: RED, fontFamily: C.font, marginTop: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 11px', borderRadius: 10, background: tint(9, RED), border: `1px solid ${tint(30, RED)}`, fontSize: 12, fontWeight: 700, color: RED, fontFamily: C.font, marginTop: 10 }}>
           <Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={13} /> {error}
         </div>
       )}

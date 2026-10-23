@@ -359,7 +359,7 @@ export function Toast({ message, type = 'success', onClose }) {
   const color = colors[type] || GREEN;
   return (
     <div style={{
-      position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
+      position: 'fixed', bottom: 96, right: 24, zIndex: 9999,
       background: C.surface, borderRadius: 12, padding: '14px 18px',
       boxShadow: '0 8px 30px rgba(0,0,0,.12)',
       display: 'flex', alignItems: 'center', gap: 10,

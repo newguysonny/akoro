@@ -120,7 +120,7 @@ export function StudentAttendancePage() {
 
 const pillBtn = (c) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 13px', borderRadius: 9, border: `1px solid ${c}55`, background: tint(7, c), color: c, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: C.font });
 const emptyBox = { padding: 44, textAlign: 'center', color: C.muted2, fontSize: 13.5, fontFamily: C.font, background: C.surface, border: `1.5px dashed ${C.border}`, borderRadius: 14 };
-const toastStyle = { position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.hero, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 };
+const toastStyle = { position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)', background: C.hero, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 };
 
 export function BehaviorRecordsPage() {
   return <ResourcePage title="Behavior Records" subtitle="Log positive and negative behavior" resource="behavior-records"

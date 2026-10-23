@@ -61,7 +61,7 @@ export default function PurchaseCheckoutPage() {
           </div>
         </div>
 
-        {err && <div style={{ background: '#FEECEC', color: RED, borderRadius: 10, padding: '10px 14px', fontSize: 13, fontWeight: 700, marginBottom: 12 }}>{err}</div>}
+        {err && <div style={{ background: tint(9, RED), color: RED, borderRadius: 10, padding: '10px 14px', fontSize: 13, fontWeight: 700, marginBottom: 12 }}>{err}</div>}
 
         <button onClick={proceed} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: 14, borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${C.brand},${C.brandDeep})`, color: '#fff', fontSize: 14.5, fontWeight: 900, cursor: 'pointer', fontFamily: C.font }}>
           {busy ? <Ico lucide={Loader2} ti="ti-loader-2" size={15} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico lucide={Lock} ti="ti-lock" size={15} />} {busy ? 'Starting…' : free ? 'Confirm' : 'Proceed to secure payment'}

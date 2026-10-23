@@ -356,10 +356,10 @@ export default function PilotSchoolsPage() {
                     ? <input className="ak-date-input w-[130px]" type="date" value={settingsDraft.end_date} onChange={(e) => setSettingsDraft({ ...settingsDraft, end_date: e.target.value })} />
                     : selected.end_date}</td>
                   <td>{settingsEditing
-                    ? <input className="ak-credit-input" type="number" min="0" value={settingsDraft.student_cap} onChange={(e) => setSettingsDraft({ ...settingsDraft, student_cap: e.target.value })} /> / mo
+                    ? <><input className="ak-credit-input" type="number" min="0" value={settingsDraft.student_cap} onChange={(e) => setSettingsDraft({ ...settingsDraft, student_cap: e.target.value })} /> / mo</>
                     : `${selected.student_cap} / mo`}</td>
                   <td>{settingsEditing
-                    ? <input className="ak-credit-input" type="number" min="0" value={settingsDraft.instructor_cap} onChange={(e) => setSettingsDraft({ ...settingsDraft, instructor_cap: e.target.value })} /> / mo
+                    ? <><input className="ak-credit-input" type="number" min="0" value={settingsDraft.instructor_cap} onChange={(e) => setSettingsDraft({ ...settingsDraft, instructor_cap: e.target.value })} /> / mo</>
                     : `${selected.instructor_cap} / mo`}</td>
                   <td>{settingsEditing ? (
                     <div className="ak-detail-actions">

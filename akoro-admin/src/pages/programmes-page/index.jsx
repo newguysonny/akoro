@@ -592,7 +592,7 @@ function CourseDetail() {
       {its.length ? (
         <div className="clist">
           {its.map((m, n) => (
-                        <div className="ccd" key={m.id} {...getItemProps(i)}>
+                        <div className="ccd" key={m.id} {...getItemProps(n)}>
               <div className="cth">
                 <div className="th" style={m.thumb_url ? { backgroundImage: `url(${m.thumb_url})` } : undefined}>
                   {m.thumb_url && m.type !== 'video' ? null : <svg viewBox="0 0 24 24" className="tic">{TI[m.type]}</svg>}

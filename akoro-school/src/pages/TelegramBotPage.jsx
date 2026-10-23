@@ -5,6 +5,7 @@ import { PageLayout } from '../components/Layout.jsx';
 import BackButton from '../components/BackButton.jsx';
 import { apiGet, apiPut, apiPost } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
+const BRAND = AMBER;
 
 function Toggle({ on, onChange }) {
   return (

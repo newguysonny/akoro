@@ -232,7 +232,7 @@ export default function SubmissionMarkup({ blob, marks, onChange, saveState = 'i
           stays where it was dropped while the note is typed). */}
       <div style={{ position: 'relative', height: 0, zIndex: 4 }}>
       {editingMark && (
-        <div data-comment-editor="" style={{ position: 'absolute', top: 6, right: 12, width: 340, maxWidth: 'calc(100% - 24px)', border: `1.5px solid ${PURPLE}`, borderRadius: 10, padding: 10, background: '#FBFAFF', boxShadow: '0 12px 30px -10px rgba(33,31,53,.45)' }}>
+        <div data-comment-editor="" style={{ position: 'absolute', top: 6, right: 12, width: 340, maxWidth: 'calc(100% - 24px)', border: `1.5px solid ${PURPLE}`, borderRadius: 10, padding: 10, background: tint(4), boxShadow: '0 12px 30px -10px rgba(33,31,53,.45)' }}>
           <div style={{ fontSize: 11.5, fontWeight: 800, color: PURPLE, marginBottom: 6 }}>Comment {numbers.get(editingMark.id) || ''} · page {editingMark.page}</div>
           <textarea autoFocus value={editingMark.text || ''} maxLength={1000} rows={3}
             onChange={(e) => setText(editingMark.id, e.target.value)}

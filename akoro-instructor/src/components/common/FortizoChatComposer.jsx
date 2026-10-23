@@ -16,9 +16,9 @@ import { Mic, Paperclip, ArrowUp, Sparkles, ChevronDown, Check, CheckSquare, Aud
 import { Ico } from '../../theme/Ico.jsx';
 import { C, tint } from '../../theme/colors.js';
 
-const SURFACE = '#F8F9FC';
-const RAIL_BORDER = '#DFE3ED';
-const MUTED_RAIL = '#526078';
+const SURFACE = 'var(--ak-input-bg)';
+const RAIL_BORDER = 'var(--ak-border2)';
+const MUTED_RAIL = 'var(--ak-text-sub)';
 
 function ComposerTool({ icon: Icon, ti, label, onClick, disabled = false, active = false }) {
   const unavailable = disabled && !active;
@@ -35,11 +35,11 @@ function ComposerTool({ icon: Icon, ti, label, onClick, disabled = false, active
         justifyContent: 'center', border: 'none', borderRadius: 10, cursor: unavailable ? 'default' : 'pointer',
         transition: 'background .16s, color .16s, transform .16s',
         color: active ? '#fff' : MUTED_RAIL,
-        background: active ? C.brand : '#fff',
+        background: active ? C.brand : C.surface,
         boxShadow: '0 1px 4px rgba(30,41,59,.06)',
       }}
       onMouseEnter={e => { if (!unavailable && !active) { e.currentTarget.style.background = C.brand; e.currentTarget.style.color = '#fff'; e.currentTarget.style.transform = 'translateY(-1px)'; } }}
-      onMouseLeave={e => { if (!unavailable && !active) { e.currentTarget.style.background = '#fff'; e.currentTarget.style.color = MUTED_RAIL; e.currentTarget.style.transform = 'none'; } }}
+      onMouseLeave={e => { if (!unavailable && !active) { e.currentTarget.style.background = C.surface; e.currentTarget.style.color = MUTED_RAIL; e.currentTarget.style.transform = 'none'; } }}
     >
       <Ico lucide={Icon} ti={ti} size={16} />
     </button>
@@ -77,7 +77,7 @@ export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelCha
         style={{
           display: 'flex', alignItems: 'center', gap: 5, maxWidth: 190, padding: '7px 10px',
           border: 'none', borderRadius: 17, cursor: selectable ? 'pointer' : 'default',
-          color: '#4B5871', background: '#fff',
+          color: 'var(--ak-text-sub)', background: C.surface,
           fontSize: 11, fontWeight: 800, fontFamily: C.font, whiteSpace: 'nowrap', overflow: 'hidden',
           opacity: selectable ? 1 : .78,
         }}
@@ -91,14 +91,14 @@ export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelCha
             ? ChipIcon
             : <Ico lucide={ChipIcon} ti={iconTi} size={13} color={C.brand} />}
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{modelLabel}</span>
-        {selectable && <Ico lucide={ChevronDown} ti="ti-chevron-down" size={12} color="#8792A7" />}
+        {selectable && <Ico lucide={ChevronDown} ti="ti-chevron-down" size={12} color={C.muted2} />}
       </button>
 
       {open && (
         <div role="menu" aria-label="Supported chat modes" style={{
           position: 'absolute', zIndex: 20, bottom: 42, left: 0, width: 270, padding: 5,
           maxHeight: 'min(70vh, 460px)', overflowY: 'auto',
-          border: '1px solid #E2E5ED', borderRadius: 13,
+          border: `1px solid ${C.border}`, borderRadius: 13,
           color: C.ink, background: C.surface,
           boxShadow: '0 13px 34px rgba(22,28,45,.24)',
         }}>
@@ -108,7 +108,7 @@ export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelCha
             return (
               <div key={option.id}>
                 {option.section && (
-                  <div style={{ padding: '8px 9px 3px', fontSize: 9.5, fontWeight: 900, letterSpacing: '.07em', textTransform: 'uppercase', color: '#98A1B2', fontFamily: C.font }}>{option.section}</div>
+                  <div style={{ padding: '8px 9px 3px', fontSize: 9.5, fontWeight: 900, letterSpacing: '.07em', textTransform: 'uppercase', color: C.muted2, fontFamily: C.font }}>{option.section}</div>
                 )}
                 <button type="button" role="menuitemradio" aria-checked={selected} aria-disabled={off}
                   title={off ? (option.note || 'Coming soon') : undefined}
@@ -124,9 +124,9 @@ export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelCha
                       <span style={{ fontSize: 12, fontWeight: selected ? 900 : 800 }}>{option.label}</span>
                       {option.meta && (off
                         ? <span style={{ fontSize: 9, fontWeight: 900, color: '#B45309', background: 'rgba(245,158,11,.14)', borderRadius: 999, padding: '1px 7px', textTransform: 'uppercase', letterSpacing: '.04em', whiteSpace: 'nowrap' }}>{option.meta}</span>
-                        : <span style={{ fontSize: 9.5, fontWeight: 800, color: '#8791A3', textTransform: 'uppercase', letterSpacing: '.04em' }}>{option.meta}</span>)}
+                        : <span style={{ fontSize: 9.5, fontWeight: 800, color: C.muted2, textTransform: 'uppercase', letterSpacing: '.04em' }}>{option.meta}</span>)}
                     </span>
-                    {option.description && <span style={{ display: 'block', marginTop: 1, color: '#8791A3', fontSize: 10, fontWeight: 500, lineHeight: 1.35 }}>{option.description}</span>}
+                    {option.description && <span style={{ display: 'block', marginTop: 1, color: C.muted2, fontSize: 10, fontWeight: 500, lineHeight: 1.35 }}>{option.description}</span>}
                   </span>
                   {selected && <Ico lucide={Check} ti="ti-check" size={14} color={C.brand} />}
                 </button>
@@ -233,8 +233,8 @@ export default function FortizoChatComposer({
             style={{
               width: 33, height: 33, padding: 0, borderRadius: 10, display: 'inline-flex',
               alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer',
-              border: '1.5px solid #DFE3ED',
-              background: '#fff',
+              border: `1.5px solid ${RAIL_BORDER}`,
+              background: C.surface,
             }}
           >
             <span style={{ width: 11, height: 11, borderRadius: 2, background: C.ink, display: 'block' }} />
@@ -254,7 +254,7 @@ export default function FortizoChatComposer({
               transition: 'background .16s, transform .16s',
             }}
           >
-            <Ico lucide={ArrowUp} ti="ti-arrow-up" size={17} color={canSend ? '#fff' : '#9490A0'} />
+            <Ico lucide={ArrowUp} ti="ti-arrow-up" size={17} color={canSend ? '#fff' : C.muted2} />
           </button>
         )}
       </div>

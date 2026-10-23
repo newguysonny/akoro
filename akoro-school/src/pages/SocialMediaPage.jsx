@@ -5,6 +5,7 @@ import { PageLayout } from '../components/Layout.jsx';
 import BackButton from '../components/BackButton.jsx';
 import { apiGet, apiPatch } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
+const BRAND = AMBER;
 
 const PROVIDER_META = {
   facebook:  { icon: Facebook,  color: '#1877F2' },

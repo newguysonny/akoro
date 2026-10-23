@@ -150,4 +150,4 @@ const inp = { width: 140, padding: '10px 12px', borderRadius: 10, border: `1px s
 const primaryBtn = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: C.font };
 const th = { textAlign: 'left', padding: '10px 14px', fontSize: 11.5, fontWeight: 800, color: C.muted2, background: C.bg };
 const td = { padding: '10px 14px', fontSize: 12.5, color: C.muted, verticalAlign: 'middle' };
-const toastStyle = { position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.hero, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, fontFamily: C.font };
+const toastStyle = { position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)', background: C.hero, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, fontFamily: C.font };

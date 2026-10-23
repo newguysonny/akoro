@@ -8,7 +8,7 @@ import {Receipt, Wrench } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Skeleton } from '../components/Primitives.jsx';
 import { apiGet } from '../services/api.js';
-import { INK, MUTED, BORDER, LIGHT, WHITE, GREEN, RED, FONT } from '../constants.js';
+import { AMBER, INK, MUTED, BORDER, LIGHT, WHITE, GREEN, RED, FONT } from '../constants.js';
 
 const ngn = (n) => `₦${Number(n || 0).toLocaleString('en-NG')}`;
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';

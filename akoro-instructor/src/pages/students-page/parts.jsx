@@ -272,12 +272,12 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
   const Feedback = () => (
     <>
       {error && (
-        <div style={{ background: '#FEF2F2', border: `1px solid #FECACA`, borderRadius: 10, padding: '10px 14px', fontSize: 13, color: RED }}>
+        <div style={{ background: tint(9, RED), border: `1px solid ${tint(30, RED)}`, borderRadius: 10, padding: '10px 14px', fontSize: 13, color: RED }}>
           {error}
         </div>
       )}
       {success && (
-        <div style={{ background: '#F0FDF4', border: `1px solid #BBF7D0`, borderRadius: 10, padding: '10px 14px', fontSize: 13, color: GREEN }}>
+        <div style={{ background: tint(9, GREEN), border: `1px solid ${tint(30, GREEN)}`, borderRadius: 10, padding: '10px 14px', fontSize: 13, color: GREEN }}>
           {success}
         </div>
       )}
@@ -518,7 +518,7 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
           </div>
 
           {csvResult && (
-            <div style={{ background: '#F0FDF4', border: `1px solid #BBF7D0`, borderRadius: 10, padding: '12px 14px' }}>
+            <div style={{ background: tint(9, GREEN), border: `1px solid ${tint(30, GREEN)}`, borderRadius: 10, padding: '12px 14px' }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: GREEN, marginBottom: 6, fontFamily: C.font }}>
                 Import complete
               </div>

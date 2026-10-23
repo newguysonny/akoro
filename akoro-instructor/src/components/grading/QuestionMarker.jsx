@@ -119,7 +119,7 @@ export default function QuestionMarker({ questions, paper = null, step, setStep,
       </div>
 
       {/* What the learner answered */}
-      <div style={{ background: '#FBFAF8', border: `1px solid ${C.border}`, borderLeft: `3px solid ${PURPLE}`, borderRadius: 10, padding: '10px 12px' }}>
+      <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderLeft: `3px solid ${PURPLE}`, borderRadius: 10, padding: '10px 12px' }}>
         <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: .5, color: C.muted2, marginBottom: 4 }}>THEIR ANSWER</div>
         {!answered && !qFiles.length ? <div style={{ fontSize: 13, color: C.muted, fontStyle: 'italic' }}>No answer</div>
           : !answered ? null
@@ -154,7 +154,7 @@ export default function QuestionMarker({ questions, paper = null, step, setStep,
 
       {/* The key for a written answer: a labelling question's parts, or a model answer */}
       {q?.answer && !isMcq(q) && (
-        <div style={{ fontSize: 12, color: C.ink, background: '#F3FBF6', border: `1px solid ${GREEN}33`, borderRadius: 10, padding: '8px 11px', lineHeight: 1.55 }}>
+        <div style={{ fontSize: 12, color: C.ink, background: tint(9, GREEN), border: `1px solid ${GREEN}33`, borderRadius: 10, padding: '8px 11px', lineHeight: 1.55 }}>
           <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: .5, color: GREEN }}>{typeof q.answer === 'object' ? 'KEY' : 'MODEL ANSWER'}</span>
           <div style={{ whiteSpace: 'pre-wrap' }}>{typeof q.answer === 'object' ? Object.entries(q.answer).map(([k, v]) => `${k}: ${v}`).join('\n') : String(q.answer)}</div>
         </div>
@@ -162,7 +162,7 @@ export default function QuestionMarker({ questions, paper = null, step, setStep,
 
       {/* The AI's suggestion for this question */}
       {aiQ && (
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: C.ink, background: '#FBFAFF', border: `1px solid ${PURPLE}33`, borderRadius: 10, padding: '8px 10px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: C.ink, background: tint(4), border: `1px solid ${PURPLE}33`, borderRadius: 10, padding: '8px 10px' }}>
           <Ico lucide={Sparkles} ti="ti-sparkles" size={13} color={PURPLE} style={{ marginTop: 2, flexShrink: 0 }} />
           <span style={{ flex: 1, lineHeight: 1.5 }}><b>AI: {aiQ.awarded}/{aiQ.max}</b> — {aiQ.why}</span>
           <button type="button" onClick={() => setMark(step, { awarded: aiQ.awarded })}
