@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS } from '../../constants.js';
 import { XIcon, ChevDownIcon, Icon } from '../common/Icons.jsx';
-import { apiPost, apiUpload } from '../../services/api.js';
+import { apiGet, apiPost, apiUpload } from '../../services/api.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
 // Default objective placeholders for a manually-added subtopic. These are just
@@ -26,10 +26,33 @@ const bytesLabel = (bytes) => bytes < 1024 * 1024
   : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 const fileKey = (file) => `${file.name}:${file.size}:${file.lastModified}`;
 
+// A syllabus topic fills the outline: its content points become the subtopics
+// and its performance objectives are shared out across them in order (the
+// syllabus lists objectives per topic, the session wants them per subtopic).
+// A subtopic left without one keeps the editable placeholder prompts.
+const MAX_SYLLABUS_SUBTOPICS = 8;
+function outlineFromSyllabus(entry) {
+  const subtopics = [...new Set((entry.content || []).map((c) => String(c).trim()).filter(Boolean))].slice(0, MAX_SYLLABUS_SUBTOPICS);
+  const objectives = (entry.performance_objectives || []).map((o) => String(o).trim()).filter(Boolean);
+  const per = subtopics.length ? Math.max(1, Math.ceil(objectives.length / subtopics.length)) : 0;
+  const objs = {};
+  subtopics.forEach((st, i) => {
+    const mine = objectives.slice(i * per, i * per + per);
+    objs[st] = mine.length ? mine : autoObjectives(st, entry.title);
+  });
+  return { subtopics, objs };
+}
+
 function ConfigModal({ initial, onStart, onCancel, higherEd = false }) {
   const { t } = useLang();
   const [topic,      setTopic]      = useState(initial?.topic      || "");
   const [subject,    setSubject]    = useState(initial?.subject    || "Science");
+  // Topic comes from the class syllabus by default; "Type your own" switches to
+  // free text. A topic handed in by another screen starts as free text.
+  const [manualTopic, setManualTopic] = useState(!!initial?.topic);
+  const [syllabus,   setSyllabus]   = useState({ status: "loading", topics: [], matchedClass: true });
+  const [pickedId,   setPickedId]   = useState("");
+  const [yearGroup,  setYearGroup]  = useState("");
   const [subtopics,  setSubtopics]  = useState(initial?.subtopics  || []);
   const [draft,      setDraft]      = useState("");
   const [objs,       setObjs]       = useState(initial?.objectives || {});
@@ -41,6 +64,46 @@ function ConfigModal({ initial, onStart, onCancel, higherEd = false }) {
   const fileInputRef = useRef(null);
 
   const subjects = ["Science","Biology","Chemistry","Physics","Maths","English","History","Geography"];
+
+  useEffect(() => {
+    let alive = true;
+    apiGet("/api/profiles/me").then((d) => { if (alive) setYearGroup((d?.data ?? d)?.yearGroup || (d?.data ?? d)?.year_group || ""); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  // The syllabus topics for the chosen subject (and the learner's class).
+  useEffect(() => {
+    let alive = true;
+    setSyllabus((s) => ({ ...s, status: "loading" }));
+    const qs = `subject=${encodeURIComponent(subject)}${yearGroup ? `&class=${encodeURIComponent(yearGroup)}` : ""}`;
+    apiGet(`/api/curriculum/topics?${qs}`)
+      .then((r) => {
+        if (!alive) return;
+        const topics = r?.data || [];
+        setSyllabus({ status: topics.length ? "ready" : "empty", topics, matchedClass: r?.matchedClass !== false });
+        if (!topics.length) setManualTopic(true);
+      })
+      .catch(() => { if (alive) { setSyllabus({ status: "empty", topics: [], matchedClass: true }); setManualTopic(true); } });
+    return () => { alive = false; };
+  }, [subject, yearGroup]);
+
+  const changeSubject = (next) => {
+    setSubject(next);
+    // A topic (and the outline) that came from the old subject's syllabus no longer applies.
+    if (pickedId) { setPickedId(""); setTopic(""); setSubtopics([]); setObjs({}); setGenError(""); }
+  };
+  const pickSyllabusTopic = (id) => {
+    setPickedId(id);
+    const entry = syllabus.topics.find((x) => x.id === id);
+    if (!entry) { setTopic(""); return; }
+    const { subtopics: sts, objs: o } = outlineFromSyllabus(entry);
+    setTopic(entry.title); setSubtopics(sts); setObjs(o); setGenError("");
+  };
+  const toggleTopicMode = () => {
+    // Back to the syllabus list: a typed topic isn't one of its entries, so don't leave it behind.
+    if (manualTopic && !pickedId) setTopic("");
+    setManualTopic((m) => !m);
+  };
 
   const addSubtopic = (val) => {
     const v = val.trim();
@@ -165,20 +228,41 @@ function ConfigModal({ initial, onStart, onCancel, higherEd = false }) {
           {onCancel && <button onClick={onCancel} style={{ width:30,height:30,borderRadius:"50%",border:"0.5px solid var(--ak-border2)",background:"var(--ak-bg)",cursor:"pointer",fontSize:14,color:"var(--ak-text-sub)" }}><Icon name="ti-x" size={14}/></button>}
         </div>
 
-        {/* Topic */}
-        <div style={{ marginBottom:14 }}>
-          <label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sec)",display:"block",marginBottom:5,letterSpacing:.3 }}>{t('config.topic')}</label>
-          <input value={topic} onChange={e=>setTopic(e.target.value)} placeholder={t('config.topic_ph')}
-            style={{ width:"100%",padding:"10px 13px",borderRadius:8,border:"0.5px solid var(--ak-border2)",fontSize:14,fontWeight:600,color:"var(--ak-text)",outline:"none",fontFamily:"inherit" }}
-            onFocus={e=>e.target.style.borderColor=BRAND} onBlur={e=>e.target.style.borderColor="#D1D5DB"}/>
-        </div>
-
-        {/* Subject */}
+        {/* 1 · Subject */}
         <div style={{ marginBottom:14 }}>
           <label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sec)",display:"block",marginBottom:5,letterSpacing:.3 }}>{t('config.subject')}</label>
-          <select value={subject} onChange={e=>setSubject(e.target.value)} style={{ width:"100%",padding:"10px 13px",borderRadius:8,border:"0.5px solid var(--ak-border2)",fontSize:14,fontWeight:600,color:"var(--ak-text)",outline:"none",fontFamily:"inherit",background:"var(--ak-surface)" }}>
+          <select value={subject} onChange={e=>changeSubject(e.target.value)} style={{ width:"100%",padding:"10px 13px",borderRadius:8,border:"0.5px solid var(--ak-border2)",fontSize:14,fontWeight:600,color:"var(--ak-text)",outline:"none",fontFamily:"inherit",background:"var(--ak-surface)" }}>
             {subjects.map(s=><option key={s}>{s}</option>)}
           </select>
+        </div>
+
+        {/* 2 · Topic — from the class syllabus, or typed (the toggle sits on the right, like Auto-generate below) */}
+        <div style={{ marginBottom:14 }}>
+          <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:5,gap:8 }}>
+            <label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sec)",letterSpacing:.3 }}>{t('config.topic')}</label>
+            {syllabus.status==="ready"&&(
+              <button type="button" onClick={toggleTopicMode} style={{ padding:"4px 11px",borderRadius:6,border:`0.5px solid ${BRAND}`,background:`${BRAND}10`,color:BRAND,fontSize:11,fontWeight:800,cursor:"pointer",display:"flex",alignItems:"center",gap:4,fontFamily:"inherit",whiteSpace:"nowrap" }}>
+                {manualTopic?<><Icon name="ti-list-search" size={11}/> {t('config.topic_syllabus')}</>:<><Icon name="ti-pencil" size={11}/> {t('config.topic_manual')}</>}
+              </button>
+            )}
+          </div>
+          {manualTopic||syllabus.status!=="ready" ? (
+            <>
+              <input value={topic} onChange={e=>{ setTopic(e.target.value); setPickedId(""); }} placeholder={t('config.topic_ph')}
+                style={{ width:"100%",padding:"10px 13px",borderRadius:8,border:"0.5px solid var(--ak-border2)",fontSize:14,fontWeight:600,color:"var(--ak-text)",outline:"none",fontFamily:"inherit" }}
+                onFocus={e=>e.target.style.borderColor=BRAND} onBlur={e=>e.target.style.borderColor="#D1D5DB"}/>
+              {syllabus.status==="loading"&&<p style={{ fontSize:10.5,color:"var(--ak-text-muted)",margin:"5px 1px 0" }}>{t('config.syllabus_loading')}</p>}
+              {syllabus.status==="empty"&&<p style={{ fontSize:10.5,color:"var(--ak-text-muted)",margin:"5px 1px 0" }}>{t('config.syllabus_empty')}</p>}
+            </>
+          ) : (
+            <select value={pickedId} onChange={e=>pickSyllabusTopic(e.target.value)}
+              style={{ width:"100%",padding:"10px 13px",borderRadius:8,border:"0.5px solid var(--ak-border2)",fontSize:14,fontWeight:600,color:pickedId?"var(--ak-text)":"var(--ak-text-muted)",outline:"none",fontFamily:"inherit",background:"var(--ak-surface)" }}>
+              <option value="">{t('config.topic_pick')}</option>
+              {syllabus.topics.map(x=><option key={x.id} value={x.id}>{x.title}{!syllabus.matchedClass&&x.class_label?` · ${x.class_label}`:""}</option>)}
+            </select>
+          )}
+          {!manualTopic&&syllabus.status==="ready"&&!syllabus.matchedClass&&<p style={{ fontSize:10.5,color:"var(--ak-text-muted)",margin:"5px 1px 0" }}>{t('config.other_class')}</p>}
+          {pickedId&&!manualTopic&&<p style={{ fontSize:10.5,fontWeight:700,color:GREEN,margin:"5px 1px 0",display:"flex",alignItems:"center",gap:4 }}><Icon name="ti-circle-check" size={11}/> {t('config.from_syllabus')}</p>}
         </div>
 
         {/* Higher-ed reference — extracted on demand and used only for this live session. */}

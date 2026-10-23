@@ -79,6 +79,51 @@ router.get("/", authenticateToken, async (req, res) => {
   } catch (e) { serverError(res, e, req); }
 });
 
+// GET /api/curriculum/topics?subject=&class= — a flat, picker-ready list of
+// syllabus topics for one subject (what a "choose a topic" dropdown needs):
+// each topic carries its content points (subtopics / concepts) and its
+// performance objectives, so choosing one can fill a whole lesson outline.
+// With ?class= it keeps that class's topics; when the class has none (or the
+// label is spelled differently in the document) it returns the subject's
+// topics for every class instead, flagged matchedClass:false, so the picker
+// is never empty just because of a label.
+const SUBJECT_ALIASES = {
+  science:     ["Science", "Basic Science", "Integrated Science", "Basic Science and Technology", "Primary Science"],
+  maths:       ["Maths", "Mathematics"],
+  mathematics: ["Mathematics", "Maths"],
+  english:     ["English", "English Language", "English Studies"],
+};
+const classKey = (v) => String(v || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+router.get("/topics", authenticateToken, async (req, res) => {
+  try {
+    const subject = String(req.query.subject || "").trim();
+    if (!subject) return res.status(400).json({ error: "subject is required" });
+    const names = [...new Set([subject, ...(SUBJECT_ALIASES[subject.toLowerCase()] || [])])]
+      .map((n) => n.replace(/[^A-Za-z0-9 &'-]/g, "")).filter(Boolean);
+
+    const { data: docs, error: dErr } = await db.schema("edu").from("curricula")
+      .select("id").eq("status", "published")
+      .or(names.map((n) => `subject.ilike.${n}`).join(","));
+    if (dErr) throw dErr;
+    const ids = (docs || []).map((d) => d.id);
+    if (!ids.length) return res.json({ success: true, data: [], matchedClass: false });
+
+    const { data: rows, error } = await db.schema("edu").from("curriculum_topics")
+      .select("id, curriculum_id, title, class_label, content, performance_objectives, sort_order")
+      .in("curriculum_id", ids).order("sort_order").limit(600);
+    if (error) throw error;
+
+    const want = classKey(req.query.class);
+    const mine = want ? (rows || []).filter((r) => classKey(r.class_label) === want) : [];
+    const list = (mine.length ? mine : rows || []).map((r) => ({
+      id: r.id, title: r.title, class_label: r.class_label || null,
+      content: Array.isArray(r.content) ? r.content : [],
+      performance_objectives: Array.isArray(r.performance_objectives) ? r.performance_objectives : [],
+    }));
+    res.json({ success: true, data: list, matchedClass: mine.length > 0 });
+  } catch (e) { serverError(res, e, req); }
+});
+
 // ── Curriculum Guardian review operations ───────────────────────────────
 // A queue record is intentionally a metadata-only operational signal. The
 // underlying learner reply/evidence stays in its protected evidence ledger and
