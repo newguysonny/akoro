@@ -117,6 +117,7 @@ export const TOOL_EXAMPLES = Object.freeze({
 
   // Activities (instructor)
   prepare_activity: e("activities", "Prepare 5 questions on linear equations for JSS2A."),
+  run_teaching_tool: e("activities", "Make a lesson plan on fractions for JSS1, 40 minutes."),
   list_activity_drafts: e("activities", "What drafts do I have?"),
   get_activity_draft: e("activities", "Show me the fractions draft."),
   revise_activity_draft: e("activities", "Make question 2 easier.", "Add one more harder question."),

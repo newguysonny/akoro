@@ -24,7 +24,9 @@ const [migration, manifest, service, drafts, routes, chat, chatDoctrine, hitlDoc
   read("../../akoro-api/modules/adaptive-learning/chat.js"),
   read("../../akoro-api/akoro-agent/channels/CHAT.md"),
   read("../../akoro-api/akoro-agent/policies/HITL_DRAFTS.md"),
-  read("../../akoro-instructor/src/pages/ActivitiesPage.jsx"),
+  // The Activities page was split: the router, the list, the drafts strip and the shared draft editor.
+  Promise.all(["pages/ActivitiesPage.jsx", "pages/activities-page/ActivitiesHome.jsx", "pages/activities-page/DraftsStrip.jsx", "components/activities/ActivityForm.jsx"]
+    .map((f) => read(`../../akoro-instructor/src/${f}`))).then((parts) => parts.join("\n")),
   read("../../akoro-instructor/src/components/ActivityPreviewPanel.jsx"),
   read("../../akoro-instructor/src/pages/ChatPage.jsx"),
   read("../../akoro-api/modules/agent-tools/routes.js"),

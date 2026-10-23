@@ -96,6 +96,7 @@ export const CHAT_TOOL_DISPLAY = Object.freeze({
   cancel_study_prep_session:      { category: "action",   headline: "Cancelling your study plan",          description: "Stopping the study-prep session you asked to end", done: "Cancelled your study plan" },
   submit_tool_request:            { category: "action",   headline: "Sending your feature request",        description: "Passing your idea to the Akoro team", done: "Sent your feature request" },
   prepare_activity:               { category: "action",   headline: "Drafting an activity",                description: "Preparing an activity for your review", done: "Drafted an activity" },
+  run_teaching_tool:              { category: "action",   headline: "Creating a teaching resource",        description: "Making it with your teaching tools", done: "Created a teaching resource" },
   list_activity_drafts:           { category: "research", headline: "Checking your activity drafts",       description: "Listing drafts waiting for review" },
   discard_activity_draft:         { category: "action",   headline: "Discarding a draft",                  description: "Removing the activity draft", done: "Discarded a draft" },
   list_my_classrooms:             { category: "research", headline: "Checking your classes",               description: "Listing the classes you teach" },

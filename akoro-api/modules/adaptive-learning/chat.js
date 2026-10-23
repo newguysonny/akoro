@@ -67,6 +67,7 @@ import {
   createActivityDraft, listActivityDrafts, getActivityDraft, discardActivityDraft, reviseDraftPayload,
   instructorClassrooms,
 } from "../self-study/drafts.js";
+import { TOOLS as TEACHING_TOOLS, runTeachingTool, ToolError as TeachingToolError } from "../teaching/tools.js";
 import { activityOutcomeSummary, listRecentActivities } from "../self-study/outcomes.js";
 import {
   listRoutines, createRoutine, updateRoutine, deleteRoutine,
@@ -1119,6 +1120,27 @@ export const INSTRUCTOR_TOOLS = [
     },
   },
   {
+    // The teaching-tool workbench, callable from chat: the same runner the
+    // workbench and the task scheduler use, so unlock checks, charge-after
+    // billing and saving to the Library behave identically.
+    name: "run_teaching_tool",
+    description: "Create a teaching resource and save it to the instructor's Library. Use when they ask for a podcast, common misconceptions, real-world connections, lesson hooks, a vocabulary list, an essay graded, a lesson plan, an activities pack or an assignment sheet. (Activities that go to learners — assignments, projects, battles, self study — use prepare_activity instead.) Ask for the topic if it is missing.\n\nAvailable tools:\n" +
+      TEACHING_TOOLS.map((t) => `  • ${t.key} — ${t.name}: ${t.blurb} (fields: ${t.fields.map((f) => f.name).join(", ")})`).join("\n"),
+    input_schema: {
+      type: "object",
+      properties: {
+        tool:    { type: "string", enum: TEACHING_TOOLS.map((t) => t.key), description: "Which teaching tool to run" },
+        topic:   { type: "string", description: "The topic or, for the essay grader, the essay text" },
+        subject: { type: "string", description: "Subject, e.g. Basic Science" },
+        class:   { type: "string", description: "Class or year group, e.g. JSS1" },
+        notes:   { type: "string", description: "Any extra direction from the instructor" },
+        minutes: { type: "string", description: "Podcast length in minutes: 3, 5 or 10" },
+        hosts:   { type: "string", description: "Podcast format: 'Two hosts' or 'Single narrator'" },
+      },
+      required: ["tool"],
+    },
+  },
+  {
     name: "list_activity_drafts",
     description: "List the instructor's still-pending activity drafts (prepared, awaiting preview/assign). Use when they ask what is prepared or want to pick a draft back up.",
     input_schema: { type: "object", properties: {}, required: [] },
@@ -1278,7 +1300,7 @@ async function resolveLearnerSchoolContext(studentId) {
 export const SIDE_EFFECT_TOOLS = ["create_task", "suggest_help", "schedule_chat_follow_up", "post_to_chat", "create_tool", "cancel_scheduled_chat_follow_up", "submit_tool_request", "prepare_activity", "revise_activity_draft",
           "create_goal", "update_goal_progress", "save_blog_draft", "publish_blog", "update_agent_network_settings", "block_agent", "log_past_question_practice",
           "challenge_agent", "post_challenge_request", "accept_challenge_request", "cancel_challenge_request", "rematch_battle", "message_agent", "reply_to_agent", "start_study_prep_session", "cancel_study_prep_session",
-          "consult_peer_agents", "discard_activity_draft", "schedule_activity_routine", "cancel_activity_routine"];
+          "consult_peer_agents", "discard_activity_draft", "schedule_activity_routine", "cancel_activity_routine", "run_teaching_tool"];
 /** The multi-action tools change things only on their writing actions. */
 export const isSideEffectingAction = (tool, input) =>
   ["study_buddy", "daily_challenge", "revision_circle"].includes(tool) && !["list", "status", "ranking", "search", undefined, null, ""].includes(input?.action);
@@ -1311,6 +1333,30 @@ export async function executeChatTool(name, input, studentId, { conversationId =
     // ── Instructor: activity creation, human-in-the-loop ──────────────────
     // These prepare drafts only. Assigning is the instructor's tap on the
     // preview (POST /api/self-study/drafts/:id/assign) — no tool reaches it.
+    case "run_teaching_tool": {
+      if (role !== "instructor") return { error: "Teaching tools are only available to instructor accounts" };
+      const { tool, ...body } = input || {};
+      try {
+        const out = await runTeachingTool({ key: tool, body, userId: studentId });
+        const text = typeof out.content === "string" ? out.content : "";
+        return {
+          created: true, tool: out.key, name: out.name, topic: out.topic, subject: out.subject, class: out.class,
+          coinsCharged: out.coinsCharged,
+          preview: text.slice(0, 1500), truncated: text.length > 1500,
+          savedTo: "Library",
+          hint: "It is saved in the instructor's Library. Give a two-line summary of what you made and say it is in Library — do not paste the whole thing.",
+        };
+      } catch (e) {
+        if (e instanceof TeachingToolError) {
+          return { created: false, error: e.message, code: e.code,
+            guidance: e.code === "TOOL_LOCKED" ? "Tell the instructor this tool is locked and can be unlocked in the App Center."
+              : e.code === "INSUFFICIENT_COINS" ? "Tell the instructor they need to top up coins."
+              : "Tell the instructor exactly what is missing and ask for it." };
+        }
+        console.error("[run_teaching_tool] failed:", e.message);
+        return { created: false, error: "Could not create that just now", guidance: "Say it did not work and offer to try again." };
+      }
+    }
     case "prepare_activity": {
       if (role !== "instructor") return { error: "Activity preparation is only available to instructor accounts" };
       try {

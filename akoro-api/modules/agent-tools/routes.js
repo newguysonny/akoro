@@ -405,7 +405,9 @@ async function catalogueFor(claims, principal) {
   if (String(process.env.AKORO_ACTIVITY_DRAFTS_ENABLED || "").toLowerCase() === "false") {
     return taskTools;
   }
-  const draftTools = INSTRUCTOR_TOOLS.map((tool) =>
+  // run_teaching_tool is also a task-engine tool: keep one copy (the task engine's).
+  const taken = new Set(taskTools.map((t) => t.name));
+  const draftTools = INSTRUCTOR_TOOLS.filter((tool) => !taken.has(tool.name)).map((tool) =>
     publicTool(tool, true), // prepare_activity writes a draft row; the others manage drafts
   );
   return [...taskTools, ...draftTools];
