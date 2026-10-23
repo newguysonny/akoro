@@ -14,7 +14,6 @@ import SalesPage     from './pages/SalesPage.jsx';
 import OrderHistoryPage from './pages/OrderHistoryPage.jsx';
 import StudentsPage from './pages/StudentsPage.jsx';
 import JoinRequestsPage from './pages/JoinRequestsPage.jsx';
-import TasksPage    from './pages/TasksPage.jsx';
 import ActivitiesPage from './pages/ActivitiesPage.jsx';
 import GradebookPage from './pages/GradebookPage.jsx';
 import SubmissionsPage from './pages/SubmissionsPage.jsx';
@@ -123,7 +122,8 @@ function AppRoutes() {
       <Route path="/students" element={<Navigate to="/mgmt/students" replace />} />
       {/* Battles live in Activities now (type = battle). */}
       <Route path="/battles" element={<Navigate to="/activities?type=battle" replace />} />
-      <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
+      {/* Tasks live in the Agent chat as a tab. */}
+      <Route path="/tasks" element={<Navigate to="/chat?tab=tasks" replace />} />
       {/* AI Self Study is an activity type now. */}
       <Route path="/self-study" element={<Navigate to="/activities?type=self_study" replace />} />
       <Route path="/activities" element={<ProtectedRoute><ActivitiesPage /></ProtectedRoute>} />

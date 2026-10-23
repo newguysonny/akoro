@@ -49,7 +49,6 @@ export function instructorNav({ isAdmin = false, joinRequests = 0 } = {}) {
       ] },
       { key: 'activities', label: 'Activities', to: '/activities', icon: 'activities' },
       { key: 'submissions', label: 'Submissions', to: '/submissions', ti: 'ti-clipboard-check' },
-      { key: 'tasks', label: 'Tasks', to: '/tasks', ti: 'ti-checkbox' },
       { key: 'assessments', label: 'Assessments', to: '/assessments', ti: 'ti-shield-check' },
       { key: 'documents', label: 'Documents', to: '/documents', ti: 'ti-file-text' },
       { key: 'library', label: 'Library', to: '/library', ti: 'ti-library' },

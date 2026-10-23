@@ -5,7 +5,7 @@ import { Ico } from '../theme/Ico.jsx';
 import { Icon } from '../ui/Icon.jsx';
 import { PageLayout, PageEmbed, useIsMobile } from '../components/Layout.jsx';
 import { useAgentOnline } from '../hooks/useAgentOnline.js';
-import TasksPage from './TasksPage.jsx';
+import TasksTab from '../components/TasksTab.jsx';
 import { Btn, Modal, Inp, Txa, Sel, FileUploadZone, Toast } from '../components/Primitives.jsx';
 import TrainingProgress from '../components/TrainingProgress.jsx';
 import LiveRecorder from '../components/LiveRecorder.jsx';
@@ -156,7 +156,11 @@ export default function ChatPage() {
   const [agentName, setAgentName]   = useState('Your Agent');
   const [agentEmoji, setAgentEmoji] = useState('🤖');
   const [agentLevel, setAgentLevel] = useState(1);
-  const [innerTab, setInnerTab] = useState('chat');
+  // Old /tasks links land on the Tasks tab (?tab=tasks); anything else opens the chat.
+  const [innerTab, setInnerTab] = useState(() => {
+    const t = new URLSearchParams(window.location.search).get('tab');
+    return t === 'tasks' || t === 'stats' ? t : 'chat';
+  });
   const agentOnline = useAgentOnline();
   const [agentId, setAgentId]       = useState(null);
 
@@ -1114,7 +1118,7 @@ export default function ChatPage() {
 
       {innerTab === 'tasks' && (
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: isMobile ? 12 : 16 }}>
-          <PageEmbed><TasksPage /></PageEmbed>
+          <PageEmbed><TasksTab /></PageEmbed>
         </div>
       )}
       {innerTab === 'stats' && <AgentStatsPanel agentName={agentName} agentLevel={agentLevel} isMobile={isMobile} />}

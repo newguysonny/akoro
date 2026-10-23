@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Repeat } from 'lucide-react';
-import { PageLayout } from '../components/Layout.jsx';
-import { Btn, Modal, Inp, Txa, Sel, Badge, Toast } from '../components/Primitives.jsx';
+import { PageLayout } from './Layout.jsx';
+import { Btn, Modal, Inp, Txa, Sel, Badge, Toast } from './Primitives.jsx';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
-import NoAgentModal, { isNoAgentError } from '../components/NoAgentModal.jsx';
+import NoAgentModal, { isNoAgentError } from './NoAgentModal.jsx';
 import { GREEN, PURPLE, BLUE, RED } from '../constants.js';
 import { C, tint } from '../theme/colors.js';
 import { Ico } from '../theme/Ico.jsx';
-import { confirmDialog } from '../components/ConfirmHost.jsx';
+import { confirmDialog } from './ConfirmHost.jsx';
 
 /* datetime-local speaks local wall-clock; the API speaks ISO/UTC. */
 function toLocalInput(iso) {
@@ -219,7 +219,7 @@ function TaskRow({ task, onToggle, onEdit, onDelete, onRun }) {
 
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 14,
+      display: 'flex', alignItems: 'center', gap: '8px 14px', flexWrap: 'wrap',
       padding: '12px 16px', background: C.surface, borderRadius: 12,
       border: `1px solid ${isOverdue ? '#FECACA' : C.border}`,
       opacity: isDone ? 0.7 : 1, transition: 'opacity .2s',
@@ -232,7 +232,7 @@ function TaskRow({ task, onToggle, onEdit, onDelete, onRun }) {
         {isDone ? <Ico ti="ti-square-check" size={20} /> : <Ico ti="ti-square" size={20} />}
       </button>
 
-      <div style={{ flex: 1, overflow: 'hidden' }}>
+      <div style={{ flex: '1 1 150px', minWidth: 0, overflow: 'hidden' }}>
         <div style={{
           fontSize: 13, fontWeight: 600, color: isDone ? C.muted : C.ink,
           fontFamily: C.font, textDecoration: isDone ? 'line-through' : 'none',
@@ -247,7 +247,8 @@ function TaskRow({ task, onToggle, onEdit, onDelete, onRun }) {
         )}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+      {/* wraps under the title on a phone instead of squeezing it out */}
+      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginLeft: 'auto' }}>
         <TypeBadge type={task.task_type} />
         <PriorityBadge priority={task.priority} />
         <StatusBadge status={task.status} />
@@ -279,7 +280,7 @@ const iconBtn = (disabled, color = C.muted) => ({
 });
 
 /* ── Main page ──────────────────────────────────────────────────────────── */
-export default function TasksPage() {
+export default function TasksTab() {
   const [tasks,   setTasks]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal,   setModal]   = useState(false);
