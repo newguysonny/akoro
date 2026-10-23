@@ -26,11 +26,14 @@ import { readerBackend } from "./reader.js";
 import { socketSession } from "./socket.js";
 import { courseOneRecord } from "./courses.js";
 import { teachingToolRouting, teachingToolRuns, activityToolRouting, draftLifecycle, routineLifecycle } from "./instructorTools.js";
+import { battleFromChat, battleReviewFromChat, selfStudyFull, assignmentPreviewAssign } from "./instructorActivities.js";
+import { teachingToolScenarios } from "./teachingTools.js";
 
 const ALL = [healthBuild, toolsCatalogue, r2Live, embeddingsLive, embeddingsCompare, searchTextFallback, scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity,
   privacyEdges, rateLimitCountedOnce, battleEntryGates, followUpDeliverIntoChat, taskDueInMinutes, noResidue,
   viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, suggestionsSurviveRefresh, studyToolRouting, untaughtFlashcards, tailoredChips, chatUploadFiled, pastPaperStructured, sortOwnFolders, readyProposal, goalWork, ideasFlow, consentsQuietBudget, instructorProactive, voiceSpeak, voiceLive, sweepStale, agentCheckBattle, agentCheckStop, classSyllabusFirst, historyPages, workflowMirror, agentWakes, replaceAndCancel, teachingHandoff, eventStream, paperStructured, ...chatToSubmissionScenarios, authoringVersionsParts, authoringDiagramsEdits, inboxOneList, quietLearningPass, plannerRichGather, proactiveInChat, readerBackend, socketSession, courseOneRecord,
-  teachingToolRouting, teachingToolRuns, activityToolRouting, draftLifecycle, routineLifecycle];
+  teachingToolRouting, teachingToolRuns, activityToolRouting, draftLifecycle, routineLifecycle,
+  battleFromChat, battleReviewFromChat, selfStudyFull, assignmentPreviewAssign, ...teachingToolScenarios];
 
 export const SCENARIOS = Object.fromEntries(ALL.map((s) => [s.name, s]));
 
@@ -60,6 +63,9 @@ export const SUITES = {
   curriculum: ["curriculum.syllabus_coverage"],
   // The instructor's agent tools from chat: teaching tools (Library) and activity tools (drafts, routines, results).
   "instructor-chat": ["instructor.teaching_tool_routing", "instructor.activity_tool_routing", "instructor.teaching_tool_runs", "instructor.draft_lifecycle", "instructor.routine_lifecycle", "writes.no_residue"],
+  // Each activity type from chat to assigned (battle, study review, self study, assignment), then every teaching tool from chat to the Library.
+  "instructor-activities": ["instructor.battle_from_chat", "instructor.battle_review_from_chat", "instructor.self_study_full", "instructor.assignment_preview_assign", "writes.no_residue"],
+  "instructor-teaching-tools": [...teachingToolScenarios.map((t) => t.name), "writes.no_residue"],
   teaching: ["teaching.bridge_persists"],
   decay: ["decay.concept_curve"],
   suggestions: ["chat.suggestions_answer", "chat.tailored_chips", "chat.suggestions_survive_refresh", "chat.study_tool_routing", "chat.untaught_flashcards", "writes.no_residue"],

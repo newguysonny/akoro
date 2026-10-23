@@ -463,3 +463,11 @@ test("classroom name resolution never chains .catch on a Supabase builder", () =
   assert.match(fnBody, /\.eq\("teacher_id", instructorId\)/);
 });
 
+
+test("run_teaching_tool tells the model every field the teaching tools take (the essay grader needs rubric + essays)", () => {
+  // The schema is built from the tools' own field lists, so none can be missing.
+  assert.match(chat, /const TEACHING_FIELD_PROPS = \(\(\) => \{/);
+  assert.match(chat, /\.\.\.TEACHING_FIELD_PROPS,/);
+  assert.match(chat, /REQUIRED for \$\{p\.required\.join/);
+  assert.match(chat, /the essay grader needs the rubric and the essay text/);
+});

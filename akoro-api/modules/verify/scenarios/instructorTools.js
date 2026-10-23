@@ -17,14 +17,14 @@
 const DEFAULT_INSTRUCTOR = "@tester51";
 const DEFAULT_LEARNER = "@tester19";
 
-async function teacherOf(ctx, who) {
+export async function teacherOf(ctx, who) {
   const teacher = await ctx.as(who);
   if (teacher.role !== "instructor") ctx.expect.blocked(`${who} isn't an instructor (seed 2026-seed-instructor-testers.sql)`);
   return teacher;
 }
 
-const toolsOf = (turn) => (turn.tools || []).map((t) => t.tool);
-const lastCall = (turn, name) => (turn.tools || []).filter((t) => t.tool === name).at(-1) || null;
+export const toolsOf = (turn) => (turn.tools || []).map((t) => t.tool);
+export const lastCall = (turn, name) => (turn.tools || []).filter((t) => t.tool === name).at(-1) || null;
 
 /* ── Teaching tools ─────────────────────────────────────────────────────── */
 
@@ -145,7 +145,7 @@ export const activityToolRouting = {
 };
 
 /** A conversation with the instructor's agent that carries its history, like the app. */
-function talk(ctx, p, teacher) {
+export function talk(ctx, p, teacher) {
   const history = [];
   return async (prompt, label) => {
     const turn = await ctx.agent.chat({ as: p.instructor, mode: "live", model: p.model, prompt, history: [...history] });

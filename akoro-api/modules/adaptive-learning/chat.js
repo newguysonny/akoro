@@ -1078,6 +1078,26 @@ export function getLearnerChatTools({ allowToolRequest = true, selfTooling = tru
  * (POST /api/self-study/drafts/:id/assign), never a tool. All six workbench
  * types are draftable; battles assign through their battle form.
  */
+/* Every field any teaching tool accepts, taken from the tools' own definitions so
+   the model is told about all of them (the essay grader's rubric and essays,
+   the vocabulary count, a lesson plan's duration…) and the two can't drift.
+   Voices stay at their defaults. */
+const TEACHING_FIELD_PROPS = (() => {
+  const props = {};
+  for (const t of TEACHING_TOOLS) {
+    for (const f of t.fields) {
+      if (f.name === "voiceA" || f.name === "voiceB") continue;
+      const p = (props[f.name] ||= { label: f.label, options: f.options, tools: [], required: [] });
+      p.tools.push(t.key);
+      if (f.required) p.required.push(t.key);
+    }
+  }
+  return Object.fromEntries(Object.entries(props).map(([name, p]) => [name, {
+    type: "string",
+    description: `${name === "topic" ? "The topic" : p.label}${p.options ? ` (one of: ${p.options.join(" | ")})` : ""} — used by ${p.tools.join(", ")}${p.required.length ? `; REQUIRED for ${p.required.join(", ")}` : ""}.`,
+  }]));
+})();
+
 export const INSTRUCTOR_TOOLS = [
   {
     name: "prepare_activity",
@@ -1124,18 +1144,13 @@ export const INSTRUCTOR_TOOLS = [
     // workbench and the task scheduler use, so unlock checks, charge-after
     // billing and saving to the Library behave identically.
     name: "run_teaching_tool",
-    description: "Create a teaching resource and save it to the instructor's Library. Use when they ask for a podcast, common misconceptions, real-world connections, lesson hooks, a vocabulary list, an essay graded, a lesson plan, an activities pack or an assignment sheet. (Activities that go to learners — assignments, projects, battles, self study — use prepare_activity instead.) Ask for the topic if it is missing.\n\nAvailable tools:\n" +
+    description: "Create a teaching resource and save it to the instructor's Library. Use when they ask for a podcast, common misconceptions, real-world connections, lesson hooks, a vocabulary list, an essay graded, a lesson plan, an activities pack or an assignment sheet. (Activities that go to learners — assignments, projects, battles, self study — use prepare_activity instead.) Ask for the topic if it is missing; the essay grader needs the rubric and the essay text.\n\nAvailable tools:\n" +
       TEACHING_TOOLS.map((t) => `  • ${t.key} — ${t.name}: ${t.blurb} (fields: ${t.fields.map((f) => f.name).join(", ")})`).join("\n"),
     input_schema: {
       type: "object",
       properties: {
-        tool:    { type: "string", enum: TEACHING_TOOLS.map((t) => t.key), description: "Which teaching tool to run" },
-        topic:   { type: "string", description: "The topic or, for the essay grader, the essay text" },
-        subject: { type: "string", description: "Subject, e.g. Basic Science" },
-        class:   { type: "string", description: "Class or year group, e.g. JSS1" },
-        notes:   { type: "string", description: "Any extra direction from the instructor" },
-        minutes: { type: "string", description: "Podcast length in minutes: 3, 5 or 10" },
-        hosts:   { type: "string", description: "Podcast format: 'Two hosts' or 'Single narrator'" },
+        tool: { type: "string", enum: TEACHING_TOOLS.map((t) => t.key), description: "Which teaching tool to run" },
+        ...TEACHING_FIELD_PROPS,
       },
       required: ["tool"],
     },
