@@ -437,7 +437,22 @@ export default function ChatPage() {
     return () => off('tool_unlocked', handler);
   }, [on, off, loadMyTools]);
 
-  // ── auto-scroll ──
+  // ── auto-scroll (as in the learner chat) ──
+  // Follow new output only while already at the bottom; scrolled up to read,
+  // the view stays put and a floating ↓ "jump to latest" button appears.
+  const atBottomRef = useRef(true);
+  const [showJump, setShowJump] = useState(false);
+  const scrollToLatest = (smooth = false) => {
+    const el = feedRef.current; if (!el) return;
+    if (smooth && el.scrollTo) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' }); else el.scrollTop = el.scrollHeight;
+    atBottomRef.current = true; setShowJump(false);
+  };
+  const onFeedScroll = () => {
+    const el = feedRef.current; if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    atBottomRef.current = atBottom;
+    if (atBottom) setShowJump(false);
+  };
   // Older messages went in above: keep what the instructor was reading in
   // place. A first page too short to scroll fetches the next one straight away.
   useLayoutEffect(() => {
@@ -453,7 +468,10 @@ export default function ChatPage() {
   }, [messages]);
   useEffect(() => {
     if (skipFollowRef.current) { skipFollowRef.current = false; return; }
-    if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight;
+    if (!feedRef.current) return;
+    // Your own message always jumps to the bottom; replies follow only if you were already there.
+    if (atBottomRef.current || messages[messages.length - 1]?.from === 'me') scrollToLatest();
+    else setShowJump(true);
   }, [messages, trainingInChat]);
 
   // ── close attach menu on outside click ──
@@ -846,7 +864,8 @@ export default function ChatPage() {
         )}
 
         {/* Message feed */}
-        <div ref={feedRef} onScroll={(e) => { if (e.currentTarget.scrollTop < 80) loadOlder(); }} style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: isMobile ? '12px 12px' : '14px 18px' }}>
+        <div style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div ref={feedRef} onScroll={(e) => { onFeedScroll(); if (e.currentTarget.scrollTop < 80) loadOlder(); }} style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: isMobile ? '12px 12px' : '14px 18px' }}>
           {loadingOlder && (
             <div role="status" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 12, color: C.muted }}>
               <Ico ti="ti-loader-2" size={12} className="spinner" /> Loading earlier messages…
@@ -965,11 +984,18 @@ export default function ChatPage() {
             </div>
           )}
           {!trainingInChat && aiStatus && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '-4px 0 0 36px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '-4px 0 0 0' }}>
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.brand, display: 'inline-block', animation: 'ciTyping 1.4s infinite ease-in-out' }} />
               <span style={{ fontSize: 11, fontWeight: 700, color: C.muted, fontFamily: C.font }}>{aiStatus}</span>
             </div>
           )}
+        </div>
+        {showJump && (
+          <button type="button" onClick={() => scrollToLatest(true)} title="Jump to latest" aria-label="Jump to latest"
+            style={{ position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', width: 36, height: 36, borderRadius: '50%', background: C.surface, border: `1px solid ${C.border}`, boxShadow: '0 4px 14px rgba(15,23,42,.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, zIndex: 5 }}>
+            <Ico ti="ti-arrow-down" size={17} color={C.ink} />
+          </button>
+        )}
         </div>
 
         {/* Input bar */}
