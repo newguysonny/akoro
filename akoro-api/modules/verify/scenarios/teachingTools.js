@@ -74,7 +74,7 @@ function toolScenario(c) {
       const catalogue = await ctx.http({ as: p.instructor, path: "/api/teaching/tools" });
       const entry = (catalogue.body?.data || []).find((t) => t.key === c.key);
       ctx.expect.ok(`the ${c.name} tool exists`, !!entry, (catalogue.body?.data || []).map((t) => t.key));
-      if (entry?.locked) ctx.expect.blocked(`${c.name} is locked for ${p.instructor} (it is sold in the App Center)`);
+      ctx.expect.eq(`${c.name} is open to the instructor (no tool is locked)`, entry?.locked, false);
 
       const startedAt = Date.now() - 5_000;
       const turn = await ctx.agent.chat({ as: p.instructor, mode: "live", model: p.model, prompt: c.say });

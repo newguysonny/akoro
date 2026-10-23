@@ -67,9 +67,7 @@ export const teachingToolRouting = {
   },
 };
 
-// One ask per tool, in the order the gate prefers them. Only tools the test
-// instructor has unlocked can run (some are sold in the App Center), so the
-// scenario uses the first open one rather than assuming.
+// One ask per tool, in the order the gate prefers them. Every tool is open to every instructor.
 const RUNNABLE = [
   { key: "lesson-hooks", say: "Give me lesson hooks for the water cycle, JSS1 Basic Science.", name: "Lesson Hooks" },
   { key: "vocabulary",   say: "Make a vocabulary list for photosynthesis, JSS1 Basic Science.", name: "Vocabulary Builder" },
@@ -86,9 +84,10 @@ export const teachingToolRuns = {
     const teacher = await teacherOf(ctx, p.instructor);
     await cleanSlate(ctx, teacher);
     const catalogue = await ctx.http({ as: p.instructor, path: "/api/teaching/tools" });
-    const open = new Set((catalogue.body?.data || []).filter((t) => !t.locked).map((t) => t.key));
-    const pick = RUNNABLE.find((r) => open.has(r.key));
-    if (!pick) ctx.expect.blocked(`${p.instructor} has none of ${RUNNABLE.map((r) => r.key).join(", ")} unlocked (they are sold in the App Center)`);
+    const keys = new Set((catalogue.body?.data || []).map((t) => t.key));
+    const pick = RUNNABLE.find((r) => keys.has(r.key));
+    ctx.expect.ok("the teaching tools are listed", !!pick, [...keys]);
+    if (!pick) return;
     ctx.note(`using the ${pick.name} tool`);
 
     const startedAt = Date.now() - 5_000;
@@ -254,5 +253,24 @@ export const routineLifecycle = {
 
     const after = await ctx.http({ as: p.instructor, path: "/api/self-study/routines" });
     ctx.expect.ok("it is gone from the routines list", !(after.body?.data?.routines || []).some((r) => r.id === routineId), after.body?.data?.routines);
+  },
+};
+
+/** No tool is locked or priced: the catalogue says so for every tool, for every instructor. */
+export const toolsAllOpen = {
+  name: "instructor.tools_all_open", area: "instructor-chat", risk: "read",
+  description: "Every teaching tool is open (not locked, no price) and every platform tool in the catalogue shows as included.",
+  params: { instructor: { default: DEFAULT_INSTRUCTOR } },
+  async run(ctx, p) {
+    await teacherOf(ctx, p.instructor);
+    const teaching = (await ctx.http({ as: p.instructor, path: "/api/teaching/tools" })).body?.data || [];
+    ctx.expect.gte("the teaching tools are listed", teaching.length, 9);
+    ctx.expect.eq("none is locked", teaching.filter((t) => t.locked).map((t) => t.key), []);
+    ctx.expect.eq("none has a price", teaching.filter((t) => (t.priceKobo || 0) > 0).map((t) => t.key), []);
+    const catalogue = (await ctx.http({ as: p.instructor, path: "/api/instructor/tools" })).body || {};
+    const tools = catalogue.tools || [];
+    ctx.note(`${tools.length} platform tools in the catalogue`);
+    ctx.expect.eq("every platform tool is owned (included)", tools.filter((t) => !t.owned).map((t) => t.key), []);
+    ctx.expect.eq("every platform tool is free", tools.filter((t) => (t.priceKobo || 0) > 0 || (t.price || 0) > 0).map((t) => t.key), []);
   },
 };

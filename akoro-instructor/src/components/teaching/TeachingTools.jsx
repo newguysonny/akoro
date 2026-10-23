@@ -459,13 +459,12 @@ export default function TeachingTools({ onInsert, compact = false }) {
       {error && <div style={errBox}>{error}</div>}
       <div style={{ display: 'grid', gridTemplateColumns: compact ? '1fr' : 'repeat(auto-fill,minmax(230px,1fr))', gap: 10 }}>
         {tools.map((t) => (
-          <button key={t.key} onClick={() => setTool(t)} disabled={t.locked}
-            style={{ ...toolCard, opacity: t.locked ? .55 : 1, cursor: t.locked ? 'default' : 'pointer' }}>
+          <button key={t.key} onClick={() => setTool(t)} style={{ ...toolCard, cursor: 'pointer' }}>
             <span style={{ fontSize: 15, fontWeight: 900, color: '#6B7280' }}>{(t.name || 'T').trim().charAt(0).toUpperCase()}</span>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 800, color: C.ink }}>{t.name}{t.locked && <Ico ti="ti-lock" size={11} style={{ marginLeft: 4, verticalAlign: '-1px' }} />}</div>
+              <div style={{ fontSize: 13.5, fontWeight: 800, color: C.ink }}>{t.name}</div>
               <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.45, marginTop: 2 }}>
-                {t.locked ? 'Unlock this in Tools & Assets' : t.blurb}
+                {t.blurb}
               </div>
             </div>
           </button>

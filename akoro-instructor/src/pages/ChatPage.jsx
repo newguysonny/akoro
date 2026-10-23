@@ -151,7 +151,7 @@ export default function ChatPage() {
   const [chatMode, setChatMode]   = useState('default');
   const [taskChips, setTaskChips] = useState([]);
   const [toast, setToast]         = useState(null);
-  const [myTools, setMyTools]     = useState([]);   // unlocked Tools & Assets
+  const [myTools, setMyTools]     = useState([]);   // platform tools (all included) + the exam assets unlocked
 
   const [agentName, setAgentName]   = useState('Your Agent');
   const [agentEmoji, setAgentEmoji] = useState('🤖');
@@ -421,7 +421,7 @@ export default function ChatPage() {
       .catch((e) => console.warn('[chat] profile load failed, using defaults:', e.message));
   }, []); // eslint-disable-line
 
-  // ── Load unlocked Tools & Assets (shown as quick-prompt pills) ──
+  // ── Load the platform tools and unlocked assets (shown as quick-prompt pills) ──
   const loadMyTools = useCallback(() => {
     apiGet('/api/instructor/tools')
       .then((res) => {
@@ -863,7 +863,7 @@ export default function ChatPage() {
 
         {/* Tool commands — only the instructor's UNLOCKED Tools & Assets show
             here. A new agent has none until items are purchased. */}
-        {/* No "Unlock tools" row (the learner chat has none); unlocked tools still show. */}
+        {/* No "Unlock tools" row (the learner chat has none); every platform tool shows as a pill. */}
         {myTools.length > 0 && (
         <div className="ci-quickbar" style={{ padding: '8px 18px 0' }}>
           {myTools.map((t) => {

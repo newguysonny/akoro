@@ -294,10 +294,12 @@ router.get("/", authenticateToken, async (req, res) => {
       tag:         r.kind === "management" ? undefined : r.tag,
       // Management tools repurpose `tag` as a lifecycle status ('active' | 'soon').
       status:      r.kind === "management" ? (r.tag || "active") : undefined,
-      priceKobo:   r.price_kobo,
-      price:       toNaira(r.price_kobo),
+      // Tools are included for every instructor: shown free and owned. (Assets, e.g. exam
+      // resources, are still bought.)
+      priceKobo:   r.kind === "tool" ? 0 : r.price_kobo,
+      price:       r.kind === "tool" ? 0 : toNaira(r.price_kobo),
       currency:    r.currency,
-      owned:       ownedSet.has(r.id),
+      owned:       r.kind === "tool" ? true : ownedSet.has(r.id),
     });
 
     const items  = (catalog || []).map(shape);
@@ -333,6 +335,11 @@ router.post("/checkout", authenticateToken, requireRole(["instructor", "teacher"
     const aud = audienceFor(req);
     if (tool.audience && tool.audience !== "both" && tool.audience !== aud) {
       return res.status(403).json({ error: "This item isn't available for your account type" });
+    }
+
+    // Tools are included for every instructor — nothing to buy, nothing to charge.
+    if (tool.kind === "tool") {
+      return res.json({ success: true, free: true, owned: true, message: `${tool.name} is included.` });
     }
 
     // Already owned?

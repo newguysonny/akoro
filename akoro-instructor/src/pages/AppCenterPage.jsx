@@ -44,7 +44,7 @@ function AppCard({ item, busy, onBuy, onOpen }) {
           {item.tag || (item._kind === 'tool' ? 'Tool' : 'Asset')}
         </span>
         <span style={{ fontSize: 13.5, fontWeight: 900, color: item.price === 0 ? GREEN : C.ink }}>
-          {item.price === 0 ? 'Free' : naira(item.price)}
+          {item._kind === 'tool' ? 'Included' : item.price === 0 ? 'Free' : naira(item.price)}
         </span>
       </div>
 
@@ -67,7 +67,7 @@ function AppCard({ item, busy, onBuy, onOpen }) {
             background: `${GREEN}15`, color: GREEN, fontSize: 13, fontWeight: 800,
             fontFamily: C.font, cursor: 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
           }}>
-            <Ico ti="ti-check" size={15} /> Unlocked
+            <Ico ti="ti-check" size={15} /> {item._kind === 'tool' ? 'Included' : 'Unlocked'}
           </button>
         )
       ) : (
@@ -156,18 +156,19 @@ export default function AppCenterPage() {
   }, [cat, q, tools, assets]);
 
   const total    = tools.length + assets.length;
-  const unlocked = [...tools, ...assets].filter((i) => i.owned).length;
+  // Tools are included for everyone, so "unlocked" counts the assets that were bought.
+  const unlocked = assets.filter((i) => i.owned).length;
 
   if (openKey) {
     return (
-      <PageLayout title="Workbench" subtitle="Run a tool you have unlocked">
+      <PageLayout title="Workbench" subtitle="Run a tool">
         <ToolWorkbench toolKey={openKey} onBack={() => setOpenKey(null)} />
       </PageLayout>
     );
   }
 
   return (
-    <PageLayout title="App Center" subtitle="Browse and unlock tools & assets for your agent">
+    <PageLayout title="App Center" subtitle="Platform tools for your agent, and exam resources to unlock">
       {/* Hero */}
       <div style={{
         background: `linear-gradient(120deg, ${C.hero} 0%, #23233f 100%)`,
@@ -181,7 +182,7 @@ export default function AppCenterPage() {
             <h2 style={{ fontSize: 21, fontWeight: 800, color: '#fff', margin: 0 }}>Power up your teaching</h2>
           </div>
           <p style={{ fontSize: 13.5, color: 'rgba(255,255,255,.7)', margin: 0, lineHeight: 1.6 }}>
-            Unlock platform tools and exam resources your AI agent uses to generate lesson plans, worksheets, reports and more.
+            Every platform tool is included — your agent uses them to generate lesson plans, worksheets, reports and more. Unlock exam resources to add past papers and mark schemes.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 12 }}>

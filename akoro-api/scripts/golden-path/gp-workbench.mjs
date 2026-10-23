@@ -46,14 +46,11 @@ const selects = tools.flatMap((t) => t.fields.filter((f) => f.type === 'select')
 check('every dropdown has options', selects.every((f) => Array.isArray(f.options) && f.options.length),
   `${selects.length} dropdowns`);
 
-console.log('\n· Lock state, which decides whether Open appears at all');
-check('each tool says whether it is locked',
-  tools.every((t) => typeof t.locked === 'boolean'), 'all report locked');
+console.log('\n· Every tool is open (none is locked or priced)');
+check('no tool is locked', tools.every((t) => t.locked === false), 'all open');
 check('and carries the key the catalogue uses',
   tools.every((t) => typeof t.key === 'string' && t.key.length > 0),
-  // This shared namespace is the whole mapping: lockState() looks
-  // platform_tools up BY the teaching-tool key, so a catalogue card knows which
-  // tool to open by its own key and nothing else.
+  // A catalogue card knows which tool to open by its own key and nothing else.
   'keys present');
 
 console.log('\n· Running one');

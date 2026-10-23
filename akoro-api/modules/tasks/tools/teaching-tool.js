@@ -68,7 +68,6 @@ export async function executeTeachingTool(rawInput, ctx) {
       // These are the teacher's problem to fix, not a crash: say which, so the
       // failed run reads as an instruction rather than a stack trace.
       const advice = {
-        TOOL_LOCKED:        "Unlock it in the App Center, then run this task again.",
         INSUFFICIENT_COINS: "Top up coins, then run this task again.",
         MISSING_FIELD:      "Add the missing detail to the task description.",
       }[e.code];

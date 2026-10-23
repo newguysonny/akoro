@@ -287,40 +287,19 @@ function asMarkdown(tool, data) {
   return "";
 }
 
-/* Some tools are also sold in the App Center (edu.platform_tools). Where a
-   catalog key matches a PAID platform tool, the teaching tool is locked until
-   the teacher has bought it — otherwise the purchase would be meaningless.
-   Tools with no matching paid row are free to everyone. */
-async function lockState(userId) {
-  const { data: paid } = await db.schema("edu").from("platform_tools")
-    .select("id, key, name, price_kobo, is_active")
-    .in("key", TOOLS.map((t) => t.key));
-  const priced = (paid || []).filter((p) => p.is_active && (p.price_kobo || 0) > 0);
-  if (!priced.length) return {};
-
-  const { data: access } = await db.schema("edu").from("instructor_tool_access")
-    .select("tool_id, access_granted").eq("instructor_id", userId);
-  const ownedIds = new Set((access || []).filter((a) => a.access_granted).map((a) => a.tool_id));
-
-  return Object.fromEntries(priced.map((p) => [p.key, {
-    locked: !ownedIds.has(p.id), priceKobo: p.price_kobo, toolId: p.id,
-  }]));
-}
+/* Every teaching tool is open to every instructor — none is locked or priced.
+   (They used to lock when a same-key platform_tools row had a price and the
+   instructor hadn't bought it; that gate is gone. The response keeps its
+   locked / priceKobo / toolId fields, always open, so existing clients read it
+   unchanged.) */
 
 // ── GET /api/teaching/tools ──────────────────────────────────────────────────
 router.get("/", teacherOnly, async (req, res) => {
   try {
-    const locks = await lockState(req.user.id);
     res.json({
       success: true,
       data: TOOLS.map(({ key, name, emoji, blurb, output, fields }) => {
-        const l = locks[key];
-        return {
-          key, name, emoji, blurb, output, fields,
-          locked: !!l?.locked,
-          priceKobo: l?.priceKobo || 0,
-          toolId: l?.toolId || null,
-        };
+        return { key, name, emoji, blurb, output, fields, locked: false, priceKobo: 0, toolId: null };
       }),
     });
   } catch (e) { serverError(res, e, req); }
@@ -379,12 +358,6 @@ export class ToolError extends Error {
 export async function runTeachingTool({ key, body = {}, userId }) {
   const tool = byKey[key];
   if (!tool) throw new ToolError("Unknown tool", "UNKNOWN_TOOL");
-
-  const locks = await lockState(userId);
-  if (locks[tool.key]?.locked) {
-    throw new ToolError(`${tool.name} is locked. Unlock it in the App Center to use it.`,
-      "TOOL_LOCKED", { toolId: locks[tool.key].toolId });
-  }
 
   const input = {};
   for (const f of tool.fields) {
@@ -470,7 +443,7 @@ router.post("/:key", teacherOnly, async (req, res) => {
   } catch (e) {
     // The runner speaks in codes so both callers — this route and the task
     // worker — can react without parsing prose.
-    const map = { UNKNOWN_TOOL: 404, TOOL_LOCKED: 403, MISSING_FIELD: 400,
+    const map = { UNKNOWN_TOOL: 404, MISSING_FIELD: 400,
                   EMPTY: 422, UNPARSEABLE: 422, NO_SECTIONS: 422, INSUFFICIENT_COINS: 402 };
     if (e.code && map[e.code]) {
       const body = { error: e.message, code: e.code };

@@ -1366,8 +1366,7 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       } catch (e) {
         if (e instanceof TeachingToolError) {
           return { created: false, error: e.message, code: e.code,
-            guidance: e.code === "TOOL_LOCKED" ? "Tell the instructor this tool is locked and can be unlocked in the App Center."
-              : e.code === "INSUFFICIENT_COINS" ? "Tell the instructor they need to top up coins."
+            guidance: e.code === "INSUFFICIENT_COINS" ? "Tell the instructor they need to top up coins."
               : "Tell the instructor exactly what is missing and ask for it." };
         }
         console.error("[run_teaching_tool] failed:", e.message);
