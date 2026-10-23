@@ -180,7 +180,9 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
         scheduled_for: scheduledIso,
         ...audienceBody(form.audience),
       });
-      const battleId = res?.data?.battle?.id ?? res?.battle?.id ?? res?.data?.id ?? res?.id ?? null;
+      // The invite answers { success, data: { battle_id, invited, … } } — without battle_id the draft was closed
+      // with no link to the battle it created.
+      const battleId = res?.data?.battle_id ?? res?.battle_id ?? res?.data?.battle?.id ?? res?.battle?.id ?? res?.data?.id ?? res?.id ?? null;
       await apiPatch(`/api/self-study/drafts/${draftId}`, { status: 'assigned', assignment_id: battleId });
       markResolved('assigned', res?.data?.invited ?? res?.invited ?? 0);
     } catch (e) {

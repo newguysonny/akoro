@@ -9,9 +9,15 @@ import test from "node:test";
  * All four kinds ride the self-study machinery, separated by `type`.
  */
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
+/* The Activities page was split (router, list, detail, drafts strip) and the draft editor moved to
+   components/activities/ActivityForm.jsx; creation moved to the agent chat. The Self Study and Battles
+   pages are retired — their pieces live in the shared modules read below. */
+const readAll = async (names) => (await Promise.all(names.map(read))).join("\n");
 const [page, selfStudy, planEditor, routes, service, migration, manifest, activityApi, battleForm, battlesPage, dashboard, learnerActivity, activitySocket, selfStudyList, guide, analyticsPage, appRoutes, activityFeed, activityDetail] = await Promise.all([
-  read("../../akoro-instructor/src/pages/ActivitiesPage.jsx"),
-  read("../../akoro-instructor/src/pages/SelfStudyPage.jsx"),
+  readAll(["../../akoro-instructor/src/pages/ActivitiesPage.jsx", "../../akoro-instructor/src/pages/activities-page/ActivitiesHome.jsx",
+    "../../akoro-instructor/src/pages/activities-page/DetailPage.jsx", "../../akoro-instructor/src/pages/activities-page/DraftsStrip.jsx",
+    "../../akoro-instructor/src/components/activities/ActivityForm.jsx", "../../akoro-instructor/src/components/ActivityPreviewPanel.jsx"]),
+  read("../../akoro-instructor/src/components/activities/ActivityForm.jsx"),
   read("../../akoro-instructor/src/components/PlanEditor.jsx"),
   read("../../akoro-api/modules/self-study/routes.js"),
   read("../../akoro-api/modules/self-study/createAssignment.js"),
@@ -19,7 +25,7 @@ const [page, selfStudy, planEditor, routes, service, migration, manifest, activi
   read("../../akoro-api/migrations/manifest.json"),
   read("../../akoro-learner/src/services/activityApi.js"),
   read("../../akoro-instructor/src/components/battles/BattleForm.jsx"),
-  read("../../akoro-instructor/src/pages/BattlesPage.jsx"),
+  readAll(["../../akoro-instructor/src/components/battles/BattleManage.jsx", "../../akoro-instructor/src/pages/activities-page/ActivitiesHome.jsx"]),
   read("../../akoro-learner/src/pages/LearnerDashboard.jsx"),
   read("../../akoro-learner/src/pages/ActivityPage.jsx"),
   read("../../akoro-learner/src/services/activitySocket.js"),
@@ -31,13 +37,15 @@ const [page, selfStudy, planEditor, routes, service, migration, manifest, activi
   read("../../akoro-learner/src/pages/ActivityDetailPage.jsx"),
 ]);
 
-test("the page mirrors the workbench: rail + WHEN TO USE IT + form + past activities", () => {
-  assert.match(page, /ACTIVITY TYPES/);
-  assert.match(page, /WHEN TO USE IT/);
-  assert.match(page, /Past \{meta\.name\.toLowerCase\(\)\} activities/);
+test("the Activities page lists every type and stage; creation moved to the agent chat", () => {
+  // The record of everything set: metrics, a stage filter and a type filter from the one type list.
+  for (const label of ["Total", "Live Now", "Scheduled", "Completed"]) assert.match(page, new RegExp(`label: '${label}'`));
+  for (const stage of ["live", "scheduled", "lobby", "completed"]) assert.match(page, new RegExp(`key: '${stage}'`));
+  assert.match(page, /WORKBENCH_TYPES\.map/);
+  assert.match(page, /Create in chat/);
+  // The draft editor (the preview's form) is the same form: audience + plan + per-type guidance.
   assert.match(page, /AudiencePicker/);
   assert.match(page, /PlanEditor/);
-  // The four kinds the instructor assigns, each with its own guidance.
   for (const kind of ["self_study", "assignment", "project", "live_course"]) {
     assert.match(page, new RegExp(`key: '${kind}'`));
   }
@@ -58,10 +66,9 @@ test("all kinds ride the self-study machinery, separated by type", () => {
   assert.match(manifest, /"2026-activity-types\.sql"/);
 });
 
-test("the creation form is the self-study form generalised", () => {
-  // Shared plan editor, one implementation used by both pages.
-  assert.match(selfStudy, /import PlanEditor from '\.\.\/components\/PlanEditor\.jsx';/);
-  assert.match(page, /import PlanEditor from '\.\.\/components\/PlanEditor\.jsx';/);
+test("the draft editor is the self-study form generalised", () => {
+  // Shared plan editor, one implementation (the Self Study page is retired: it is an activity type).
+  assert.match(selfStudy, /import PlanEditor from '\.\.\/PlanEditor\.jsx';/);
   // Live course swaps the plan for a schedule; the others draft one with AI.
   assert.match(page, /scheduled_at: new Date\(form\.scheduledAt\)\.toISOString\(\)/);
   assert.match(page, /!isLive && \(/);
@@ -94,7 +101,7 @@ test("past activities carry the same data as self study, for every kind", () => 
   // Cards: assigned / started / done badges plus the self-study progress bar.
   assert.match(page, /\{p\.started\} started/);
   assert.match(page, /p\.assigned \? Math\.round\(\(p\.complete \/ p\.assigned\) \* 100\) : 0/);
-  assert.match(page, /linear-gradient\(90deg, \$\{AMBER\}, \$\{GREEN\}\)/);
+  assert.match(page, /linear-gradient\(90deg, \$\{C\.brand\}, \$\{GREEN\}\)/);
   // Detail: the full brief — schedule or due line, the approved plan with its
   // objectives, and the per-learner roster with statuses.
   assert.match(page, /Holds \{new Date\(data\.details\.scheduled_at\)/);
@@ -114,29 +121,24 @@ test("BattleForm is self-contained — no identifiers from its old modal host", 
   assert.match(battleForm, /\{onCancel && <Btn variant="secondary" type="button" onClick=\{onCancel\}>Cancel<\/Btn>\}/);
 });
 
-test("battles use the same creation form everywhere", () => {
-  // One BattleForm implementation; the Battles page wraps it in a modal, the
-  // workbench renders it inline.
-  assert.match(battlesPage, /import BattleForm from '\.\.\/components\/battles\/BattleForm\.jsx';/);
+test("battles use the same battle form everywhere", () => {
+  // One BattleForm implementation: the draft preview completes a battle with it (embedded) and
+  // the Activities page edits one in a modal. There is no Battles page.
+  assert.match(battlesPage, /import BattleForm from '\.\/BattleForm\.jsx';/);
   assert.match(battlesPage, /<BattleForm/);
-  assert.match(page, /import BattleForm from '\.\.\/components\/battles\/BattleForm\.jsx';/);
-  assert.match(page, /key === 'battle'\s*\?/);
-  assert.match(page, /BattlePastStrip/);
-  // Battle creation calls the same invite endpoint the Battles page uses.
+  assert.match(page, /import BattleForm from '\.\/battles\/BattleForm\.jsx';/);
+  assert.match(page, /<BattleForm onSubmit=\{battleSubmit\}/);
+  // Battle creation calls the same invite endpoint the form always used.
   assert.match(page, /createBattle\(/);
   assert.match(page, /question_source: form\.questionSource/);
 });
 
-test("multi-stage activities chain real work into one journey", () => {
-  // The composer: ordered stages, all four kinds, shared audience, battle
-  // stages created through the same battle form.
-  assert.match(page, /function MultiStageForm/);
-  for (const k of ["'self_study'", "'assignment'", "'project'", "'battle'"]) {
-    assert.ok(page.includes(`key: ${k}`), `stage kind ${k}`);
-  }
-  assert.match(page, /type: 'multi_stage'/);
-  assert.match(page, /details: \{ stages: refs \}/);
-  assert.match(page, /BattleStageModal/);
+test("multi-stage activities chain real work into one journey", async () => {
+  // The journey is drafted in chat (stages) and created stage by stage on assign.
+  const drafts = await read("../../akoro-api/modules/self-study/drafts.js");
+  assert.match(drafts, /type: "multi_stage"/);
+  assert.match(drafts, /details: \{ stages: refs \}/);
+  assert.match(drafts, /\["self_study", "assignment", "project"\]\.includes\(st\?\.kind\)/);
   // The backend knows the type and announces it.
   assert.match(routes, /"multi_stage"/);
   assert.match(migration, /'multi_stage'/);
@@ -191,9 +193,11 @@ test("the journey card shows the roadmap with each stage's state", () => {
   assert.ok(activityApi.includes("Step ${(a.journeyProgress?.done ?? doneCount) + 1} of ${stageList.length}"), "subtitle names the current step");
 });
 
-test("stage battles are captured with their id so completion can be derived", () => {
-  assert.ok(page.includes("res?.battle_id ?? res?.data?.battle_id"), "battle id captured from the invite response");
-  assert.ok(page.includes("battleId: battleId ?? null"), "the stage ref keeps the battle id");
+test("a battle created from a draft is linked to the draft by its id", () => {
+  // The invite answers { success, data: { battle_id, … } }. Missing it closed the draft with no link
+  // to the battle (found by the verification gate).
+  assert.ok(page.includes("res?.data?.battle_id ?? res?.battle_id"), "battle id captured from the invite response");
+  assert.ok(page.includes("assignment_id: battleId"), "the draft records the battle id");
 });
 
 test("every activity has a per-class analytics page with an AI report", () => {
@@ -212,9 +216,9 @@ test("every activity has a per-class analytics page with an AI report", () => {
   assert.ok(analyticsPage.includes("`/api/self-study/${id}/report`"), "page generates the report");
   assert.ok(analyticsPage.includes("LIKELY MISCONCEPTIONS"), "misconceptions section");
   assert.ok(analyticsPage.includes("Difficulty: {r.difficulty.rating}"), "difficulty verdict");
-  // Reachable from both surfaces: the self-study card and the activity detail.
-  assert.ok(selfStudy.includes("onAnalytics(a)"), "card analytics button");
-  assert.ok(selfStudy.includes("navigate(`/self-study/${x.id}/analytics`)"), "card navigates");
+  // Reachable from both surfaces: a self-study card on the Activities list and the activity detail.
+  assert.ok(page.includes("onClick={onAnalytics}"), "card analytics button");
+  assert.ok(page.includes("navigate(`/self-study/${it.raw.id}/analytics`)"), "card navigates");
   assert.ok(page.includes("`/self-study/${activity.id}/analytics`"), "activity detail links out");
 });
 

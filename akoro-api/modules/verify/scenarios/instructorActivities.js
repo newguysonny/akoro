@@ -35,6 +35,14 @@ function cleanAssigned(ctx, teacher, learner, id) {
 
 /* ── Battle ─────────────────────────────────────────────────────────────── */
 
+/** Battles an earlier gate run left behind (they carry the run marker in their title): delete them. */
+async function sweepGateBattles(ctx, as) {
+  const mine = (await ctx.http({ as, path: "/api/battle/my-battles" })).body?.data || [];
+  const stale = mine.filter((b) => b.mine && /\[verify:[0-9a-f]+\]/.test(b.title || "") && b.status !== "live");
+  for (const b of stale) await ctx.http({ as, method: "DELETE", path: `/api/battle/battles/${b.id}` });
+  if (stale.length) ctx.note(`removed ${stale.length} battle(s) left by earlier gate runs`);
+}
+
 /** A class of the instructor's with test learners who have an agent (a battle needs agents). */
 async function battleClass(ctx, as, need) {
   const classes = (await ctx.http({ as, path: "/api/instructor/classrooms" })).body?.data || [];
@@ -54,6 +62,7 @@ function battleScenario({ key, mode, learnersNeeded, description }) {
     async run(ctx, p) {
       const teacher = await teacherOf(ctx, p.instructor);
       await cleanSlate(ctx, teacher);
+      await sweepGateBattles(ctx, p.instructor);
       const found = await battleClass(ctx, p.instructor, learnersNeeded);
       if (!found) ctx.expect.blocked(`${p.instructor} has no class with ${learnersNeeded} test learner(s) who have an agent — a battle needs them`);
       const { classroom, learners } = found;
@@ -112,7 +121,7 @@ function battleScenario({ key, mode, learnersNeeded, description }) {
         ctx.expect.blocked(`creating the battle was refused (${made.status}): ${made.body?.error || made.body?.message || "no reason given"}${tried.length ? ` — tried ${tried.join(" | ")}` : ""}`);
       }
       ctx.expect.ok("the battle was created", made.status >= 200 && made.status < 300, made.body);
-      const battleId = made.body?.data?.battle?.id ?? made.body?.battle?.id ?? made.body?.data?.id ?? made.body?.id ?? null;
+      const battleId = made.body?.data?.battle_id ?? made.body?.battle_id ?? null;   // { success, data: { battle_id, … } }
       ctx.expect.ok("it has an id", !!battleId, made.body);
       if (!battleId) return;
       ctx.cleanup(() => ctx.http({ as: p.instructor, method: "DELETE", path: `/api/battle/battles/${battleId}` }));
