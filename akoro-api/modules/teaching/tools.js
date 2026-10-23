@@ -394,11 +394,25 @@ export async function runTeachingTool({ key, body = {}, userId }) {
     if (!input[f.name] && f.default) input[f.name] = f.default;
   }
 
-  const resp = await openai.chat.completions.create({
-    model: OPENAI_MODEL, max_tokens: tool.maxTokens, temperature: 0.6,
-    messages: [{ role: "system", content: tool.system }, { role: "user", content: tool.prompt(input) }],
-  });
-  const raw = resp.choices?.[0]?.message?.content?.trim() || "";
+  // One retry when the model's answer can't be used (empty, unparseable JSON, a doc with no
+  // sections): these are intermittent, and a failed run is free (charged after the call). Token
+  // use is summed across the attempts so the charge stays honest.
+  const unusable = (raw) => {
+    if (tool.output === "markdown") return !raw;
+    const data = parseJson(raw);
+    return !data || (tool.output === "doc" && !Array.isArray(data.cards));
+  };
+  let resp, raw = "";
+  const usage = {};
+  for (let attempt = 0; attempt < 2; attempt++) {
+    resp = await openai.chat.completions.create({
+      model: OPENAI_MODEL, max_tokens: tool.maxTokens, temperature: 0.6,
+      messages: [{ role: "system", content: tool.system }, { role: "user", content: tool.prompt(input) }],
+    });
+    for (const [k, v] of Object.entries(resp.usage || {})) if (typeof v === "number") usage[k] = (usage[k] || 0) + v;
+    raw = resp.choices?.[0]?.message?.content?.trim() || "";
+    if (!unusable(raw)) break;
+  }
 
   let payload;
   if (tool.output === "markdown") {
@@ -421,7 +435,7 @@ export async function runTeachingTool({ key, body = {}, userId }) {
     const billTo = await schoolBillTo(userId);
     const r = await chargeForAI({
       userId, feature: `tool_${tool.key}`, model: OPENAI_MODEL,
-      usage: resp.usage || {}, ref: tool.key, billTo,
+      usage: Object.keys(usage).length ? usage : (resp.usage || {}), ref: tool.key, billTo,
     });
     charged = r?.charged || 0;
   } catch (e) {

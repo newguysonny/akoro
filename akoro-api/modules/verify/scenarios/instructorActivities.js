@@ -18,6 +18,7 @@
 import { teacherOf, toolsOf, lastCall, talk, cleanSlate } from "./instructorTools.js";
 
 const INSTRUCTOR = "@tester51";
+const BATTLE_SUBJECTS = ["Mathematics", "English Language", "Basic Science", "Biology", "Chemistry", "Physics", "Economics", "Civic Education"];
 const LEARNER = "@tester19";
 
 const draftOf = async (ctx, as, id) => (await ctx.http({ as, path: `/api/self-study/drafts/${id}` })).body?.data?.draft || null;
@@ -60,7 +61,7 @@ function battleScenario({ key, mode, learnersNeeded, description }) {
       const say = talk(ctx, p, teacher);
 
       // 1. Chat → a battle DRAFT (the agent drafts intent; the form completes it).
-      const t1 = await say(`Set a battle on fractions for ${who} in ${classroom.name} (JSS1 Mathematics).`, "prepare");
+      const t1 = await say(`Set a battle on fractions for ${who} in ${classroom.name}.`, "prepare");
       const prep = lastCall(t1, "prepare_activity");
       ctx.expect.ok("the agent called prepare_activity", !!prep, toolsOf(t1));
       ctx.expect.eq("it is a battle", prep?.input?.type, "battle");
@@ -91,13 +92,25 @@ function battleScenario({ key, mode, learnersNeeded, description }) {
 
       // 5. The battle form's own path: create the battle, then record it on the draft.
       const title = `${ctx.marker} Fractions ${review ? "review" : "battle"}`;
-      const made = await ctx.http({ as: p.instructor, method: "POST", path: `/api/battle/classes/${classroom.id}/battles/invite`, body: {
-        title, subject: "Mathematics", topic: "Fractions", difficulty: "hard", total_questions: 3,
-        // the question bank, not AI generation: bounded in time (AI-filled questions can outlast the gate's request limit)
-        time_limit_seconds: 600, xp_prize: 100, question_source: "bank", expires_in_minutes: 60,
-        usernames: learners.map((l) => l.username), ...(review ? { mode: "review" } : {}),
-      } });
-      if (made.status >= 400 && made.status < 500) ctx.expect.blocked(`creating the battle was refused (${made.status}): ${made.body?.error || made.body?.message || "no reason given"}`);
+      // The bank decides what can run: a battle needs at least 5 questions in the subject's bank, so
+      // try the subjects in turn (a refused attempt deletes its own battle — nothing is left behind).
+      // The question bank, not AI generation: bounded in time (AI-filled questions can outlast the gate's request limit).
+      let made = null;
+      const tried = [];
+      for (const subject of BATTLE_SUBJECTS) {
+        made = await ctx.http({ as: p.instructor, method: "POST", path: `/api/battle/classes/${classroom.id}/battles/invite`, body: {
+          title, subject, topic: "Fractions", difficulty: "hard", total_questions: 5,
+          time_limit_seconds: 600, xp_prize: 100, question_source: "bank", expires_in_minutes: 60,
+          usernames: learners.map((l) => l.username), ...(review ? { mode: "review" } : {}),
+        } });
+        if (made.status >= 200 && made.status < 300) { ctx.note(`created in ${subject}`); break; }
+        const why = made.body?.error || made.body?.message || `HTTP ${made.status}`;
+        if (made.status === 400 && /in the bank|enough .* questions/i.test(why)) { tried.push(`${subject}: ${why}`); continue; }
+        break;   // anything else is not about the bank
+      }
+      if (made.status >= 400 && made.status < 500) {
+        ctx.expect.blocked(`creating the battle was refused (${made.status}): ${made.body?.error || made.body?.message || "no reason given"}${tried.length ? ` — tried ${tried.join(" | ")}` : ""}`);
+      }
       ctx.expect.ok("the battle was created", made.status >= 200 && made.status < 300, made.body);
       const battleId = made.body?.data?.battle?.id ?? made.body?.battle?.id ?? made.body?.data?.id ?? made.body?.id ?? null;
       ctx.expect.ok("it has an id", !!battleId, made.body);
