@@ -25,7 +25,7 @@ never vary it. Recommended: the shorter "conversation, practice, and feedback".
 
 ## Is the advice right?
 
-Mostly yes. Checked against Google's own documentation:
+Mostly yes. Judged against Google's published Search guidance (from what I know of it, not re-read for this plan; worth confirming on developers.google.com/search before acting on any single line):
 
 | Claim | Verdict |
 |---|---|
