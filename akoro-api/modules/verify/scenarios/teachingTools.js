@@ -21,6 +21,12 @@ const ESSAYS = [
 ].join("\n---\n");
 
 /** What each output type must look like once saved — the Library viewer reads these. */
+// Every tool answers in the one result template (teaching/template.js).
+const TEMPLATE = (c) => c.version === 2 && typeof c.title === "string" && c.title.length > 0
+  && Array.isArray(c.entries) && c.entries.length >= 1
+  && c.entries.every((e) => e.title !== undefined && Array.isArray(e.sections) && e.sections.length >= 1
+    && e.sections.every((x) => ["text", "list", "chips", "fields", "script", "scores"].includes(x.kind)));
+
 const SHAPES = {
   script: (c) => Array.isArray(c.turns) && c.turns.length >= 4 && c.turns.every((t) => t.speaker && t.text),
   doc: (c) => Array.isArray(c.cards) && c.cards.length >= 2,
@@ -104,6 +110,7 @@ function toolScenario(c) {
       ctx.expect.eq("it opens", full.status, 200);
       const body = full.body?.output?.content || {};
       ctx.expect.ok(`the saved result has the ${c.output} shape the viewer reads`, SHAPES[c.output](body), Object.keys(body));
+      ctx.expect.ok("the saved result follows the shared template (title, entries of sections)", TEMPLATE(body), Object.keys(body));
       ctx.expect.ok("it also has the readable text", typeof body.content === "string" && body.content.length > 50, typeof body.content);
       // The same row, through the teaching tools' own listing (the older viewer path).
       const alt = await ctx.http({ as: p.instructor, path: `/api/teaching/tools/outputs/${row.id}` });

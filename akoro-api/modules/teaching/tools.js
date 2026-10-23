@@ -12,10 +12,10 @@
  *   POST /api/teaching/tools/podcast/audio   — narrate a podcast script (TTS)
  *
  * Output shape is per tool:
- *   'markdown' → { content }            rendered, printable to PDF client-side
- *   'cards'    → { content, cards[] }   vocabulary flashcards
- *   'script'   → { content, script[] }  podcast turns, ready to narrate
- *   'grades'   → { content, grades[] }  one entry per essay
+ * Every tool returns the one result template (see template.js):
+ *   { version:2, title, summary, meta, highlights[], entries[{title, sections[]}], content }
+ * `output` names the legacy shape also included beside it (doc → cards, cards,
+ * script → turns, grades), for consumers not yet on the template.
  *
  * Billing: metered on real usage via chargeForAI, charged to the school when
  * the caller belongs to one, otherwise to the teacher — the same rule as every
@@ -28,6 +28,7 @@ import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { chargeForAI, schoolBillTo, debitCoins, coinsAvailable, InsufficientCoins } from "../../lib/coins.js";
 import { serverError } from "../../lib/httpError.js";
+import { TEMPLATE_RULE, normalizeResult, toMarkdown, toLegacy } from "./template.js";
 
 const router = Router();
 const TEACHER_ROLES = ["instructor", "teacher", "school", "school_admin", "admin"];
@@ -43,7 +44,6 @@ const F = {
   notes:   { name: "notes",   label: "Anything else?", placeholder: "Optional — context, focus, constraints", long: true },
 };
 
-const JSON_RULE = "Return ONLY valid JSON matching the requested shape. No markdown fences, no commentary.";
 
 /* The TTS voices, named so a teacher picks a person rather than a codename.
    Order matters only in that the first two are the defaults for two hosts. */
@@ -60,23 +60,10 @@ const voiceFromLabel = (label, fallback) =>
   VOICE_CATALOG.find((v) => v.label === label)?.voice
   || (VOICE_CATALOG.some((v) => v.voice === label) ? label : fallback);
 
-/* A 'doc' is the structured shape every prose tool returns instead of a wall of
-   Markdown: a titled set of cards, each card a few labelled blocks. The client
-   renders labels as coloured, icon'd headings, so output is scannable and
-   prints as a proper handout.
-
-   {"title":string,"subtitle":string,
-    "cards":[{"heading":string,
-              "blocks":[{"label":string,"text":string}
-                       |{"label":string,"bullets":[string]}
-                       |{"label":string,"chips":[string]}]}]}
-
-   Block labels are free text — the client maps known ones to icons and falls
-   back to a neutral style — so a tool can name its own sections. */
-const DOC_RULE = `Return ONLY valid JSON in this shape, no markdown fences and no commentary:
-{"title":string,"subtitle":string,"cards":[{"heading":string,"blocks":[{"label":string,"text":string}]}]}
-Each block carries exactly ONE of: "text" (a paragraph), "bullets" (array of short lines) or "chips" (array of 1-3 word labels).
-Write **bold** around key terms inside text and bullets. Keep every paragraph under 60 words — cards are read at a glance, not studied.`;
+/* Every tool answers in the one result template (template.js): a titled set of
+   entries, each a few labelled sections. TEMPLATE_RULE is its shape card, so a
+   tool's prompt only has to say WHICH entries and sections it wants. */
+const DOC_RULE = TEMPLATE_RULE;
 const HOUSE = "You support Nigerian secondary school teachers. Be concrete and classroom-ready — real examples, real materials, nothing generic. Never invent exam results, statistics or citations.";
 
 export const TOOLS = [
@@ -90,11 +77,10 @@ export const TOOLS = [
       { name: "voiceB", label: "Second voice", type: "select", options: VOICE_LABELS, default: "Ngozi — bright, lively" },
       F.notes],
     maxTokens: 3000,
-    system: `${HOUSE} You write podcast scripts for students: warm, curious, and genuinely entertaining — banter, questions, analogies, a moment of surprise. No filler. ${JSON_RULE}`,
+    system: `${HOUSE} You write podcast scripts for students: warm, curious, and genuinely entertaining — banter, questions, analogies, a moment of surprise. No filler. ${DOC_RULE}`,
     prompt: (i) => `Write a ${i.minutes || 5}-minute ${String(i.hosts || "Two hosts").toLowerCase()} podcast episode for ${i.class || "secondary"} students on "${i.topic}"${i.subject ? ` (${i.subject})` : ""}.
 ${i.notes ? `Extra direction: ${i.notes}\n` : ""}
-JSON shape:
-{"title":string,"summary":string,"turns":[{"speaker":string,"text":string}]}
+Produce ONE entry titled "Episode" with ONE "script" section holding the turns. Put the episode\'s length and format in "highlights".
 Use at most two distinct speaker names. Keep each turn under 60 words so it narrates naturally.`,
   },
   {
@@ -104,12 +90,13 @@ Use at most two distinct speaker names. Keep each turn under 60 words so it narr
     system: `${HOUSE} ${DOC_RULE}`,
     prompt: (i) => `Topic: "${i.topic}"${i.subject ? ` · Subject: ${i.subject}` : ""}${i.class ? ` · Class: ${i.class}` : ""}.
 ${i.notes ? `Context: ${i.notes}\n` : ""}
-Produce 5 cards, one per misconception. Each card's heading is the misconception stated plainly, with these blocks in order:
-- "Common Misconception" (text) — what students believe.
-- "Clarification" (text) — what is actually true.
-- "Why This Happens" (text) — why the wrong idea feels right to them.
-- "Fix Strategies" (bullets) — 3 specific teaching moves, not general advice.
-Then add two final cards: "Where Students Struggle" (a "Watch For" bullets block) and "Quick Checks" (a "Questions" bullets block of 5 questions that expose the misconception).`,
+Produce 5 entries, one per misconception. Each entry's title is the misconception stated plainly. Sections in order:
+- text "Common Misconception" (tone danger) — what students believe.
+- text "Clarification" (tone success) — what is actually true.
+- text "Why This Misconception Occurs" (tone info) — why the wrong idea feels right to them.
+- list "Fix Strategies" (tone idea) — 3 specific teaching moves, not general advice.
+- text "Real Classroom Example" (tone warn) — a short moment from a real lesson where it shows up.
+Then one final entry "Quick Checks" with a list "Questions" of 5 questions that expose the misconception.`,
   },
   {
     key: "real-world", name: "Real-World Connections", emoji: "🌍", output: "doc",
@@ -118,11 +105,10 @@ Then add two final cards: "Where Students Struggle" (a "Watch For" bullets block
     system: `${HOUSE} Ground examples in Nigerian and West African daily life where it fits naturally — markets, farming, transport, weather, mobile money, local industry — without forcing it. ${DOC_RULE}`,
     prompt: (i) => `Topic: "${i.topic}"${i.subject ? ` · Subject: ${i.subject}` : ""}${i.class ? ` · Class: ${i.class}` : ""}.
 ${i.notes ? `Context: ${i.notes}\n` : ""}
-Produce 5 cards, each a different real-world connection. The heading is a short, vivid name for the connection (e.g. "Our Shared Recipes"). Blocks in order:
-- "Context" (text) — the everyday situation, in language a student recognises.
-- "Application" (text) — how the topic actually shows up there.
-- "Professions" (chips) — 3 job titles that depend on this.
-Then two final cards: "Talk About It" (a "Discussion" bullets block of 5 questions linking the topic to students' own lives) and "Try This" (an "Activity" text block describing one thing they can do or observe outside class).`,
+Produce 5 entries, each a different real-world connection, with layout "split". The title is a short, vivid name for the connection (e.g. "Our Shared Recipes"). Sections in order:
+- text "Context" (tone info) — the everyday situation and how the topic shows up there, in language a student recognises.
+- chips "Professions" (tone accent) — 3 job titles that depend on this.
+Then two final entries (layout "stack"): "Talk About It" with a list "Discussion" of 5 questions linking the topic to students' own lives, and "Try This" with a text "Activity" describing one thing they can do or observe outside class.`,
   },
   {
     key: "lesson-hooks", name: "Lesson Hooks", emoji: "🪝", output: "doc",
@@ -131,12 +117,12 @@ Then two final cards: "Talk About It" (a "Discussion" bullets block of 5 questio
     system: `${HOUSE} A hook is something the teacher DOES in the first 2 minutes — a demonstration, a question with a surprising answer, a story, a challenge. Every hook must be runnable with materials a Nigerian classroom actually has. ${DOC_RULE}`,
     prompt: (i) => `Topic: "${i.topic}"${i.subject ? ` · Subject: ${i.subject}` : ""}${i.class ? ` · Class: ${i.class}` : ""}.
 ${i.notes ? `Context: ${i.notes}\n` : ""}
-Produce 5 cards, one per hook. The heading names the hook. Blocks in order:
-- "The Hook" (text) — what the teacher says or does, word for word where it helps.
-- "Materials" (chips) — what's needed; use "None" if nothing.
-- "Timing" (text) — how long it takes.
-- "Bridge Into The Lesson" (text) — the sentence that moves the class from hook to content.
-Then a final card "Expected Outcomes" with an "By The End" bullets block of what students should be able to do.`,
+Produce 5 entries, one per hook. The title names the hook. Sections in order:
+- text (no label) — one paragraph: what the teacher says or does, word for word where it helps.
+- list "Implementation Steps" (ordered true, tone accent) — 3-4 steps, each ending with its minutes in brackets, e.g. "Ask the class to... (1 min)". The minutes add up to 2.
+- fields — "Expected Outcome" (what students feel or realise) and "Materials Needed" (what's needed; "None" if nothing).
+- text "Bridge Into The Lesson" (tone teal) — the sentence that moves the class from hook to content.
+Then a final entry "Expected Outcomes" with a list "By The End" of what students should be able to do.`,
   },
   {
     key: "vocabulary", name: "Vocabulary Builder", emoji: "🔤", output: "cards",
@@ -145,12 +131,10 @@ Then a final card "Expected Outcomes" with an "By The End" bullets block of what
       { name: "count", label: "How many terms", type: "select", options: ["10", "15", "20", "30"], default: "15" },
       F.notes],
     maxTokens: 2600,
-    system: `${HOUSE} Definitions must be in language the stated class level can read unaided. ${JSON_RULE}`,
+    system: `${HOUSE} Definitions must be in language the stated class level can read unaided. ${DOC_RULE}`,
     prompt: (i) => `Build a vocabulary set of ${i.count || 15} terms for "${i.topic}"${i.subject ? ` (${i.subject})` : ""}${i.class ? `, ${i.class} level` : ""}.
 ${i.notes ? `Context: ${i.notes}\n` : ""}
-JSON shape:
-{"title":string,"cards":[{"term":string,"definition":string,"example":string,"tip":string}]}
-"example" is a sentence using the term in context. "tip" is a short memory aid — leave it as "" if there isn't a genuine one.`,
+Produce one entry per term (layout "compact"): the title is the term, then sections text "Definition", text "Example" (a sentence using the term in context) and text "Memory tip" (tone idea; leave this section out if there isn't a genuine one). Put the term count in "highlights".`,
   },
   {
     key: "essay-grader", name: "Essay Grader", emoji: "📊", output: "grades",
@@ -161,7 +145,7 @@ JSON shape:
       F.subject, F.klass,
     ],
     maxTokens: 4000,
-    system: `${HOUSE} You mark to the rubric GIVEN — never your own criteria, never a curve. Be specific about where marks were lost. Feedback is addressed to the student, encouraging but honest. ${JSON_RULE}`,
+    system: `${HOUSE} You mark to the rubric GIVEN — never your own criteria, never a curve. Be specific about where marks were lost. Feedback is addressed to the student, encouraging but honest. ${DOC_RULE}`,
     prompt: (i) => `Mark these essays${i.subject ? ` (${i.subject}` : ""}${i.class ? `${i.subject ? ", " : " ("}${i.class}` : ""}${i.subject || i.class ? ")" : ""} strictly against the rubric.
 
 RUBRIC:
@@ -170,9 +154,11 @@ ${i.rubric}
 ESSAYS (separated by ---):
 ${i.essays}
 
-JSON shape:
-{"grades":[{"label":string,"score":number,"outOf":number,"breakdown":[{"criterion":string,"score":number,"outOf":number,"comment":string}],"strengths":[string],"improvements":[string],"feedback":string}]}
-One entry per essay, in the order given. "label" is the student's name if the essay states one, otherwise "Essay 1", "Essay 2"…`,
+Produce one entry per essay, in the order given. The title is the student's name if the essay states one, otherwise "Essay 1", "Essay 2"…; "tag" is the total as "score/outOf". Sections in order:
+- scores "Mark breakdown" — one item per rubric criterion, with the marks lost explained in "comment".
+- list "Strengths" (tone success).
+- list "To improve" (tone warn).
+- text "Feedback to the student" (tone info) — addressed to the student.`,
   },
   {
     key: "lesson-plan", name: "Lesson Plan", emoji: "📋", output: "doc",
@@ -186,11 +172,11 @@ One entry per essay, in the order given. "label" is the student's name if the es
     prompt: (i) => `Write a ${i.duration || "40 minute"} lesson plan.
 Topic: "${i.topic}"${i.subject ? ` · Subject: ${i.subject}` : ""}${i.class ? ` · Class: ${i.class}` : ""}
 ${i.objectives ? `Objectives to cover:\n${i.objectives}\n` : ""}${i.notes ? `Context: ${i.notes}\n` : ""}
-Produce these cards in order:
-1. "Overview" — blocks: "Objectives" (bullets), "Prior Knowledge" (text), "Materials" (chips).
-2. One card per phase — "Introduction", "Development", "Guided Practice", "Close" — each with "Timing" (text), "Teacher Does" (bullets), "Students Do" (bullets).
-3. "Differentiation" — blocks: "Support" (bullets) and "Extension" (bullets).
-4. "Assessment & Homework" — blocks: "Check For Understanding" (bullets), "Homework" (text), "Board Plan" (text).
+Put the period length in "highlights". Produce these entries in order:
+1. "Overview" — list "Objectives" (tone teal), text "Prior Knowledge", chips "Materials".
+2. One entry per phase — "Introduction", "Development", "Guided Practice", "Close" — each with fields {"Timing"}, list "Teacher Does" (tone accent) and list "Students Do" (tone success).
+3. "Differentiation" — list "Support" and list "Extension".
+4. "Assessment & Homework" — list "Check For Understanding", text "Homework", text "Board Plan".
 Timings must add up to the period length.`,
   },
   {
@@ -217,11 +203,11 @@ Timings must add up to the period length.`,
     prompt: (i) => `Design one ${String(i.format || "group work").toLowerCase()} activity lasting ${i.duration || "20 minutes"}.
 Topic: "${i.topic}"${i.subject ? ` · Subject: ${i.subject}` : ""}${i.class ? ` · Class: ${i.class}` : ""}
 ${i.materials ? `Available materials: ${i.materials}\n` : "Assume no printing and no devices.\n"}${i.notes ? `Context: ${i.notes}\n` : ""}
-Produce these cards in order:
-1. "The Activity" — blocks: "Objective" (text), "Materials" (chips), "Setup" (text).
-2. "Run It" — blocks: "Timing" (text), "Teacher Does" (bullets), "Students Do" (bullets).
-3. "Differentiation" — blocks: "If they struggle" (bullets), "If they finish early" (bullets).
-4. "Assessment" — blocks: "What Good Looks Like" (bullets), "Quick Check" (text).
+Put the format and length in "highlights". Produce these entries in order:
+1. "The Activity" — text "Objective" (tone teal), chips "Materials", text "Setup".
+2. "Run It" — fields {"Timing"}, list "Teacher Does" (tone accent) and list "Students Do" (tone success).
+3. "Differentiation" — list "If they struggle" and list "If they finish early".
+4. "Assessment" — list "What Good Looks Like" (tone success) and text "Quick Check".
 Timings must add up to the stated length.`,
   },
   {
@@ -233,13 +219,13 @@ Timings must add up to the stated length.`,
       { name: "difficulty", label: "Difficulty", type: "select", options: ["Mixed", "Foundation", "Standard", "Challenge"], default: "Mixed" },
       F.notes],
     maxTokens: 3200,
-    system: `${HOUSE} Questions are unambiguous and answerable from what was taught. The marking scheme is a separate card so the teacher can hand out the questions alone. ${DOC_RULE}`,
+    system: `${HOUSE} Questions are unambiguous and answerable from what was taught. The marking scheme is a separate entry so the teacher can hand out the questions alone. ${DOC_RULE}`,
     prompt: (i) => `Create a ${String(i.type || "homework").toLowerCase()} of ${i.count || 10} questions on "${i.topic}"${i.subject ? ` (${i.subject})` : ""}${i.class ? `, ${i.class}` : ""}. Difficulty: ${i.difficulty || "Mixed"}.
 ${i.notes ? `Context: ${i.notes}\n` : ""}
-Produce these cards in order:
-1. "Instructions" — blocks: "For Students" (text), "Time Needed" (text), "Total Marks" (text).
-2. "Questions" — a "Questions" bullets block, each line starting with the number and ending with the marks in brackets.
-3. "Marking Scheme" — an "Answers" bullets block matching the question numbers, showing where marks are awarded.`,
+Put the question count and total marks in "highlights". Produce these entries in order:
+1. "Instructions" — text "For Students", fields {"Time Needed", "Total Marks"}.
+2. "Questions" — an ordered list "Questions", each line ending with its marks in brackets.
+3. "Marking Scheme" — an ordered list "Answers" matching the question numbers, showing where marks are awarded.`,
   },
 ];
 
@@ -254,37 +240,14 @@ function parseJson(text) {
   return null;
 }
 
-// Turn structured output back into readable text so copy / print / "send to
-// chat" work identically for every tool.
-function asMarkdown(tool, data) {
-  if (tool.output === "doc") {
-    const block = (b) => {
-      if (b.bullets?.length) return `**${b.label}**\n${b.bullets.map((x) => `- ${x}`).join("\n")}`;
-      if (b.chips?.length)   return `**${b.label}:** ${b.chips.join(" · ")}`;
-      return `**${b.label}**\n${b.text || ""}`;
-    };
-    return [`# ${data.title || tool.name}`, data.subtitle || "", "",
-      ...(data.cards || []).map((c) => [`## ${c.heading}`, ...(c.blocks || []).map(block)].join("\n\n")),
-    ].filter(Boolean).join("\n\n");
-  }
-  if (tool.output === "cards") {
-    return [`# ${data.title || "Vocabulary"}`, "",
-      ...(data.cards || []).map((c, n) => `**${n + 1}. ${c.term}**\n\n${c.definition}${c.example ? `\n\n_${c.example}_` : ""}${c.tip ? `\n\n💡 ${c.tip}` : ""}`)].join("\n\n");
-  }
-  if (tool.output === "script") {
-    return [`# ${data.title || "Podcast"}`, data.summary || "", "",
-      ...(data.turns || []).map((t) => `**${t.speaker}:** ${t.text}`)].join("\n\n");
-  }
-  if (tool.output === "grades") {
-    return (data.grades || []).map((g) => [
-      `## ${g.label} — ${g.score}/${g.outOf}`,
-      ...(g.breakdown || []).map((b) => `- **${b.criterion}**: ${b.score}/${b.outOf} — ${b.comment}`),
-      g.strengths?.length ? `\n**Strengths:** ${g.strengths.join("; ")}` : "",
-      g.improvements?.length ? `**To improve:** ${g.improvements.join("; ")}` : "",
-      g.feedback ? `\n${g.feedback}` : "",
-    ].filter(Boolean).join("\n")).join("\n\n---\n\n");
-  }
-  return "";
+/* A saved output from before the template has the old per-tool shape. Lift it
+   into the template on the way out so the Library draws old and new alike. */
+export function upgradeSaved(row) {
+  const tool = byKey[row?.kind];
+  const c = row?.content;
+  if (!tool || !c || typeof c !== "object" || Array.isArray(c.entries)) return row;
+  const result = normalizeResult(c, { tool, input: { subject: row.subject, topic: row.title } });
+  return result.entries.length ? { ...row, content: { ...c, ...result } } : row;
 }
 
 /* Every teaching tool is open to every instructor — none is locked or priced.
@@ -326,7 +289,7 @@ router.get("/outputs/:id", teacherOnly, async (req, res) => {
     const { data } = await db.schema("edu").from("tool_outputs")
       .select("*").eq("id", req.params.id).eq("instructor_id", req.user.id).maybeSingle();
     if (!data) return res.status(404).json({ error: "Not found" });
-    res.json({ success: true, data });
+    res.json({ success: true, data: upgradeSaved(data) });
   } catch (e) { serverError(res, e, req); }
 });
 
@@ -370,10 +333,15 @@ export async function runTeachingTool({ key, body = {}, userId }) {
   // One retry when the model's answer can't be used (empty, unparseable JSON, a doc with no
   // sections): these are intermittent, and a failed run is free (charged after the call). Token
   // use is summed across the attempts so the charge stays honest.
+  // A usable answer parses AND leaves at least one entry once normalized.
+  const resultOf = (r) => {
+    const data = parseJson(r);
+    if (!data) return null;
+    const result = normalizeResult(data, { tool, input });
+    return result.entries.length ? result : null;
+  };
   const unusable = (raw) => {
-    if (tool.output === "markdown") return !raw;
-    const data = parseJson(raw);
-    return !data || (tool.output === "doc" && !Array.isArray(data.cards));
+    return !resultOf(raw);
   };
   let resp, raw = "";
   const usage = {};
@@ -387,20 +355,16 @@ export async function runTeachingTool({ key, body = {}, userId }) {
     if (!unusable(raw)) break;
   }
 
-  let payload;
-  if (tool.output === "markdown") {
-    if (!raw) throw new ToolError("Nothing came back — try again.", "EMPTY");
-    payload = { content: raw.replace(/^```(?:markdown)?\s*/i, "").replace(/\s*```$/, "") };
-  } else {
-    const data = parseJson(raw);
-    if (!data) throw new ToolError("That came back in an unusable shape — try again.", "UNPARSEABLE");
-    // A doc with no cards renders as an empty page — better to say so than to
-    // hand back a blank result that looks like a bug.
-    if (tool.output === "doc" && !Array.isArray(data.cards)) {
-      throw new ToolError("That came back without any sections — try again.", "NO_SECTIONS");
-    }
-    payload = { ...data, content: asMarkdown(tool, data) };
+  const result = resultOf(raw);
+  if (!raw) throw new ToolError("Nothing came back — try again.", "EMPTY");
+  if (!result) {
+    throw new ToolError(parseJson(raw) ? "That came back without any sections — try again." : "That came back in an unusable shape — try again.",
+      parseJson(raw) ? "NO_SECTIONS" : "UNPARSEABLE");
   }
+  // The template is the result. The per-tool legacy keys ride along (cards / turns /
+  // grades) so the podcast narrator, the school portal and saved-output readers
+  // keep working while they move over.
+  const payload = { ...toLegacy(result, tool.output), ...result, content: toMarkdown(result) };
 
   // Charged AFTER the call, so a failed generation is free.
   let charged = 0;

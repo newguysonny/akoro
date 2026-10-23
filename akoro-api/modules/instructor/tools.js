@@ -15,6 +15,7 @@
  *   GET  /api/instructor/tools/verify/:reference — verify Paystack + grant access
  */
 
+import { upgradeSaved } from "../teaching/tools.js";
 import { Router } from "express";
 import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
@@ -225,7 +226,7 @@ router.get("/outputs/:id", authenticateToken, async (req, res) => {
       .eq("instructor_id", req.user.id)
       .single();
     if (error || !data) return res.status(404).json({ error: "Not found" });
-    res.json({ success: true, output: data });
+    res.json({ success: true, output: upgradeSaved(data) });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

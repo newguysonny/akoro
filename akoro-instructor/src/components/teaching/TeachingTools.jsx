@@ -3,13 +3,10 @@
  *
  * The form is built from `fields` returned by GET /api/teaching/tools, so a new
  * tool added on the server appears here with no frontend change. Only the four
- * OUTPUT shapes are known to this file:
- *
- *   doc      → titled cards of labelled blocks (most tools)
- *   markdown → plain readable text (fallback)
- *   cards    → flippable flashcards (vocabulary)
- *   script   → transcript + narrated audio with a speed control (podcast)
- *   grades   → one result card per essay
+ * result is drawn by ToolResult.jsx — every tool returns the same template.
+ * This file keeps what is specific to a kind of output: the podcast player,
+ * the flashcard study mode, and the print window. The doc / cards / grades
+ * renderers below are only the fallback for results saved before the template.
  *
  * Used by the school portal page and by the AI chat on a school website, which
  * passes `onInsert` to drop the result into the conversation.
@@ -19,6 +16,7 @@ import { Copy, Play, Download, AlertCircle, CheckCircle2, HelpCircle, Lightbulb,
 import { Ico } from '../../theme/Ico.jsx';
 import { apiGet, apiPost } from '../../services/api.js';
 import { C } from '../../theme/colors.js';
+import { ResultHeader, ResultEntries, resultToHtml, accentFor } from './ToolResult.jsx';
 
 const TT_FONT = "'Nunito', sans-serif";
 const BRAND = '#6C3BFF', TT_AMBER = '#E8853A', TT_MUTED2 = '#9A96A8',
@@ -96,7 +94,7 @@ function printDoc(title, bodyHtml) {
     .blk p{margin:0} .blk ul{margin:0}
     .chip{display:inline-block;border:1px solid #bbb;border-radius:20px;padding:2px 9px;margin-right:5px;font-size:.9em}
     .sub{color:#555;font-style:italic;margin-top:-4px}
-    @media print{@page{margin:16mm}}
+    @media print{@page{margin:16mm}} ol{padding-left:22px} small{font-weight:400;color:#666}
   </style></head><body>${bodyHtml}<script>window.onload=()=>window.print()</script></body></html>`);
   w.document.close();
 }
@@ -539,66 +537,52 @@ export function ToolRunner({ tool, onInsert, onDone, showHeader = false }) {
       </button>
       {error && <div style={errBox}>{error}</div>}
 
-      {out && <Result tool={tool} out={out} onInsert={onInsert} onError={setError} />}
+      {out && <Result tool={tool} out={out} onInsert={onInsert} onError={setError} onReset={() => setOut(null)} />}
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
 
-function Result({ tool, out, onInsert, onError = () => {}, title }) {
+function Result({ tool, out, onInsert, onError = () => {}, title, onReset }) {
   const [copied, setCopied] = useState(false);
+  const [study, setStudy] = useState(false);
   const copy = async () => {
     try { await navigator.clipboard.writeText(out.content || ''); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* ignore */ }
   };
 
+  // Every tool answers in the one template (entries[]); results saved before it
+  // still carry their old per-tool shape, which the server lifts on read, and the
+  // legacy renderers below are the fallback if one slips through unlifted.
+  const templated = Array.isArray(out.entries) && out.entries.length > 0;
+  const accent = accentFor(tool.key);
+  const head = out.title || title || tool.name;
+
   const print = () => {
-    const head = out.title || title || tool.name;
-    if (tool.output === 'doc') {
-      const meta = [out.subject, out.class].filter(Boolean).join(' · ');
-      printDoc(head, `<h1>${esc(head)}</h1>${out.subtitle ? `<p class="sub">${esc(out.subtitle)}</p>` : ''}${meta ? `<p class="sub">${esc(meta)}</p>` : ''}` +
-        (out.cards || []).map((c) => `<div class="card"><h2>${esc(c.heading)}</h2>` +
-          (c.blocks || []).map((b) => `<div class="blk"><div class="lbl">${esc(b.label)}</div>` +
-            (b.chips?.length ? `<p>${b.chips.map((x) => `<span class="chip">${esc(x)}</span>`).join(' ')}</p>`
-              : b.bullets?.length ? `<ul>${b.bullets.map((x) => `<li>${boldish(x)}</li>`).join('')}</ul>`
-              : `<p>${boldish(b.text)}</p>`) + '</div>').join('') + '</div>').join(''));
-      return;
-    }
-    if (tool.output === 'cards') {
-      printDoc(head, `<h1>${esc(out.title || head)}</h1>` +
-        (out.cards || []).map((c) => `<div class="card"><div class="term">${esc(c.term)}</div><div class="def">${esc(c.definition)}</div>${c.example ? `<div class="ex">${esc(c.example)}</div>` : ''}</div>`).join(''));
-      return;
-    }
+    if (templated) { printDoc(head, resultToHtml(out)); return; }
     printDoc(head, `<h1>${esc(head)}</h1>${mdToHtml(out.content || '')}`);
   };
 
   return (
     <div style={{ marginTop: 18, borderTop: `1px solid ${C.border}`, paddingTop: 16 }}>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+      {templated && <ResultHeader data={{ ...out, title: head }} accent={accent} icon={tool.emoji} name={tool.name} />}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
         <button onClick={copy} style={ghost}>{copied ? <Ico ti="ti-check" size={13} color={GREEN} /> : <Ico ti="ti-copy" size={13} />} {copied ? 'Copied' : 'Copy'}</button>
         <button onClick={print} style={ghost}><Ico ti="ti-printer" size={13} /> Save as PDF</button>
         {onInsert && <button onClick={() => onInsert(out.content || '')} style={ghost}><Ico ti="ti-message-plus" size={13} /> Send to chat</button>}
-        {out.coinsCharged > 0 && <span style={{ fontSize: 11, color: TT_MUTED2, alignSelf: 'center' }}>{out.coinsCharged.toLocaleString()} coins</span>}
+        {tool.output === 'cards' && templated && (
+          <button onClick={() => setStudy((v) => !v)} style={ghost}><Ico ti={study ? 'ti-layout-list' : 'ti-cards'} size={13} /> {study ? 'See all' : 'Flashcards'}</button>
+        )}
+        {onReset && <button onClick={onReset} style={{ ...ghost, marginLeft: 'auto' }}><Ico ti="ti-plus" size={13} /> Create another</button>}
+        {out.coinsCharged > 0 && <span style={{ fontSize: 11, color: TT_MUTED2 }}>{out.coinsCharged.toLocaleString()} coins</span>}
       </div>
 
-      {tool.output === 'doc' && (
-        <>
-          <div style={{ textAlign: 'center', marginBottom: 16 }}>
-            <div style={{ fontSize: 19, fontWeight: 900, color: C.ink }}>{out.title || title}</div>
-            {out.subtitle && <div style={{ fontSize: 12.5, color: C.muted, marginTop: 4 }}>{out.subtitle}</div>}
-            <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap', marginTop: 9 }}>
-              {out.subject && <span style={{ ...pill, background: `${TT_AMBER}18`, color: TT_AMBER }}>{out.subject}</span>}
-              {out.class   && <span style={{ ...pill, background: `${BRAND}18`, color: BRAND }}>{out.class}</span>}
-            </div>
-          </div>
-          <Doc data={out} />
-        </>
-      )}
-      {tool.output === 'cards'  && <Flashcards data={out} />}
-      {tool.output === 'script' && <Podcast data={out} tool={tool} onError={onError} />}
-      {tool.output === 'grades' && <Grades data={out} />}
-      {tool.output === 'markdown' && (
-        <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.7 }} dangerouslySetInnerHTML={{ __html: mdToHtml(out.content || '') }} />
-      )}
+      {tool.output === 'script' ? <Podcast data={out} tool={tool} onError={onError} />
+        : tool.output === 'cards' && study ? <Flashcards data={out} />
+        : templated ? <ResultEntries data={out} accent={accent} />
+        : tool.output === 'doc' ? <Doc data={out} />
+        : tool.output === 'cards' ? <Flashcards data={out} />
+        : tool.output === 'grades' ? <Grades data={out} />
+        : <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.7 }} dangerouslySetInnerHTML={{ __html: mdToHtml(out.content || '') }} />}
     </div>
   );
 }

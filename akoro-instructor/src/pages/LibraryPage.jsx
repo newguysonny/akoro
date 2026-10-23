@@ -38,8 +38,15 @@ const CREATE_STARTS = [
   { label: 'Vocabulary list', fill: 'Make a vocabulary list for ' },
 ];
 // Saved payloads predate the `output` field, so infer it from what's inside.
-function guessOutput(c) {
+const TOOL_NAME = { 'podcast': 'Podcast Generator', 'misconceptions': 'Common Misconceptions', 'real-world': 'Real-World Connections',
+  'lesson-hooks': 'Lesson Hooks', 'vocabulary': 'Vocabulary Builder', 'essay-grader': 'Essay Grader', 'lesson-plan': 'Lesson Plan',
+  'activity': 'Activities Creator', 'assignment': 'Assignment Creator' };
+const TOOL_EMOJI = { 'podcast': '🎧', 'misconceptions': '🧠', 'real-world': '🌍', 'lesson-hooks': '🪝', 'vocabulary': '🔤',
+  'essay-grader': '📊', 'lesson-plan': '📋', 'activity': '✨', 'assignment': '✍️' };
+const OUTPUT_OF = { 'podcast': 'script', 'vocabulary': 'cards', 'essay-grader': 'grades' };
+function guessOutput(c, kind) {
   if (!c) return 'markdown';
+  if (Array.isArray(c.entries)) return OUTPUT_OF[kind] || 'doc';
   if (Array.isArray(c.turns)) return 'script';
   if (Array.isArray(c.grades)) return 'grades';
   if (Array.isArray(c.cards) && c.cards[0]?.blocks) return 'doc';
@@ -277,12 +284,12 @@ export default function LibraryPage() {
       </div>
 
       {/* Detail modal */}
-      <Modal open={!!open} onClose={() => setOpen(null)} title={open ? `${open.title || (KIND_META[open.kind] || {}).label || 'Artifact'}` : ''} width={600}>
+      <Modal open={!!open} onClose={() => setOpen(null)} title={open ? `${open.title || (KIND_META[open.kind] || {}).label || 'Artifact'}` : ''} width={open && isTeaching(open) ? 720 : 600}>
         {openLoading && !open?.content ? (
           <p style={{ fontSize: 13, color: C.muted }}>Loading…</p>
         ) : open ? (
           isTeaching(open) && open.content
-            ? <ToolRunner.Result tool={{ key: open.kind, output: open.content?.output || guessOutput(open.content) }} out={open.content} title={open.title} />
+            ? <ToolRunner.Result tool={{ key: open.kind, name: TOOL_NAME[open.kind], emoji: TOOL_EMOJI[open.kind], output: open.content?.output || guessOutput(open.content, open.kind) }} out={open.content} title={open.title} />
             : <ArtifactDetail output={open} />
         ) : null}
       </Modal>
