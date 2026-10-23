@@ -62,6 +62,10 @@ const runValidation = (req, res, next) => {
 
 const now = () => new Date().toISOString();
 
+/** Run a reminder step (workers/sessionNotifier.js) without ever failing the request over it. */
+const reminders = (fn) => import("../../workers/sessionNotifier.js").then(fn)
+  .catch((e) => console.warn("[live-sessions] session reminders:", e.message));
+
 // ─── § VALIDATION RULES ───────────────────────────────────────────────────────
 
 const rules = {
@@ -173,20 +177,14 @@ const sessionHandlers = {
       peak_concurrent:  0,
     });
 
-    // Schedule reminder notifications via BullMQ (imported lazily to avoid circular deps)
-    try {
-      const { sessionQueue } = await import("../workers/sessionNotifier.js");
-      await sessionQueue.add("schedule-reminders", {
-        sessionId:      session.id,
-        scheduledStart: scheduled_start,
-        courseTitle:    course.title,
-        sessionTitle:   title,
-        meetingUrl:     meeting.joinUrl,
-        participantIds: enrollments?.map((e) => e.user_id) ?? [],
-      });
-    } catch (e) {
-      console.warn("[live-sessions] sessionQueue not available:", e.message);
-    }
+    // The 24 h / 1 h / 10 min reminders (workers/sessionNotifier.js; imported lazily to avoid circular deps).
+    await reminders((m) => m.scheduleSessionReminders({
+      sessionId:      session.id,
+      scheduledStart: scheduled_start,
+      courseTitle:    course.title,
+      sessionTitle:   title,
+      meetingUrl:     meeting.joinUrl,
+    }));
 
     console.log(`[live-sessions] ✅ Created session=${session.id}  participants=${enrollments?.length ?? 0}`);
 
@@ -298,6 +296,10 @@ const sessionHandlers = {
       .single();
 
     if (error || !data) return res404(res, "Session not found or not authorised");
+    // A moved session gets fresh reminders; the old ones are dropped (any already queued skip themselves).
+    if (updates.scheduled_start) {
+      await reminders(async (m) => { await m.cancelSessionReminders(sessionId); await m.scheduleSessionReminders({ sessionId, scheduledStart: data.scheduled_start, sessionTitle: data.title }); });
+    }
     res200(res, data);
   }),
 
@@ -330,6 +332,7 @@ const sessionHandlers = {
       .from("live_sessions")
       .update({ status: "cancelled", updated_at: now() })
       .eq("id", sessionId);
+    await reminders((m) => m.cancelSessionReminders(sessionId));
 
     // Notify participants — live socket to anyone in the room…
     const io = req.app.get("io") || global.io || global._io;

@@ -36,7 +36,7 @@ root directory `akoro-api`, build `npm ci`, start `npm start`, health check
 | `JWT_SECRET` | its own value |
 | `AKORO_SELF_TOOLING_ENABLED`, `AKORO_SELF_TOOLING_CODE_ENABLED` | `true`, to test self-tooling |
 | feature flags | the same as production, so the sandbox tests what production runs. Flags left unset on production can stay unset here — e.g. `AKORO_AGENT_NETWORK_ENABLED` defaults to on (only `false` turns it off). |
-| `AKORO_JOBS_ENABLED` | optional: `chat follow-ups worker,self-tool resumes worker` keeps only the workers the gate needs |
+| `AKORO_JOBS_ENABLED` | optional: `chat follow-ups worker,self-tool resumes worker,deferred jobs` keeps only the workers the gate needs (`deferred jobs` releases far-off jobs from Postgres — leave it in) |
 
 Writes stay on test learners in the sandbox too (same policy as production),
 so even a misconfigured sandbox can't change a real account.

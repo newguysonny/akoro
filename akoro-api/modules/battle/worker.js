@@ -22,6 +22,7 @@ import { prepareRuling, ruling, verdict, JUDGE } from "./judge.js";
 import { HP_PER_MISS_DEFAULT } from "./hp.js";
 import { guardWorker } from "../../lib/redisQuotaGuard.js";
 
+import { registerDeferredQueue } from "../../lib/deferredJobs.js";
 // Agents already told they are out of coins this battle (one log line each, not one per question).
 const toldNoCoins = new Set();
 // Each question's embedding, computed once when it goes out and reused by every
@@ -46,6 +47,8 @@ export const battleQueue = new Queue("battles", {
     removeOnFail:     { count: 500 },
   },
 });
+// Far-off expiries, idle cleanups and scheduled starts wait in Postgres (lib/deferredJobs.js).
+registerDeferredQueue(battleQueue);
 
 const worker = new Worker("battles", async (job) => {
   const { action, battleId } = job.data;
@@ -64,7 +67,7 @@ const worker = new Worker("battles", async (job) => {
   concurrency: 10,
   // Reduce idle Redis traffic on per-request-billed providers (Upstash):
   // block the poll longer and check for stalled jobs far less often.
-  drainDelay:  60,                          // seconds the blocking poll waits when idle
+  drainDelay:  300,                         // seconds the idle poll blocks (a new job still wakes it at once)
   stalledInterval: 300_000,   // 5 min between stalled-job scans. Top level: BullMQ ignores it inside `settings`, which left every worker scanning every 30 s.
 });
 // Quota errors pause every worker instead of a 100 ms retry storm (lib/redisQuotaGuard.js).

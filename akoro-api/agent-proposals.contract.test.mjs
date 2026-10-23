@@ -107,7 +107,7 @@ test("step 3 · nightly scheduler is quota-cheap and worker starts at boot", () 
   // one tick, small batch, one nightly window — every cadence knob is
   // env-tunable (AKORO_AUTONOMY_*); defaults: 60s tick, 40/tick, 21:00–22:00
   // Africa/Lagos, 20h per learner
-  assert.match(autonomyIndex, /QUEUE_NAME = "autonomy-cycle"/);
+  assert.match(autonomyIndex, /backgroundQueue\("autonomy-cycle"\)/);   // its kind on the shared background queue
   assert.match(autonomyIndex, /inNightlyWindow/);
   assert.match(autonomyIndex, /setInterval\(async \(\) =>/);
   assert.match(autonomyIndex, /duePlanners\(limit = autonomyCadence\(\)\.batchLimit\)/);
@@ -119,14 +119,9 @@ test("step 3 · nightly scheduler is quota-cheap and worker starts at boot", () 
   assert.match(cadence, /AKORO_AUTONOMY_WINDOW_START_HOUR", 21/);
   assert.match(cadence, /AKORO_AUTONOMY_WINDOW_END_HOUR", 22/);
   assert.match(cadence, /export function inNightlyWindow/);
-  // drainDelay/stalledInterval tuned like the other workers (Redis-quota lesson)
-  assert.match(autonomyIndex, /drainDelay:\s*60,/);   // SECONDS in BullMQ (60_000 was 16 h)
-  assert.match(autonomyIndex, /stalledInterval:\s*300_000/);
-  // the worker MUST carry the traced REDIS_URL connection — BullMQ's
-  // 127.0.0.1:6379 default silently killed the planner on remote-Redis
-  // deploys (jobs enqueued, never processed)
-  assert.match(autonomyIndex, /connection: workerConnection\(\),/);
-  assert.match(autonomyIndex, /connection: queueConnection\(\)/);
+  // The worker is the shared background worker (lib/backgroundQueue.js), which
+  // carries the Redis-quota tuning and the traced REDIS_URL connections.
+  assert.match(autonomyIndex, /handleBackground\("autonomy-cycle", async \(job\) =>/);
   // claims rows atomically so multi-replica deploys cannot double-enqueue
   assert.match(autonomyIndex, /\.update\(\{\s*last_cycle_at: new Date\(\)\.toISOString\(\)\s*\}\)/);
   // boot order: migrations self-run before workers; planner after the L1 worker

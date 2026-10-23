@@ -18,37 +18,25 @@
  * mastery (D50); at most QUIET.MAX_ACTIVE active memories per learner.
  */
 import { budgetState } from "../autonomy/budget.js";
-import { Queue, Worker } from "bullmq";
-import Redis from "ioredis";
+import { backgroundQueue, handleBackground } from "../../lib/backgroundQueue.js";
+import { addLater } from "../../lib/deferredJobs.js";
 
 import db from "../../db.js";
 import { openai } from "../../lib/aiModel.js";
-import { redisConnectionOptions } from "../../lib/redisOptions.js";
-import { traceRedis } from "../../lib/redisTrace.js";
 import { workerJob } from "../../lib/workerLog.js";
-import { guardWorker } from "../../lib/redisQuotaGuard.js";
 import { QUIET, buildQuietLearningMessages, cleanPassResult, quietLearningSchema, readyForPass } from "./quietLearningCore.js";
 
-const QUEUE_NAME = "quiet-learning";
 const edu = () => db.schema("edu");
 const now = () => new Date().toISOString();
 export const quietLearningEnabled = () => String(process.env.QUIET_LEARNING_ENABLED ?? "true").toLowerCase() !== "false";
 
-let redis, workerRedis, queue, worker;
-const connection = (label) => {
-  const r = traceRedis(new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label })), label);
-  r.on("error", (error) => console.error(`[${label} Redis]`, error.message));
-  return r;
-};
-function quietQueue() {
-  if (queue) return queue;
-  redis ||= connection("quiet-learning");
-  queue = new Queue(QUEUE_NAME, {
-    connection: redis,
-    defaultJobOptions: { attempts: 2, backoff: { type: "exponential", delay: 60_000 }, removeOnComplete: true, removeOnFail: { count: 200 } },
-  });
-  return queue;
-}
+let worker;
+// The shared background queue (lib/backgroundQueue.js). The pass waits in
+// Postgres until the chat has settled (lib/deferredJobs.js): a busy chat only
+// pushes its row back, with no Redis call.
+const quietQueue = () => backgroundQueue("quiet-learning", {
+  attempts: 2, backoff: { type: "exponential", delay: 60_000 }, removeOnComplete: true, removeOnFail: { count: 200 },
+});
 
 /** The learner's consent: agent Online and "Learn from my conversations" on. */
 export async function quietLearningConsent(userId) {
@@ -66,6 +54,7 @@ export async function noteChatTurn({ userId, chatSessionId }) {
   try {
     const jobId = `quiet-${chatSessionId}`;
     const q = quietQueue();
+    // A pass already handed to the queue: let it run (it re-checks that the chat settled).
     const existing = await q.getJob(jobId);
     if (existing) {
       const state = await existing.getState();
@@ -73,7 +62,8 @@ export async function noteChatTurn({ userId, chatSessionId }) {
       if (state === "active" || state === "waiting") return { armed: true };
       await existing.remove().catch(() => {});
     }
-    await q.add("pass", { userId, chatSessionId }, { jobId, delay: QUIET.SETTLE_MS });
+    // Waiting in Postgres: replace pushes the same row back by SETTLE_MS.
+    await addLater(q, "pass", { userId, chatSessionId }, { jobId, delay: QUIET.SETTLE_MS, replace: true });
     return { armed: true };
   } catch (error) {
     console.warn("[quiet-learning] could not arm a pass:", error.message);
@@ -195,12 +185,10 @@ async function enforceCap(userId) {
 
 export function startQuietLearningWorker() {
   if (worker) return worker;
-  workerRedis ||= connection("quiet-learning");
-  worker = new Worker(QUEUE_NAME, async (job) => runQuietPass({ userId: job.data?.userId, chatSessionId: job.data?.chatSessionId }), {
-    connection: workerRedis, concurrency: 2, drainDelay: 60, stalledInterval: 300_000,
+  worker = handleBackground("quiet-learning", async (job) => runQuietPass({ userId: job.data?.userId, chatSessionId: job.data?.chatSessionId }), {
+    concurrency: 2,
+    onCompleted: (job, result) => workerJob("quiet-learning", "done", job, { status: result?.status, reason: result?.reason || null }),
+    onFailed: (job, error) => workerJob("quiet-learning", "failed", job, { error: error?.message }),
   });
-  guardWorker(worker, "quiet learning worker");
-  worker.on("completed", (job, result) => workerJob("quiet-learning", "done", job, { status: result?.status, reason: result?.reason || null }));
-  worker.on("failed", (job, error) => workerJob("quiet-learning", "failed", job, { error: error?.message }));
   return worker;
 }

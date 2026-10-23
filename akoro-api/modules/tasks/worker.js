@@ -130,7 +130,7 @@ export const taskWorker = new Worker("task-runner", async (job) => {
   concurrency: 5,
   // Reduce idle Redis traffic on per-request-billed providers (Upstash):
   // block the poll longer and check for stalled jobs far less often.
-  drainDelay:  60,                          // seconds the blocking poll waits when idle
+  drainDelay:  300,                         // seconds the idle poll blocks (a new job still wakes it at once)
   stalledInterval: 300_000,   // 5 min between stalled-job scans. Top level: BullMQ ignores it inside `settings`, which left every worker scanning every 30 s.
 });
 // Quota errors pause every worker instead of a 100 ms retry storm (lib/redisQuotaGuard.js).

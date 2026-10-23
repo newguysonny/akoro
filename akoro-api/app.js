@@ -825,6 +825,29 @@ if (!skipJob("alert worker")) {
     .then((m) => m.startAlertWorker())
     .catch((e) => console.error("[alerts] worker failed to start:", e.message));
 }
+// Far-off queue jobs wait in Postgres and are handed to their queue shortly
+// before they are due (lib/deferredJobs.js) — so no worker polls Redis every
+// 10 s for a job that is days away. Once the workers above have loaded, the
+// boot clean-up moves the old per-module queues' jobs onto the shared
+// background queue and pulls far-off / repeat jobs out of Redis.
+// Live-session reminders (24 h / 1 h / 10 min). Started at boot so its waiting
+// reminders are releasable after a restart, not only once a session is created.
+if (process.env.REDIS_URL && !skipJob("session notifier")) {
+  import("./workers/sessionNotifier.js")
+    .then((m) => { m.startSessionNotifier(); console.log("[sessionNotifier] worker started at boot"); })
+    .catch((e) => console.error("[sessionNotifier] failed to start:", e.message));
+}
+if (process.env.REDIS_URL && !skipJob("deferred jobs")) {
+  import("./lib/deferredJobs.js")
+    .then((m) => { m.startDeferredRelease(); console.log("[deferred-jobs] release clock started (every minute)"); })
+    .catch((e) => console.error("[deferred-jobs] failed to start:", e.message));
+  setTimeout(() => {
+    import("./lib/backgroundMigrate.js")
+      .then((m) => m.migrateBackgroundQueues())
+      .then((r) => console.log("[background-migrate] done", JSON.stringify(r)))
+      .catch((e) => console.warn("[background-migrate] failed:", e.message));
+  }, 30_000).unref?.();
+}
 app.use("/api/student",  standardLimit, studentFeedRouter);
 app.use("/api/tasks",      aiLimit,       tasksModule);
 // Only /plan calls a model; the rest is ordinary CRUD. Putting the whole module

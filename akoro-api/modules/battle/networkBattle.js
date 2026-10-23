@@ -21,6 +21,7 @@ import { cleanHpPerMiss } from "./hp.js";
 import { entryCheck } from "./entry.js";
 import { toCard } from "./card.js";
 
+import { addLater } from "../../lib/deferredJobs.js";
 const IDLE_HOURS = Math.max(1, Number(process.env.BATTLE_IDLE_HOURS ?? 48) || 48);
 
 const now = () => new Date().toISOString();
@@ -168,7 +169,7 @@ export async function createNetworkBattle({ creatorId, opponents = [], joined = 
 
   const q = await queue();
   if (o.scheduledFor) {
-    await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
+    await addLater(q, "expire-battle", { action: "expire-battle", battleId: battle.id },
       { delay: Math.max(0, Date.parse(o.scheduledFor) - Date.now() + EXPIRE_AFTER_START_MS) });
   }
   // Everyone already said yes (a request or circle): start now or at its time.
@@ -177,15 +178,15 @@ export async function createNetworkBattle({ creatorId, opponents = [], joined = 
     // (lobby/scheduled) and flips it live itself. Marking it live first left
     // a full request or circle stuck "live" with no questions ever asked.
     if (scheduled) await db.from("battles").update({ status: "scheduled" }).eq("id", battle.id);
-    await q.add("start-battle", { action: "start-battle", battleId: battle.id },
+    await addLater(q, "start-battle", { action: "start-battle", battleId: battle.id },
       { delay: scheduled ? Math.max(0, Date.parse(o.scheduledFor) - Date.now()) : 3000, jobId: `start-${battle.id}` });
     for (const id of ids) global.io?.to(`user:${id}`).emit("join_battle_room", { battleId: battle.id });
   } else if (!scheduled) {
-    await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
+    await addLater(q, "expire-battle", { action: "expire-battle", battleId: battle.id },
       { delay: IDLE_HOURS * 3600_000, jobId: `idle-${battle.id}` });
   }
   if (!(everyoneIn && (startNowIfReady || scheduled)) && scheduled && o.kind !== "1v1") {
-    await q.add("start-battle", { action: "start-battle", battleId: battle.id },
+    await addLater(q, "start-battle", { action: "start-battle", battleId: battle.id },
       { delay: Math.max(0, Date.parse(o.scheduledFor) - Date.now()), jobId: `start-${battle.id}` });
   }
 

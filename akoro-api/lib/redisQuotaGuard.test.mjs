@@ -27,8 +27,9 @@ test("a quota error pauses every registered worker instead of a retry storm", as
 });
 
 test("every in-app BullMQ worker is guarded and scans for stalled jobs every 5 min (top-level option)", async () => {
-  const files = ["../modules/battle/worker.js", "../modules/autonomy/index.js", "../modules/adaptive-learning/learner-autonomy.js",
-    "../modules/adaptive-learning/chat-follow-ups.js", "./evalWorker.js", "../modules/tasks/worker.js"];
+  // The quiet kinds (follow-ups, check-ins, quiet learning, resumes, evals, the
+  // autonomy cycle) share one worker in lib/backgroundQueue.js.
+  const files = ["../modules/battle/worker.js", "./backgroundQueue.js", "../modules/tasks/worker.js"];
   for (const f of files) {
     const src = await readFile(new URL(f, import.meta.url), "utf8");
     assert.match(src, /guardWorker\(/, f);

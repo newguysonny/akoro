@@ -415,7 +415,7 @@ const worker = new Worker(
     // burns ~40-80k commands/day (5s poll timeouts, 30s stalled scans, 30s
     // lock renewals). Same treatment as the battle worker: block longer,
     // scan stalled jobs far less often.
-    drainDelay:  60,                            // seconds the idle poll blocks
+    drainDelay:  300,                           // seconds the idle poll blocks (a new job still wakes it at once)
     stalledInterval: 300_000,   // 5 min between stalled scans (top level — BullMQ ignores it inside `settings`)
   }
 );
