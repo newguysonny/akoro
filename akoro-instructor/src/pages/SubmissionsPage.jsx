@@ -126,7 +126,7 @@ export default function SubmissionsPage() {
     <PageLayout
       title="Submissions"
       subtitle="Grade submitted work, activity by activity"
-      action={<Btn size="sm" variant="secondary" onClick={() => navigate('/activities')}><Ico ti="ti-clipboard-check" size={14} /> New activity</Btn>}
+      action={<Btn size="sm" variant="secondary" onClick={() => navigate('/chat', { state: { prefill: 'Prepare an assignment on  for my class' } })}><Ico ti="ti-clipboard-check" size={14} /> New activity</Btn>}
     >
       {/* Drafts waiting to be finished — survives closed tabs and dead networks */}
       <NowGrading onResume={resumeDraft} />

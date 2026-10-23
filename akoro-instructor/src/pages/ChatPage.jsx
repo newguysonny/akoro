@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Send, X, Upload, History, Copy, Check, Pencil, Trash2, Cpu } from 'lucide-react';
 import { Ico } from '../theme/Ico.jsx';
 import { Icon } from '../ui/Icon.jsx';
@@ -191,6 +191,16 @@ export default function ChatPage() {
   const skipFollowRef = useRef(false);
   const attachRef = useRef(null);
   const inputRef  = useRef(null);
+  // Other pages hand the agent a starting line (Activities → "Create in chat").
+  const location = useLocation();
+  useEffect(() => {
+    const fill = location.state?.prefill;
+    if (typeof fill !== 'string') return;
+    setInput(fill);
+    setTimeout(() => inputRef.current?.focus(), 0);
+    navigate(location.pathname, { replace: true, state: null });   // a refresh must not refill it
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
 
   // ── Durable conversations ────────────────────────────────────────────────
   // The instructor chat shares the learner session store: the server owns the

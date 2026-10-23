@@ -1,8 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { FileText, ClipboardList, UserCheck, GraduationCap, Presentation, NotebookPen, Library as LibraryIcon } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
-import { Modal } from '../components/Primitives.jsx';
-import { apiGet } from '../services/api.js';
+import { Btn, Modal } from '../components/Primitives.jsx';
+import { ToolRunner } from '../components/teaching/TeachingTools.jsx';
+import ExamResources, { useExamResources } from '../components/library/ExamResources.jsx';
+import { apiGet, apiDelete } from '../services/api.js';
 import { GREEN } from '../constants.js';
 import { C, tint } from '../theme/colors.js';
 import { Ico } from '../theme/Ico.jsx';
@@ -18,8 +21,34 @@ const KINDS = [
   { key: 'assessment', label: 'Assessments',  icon: GraduationCap, ti: 'ti-school' },
   { key: 'attendance', label: 'Attendance',   icon: UserCheck, ti: 'ti-user-check' },
   { key: 'interactive',label: 'Interactive',  icon: Presentation, ti: 'ti-presentation' },
+  // What the teaching tools save when the agent runs them from chat.
+  { key: 'podcast',        label: 'Podcasts',       ti: 'ti-headphones' },
+  { key: 'lesson-hooks',   label: 'Lesson hooks',   ti: 'ti-bulb' },
+  { key: 'misconceptions', label: 'Misconceptions', ti: 'ti-brain' },
+  { key: 'real-world',     label: 'Real-world',     ti: 'ti-world' },
+  { key: 'vocabulary',     label: 'Vocabulary',     ti: 'ti-letter-case' },
+  { key: 'essay-grader',   label: 'Essay grades',   ti: 'ti-writing' },
+  { key: 'activity',       label: 'Activity packs', ti: 'ti-sparkles' },
+  { key: 'assignment',     label: 'Assignment sheets', ti: 'ti-pencil' },
 ];
+const CREATE_STARTS = [
+  { label: 'Lesson plan', fill: 'Make a lesson plan on  for JSS1, 40 minutes' },
+  { label: 'Podcast', fill: 'Make a 5 minute podcast about  for ' },
+  { label: 'Lesson hooks', fill: 'Give me lesson hooks for ' },
+  { label: 'Vocabulary list', fill: 'Make a vocabulary list for ' },
+];
+// Saved payloads predate the `output` field, so infer it from what's inside.
+function guessOutput(c) {
+  if (!c) return 'markdown';
+  if (Array.isArray(c.turns)) return 'script';
+  if (Array.isArray(c.grades)) return 'grades';
+  if (Array.isArray(c.cards) && c.cards[0]?.blocks) return 'doc';
+  if (Array.isArray(c.cards)) return 'cards';
+  return 'markdown';
+}
+const isTeaching = (row) => String(row?.tool || '').startsWith('teaching_');
 const KIND_META = Object.fromEntries(KINDS.map((k) => [k.key, k]));
+KIND_META['lesson-plan'] = KIND_META.lesson_plan;   // the teaching tool's key for the same thing
 
 const fmtDate = (d) => {
   try {
@@ -136,6 +165,9 @@ function ArtifactDetail({ output }) {
 
 /* ─── Main page ───────────────────────────────────────────────────── */
 export default function LibraryPage() {
+  const navigate = useNavigate();
+  const exam = useExamResources();
+  const [tab, setTab]         = useState('resources');   // resources | exam
   const [kind, setKind]       = useState('all');
   const [items, setItems]     = useState([]);
   const [loading, setLoading] = useState(true);
@@ -144,14 +176,21 @@ export default function LibraryPage() {
 
   const load = useCallback(() => {
     setLoading(true);
-    const q = kind === 'all' ? '' : `?kind=${kind}`;
-    apiGet(`/api/instructor/tools/outputs${q}`)
-      .then((res) => setItems(res.outputs || []))
+    // Lesson plans were saved as `lesson_plan` before the teaching tools and as `lesson-plan` since.
+    const kinds = kind === 'all' ? [''] : kind === 'lesson_plan' ? ['lesson_plan', 'lesson-plan'] : [kind];
+    Promise.all(kinds.map((k) => apiGet(`/api/instructor/tools/outputs${k ? `?kind=${k}` : ''}`).then((res) => res.outputs || [])))
+      .then((lists) => setItems(lists.flat().sort((a, b) => new Date(b.created_at) - new Date(a.created_at))))
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
   }, [kind]);
 
   useEffect(() => { load(); }, [load]);
+
+  const removeOutput = async (row, e) => {
+    e.stopPropagation();
+    setItems((xs) => xs.filter((x) => x.id !== row.id));
+    try { await apiDelete(`/api/teaching/tools/outputs/${row.id}`); } catch { load(); }
+  };
 
   const openArtifact = async (row) => {
     setOpenLoading(true);
@@ -164,10 +203,26 @@ export default function LibraryPage() {
   };
 
   return (
-    <PageLayout title="Library" subtitle="Everything your agent has created">
+    <PageLayout
+      title="Library"
+      subtitle="What your agent has created, and your exam resources"
+      action={<Btn size="sm" onClick={() => navigate('/chat', { state: { prefill: '' } })}><Ico ti="ti-sparkles" size={14} /> Create in chat</Btn>}
+    >
       <div style={{ maxWidth: 720, margin: '0 auto' }}>
+        {/* Resources / Exam resources */}
+        <div role="tablist" style={{ display: 'flex', background: C.surface, borderRadius: 12, padding: 4, marginBottom: 16, border: `1px solid ${C.border}`, gap: 4 }}>
+          {[['resources', 'My resources'], ['exam', `Exam resources${exam.items && exam.items.length ? ` (${exam.items.length})` : ''}`]].map(([k, label]) => (
+            <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)} style={{
+              flex: 1, padding: '9px 0', borderRadius: 9, border: 'none', background: tab === k ? C.brand : 'transparent',
+              color: tab === k ? '#fff' : C.muted2, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONTF,
+            }}>{label}</button>
+          ))}
+        </div>
+
+        {tab === 'exam' && <ExamResources items={exam.items} />}
+
         {/* Kind filter */}
-        <div style={{ display: 'flex', gap: 7, overflowX: 'auto', paddingBottom: 8, marginBottom: 16, scrollbarWidth: 'none' }}>
+        {tab === 'resources' && <div style={{ display: 'flex', gap: 7, overflowX: 'auto', paddingBottom: 8, marginBottom: 16, scrollbarWidth: 'none' }}>
           {KINDS.map((k) => {
             const active = kind === k.key;
             return (
@@ -180,10 +235,10 @@ export default function LibraryPage() {
               </button>
             );
           })}
-        </div>
+        </div>}
 
         {/* List */}
-        {loading ? (
+        {tab === 'resources' && (loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {[0, 1, 2, 3].map((i) => <div key={i} style={{ height: 64, borderRadius: 14, background: C.tagBg, animation: 'pulse-dot 1.5s ease-in-out infinite' }} />)}
           </div>
@@ -191,7 +246,12 @@ export default function LibraryPage() {
           <div style={{ textAlign: 'center', padding: '56px 24px', color: C.muted2 }}>
             <Ico ti="ti-books" size={40} color="#D1D5DB" style={{ marginBottom: 14 }} />
             <p style={{ fontSize: 15, fontWeight: 700, color: C.muted, margin: '0 0 4px' }}>Nothing saved yet</p>
-            <p style={{ fontSize: 13, margin: 0 }}>Ask your agent to create a lesson plan, worksheet or report — it'll appear here.</p>
+            <p style={{ fontSize: 13, margin: '0 0 14px' }}>Ask your agent to create a lesson plan, podcast or hooks — it'll appear here.</p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+              {CREATE_STARTS.map((c) => (
+                <button key={c.label} onClick={() => navigate('/chat', { state: { prefill: c.fill } })} style={{ padding: '6px 13px', borderRadius: 20, border: `1.5px solid ${C.border}`, background: C.surface, color: C.brand, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONTF }}>{c.label}</button>
+              ))}
+            </div>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -203,16 +263,17 @@ export default function LibraryPage() {
                   background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '13px 15px',
                   cursor: 'pointer', fontFamily: FONTF, boxShadow: '0 1px 4px rgba(0,0,0,.04)',
                 }}>
-                  <div style={{ width: 42, height: 42, flexShrink: 0, borderRadius: 11, background: tint(7), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{meta.icon ? <Ico lucide={meta.icon} ti={meta.ti} size={20} color={C.brand} /> : <Ico ti="ti-file-text" size={20} color={C.brand} />}</div>
+                  <div style={{ width: 42, height: 42, flexShrink: 0, borderRadius: 11, background: tint(7), display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ico lucide={meta.icon} ti={meta.ti || 'ti-file-text'} size={20} color={C.brand} /></div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 800, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.title || meta.label}</div>
                     <div style={{ fontSize: 12, color: C.muted2, marginTop: 2 }}>{meta.label}{row.subject ? ` · ${row.subject}` : ''} · {fmtDate(row.created_at)}</div>
                   </div>
+                  {isTeaching(row) && <span role="button" tabIndex={0} title="Delete" aria-label="Delete" onClick={(e) => removeOutput(row, e)} style={{ color: C.muted2, padding: 6, display: 'flex', flexShrink: 0 }}><Ico ti="ti-trash" size={15} /></span>}
                 </button>
               );
             })}
           </div>
-        )}
+        ))}
       </div>
 
       {/* Detail modal */}
@@ -220,7 +281,9 @@ export default function LibraryPage() {
         {openLoading && !open?.content ? (
           <p style={{ fontSize: 13, color: C.muted }}>Loading…</p>
         ) : open ? (
-          <ArtifactDetail output={open} />
+          isTeaching(open) && open.content
+            ? <ToolRunner.Result tool={{ key: open.kind, output: open.content?.output || guessOutput(open.content) }} out={open.content} title={open.title} />
+            : <ArtifactDetail output={open} />
         ) : null}
       </Modal>
     </PageLayout>

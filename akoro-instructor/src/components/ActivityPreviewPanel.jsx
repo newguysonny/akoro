@@ -19,7 +19,7 @@ import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
 import { GREEN, PURPLE, RED } from '../constants.js';
 import { C, tint } from '../theme/colors.js';
 import { Ico } from '../theme/Ico.jsx';
-import { ActivityForm, byKey, rowsFromQuestions } from '../pages/ActivitiesPage.jsx';
+import { ActivityForm, byKey, rowsFromQuestions } from './activities/ActivityForm.jsx';
 import DraftVersions, { versionsOf } from './paper/DraftVersions.jsx';
 import { apiPut } from '../services/api.js';
 import BattleForm from './battles/BattleForm.jsx';

@@ -20,7 +20,7 @@ import PaperFrame from './PaperFrame.jsx';
 import { apiBlob } from '../../services/api.js';
 
 import PaperBuilder from './PaperBuilder.jsx';
-import { rowsFromQuestions, cleanPaper } from '../../pages/ActivitiesPage.jsx';
+import { rowsFromQuestions, cleanPaper } from '../activities/ActivityForm.jsx';
 
 export const versionsOf = (draft) => (Array.isArray(draft?.payload?.versions) ? draft.payload.versions : []);
 

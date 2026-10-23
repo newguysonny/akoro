@@ -14,9 +14,7 @@ import SalesPage     from './pages/SalesPage.jsx';
 import OrderHistoryPage from './pages/OrderHistoryPage.jsx';
 import StudentsPage from './pages/StudentsPage.jsx';
 import JoinRequestsPage from './pages/JoinRequestsPage.jsx';
-import BattlesPage  from './pages/BattlesPage.jsx';
 import TasksPage    from './pages/TasksPage.jsx';
-import SelfStudyPage from './pages/SelfStudyPage.jsx';
 import ActivitiesPage from './pages/ActivitiesPage.jsx';
 import GradebookPage from './pages/GradebookPage.jsx';
 import SubmissionsPage from './pages/SubmissionsPage.jsx';
@@ -30,7 +28,6 @@ import WalletPage         from './pages/WalletPage.jsx';
 import PurchaseCheckoutPage from './pages/PurchaseCheckoutPage.jsx';
 import LessonReviewPage from './pages/LessonReviewPage.jsx';
 import ProfilePage        from './pages/ProfilePage.jsx';
-import MarketplacePage     from './pages/MarketplacePage.jsx';
 import AppCenterPage       from './pages/AppCenterPage.jsx';
 import LibraryPage         from './pages/LibraryPage.jsx';
 import NotificationsPage  from './pages/NotificationsPage.jsx';
@@ -39,6 +36,13 @@ import { StudentAttendancePage, BehaviorRecordsPage } from './pages/mgmt/student
 import StudentProfilePage from './pages/mgmt/StudentProfilePage.jsx';
 import PrivacyPolicyPage  from './pages/PrivacyPolicyPage.jsx';
 import TermsOfServicePage from './pages/TermsOfServicePage.jsx';
+
+/* The old Tools & Assets address: purchases still return to /marketplace?tool_ref=…,
+   so carry the query to the App Center, which verifies the payment. */
+function MarketplaceRedirect() {
+  const { search } = useLocation();
+  return <Navigate to={`/apps${search}`} replace />;
+}
 
 /* ── ProtectedRoute ─────────────────────────────────────────────────── */
 const INSTRUCTOR_ROLES = ['instructor', 'admin'];
@@ -117,9 +121,11 @@ function AppRoutes() {
       <Route path="/orders" element={<ProtectedRoute><OrderHistoryPage /></ProtectedRoute>} />
       {/* Students now live under Management → My Students. */}
       <Route path="/students" element={<Navigate to="/mgmt/students" replace />} />
-      <Route path="/battles" element={<ProtectedRoute><BattlesPage /></ProtectedRoute>} />
+      {/* Battles live in Activities now (type = battle). */}
+      <Route path="/battles" element={<Navigate to="/activities?type=battle" replace />} />
       <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
-      <Route path="/self-study" element={<ProtectedRoute><SelfStudyPage /></ProtectedRoute>} />
+      {/* AI Self Study is an activity type now. */}
+      <Route path="/self-study" element={<Navigate to="/activities?type=self_study" replace />} />
       <Route path="/activities" element={<ProtectedRoute><ActivitiesPage /></ProtectedRoute>} />
       {/* Dedicated pages for flows that used to be modals */}
       <Route path="/activities/detail" element={<ProtectedRoute><ActivitiesPage /></ProtectedRoute>} />
@@ -151,7 +157,8 @@ function AppRoutes() {
       <Route path="/settings"       element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
       <Route path="/agent-tools"    element={<ProtectedRoute><AgentToolsPage /></ProtectedRoute>} />
       <Route path="/profile"        element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-      <Route path="/marketplace"    element={<ProtectedRoute><MarketplacePage /></ProtectedRoute>} />
+      {/* Tools & Assets is retired: the payment return (?tool_ref) lands in the App Center. */}
+      <Route path="/marketplace"    element={<MarketplaceRedirect />} />
       <Route path="/apps"           element={<ProtectedRoute><AppCenterPage /></ProtectedRoute>} />
       <Route path="/library"        element={<ProtectedRoute><LibraryPage /></ProtectedRoute>} />
       <Route path="/notifications"  element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />

@@ -392,7 +392,7 @@ export default function GradebookPage() {
       <div className="gb-shell">
         {/* ── Sidebar: filters + class rail ── */}
         <aside style={{ width: 240, flexShrink: 0, position: 'sticky', top: 0 }}>
-          <Btn style={{ width: '100%', marginBottom: 16 }} onClick={() => navigate('/activities')}>
+          <Btn style={{ width: '100%', marginBottom: 16 }} onClick={() => navigate('/chat', { state: { prefill: 'Prepare an assignment on  for my class' } })}>
             <Ico ti="ti-plus" size={13} /> Add Assignment
           </Btn>
 
@@ -476,7 +476,7 @@ export default function GradebookPage() {
           ) : !assignments.length ? (
             <EmptyState icon={<Ico ti="ti-inbox" size={36} color="#9490A0" />} title="No activities in this class yet"
               sub="Assign work from the activities workbench and it lands here."
-              action={<Btn size="sm" onClick={() => navigate('/activities')}><Ico ti="ti-plus" size={13} /> Add Assignment</Btn>} />
+              action={<Btn size="sm" onClick={() => navigate('/chat', { state: { prefill: 'Prepare an assignment on  for my class' } })}><Ico ti="ti-plus" size={13} /> Add Assignment</Btn>} />
           ) : !students.length ? (
             <EmptyState icon={<Ico ti="ti-users" size={36} color="#9490A0" />} title="No learners assigned yet"
               sub="This class's activities have no learners on them — assign them from the workbench." />

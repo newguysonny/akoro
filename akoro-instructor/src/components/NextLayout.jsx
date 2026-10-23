@@ -27,7 +27,6 @@ export function instructorNav({ isAdmin = false, joinRequests = 0 } = {}) {
         { label: 'Schedule sessions', to: '/courses/schedule' },
         ...(isAdmin ? [{ label: 'Review Queue', to: '/course-creator/review' }] : []),
       ] },
-      { key: 'battles', label: 'Battles', to: '/battles', icon: 'battles' },
       { key: 'agent', label: 'Agent', to: '/chat', icon: 'agent', dot: true },
     ] },
     { section: 'Teaching', items: [
@@ -51,7 +50,6 @@ export function instructorNav({ isAdmin = false, joinRequests = 0 } = {}) {
       { key: 'activities', label: 'Activities', to: '/activities', icon: 'activities' },
       { key: 'submissions', label: 'Submissions', to: '/submissions', ti: 'ti-clipboard-check' },
       { key: 'tasks', label: 'Tasks', to: '/tasks', ti: 'ti-checkbox' },
-      { key: 'self-study', label: 'AI Self Study', to: '/self-study', ti: 'ti-sparkles' },
       { key: 'assessments', label: 'Assessments', to: '/assessments', ti: 'ti-shield-check' },
       { key: 'documents', label: 'Documents', to: '/documents', ti: 'ti-file-text' },
       { key: 'library', label: 'Library', to: '/library', ti: 'ti-library' },
@@ -59,14 +57,13 @@ export function instructorNav({ isAdmin = false, joinRequests = 0 } = {}) {
     { section: 'More', items: [
       { key: 'wallet', label: 'Wallet & Credits', to: '/wallet', icon: 'wallet' },
       { key: 'sales', label: 'Sales & Earnings', to: '/sales', ti: 'ti-chart-line' },
-      { key: 'marketplace', label: 'Tools & Assets', to: '/marketplace', ti: 'ti-building-store' },
       { key: 'apps', label: 'App Center', to: '/apps', ti: 'ti-apps' },
       { key: 'profile', label: 'Profile', to: '/profile', ti: 'ti-user-circle' },
       { key: 'settings', label: 'Settings', to: '/settings', icon: 'settings' },
     ] },
   ];
 }
-export const INSTRUCTOR_BOTTOM = ['home', 'course-creator', 'battles', 'agent'];
+export const INSTRUCTOR_BOTTOM = ['home', 'course-creator', 'activities', 'agent'];
 
 /* Unread notifications for the bell — refetched on the server's push, like the legacy BellButton. */
 function useUnreadNotifications(userId) {
@@ -93,7 +90,7 @@ function useCoins() {
   return coins;
 }
 
-/* The shared cart's item count (instructors buy Tools & Assets; the cart opens the marketplace). */
+/* The shared cart's item count (instructors buy tools and assets in the App Center; the cart opens it). */
 function useCartCount() {
   const [n, setN] = useState(0);
   useEffect(() => { apiGet('/api/cart').then((r) => setN((r?.data ?? r)?.item_count ?? 0)).catch(() => {}); }, []);
@@ -136,7 +133,7 @@ export default function NextLayout({ children, title, subtitle, action, bare = f
       headerRight={(
         <>
           {coins != null && <CoinPill coins={coins} low={coins < 50} onClick={() => navigate('/wallet')}/>}
-          <CartButton count={cart} onClick={() => navigate('/marketplace')}/>
+          <CartButton count={cart} onClick={() => navigate('/apps')}/>
           <BellButton count={unread} onClick={() => navigate('/notifications')}/>
           <AgentToggle online={agent.online} loaded={agent.loaded} saving={agent.saving} onToggle={agent.toggle}
             onTitle="Agent online: it watches your classes and proposes next steps (missing work, low scores) for you to approve."

@@ -153,7 +153,7 @@ export default function HomePage() {
                 <QuickAction icon={BookOpen} ti="ti-books" label="New course" desc="Build it in Course Creator" color={C.brand} onClick={() => navigate('/course-creator/courses/new')} />
                 <QuickAction icon={Eye} ti="ti-eye" label="View Students"    desc="Manage your enrolled learners" color={BLUE} onClick={() => navigate('/mgmt/students')} />
                 <QuickAction icon={Plus} ti="ti-user-plus" label="Add Student"      desc="Enroll a new learner"         color={GREEN}  onClick={() => navigate('/mgmt/students?add=1')} />
-                <QuickAction icon={Swords} ti="ti-swords" label="Create Battle"    desc="Launch a quiz battle"         color={PURPLE} onClick={() => navigate('/battles')} />
+                <QuickAction icon={Swords} ti="ti-swords" label="Create Battle"    desc="Ask your agent to set one"    color={PURPLE} onClick={() => navigate('/chat', { state: { prefill: 'Set a battle on  for my class' } })} />
                 <QuickAction icon={Video} ti="ti-calendar-plus" label="Schedule a session" desc="Add a live session to a course" color={BLUE} onClick={() => navigate('/courses/schedule')} />
                 <QuickAction icon={Bot} ti="ti-robot" label="AI Assistant"     desc="Chat with your AI tutor"      color={C.brand}  onClick={() => navigate('/chat')} />
               </div>

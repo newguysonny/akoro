@@ -17,6 +17,7 @@ export const STARTERS = [
   { label: 'Assignment: 3 MCQ, 2 theory', fill: 'Prepare an assignment on  for my class — 5 questions: 3 MCQ, 2 direct theory' },
   { label: 'With diagrams', fill: 'Prepare an assignment on  for my class — 6 questions, 2 with diagrams' },
   { label: 'True/False + case study', fill: 'Prepare an assignment on  for my class — 4 true/false and a case study with 2 questions' },
+  { label: 'Lesson plan', fill: 'Make a lesson plan on  for JSS1, 40 minutes' },
   { label: 'Draft a quiz', fill: 'Draft a 10-question quiz for ' },
   { label: 'Prep this week\'s activities', fill: 'Prep this week\'s activities — ' },
   { label: 'Last assignment results', fill: 'How did the last assignment go? ' },
