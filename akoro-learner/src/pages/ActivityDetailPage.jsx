@@ -99,7 +99,7 @@ const FILE_OK = /\.(pdf|jpe?g|png|docx|txt)$/i;
 function Chip({ children, dot }) {
   return (
     <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 20,
+      display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 20,
       background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.22)',
       fontSize: 11, fontWeight: 800, color: '#fff', fontFamily: "'Nunito',sans-serif",
     }}>
@@ -920,27 +920,23 @@ export default function ActivityDetailPage() {
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'var(--ak-bg)', display: 'flex', flexDirection: 'column', fontFamily: "'Nunito',sans-serif" }}>
-      {/* ── Hero ── */}
-      <div style={{
-        position: 'relative', flexShrink: 0, padding: '46px 22px 46px', color: '#fff', overflow: 'hidden',
-        background: `radial-gradient(130% 170% at 15% -15%, ${t.light} 0%, ${t.mid} 55%, ${t.dark} 100%)`,
-      }}>
-        <div style={{ position: 'absolute', top: -26, right: -26, width: 170, height: 170, opacity: 0.14, pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Icon name={t.icon} size={150} color="#fff"/>
-        </div>
-        <button onClick={() => navigate('/activities')} aria-label="Back"
-          style={{ position: 'absolute', top: 14, left: 16, width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.26)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', cursor: 'pointer', zIndex: 2 }}>
-          <Icon name="ti-chevron-left" size={16}/>
-        </button>
-        <div style={{ position: 'relative', zIndex: 1, maxWidth: 760, margin: '0 auto' }}>
-          <div style={{ width: 50, height: 50, borderRadius: 16, background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.26)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14, boxShadow: '0 10px 22px -8px rgba(0,0,0,.3)' }}>
-            <Icon name={t.icon} size={23} color="#fff"/>
+      {/* ── Header band — compact: back, type, title and the facts, in the type's colour ── */}
+      <div style={{ flexShrink: 0, padding: 'calc(10px + env(safe-area-inset-top)) 14px 0' }}>
+        <div style={{
+          position: 'relative', maxWidth: 760, margin: '0 auto', padding: '14px 18px 16px', color: '#fff', overflow: 'hidden', borderRadius: 18,
+          background: `linear-gradient(135deg, ${t.mid}, ${t.dark})`,
+        }}>
+          <div aria-hidden style={{ position: 'absolute', right: -34, top: -46, width: 150, height: 150, borderRadius: '50%', background: 'rgba(255,255,255,.12)', pointerEvents: 'none' }}/>
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}>
+            <button onClick={() => navigate('/activities')} aria-label="Back"
+              style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.26)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', cursor: 'pointer', flexShrink: 0, padding: 0 }}>
+              <Icon name="ti-chevron-left" size={15}/>
+            </button>
+            <Icon name={t.icon} size={14} color="#fff"/>
+            <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', opacity: 0.92 }}>{t.label}</span>
           </div>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 11px', borderRadius: 20, background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.26)', fontSize: 10.5, fontWeight: 800, marginBottom: 10 }}>
-            {t.label}
-          </div>
-          <h2 style={{ fontSize: 19, fontWeight: 900, margin: '0 0 12px', letterSpacing: '-0.01em', lineHeight: 1.3 }}>{row.title}</h2>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <h2 style={{ position: 'relative', fontSize: 19, fontWeight: 900, margin: '0 0 10px', letterSpacing: '-0.01em', lineHeight: 1.3 }}>{row.title}</h2>
+          <div style={{ position: 'relative', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {due && <Chip dot="#F59E0B">Due {due}</Chip>}
             <Chip dot={st.color}>{st.label}</Chip>
             {row.subject && <Chip>{row.subject}</Chip>}
@@ -950,7 +946,7 @@ export default function ActivityDetailPage() {
       </div>
 
       {/* ── Sheet ── */}
-      <div ref={sheetRef} style={{ flex: 1, overflowY: 'auto', background: 'var(--ak-bg)', borderRadius: '24px 24px 0 0', marginTop: -18, position: 'relative', zIndex: 2 }}>
+      <div ref={sheetRef} style={{ flex: 1, overflowY: 'auto', background: 'var(--ak-bg)' }}>
         <div style={{ maxWidth: 760, margin: '0 auto', padding: '22px 20px 24px' }}>
           {(row.instructions || row.details) && (
             <p style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--ak-text-muted)', lineHeight: 1.6, margin: '0 0 20px' }}>
