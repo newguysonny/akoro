@@ -4,8 +4,8 @@
  * and everything is scoped under .ccroot so nothing leaks into the
  * instructor shell. Same cards, same components, same layout as the
  * reference — only the brand changed: the Kpemu purple/Inter palette is
- * swapped for the Akoro instructor brand (amber #E8884A accent on ink
- * #1A1A2E text, DM Sans, the dashboard's warm border and pill tones).
+ * swapped for the app's theme tokens (the learner purple, text, borders
+ * and Nunito; light and dark).
  * Structural adoption: the root is a centred column inside the instructor
  * PageLayout (the reference's own 760px main) and navigation lives in the
  * dashboard sidebar's "Course Creator" group.
@@ -13,7 +13,7 @@
 .ccroot{
   --bg:var(--ak-surface);--text:var(--ak-text);--muted:var(--ak-text-sub);--border:var(--ak-border2);--pill:var(--ak-bg);
   --fg:var(--ak-brand);--btn:var(--ak-surface);--warn:#c2740c;--ok:#10B981;
-  color:var(--text);font:15px/1.5 'DM Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  color:var(--text);font:15px/1.5 var(--ak-font,'DM Sans'),system-ui,-apple-system,'Segoe UI',sans-serif;
   max-width:760px;margin:0 auto;padding:28px 20px 80px}
 .ccroot *{box-sizing:border-box}
 .ccroot button,.ccroot input,.ccroot select,.ccroot textarea{font:inherit;color:inherit}
@@ -76,5 +76,3 @@
 .ccroot .pb u{text-decoration:none;border-bottom:2px solid #F3C9A8;line-height:1.2}
 .ccroot .lnk{color:var(--fg);cursor:pointer;text-decoration:underline;text-underline-offset:2px;background:none;border:0;padding:0;font-size:inherit}
 @media (prefers-reduced-motion:reduce){.ccroot .ccard,.ccroot .scard,.ccroot .chv{transition:none}}
-/* The next look: the learner font (the legacy stack is left as is). */
-.ccroot:is([data-ui="next"] *){font-family:var(--ak-font)}

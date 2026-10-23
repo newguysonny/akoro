@@ -1,7 +1,6 @@
 /**
- * colors.js — colour names for pages that follow the legacy/next switch.
- * Each is a theme variable: today's colour on legacy (legacyVars.js), the
- * learner app's on next. Use these instead of constants.js's AMBER, INK…
+ * colors.js — the app's colour names. Each is a theme variable from the
+ * learner app's set (light + dark). Use these instead of constants.js's AMBER, INK…
  * (reference/Akoro Console Rebuild — Plan.md, Phase 3 mapping):
  *
  *   AMBER → C.brand     INK → C.ink        MUTED → C.muted    MUTED2 → C.muted2
@@ -9,7 +8,7 @@
  *   FONT → C.font       `${AMBER}18` → tint(9)   `${X}44` → tint(27, X)
  *
  * White TEXT on a coloured button stays '#fff'. Status hues (GREEN, RED,
- * BLUE, PURPLE, GOLD) stay as they are — they read on both themes.
+ * BLUE, PURPLE, GOLD) stay as they are — they read on light and dark.
  */
 export { tint } from '../ui/tokens.js';
 
@@ -31,7 +30,7 @@ export const C = {
   inputBg: 'var(--ak-input-bg)',
   tagBg: 'var(--ak-tag-bg)',
   font: 'var(--ak-font)',
-  // The older "Bachs" palette (a few screens): blue + Inter on legacy, the learner look on next.
+  // The older "Bachs" palette names (a few screens): the learner tokens (instructorVars.js).
   bxPrimary: 'var(--ak-bx-primary)',
   bxInk: 'var(--ak-bx-ink)',
   bxMuted: 'var(--ak-bx-muted)',

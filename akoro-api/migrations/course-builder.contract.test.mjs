@@ -21,7 +21,7 @@ const [migration, manifest, routes, app, section, sectionCss, appJsx, layoutJsx,
   read("../../akoro-instructor/src/pages/course-creator/index.jsx"),
   read("../../akoro-instructor/src/pages/course-creator/cc.css"),
   read("../../akoro-instructor/src/App.jsx"),
-  read("../../akoro-instructor/src/components/Layout.jsx"),
+  read("../../akoro-instructor/src/components/NextLayout.jsx"),   // the nav (instructorNav)
   read("../../akoro-admin/src/pages/course-approvals/index.jsx"),
   read("../../akoro-admin/src/pages/course-approvals/ca.css"),
   read("../../akoro-admin/src/App.jsx"),
@@ -89,7 +89,7 @@ test("instructor app: the Course Creator section is wired in", () => {
   assert.ok(layoutJsx.includes("'/course-creator/library'"), "Content Library child");
   // Review Queue only ever appears for admin sessions.
   assert.ok(layoutJsx.includes("'/course-creator/review'"), "Review Queue child");
-  assert.ok(/user\?\.role === 'admin'[\s\S]{0,300}Review Queue/.test(layoutJsx), "review queue is admin-only");
+  assert.ok(/isAdmin \? \[\{ label: 'Review Queue'/.test(layoutJsx) && layoutJsx.includes("isAdmin: user?.role === 'admin'"), "review queue is admin-only");
 });
 
 test("section: every page of the prototype is ported", () => {

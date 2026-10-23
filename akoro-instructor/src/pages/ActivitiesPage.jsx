@@ -1065,7 +1065,6 @@ function DraftsStrip({ refreshKey, onResolved }) {
           </button>
         ))}
       </div>
-      )}
     </div>
   );
 }

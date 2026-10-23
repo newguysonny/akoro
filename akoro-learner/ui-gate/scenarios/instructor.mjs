@@ -9,10 +9,10 @@
  */
 import { historyPagesCheck } from './chat.mjs';
 
-// Every instructor route with no id in it (the console rebuild's baseline and
-// its legacy/next pairs — reference/Akoro Console Rebuild — Plan.md).
+// Every instructor route with no id in it (the console rebuild's screenshots —
+// reference/Akoro Console Rebuild — Plan.md). /courses* redirect to Course Creator.
 export const INSTRUCTOR_ROUTES = [
-  '/', '/courses', '/courses/schedule', '/courses/manage', '/course-creator', '/course-creator/courses', '/course-creator/library',
+  '/', '/courses/schedule', '/course-creator', '/course-creator/courses', '/course-creator/library',
   '/sales', '/orders', '/students', '/battles', '/tasks', '/self-study', '/activities', '/submissions', '/wallet',
   '/lesson-review', '/documents', '/assessments', '/chat',
   '/mgmt/students', '/mgmt/join-requests', '/mgmt/attendance', '/mgmt/behavior', '/mgmt/curriculum', '/mgmt/syllabus',
@@ -24,10 +24,9 @@ export const scenarios = [
   {
     name: 'instructor.routes_baseline',
     portal: 'instructor',
-    description: 'A screenshot of every instructor route (no ids) — the console rebuild\'s before/after record. UI_GATE_UI=legacy|next adds ?ui= to each; UI_GATE_THEME=dark sets the dark theme; UI_GATE_ROUTES=/,/chat limits the routes. For a person to look at; a route that throws is a failed check.',
+    description: 'A screenshot of every instructor route (no ids) — the console rebuild\'s record. UI_GATE_THEME=dark sets the dark theme; UI_GATE_ROUTES=/,/chat limits the routes. For a person to look at; a route that throws is a failed check.',
     async run(t) {
       const { page } = t;
-      const ui = process.env.UI_GATE_UI || '';
       const theme = process.env.UI_GATE_THEME || '';
       if (theme) await page.addInitScript((m) => { try { localStorage.setItem('akoro_display_mode', m); } catch { /* private mode */ } }, theme);
       const errors = [];
@@ -37,11 +36,10 @@ export const scenarios = [
       const crashed = [];
       const only = (process.env.UI_GATE_ROUTES || '').split(',').map((r) => r.trim()).filter(Boolean);
       for (const route of only.length ? INSTRUCTOR_ROUTES.filter((r) => only.includes(r)) : INSTRUCTOR_ROUTES) {
-        const url = `${t.app}${route}${ui ? `${route.includes('?') ? '&' : '?'}ui=${ui}` : ''}`;
-        await page.goto(url, { waitUntil: 'domcontentloaded' }).catch(() => {});
+        await page.goto(`${t.app}${route}`, { waitUntil: 'domcontentloaded' }).catch(() => {});
         await page.waitForTimeout(2500);
         if (await page.getByText('This page ran into a problem').first().isVisible().catch(() => false)) crashed.push(route);
-        await t.shot(`${(route === '/' ? 'home' : route.slice(1)).replace(/\//g, '_')}${ui ? `.${ui}` : ''}${theme ? `.${theme}` : ''}`);
+        await t.shot(`${(route === '/' ? 'home' : route.slice(1)).replace(/\//g, '_')}${theme ? `.${theme}` : ''}`);
       }
       t.note(`${INSTRUCTOR_ROUTES.length} routes`);
       if (errors.length) t.note(`errors: ${errors.slice(0, 8).join(' | ')}`);

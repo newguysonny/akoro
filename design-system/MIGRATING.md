@@ -6,8 +6,10 @@ onto the shared theme so it follows the `?ui=` switch. Read with
 
 ## The one rule
 
-**On `?ui=legacy` the page must look exactly as it does today. On `?ui=next`
-it takes the learner app's look (purple, Nunito, light and dark).**
+**The page takes the learner app's look (purple, Nunito, light and dark).**
+(The instructor app was flipped on 2026-10-23: it has no legacy look or
+`?ui=` switch any more. A console still on its old look keeps that rule
+until its own flip: legacy unchanged, next the learner's.)
 
 Behaviour, routes, API calls, text and layout do not change. This is colours,
 fonts and icons only.
@@ -17,8 +19,7 @@ fonts and icons only.
 | File | What it gives you |
 |---|---|
 | `src/theme/colors.js` | `C.*` colour names (theme variables) and `tint(pct, color?)` |
-| `src/theme/Ico.jsx` | `<Ico lucide={X} ti="ti-x" size={16} color={…}/>`: today's lucide icon on legacy, the learner's Tabler glyph on next |
-| `src/theme/uiMode.js` | `isNextUi()`, only if a page truly needs to branch (rare; ask first) |
+| `src/theme/Ico.jsx` | `<Ico ti="ti-x" size={16} color={…}/>`: the learner's Tabler glyph |
 | `scripts/tokenize-colors.mjs` | the mechanical step (below) |
 | `src/ui/` | the shared kit. Generated: never edit it in an app |
 
@@ -62,9 +63,8 @@ fonts and icons only.
 - **Status hues stay:** `GREEN`, `RED`, `BLUE`, `PURPLE`, `GOLD`, and their
   pastel pills (`#DCFCE7`, `#FEE2E2`, `#FEF3C7`…). They read on both themes.
 - **Inline grey hexes** (`'#F3F4F6'`, `'#E5E7EB'`, `'#6B7280'`…): use the
-  nearest `C.*` (`C.tagBg`, `C.borderSoft`, `C.muted`) only if that's the
-  same colour on legacy. Look it up in `src/theme/legacyVars.js`. If none
-  matches exactly, leave the hex and list it in your report.
+  nearest `C.*` (`C.tagBg`, `C.borderSoft`, `C.muted`), so it follows dark
+  mode. If none fits, leave the hex and list it in your report.
 - **Brand logos** (Zoom, YouTube, Google…) keep their own colours.
 - **PDF/print output** (`lib/activityPdf.js`, `components/paper/*` print
   styles) keeps fixed colours: paper is always white. Don't migrate print
@@ -72,8 +72,7 @@ fonts and icons only.
 - **`background: C.ink` with white text** is wrong in dark mode (ink becomes
   light). Use `C.hero`.
 - **CSS files** (e.g. `pages/course-creator/cc.css`): use the variables
-  directly, `var(--ak-brand)`, `var(--ak-text)`…, with the same legacy values
-  as in `src/theme/legacyVars.js`.
+  directly, `var(--ak-brand)`, `var(--ak-text)`….
 - **Icon names are checked:** a contract test fails on any `ti-*` name that
   isn't in the installed font. Look names up in
   `node_modules/@tabler/icons-webfont/dist/tabler-icons.min.css`.

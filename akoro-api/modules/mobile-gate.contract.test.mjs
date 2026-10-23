@@ -26,7 +26,11 @@ const [instructorMain, adminMain, learnerMain, learnerApp] = await Promise.all([
   readFile(new URL("../../akoro-learner/src/App.jsx", import.meta.url), "utf8").catch(() => ""),
 ]);
 
-const APPS = ["akoro-admin", "akoro-school", "akoro-instructor", "kpemu-business"];
+// The consoles still on their own AppHeader. The instructor app is on the
+// shared frame (design-system/ui/Shell.jsx): its own test is below.
+const APPS = ["akoro-admin", "akoro-school", "kpemu-business"];
+// Every console's source tree, for the crash-class guards.
+const ALL_APPS = [...APPS, "akoro-instructor"];
 const layouts = {}, headers = {}, headerCss = {};
 for (const app of APPS) {
   layouts[app] = await read(app, "components/Layout.jsx");
@@ -55,8 +59,8 @@ test("every console shell renders the shared Akoro AppHeader on mobile", () => {
   }
 });
 
-test("admin/school/instructor: drawer opens ONLY from the hamburger — closed by X, hamburger, backdrop, Escape", () => {
-  for (const app of ["akoro-admin", "akoro-school", "akoro-instructor"]) {
+test("admin/school: drawer opens ONLY from the hamburger — closed by X, hamburger, backdrop, Escape", () => {
+  for (const app of ["akoro-admin", "akoro-school"]) {
     const src = layouts[app];
     assert.match(src, /onMenu=\{\(\) => setDrawerOpen\(\(o\) => !o\)\}/,
       `${app}: the AppHeader hamburger TOGGLES the drawer (open AND close)`);
@@ -72,8 +76,8 @@ test("admin/school/instructor: drawer opens ONLY from the hamburger — closed b
   }
 });
 
-test("admin/school/instructor: phones get full-width pages — no permanent sidebar", () => {
-  for (const app of ["akoro-admin", "akoro-school", "akoro-instructor"]) {
+test("admin/school: phones get full-width pages — no permanent sidebar", () => {
+  for (const app of ["akoro-admin", "akoro-school"]) {
     const src = layouts[app];
     const cut = src.indexOf("if (mobile) {");
     assert.ok(cut !== -1, `${app}: has a mobile branch`);
@@ -144,7 +148,7 @@ test("no source file uses a component or icon it never imports — the productio
       else if (/\.(jsx|js)$/.test(e.name)) yield p;
     }
   }
-  for (const app of APPS) {
+  for (const app of ALL_APPS) {
     for await (const file of walk(`${root}${app}/src`)) {
       const src = await readFile(file, "utf8");
       const known = new Set();
@@ -205,11 +209,10 @@ test("every header carries the FULL reference set — ring · chat/messages · b
     assert.match(src, /onSetup=\{\(\) => navigate\('/, `${app}: the ring navigates to a setup surface`);
   }
   // chat surfaces where the app has one (reference order: ring · chat · bell · help)
-  assert.match(layouts["akoro-instructor"], /key: 'chat',\s*icon: ReferenceChatIcon/, "instructor: agent chat");
   assert.match(layouts["akoro-school"], /key: 'chat',\s*icon: ReferenceChatIcon/, "school: agent chat");
   assert.match(layouts["akoro-admin"], /key: 'messages',\s*icon: ReferenceChatIcon/, "admin: messages");
   // the consoles keep the page-TopBar bell OFF on mobile — the header is the only bell
-  for (const app of ["akoro-admin", "akoro-school", "akoro-instructor"]) {
+  for (const app of ["akoro-admin", "akoro-school"]) {
     assert.match(layouts[app], /showBell=\{false\} \/>/, `${app}: the mobile TopBar renders no second bell`);
     assert.match(layouts[app], /showBell = true/, `${app}: desktop keeps its bell`);
   }
@@ -234,11 +237,21 @@ test("the instructor chat uses the learner app's Fortizo composer", () => {
   });
 });
 
-test("the instructor chat reclaims the TopBar strip on phones", () => {
-  const src = layouts["akoro-instructor"];
-  assert.match(src, /export function useIsMobile/, "the hook is shared with pages");
-  assert.match(src, /hideTopBarOnMobile = false/, "PageLayout accepts the opt-out");
-  assert.match(src, /\{!hideTopBarOnMobile && \(/, "the mobile TopBar yields when a page opts out");
+test("the instructor app is on the shared frame — the learner's header, sidebar and phone nav", async () => {
+  const layout = await read("akoro-instructor", "components/Layout.jsx");
+  const next = await read("akoro-instructor", "components/NextLayout.jsx");
+  const chat = await read("akoro-instructor", "pages/ChatPage.jsx");
+  const shell = await readFile(new URL("../../design-system/ui/Shell.jsx", import.meta.url), "utf8");
+  assert.match(layout, /return <NextLayout \{\.\.\.props\}\/>;/, "every page renders in the shared frame");
+  assert.doesNotMatch(layout, /AppHeader|LegacyPageLayout|isNextUi/, "no legacy frame left");
+  assert.match(layout, /export function useIsMobile/, "the hook is shared with pages");
+  // the learner header: coins, cart, bell, the agent toggle
+  for (const part of ["<CoinPill", "<CartButton", "<BellButton", "<AgentToggle"]) assert.ok(next.includes(part), `header: ${part}`);
+  // phones: the bottom nav + More sheet, no permanent sidebar
+  assert.match(shell, /function BottomNav/);
+  assert.match(shell, /function MoreSheet/);
+  // the agent chat is full screen, like the learner's Agent tab
+  assert.match(chat, /<PageLayout bare>/);
 });
 
 /* ── The no-emoji guard ────────────────────────────────────────────────────
@@ -316,7 +329,7 @@ test("the admin app renders no emoji — icons and SVGs only", async () => {
 
 test("the header uses the reference's exact glyphs — drawn, not approximated", async () => {
   for (const app of APPS) {
-    const src = await read(app, "components/AppHeader.jsx");
+    const src = headers[app];
     // the reference's hamburger: three rounded bars, at the reference's 22px
     assert.match(src, /<rect x="3" y="3\.5" width="18" height="4\.5" rx="1\.6" \/>/, `${app}: reference hamburger bars`);
     assert.match(src, /<ReferenceMenuIcon size=\{22\} \/>/, `${app}: hamburger at the reference's 22px`);
@@ -329,7 +342,6 @@ test("the header uses the reference's exact glyphs — drawn, not approximated",
     assert.match(layouts[app], /key: 'help',\s*icon: MessageCircleQuestion/, `${app}: reference help glyph`);
   }
   // chat surfaces use the drawn reference bubble
-  assert.match(layouts["akoro-instructor"], /key: 'chat',\s*icon: ReferenceChatIcon/);
   assert.match(layouts["akoro-school"], /key: 'chat',\s*icon: ReferenceChatIcon/);
   assert.match(layouts["akoro-admin"], /key: 'messages',\s*icon: ReferenceChatIcon/);
 });
@@ -341,7 +353,7 @@ test("no console calls a framework hook it never imports — the runtime-Referen
   const { readdir } = await import("node:fs/promises");
   const HOOKS = ["useState","useEffect","useRef","useMemo","useCallback","useContext","useReducer",
     "useLayoutEffect","useNavigate","useLocation","useSearchParams","useParams","useMatch","useResolvedPath"];
-  for (const app of APPS) {
+  for (const app of ALL_APPS) {
     const root = new URL(`../../${app}/src`, import.meta.url).pathname;
     async function* walk(dir) {
       for (const e of await readdir(dir, { withFileTypes: true })) {
@@ -409,8 +421,6 @@ test("URL flow shells stay hook-free — the early-return crash class", async ()
   const shells = [
     ["akoro-instructor/src/pages/ActivitiesPage.jsx",
      ["function DraftRoute(", "function DetailRoute(", "function ActivitiesHome("]],
-    ["akoro-instructor/src/pages/courses-page/CoursesPage.jsx",
-     ["function CourseFlow(", "function ScheduleFlow(", "function ManageFlow(", "function CoursesHome("]],
   ];
   for (const [file, parts] of shells) {
     const src2 = await readFile(new URL(`../../${file}`, import.meta.url), "utf8");

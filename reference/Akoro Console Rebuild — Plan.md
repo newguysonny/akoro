@@ -7,6 +7,10 @@ goal is that they are identical. Instructor first, then school, then admin.
 Status: approved 2026-10-20. Runs alongside the Grand Plan's Phase 7 (decay
 review); this work is frontend only.
 
+**Instructor flipped 2026-10-23:** the legacy look is deleted. The instructor
+app has only the learner look; there is no `?ui=` switch any more (see "The
+flip" below). School and admin are next.
+
 ## Decisions (2026-10-20)
 
 1. **Brand colour:** the learner's purple everywhere (`BRAND #6C3BFF`). No
@@ -104,12 +108,25 @@ this work is merged there (safe, since the default stays legacy). Before that:
 
 ### The flip, and removing the legacy look
 
-1. Every route reviewed in `next`, light and dark, phone/tablet/desktop.
-2. The default becomes `next`; `?ui=legacy` still works for a short while.
-3. Then the legacy theme values, `Layout.jsx`, `AppHeader.jsx` and the switch
-   are deleted — one small, contained change. The Courses page and the
-   wizards go with them: `pages/courses-page/` (all but its Schedule sessions
-   screen), `LiveClassWizard.jsx`, `OnDemandWizard.jsx` and their routes.
+Done for instructor on 2026-10-23, at the owner's call (straight to removal,
+without a period on `next` as the default):
+
+- deleted: `theme/uiMode.js` (the switch), `theme/legacyVars.js`, the legacy
+  frame in `Layout.jsx` (its sidebar, top bar and mobile drawer),
+  `AppHeader.jsx/.css`, the Courses page (`pages/courses-page/`,
+  `pages/CoursesPage.jsx`), `LiveClassWizard.jsx`, `OnDemandWizard.jsx` and
+  `CourseCurriculum.jsx`;
+- `Layout.jsx` keeps `PageLayout` (always the shared frame), `PageEmbed`,
+  `useJoinRequestCount` and `useIsMobile`; the instructor-only variables are
+  in `theme/instructorVars.js`; `Ico` draws the Tabler glyph (lucide only
+  where a use has no Tabler name);
+- Schedule sessions is its own page, `pages/ScheduleSessionsPage.jsx`;
+  `/courses`, `/courses/manage` and the wizard paths redirect to Course
+  Creator;
+- the Vercel setting `VITE_CONSOLE_UI` does nothing now and can be removed.
+
+Still to do: the lucide imports left beside each `Ico` (unused on screen)
+can be dropped page by page.
 
 Phase 0's screenshots of every route stay as the frozen record of the old app.
 While both looks exist, a ui-gate check confirms that each migrated page still

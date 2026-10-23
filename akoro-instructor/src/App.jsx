@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
 import GlobalStyles from './components/GlobalStyles.jsx';
-import { isNextUi } from './theme/uiMode.js';
 import SigninPage         from './pages/auth/SigninPage.jsx';
 import SignupPage         from './pages/auth/SignupPage.jsx';
 import OnboardingPage     from './pages/auth/OnboardingPage.jsx';
@@ -9,7 +8,7 @@ import AuthCallback       from './pages/auth/AuthCallback.jsx';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage.jsx';
 import ResetPasswordPage  from './pages/auth/ResetPasswordPage.jsx';
 import HomePage     from './pages/HomePage.jsx';
-import CoursesPage  from './pages/CoursesPage.jsx';
+import ScheduleSessionsPage from './pages/ScheduleSessionsPage.jsx';
 import CourseCreatorPage from './pages/course-creator/index.jsx';
 import SalesPage     from './pages/SalesPage.jsx';
 import OrderHistoryPage from './pages/OrderHistoryPage.jsx';
@@ -106,13 +105,12 @@ function AppRoutes() {
     <Routes>
       {/* Protected */}
       <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
-      {/* The next look has no Courses page: Course Creator (with Schedule sessions) replaces it. */}
-      <Route path="/courses" element={<ProtectedRoute>{isNextUi() ? <Navigate to="/course-creator" replace /> : <CoursesPage />}</ProtectedRoute>} />
-      {/* On next, courses are made only in Course Creator: the old wizards' paths go to its New course page. */}
-      <Route path="/courses/new-live"    element={<ProtectedRoute>{isNextUi() ? <Navigate to="/course-creator/courses/new" replace /> : <CoursesPage />}</ProtectedRoute>} />
-      <Route path="/courses/new-ondemand" element={<ProtectedRoute>{isNextUi() ? <Navigate to="/course-creator/courses/new" replace /> : <CoursesPage />}</ProtectedRoute>} />
-      <Route path="/courses/schedule"    element={<ProtectedRoute><CoursesPage /></ProtectedRoute>} />
-      <Route path="/courses/manage"      element={<ProtectedRoute><CoursesPage /></ProtectedRoute>} />
+      {/* No Courses page: courses are made and managed only in Course Creator; Schedule sessions sits in its group. */}
+      <Route path="/courses" element={<Navigate to="/course-creator" replace />} />
+      <Route path="/courses/new-live"     element={<Navigate to="/course-creator/courses/new" replace />} />
+      <Route path="/courses/new-ondemand" element={<Navigate to="/course-creator/courses/new" replace />} />
+      <Route path="/courses/manage"       element={<Navigate to="/course-creator" replace />} />
+      <Route path="/courses/schedule"     element={<ProtectedRoute><ScheduleSessionsPage /></ProtectedRoute>} />
       {/* Course Creator — the marketplace course builder (sections, lessons, review flow). */}
       <Route path="/course-creator/*" element={<ProtectedRoute><CourseCreatorPage /></ProtectedRoute>} />
       <Route path="/sales" element={<ProtectedRoute><SalesPage /></ProtectedRoute>} />

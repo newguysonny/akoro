@@ -1,11 +1,11 @@
 // The console rebuild's UI kit (reference/Akoro Console Rebuild — Plan.md):
 // one source (design-system/ui), copied into each console as src/ui; the
-// kit's look is the learner app's; the ?ui= switch picks legacy or next.
+// kit's look is the learner app's. The instructor app is on it alone (the
+// legacy look and its ?ui= switch were removed at the flip).
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 import { TARGETS, copyOf, kitFiles } from "../../design-system/sync.mjs";
-import { pickUiMode } from "../../akoro-instructor/src/theme/uiMode.js";
 
 const root = new URL("../../", import.meta.url);
 const read = (p) => readFileSync(new URL(p, root), "utf8");
@@ -31,35 +31,29 @@ test("the kit's look is the learner app's: theme variables and nav icons identic
   assert.match(kit, /BRAND = '#6C3BFF'/);
 });
 
-test("the instructor's legacy look sets every variable the next look sets", () => {
-  const keys = (src) => [...src.matchAll(/'(--ak-[a-z0-9-]+)':/g)].map((m) => m[1]).sort();
-  const legacy = keys(read("akoro-instructor/src/theme/legacyVars.js")).filter((k) => !k.startsWith("--ak-bx-") && !k.startsWith("--ak-skel-"));
-  const next = keys(read("design-system/ui/tokens.js").replace(/export const DARK_VARS[\s\S]*?\n\};/, "")).concat("--ak-brand", "--ak-font").sort();
-  assert.deepEqual(legacy, [...new Set(next)].sort());
+test("the instructor app has only the learner look — no legacy theme, frame or switch left", async () => {
+  const { existsSync } = await import("node:fs");
+  for (const f of ["theme/uiMode.js", "theme/legacyVars.js", "components/AppHeader.jsx", "components/LiveClassWizard.jsx", "components/OnDemandWizard.jsx", "pages/CoursesPage.jsx"]) {
+    assert.ok(!existsSync(new URL(`akoro-instructor/src/${f}`, root)), `${f} is gone`);
+  }
+  const main = read("akoro-instructor/src/main.jsx");
+  assert.match(main, /setAttribute\('data-ui', 'next'\)/, "the kit's base styles apply");
+  assert.match(main, /learnerVars\(isDark\)/, "the learner's light and dark sets");
+  const { readdir } = await import("node:fs/promises");
+  const files = (await readdir(new URL("akoro-instructor/src/", root), { recursive: true })).filter((f) => /\.(jsx|js)$/.test(f));
+  const left = files.filter((f) => /isNextUi|UI_MODE|legacyVars/.test(read(`akoro-instructor/src/${f}`)));
+  assert.deepEqual(left, [], "no page branches on the old switch");
 });
 
-test("?ui= picks the look: next / legacy stick, reset clears, any case, default legacy", () => {
-  assert.deepEqual(pickUiMode("?ui=next", null, undefined), { mode: "next", store: "next" });
-  assert.deepEqual(pickUiMode("?UI=Next", null, undefined), { mode: "next", store: "next" });
-  assert.deepEqual(pickUiMode("?ui=legacy", "next", undefined), { mode: "legacy", store: "legacy" });
-  assert.deepEqual(pickUiMode("", "next", undefined), { mode: "next", store: undefined }, "the stored choice sticks");
-  assert.deepEqual(pickUiMode("?ui=reset", "next", undefined), { mode: "legacy", store: null });
-  assert.deepEqual(pickUiMode("", null, undefined), { mode: "legacy", store: undefined }, "default: legacy");
-  assert.deepEqual(pickUiMode("", null, "next"), { mode: "next", store: undefined }, "VITE_CONSOLE_UI=next flips the default");
-  assert.deepEqual(pickUiMode("?ui=banana", "legacy", "next"), { mode: "legacy", store: undefined }, "an unknown value changes nothing");
-});
-
-test("the instructor's next nav reaches every page the legacy nav does (and nothing else)", () => {
-  const paths = (src) => new Set([...src.matchAll(/to:\s*'(\/[^']*)'/g)].map((m) => m[1]));
-  const legacySrc = read("akoro-instructor/src/components/Layout.jsx");
-  const legacy = paths(legacySrc.slice(legacySrc.indexOf("const NAV = ["), legacySrc.indexOf("function NavItem")));
-  legacy.add("/course-creator/review");   // the admin-only Review Queue, appended in the legacy Sidebar
-  // Dropped on purpose in the next nav: the Courses page (Course Creator replaces it, /courses redirects
-  // there on next); added: Schedule sessions (one of the Courses page's own screens) in the Course Creator group.
-  legacy.delete("/courses");
-  legacy.add("/courses/schedule");
-  const next = paths(read("akoro-instructor/src/components/NextLayout.jsx"));
-  assert.deepEqual([...next].sort(), [...legacy].sort());
+test("every page the instructor nav links to has a route (no dead links)", () => {
+  const nav = [...new Set([...read("akoro-instructor/src/components/NextLayout.jsx").matchAll(/to:\s*'(\/[^']*)'/g)].map((m) => m[1]))];
+  const app = read("akoro-instructor/src/App.jsx");
+  assert.ok(nav.length > 25, "the nav was read");
+  // Course Creator's own pages live under its /course-creator/* route.
+  const routed = (p) => app.includes(`path="${p}"`) || (p.startsWith("/course-creator") && app.includes('path="/course-creator/*"'));
+  assert.deepEqual(nav.filter((p) => !routed(p)), []);
+  // No Courses page: its paths go to Course Creator.
+  assert.match(app, /path="\/courses" element=\{<Navigate to="\/course-creator" replace \/>\}/);
 });
 
 test("every Tabler icon name the instructor app uses exists in the icon font (no blank icons)", async () => {

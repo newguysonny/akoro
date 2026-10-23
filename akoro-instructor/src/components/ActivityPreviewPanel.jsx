@@ -81,6 +81,9 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
   const [vSel, setVSel] = useState(initialVersion);   // the version tab on screen (null = newest)
   const [vEditing, setVEditing] = useState(false);
   const [vBusy, setVBusy] = useState(false);
+  // Every hook sits above the early returns below (loading / error), or the
+  // first render after the draft loads calls one more hook and React crashes (#310).
+  const [pdfErr, setPdfErr] = useState(false);
   const [phase, setPhase] = useState('loading');   // loading|ready|editing|assigning|assigned|discarded|error
   const [error, setError] = useState('');
   const [assignedCount, setAssignedCount] = useState(0);
@@ -225,7 +228,6 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
   const dueValue = dueLocal ?? datetimeLocal(payload.due_at);
   const dueUnset = !isLive && !isBattle && !isJourney && !!payload.due_hint && !dueValue;
   const assignBlock = needsFigure ? 'Add the missing figure first (Edit on the version).' : dueUnset ? `Set the exact due date for “${payload.due_hint}” first.` : '';
-  const [pdfErr, setPdfErr] = useState(false);
   const downloadPdf = () => {
     // A version with questions downloads as the paper, with its marking scheme after it.
     if (shown?.status === 'ready' && (shown.paper?.questions || []).length) {

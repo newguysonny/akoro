@@ -1,31 +1,27 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-// The legacy/next switch first: it sets <html data-ui> before anything renders.
-import { UI_MODE } from './theme/uiMode.js';
 import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 import './ui/base.css';
 import { ThemeProvider, learnerVars, applyTheme, readMode } from './ui/theme.jsx';
-import { legacyVars, BX_NEXT } from './theme/legacyVars.js';
+import { INSTRUCTOR_VARS } from './theme/instructorVars.js';
 import App from './App.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import ConfirmHost from './components/ConfirmHost.jsx';
 import ConnectionBanner from './components/ConnectionBanner.jsx';
 
-// The next look: the learner's theme (light + dark) and Nunito. Legacy: today's colours, light only.
-const next = UI_MODE === 'next';
-const nextVars = (isDark) => ({ ...learnerVars(isDark), ...BX_NEXT });
-const themeVars = next ? nextVars : legacyVars;
-if (next) {
-  const font = document.createElement('link');
-  font.rel = 'stylesheet';
-  font.href = 'https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap';
-  document.head.appendChild(font);
-}
-applyTheme(readMode(), { vars: themeVars, dark: next });
+// The learner app's look: its theme (light + dark) and Nunito. The shared
+// kit's base styles apply under <html data-ui="next">.
+document.documentElement.setAttribute('data-ui', 'next');
+const themeVars = (isDark) => ({ ...learnerVars(isDark), ...INSTRUCTOR_VARS });
+const font = document.createElement('link');
+font.rel = 'stylesheet';
+font.href = 'https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap';
+document.head.appendChild(font);
+applyTheme(readMode(), { vars: themeVars, dark: true });
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <ThemeProvider vars={themeVars} dark={next}>
+    <ThemeProvider vars={themeVars} dark>
     <ErrorBoundary>
         <App />
       {/* One host for every confirmDialog() call in the app. */}

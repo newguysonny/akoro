@@ -3,11 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import {
   Send, Plus, Brain, CheckSquare, X, Paperclip, Camera,
   Upload, FileText, ScanLine, Loader, CheckCircle2,
-  History, Copy, Check, Lightbulb, MoreVertical, Pencil, Trash2, CloudOff,  Bot, Lock , Cpu } from 'lucide-react';
+  History, Copy, Check, Lightbulb, MoreVertical, Pencil, Trash2, CloudOff,  Bot, Cpu } from 'lucide-react';
 import { Ico } from '../theme/Ico.jsx';
 import { Icon } from '../ui/Icon.jsx';
 import { PageLayout, PageEmbed, useIsMobile } from '../components/Layout.jsx';
-import { isNextUi } from '../theme/uiMode.js';
 import { useAgentOnline } from '../hooks/useAgentOnline.js';
 import TasksPage from './TasksPage.jsx';
 import { Btn, Modal, Inp, Txa, Sel, FileUploadZone, Toast } from '../components/Primitives.jsx';
@@ -160,7 +159,6 @@ export default function ChatPage() {
   const [agentName, setAgentName]   = useState('Your Agent');
   const [agentEmoji, setAgentEmoji] = useState('🤖');
   const [agentLevel, setAgentLevel] = useState(1);
-  const next = isNextUi();
   const [innerTab, setInnerTab] = useState('chat');
   const agentOnline = useAgentOnline();
   const [agentId, setAgentId]       = useState(null);
@@ -767,9 +765,9 @@ export default function ChatPage() {
   const hasInput = taskChips.length > 0 || input.trim().length > 0;
 
   return (
-    // The next look is the learner's Agent tab: no page heading, Chat / Tasks / Stats, the status row, full screen.
-    <PageLayout {...(next ? { bare: true } : { title: 'Agent Chat', subtitle: `${agentName} · Lv ${agentLevel}` })} hideTopBarOnMobile>
-      {next && (
+    // The learner's Agent tab: no page heading, Chat / Tasks / Stats, the status row, full screen.
+    <PageLayout bare>
+      {(
         <>
           <div style={{ display: 'flex', borderBottom: `1px solid ${C.borderSoft}`, background: C.surface, flexShrink: 0 }}>
             {[{ key: 'chat', label: 'Chat', icon: 'ti-message-circle' }, { key: 'tasks', label: 'Tasks', icon: 'ti-clipboard' }, { key: 'stats', label: 'Stats', icon: 'ti-chart-bar' }].map(({ key, label, icon }) => (
@@ -813,9 +811,7 @@ export default function ChatPage() {
         }
       `}</style>
 
-      <div style={next
-        ? { flex: 1, minHeight: 0, width: '100%', display: innerTab === 'chat' ? 'flex' : 'none', flexDirection: 'column' }
-        : { maxWidth: previewDraft ? 'min(1180px, 97vw)' : 720, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', height: isMobile ? 'calc(100vh - 86px)' : 'calc(100vh - 150px)' }}>
+      <div style={{ flex: 1, minHeight: 0, width: '100%', display: innerTab === 'chat' ? 'flex' : 'none', flexDirection: 'column' }}>
         <div style={{ display: 'flex', gap: 14, flex: 1, minHeight: 0 }}>
         <div className="ci-chat-col" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
 
@@ -837,28 +833,22 @@ export default function ChatPage() {
 
         {/* Tool commands — only the instructor's UNLOCKED Tools & Assets show
             here. A new agent has none until items are purchased. */}
-        {/* The next look has no "Unlock tools" row (the learner chat doesn't); unlocked tools still show. */}
-        {(!next || myTools.length > 0) && (
-        <div className="ci-quickbar" style={next ? { padding: '8px 18px 0' } : undefined}>
-          {myTools.length > 0 ? (
-            myTools.map((t) => {
+        {/* No "Unlock tools" row (the learner chat has none); unlocked tools still show. */}
+        {myTools.length > 0 && (
+        <div className="ci-quickbar" style={{ padding: '8px 18px 0' }}>
+          {myTools.map((t) => {
               const active = taskChips.includes(t.name);
               return (
                 <button key={t.id} className={'ci-qp ci-tool' + (active ? ' active' : '')} onClick={() => (active ? removeChip(t.name) : handleQuickPrompt(t.name))} title={t.description}>
                   <span style={{ fontSize: 10, fontWeight: 900, color: C.muted }}>{(t.name || 'T').charAt(0).toUpperCase()}</span>{t.name}{active && <Ico lucide={X} ti="ti-x" size={9} />}
                 </button>
               );
-            })
-          ) : (
-            <button className="ci-qp" onClick={() => navigate('/marketplace')} title="Unlock tools & assets for your agent">
-              <Ico lucide={Lock} ti="ti-lock" size={11} style={{ verticalAlign: '-2px', marginRight: 3 }} />Unlock tools
-            </button>
-          )}
+            })}
         </div>
         )}
 
         {/* Message feed */}
-        <div ref={feedRef} onScroll={(e) => { if (e.currentTarget.scrollTop < 80) loadOlder(); }} style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: next ? (isMobile ? '12px 12px' : '14px 18px') : '8px 2px' }}>
+        <div ref={feedRef} onScroll={(e) => { if (e.currentTarget.scrollTop < 80) loadOlder(); }} style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: isMobile ? '12px 12px' : '14px 18px' }}>
           {loadingOlder && (
             <div role="status" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 12, color: C.muted }}>
               <Ico lucide={Loader} ti="ti-loader-2" size={12} className="spinner" /> Loading earlier messages…
@@ -985,7 +975,7 @@ export default function ChatPage() {
         </div>
 
         {/* Input bar */}
-        <div style={next ? { padding: isMobile ? '10px 12px 0' : '10px 18px 0' } : { paddingTop: 10 }}>
+        <div style={{ padding: isMobile ? '10px 12px 0' : '10px 18px 0' }}>
           {!isTask && input === '' && !messages.some((m) => m.from === 'me') && (
             <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8 }}>
               {STARTERS.map((chip) => (
@@ -1088,12 +1078,12 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {next && innerTab === 'tasks' && (
+      {innerTab === 'tasks' && (
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: isMobile ? 12 : 16 }}>
           <PageEmbed><TasksPage /></PageEmbed>
         </div>
       )}
-      {next && innerTab === 'stats' && <AgentStatsPanel agentName={agentName} agentLevel={agentLevel} isMobile={isMobile} />}
+      {innerTab === 'stats' && <AgentStatsPanel agentName={agentName} agentLevel={agentLevel} isMobile={isMobile} />}
 
       {/* Task modal */}
       {/* Sessions drawer — the learner chat's drawer, instructor-dressed:
@@ -1282,7 +1272,7 @@ export default function ChatPage() {
   );
 }
 
-/* The Stats tab (next look): the agent's level and XP and the instructor's
+/* The Stats tab: the agent's level and XP and the instructor's
    teaching numbers, in the learner Stats tab's card style. */
 function AgentStatsPanel({ agentName, agentLevel, isMobile }) {
   const { getStats } = useStatsAPI();
