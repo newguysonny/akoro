@@ -57,43 +57,61 @@ export const teachingToolRouting = {
   },
 };
 
+// One ask per tool, in the order the gate prefers them. Only tools the test
+// instructor has unlocked can run (some are sold in the App Center), so the
+// scenario uses the first open one rather than assuming.
+const RUNNABLE = [
+  { key: "lesson-hooks", say: "Give me lesson hooks for the water cycle, JSS1 Basic Science.", name: "Lesson Hooks" },
+  { key: "vocabulary",   say: "Make a vocabulary list for photosynthesis, JSS1 Basic Science.", name: "Vocabulary Builder" },
+  { key: "misconceptions", say: "What are the common misconceptions about fractions for JSS1 Mathematics?", name: "Common Misconceptions" },
+  { key: "real-world",   say: "Real-world connections for simple interest, JSS1 Mathematics.", name: "Real-World Connections" },
+  { key: "lesson-plan",  say: "Make a lesson plan on fractions for JSS1 Mathematics, 40 minutes.", name: "Lesson Plan" },
+];
+
 export const teachingToolRuns = {
   name: "instructor.teaching_tool_runs", area: "instructor-chat", risk: "write",
-  description: "A lesson plan asked for in chat is made, saved to the instructor's Library and opens from there.",
+  description: "A teaching resource asked for in chat is made with an unlocked tool, saved to the instructor's Library and opens from there.",
   params: { instructor: { default: DEFAULT_INSTRUCTOR } },
   async run(ctx, p) {
     const teacher = await teacherOf(ctx, p.instructor);
+    const catalogue = await ctx.http({ as: p.instructor, path: "/api/teaching/tools" });
+    const open = new Set((catalogue.body?.data || []).filter((t) => !t.locked).map((t) => t.key));
+    const pick = RUNNABLE.find((r) => open.has(r.key));
+    if (!pick) ctx.expect.blocked(`${p.instructor} has none of ${RUNNABLE.map((r) => r.key).join(", ")} unlocked (they are sold in the App Center)`);
+    ctx.note(`using the ${pick.name} tool`);
+
     const startedAt = Date.now() - 5_000;
-    const turn = await ctx.agent.chat({ as: p.instructor, mode: "live", model: p.model, prompt: "Make a lesson plan on fractions for JSS1 Mathematics, 40 minutes." });
+    const turn = await ctx.agent.chat({ as: p.instructor, mode: "live", model: p.model, prompt: pick.say });
     ctx.expect.eq("turn answered", turn.status, 200);
 
     const run = lastCall(turn, "run_teaching_tool");
     ctx.expect.ok("the agent called run_teaching_tool", !!run, toolsOf(turn));
+    ctx.expect.toolNotCalled(turn, "prepare_activity");
     if (!run) return;
-    // A locked tool or an empty wallet is a missing precondition, not a bug.
-    if (run.result?.created === false && ["TOOL_LOCKED", "INSUFFICIENT_COINS"].includes(run.result?.code)) {
-      ctx.expect.blocked(`${p.instructor} can't run the lesson plan tool: ${run.result.error}`);
+    // An empty wallet is a missing precondition, not a bug.
+    if (run.result?.created === false && run.result?.code === "INSUFFICIENT_COINS") {
+      ctx.expect.blocked(`${p.instructor} can't pay for the tool: ${run.result.error}`);
     }
-    ctx.expect.eq("the lesson plan tool", run.input?.tool, "lesson-plan");
+    ctx.expect.eq("the tool the request asked for", run.input?.tool, pick.key);
     ctx.expect.ok("it was created", run.result?.created === true, run.result);
     ctx.expect.eq("it says where it was saved", run.result?.savedTo, "Library");
-    ctx.expect.gte("the preview carries the lesson", String(run.result?.preview || "").length, 200);
+    ctx.expect.gte("the preview carries the content", String(run.result?.preview || "").length, 100);
 
     // Saved for the instructor (the insert is fire-and-forget: give it a moment).
     const row = await ctx.until(async () => {
-      const r = await ctx.http({ as: p.instructor, path: "/api/instructor/tools/outputs?kind=lesson-plan" });
+      const r = await ctx.http({ as: p.instructor, path: `/api/instructor/tools/outputs?kind=${pick.key}` });
       return (r.body?.outputs || []).find((o) => new Date(o.created_at).getTime() >= startedAt) || null;
     }, { timeoutMs: 20_000, everyMs: 2_000 });
-    ctx.expect.ok("it is in the Library list", !!row, "no lesson-plan output after the turn");
+    ctx.expect.ok("it is in the Library list", !!row, `no ${pick.key} output after the turn`);
     if (!row) return;
     ctx.cleanup(() => ctx.db.deleteOwned("edu.tool_outputs", { ownerColumn: "instructor_id", ownerId: teacher.id, filters: { id: row.id } }));
     ctx.expect.ok("it is filed under the teaching tool", String(row.tool || "").startsWith("teaching_"), row.tool);
 
     // …and opens, which is what the Library's viewer reads.
     const full = await ctx.http({ as: p.instructor, path: `/api/instructor/tools/outputs/${row.id}` });
-    ctx.expect.eq("the saved lesson opens", full.status, 200);
+    ctx.expect.eq("the saved resource opens", full.status, 200);
     const body = full.body?.output?.content;
-    ctx.expect.ok("the saved lesson has content", !!(body && (body.content || body.cards)), body && Object.keys(body));
+    ctx.expect.ok("it has content", !!(body && (body.content || body.cards || body.turns || body.grades)), body && Object.keys(body));
     ctx.expect.noBackendNames("reply has no backend names", turn.reply);
     ctx.expect.loopHealthy(turn);
   },
@@ -162,12 +180,16 @@ export const draftLifecycle = {
     const listed = lastCall(t2, "list_activity_drafts");
     ctx.expect.ok("the agent called list_activity_drafts", !!listed, toolsOf(t2));
     ctx.expect.ok("the new draft is in the list", (listed?.result?.drafts || []).some((d) => d.draftId === draftId), listed?.result);
+    ctx.expect.toolNotCalled(t2, "prepare_activity");
 
     const t3 = await say("Show me that draft.", "read");
     const got = lastCall(t3, "get_activity_draft");
     ctx.expect.ok("the agent called get_activity_draft", !!got, toolsOf(t3));
     ctx.expect.eq("it read the same draft", got?.input?.draftId, draftId);
-    ctx.expect.eq("the draft is still pending", got?.result?.status, "draft");
+    // A long draft comes back to the gate truncated ({truncated, preview}): read the status from whichever is there.
+    const gotText = typeof got?.result?.preview === "string" ? got.result.preview : JSON.stringify(got?.result || {});
+    ctx.expect.ok("the draft is still pending", /"status":\s*"draft"/.test(gotText), gotText.slice(0, 200));
+    ctx.expect.toolNotCalled(t3, "prepare_activity");   // reading a draft must not start another
 
     const t4 = await say("Discard it, I don't need it.", "discard");
     const gone = lastCall(t4, "discard_activity_draft");
@@ -209,12 +231,14 @@ export const routineLifecycle = {
     const listed = lastCall(t2, "list_activity_routines");
     ctx.expect.ok("the agent called list_activity_routines", !!listed, toolsOf(t2));
     ctx.expect.ok("the routine is in the list", (listed?.result?.routines || []).some((r) => r.routineId === routineId), listed?.result);
+    ctx.expect.toolNotCalled(t2, "prepare_activity");
 
     const t3 = await say("Cancel that routine.", "cancel");
     const cancelled = lastCall(t3, "cancel_activity_routine");
     ctx.expect.ok("the agent called cancel_activity_routine", !!cancelled, toolsOf(t3));
     ctx.expect.eq("it cancelled the same routine", cancelled?.input?.routineId, routineId);
     ctx.expect.ok("it was cancelled", cancelled?.result?.cancelled === true, cancelled?.result);
+    ctx.expect.toolNotCalled(t3, "prepare_activity");   // cancelling must not start a draft
 
     const after = await ctx.http({ as: p.instructor, path: "/api/self-study/routines" });
     ctx.expect.ok("it is gone from the routines list", !(after.body?.data?.routines || []).some((r) => r.id === routineId), after.body?.data?.routines);

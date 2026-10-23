@@ -59,11 +59,25 @@ const ACTIVITY_QUERY_RE = /^\s*(?:show|list|see|view|check|open|display|what|whi
 const SHORT_CONFIRM_RE = /^\s*(?:yes|yeah|yep|yup|ok(?:ay)?|proceed|go\s+ahead|continue|do\s+it|sure|please\s+do|use\s+(?:that|the)\s+class|that'?s\s+(?:fine|good|correct|right)|correct|exactly|sounds\s+good|perfect)[\s!.]*$/i;
 const SHORT_ANSWER_RE = /^(?:\w+[\s,.!?]*){1,6}$/;
 
+/* Three kinds of message that are NOT a request for a new activity draft,
+   though they can look like one (found by the instructor-chat gate scenarios:
+   each used to start a stray draft alongside the right tool):
+     · a Library resource for the teaching tools — "make a lesson plan…",
+       "give me lesson hooks…" (run_teaching_tool, saved to the Library);
+     · a recurring ask — "every Friday, prepare…" (schedule_activity_routine);
+     · managing a draft or routine that exists — "show me that draft",
+       "cancel that routine", "discard it". */
+const TEACHING_RESOURCE_RE = /\b(?:lesson\s+plans?|lesson\s+hooks?|vocab(?:ulary)?\s+(?:list|builder)|podcast|misconceptions?|real[-\s]?world\s+connections?|essay\s+grad(?:er|ing)|grade\s+(?:this|these|the)\s+essays?)\b/i;
+const RECURRING_RE = /\b(?:every|each)\s+(?:day|week|weekday|(?:mon|tues|wednes|thurs|fri|satur|sun)day)\b|\bweekly\b/i;
+const DRAFT_MANAGE_RE = /^\s*(?:please\s+)?(?:show|open|read|view|list|display|see|cancel|discard|scrap|stop|pause|resume|delete|remove|drop)\b[^.?!]{0,40}\b(?:drafts?|routines?|it|that|this|them)\b/i;
+const isTeachingResource = (text) => TEACHING_RESOURCE_RE.test(text) && !ACTIVITY_NOUN_RE.test(text);
+
 export function requiresActivityPreparation(message, history = []) {
   const text = String(message || "").trim();
   if (!text) return false;
   // "Quiz me on Algebra" is tutoring in chat, not a draft request.
   if (/^\s*(?:quiz|test)\s+me\b/i.test(text)) return false;
+  if (isTeachingResource(text) || RECURRING_RE.test(text) || DRAFT_MANAGE_RE.test(text)) return false;
   if (!ACTIVITY_QUERY_RE.test(text) && ACTIVITY_NOUN_RE.test(text)) return true;
   // A short confirmation/answer only ever CONTINUES a request that exists in
   // recent conversation — it can never start one.
@@ -88,6 +102,8 @@ const DRAFT_POINTER_RE = /\b(?:question|q|number|no\.)\s*\d+\b|\bversion\s*\d+\b
 export function isDraftFollowUp(message) {
   const text = String(message || "").trim();
   if (!text || ACTIVITY_QUERY_RE.test(text) || NEW_ACTIVITY_RE.test(text)) return false;
+  // A new Library resource, or a discard/cancel, is not an edit of the pending draft.
+  if (isTeachingResource(text) || /^\s*(?:please\s+)?(?:cancel|discard|scrap)\b/i.test(text)) return false;
   return DRAFT_EDIT_RE.test(text) || DRAFT_POINTER_RE.test(text);
 }
 

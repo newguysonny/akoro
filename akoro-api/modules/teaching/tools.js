@@ -287,7 +287,7 @@ function asMarkdown(tool, data) {
   return "";
 }
 
-/* Some tools are also sold in Tools & Assets (edu.platform_tools). Where a
+/* Some tools are also sold in the App Center (edu.platform_tools). Where a
    catalog key matches a PAID platform tool, the teaching tool is locked until
    the teacher has bought it — otherwise the purchase would be meaningless.
    Tools with no matching paid row are free to everyone. */
@@ -382,7 +382,7 @@ export async function runTeachingTool({ key, body = {}, userId }) {
 
   const locks = await lockState(userId);
   if (locks[tool.key]?.locked) {
-    throw new ToolError(`${tool.name} is locked. Unlock it in Tools & Assets to use it.`,
+    throw new ToolError(`${tool.name} is locked. Unlock it in the App Center to use it.`,
       "TOOL_LOCKED", { toolId: locks[tool.key].toolId });
   }
 

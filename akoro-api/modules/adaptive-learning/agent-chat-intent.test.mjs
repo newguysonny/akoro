@@ -22,7 +22,7 @@ test("ordinary study questions remain for the unified agent prompt to answer dir
   }
 });
 
-import { requiresActivityPreparation } from "./agent-chat-intent.js";
+import { requiresActivityPreparation, isDraftFollowUp } from "./agent-chat-intent.js";
 
 test("instructor activity requests force prepare_activity — the prose detour is closed", () => {
   // The live hallucination transcript: these MUST reach the tool, and the
@@ -248,4 +248,42 @@ test("an exam says the class when the learner doesn't", async () => {
   assert.equal(classForExam("WAEC"), "SS3");
   assert.equal(classForExam("bece"), "JSS3");
   assert.equal(classForExam("Cambridge"), null);
+});
+
+/* Found by the instructor-chat gate scenarios: each of these used to start a
+   stray draft (or revise a pending one) next to the right tool. */
+test("library resources, routines and draft/routine management never force prepare_activity", () => {
+  const history = [
+    { role: "user", content: "Set a Basic Science self study on photosynthesis for @tester19" },
+    { role: "assistant", content: "Draft ready — preview it to assign." },
+  ];
+  // Teaching-tool requests (run_teaching_tool → Library)
+  for (const m of ["Make a lesson plan on fractions for JSS1 Mathematics, 40 minutes.",
+    "Give me lesson hooks for the water cycle, JSS1 Basic Science.",
+    "Make a vocabulary list for photosynthesis, JSS1 Basic Science.",
+    "Make a podcast about fractions"]) {
+    assert.equal(requiresActivityPreparation(m, history), false, m);
+    assert.equal(isDraftFollowUp(m), false, `${m} is not an edit of the pending draft`);
+  }
+  // A recurring ask is a routine, not a draft now
+  assert.equal(requiresActivityPreparation("Every Friday, prepare a Basic Science self study on revision for @tester19.", history), false);
+  assert.equal(requiresActivityPreparation("Set a weekly quiz on fractions for my class", history), false);
+  // Managing something that exists
+  for (const m of ["Show me that draft.", "Cancel that routine.", "Discard it.", "Open the draft", "List my routines"]) {
+    assert.equal(requiresActivityPreparation(m, history), false, m);
+  }
+  assert.equal(isDraftFollowUp("Discard it, I don't need it."), false);
+  assert.equal(isDraftFollowUp("Cancel that draft"), false);
+});
+
+test("the guards still force and revise where they should", () => {
+  const history = [{ role: "user", content: "Prepare an assignment on family for the whole class" }, { role: "assistant", content: "Which class?" }];
+  assert.equal(requiresActivityPreparation("Prepare an assignment on fractions for JSS1", history), true);
+  assert.equal(requiresActivityPreparation("Prepare an assignment from my lesson plan on fractions"), true, "an activity noun still forces");
+  assert.equal(requiresActivityPreparation("Proceed", history), true);
+  assert.equal(requiresActivityPreparation("use the class", history), true);
+  // Edits of a pending draft are still edits
+  assert.equal(isDraftFollowUp("Make question 2 harder"), true);
+  assert.equal(isDraftFollowUp("Add a part with 2 true or false questions"), true);
+  assert.equal(isDraftFollowUp("remove question 3"), true);
 });
