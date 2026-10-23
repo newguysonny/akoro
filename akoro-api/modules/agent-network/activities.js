@@ -21,6 +21,7 @@ import { notifyUser } from "../notify.js";
 import { canMessage } from "./filters.js";
 import { relationsOf, blockedWith, getSettings } from "./network.js";
 
+import { addLater } from "../../lib/deferredJobs.js";
 const edu = () => db.schema("edu");
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
 const first = (full, username) => String(full || "").trim().split(/\s+/)[0] || username || "a learner";
@@ -235,7 +236,7 @@ async function createDailyHeat(day, subject, heat, copyFrom = null) {
     throw e;
   }
   const { battleQueue } = await import("../battle/worker.js");
-  await battleQueue.add("start-battle", { action: "start-battle", battleId: b.id },
+  await addLater(battleQueue, "start-battle", { action: "start-battle", battleId: b.id },
     { delay: Math.max(0, Date.parse(startsAt) - Date.now()), jobId: `start-${b.id}` });
   return b;
 }

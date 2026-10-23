@@ -59,6 +59,7 @@ import { toCard } from "./card.js";
 import { buildQuestions, perQuestionSeconds } from "./questionSource.js";
 import { InsufficientCoins } from "../../lib/coins.js";
 
+import { addLater } from "../../lib/deferredJobs.js";
 // ─── Lazy-load battle queue ───────────────────────────────────────────────────
 let _battleQueue = null;
 async function getBattleQueue() {
@@ -177,7 +178,7 @@ const EXPIRE_AFTER_START_MS = 10_000;
 const IDLE_HOURS = Math.max(1, Number(process.env.BATTLE_IDLE_HOURS ?? 48) || 48);
 const idleDeadline = () => new Date(Date.now() + IDLE_HOURS * 3600_000).toISOString();
 async function queueIdleExpiry(battleId) {
-  await (await getBattleQueue()).add("expire-battle", { action: "expire-battle", battleId },
+  await addLater(await getBattleQueue(), "expire-battle", { action: "expire-battle", battleId },
     { delay: IDLE_HOURS * 3600_000, jobId: `idle-${battleId}` });
 }
 
@@ -376,11 +377,11 @@ router.post("/courses/:courseId/battles/challenge", authenticateToken, asyncHand
   const q = await getBattleQueue();
   // No deadline, no expiry job — an unscheduled invitation waits.
   if (expiresAt) {
-    await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
+    await addLater(q, "expire-battle", { action: "expire-battle", battleId: battle.id },
       { delay: Math.max(0, new Date(expiresAt).getTime() - Date.now() + EXPIRE_AFTER_START_MS) });
   }
   if (isScheduled) {
-    await q.add("start-battle", { action: "start-battle", battleId: battle.id },
+    await addLater(q, "start-battle", { action: "start-battle", battleId: battle.id },
       { delay: new Date(scheduled_for).getTime() - Date.now() });
   }
 
@@ -451,11 +452,11 @@ router.post("/courses/:courseId/battles/open", authenticateToken, asyncHandler(a
   const q = await getBattleQueue();
   // No deadline, no expiry job — an unscheduled invitation waits.
   if (expiresAt) {
-    await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
+    await addLater(q, "expire-battle", { action: "expire-battle", battleId: battle.id },
       { delay: Math.max(0, new Date(expiresAt).getTime() - Date.now() + EXPIRE_AFTER_START_MS) });
   }
   if (isScheduled) {
-    await q.add("start-battle", { action: "start-battle", battleId: battle.id },
+    await addLater(q, "start-battle", { action: "start-battle", battleId: battle.id },
       { delay: new Date(scheduled_for).getTime() - Date.now() });
   }
 
@@ -530,11 +531,11 @@ router.post("/courses/:courseId/battles/classroom", authenticateToken, requireRo
   const q = await getBattleQueue();
   // No deadline, no expiry job — an unscheduled invitation waits.
   if (expiresAt) {
-    await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
+    await addLater(q, "expire-battle", { action: "expire-battle", battleId: battle.id },
       { delay: Math.max(0, new Date(expiresAt).getTime() - Date.now() + EXPIRE_AFTER_START_MS) });
   }
   const delay = isScheduled ? new Date(scheduled_for).getTime() - Date.now() : 5000;
-  await q.add("start-battle", { action: "start-battle", battleId: battle.id }, { delay });
+  await addLater(q, "start-battle", { action: "start-battle", battleId: battle.id }, { delay });
 
   res.status(201).json({ success: true, battle_id: battle.id, status: isScheduled ? "scheduled" : "starting", participants: (students?.length ?? 0) + 1, expires_at: expiresAt });
 }));
@@ -842,7 +843,7 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
   const q = await getBattleQueue();
   // No deadline, no expiry job — an unscheduled invitation waits.
   if (expiresAt) {
-    await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
+    await addLater(q, "expire-battle", { action: "expire-battle", battleId: battle.id },
       { delay: Math.max(0, new Date(expiresAt).getTime() - Date.now() + EXPIRE_AFTER_START_MS) });
   }
   if (!isDuel) {
@@ -855,7 +856,7 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
     // the accept and decline routes bring it forward — or when the creator
     // presses Start Now. It will not run off a timer nobody set.
     if (isScheduled) {
-      await q.add("start-battle", { action: "start-battle", battleId: battle.id },
+      await addLater(q, "start-battle", { action: "start-battle", battleId: battle.id },
         { delay: Math.max(0, new Date(scheduled_for).getTime() - Date.now()), jobId: `start-${battle.id}` });
     }
   }
@@ -1407,7 +1408,7 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
   const q = await getBattleQueue();
   // No deadline, no expiry job — an unscheduled invitation waits.
   if (expiresAt) {
-    await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
+    await addLater(q, "expire-battle", { action: "expire-battle", battleId: battle.id },
       { delay: Math.max(0, new Date(expiresAt).getTime() - Date.now() + EXPIRE_AFTER_START_MS) });
   }
   // A duel waits for its accept; a group battle waits for its invitations —
@@ -1419,7 +1420,7 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
     // the accept and decline routes bring it forward — or when the creator
     // presses Start Now. It will not run off a timer nobody set.
     if (isScheduled) {
-      await q.add("start-battle", { action: "start-battle", battleId: battle.id },
+      await addLater(q, "start-battle", { action: "start-battle", battleId: battle.id },
         { delay: Math.max(0, new Date(scheduled_for).getTime() - Date.now()), jobId: `start-${battle.id}` });
     }
   }
@@ -1527,7 +1528,7 @@ async function maybeStartEarly(battle) {
   // Same jobId as the invite route queued, so this REPLACES that job rather
   // than running the battle twice.
   await q.remove(`start-${battle.id}`).catch(() => {});
-  await q.add("start-battle", { action: "start-battle", battleId: battle.id },
+  await addLater(q, "start-battle", { action: "start-battle", battleId: battle.id },
     { delay: 3000, jobId: `start-${battle.id}` });
   return { started: true, invited, players };
 }
@@ -1593,7 +1594,7 @@ router.post("/challenges/:challengeId/accept", authenticateToken, asyncHandler(a
 
   const q = await getBattleQueue();
   const delay = isScheduled ? new Date(battle.scheduled_start).getTime() - Date.now() : 3000;
-  await q.add("start-battle", { action: "start-battle", battleId: battle.id }, { delay: Math.max(delay, 0) });
+  await addLater(q, "start-battle", { action: "start-battle", battleId: battle.id }, { delay: Math.max(delay, 0) });
 
   const { data: me } = await db.from("users").select("full_name, avatar_url").eq("id", req.user.id).single();
   await notifyUser(battle.created_by, "battle_accepted",
@@ -1725,7 +1726,7 @@ router.post("/battles/:battleId/join", authenticateToken, asyncHandler(async (re
   });
 
   if ((count ?? 0) + 1 >= battle.max_participants && !battle.scheduled_start) {
-    await (await getBattleQueue()).add("start-battle", { action: "start-battle", battleId: battle.id }, { delay: 3000 });
+    await addLater(await getBattleQueue(), "start-battle", { action: "start-battle", battleId: battle.id }, { delay: 3000 });
   }
 
   res.json({ success: true, battle_id: battle.id, current_participants: (count ?? 0) + 1 });
@@ -1845,7 +1846,7 @@ router.post("/battles/:battleId/start", authenticateToken, asyncHandler(async (r
     });
   }
 
-  await (await getBattleQueue()).add("start-battle", { action: "start-battle", battleId: battle.id }, { delay: 1000 });
+  await addLater(await getBattleQueue(), "start-battle", { action: "start-battle", battleId: battle.id }, { delay: 1000 });
   res.json({ success: true, battle_id: battle.id });
 }));
 
@@ -2361,10 +2362,10 @@ router.post("/courses/:courseId/battles/session", authenticateToken, requireRole
 
   const q = await getBattleQueue();
   if (expiresAt) {
-    await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
+    await addLater(q, "expire-battle", { action: "expire-battle", battleId: battle.id },
       { delay: Math.max(0, new Date(expiresAt).getTime() - Date.now() + EXPIRE_AFTER_START_MS) });
   }
-  await q.add("start-battle", { action: "start-battle", battleId: battle.id }, { delay: 5000 });
+  await addLater(q, "start-battle", { action: "start-battle", battleId: battle.id }, { delay: 5000 });
 
   res201(res, { success: true, battle_id: battle.id, session_id, participants: (students?.length ?? 0) + 1 });
 }));

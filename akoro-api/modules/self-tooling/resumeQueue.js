@@ -6,35 +6,19 @@
  * so a lost or repeated job is harmless; a tick sweeps up waiting requests
  * whose job never ran, and expires requests nobody decided.
  */
-import { Queue, Worker } from "bullmq";
-import Redis from "ioredis";
+import { backgroundQueue, handleBackground } from "../../lib/backgroundQueue.js";
 
-import { redisConnectionOptions } from "../../lib/redisOptions.js";
-import { traceRedis } from "../../lib/redisTrace.js";
 import { workerJob } from "../../lib/workerLog.js";
-import { guardWorker } from "../../lib/redisQuotaGuard.js";
 import cron from "node-cron";
 import { registerTick, cronSource } from "../../lib/cronTicks.js";
 import { resumeRequest, waitingResumes, expireRequests } from "./escalation.js";
 
-const QUEUE_NAME = "self-tool-resumes";
-let redis, workerRedis, queue, worker;
+let worker;
 
-const conn = (label) => {
-  const r = traceRedis(new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label })), label);
-  r.on("error", (e) => console.error(`[${label} Redis]`, e.message));
-  return r;
-};
-
-function resumeQueue() {
-  if (queue) return queue;
-  redis ||= conn("self-tool-resumes");
-  queue = new Queue(QUEUE_NAME, {
-    connection: redis,
-    defaultJobOptions: { attempts: 3, backoff: { type: "exponential", delay: 10_000 }, removeOnComplete: { count: 200 }, removeOnFail: { count: 200 } },
-  });
-  return queue;
-}
+// The shared background queue (lib/backgroundQueue.js).
+const resumeQueue = () => backgroundQueue("self-tool-resumes", {
+  attempts: 3, backoff: { type: "exponential", delay: 10_000 }, removeOnComplete: { count: 200 }, removeOnFail: { count: 200 },
+});
 
 /**
  * Resume one request: a queue job when this deployment runs the worker, else
@@ -92,15 +76,13 @@ export function armSweep() {
 export function startResumeWorker() {
   armSweep();
   if (worker) return worker;
-  workerRedis ||= conn("self-tool-resumes");
-  worker = new Worker(QUEUE_NAME, async (job) => runResume(job.data?.requestId), {
-    connection: workerRedis, concurrency: 2, drainDelay: 60, stalledInterval: 300_000,
-  });
-  guardWorker(worker, "self-tool resumes worker");
-  worker.on("completed", (job, result) => workerJob("self-tool-resumes", "done", job, { resumed: result?.resumed ?? false, skipped: result?.skipped ?? false }));
-  worker.on("failed", (job, error) => {
-    console.error(`[self-tool-resumes] failed job ${job?.id}:`, error.message);
-    workerJob("self-tool-resumes", "failed", job, { error: error?.message });
+  worker = handleBackground("self-tool-resumes", async (job) => runResume(job.data?.requestId), {
+    concurrency: 2,
+    onCompleted: (job, result) => workerJob("self-tool-resumes", "done", job, { resumed: result?.resumed ?? false, skipped: result?.skipped ?? false }),
+    onFailed: (job, error) => {
+      console.error(`[self-tool-resumes] failed job ${job?.id}:`, error.message);
+      workerJob("self-tool-resumes", "failed", job, { error: error?.message });
+    },
   });
   return worker;
 }

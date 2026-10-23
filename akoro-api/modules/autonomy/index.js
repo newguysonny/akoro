@@ -10,53 +10,20 @@
  * window) is env-tunable via AKORO_AUTONOMY_* — see ./cadence.js.
  */
 import { deliverDue } from "./deliver.js";
-import { Queue, Worker } from "bullmq";
-import Redis from "ioredis";
+import { backgroundQueue, handleBackground } from "../../lib/backgroundQueue.js";
 import db from "../../db.js";
-import { redisConnectionOptions } from "../../lib/redisOptions.js";
-import { traceRedis } from "../../lib/redisTrace.js";
 import { workerTick, workerJob } from "../../lib/workerLog.js";
 import { runAutonomyCycleForUser } from "./cycle.js";
 import { autonomyCadence, fmtMs, inNightlyWindow, minCycleCutoff, minCycleMs, weeklyRunsCap } from "./cadence.js";
-import { guardWorker } from "../../lib/redisQuotaGuard.js";
 
 // Re-exported so the module's public surface (and the contract tests) keep
 // finding inNightlyWindow here; the logic itself lives in cadence.js.
 export { inNightlyWindow, autonomyCadence };
 
 const edu = () => db.schema("edu");
-const QUEUE_NAME = "autonomy-cycle";
-
-let autonomyCycleQueue = null;
-let queueRedis = null;
-let workerRedis = null;
-
-/* Both connections are traced and REDIS_URL-backed, with error listeners
- * (an un-listened ioredis error throws). NEVER let BullMQ default them:
- * its fallback is 127.0.0.1:6379, which is exactly how the planner went
- * silently dead on remote-Redis deploys (Render et al.) — the scheduler
- * enqueued into the real Redis while the worker listened on localhost,
- * so jobs were added but never processed. */
-function queueConnection() {
-  if (queueRedis) return queueRedis;
-  queueRedis = traceRedis(new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "autonomy-cycle" })), "autonomy-cycle");
-  queueRedis.on("error", (error) => console.error("[autonomy/cycle queue Redis]", error.message));
-  return queueRedis;
-}
-
-function workerConnection() {
-  if (workerRedis) return workerRedis;
-  workerRedis = traceRedis(new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "autonomy-worker" })), "autonomy-worker");
-  workerRedis.on("error", (error) => console.error("[autonomy/cycle worker Redis]", error.message));
-  return workerRedis;
-}
-
-const queue = () => {
-  if (!autonomyCycleQueue) {
-    autonomyCycleQueue = new Queue(QUEUE_NAME, { connection: queueConnection() });
-  }
-  return autonomyCycleQueue;
-};
+// The shared background queue (lib/backgroundQueue.js); this module's jobs
+// are its "autonomy-cycle" kind.
+const queue = () => backgroundQueue("autonomy-cycle");
 
 /** Enqueue one learner's cycle (used by the scheduler and future events). */
 export async function enqueueAutonomyCycle(userId, trigger = "nightly") {
@@ -91,7 +58,7 @@ let worker = null;
 
 /** Start the worker + the nightly scheduler. Redis-guarded by the caller. */
 export function startAutonomyCycleWorker() {
-  worker = new Worker(QUEUE_NAME, async (job) => {
+  worker = handleBackground("autonomy-cycle", async (job) => {
     const { userId, trigger } = job.data || {};
     if (!userId) return;
     const result = await runAutonomyCycleForUser(userId, trigger || "nightly");
@@ -101,19 +68,12 @@ export function startAutonomyCycleWorker() {
     if (result?.skipped) console.log(`[autonomy/cycle] skipped user ${userId} (${trigger || "nightly"}): ${result.skipped}`);
     return result;
   }, {
-    connection: workerConnection(),
     concurrency: 2,
-    drainDelay: 60,   // seconds (60_000 was 16 hours)
-    stalledInterval: 300_000,   // 5 min between stalled-job scans. Top level: BullMQ ignores it inside `settings`, which left every worker scanning every 30 s.
-  });
-  // Quota errors pause every worker instead of a 100 ms retry storm (lib/redisQuotaGuard.js).
-  guardWorker(worker, "autonomy cycle worker");
-  worker.on("completed", (job, result) =>
-    workerJob("autonomy-cycle", "done", job, { skipped: result?.skipped ?? null })
-  );
-  worker.on("failed", (job, err) => {
-    console.error(`[autonomy/cycle] job ${job?.id} failed:`, err?.message);
-    workerJob("autonomy-cycle", "failed", job, { error: err?.message });
+    onCompleted: (job, result) => workerJob("autonomy-cycle", "done", job, { skipped: result?.skipped ?? null }),
+    onFailed: (job, err) => {
+      console.error(`[autonomy/cycle] job ${job?.id} failed:`, err?.message);
+      workerJob("autonomy-cycle", "failed", job, { error: err?.message });
+    },
   });
 
   // The nightly stagger: one tick paces at most one batch into the queue
@@ -198,9 +158,7 @@ export function startAutonomyCycleWorker() {
 
 /** Test/cleanup hook. */
 export async function stopAutonomyCycleWorker() {
+  // The worker is the shared background worker (other kinds run on it): only the scheduler stops here.
   if (schedulerTimer) clearInterval(schedulerTimer);
-  if (worker) await worker.close();
-  if (autonomyCycleQueue) await autonomyCycleQueue.close();
-  if (workerRedis) await workerRedis.quit().catch(() => {});
-  if (queueRedis) await queueRedis.quit().catch(() => {});
+  schedulerTimer = null;
 }

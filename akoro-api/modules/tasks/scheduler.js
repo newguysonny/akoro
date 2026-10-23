@@ -10,6 +10,7 @@ import { TaskDB, TaskScheduleDB } from "./lib/db.js";
 import { redisConnectionOptions }       from "../../lib/redisOptions.js";
 import { traceRedis } from "../../lib/redisTrace.js";
 import { assertQueueCapacity } from "../../lib/queueGuard.js";
+import { addLater, cancelLater, registerDeferredQueue } from "../../lib/deferredJobs.js";
 
 const redis = traceRedis(new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "tasks-scheduler" })), "tasks-scheduler");
 redis.on("error", (err) => console.error("[tasks/scheduler Redis]", err.message));
@@ -23,6 +24,8 @@ export const taskQueue = new Queue("task-runner", {
     removeOnFail:     { count: 500 },
   },
 });
+// Far-off and recurring runs wait in Postgres (lib/deferredJobs.js), not as delayed jobs in Redis.
+registerDeferredQueue(taskQueue);
 
 export async function scheduleTask(task) {
   let bullJobId;
@@ -49,23 +52,29 @@ async function scheduleImmediate(task, jobData) {
 
 async function scheduleDelayed(task, runAt, jobData) {
   const delayMs = runAt.getTime() - Date.now();
-  const job     = await taskQueue.add(`task-${task.id}`, jobData, { delay: Math.max(0, delayMs) });
+  // A stable id per due time: re-scheduling the same run (boot recovery) adds nothing.
+  const job     = await addLater(taskQueue, `task-${task.id}`, jobData, { delay: Math.max(0, delayMs), jobId: `task-${task.id}-at-${runAt.getTime()}` });
   return job.id;
 }
 
 async function scheduleRecurring(task, cronExpr, timezone, jobData) {
-  const job = await taskQueue.add(`task-${task.id}`, jobData, {
+  // One row per task (replace: a changed pattern updates it); each run is released with its own id.
+  const job = await addLater(taskQueue, `task-${task.id}`, jobData, {
+    jobId: `repeat-task-${task.id}`,
+    replace: true,
     repeat: { pattern: cronExpr, tz: timezone ?? "Africa/Lagos" },
   });
-  return job.id ?? `cron-${task.id}`;
+  return job.id;
 }
 
 export async function cancelTask(bullJobId, taskId) {
   try {
     if (bullJobId) {
+      await cancelLater(taskQueue, bullJobId);
       const job = await taskQueue.getJob(bullJobId);
       if (job) await job.remove();
     }
+    if (taskId) await cancelLater(taskQueue, `repeat-task-${taskId}`);
     // A recurring task's delayed jobs are spawned by a repeatable entry, which
     // survives removing any single job — so drop the repeat itself too, or the
     // "deleted" task keeps firing on its cron.

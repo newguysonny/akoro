@@ -11,35 +11,26 @@
 // So POST enqueues and returns a run id, and the page polls. Results are
 // written per case, so it fills in as it goes.
 
-import { Queue, Worker } from "bullmq";
-import Redis from "ioredis";
 import db from "../db.js";
-import { redisConnectionOptions } from "./redisOptions.js";
 import { SUITES, suiteByKey, runSuite } from "./evals/index.js";
-import { traceRedis } from "./redisTrace.js";
 import { workerJob } from "./workerLog.js";
-import { guardWorker } from "./redisQuotaGuard.js";
+import { backgroundQueue, handleBackground } from "./backgroundQueue.js";
 
-const connection = traceRedis(new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "eval-worker" })), "eval-worker");
-connection.on("error", (e) => console.error("[evals/redis]", e.message));
-
-export const evalQueue = new Queue("evals", {
-  connection,
-  defaultJobOptions: {
-    // No retries. A rerun costs real money and would silently double the bill
-    // for a failure the operator has not seen yet — they can press the button
-    // again if they want it.
-    attempts: 1,
-    removeOnComplete: { count: 50 },
-    removeOnFail: { count: 50 },
-  },
+// The shared background queue (lib/backgroundQueue.js).
+export const evalQueue = backgroundQueue("evals", {
+  // No retries. A rerun costs real money and would silently double the bill
+  // for a failure the operator has not seen yet — they can press the button
+  // again if they want it.
+  attempts: 1,
+  removeOnComplete: { count: 50 },
+  removeOnFail: { count: 50 },
 });
 
 let worker = null;
 
 export function startEvalWorker() {
   if (worker) return worker;
-  worker = new Worker("evals", async (job) => {
+  worker = handleBackground("evals", async (job) => {
     const { runId } = job.data;
     const { data: run } = await db.schema("edu").from("eval_runs").select("*").eq("id", runId).maybeSingle();
     if (!run || run.status === "cancelled") return;
@@ -79,21 +70,12 @@ export function startEvalWorker() {
       console.error(`[evals] run ${runId} failed:`, e.message);
     }
   }, {
-    connection,
     // One at a time. Two runs would double the spend and race the same tables,
     // and there is never a reason to want the second one sooner.
     concurrency: 1,
-    // House Upstash tuning (per-command-billed Redis): block longer between
-    // idle polls and scan for stalled jobs far less often than the defaults.
-    drainDelay: 60,
-    stalledInterval: 300_000,   // 5 min between stalled-job scans. Top level: BullMQ ignores it inside `settings`, which left every worker scanning every 30 s.
+    onCompleted: (job) => workerJob("evals", "done", job, { runId: job.data?.runId }),
+    onFailed: (job, err) => workerJob("evals", "failed", job, { runId: job?.data?.runId, error: err?.message }),
   });
-  // Quota errors pause every worker instead of a 100 ms retry storm (lib/redisQuotaGuard.js).
-  guardWorker(worker, "eval worker");
-
-  worker.on("completed", (job) => workerJob("evals", "done", job, { runId: job.data?.runId }));
-  worker.on("failed",    (job, err) => workerJob("evals", "failed", job, { runId: job?.data?.runId, error: err?.message }));
-  worker.on("error", (e) => console.error("[evals/worker]", e.message));
   console.log(`[evals] worker started (${SUITES.length} suites)`);
   return worker;
 }

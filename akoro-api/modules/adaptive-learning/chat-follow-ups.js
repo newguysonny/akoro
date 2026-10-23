@@ -8,52 +8,25 @@
  */
 import { randomUUID } from "node:crypto";
 import { reportAgentActivity, clearAgentActivity } from "../../lib/agentActivity.js";
-import { Queue, Worker } from "bullmq";
-import Redis from "ioredis";
+import { backgroundQueue, handleBackground } from "../../lib/backgroundQueue.js";
+import { addLater, cancelLater } from "../../lib/deferredJobs.js";
 
 import db from "../../db.js";
 import { notifyUser } from "../notify.js";
-import { redisConnectionOptions } from "../../lib/redisOptions.js";
-import { traceRedis } from "../../lib/redisTrace.js";
 import { workerJob } from "../../lib/workerLog.js";
 import { validateFollowUpId, validateFollowUpInput } from "./chat-follow-up-validation.js";
-import { guardWorker } from "../../lib/redisQuotaGuard.js";
 import { assertQueueCapacity } from "../../lib/queueGuard.js";
 
-const QUEUE_NAME = "agent-chat-follow-ups";
 const STALE_DELIVERY_MS = 5 * 60 * 1000;
 
-let redis;
-let workerRedis;
-let queue;
-
-function redisConnection() {
-  if (redis) return redis;
-  redis = traceRedis(new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "chat-follow-ups" })), "chat-follow-ups");
-  redis.on("error", (error) => console.error("[chat-follow-ups queue Redis]", error.message));
-  return redis;
-}
-
-function workerRedisConnection() {
-  if (workerRedis) return workerRedis;
-  workerRedis = traceRedis(new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "chat-follow-ups" })), "chat-follow-ups");
-  workerRedis.on("error", (error) => console.error("[chat-follow-ups worker Redis]", error.message));
-  return workerRedis;
-}
-
-function chatFollowUpQueue() {
-  if (queue) return queue;
-  queue = new Queue(QUEUE_NAME, {
-    connection: redisConnection(),
-    defaultJobOptions: {
-      attempts: 3,
-      backoff: { type: "exponential", delay: 5_000 },
-      removeOnComplete: { count: 200 },
-      removeOnFail: { count: 500 },
-    },
-  });
-  return queue;
-}
+// The shared background queue (lib/backgroundQueue.js); a far-off delivery
+// waits in Postgres until shortly before it is due (lib/deferredJobs.js).
+const chatFollowUpQueue = () => backgroundQueue("chat-follow-ups", {
+  attempts: 3,
+  backoff: { type: "exponential", delay: 5_000 },
+  removeOnComplete: { count: 200 },
+  removeOnFail: { count: 500 },
+});
 
 /**
  * Schedule a new Agent Chat conversation for the authorised learner. The user
@@ -83,7 +56,7 @@ export async function scheduleChatFollowUp({ userId, input, defaultTimezone, tar
 
   try {
     await assertQueueCapacity(chatFollowUpQueue(), { name: "followups" });
-    await chatFollowUpQueue().add("deliver-chat-follow-up", { followUpId: id }, {
+    await addLater(chatFollowUpQueue(), "deliver-chat-follow-up", { followUpId: id }, {
       jobId: `chat-follow-up-${id}`,
       delay: validated.delayMs,
     });
@@ -157,6 +130,7 @@ export async function cancelChatFollowUp({ userId, followUpId }) {
   // Removing the delayed job saves queue work, but the database status is the
   // authority: if Redis is briefly unavailable, the worker will still skip it.
   try {
+    await cancelLater(chatFollowUpQueue(), `chat-follow-up-${id}`);
     const job = await chatFollowUpQueue().getJob(`chat-follow-up-${id}`);
     if (job) await job.remove();
   } catch (error_) {
@@ -269,7 +243,7 @@ let worker;
 /** Start once from app.js; workers never run in a browser process. */
 export function startChatFollowUpWorker() {
   if (worker) return worker;
-  worker = new Worker(QUEUE_NAME, async (job) => {
+  worker = handleBackground("chat-follow-ups", async (job) => {
     try {
       return await deliverChatFollowUp(job.data?.followUpId);
     } catch (error) {
@@ -288,20 +262,15 @@ export function startChatFollowUpWorker() {
       throw error;
     }
   }, {
-    connection: workerRedisConnection(),
     concurrency: 5,
-    drainDelay: 60,
-    stalledInterval: 300_000,   // 5 min between stalled-job scans. Top level: BullMQ ignores it inside `settings`, which left every worker scanning every 30 s.
-  });
-  // Quota errors pause every worker instead of a 100 ms retry storm (lib/redisQuotaGuard.js).
-  guardWorker(worker, "chat follow-ups worker");
-  worker.on("completed", (job, result) => {
-    console.log(`[chat-follow-ups] delivered job ${job.id}`);
-    workerJob("chat-follow-ups", "done", job, { skipped: result?.skipped ?? false, delivered: result?.delivered ?? false });
-  });
-  worker.on("failed", (job, error) => {
-    console.error(`[chat-follow-ups] failed job ${job?.id}:`, error.message);
-    workerJob("chat-follow-ups", "failed", job, { error: error?.message });
+    onCompleted: (job, result) => {
+      console.log(`[chat-follow-ups] delivered job ${job.id}`);
+      workerJob("chat-follow-ups", "done", job, { skipped: result?.skipped ?? false, delivered: result?.delivered ?? false });
+    },
+    onFailed: (job, error) => {
+      console.error(`[chat-follow-ups] failed job ${job?.id}:`, error.message);
+      workerJob("chat-follow-ups", "failed", job, { error: error?.message });
+    },
   });
   return worker;
 }

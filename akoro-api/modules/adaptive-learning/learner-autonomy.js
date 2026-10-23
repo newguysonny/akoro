@@ -9,53 +9,27 @@
  */
 import { randomUUID } from "node:crypto";
 import { reportAgentActivity, clearAgentActivity } from "../../lib/agentActivity.js";
-import { Queue, Worker } from "bullmq";
-import Redis from "ioredis";
+import { backgroundQueue, handleBackground } from "../../lib/backgroundQueue.js";
+import { addLater } from "../../lib/deferredJobs.js";
 
 import db from "../../db.js";
 import { notifyUser } from "../notify.js";
-import { redisConnectionOptions } from "../../lib/redisOptions.js";
-import { traceRedis } from "../../lib/redisTrace.js";
 import { workerJob } from "../../lib/workerLog.js";
 import { buildAutonomyTaskMessage } from "./learner-autonomy-policy.js";
-import { guardWorker } from "../../lib/redisQuotaGuard.js";
 import { assertQueueCapacity } from "../../lib/queueGuard.js";
 
-const QUEUE_NAME = "learner-agent-autonomy";
 const STALE_DELIVERY_MS = 5 * 60 * 1000;
 
-let queueRedis;
-let workerRedis;
-let queue;
 let worker;
 
-function queueConnection() {
-  if (queueRedis) return queueRedis;
-  queueRedis = traceRedis(new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "learner-autonomy" })), "learner-autonomy");
-  queueRedis.on("error", (error) => console.error("[learner-autonomy queue Redis]", error.message));
-  return queueRedis;
-}
-
-function workerConnection() {
-  if (workerRedis) return workerRedis;
-  workerRedis = traceRedis(new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "learner-autonomy" })), "learner-autonomy");
-  workerRedis.on("error", (error) => console.error("[learner-autonomy worker Redis]", error.message));
-  return workerRedis;
-}
-
-function autonomyQueue() {
-  if (queue) return queue;
-  queue = new Queue(QUEUE_NAME, {
-    connection: queueConnection(),
-    defaultJobOptions: {
-      attempts: 3,
-      backoff: { type: "exponential", delay: 5_000 },
-      removeOnComplete: { count: 500 },
-      removeOnFail: { count: 500 },
-    },
-  });
-  return queue;
-}
+// The shared background queue (lib/backgroundQueue.js); a check-in due later
+// than a few minutes waits in Postgres (lib/deferredJobs.js).
+const autonomyQueue = () => backgroundQueue("learner-autonomy", {
+  attempts: 3,
+  backoff: { type: "exponential", delay: 5_000 },
+  removeOnComplete: { count: 500 },
+  removeOnFail: { count: 500 },
+});
 
 /** Due-task check-ins: the agent Online AND the learner's "Task check-ins" switch (§7.16.7). */
 async function enabledFor(userId, { strict = false } = {}) {
@@ -86,7 +60,7 @@ async function queueReview(review) {
   const due = validDueAt(review.due_at);
   if (!due) throw new Error("Task has no valid due time");
   await assertQueueCapacity(autonomyQueue(), { name: "autonomy" });
-  return autonomyQueue().add("review-due-task", {
+  return addLater(autonomyQueue(), "review-due-task", {
     reviewId: review.id,
     revision: review.revision,
   }, {
@@ -349,7 +323,7 @@ export async function deliverAutonomyReview({ reviewId, revision }) {
 
 export function startLearnerAutonomyWorker() {
   if (worker) return worker;
-  worker = new Worker(QUEUE_NAME, async (job) => {
+  worker = handleBackground("learner-autonomy", async (job) => {
     try {
       return await deliverAutonomyReview(job.data || {});
     } catch (error) {
@@ -371,20 +345,15 @@ export function startLearnerAutonomyWorker() {
       throw error;
     }
   }, {
-    connection: workerConnection(),
     concurrency: 5,
-    drainDelay: 60,
-    stalledInterval: 300_000,   // 5 min between stalled-job scans. Top level: BullMQ ignores it inside `settings`, which left every worker scanning every 30 s.
-  });
-  // Quota errors pause every worker instead of a 100 ms retry storm (lib/redisQuotaGuard.js).
-  guardWorker(worker, "learner-autonomy worker");
-  worker.on("completed", (job, result) => {
-    console.log(`[learner-autonomy] completed job ${job.id}`);
-    workerJob("learner-autonomy", "done", job, { skipped: result?.skipped ?? false, delivered: result?.delivered ?? false });
-  });
-  worker.on("failed", (job, error) => {
-    console.error(`[learner-autonomy] failed job ${job?.id}:`, error.message);
-    workerJob("learner-autonomy", "failed", job, { error: error?.message });
+    onCompleted: (job, result) => {
+      console.log(`[learner-autonomy] completed job ${job.id}`);
+      workerJob("learner-autonomy", "done", job, { skipped: result?.skipped ?? false, delivered: result?.delivered ?? false });
+    },
+    onFailed: (job, error) => {
+      console.error(`[learner-autonomy] failed job ${job?.id}:`, error.message);
+      workerJob("learner-autonomy", "failed", job, { error: error?.message });
+    },
   });
   return worker;
 }

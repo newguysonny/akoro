@@ -11,6 +11,7 @@ const workerJs = await readFile(new URL("../../worker.js", import.meta.url), "ut
 const followUpsJs = await readFile(new URL("../adaptive-learning/chat-follow-ups.js", import.meta.url), "utf8");
 const autonomyJs = await readFile(new URL("../adaptive-learning/learner-autonomy.js", import.meta.url), "utf8");
 const evalJs = await readFile(new URL("../../lib/evalWorker.js", import.meta.url), "utf8");
+const backgroundJs = await readFile(new URL("../../lib/backgroundQueue.js", import.meta.url), "utf8");
 
 test("usage meter attributes commands to the route in context", () => {
   assert.equal(currentRouteKey(), "(background)");
@@ -50,13 +51,12 @@ test("health checks and the encoding worker no longer bill per-command Redis/DB"
   assert.match(appSource, /req\.query\.deep === "1"/);
   // The video-encoding worker got the battle worker's Upstash treatment.
   const workerSource = workerJs;
-  assert.match(workerSource, /drainDelay:\s+60/);
+  assert.match(workerSource, /drainDelay:\s+300/);
   assert.match(workerSource, /stalledInterval: 300_000/);
-  // ...and so did every in-process BullMQ worker (house tuning).
-  for (const src of [followUpsJs, autonomyJs, evalJs]) {
-    assert.match(src, /drainDelay: 60/);
-    assert.match(src, /stalledInterval: 300_000/);
-  }
+  // ...and the quiet kinds share one worker with the house tuning (lib/backgroundQueue.js).
+  for (const src of [followUpsJs, autonomyJs, evalJs]) assert.match(src, /handleBackground\(/);
+  assert.match(backgroundJs, /drainDelay: 300/);
+  assert.match(backgroundJs, /stalledInterval: 300_000/);
   // A stand-down switch exits before any Redis connection is made.
   assert.match(workerSource, /VIDEO_WORKER_ENABLED/);
 });

@@ -17,6 +17,7 @@
 import db from "../../db.js";
 import { buildQuestions } from "./questionSource.js";
 
+import { addLater } from "../../lib/deferredJobs.js";
 const now = () => new Date().toISOString();
 let _q = null;
 const queue = async () => (_q ||= (await import("./worker.js")).battleQueue);
@@ -87,7 +88,7 @@ export async function createCheckBattle({ learnerId, subject, topic, total = CHE
   }
 
   const q = await queue();
-  await q.add("start-battle", { action: "start-battle", battleId: battle.id },
+  await addLater(q, "start-battle", { action: "start-battle", battleId: battle.id },
     { delay: CHECK_DEFAULTS.START_DELAY_MS, jobId: `start-${battle.id}` });
   global.io?.to(`user:${learnerId}`).emit("join_battle_room", { battleId: battle.id });
   return { battleId: battle.id, placed: fill.placed, title };
