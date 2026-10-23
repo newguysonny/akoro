@@ -25,10 +25,12 @@ import { proactiveInChat } from "./proactiveChat.js";
 import { readerBackend } from "./reader.js";
 import { socketSession } from "./socket.js";
 import { courseOneRecord } from "./courses.js";
+import { teachingToolRouting, teachingToolRuns, activityToolRouting, draftLifecycle, routineLifecycle } from "./instructorTools.js";
 
 const ALL = [healthBuild, toolsCatalogue, r2Live, embeddingsLive, embeddingsCompare, searchTextFallback, scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity,
   privacyEdges, rateLimitCountedOnce, battleEntryGates, followUpDeliverIntoChat, taskDueInMinutes, noResidue,
-  viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, suggestionsSurviveRefresh, studyToolRouting, untaughtFlashcards, tailoredChips, chatUploadFiled, pastPaperStructured, sortOwnFolders, readyProposal, goalWork, ideasFlow, consentsQuietBudget, instructorProactive, voiceSpeak, voiceLive, sweepStale, agentCheckBattle, agentCheckStop, classSyllabusFirst, historyPages, workflowMirror, agentWakes, replaceAndCancel, teachingHandoff, eventStream, paperStructured, ...chatToSubmissionScenarios, authoringVersionsParts, authoringDiagramsEdits, inboxOneList, quietLearningPass, plannerRichGather, proactiveInChat, readerBackend, socketSession, courseOneRecord];
+  viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, suggestionsSurviveRefresh, studyToolRouting, untaughtFlashcards, tailoredChips, chatUploadFiled, pastPaperStructured, sortOwnFolders, readyProposal, goalWork, ideasFlow, consentsQuietBudget, instructorProactive, voiceSpeak, voiceLive, sweepStale, agentCheckBattle, agentCheckStop, classSyllabusFirst, historyPages, workflowMirror, agentWakes, replaceAndCancel, teachingHandoff, eventStream, paperStructured, ...chatToSubmissionScenarios, authoringVersionsParts, authoringDiagramsEdits, inboxOneList, quietLearningPass, plannerRichGather, proactiveInChat, readerBackend, socketSession, courseOneRecord,
+  teachingToolRouting, teachingToolRuns, activityToolRouting, draftLifecycle, routineLifecycle];
 
 export const SCENARIOS = Object.fromEntries(ALL.map((s) => [s.name, s]));
 
@@ -56,6 +58,8 @@ export const SUITES = {
   // One course record: Course Creator edits the courses row learners and schedules read.
   courses: ["courses.one_record"],
   curriculum: ["curriculum.syllabus_coverage"],
+  // The instructor's agent tools from chat: teaching tools (Library) and activity tools (drafts, routines, results).
+  "instructor-chat": ["instructor.teaching_tool_routing", "instructor.activity_tool_routing", "instructor.teaching_tool_runs", "instructor.draft_lifecycle", "instructor.routine_lifecycle", "writes.no_residue"],
   teaching: ["teaching.bridge_persists"],
   decay: ["decay.concept_curve"],
   suggestions: ["chat.suggestions_answer", "chat.tailored_chips", "chat.suggestions_survive_refresh", "chat.study_tool_routing", "chat.untaught_flashcards", "writes.no_residue"],
