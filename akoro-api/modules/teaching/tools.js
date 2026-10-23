@@ -63,6 +63,8 @@ const voiceFromLabel = (label, fallback) =>
 /* Every tool answers in the one result template (template.js): a titled set of
    entries, each a few labelled sections. TEMPLATE_RULE is its shape card, so a
    tool's prompt only has to say WHICH entries and sections it wants. */
+// The template spells out kind/label/tone on every section, so the JSON runs longer than the old
+// card shape did: the token ceilings below leave room for it (a cut-off answer is unparseable).
 const DOC_RULE = TEMPLATE_RULE;
 const HOUSE = "You support Nigerian secondary school teachers. Be concrete and classroom-ready — real examples, real materials, nothing generic. Never invent exam results, statistics or citations.";
 
@@ -76,7 +78,7 @@ export const TOOLS = [
       { name: "voiceA", label: "First voice", type: "select", options: VOICE_LABELS, default: "Ade — warm, steady" },
       { name: "voiceB", label: "Second voice", type: "select", options: VOICE_LABELS, default: "Ngozi — bright, lively" },
       F.notes],
-    maxTokens: 3000,
+    maxTokens: 4500,
     system: `${HOUSE} You write podcast scripts for students: warm, curious, and genuinely entertaining — banter, questions, analogies, a moment of surprise. No filler. ${DOC_RULE}`,
     prompt: (i) => `Write a ${i.minutes || 5}-minute ${String(i.hosts || "Two hosts").toLowerCase()} podcast episode for ${i.class || "secondary"} students on "${i.topic}"${i.subject ? ` (${i.subject})` : ""}.
 ${i.notes ? `Extra direction: ${i.notes}\n` : ""}
@@ -86,7 +88,7 @@ Use at most two distinct speaker names. Keep each turn under 60 words so it narr
   {
     key: "misconceptions", name: "Common Misconceptions", emoji: "🧠", output: "doc",
     blurb: "The wrong ideas students arrive with, where they'll struggle, and how to fix each one.",
-    fields: [F.topic, F.subject, F.klass, F.notes], maxTokens: 2600,
+    fields: [F.topic, F.subject, F.klass, F.notes], maxTokens: 4500,
     system: `${HOUSE} ${DOC_RULE}`,
     prompt: (i) => `Topic: "${i.topic}"${i.subject ? ` · Subject: ${i.subject}` : ""}${i.class ? ` · Class: ${i.class}` : ""}.
 ${i.notes ? `Context: ${i.notes}\n` : ""}
@@ -101,7 +103,7 @@ Then one final entry "Quick Checks" with a list "Questions" of 5 questions that 
   {
     key: "real-world", name: "Real-World Connections", emoji: "🌍", output: "doc",
     blurb: "Why this topic matters — everyday contexts, local examples, and the careers built on it.",
-    fields: [F.topic, F.subject, F.klass, F.notes], maxTokens: 2600,
+    fields: [F.topic, F.subject, F.klass, F.notes], maxTokens: 4500,
     system: `${HOUSE} Ground examples in Nigerian and West African daily life where it fits naturally — markets, farming, transport, weather, mobile money, local industry — without forcing it. ${DOC_RULE}`,
     prompt: (i) => `Topic: "${i.topic}"${i.subject ? ` · Subject: ${i.subject}` : ""}${i.class ? ` · Class: ${i.class}` : ""}.
 ${i.notes ? `Context: ${i.notes}\n` : ""}
@@ -113,7 +115,7 @@ Then two final entries (layout "stack"): "Talk About It" with a list "Discussion
   {
     key: "lesson-hooks", name: "Lesson Hooks", emoji: "🪝", output: "doc",
     blurb: "Openings that grab the class in the first two minutes — with materials and outcomes.",
-    fields: [F.topic, F.subject, F.klass, F.notes], maxTokens: 2400,
+    fields: [F.topic, F.subject, F.klass, F.notes], maxTokens: 4000,
     system: `${HOUSE} A hook is something the teacher DOES in the first 2 minutes — a demonstration, a question with a surprising answer, a story, a challenge. Every hook must be runnable with materials a Nigerian classroom actually has. ${DOC_RULE}`,
     prompt: (i) => `Topic: "${i.topic}"${i.subject ? ` · Subject: ${i.subject}` : ""}${i.class ? ` · Class: ${i.class}` : ""}.
 ${i.notes ? `Context: ${i.notes}\n` : ""}
@@ -130,7 +132,7 @@ Then a final entry "Expected Outcomes" with a list "By The End" of what students
     fields: [F.topic, F.subject, F.klass,
       { name: "count", label: "How many terms", type: "select", options: ["10", "15", "20", "30"], default: "15" },
       F.notes],
-    maxTokens: 2600,
+    maxTokens: 4500,
     system: `${HOUSE} Definitions must be in language the stated class level can read unaided. ${DOC_RULE}`,
     prompt: (i) => `Build a vocabulary set of ${i.count || 15} terms for "${i.topic}"${i.subject ? ` (${i.subject})` : ""}${i.class ? `, ${i.class} level` : ""}.
 ${i.notes ? `Context: ${i.notes}\n` : ""}
@@ -144,7 +146,7 @@ Produce one entry per term (layout "compact"): the title is the term, then secti
       { name: "essays", label: "Essays", placeholder: "Paste the essays. Separate each with a line containing only ---", long: true, required: true, rows: 10 },
       F.subject, F.klass,
     ],
-    maxTokens: 4000,
+    maxTokens: 6000,
     system: `${HOUSE} You mark to the rubric GIVEN — never your own criteria, never a curve. Be specific about where marks were lost. Feedback is addressed to the student, encouraging but honest. ${DOC_RULE}`,
     prompt: (i) => `Mark these essays${i.subject ? ` (${i.subject}` : ""}${i.class ? `${i.subject ? ", " : " ("}${i.class}` : ""}${i.subject || i.class ? ")" : ""} strictly against the rubric.
 
@@ -167,7 +169,7 @@ Produce one entry per essay, in the order given. The title is the student's name
       { name: "duration", label: "Period length", type: "select", options: ["35 minutes", "40 minutes", "45 minutes", "60 minutes", "Double period"], default: "40 minutes" },
       { name: "objectives", label: "Your objectives", placeholder: "Optional — leave blank and I'll write them", long: true },
       F.notes],
-    maxTokens: 3000,
+    maxTokens: 4500,
     system: `${HOUSE} Every activity states what the TEACHER does and what the STUDENTS do. ${DOC_RULE}`,
     prompt: (i) => `Write a ${i.duration || "40 minute"} lesson plan.
 Topic: "${i.topic}"${i.subject ? ` · Subject: ${i.subject}` : ""}${i.class ? ` · Class: ${i.class}` : ""}
@@ -194,7 +196,7 @@ Timings must add up to the period length.`,
       { name: "duration", label: "How long", type: "select", options: ["10 minutes", "15 minutes", "20 minutes", "30 minutes", "Full period"], default: "20 minutes" },
       { name: "materials", label: "What you have", placeholder: "Optional — e.g. only a board and exercise books", long: true },
       F.notes],
-    maxTokens: 2400,
+    maxTokens: 4000,
     // The materials constraint is the whole point of asking for it. A plan that
     // needs printouts and tablets is not an activity for a class that has a
     // board and exercise books, and it is worse than no plan because the
@@ -218,7 +220,7 @@ Timings must add up to the stated length.`,
       { name: "count", label: "How many questions", type: "select", options: ["5", "10", "15", "20"], default: "10" },
       { name: "difficulty", label: "Difficulty", type: "select", options: ["Mixed", "Foundation", "Standard", "Challenge"], default: "Mixed" },
       F.notes],
-    maxTokens: 3200,
+    maxTokens: 5000,
     system: `${HOUSE} Questions are unambiguous and answerable from what was taught. The marking scheme is a separate entry so the teacher can hand out the questions alone. ${DOC_RULE}`,
     prompt: (i) => `Create a ${String(i.type || "homework").toLowerCase()} of ${i.count || 10} questions on "${i.topic}"${i.subject ? ` (${i.subject})` : ""}${i.class ? `, ${i.class}` : ""}. Difficulty: ${i.difficulty || "Mixed"}.
 ${i.notes ? `Context: ${i.notes}\n` : ""}
@@ -356,6 +358,7 @@ export async function runTeachingTool({ key, body = {}, userId }) {
   }
 
   const result = resultOf(raw);
+  if (!result) console.warn(`[teaching/tools] ${tool.key} unusable (finish=${resp?.choices?.[0]?.finish_reason}, ${raw.length} chars): ${raw.slice(-160).replace(/\s+/g, " ")}`);
   if (!raw) throw new ToolError("Nothing came back — try again.", "EMPTY");
   if (!result) {
     throw new ToolError(parseJson(raw) ? "That came back without any sections — try again." : "That came back in an unusable shape — try again.",
