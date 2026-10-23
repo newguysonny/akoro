@@ -5,9 +5,7 @@
  */
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  FileText, Plus, Eye, Pencil, Trash2, Printer, Loader2, ArrowLeft, Save, X, Award, Sparkles,
-} from 'lucide-react';
+import { Save, X } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { uploadAndOcr } from '../services/uploadApi.js';
 import { API, apiGet, apiPost, apiPut, apiDelete } from '../services/api.js';
@@ -36,7 +34,7 @@ function Thumb({ getHtml, baseW = 830, height = 122, fallback }) {
   useEffect(() => { const w = ref.current?.offsetWidth; if (w) setScale(w / baseW); }, [html, baseW]);
   return (
     <div ref={ref} style={{ height, overflow: 'hidden', position: 'relative', background: '#f1f1f4', borderBottom: `1px solid ${C.border}` }}>
-      {html === null ? <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center' }}><Ico lucide={Loader2} ti="ti-loader-2" size={16} color={C.muted2} style={{ animation: 'spin .8s linear infinite' }} /></div>
+      {html === null ? <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center' }}><Ico ti="ti-loader-2" size={16} color={C.muted2} style={{ animation: 'spin .8s linear infinite' }} /></div>
         : html === '' ? (fallback || null)
         : <iframe title="preview" srcDoc={html} scrolling="no" tabIndex={-1} aria-hidden style={{ width: baseW, height: baseW * 1.3, border: 0, transform: `scale(${scale})`, transformOrigin: 'top left', pointerEvents: 'none' }} />}
     </div>
@@ -44,7 +42,7 @@ function Thumb({ getHtml, baseW = 830, height = 122, fallback }) {
 }
 const IconBlock = ({ cat, height = 122 }) => (
   <div style={{ height, background: `linear-gradient(135deg, ${tint(8, catColor[cat] || C.brand)}, ${BLUE}10)`, display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: `1px solid ${C.border}` }}>
-    {cat === 'certificate' ? <Ico lucide={Award} ti="ti-award" size={30} color={catColor.certificate} /> : <Ico lucide={FileText} ti="ti-file-text" size={28} color={catColor[cat] || BLUE} />}
+    {cat === 'certificate' ? <Ico ti="ti-award" size={30} color={catColor.certificate} /> : <Ico ti="ti-file-text" size={28} color={catColor[cat] || BLUE} />}
   </div>
 );
 
@@ -79,18 +77,18 @@ function CreateDocModal({ onClose, onSaved }) {
       <div onClick={(e) => e.stopPropagation()} style={{ background: C.surface, borderRadius: 18, width: '100%', maxWidth: 440, padding: 22, fontFamily: C.font, boxShadow: '0 20px 60px rgba(0,0,0,.3)' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
           <p style={{ fontSize: 16, fontWeight: 900, color: C.ink, margin: '0 0 4px' }}>Create a template</p>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted2 }}><Ico lucide={X} ti="ti-x" size={18} /></button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted2 }}><Ico ti="ti-x" size={18} /></button>
         </div>
         <p style={{ fontSize: 12.5, color: C.muted, margin: '0 0 18px', lineHeight: 1.5 }}>Upload a photo of an existing document — a report card, certificate, form or letter. We’ll turn it into a reusable template you can fill and print.</p>
 
         <input ref={fileRef} type="file" accept="image/*,application/pdf" hidden onChange={onFile} />
         <div onClick={() => stage !== 'extracting' && fileRef.current?.click()} style={{ border: `2px dashed ${C.border}`, borderRadius: 16, padding: '28px 20px', textAlign: 'center', cursor: stage === 'extracting' ? 'default' : 'pointer', marginBottom: 16 }}>
           {stage === 'extracting' ? (
-            <><Ico lucide={Loader2} ti="ti-loader-2" size={22} color={C.brand} style={{ animation: 'spin .8s linear infinite' }} /><p style={{ fontSize: 12, color: C.muted2, margin: '6px 0 0' }}>Reading the document…</p></>
+            <><Ico ti="ti-loader-2" size={22} color={C.brand} style={{ animation: 'spin .8s linear infinite' }} /><p style={{ fontSize: 12, color: C.muted2, margin: '6px 0 0' }}>Reading the document…</p></>
           ) : stage === 'review' ? (
-            <><Ico lucide={FileText} ti="ti-file-text" size={22} color={GREEN} /><p style={{ fontSize: 13, fontWeight: 800, color: C.ink, margin: '6px 0 0' }}>Sample read ✓</p><p style={{ fontSize: 11.5, color: C.muted2, margin: '2px 0 0' }}>Tap to choose a different file</p></>
+            <><Ico ti="ti-file-text" size={22} color={GREEN} /><p style={{ fontSize: 13, fontWeight: 800, color: C.ink, margin: '6px 0 0' }}>Sample read ✓</p><p style={{ fontSize: 11.5, color: C.muted2, margin: '2px 0 0' }}>Tap to choose a different file</p></>
           ) : (
-            <><Ico lucide={Sparkles} ti="ti-sparkles" size={22} color={C.brand} /><p style={{ fontSize: 13.5, fontWeight: 800, color: C.ink, margin: '6px 0 0' }}>Tap to upload a sample</p><p style={{ fontSize: 11.5, color: C.muted2, margin: '2px 0 0' }}>Image or PDF</p></>
+            <><Ico ti="ti-sparkles" size={22} color={C.brand} /><p style={{ fontSize: 13.5, fontWeight: 800, color: C.ink, margin: '6px 0 0' }}>Tap to upload a sample</p><p style={{ fontSize: 11.5, color: C.muted2, margin: '2px 0 0' }}>Image or PDF</p></>
           )}
         </div>
 
@@ -142,14 +140,14 @@ export default function DocumentsPage() {
           ))}
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 10 }}>
-          <button onClick={() => setGen({ pick: true })} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 15px', borderRadius: 9, border: `1.5px solid ${BLUE}55`, background: `${BLUE}0C`, color: BLUE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}><Ico lucide={Printer} ti="ti-printer" size={14} /> Generate</button>
-          <button onClick={() => setShowCreate(true)} title="Upload a sample — AI builds a reusable template" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 15px', borderRadius: 9, border: `1.5px solid ${PURPLE}55`, background: `${PURPLE}0C`, color: PURPLE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}><Ico lucide={Sparkles} ti="ti-sparkles" size={14} /> Create Template</button>
-          <button onClick={() => navigate('/documents/new')} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}><Ico lucide={Plus} ti="ti-plus" size={15} /> New Template</button>
+          <button onClick={() => setGen({ pick: true })} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 15px', borderRadius: 9, border: `1.5px solid ${BLUE}55`, background: `${BLUE}0C`, color: BLUE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}><Ico ti="ti-printer" size={14} /> Generate</button>
+          <button onClick={() => setShowCreate(true)} title="Upload a sample — AI builds a reusable template" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 15px', borderRadius: 9, border: `1.5px solid ${PURPLE}55`, background: `${PURPLE}0C`, color: PURPLE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}><Ico ti="ti-sparkles" size={14} /> Create Template</button>
+          <button onClick={() => navigate('/documents/new')} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}><Ico ti="ti-plus" size={15} /> New Template</button>
         </div>
       </div>
 
       {docs === null ? (
-        <div style={{ padding: '60px 0', textAlign: 'center', color: C.muted2, fontFamily: C.font }}><Ico lucide={Loader2} ti="ti-loader-2" size={22} style={{ animation: 'spin .8s linear infinite' }} /></div>
+        <div style={{ padding: '60px 0', textAlign: 'center', color: C.muted2, fontFamily: C.font }}><Ico ti="ti-loader-2" size={22} style={{ animation: 'spin .8s linear infinite' }} /></div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
           {all.map((t) => (
@@ -163,11 +161,11 @@ export default function DocumentsPage() {
                 </div>
                 {t.description && <div style={{ fontSize: 11.5, color: C.muted2, fontFamily: C.font, flex: 1 }}>{t.description}</div>}
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                  <button onClick={() => view(t)} style={actBtn(C.ink)}><Ico lucide={Eye} ti="ti-eye" size={12} /> View</button>
-                  <button onClick={() => setGen(t)} style={actBtn(C.brand)}><Ico lucide={Printer} ti="ti-printer" size={12} /> Generate</button>
-                  {!t.isDefault && <button onClick={() => navigate(`/documents/${t.id}`)} style={actBtn(BLUE)}><Ico lucide={Pencil} ti="ti-pencil" size={12} /> Edit</button>}
-                  {t.isDefault && <button onClick={() => navigate(`/documents/new?from=${t.id.replace('default:', '')}`)} style={actBtn(BLUE)}><Ico lucide={Pencil} ti="ti-pencil" size={12} /> Customize</button>}
-                  {!t.isDefault && <button onClick={() => remove(t)} style={actBtn(RED)}><Ico lucide={Trash2} ti="ti-trash" size={12} /></button>}
+                  <button onClick={() => view(t)} style={actBtn(C.ink)}><Ico ti="ti-eye" size={12} /> View</button>
+                  <button onClick={() => setGen(t)} style={actBtn(C.brand)}><Ico ti="ti-printer" size={12} /> Generate</button>
+                  {!t.isDefault && <button onClick={() => navigate(`/documents/${t.id}`)} style={actBtn(BLUE)}><Ico ti="ti-pencil" size={12} /> Edit</button>}
+                  {t.isDefault && <button onClick={() => navigate(`/documents/new?from=${t.id.replace('default:', '')}`)} style={actBtn(BLUE)}><Ico ti="ti-pencil" size={12} /> Customize</button>}
+                  {!t.isDefault && <button onClick={() => remove(t)} style={actBtn(RED)}><Ico ti="ti-trash" size={12} /></button>}
                 </div>
               </div>
             </div>
@@ -211,7 +209,7 @@ function GenerateModal({ seed, allDocs, onClose, showToast, onDone }) {
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: '86vh', overflowY: 'auto', background: C.surface, borderRadius: 16, padding: '20px 22px', fontFamily: C.font }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
           <span style={{ fontSize: 16, fontWeight: 800, color: C.ink }}>Generate Document</span>
-          <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', color: C.muted2 }}><Ico lucide={X} ti="ti-x" size={18} /></button>
+          <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', color: C.muted2 }}><Ico ti="ti-x" size={18} /></button>
         </div>
         <label style={lbl}>Template</label>
         <select value={sel} onChange={(e) => { setSel(e.target.value); setValues({}); }} style={{ ...inputStyle, cursor: 'pointer', marginBottom: 14 }}>
@@ -226,7 +224,7 @@ function GenerateModal({ seed, allDocs, onClose, showToast, onDone }) {
         ))}
         {chosen && vars.length === 0 && <p style={{ fontSize: 12, color: C.muted2 }}>This template has no fillable fields — it will render as-is.</p>}
         <button onClick={generate} disabled={busy || !chosen} style={{ width: '100%', marginTop: 10, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 10, border: 'none', background: (busy || !chosen) ? '#E5E7EB' : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: (busy || !chosen) ? '#9CA3AF' : '#fff', fontSize: 13.5, fontWeight: 800, cursor: (busy || !chosen) ? 'default' : 'pointer', fontFamily: C.font }}>
-          {busy ? <Ico lucide={Loader2} ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico lucide={Printer} ti="ti-printer" size={14} />} Generate &amp; Open
+          {busy ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-printer" size={14} />} Generate &amp; Open
         </button>
       </div>
     </div>
@@ -294,12 +292,12 @@ export function DocumentEditorPage() {
   return (
     <PageLayout title={isNew ? 'New Template' : 'Edit Template'} subtitle="Document Templates">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 10, flexWrap: 'wrap' }}>
-        <button onClick={() => navigate('/documents')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: `1.5px solid ${C.border}`, background: C.surface, color: C.muted, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}><Ico lucide={ArrowLeft} ti="ti-arrow-left" size={14} /> Back</button>
-        <button onClick={save} disabled={saving || loading} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 20px', borderRadius: 9, border: 'none', background: saving ? '#E5E7EB' : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: saving ? '#9CA3AF' : '#fff', fontSize: 13, fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: C.font }}>{saving ? <Ico lucide={Loader2} ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico lucide={Save} ti="ti-device-floppy" size={14} />} Save Template</button>
+        <button onClick={() => navigate('/documents')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: `1.5px solid ${C.border}`, background: C.surface, color: C.muted, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}><Ico ti="ti-arrow-left" size={14} /> Back</button>
+        <button onClick={save} disabled={saving || loading} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 20px', borderRadius: 9, border: 'none', background: saving ? '#E5E7EB' : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: saving ? '#9CA3AF' : '#fff', fontSize: 13, fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: C.font }}>{saving ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-device-floppy" size={14} />} Save Template</button>
       </div>
 
       {loading ? (
-        <div style={{ padding: '60px 0', textAlign: 'center', color: C.muted2, fontFamily: C.font }}><Ico lucide={Loader2} ti="ti-loader-2" size={20} style={{ animation: 'spin .8s linear infinite' }} /></div>
+        <div style={{ padding: '60px 0', textAlign: 'center', color: C.muted2, fontFamily: C.font }}><Ico ti="ti-loader-2" size={20} style={{ animation: 'spin .8s linear infinite' }} /></div>
       ) : (
         <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 380px', minWidth: 320, maxWidth: 480, maxHeight: 'calc(100vh - 170px)', overflowY: 'auto', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '18px 20px' }}>
@@ -319,7 +317,7 @@ export function DocumentEditorPage() {
                 <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
                   <input value={v.key} onChange={(e) => setVar(i, { key: e.target.value })} placeholder="key" style={{ ...inputStyle, flex: 1 }} />
                   <input value={v.label} onChange={(e) => setVar(i, { label: e.target.value })} placeholder="Label" style={{ ...inputStyle, flex: 1 }} />
-                  <button onClick={() => delVar(i)} style={{ border: 'none', background: `${RED}12`, color: RED, borderRadius: 7, width: 32, cursor: 'pointer' }}><Ico lucide={Trash2} ti="ti-trash" size={12} /></button>
+                  <button onClick={() => delVar(i)} style={{ border: 'none', background: `${RED}12`, color: RED, borderRadius: 7, width: 32, cursor: 'pointer' }}><Ico ti="ti-trash" size={12} /></button>
                 </div>
               ))}
               <p style={{ fontSize: 11, color: C.muted2, margin: '4px 0 0', fontFamily: C.font }}>Use these as <code>{'{{key}}'}</code> in the body.</p>
@@ -332,7 +330,7 @@ export function DocumentEditorPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderBottom: `1px solid ${C.border}`, background: C.bg }}>
               <span style={{ display: 'inline-flex', gap: 5 }}>{[RED, C.brand, GREEN].map((c) => <span key={c} style={{ width: 8, height: 8, borderRadius: '50%', background: c }} />)}</span>
               <span style={{ fontSize: 12, fontWeight: 700, color: C.muted2, fontFamily: C.font }}>Live Preview · {form.page_size} {form.orientation}</span>
-              {previewing && <Ico lucide={Loader2} ti="ti-loader-2" size={12} color={C.muted2} style={{ animation: 'spin .8s linear infinite', marginLeft: 'auto' }} />}
+              {previewing && <Ico ti="ti-loader-2" size={12} color={C.muted2} style={{ animation: 'spin .8s linear infinite', marginLeft: 'auto' }} />}
             </div>
             <iframe title="Document preview" srcDoc={previewHtml} style={{ flex: 1, width: '100%', border: 'none', minHeight: 520, background: '#e9e9ee' }} />
           </div>

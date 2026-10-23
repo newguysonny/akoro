@@ -174,7 +174,7 @@ export default function OnboardingPage() {
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
               <div style={{ width: 72, height: 72, borderRadius: 20, background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, boxShadow: `0 6px 20px ${tint(33)}` }}>
-                {(() => { const hit = GUIDE_ICONS.find(([, em]) => em === guideEmoji); const I = hit ? hit[0] : Brain; const iti = hit ? hit[2] : 'ti-brain'; return <Ico lucide={I} ti={iti} size={26} color={C.brand} />; })()}
+                {(() => { const hit = GUIDE_ICONS.find(([, em]) => em === guideEmoji); const I = hit ? hit[0] : Brain; const iti = hit ? hit[2] : 'ti-brain'; return <Ico ti={iti} size={26} color={C.brand} />; })()}
               </div>
             </div>
 
@@ -192,7 +192,7 @@ export default function OnboardingPage() {
                     border: `2px solid ${guideEmoji === em ? C.brand : C.border}`,
                     background: guideEmoji === em ? tint(9) : C.bg,
                     fontFamily: C.font,
-                  }}><Ico lucide={Icon} ti={ti} size={20} color={guideEmoji === em ? C.brand : '#6B7280'} /></button>
+                  }}><Ico ti={ti} size={20} color={guideEmoji === em ? C.brand : '#6B7280'} /></button>
                 ))}
               </div>
             </div>

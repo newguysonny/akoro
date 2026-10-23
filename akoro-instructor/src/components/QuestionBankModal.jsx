@@ -6,7 +6,6 @@
  *   POST /api/battle/courses/:courseId/questions-bank/generate  (AI)
  */
 import { useState, useEffect, useCallback } from 'react';
-import { Trash2, Sparkles, Plus } from 'lucide-react';
 import { Ico } from '../theme/Ico.jsx';
 import { Modal, Btn, Inp, Sel, Txa, Toast, Skeleton } from './Primitives.jsx';
 import { useBattlesAPI } from '../hooks/useBattlesAPI.js';
@@ -96,7 +95,7 @@ export default function QuestionBankModal({ open, onClose }) {
 
         {/* AI generate */}
         <div style={{ ...card, background: tint(4), borderColor: '#E9D8FF' }}>
-          <div style={{ fontSize: 13, fontWeight: 800, color: C.ink, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}><Ico lucide={Sparkles} ti="ti-sparkles" size={14} /> Generate with AI</div>
+          <div style={{ fontSize: 13, fontWeight: 800, color: C.ink, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}><Ico ti="ti-sparkles" size={14} /> Generate with AI</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <Inp label="Topic" value={gen.topic} onChange={(e) => setGen({ ...gen, topic: e.target.value })} placeholder="e.g. Chain Rule" />
             <Inp label="Subject" value={gen.subject} onChange={(e) => setGen({ ...gen, subject: e.target.value })} placeholder="e.g. Further Maths" />
@@ -107,7 +106,7 @@ export default function QuestionBankModal({ open, onClose }) {
             </Sel>
             <Inp label="How many" type="number" value={gen.count} onChange={(e) => setGen({ ...gen, count: e.target.value })} />
           </div>
-          <Btn onClick={generate} disabled={genBusy || !courseId} style={{ marginTop: 10 }}><Ico lucide={Sparkles} ti="ti-sparkles" size={13} /> {genBusy ? 'Generating…' : 'Generate questions'}</Btn>
+          <Btn onClick={generate} disabled={genBusy || !courseId} style={{ marginTop: 10 }}><Ico ti="ti-sparkles" size={13} /> {genBusy ? 'Generating…' : 'Generate questions'}</Btn>
         </div>
 
         {/* Manual add */}
@@ -133,7 +132,7 @@ export default function QuestionBankModal({ open, onClose }) {
             </Sel>
             <Inp label="XP" type="number" value={form.xp_value} onChange={(e) => setForm({ ...form, xp_value: e.target.value })} />
           </div>
-          <Btn onClick={addQuestion} disabled={busy || !courseId} style={{ marginTop: 10 }}><Ico lucide={Plus} ti="ti-plus" size={13} /> {busy ? 'Adding…' : 'Add question'}</Btn>
+          <Btn onClick={addQuestion} disabled={busy || !courseId} style={{ marginTop: 10 }}><Ico ti="ti-plus" size={13} /> {busy ? 'Adding…' : 'Add question'}</Btn>
         </div>
 
         {/* List */}
@@ -151,7 +150,7 @@ export default function QuestionBankModal({ open, onClose }) {
                       ✓ {q.options?.[q.correct_answer_index]} · <span style={{ textTransform: 'capitalize' }}>{q.difficulty}</span>{q.topic ? ` · ${q.topic}` : ''} · {q.xp_value} XP{q.is_ai_generated ? ' · AI' : ''}
                     </div>
                   </div>
-                  <button onClick={() => remove(q.id)} title="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: 4 }}><Ico lucide={Trash2} ti="ti-trash" size={15} /></button>
+                  <button onClick={() => remove(q.id)} title="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: 4 }}><Ico ti="ti-trash" size={15} /></button>
                 </div>
               ))}
             </div>

@@ -6,10 +6,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  ArrowLeft, Sparkles, Loader2, RefreshCw, Users, Clock, CheckCircle2,
-  Brain, AlertTriangle, Gauge,
-} from 'lucide-react';
+import { Users, Clock, CheckCircle2, AlertTriangle, Gauge } from 'lucide-react';
 import { Ico } from '../theme/Ico.jsx';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Badge } from '../components/Primitives.jsx';
@@ -43,7 +40,7 @@ function Stat({ icon: Icon, ti, label, value, color }) {
   return (
     <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '13px 15px', display: 'flex', alignItems: 'center', gap: 10, fontFamily: C.font }}>
       <div style={{ width: 34, height: 34, borderRadius: 10, background: tint(8, color), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        <Ico lucide={Icon} ti={ti} size={16} color={color} />
+        <Ico ti={ti} size={16} color={color} />
       </div>
       <div>
         <div style={{ fontSize: 19, fontWeight: 900, color: C.ink, lineHeight: 1.1 }}>{value ?? '—'}</div>
@@ -61,7 +58,7 @@ function ReportCard({ data, onRegenerate, generating, error }) {
     <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: '18px 20px', marginBottom: 20, fontFamily: C.font }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Ico lucide={Sparkles} ti="ti-sparkles" size={15} color={C.brand} />
+          <Ico ti="ti-sparkles" size={15} color={C.brand} />
           <span style={{ fontSize: 13.5, fontWeight: 900, color: C.ink }}>AI report</span>
           {data?.generatedAt && (
             <span style={{ fontSize: 10.5, color: C.muted2, fontWeight: 700 }}>
@@ -71,8 +68,8 @@ function ReportCard({ data, onRegenerate, generating, error }) {
         </div>
         <Btn size="sm" variant="secondary" onClick={onRegenerate} disabled={generating}>
           {generating
-            ? <><Ico lucide={Loader2} ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> Reading the class…</>
-            : <><Ico lucide={RefreshCw} ti="ti-refresh" size={12} /> {r ? 'Regenerate' : 'Generate AI report'}</>}
+            ? <><Ico ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> Reading the class…</>
+            : <><Ico ti="ti-refresh" size={12} /> {r ? 'Regenerate' : 'Generate AI report'}</>}
         </Btn>
       </div>
 
@@ -90,7 +87,7 @@ function ReportCard({ data, onRegenerate, generating, error }) {
 
           {r.difficulty && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Ico lucide={Gauge} ti="ti-gauge" size={14} color={diffColor} />
+              <Ico ti="ti-gauge" size={14} color={diffColor} />
               <Badge color={diffColor} bg={tint(8, diffColor)}>Difficulty: {r.difficulty.rating}</Badge>
               <span style={{ fontSize: 12, color: C.muted }}>{r.difficulty.note}</span>
             </div>
@@ -103,7 +100,7 @@ function ReportCard({ data, onRegenerate, generating, error }) {
                 {r.misconceptions.map((m, i) => (
                   <div key={i} style={{ border: `1px solid ${tint(30, RED)}`, background: tint(9, RED), borderRadius: 10, padding: '9px 12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                      <Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={12} color={RED} />
+                      <Ico ti="ti-alert-triangle" size={12} color={RED} />
                       <span style={{ fontSize: 11.5, fontWeight: 900, color: RED }}>{m.learner}</span>
                     </div>
                     <div style={{ fontSize: 12.5, color: C.ink, fontWeight: 700, marginBottom: 2 }}>{m.misconception}</div>
@@ -120,7 +117,7 @@ function ReportCard({ data, onRegenerate, generating, error }) {
                 <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: .5, color: C.muted2, marginBottom: 6 }}>STRENGTHS</div>
                 {r.strengths.map((x, i) => (
                   <div key={i} style={{ display: 'flex', gap: 6, fontSize: 12, color: C.ink, marginBottom: 4, lineHeight: 1.5 }}>
-                    <Ico lucide={CheckCircle2} ti="ti-circle-check" size={12} color={GREEN} style={{ flexShrink: 0, marginTop: 2 }} />{x}
+                    <Ico ti="ti-circle-check" size={12} color={GREEN} style={{ flexShrink: 0, marginTop: 2 }} />{x}
                   </div>
                 ))}
               </div>
@@ -130,7 +127,7 @@ function ReportCard({ data, onRegenerate, generating, error }) {
                 <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: .5, color: C.muted2, marginBottom: 6 }}>GAPS</div>
                 {r.gaps.map((x, i) => (
                   <div key={i} style={{ display: 'flex', gap: 6, fontSize: 12, color: C.ink, marginBottom: 4, lineHeight: 1.5 }}>
-                    <Ico lucide={Brain} ti="ti-brain" size={12} color={C.brand} style={{ flexShrink: 0, marginTop: 2 }} />{x}
+                    <Ico ti="ti-brain" size={12} color={C.brand} style={{ flexShrink: 0, marginTop: 2 }} />{x}
                   </div>
                 ))}
               </div>
@@ -187,7 +184,7 @@ export default function SelfStudyAnalyticsPage() {
       subtitle={a ? `${a.subject} · ${a.topic}` : ''}
       action={
         <Btn size="sm" variant="secondary" onClick={() => navigate(-1)}>
-          <Ico lucide={ArrowLeft} ti="ti-arrow-left" size={13} /> Back
+          <Ico ti="ti-arrow-left" size={13} /> Back
         </Btn>
       }
     >

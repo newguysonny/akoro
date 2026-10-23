@@ -4,7 +4,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Coins, Plus, Loader2, ArrowUpRight, ArrowDownRight, Wallet as WalletIcon, Ticket } from 'lucide-react';
+import { Coins } from 'lucide-react';
 import { apiGet, apiPost } from '../services/api.js';
 import { PageLayout } from '../components/Layout.jsx';
 import { GREEN, RED } from '../constants.js';
@@ -70,12 +70,12 @@ export default function WalletPage() {
     <PageLayout title="Wallet & AI Credits" subtitle="Top up coins — every AI feature draws from this balance">
     <div style={{ maxWidth: 720, fontFamily: C.font }}>
       <div style={{ background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, borderRadius: 18, padding: '22px 20px', color: '#fff', marginBottom: 18 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.9, display: 'flex', alignItems: 'center', gap: 6 }}><Ico lucide={WalletIcon} ti="ti-wallet" size={15} /> Your balance</div>
-        <div style={{ fontSize: 40, fontWeight: 900, marginTop: 4, display: 'flex', alignItems: 'center', gap: 8 }}><Ico lucide={Coins} ti="ti-coins" size={30} />{fmt(data?.balance)} <span style={{ fontSize: 16, fontWeight: 700, opacity: 0.9 }}>coins</span></div>
+        <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.9, display: 'flex', alignItems: 'center', gap: 6 }}><Ico ti="ti-wallet" size={15} /> Your balance</div>
+        <div style={{ fontSize: 40, fontWeight: 900, marginTop: 4, display: 'flex', alignItems: 'center', gap: 8 }}><Ico ti="ti-coins" size={30} />{fmt(data?.balance)} <span style={{ fontSize: 16, fontWeight: 700, opacity: 0.9 }}>coins</span></div>
       </div>
 
       <div style={card}>
-        <div style={cardTitle}><Ico lucide={Plus} ti="ti-plus" size={16} /> Top up</div>
+        <div style={cardTitle}><Ico ti="ti-plus" size={16} /> Top up</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
           {PRESETS.map((c) => (
             <button key={c} onClick={() => setCoins(c)} style={{ ...pill, ...(Number(coins) === c ? pillOn : {}) }}>
@@ -86,7 +86,7 @@ export default function WalletPage() {
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <input type="number" min="1" value={coins} onChange={(e) => setCoins(e.target.value)} style={inp} />
           {nairaFor(coins) != null && <span style={{ fontSize: 12.5, color: C.muted }}>≈ ₦{fmt(nairaFor(coins))}</span>}
-          <button onClick={topUp} style={primaryBtn}><Ico lucide={Plus} ti="ti-plus" size={14} /> Continue to checkout</button>
+          <button onClick={topUp} style={primaryBtn}><Ico ti="ti-plus" size={14} /> Continue to checkout</button>
         </div>
         {pricing && <div style={{ marginTop: 12, fontSize: 12, color: C.muted2 }}>Example: {pricing.examples?.map((e) => `${e.label} ≈ ${e.coins}`).join(' · ')} coins</div>}
 
@@ -96,7 +96,7 @@ export default function WalletPage() {
           {!voucherOpen ? (
             <button onClick={() => { setVoucherOpen(true); setVoucherErr(''); setVoucherMsg(''); }}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 10, border: `1px dashed ${C.border}`, background: 'transparent', cursor: 'pointer', fontFamily: C.font, fontSize: 13, fontWeight: 800, color: C.ink }}>
-              <Ico lucide={Ticket} ti="ti-ticket" size={15} /> Top up with a voucher code
+              <Ico ti="ti-ticket" size={15} /> Top up with a voucher code
             </button>
           ) : (
             <form onSubmit={redeemVoucher}>
@@ -117,7 +117,7 @@ export default function WalletPage() {
       </div>
 
       <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
-        <div style={{ ...cardTitle, padding: '16px 18px 0' }}><Ico lucide={Coins} ti="ti-coins" size={16} /> Recent activity</div>
+        <div style={{ ...cardTitle, padding: '16px 18px 0' }}><Ico ti="ti-coins" size={16} /> Recent activity</div>
         {recent.length === 0 ? (
           <div style={{ padding: 28, textAlign: 'center', color: C.muted2, fontSize: 13 }}>No transactions yet.</div>
         ) : (
@@ -129,7 +129,7 @@ export default function WalletPage() {
                   <td style={td}>{new Date(t.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
                   <td style={td}>{TYPE_LABEL[t.type] || t.type}</td>
                   <td style={{ ...td, color: C.muted2 }}>{(t.feature || t.model || '—').replace(/_/g, ' ')}</td>
-                  <td style={{ ...td, fontWeight: 800, color: t.delta >= 0 ? GREEN : RED }}>{t.delta >= 0 ? <Ico lucide={ArrowUpRight} ti="ti-arrow-up-right" size={13} /> : <Ico lucide={ArrowDownRight} ti="ti-arrow-down-right" size={13} />} {t.delta >= 0 ? '+' : ''}{fmt(t.delta)}</td>
+                  <td style={{ ...td, fontWeight: 800, color: t.delta >= 0 ? GREEN : RED }}>{t.delta >= 0 ? <Ico ti="ti-arrow-up-right" size={13} /> : <Ico ti="ti-arrow-down-right" size={13} />} {t.delta >= 0 ? '+' : ''}{fmt(t.delta)}</td>
                 </tr>
               ))}
             </tbody>

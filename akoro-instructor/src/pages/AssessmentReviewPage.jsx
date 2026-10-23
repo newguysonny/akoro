@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Shield, AlertTriangle, Eye, X, Camera, CheckCircle2, XCircle , Lightbulb } from 'lucide-react';
+import { AlertTriangle, Camera } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Modal } from '../components/Primitives.jsx';
 import { apiGet } from '../services/api.js';
@@ -87,7 +87,7 @@ export default function AssessmentReviewPage() {
 
       {rows && rows.length === 0 && (
         <div style={{ textAlign: 'center', padding: '60px 20px', color: C.muted2, fontFamily: C.font }}>
-          <Ico lucide={Shield} ti="ti-shield" size={36} strokeWidth={1.5} style={{ marginBottom: 10, opacity: .5 }} />
+          <Ico ti="ti-shield" size={36} strokeWidth={1.5} style={{ marginBottom: 10, opacity: .5 }} />
           <p style={{ fontSize: 14, fontWeight: 600 }}>No assessments in this view.</p>
         </div>
       )}
@@ -119,7 +119,7 @@ function ReviewRow({ r, onOpen }) {
           <VerdictPill verdict={r.verdict} />
           {!r.identityVerified && (
             <span style={{ fontSize: 10.5, fontWeight: 700, color: C.brand, display: 'flex', alignItems: 'center', gap: 3 }}>
-              <Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={12} /> No ID
+              <Ico ti="ti-alert-triangle" size={12} /> No ID
             </span>
           )}
         </div>
@@ -138,7 +138,7 @@ function ReviewRow({ r, onOpen }) {
         <div style={{ fontSize: 18, fontWeight: 900, color: C.ink }}>{r.score ?? '—'}</div>
       </div>
 
-      <Ico lucide={Eye} ti="ti-eye" size={18} color={C.muted2} style={{ flexShrink: 0 }} />
+      <Ico ti="ti-eye" size={18} color={C.muted2} style={{ flexShrink: 0 }} />
     </div>
   );
 }
@@ -237,14 +237,14 @@ function TranscriptBlock({ b }) {
   if (b.type === 'sergeant')
     return (
       <div style={{ fontSize: 12.5, color: C.muted, display: 'flex', gap: 6, alignItems: 'center' }}>
-        {b.correct != null && (b.correct ? <Ico lucide={CheckCircle2} ti="ti-circle-check" size={14} color={GREEN} /> : <Ico lucide={XCircle} ti="ti-circle-x" size={14} color={RED} />)}
+        {b.correct != null && (b.correct ? <Ico ti="ti-circle-check" size={14} color={GREEN} /> : <Ico ti="ti-circle-x" size={14} color={RED} />)}
         <span>{b.text}{b.score != null ? ` (${b.score}/100)` : ''}</span>
       </div>
     );
   if (b.type === 'hint')
-    return <div style={{ fontSize: 12, color: C.brand, fontStyle: 'italic' }}><Ico lucide={Lightbulb} ti="ti-bulb" size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />{b.text}</div>;
+    return <div style={{ fontSize: 12, color: C.brand, fontStyle: 'italic' }}><Ico ti="ti-bulb" size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />{b.text}</div>;
   if (b.type === 'proctor-flag')
-    return <div style={{ fontSize: 12, color: RED, fontWeight: 600 }}><Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />{b.text}</div>;
+    return <div style={{ fontSize: 12, color: RED, fontWeight: 600 }}><Ico ti="ti-alert-triangle" size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />{b.text}</div>;
   return null;
 }
 
@@ -260,7 +260,7 @@ function Stat({ label, value, color }) {
 function SectionLabel({ children, icon: Icon, ti }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-      {Icon && <Ico lucide={Icon} ti={ti} size={14} color={C.muted} />}
+      {Icon && <Ico ti={ti} size={14} color={C.muted} />}
       <span style={{ fontSize: 11, fontWeight: 800, color: C.muted, letterSpacing: .4 }}>
         {typeof children === 'string' ? children.toUpperCase() : children}
       </span>

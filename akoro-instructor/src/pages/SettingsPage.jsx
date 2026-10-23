@@ -1,9 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Languages, Moon, Palette, Bell, MessageCircle, Shield, Key, Lock,
-  PauseCircle, Trash2, HelpCircle, Bug, FileText, Info, ChevronRight, Receipt, Wrench,
-} from 'lucide-react';
+import { Languages, Moon, Palette, Bell, MessageCircle, Shield, Key, Lock, PauseCircle, Trash2, HelpCircle, Bug, FileText, Info, Receipt, Wrench } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { PageLayout } from '../components/Layout.jsx';
 import { RED } from '../constants.js';
@@ -66,14 +63,14 @@ function Row({ icon: Icon, ti, label, sublabel, right, onClick, danger }) {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           color: danger ? RED : BRAND,
         }}>
-          <Ico lucide={Icon} ti={ti} size={16} />
+          <Ico ti={ti} size={16} />
         </div>
       )}
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: 14, fontWeight: 500, fontFamily: FONTF }}>{label}</div>
         {sublabel && <div style={{ fontSize: 12, color: C.muted2, fontFamily: FONTF, marginTop: 2 }}>{sublabel}</div>}
       </div>
-      {right ?? (onClick && <Ico lucide={ChevronRight} ti="ti-chevron-right" size={16} color={C.muted2} />)}
+      {right ?? (onClick && <Ico ti="ti-chevron-right" size={16} color={C.muted2} />)}
     </div>
   );
 }
@@ -107,7 +104,7 @@ export default function SettingsPage() {
             label="Order history"
             sublabel="Your tool & asset purchases"
             onClick={() => navigate('/orders')}
-            right={<Ico lucide={ChevronRight} ti="ti-chevron-right" size={18} color={C.muted} />}
+            right={<Ico ti="ti-chevron-right" size={18} color={C.muted} />}
           />
         </Section>
 
@@ -118,7 +115,7 @@ export default function SettingsPage() {
             label="My agent tools"
             sublabel="Tools your AI Chat agent built for you"
             onClick={() => navigate('/agent-tools')}
-            right={<Ico lucide={ChevronRight} ti="ti-chevron-right" size={18} color={C.muted} />}
+            right={<Ico ti="ti-chevron-right" size={18} color={C.muted} />}
           />
         </Section>
 

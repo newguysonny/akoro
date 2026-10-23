@@ -131,7 +131,7 @@ export default function AudiencePicker({
               background: on ? tint(7) : C.surface,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
-                <Ico lucide={Icon} ti={ti} size={12} color={on ? C.brand : C.muted} />
+                <Ico ti={ti} size={12} color={on ? C.brand : C.muted} />
                 <span style={{ fontSize: 12, fontWeight: 800, color: on ? C.brand : C.ink }}>{label}</span>
               </div>
               <div style={{ fontSize: 10.5, color: C.muted }}>{hint}</div>
@@ -171,7 +171,7 @@ export default function AudiencePicker({
       {mode === 'picked' && (
         <div style={{ border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderBottom: `1px solid ${C.border}`, background: C.bg }}>
-            <Ico lucide={Search} ti="ti-search" size={13} color={C.muted} />
+            <Ico ti="ti-search" size={13} color={C.muted} />
             <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search learners by name or username…"
               style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', fontSize: 12.5, fontFamily: C.font, color: C.ink }} />
           </div>

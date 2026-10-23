@@ -10,7 +10,6 @@
  * "Drafting questions…" and looks again every few seconds until it's ready.
  */
 import { useEffect, useState } from 'react';
-import { Eye, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { apiGet } from '../../services/api.js';
 import { GREEN, PURPLE, RED } from '../../constants.js';
 import { C } from '../../theme/colors.js';
@@ -57,11 +56,11 @@ export default function DraftCard({ preview, state = null, label = 'Preview', on
       </div>
       <div style={{ fontSize: 11.5, color: C.muted, marginTop: 3, lineHeight: 1.45, display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
         {!versioned ? <span>{[audience, due].filter(Boolean).join(' · ') || 'Ready to preview'}</span>
-          : !v || v.status === 'drafting' ? <><Ico lucide={Loader2} ti="ti-loader-2" size={11} color={PURPLE} style={{ animation: 'spin .8s linear infinite' }} /> Drafting questions…</>
-          : v.status === 'failed' ? <span style={{ color: RED, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={11} /> Couldn't draft the questions — open to try again</span>
+          : !v || v.status === 'drafting' ? <><Ico ti="ti-loader-2" size={11} color={PURPLE} style={{ animation: 'spin .8s linear infinite' }} /> Drafting questions…</>
+          : v.status === 'failed' ? <span style={{ color: RED, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Ico ti="ti-alert-triangle" size={11} /> Couldn't draft the questions — open to try again</span>
           : <span>{[v.summary?.line, audience, due && `due ${due}`].filter(Boolean).join(' · ')}{v.basedOn && v.note ? <><br />{v.note}</> : null}</span>}
       </div>
-      {versioned && v?.warning && <div style={{ fontSize: 11, color: '#B45309', fontWeight: 700, marginTop: 4 }}><Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={11} style={{ verticalAlign: '-2px', marginRight: 3 }} />{v.warning}</div>}
+      {versioned && v?.warning && <div style={{ fontSize: 11, color: '#B45309', fontWeight: 700, marginTop: 4 }}><Ico ti="ti-alert-triangle" size={11} style={{ verticalAlign: '-2px', marginRight: 3 }} />{v.warning}</div>}
       <div style={{ marginTop: 8 }}>
         <button type="button" disabled={!!state} onClick={() => onOpen(preview.id, versioned ? preview.version : null)}
           title={state ? undefined : 'Preview this draft — assigning is your call'}
@@ -69,7 +68,7 @@ export default function DraftCard({ preview, state = null, label = 'Preview', on
             border: state === 'assigned' ? '1px solid #BBF7D0' : state === 'discarded' ? `1px solid ${C.border}` : 'none',
             background: state === 'assigned' ? '#DCFCE7' : state === 'discarded' ? C.bg : PURPLE,
             color: state === 'assigned' ? GREEN : state === 'discarded' ? C.muted2 : '#fff' }}>
-          {state === 'assigned' ? <><Ico lucide={CheckCircle2} ti="ti-circle-check" size={12} /> Assigned ✓</> : state === 'discarded' ? 'Discarded' : <><Ico lucide={Eye} ti="ti-eye" size={12} /> {label}</>}
+          {state === 'assigned' ? <><Ico ti="ti-circle-check" size={12} /> Assigned ✓</> : state === 'discarded' ? 'Discarded' : <><Ico ti="ti-eye" size={12} /> {label}</>}
         </button>
       </div>
     </div>

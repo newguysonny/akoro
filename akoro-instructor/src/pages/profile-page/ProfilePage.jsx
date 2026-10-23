@@ -3,11 +3,6 @@
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { PageLayout } from '../../components/Layout.jsx';
-import {
-  User, AtSign, Mail, Phone, MapPin, Building2, GraduationCap, BookOpen,
-  Pencil, Upload, Search, Bolt, Star, BarChart3, Palette,
-  Tag, Sparkles, Store, CheckCircle2, ChevronRight,
-} from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import {
   getProfile, patchProfile, patchAgent,

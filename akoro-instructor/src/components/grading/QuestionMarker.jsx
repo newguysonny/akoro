@@ -9,7 +9,6 @@
  * will see under that question, and the AI's suggestion when there is one.
  * Marks live in the parent (autosaved with the grading draft).
  */
-import { Check, ChevronLeft, ChevronRight, Sparkles, X } from 'lucide-react';
 import { PURPLE, GREEN, RED } from '../../constants.js';
 import { C, tint } from '../../theme/colors.js';
 import { Ico } from '../../theme/Ico.jsx';
@@ -72,7 +71,7 @@ export function QuestionRail({ questions, step, setStep, marks }) {
             style={{ minWidth: 30, height: 30, padding: '0 7px', borderRadius: 8, cursor: 'pointer', fontFamily: C.font, fontSize: 12, fontWeight: 900,
               border: `1.5px solid ${on ? PURPLE : done ? `${GREEN}66` : C.border}`, background: on ? '#F1ECFF' : done ? '#E6F6EE' : C.surface, color: on ? PURPLE : done ? GREEN : C.muted,
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-            {done && !on ? <Ico lucide={Check} ti="ti-check" size={12} /> : i + 1}
+            {done && !on ? <Ico ti="ti-check" size={12} /> : i + 1}
           </button>
         );
       })}
@@ -140,7 +139,7 @@ export default function QuestionMarker({ questions, paper = null, step, setStep,
               <div style={{ fontSize: 13, fontWeight: 800, color: q.correct == null ? C.ink : right ? GREEN : RED }}>
                 {typed !== letterOf(pick) && <span style={{ fontWeight: 600, color: C.muted }}>“{typed}” → </span>}
                 {letterOf(pick)}. <MathText text={q.options?.[pick] ?? ''} />
-                {q.correct != null && <span style={{ fontWeight: 700, color: C.muted, marginLeft: 6, display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: 'middle' }}>{right ? <><Ico lucide={Check} ti="ti-check" size={13} color={GREEN} /> correct</> : <><Ico lucide={X} ti="ti-x" size={13} color={RED} /> {keyLine}</>}</span>}
+                {q.correct != null && <span style={{ fontWeight: 700, color: C.muted, marginLeft: 6, display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: 'middle' }}>{right ? <><Ico ti="ti-check" size={13} color={GREEN} /> correct</> : <><Ico ti="ti-x" size={13} color={RED} /> {keyLine}</>}</span>}
               </div>
             );
           })()
@@ -163,7 +162,7 @@ export default function QuestionMarker({ questions, paper = null, step, setStep,
       {/* The AI's suggestion for this question */}
       {aiQ && (
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: C.ink, background: tint(4), border: `1px solid ${PURPLE}33`, borderRadius: 10, padding: '8px 10px' }}>
-          <Ico lucide={Sparkles} ti="ti-sparkles" size={13} color={PURPLE} style={{ marginTop: 2, flexShrink: 0 }} />
+          <Ico ti="ti-sparkles" size={13} color={PURPLE} style={{ marginTop: 2, flexShrink: 0 }} />
           <span style={{ flex: 1, lineHeight: 1.5 }}><b>AI: {aiQ.awarded}/{aiQ.max}</b> — {aiQ.why}</span>
           <button type="button" onClick={() => setMark(step, { awarded: aiQ.awarded })}
             style={{ fontSize: 11.5, fontWeight: 800, color: PURPLE, background: 'none', border: 'none', cursor: 'pointer', fontFamily: C.font, padding: 0 }}>Use</button>
@@ -208,11 +207,11 @@ export default function QuestionMarker({ questions, paper = null, step, setStep,
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <button type="button" onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '8px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.muted, fontSize: 12.5, fontWeight: 800, cursor: step === 0 ? 'default' : 'pointer', opacity: step === 0 ? .4 : 1, fontFamily: C.font }}>
-          <Ico lucide={ChevronLeft} ti="ti-chevron-left" size={14} /> Back
+          <Ico ti="ti-chevron-left" size={14} /> Back
         </button>
         <button type="button" onClick={() => setStep(step + 1)}
           style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4, padding: '8px 14px', borderRadius: 10, border: marked ? 'none' : `1px solid ${C.border}`, background: marked ? PURPLE : C.surface, color: marked ? '#fff' : C.muted, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
-          {marked ? (isLast ? 'Save mark & review' : 'Save mark & next') : (isLast ? 'Review' : 'Skip for now')} <Ico lucide={ChevronRight} ti="ti-chevron-right" size={14} />
+          {marked ? (isLast ? 'Save mark & review' : 'Save mark & next') : (isLast ? 'Review' : 'Skip for now')} <Ico ti="ti-chevron-right" size={14} />
         </button>
       </div>
     </div>

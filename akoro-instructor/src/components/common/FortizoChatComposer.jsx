@@ -12,7 +12,7 @@
  * when the host provides it.
  */
 import { useEffect, useRef, useState, isValidElement } from 'react';
-import { Mic, Paperclip, ArrowUp, Sparkles, ChevronDown, Check, CheckSquare, AudioLines } from 'lucide-react';
+import { Mic, Paperclip, CheckSquare, AudioLines } from 'lucide-react';
 import { Ico } from '../../theme/Ico.jsx';
 import { C, tint } from '../../theme/colors.js';
 
@@ -41,7 +41,7 @@ function ComposerTool({ icon: Icon, ti, label, onClick, disabled = false, active
       onMouseEnter={e => { if (!unavailable && !active) { e.currentTarget.style.background = C.brand; e.currentTarget.style.color = '#fff'; e.currentTarget.style.transform = 'translateY(-1px)'; } }}
       onMouseLeave={e => { if (!unavailable && !active) { e.currentTarget.style.background = C.surface; e.currentTarget.style.color = MUTED_RAIL; e.currentTarget.style.transform = 'none'; } }}
     >
-      <Ico lucide={Icon} ti={ti} size={16} />
+      <Ico ti={ti} size={16} />
     </button>
   );
 }
@@ -86,12 +86,12 @@ export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelCha
             branch on typeof); an element renders as-is, carrying its own
             props. Rendering a component object as a child is React #31. */}
         {ChipIcon == null
-          ? <Ico lucide={Sparkles} ti="ti-sparkles" size={13} color={C.brand} />
+          ? <Ico ti="ti-sparkles" size={13} color={C.brand} />
           : isValidElement(ChipIcon)
             ? ChipIcon
-            : <Ico lucide={ChipIcon} ti={iconTi} size={13} color={C.brand} />}
+            : <Ico ti={iconTi} size={13} color={C.brand} />}
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{modelLabel}</span>
-        {selectable && <Ico lucide={ChevronDown} ti="ti-chevron-down" size={12} color={C.muted2} />}
+        {selectable && <Ico ti="ti-chevron-down" size={12} color={C.muted2} />}
       </button>
 
       {open && (
@@ -128,7 +128,7 @@ export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelCha
                     </span>
                     {option.description && <span style={{ display: 'block', marginTop: 1, color: C.muted2, fontSize: 10, fontWeight: 500, lineHeight: 1.35 }}>{option.description}</span>}
                   </span>
-                  {selected && <Ico lucide={Check} ti="ti-check" size={14} color={C.brand} />}
+                  {selected && <Ico ti="ti-check" size={14} color={C.brand} />}
                 </button>
               </div>
             );
@@ -254,7 +254,7 @@ export default function FortizoChatComposer({
               transition: 'background .16s, transform .16s',
             }}
           >
-            <Ico lucide={ArrowUp} ti="ti-arrow-up" size={17} color={canSend ? '#fff' : C.muted2} />
+            <Ico ti="ti-arrow-up" size={17} color={canSend ? '#fff' : C.muted2} />
           </button>
         )}
       </div>

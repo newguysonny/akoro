@@ -2,10 +2,7 @@
  * StudentsPage — composes the components from ./parts.jsx.
  */
 import { useState, useEffect, useRef } from 'react';
-import {
-  Search, Plus, X, User, Mail, Calendar, BookOpen, TrendingUp,
-  Trash2, ChevronRight, Copy, Check, Upload, Link2, UserPlus, Eye, Download,
-} from 'lucide-react';
+import { Search } from 'lucide-react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { PageLayout } from '../../components/Layout.jsx';
 import { Btn, Modal, Inp, StatusPill, Toast } from '../../components/Primitives.jsx';
@@ -119,7 +116,7 @@ export default function StudentsPage() {
       subtitle={`${loading ? '…' : students.length} learner${students.length === 1 ? '' : 's'}`}
       action={
         <Btn size="sm" onClick={() => setModal(true)}>
-          <Ico lucide={Plus} ti="ti-plus" size={14} /> Add Student
+          <Ico ti="ti-plus" size={14} /> Add Student
         </Btn>
       }
     >
@@ -128,7 +125,7 @@ export default function StudentsPage() {
 
       {/* Search */}
       <div style={{ position: 'relative', marginBottom: 20, maxWidth: 420 }}>
-        <Ico lucide={Search} ti="ti-search" size={16} color={C.muted} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }} />
+        <Ico ti="ti-search" size={16} color={C.muted} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }} />
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
@@ -147,11 +144,11 @@ export default function StudentsPage() {
           {checkedIds.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: tint(7), border: `1px solid ${tint(27)}`, borderRadius: 10, padding: '6px 12px' }}>
               <span style={{ fontSize: 12.5, fontWeight: 800, color: C.brand, fontFamily: C.font }}>{checkedIds.length} selected</span>
-              <button onClick={bulkRemove} style={toolBtn(RED)}><Ico lucide={Trash2} ti="ti-trash" size={13} /> Remove</button>
+              <button onClick={bulkRemove} style={toolBtn(RED)}><Ico ti="ti-trash" size={13} /> Remove</button>
             </div>
           )}
           <button onClick={exportCsv} style={{ ...toolBtn(GREEN), marginLeft: 'auto' }}>
-            <Ico lucide={Download} ti="ti-download" size={14} /> Export CSV{checkedIds.length ? ` (${checkedIds.length})` : ''}
+            <Ico ti="ti-download" size={14} /> Export CSV{checkedIds.length ? ` (${checkedIds.length})` : ''}
           </button>
         </div>
       )}
@@ -165,15 +162,15 @@ export default function StudentsPage() {
         </div>
       ) : filtered.length === 0 ? (
         <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 16, padding: '48px', textAlign: 'center' }}>
-          <Ico lucide={User} ti="ti-user" size={32} color={C.muted} style={{ marginBottom: 12 }} />
+          <Ico ti="ti-user" size={32} color={C.muted} style={{ marginBottom: 12 }} />
           <p style={{ fontSize: 14, color: C.muted, fontFamily: C.font, margin: '0 0 16px' }}>
             {search ? 'No students match your search' : 'No students enrolled yet'}
           </p>
           {!search && (
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <Btn onClick={() => setModal(true)}><Ico lucide={UserPlus} ti="ti-user-plus" size={14} /> Manual Entry</Btn>
-              <Btn variant="secondary" onClick={() => setModal(true)}><Ico lucide={Mail} ti="ti-mail" size={14} /> Send Invite</Btn>
-              <Btn variant="secondary" onClick={() => setModal(true)}><Ico lucide={Upload} ti="ti-upload" size={14} /> Import CSV</Btn>
+              <Btn onClick={() => setModal(true)}><Ico ti="ti-user-plus" size={14} /> Manual Entry</Btn>
+              <Btn variant="secondary" onClick={() => setModal(true)}><Ico ti="ti-mail" size={14} /> Send Invite</Btn>
+              <Btn variant="secondary" onClick={() => setModal(true)}><Ico ti="ti-upload" size={14} /> Import CSV</Btn>
             </div>
           )}
         </div>
@@ -233,7 +230,7 @@ export default function StudentsPage() {
                   </td>
                   <td style={td}><StatusPill status={s.status} /></td>
                   <td style={{ ...td, textAlign: 'right' }}>
-                    <button onClick={() => openProfile(s)} title="View profile" style={iconBtn(GREEN)}><Ico lucide={Eye} ti="ti-eye" size={14} /></button>
+                    <button onClick={() => openProfile(s)} title="View profile" style={iconBtn(GREEN)}><Ico ti="ti-eye" size={14} /></button>
                   </td>
                 </tr>
               ))}

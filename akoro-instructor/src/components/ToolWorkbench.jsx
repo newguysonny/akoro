@@ -16,7 +16,7 @@
  * — the server already describes what it needs.
  */
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2, ArrowLeft, Copy, Check, Clock, Sparkles } from 'lucide-react';
+import { Copy } from 'lucide-react';
 import { Ico } from '../theme/Ico.jsx';
 import { apiGet, apiPost } from '../services/api.js';
 import { GREEN } from '../constants.js';
@@ -92,7 +92,7 @@ function DocOutput({ doc }) {
         <button onClick={copy} style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
           fontFamily: C.font, fontSize: 12.5, fontWeight: 600, padding: '7px 12px', borderRadius: 8,
           border: `1px solid ${C.border}`, background: C.surface, color: C.ink, cursor: 'pointer' }}>
-          {copied ? <Ico lucide={Check} ti="ti-check" size={13} color={GREEN}/> : <Ico lucide={Copy} ti="ti-copy" size={13}/>} {copied ? 'Copied' : 'Copy'}
+          {copied ? <Ico ti="ti-check" size={13} color={GREEN}/> : <Ico ti="ti-copy" size={13}/>} {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
 
@@ -310,7 +310,7 @@ export default function ToolWorkbench({ toolKey, onBack }) {
   }
   if (!tool) {
     return <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 20, fontFamily: C.font, color: C.muted }}>
-      <Ico lucide={Loader2} ti="ti-loader-2" size={15} className="spin"/> Loading…
+      <Ico ti="ti-loader-2" size={15} className="spin"/> Loading…
     </div>;
   }
 
@@ -319,7 +319,7 @@ export default function ToolWorkbench({ toolKey, onBack }) {
       <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16,
         fontFamily: C.font, fontSize: 13, fontWeight: 600, color: C.muted, background: 'none',
         border: 'none', padding: 0, cursor: 'pointer' }}>
-        <Ico lucide={ArrowLeft} ti="ti-arrow-left" size={14}/> All tools
+        <Ico ti="ti-arrow-left" size={14}/> All tools
       </button>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
@@ -374,7 +374,7 @@ export default function ToolWorkbench({ toolKey, onBack }) {
           fontFamily: C.font, fontSize: 14, fontWeight: 700, padding: '10px 18px', borderRadius: 10,
           border: 'none', background: busy ? C.border : C.brand, color: busy ? C.muted : '#fff',
           cursor: busy ? 'default' : 'pointer' }}>
-          {busy ? <Ico lucide={Loader2} ti="ti-loader-2" size={15} className="spin"/> : <Ico lucide={Sparkles} ti="ti-sparkles" size={15}/>}
+          {busy ? <Ico ti="ti-loader-2" size={15} className="spin"/> : <Ico ti="ti-sparkles" size={15}/>}
           {busy ? 'Working…' : `Run ${tool.name}`}
         </button>
       </div>
@@ -389,7 +389,7 @@ export default function ToolWorkbench({ toolKey, onBack }) {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: C.font, fontSize: 12,
             fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.muted2, marginBottom: 10 }}>
-            <Ico lucide={Clock} ti="ti-clock" size={12}/> Earlier runs
+            <Ico ti="ti-clock" size={12}/> Earlier runs
           </div>
           <div style={{ display: 'grid', gap: 8 }}>
             {past.slice(0, 8).map((o) => (

@@ -5,7 +5,7 @@
  */
 import { useState, useEffect } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, BookOpen, TrendingUp, Calendar, Mail, Trash2, User, Loader2, GraduationCap } from 'lucide-react';
+import { BookOpen, TrendingUp, Calendar, Mail, User, GraduationCap } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import { Btn, StatusPill, Toast } from '../../components/Primitives.jsx';
 import { useStudentsAPI } from '../../hooks/useStudentsAPI.js';
@@ -66,7 +66,7 @@ export default function StudentProfilePage() {
     catch (e) { showToast(e.message || 'Could not remove', 'error'); }
   };
 
-  if (loading) return <PageLayout title="Student Profile" subtitle=""><div style={{ padding: '60px 0', textAlign: 'center', color: C.muted2 }}><Ico lucide={Loader2} ti="ti-loader-2" size={22} style={{ animation: 'spin .8s linear infinite' }} /></div></PageLayout>;
+  if (loading) return <PageLayout title="Student Profile" subtitle=""><div style={{ padding: '60px 0', textAlign: 'center', color: C.muted2 }}><Ico ti="ti-loader-2" size={22} style={{ animation: 'spin .8s linear infinite' }} /></div></PageLayout>;
   if (!student) return (
     <PageLayout title="Student Profile" subtitle="">
       <div style={{ padding: 40, textAlign: 'center', color: C.muted2, fontFamily: C.font }}>
@@ -84,7 +84,7 @@ export default function StudentProfilePage() {
   );
   const infoRow = (Icon, ti, label, value) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 0', fontSize: 12.5, fontFamily: C.font }}>
-      <Ico lucide={Icon} ti={ti} size={14} color={C.muted2} style={{ flexShrink: 0 }} />
+      <Ico ti={ti} size={14} color={C.muted2} style={{ flexShrink: 0 }} />
       <span style={{ color: C.muted2, minWidth: 66 }}>{label}</span>
       <span style={{ color: C.ink, fontWeight: 600, marginLeft: 'auto', textAlign: 'right', wordBreak: 'break-word' }}>{value}</span>
     </div>
@@ -96,7 +96,7 @@ export default function StudentProfilePage() {
     <PageLayout title={student.fullName || 'Student'} subtitle={student.email}>
       <div style={{ marginBottom: 16 }}>
         <button onClick={() => navigate('/mgmt/students')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: `1.5px solid ${C.border}`, background: C.surface, color: C.muted, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>
-          <Ico lucide={ArrowLeft} ti="ti-arrow-left" size={14} /> Back to Students
+          <Ico ti="ti-arrow-left" size={14} /> Back to Students
         </button>
       </div>
 
@@ -174,7 +174,7 @@ export default function StudentProfilePage() {
                 <div style={{ fontSize: 13, color: C.muted, fontFamily: C.font }}>No courses available to enrol.</div>
               )}
               <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 14 }}>
-                <Btn variant="danger" onClick={remove} style={{ width: '100%' }}><Ico lucide={Trash2} ti="ti-trash" size={14} /> Remove from courses</Btn>
+                <Btn variant="danger" onClick={remove} style={{ width: '100%' }}><Ico ti="ti-trash" size={14} /> Remove from courses</Btn>
               </div>
             </div>
           )}

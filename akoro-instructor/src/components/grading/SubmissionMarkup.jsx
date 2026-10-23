@@ -14,7 +14,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { Check, X, MessageSquare, Highlighter, MousePointer2, Undo2, Trash2, Loader2 } from 'lucide-react';
+import { Check, X, MessageSquare, Highlighter, MousePointer2 } from 'lucide-react';
 import { PURPLE, GREEN, RED } from '../../constants.js';
 import { C, tint } from '../../theme/colors.js';
 import { Ico } from '../../theme/Ico.jsx';
@@ -207,17 +207,17 @@ export default function SubmissionMarkup({ blob, marks, onChange, saveState = 'i
         {TOOLS.map(({ id, label, Icon, ti, color, key }) => (
           <button key={id} type="button" onClick={() => setTool(id)} aria-pressed={tool === id} title={`${label} (${key.toUpperCase()})`}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 8, border: `1.5px solid ${tool === id ? PURPLE : C.border}`, background: tool === id ? '#F1ECFF' : C.surface, color: tool === id ? PURPLE : (color || C.muted), fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
-            <Ico lucide={Icon} ti={ti} size={13} /> {label}
+            <Ico ti={ti} size={13} /> {label}
           </button>
         ))}
         <button type="button" onClick={undo} disabled={!history.current.length} title="Undo (Ctrl+Z)"
           style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 8, border: `1.5px solid ${C.border}`, background: C.surface, color: C.muted, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: C.font, opacity: history.current.length ? 1 : .45 }}>
-          <Ico lucide={Undo2} ti="ti-arrow-back-up" size={13} /> Undo
+          <Ico ti="ti-arrow-back-up" size={13} /> Undo
         </button>
         {selectedId && (
           <button type="button" onClick={() => remove(selectedId)} title="Delete the selected mark (Delete)"
             style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 8, border: `1.5px solid ${RED}55`, background: C.surface, color: RED, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
-            <Ico lucide={Trash2} ti="ti-trash" size={13} /> Delete mark
+            <Ico ti="ti-trash" size={13} /> Delete mark
           </button>
         )}
         <span style={{ marginLeft: 'auto', fontSize: 11.5, fontWeight: 700, color: C.muted2, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -250,7 +250,7 @@ export default function SubmissionMarkup({ blob, marks, onChange, saveState = 'i
       {/* Pages */}
       <div ref={wrapRef} style={{ background: '#525659', borderRadius: 10, padding: '12px 0', maxHeight: '76vh', overflowY: 'auto' }}>
         {error ? <div style={{ color: '#fff', fontSize: 13, fontWeight: 700, padding: 20, textAlign: 'center' }}>{error}</div>
-          : !pdf || !width ? <div style={{ color: '#ddd', fontSize: 13, fontWeight: 700, padding: 40, display: 'flex', justifyContent: 'center', gap: 8 }}><Ico lucide={Loader2} ti="ti-loader-2" size={15} style={{ animation: 'spin .8s linear infinite' }} /> Loading pages…</div>
+          : !pdf || !width ? <div style={{ color: '#ddd', fontSize: 13, fontWeight: 700, padding: 40, display: 'flex', justifyContent: 'center', gap: 8 }}><Ico ti="ti-loader-2" size={15} style={{ animation: 'spin .8s linear infinite' }} /> Loading pages…</div>
           : Array.from({ length: pdf.numPages }, (_, i) => (
             <MarkupPage key={i + 1} pdf={pdf} pageNumber={i + 1} width={width} tool={tool}
               marks={marks.filter((m) => m.page === i + 1)} numbers={numbers} selectedId={selectedId}

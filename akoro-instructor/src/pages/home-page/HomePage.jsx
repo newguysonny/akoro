@@ -3,7 +3,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, BookOpen, Plus, Eye, Clock, Video, Bot, ChevronRight, Zap, Wallet, Layers, Flame, CheckCircle2, Swords , AlertTriangle } from 'lucide-react';
+import { Users, BookOpen, Plus, Eye, Video, Bot, Zap, Wallet, Layers, Flame, Swords } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import SchoolNudge from '../../components/SchoolNudge.jsx';
 import { Btn, Toast, Skeleton, Modal, Inp } from '../../components/Primitives.jsx';
@@ -113,7 +113,7 @@ export default function HomePage() {
             padding: '11px 14px', borderRadius: 12,
             background: tint(14, '#F59E0B'), border: `1px solid ${tint(35, '#F59E0B')}`, fontFamily: C.font,
           }}>
-            <span style={{ display: 'flex' }}><Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={16} color="#B45309" /></span>
+            <span style={{ display: 'flex' }}><Ico ti="ti-alert-triangle" size={16} color="#B45309" /></span>
             <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: '#92400E' }}>
               {loadError} These figures may be incomplete.
             </span>
@@ -174,10 +174,10 @@ export default function HomePage() {
                   background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14,
                   padding: '32px', textAlign: 'center',
                 }}>
-                  <Ico lucide={Clock} ti="ti-clock" size={28} color={C.muted} style={{ marginBottom: 10 }} />
+                  <Ico ti="ti-clock" size={28} color={C.muted} style={{ marginBottom: 10 }} />
                   <p style={{ fontSize: 14, color: C.muted, fontFamily: C.font, margin: 0 }}>No sessions scheduled for today</p>
                   <Btn size="sm" style={{ marginTop: 12 }} onClick={() => navigate('/courses/schedule')}>
-                    <Ico lucide={Plus} ti="ti-plus" size={14} /> Schedule one
+                    <Ico ti="ti-plus" size={14} /> Schedule one
                   </Btn>
                 </div>
               ) : (
@@ -233,7 +233,7 @@ export default function HomePage() {
                     background: `linear-gradient(135deg, ${PURPLE}, ${BLUE})`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>
-                    <Ico lucide={Bot} ti="ti-robot" size={16} color="#fff" />
+                    <Ico ti="ti-robot" size={16} color="#fff" />
                   </div>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>{loading ? '…' : (profile?.agent?.agent_name || profile?.agentName || 'AI Agent')}</div>
@@ -266,7 +266,7 @@ export default function HomePage() {
                 style={{ marginTop: 12, width: '100%', justifyContent: 'center', color: PURPLE, background: `${PURPLE}10` }}
                 onClick={() => navigate('/chat')}
               >
-                <Ico lucide={Zap} ti="ti-bolt" size={14} /> Train Agent <Ico lucide={ChevronRight} ti="ti-chevron-right" size={12} />
+                <Ico ti="ti-bolt" size={14} /> Train Agent <Ico ti="ti-chevron-right" size={12} />
               </Btn>
             </div>
 

@@ -12,7 +12,7 @@
  * "edited". Assign (in the panel's footer) sends the version on screen.
  */
 import { useEffect, useState } from 'react';
-import { Sparkles, AlertTriangle, Loader2, RotateCcw, Eye, Pencil } from 'lucide-react';
+import { Eye, Pencil } from 'lucide-react';
 import { GREEN, PURPLE, RED } from '../../constants.js';
 import { C } from '../../theme/colors.js';
 import { Ico } from '../../theme/Ico.jsx';
@@ -32,8 +32,8 @@ function Tab({ v, on, onClick }) {
         background: on ? C.surface : 'transparent', color: on ? PURPLE : v.status === 'failed' ? RED : C.muted, cursor: 'pointer', fontFamily: C.font, fontSize: 12.5, fontWeight: 800,
         display: 'inline-flex', alignItems: 'center', gap: 4 }}>
       V{v.n}
-      {v.status === 'drafting' && <Ico lucide={Loader2} ti="ti-loader-2" size={11} style={{ animation: 'spin .8s linear infinite' }} />}
-      {v.status === 'failed' && <Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={11} />}
+      {v.status === 'drafting' && <Ico ti="ti-loader-2" size={11} style={{ animation: 'spin .8s linear infinite' }} />}
+      {v.status === 'failed' && <Ico ti="ti-alert-triangle" size={11} />}
       {v.edited && <span style={{ fontSize: 10.5, fontWeight: 700, color: C.brand }}>· edited</span>}
     </button>
   );
@@ -90,18 +90,18 @@ export default function DraftVersions({ draft, selected, onSelect, onSave, onRet
 
       {v.status === 'drafting' ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '40px 12px', color: C.muted, textAlign: 'center' }}>
-          <Ico lucide={Loader2} ti="ti-loader-2" size={20} color={PURPLE} style={{ animation: 'spin .8s linear infinite' }} />
+          <Ico ti="ti-loader-2" size={20} color={PURPLE} style={{ animation: 'spin .8s linear infinite' }} />
           <div style={{ fontSize: 13, fontWeight: 800, color: C.ink }}>Drafting version {v.n}…</div>
           <div style={{ fontSize: 12, maxWidth: 360, lineHeight: 1.5 }}>“{v.request}” — usually ready within a minute. You can keep chatting meanwhile.</div>
         </div>
       ) : v.status === 'failed' ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '36px 12px', textAlign: 'center' }}>
-          <Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={20} color={RED} />
+          <Ico ti="ti-alert-triangle" size={20} color={RED} />
           <div style={{ fontSize: 13, fontWeight: 800, color: C.ink }}>Version {v.n} couldn't be drafted</div>
           <div style={{ fontSize: 12, color: C.muted }}>{v.error || 'Something went wrong.'}</div>
           <button type="button" onClick={() => onRetry(v.n)} disabled={busy}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 13px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.surface, fontFamily: C.font, fontSize: 12, fontWeight: 800, cursor: 'pointer', color: C.ink }}>
-            <Ico lucide={RotateCcw} ti="ti-rotate" size={12} /> Try again
+            <Ico ti="ti-rotate" size={12} /> Try again
           </button>
         </div>
       ) : (
@@ -109,7 +109,7 @@ export default function DraftVersions({ draft, selected, onSelect, onSave, onRet
           {/* What this round changed, and anything it missed */}
           {v.note && !editing && (
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, padding: '8px 11px', borderRadius: 10, background: C.bg, border: `1px solid ${C.border}`, fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 8 }}>
-              <Ico lucide={Sparkles} ti="ti-sparkles" size={13} color={PURPLE} style={{ marginTop: 2, flexShrink: 0 }} />
+              <Ico ti="ti-sparkles" size={13} color={PURPLE} style={{ marginTop: 2, flexShrink: 0 }} />
               <span><b style={{ color: C.ink }}>Version {v.n}</b>
                 {v.basedOn ? <> — from {versions.find((x) => x.n === v.basedOn)?.edited ? 'your edited ' : ''}V{v.basedOn}</> : null}: {v.note}
                 {v.edited && <span style={{ color: C.brand, fontWeight: 700 }}> · you edited this version</span>}
@@ -118,7 +118,7 @@ export default function DraftVersions({ draft, selected, onSelect, onSave, onRet
           )}
           {v.warning && !editing && (
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, padding: '8px 11px', borderRadius: 10, background: C.brandSoft, border: '1px solid #FED7AA', fontSize: 12, fontWeight: 700, color: '#B45309', lineHeight: 1.5, marginBottom: 8 }}>
-              <Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={13} style={{ marginTop: 2, flexShrink: 0 }} />
+              <Ico ti="ti-alert-triangle" size={13} style={{ marginTop: 2, flexShrink: 0 }} />
               <span>Not quite what you asked for: {v.warning} Ask in the chat to fix it, or edit it yourself.</span>
             </div>
           )}
@@ -131,7 +131,7 @@ export default function DraftVersions({ draft, selected, onSelect, onSave, onRet
                   <button key={k} type="button" aria-pressed={on} onClick={() => setEditing(k === 'edit')}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: C.font, fontSize: 11.5, fontWeight: 800,
                       background: on ? C.surface : 'transparent', color: on ? C.ink : C.muted, boxShadow: on ? '0 1px 3px rgba(0,0,0,.08)' : 'none' }}>
-                    <Ico lucide={Icon} ti={ti} size={12} /> {label}
+                    <Ico ti={ti} size={12} /> {label}
                   </button>
                 );
               })}
@@ -155,7 +155,7 @@ export default function DraftVersions({ draft, selected, onSelect, onSave, onRet
                   style={{ padding: '8px 13px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.muted, fontFamily: C.font, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Cancel</button>
                 <button type="button" onClick={save} disabled={busy}
                   style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: PURPLE, color: '#fff', fontFamily: C.font, fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  {busy && <Ico lucide={Loader2} ti="ti-loader-2" size={12} style={{ animation: 'spin .8s linear infinite' }} />} Save to V{v.n}
+                  {busy && <Ico ti="ti-loader-2" size={12} style={{ animation: 'spin .8s linear infinite' }} />} Save to V{v.n}
                 </button>
               </div>
             </>

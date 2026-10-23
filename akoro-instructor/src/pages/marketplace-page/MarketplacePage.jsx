@@ -3,7 +3,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import ToolsWorkbench from '../../components/teaching/ToolsWorkbench.jsx';
-import { Check, Lock, Loader2, Plus, Trash2, Upload, FileText } from 'lucide-react';
+import { Upload } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import { apiGet, apiPost, API } from '../../services/api.js';
 import { useNavigate } from 'react-router-dom';
@@ -124,7 +124,7 @@ export default function MarketplacePage() {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, padding: '0 2px' }}>
               <p style={{ fontSize: 11, fontWeight: 900, color: BRAND, letterSpacing: 1.5, textTransform: 'uppercase', margin: 0 }}>My Templates</p>
               <button onClick={() => setShowTpl(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 20, border: `1.5px solid ${BRAND}`, background: tint(8), color: BRAND, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONTF }}>
-                <Ico lucide={Plus} ti="ti-plus" size={13} /> Create template
+                <Ico ti="ti-plus" size={13} /> Create template
               </button>
             </div>
             {templates.length === 0 ? (
@@ -135,7 +135,7 @@ export default function MarketplacePage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {templates.map((t) => (
                   <div key={t.id} onClick={() => setViewTpl(t)} style={{ display: 'flex', alignItems: 'center', gap: 11, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '11px 13px', cursor: 'pointer' }}>
-                    <div style={{ width: 36, height: 36, flexShrink: 0, borderRadius: 9, background: tint(7, BRAND), display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ico lucide={FileText} ti="ti-file-text" size={16} color={BRAND} /></div>
+                    <div style={{ width: 36, height: 36, flexShrink: 0, borderRadius: 9, background: tint(7, BRAND), display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ico ti="ti-file-text" size={16} color={BRAND} /></div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                         <span style={{ fontSize: 13, fontWeight: 800, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</span>
@@ -143,7 +143,7 @@ export default function MarketplacePage() {
                       </div>
                       <div style={{ fontSize: 11, color: C.muted2 }}>{(TEMPLATE_TARGETS.find((x) => x.value === t.tool_target) || {}).label || t.tool_target}</div>
                     </div>
-                    {!t.is_sample && <button onClick={(e) => { e.stopPropagation(); deleteTemplate(t.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted2, padding: 4 }}><Ico lucide={Trash2} ti="ti-trash" size={15} /></button>}
+                    {!t.is_sample && <button onClick={(e) => { e.stopPropagation(); deleteTemplate(t.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted2, padding: 4 }}><Ico ti="ti-trash" size={15} /></button>}
                   </div>
                 ))}
               </div>

@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Upload, X, Check } from 'lucide-react';
+import { Upload } from 'lucide-react';
 import { AMBER, GREEN, RED, PURPLE, BLUE } from '../constants.js';
 import { C, tint } from '../theme/colors.js';
 import { Ico } from '../theme/Ico.jsx';
@@ -115,7 +115,7 @@ export function Modal({ open, onClose, title, children, width = 520, style, asPa
             <h2 style={{ fontSize: 18, fontWeight: 700, color: C.ink, margin: 0 }}>{title}</h2>
             <button onClick={onClose} aria-label="Close"
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, padding: 4, borderRadius: 6 }}>
-              <Ico lucide={X} ti="ti-x" size={18} />
+              <Ico ti="ti-x" size={18} />
             </button>
           </div>
         )}
@@ -153,7 +153,7 @@ export function Modal({ open, onClose, title, children, width = 520, style, asPa
                 color: C.muted, padding: 4, borderRadius: 6,
               }}
             >
-              <Ico lucide={X} ti="ti-x" size={18} />
+              <Ico ti="ti-x" size={18} />
             </button>
           </div>
         )}
@@ -190,7 +190,7 @@ export function WizardSteps({ steps, current }) {
               color: i <= current ? '#fff' : C.muted, fontSize: 12, fontWeight: 700,
               flexShrink: 0,
             }}>
-              {i < current ? <Ico lucide={Check} ti="ti-check" size={14} /> : i + 1}
+              {i < current ? <Ico ti="ti-check" size={14} /> : i + 1}
             </div>
             <span style={{ fontSize: 10, fontWeight: 600, color: i === current ? C.ink : C.muted, whiteSpace: 'nowrap' }}>
               {step}
@@ -322,7 +322,7 @@ export function FileUploadZone({ label = 'Drop files here or click to upload', a
         onChange={e => handleFiles(e.target.files)} />
       {!fileName ? (
         <>
-          <Ico lucide={Upload} ti="ti-upload" size={24} color={C.muted} style={{ marginBottom: 8 }} />
+          <Ico ti="ti-upload" size={24} color={C.muted} style={{ marginBottom: 8 }} />
           <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>{label}</p>
         </>
       ) : (
@@ -369,7 +369,7 @@ export function Toast({ message, type = 'success', onClose }) {
     }}>
       <span style={{ fontSize: 13, fontWeight: 500, color: C.ink, flex: 1 }}>{message}</span>
       <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, padding: 2 }}>
-        <Ico lucide={X} ti="ti-x" size={14} />
+        <Ico ti="ti-x" size={14} />
       </button>
     </div>
   );

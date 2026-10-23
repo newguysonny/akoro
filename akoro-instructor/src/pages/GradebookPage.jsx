@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Scale, SlidersHorizontal , LibraryBig, Inbox, Users } from 'lucide-react';
+import { Scale } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Toast } from '../components/Primitives.jsx';
 import { GREEN, RED, PURPLE, BLUE } from '../constants.js';
@@ -393,7 +393,7 @@ export default function GradebookPage() {
         {/* ── Sidebar: filters + class rail ── */}
         <aside style={{ width: 240, flexShrink: 0, position: 'sticky', top: 0 }}>
           <Btn style={{ width: '100%', marginBottom: 16 }} onClick={() => navigate('/activities')}>
-            <Ico lucide={Plus} ti="ti-plus" size={13} /> Add Assignment
+            <Ico ti="ti-plus" size={13} /> Add Assignment
           </Btn>
 
           <div style={{ background: C.bg, borderRadius: 14, padding: 12, marginBottom: 16, border: `1px solid ${C.border}` }}>
@@ -459,10 +459,10 @@ export default function GradebookPage() {
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 10 }}>
             <Btn variant="secondary" size="sm" onClick={() => setScaleOpen(true)}>
-              <Ico lucide={Scale} ti="ti-scale" size={14} /> Grading Scale
+              <Ico ti="ti-scale" size={14} /> Grading Scale
             </Btn>
             <Btn variant="secondary" size="sm" disabled={!classTypes.length} onClick={() => setWeightsOpen(true)}>
-              <Ico lucide={SlidersHorizontal} ti="ti-adjustments-horizontal" size={14} /> Grading System
+              <Ico ti="ti-adjustments-horizontal" size={14} /> Grading System
             </Btn>
           </div>
 
@@ -472,13 +472,13 @@ export default function GradebookPage() {
               {[1, 2, 3, 4].map((i) => <div key={i} style={{ height: 38, borderRadius: 10, background: C.bg, marginBottom: 8, opacity: 0.6 }} />)}
             </div>
           ) : !classObj ? (
-            <EmptyState icon={<Ico lucide={LibraryBig} ti="ti-books" size={36} color="#9490A0" />} title="Pick a class" sub="Your classes appear in the rail on the left." />
+            <EmptyState icon={<Ico ti="ti-books" size={36} color="#9490A0" />} title="Pick a class" sub="Your classes appear in the rail on the left." />
           ) : !assignments.length ? (
-            <EmptyState icon={<Ico lucide={Inbox} ti="ti-inbox" size={36} color="#9490A0" />} title="No activities in this class yet"
+            <EmptyState icon={<Ico ti="ti-inbox" size={36} color="#9490A0" />} title="No activities in this class yet"
               sub="Assign work from the activities workbench and it lands here."
-              action={<Btn size="sm" onClick={() => navigate('/activities')}><Ico lucide={Plus} ti="ti-plus" size={13} /> Add Assignment</Btn>} />
+              action={<Btn size="sm" onClick={() => navigate('/activities')}><Ico ti="ti-plus" size={13} /> Add Assignment</Btn>} />
           ) : !students.length ? (
-            <EmptyState icon={<Ico lucide={Users} ti="ti-users" size={36} color="#9490A0" />} title="No learners assigned yet"
+            <EmptyState icon={<Ico ti="ti-users" size={36} color="#9490A0" />} title="No learners assigned yet"
               sub="This class's activities have no learners on them — assign them from the workbench." />
           ) : (
             <div style={{ background: C.surface, borderRadius: 16, border: `1px solid ${C.border}`, boxShadow: '0 2px 10px rgba(26,26,46,0.05)', overflow: 'hidden' }}>

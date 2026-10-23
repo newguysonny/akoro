@@ -16,9 +16,7 @@
  * free, and past work here reads the same rows that page wrote.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  BookOpen, Pencil, FolderKanban, MonitorPlay, Swords, ListChecks, Plus, Users,
-  Clock, Trash2, ChevronRight, Sparkles, Loader2, CheckCircle2, Info, ArrowUp, ArrowDown, BarChart3, Check,  AlertTriangle, Download } from 'lucide-react';
+import { BookOpen, Pencil, FolderKanban, MonitorPlay, Swords, ListChecks, Download } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, Badge, Toast } from '../components/Primitives.jsx';
 import { apiGet, apiPost, apiPatch, apiDelete, apiBlob } from '../services/api.js';
@@ -447,7 +445,7 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
 
       {done && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 12px', borderRadius: 10, background: '#DCFCE7', border: `1px solid ${tint(30, GREEN)}`, fontSize: 12.5, fontWeight: 800, color: GREEN }}>
-          <Ico lucide={CheckCircle2} ti="ti-circle-check" size={14} /> {done}
+          <Ico ti="ti-circle-check" size={14} /> {done}
         </div>
       )}
 
@@ -483,8 +481,8 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
             <div style={{ fontSize: 12, fontWeight: 700, color: C.ink, fontFamily: C.font }}>{meta.planLabel} *</div>
             <Btn size="sm" variant="secondary" type="button" onClick={draft} disabled={drafting}>
               {drafting
-                ? <><Ico lucide={Loader2} ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> Drafting…</>
-                : <><Ico lucide={Sparkles} ti="ti-sparkles" size={13} /> {form.subtopics.length ? 'Redraft with AI' : 'Draft with AI'}</>}
+                ? <><Ico ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> Drafting…</>
+                : <><Ico ti="ti-sparkles" size={13} /> {form.subtopics.length ? 'Redraft with AI' : 'Draft with AI'}</>}
             </Btn>
           </div>
           <PlanEditor
@@ -543,7 +541,7 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
                       background: on ? '#EFF6FF' : C.surface,
                       color: on ? BLUE : C.muted,
                     }}>
-                    {on && <Ico lucide={Check} ti="ti-check" size={11} />} {qt}
+                    {on && <Ico ti="ti-check" size={11} />} {qt}
                   </button>
                 );
               })}
@@ -566,8 +564,8 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
               </div>
               <Btn size="sm" variant="secondary" type="button" onClick={draftRubric} disabled={rubricDrafting}>
                 {rubricDrafting
-                  ? <><Ico lucide={Loader2} ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> Drafting…</>
-                  : <><Ico lucide={Sparkles} ti="ti-sparkles" size={13} /> {form.rubric.length ? 'Redraft with AI' : 'Draft with AI'}</>}
+                  ? <><Ico ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> Drafting…</>
+                  : <><Ico ti="ti-sparkles" size={13} /> {form.rubric.length ? 'Redraft with AI' : 'Draft with AI'}</>}
               </Btn>
             </div>
             {form.rubric.length === 0 ? (
@@ -617,8 +615,8 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
               {type === 'assignment' && (
                 <Btn size="sm" variant="secondary" type="button" onClick={draftQuestions} disabled={qDrafting}>
                   {qDrafting
-                    ? <><Ico lucide={Loader2} ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> Drafting…</>
-                    : <><Ico lucide={Sparkles} ti="ti-sparkles" size={13} /> {form.questions.length ? 'Redraft questions' : 'Draft questions'}</>}
+                    ? <><Ico ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> Drafting…</>
+                    : <><Ico ti="ti-sparkles" size={13} /> {form.questions.length ? 'Redraft questions' : 'Draft questions'}</>}
                 </Btn>
               )}
               <Btn size="sm" variant="secondary" type="button"
@@ -631,7 +629,7 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
                   };
                   return { ...f, questions: [...f.questions, { ...BLANK_QUESTION, options: ['', ''], ...at }] };
                 })}>
-                <Ico lucide={Plus} ti="ti-plus" size={13} /> Add question
+                <Ico ti="ti-plus" size={13} /> Add question
               </Btn>
             </div>
           </div>
@@ -645,7 +643,7 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
           )}
           {qWarning && (
             <div style={{ marginTop: 8, padding: '7px 10px', borderRadius: 9, background: C.brandSoft, border: '1px solid #FED7AA', fontSize: 11.5, fontWeight: 700, color: '#B45309', fontFamily: C.font }}>
-              <Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={12} color="#B45309" style={{ verticalAlign: '-2px', marginRight: 3 }} />{qWarning} Edit below, or draft again.
+              <Ico ti="ti-alert-triangle" size={12} color="#B45309" style={{ verticalAlign: '-2px', marginRight: 3 }} />{qWarning} Edit below, or draft again.
             </div>
           )}
           {form.questions.length > 0 && (
@@ -692,7 +690,7 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
         <Btn type="submit" disabled={saving}>
-          {saving ? 'Assigning…' : <><Ico lucide={Users} ti="ti-users" size={14} /> Assign to learners</>}
+          {saving ? 'Assigning…' : <><Ico ti="ti-users" size={14} /> Assign to learners</>}
         </Btn>
       </div>
     </form>
@@ -759,20 +757,20 @@ function PastActivities({ type, refreshKey, onOpen }) {
                     <span style={{ display: 'flex', flexShrink: 0 }}><Ico lucide={meta.icon} ti={meta.ti} size={14} color={meta.color} /></span>
                     <span style={{ fontSize: 12.5, fontWeight: 700, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.title}</span>
                   </span>
-                  <button onClick={(e) => remove(a, e)} title="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted2, padding: 0, flexShrink: 0 }}><Ico lucide={Trash2} ti="ti-trash" size={13} /></button>
+                  <button onClick={(e) => remove(a, e)} title="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted2, padding: 0, flexShrink: 0 }}><Ico ti="ti-trash" size={13} /></button>
                 </div>
                 <span style={{ fontSize: 10, fontWeight: 800, color: meta.color }}>{a.subject}</span>
                 <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                  <Badge color={BLUE} bg="#EFF6FF"><Ico lucide={Users} ti="ti-users" size={10} style={{ marginRight: 2 }} />{p.assigned} assigned</Badge>
+                  <Badge color={BLUE} bg="#EFF6FF"><Ico ti="ti-users" size={10} style={{ marginRight: 2 }} />{p.assigned} assigned</Badge>
                   <Badge color={C.brand} bg={C.brandSoft}>{p.started} started</Badge>
-                  <Badge color={GREEN} bg="#DCFCE7"><Ico lucide={CheckCircle2} ti="ti-circle-check" size={10} style={{ marginRight: 2 }} />{p.complete} done</Badge>
+                  <Badge color={GREEN} bg="#DCFCE7"><Ico ti="ti-circle-check" size={10} style={{ marginRight: 2 }} />{p.complete} done</Badge>
                 </div>
                 {/* Same progress bar the self-study cards carry. */}
                 <div style={{ height: 6, borderRadius: 3, background: C.bg, overflow: 'hidden' }}>
                   <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg, ${C.brand}, ${GREEN})`, transition: 'width .3s' }} />
                 </div>
                 <div style={{ fontSize: 10, color: overdue ? RED : C.muted2, marginTop: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <Ico lucide={Clock} ti="ti-clock" size={10} />{whenLabel} {when || '—'}
+                  <Ico ti="ti-clock" size={10} />{whenLabel} {when || '—'}
                 </div>
               </div>
             );
@@ -870,14 +868,14 @@ export function DetailPage({ activity, onDeleted, onClose }) {
 
           {data.details?.scheduled_at && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: C.brand, marginBottom: 10 }}>
-              <Ico lucide={Clock} ti="ti-clock" size={12} />
+              <Ico ti="ti-clock" size={12} />
               Holds {new Date(data.details.scheduled_at).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
               {data.details.duration_mins ? ` · ${data.details.duration_mins} minutes` : ''}
             </div>
           )}
           {data.due_at && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 10 }}>
-              <Ico lucide={Clock} ti="ti-clock" size={12} /> Due {new Date(data.due_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              <Ico ti="ti-clock" size={12} /> Due {new Date(data.due_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
             </div>
           )}
 
@@ -964,25 +962,25 @@ export function DetailPage({ activity, onDeleted, onClose }) {
 
           {pdfErr && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 11px', borderRadius: 10, background: tint(9, RED), border: `1px solid ${tint(30, RED)}`, fontSize: 12, fontWeight: 700, color: RED, fontFamily: C.font, marginTop: 12 }}>
-              <Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={13} /> Couldn't build the PDF — try again.
+              <Ico ti="ti-alert-triangle" size={13} /> Couldn't build the PDF — try again.
             </div>
           )}
           <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginTop: 14 }}>
             <div style={{ display: 'flex', gap: 8 }}>
               <Btn size="sm" variant="secondary" onClick={downloadPdf} disabled={!canPdf}
                 title="Download this activity as a PDF">
-                <Ico lucide={Download} ti="ti-download" size={13} /> {questions.length ? 'Download paper' : 'Download PDF'}
+                <Ico ti="ti-download" size={13} /> {questions.length ? 'Download paper' : 'Download PDF'}
               </Btn>
               {questions.length > 0 && (
                 <Btn size="sm" variant="secondary" onClick={() => printPaper('teacher')} title="Download the marking scheme (teacher copy)">
-                  <Ico lucide={Download} ti="ti-download" size={13} /> Marking scheme
+                  <Ico ti="ti-download" size={13} /> Marking scheme
                 </Btn>
               )}
-              <Btn size="sm" variant="secondary" onClick={del}><Ico lucide={Trash2} ti="ti-trash" size={13} /> Delete activity</Btn>
+              <Btn size="sm" variant="secondary" onClick={del}><Ico ti="ti-trash" size={13} /> Delete activity</Btn>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <Btn size="sm" variant="secondary" onClick={() => navigate(`/self-study/${activity.id}/analytics`)}>
-                <Ico lucide={BarChart3} ti="ti-chart-bar" size={13} /> Analytics
+                <Ico ti="ti-chart-bar" size={13} /> Analytics
               </Btn>
               <Btn size="sm" variant="secondary" onClick={onClose}>Close</Btn>
             </div>
@@ -1026,7 +1024,7 @@ function DraftsStrip({ refreshKey, onResolved }) {
   return (
     <div style={{ background: `${PURPLE}08`, border: '1px solid rgba(168,85,247,.3)', borderRadius: 14, padding: '12px 16px', marginBottom: 18, fontFamily: C.font }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <Ico lucide={Sparkles} ti="ti-sparkles" size={14} color={PURPLE} />
+        <Ico ti="ti-sparkles" size={14} color={PURPLE} />
         <span style={{ fontSize: 12, fontWeight: 900, color: PURPLE, letterSpacing: .3 }}>
           {drafts.length} AI-prepared draft{drafts.length === 1 ? '' : 's'} awaiting your review
         </span>
@@ -1134,7 +1132,7 @@ function ActivitiesHome() {
     <PageLayout
       title="Activities"
       subtitle="Create work, assign it to learners, and see what has been done"
-      action={<Btn size="sm" onClick={() => setRefreshKey(k => k + 1)}><Ico lucide={Plus} ti="ti-plus" size={14} /> Refresh</Btn>}
+      action={<Btn size="sm" onClick={() => setRefreshKey(k => k + 1)}><Ico ti="ti-plus" size={14} /> Refresh</Btn>}
     >
       <DraftsStrip refreshKey={refreshKey} onResolved={() => setRefreshKey(k => k + 1)} />
       <div style={{ display: 'flex', gap: 22, alignItems: 'flex-start', flexWrap: 'wrap' }}>
@@ -1166,7 +1164,7 @@ function ActivitiesHome() {
           {note && (
             <div style={{ background: tint(4), border: `1px solid ${tint(20)}`, borderRadius: 14, padding: '13px 15px', fontFamily: C.font }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                <Ico lucide={Info} ti="ti-info-circle" size={13} color={C.brand} />
+                <Ico ti="ti-info-circle" size={13} color={C.brand} />
                 <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: .5, color: C.brand }}>WHEN TO USE IT</span>
               </div>
               <div style={{ fontSize: 12.5, fontWeight: 800, color: C.ink, marginBottom: 5 }}>{note[0]}</div>
@@ -1242,7 +1240,7 @@ function BattlePanel({ onDone }) {
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
         <div style={{ width: 40, height: 40, borderRadius: 12, background: `${RED}18`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Ico lucide={Swords} ti="ti-swords" size={19} color={RED} />
+          <Ico ti="ti-swords" size={19} color={RED} />
         </div>
         <div>
           <div style={{ fontSize: 15.5, fontWeight: 900, color: C.ink }}>New battle</div>
@@ -1291,12 +1289,12 @@ function BattlePastStrip({ refreshKey }) {
             return (
               <div key={b.id} style={{ flex: '0 0 auto', width: 224, scrollSnapAlign: 'start', border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 13px', display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                  <span style={{ display: 'flex', flexShrink: 0 }}><Ico lucide={Swords} ti="ti-swords" size={14} color="#DC2626" /></span>
+                  <span style={{ display: 'flex', flexShrink: 0 }}><Ico ti="ti-swords" size={14} color="#DC2626" /></span>
                   <span style={{ fontSize: 12.5, fontWeight: 700, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.title}</span>
                 </div>
                 <Badge color={st.color} bg={st.bg}>{st.label}</Badge>
                 <div style={{ fontSize: 10, color: C.muted2, marginTop: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <Ico lucide={Clock} ti="ti-clock" size={10} />{b.scheduled_start || b.scheduledAt ? fmtWhen(b.scheduled_start || b.scheduledAt) : b.topic || '—'}
+                  <Ico ti="ti-clock" size={10} />{b.scheduled_start || b.scheduledAt ? fmtWhen(b.scheduled_start || b.scheduledAt) : b.topic || '—'}
                 </div>
               </div>
             );
@@ -1446,7 +1444,7 @@ function MultiStageForm({ onAssigned }) {
     <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14, fontFamily: C.font }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 2 }}>
         <div style={{ width: 40, height: 40, borderRadius: 12, background: '#A855F718', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Ico lucide={ListChecks} ti="ti-list-check" size={19} color="#A855F7" />
+          <Ico ti="ti-list-check" size={19} color="#A855F7" />
         </div>
         <div>
           <div style={{ fontSize: 15.5, fontWeight: 900, color: C.ink }}>New multi-stage activity</div>
@@ -1456,7 +1454,7 @@ function MultiStageForm({ onAssigned }) {
 
       {done && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 12px', borderRadius: 10, background: '#DCFCE7', border: `1px solid ${tint(30, GREEN)}`, fontSize: 12.5, fontWeight: 800, color: GREEN }}>
-          <Ico lucide={CheckCircle2} ti="ti-circle-check" size={14} /> {done}
+          <Ico ti="ti-circle-check" size={14} /> {done}
         </div>
       )}
 
@@ -1480,18 +1478,18 @@ function MultiStageForm({ onAssigned }) {
                   <span style={{ fontSize: 12.5, fontWeight: 800, color: C.ink }}>{meta.label}</span>
                   <span style={{ flex: 1 }} />
                   <button type="button" onClick={() => moveStage(i, -1)} disabled={i === 0} title="Move up"
-                    style={{ background: 'none', border: 'none', cursor: i === 0 ? 'default' : 'pointer', color: i === 0 ? C.border : C.muted, display: 'flex', padding: 2 }}><Ico lucide={ArrowUp} ti="ti-arrow-up" size={13} /></button>
+                    style={{ background: 'none', border: 'none', cursor: i === 0 ? 'default' : 'pointer', color: i === 0 ? C.border : C.muted, display: 'flex', padding: 2 }}><Ico ti="ti-arrow-up" size={13} /></button>
                   <button type="button" onClick={() => moveStage(i, 1)} disabled={i === stages.length - 1} title="Move down"
-                    style={{ background: 'none', border: 'none', cursor: i === stages.length - 1 ? 'default' : 'pointer', color: i === stages.length - 1 ? C.border : C.muted, display: 'flex', padding: 2 }}><Ico lucide={ArrowDown} ti="ti-arrow-down" size={13} /></button>
+                    style={{ background: 'none', border: 'none', cursor: i === stages.length - 1 ? 'default' : 'pointer', color: i === stages.length - 1 ? C.border : C.muted, display: 'flex', padding: 2 }}><Ico ti="ti-arrow-down" size={13} /></button>
                   <button type="button" onClick={() => removeStage(st.key)} title="Remove stage"
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: RED, display: 'flex', padding: 2 }}><Ico lucide={Trash2} ti="ti-trash" size={13} /></button>
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: RED, display: 'flex', padding: 2 }}><Ico ti="ti-trash" size={13} /></button>
                 </div>
 
                 {st.kind === 'battle' ? (
                   st.battle
                     ? <div style={{ fontSize: 12, fontWeight: 700, color: GREEN }}>{st.battle.title} — battle is live for its audience</div>
                     : <Btn size="sm" variant="secondary" type="button" onClick={() => setBattleFor(st.key)}>
-                        <Ico lucide={Swords} ti="ti-swords" size={13} /> Create the battle for this stage
+                        <Ico ti="ti-swords" size={13} /> Create the battle for this stage
                       </Btn>
                 ) : (
                   <>
@@ -1508,8 +1506,8 @@ function MultiStageForm({ onAssigned }) {
                       <div style={{ fontSize: 11.5, fontWeight: 700, color: C.ink }}>Stage plan *</div>
                       <Btn size="sm" variant="secondary" type="button" onClick={() => draftStage(st)} disabled={draftingKey === st.key}>
                         {draftingKey === st.key
-                          ? <><Ico lucide={Loader2} ti="ti-loader-2" size={12} style={{ animation: 'spin .8s linear infinite' }} /> Drafting…</>
-                          : <><Ico lucide={Sparkles} ti="ti-sparkles" size={12} /> {st.subtopics.length ? 'Redraft' : 'Draft with AI'}</>}
+                          ? <><Ico ti="ti-loader-2" size={12} style={{ animation: 'spin .8s linear infinite' }} /> Drafting…</>
+                          : <><Ico ti="ti-sparkles" size={12} /> {st.subtopics.length ? 'Redraft' : 'Draft with AI'}</>}
                       </Btn>
                     </div>
                     <PlanEditor
@@ -1559,7 +1557,7 @@ function MultiStageForm({ onAssigned }) {
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
         <Btn type="submit" disabled={saving}>
-          {saving ? 'Assigning…' : <><Ico lucide={ListChecks} ti="ti-list-check" size={14} /> Assign journey</>}
+          {saving ? 'Assigning…' : <><Ico ti="ti-list-check" size={14} /> Assign journey</>}
         </Btn>
       </div>
 

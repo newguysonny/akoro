@@ -22,7 +22,7 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
-import { X, Trophy, Users, Radio, Square, Gavel , Flame, Swords, Flag, Ban, OctagonX } from 'lucide-react';
+import { Trophy, Users } from 'lucide-react';
 import { apiGet, apiPost } from '../services/api.js';
 import { WS_URL } from '../constants.js';
 import { C, tint } from '../theme/colors.js';
@@ -213,7 +213,7 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
               display: 'inline-flex', alignItems: 'center', gap: 5, background: tint(12, RED),
               color: RED, fontSize: 10.5, fontWeight: 800, padding: '4px 10px', borderRadius: 20,
             }}>
-              <Ico lucide={Radio} ti="ti-broadcast" size={11} /> LIVE
+              <Ico ti="ti-broadcast" size={11} /> LIVE
             </span>
           )}
           {isLive && battle.mine && (
@@ -223,11 +223,11 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
                 background: C.surface, color: RED, fontSize: 11.5, fontWeight: 700, padding: '5px 11px',
                 borderRadius: 8, cursor: ending ? 'default' : 'pointer', opacity: ending ? 0.6 : 1,
               }}>
-              <Ico lucide={Square} ti="ti-square" size={11} /> {ending ? 'Ending…' : 'End now'}
+              <Ico ti="ti-square" size={11} /> {ending ? 'Ending…' : 'End now'}
             </button>
           )}
           <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', color: C.muted, padding: 4 }}>
-            <Ico lucide={X} ti="ti-x" size={18} />
+            <Ico ti="ti-x" size={18} />
           </button>
         </div>
 
@@ -241,7 +241,7 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
           {/* ── Standings ─────────────────────────────────────────────── */}
           <div>
             <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, marginBottom: 9, letterSpacing: .3 }}>
-              <Ico lucide={Users} ti="ti-users" size={11} style={{ marginRight: 4, verticalAlign: -1 }} />STANDINGS
+              <Ico ti="ti-users" size={11} style={{ marginRight: 4, verticalAlign: -1 }} />STANDINGS
             </div>
             {ranked.length === 0 ? (
               <div style={{ fontSize: 12.5, color: C.muted }}>
@@ -256,7 +256,7 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
                     background: i === 0 && leader > 0 ? '#FFFBEB' : C.surface,
                   }}>
                     <span style={{ fontSize: 11, fontWeight: 800, color: C.muted, width: 16 }}>{i + 1}</span>
-                    <span style={{ fontSize: 17 }}>{(() => { const [I, ti] = p.agentEmoji === '🏆' ? [Trophy, 'ti-trophy'] : [Users, 'ti-users']; return <Ico lucide={I} ti={ti} size={16} color={p.agentColor || C.brand} />; })()}</span>
+                    <span style={{ fontSize: 17 }}>{(() => { const [I, ti] = p.agentEmoji === '🏆' ? [Trophy, 'ti-trophy'] : [Users, 'ti-users']; return <Ico ti={ti} size={16} color={p.agentColor || C.brand} />; })()}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12.5, fontWeight: 700, color: C.ink }}>{p.agentName}</div>
                       {/* HP is the learner-facing health bar; for a teacher it
@@ -265,7 +265,7 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
                         <div style={{ width: `${Math.max(0, Math.min(100, p.hp))}%`, height: '100%', background: p.hp > 40 ? GREEN : RED }} />
                       </div>
                     </div>
-                    {p.streak > 1 && <span style={{ fontSize: 10.5, fontWeight: 700, color: C.brand, display: 'inline-flex', alignItems: 'center', gap: 2 }}><Ico lucide={Flame} ti="ti-flame" size={11} color={C.brand} />{p.streak}</span>}
+                    {p.streak > 1 && <span style={{ fontSize: 10.5, fontWeight: 700, color: C.brand, display: 'inline-flex', alignItems: 'center', gap: 2 }}><Ico ti="ti-flame" size={11} color={C.brand} />{p.streak}</span>}
                     <span style={{ fontSize: 13, fontWeight: 900, color: p.agentColor }}>{p.score}</span>
                   </div>
                 ))}
@@ -275,7 +275,7 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
             {over && (
               <div style={{ marginTop: 14, padding: '12px 14px', borderRadius: 12, background: tint(10, '#F59E0B'), border: `1px solid ${tint(27)}` }}>
                 <div style={{ fontSize: 11, fontWeight: 800, color: C.brand, marginBottom: 6 }}>
-                  <Ico lucide={Trophy} ti="ti-trophy" size={11} style={{ marginRight: 4, verticalAlign: -1 }} />RESULT
+                  <Ico ti="ti-trophy" size={11} style={{ marginRight: 4, verticalAlign: -1 }} />RESULT
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 800, color: C.ink }}>
                   {over.review
@@ -293,7 +293,7 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
                 )}
                 {over.verdict && (
                   <div style={{ fontSize: 12, color: C.ink, marginTop: 8, lineHeight: 1.5 }}>
-                    <Ico lucide={Gavel} ti="ti-gavel" size={11} style={{ marginRight: 4, verticalAlign: -1, color: C.brand }} /><b>Sergeant's verdict:</b> {over.verdict}
+                    <Ico ti="ti-gavel" size={11} style={{ marginRight: 4, verticalAlign: -1, color: C.brand }} /><b>Sergeant's verdict:</b> {over.verdict}
                   </div>
                 )}
               </div>
@@ -341,7 +341,7 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
                 </div>
                 {reveal?.judge && reveal.questionOrder === question.questionOrder && (
                   <div style={{ marginTop: 9, fontSize: 11.5, color: C.ink, lineHeight: 1.45 }}>
-                    <Ico lucide={Gavel} ti="ti-gavel" size={11} style={{ marginRight: 4, verticalAlign: -1, color: C.brand }} /><b>Sergeant:</b> {reveal.judge.answer}{reveal.judge.why ? ` — ${reveal.judge.why}` : ''}
+                    <Ico ti="ti-gavel" size={11} style={{ marginRight: 4, verticalAlign: -1, color: C.brand }} /><b>Sergeant:</b> {reveal.judge.answer}{reveal.judge.why ? ` — ${reveal.judge.why}` : ''}
                   </div>
                 )}
               </div>

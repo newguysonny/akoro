@@ -3,10 +3,7 @@
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { PageLayout } from '../../components/Layout.jsx';
-import {
-  User, AtSign, Mail, Phone, MapPin, Building2, GraduationCap, BookOpen,
-  Pencil, Upload, Search, Bolt, Star, BarChart3, Palette,
-  Tag, Sparkles, Store, CheckCircle2, ChevronRight,  Bot, Brain, Gamepad2, Bird, Zap, Wand2, Flower2, Target, Rocket, Lightbulb, Squirrel, Dog, Rabbit, Drama, Trophy, Gem } from 'lucide-react';
+import { User, AtSign, Mail, Phone, MapPin, Building2, GraduationCap, BookOpen, Pencil, Upload, Search, Bolt, BarChart3, Palette, Tag, Sparkles, CheckCircle2, Bot, Brain, Gamepad2, Bird, Zap, Wand2, Flower2, Target, Rocket, Lightbulb, Squirrel, Dog, Rabbit, Drama, Trophy, Gem } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import {
   getProfile, patchProfile, patchAgent,
@@ -70,7 +67,7 @@ function Row({ icon: Icon, ti, label, value, sub, onClick, noArrow, children }) 
       onMouseLeave={(e) => (e.currentTarget.style.background = C.surface)}
       onClick={onClick}>
       <span style={{ width: 28, flexShrink: 0, display: 'flex', alignItems: 'center' }}>
-        {Icon && <Ico lucide={Icon} ti={ti} size={17} color={C.muted} />}
+        {Icon && <Ico ti={ti} size={17} color={C.muted} />}
       </span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{ fontSize: 13.5, fontWeight: 700, margin: 0, color: C.ink }}>{label}</p>
@@ -78,7 +75,7 @@ function Row({ icon: Icon, ti, label, value, sub, onClick, noArrow, children }) 
       </div>
       {value !== undefined && <span style={{ fontSize: 12.5, fontWeight: 600, color: C.muted, marginRight: 4, flexShrink: 0 }}>{value}</span>}
       {children}
-      {onClick && !noArrow && <Ico lucide={ChevronRight} ti="ti-chevron-right" size={16} color="#D1D5DB" />}
+      {onClick && !noArrow && <Ico ti="ti-chevron-right" size={16} color="#D1D5DB" />}
     </div>
   );
 }
@@ -91,7 +88,7 @@ function AvatarCircle({ photoUrl, monogram, color, size = 60, onPhotoClick }) {
         {photoUrl ? <img src={photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />  : <span style={{ fontSize: size * 0.38, fontWeight: 900, color }}>{String(monogram || '?').trim().charAt(0).toUpperCase() || '?'}</span>}
       </div>
       <div style={{ position: 'absolute', bottom: 0, right: 0, width: 20, height: 20, borderRadius: '50%', background: color, border: `2px solid ${C.surface}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} onClick={onPhotoClick}>
-        <Ico lucide={Pencil} ti="ti-pencil" size={9} color="#fff" />
+        <Ico ti="ti-pencil" size={9} color="#fff" />
       </div>
     </div>
   );
@@ -142,7 +139,7 @@ function AvatarPickerSheet({ current, onClose, onSavePhoto, onSaveEmoji, color }
         <>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
             {AGENT_ICONS.map(([Icon, em, ti]) => (
-              <div key={em} onClick={() => setSelEmoji(em)} style={{ width: 46, height: 46, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: selEmoji === em ? tint(8, color) : C.bg, border: `1.5px solid ${selEmoji === em ? color : C.border}` }}><Ico lucide={Icon} ti={ti} size={22} color={selEmoji === em ? color : C.muted} /></div>
+              <div key={em} onClick={() => setSelEmoji(em)} style={{ width: 46, height: 46, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: selEmoji === em ? tint(8, color) : C.bg, border: `1.5px solid ${selEmoji === em ? color : C.border}` }}><Ico ti={ti} size={22} color={selEmoji === em ? color : C.muted} /></div>
             ))}
           </div>
           <SheetButtons onClose={onClose} onSave={() => { onSaveEmoji(selEmoji); onClose(); }} saveLabel="Save Emoji" />
@@ -158,7 +155,7 @@ function AvatarPickerSheet({ current, onClose, onSavePhoto, onSaveEmoji, color }
             </div>
           ) : (
             <div onClick={() => fileRef.current?.click()} style={{ border: `2px dashed ${C.border}`, borderRadius: 16, padding: '32px 20px', textAlign: 'center', cursor: 'pointer', marginBottom: 20 }}>
-              <Ico lucide={Upload} ti="ti-upload" size={28} color={C.muted2} style={{ display: 'block', margin: '0 auto 10px' }} />
+              <Ico ti="ti-upload" size={28} color={C.muted2} style={{ display: 'block', margin: '0 auto 10px' }} />
               <p style={{ fontSize: 14, fontWeight: 800, color: C.ink, margin: '0 0 4px' }}>Tap to upload photo</p>
               <p style={{ fontSize: 12, color: C.muted2, margin: 0 }}>JPG, PNG or WebP · Max 5MB</p>
             </div>
@@ -185,7 +182,7 @@ function SubjectsSheet({ current, onClose, onSave, color = BRAND }) {
       </div>
       {selected.length > 0 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>{selected.map((s) => <SubjectChip key={s} label={s} color={color} onRemove={(x) => setSelected((p) => p.filter((y) => y !== x))} />)}</div>}
       <div style={{ position: 'relative', marginBottom: 10 }}>
-        <Ico lucide={Search} ti="ti-search" size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: C.muted2 }} />
+        <Ico ti="ti-search" size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: C.muted2 }} />
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search subjects…" style={{ width: '100%', padding: '10px 13px 10px 34px', borderRadius: 12, border: `1.5px solid ${C.border}`, outline: 'none', fontSize: 13, fontFamily: FONTF, color: C.ink, boxSizing: 'border-box' }} />
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, maxHeight: 160, overflowY: 'auto', marginBottom: 14 }}>
@@ -271,10 +268,10 @@ function SubjectsRow({ subjects, onClick, color = BRAND }) {
       onMouseLeave={(e) => (e.currentTarget.style.background = C.surface)}
       onClick={onClick}>
       <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-        <span style={{ width: 28, flexShrink: 0, display: 'flex', alignItems: 'center' }}><Ico lucide={BookOpen} ti="ti-book" size={17} color={C.muted} /></span>
+        <span style={{ width: 28, flexShrink: 0, display: 'flex', alignItems: 'center' }}><Ico ti="ti-book" size={17} color={C.muted} /></span>
         <div style={{ flex: 1 }}><p style={{ fontSize: 13.5, fontWeight: 700, margin: 0, color: C.ink }}>Subjects Taught</p></div>
         <span style={{ fontSize: 12.5, fontWeight: 600, color: C.muted, marginRight: 4 }}>{subjects.length} added</span>
-        <Ico lucide={ChevronRight} ti="ti-chevron-right" size={16} color="#D1D5DB" />
+        <Ico ti="ti-chevron-right" size={16} color="#D1D5DB" />
       </div>
       {subjects.length > 0 && (
         <div style={{ paddingLeft: 28, paddingTop: 8, paddingBottom: 2, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -354,7 +351,7 @@ function ProfileTab({ profile, setProfile, stats, onSaveField }) {
           <p style={{ margin: '0 0 2px', fontSize: 15, fontWeight: 900, color: C.ink }}>{profile.fullName || '—'}</p>
           <p style={{ margin: '0 0 6px', fontSize: 12.5, color: C.muted }}>@{profile.username || profile.email?.split('@')[0]}</p>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: tint(7, color), borderRadius: 8, padding: '3px 10px' }}>
-            <Ico lucide={GraduationCap} ti="ti-school" size={11} color={color} />
+            <Ico ti="ti-school" size={11} color={color} />
             <span style={{ fontSize: 11, fontWeight: 800, color }}>Instructor</span>
           </div>
         </div>
@@ -433,7 +430,7 @@ function AgentTab({ agent, setAgent, profile, onSaveAgent, onPublish, onUnpublis
       {/* XP bar */}
       <div style={{ background: C.surface, marginBottom: 16, borderRadius: 14, padding: '14px 16px', border: `1px solid ${C.border}` }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={{ fontSize: 12, fontWeight: 800, color: '#374151', display: 'flex', alignItems: 'center', gap: 5 }}><Ico lucide={Star} ti="ti-star" size={13} color={color} />Agent Level {agent.level || 1}</span>
+          <span style={{ fontSize: 12, fontWeight: 800, color: '#374151', display: 'flex', alignItems: 'center', gap: 5 }}><Ico ti="ti-star" size={13} color={color} />Agent Level {agent.level || 1}</span>
           <span style={{ fontSize: 11.5, fontWeight: 600, color: C.muted2 }}>{(agent.xpEarned || 0).toLocaleString()} XP</span>
         </div>
         <ProgressBar pct={levelPct} color={color} />
@@ -442,7 +439,7 @@ function AgentTab({ agent, setAgent, profile, onSaveAgent, onPublish, onUnpublis
       <Section title="Agent Profile">
         <Row icon={Tag} ti="ti-tag"      label="Agent Name"    value={agent.name} onClick={() => openSheet('name', 'Agent Name', 'text')} />
         <Row icon={Sparkles} ti="ti-sparkles" label="Agent Icon" onClick={() => setAvSheet(true)}>
-          <span style={{ display: 'flex', alignItems: 'center' }}>{(() => { const hit = AGENT_ICONS.find(([, em]) => em === (agent.emoji || '🤖')); const I = hit ? hit[0] : Bot; const iti = hit ? hit[2] : 'ti-robot'; return <Ico lucide={I} ti={iti} size={16} color={C.muted} />; })()}</span>
+          <span style={{ display: 'flex', alignItems: 'center' }}>{(() => { const hit = AGENT_ICONS.find(([, em]) => em === (agent.emoji || '🤖')); const I = hit ? hit[0] : Bot; const iti = hit ? hit[2] : 'ti-robot'; return <Ico ti={iti} size={16} color={C.muted} />; })()}</span>
         </Row>
         <Row icon={Palette} ti="ti-palette"  label="Agent Colour"  onClick={() => openSheet('color', 'Agent Colour', 'accent')}>
           <div style={{ width: 18, height: 18, borderRadius: '50%', background: color, marginRight: 6, flexShrink: 0 }} />
@@ -451,7 +448,7 @@ function AgentTab({ agent, setAgent, profile, onSaveAgent, onPublish, onUnpublis
 
       <Section title="Marketplace">
         <div style={rowBase}>
-          <span style={{ width: 28, flexShrink: 0, display: 'flex', alignItems: 'center' }}><Ico lucide={Store} ti="ti-building-store" size={17} color={C.muted} /></span>
+          <span style={{ width: 28, flexShrink: 0, display: 'flex', alignItems: 'center' }}><Ico ti="ti-building-store" size={17} color={C.muted} /></span>
           <div style={{ flex: 1 }}>
             <p style={{ fontSize: 13.5, fontWeight: 700, margin: 0, color: C.ink }}>Publish to Marketplace</p>
             <p style={{ fontSize: 11.5, color: C.muted2, marginTop: 2, margin: 0 }}>{published ? 'Your agent is live and discoverable' : 'List your trained agent for students'}</p>

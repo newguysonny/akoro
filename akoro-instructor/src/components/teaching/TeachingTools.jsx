@@ -15,10 +15,7 @@
  * passes `onInsert` to drop the result into the conversation.
  */
 import { useState, useEffect, useRef } from 'react';
-import { Sparkles, Copy, Check, Printer, Loader2, ArrowLeft, Volume2, Play, Pause, MessageSquarePlus,
-  SkipBack, SkipForward, Download, RotateCcw,
-  AlertCircle, CheckCircle2, HelpCircle, Lightbulb, Briefcase, Link2, Clock, Package, Target,
-  ListChecks, MessageCircle, GraduationCap, Users, FileText, Award , Lock } from 'lucide-react';
+import { Copy, Play, Download, AlertCircle, CheckCircle2, HelpCircle, Lightbulb, Briefcase, Link2, Clock, Package, Target, ListChecks, MessageCircle, GraduationCap, Users, FileText, Award } from 'lucide-react';
 import { Ico } from '../../theme/Ico.jsx';
 import { apiGet, apiPost } from '../../services/api.js';
 import { C } from '../../theme/colors.js';
@@ -118,7 +115,7 @@ function Doc({ data }) {
               <div key={k} style={{ marginBottom: 14 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
                   <span style={{ width: 22, height: 22, borderRadius: 7, background: `${color}14`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Ico lucide={Icon} ti={ti} size={12} color={color} />
+                    <Ico ti={ti} size={12} color={color} />
                   </span>
                   <span style={{ fontSize: 12.5, fontWeight: 800, color }}>{b.label}</span>
                 </div>
@@ -184,7 +181,7 @@ function Flashcards({ data }) {
           <>
             <div style={{ fontSize: 14, color: C.ink, fontWeight: 600, lineHeight: 1.55 }}>{c.definition}</div>
             {c.example && <div style={{ fontSize: 12.5, color: C.muted, fontStyle: 'italic', marginTop: 10 }}>{c.example}</div>}
-            {c.tip && <div style={{ fontSize: 12, color: TT_AMBER, fontWeight: 700, marginTop: 8 }}><Ico lucide={Lightbulb} ti="ti-bulb" size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />{c.tip}</div>}
+            {c.tip && <div style={{ fontSize: 12, color: TT_AMBER, fontWeight: 700, marginTop: 8 }}><Ico ti="ti-bulb" size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />{c.tip}</div>}
           </>
         )}
         <div style={{ fontSize: 10.5, color: TT_MUTED2, marginTop: 14 }}>{flipped ? 'Tap to hide' : 'Tap to reveal'}</div>
@@ -295,8 +292,8 @@ function Podcast({ data, tool, onError }) {
           {voicePickers()}
           <button onClick={narrate} disabled={busy} style={{ ...primary, width: '100%', justifyContent: 'center', marginBottom: 14 }}>
             {busy
-              ? <><Ico lucide={Loader2} ti="ti-loader-2" size={15} style={{ animation: 'spin .8s linear infinite' }} /> Recording the episode…</>
-              : <><Ico lucide={Volume2} ti="ti-volume" size={15} /> Generate audio</>}
+              ? <><Ico ti="ti-loader-2" size={15} style={{ animation: 'spin .8s linear infinite' }} /> Recording the episode…</>
+              : <><Ico ti="ti-volume" size={15} /> Generate audio</>}
           </button>
         </>
       ) : (
@@ -318,11 +315,11 @@ function Podcast({ data, tool, onError }) {
 
           {/* Transport */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, marginTop: 10 }}>
-            <button onClick={() => nudge(-10)} title="Back 10 seconds" style={iconBtn}><Ico lucide={SkipBack} ti="ti-player-skip-back" size={16} /></button>
+            <button onClick={() => nudge(-10)} title="Back 10 seconds" style={iconBtn}><Ico ti="ti-player-skip-back" size={16} /></button>
             <button onClick={toggle} style={playBtn}>
-              {playing ? <Ico lucide={Pause} ti="ti-player-pause" size={19} color="#fff" /> : <Ico lucide={Play} ti="ti-player-play" size={19} color="#fff" style={{ marginLeft: 2 }} />}
+              {playing ? <Ico ti="ti-player-pause" size={19} color="#fff" /> : <Ico ti="ti-player-play" size={19} color="#fff" style={{ marginLeft: 2 }} />}
             </button>
-            <button onClick={() => nudge(10)} title="Forward 10 seconds" style={iconBtn}><Ico lucide={SkipForward} ti="ti-player-skip-forward" size={16} /></button>
+            <button onClick={() => nudge(10)} title="Forward 10 seconds" style={iconBtn}><Ico ti="ti-player-skip-forward" size={16} /></button>
           </div>
 
           {/* Speed · volume · download */}
@@ -338,13 +335,13 @@ function Podcast({ data, tool, onError }) {
               </button>
             ))}
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginLeft: 6 }}>
-              <Ico lucide={Volume2} ti="ti-volume" size={13} color={C.muted} />
+              <Ico ti="ti-volume" size={13} color={C.muted} />
               <input type="range" min={0} max={1} step={0.05} value={volume}
                 onChange={(e) => setVolume(Number(e.target.value))}
                 style={{ width: 74, accentColor: BRAND, cursor: 'pointer' }} />
             </div>
             <a href={audio} download="podcast.mp3" style={{ ...ghost, textDecoration: 'none', marginLeft: 'auto' }}>
-              <Ico lucide={Download} ti="ti-download" size={13} /> Download
+              <Ico ti="ti-download" size={13} /> Download
             </a>
           </div>
 
@@ -362,8 +359,8 @@ function Podcast({ data, tool, onError }) {
                 title={voicesChanged ? 'Records the same script again with the new voices' : 'Pick different voices to re-record'}
                 style={{ ...ghost, marginTop: 10, opacity: busy || !voicesChanged ? .55 : 1 }}>
                 {busy
-                  ? <><Ico lucide={Loader2} ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> Re-recording…</>
-                  : <><Ico lucide={RotateCcw} ti="ti-rotate" size={13} /> Re-narrate with these voices</>}
+                  ? <><Ico ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> Re-recording…</>
+                  : <><Ico ti="ti-rotate" size={13} /> Re-narrate with these voices</>}
               </button>
               {voicesChanged && !busy && (
                 <span style={{ fontSize: 11, color: TT_MUTED2, marginLeft: 10 }}>Charged again — the script is reused, the audio is new.</span>
@@ -450,7 +447,7 @@ export default function TeachingTools({ onInsert, compact = false }) {
     return (
       <div>
         <button onClick={() => setTool(null)} style={{ ...ghost, marginBottom: 14 }}>
-          <Ico lucide={ArrowLeft} ti="ti-arrow-left" size={13} /> All tools
+          <Ico ti="ti-arrow-left" size={13} /> All tools
         </button>
         <ToolRunner tool={tool} onInsert={onInsert} showHeader />
       </div>
@@ -466,7 +463,7 @@ export default function TeachingTools({ onInsert, compact = false }) {
             style={{ ...toolCard, opacity: t.locked ? .55 : 1, cursor: t.locked ? 'default' : 'pointer' }}>
             <span style={{ fontSize: 15, fontWeight: 900, color: '#6B7280' }}>{(t.name || 'T').trim().charAt(0).toUpperCase()}</span>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 800, color: C.ink }}>{t.name}{t.locked && <Ico lucide={Lock} ti="ti-lock" size={11} style={{ marginLeft: 4, verticalAlign: '-1px' }} />}</div>
+              <div style={{ fontSize: 13.5, fontWeight: 800, color: C.ink }}>{t.name}{t.locked && <Ico ti="ti-lock" size={11} style={{ marginLeft: 4, verticalAlign: '-1px' }} />}</div>
               <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.45, marginTop: 2 }}>
                 {t.locked ? 'Unlock this in Tools & Assets' : t.blurb}
               </div>
@@ -539,7 +536,7 @@ export function ToolRunner({ tool, onInsert, onDone, showHeader = false }) {
       ))}
 
       <button onClick={run} disabled={busy} style={{ ...primary, width: '100%', justifyContent: 'center' }}>
-        {busy ? <><Ico lucide={Loader2} ti="ti-loader-2" size={15} style={{ animation: 'spin .8s linear infinite' }} /> Working…</> : <><Ico lucide={Sparkles} ti="ti-sparkles" size={15} /> Generate</>}
+        {busy ? <><Ico ti="ti-loader-2" size={15} style={{ animation: 'spin .8s linear infinite' }} /> Working…</> : <><Ico ti="ti-sparkles" size={15} /> Generate</>}
       </button>
       {error && <div style={errBox}>{error}</div>}
 
@@ -578,9 +575,9 @@ function Result({ tool, out, onInsert, onError = () => {}, title }) {
   return (
     <div style={{ marginTop: 18, borderTop: `1px solid ${C.border}`, paddingTop: 16 }}>
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-        <button onClick={copy} style={ghost}>{copied ? <Ico lucide={Check} ti="ti-check" size={13} color={GREEN} /> : <Ico lucide={Copy} ti="ti-copy" size={13} />} {copied ? 'Copied' : 'Copy'}</button>
-        <button onClick={print} style={ghost}><Ico lucide={Printer} ti="ti-printer" size={13} /> Save as PDF</button>
-        {onInsert && <button onClick={() => onInsert(out.content || '')} style={ghost}><Ico lucide={MessageSquarePlus} ti="ti-message-plus" size={13} /> Send to chat</button>}
+        <button onClick={copy} style={ghost}>{copied ? <Ico ti="ti-check" size={13} color={GREEN} /> : <Ico ti="ti-copy" size={13} />} {copied ? 'Copied' : 'Copy'}</button>
+        <button onClick={print} style={ghost}><Ico ti="ti-printer" size={13} /> Save as PDF</button>
+        {onInsert && <button onClick={() => onInsert(out.content || '')} style={ghost}><Ico ti="ti-message-plus" size={13} /> Send to chat</button>}
         {out.coinsCharged > 0 && <span style={{ fontSize: 11, color: TT_MUTED2, alignSelf: 'center' }}>{out.coinsCharged.toLocaleString()} coins</span>}
       </div>
 

@@ -1,4 +1,4 @@
-import { AlertTriangle, Ban, Bot, ClipboardList, Copyright, CreditCard, GraduationCap, Link2, Lock, LogOut, Mail, PencilLine, Ruler, Scale, ScrollText, Settings, ShieldCheck, User , Archive } from 'lucide-react';
+import { Ban, Bot, ClipboardList, GraduationCap, Link2, Lock, PencilLine, Scale, Settings, Archive } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { C, tint } from '../theme/colors.js';
@@ -144,7 +144,7 @@ export default function PrivacyPolicyPage() {
 
       {/* Hero */}
       <div style={{ background: `linear-gradient(135deg, ${A} 0%, #C07020 100%)`, padding: '44px 24px 48px', textAlign: 'center' }}>
-        <div style={{ marginBottom: 10 }}><Ico lucide={Lock} ti="ti-lock" size={40} color={A} /></div>
+        <div style={{ marginBottom: 10 }}><Ico ti="ti-lock" size={40} color={A} /></div>
         <h1 style={{ fontSize: 'clamp(22px,3.5vw,32px)', fontWeight: 700, color: '#fff', marginBottom: 12, fontFamily: C.font }}>Instructor Privacy Policy</h1>
         <p style={{ fontSize: 14, color: 'rgba(255,255,255,.85)', maxWidth: 520, margin: '0 auto 22px', lineHeight: 1.7, fontFamily: C.font }}>
           We collect only what we need to run the platform and pay you fairly. Your course content and your students' data are never sold.
@@ -167,7 +167,7 @@ export default function PrivacyPolicyPage() {
             { icon: PencilLine, ti: 'ti-pencil', title: 'Full control', desc: 'Access, edit, export or delete any time.' },
           ].map(({ icon: Icon, ti, title, desc }) => (
             <div key={title} style={{ background: C.surface, borderRadius: 12, padding: '16px', border: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <span style={{ display: 'flex' }}><Ico lucide={Icon} ti={ti} size={24} color={A} /></span>
+              <span style={{ display: 'flex' }}><Ico ti={ti} size={24} color={A} /></span>
               <div style={{ fontSize: 13, fontWeight: 700, color: C.ink, fontFamily: C.font }}>{title}</div>
               <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, fontFamily: C.font }}>{desc}</div>
             </div>
@@ -184,7 +184,7 @@ export default function PrivacyPolicyPage() {
                 {TOC.map(({ id, title, icon: Icon, ti }) => (
                   <button key={id} className="ip-toc-btn" onClick={() => scrollTo(id)}
                     style={{ background: active === id ? tint(8, A) : 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', padding: '7px 10px', borderRadius: 8, fontSize: 12, fontWeight: active === id ? 700 : 500, color: active === id ? A : '#4B5563', fontFamily: C.font, display: 'flex', alignItems: 'center', gap: 8, transition: 'all .15s' }}>
-                    <Ico lucide={Icon} ti={ti} size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />{title}
+                    <Ico ti={ti} size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />{title}
                   </button>
                 ))}
               </div>
@@ -203,7 +203,7 @@ export default function PrivacyPolicyPage() {
               <div key={id} id={id} className="ip-section"
                 style={{ background: C.surface, borderRadius: 14, overflow: 'hidden', border: `1px solid ${C.border}` }}>
                 <div style={{ padding: '18px 22px 14px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                  <div style={{ width: 42, height: 42, borderRadius: 10, background: tint(7, badgeColor), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Ico lucide={Icon} ti={ti} size={20} color={A} /></div>
+                  <div style={{ width: 42, height: 42, borderRadius: 10, background: tint(7, badgeColor), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Ico ti={ti} size={20} color={A} /></div>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
                       <h2 style={{ fontSize: 15, fontWeight: 700, color: C.ink, fontFamily: C.font }}>{title}</h2>
@@ -224,7 +224,7 @@ export default function PrivacyPolicyPage() {
 
             {/* Contact */}
             <div style={{ background: tint(6, A), borderRadius: 14, padding: '26px 22px', border: `1px solid ${tint(19, A)}`, textAlign: 'center' }}>
-              <div style={{ marginBottom: 10 }}><Ico lucide={Mail} ti="ti-mail" size={30} color={A} /></div>
+              <div style={{ marginBottom: 10 }}><Ico ti="ti-mail" size={30} color={A} /></div>
               <h3 style={{ fontSize: 16, fontWeight: 700, color: C.ink, marginBottom: 8, fontFamily: C.font }}>Questions about your data?</h3>
               <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, marginBottom: 18, fontFamily: C.font }}>We respond to all requests within 30 days.</p>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>

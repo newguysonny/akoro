@@ -6,7 +6,6 @@
  *   POST /api/profiles/teacher/join-requests/:id { decision }
  */
 import { useState, useEffect, useCallback } from 'react';
-import { UserPlus, Check, X, Loader2 } from 'lucide-react';
 import { apiGet, apiPost } from '../../services/api.js';
 import { GREEN, RED } from '../../constants.js';
 import { C, tint } from '../../theme/colors.js';
@@ -41,7 +40,7 @@ export default function JoinRequests({ onChanged, showEmpty = false }) {
     if (!showEmpty) return null;
     return (
       <div style={{ border: `1.5px solid ${C.border}`, background: C.surface, borderRadius: 14, padding: '48px 24px', textAlign: 'center', fontFamily: C.font }}>
-        <Ico lucide={UserPlus} ti="ti-user-plus" size={30} color={C.muted} style={{ marginBottom: 10 }} />
+        <Ico ti="ti-user-plus" size={30} color={C.muted} style={{ marginBottom: 10 }} />
         <div style={{ fontSize: 15, fontWeight: 800, color: C.ink }}>{loading ? 'Loading requests…' : 'No pending join requests'}</div>
         {!loading && <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>When a learner asks to join your class, they’ll appear here for approval.</div>}
       </div>
@@ -51,7 +50,7 @@ export default function JoinRequests({ onChanged, showEmpty = false }) {
   return (
     <div style={{ marginBottom: 20, border: `1.5px solid ${tint(33)}`, background: tint(4), borderRadius: 14, padding: '12px 14px', fontFamily: C.font }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10, fontSize: 12.5, fontWeight: 800, color: '#B45309' }}>
-        <Ico lucide={UserPlus} ti="ti-user-plus" size={15} /> {rows.length} learner{rows.length === 1 ? '' : 's'} requested to join your class
+        <Ico ti="ti-user-plus" size={15} /> {rows.length} learner{rows.length === 1 ? '' : 's'} requested to join your class
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {rows.map((r) => (
@@ -62,11 +61,11 @@ export default function JoinRequests({ onChanged, showEmpty = false }) {
             </div>
             <button onClick={() => decide(r.id, 'approve')} disabled={busyId === r.id}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 13px', borderRadius: 8, border: 'none', background: GREEN, color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
-              {busyId === r.id ? <Ico lucide={Loader2} ti="ti-loader-2" size={12} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico lucide={Check} ti="ti-check" size={13} />} Approve
+              {busyId === r.id ? <Ico ti="ti-loader-2" size={12} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-check" size={13} />} Approve
             </button>
             <button onClick={() => decide(r.id, 'reject')} disabled={busyId === r.id}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 11px', borderRadius: 8, border: `1px solid ${RED}44`, background: `${RED}0C`, color: RED, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
-              <Ico lucide={X} ti="ti-x" size={13} /> Reject
+              <Ico ti="ti-x" size={13} /> Reject
             </button>
           </div>
         ))}

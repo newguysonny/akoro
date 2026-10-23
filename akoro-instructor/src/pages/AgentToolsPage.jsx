@@ -7,7 +7,7 @@
  */
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Wrench, Trash2, Pencil, Check, X, Hourglass, Calendar, CheckCircle2, XCircle, Clock, MessageSquare } from 'lucide-react';
+import { Wrench, Hourglass, Calendar, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { apiGet, apiPatch, apiPost } from '../services/api.js';
 import { confirmDialog } from '../components/ConfirmHost.jsx';
@@ -56,7 +56,7 @@ function Row({ icon: Icon, ti, label, sublabel, right, muted }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderBottom: `1px solid ${C.border}` }}>
       <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, background: tint(9), display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.brand, opacity: muted ? 0.55 : 1 }}>
-        <Ico lucide={Icon} ti={ti} size={16} />
+        <Ico ti={ti} size={16} />
       </div>
       <div style={{ flex: 1, minWidth: 0, opacity: muted ? 0.55 : 1 }}>
         <div style={{ fontSize: 14, fontWeight: 500, fontFamily: C.font, color: C.ink, overflowWrap: 'anywhere' }}>{label}</div>
@@ -122,7 +122,7 @@ export default function AgentToolsPage() {
                 {note('When you ask your AI Chat agent something none of its tools can answer — like "which of my students haven\'t started Activity 2?" — it can build a small tool for you. Your tools only ever see your own classes, and they show up here.')}
                 <div style={{ padding: '0 16px 14px' }}>
                   <button type="button" onClick={() => navigate('/chat')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: C.font, fontSize: 13, fontWeight: 600, padding: '8px 12px', borderRadius: 10, border: 'none', background: C.brand, color: '#fff', cursor: 'pointer' }}>
-                    <Ico lucide={MessageSquare} ti="ti-message" size={14} /> Open AI Chat
+                    <Ico ti="ti-message" size={14} /> Open AI Chat
                   </button>
                 </div>
               </>
@@ -134,8 +134,8 @@ export default function AgentToolsPage() {
                   style={{ width: '100%', fontFamily: C.font, fontSize: 14, padding: '6px 8px', borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg, color: C.ink, boxSizing: 'border-box' }} />
               } right={
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <button type="button" onClick={rename} aria-label="Save name" style={{ ...iconBtn, color: C.brand }}><Ico lucide={Check} ti="ti-check" size={15} /></button>
-                  <button type="button" onClick={() => setEditing(null)} aria-label="Cancel" style={iconBtn}><Ico lucide={X} ti="ti-x" size={15} /></button>
+                  <button type="button" onClick={rename} aria-label="Save name" style={{ ...iconBtn, color: C.brand }}><Ico ti="ti-check" size={15} /></button>
+                  <button type="button" onClick={() => setEditing(null)} aria-label="Cancel" style={iconBtn}><Ico ti="ti-x" size={15} /></button>
                 </div>
               } />
             ) : (
@@ -144,8 +144,8 @@ export default function AgentToolsPage() {
                 right={
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <Toggle on={t.status === 'active'} onChange={() => toggle(t)} label={`${t.status === 'active' ? 'Turn off' : 'Turn on'} ${t.label}`} />
-                    <button type="button" onClick={() => setEditing({ id: t.id, label: t.label })} aria-label={`Rename ${t.label}`} style={iconBtn}><Ico lucide={Pencil} ti="ti-pencil" size={14} /></button>
-                    <button type="button" onClick={() => remove(t)} aria-label={`Delete ${t.label}`} style={iconBtn}><Ico lucide={Trash2} ti="ti-trash" size={14} /></button>
+                    <button type="button" onClick={() => setEditing({ id: t.id, label: t.label })} aria-label={`Rename ${t.label}`} style={iconBtn}><Ico ti="ti-pencil" size={14} /></button>
+                    <button type="button" onClick={() => remove(t)} aria-label={`Delete ${t.label}`} style={iconBtn}><Ico ti="ti-trash" size={14} /></button>
                   </div>
                 } />
             ))}

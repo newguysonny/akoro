@@ -15,7 +15,7 @@
  *   <NoAgentModal open={!!noAgent} onClose={() => setNoAgent(null)} onCreated={noAgent} />
  */
 import { useState, useEffect } from 'react';
-import { Sparkles , Bot, Bird, Brain, BookOpen, Microscope, GraduationCap, Zap, Compass, Bug } from 'lucide-react';
+import { Sparkles, Bot, Bird, Brain, BookOpen, Microscope, GraduationCap, Zap, Compass, Bug } from 'lucide-react';
 import { Btn, Modal, Inp } from './Primitives.jsx';
 import { apiPut } from '../services/api.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
@@ -76,7 +76,7 @@ export default function NoAgentModal({ open, onClose, onCreated, context = 'this
             background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <Ico lucide={Sparkles} ti="ti-sparkles" size={18} color="#fff" />
+            <Ico ti="ti-sparkles" size={18} color="#fff" />
           </div>
           <div>
             <div style={{ fontSize: 13, fontWeight: 800, color: C.ink, marginBottom: 3 }}>
@@ -105,7 +105,7 @@ export default function NoAgentModal({ open, onClose, onCreated, context = 'this
                   border: `2px solid ${emoji === em ? C.brand : C.border}`,
                   background: emoji === em ? tint(7) : C.surface,
                 }}
-              ><Ico lucide={Icon} ti={ti} size={19} color={emoji === em ? C.brand : C.muted2} /></button>
+              ><Ico ti={ti} size={19} color={emoji === em ? C.brand : C.muted2} /></button>
             ))}
           </div>
         </div>
@@ -119,7 +119,7 @@ export default function NoAgentModal({ open, onClose, onCreated, context = 'this
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
           <Btn variant="secondary" type="button" onClick={onClose} disabled={busy}>Not now</Btn>
           <Btn type="button" onClick={create} disabled={busy || !name.trim()}>
-            {busy ? 'Creating…' : <><Ico lucide={Sparkles} ti="ti-sparkles" size={14} /> Create my agent</>}
+            {busy ? 'Creating…' : <><Ico ti="ti-sparkles" size={14} /> Create my agent</>}
           </Btn>
         </div>
       </div>

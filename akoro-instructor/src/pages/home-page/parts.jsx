@@ -3,7 +3,6 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, BookOpen, Plus, Eye, Clock, Video, Bot, ChevronRight, Zap, Wallet, Layers, Flame, CheckCircle2, Swords } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import { Btn, Toast, Skeleton, Modal, Inp } from '../../components/Primitives.jsx';
 import { useStatsAPI } from '../../hooks/useStatsAPI.js';
@@ -76,7 +75,7 @@ function StatCard({ icon: Icon, ti, label, value, sub, color = C.brand, loading,
           strokeLinecap="round" strokeDasharray={c.toFixed(1)} strokeDashoffset={offset.toFixed(1)}
           transform="rotate(-90 26 26)" />
         <foreignObject x="17" y="17" width="18" height="18">
-          <Ico lucide={Icon} ti={ti} size={18} color={C.bxPrimary} />
+          <Ico ti={ti} size={18} color={C.bxPrimary} />
         </foreignObject>
       </svg>
     </div>
@@ -96,14 +95,14 @@ function SessionItem({ session }) {
         width: 40, height: 40, borderRadius: 10, background: tint(8),
         display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
       }}>
-        <Ico lucide={Video} ti="ti-video" size={18} color={C.brand} />
+        <Ico ti="ti-video" size={18} color={C.brand} />
       </div>
       <div style={{ flex: 1, overflow: 'hidden' }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, fontFamily: C.font, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {session.title}
         </div>
         <div style={{ fontSize: 11, color: C.muted, fontFamily: C.font, display: 'flex', alignItems: 'center', gap: 4 }}>
-          <Ico lucide={Clock} ti="ti-clock" size={10} /> {time} · {session.enrolledCount || 0} enrolled
+          <Ico ti="ti-clock" size={10} /> {time} · {session.enrolledCount || 0} enrolled
         </div>
       </div>
       <Btn size="sm" variant="outline">Join</Btn>
@@ -129,7 +128,7 @@ function QuickAction({ icon: Icon, ti, label, desc, color, onClick }) {
         width: 40, height: 40, borderRadius: 10, background: tint(8, color),
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <Ico lucide={Icon} ti={ti} size={18} color={color} />
+        <Ico ti={ti} size={18} color={color} />
       </div>
       <div style={{ fontSize: 13, fontWeight: 600, color: C.bxInk }}>{label}</div>
       <div style={{ fontSize: 12, color: C.bxMuted }}>{desc}</div>
@@ -236,7 +235,7 @@ function StreamingPanel({ onToast }) {
   return (
     <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 20, padding: '20px', fontFamily: C.font }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-        <Ico lucide={Video} ti="ti-video" size={16} color={C.brand} />
+        <Ico ti="ti-video" size={16} color={C.brand} />
         <h3 style={{ fontSize: 14, fontWeight: 700, color: C.ink, margin: 0 }}>Streaming Platforms</h3>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -250,12 +249,12 @@ function StreamingPanel({ onToast }) {
             return (
               <div key={p.platform} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 12 }}>
                 <div style={{ width: 30, height: 30, borderRadius: 8, background: tint(8, meta.color), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <Ico lucide={Video} ti="ti-video" size={15} color={meta.color} />
+                  <Ico ti="ti-video" size={15} color={meta.color} />
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 12.5, fontWeight: 600, color: C.ink }}>{meta.label}</div>
                   <div style={{ fontSize: 10.5, color: p.connected ? GREEN : C.muted, display: 'flex', alignItems: 'center', gap: 3 }}>
-                    {p.connected && <Ico lucide={CheckCircle2} ti="ti-circle-check" size={10} />}{sub}
+                    {p.connected && <Ico ti="ti-circle-check" size={10} />}{sub}
                   </div>
                 </div>
                 {p.connected ? (

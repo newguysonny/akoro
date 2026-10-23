@@ -1,4 +1,3 @@
-import { KeyRound } from 'lucide-react';
 import AkoroLogo from '../../components/common/AkoroLogo.jsx';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -62,7 +61,7 @@ export default function ForgotPasswordPage() {
         <div style={{ width: 52, height: 52, borderRadius: 16,
           background: `linear-gradient(135deg,${C.brand},${C.brandDeep})`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          marginBottom: 20 }}><Ico lucide={KeyRound} ti="ti-key" size={24} color={C.ink} /></div>
+          marginBottom: 20 }}><Ico ti="ti-key" size={24} color={C.ink} /></div>
 
         {sent ? (
           <>

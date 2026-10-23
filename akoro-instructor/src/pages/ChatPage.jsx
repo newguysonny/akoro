@@ -1,9 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Send, Plus, Brain, CheckSquare, X, Paperclip, Camera,
-  Upload, FileText, ScanLine, Loader, CheckCircle2,
-  History, Copy, Check, Lightbulb, MoreVertical, Pencil, Trash2, CloudOff,  Bot, Cpu } from 'lucide-react';
+import { Send, X, Upload, History, Copy, Check, Pencil, Trash2, Cpu } from 'lucide-react';
 import { Ico } from '../theme/Ico.jsx';
 import { Icon } from '../ui/Icon.jsx';
 import { PageLayout, PageEmbed, useIsMobile } from '../components/Layout.jsx';
@@ -81,7 +78,7 @@ function CopyMsgButton({ text }) {
       onMouseEnter={(e) => { e.currentTarget.style.opacity = 1; }}
       onMouseLeave={(e) => { e.currentTarget.style.opacity = .6; }}
     >
-      {done ? <Ico lucide={Check} ti="ti-check" size={12} color={GREEN} /> : <Ico lucide={Copy} ti="ti-copy" size={12} />}
+      {done ? <Ico ti="ti-check" size={12} color={GREEN} /> : <Ico ti="ti-copy" size={12} />}
     </button>
   );
 }
@@ -841,7 +838,7 @@ export default function ChatPage() {
               const active = taskChips.includes(t.name);
               return (
                 <button key={t.id} className={'ci-qp ci-tool' + (active ? ' active' : '')} onClick={() => (active ? removeChip(t.name) : handleQuickPrompt(t.name))} title={t.description}>
-                  <span style={{ fontSize: 10, fontWeight: 900, color: C.muted }}>{(t.name || 'T').charAt(0).toUpperCase()}</span>{t.name}{active && <Ico lucide={X} ti="ti-x" size={9} />}
+                  <span style={{ fontSize: 10, fontWeight: 900, color: C.muted }}>{(t.name || 'T').charAt(0).toUpperCase()}</span>{t.name}{active && <Ico ti="ti-x" size={9} />}
                 </button>
               );
             })}
@@ -852,7 +849,7 @@ export default function ChatPage() {
         <div ref={feedRef} onScroll={(e) => { if (e.currentTarget.scrollTop < 80) loadOlder(); }} style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: isMobile ? '12px 12px' : '14px 18px' }}>
           {loadingOlder && (
             <div role="status" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 12, color: C.muted }}>
-              <Ico lucide={Loader} ti="ti-loader-2" size={12} className="spinner" /> Loading earlier messages…
+              <Ico ti="ti-loader-2" size={12} className="spinner" /> Loading earlier messages…
             </div>
           )}
           {messages.map((msg, mi) => {
@@ -862,11 +859,11 @@ export default function ChatPage() {
             const textPart = chips.length ? msg.text.replace(chips.join(' · '), '').replace(/^\n/, '').trim() : msg.text;
             return (
               <div key={msg.id} style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: 8 }}>
-                {!isMe && <div style={{ width: 28, height: 28, borderRadius: '50%', background: C.brandSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}><Ico lucide={Bot} ti="ti-robot" size={15} color={C.brand} /></div>}
+                {!isMe && <div style={{ width: 28, height: 28, borderRadius: '50%', background: C.brandSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}><Ico ti="ti-robot" size={15} color={C.brand} /></div>}
                 <div style={{ maxWidth: '80%' }}>
                   {isMe && msg.isTask && (
                     <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 10px', borderRadius: 20, background: tint(12), border: `1.5px solid ${tint(35)}`, color: C.brand, fontSize: 11, fontWeight: 700 }}><Ico lucide={CheckSquare} ti="ti-square-check" size={10} />Task assigned</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 10px', borderRadius: 20, background: tint(12), border: `1.5px solid ${tint(35)}`, color: C.brand, fontSize: 11, fontWeight: 700 }}><Ico ti="ti-square-check" size={10} />Task assigned</span>
                     </div>
                   )}
                   <div style={{
@@ -878,7 +875,7 @@ export default function ChatPage() {
                     {chips.length > 0 && (
                       <div style={{ marginBottom: textPart ? 6 : 0, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                         {chips.map((c) => (
-                          <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 9px', borderRadius: 20, background: 'rgba(255,255,255,.25)', border: '1px solid rgba(255,255,255,.4)', fontSize: 10.5, fontWeight: 700, color: '#fff' }}><Ico lucide={CheckSquare} ti="ti-square-check" size={9} />{c}</span>
+                          <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 9px', borderRadius: 20, background: 'rgba(255,255,255,.25)', border: '1px solid rgba(255,255,255,.4)', fontSize: 10.5, fontWeight: 700, color: '#fff' }}><Ico ti="ti-square-check" size={9} />{c}</span>
                         ))}
                       </div>
                     )}
@@ -922,7 +919,7 @@ export default function ChatPage() {
                     if (!ideas.length) return null;
                     return (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }} aria-label="Suggestions">
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 800, color: C.muted2, fontFamily: C.font }}><Ico lucide={Lightbulb} ti="ti-bulb" size={11} /> {last ? 'Ideas' : 'Try next'}</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 800, color: C.muted2, fontFamily: C.font }}><Ico ti="ti-bulb" size={11} /> {last ? 'Ideas' : 'Try next'}</span>
                         {ideas.map((it) => (
                           <button key={it.label} type="button" className="ci-qp" onClick={() => { setInput(it.fill); inputRef.current?.focus(); }}
                             title="Tap to put it in the message box — change it if you like, then send">
@@ -961,7 +958,7 @@ export default function ChatPage() {
 
           {!trainingInChat && messages[messages.length - 1]?.from === 'me' && !messages[messages.length - 1]?.isTask && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ width: 28, height: 28, borderRadius: '50%', background: C.brandSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}><Ico lucide={Bot} ti="ti-robot" size={15} color={C.brand} /></div>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: C.brandSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}><Ico ti="ti-robot" size={15} color={C.brand} /></div>
               <div style={{ padding: '10px 15px', borderRadius: '17px 17px 17px 4px', background: C.tagBg, display: 'flex', gap: 2 }}>
                 <span className="ci-typing" /><span className="ci-typing" style={{ animationDelay: '.2s' }} /><span className="ci-typing" style={{ animationDelay: '.4s' }} />
               </div>
@@ -989,8 +986,8 @@ export default function ChatPage() {
           )}
           {isTask && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderRadius: 10, background: tint(10), border: bdr(1, tint(30)), marginBottom: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Ico lucide={CheckSquare} ti="ti-square-check" size={12} color={C.brand} /><span style={{ fontSize: 11.5, fontWeight: 700, color: C.brand }}>Sending as task</span></div>
-              <button onClick={() => { setIsTask(false); setTaskChips([]); }} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: C.muted, fontFamily: C.font, fontWeight: 600 }}><Ico lucide={X} ti="ti-x" size={11} />Clear</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Ico ti="ti-square-check" size={12} color={C.brand} /><span style={{ fontSize: 11.5, fontWeight: 700, color: C.brand }}>Sending as task</span></div>
+              <button onClick={() => { setIsTask(false); setTaskChips([]); }} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: C.muted, fontFamily: C.font, fontWeight: 600 }}><Ico ti="ti-x" size={11} />Clear</button>
             </div>
           )}
 
@@ -998,7 +995,7 @@ export default function ChatPage() {
           {taskChips.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, paddingBottom: 8 }}>
               {taskChips.map((chip) => (
-                <span key={chip} className="ci-task-chip"><Ico lucide={CheckSquare} ti="ti-square-check" size={9} />{chip}<button onClick={() => removeChip(chip)} tabIndex={-1}><Ico lucide={X} ti="ti-x" size={9} /></button></span>
+                <span key={chip} className="ci-task-chip"><Ico ti="ti-square-check" size={9} />{chip}<button onClick={() => removeChip(chip)} tabIndex={-1}><Ico ti="ti-x" size={9} /></button></span>
               ))}
             </div>
           )}
@@ -1045,9 +1042,9 @@ export default function ChatPage() {
             {attachMenu && (
               <div className="ci-attach-menu">
                   {[
-                    { icon: <Ico lucide={Camera} ti="ti-camera" size={15} color={GREEN} />, label: 'Photo / Image OCR', desc: 'Scan & extract text', act: () => { setAttachType('ocr'); setAttachModal(true); setAttachMenu(false); } },
-                    { icon: <Ico lucide={Upload} ti="ti-upload" size={15} color={PURPLE} />, label: 'Upload file', desc: 'PDF, Word, Excel…', act: () => { setAttachType('file'); setAttachModal(true); setAttachMenu(false); } },
-                    { icon: <Ico lucide={FileText} ti="ti-file-text" size={15} color={BLUE} />, label: 'Upload document', desc: 'Lesson notes, worksheets', act: () => { setAttachType('doc'); setAttachModal(true); setAttachMenu(false); } },
+                    { icon: <Ico ti="ti-camera" size={15} color={GREEN} />, label: 'Photo / Image OCR', desc: 'Scan & extract text', act: () => { setAttachType('ocr'); setAttachModal(true); setAttachMenu(false); } },
+                    { icon: <Ico ti="ti-upload" size={15} color={PURPLE} />, label: 'Upload file', desc: 'PDF, Word, Excel…', act: () => { setAttachType('file'); setAttachModal(true); setAttachMenu(false); } },
+                    { icon: <Ico ti="ti-file-text" size={15} color={BLUE} />, label: 'Upload document', desc: 'Lesson notes, worksheets', act: () => { setAttachType('doc'); setAttachModal(true); setAttachMenu(false); } },
                   ].map((item) => (
                     <button key={item.label} className="ci-attach-item" onClick={item.act}>
                       <div style={{ width: 32, height: 32, borderRadius: 9, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{item.icon}</div>
@@ -1056,7 +1053,7 @@ export default function ChatPage() {
                   ))}
                   <div style={{ height: 1, background: C.border, margin: '4px 0' }} />
                   <button className="ci-attach-item" onClick={() => { setTaskModal(true); setAttachMenu(false); }}>
-                    <div style={{ width: 32, height: 32, borderRadius: 9, background: tint(10), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Ico lucide={CheckSquare} ti="ti-square-check" size={15} color={C.brand} /></div>
+                    <div style={{ width: 32, height: 32, borderRadius: 9, background: tint(10), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Ico ti="ti-square-check" size={15} color={C.brand} /></div>
                     <div><div style={{ fontSize: 12.5, fontWeight: 700, color: C.ink }}>Assign task</div><div style={{ fontSize: 11, color: C.muted }}>Create a structured task</div></div>
                   </button>
                 </div>
@@ -1098,7 +1095,7 @@ export default function ChatPage() {
             <style>{`@keyframes ci-drawer-in{from{transform:translateX(-100%)}to{transform:translateX(0)}}.ci-sess-item:hover{background:${C.bg}}`}</style>
             {/* Agent header */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 16px 13px', borderBottom: bdr(1, C.border), flexShrink: 0 }}>
-              <div style={{ width: 46, height: 46, borderRadius: '50%', background: C.brandSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 23, boxShadow: `0 0 0 2px ${C.surface}, 0 0 0 3.5px ${C.brand}`, flexShrink: 0 }}><Ico lucide={Bot} ti="ti-robot" size={23} color={C.brand} /></div>
+              <div style={{ width: 46, height: 46, borderRadius: '50%', background: C.brandSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 23, boxShadow: `0 0 0 2px ${C.surface}, 0 0 0 3.5px ${C.brand}`, flexShrink: 0 }}><Ico ti="ti-robot" size={23} color={C.brand} /></div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 14.5, fontWeight: 900, color: C.ink, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{agentName}</p>
                 <div style={{ fontSize: 11, color: trainingInChat ? C.brand : GREEN, display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
@@ -1106,16 +1103,16 @@ export default function ChatPage() {
                   {trainingInChat ? 'Training in progress…' : `Online · Lv ${agentLevel}`}
                 </div>
               </div>
-              <button onClick={() => setDrawerOpen(false)} title="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex' }}><Ico lucide={X} ti="ti-x" size={17} color={C.muted2} /></button>
+              <button onClick={() => setDrawerOpen(false)} title="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex' }}><Ico ti="ti-x" size={17} color={C.muted2} /></button>
             </div>
             {/* New chat + Train agent */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 16px', flexShrink: 0 }}>
               <button onClick={newChat} style={{ width: '100%', padding: 11, borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${C.brand},${C.brandDeep})`, color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: C.font, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
-                <Ico lucide={Plus} ti="ti-plus" size={14} strokeWidth={2.6} /> New chat
+                <Ico ti="ti-plus" size={14} strokeWidth={2.6} /> New chat
               </button>
               <button onClick={() => { setTrainModal(true); }} disabled={trainingInChat} title={trainingInChat ? 'Training already in progress' : 'Train your agent on a lesson recording or document'}
                 style={{ width: '100%', padding: 11, borderRadius: 12, border: bdr(1.5, trainingInChat ? C.border : tint(40)), background: trainingInChat ? C.bg : tint(7), color: trainingInChat ? C.muted2 : C.brand, fontSize: 13, fontWeight: 800, cursor: trainingInChat ? 'wait' : 'pointer', fontFamily: C.font, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
-                <Ico lucide={Brain} ti="ti-brain" size={14} /> {trainingInChat ? 'Training in progress…' : 'Train agent'}
+                <Ico ti="ti-brain" size={14} /> {trainingInChat ? 'Training in progress…' : 'Train agent'}
               </button>
             </div>
             {/* Sessions */}
@@ -1128,13 +1125,13 @@ export default function ChatPage() {
               ) : chatSessions.length === 0 ? (
                 historyError ? (
                   <div style={{ textAlign: 'center', padding: '28px 16px', color: C.brand }}>
-                    <Ico lucide={CloudOff} ti="ti-cloud-off" size={34} style={{ opacity: .5 }} />
+                    <Ico ti="ti-cloud-off" size={34} style={{ opacity: .5 }} />
                     <p style={{ fontSize: 12.5, fontWeight: 700, marginTop: 8, lineHeight: 1.5 }}>Couldn&apos;t load your chat history — check your connection. Your chats are safe.</p>
                     <button onClick={retryHistoryLoad} style={{ marginTop: 10, border: 'none', background: tint(10), color: C.brand, cursor: 'pointer', fontSize: 11, fontWeight: 900, padding: '6px 14px', borderRadius: 8, fontFamily: C.font }}>Try again</button>
                   </div>
                 ) : (
                   <div style={{ textAlign: 'center', padding: '28px 16px', color: C.muted2 }}>
-                    <Ico lucide={History} ti="ti-history" size={34} style={{ opacity: .3 }} />
+                    <Ico ti="ti-history" size={34} style={{ opacity: .3 }} />
                     <p style={{ fontSize: 12.5, fontWeight: 700, marginTop: 8 }}>No chats yet. Conversations with your agent will appear here.</p>
                   </div>
                 )
@@ -1149,8 +1146,8 @@ export default function ChatPage() {
                             onKeyDown={(e) => { if (e.key === 'Enter') saveRename(s); else if (e.key === 'Escape') setRenamingId(null); }}
                             maxLength={80} aria-label="Chat name"
                             style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: C.ink, background: C.bg, border: bdr(1.5, tint(33)), borderRadius: 8, padding: '6px 9px', outline: 'none', fontFamily: C.font }} />
-                          <button type="button" onClick={() => saveRename(s)} title="Save name" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', flexShrink: 0 }}><Ico lucide={Check} ti="ti-check" size={15} color={GREEN} /></button>
-                          <button type="button" onClick={() => setRenamingId(null)} title="Cancel" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', flexShrink: 0 }}><Ico lucide={X} ti="ti-x" size={15} color={C.muted2} /></button>
+                          <button type="button" onClick={() => saveRename(s)} title="Save name" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', flexShrink: 0 }}><Ico ti="ti-check" size={15} color={GREEN} /></button>
+                          <button type="button" onClick={() => setRenamingId(null)} title="Cancel" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', flexShrink: 0 }}><Ico ti="ti-x" size={15} color={C.muted2} /></button>
                         </div>
                       ) : (
                         <>
@@ -1160,7 +1157,7 @@ export default function ChatPage() {
                           </div>
                           <button data-session-menu onClick={(e) => { e.stopPropagation(); setMenuFor(menuFor === s.id ? null : s.id); setDeleteArmId(null); }} title="Chat options" aria-expanded={menuFor === s.id}
                             style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 5, display: 'flex', flexShrink: 0, opacity: .6 }}>
-                            <Ico lucide={MoreVertical} ti="ti-dots-vertical" size={14} color={C.muted2} />
+                            <Ico ti="ti-dots-vertical" size={14} color={C.muted2} />
                           </button>
                         </>
                       )}
@@ -1213,7 +1210,7 @@ export default function ChatPage() {
               console.warn('[chat] task create failed:', e.message);
               pushAgent(`Task "${title}" noted.`);
             }
-          }}><Ico lucide={Send} ti="ti-send" size={14} />Assign task</Btn>
+          }}><Ico ti="ti-send" size={14} />Assign task</Btn>
         </div>
       </Modal>
 
@@ -1224,21 +1221,21 @@ export default function ChatPage() {
             <FileUploadZone label="Upload an image to scan" accept="image/*" onUploaded={handleOcrUploaded} />
             {ocrRunning && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0', fontSize: 13, color: C.muted }}>
-                <Ico lucide={Loader} ti="ti-loader-2" size={13} className="spinner" /> Extracting text…
+                <Ico ti="ti-loader-2" size={13} className="spinner" /> Extracting text…
               </div>
             )}
             {ocrError && <p style={{ fontSize: 12, color: RED, margin: '12px 0', fontWeight: 600 }}>{ocrError}</p>}
             {ocrText && (
               <>
                 <Txa label="Extracted text — edit if needed" value={ocrText} onChange={(e) => setOcrText(e.target.value)} rows={5} />
-                <Btn variant="primary" style={{ width: '100%' }} onClick={sendAttachment}><Ico lucide={Send} ti="ti-send" size={13} />Send to {agentName}</Btn>
+                <Btn variant="primary" style={{ width: '100%' }} onClick={sendAttachment}><Ico ti="ti-send" size={13} />Send to {agentName}</Btn>
               </>
             )}
           </div>
         ) : (
           <div>
             <FileUploadZone label={attachType === 'doc' ? 'Upload a document' : 'Upload a file'} accept={attachType === 'doc' ? '.pdf,.doc,.docx,.pptx,.xlsx' : '*'} onUploaded={handleAttachUploaded} />
-            <Btn variant="primary" style={{ width: '100%', marginTop: 14 }} onClick={sendAttachment} disabled={!attachFile}><Ico lucide={Paperclip} ti="ti-paperclip" size={13} />Attach & send</Btn>
+            <Btn variant="primary" style={{ width: '100%', marginTop: 14 }} onClick={sendAttachment} disabled={!attachFile}><Ico ti="ti-paperclip" size={13} />Attach & send</Btn>
           </div>
         )}
       </Modal>
@@ -1267,7 +1264,7 @@ export default function ChatPage() {
         <Sel label="Assign to subject" value={trainSubj} onChange={(e) => setTrainSubj(e.target.value)}>
           {['Mathematics', 'Chemistry', 'Physics', 'Biology', 'English', 'Economics', 'Computer Science', 'General'].map((s) => <option key={s} value={s}>{s}</option>)}
         </Sel>
-        <Btn variant="primary" style={{ width: '100%' }} onClick={startTraining}><Ico lucide={Brain} ti="ti-brain" size={14} />Start training {agentName}</Btn>
+        <Btn variant="primary" style={{ width: '100%' }} onClick={startTraining}><Ico ti="ti-brain" size={14} />Start training {agentName}</Btn>
       </Modal>
     </PageLayout>
   );

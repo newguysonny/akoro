@@ -14,7 +14,7 @@
  * section or passage keeps every reference in step (removeRef).
  */
 import { useRef, useState } from 'react';
-import { ArrowUp, ArrowDown, ImagePlus, Trash2, Eye, Pencil, Plus } from 'lucide-react';
+import { Eye, Pencil } from 'lucide-react';
 import { GREEN, PURPLE, BLUE, RED } from '../../constants.js';
 import { C } from '../../theme/colors.js';
 import { Ico } from '../../theme/Ico.jsx';
@@ -103,7 +103,7 @@ export default function PaperBuilder({ questions, sections, passages, onChange, 
     <button type="button" onClick={() => setView(key)} aria-pressed={view === key}
       style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: C.font, fontSize: 11.5, fontWeight: 800,
         background: view === key ? C.surface : 'transparent', color: view === key ? C.ink : C.muted, boxShadow: view === key ? '0 1px 3px rgba(0,0,0,.08)' : 'none' }}>
-      <Ico lucide={Icon} ti={ti} size={12} /> {label}
+      <Ico ti={ti} size={12} /> {label}
     </button>
   );
 
@@ -122,8 +122,8 @@ export default function PaperBuilder({ questions, sections, passages, onChange, 
         )}
         {view === 'edit' ? (
           <div style={{ display: 'flex', gap: 12, marginLeft: 'auto' }}>
-            <button type="button" style={LINK} onClick={() => onChange({ sections: [...sections, { title: sectionName(sections.length), instructions: '' }] })}><Ico lucide={Plus} ti="ti-plus" size={12} /> Section</button>
-            <button type="button" style={LINK} onClick={() => onChange({ passages: [...passages, { title: '', text: '' }] })}><Ico lucide={Plus} ti="ti-plus" size={12} /> Passage</button>
+            <button type="button" style={LINK} onClick={() => onChange({ sections: [...sections, { title: sectionName(sections.length), instructions: '' }] })}><Ico ti="ti-plus" size={12} /> Section</button>
+            <button type="button" style={LINK} onClick={() => onChange({ passages: [...passages, { title: '', text: '' }] })}><Ico ti="ti-plus" size={12} /> Passage</button>
           </div>
         ) : (
           <label style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: C.muted, cursor: 'pointer' }}>
@@ -145,7 +145,7 @@ export default function PaperBuilder({ questions, sections, passages, onChange, 
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                 <span style={{ fontSize: 10, fontWeight: 900, letterSpacing: .5, color: PURPLE, flexShrink: 0 }}>SECTION {letterOf(si)}</span>
                 <input value={s.title} onChange={(e) => setSection(si, { title: e.target.value })} placeholder="Title, e.g. Section A — Multiple choice" style={{ ...INP, flex: 1 }} maxLength={120} />
-                <button type="button" style={ICON_BTN} title="Remove section (its questions stay)" onClick={() => dropSection(si)}><Ico lucide={Trash2} ti="ti-trash" size={13} /></button>
+                <button type="button" style={ICON_BTN} title="Remove section (its questions stay)" onClick={() => dropSection(si)}><Ico ti="ti-trash" size={13} /></button>
               </div>
               <textarea value={s.instructions} onChange={(e) => setSection(si, { instructions: e.target.value })} rows={2} maxLength={1200}
                 placeholder="Instructions learners see above these questions, e.g. Choose the correct option from A to E."
@@ -162,7 +162,7 @@ export default function PaperBuilder({ questions, sections, passages, onChange, 
                 <span style={{ fontSize: 10.5, color: C.muted2, fontWeight: 700, whiteSpace: 'nowrap' }}>
                   {questions.filter((r) => r.passage === pi).length} question{questions.filter((r) => r.passage === pi).length === 1 ? '' : 's'}
                 </span>
-                <button type="button" style={ICON_BTN} title="Remove passage" onClick={() => dropPassage(pi)}><Ico lucide={Trash2} ti="ti-trash" size={13} /></button>
+                <button type="button" style={ICON_BTN} title="Remove passage" onClick={() => dropPassage(pi)}><Ico ti="ti-trash" size={13} /></button>
               </div>
               <textarea value={p.text} onChange={(e) => setPassage(pi, { text: e.target.value })} rows={4} maxLength={8000}
                 placeholder="The passage the linked questions are about." style={{ ...INP, width: '100%', resize: 'vertical', lineHeight: 1.55, fontWeight: 500 }} />
@@ -203,8 +203,8 @@ export default function PaperBuilder({ questions, sections, passages, onChange, 
                       {KIND_CHOICES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                     </select>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <button type="button" style={{ ...ICON_BTN, opacity: qi === 0 ? .3 : 1 }} disabled={qi === 0} onClick={() => move(qi, -1)} title="Move up"><Ico lucide={ArrowUp} ti="ti-arrow-up" size={12} /></button>
-                      <button type="button" style={{ ...ICON_BTN, opacity: qi === questions.length - 1 ? .3 : 1 }} disabled={qi === questions.length - 1} onClick={() => move(qi, 1)} title="Move down"><Ico lucide={ArrowDown} ti="ti-arrow-down" size={12} /></button>
+                      <button type="button" style={{ ...ICON_BTN, opacity: qi === 0 ? .3 : 1 }} disabled={qi === 0} onClick={() => move(qi, -1)} title="Move up"><Ico ti="ti-arrow-up" size={12} /></button>
+                      <button type="button" style={{ ...ICON_BTN, opacity: qi === questions.length - 1 ? .3 : 1 }} disabled={qi === questions.length - 1} onClick={() => move(qi, 1)} title="Move down"><Ico ti="ti-arrow-down" size={12} /></button>
                     </div>
                     <button type="button" onClick={() => onChange({ questions: questions.filter((_, i) => i !== qi) })}
                       style={{ ...ICON_BTN, fontSize: 15 }} title="Remove question">×</button>
@@ -249,19 +249,19 @@ export default function PaperBuilder({ questions, sections, passages, onChange, 
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <input value={row.figure.caption || ''} maxLength={200} placeholder="Caption (optional), e.g. Fig. 1"
                             onChange={(e) => setRow(qi, { figure: { ...row.figure, caption: e.target.value } })} style={{ ...INP, flex: 1, padding: '4px 8px', fontSize: 11 }} />
-                          <button type="button" style={LINK} onClick={() => pickFigure(qi)}><Ico lucide={ImagePlus} ti="ti-photo-plus" size={12} /> Replace</button>
-                          <button type="button" style={{ ...LINK, color: RED }} onClick={() => setRow(qi, { figure: null })}><Ico lucide={Trash2} ti="ti-trash" size={12} /> Remove</button>
+                          <button type="button" style={LINK} onClick={() => pickFigure(qi)}><Ico ti="ti-photo-plus" size={12} /> Replace</button>
+                          <button type="button" style={{ ...LINK, color: RED }} onClick={() => setRow(qi, { figure: null })}><Ico ti="ti-trash" size={12} /> Remove</button>
                         </div>
                         {row.figure.svg && <div style={{ fontSize: 10, color: C.muted2, marginTop: 4 }}>Drawn by the AI — check it matches the question, or replace it with your own image.</div>}
                       </div>
                     ) : row.figure_note ? (
                       <div>
                         <FigureSlot note={row.figure_note} style={{ margin: '0 0 4px' }} />
-                        <button type="button" style={LINK} onClick={() => pickFigure(qi)}><Ico lucide={ImagePlus} ti="ti-photo-plus" size={12} /> Upload the figure</button>
+                        <button type="button" style={LINK} onClick={() => pickFigure(qi)}><Ico ti="ti-photo-plus" size={12} /> Upload the figure</button>
                         <button type="button" style={{ ...LINK, color: C.muted, marginLeft: 12 }} onClick={() => setRow(qi, { figure_note: undefined })}>No figure needed</button>
                       </div>
                     ) : (
-                      <button type="button" style={{ ...LINK, color: C.muted }} onClick={() => pickFigure(qi)}><Ico lucide={ImagePlus} ti="ti-photo-plus" size={12} /> Add figure</button>
+                      <button type="button" style={{ ...LINK, color: C.muted }} onClick={() => pickFigure(qi)}><Ico ti="ti-photo-plus" size={12} /> Add figure</button>
                     )}
                     {figErr[qi] && <div style={{ fontSize: 10.5, color: RED, fontWeight: 700, marginTop: 3 }}>{figErr[qi]}</div>}
                   </div>

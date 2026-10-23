@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from 'react';
-import { Mic, Square, Loader, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { GREEN, RED } from '../constants.js';
 import { C, tint } from '../theme/colors.js';
 import { Ico } from '../theme/Ico.jsx';
@@ -92,7 +91,7 @@ export default function LiveRecorder({ onRecorded }) {
   if (state === 'error') {
     return (
       <div style={box}>
-        <Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={22} color={RED} style={{ marginBottom: 6 }} />
+        <Ico ti="ti-alert-triangle" size={22} color={RED} style={{ marginBottom: 6 }} />
         <div style={{ fontWeight: 700, color: C.ink, marginBottom: 4 }}>Can’t record</div>
         <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>{error}</div>
         <button onClick={() => setState('idle')} style={btn(C.surface, C.ink)}>Try again</button>
@@ -103,7 +102,7 @@ export default function LiveRecorder({ onRecorded }) {
   if (state === 'ready') {
     return (
       <div style={box}>
-        <Ico lucide={CheckCircle2} ti="ti-circle-check" size={22} color={GREEN} style={{ marginBottom: 6 }} />
+        <Ico ti="ti-circle-check" size={22} color={GREEN} style={{ marginBottom: 6 }} />
         <div style={{ fontWeight: 700, color: C.ink, marginBottom: 2 }}>Recording captured · {fmt(seconds)}</div>
         <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>{fileName}</div>
         <button onClick={reset} style={btn(C.surface, C.ink)}>Record again</button>
@@ -119,17 +118,17 @@ export default function LiveRecorder({ onRecorded }) {
           <span style={{ fontWeight: 800, color: C.ink, fontSize: 18, fontVariantNumeric: 'tabular-nums' }}>{fmt(seconds)}</span>
         </div>
         <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Recording… speak naturally as you teach.</div>
-        <button onClick={stop} style={btn(RED, '#fff')}><Ico lucide={Square} ti="ti-player-stop" size={13} fill="#fff" /> Stop recording</button>
+        <button onClick={stop} style={btn(RED, '#fff')}><Ico ti="ti-player-stop" size={13} fill="#fff" /> Stop recording</button>
       </div>
     );
   }
 
   return (
     <div style={box}>
-      <Ico lucide={Mic} ti="ti-microphone" size={24} color={C.brand} style={{ marginBottom: 6 }} />
+      <Ico ti="ti-microphone" size={24} color={C.brand} style={{ marginBottom: 6 }} />
       <div style={{ fontWeight: 700, color: C.ink, marginBottom: 4 }}>Record live from your device</div>
       <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Capture a lesson now — it trains your agent on stop.</div>
-      <button onClick={start} style={btn(C.brand, '#fff')}><Ico lucide={Mic} ti="ti-microphone" size={13} /> Start recording</button>
+      <button onClick={start} style={btn(C.brand, '#fff')}><Ico ti="ti-microphone" size={13} /> Start recording</button>
     </div>
   );
 }

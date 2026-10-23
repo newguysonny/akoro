@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Swords, Users, Clock, Trophy, Play, Zap, Target, Search, Trash2, Pencil, Radio, ClipboardList } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, StatusPill, Badge, Toast } from '../components/Primitives.jsx';
 import { apiGet } from '../services/api.js';
@@ -101,7 +100,7 @@ function ParticipantsModal({ open, onClose, battleId }) {
                   <span style={{ fontSize: 14, fontWeight: 900, color: '#6B7280' }}>{(p.fullName || 'L').trim().charAt(0).toUpperCase()}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12.5, fontWeight: 700, color: C.ink }}>
-                      {p.fullName}{p.isWinner && <Ico lucide={Trophy} ti="ti-trophy" size={12} color="#F59E0B" style={{ verticalAlign: '-2px', marginLeft: 4 }} />}
+                      {p.fullName}{p.isWinner && <Ico ti="ti-trophy" size={12} color="#F59E0B" style={{ verticalAlign: '-2px', marginLeft: 4 }} />}
                     </div>
                     <div style={{ fontSize: 11, color: C.muted }}>@{p.username}</div>
                   </div>
@@ -175,11 +174,11 @@ function MarkSheetModal({ open, onClose, battleId }) {
                 reward, so a teacher could not answer "what did they get for
                 it?" — which is the learner's first question. */}
             {data.learner?.xpEarned > 0 && (
-              <Badge color={C.brand} bg={C.brandSoft}><Ico lucide={Zap} ti="ti-bolt" size={10} style={{ marginRight: 3 }} />{data.learner.xpEarned} XP</Badge>
+              <Badge color={C.brand} bg={C.brandSoft}><Ico ti="ti-bolt" size={10} style={{ marginRight: 3 }} />{data.learner.xpEarned} XP</Badge>
             )}
             {s.unanswered > 0 && <Badge color={C.muted} bg={C.surface}>{s.unanswered} unanswered</Badge>}
             {data.battle?.duration_formatted && (
-              <Badge color={C.muted} bg={C.surface}><Ico lucide={Clock} ti="ti-clock" size={10} style={{ marginRight: 3 }} />{data.battle.duration_formatted}</Badge>
+              <Badge color={C.muted} bg={C.surface}><Ico ti="ti-clock" size={10} style={{ marginRight: 3 }} />{data.battle.duration_formatted}</Badge>
             )}
           </div>
 
@@ -263,8 +262,8 @@ function BattleCard({ battle, onStart, onEdit, onDelete, onViewParticipants, onW
           background: isLive ? `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})` : `${PURPLE}18`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          {isReview ? <Ico lucide={ClipboardList} ti="ti-clipboard-list" size={20} color={isLive ? '#fff' : PURPLE} />
-                    : <Ico lucide={Swords} ti="ti-swords" size={20} color={isLive ? '#fff' : PURPLE} />}
+          {isReview ? <Ico ti="ti-clipboard-list" size={20} color={isLive ? '#fff' : PURPLE} />
+                    : <Ico ti="ti-swords" size={20} color={isLive ? '#fff' : PURPLE} />}
         </div>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: C.ink, fontFamily: C.font }}>{battle.title}</div>
@@ -282,11 +281,11 @@ function BattleCard({ battle, onStart, onEdit, onDelete, onViewParticipants, onW
           style={{ border: 'none', padding: 0, background: 'none', cursor: 'pointer' }}
         >
           <Badge color={BLUE} bg="#EFF6FF">
-            {isReview ? <><Ico lucide={ClipboardList} ti="ti-clipboard-list" size={10} style={{ marginRight: 2, verticalAlign: '-1px' }} />Review</> : <><Ico lucide={Users} ti="ti-users" size={10} style={{ marginRight: 2 }} />{battle.participantCount}</>}
+            {isReview ? <><Ico ti="ti-clipboard-list" size={10} style={{ marginRight: 2, verticalAlign: '-1px' }} />Review</> : <><Ico ti="ti-users" size={10} style={{ marginRight: 2 }} />{battle.participantCount}</>}
           </Badge>
         </button>
-        <Badge color={C.muted} bg={C.bg}><Ico lucide={Clock} ti="ti-clock" size={10} style={{ marginRight: 2 }} />{battle.durationMin}min</Badge>
-        <Badge color={C.brand} bg={C.brandSoft}><Ico lucide={Zap} ti="ti-bolt" size={10} style={{ marginRight: 2 }} />{battle.xpPool} XP</Badge>
+        <Badge color={C.muted} bg={C.bg}><Ico ti="ti-clock" size={10} style={{ marginRight: 2 }} />{battle.durationMin}min</Badge>
+        <Badge color={C.brand} bg={C.brandSoft}><Ico ti="ti-bolt" size={10} style={{ marginRight: 2 }} />{battle.xpPool} XP</Badge>
       </div>
 
       {scheduled && (
@@ -305,13 +304,13 @@ function BattleCard({ battle, onStart, onEdit, onDelete, onViewParticipants, onW
           >
             {/* When it is live this said "In Progress" and did nothing at all.
                 Live is exactly when a teacher wants in. */}
-            {isLive ? <><Ico lucide={Radio} ti="ti-broadcast" size={14} /> Watch Live</> : <><Ico lucide={Play} ti="ti-player-play" size={14} /> Start Now</>}
+            {isLive ? <><Ico ti="ti-broadcast" size={14} /> Watch Live</> : <><Ico ti="ti-player-play" size={14} /> Start Now</>}
           </Btn>
-          <Btn size="sm" variant="secondary" onClick={() => onViewParticipants(battle)} title="View participants"><Ico lucide={Users} ti="ti-users" size={13} /></Btn>
+          <Btn size="sm" variant="secondary" onClick={() => onViewParticipants(battle)} title="View participants"><Ico ti="ti-users" size={13} /></Btn>
           {editable && (
             <>
-              <Btn size="sm" variant="secondary" onClick={() => onEdit(battle)} title="Edit"><Ico lucide={Pencil} ti="ti-pencil" size={13} /></Btn>
-              <Btn size="sm" variant="secondary" onClick={() => onDelete(battle)} title="Cancel battle"><Ico lucide={Trash2} ti="ti-trash" size={13} /></Btn>
+              <Btn size="sm" variant="secondary" onClick={() => onEdit(battle)} title="Edit"><Ico ti="ti-pencil" size={13} /></Btn>
+              <Btn size="sm" variant="secondary" onClick={() => onDelete(battle)} title="Cancel battle"><Ico ti="ti-trash" size={13} /></Btn>
             </>
           )}
         </div>
@@ -328,12 +327,12 @@ function BattleCard({ battle, onStart, onEdit, onDelete, onViewParticipants, onW
               padding: 0, cursor: 'pointer', textAlign: 'left',
             }}
           >
-            <Ico lucide={Trophy} ti="ti-trophy" size={14} color={C.brand} />
+            <Ico ti="ti-trophy" size={14} color={C.brand} />
             {isReview ? 'View mark sheet' : `${battle.participantCount} participants — see results`}
           </button>
-          <Btn size="sm" variant="secondary" onClick={() => onWatch(battle)} title="Review the battle"><Ico lucide={Radio} ti="ti-broadcast" size={13} /></Btn>
-          {editable && <Btn size="sm" variant="secondary" onClick={() => onEdit(battle)} title="Edit"><Ico lucide={Pencil} ti="ti-pencil" size={13} /></Btn>}
-          {deletable && <Btn size="sm" variant="secondary" onClick={() => onDelete(battle)} title="Delete"><Ico lucide={Trash2} ti="ti-trash" size={13} /></Btn>}
+          <Btn size="sm" variant="secondary" onClick={() => onWatch(battle)} title="Review the battle"><Ico ti="ti-broadcast" size={13} /></Btn>
+          {editable && <Btn size="sm" variant="secondary" onClick={() => onEdit(battle)} title="Edit"><Ico ti="ti-pencil" size={13} /></Btn>}
+          {deletable && <Btn size="sm" variant="secondary" onClick={() => onDelete(battle)} title="Delete"><Ico ti="ti-trash" size={13} /></Btn>}
         </div>
       )}
     </div>
@@ -506,10 +505,10 @@ export default function BattlesPage() {
       action={
         <div style={{ display: 'flex', gap: 8 }}>
           <Btn size="sm" variant="secondary" onClick={() => setBankOpen(true)}>
-            <Ico lucide={Target} ti="ti-target" size={14} /> Question Bank
+            <Ico ti="ti-target" size={14} /> Question Bank
           </Btn>
           <Btn size="sm" onClick={openNew}>
-            <Ico lucide={Plus} ti="ti-plus" size={14} /> New Battle
+            <Ico ti="ti-plus" size={14} /> New Battle
           </Btn>
         </div>
       }
@@ -555,11 +554,11 @@ export default function BattlesPage() {
         </div>
       ) : filtered.length === 0 ? (
         <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 16, padding: '48px', textAlign: 'center' }}>
-          <Ico lucide={Swords} ti="ti-swords" size={32} color={C.muted} style={{ marginBottom: 12 }} />
+          <Ico ti="ti-swords" size={32} color={C.muted} style={{ marginBottom: 12 }} />
           <p style={{ fontSize: 14, color: C.muted, fontFamily: C.font, margin: '0 0 16px' }}>
             {filter === 'all' ? 'No battles yet' : `No ${filter} battles`}
           </p>
-          {filter === 'all' && <Btn onClick={openNew}><Ico lucide={Plus} ti="ti-plus" size={14} /> Create your first battle</Btn>}
+          {filter === 'all' && <Btn onClick={openNew}><Ico ti="ti-plus" size={14} /> Create your first battle</Btn>}
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>

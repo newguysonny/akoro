@@ -26,9 +26,7 @@
  * until the grader publishes.
  */
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import {
-  ArrowLeft, ChevronLeft, ChevronRight, X, Check, Loader2, FileText, PenLine, ExternalLink, Download, AlertTriangle,
-} from 'lucide-react';
+import { Download } from 'lucide-react';
 import { apiGet, apiPatch, apiPost, apiPut, apiDelete, apiBlob, downloadActivityFile, openActivityFile, fetchSubmissionPdf } from '../../services/api.js';
 import SubmissionMarkup from './SubmissionMarkup.jsx';
 import QuestionMarker, { QuestionRail, autoMarks, markTotals, pointsOf } from './QuestionMarker.jsx';
@@ -125,7 +123,7 @@ function SubmittedPaper({ current, brief, only = null }) {
               <div key={k} style={{ background: C.surface, border: `1px solid ${correct === false && qMcq ? 'rgba(239,68,68,.35)' : C.border}`, borderRadius: 10, padding: '10px 13px' }}>
                 {q && <div style={{ fontSize: 11, fontWeight: 800, color: C.muted2, marginBottom: 4 }}>Q{Number(k) + 1}. {qText(q)}</div>}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 800, color: C.ink, fontFamily: C.font }}>
-                  {qMcq && <span style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${correct ? GREEN : C.border}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 9, color: GREEN }}>{correct ? <Ico lucide={Check} ti="ti-check" size={10} /> : null}</span>}
+                  {qMcq && <span style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${correct ? GREEN : C.border}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 9, color: GREEN }}>{correct ? <Ico ti="ti-check" size={10} /> : null}</span>}
                   {chosen != null ? `${letterOf(pick)}. ${chosen}` : String(raw)}
                   {qMcq && correct && <span style={{ fontSize: 10, fontWeight: 800, color: GREEN, background: tint(12, GREEN), borderRadius: 999, padding: '2px 8px' }}>correct</span>}
                 </div>
@@ -138,15 +136,15 @@ function SubmittedPaper({ current, brief, only = null }) {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {files.map((f) => (
             <div key={f.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 6px 6px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, fontFamily: C.font }}>
-              <span style={{ width: 26, height: 26, borderRadius: 8, background: `${PURPLE}14`, color: PURPLE, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Ico lucide={FileText} ti="ti-file-text" size={13} /></span>
+              <span style={{ width: 26, height: 26, borderRadius: 8, background: `${PURPLE}14`, color: PURPLE, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Ico ti="ti-file-text" size={13} /></span>
               <span style={{ textAlign: 'left' }}>
                 <span style={{ display: 'block', fontSize: 12, fontWeight: 800, color: C.ink, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
                 <span style={{ display: 'block', fontSize: 10, fontWeight: 700, color: C.muted2 }}>{fmtSize(f.size)}</span>
               </span>
               <button onClick={() => openActivityFile(f.id).catch(() => {})} title="Open" aria-label={`Open ${f.name}`}
-                style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'transparent', color: PURPLE, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ico lucide={ExternalLink} ti="ti-external-link" size={13} /></button>
+                style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'transparent', color: PURPLE, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ico ti="ti-external-link" size={13} /></button>
               <button onClick={() => downloadActivityFile(f.id, f.name).catch(() => {})} title="Download" aria-label={`Download ${f.name}`}
-                style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'transparent', color: C.muted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ico lucide={Download} ti="ti-download" size={13} /></button>
+                style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'transparent', color: C.muted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ico ti="ti-download" size={13} /></button>
             </div>
           ))}
         </div>
@@ -216,7 +214,7 @@ function SubmissionPdfView({ targetId, version, name, marks, onMarks, markState 
   };
 
   if (state.status === 'loading') {
-    return <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.muted, fontSize: 13, fontWeight: 700 }}><Ico lucide={Loader2} ti="ti-loader-2" size={15} style={{ animation: 'spin .8s linear infinite' }} /> Preparing the submission PDF…</div>;
+    return <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.muted, fontSize: 13, fontWeight: 700 }}><Ico ti="ti-loader-2" size={15} style={{ animation: 'spin .8s linear infinite' }} /> Preparing the submission PDF…</div>;
   }
   if (state.status === 'error') {
     return <div style={{ background: C.bg, border: `1px dashed ${C.border}`, borderRadius: 10, padding: '12px 14px', fontSize: 12.5, color: RED, fontWeight: 700 }}>{state.error} — the Answers tab still shows the work.</div>;
@@ -226,10 +224,10 @@ function SubmissionPdfView({ targetId, version, name, marks, onMarks, markState 
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ display: 'flex', gap: 14, justifyContent: 'flex-end' }}>
         <button type="button" onClick={previewMarked} disabled={previewing} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: PURPLE, background: 'none', border: 'none', cursor: 'pointer', fontFamily: C.font, padding: 0 }}>
-          {previewing ? <Ico lucide={Loader2} ti="ti-loader-2" size={12} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico lucide={FileText} ti="ti-file-text" size={12} />} Preview marked copy
+          {previewing ? <Ico ti="ti-loader-2" size={12} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-file-text" size={12} />} Preview marked copy
         </button>
-        <a href={state.url} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: C.muted, textDecoration: 'none' }}><Ico lucide={ExternalLink} ti="ti-external-link" size={12} /> Original</a>
-        <a href={state.url} download={fileName} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: C.muted, textDecoration: 'none' }}><Ico lucide={Download} ti="ti-download" size={12} /> Download</a>
+        <a href={state.url} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: C.muted, textDecoration: 'none' }}><Ico ti="ti-external-link" size={12} /> Original</a>
+        <a href={state.url} download={fileName} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: C.muted, textDecoration: 'none' }}><Ico ti="ti-download" size={12} /> Download</a>
       </div>
       <SubmissionMarkup blob={state.blob} marks={marks} onChange={onMarks} saveState={markState} />
     </div>
@@ -239,7 +237,7 @@ function SubmissionPdfView({ targetId, version, name, marks, onMarks, markState 
 /* The AI's draft marks — shown for approval, never published by itself. */
 function AiDraftCard({ ai, onApply, onRequest, requesting }) {
   const box = { border: `1px solid ${PURPLE}33`, background: tint(4), borderRadius: 10, padding: '11px 13px' };
-  const head = (extra) => <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 900, letterSpacing: .5, color: PURPLE }}><Ico lucide={Sparkles} ti="ti-sparkles" size={12} /> AI DRAFT {extra}</div>;
+  const head = (extra) => <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 900, letterSpacing: .5, color: PURPLE }}><Ico ti="ti-sparkles" size={12} /> AI DRAFT {extra}</div>;
   if (!ai || ai.status === 'failed') {
     return (
       <div style={box}>
@@ -248,13 +246,13 @@ function AiDraftCard({ ai, onApply, onRequest, requesting }) {
         <div style={{ fontSize: 12, color: C.muted, margin: '6px 0 8px', lineHeight: 1.5 }}>Let AI suggest marks per answer, rubric levels and feedback. You approve them before anything is published.</div>
         <button type="button" onClick={onRequest} disabled={requesting}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: 'none', background: PURPLE, color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
-          {requesting ? <Ico lucide={Loader2} ti="ti-loader-2" size={12} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico lucide={Sparkles} ti="ti-sparkles" size={12} />} Draft marks with AI
+          {requesting ? <Ico ti="ti-loader-2" size={12} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-sparkles" size={12} />} Draft marks with AI
         </button>
       </div>
     );
   }
   if (ai.status === 'making') {
-    return <div style={box}>{head()}<div style={{ fontSize: 12, color: C.muted, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}><Ico lucide={Loader2} ti="ti-loader-2" size={12} style={{ animation: 'spin .8s linear infinite' }} /> Reading the submission and drafting marks…</div></div>;
+    return <div style={box}>{head()}<div style={{ fontSize: 12, color: C.muted, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}><Ico ti="ti-loader-2" size={12} style={{ animation: 'spin .8s linear infinite' }} /> Reading the submission and drafting marks…</div></div>;
   }
   return (
     <div style={box}>
@@ -271,7 +269,7 @@ function AiDraftCard({ ai, onApply, onRequest, requesting }) {
           </div>
         ))}
         {ai.feedback && <div style={{ fontSize: 12, color: C.muted, fontStyle: 'italic', lineHeight: 1.5 }}>“{ai.feedback}”</div>}
-        {(ai.notes || []).map((n, i) => <div key={i} style={{ fontSize: 11, color: '#B45309', fontWeight: 700, display: 'flex', gap: 5, alignItems: 'flex-start' }}><Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={12} style={{ marginTop: 1, flexShrink: 0 }} /> {n}</div>)}
+        {(ai.notes || []).map((n, i) => <div key={i} style={{ fontSize: 11, color: '#B45309', fontWeight: 700, display: 'flex', gap: 5, alignItems: 'flex-start' }}><Ico ti="ti-alert-triangle" size={12} style={{ marginTop: 1, flexShrink: 0 }} /> {n}</div>)}
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 9 }}>
         <button type="button" onClick={onApply}
@@ -572,7 +570,7 @@ export default function GradeSubmissionModal({
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 22px', background: C.surface, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
         <button onClick={onClose} title="Back to the workbench"
           style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: C.muted2, fontSize: 12.5, fontWeight: 700, fontFamily: C.font, padding: '4px 0' }}>
-          <Ico lucide={ArrowLeft} ti="ti-arrow-left" size={14} /> Workbench
+          <Ico ti="ti-arrow-left" size={14} /> Workbench
         </button>
         <div style={{ width: 1, height: 24, background: C.border }} />
         <div style={{ minWidth: 0 }}>
@@ -586,8 +584,8 @@ export default function GradeSubmissionModal({
           {/* Autosave label */}
           <span style={{ fontSize: 11.5, fontWeight: 700, color: saveState === 'saving' ? C.brand : C.muted2, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             {saveState === 'saving'
-              ? <><Ico lucide={Loader2} ti="ti-loader-2" size={11} style={{ animation: 'spin .8s linear infinite' }} /> Saving…</>
-              : saveState === 'saved' ? <><Ico lucide={Check} ti="ti-check" size={11} color={GREEN} /> Draft saved</>
+              ? <><Ico ti="ti-loader-2" size={11} style={{ animation: 'spin .8s linear infinite' }} /> Saving…</>
+              : saveState === 'saved' ? <><Ico ti="ti-check" size={11} color={GREEN} /> Draft saved</>
               : 'Draft autosaves locally'}
           </span>
 
@@ -595,12 +593,12 @@ export default function GradeSubmissionModal({
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <button onClick={() => setIndex(i => Math.max(0, i - 1))} disabled={index === 0}
               style={{ width: 30, height: 30, borderRadius: 999, border: `1px solid ${C.border}`, background: C.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: index === 0 ? 'not-allowed' : 'pointer', color: C.muted, opacity: index === 0 ? .35 : 1 }}>
-              <Ico lucide={ChevronLeft} ti="ti-chevron-left" size={15} />
+              <Ico ti="ti-chevron-left" size={15} />
             </button>
             <span style={{ fontSize: 12.5, color: C.muted, fontWeight: 700, whiteSpace: 'nowrap' }}>{index + 1} of {students.length}</span>
             <button onClick={() => setIndex(i => Math.min(students.length - 1, i + 1))} disabled={index >= students.length - 1}
               style={{ width: 30, height: 30, borderRadius: 999, border: `1px solid ${C.border}`, background: C.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: index >= students.length - 1 ? 'not-allowed' : 'pointer', color: C.muted, opacity: index >= students.length - 1 ? .35 : 1 }}>
-              <Ico lucide={ChevronRight} ti="ti-chevron-right" size={15} />
+              <Ico ti="ti-chevron-right" size={15} />
             </button>
           </div>
 
@@ -616,7 +614,7 @@ export default function GradeSubmissionModal({
           )}
           <button onClick={publish} disabled={finalScore == null || publishing}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 10, border: 'none', cursor: finalScore == null ? 'not-allowed' : 'pointer', background: finalScore == null ? C.border : PURPLE, color: '#fff', fontSize: 13, fontWeight: 800, fontFamily: C.font, opacity: finalScore == null ? .75 : 1 }}>
-            {publishing ? <Ico lucide={Loader2} ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico lucide={Check} ti="ti-check" size={13} />}
+            {publishing ? <Ico ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-check" size={13} />}
             Publish grade
           </button>
         </div>
@@ -641,9 +639,9 @@ export default function GradeSubmissionModal({
               </div>
               <div style={{ display: 'flex', gap: 6, visibility: submitted && view === 'pdf' ? 'hidden' : 'visible' }}>
                 <button onClick={() => setQIndex(i => Math.max(0, i - 1))} disabled={qIndex === 0}
-                  style={{ width: 28, height: 28, borderRadius: 999, border: `1px solid ${C.border}`, background: C.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: qIndex === 0 ? 'not-allowed' : 'pointer', color: C.muted, opacity: qIndex === 0 ? .35 : 1 }}><Ico lucide={ChevronLeft} ti="ti-chevron-left" size={14} /></button>
+                  style={{ width: 28, height: 28, borderRadius: 999, border: `1px solid ${C.border}`, background: C.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: qIndex === 0 ? 'not-allowed' : 'pointer', color: C.muted, opacity: qIndex === 0 ? .35 : 1 }}><Ico ti="ti-chevron-left" size={14} /></button>
                 <button onClick={() => setQIndex(i => Math.min(questions.length - 1, i + 1))} disabled={qIndex >= questions.length - 1}
-                  style={{ width: 28, height: 28, borderRadius: 999, border: `1px solid ${C.border}`, background: C.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: qIndex >= questions.length - 1 ? 'not-allowed' : 'pointer', color: C.muted, opacity: qIndex >= questions.length - 1 ? .35 : 1 }}><Ico lucide={ChevronRight} ti="ti-chevron-right" size={14} /></button>
+                  style={{ width: 28, height: 28, borderRadius: 999, border: `1px solid ${C.border}`, background: C.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: qIndex >= questions.length - 1 ? 'not-allowed' : 'pointer', color: C.muted, opacity: qIndex >= questions.length - 1 ? .35 : 1 }}><Ico ti="ti-chevron-right" size={14} /></button>
               </div>
             </div>
             {submitted && view === 'pdf' ? (
@@ -742,7 +740,7 @@ export default function GradeSubmissionModal({
                 {[...(hasQuestions ? [['questions', 'Question marks']] : []), ['rubric', 'Rubric'], ['manual', 'Manual']].map(([id, label]) => (
                   <button key={id} type="button" onClick={() => { setMode(id); touch({ mode: id }); }} aria-pressed={mode === id}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 999, border: `1.5px solid ${mode === id ? PURPLE : C.border}`, background: mode === id ? '#F1ECFF' : C.surface, color: mode === id ? PURPLE : C.muted, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
-                    {id === 'manual' && <Ico lucide={PenLine} ti="ti-pencil" size={10} />}{label}
+                    {id === 'manual' && <Ico ti="ti-pencil" size={10} />}{label}
                   </button>
                 ))}
               </div>
@@ -793,7 +791,7 @@ export default function GradeSubmissionModal({
               {/* Written feedback */}
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 800, color: C.ink, display: 'inline-flex', alignItems: 'center', gap: 5 }}><Ico lucide={FileText} ti="ti-file-text" size={12} color={C.muted2} /> Written feedback</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 800, color: C.ink, display: 'inline-flex', alignItems: 'center', gap: 5 }}><Ico ti="ti-file-text" size={12} color={C.muted2} /> Written feedback</span>
                   <span style={{ fontSize: 10.5, color: C.muted2, fontWeight: 700 }}>{feedbackText.length}</span>
                 </div>
                 <textarea value={feedbackText} onChange={e => onFeedback(e.target.value)}
@@ -805,7 +803,7 @@ export default function GradeSubmissionModal({
               {error && <div style={{ fontSize: 12, color: RED, fontWeight: 700 }}>{error}</div>}
 
               <div style={{ fontSize: 11, color: C.muted2, lineHeight: 1.55, display: 'flex', alignItems: 'center', gap: 5 }}>
-                <Ico lucide={Check} ti="ti-check" size={11} color={GREEN} /> Publishing notifies {current.student.name.split(' ')[0]} and files this under their graded work. Drafts stay on this device until then.
+                <Ico ti="ti-check" size={11} color={GREEN} /> Publishing notifies {current.student.name.split(' ')[0]} and files this under their graded work. Drafts stay on this device until then.
               </div>
               </>)}
             </div>

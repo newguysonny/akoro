@@ -1,4 +1,4 @@
-import { AlertTriangle, Timer, Ban, Bot, ClipboardList, Copyright, CreditCard, GraduationCap, Link2, Lock, LogOut, Mail, Ruler, Scale, ScrollText, Settings, ShieldCheck, User , PencilLine , Archive } from 'lucide-react';
+import { AlertTriangle, Ban, Copyright, CreditCard, GraduationCap, Lock, LogOut, Ruler, Scale, Settings, ShieldCheck, User } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { C, tint } from '../theme/colors.js';
@@ -170,13 +170,13 @@ export default function TermsOfServicePage() {
 
       {/* Hero */}
       <div style={{ background: `linear-gradient(135deg, ${C.hero} 0%, #2D1B6E 100%)`, padding: '44px 24px 48px', textAlign: 'center' }}>
-        <div style={{ marginBottom: 10 }}><Ico lucide={ScrollText} ti="ti-file-text" size={40} color={A} /></div>
+        <div style={{ marginBottom: 10 }}><Ico ti="ti-file-text" size={40} color={A} /></div>
         <h1 style={{ fontSize: 'clamp(22px,3.5vw,32px)', fontWeight: 700, color: '#fff', marginBottom: 12, fontFamily: C.font }}>Instructor Terms of Service</h1>
         <p style={{ fontSize: 14, color: 'rgba(255,255,255,.80)', maxWidth: 520, margin: '0 auto 22px', lineHeight: 1.7, fontFamily: C.font }}>
           Plain-language terms governing your use of the Akoro Instructor platform, your responsibilities as an educator, and how we work together.
         </p>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,.12)', borderRadius: 20, padding: '8px 18px' }}>
-          <span style={{ fontSize: 13, color: 'rgba(255,255,255,.9)', fontWeight: 700, fontFamily: C.font }}><Ico lucide={Timer} ti="ti-clock" size={13} />About 5 min read · Last updated: 1 June 2025</span>
+          <span style={{ fontSize: 13, color: 'rgba(255,255,255,.9)', fontWeight: 700, fontFamily: C.font }}><Ico ti="ti-clock" size={13} />About 5 min read · Last updated: 1 June 2025</span>
         </div>
       </div>
 
@@ -191,7 +191,7 @@ export default function TermsOfServicePage() {
             { icon: Scale, ti: 'ti-scale', title: 'Fair disputes', desc: 'Good-faith resolution before arbitration.' },
           ].map(({ icon: Icon, ti, title, desc }) => (
             <div key={title} style={{ background: C.surface, borderRadius: 12, padding: '16px', border: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <span style={{ display: 'flex' }}><Ico lucide={Icon} ti={ti} size={24} color={A} /></span>
+              <span style={{ display: 'flex' }}><Ico ti={ti} size={24} color={A} /></span>
               <div style={{ fontSize: 13, fontWeight: 700, color: C.ink, fontFamily: C.font }}>{title}</div>
               <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, fontFamily: C.font }}>{desc}</div>
             </div>
@@ -208,7 +208,7 @@ export default function TermsOfServicePage() {
                 {TOC.map(({ id, title, icon: Icon, ti }) => (
                   <button key={id} className="it-toc-btn" onClick={() => scrollTo(id)}
                     style={{ background: active === id ? tint(8, A) : 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', padding: '7px 10px', borderRadius: 8, fontSize: 12, fontWeight: active === id ? 700 : 500, color: active === id ? A : '#4B5563', fontFamily: C.font, display: 'flex', alignItems: 'center', gap: 8, transition: 'all .15s' }}>
-                    <Ico lucide={Icon} ti={ti} size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />{title}
+                    <Ico ti={ti} size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />{title}
                   </button>
                 ))}
               </div>
@@ -227,7 +227,7 @@ export default function TermsOfServicePage() {
               <div key={id} id={id} className="it-section"
                 style={{ background: C.surface, borderRadius: 14, overflow: 'hidden', border: `1px solid ${C.border}` }}>
                 <div style={{ padding: '18px 22px 14px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                  <div style={{ width: 42, height: 42, borderRadius: 10, background: tint(7, badgeColor), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Ico lucide={Icon} ti={ti} size={20} color={A} /></div>
+                  <div style={{ width: 42, height: 42, borderRadius: 10, background: tint(7, badgeColor), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Ico ti={ti} size={20} color={A} /></div>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
                       <h2 style={{ fontSize: 15, fontWeight: 700, color: C.ink, fontFamily: C.font }}>{title}</h2>
@@ -248,7 +248,7 @@ export default function TermsOfServicePage() {
 
             {/* Contact */}
             <div style={{ background: tint(6, A), borderRadius: 14, padding: '26px 22px', border: `1px solid ${tint(19, A)}`, textAlign: 'center' }}>
-              <div style={{ marginBottom: 10 }}><Ico lucide={Mail} ti="ti-mail" size={30} color={A} /></div>
+              <div style={{ marginBottom: 10 }}><Ico ti="ti-mail" size={30} color={A} /></div>
               <h3 style={{ fontSize: 16, fontWeight: 700, color: C.ink, marginBottom: 8, fontFamily: C.font }}>Questions about these Terms?</h3>
               <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, marginBottom: 18, fontFamily: C.font }}>We'd rather clarify now than resolve disputes later.</p>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>

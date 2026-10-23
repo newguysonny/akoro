@@ -9,7 +9,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ClipboardCheck, Users, CheckCircle2, Loader2, Info , BookOpen, PencilLine, FolderKanban, MonitorPlay, ListChecks, Pin } from 'lucide-react';
+import { BookOpen, PencilLine, FolderKanban, MonitorPlay, ListChecks, Pin } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Badge } from '../components/Primitives.jsx';
 import { apiGet } from '../services/api.js';
@@ -126,7 +126,7 @@ export default function SubmissionsPage() {
     <PageLayout
       title="Submissions"
       subtitle="Grade submitted work, activity by activity"
-      action={<Btn size="sm" variant="secondary" onClick={() => navigate('/activities')}><Ico lucide={ClipboardCheck} ti="ti-clipboard-check" size={14} /> New activity</Btn>}
+      action={<Btn size="sm" variant="secondary" onClick={() => navigate('/activities')}><Ico ti="ti-clipboard-check" size={14} /> New activity</Btn>}
     >
       {/* Drafts waiting to be finished — survives closed tabs and dead networks */}
       <NowGrading onResume={resumeDraft} />
@@ -153,7 +153,7 @@ export default function SubmissionsPage() {
                 }}
                   onMouseEnter={(e) => { if (!on) e.currentTarget.style.background = C.bg; }}
                   onMouseLeave={(e) => { if (!on) e.currentTarget.style.background = 'transparent'; }}>
-                  <span style={{ display: 'flex', flexShrink: 0, marginTop: 1 }}>{(() => { const [I, ti] = TYPE_ICON[a.type] || [Pin, 'ti-pin']; return <Ico lucide={I} ti={ti} size={14} color="#6B7280" />; })()}</span>
+                  <span style={{ display: 'flex', flexShrink: 0, marginTop: 1 }}>{(() => { const [I, ti] = TYPE_ICON[a.type] || [Pin, 'ti-pin']; return <Ico ti={ti} size={14} color="#6B7280" />; })()}</span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.title}</span>
                     <span style={{ display: 'block', fontSize: 11, fontWeight: 600, lineHeight: 1.4, marginTop: 2, color: on ? 'rgba(255,255,255,.82)' : C.muted2 }}>
@@ -173,7 +173,7 @@ export default function SubmissionsPage() {
           {/* Guidance note, in the workbench's WHEN TO USE IT voice */}
           <div style={{ background: tint(4), border: `1px solid ${tint(20)}`, borderRadius: 14, padding: '13px 15px', fontFamily: C.font }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-              <Ico lucide={Info} ti="ti-info-circle" size={13} color={C.brand} />
+              <Ico ti="ti-info-circle" size={13} color={C.brand} />
               <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: .5, color: C.brand }}>WHO TO GRADE FIRST</span>
             </div>
             {activities === null ? (
@@ -205,7 +205,7 @@ export default function SubmissionsPage() {
             <div style={{ color: C.muted2, fontSize: 13 }}>Pick an activity to see its submissions.</div>
           ) : detailLoading ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.muted2, fontSize: 13 }}>
-              <Ico lucide={Loader2} ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> Loading the roster…
+              <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> Loading the roster…
             </div>
           ) : (
             <>
@@ -215,7 +215,7 @@ export default function SubmissionsPage() {
                   <div style={{ fontSize: 11.5, color: C.muted }}>{activity.subject} · {activity.topic}</div>
                 </div>
                 <Badge color={ungraded ? C.brand : GREEN} bg={ungraded ? C.brandSoft : '#DCFCE7'}>
-                  <Ico lucide={Users} ti="ti-users" size={10} style={{ marginRight: 3 }} />{ungraded} to grade
+                  <Ico ti="ti-users" size={10} style={{ marginRight: 3 }} />{ungraded} to grade
                 </Badge>
               </div>
 
@@ -240,7 +240,7 @@ export default function SubmissionsPage() {
                         </div>
                       </div>
                       {graded ? (
-                        <Badge color={GREEN} bg="#DCFCE7"><Ico lucide={CheckCircle2} ti="ti-circle-check" size={10} style={{ marginRight: 2 }} />{t.grade}%</Badge>
+                        <Badge color={GREEN} bg="#DCFCE7"><Ico ti="ti-circle-check" size={10} style={{ marginRight: 2 }} />{t.grade}%</Badge>
                       ) : (
                         <Badge color={t.status === 'complete' ? BLUE : t.status === 'started' ? C.brand : C.muted}
                           bg={t.status === 'complete' ? '#EFF6FF' : t.status === 'started' ? C.brandSoft : C.bg}>

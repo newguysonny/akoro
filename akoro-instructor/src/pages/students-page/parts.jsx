@@ -2,9 +2,7 @@
  * StudentsPage — constants + child components.
  */
 import { useState, useEffect, useRef } from 'react';
-import {
-  Search, Plus, X, User, Mail, Calendar, BookOpen, TrendingUp,
-  Trash2, ChevronRight, Copy, Check, Upload, Download, Link2, UserPlus,  PencilLine, ClipboardList } from 'lucide-react';
+import { BookOpen, TrendingUp, Copy, Download } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { PageLayout } from '../../components/Layout.jsx';
 import { Btn, Modal, Inp, StatusPill, Toast } from '../../components/Primitives.jsx';
@@ -289,13 +287,13 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
       {/* Tab bar */}
       <div style={{ display: 'flex', background: C.bg, borderRadius: 10, padding: 4, marginBottom: 20, gap: 2 }}>
         <button style={TAB_STYLE(tab === 'manual')} onClick={() => { setTab('manual'); reset(); }}>
-          <Ico lucide={PencilLine} ti="ti-pencil" size={13} style={{ verticalAlign: '-2px', marginRight: 5 }} />Manual Entry
+          <Ico ti="ti-pencil" size={13} style={{ verticalAlign: '-2px', marginRight: 5 }} />Manual Entry
         </button>
         <button style={TAB_STYLE(tab === 'invite')} onClick={() => { setTab('invite'); reset(); }}>
-          <Ico lucide={Mail} ti="ti-mail" size={13} style={{ verticalAlign: '-2px', marginRight: 5 }} />Invite Link
+          <Ico ti="ti-mail" size={13} style={{ verticalAlign: '-2px', marginRight: 5 }} />Invite Link
         </button>
         <button style={TAB_STYLE(tab === 'csv')} onClick={() => { setTab('csv'); reset(); }}>
-          <Ico lucide={ClipboardList} ti="ti-clipboard-list" size={13} style={{ verticalAlign: '-2px', marginRight: 5 }} />Bulk CSV
+          <Ico ti="ti-clipboard-list" size={13} style={{ verticalAlign: '-2px', marginRight: 5 }} />Bulk CSV
         </button>
       </div>
 
@@ -398,7 +396,7 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
               background: C.bg, border: `1.5px solid ${C.border}`, borderRadius: 10,
               padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8,
             }}>
-              <Ico lucide={Link2} ti="ti-link" size={14} color={C.brand} style={{ flexShrink: 0 }} />
+              <Ico ti="ti-link" size={14} color={C.brand} style={{ flexShrink: 0 }} />
               <span style={{ flex: 1, fontSize: 11, color: C.ink, fontFamily: C.font, wordBreak: 'break-all' }}>
                 {inviteUrl}
               </span>
@@ -411,7 +409,7 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
                   display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontFamily: C.font,
                 }}
               >
-                {copied ? <Ico lucide={Check} ti="ti-check" size={12} /> : <Ico lucide={Copy} ti="ti-copy" size={12} />}
+                {copied ? <Ico ti="ti-check" size={12} /> : <Ico ti="ti-copy" size={12} />}
                 {copied ? 'Copied!' : 'Copy'}
               </button>
             </div>
@@ -474,7 +472,7 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
               if (f) setCsv(c => ({ ...c, file: f }));
             }}
           >
-            <Ico lucide={Upload} ti="ti-upload" size={22} color={csv.file ? C.brand : C.muted} style={{ marginBottom: 8 }} />
+            <Ico ti="ti-upload" size={22} color={csv.file ? C.brand : C.muted} style={{ marginBottom: 8 }} />
             <div style={{ fontSize: 13, fontWeight: 600, color: csv.file ? C.brand : C.ink, fontFamily: C.font }}>
               {csv.file ? csv.file.name : 'Drop CSV file here or click to browse'}
             </div>
@@ -503,7 +501,7 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
                 color: C.brand, fontSize: 11, fontWeight: 800, cursor: 'pointer', fontFamily: C.font,
                 flexShrink: 0,
               }}>
-                <Ico lucide={Download} ti="ti-download" size={12} /> Starter file
+                <Ico ti="ti-download" size={12} /> Starter file
               </button>
             </div>
             <code style={{ fontSize: 11, color: C.muted, fontFamily: 'monospace' }}>
@@ -602,7 +600,7 @@ function StudentSheet({ student, courses = [], onClose, onRemove }) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h2 style={{ fontSize: 18, fontWeight: 700, color: C.ink, margin: 0, fontFamily: C.font }}>Student Profile</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted }}>
-            <Ico lucide={X} ti="ti-x" size={18} />
+            <Ico ti="ti-x" size={18} />
           </button>
         </div>
 
@@ -630,7 +628,7 @@ function StudentSheet({ student, courses = [], onClose, onRemove }) {
             { label: 'Progress', value: `${student.progress || 0}%`, icon: TrendingUp, ti: 'ti-trending-up', color: GREEN },
           ].map(({ label, value, icon: Icon, ti, color }) => (
             <div key={label} style={{ background: C.bg, borderRadius: 12, padding: '14px', textAlign: 'center' }}>
-              <Ico lucide={Icon} ti={ti} size={18} color={color} style={{ marginBottom: 6 }} />
+              <Ico ti={ti} size={18} color={color} style={{ marginBottom: 6 }} />
               <div style={{ fontSize: 20, fontWeight: 800, color: C.ink, fontFamily: C.font }}>{value}</div>
               <div style={{ fontSize: 11, color: C.muted, fontFamily: C.font }}>{label}</div>
             </div>
@@ -640,11 +638,11 @@ function StudentSheet({ student, courses = [], onClose, onRemove }) {
         {/* Details */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Ico lucide={Mail} ti="ti-mail" size={14} color={C.muted} />
+            <Ico ti="ti-mail" size={14} color={C.muted} />
             <span style={{ fontSize: 13, color: C.muted, fontFamily: C.font }}>{student.email}</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Ico lucide={Calendar} ti="ti-calendar" size={14} color={C.muted} />
+            <Ico ti="ti-calendar" size={14} color={C.muted} />
             <span style={{ fontSize: 13, color: C.muted, fontFamily: C.font }}>
               Joined {student.joinedAt ? new Date(student.joinedAt).toLocaleDateString() : 'Unknown'}
             </span>
@@ -706,7 +704,7 @@ function StudentSheet({ student, courses = [], onClose, onRemove }) {
         {/* Actions */}
         <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <Btn variant="danger" onClick={() => { onRemove(student.enrollmentId); onClose(); }}>
-            <Ico lucide={Trash2} ti="ti-trash" size={14} /> Remove from courses
+            <Ico ti="ti-trash" size={14} /> Remove from courses
           </Btn>
         </div>
       </div>
@@ -745,7 +743,7 @@ function StudentRow({ student, onClick }) {
           <div style={{ fontSize: 10, color: C.muted, fontFamily: C.font }}>progress</div>
         </div>
         <StatusPill status={student.status} />
-        <Ico lucide={ChevronRight} ti="ti-chevron-right" size={14} color={C.muted} />
+        <Ico ti="ti-chevron-right" size={14} color={C.muted} />
       </div>
     </div>
   );

@@ -2,7 +2,7 @@
  * MarketplacePage — constants + child components.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Check, Lock, Loader2, Plus, Trash2, Upload, FileText } from 'lucide-react';
+import { Upload } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import { apiGet, apiPost, API } from '../../services/api.js';
 import { uploadAndOcr } from '../../services/uploadApi.js';
@@ -74,13 +74,13 @@ function CreateTemplateModal({ onClose, onSaved }) {
           <div onClick={() => stage !== 'extracting' && fileRef.current?.click()} style={{ border: `2px dashed ${C.border}`, borderRadius: 16, padding: '30px 20px', textAlign: 'center', cursor: stage === 'extracting' ? 'default' : 'pointer', marginBottom: 16 }}>
             {stage === 'extracting' ? (
               <>
-                <Ico lucide={Loader2} ti="ti-loader-2" size={26} color={BRAND} style={{ animation: 'spin .8s linear infinite', marginBottom: 8 }} />
+                <Ico ti="ti-loader-2" size={26} color={BRAND} style={{ animation: 'spin .8s linear infinite', marginBottom: 8 }} />
                 <p style={{ fontSize: 13.5, fontWeight: 700, color: C.ink, margin: 0 }}>Reading {fileName}…</p>
                 <p style={{ fontSize: 12, color: C.muted2, margin: '4px 0 0' }}>Extracting the structure</p>
               </>
             ) : (
               <>
-                <Ico lucide={Upload} ti="ti-upload" size={26} color={C.muted2} style={{ marginBottom: 8 }} />
+                <Ico ti="ti-upload" size={26} color={C.muted2} style={{ marginBottom: 8 }} />
                 <p style={{ fontSize: 13.5, fontWeight: 800, color: C.ink, margin: 0 }}>Tap to upload a sample</p>
                 <p style={{ fontSize: 12, color: C.muted2, margin: '4px 0 0' }}>Image or PDF · lesson notes, worksheet, report…</p>
               </>
@@ -172,12 +172,12 @@ function ItemCard({ item, busy, onBuy }) {
       {/* Owned badge or Unlock button */}
       {item.owned ? (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 12px', borderRadius: 10, background: `${GREEN}15`, color: GREEN, fontSize: 12, fontWeight: 800, flexShrink: 0, marginTop: 2 }}>
-          <Ico lucide={Check} ti="ti-check" size={13} /> Unlocked
+          <Ico ti="ti-check" size={13} /> Unlocked
         </span>
       ) : (
         <button onClick={() => onBuy(item)} disabled={busy}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, border: 'none', background: busy ? '#E5E7EB' : `linear-gradient(135deg,${BRAND},${C.brandDeep})`, color: busy ? '#9CA3AF' : '#fff', fontSize: 12.5, fontWeight: 800, cursor: busy ? 'default' : 'pointer', fontFamily: FONTF, flexShrink: 0, marginTop: 2 }}>
-          {busy ? <Ico lucide={Loader2} ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico lucide={Lock} ti="ti-lock" size={12} />}
+          {busy ? <Ico ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-lock" size={12} />}
           {item.price === 0 ? 'Get' : 'Unlock'}
         </button>
       )}

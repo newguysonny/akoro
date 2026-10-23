@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, CheckSquare, Square, Trash2, Pencil, Clock, Repeat, Play } from 'lucide-react';
+import { Repeat } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, Badge, Toast } from '../components/Primitives.jsx';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
@@ -229,7 +229,7 @@ function TaskRow({ task, onToggle, onEdit, onDelete, onRun }) {
         style={{ background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, padding: 0, color: isDone ? GREEN : C.muted }}
         title={isDone ? 'Mark as pending' : 'Mark as done'}
       >
-        {isDone ? <Ico lucide={CheckSquare} ti="ti-square-check" size={20} /> : <Ico lucide={Square} ti="ti-square" size={20} />}
+        {isDone ? <Ico ti="ti-square-check" size={20} /> : <Ico ti="ti-square" size={20} />}
       </button>
 
       <div style={{ flex: 1, overflow: 'hidden' }}>
@@ -252,21 +252,21 @@ function TaskRow({ task, onToggle, onEdit, onDelete, onRun }) {
         <PriorityBadge priority={task.priority} />
         <StatusBadge status={task.status} />
         {task.is_recurring && (
-          <span title="Repeats on a schedule" style={{ color: PURPLE, display: 'flex' }}><Ico lucide={Repeat} ti="ti-repeat" size={12} /></span>
+          <span title="Repeats on a schedule" style={{ color: PURPLE, display: 'flex' }}><Ico ti="ti-repeat" size={12} /></span>
         )}
         {due && (
           <span style={{ fontSize: 11, color: isOverdue ? RED : C.muted, display: 'flex', alignItems: 'center', gap: 3, fontFamily: C.font, whiteSpace: 'nowrap' }}>
-            <Ico lucide={Clock} ti="ti-clock" size={10} />
+            <Ico ti="ti-clock" size={10} />
             {due.toLocaleDateString()} {due.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </span>
         )}
 
         <button onClick={() => onRun(task)} disabled={isRunning} title="Run now"
-          style={iconBtn(isRunning)}><Ico lucide={Play} ti="ti-player-play" size={13} /></button>
+          style={iconBtn(isRunning)}><Ico ti="ti-player-play" size={13} /></button>
         <button onClick={() => onEdit(task)} disabled={isRunning} title="Edit"
-          style={iconBtn(isRunning)}><Ico lucide={Pencil} ti="ti-pencil" size={13} /></button>
+          style={iconBtn(isRunning)}><Ico ti="ti-pencil" size={13} /></button>
         <button onClick={() => onDelete(task)} disabled={isRunning} title="Delete"
-          style={iconBtn(isRunning, RED)}><Ico lucide={Trash2} ti="ti-trash" size={13} /></button>
+          style={iconBtn(isRunning, RED)}><Ico ti="ti-trash" size={13} /></button>
       </div>
     </div>
   );
@@ -396,7 +396,7 @@ export default function TasksPage() {
     <PageLayout
       title="Tasks"
       subtitle="Schedule work for your agent — once, or on a repeat"
-      action={<Btn size="sm" onClick={openNew}><Ico lucide={Plus} ti="ti-plus" size={14} /> New Task</Btn>}
+      action={<Btn size="sm" onClick={openNew}><Ico ti="ti-plus" size={14} /> New Task</Btn>}
     >
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 24, maxWidth: 480 }}>
@@ -443,11 +443,11 @@ export default function TasksPage() {
         </div>
       ) : filtered.length === 0 ? (
         <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 16, padding: '48px', textAlign: 'center' }}>
-          <Ico lucide={CheckSquare} ti="ti-square-check" size={32} color={C.muted} style={{ marginBottom: 12 }} />
+          <Ico ti="ti-square-check" size={32} color={C.muted} style={{ marginBottom: 12 }} />
           <p style={{ fontSize: 14, color: C.muted, fontFamily: C.font, margin: '0 0 16px' }}>
             {filter === 'done' ? 'No completed tasks yet' : 'No tasks here'}
           </p>
-          <Btn onClick={openNew}><Ico lucide={Plus} ti="ti-plus" size={14} /> Add a task</Btn>
+          <Btn onClick={openNew}><Ico ti="ti-plus" size={14} /> Add a task</Btn>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

@@ -189,7 +189,7 @@ export default function LibraryPage() {
           </div>
         ) : items.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '56px 24px', color: C.muted2 }}>
-            <Ico lucide={LibraryIcon} ti="ti-books" size={40} color="#D1D5DB" style={{ marginBottom: 14 }} />
+            <Ico ti="ti-books" size={40} color="#D1D5DB" style={{ marginBottom: 14 }} />
             <p style={{ fontSize: 15, fontWeight: 700, color: C.muted, margin: '0 0 4px' }}>Nothing saved yet</p>
             <p style={{ fontSize: 13, margin: 0 }}>Ask your agent to create a lesson plan, worksheet or report — it'll appear here.</p>
           </div>
@@ -203,7 +203,7 @@ export default function LibraryPage() {
                   background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '13px 15px',
                   cursor: 'pointer', fontFamily: FONTF, boxShadow: '0 1px 4px rgba(0,0,0,.04)',
                 }}>
-                  <div style={{ width: 42, height: 42, flexShrink: 0, borderRadius: 11, background: tint(7), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{meta.icon ? <Ico lucide={meta.icon} ti={meta.ti} size={20} color={C.brand} /> : <Ico lucide={FileText} ti="ti-file-text" size={20} color={C.brand} />}</div>
+                  <div style={{ width: 42, height: 42, flexShrink: 0, borderRadius: 11, background: tint(7), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{meta.icon ? <Ico lucide={meta.icon} ti={meta.ti} size={20} color={C.brand} /> : <Ico ti="ti-file-text" size={20} color={C.brand} />}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 800, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.title || meta.label}</div>
                     <div style={{ fontSize: 12, color: C.muted2, marginTop: 2 }}>{meta.label}{row.subject ? ` · ${row.subject}` : ''} · {fmtDate(row.created_at)}</div>

@@ -4,7 +4,7 @@
  * GET /api/instructor/earnings.
  */
 import { useState, useEffect } from 'react';
-import { Wallet, TrendingUp, Clock, BookOpen, Users } from 'lucide-react';
+import { Wallet, TrendingUp, Clock, Users } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Skeleton } from '../components/Primitives.jsx';
 import { apiGet } from '../services/api.js';
@@ -25,7 +25,7 @@ function StatCard({ icon: Icon, ti, label, value, tint }) {
   return (
     <div style={{ flex: 1, minWidth: 150, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '14px 16px', fontFamily: C.font }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: tint }}>
-        <Ico lucide={Icon} ti={ti} size={15} /><span style={{ fontSize: 11.5, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: .3 }}>{label}</span>
+        <Ico ti={ti} size={15} /><span style={{ fontSize: 11.5, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: .3 }}>{label}</span>
       </div>
       <div style={{ fontSize: 20, fontWeight: 900, color: C.ink, marginTop: 6 }}>{value}</div>
     </div>
@@ -88,7 +88,7 @@ export default function SalesPage() {
                       <td style={TD}>{e.student?.full_name || e.student?.username || 'Learner'}</td>
                       <td style={{ ...TD }}>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
-                          <Ico lucide={BookOpen} ti="ti-book" size={13} color={C.muted} /> {e.courses?.title || 'Course'}
+                          <Ico ti="ti-book" size={13} color={C.muted} /> {e.courses?.title || 'Course'}
                         </span>
                       </td>
                       <td style={{ ...TD, textAlign: 'right', color: C.muted }}>{ngn((e.gross_amount || 0) / 100)}</td>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Brain, Zap, CheckCircle, AlertTriangle, Sparkles } from 'lucide-react';
+import { Brain, CheckCircle, AlertTriangle, Sparkles } from 'lucide-react';
 import { pollTrainingRun } from '../services/trainingApi.js';
 import { GREEN, RED, PURPLE } from '../constants.js';
 import { C, tint } from '../theme/colors.js';
@@ -69,7 +69,7 @@ export default function TrainingProgress({ runId, agentName = 'Your Agent', onCo
           animation: (pct < 100 && !failed) ? 'pulse-dot 1.5s infinite' : 'none',
           boxShadow: `0 0 32px ${tint(27)}`,
         }}>
-          <Ico lucide={Icon} ti={iconTi} size={26} color="#fff" />
+          <Ico ti={iconTi} size={26} color="#fff" />
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 16, fontWeight: 700 }}>{agentName}</div>
@@ -77,7 +77,7 @@ export default function TrainingProgress({ runId, agentName = 'Your Agent', onCo
         </div>
         {totalXP > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 700, color: C.brand }}>
-            <Ico lucide={Zap} ti="ti-bolt" size={14} />+{totalXP} XP
+            <Ico ti="ti-bolt" size={14} />+{totalXP} XP
           </div>
         )}
       </div>

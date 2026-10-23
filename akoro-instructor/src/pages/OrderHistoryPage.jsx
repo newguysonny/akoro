@@ -3,7 +3,6 @@
  * Tools & Assets marketplace. Backed by GET /api/instructor/tools/purchases.
  */
 import { useState, useEffect } from 'react';
-import { Receipt , Wrench } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Skeleton } from '../components/Primitives.jsx';
 import { apiGet } from '../services/api.js';
@@ -39,7 +38,7 @@ export default function OrderHistoryPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>{[1,2,3,4].map(i => <Skeleton key={i} height={64} />)}</div>
         ) : rows.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '64px 20px', color: C.muted, fontFamily: C.font }}>
-            <Ico lucide={Receipt} ti="ti-receipt" size={40} style={{ marginBottom: 12, opacity: 0.5 }} />
+            <Ico ti="ti-receipt" size={40} style={{ marginBottom: 12, opacity: 0.5 }} />
             <div style={{ fontSize: 16, fontWeight: 800, color: C.ink }}>No purchases yet</div>
             <div style={{ fontSize: 13.5, marginTop: 4 }}>Tools & assets you unlock will show up here.</div>
           </div>
@@ -50,7 +49,7 @@ export default function OrderHistoryPage() {
               const tool = p.platform_tools || {};
               return (
                 <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '13px 14px', fontFamily: C.font }}>
-                  <span style={{ width: 40, height: 40, borderRadius: 11, flexShrink: 0, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ico lucide={Wrench} ti="ti-tool" size={20} color={C.brand} /></span>
+                  <span style={{ width: 40, height: 40, borderRadius: 11, flexShrink: 0, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ico ti="ti-tool" size={20} color={C.brand} /></span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 800, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tool.name || 'Tool'}</div>
                     <div style={{ fontSize: 12, color: C.muted, textTransform: 'capitalize' }}>{tool.kind || 'tool'} · {fmtDate(p.purchased_at)}</div>

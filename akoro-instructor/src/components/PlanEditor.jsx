@@ -4,9 +4,6 @@
  * and removable, because an objective the teacher didn't agree with is worse
  * than no objective at all.
  */
-import {
-  Plus, Sparkles, X,
-} from 'lucide-react';
 import { Btn } from './Primitives.jsx';
 import { PURPLE } from '../constants.js';
 import { C, tint } from '../theme/colors.js';
@@ -41,12 +38,12 @@ function PlanEditor({ subtopics, objectives, onChange }) {
   if (!subtopics.length) {
     return (
       <div style={{ padding: '20px', textAlign: 'center', border: `1px dashed ${C.border}`, borderRadius: 12, background: C.bg }}>
-        <Ico lucide={Sparkles} ti="ti-sparkles" size={20} color={C.muted} style={{ marginBottom: 6 }} />
+        <Ico ti="ti-sparkles" size={20} color={C.muted} style={{ marginBottom: 6 }} />
         <div style={{ fontSize: 12, color: C.muted, fontFamily: C.font }}>
           Enter a subject and topic, then draft the plan — or add subtopics yourself.
         </div>
         <Btn size="sm" variant="secondary" style={{ marginTop: 10 }} onClick={addSubtopic}>
-          <Ico lucide={Plus} ti="ti-plus" size={13} /> Add a subtopic
+          <Ico ti="ti-plus" size={13} /> Add a subtopic
         </Btn>
       </div>
     );
@@ -71,7 +68,7 @@ function PlanEditor({ subtopics, objectives, onChange }) {
             />
             <button type="button" onClick={() => removeSubtopic(i)} title="Remove subtopic"
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, display: 'flex', padding: 2 }}>
-              <Ico lucide={X} ti="ti-x" size={14} />
+              <Ico ti="ti-x" size={14} />
             </button>
           </div>
 
@@ -89,7 +86,7 @@ function PlanEditor({ subtopics, objectives, onChange }) {
                 />
                 <button type="button" onClick={() => removeObjective(st, j)}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted2, display: 'flex', padding: 2 }}>
-                  <Ico lucide={X} ti="ti-x" size={12} />
+                  <Ico ti="ti-x" size={12} />
                 </button>
               </div>
             ))}
@@ -104,7 +101,7 @@ function PlanEditor({ subtopics, objectives, onChange }) {
         </div>
       ))}
       <Btn size="sm" variant="secondary" type="button" onClick={addSubtopic} style={{ alignSelf: 'flex-start' }}>
-        <Ico lucide={Plus} ti="ti-plus" size={13} /> Add a subtopic
+        <Ico ti="ti-plus" size={13} /> Add a subtopic
       </Btn>
     </div>
   );

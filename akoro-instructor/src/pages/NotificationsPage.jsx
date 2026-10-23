@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Bell, Check, CheckCheck, Trash2, BookOpen, Users, Swords, Calendar, MessageSquare, CheckSquare, Settings, Info, Video, DollarSign, Wallet, Star, Wrench, ShieldCheck } from 'lucide-react';
+import { Trash2, BookOpen, Users, Swords, Calendar, MessageSquare, CheckSquare, Settings, Info, Video, DollarSign, Wallet, Star, Wrench, ShieldCheck } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Toast } from '../components/Primitives.jsx';
 import { apiGet, apiPost, apiDelete } from '../services/api.js';
@@ -64,7 +64,7 @@ function NotificationItem({ n, onMarkRead, onDelete }) {
         width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
         background: tint(9, color), display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <Ico lucide={Icon} ti={ti} size={16} color={color} />
+        <Ico ti={ti} size={16} color={color} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
@@ -88,7 +88,7 @@ function NotificationItem({ n, onMarkRead, onDelete }) {
             title="Mark as read"
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.brand, padding: 4 }}
           >
-            <Ico lucide={Check} ti="ti-check" size={14} />
+            <Ico ti="ti-check" size={14} />
           </button>
         )}
         <button
@@ -96,7 +96,7 @@ function NotificationItem({ n, onMarkRead, onDelete }) {
           title="Delete"
           style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, padding: 4 }}
         >
-          <Ico lucide={Trash2} ti="ti-trash" size={14} />
+          <Ico ti="ti-trash" size={14} />
         </button>
       </div>
     </div>
@@ -169,7 +169,7 @@ export default function NotificationsPage() {
       action={
         unread > 0 && (
           <Btn size="sm" variant="secondary" onClick={markAllRead}>
-            <Ico lucide={CheckCheck} ti="ti-checks" size={14} /> Mark all read
+            <Ico ti="ti-checks" size={14} /> Mark all read
           </Btn>
         )
       }
@@ -193,7 +193,7 @@ export default function NotificationsPage() {
           background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 16,
           padding: '56px', textAlign: 'center',
         }}>
-          <Ico lucide={Bell} ti="ti-bell" size={32} color={C.muted} style={{ marginBottom: 12 }} />
+          <Ico ti="ti-bell" size={32} color={C.muted} style={{ marginBottom: 12 }} />
           <p style={{ fontSize: 14, color: C.muted, fontFamily: C.font, margin: 0 }}>
             {filter === 'unread' ? 'No unread notifications' : 'No notifications yet'}
           </p>

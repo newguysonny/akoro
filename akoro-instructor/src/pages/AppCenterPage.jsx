@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, ArrowRight, Check, Lock, Loader2, LayoutGrid, Wrench, BookOpen, Play } from 'lucide-react';
+import { Search, LayoutGrid, Wrench, BookOpen } from 'lucide-react';
 import ToolWorkbench from '../components/ToolWorkbench.jsx';
 import { PageLayout } from '../components/Layout.jsx';
 import { apiGet, apiPost } from '../services/api.js';
@@ -32,7 +32,7 @@ function AppCard({ item, busy, onBuy, onOpen }) {
       }}
     >
       <div style={{ width: 60, height: 60, borderRadius: 16, background: tint(8), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, marginBottom: 14 }}>
-        {(() => { const I = item._kind === 'tool' ? Wrench : BookOpen; const ti = item._kind === 'tool' ? 'ti-tool' : 'ti-book'; return <Ico lucide={I} ti={ti} size={28} color={C.brand} />; })()}
+        {(() => { const I = item._kind === 'tool' ? Wrench : BookOpen; const ti = item._kind === 'tool' ? 'ti-tool' : 'ti-book'; return <Ico ti={ti} size={28} color={C.brand} />; })()}
       </div>
 
       <h3 style={{ fontSize: 15.5, fontWeight: 800, color: C.ink, margin: '0 0 7px' }}>{item.name}</h3>
@@ -40,7 +40,7 @@ function AppCard({ item, busy, onBuy, onOpen }) {
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: 14, gap: 8 }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 999, background: tint(7), color: C.brand, fontSize: 11, fontWeight: 700 }}>
-          {item._kind === 'tool' ? <Ico lucide={Wrench} ti="ti-tool" size={11} /> : <Ico lucide={BookOpen} ti="ti-book" size={11} />}
+          {item._kind === 'tool' ? <Ico ti="ti-tool" size={11} /> : <Ico ti="ti-book" size={11} />}
           {item.tag || (item._kind === 'tool' ? 'Tool' : 'Asset')}
         </span>
         <span style={{ fontSize: 13.5, fontWeight: 900, color: item.price === 0 ? GREEN : C.ink }}>
@@ -59,7 +59,7 @@ function AppCard({ item, busy, onBuy, onOpen }) {
             background: `${GREEN}12`, color: GREEN, fontSize: 13, fontWeight: 800,
             fontFamily: C.font, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
           }}>
-            <Ico lucide={Play} ti="ti-player-play" size={14} /> Open
+            <Ico ti="ti-player-play" size={14} /> Open
           </button>
         ) : (
           <button disabled style={{
@@ -67,7 +67,7 @@ function AppCard({ item, busy, onBuy, onOpen }) {
             background: `${GREEN}15`, color: GREEN, fontSize: 13, fontWeight: 800,
             fontFamily: C.font, cursor: 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
           }}>
-            <Ico lucide={Check} ti="ti-check" size={15} /> Unlocked
+            <Ico ti="ti-check" size={15} /> Unlocked
           </button>
         )
       ) : (
@@ -77,7 +77,7 @@ function AppCard({ item, busy, onBuy, onOpen }) {
           color: busy ? '#9CA3AF' : '#fff', fontSize: 13, fontWeight: 800,
           fontFamily: C.font, cursor: busy ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
         }}>
-          {busy ? <Ico lucide={Loader2} ti="ti-loader-2" size={15} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico lucide={Lock} ti="ti-lock" size={14} />}
+          {busy ? <Ico ti="ti-loader-2" size={15} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-lock" size={14} />}
           {item.price === 0 ? 'Get' : 'Unlock'}
         </button>
       )}
@@ -177,7 +177,7 @@ export default function AppCenterPage() {
       }}>
         <div style={{ maxWidth: 460 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <Ico lucide={LayoutGrid} ti="ti-layout-grid" size={20} color={C.brand} />
+            <Ico ti="ti-layout-grid" size={20} color={C.brand} />
             <h2 style={{ fontSize: 21, fontWeight: 800, color: '#fff', margin: 0 }}>Power up your teaching</h2>
           </div>
           <p style={{ fontSize: 13.5, color: 'rgba(255,255,255,.7)', margin: 0, lineHeight: 1.6 }}>
@@ -201,7 +201,7 @@ export default function AppCenterPage() {
       {/* Search + filters */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginBottom: 22 }}>
         <div style={{ position: 'relative', flex: '1 1 260px', minWidth: 220 }}>
-          <Ico lucide={Search} ti="ti-search" size={16} color={C.muted2} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }} />
+          <Ico ti="ti-search" size={16} color={C.muted2} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }} />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search tools & assets…"
             style={{ width: '100%', padding: '11px 14px 11px 40px', borderRadius: 12, border: `1.5px solid ${C.border}`, outline: 'none', fontSize: 13.5, fontFamily: C.font, color: C.ink, background: C.surface, boxSizing: 'border-box' }} />
         </div>

@@ -6,7 +6,6 @@
  * Sorted by use_count so the most-used lessons get reviewed first.
  */
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2, Check, X, Pencil, Plus, Trash2, BookOpen, Users } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { apiGet, apiPatch } from '../services/api.js';
 import { GREEN, RED } from '../constants.js';
@@ -78,7 +77,7 @@ export default function LessonReviewPage() {
         </div>
 
         {loading ? (
-          <div style={{ padding: 50, textAlign: 'center', color: C.muted2 }}><Ico lucide={Loader2} ti="ti-loader-2" size={20} style={{ animation: 'spin .8s linear infinite' }} /></div>
+          <div style={{ padding: 50, textAlign: 'center', color: C.muted2 }}><Ico ti="ti-loader-2" size={20} style={{ animation: 'spin .8s linear infinite' }} /></div>
         ) : ladders.length === 0 ? (
           <div style={{ padding: 40, textAlign: 'center', background: C.surface, border: `1.5px dashed ${C.border}`, borderRadius: 14, color: C.muted2, fontSize: 13.5 }}>
             {tab === 'pending_review' ? 'Nothing to review — every lesson your students used is already trusted.' : 'Nothing here yet.'}
@@ -93,8 +92,8 @@ export default function LessonReviewPage() {
                 <div>
                   <div style={{ fontSize: 15.5, fontWeight: 900, color: C.ink }}>{l.topic}</div>
                   <div style={{ fontSize: 12.5, color: C.muted, marginTop: 2, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Ico lucide={BookOpen} ti="ti-book" size={13} /> {l.subject}</span>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Ico lucide={Users} ti="ti-users" size={13} /> used {l.use_count || 0}×</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Ico ti="ti-book" size={13} /> {l.subject}</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Ico ti="ti-users" size={13} /> used {l.use_count || 0}×</span>
                   </div>
                 </div>
                 <span style={{ alignSelf: 'flex-start', fontSize: 11, fontWeight: 800, color: prov.c, background: tint(8, prov.c), border: `1px solid ${tint(20, prov.c)}`, borderRadius: 100, padding: '4px 10px' }}>{prov.label}</span>
@@ -113,7 +112,7 @@ export default function LessonReviewPage() {
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                         <input value={s} onChange={(e) => setStep(i, e.target.value)}
                           style={{ flex: 1, padding: '7px 10px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: C.font, color: C.ink }} />
-                        <button onClick={() => delStep(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: RED }}><Ico lucide={Trash2} ti="ti-trash" size={15} /></button>
+                        <button onClick={() => delStep(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: RED }}><Ico ti="ti-trash" size={15} /></button>
                       </div>
                     ) : s}
                   </li>
@@ -121,7 +120,7 @@ export default function LessonReviewPage() {
               </ol>
               {isEditing && (
                 <button onClick={addStep} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', color: C.brand, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', marginBottom: 12, fontFamily: C.font }}>
-                  <Ico lucide={Plus} ti="ti-plus" size={14} /> Add step
+                  <Ico ti="ti-plus" size={14} /> Add step
                 </button>
               )}
 
@@ -129,16 +128,16 @@ export default function LessonReviewPage() {
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
                   <button onClick={() => review(l, 'approved')} disabled={busyId === l.id}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 9, border: 'none', background: GREEN, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
-                    {busyId === l.id ? <Ico lucide={Loader2} ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico lucide={Check} ti="ti-check" size={14} />} {isEditing ? 'Save & approve' : 'Approve'}
+                    {busyId === l.id ? <Ico ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-check" size={14} />} {isEditing ? 'Save & approve' : 'Approve'}
                   </button>
                   <button onClick={() => isEditing ? setEditing(null) : startEdit(l)}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.surface, color: C.ink, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>
-                    <Ico lucide={Pencil} ti="ti-pencil" size={13} /> {isEditing ? 'Cancel edit' : 'Edit'}
+                    <Ico ti="ti-pencil" size={13} /> {isEditing ? 'Cancel edit' : 'Edit'}
                   </button>
                   <div style={{ flex: 1 }} />
                   <button onClick={() => review(l, 'rejected')} disabled={busyId === l.id}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${RED}55`, background: `${RED}0C`, color: RED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>
-                    <Ico lucide={X} ti="ti-x" size={14} /> Reject
+                    <Ico ti="ti-x" size={14} /> Reject
                   </button>
                 </div>
               )}

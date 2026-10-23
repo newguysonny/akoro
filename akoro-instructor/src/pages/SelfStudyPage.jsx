@@ -9,10 +9,6 @@
  * and feeds revision like everything else.
  */
 import { useState, useEffect, useCallback } from 'react';
-import {
-  Plus, BookOpen, Sparkles, Users, Clock, Trash2, Pencil, ChevronRight,
-  Search, Loader2, X, CheckCircle2, BarChart3,
-} from 'lucide-react';
 import { Ico } from '../theme/Ico.jsx';
 import { useNavigate } from 'react-router-dom';
 import { PageLayout } from '../components/Layout.jsx';
@@ -148,8 +144,8 @@ function AssignModal({ open, onClose, onSubmit, editing }) {
             <div style={{ fontSize: 12, fontWeight: 700, color: C.ink, fontFamily: C.font }}>Study plan *</div>
             <Btn size="sm" variant="secondary" type="button" onClick={draft} disabled={drafting}>
               {drafting
-                ? <><Ico lucide={Loader2} ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> Drafting…</>
-                : <><Ico lucide={Sparkles} ti="ti-sparkles" size={13} /> {form.subtopics.length ? 'Redraft with AI' : 'Draft with AI'}</>}
+                ? <><Ico ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> Drafting…</>
+                : <><Ico ti="ti-sparkles" size={13} /> {form.subtopics.length ? 'Redraft with AI' : 'Draft with AI'}</>}
             </Btn>
           </div>
           <PlanEditor
@@ -275,7 +271,7 @@ function AssignmentCard({ a, onOpen, onEdit, onDelete, onAnalytics }) {
           width: 42, height: 42, borderRadius: 12, flexShrink: 0, background: `${PURPLE}18`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          <Ico lucide={BookOpen} ti="ti-book" size={19} color={PURPLE} />
+          <Ico ti="ti-book" size={19} color={PURPLE} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: C.ink, fontFamily: C.font }}>{a.title}</div>
@@ -283,25 +279,25 @@ function AssignmentCard({ a, onOpen, onEdit, onDelete, onAnalytics }) {
         </div>
         <button onClick={() => onAnalytics(a)} title="Analytics"
           style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 8, padding: '5px 6px', cursor: 'pointer', color: C.muted, display: 'flex' }}>
-          <Ico lucide={BarChart3} ti="ti-chart-bar" size={13} />
+          <Ico ti="ti-chart-bar" size={13} />
         </button>
         <button onClick={() => onEdit(a)} title="Edit"
           style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 8, padding: '5px 6px', cursor: 'pointer', color: C.muted, display: 'flex' }}>
-          <Ico lucide={Pencil} ti="ti-pencil" size={13} />
+          <Ico ti="ti-pencil" size={13} />
         </button>
         <button onClick={() => onDelete(a)} title="Delete"
           style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 8, padding: '5px 6px', cursor: 'pointer', color: RED, display: 'flex' }}>
-          <Ico lucide={Trash2} ti="ti-trash" size={13} />
+          <Ico ti="ti-trash" size={13} />
         </button>
       </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-        <Badge color={BLUE} bg="#EFF6FF"><Ico lucide={Users} ti="ti-users" size={10} style={{ marginRight: 2 }} />{p.assigned} assigned</Badge>
+        <Badge color={BLUE} bg="#EFF6FF"><Ico ti="ti-users" size={10} style={{ marginRight: 2 }} />{p.assigned} assigned</Badge>
         <Badge color={C.brand} bg={C.brandSoft}>{p.started} in progress</Badge>
-        <Badge color={GREEN} bg="#DCFCE7"><Ico lucide={CheckCircle2} ti="ti-circle-check" size={10} style={{ marginRight: 2 }} />{p.complete} done</Badge>
+        <Badge color={GREEN} bg="#DCFCE7"><Ico ti="ti-circle-check" size={10} style={{ marginRight: 2 }} />{p.complete} done</Badge>
         {due && (
           <Badge color={overdue ? RED : C.muted} bg={overdue ? '#FEE2E2' : C.bg}>
-            <Ico lucide={Clock} ti="ti-clock" size={10} style={{ marginRight: 2 }} />
+            <Ico ti="ti-clock" size={10} style={{ marginRight: 2 }} />
             {due.toLocaleDateString()} {due.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </Badge>
         )}
@@ -312,7 +308,7 @@ function AssignmentCard({ a, onOpen, onEdit, onDelete, onAnalytics }) {
       </div>
 
       <Btn size="sm" variant="secondary" style={{ width: '100%', justifyContent: 'center' }} onClick={() => onOpen(a)}>
-        See who's done it <Ico lucide={ChevronRight} ti="ti-chevron-right" size={13} />
+        See who's done it <Ico ti="ti-chevron-right" size={13} />
       </Btn>
     </div>
   );
@@ -399,7 +395,7 @@ export default function SelfStudyPage() {
     <PageLayout
       title="AI Self Study"
       subtitle="Assign a topic for learners to work through with their own AI agent"
-      action={<Btn size="sm" onClick={openNew}><Ico lucide={Plus} ti="ti-plus" size={14} /> New self study</Btn>}
+      action={<Btn size="sm" onClick={openNew}><Ico ti="ti-plus" size={14} /> New self study</Btn>}
     >
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
         {[
@@ -421,13 +417,13 @@ export default function SelfStudyPage() {
         </div>
       ) : items.length === 0 ? (
         <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 16, padding: '48px', textAlign: 'center' }}>
-          <Ico lucide={BookOpen} ti="ti-book" size={32} color={C.muted} style={{ marginBottom: 12 }} />
+          <Ico ti="ti-book" size={32} color={C.muted} style={{ marginBottom: 12 }} />
           <p style={{ fontSize: 14, color: C.muted, fontFamily: C.font, margin: '0 0 6px', fontWeight: 700 }}>No self study assigned yet</p>
           <p style={{ fontSize: 12.5, color: C.muted2, fontFamily: C.font, margin: '0 0 16px', maxWidth: 420, marginInline: 'auto', lineHeight: 1.55 }}>
             Pick a topic, let the AI draft the subtopics and objectives, edit them, then send it to
             one learner or the whole class. Each learner works through it with their own agent.
           </p>
-          <Btn onClick={openNew}><Ico lucide={Plus} ti="ti-plus" size={14} /> Create your first one</Btn>
+          <Btn onClick={openNew}><Ico ti="ti-plus" size={14} /> Create your first one</Btn>
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>

@@ -6,7 +6,7 @@
  * their options from another mgmt resource (optionsFrom).
  */
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Plus, Pencil, Trash2, Search, Loader2, X, Save } from 'lucide-react';
+import { Search, Save } from 'lucide-react';
 import { PageLayout } from '../Layout.jsx';
 import { apiGet, apiPost, apiPut, apiDelete } from '../../services/api.js';
 import { GREEN, RED, BLUE } from '../../constants.js';
@@ -157,7 +157,7 @@ export default function ResourcePage({
       {/* Toolbar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
         <div style={{ position: 'relative', flex: '1 1 240px', minWidth: 200 }}>
-          <Ico lucide={Search} ti="ti-search" size={15} color={C.muted2} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
+          <Ico ti="ti-search" size={15} color={C.muted2} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search…" style={{ ...inputStyle, paddingLeft: 34 }} />
         </div>
         {listFilters.map((f) => (
@@ -168,7 +168,7 @@ export default function ResourcePage({
         ))}
         {canCreate && (
           <button onClick={openNew} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
-            <Ico lucide={Plus} ti="ti-plus" size={14} /> {createLabel}
+            <Ico ti="ti-plus" size={14} /> {createLabel}
           </button>
         )}
       </div>
@@ -176,7 +176,7 @@ export default function ResourcePage({
       {/* Table */}
       <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
         {loading ? (
-          <div style={{ padding: '36px 0', textAlign: 'center', color: C.muted2 }}><Ico lucide={Loader2} ti="ti-loader-2" size={18} style={{ animation: 'spin .8s linear infinite' }} /></div>
+          <div style={{ padding: '36px 0', textAlign: 'center', color: C.muted2 }}><Ico ti="ti-loader-2" size={18} style={{ animation: 'spin .8s linear infinite' }} /></div>
         ) : visible.length === 0 ? (
           <div style={{ padding: '36px 18px', textAlign: 'center', color: C.muted2, fontSize: 13, fontFamily: C.font }}>No records yet.</div>
         ) : (
@@ -201,10 +201,10 @@ export default function ResourcePage({
                               {a.icon}{a.label ? <span>{a.label}</span> : null}
                             </button>
                           ))}
-                          {canEdit && <button onClick={() => openEdit(row)} style={{ width: 28, height: 28, borderRadius: 7, border: 'none', background: `${BLUE}15`, color: BLUE, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Ico lucide={Pencil} ti="ti-pencil" size={13} /></button>}
+                          {canEdit && <button onClick={() => openEdit(row)} style={{ width: 28, height: 28, borderRadius: 7, border: 'none', background: `${BLUE}15`, color: BLUE, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Ico ti="ti-pencil" size={13} /></button>}
                           {canDelete && (
                             <button onClick={() => remove(row)} disabled={busyId === row.id} style={{ width: 28, height: 28, borderRadius: 7, border: 'none', background: `${RED}12`, color: RED, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                              {busyId === row.id ? <Ico lucide={Loader2} ti="ti-loader-2" size={12} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico lucide={Trash2} ti="ti-trash" size={13} />}
+                              {busyId === row.id ? <Ico ti="ti-loader-2" size={12} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-trash" size={13} />}
                             </button>
                           )}
                         </div>
@@ -224,7 +224,7 @@ export default function ResourcePage({
           <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 560, maxHeight: '88vh', overflowY: 'auto', background: C.surface, borderRadius: 18, padding: '22px 22px 24px', boxShadow: '0 12px 48px rgba(0,0,0,.22)', fontFamily: C.font }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
               <p style={{ fontSize: 15.5, fontWeight: 800, color: C.ink, margin: 0 }}>{modal.row ? `Edit ${title}` : createLabel}</p>
-              <button onClick={() => setModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted2 }}><Ico lucide={X} ti="ti-x" size={18} /></button>
+              <button onClick={() => setModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted2 }}><Ico ti="ti-x" size={18} /></button>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 13 }}>
               {fields.map((f) => (
@@ -239,7 +239,7 @@ export default function ResourcePage({
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
               <button onClick={() => setModal(null)} style={{ padding: '10px 18px', borderRadius: 10, border: `1.5px solid ${C.border}`, background: C.surface, color: C.muted, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>Cancel</button>
               <button onClick={save} disabled={saving} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 20px', borderRadius: 10, border: 'none', background: saving ? '#E5E7EB' : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: saving ? '#9CA3AF' : '#fff', fontSize: 13, fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: C.font }}>
-                {saving ? <Ico lucide={Loader2} ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico lucide={Save} ti="ti-device-floppy" size={14} />} {saving ? 'Saving…' : 'Save'}
+                {saving ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-device-floppy" size={14} />} {saving ? 'Saving…' : 'Save'}
               </button>
             </div>
           </div>

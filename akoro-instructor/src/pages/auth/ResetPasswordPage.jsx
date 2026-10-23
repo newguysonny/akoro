@@ -1,4 +1,3 @@
-import { AlertTriangle, CheckCircle2, Lock, EyeOff, Eye } from 'lucide-react';
 import AkoroLogo from '../../components/common/AkoroLogo.jsx';
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -67,7 +66,7 @@ export default function ResetPasswordPage() {
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
       background: C.bg, fontFamily: C.font, padding: 24 }}>
       <div style={{ textAlign: 'center', maxWidth: 380 }}>
-        <div style={{ marginBottom: 16 }}><Ico lucide={AlertTriangle} ti="ti-alert-triangle" size={40} color="#D97706" /></div>
+        <div style={{ marginBottom: 16 }}><Ico ti="ti-alert-triangle" size={40} color="#D97706" /></div>
         <h2 style={{ color: C.ink, marginBottom: 8 }}>Invalid reset link</h2>
         <p style={{ color: C.muted, marginBottom: 24 }}>This link is missing or malformed. Please request a new password reset.</p>
         <button onClick={() => navigate('/forgot-password')} style={{ padding: '12px 28px',
@@ -98,7 +97,7 @@ export default function ResetPasswordPage() {
         <div style={{ width: 52, height: 52, borderRadius: 16,
           background: done ? `linear-gradient(135deg,${GREEN},#059669)` : `linear-gradient(135deg,${C.brand},${C.brandDeep})`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          marginBottom: 20 }}>{done ? <Ico lucide={CheckCircle2} ti="ti-circle-check" size={24} color="#10B981" /> : <Ico lucide={Lock} ti="ti-lock" size={24} color={C.ink} />}</div>
+          marginBottom: 20 }}>{done ? <Ico ti="ti-circle-check" size={24} color="#10B981" /> : <Ico ti="ti-lock" size={24} color={C.ink} />}</div>
 
         {done ? (
           <>
@@ -136,7 +135,7 @@ export default function ResetPasswordPage() {
                   <button type="button" onClick={() => setShowPw(v => !v)}
                     style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
                       background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: C.muted2 }}>
-                    {showPw ? <Ico lucide={EyeOff} ti="ti-eye-off" size={15} /> : <Ico lucide={Eye} ti="ti-eye" size={15} />}
+                    {showPw ? <Ico ti="ti-eye-off" size={15} /> : <Ico ti="ti-eye" size={15} />}
                   </button>
                 </div>
                 {password && (

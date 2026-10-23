@@ -6,7 +6,7 @@
  * mounted at /mgmt/students.
  */
 import { useState, useEffect, useCallback } from 'react';
-import { CalendarDays, Loader2, Save, Check } from 'lucide-react';
+import { Save } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import ResourcePage, { inputStyle } from '../../components/mgmt/ResourcePage.jsx';
 import { apiGet, apiPost } from '../../services/api.js';
@@ -74,9 +74,9 @@ export function StudentAttendancePage() {
         <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} style={{ ...inputStyle, width: 140, cursor: 'pointer' }}>
           <option value="">All sections</option>{sections.filter((s) => s.class_id === classId).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Ico lucide={CalendarDays} ti="ti-calendar" size={15} color={C.muted2} /><input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ ...inputStyle, width: 160 }} /></div>
-        {roster?.length > 0 && <button onClick={allPresent} style={{ ...pillBtn(GREEN) }}><Ico lucide={Check} ti="ti-check" size={13} /> All present</button>}
-        {roster?.length > 0 && <button onClick={save} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>{busy ? <Ico lucide={Loader2} ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico lucide={Save} ti="ti-device-floppy" size={13} />} Save</button>}
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Ico ti="ti-calendar" size={15} color={C.muted2} /><input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ ...inputStyle, width: 160 }} /></div>
+        {roster?.length > 0 && <button onClick={allPresent} style={{ ...pillBtn(GREEN) }}><Ico ti="ti-check" size={13} /> All present</button>}
+        {roster?.length > 0 && <button onClick={save} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>{busy ? <Ico ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-device-floppy" size={13} />} Save</button>}
       </div>
 
       {roster?.length > 0 && (
@@ -89,7 +89,7 @@ export function StudentAttendancePage() {
       {!classId ? (
         <div style={emptyBox}>Pick a class and date to take attendance.</div>
       ) : roster === null ? (
-        <div style={{ padding: 40, textAlign: 'center', color: C.muted2 }}><Ico lucide={Loader2} ti="ti-loader-2" size={20} style={{ animation: 'spin .8s linear infinite' }} /></div>
+        <div style={{ padding: 40, textAlign: 'center', color: C.muted2 }}><Ico ti="ti-loader-2" size={20} style={{ animation: 'spin .8s linear infinite' }} /></div>
       ) : roster.length === 0 ? (
         <div style={emptyBox}>No active students in this class.</div>
       ) : (

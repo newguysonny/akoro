@@ -6,7 +6,6 @@
  * who, what, and one tap to resume exactly where it stopped.
  */
 import { useState, useEffect } from 'react';
-import { X, Play } from 'lucide-react';
 import { listDrafts, clearDraft } from './gradingDrafts.js';
 import { C, tint } from '../../theme/colors.js';
 import { Ico } from '../../theme/Ico.jsx';
@@ -57,11 +56,11 @@ export default function NowGrading({ onResume }) {
             </div>
           </div>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 13px', borderRadius: 9, background: C.brand, color: '#fff', fontSize: 12, fontWeight: 800, flexShrink: 0 }}>
-            <Ico lucide={Play} ti="ti-player-play" size={11} /> Continue
+            <Ico ti="ti-player-play" size={11} /> Continue
           </span>
           <button onClick={(e) => dismiss(d, e)} title="Discard this draft"
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted2, display: 'flex', padding: 3, flexShrink: 0 }}>
-            <Ico lucide={X} ti="ti-x" size={14} />
+            <Ico ti="ti-x" size={14} />
           </button>
         </div>
       ))}

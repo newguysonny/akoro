@@ -11,7 +11,7 @@
  * their price, and unlock the moment the teacher buys them.
  */
 import { useState, useEffect, useCallback } from 'react';
-import { Sparkles, Lock, Clock, Trash2, Loader2, Info } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { Ico } from '../../theme/Ico.jsx';
 import { apiGet, apiDelete } from '../../services/api.js';
 import { ToolRunner } from './TeachingTools.jsx';
@@ -75,7 +75,7 @@ export default function ToolsWorkbench() {
           <span style={{ display: 'block', fontSize: 11, fontWeight: 600, lineHeight: 1.4, marginTop: 2,
             color: on ? 'rgba(255,255,255,.82)' : C.muted2 }}>{t.blurb}</span>
         </span>
-        {t.locked && <Ico lucide={Lock} ti="ti-lock" size={13} color={on ? '#fff' : C.muted2} style={{ marginTop: 2 }} />}
+        {t.locked && <Ico ti="ti-lock" size={13} color={on ? '#fff' : C.muted2} style={{ marginTop: 2 }} />}
       </button>
     );
   };
@@ -104,7 +104,7 @@ export default function ToolsWorkbench() {
           {note && (
             <div style={{ background: tint(4), border: `1px solid ${tint(20)}`, borderRadius: 14, padding: '13px 15px', fontFamily: C.font }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                <Ico lucide={Info} ti="ti-info-circle" size={13} color={C.brand} />
+                <Ico ti="ti-info-circle" size={13} color={C.brand} />
                 <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: .5, color: C.brand }}>WHEN TO USE IT</span>
               </div>
               <div style={{ fontSize: 12.5, fontWeight: 800, color: C.ink, marginBottom: 5 }}>{note[0]}</div>
@@ -133,7 +133,7 @@ function LockedPanel({ tool }) {
       <div style={{ fontSize: 16, fontWeight: 900, color: C.ink }}>{tool.name}</div>
       <p style={{ fontSize: 13, color: C.muted, maxWidth: 380, margin: '8px auto 18px', lineHeight: 1.6 }}>{tool.blurb}</p>
       <a href="/apps" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '11px 20px', borderRadius: 10, background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: '#fff', fontSize: 13.5, fontWeight: 800, textDecoration: 'none' }}>
-        <Ico lucide={Lock} ti="ti-lock" size={14} /> Unlock for {naira(tool.priceKobo)}
+        <Ico ti="ti-lock" size={14} /> Unlock for {naira(tool.priceKobo)}
       </a>
       <div style={{ fontSize: 11.5, color: C.muted2, marginTop: 10 }}>Bought once — it then works here and in your AI chat.</div>
     </div>
@@ -181,10 +181,10 @@ function PastGenerations({ toolKey, refreshKey }) {
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = C.border; }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
                 <span style={{ fontSize: 12.5, fontWeight: 700, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.title || 'Untitled'}</span>
-                <button onClick={(e) => remove(o.id, e)} title="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted2, padding: 0, flexShrink: 0 }}><Ico lucide={Trash2} ti="ti-trash" size={13} /></button>
+                <button onClick={(e) => remove(o.id, e)} title="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted2, padding: 0, flexShrink: 0 }}><Ico ti="ti-trash" size={13} /></button>
               </div>
               {o.subject && <span style={{ fontSize: 10, fontWeight: 800, color: C.brand }}>{o.subject}</span>}
-              <div style={{ fontSize: 10, color: C.muted2, marginTop: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Ico lucide={Clock} ti="ti-clock" size={10} />{fmtDateTime(o.created_at)}</div>
+              <div style={{ fontSize: 10, color: C.muted2, marginTop: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Ico ti="ti-clock" size={10} />{fmtDateTime(o.created_at)}</div>
             </div>
           ))}
         </div>
@@ -193,7 +193,7 @@ function PastGenerations({ toolKey, refreshKey }) {
       {(open || busy) && (
         <div onClick={() => setOpen(null)} style={{ position: 'fixed', inset: 0, zIndex: 3200, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 620, maxHeight: '86vh', overflowY: 'auto', background: C.surface, borderRadius: 16, padding: '20px 22px', fontFamily: C.font }}>
-            {busy ? <Ico lucide={Loader2} ti="ti-loader-2" size={20} style={{ animation: 'spin .8s linear infinite' }} />
+            {busy ? <Ico ti="ti-loader-2" size={20} style={{ animation: 'spin .8s linear infinite' }} />
               : <ToolRunner.Result tool={{ key: open.kind, output: open.content?.output || guessOutput(open.content) }} out={open.content} title={open.title} />}
             <button onClick={() => setOpen(null)} style={{ marginTop: 16, padding: '9px 16px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.surface, color: C.muted, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>Close</button>
           </div>
