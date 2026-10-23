@@ -543,7 +543,7 @@ export function ToolRunner({ tool, onInsert, onDone, showHeader = false }) {
   );
 }
 
-function Result({ tool, out, onInsert, onError = () => {}, title, onReset }) {
+function Result({ tool, out, onInsert, onError = () => {}, title, onReset, bare = false }) {
   const [copied, setCopied] = useState(false);
   const [study, setStudy] = useState(false);
   const copy = async () => {
@@ -563,7 +563,7 @@ function Result({ tool, out, onInsert, onError = () => {}, title, onReset }) {
   };
 
   return (
-    <div style={{ marginTop: 18, borderTop: `1px solid ${C.border}`, paddingTop: 16 }}>
+    <div style={bare ? {} : { marginTop: 18, borderTop: `1px solid ${C.border}`, paddingTop: 16 }}>
       {templated && <ResultHeader data={{ ...out, title: head }} accent={accent} icon={tool.emoji} name={tool.name} />}
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
         <button onClick={copy} style={ghost}>{copied ? <Ico ti="ti-check" size={13} color={GREEN} /> : <Ico ti="ti-copy" size={13} />} {copied ? 'Copied' : 'Copy'}</button>

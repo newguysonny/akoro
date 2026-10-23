@@ -29,6 +29,7 @@ import LessonReviewPage from './pages/LessonReviewPage.jsx';
 import ProfilePage        from './pages/ProfilePage.jsx';
 import AppCenterPage       from './pages/AppCenterPage.jsx';
 import LibraryPage         from './pages/LibraryPage.jsx';
+import ToolResultPage      from './pages/ToolResultPage.jsx';
 import NotificationsPage  from './pages/NotificationsPage.jsx';
 import { CurriculumPage, SyllabusPage, SubjectsPage, ClassTimetablePage, WeeklyForecastPage, DailySchedulePage, MyTimetablePage } from './pages/mgmt/academic.jsx';
 import { StudentAttendancePage, BehaviorRecordsPage } from './pages/mgmt/students.jsx';
@@ -161,6 +162,7 @@ function AppRoutes() {
       <Route path="/marketplace"    element={<MarketplaceRedirect />} />
       <Route path="/apps"           element={<ProtectedRoute><AppCenterPage /></ProtectedRoute>} />
       <Route path="/library"        element={<ProtectedRoute><LibraryPage /></ProtectedRoute>} />
+      <Route path="/library/:id"    element={<ProtectedRoute><ToolResultPage /></ProtectedRoute>} />
       <Route path="/notifications"  element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
 
       {/* Legal */}

@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { FileText, ClipboardList, UserCheck, GraduationCap, Presentation, NotebookPen, Library as LibraryIcon } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal } from '../components/Primitives.jsx';
-import { ToolRunner } from '../components/teaching/TeachingTools.jsx';
 import ExamResources, { useExamResources } from '../components/library/ExamResources.jsx';
 import { apiGet, apiDelete } from '../services/api.js';
 import { GREEN } from '../constants.js';
@@ -37,22 +36,6 @@ const CREATE_STARTS = [
   { label: 'Lesson hooks', fill: 'Give me lesson hooks for ' },
   { label: 'Vocabulary list', fill: 'Make a vocabulary list for ' },
 ];
-// Saved payloads predate the `output` field, so infer it from what's inside.
-const TOOL_NAME = { 'podcast': 'Podcast Generator', 'misconceptions': 'Common Misconceptions', 'real-world': 'Real-World Connections',
-  'lesson-hooks': 'Lesson Hooks', 'vocabulary': 'Vocabulary Builder', 'essay-grader': 'Essay Grader', 'lesson-plan': 'Lesson Plan',
-  'activity': 'Activities Creator', 'assignment': 'Assignment Creator' };
-const TOOL_EMOJI = { 'podcast': '🎧', 'misconceptions': '🧠', 'real-world': '🌍', 'lesson-hooks': '🪝', 'vocabulary': '🔤',
-  'essay-grader': '📊', 'lesson-plan': '📋', 'activity': '✨', 'assignment': '✍️' };
-const OUTPUT_OF = { 'podcast': 'script', 'vocabulary': 'cards', 'essay-grader': 'grades' };
-function guessOutput(c, kind) {
-  if (!c) return 'markdown';
-  if (Array.isArray(c.entries)) return OUTPUT_OF[kind] || 'doc';
-  if (Array.isArray(c.turns)) return 'script';
-  if (Array.isArray(c.grades)) return 'grades';
-  if (Array.isArray(c.cards) && c.cards[0]?.blocks) return 'doc';
-  if (Array.isArray(c.cards)) return 'cards';
-  return 'markdown';
-}
 const isTeaching = (row) => String(row?.tool || '').startsWith('teaching_');
 const KIND_META = Object.fromEntries(KINDS.map((k) => [k.key, k]));
 KIND_META['lesson-plan'] = KIND_META.lesson_plan;   // the teaching tool's key for the same thing
@@ -200,6 +183,8 @@ export default function LibraryPage() {
   };
 
   const openArtifact = async (row) => {
+    // A teaching tool's result is a page of its own, like an activity.
+    if (isTeaching(row)) { navigate(`/library/${row.id}`); return; }
     setOpenLoading(true);
     setOpen({ ...row });
     try {
@@ -284,14 +269,10 @@ export default function LibraryPage() {
       </div>
 
       {/* Detail modal */}
-      <Modal open={!!open} onClose={() => setOpen(null)} title={open ? `${open.title || (KIND_META[open.kind] || {}).label || 'Artifact'}` : ''} width={open && isTeaching(open) ? 720 : 600}>
+      <Modal open={!!open} onClose={() => setOpen(null)} title={open ? `${open.title || (KIND_META[open.kind] || {}).label || 'Artifact'}` : ''} width={600}>
         {openLoading && !open?.content ? (
           <p style={{ fontSize: 13, color: C.muted }}>Loading…</p>
-        ) : open ? (
-          isTeaching(open) && open.content
-            ? <ToolRunner.Result tool={{ key: open.kind, name: TOOL_NAME[open.kind], emoji: TOOL_EMOJI[open.kind], output: open.content?.output || guessOutput(open.content, open.kind) }} out={open.content} title={open.title} />
-            : <ArtifactDetail output={open} />
-        ) : null}
+        ) : open ? <ArtifactDetail output={open} /> : null}
       </Modal>
     </PageLayout>
   );
