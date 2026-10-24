@@ -69,6 +69,16 @@ const voiceFromLabel = (label, fallback) =>
 const DOC_RULE = TEMPLATE_RULE;
 const HOUSE = "You support Nigerian secondary school teachers. Be concrete and classroom-ready — real examples, real materials, nothing generic. Never invent exam results, statistics or citations.";
 
+/* What makes the best results class-ready: they sound like a teacher who knows THIS class, say the
+   actual words and moves, and give every entry a vivid name. The three recipes below follow the
+   reference results (reference/instructor-tools): scripted hooks with timed steps, misconceptions
+   with a real classroom moment, real-world connections that start from the students' own lives. */
+const CRAFT = `Write like an experienced teacher talking to a colleague: concrete, vivid, warm, never generic. Pitch every sentence at the stated class level — if students could not say it aloud, simplify it. Give each entry a short, evocative name (a title a teacher would remember), never "Example 1". Wherever there is something to say, write the actual words in quotes. Use **bold** for the few key terms or moves, not for whole sentences. No two entries may open the same way or use the same device.`;
+const DIRECTION = (i) => i.notes
+  ? `The teacher's direction: "${i.notes}". Treat it as the brief for the whole set — it decides the theme, tone and style of EVERY entry (for example "a journey through time" makes each entry a stop on that journey; "exciting activities" means active, hands-on, a little noisy). Follow it closely and do not water it down.\n`
+  : "";
+const BRIEF = (i) => `Topic: "${i.topic}"${i.subject ? ` · Subject: ${i.subject}` : ""}${i.class ? ` · Class: ${i.class}` : ""}.`;
+
 export const TOOLS = [
   {
     key: "podcast", name: "Podcast Generator", emoji: "🎧", output: "script",
@@ -90,42 +100,40 @@ Use at most two distinct speaker names. Keep each turn under 60 words so it narr
     key: "misconceptions", name: "Common Misconceptions", emoji: "🧠", output: "doc",
     blurb: "The wrong ideas students arrive with, where they'll struggle, and how to fix each one.",
     fields: [F.topic, F.subject, F.klass, F.notes], maxTokens: 4500,
-    system: `${HOUSE} ${DOC_RULE}`,
-    prompt: (i) => `Topic: "${i.topic}"${i.subject ? ` · Subject: ${i.subject}` : ""}${i.class ? ` · Class: ${i.class}` : ""}.
-${i.notes ? `Context: ${i.notes}\n` : ""}
-Produce 5 entries, one per misconception. Each entry's title is the misconception stated plainly. Sections in order:
-- text "Common Misconception" (tone danger) — what students believe.
-- text "Clarification" (tone success) — what is actually true.
-- text "Why This Misconception Occurs" (tone info) — why the wrong idea feels right to them.
-- list "Fix Strategies" (tone idea) — 3 specific teaching moves, not general advice.
-- text "Real Classroom Example" (tone warn) — a short moment from a real lesson where it shows up.
-Then one final entry "Quick Checks" with a list "Questions" of 5 questions that expose the misconception.`,
+    system: `${HOUSE} ${CRAFT} You know the research on student misconceptions in every school subject. A misconception is a wrong idea students genuinely hold, written the way a student would say it — one plain sentence ("Plants get their food from the soil"), never a vague topic. The five must differ in kind: an overgeneralised rule, an everyday word that means something else in this subject, a rule used outside where it holds, cause and effect reversed, a half-truth that sounds complete. ${DOC_RULE}`,
+    prompt: (i) => `${BRIEF(i)}
+${DIRECTION(i)}
+Produce 5 entries, one per misconception. The entry title is the misconception in the student's own words. Sections in order:
+- text "Common Misconception" (tone danger) — the wrong belief, one sentence.
+- text "Clarification" (tone success) — what is actually true, in 2-3 plain sentences, bolding the key terms.
+- text "Why This Misconception Occurs" (tone info) — the real source: an everyday meaning of a word, an earlier lesson stretched too far, intuition, a shortcut that works in exams but not here. Name it.
+- list "Fix Strategies" (tone idea) — 3 concrete teaching moves, each starting with a verb and naming the activity, object or question (e.g. "**Weigh** a pot of soil before and after a bean grows in it"). No general advice such as "explain it again".
+- text "Real Classroom Example" (tone warn) — 1-2 sentences: what a student says or does in class that reveals this misconception, in a setting a Nigerian class would recognise.
+Then one final entry "Quick Checks" with a list "Questions" of 5 short questions that make the misconception show itself.`,
   },
   {
     key: "real-world", name: "Real-World Connections", emoji: "🌍", output: "doc",
     blurb: "Why this topic matters — everyday contexts, local examples, and the careers built on it.",
     fields: [F.topic, F.subject, F.klass, F.notes], maxTokens: 4500,
-    system: `${HOUSE} Ground examples in Nigerian and West African daily life where it fits naturally — markets, farming, transport, weather, mobile money, local industry — without forcing it. ${DOC_RULE}`,
-    prompt: (i) => `Topic: "${i.topic}"${i.subject ? ` · Subject: ${i.subject}` : ""}${i.class ? ` · Class: ${i.class}` : ""}.
-${i.notes ? `Context: ${i.notes}\n` : ""}
-Produce 5 entries, each a different real-world connection, with layout "split". The title is a short, vivid name for the connection (e.g. "Our Shared Recipes"). Sections in order:
-- text "Context" (tone info) — the everyday situation and how the topic shows up there, in language a student recognises.
-- chips "Professions" (tone accent) — 3 job titles that depend on this.
-Then two final entries (layout "stack"): "Talk About It" with a list "Discussion" of 5 questions linking the topic to students' own lives, and "Try This" with a text "Activity" describing one thing they can do or observe outside class.`,
+    system: `${HOUSE} ${CRAFT} You write for students, not teachers: warm, second person ("your", "you"), starting from something the student already does or has seen — a meal, a game, a phone, a market stall, the walk to school — and only then connecting it to the idea. Ground the connections in Nigerian and West African daily life where it is natural (markets, farming, transport, weather, mobile money, football, local industry, family occasions), and never force it. ${DOC_RULE}`,
+    prompt: (i) => `${BRIEF(i)}
+${DIRECTION(i)}
+Produce 5 entries, each a different real-world connection, drawn from different parts of life (home, school or sport, money or market, technology, work or community). Use layout "split". The entry title is a short, vivid, human name (for example "Our Shared Recipes", "Team Traditions"). Sections in order:
+- text "Context" (tone info) — 3-4 sentences. Start from the everyday situation, make the comparison to the topic obvious, **bold** the key terms, and end with one sentence of the form "Knowing about … helps us …" that says why it matters to the student.
+- chips "Professions" (tone accent) — exactly 3 real, specific job titles whose daily work depends on this (not just "Teacher").
+Then two final entries (layout "stack"): "Talk About It" with a list "Discussion" of 5 open questions linking the topic to students' own lives, and "Try This" with a text "Activity" describing one thing they can do or observe outside class this week, with what to bring back.`,
   },
   {
     key: "lesson-hooks", name: "Lesson Hooks", emoji: "🪝", output: "doc",
     blurb: "Openings that grab the class in the first two minutes — with materials and outcomes.",
-    fields: [F.topic, F.subject, F.klass, F.notes], maxTokens: 4000,
-    system: `${HOUSE} A hook is something the teacher DOES in the first 2 minutes — a demonstration, a question with a surprising answer, a story, a challenge. Every hook must be runnable with materials a Nigerian classroom actually has. ${DOC_RULE}`,
-    prompt: (i) => `Topic: "${i.topic}"${i.subject ? ` · Subject: ${i.subject}` : ""}${i.class ? ` · Class: ${i.class}` : ""}.
-${i.notes ? `Context: ${i.notes}\n` : ""}
-Produce 5 entries, one per hook. The title names the hook. Sections in order:
-- text (no label) — one paragraph: what the teacher says or does, word for word where it helps.
-- list "Implementation Steps" (ordered true, tone accent) — 3-4 steps, each ending with its minutes in brackets, e.g. "Ask the class to... (1 min)". The minutes add up to 2.
-- fields — "Expected Outcome" (what students feel or realise) and "Materials Needed" (what's needed; "None" if nothing).
-- text "Bridge Into The Lesson" (tone teal) — the sentence that moves the class from hook to content.
-Then a final entry "Expected Outcomes" with a list "By The End" of what students should be able to do.`,
+    fields: [F.topic, F.subject, F.klass, F.notes], maxTokens: 6000,
+    system: `${HOUSE} ${CRAFT} A lesson hook is something the teacher DOES or SAYS in the first minutes of a lesson that makes students lean in: a story, a mystery, a role-play or game, a prediction, a challenge, a vote on their feet. It never explains the topic — it makes them need to know. Every hook must run with what a Nigerian classroom actually has (chalkboard, exercise books, bottle caps, a phone torch, or nothing at all) and work with 40-70 students. Vary the five: no two with the same format. ${DOC_RULE}`,
+    prompt: (i) => `${BRIEF(i)}
+${DIRECTION(i)}
+Produce 5 entries, one per hook. The entry title is the hook's name (for example "The Time Traveler's Dilemma", "Stone Age Survivor"). Sections in order:
+- text (no label) — one paragraph: what the hook is, and the learning idea behind it (for instance "This hook uses a hypothetical scenario to get students thinking about … without naming it"). If it is a game or role-play, start with the line the teacher says to launch it ("Let's play '…'! You are …").
+- list "Implementation Steps" (ordered true, tone accent) — 4-5 steps for the teacher. Give the teacher's exact words in quotes where they speak, say what students do, and end every step with its minutes in brackets, e.g. "Pose the challenge: '…' (2 min)". The LAST step is always a transition into the lesson ("Transition: 'Today we …'"). Total time 5-10 minutes.
+- fields — "Expected Outcome" (what students will feel, notice or be able to say, and how that leads into the topic) and "Materials Needed" (specific items, or "None").`,
   },
   {
     key: "vocabulary", name: "Vocabulary Builder", emoji: "🔤", output: "cards",

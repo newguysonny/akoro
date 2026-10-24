@@ -52,7 +52,7 @@ SECTION is exactly one of:
 {"kind":"scores","items":[{"criterion":string,"score":number,"outOf":number,"comment":string}]}
 TONE is one of danger, success, info, idea, accent, warn, teal, neutral.
 "title" is a specific heading for this result (the topic, not the tool's name). "summary" is one sentence. "highlights" is 0-4 quick facts (e.g. {"label":"Period","value":"40 minutes"}). "tag" is a short label such as "Hook 2" (or "" for none). "layout" is "stack" by default, "split" to put a text section beside a chips section, "compact" for small term-style cards.
-Write **bold** around key terms inside text and list items. Keep every paragraph under 60 words — entries are read at a glance, not studied. For numbered steps use "ordered":true and end a step with its time in brackets, e.g. "Ask the question (2 min)". Leave out any section or field you have nothing real to put in.`;
+Write **bold** around key terms inside text and list items. Keep each paragraph under 70 words and each numbered step under 45 words — entries are read at a glance, not studied. For numbered steps use "ordered":true and end a step with its time in brackets, e.g. "Ask the question (2 min)". Leave out any section or field you have nothing real to put in.`;
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 
