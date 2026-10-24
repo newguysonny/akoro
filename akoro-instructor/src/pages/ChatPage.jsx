@@ -608,7 +608,7 @@ export default function ChatPage() {
       // Human-in-the-loop: a successful prepare/revise execution rides
       // with the reply as a draft echo — render its Preview affordance.
       const previews = (data.toolExecutions || [])
-        .filter((x) => (x.tool === 'prepare_activity' && x.success || x.tool === 'revise_activity_draft' && x.success) && x.draft)
+        .filter((x) => (['prepare_activity', 'run_teaching_tool', 'revise_activity_draft'].includes(x.tool) && x.success) && x.draft)
         .map((x) => x.draft);
       (data.toolExecutions || [])
         .filter((x) => x.tool === 'revise_activity_draft' && x.success && x.draft)
