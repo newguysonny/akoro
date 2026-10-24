@@ -13,8 +13,9 @@
  *
  * (When the review time is at or after the due date, one run reviews
  * everyone.) A review is an Agent Check (battle/agentCheck.js) hosted by the
- * teacher: the learner's protégé answers questions written from the
- * activity's topic, concepts and objectives; a mark sheet, not graded.
+ * teacher, sent as a CHALLENGE: it waits in the learner's Challenges list
+ * and starts when they accept; the learner's protégé answers questions written
+ * from the activity's topic, concepts and objectives; a mark sheet, not graded.
  * Each learner is reviewed once (self_study_targets.review_battle_id).
  */
 import db from "../../db.js";
@@ -24,6 +25,8 @@ const edu = () => db.schema("edu");
 const invalid = (message, status = 400) => Object.assign(new Error(message), { status });
 export const REVIEW_LIMITS = Object.freeze({ MIN_Q: 5, MAX_Q: 10, DEFAULT_Q: 8 });
 const REVIEWABLE = ["assignment", "self_study", "project"];
+// How long a review sent as a challenge stays in the learner's Challenges list.
+export const REVIEW_OPEN_MS = 7 * 86400_000;
 
 /** PURE: the instructor's choice → what is kept, or null (no review). Throws when it can't run. */
 export function cleanReview(review, { dueAt = null, now = Date.now() } = {}) {
@@ -90,10 +93,12 @@ export async function runActivityReview(assignmentId, who = "all") {
       const made = await createCheckBattle({
         learnerId, subject: a.subject, topic, total: a.details.review.questions || REVIEW_LIMITS.DEFAULT_Q,
         title: `Review: ${a.title}`,
+        // Sent as a challenge: it waits in the learner's Challenges list; they start it.
+        invite: true, inviteUntil: Date.now() + REVIEW_OPEN_MS,
         extra: { review_host: "teacher", requested_by: a.created_by, activity_assignment_id: a.id },
       });
       await edu().from("self_study_targets").update({ review_battle_id: made.battleId }).eq("assignment_id", a.id).eq("student_id", learnerId);
-      await notify(learnerId, `Your review battle is starting: ${a.title}`, "Your agent answers what you taught it. A mark sheet for you and your teacher — it doesn't count toward your grade.", made.battleId);
+      await notify(learnerId, `Your review battle is in your Challenges: ${a.title}`, "Start it when you're ready: your agent answers what you taught it. A mark sheet for you and your teacher — it doesn't count toward your grade.", made.battleId);
       reviewed++;
     } catch (e) {
       skipped.push({ learnerId, why: e.message });
@@ -104,19 +109,32 @@ export async function runActivityReview(assignmentId, who = "all") {
   return { reviewed, skipped: skipped.length };
 }
 
+/** PURE: a review's state. waiting (not made yet) · sent (in their Challenges) · running · done · missed */
+export function reviewStatus(battle, seat, now = Date.now()) {
+  if (!battle) return "waiting";
+  if (battle.status === "completed") return "done";
+  if (["cancelled", "expired"].includes(battle.status) || seat?.declined_at) return "missed";
+  if (!seat?.joined_at) return battle.expires_at && Date.parse(battle.expires_at) < now ? "missed" : "sent";
+  return "running";
+}
+
 /** The instructor's view: each learner's review and its mark. */
 export async function activityReviews(assignmentId) {
   const { data: targets } = await edu().from("self_study_targets").select("student_id, review_battle_id").eq("assignment_id", assignmentId);
   const ids = (targets || []).map((t) => t.review_battle_id).filter(Boolean);
-  const { data: battles } = ids.length ? await db.from("battles").select("id, status").in("id", ids) : { data: [] };
-  const statusOf = new Map((battles || []).map((b) => [b.id, b.status]));
+  const [{ data: battles }, { data: seats }] = ids.length ? await Promise.all([
+    db.from("battles").select("id, status, expires_at").in("id", ids),
+    db.from("battle_participants").select("battle_id, joined_at, declined_at").in("battle_id", ids).eq("role", "participant"),
+  ]) : [{ data: [] }, { data: [] }];
+  const battleOf = new Map((battles || []).map((b) => [b.id, b]));
+  const seatOf = new Map((seats || []).map((s) => [s.battle_id, s]));
   const { checkResults } = await import("../battle/agentCheck.js");
   const out = [];
   for (const t of targets || []) {
     if (!t.review_battle_id) { out.push({ learnerId: t.student_id, status: "waiting" }); continue; }
-    const done = statusOf.get(t.review_battle_id) === "completed";
-    const r = done ? await checkResults(t.review_battle_id).catch(() => null) : null;
-    out.push({ learnerId: t.student_id, battleId: t.review_battle_id, status: done ? "done" : "running", score: r?.score ?? null, correct: r?.correct ?? null, total: r?.total ?? null });
+    const status = reviewStatus(battleOf.get(t.review_battle_id), seatOf.get(t.review_battle_id));
+    const r = status === "done" ? await checkResults(t.review_battle_id).catch(() => null) : null;
+    out.push({ learnerId: t.student_id, battleId: t.review_battle_id, status, score: r?.score ?? null, correct: r?.correct ?? null, total: r?.total ?? null });
   }
   return { reviews: out, made: ids.length };
 }

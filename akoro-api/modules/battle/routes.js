@@ -262,6 +262,7 @@ async function resolveAgent(userId) {
 }
 
 async function notifyUser(userId, type, title, content, relatedId) {
+  if (!userId) return;   // a platform-made battle (an activity's review) has no creator to tell
   await db.from("notifications").insert({ user_id: userId, type, title, content, related_id: relatedId });
   global.io?.to(`user:${userId}`).emit("notification", { type, title, content, relatedId });
 }
@@ -1159,6 +1160,11 @@ router.get("/my-challenges", authenticateToken, asyncHandler(async (req, res) =>
   ]);
   const courseName = new Map((courses ?? []).map((c) => [c.id, c.title]));
   const className  = new Map((classes ?? []).map((c) => [c.id, c.name]));
+  // An activity's review battle is platform-made (no creator): the card names the teacher who set it.
+  const setBy = [...new Set(rows.filter((b) => !b.created_by && b.review_host === "teacher" && b.requested_by).map((b) => b.requested_by))];
+  const { data: setters } = setBy.length ? await db.from("users").select("id, full_name, avatar_url, role").in("id", setBy) : { data: [] };
+  const setter = new Map((setters ?? []).map((u) => [u.id, u]));
+  for (const b of rows) if (!b.created_by && setter.has(b.requested_by)) b.users = setter.get(b.requested_by);
   // One card per recurring series I'm in or set (its occurrences are in my Battles tab).
   const series = await seriesCards(req.user.id).catch((e) => { console.warn("[my-challenges] series:", e.message); return []; });
   res200(res, [...rows.map((b) => toCard(b, {
@@ -1595,7 +1601,7 @@ async function maybeStartEarly(battle) {
   // for a contest, not for this — and the "everyone answered but fewer than
   // two are playing" branch below would otherwise cancel a review the instant
   // its single learner accepted it.
-  const minPlayers = battle.battle_type === "review" ? 1 : 2;
+  const minPlayers = minPlayersFor(battle);   // a review or an Agent Check is one learner
 
   const startsAt = battle.scheduled_start ? new Date(battle.scheduled_start).getTime() : null;
 
@@ -1669,10 +1675,13 @@ router.post("/challenges/:challengeId/accept", authenticateToken, asyncHandler(a
     const { invited: seats } = await maybeStartEarly(battle);
     const accepted = seats.filter((s) => s.joined_at && !s.declined_at).length;
 
-    const { data: me } = await db.from("users").select("full_name").eq("id", req.user.id).single();
-    await notifyUser(battle.created_by, "battle_accepted",
-      `${me?.full_name} joined ${battle.title}`,
-      `${accepted} of ${seats.length} accepted`, battle.id);
+    // A review sent as a challenge has no creator to tell (the teacher sees it on the activity).
+    if (battle.created_by) {
+      const { data: me } = await db.from("users").select("full_name").eq("id", req.user.id).single();
+      await notifyUser(battle.created_by, "battle_accepted",
+        `${me?.full_name} joined ${battle.title}`,
+        `${accepted} of ${seats.length} accepted`, battle.id);
+    }
     req.app.get("io")?.to(`user:${req.user.id}`).emit("join_battle_room", { battleId: battle.id });
 
     return res.json({ success: true, battle_id: battle.id, status: battle.status,

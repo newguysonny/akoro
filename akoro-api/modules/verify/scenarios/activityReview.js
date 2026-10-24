@@ -3,7 +3,9 @@
  * a self study assigned from its draft with the review on; the review is kept
  * on the activity, the instructions gain the line, the runs wait in Postgres;
  * a run makes each learner's review (an Agent Check hosted by the teacher,
- * linked to the activity) once; the instructor's view lists them.
+ * linked to the activity) once, SENT AS A CHALLENGE: it shows in the
+ * learner's Challenges list and waits for them; accepting starts it; the
+ * instructor's view lists them (sent, then running).
  *
  * The run is made in-process (runActivityReview, what the battle worker runs
  * at the review time), so the gate needn't wait for the clock.
@@ -69,8 +71,25 @@ export const activityReviewRuns = {
     const third = await runActivityReview(assignmentId, "all");
     ctx.expect.eq("a repeat run reviews nobody twice", third.reviewed, 0);
 
+    // Sent as a challenge: waiting in the learner's Challenges, not started on its own.
+    const mine = battles.find((b) => b.id === targets.find((t) => t.student_id === learners[0].id)?.review_battle_id);
+    const seat = await ctx.db.rows("battle_participants", { battle_id: mine?.id }, { columns: "role, joined_at" });
+    ctx.expect.ok("the review waits for the learner (an unanswered seat, nothing started)", seat.length === 1 && seat[0].role === "participant" && !seat[0].joined_at, seat);
+    const list = await ctx.http({ as: `@${learners[0].username}`, path: "/api/battle/my-challenges" });
+    ctx.expect.status("the learner's Challenges list answers", list, 200);
+    const card = (list.body?.data || []).find((c) => c.id === mine?.id);
+    ctx.expect.ok("…and shows the review, set by the teacher, at no coin cost", !!card && card.type === "check" && card.reviewHost === "teacher" && card.hostRole === "teacher" && card.entry?.coins === 0, card || (list.body?.data || []).map((c) => c.title));
+
     const view = await ctx.http({ as: BATTLE_INSTRUCTOR, path: `/api/self-study/${assignmentId}/reviews` });
     ctx.expect.status("the instructor's view answers", view, 200);
-    ctx.expect.eq("…listing each learner's review", (view.body?.data?.reviews || []).filter((r) => r.battleId).length, learners.length);
+    ctx.expect.eq("…listing each learner's review as sent to their Challenges", (view.body?.data?.reviews || []).filter((r) => r.battleId).map((r) => r.status), learners.map(() => "sent"));
+
+    // The learner accepts it: it starts (a review is one learner; it isn't cancelled for having one player).
+    const acc = await ctx.http({ as: `@${learners[0].username}`, method: "POST", path: `/api/battle/challenges/${mine?.id}/accept` });
+    ctx.expect.status("the learner accepts the review", acc, 200);
+    const [after] = await ctx.db.rows("battles", { id: mine?.id }, { columns: "status" });
+    ctx.expect.ok("…and it isn't cancelled", after && after.status !== "cancelled", after);
+    const view2 = await ctx.http({ as: BATTLE_INSTRUCTOR, path: `/api/self-study/${assignmentId}/reviews` });
+    ctx.expect.ok("the instructor sees it running (or done)", ["running", "done"].includes((view2.body?.data?.reviews || []).find((r) => r.battleId === mine?.id)?.status), view2.body?.data?.reviews);
   },
 };

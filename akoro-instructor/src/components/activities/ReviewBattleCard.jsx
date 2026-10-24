@@ -1,6 +1,7 @@
 /*
  * ReviewBattleCard — an activity's review battle on its detail page: when it
- * runs, and each learner's review (waiting · running · done, with the mark).
+ * runs, and each learner's review (waiting · sent to their Challenges ·
+ * running · done, with the mark · missed).
  * Not graded. GET /api/self-study/:id/reviews (self-study/activityReview.js).
  */
 import { useEffect, useState } from 'react';
@@ -22,7 +23,10 @@ export default function ReviewBattleCard({ activityId }) {
   const avg = done.length ? Math.round(done.reduce((n, r) => n + (r.total ? (r.correct / r.total) * 100 : 0), 0) / done.length) : null;
   const chip = (r) => (r.status === 'done'
     ? { label: r.total ? `${r.correct}/${r.total}` : 'Done', color: GREEN, bg: '#DCFCE7' }
-    : r.status === 'running' ? { label: 'Running', color: BLUE, bg: '#EFF6FF' } : { label: 'Waiting', color: C.muted, bg: C.bg });
+    : r.status === 'running' ? { label: 'Running', color: BLUE, bg: '#EFF6FF' }
+    : r.status === 'sent' ? { label: 'In Challenges', color: '#7C3AED', bg: '#F3E8FF' }
+    : r.status === 'missed' ? { label: 'Missed', color: '#B45309', bg: '#FEF3C7' }
+    : { label: 'Waiting', color: C.muted, bg: C.bg });
   return (
     <div data-review-card="" style={{ marginTop: 14, fontFamily: C.font }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
@@ -30,7 +34,7 @@ export default function ReviewBattleCard({ activityId }) {
         <div style={{ fontSize: 11, fontWeight: 700, color: C.muted }}>{fmt(data.review.at)} · {data.review.questions} questions · not graded</div>
       </div>
       <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 8, lineHeight: 1.5 }}>
-        Each learner's protégé answers what the learner taught it. Learners who hadn't submitted by then are reviewed at the due date.
+        Sent to each learner as a challenge in their Challenges list; their protégé answers what they taught it. Learners who hadn't submitted by then are reviewed at the due date.
         {avg != null && <> Average so far: <b style={{ color: C.ink }}>{avg}%</b> ({done.length} done).</>}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 260, overflowY: 'auto' }}>

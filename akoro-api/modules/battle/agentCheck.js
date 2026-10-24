@@ -37,7 +37,9 @@ async function protegeOf(learnerId) {
  * Starts on its own after START_DELAY_MS, so the learner can open the arena
  * first; the learner's sockets are told to join its room.
  */
-export async function createCheckBattle({ learnerId, subject, topic, total = CHECK_DEFAULTS.QUESTIONS, studyPrepTopicId = null, mode = "diagnostic", secondsPerQuestion = CHECK_DEFAULTS.SECONDS_PER_QUESTION, basedOn = [], title: titleIn = null, extra = {} }) {
+// invite: sent as a CHALLENGE (an activity's review battle): the seat waits unanswered, it shows in the
+// learner's Challenges list until `inviteUntil`, and starts when they accept (the accept route), not on its own.
+export async function createCheckBattle({ learnerId, subject, topic, total = CHECK_DEFAULTS.QUESTIONS, studyPrepTopicId = null, mode = "diagnostic", secondsPerQuestion = CHECK_DEFAULTS.SECONDS_PER_QUESTION, basedOn = [], title: titleIn = null, extra = {}, invite = false, inviteUntil = null }) {
   const agentId = await protegeOf(learnerId);
   if (!agentId) throw fail("Create your agent first — the Agent Check is your agent answering.", 409);
   const count = Math.max(3, Math.min(10, Number(total) || CHECK_DEFAULTS.QUESTIONS));
@@ -50,7 +52,7 @@ export async function createCheckBattle({ learnerId, subject, topic, total = CHE
     total_questions: count, time_limit_seconds: count * seconds,
     xp_prize: 0, xp_pool: 0, hp_per_miss: 0, min_xp: 0,
     max_participants: 1, total_participants: 1, status: "lobby",
-    expires_at: new Date(Date.now() + 3600_000).toISOString(),
+    expires_at: invite && inviteUntil ? new Date(inviteUntil).toISOString() : new Date(Date.now() + 3600_000).toISOString(),
     // The platform asks (and pays for the questions); nobody "created" it.
     created_by: null,
     study_prep_topic_id: studyPrepTopicId,
@@ -82,13 +84,14 @@ export async function createCheckBattle({ learnerId, subject, topic, total = CHE
   }
 
   const { error: seatError } = await db.from("battle_participants").insert({
-    battle_id: battle.id, user_id: learnerId, agent_id: agentId, role: "participant", joined_at: now(),
+    battle_id: battle.id, user_id: learnerId, agent_id: agentId, role: "participant", joined_at: invite ? null : now(),
   });
   if (seatError) {
     await db.from("battles").delete().eq("id", battle.id);
     throw new Error(seatError.message);
   }
 
+  if (invite) return { battleId: battle.id, placed: fill.placed, title, invited: true };
   const q = await queue();
   await addLater(q, "start-battle", { action: "start-battle", battleId: battle.id },
     { delay: CHECK_DEFAULTS.START_DELAY_MS, jobId: `start-${battle.id}` });

@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const { cleanReview, reviewRuns, reviewInstruction, dueForReview, REVIEW_LIMITS } = await import("./activityReview.js");
+const { cleanReview, reviewRuns, reviewInstruction, dueForReview, reviewStatus, REVIEW_LIMITS } = await import("./activityReview.js");
 const NOW = Date.parse("2026-10-24T10:00:00Z");
 
 test("cleanReview: off, at the instructor's time, else the due date; questions clamped; a past or missing time refuses", () => {
@@ -39,4 +39,17 @@ test("the instruction line, and the wiring: assign keeps it, the worker runs it"
   assert.match(drafts, /await scheduleActivityReview\(result\.assignment, review\)/);
   const worker = readFileSync(new URL("../battle/worker.js", import.meta.url), "utf8");
   assert.match(worker, /case "activity-review":/);
+});
+
+test("reviewStatus: sent to Challenges until accepted; running; done; missed when declined or expired", () => {
+  const t = Date.parse("2026-10-26T12:00:00Z");
+  assert.equal(reviewStatus(null, null, t), "waiting");
+  assert.equal(reviewStatus({ status: "lobby", expires_at: "2026-10-30T00:00:00Z" }, { joined_at: null }, t), "sent");
+  assert.equal(reviewStatus({ status: "lobby", expires_at: "2026-10-20T00:00:00Z" }, { joined_at: null }, t), "missed");
+  assert.equal(reviewStatus({ status: "lobby" }, { joined_at: "x" }, t), "running");
+  assert.equal(reviewStatus({ status: "live" }, { joined_at: "x" }, t), "running");
+  assert.equal(reviewStatus({ status: "cancelled" }, { declined_at: "x" }, t), "missed");
+  assert.equal(reviewStatus({ status: "completed" }, { joined_at: "x" }, t), "done");
+  const src = readFileSync(new URL("./activityReview.js", import.meta.url), "utf8");
+  assert.match(src, /invite: true, inviteUntil:/);
 });

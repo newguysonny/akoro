@@ -22,7 +22,8 @@ export function toCard(b, extra = {}) {
     status:        b.status,
     // From what it IS, not its status: a scheduled duel deliberately waits in
     // "lobby" until accepted, and was labelled "Immediate" for it.
-    battleType:    b.battle_type === "review" ? "review"
+    // An Agent Check sent as a challenge (an activity's review) reads as a review too.
+    battleType:    b.battle_type === "review" || b.battle_type === "check" ? "review"
                  : (b.scheduled_start && new Date(b.scheduled_start) > new Date()) || b.status === "scheduled" ? "scheduled"
                  : b.battle_type === "classroom" || b.battle_type === "team" ? "classroom" : "immediate",
     type:          b.battle_type,

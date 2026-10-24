@@ -44,7 +44,8 @@ export const isMarkSheet = (type) => type === "review" || type === "check";
 export function requirementsOf(b) {
   const isReview = b?.battle_type === "review";
   return {
-    coins: coinsNeeded(b?.total_questions),
+    // An Agent Check's answers are the platform's (D45; a teacher's review sent as a challenge too).
+    coins: b?.battle_type === "check" ? 0 : coinsNeeded(b?.total_questions),
     minXp: isReview ? 0 : Math.max(0, Number(b?.min_xp) || 0),
     review: isReview,
   };
