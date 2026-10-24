@@ -319,8 +319,8 @@ export const activityChatPartsInstructions = {
     const base = v2 || v1;
     const v3 = await reviseVersion(ctx, say, draftId, { prompt: "Add a question with a diagram.", label: "question with a diagram", n: 3, base: base.n });
     if (v3) {
-      const was = new Set(base.paper.questions.map(qText));
-      const fresh = v3.paper.questions.filter((q) => !was.has(qText(q)));
+      // The version's own record of what's new (two diagram questions can open with the same words).
+      const fresh = Object.entries(v3.changes || {}).filter(([, c]) => c === "new").map(([i]) => v3.paper.questions[Number(i)]).filter(Boolean);
       ctx.expect.eq("V3: one more question", v3.paper.questions.length, base.paper.questions.length + 1);
       ctx.expect.ok("V3: the new one has a diagram", fresh.length === 1 && !!(fresh[0].figure || fresh[0].figure_note), fresh);
       ctx.expect.ok("V3: every earlier question kept", base.paper.questions.every((q) => v3.paper.questions.some((x) => qText(x) === qText(q))));

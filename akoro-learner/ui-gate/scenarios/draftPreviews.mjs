@@ -24,6 +24,27 @@ const DRAFTS = {
     id: 'gatefake-review', type: 'battle', status: 'draft', title: 'Fractions review: Amaka', audience: { label: '@amaka in Tester Class A', class_name: 'Tester Class A', names: ['amaka'] }, created_at: new Date().toISOString(),
     payload: { subject: 'Mathematics', topic: 'Fractions', difficulty: 'intermediate', details: { topic: 'Fractions', mode: 'review', total_questions: 6 } },
   },
+  'gatefake-assignment': {
+    id: 'gatefake-assignment', type: 'assignment', status: 'draft', title: 'Photosynthesis — assignment', audience: AUDIENCE, created_at: new Date().toISOString(),
+    payload: {
+      subject: 'Basic Science', topic: 'Photosynthesis', due_at: inDays(4, 17), title: 'Photosynthesis — assignment',
+      versions: [{
+        n: 1, status: 'ready', note: 'First draft — 5 questions (3 MCQ · 1 Labelling · 1 Short answer) as asked.',
+        summary: { count: 5, totalPoints: 12, line: '5 questions (3 MCQ · 1 Labelling · 1 Short answer) · 12 marks' },
+        paper: {
+          instructions: 'Answer all questions. Do not spend too much time on one question.',
+          sections: [{ title: 'Part A – Multiple Choice', instructions: 'Each question carries 1 mark.' }, { title: 'Part B – Short Answers', instructions: 'Marks are shown at the end of each question.' }],
+          questions: [
+            { q: 'Where in a leaf cell does photosynthesis take place?', type: 'MCQ', options: ['Nucleus', 'Chloroplast', 'Cell wall', 'Vacuole'], correct: 1, max_points: 1, section: 0 },
+            { q: 'Which gas do plants take in for photosynthesis?', type: 'MCQ', options: ['Oxygen', 'Nitrogen', 'Carbon dioxide', 'Hydrogen'], correct: 2, max_points: 1, section: 0 },
+            { q: 'What is the green pigment in leaves called?', type: 'MCQ', options: ['Chlorophyll', 'Haemoglobin', 'Keratin', 'Melanin'], correct: 0, max_points: 1, section: 0 },
+            { q: 'Name the labelled parts of the leaf.', type: 'Labelling', format: 'label', labels: ['P', 'Q'], label_answers: [{ label: 'P', answer: 'Vein' }, { label: 'Q', answer: 'Stoma' }], figure_note: 'A leaf: P on a vein, Q on a stoma.', max_points: 4, section: 0 },
+            { q: 'Explain why plants need light to make food.', type: 'Short answer', answer: 'Light gives the energy chlorophyll traps to turn carbon dioxide and water into glucose. Without light no glucose is made.', max_points: 5, section: 1 },
+          ],
+        },
+      }],
+    },
+  },
   'gatefake-selfstudy': {
     id: 'gatefake-selfstudy', type: 'self_study', status: 'draft', title: 'Photosynthesis: how plants make food', audience: AUDIENCE, created_at: new Date().toISOString(),
     payload: {
@@ -42,7 +63,7 @@ const DRAFTS = {
 export const draftPreviewScenarios = [{
   name: 'instructor.draft_previews',
   portal: 'instructor',
-  description: 'Screenshots of the battle and self-study draft previews (Settings, Preview, Questions / Study plan) and of Play: the simulated battle (class battle and study review) and the simulated teaching session. Fixture drafts, intercepted in the browser — nothing is created.',
+  description: 'Screenshots of the battle, assignment and self-study draft previews (Settings, Preview, Questions / Study plan) and of Play: the simulated battle (class battle and study review) and the simulated teaching session. Fixture drafts, intercepted in the browser — nothing is created.',
   async run(t) {
     const { page } = t;
     fs.mkdirSync(OUT, { recursive: true });
@@ -83,6 +104,21 @@ export const draftPreviewScenarios = [{
     await page.locator('text=correct').first().waitFor({ timeout: 60000 }).catch(() => {});
     await page.waitForTimeout(400); await snap('09-review-marksheet');
 
+    // ── Assignment: Settings · Preview (a learner answers and submits) · Questions ──
+    await page.route(/\/api\/self-study\/drafts\/gatefake-assignment\/paper\.html/, (route) => route.fulfill({ contentType: 'text/html', body: '<html><body style="font-family:Georgia;padding:24px"><h3>Photosynthesis — assignment</h3><p>Answer all questions. Do not spend too much time on one question.</p><p>Part A – Multiple Choice …</p></body></html>' }));
+    await open('gatefake-assignment', '[data-assignment-preview]');
+    await snap('16-assignment-settings');
+    await tab('Preview'); await page.waitForTimeout(500); await snap('17-assignment-preview');
+    await page.getByRole('button', { name: /Play preview/ }).click();
+    await page.waitForTimeout(1500); await snap('18-assignment-q1-typing');
+    await page.locator('[data-sim-question="4"]').waitFor({ timeout: 30000 }).catch(() => {});
+    await page.waitForTimeout(2100); await snap('19-assignment-q4-labels');
+    await page.locator('[data-sim-review]').waitFor({ timeout: 30000 }).catch(() => {});
+    await page.waitForTimeout(600); await snap('20-assignment-review');
+    await page.locator('[data-sim-submitted]').waitFor({ timeout: 30000 }).catch(() => {});
+    await page.waitForTimeout(400); await snap('21-assignment-submitted');
+    await tab('Questions'); await page.waitForTimeout(1500); await snap('22-assignment-questions');
+
     // ── Self study ───────────────────────────────────────────────────────
     await open('gatefake-selfstudy', '[data-selfstudy-preview]');
     await snap('10-selfstudy-settings');
@@ -97,6 +133,6 @@ export const draftPreviewScenarios = [{
 
     t.note(`${shots.length} screenshots in ui-gate/.out/previews`);
     t.check('the previews rendered without errors', errors.length === 0, { errors: errors.slice(0, 5) });
-    t.check('every screenshot was taken', shots.length === 15, { shots: shots.length });
+    t.check('every screenshot was taken', shots.length === 22, { shots: shots.length });
   },
 }];

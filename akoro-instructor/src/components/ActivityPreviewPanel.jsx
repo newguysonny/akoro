@@ -25,6 +25,7 @@ import DraftVersions, { versionsOf } from './paper/DraftVersions.jsx';
 import { apiPut } from '../services/api.js';
 import BattleDraftPreview from './preview/BattleDraftPreview.jsx';
 import SelfStudyDraftPreview from './preview/SelfStudyDraftPreview.jsx';
+import AssignmentDraftPreview from './preview/AssignmentDraftPreview.jsx';
 import ReviewBattleSettings, { REVIEW_DEFAULT } from './preview/ReviewBattleSettings.jsx';
 import { useBattlesAPI } from '../hooks/useBattlesAPI.js';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
@@ -362,6 +363,39 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
     );
   }
 
+  /* The brief at a glance — shared by the Settings tab and the other activity types. */
+  const renderBrief = () => (
+    <>
+      {/* The brief at a glance: class, subject, topic, due — then who gets it. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0 14px' }}>
+        <Row label="Class">{audience.class_name || <span style={{ color: C.muted2 }}>Not set — choose one in Edit details</span>}</Row>
+        <Row label="Subject">{payload.subject || <span style={{ color: C.muted2 }}>—</span>}</Row>
+        <Row label={isLive ? 'Session focus' : 'Topic'}>{payload.topic}</Row>
+        <Row label="Due">
+          {isLive ? (payload.due_hint || <span style={{ color: C.muted2 }}>—</span>) : (
+            <>
+              <input type="datetime-local" value={dueValue} aria-label="Due date" onChange={(e) => setDueLocal(e.target.value)}
+                style={{ padding: '5px 7px', borderRadius: 8, border: `1px solid ${dueUnset ? RED : C.border}`, fontSize: 12, fontFamily: C.font, color: C.ink, maxWidth: '100%' }} />
+              {payload.due_hint && !dueValue && <div style={{ fontSize: 11, color: RED, marginTop: 3 }}>You said “{payload.due_hint}” — pick the exact date and time.</div>}
+            </>
+          )}
+        </Row>
+      </div>
+      <Row label="Who gets it">
+        {audience.whole_class ? `Everyone in ${audience.class_name || 'the class'}` : (audience.label || '—')}
+        {audience.resolved_count ? <Chip color={GREEN} bg="#DCFCE7">{audience.resolved_count} learner{audience.resolved_count === 1 ? '' : 's'}</Chip> : null}
+        {(audience.names || []).length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
+            {audience.names.map((n) => <Chip key={n} color={C.ink} bg={C.bg}>@{n}</Chip>)}
+            {(audience.resolved_count || 0) > audience.names.length && (
+              <Chip color={C.muted2} bg={C.bg}>+{audience.resolved_count - audience.names.length} more</Chip>
+            )}
+          </div>
+        )}
+      </Row>
+    </>
+  );
+
   return (
     <Frame onClose={onClose} meta={meta} type={draft.type}>
       {/* The AI-prepared banner — honest about who made this and what it is */}
@@ -411,6 +445,26 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
           <SelfStudyDraftPreview draft={draft} audience={audience} dueLocal={dueValue} onDue={setDueLocal} dueHint={payload.due_hint}
             review={review} onReview={setReview} onEditPlan={() => setPhase('editing')} />
         </div>
+      ) : draft.type === 'assignment' && versions.length > 0 ? (
+        <div style={{ flex: 1, overflowY: 'auto', paddingRight: 2 }}>
+          <AssignmentDraftPreview version={shown} title={payload.title || draft.title} topic={payload.topic}
+            settings={(
+              <div>
+                {renderBrief()}
+                <Row label="Instructions to learners">{shown?.paper?.instructions || payload.instructions || <span style={{ color: C.muted2 }}>None</span>}</Row>
+                <div style={{ marginBottom: 12, borderTop: `1px solid ${C.border}` }}>
+                  <ReviewBattleSettings value={review} onChange={setReview} dueLocal={dueValue} defaultOpen={false} />
+                </div>
+              </div>
+            )}
+            questions={(
+              <div style={{ marginBottom: 14 }}>
+                <DraftVersions draft={draft} selected={shown?.n} onSelect={setVSel}
+                  onSave={saveVersion} onRetry={retryVersion} busy={vBusy}
+                  editing={vEditing} setEditing={setVEditing} />
+              </div>
+            )} />
+        </div>
       ) : isJourney ? (
         <div style={{ flex: 1, overflowY: 'auto', paddingRight: 2 }}>
           {(payload.history || []).length > 1 && (
@@ -441,33 +495,7 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
           {(payload.history || []).length > 1 && (
             <HistoryTabs history={payload.history} current={payload.history_current} busy={vBusy} onPick={restoreRound} />
           )}
-          {/* The brief at a glance: class, subject, topic, due — then who gets it. */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0 14px' }}>
-            <Row label="Class">{audience.class_name || <span style={{ color: C.muted2 }}>Not set — choose one in Edit details</span>}</Row>
-            <Row label="Subject">{payload.subject || <span style={{ color: C.muted2 }}>—</span>}</Row>
-            <Row label={isLive ? 'Session focus' : 'Topic'}>{payload.topic}</Row>
-            <Row label="Due">
-              {isLive ? (payload.due_hint || <span style={{ color: C.muted2 }}>—</span>) : (
-                <>
-                  <input type="datetime-local" value={dueValue} aria-label="Due date" onChange={(e) => setDueLocal(e.target.value)}
-                    style={{ padding: '5px 7px', borderRadius: 8, border: `1px solid ${dueUnset ? RED : C.border}`, fontSize: 12, fontFamily: C.font, color: C.ink, maxWidth: '100%' }} />
-                  {payload.due_hint && !dueValue && <div style={{ fontSize: 11, color: RED, marginTop: 3 }}>You said “{payload.due_hint}” — pick the exact date and time.</div>}
-                </>
-              )}
-            </Row>
-          </div>
-          <Row label="Who gets it">
-            {audience.whole_class ? `Everyone in ${audience.class_name || 'the class'}` : (audience.label || '—')}
-            {audience.resolved_count ? <Chip color={GREEN} bg="#DCFCE7">{audience.resolved_count} learner{audience.resolved_count === 1 ? '' : 's'}</Chip> : null}
-            {(audience.names || []).length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
-                {audience.names.map((n) => <Chip key={n} color={C.ink} bg={C.bg}>@{n}</Chip>)}
-                {(audience.resolved_count || 0) > audience.names.length && (
-                  <Chip color={C.muted2} bg={C.bg}>+{audience.resolved_count - audience.names.length} more</Chip>
-                )}
-              </div>
-            )}
-          </Row>
+          {renderBrief()}
           {!versions.length && <Row label="Instructions to learners">{payload.instructions || <span style={{ color: C.muted2 }}>None</span>}</Row>}
           {versions.length > 0 && (
             <div style={{ marginBottom: 14 }}>
