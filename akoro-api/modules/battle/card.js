@@ -22,12 +22,15 @@ export function toCard(b, extra = {}) {
     status:        b.status,
     // From what it IS, not its status: a scheduled duel deliberately waits in
     // "lobby" until accepted, and was labelled "Immediate" for it.
-    battleType:    b.battle_type === "review" ? "review"
+    // An Agent Check sent as a challenge (an activity's review) reads as a review too.
+    battleType:    b.battle_type === "review" || b.battle_type === "check" ? "review"
                  : (b.scheduled_start && new Date(b.scheduled_start) > new Date()) || b.status === "scheduled" ? "scheduled"
                  : b.battle_type === "classroom" || b.battle_type === "team" ? "classroom" : "immediate",
     type:          b.battle_type,
     // The daily battle: platform-made, recurs every day (agent-network/activities.js).
     daily:         String(b.recurring_key || "").startsWith("daily:"),
+    // Who hosts a review: 'guide' (a student asked the teaching guide, battle/guideReview.js).
+    reviewHost:    b.review_host ?? (b.battle_type === "review" ? "teacher" : null),
     xpPrize:       `+${b.xp_prize ?? b.xp_pool ?? 0} XP`,
     xpPool:        b.xp_pool ?? b.xp_prize ?? 0,
     // What a miss costs, set by the creator — on the challenge sheet before accepting.

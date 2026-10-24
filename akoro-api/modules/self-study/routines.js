@@ -13,6 +13,7 @@
  */
 
 import db from "../../db.js";
+import { matchRoutine } from "./routinesCore.js";
 import { createActivityDraft, DRAFT_TYPES, instructorClassrooms } from "./drafts.js";
 
 // `invalid` (an Error carrying an HTTP status) is createAssignment.js's —
@@ -95,8 +96,12 @@ export async function deleteRoutine(instructor, id) {
   return { deleted: true, id: routine.id };
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 async function ownedRoutine(instructor, id) {
-  const { data } = await db.from("draft_routines").select("*").eq("id", id).maybeSingle();
+  let data = null;
+  if (UUID.test(String(id || ""))) ({ data } = await db.from("draft_routines").select("*").eq("id", id).maybeSingle());
+  else data = matchRoutine(await listRoutines(instructor), id);
   if (!data) throw invalid("Routine not found", 404);
   if (data.created_by !== instructor.id && instructor.role !== "admin") throw invalid("Not your routine", 403);
   return data;

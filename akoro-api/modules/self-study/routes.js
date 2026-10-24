@@ -536,6 +536,26 @@ async function classRows(assignment) {
 }
 
 /** GET /api/self-study/:id/analytics — class results for one activity, plus any saved AI report. */
+/**
+ * GET /api/self-study/:id/reviews — the activity's review battle: when it runs
+ * (one class battle, sent to their Challenges) and each learner's state
+ * (waiting · sent · accepted · running · done with its mark · missed). The
+ * instructor's view (self-study/activityReview.js).
+ */
+router.get("/:id/reviews", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
+  const { assignment, error } = await ownedAssignment(req, req.params.id);
+  if (error === "not_found") return missing(res, "Assignment not found");
+  if (error === "forbidden") return denied(res, "Not your assignment");
+  const review = assignment.details?.review || null;
+  if (!review?.on) return ok(res, { review: null, reviews: [] });
+  const { activityReviews } = await import("./activityReview.js");
+  const { reviews, battleId, battleStatus, startsAt } = await activityReviews(assignment.id);
+  const ids = reviews.map((r) => r.learnerId);
+  const { data: users } = ids.length ? await db.from("users").select("id, full_name, username").in("id", ids) : { data: [] };
+  const nameOf = new Map((users || []).map((u) => [u.id, u.full_name || u.username]));
+  ok(res, { review, battleId, battleStatus, startsAt, reviews: reviews.map((r) => ({ ...r, name: nameOf.get(r.learnerId) || null })) });
+}));
+
 router.get("/:id/analytics", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
   const { assignment, error } = await ownedAssignment(req, req.params.id);
   if (error === "not_found") return missing(res, "Assignment not found");

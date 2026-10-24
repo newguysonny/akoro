@@ -31,6 +31,9 @@ export async function teacherOf(ctx, who) {
 export async function cleanSlate(ctx, teacher) {
   const n = await ctx.db.deleteOwned("activity_drafts", { ownerColumn: "created_by", ownerId: teacher.id, filters: { status: "draft" } });
   if (n) ctx.note(`cleared ${n} stale pending draft(s) left on ${teacher.username || "the test instructor"}`);
+  // Weekly routines an earlier run left active change "cancel that routine" into "which one?".
+  const r = await ctx.db.deleteOwned("draft_routines", { ownerColumn: "created_by", ownerId: teacher.id, filters: { status: "active" } }).catch(() => 0);
+  if (r) ctx.note(`cleared ${r} stale routine(s) left on ${teacher.username || "the test instructor"}`);
 }
 
 export const toolsOf = (turn) => (turn.tools || []).map((t) => t.tool);
@@ -249,9 +252,11 @@ export const draftLifecycle = {
 export const routineLifecycle = {
   name: "instructor.routine_lifecycle", area: "instructor-chat", risk: "write",
   description: "A weekly routine set in chat is stored, listed and cancelled — and only ever prepares drafts, never assigns.",
-  params: { instructor: { default: DEFAULT_INSTRUCTOR }, learner: { default: DEFAULT_LEARNER } },
+  // A learner IN the instructor's class: the agent checks the roster and rightly asks about anyone else.
+  params: { instructor: { default: DEFAULT_INSTRUCTOR }, learner: { default: "@tester01" } },
   async run(ctx, p) {
     const teacher = await teacherOf(ctx, p.instructor);
+    await cleanSlate(ctx, teacher);
     const learner = await ctx.as(p.learner);
     const say = talk(ctx, p, teacher);
     const title = `${ctx.marker} Friday revision`;
@@ -275,7 +280,8 @@ export const routineLifecycle = {
     const t3 = await say("Cancel that routine.", "cancel");
     const cancelled = lastCall(t3, "cancel_activity_routine");
     ctx.expect.ok("the agent called cancel_activity_routine", !!cancelled, toolsOf(t3));
-    ctx.expect.eq("it cancelled the same routine", cancelled?.input?.routineId, routineId);
+    // By id or by its title: what counts is which routine was cancelled.
+    ctx.expect.eq("it cancelled the same routine", cancelled?.result?.routineId, routineId);
     ctx.expect.ok("it was cancelled", cancelled?.result?.cancelled === true, cancelled?.result);
     ctx.expect.toolNotCalled(t3, "prepare_activity");   // cancelling must not start a draft
 

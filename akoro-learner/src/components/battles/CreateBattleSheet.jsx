@@ -33,6 +33,10 @@ const FIELD = {
 };
 const LABEL = { fontSize: 11, fontWeight: 700, color: 'var(--ak-text-sub)', display: 'block', marginBottom: 6, letterSpacing: .3 };
 
+const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const localZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Africa/Lagos'; } catch { return 'Africa/Lagos'; } };
+
 const ANIM_CSS =
   '@keyframes ak-shimmer{0%{background-position:100% 50%}100%{background-position:0 50%}}' +
   '@keyframes ak-spin{to{transform:rotate(360deg)}}';
@@ -85,6 +89,11 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
   const [hpPerMiss, setHpPerMiss] = useState('10');
   const [minXp, setMinXp] = useState('0');           // entry requirement (0 = open to all)   // what a miss costs — invitees see it first
   const [scheduledAt, setScheduledAt] = useState('');
+  // Recurring: days of the week, a time and an end date and time (battle/series.js).
+  const [repeats, setRepeats] = useState(false);
+  const [days, setDays] = useState([]);
+  const [repeatTime, setRepeatTime] = useState('16:00');
+  const [repeatUntil, setRepeatUntil] = useState('');
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -178,6 +187,8 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
     if (kind === 'class' && !subject)   return setError('Pick a subject — the questions come from one.');
     if (!title.trim()) return setError('Give your battle a title.');
     if (mode === 'picked' && count === 0) return setError('Choose at least one classmate, or pick “Everyone”.');
+    if (repeats && !days.length) return setError('Pick the days it repeats on.');
+    if (repeats && !repeatUntil) return setError('Pick when the series ends.');
     if (checked?.missing.length) return setError(`Not in this ${scopeWord}: ${checked.missing.join(', ')}`);
 
     setBusy(true);
@@ -198,7 +209,8 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
       hp_per_miss: hpPerMiss === '' ? undefined : parseInt(hpPerMiss, 10),
       min_xp: parseInt(minXp, 10) || 0,
       expires_in_minutes: 60,
-      scheduled_for: scheduledAt ? new Date(scheduledAt).toISOString() : null,
+      scheduled_for: !repeats && scheduledAt ? new Date(scheduledAt).toISOString() : null,
+      repeat: repeats ? { days, time: repeatTime, tz: localZone(), until: new Date(repeatUntil).toISOString() } : undefined,
       question_source: questionSource,
       whole_class: mode === 'all',
       user_ids: mode === 'all' ? [] : selected,
@@ -479,11 +491,54 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
             </div>
 
             <div style={{ marginBottom: 22 }}>
-              <label style={LABEL}><Icon name="ti-calendar" size={13} color={BRAND}/> Schedule for <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--ak-text-muted)' }}>optional</span></label>
-              <input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} style={FIELD} />
-              <p style={{ fontSize: 10.5, color: 'var(--ak-text-muted)', margin: '5px 0 0', lineHeight: 1.45 }}>
-                Leave empty to send the challenge right now.
-              </p>
+              <label style={LABEL}><Icon name="ti-calendar" size={13} color={BRAND}/> When</label>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                {[[false, 'Once', 'ti-calendar'], [true, 'Repeats', 'ti-repeat']].map(([v, label, icon]) => (
+                  <button key={label} type="button" onClick={() => setRepeats(v)} style={{
+                    flex: 1, padding: '9px 10px', borderRadius: 12, cursor: 'pointer', fontFamily: "'Nunito',sans-serif",
+                    border: `1.5px solid ${repeats === v ? BRAND : 'var(--ak-border2)'}`, background: repeats === v ? `${BRAND}12` : 'var(--ak-surface)',
+                    color: repeats === v ? BRAND : 'var(--ak-text-sub)', fontSize: 12.5, fontWeight: 800,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  }}><Icon name={icon} size={14} color={repeats === v ? BRAND : 'var(--ak-text-sub)'} />{label}</button>
+                ))}
+              </div>
+              {!repeats ? (
+                <>
+                  <input type="datetime-local" aria-label="Schedule for" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} style={FIELD} />
+                  <p style={{ fontSize: 10.5, color: 'var(--ak-text-muted)', margin: '5px 0 0', lineHeight: 1.45 }}>
+                    Leave empty to send the challenge right now.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', gap: 5, marginBottom: 10 }}>
+                    {DAY_LETTERS.map((l, d) => {
+                      const on = days.includes(d);
+                      return (
+                        <button key={d} type="button" aria-label={DAY_NAMES[d]} aria-pressed={on}
+                          onClick={() => setDays(on ? days.filter((x) => x !== d) : [...days, d].sort())} style={{
+                            flex: 1, height: 36, borderRadius: 10, cursor: 'pointer', fontFamily: "'Nunito',sans-serif",
+                            border: `1.5px solid ${on ? BRAND : 'var(--ak-border2)'}`, background: on ? BRAND : 'var(--ak-surface)',
+                            color: on ? '#fff' : 'var(--ak-text-sub)', fontSize: 12, fontWeight: 900,
+                          }}>{l}</button>
+                      );
+                    })}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ ...LABEL, fontSize: 10 }}>Starts at</label>
+                      <input type="time" value={repeatTime} onChange={e => setRepeatTime(e.target.value)} style={FIELD} />
+                    </div>
+                    <div style={{ flex: 1.6 }}>
+                      <label style={{ ...LABEL, fontSize: 10 }}>Ends</label>
+                      <input type="datetime-local" value={repeatUntil} onChange={e => setRepeatUntil(e.target.value)} style={FIELD} />
+                    </div>
+                  </div>
+                  <p style={{ fontSize: 10.5, color: 'var(--ak-text-muted)', margin: '5px 0 0', lineHeight: 1.45 }}>
+                    Everyone you pick is in every one automatically; they can skip one or opt out. Each one appears in Battles an hour before it starts.
+                  </p>
+                </>
+              )}
             </div>
 
             {error && <p style={{ fontSize: 12, fontWeight: 800, color: RED, margin: '0 0 12px' }}>{error}</p>}

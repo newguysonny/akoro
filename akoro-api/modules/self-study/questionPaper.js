@@ -602,8 +602,33 @@ export function unchangedRewrites(request, base, paper) {
   return problems;
 }
 
+/**
+ * PURE: a follow-up that only sets marks ("Give question 7 5 marks", "make Q2 and Q3 worth 4 marks
+ * each", "question 5: 10 marks") → [{ n, points }], else null. Anything else in it → null (the model).
+ */
+const MARKS_CLAUSE = /^(?:please\s+)?(?:(?:give|make|set|award|change|put)\s+)?((?:(?:question|q)\s*\d{1,2}(?:\s*(?:,|and|&)\s*)?)+)\s*(?::|to|is|as|should be|be|carry|carries|worth|=)?\s*(?:worth\s+|carry\s+)?(\d{1,3}(?:\.5)?)\s*(?:marks?|points?|pts?)(?:\s+each)?$/i;
+export function marksOnly(request) {
+  const clauses = String(request || "").trim().replace(/[.!]+$/, "").split(/\s*(?:;|\.\s|,\s*(?=(?:and\s+)?(?:give|make|set|award|change|put|question|q)\b)|\band\s+(?=(?:give|make|set|award|change|put)\b))\s*/i).filter(Boolean);
+  if (!clauses.length) return null;
+  const out = [];
+  for (const c of clauses) {
+    const m = c.trim().match(MARKS_CLAUSE);
+    if (!m) return null;
+    for (const n of m[1].match(/\d{1,2}/g)) out.push({ n: Number(n), points: Number(m[2]) });
+  }
+  return out.length && out.every((x) => x.points > 0) ? out : null;
+}
+
 /** A follow-up: the same check-and-retry over applyRevision. → { paper, changes, note, warning } */
 export async function revisePaper({ chat, topic, subject, classLevel, request, base, plan: given }) {
+  // Marks alone need no writer: the questions stay word for word, only their marks change.
+  const marks = marksOnly(request);
+  if (marks && marks.every(({ n }) => base?.questions?.[n - 1])) {
+    const paper = structuredClone(base);
+    const changes = {};
+    for (const { n, points } of marks) { paper.questions[n - 1].max_points = points; changes[n - 1] = "changed"; }
+    return { paper, changes, note: `Marks set: ${marks.map(({ n, points }) => `Q${n} ${points}`).join(", ")}.`, warning: null };
+  }
   // A follow-up only holds counts it states itself ("make it 8 questions").
   // Counts in a follow-up are changes ("add 2 MCQ"), not the paper's totals,
   // so only what can be checked on the whole paper is held: diagrams added

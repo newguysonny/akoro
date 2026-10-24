@@ -20,6 +20,7 @@
 
 import { normalizeStages } from "./journeyStages.js";
 import { saveToolDraft, reviseToolDraft, retryToolVersion } from "../teaching/toolDrafts.js";
+import { cleanReview, reviewInstruction, scheduleActivityReview } from "./activityReview.js";
 import { callAsUser } from "../tasks/tools/assign-battle.js";
 import { mergePlanItems, wantsPlanEdit } from "./planEdit.js";
 import db from "../../db.js";
@@ -315,11 +316,28 @@ export async function createActivityDraft({ instructor, input, sessionId = null,
     if (hint) audienceLabel += ` · ${hint}`;
   } else if (type === "battle") {
     // The battle form (human) completes questions/XP; the agent drafts intent.
+    // What the instructor said about its shape and timing travels to the form,
+    // which opens prefilled with it: a study review or a battle, when it
+    // starts, whether it repeats, how many questions.
+    const repeat = input?.repeat && typeof input.repeat === "object" ? input.repeat : null;
+    const scheduledAt = input?.scheduled_at && !Number.isNaN(Date.parse(input.scheduled_at)) ? new Date(input.scheduled_at).toISOString() : null;
+    const total = Math.round(Number(input?.total_questions));
     payload.details = {
       topic,
       difficulty: payload.difficulty,
       note: String(input?.instructions || "").trim() || null,
+      mode: input?.battle_format === "review" ? "review" : "battle",
+      scheduled_at: repeat ? null : scheduledAt,
+      scheduled_hint: String(input?.scheduled_hint || "").trim() || null,
+      repeat: repeat ? {
+        days: (Array.isArray(repeat.days) ? repeat.days : []).map(Number).filter((d) => d >= 0 && d <= 6),
+        time: String(repeat.time || "").slice(0, 5) || null,
+        until: repeat.until && !Number.isNaN(Date.parse(repeat.until)) ? new Date(repeat.until).toISOString() : null,
+      } : null,
+      total_questions: Number.isFinite(total) && total >= 5 ? Math.min(30, total) : null,
     };
+    if (repeat) audienceLabel += " · repeats";
+    else if (scheduledAt || payload.details.scheduled_hint) audienceLabel += ` · ${payload.details.scheduled_hint || "scheduled"}`;
   } else if (type === "multi_stage") {
     const stages = normalizeStages(input?.stages, subject);
     if (!stages.length) throw invalid("A multi-stage journey needs at least one stage with a topic");
@@ -439,6 +457,8 @@ export async function updateActivityDraft(instructor, id, patch) {
     // draft just records provenance.
     updates.status = "assigned";
     updates.assignment_id = patch.assignment_id ?? null;
+    // A recurring battle: the series it became (its battles come later).
+    if (patch.series_id) updates.series_id = patch.series_id;
     updates.resolved_at = new Date().toISOString();
   }
   if (!Object.keys(updates).length) return draft;
@@ -702,7 +722,8 @@ export async function assignActivityDraft({ instructor, id, overrides = null }) 
   if (claimErr) throw invalid(claimErr.message, 500);
   if (!claim?.length) throw invalid("This draft was already resolved", 409);
 
-  const { version: pickedVersion, ...rest } = overrides && typeof overrides === "object" ? overrides : {};
+  // `review`: the review battle the activity comes with (self-study/activityReview.js).
+  const { version: pickedVersion, review: reviewIn = undefined, ...rest } = overrides && typeof overrides === "object" ? overrides : {};
   const payload = { ...(draft.payload || {}), ...rest };
   const type = payload.type || draft.type;
 
@@ -732,7 +753,13 @@ export async function assignActivityDraft({ instructor, id, overrides = null }) 
   }
 
   let result;
+  let review = null;
   try {
+    // The review battle: checked before anything is created, so a bad time is a clear refusal.
+    if (["assignment", "self_study", "project"].includes(type) && reviewIn !== undefined) {
+      review = cleanReview(reviewIn, { dueAt: payload.due_at ?? null });
+      if (review) payload.instructions = [payload.instructions, reviewInstruction(review.at)].filter(Boolean).join("\n\n");
+    }
     if (type === "multi_stage") {
     const stages = Array.isArray(payload.details?.stages) ? payload.details.stages.slice(0, 6) : [];
     if (!stages.length) throw invalid("The journey has no stages", 400);
@@ -784,7 +811,11 @@ export async function assignActivityDraft({ instructor, id, overrides = null }) 
     .eq("id", draft.id);
   if (error) console.warn("[drafts] assign bookkeeping failed:", error.message);
 
-  return { ...result, announce: announceFor(type) };
+  // Queue the review battle's runs (the assignment stands even if this fails: it is logged).
+  if (review) {
+    review = await scheduleActivityReview(result.assignment, review).catch((e) => { console.error("[drafts] review battle not scheduled:", e.message); return null; });
+  }
+  return { ...result, review, announce: announceFor(type) };
 }
 
 /* ── Versions: the teacher's edits and retries (the preview) ──────────── */

@@ -45,6 +45,8 @@
   .ak-shell-main:not(.ak-bare) { padding: 12px 12px 84px !important; }
   .ak-shell-main.ak-bare { padding-bottom: 74px !important; }
   .ak-hdr-wide { display: none !important; }
+  /* A full-screen page (the chat) gets the whole viewport, like the learner's Agent tab. */
+  .ak-mobile-hide { display: none !important; }
 }
 
 /* Wide pages: the old layouts centred their content in a fixed width; in the

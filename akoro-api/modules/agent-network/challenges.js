@@ -9,12 +9,18 @@
  *   cancelChallengeRequest(me, id)
  *   rematch(me, battleId)             the same battle again with the same agents
  *
+ * Both creators take `repeat: { days, time, tz, until }`: a recurring series
+ * (battle/series.js) instead of one battle or post — the invitees are in every
+ * occurrence unless they opt out; a post goes up again before each start.
+ *
  * Who may be challenged follows their privacy (canFind) and "open to
  * challenges"; blocks hide both ways.
  */
 import { assertEntry, entryCheck } from "../battle/entry.js";
 import db from "../../db.js";
-import { createNetworkBattle, cleanBattleOptions } from "../battle/networkBattle.js";
+import { createNetworkBattle, cleanBattleOptions, seatsFor } from "../battle/networkBattle.js";
+import { createSeries } from "../battle/series.js";
+import { NETWORK_KEYS, seriesTemplate } from "../battle/seriesCore.js";
 import { canFind } from "./filters.js";
 import { relationsOf, blockedWith, getSettings } from "./network.js";
 import { notifyUser } from "../notify.js";
@@ -71,6 +77,15 @@ export async function challengeAgents(meId, input = {}) {
   if (!everyone.length) throw fail("Who should your agent challenge? Find them with search_agents first.");
   await checkChallengeable(meId, everyone);
   const teams = teammate ? { [teammate]: "A", ...Object.fromEntries(opponents.filter((id) => id !== teammate).map((id) => [id, "B"])) } : {};
+  if (input.repeat) {
+    cleanBattleOptions({ ...input, kind, scheduled_for: null });
+    seatsFor(kind, everyone);
+    const { data: agents } = await db.from("user_agents").select("user_id").in("user_id", [meId, ...everyone]);
+    if ((agents || []).length < everyone.length + 1) throw fail("Everyone in it needs an agent (you too).");
+    const made = await createSeries({ creatorId: meId, scope: "network", repeat: input.repeat, memberIds: everyone,
+      template: { ...seriesTemplate(input, NETWORK_KEYS), kind, teams, post: false } });
+    return { seriesId: made.id, nextAt: made.nextAt, kind, invited: everyone, status: "series", repeats: made.rule };
+  }
   return createNetworkBattle({ creatorId: meId, opponents: everyone, teams, options: { ...input, kind }, source: "challenge" });
 }
 
@@ -78,8 +93,17 @@ export async function challengeAgents(meId, input = {}) {
 
 const REQUEST_SCOPES = ["everyone", "school", "classmates", "course", "community"];
 
-export async function postChallengeRequest(meId, input = {}) {
+export async function postChallengeRequest(meId, input = {}, { seriesId = null } = {}) {
   const kind = ["1v1", "team", "group"].includes(input.kind ?? input.battle_type) ? (input.kind ?? input.battle_type) : "1v1";
+  if (input.repeat && !seriesId) {
+    // A recurring post: each start gets a fresh post 12 hours ahead (battle/series.js).
+    cleanBattleOptions({ ...input, kind, scheduled_for: null });
+    const scope = REQUEST_SCOPES.includes(input.scope) ? input.scope : "everyone";
+    if (["course", "community"].includes(scope) && !input.scope_id) throw fail(`Which ${scope}? Give its id (scope_id), or post it to everyone, your classmates or your school.`);
+    const made = await createSeries({ creatorId: meId, scope: "network", repeat: input.repeat, memberIds: [],
+      template: { ...seriesTemplate(input, NETWORK_KEYS), kind, scope, post: true } });
+    return { id: null, seriesId: made.id, nextAt: made.nextAt, title: input.title || null, scope, repeats: made.rule, series: true };
+  }
   const o = cleanBattleOptions({ ...input, kind });
   // You play in what you post: the coins for your agent's answers, up front.
   const ce = await entryCheck(meId, { battle_type: "battle", total_questions: o.total, min_xp: 0 });
@@ -103,6 +127,7 @@ export async function postChallengeRequest(meId, input = {}) {
     max_xp: Number.isFinite(Number(input.max_xp)) ? Math.max(0, Math.round(Number(input.max_xp))) : null,
     scheduled_for: o.scheduledFor, note: input.note ? String(input.note).slice(0, 280) : null,
     expires_at: expires.toISOString(), hp_per_miss: o.hpPerMiss,
+    ...(seriesId ? { series_id: seriesId } : {}),
   };
   const { data, error } = await edu().from("challenge_requests").insert(row).select().single();
   if (error) throw new Error(error.message);

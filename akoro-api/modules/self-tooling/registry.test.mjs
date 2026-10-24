@@ -1,4 +1,5 @@
 // Self-tooling S1: the Capability Registry and Data Views keep their promises.
+import "../../test-env.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";

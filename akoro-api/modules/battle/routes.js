@@ -60,6 +60,9 @@ import { buildQuestions, perQuestionSeconds } from "./questionSource.js";
 import { InsufficientCoins } from "../../lib/coins.js";
 
 import { addLater } from "../../lib/deferredJobs.js";
+import { requestGuideReview } from "./guideReview.js";
+import { createSeries, seriesCards, skipOne, optOut, endSeries } from "./series.js";
+import { seriesTemplate } from "./seriesCore.js";
 // ─── Lazy-load battle queue ───────────────────────────────────────────────────
 let _battleQueue = null;
 async function getBattleQueue() {
@@ -259,6 +262,7 @@ async function resolveAgent(userId) {
 }
 
 async function notifyUser(userId, type, title, content, relatedId) {
+  if (!userId) return;   // a platform-made battle (an activity's review) has no creator to tell
   await db.from("notifications").insert({ user_id: userId, type, title, content, related_id: relatedId });
   global.io?.to(`user:${userId}`).emit("notification", { type, title, content, relatedId });
 }
@@ -305,6 +309,26 @@ async function assignQuestions(battleId, courseId, topic, subject, difficulty, t
 // ─── CREATION ROUTES ─────────────────────────────────────────────────────────
 
 // POST /api/courses/:courseId/battles/challenge
+/**
+ * POST /api/battle/guide-reviews  { sessionId? | subject + topic }
+ * A review with the teaching guide (battle/guideReview.js): the guide asks,
+ * your protégé answers, a mark sheet. Runs at once; it is in the Battles tab.
+ */
+router.post("/guide-reviews", authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const out = await requestGuideReview({
+      learnerId: req.user.id,
+      sessionId: req.body?.sessionId || null,
+      subject: req.body?.subject || null,
+      topic: req.body?.topic || null,
+    });
+    res.status(201).json({ success: true, data: out });
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ success: false, error: e.message });
+    throw e;
+  }
+}));
+
 router.post("/courses/:courseId/battles/challenge", authenticateToken, asyncHandler(async (req, res) => {
   const { courseId } = req.params;
   const {
@@ -674,7 +698,8 @@ async function classroomRole(userId, role, classroomId) {
  * Same shape as the course invite — one opponent makes a duel, several make a
  * group battle — but scoped to classmates and a class subject.
  */
-router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHandler(async (req, res) => {
+// Named so a recurring series can make each occurrence with the same checks (battle/series.js).
+const classInvite = async (req, res) => {
   const { classroomId } = req.params;
   const {
     title, description, subject, topic,
@@ -753,6 +778,17 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
   if (!isReview && !isDuel && opponents.length < 2) {
     return res400(res, "A battle needs two learners to compete. Pick at least one more, or send it to the whole class.");
   }
+
+  // A RECURRING battle: save the series, not a battle. Its battles are made an
+  // hour before each start, through this same route (battle/series.js).
+  if (req.body?.repeat && !req.series) {
+    if (isReview) return res400(res, "A study review is set once; it doesn't repeat.");
+    try {
+      const made = await createSeries({ creatorId: req.user.id, scope: "class", classroomId,
+        template: seriesTemplate(req.body), repeat: req.body.repeat, memberIds: opponents.map((o) => o.user_id) });
+      return res201(res, { success: true, series_id: made.id, next_at: made.nextAt, invited: opponents.length, repeats: made.rule });
+    } catch (e) { if (e.status === 400) return res400(res, e.message); throw e; }
+  }
   const isScheduled = !!scheduled_for && new Date(scheduled_for) > new Date();
   // A deadline only where there is a start time to be a deadline. See
   // acceptDeadline; an unscheduled one stays open BATTLE_IDLE_HOURS.
@@ -772,9 +808,11 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
     topic: topic ?? null, subject, difficulty,
     total_questions, time_limit_seconds, xp_prize, xp_pool: xp_prize,
     total_participants: opponents.length + 1,
-    status: (isScheduled && !isDuel) ? "scheduled" : "lobby",
+    status: (isScheduled && (!isDuel || req.series)) ? "scheduled" : "lobby",
     scheduled_start: scheduled_for ?? null, expires_at: expiresAt,
     created_by: req.user.id,
+    // An occurrence of a recurring series (absent otherwise, so the insert is unchanged).
+    series_id: req.series?.id,
   }).select().single();
   if (error) throw new Error(error.message);
   // Unscheduled invitations don't wait for ever: after BATTLE_IDLE_HOURS it
@@ -836,7 +874,8 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
     await db.from("battle_participants").upsert({
       battle_id: battle.id, user_id: o.user_id, agent_id: o.agent_id,
       role: isDuel ? "opponent" : "participant",
-      joined_at: null,
+      // In a series everyone is in unless they opted out; no accept per occurrence.
+      joined_at: req.series ? now() : null,
     }, { onConflict: "battle_id,user_id" });
   }
 
@@ -846,7 +885,7 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
     await addLater(q, "expire-battle", { action: "expire-battle", battleId: battle.id },
       { delay: Math.max(0, new Date(expiresAt).getTime() - Date.now() + EXPIRE_AFTER_START_MS) });
   }
-  if (!isDuel) {
+  if (!isDuel || req.series) {
     // Wait for the invitations: until the scheduled time if there is one,
     // otherwise until the invite window closes. It starts sooner than that —
     // the accept route brings it forward the moment everyone has answered, so
@@ -863,6 +902,11 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
 
   const { data: me } = await db.from("users").select("full_name, avatar_url").eq("id", req.user.id).single();
   for (const o of opponents) {
+    if (req.series) {
+      await notifyUser(o.user_id, "battle_series", `${title} is on`,
+        `Starts ${new Date(scheduled_for).toLocaleString("en-GB", { timeZone: req.series.tz || "Africa/Lagos" })}. You're in; skip it from your Challenges tab.`, battle.id);
+      continue;
+    }
     await notifyUser(o.user_id, "battle_challenge",
       isDuel ? `${me?.full_name ?? "A classmate"} challenged you!`
              : `${me?.full_name ?? "Someone"} invited you to a battle: ${title}`,
@@ -889,7 +933,8 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
       no_agent:     skipped.no_agent.map((id) => nameById.get(id) ?? id),
     },
   });
-}));
+};
+router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHandler(classInvite));
 
 // ─── MY BATTLES / MY CHALLENGES ──────────────────────────────────────────────
 // Course-independent lists. The learner dashboard and the instructor/school
@@ -1086,7 +1131,7 @@ router.get("/my-challenges", authenticateToken, asyncHandler(async (req, res) =>
   // Challenges tab was permanently empty and nothing anywhere said why. This is
   // the third time this shape has bitten: /my-battles had exactly the same bug.
   const { data, error } = await db.from("battles")
-    .select("*, users!battles_created_by_fkey(full_name, avatar_url), battle_participants!inner(user_id, role, joined_at, declined_at)")
+    .select("*, users!battles_created_by_fkey(full_name, avatar_url, role), battle_participants!inner(user_id, role, joined_at, declined_at)")
     .eq("battle_participants.user_id", req.user.id)
     .in("battle_participants.role", ["opponent", "participant"])
     // Unanswered: neither accepted nor declined.
@@ -1104,8 +1149,44 @@ router.get("/my-challenges", authenticateToken, asyncHandler(async (req, res) =>
   // one invisible for so long.
   if (error) throw new Error(`my-challenges: ${error.message}`);
 
-  res200(res, (data ?? []).map((b) => toCard(b)));
+  // The scope's name for the card ("Class · JSS1-2", "Course · Biology 101"),
+  // and whether a teacher set it (a teacher hosts; the card says so).
+  const rows = data ?? [];
+  const courseIds = [...new Set(rows.map((b) => b.course_id).filter(Boolean))];
+  const classIds  = [...new Set(rows.map((b) => b.classroom_id).filter(Boolean))];
+  const [{ data: courses }, { data: classes }] = await Promise.all([
+    courseIds.length ? db.from("courses").select("id, title").in("id", courseIds) : { data: [] },
+    classIds.length ? db.from("classrooms").select("id, name").in("id", classIds) : { data: [] },
+  ]);
+  const courseName = new Map((courses ?? []).map((c) => [c.id, c.title]));
+  const className  = new Map((classes ?? []).map((c) => [c.id, c.name]));
+  // An activity's review battle is platform-made (no creator): the card names the teacher who set it.
+  const setBy = [...new Set(rows.filter((b) => !b.created_by && b.review_host === "teacher" && b.requested_by).map((b) => b.requested_by))];
+  const { data: setters } = setBy.length ? await db.from("users").select("id, full_name, avatar_url, role").in("id", setBy) : { data: [] };
+  const setter = new Map((setters ?? []).map((u) => [u.id, u]));
+  for (const b of rows) if (!b.created_by && setter.has(b.requested_by)) b.users = setter.get(b.requested_by);
+  // One card per recurring series I'm in or set (its occurrences are in my Battles tab).
+  const series = await seriesCards(req.user.id).catch((e) => { console.warn("[my-challenges] series:", e.message); return []; });
+  res200(res, [...rows.map((b) => toCard(b, {
+    scopeName: b.course_id ? courseName.get(b.course_id) ?? null : b.classroom_id ? className.get(b.classroom_id) ?? null : null,
+    hostRole:  b.users?.role === "instructor" || b.users?.role === "teacher" ? "teacher" : (b.users?.role || null),
+  })), ...series]);
 }));
+
+// ─── RECURRING SERIES (battle/series.js) ─────────────────────────────────────
+// Skip one occurrence (the next, or `at`), opt out of the series, or (the
+// creator) end it.
+const seriesAction = (fn) => asyncHandler(async (req, res) => {
+  try {
+    res200(res, await fn(req));
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ success: false, error: e.message });
+    throw e;
+  }
+});
+router.post("/series/:seriesId/skip", authenticateToken, seriesAction((req) => skipOne(req.params.seriesId, req.user.id, req.body?.at || null)));
+router.post("/series/:seriesId/opt-out", authenticateToken, seriesAction((req) => optOut(req.params.seriesId, req.user.id)));
+router.post("/series/:seriesId/end", authenticateToken, seriesAction((req) => endSeries(req.params.seriesId, req.user.id)));
 
 /**
  * GET /api/battle/battles/:id/participants
@@ -1222,7 +1303,7 @@ router.get("/courses/:courseId/roster", authenticateToken, asyncHandler(async (r
  * existing /challenge and /classroom routes create, so nothing downstream
  * (worker, results, leaderboard) needs to know this route exists.
  */
-router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler(async (req, res) => {
+const courseInvite = async (req, res) => {
   const { courseId } = req.params;
   const {
     title, description, topic, subject,
@@ -1322,6 +1403,16 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
   if (!isDuel && opponents.length < 2) {
     return res400(res, "A battle needs two learners to compete. Pick at least one more, or send it to the whole course.");
   }
+
+  // A RECURRING battle: save the series, not a battle. Its battles are made an
+  // hour before each start, through this same route (battle/series.js).
+  if (req.body?.repeat && !req.series) {
+    try {
+      const made = await createSeries({ creatorId: req.user.id, scope: "course", courseId,
+        template: seriesTemplate(req.body), repeat: req.body.repeat, memberIds: opponents.map((o) => o.user_id) });
+      return res201(res, { success: true, series_id: made.id, next_at: made.nextAt, invited: opponents.length, repeats: made.rule });
+    } catch (e) { if (e.status === 400) return res400(res, e.message); throw e; }
+  }
   const isScheduled = !!scheduled_for && new Date(scheduled_for) > new Date();
   // A deadline only where there is a start time to be a deadline. See
   // acceptDeadline; an unscheduled one stays open BATTLE_IDLE_HOURS.
@@ -1343,9 +1434,11 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
     topic: topic ?? null, subject: subject ?? null, difficulty,
     total_questions, time_limit_seconds, xp_prize, xp_pool: xp_prize,
     total_participants: opponents.length + 1,
-    status: (isScheduled && !isDuel) ? "scheduled" : "lobby",
+    status: (isScheduled && (!isDuel || req.series)) ? "scheduled" : "lobby",
     scheduled_start: scheduled_for ?? null, expires_at: expiresAt,
     created_by: req.user.id,
+    // An occurrence of a recurring series (absent otherwise, so the insert is unchanged).
+    series_id: req.series?.id,
   }).select().single();
   if (error) throw new Error(error.message);
   // Unscheduled invitations don't wait for ever: after BATTLE_IDLE_HOURS it
@@ -1363,7 +1456,8 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
     await db.from("battle_participants").upsert({
       battle_id: battle.id, user_id: o.user_id, agent_id: o.agent_id,
       role: isDuel ? "opponent" : "participant",
-      joined_at: null,
+      // In a series everyone is in unless they opted out; no accept per occurrence.
+      joined_at: req.series ? now() : null,
     }, { onConflict: "battle_id,user_id" });
   }
 
@@ -1414,7 +1508,7 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
   // A duel waits for its accept; a group battle waits for its invitations —
   // until the scheduled time, or until the invite window closes, whichever
   // applies. The accept route starts it early once everyone has answered.
-  if (!isDuel) {
+  if (!isDuel || req.series) {
     // A scheduled battle starts at its time. An unscheduled one has no clock
     // to start against any more, so it starts when everyone has answered —
     // the accept and decline routes bring it forward — or when the creator
@@ -1434,6 +1528,11 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
     : `Open for ${IDLE_HOURS} hours`;
 
   for (const o of opponents) {
+    if (req.series) {
+      await notifyUser(o.user_id, "battle_series", `${title} is on`,
+        `Starts ${new Date(scheduled_for).toLocaleString("en-GB", { timeZone: req.series.tz || "Africa/Lagos" })}. You're in; skip it from your Challenges tab.`, battle.id);
+      continue;
+    }
     await notifyUser(o.user_id, "battle_challenge",
       isDuel ? `${me?.full_name ?? "Someone"} challenged you!`
              : `${me?.full_name ?? "Someone"} invited you to a battle: ${title}`,
@@ -1449,7 +1548,8 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
     invited: opponents.length, expires_at: expiresAt, skipped: named,
     questions: fill.placed, fromBank: fill.fromBank, generated: fill.generated, coinsCharged: fill.charged,
   });
-}));
+};
+router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler(courseInvite));
 
 // ─── CHALLENGE RESPONSES ──────────────────────────────────────────────────────
 
@@ -1501,7 +1601,7 @@ async function maybeStartEarly(battle) {
   // for a contest, not for this — and the "everyone answered but fewer than
   // two are playing" branch below would otherwise cancel a review the instant
   // its single learner accepted it.
-  const minPlayers = battle.battle_type === "review" ? 1 : 2;
+  const minPlayers = minPlayersFor(battle);   // a review or an Agent Check is one learner
 
   const startsAt = battle.scheduled_start ? new Date(battle.scheduled_start).getTime() : null;
 
@@ -1575,10 +1675,13 @@ router.post("/challenges/:challengeId/accept", authenticateToken, asyncHandler(a
     const { invited: seats } = await maybeStartEarly(battle);
     const accepted = seats.filter((s) => s.joined_at && !s.declined_at).length;
 
-    const { data: me } = await db.from("users").select("full_name").eq("id", req.user.id).single();
-    await notifyUser(battle.created_by, "battle_accepted",
-      `${me?.full_name} joined ${battle.title}`,
-      `${accepted} of ${seats.length} accepted`, battle.id);
+    // A review sent as a challenge has no creator to tell (the teacher sees it on the activity).
+    if (battle.created_by) {
+      const { data: me } = await db.from("users").select("full_name").eq("id", req.user.id).single();
+      await notifyUser(battle.created_by, "battle_accepted",
+        `${me?.full_name} joined ${battle.title}`,
+        `${accepted} of ${seats.length} accepted`, battle.id);
+    }
     req.app.get("io")?.to(`user:${req.user.id}`).emit("join_battle_room", { battleId: battle.id });
 
     return res.json({ success: true, battle_id: battle.id, status: battle.status,
@@ -1620,7 +1723,7 @@ router.post("/challenges/:challengeId/accept", authenticateToken, asyncHandler(a
   res.json({ success: true, battle_id: battle.id, status: isScheduled ? "scheduled" : "live", is_immediate: !isScheduled });
 }));
 
-router.post("/challenges/:challengeId/decline", authenticateToken, asyncHandler(async (req, res) => {
+const declineChallenge = async (req, res) => {
   const { data: p } = await db.from("battle_participants")
     .select("battle_id, role, battles!inner(created_by, title, status)")
     .eq("battle_id", req.params.challengeId).eq("user_id", req.user.id)
@@ -1664,7 +1767,8 @@ router.post("/challenges/:challengeId/decline", authenticateToken, asyncHandler(
   // Live, so the creator's card doesn't sit on "Waiting" until a reload.
   global.io?.to(`user:${p.battles.created_by}`).emit("battle_declined", { battleId: req.params.challengeId, by: me?.full_name ?? null, cancelled: true });
   res.json({ success: true });
-}));
+};
+router.post("/challenges/:challengeId/decline", authenticateToken, asyncHandler(declineChallenge));
 
 router.delete("/challenges/:challengeId", authenticateToken, asyncHandler(async (req, res) => {
   // .select(): zero rows changed is not an error to PostgREST, so this always
@@ -1804,7 +1908,7 @@ router.post("/battles/:battleId/heartbeat", authenticateToken, asyncHandler(asyn
 
 router.get("/battles/:battleId/state", authenticateToken, asyncHandler(async (req, res) => {
   const { data: battle } = await db.from("battles")
-    .select("status, total_questions, battle_type").eq("id", req.params.battleId).single();
+    .select("status, total_questions, battle_type, review_host").eq("id", req.params.battleId).single();
   if (!battle) return res.status(404).json({ error: "Battle not found" });
 
   const { data: participants } = await db.from("battle_participants")
@@ -1818,7 +1922,7 @@ router.get("/battles/:battleId/state", authenticateToken, asyncHandler(async (re
   // opened from does not always carry it — accepting an invitation opens the
   // arena with only an id and a status.
   res.json({
-    status: battle.status, battleType: battle.battle_type,
+    status: battle.status, battleType: battle.battle_type, reviewHost: battle.review_host ?? null,
     totalQuestions: battle.total_questions ?? 0,
     participants: participants ?? [], viewer_count: count ?? 0,
   });
@@ -1897,8 +2001,10 @@ router.get("/battles/:battleId/results", authenticateToken, asyncHandler(async (
   // actively misleading.
   // An Agent Check (D45) is a mark sheet too: one seat, no winner.
   if (isMarkSheet(battle.battle_type)) {
-    const learner = scoreboard[0] ?? null;
-    const seat = (participants ?? []).find((p) => p.role !== "teacher");
+    // A class review has a seat per learner: each sees their own sheet (anyone else, the first).
+    const seat = (participants ?? []).find((p) => p.role !== "teacher" && p.user_id === req.user.id)
+      ?? (participants ?? []).find((p) => p.role !== "teacher");
+    const learner = scoreboard.find((r) => r.userId === seat?.user_id) ?? scoreboard[0] ?? null;
 
     const { data: questions } = await db.from("battle_questions")
       .select("*").eq("battle_id", battle.id).order("question_order");
@@ -2002,6 +2108,25 @@ router.get("/battles/:battleId/results", authenticateToken, asyncHandler(async (
  * preserves the client's socket-drop fallback, which looks for the first
  * question with no revealed key and finds it as the last item here.
  */
+/**
+ * GET /api/battle/battles/:battleId/questions.pdf — a FINISHED battle's
+ * questions, options, answers and explanations as one PDF (the Questions
+ * tab's "Download as PDF"). Before the end the answers aren't everyone's yet.
+ */
+router.get("/battles/:battleId/questions.pdf", authenticateToken, asyncHandler(async (req, res) => {
+  const { data: battle } = await db.from("battles").select("id, title, subject, topic, status, actual_end").eq("id", req.params.battleId).maybeSingle();
+  if (!battle) return res.status(404).json({ error: "Battle not found" });
+  if (battle.status !== "completed") return res.status(409).json({ code: "NOT_FINISHED", error: "The questions can be downloaded once the battle has finished." });
+  const { data: questions } = await db.from("battle_questions")
+    .select("question_order, question_text, options_json, correct_answer_index, explanation, topic").eq("battle_id", battle.id).order("question_order");
+  const { buildQuestionsPdf } = await import("./questionsPdf.js");
+  const bytes = await buildQuestionsPdf({ battle, questions: questions ?? [] });
+  const name = `${String(battle.title || "battle").replace(/[^\w .-]/g, "").trim() || "battle"} - questions.pdf`;
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+  res.send(Buffer.from(bytes));
+}));
+
 router.get("/battles/:battleId/questions", authenticateToken, asyncHandler(async (req, res) => {
   const { data: battle } = await db.from("battles").select("status, total_questions").eq("id", req.params.battleId).single();
   if (!battle) return res.status(404).json({ error: "Battle not found" });
@@ -2159,6 +2284,9 @@ router.post("/courses/:courseId/questions-bank/generate", authenticateToken, req
 
   res.status(201).json({ success: true, generated: inserted, topic, subject, difficulty });
 }));
+
+// The routes a recurring series runs in-process (battle/series.js).
+export const occurrenceHandlers = { classInvite, courseInvite, declineChallenge };
 
 export default router;
 
@@ -2332,7 +2460,9 @@ router.post("/courses/:courseId/battles/session", authenticateToken, requireRole
   const teacherAgent = await resolveAgent(req.user.id);
   if (!teacherAgent) return res400(res, "Create your agent first");
 
-  const expiresAt = acceptDeadline(scheduled_for);
+  // Unscheduled (it starts five seconds from now): the idle deadline, as on the
+  // other unscheduled routes. This read an undefined `scheduled_for` and threw.
+  const expiresAt = idleDeadline();
 
   const { data: battle, error } = await db.from("battles").insert({
     hp_per_miss: cleanHpPerMiss(req.body?.hp_per_miss),

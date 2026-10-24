@@ -23,7 +23,9 @@ const [card, tab, api, app, shell, trace] = await Promise.all([
 test("the session card renders inside the Agent Chat tab from the session echo", () => {
   assert.match(tab, /import StudyPrepChatCard from '\.\/studyPrep\/StudyPrepChatCard\.jsx'/);
   assert.match(tab, /entry\?\.session\?\.id && entry\?\.success\)\?\.session/);
-  assert.match(tab, /msg\.studyPrepSessionId&&<StudyPrepChatCard sessionId=\{msg\.studyPrepSessionId\} onEvents=\{onStudyPrepEvents\}\/>/);
+  // On the message (or, while it runs, pinned above the composer with a note in its place).
+  assert.match(tab, /msg\.studyPrepSessionId&&\([\s\S]{0,700}<StudyPrepChatCard sessionId=\{msg\.studyPrepSessionId\} onEvents=\{onStudyPrepEvents\}/);
+  assert.match(tab, /<StudyPrepChatCard sessionId=\{pinnedPrep\} onEvents=\{onStudyPrepEvents\}[^>]*pinned/);
   // the non-stream fallback carries the same echo
   assert.match(tab, /studyPrepSessionFallback/);
 });
@@ -87,7 +89,7 @@ test("the card never constructs scores or answer keys — the harness decides", 
 test("replay is the events feed — the card never re-runs or calls the LLM", () => {
   // The card hands its session's recorded events to the chat, which shows them in the trace.
   assert.match(card, /onEvents\?\.\(sessionId, events\)/);
-  assert.match(tab, /studyPrepEventBlocks\(studyPrepEvents\[sessionId\]/);
+  assert.match(tab, /const reported = studyPrepEvents\[sessionId\];[\s\S]{0,80}studyPrepEventBlocks\(reported, range\)/);
   assert.doesNotMatch(card, /openai|chat\.completions/);
   assert.doesNotMatch(trace, /openai|chat\.completions/);
 });

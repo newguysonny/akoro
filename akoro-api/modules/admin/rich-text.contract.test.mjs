@@ -80,7 +80,7 @@ test("RichText has ONE span render path — list items can never render empty", 
 });
 
 test("all three agent chat surfaces render RichText; user bubbles stay plain", () => {
-  assert.match(instructorPage, /<RichText text=\{textPart\} color=\{INK\} \/>/);
+  assert.match(instructorPage, /<RichText text=\{textPart\} color=\{C\.ink\} \/>/);   // the theme ink (dark mode)
   // …at the Agent Chat's reading size (16 → 14 → 14.5 after the 2026-10
   // tightening, bumped on review; RichText cascades to bold/lists inside
   // replies). Learner bubbles sit at 14.

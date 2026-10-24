@@ -1112,7 +1112,7 @@ export default function ChatPage() {
         </div>
 
         {previewDraft && (
-          <div className="ci-preview-panel" style={{ width: ['assignment', 'teaching_tool'].includes(previewType) ? 600 : 430, maxWidth: ['assignment', 'teaching_tool'].includes(previewType) ? '58vw' : '46vw', flexShrink: 0, minHeight: 0 }}>
+          <div className="ci-preview-panel" style={{ width: ['assignment', 'teaching_tool', 'battle', 'self_study'].includes(previewType) ? 600 : 430, maxWidth: ['assignment', 'teaching_tool', 'battle', 'self_study'].includes(previewType) ? '58vw' : '46vw', flexShrink: 0, minHeight: 0 }}>
             <ActivityPreviewPanel
               draftId={previewDraft}
               initialVersion={previewVersion}

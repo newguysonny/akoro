@@ -59,7 +59,7 @@ const fmtDate = (iso) => {
 const fmtSize = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round((n || 0) / 1024))} KB`);
 
 /** A writer that flows wrapped text down A4 pages, adding pages as needed. */
-class Flow {
+export class Flow {
   constructor(doc, regular, bold, glyphs) {
     Object.assign(this, { doc, regular, bold, glyphs, page: null, y: 0, replaced: 0 });
   }
@@ -127,6 +127,17 @@ class Flow {
     this.y -= gap;
   }
 }
+
+/** A new A4 document with the DejaVu fonts embedded and a Flow over it (battle/questionsPdf.js too). */
+export async function newPdf() {
+  const doc = await PDFDocument.create();
+  doc.registerFontkit(fontkit);
+  const regular = await doc.embedFont(fonts().regular, { subset: true });
+  const bold = await doc.embedFont(fonts().bold, { subset: true });
+  const probe = fontkit.create(fonts().regular);
+  return { doc, flow: new Flow(doc, regular, bold, (cp) => !isRtl(cp) && probe.hasGlyphForCodePoint(cp)), regular };
+}
+export const PDF_STYLE = Object.freeze({ A4, M, INK, MUTED, ACCENT, letterOf, fmtDate });
 
 /**
  * The same submission as markdown text — what machines read (AI grading,

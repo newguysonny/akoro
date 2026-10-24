@@ -92,7 +92,8 @@ test("admin: the Program Courses section is routed, navigable and 1:1", () => {
   // App.jsx: the section route + its import.
   assert.ok(appJsx.includes('path="/program-courses/*"'), "section route");
   assert.ok(appJsx.includes("pages/programmes-page/index.jsx"), "section import");
-  assert.ok(appJsx.includes('<PageLayout title="Program Courses"'), "section uses the shared header/sidebar shell");
+  // The shared shell; the section draws its own heading (header cleanup, 8b9f2904).
+  assert.ok(/path="\/program-courses\/\*"[\s\S]{0,120}<PageLayout>/.test(appJsx), "section uses the shared header/sidebar shell");
   // Layout: the sidebar group with the prototype's four destinations.
   assert.ok(layoutJsx.includes("'Program Courses'"), "nav group");
   for (const to of ["/program-courses", "/program-courses/programs", "/program-courses/courses", "/program-courses/contents"]) {

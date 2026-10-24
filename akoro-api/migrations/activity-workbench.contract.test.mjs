@@ -121,13 +121,16 @@ test("BattleForm is self-contained — no identifiers from its old modal host", 
   assert.match(battleForm, /\{onCancel && <Btn variant="secondary" type="button" onClick=\{onCancel\}>Cancel<\/Btn>\}/);
 });
 
-test("battles use the same battle form everywhere", () => {
+test("battles use the same battle form everywhere", async () => {
   // One BattleForm implementation: the draft preview completes a battle with it (embedded) and
   // the Activities page edits one in a modal. There is no Battles page.
   assert.match(battlesPage, /import BattleForm from '\.\/BattleForm\.jsx';/);
   assert.match(battlesPage, /<BattleForm/);
-  assert.match(page, /import BattleForm from '\.\/battles\/BattleForm\.jsx';/);
-  assert.match(page, /<BattleForm onSubmit=\{battleSubmit\}/);
+  // The draft preview's Settings tab holds it (components/preview/BattleDraftPreview.jsx).
+  assert.match(page, /<BattleDraftPreview [^>]*onSubmit=\{battleSubmit\}/);
+  const battlePreview = await read("../../akoro-instructor/src/components/preview/BattleDraftPreview.jsx");
+  assert.match(battlePreview, /import BattleForm from '\.\.\/battles\/BattleForm\.jsx';/);
+  assert.match(battlePreview, /<BattleForm onSubmit=\{onSubmit\}/);
   // Battle creation calls the same invite endpoint the form always used.
   assert.match(page, /createBattle\(/);
   assert.match(page, /question_source: form\.questionSource/);
@@ -138,7 +141,10 @@ test("multi-stage activities chain real work into one journey", async () => {
   const drafts = await read("../../akoro-api/modules/self-study/drafts.js");
   assert.match(drafts, /type: "multi_stage"/);
   assert.match(drafts, /details: \{ stages: refs \}/);
-  assert.match(drafts, /\["self_study", "assignment", "project"\]\.includes\(st\?\.kind\)/);
+  // Stage kinds live in journeyStages.js (pure); a battle stage is a real battle.
+  const stagesMod = await read("../../akoro-api/modules/self-study/journeyStages.js");
+  assert.match(stagesMod, /STAGE_KINDS = Object\.freeze\(\["self_study", "assignment", "project", "battle"\]\)/);
+  assert.match(stagesMod, /STAGE_KINDS\.includes\(st\?\.kind\)/);
   // The backend knows the type and announces it.
   assert.match(routes, /"multi_stage"/);
   assert.match(migration, /'multi_stage'/);

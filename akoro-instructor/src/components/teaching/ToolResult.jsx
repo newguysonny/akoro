@@ -28,8 +28,9 @@ export const TOOL_ACCENT = {
 export const TOOL_NAME = { 'podcast': 'Podcast Generator', 'misconceptions': 'Common Misconceptions', 'real-world': 'Real-World Connections',
   'lesson-hooks': 'Lesson Hooks', 'vocabulary': 'Vocabulary Builder', 'essay-grader': 'Essay Grader', 'lesson-plan': 'Lesson Plan',
   'activity': 'Activities Creator', 'assignment': 'Assignment Creator' };
-export const TOOL_EMOJI = { 'podcast': '🎧', 'misconceptions': '🧠', 'real-world': '🌍', 'lesson-hooks': '🪝', 'vocabulary': '🔤',
-  'essay-grader': '📊', 'lesson-plan': '📋', 'activity': '✨', 'assignment': '✍️' };
+// Tabler icons (icons, not emoji).
+export const TOOL_ICON = { 'podcast': 'ti-headphones', 'misconceptions': 'ti-brain', 'real-world': 'ti-world', 'lesson-hooks': 'ti-anchor', 'vocabulary': 'ti-abc',
+  'essay-grader': 'ti-chart-bar', 'lesson-plan': 'ti-clipboard-list', 'activity': 'ti-sparkles', 'assignment': 'ti-writing' };
 export const accentFor = (key) => TOOL_ACCENT[key] || '#6C3BFF';
 
 const TONE = {
@@ -204,7 +205,7 @@ export function ResultHeader({ data, accent, icon, name }) {
     <div style={{ borderRadius: 18, padding: '20px 22px', marginBottom: 14, color: '#fff', background: `linear-gradient(135deg, ${accent}, ${accent}CC)`, position: 'relative', overflow: 'hidden' }}>
       <div aria-hidden style={{ position: 'absolute', right: -30, top: -40, width: 160, height: 160, borderRadius: '50%', background: 'rgba(255,255,255,.12)' }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', opacity: .9, marginBottom: 6, position: 'relative' }}>
-        {icon && <span style={{ fontSize: 15 }}>{icon}</span>}{name}
+        {icon && (typeof icon === 'string' && icon.startsWith('ti-') ? <Ico ti={icon} size={15} color={accent} /> : <span style={{ fontSize: 15 }}>{icon}</span>)}{name}
       </div>
       <div style={{ fontSize: 22, fontWeight: 900, lineHeight: 1.25, position: 'relative' }}>{data.title}</div>
       {data.summary && <div style={{ fontSize: 13.5, opacity: .92, marginTop: 6, lineHeight: 1.5, position: 'relative' }}>{data.summary}</div>}

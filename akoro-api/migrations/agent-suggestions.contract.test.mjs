@@ -73,7 +73,8 @@ test("the Tasks tab is To do / Done / Suggestions, and suggestions are advice on
   assert.match(page, /acceptIdea\(it\)/);
   assert.match(page, /apiPost\(`\/api\/agent\/proposals\/inbox\/\$\{encodeURIComponent\(it\.ref\)\}\/accept`/);
   // Accept does what the kind says: a conversation starts in the chat.
-  assert.match(page, /kind==='conversation'[\s\S]{0,80}setInnerTab\("chat"\); sendMessage\(r\.prompt\|\|it\.title\)/);
+  // A conversation (or follow-up) suggestion carries on as the learner's own chat message (one accept path: afterAccept).
+  assert.match(page, /kind==="conversation"\)\{ setInnerTab\("chat"\); sendMessage\(r\.prompt\|\|title\); return; \}/);
   // Dismiss asks why (the planner learns), with a skip.
   assert.match(page, /onClick=\{\(\)=>setAskWhy\(it\.ref\)\}/);
   assert.match(page, /dismissIdea\(it,r\)/);

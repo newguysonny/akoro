@@ -44,7 +44,7 @@ export default function ExamResources({ items }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {items.map((it) => (
             <div key={it.id} style={{ background: C.surface, border: `1px solid ${GREEN}40`, borderRadius: 14, padding: '13px 15px', display: 'flex', gap: 13, alignItems: 'flex-start', fontFamily: C.font }}>
-              <div style={{ width: 42, height: 42, flexShrink: 0, borderRadius: 11, background: tint(7), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 21 }}>{it.emoji || '📘'}</div>
+              <div style={{ width: 42, height: 42, flexShrink: 0, borderRadius: 11, background: tint(7), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 21 }}>{it.emoji || <Ico ti="ti-book-2" size={21} color={C.brand} />}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 14, fontWeight: 800, color: C.ink }}>{it.name}</span>

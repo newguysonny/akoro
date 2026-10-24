@@ -72,7 +72,9 @@ test("admin/school: drawer opens ONLY from the hamburger — closed by X, hambur
       `${app}: Escape closes it`);
     // The old desktop TopBar hamburger must NOT render on mobile — the
     // AppHeader owns the drawer there.
-    assert.match(src, /onToggleSidebar=\{null\}/, `${app}: mobile TopBar has no hamburger of its own`);
+    // (Admin's phone layout renders no TopBar at all — the AppHeader is the only header.)
+    const mobileBlock = src.slice(src.indexOf("if (mobile)"), src.indexOf("<Sidebar collapsed={collapsed}"));
+    assert.ok(/onToggleSidebar=\{null\}/.test(src) || !mobileBlock.includes("<TopBar"), `${app}: mobile TopBar has no hamburger of its own`);
   }
 });
 
@@ -204,17 +206,20 @@ test("every header carries the FULL reference set — ring · chat/messages · b
   for (const app of APPS) {
     const src = layouts[app];
     assert.match(src, /key: 'notifications', icon: Bell,/, `${app}: the header carries the bell`);
-    assert.match(src, /key: 'help',\s*icon: MessageCircleQuestion/, `${app}: the header carries help (the reference's glyph)`);
+    // Admin's phone header is the Bachs set (search · preview · bell, 4a7557f6); the others keep help.
+    if (app === "akoro-admin") for (const k of ["search", "preview"]) assert.match(src, new RegExp(`key: '${k}',`), `${app}: the header carries ${k}`);
+    else assert.match(src, /key: 'help',\s*icon: MessageCircleQuestion/, `${app}: the header carries help (the reference's glyph)`);
     assert.match(src, /progress=\{setupProgressOf\(/, `${app}: the setup ring renders from real progress`);
     assert.match(src, /onSetup=\{\(\) => navigate\('/, `${app}: the ring navigates to a setup surface`);
   }
   // chat surfaces where the app has one (reference order: ring · chat · bell · help)
   assert.match(layouts["akoro-school"], /key: 'chat',\s*icon: ReferenceChatIcon/, "school: agent chat");
-  assert.match(layouts["akoro-admin"], /key: 'messages',\s*icon: ReferenceChatIcon/, "admin: messages");
   // the consoles keep the page-TopBar bell OFF on mobile — the header is the only bell
   for (const app of ["akoro-admin", "akoro-school"]) {
-    assert.match(layouts[app], /showBell=\{false\} \/>/, `${app}: the mobile TopBar renders no second bell`);
-    assert.match(layouts[app], /showBell = true/, `${app}: desktop keeps its bell`);
+    const src = layouts[app];
+    const mobileBlock = src.slice(src.indexOf("if (mobile)"), src.indexOf("<Sidebar collapsed={collapsed}"));
+    assert.ok(/showBell=\{false\} \/>/.test(src) || !mobileBlock.includes("<TopBar"), `${app}: the mobile TopBar renders no second bell`);
+    assert.ok(/showBell = true/.test(src) || /export function TopBar[\s\S]{0,4000}<BellButton \/>/.test(src), `${app}: desktop keeps its bell`);
   }
   // kpemu: the bell has a real destination — route + page exist — and the
   // shared ring button is actually clickable.
@@ -338,12 +343,12 @@ test("the header uses the reference's exact glyphs — drawn, not approximated",
     assert.match(src, /<path d="M8 13h5" \/>/);
   }
   // help is the reference's MessageCircleQuestion — lucide-exact
-  for (const app of APPS) {
+  for (const app of APPS.filter((a) => a !== "akoro-admin")) {   // admin: the Bachs set, no help
     assert.match(layouts[app], /key: 'help',\s*icon: MessageCircleQuestion/, `${app}: reference help glyph`);
   }
   // chat surfaces use the drawn reference bubble
   assert.match(layouts["akoro-school"], /key: 'chat',\s*icon: ReferenceChatIcon/);
-  assert.match(layouts["akoro-admin"], /key: 'messages',\s*icon: ReferenceChatIcon/);
+
 });
 
 test("no console calls a framework hook it never imports — the runtime-ReferenceError class", async () => {
@@ -420,7 +425,8 @@ test("URL flow shells stay hook-free — the early-return crash class", async ()
   // hooks beyond useSearchParams, and each flow must be its own component.
   const shells = [
     ["akoro-instructor/src/pages/ActivitiesPage.jsx",
-     ["function DraftRoute(", "function DetailRoute(", "function ActivitiesHome("]],
+     // ActivitiesHome is its own component in its own file (activities-page/ActivitiesHome.jsx).
+     ["function DraftRoute(", "function DetailRoute(", "import ActivitiesHome from './activities-page/ActivitiesHome.jsx'"]],
   ];
   for (const [file, parts] of shells) {
     const src2 = await readFile(new URL(`../../${file}`, import.meta.url), "utf8");

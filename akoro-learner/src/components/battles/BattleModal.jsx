@@ -12,6 +12,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
 import { API, apiGet, apiPost } from '../../services/api.js';
+import { downloadBattleQuestionsPdf } from '../../services/activityApi.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { XIcon, UsersIcon, TrophyIcon, FlameIcon, BookIcon, PlayIcon, ZapIcon, Icon } from '../common/Icons.jsx';
@@ -53,6 +54,8 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
   const [tab,          setTab]          = useState('watch');
   const [notice,       setNotice]       = useState(null);
   const [battleType,   setBattleType]   = useState(initialBattle?.type ?? initialBattle?.battleType ?? null);
+  // 'guide': a review the learner asked their teaching guide for (battle/guideReview.js).
+  const [reviewHost,   setReviewHost]   = useState(initialBattle?.reviewHost ?? null);
   const [verdict,      setVerdict]      = useState(null);   // Sergeant's, when the battle ends
 
   const qStartRef  = useRef(0);
@@ -86,6 +89,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
         setParticipants((st.participants || []).map(mapStateP));
         setViewerCount(st.viewer_count || 0);
         if (st.battleType) setBattleType(st.battleType);
+        if (st.reviewHost) setReviewHost(st.reviewHost);
       }
       if (lg?.logs?.length) setLog(lg.logs.map((e) => ({ msg: e.message, ts: e.created_at ? new Date(e.created_at).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '' })));
       if (qd?.questions?.length) {
@@ -179,6 +183,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
     const iv = setInterval(async () => {
       const st = await apiGet(`${B}/battles/${battleId}/state`).catch(() => null);
       if (st?.battleType) setBattleType(st.battleType);
+      if (st?.reviewHost) setReviewHost(st.reviewHost);
       if (st) { setStatus(st.status); setParticipants((st.participants || []).map(mapStateP)); if (st.viewer_count != null) setViewerCount(st.viewer_count); }
       if (!questionRef.current || (selectedRef.current != null && !revealRef.current)) {
         const qd = await apiGet(`${B}/battles/${battleId}/questions`).catch(() => null);
@@ -363,7 +368,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
                     <div style={{ flex: 1, textAlign: 'center' }}>{Bp && <><AgentPill p={Bp} big /><div style={{ color: '#fff', fontWeight: 800, fontSize: 12.5, marginTop: 6 }}>{Bp.agentName}</div></>}</div>
                   </div>
                   <div style={{ textAlign: 'center', marginTop: 14 }}>
-                    <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,.6)', marginBottom: 10 }}>{isCheck ? 'The Agent Check starts in a moment…' : 'Waiting for the battle to start…'}</div>
+                    <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,.6)', marginBottom: 10 }}>{isCheck ? (reviewHost === 'guide' ? 'Your guide’s review starts in a moment…' : 'The Agent Check starts in a moment…') : 'Waiting for the battle to start…'}</div>
                     {!isCheck && <button onClick={startBattle} style={{ padding: '10px 18px', borderRadius: 14, border: 'none', background: 'linear-gradient(135deg,#E8884A,#D97706)', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, display: 'inline-flex', alignItems: 'center', gap: 7 }}><PlayIcon size={13} color="#fff" />Start battle</button>}
                     {notice && <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,.5)', marginTop: 8 }}>{notice}</div>}
                   </div>
@@ -608,7 +613,10 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
                 <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,.40)', letterSpacing: .5 }}>{isCompleted ? 'ALL QUESTIONS' : 'ANSWERED SO FAR'}</span>
-                <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,.28)', background: 'rgba(255,255,255,.06)', borderRadius: 8, padding: '2px 9px' }}>{answered.length}{totalQ ? `/${totalQ}` : ''}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {isCompleted && <QuestionsMenu battleId={battleId} title={initialBattle?.title} />}
+                  <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,.28)', background: 'rgba(255,255,255,.06)', borderRadius: 8, padding: '2px 9px' }}>{answered.length}{totalQ ? `/${totalQ}` : ''}</span>
+                </div>
               </div>
               {answered.length === 0 && <div style={{ textAlign: 'center', padding: '40px 16px', color: 'rgba(255,255,255,.25)', fontSize: 13, fontWeight: 600 }}>{isCompleted ? 'No questions recorded.' : 'Questions appear here as they’re revealed…'}</div>}
               {[...answered].sort((a, b) => b.order - a.order).map((entry) => (
@@ -636,9 +644,57 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
             <span>·</span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><BookIcon size={11} color="rgba(255,255,255,.35)" />Your class</span>
           </div>
-          {isLive && iAmParticipant && <span style={{ fontSize: 11, fontWeight: 700, color: '#E8884A', display: 'flex', alignItems: 'center', gap: 5 }}><ZapIcon size={11} color="#E8884A" />{isCheck ? 'Agent Check — your agent is answering' : isReview ? 'Your review — your agent is answering' : 'Your agent is playing'}</span>}
+          {isLive && iAmParticipant && <span style={{ fontSize: 11, fontWeight: 700, color: '#E8884A', display: 'flex', alignItems: 'center', gap: 5 }}><ZapIcon size={11} color="#E8884A" />{isCheck ? (reviewHost === 'guide' ? 'Review with your guide — your agent is answering' : 'Agent Check — your agent is answering') : isReview ? 'Your review — your agent is answering' : 'Your agent is playing'}</span>}
         </div>
       </div>
+    </div>
+  );
+}
+
+/* The Questions tab's ⋮ menu on a finished battle: Download as PDF works;
+   Create activity and Agent session are coming soon. */
+function QuestionsMenu({ battleId, title }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const esc = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', esc); };
+  }, [open]);
+  const download = () => {
+    setBusy(true); setErr('');
+    downloadBattleQuestionsPdf(battleId, title)
+      .then(() => setOpen(false))
+      .catch((e) => setErr(e?.message || 'Could not get the PDF.'))
+      .finally(() => setBusy(false));
+  };
+  const item = { display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '9px 12px', border: 'none', background: 'none', color: '#E2E8F0', fontSize: 12.5, fontWeight: 700, textAlign: 'left', fontFamily: 'inherit', borderRadius: 8 };
+  const soon = <span style={{ marginLeft: 'auto', fontSize: 9.5, fontWeight: 800, padding: '1px 7px', borderRadius: 20, background: 'rgba(255,255,255,.08)', color: 'rgba(255,255,255,.45)' }}>Soon</span>;
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button type="button" aria-label="Question options" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}
+        style={{ width: 26, height: 26, display: 'grid', placeItems: 'center', borderRadius: 8, border: 'none', cursor: 'pointer', background: open ? 'rgba(255,255,255,.12)' : 'rgba(255,255,255,.06)', color: 'rgba(255,255,255,.7)' }}>
+        <Icon name="ti-dots-vertical" size={15} />
+      </button>
+      {open && (
+        <div role="menu" style={{ position: 'absolute', right: 0, top: 30, zIndex: 20, minWidth: 210, padding: 5, borderRadius: 12, background: '#1B2233', border: '1px solid rgba(255,255,255,.12)', boxShadow: '0 12px 32px rgba(0,0,0,.45)' }}>
+          <button type="button" role="menuitem" onClick={download} disabled={busy} style={{ ...item, cursor: busy ? 'wait' : 'pointer' }}>
+            <Icon name={busy ? 'ti-loader-2' : 'ti-file-type-pdf'} size={16} color="#F87171" />{busy ? 'Preparing PDF…' : 'Download as PDF'}
+          </button>
+          <button type="button" role="menuitem" aria-disabled="true" disabled style={{ ...item, cursor: 'default', color: 'rgba(255,255,255,.45)' }}>
+            <Icon name="ti-clipboard-plus" size={16} color="rgba(255,255,255,.4)" />Create activity{soon}
+          </button>
+          <button type="button" role="menuitem" aria-disabled="true" disabled style={{ ...item, cursor: 'default', color: 'rgba(255,255,255,.45)' }}>
+            <Icon name="ti-robot" size={16} color="rgba(255,255,255,.4)" />Agent session{soon}
+          </button>
+          {err && <div style={{ padding: '6px 12px 8px', fontSize: 11, color: '#F87171', lineHeight: 1.4 }}>{err}</div>}
+        </div>
+      )}
     </div>
   );
 }

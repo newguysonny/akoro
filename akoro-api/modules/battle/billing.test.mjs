@@ -1,5 +1,6 @@
 // Who pays for what in a battle: the creator for the questions, each learner
 // for their own agent's answers, the app for Sergeant's judging.
+import "../../test-env.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
@@ -90,7 +91,8 @@ test("entry: enough coins for your agent's answers and the creator's minimum XP 
   const routes = await read("./routes.js");
   assert.equal((routes.match(/code: "ENTRY_REQUIREMENTS"/g) || []).length, 6);   // accept, join, 4 creator checks
   assert.match(routes, /router\.get\("\/battles\/:battleId\/entry"/);
-  assert.match(worker, /if \(isReview && REVIEW_REWARD_COINS > 0\) \{[\s\S]*?grantCoins\(\{ userId: p\.user_id, coins: REVIEW_REWARD_COINS, feature: "review_participation"/);
+  // A teacher's study review pays the coin; an Agent Check does not (D45: the check was paid for by Study Prep).
+  assert.match(worker, /if \(isReview && !isCheck && REVIEW_REWARD_COINS > 0\) \{[\s\S]*?grantCoins\(\{ userId: p\.user_id, coins: REVIEW_REWARD_COINS, feature: "review_participation"/);
 });
 
 test("start and end are claimed once; a question is revealed once and late answers don't count", async () => {

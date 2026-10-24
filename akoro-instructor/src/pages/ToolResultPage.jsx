@@ -10,7 +10,7 @@ import { Ico } from '../theme/Ico.jsx';
 import { C } from '../theme/colors.js';
 import { apiGet } from '../services/api.js';
 import { ToolRunner } from '../components/teaching/TeachingTools.jsx';
-import { TOOL_NAME, TOOL_EMOJI } from '../components/teaching/ToolResult.jsx';
+import { TOOL_NAME, TOOL_ICON } from '../components/teaching/ToolResult.jsx';
 
 const OUTPUT_OF = { 'podcast': 'script', 'vocabulary': 'cards', 'essay-grader': 'grades' };
 // Saved payloads predate the `output` field, so infer it from what is inside.
@@ -38,7 +38,7 @@ export default function ToolResultPage() {
   }, [id]);
 
   const back = () => navigate('/library');
-  const tool = row && { key: row.kind, name: TOOL_NAME[row.kind], emoji: TOOL_EMOJI[row.kind], output: row.content?.output || guessOutput(row.content, row.kind) };
+  const tool = row && { key: row.kind, name: TOOL_NAME[row.kind], emoji: TOOL_ICON[row.kind], output: row.content?.output || guessOutput(row.content, row.kind) };
 
   return (
     <PageLayout

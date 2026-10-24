@@ -113,12 +113,13 @@ test("all six workbench types are draftable; journeys stage through the shared p
 
 test("the chat hands the human a Preview button and a side-by-side panel", () => {
   // The button rides the real toolExecutions echo, not the model's prose.
-  assert.match(chatPage, /x\.tool === 'prepare_activity' && x\.success \|\| x\.tool === 'revise_activity_draft' && x\.success/);
+  // Prepare and revise (and a teaching resource's draft) each get a Preview button.
+  assert.match(chatPage, /\['prepare_activity', 'run_teaching_tool', 'revise_activity_draft'\]\.includes\(x\.tool\) && x\.success\) && x\.draft/);
   // Each echo is a summary card (DraftCard) with its own Preview button.
   assert.match(chatPage, /label=\{msg\.previews\.length > 1 \? `Preview \$\{pi \+ 1\}` : 'Preview'\}/);
   assert.match(draftCard, /Assigned ✓/);
-  // Side-by-side: the container widens and hosts the panel next to the chat.
-  assert.match(chatPage, /previewDraft \? 'min\(1180px, 97vw\)' : 720/);
+  // Side-by-side: the chat page fills the console frame and docks the panel next to the chat.
+  assert.match(chatPage, /\{previewDraft && \(\s*<div className="ci-preview-panel"/);
   assert.match(chatPage, /<ActivityPreviewPanel/);
   // Fortizo split parity with the learner's reader + session view: the panel
   // docks beside the chat from 768px up (a 125%-zoom laptop included) and
@@ -126,11 +127,11 @@ test("the chat hands the human a Preview button and a side-by-side panel", () =>
   // narrow desktops while the chat column shrinks.
   assert.match(chatPage, /@media \(max-width: 767px\)/);
   assert.doesNotMatch(chatPage, /max-width: 1100px/);
-  // An assignment's paper needs more room than the other drafts.
-  assert.match(chatPage, /width: previewType === 'assignment' \? 600 : 430, maxWidth: previewType === 'assignment' \? '58vw' : '46vw', flexShrink: 0/);
+  // An assignment's paper, a teaching resource and the battle / self-study previews need more room.
+  assert.match(chatPage, /width: \['assignment', 'teaching_tool', 'battle', 'self_study'\]\.includes\(previewType\) \? 600 : 430, maxWidth: \['assignment', 'teaching_tool', 'battle', 'self_study'\]\.includes\(previewType\) \? '58vw' : '46vw', flexShrink: 0/);
 });
 
-test("the preview reuses the workbench's own forms — no forked editors", () => {
+test("the preview reuses the workbench's own forms — no forked editors", async () => {
   // ActivityForm grew prefill + save-override seams; the panel points it at
   // the draft-assign approval instead of the bench.
   assert.match(page, /function ActivityForm\(\{ type, onAssigned, initial = null, savePayload = null \}\)/);
@@ -138,7 +139,10 @@ test("the preview reuses the workbench's own forms — no forked editors", () =>
   assert.match(panel, /<ActivityForm[\s\S]*?initial=\{prefillFrom\(payload, shown\)\}[\s\S]*?savePayload=/);
   assert.match(panel, /\/api\/self-study\/drafts\/\$\{draftId\}\/assign/);
   // Battles go through the one shared BattleForm, embedded.
-  assert.match(panel, /<BattleForm onSubmit=\{battleSubmit\}[^>]*embedded/);
+  // (inside the battle preview's Settings tab, components/preview/BattleDraftPreview.jsx)
+  assert.match(panel, /<BattleDraftPreview draft=\{draft\} initial=\{battleInitial\} courses=\{courses\} onSubmit=\{battleSubmit\}/);
+  const battlePreview = await readFile(new URL("../../akoro-instructor/src/components/preview/BattleDraftPreview.jsx", import.meta.url), "utf8");
+  assert.match(battlePreview, /<BattleForm onSubmit=\{onSubmit\}[^>]*embedded/);
   // The approval states exist, and the panel says what is true.
   assert.match(panel, /phase === 'assigning'/);
   assert.match(panel, /nothing is sent until you assign/);

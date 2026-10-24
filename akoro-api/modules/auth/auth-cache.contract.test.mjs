@@ -42,14 +42,17 @@ test("security-field changes bust the user cache immediately", () => {
   for (const [src, re] of busts) assert.match(src, re);
 });
 
-test("join-request badges ride the websocket, not a 60-second poll", () => {
+test("join-request badges ride the websocket, not a 60-second poll", async () => {
   // Server pushes on request + decision.
   assert.match(profiles, /emit\("join-requests-changed", \{ classroomId \}\)/);
   assert.match(profiles, /join-requests-changed/, "decision endpoint also emits");
   // The instructor layout has no 60s interval left.
   assert.doesNotMatch(layout, /setInterval\(poll, 60_?000\)/);
   assert.match(layout, /on\('join-requests-changed', onEvent\)/);
-  assert.match(layout, /on\('notification', onPush\)/);
+  // The bell refetches on the server's 'notification' push (the console frame, NextLayout.jsx).
+  const frame = await readFile(new URL("../../../akoro-instructor/src/components/NextLayout.jsx", import.meta.url), "utf8");
+  assert.match(frame, /on\('notification', poll\)/);
+  assert.doesNotMatch(frame, /setInterval\(poll/);
 });
 
 test("background jobs can stand down on metered deployments", async () => {

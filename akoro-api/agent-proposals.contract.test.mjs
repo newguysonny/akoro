@@ -93,7 +93,8 @@ test("step 3 · the cycle: bounded, metered, validated server-side", () => {
   assert.match(cadence, /AKORO_AUTONOMY_MAX_WEEKLY_RUNS", 30/);
   assert.match(cycle, /const weeklyCap = weeklyRunsCap\(\);/);
   assert.match(cycle, /\? MIN_HOURS_BETWEEN_EVENT_RUNS : cadence\.minCycleHours\) \* 3600 \* 1000/); // nightly ≥20h
-  assert.match(cycle, /\(auto\.level \?\? 1\) < 2/);
+  // D47: the gate is Agent Online + "Suggestions and ideas" not switched off (no planner level any more).
+  assert.match(cycle, /if \(!auto\?\.enabled \|\| auto\.proactive === false\) return \{ skipped: "not_enabled" \};/);
   // validation clamps and drops — the model never gets the final say
   assert.match(cycle, /shaped\.length >= MAX_PROPOSALS_PER_CYCLE/);
   assert.match(cycle, /Math\.min\(room, MAX_PROPOSALS_PER_CYCLE\)/);
@@ -148,7 +149,7 @@ test("step 2 · the Suggestions inbox renders proposals; planner toggle in the d
   assert.match(tab, /k==="suggestions"&&suggestionCount>0&&/);
   assert.match(tab, /agent\.proposals_from_review/);
   // approval reflects back into the transcript (agent observes, never assumes)
-  assert.match(tab, /pushAgent\(t\('agent\.suggestion_added'\)\.replace\('\{title\}',r\.task\?\.title\|\|r\.title\|\|it\.title\)\)/);
+  assert.match(tab, /pushAgent\(t\('agent\.suggestion_added'\)\.replace\('\{title\}',r\.task\?\.title\|\|r\.title\|\|(?:it\.)?title\)\)/);   // one accept path (inbox card and chat card) takes the title
   assert.match(tab, /refetchTasks\(\)/);
   // combined switch: the dashboard online/offline control is the ONE
   // consent — online enables due-task check-ins AND the background planner

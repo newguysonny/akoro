@@ -17,6 +17,7 @@
  */
 
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import dns from "node:dns";
@@ -43,6 +44,27 @@ export function migrationUrl() {
   return process.env.MIGRATION_DATABASE_URL || process.env.DATABASE_URL || process.env.DB_URL || null;
 }
 
+/** A stuck connection fails in seconds (it used to hang the boot until the host killed it). */
+export function clientOptions(url) {
+  return {
+    connectionString: url, family: 4, ssl: url.includes("localhost") ? false : { rejectUnauthorized: false },
+    connectionTimeoutMillis: Math.max(3000, Number(process.env.MIGRATIONS_CONNECT_TIMEOUT_MS) || 15_000),
+    keepAlive: true,
+  };
+}
+
+/** PURE: a file's content hash (what "already applied" means per file). */
+export const fileHash = (sql) => createHash("sha256").update(sql).digest("hex");
+
+/**
+ * PURE: which files to run: new ones, and ones whose content changed since
+ * they last applied. `known` is { file: hash } from edu.migration_files.
+ * full (MIGRATIONS_FULL=true) runs them all, as before.
+ */
+export function filesToRun(files, sqlOf, known = {}, { full = false } = {}) {
+  return files.filter((f) => full || known[f] !== fileHash(sqlOf(f)));
+}
+
 function manifestFiles(groups) {
   const manifest = JSON.parse(readFileSync(join(migrationsDir, "manifest.json"), "utf8"));
   const files = [];
@@ -60,7 +82,7 @@ function manifestFiles(groups) {
  */
 export async function migrationsAlreadyApplied(url, sha) {
   if (!sha) return false;
-  const client = new pg.Client({ connectionString: url, family: 4, ssl: url.includes("localhost") ? false : { rejectUnauthorized: false } });
+  const client = new pg.Client(clientOptions(url));
   try {
     await client.connect();
     const { rows } = await client.query(
@@ -115,18 +137,34 @@ export function dataApiGrantStatements(schemas) {
 export async function applyMigrations({ url, groups = ["schema"], continueOnError = false, label = "boot" } = {}) {
   if (!url) throw new Error("A Postgres connection string is required (MIGRATION_DATABASE_URL or DATABASE_URL)");
   const files = manifestFiles(groups);
-  const client = new pg.Client({ connectionString: url, family: 4, ssl: url.includes("localhost") ? false : { rejectUnauthorized: false } });
+  const client = new pg.Client(clientOptions(url));
 
   let applied = 0, failed = 0;
   try {
     await client.connect();
     // Serialize concurrent boots/replicas — two instances must never race DDL.
     await client.query("SELECT pg_advisory_lock(727274)");
-    console.log(`[MIGRATIONS:${label}] applying ${files.length} file(s) [${groups.join(",")}]…`);
-    for (const file of files) {
-      const sql = readFileSync(join(migrationsDir, file), "utf8");
+    // Per file: only what is new or changed since it last applied. Every deploy
+    // re-ran all ~255 files (the sandbox's demo seeds too), which on a slow
+    // database outlasted the host's port check and failed the deploy.
+    await client.query("CREATE SCHEMA IF NOT EXISTS edu");
+    await client.query(`CREATE TABLE IF NOT EXISTS edu.migration_files (
+      file TEXT PRIMARY KEY, sha256 TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+    const { rows: knownRows } = await client.query("SELECT file, sha256 FROM edu.migration_files");
+    const known = Object.fromEntries(knownRows.map((r) => [r.file, r.sha256]));
+    const sqlCache = new Map();
+    const sqlOf = (f) => { if (!sqlCache.has(f)) sqlCache.set(f, readFileSync(join(migrationsDir, f), "utf8")); return sqlCache.get(f); };
+    const todo = filesToRun(files, sqlOf, known, { full: process.env.MIGRATIONS_FULL === "true" });
+    console.log(`[MIGRATIONS:${label}] applying ${todo.length} of ${files.length} file(s) [${groups.join(",")}] (the rest are unchanged)…`);
+    for (const file of todo) {
+      const sql = sqlOf(file);
       try {
         await client.query(sql);
+        await client.query(
+          `INSERT INTO edu.migration_files (file, sha256) VALUES ($1, $2)
+           ON CONFLICT (file) DO UPDATE SET sha256 = EXCLUDED.sha256, applied_at = now()`,
+          [file, fileHash(sql)],
+        );
         applied++;
       } catch (err) {
         failed++;

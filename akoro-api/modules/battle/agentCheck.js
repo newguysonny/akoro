@@ -36,24 +36,41 @@ async function protegeOf(learnerId) {
  * Create and queue one Agent Check. → { battleId, placed, title }.
  * Starts on its own after START_DELAY_MS, so the learner can open the arena
  * first; the learner's sockets are told to join its room.
+ *
+ * A CLASS review (an activity's review battle, self-study/activityReview.js)
+ * passes `learnerIds` and `startsAt`: one check, a seat for every learner with
+ * an agent, sent as a CHALLENGE (seats unanswered, in their Challenges list
+ * until it starts); it starts at `startsAt` with whoever accepted. Each gets a
+ * mark sheet. → also { seated, noAgent }.
  */
-export async function createCheckBattle({ learnerId, subject, topic, total = CHECK_DEFAULTS.QUESTIONS, studyPrepTopicId = null, mode = "diagnostic", secondsPerQuestion = CHECK_DEFAULTS.SECONDS_PER_QUESTION, basedOn = [] }) {
-  const agentId = await protegeOf(learnerId);
-  if (!agentId) throw fail("Create your agent first — the Agent Check is your agent answering.", 409);
+export async function createCheckBattle({ learnerId = null, learnerIds = null, startsAt = null, subject, topic, total = CHECK_DEFAULTS.QUESTIONS, studyPrepTopicId = null, mode = "diagnostic", secondsPerQuestion = CHECK_DEFAULTS.SECONDS_PER_QUESTION, basedOn = [], title: titleIn = null, extra = {} }) {
+  const group = Array.isArray(learnerIds);
+  const seats = [], noAgent = [];
+  for (const id of group ? learnerIds : [learnerId]) {
+    const agentId = await protegeOf(id);
+    if (agentId) seats.push({ userId: id, agentId }); else noAgent.push(id);
+  }
+  if (!seats.length) throw fail(group ? "Nobody in the class has an agent yet — the review is their agents answering." : "Create your agent first — the Agent Check is your agent answering.", 409);
   const count = Math.max(3, Math.min(10, Number(total) || CHECK_DEFAULTS.QUESTIONS));
   const seconds = Math.max(8, Math.min(60, Number(secondsPerQuestion) || CHECK_DEFAULTS.SECONDS_PER_QUESTION));
-  const title = `Agent Check${mode === "retest" ? " (retest)" : ""}: ${topic}`.slice(0, 200);
+  const title = (titleIn || `Agent Check${mode === "retest" ? " (retest)" : ""}: ${topic}`).slice(0, 200);
+  const startMs = group && startsAt ? Math.max(Date.now(), Date.parse(startsAt)) : null;
 
   const { data: battle, error } = await db.from("battles").insert({
     course_id: null, classroom_id: null, battle_type: "check",
     title, topic, subject, difficulty: "intermediate",
     total_questions: count, time_limit_seconds: count * seconds,
     xp_prize: 0, xp_pool: 0, hp_per_miss: 0, min_xp: 0,
-    max_participants: 1, total_participants: 1, status: "lobby",
-    expires_at: new Date(Date.now() + 3600_000).toISOString(),
+    max_participants: seats.length, total_participants: seats.length,
+    status: startMs ? "scheduled" : "lobby",
+    scheduled_start: startMs ? new Date(startMs).toISOString() : null,
+    // A class review's accept window closes when it starts.
+    expires_at: new Date(startMs ?? Date.now() + 3600_000).toISOString(),
     // The platform asks (and pays for the questions); nobody "created" it.
     created_by: null,
     study_prep_topic_id: studyPrepTopicId,
+    // A guide review (battle/guideReview.js) marks itself: who asked, from which session.
+    ...extra,
   }).select().single();
   if (error) throw new Error(error.message);
 
@@ -79,9 +96,9 @@ export async function createCheckBattle({ learnerId, subject, topic, total = CHE
     await db.from("battles").update({ total_questions: fill.placed, time_limit_seconds: fill.placed * (fill.secondsPerQuestion || seconds) }).eq("id", battle.id);
   }
 
-  const { error: seatError } = await db.from("battle_participants").insert({
-    battle_id: battle.id, user_id: learnerId, agent_id: agentId, role: "participant", joined_at: now(),
-  });
+  const { error: seatError } = await db.from("battle_participants").insert(seats.map((s) => ({
+    battle_id: battle.id, user_id: s.userId, agent_id: s.agentId, role: "participant", joined_at: group ? null : now(),
+  })));
   if (seatError) {
     await db.from("battles").delete().eq("id", battle.id);
     throw new Error(seatError.message);
@@ -89,9 +106,11 @@ export async function createCheckBattle({ learnerId, subject, topic, total = CHE
 
   const q = await queue();
   await addLater(q, "start-battle", { action: "start-battle", battleId: battle.id },
-    { delay: CHECK_DEFAULTS.START_DELAY_MS, jobId: `start-${battle.id}` });
+    { delay: startMs ? startMs - Date.now() : CHECK_DEFAULTS.START_DELAY_MS, jobId: `start-${battle.id}` });
+  const out = { battleId: battle.id, placed: fill.placed, title };
+  if (group) return { ...out, seated: seats.map((s) => s.userId), noAgent };
   global.io?.to(`user:${learnerId}`).emit("join_battle_room", { battleId: battle.id });
-  return { battleId: battle.id, placed: fill.placed, title };
+  return out;
 }
 
 /**
@@ -104,14 +123,15 @@ export async function createCheckBattle({ learnerId, subject, topic, total = CHE
  *   unknown   no answer: nothing in the notes on it
  * → { total, correct, guessed, wrong, unknown, score, perQuestion, gaps, learnerId }
  */
-export async function checkResults(battleId) {
+export async function checkResults(battleId, learnerId = null) {
   const [{ data: battle }, { data: questions }, { data: seats }] = await Promise.all([
     db.from("battles").select("id, battle_type, topic, subject, total_questions, study_prep_topic_id, status").eq("id", battleId).maybeSingle(),
     db.from("battle_questions").select("id, question_order, question_text, topic, correct_answer_index, explanation").eq("battle_id", battleId).order("question_order", { ascending: true }),
     db.from("battle_participants").select("id, user_id, role").eq("battle_id", battleId),
   ]);
   if (!battle || battle.battle_type !== "check") return null;
-  const seat = (seats || []).find((s) => s.role !== "teacher");
+  // A class review has a seat per learner: theirs, else the (only) one.
+  const seat = (seats || []).find((s) => s.role !== "teacher" && (!learnerId || s.user_id === learnerId));
   const { data: answers } = seat
     ? await db.from("battle_answers").select("question_id, is_correct, answer_basis, recalled_topic").eq("participant_id", seat.id)
     : { data: [] };

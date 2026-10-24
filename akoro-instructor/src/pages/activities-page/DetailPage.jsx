@@ -13,6 +13,7 @@ import { Ico } from '../../theme/Ico.jsx';
 import { confirmDialog } from '../../components/ConfirmHost.jsx';
 import { byKey } from '../../components/activities/ActivityForm.jsx';
 import Loading from "../../components/Loading.jsx";
+import ReviewBattleCard from '../../components/activities/ReviewBattleCard.jsx';
 
 /* ── Per-learner progress modal — same brief view the self-study page uses ── */
 export default function DetailPage({ activity, onDeleted, onClose }) {
@@ -192,6 +193,9 @@ export default function DetailPage({ activity, onDeleted, onClose }) {
               </div>
             );
           })()}
+
+          {/* The review battle the activity came with (if it has one). */}
+          <ReviewBattleCard activityId={activity?.id} />
 
           {pdfErr && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 11px', borderRadius: 10, background: tint(9, RED), border: `1px solid ${tint(30, RED)}`, fontSize: 12, fontWeight: 700, color: RED, fontFamily: C.font, marginTop: 12 }}>
