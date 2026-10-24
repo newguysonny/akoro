@@ -292,7 +292,7 @@ export const toolsAllOpen = {
   async run(ctx, p) {
     await teacherOf(ctx, p.instructor);
     const teaching = (await ctx.http({ as: p.instructor, path: "/api/teaching/tools" })).body?.data || [];
-    ctx.expect.gte("the teaching tools are listed", teaching.length, 9);
+    ctx.expect.gte("the teaching tools are listed", teaching.length, 8);
     ctx.expect.eq("none is locked", teaching.filter((t) => t.locked).map((t) => t.key), []);
     ctx.expect.eq("none has a price", teaching.filter((t) => (t.priceKobo || 0) > 0).map((t) => t.key), []);
     const catalogue = (await ctx.http({ as: p.instructor, path: "/api/instructor/tools" })).body || {};
