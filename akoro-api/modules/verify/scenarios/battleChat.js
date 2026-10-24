@@ -89,6 +89,17 @@ async function learnerCase(ctx, made, { as, label, prompt, tool, args = {} }) {
   return call;
 }
 
+/** A class of the instructor's with `need` test learners who have an agent, leaving out the privacy seeds. */
+async function classWith(ctx, as, need) {
+  const classes = (await ctx.http({ as, path: "/api/instructor/classrooms" })).body?.data || [];
+  for (const c of classes) {
+    const roster = (await ctx.http({ as, path: `/api/instructor/classrooms/${c.id}/students` })).body?.data || [];
+    const ok = roster.filter((r) => r.has_agent && /^tester\d+$/.test(r.username || "") && !/^tester0[345]$/.test(r.username));
+    if (ok.length >= need) return { classroom: c, learners: ok.slice(0, need) };
+  }
+  return null;
+}
+
 const seatsOf = (ctx, battleId) => ctx.db.rows("battle_participants", { battle_id: battleId }, { columns: "user_id, role, team, joined_at" });
 const battleOf = async (ctx, id) => (await ctx.db.rows("battles", { id }, { columns: "id, battle_type, status, scheduled_start, classroom_id, course_id, series_id, review_host, title" }))[0] || null;
 const seriesOf = async (ctx, id) => (await ctx.db.rows("battle_series", { id }, { columns: "id, scope, days, at_time, until, template, status" }))[0] || null;
@@ -205,10 +216,9 @@ export const battleChatClass = {
   async run(ctx) {
     const made = tracker(ctx);
     // tester03–05 carry the agent-network privacy seeds (hidden, blocking): not for these cases.
-    const found = await battleClass(ctx, BATTLE_INSTRUCTOR, 7);
-    const learners = (found?.learners || []).filter((l) => !/^tester0[345]$/.test(l.username)).slice(0, 4);
-    if (!found || learners.length < 4) ctx.expect.blocked(`${BATTLE_INSTRUCTOR} has no class with 4 test learners (besides the privacy seeds) who have an agent`);
-    const { classroom } = found;
+    const found = await classWith(ctx, BATTLE_INSTRUCTOR, 4);
+    if (!found) ctx.expect.blocked(`${BATTLE_INSTRUCTOR} has no class with 4 test learners (besides the privacy seeds) who have an agent`);
+    const { classroom, learners } = found;
     const [a, b, c, d] = learners;
     const cls = classroom.name;
 
@@ -266,6 +276,7 @@ export const battleChatInstructor = {
     ctx.cleanup(() => ctx.db.deleteOwned("activity_drafts", { ownerColumn: "created_by", ownerId: teacher.id, filters: { status: "draft" } }));
 
     const draftCase = async ({ label, prompt, want }) => {
+      await cleanSlate(ctx, teacher);
       const turn = await ctx.agent.chat({ as: BATTLE_INSTRUCTOR, mode: "live", prompt });
       ctx.expect.eq(`${label}: turn answered`, turn.status, 200);
       const call = lastCall(turn, "prepare_activity");

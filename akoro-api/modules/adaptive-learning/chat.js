@@ -1239,7 +1239,7 @@ export const INSTRUCTOR_TOOLS = [
   },
   {
     name: "schedule_activity_routine",
-    description: "Schedule a recurring weekly preparation: at the slot, a DRAFT is prepared automatically for the instructor to preview and assign (it is never assigned automatically). Use when the instructor says 'every <day>...'. The audience is required - ask who each occurrence is for before scheduling, and confirm the day. hour is UTC (default 7).",
+    description: "Schedule a recurring weekly preparation: at the slot, a DRAFT is prepared automatically for the instructor to preview and assign (it is never assigned automatically). Use when the instructor says 'every <day>...' for work they want to PREPARE afresh each week (assignments, self study). NOT for a recurring BATTLE: a battle that repeats is ONE prepare_activity (type battle) with repeat — its occurrences run themselves. The audience is required - ask who each occurrence is for before scheduling, and confirm the day. hour is UTC (default 7).",
     input_schema: {
       type: "object",
       properties: {
