@@ -11,6 +11,7 @@
 
 export const SERIES = Object.freeze({
   LEAD_MS: 60 * 60_000,          // an occurrence is made an hour before it starts
+  POST_LEAD_MS: 12 * 3600_000,   // an open challenge post goes up 12 hours before (people need time to find it)
   MAX_DAYS: 366,                 // a series ends within a year
   DEFAULT_TZ: "Africa/Lagos",
 });
@@ -77,7 +78,10 @@ export function nextOccurrence(rule, afterMs) {
 }
 
 /** PURE: when the occurrence starting at startMs is made (never in the past). */
-export const makeAt = (startMs, now = Date.now()) => Math.max(now, startMs - SERIES.LEAD_MS);
+export const makeAt = (startMs, now = Date.now(), lead = SERIES.LEAD_MS) => Math.max(now, startMs - lead);
+
+/** PURE: how far ahead a series makes its occurrences: a post needs finding; an invite only needs its questions. */
+export const leadOf = (s) => (s?.scope === "network" && s?.template?.post ? SERIES.POST_LEAD_MS : SERIES.LEAD_MS);
 
 /** PURE: the queue job id of one occurrence (one per start, so a repeat release is a no-op). */
 export const occurrenceJobId = (seriesId, startMs) => `series-${seriesId}-${startMs}`;
@@ -90,13 +94,23 @@ export function playersFor(members, startMs) {
 }
 
 /** PURE: the parts of a battle's settings a series repeats (not who, not when). */
-export function seriesTemplate(body = {}) {
+export function seriesTemplate(body = {}, extra = []) {
   const keep = ["title", "description", "subject", "topic", "difficulty", "total_questions",
-    "time_limit_seconds", "xp_prize", "question_source", "hp_per_miss", "min_xp", "expires_in_minutes"];
+    "time_limit_seconds", "xp_prize", "question_source", "hp_per_miss", "min_xp", "expires_in_minutes", ...extra];
   return Object.fromEntries(keep.filter((k) => body[k] !== undefined && body[k] !== null).map((k) => [k, body[k]]));
 }
 
 const DAY_NAME = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/** The extra settings a network invite or post repeats (battle/networkBattle.js, agent-network/challenges.js). */
+export const NETWORK_KEYS = ["kind", "exam", "seconds_per_question", "max_players", "scope", "scope_id", "max_xp", "note", "teams", "post"];
+
+/** PURE: the battle_type a series' card shows. */
+export function seriesCardType(s, players, creatorIsTeacher) {
+  const t = s.template || {};
+  if (s.scope === "network") return t.post ? "open" : t.kind === "team" ? "team" : t.kind === "group" ? "classroom" : "1v1";
+  return players <= 2 && !creatorIsTeacher ? "1v1" : "classroom";
+}
 
 /** PURE: "Mon, Thu at 16:00 until 12 Dec" for notifications. */
 export function ruleText(rule) {

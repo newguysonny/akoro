@@ -75,7 +75,7 @@ export function fromInvite(c, now = new Date()) {
   const teacher = c.hostRole === 'teacher';
   const guide = c.reviewHost === 'guide';
   const status = isReview ? 'review' : series && c.mine ? 'mine' : series && c.autoJoined ? 'joined' : 'invite';
-  const statusLine = series && c.mine ? (c.lastNote ? 'Your series · last one skipped' : 'Your series · everyone is in')
+  const statusLine = series && c.mine ? (c.lastNote ? 'Your series · last one skipped' : c.post ? 'Your recurring post · open to anyone' : 'Your series · everyone is in')
     : series && c.skippingNext ? "You're in · sitting out the next one"
     : isReview
     ? (guide ? 'Review · with your teaching guide' : 'Review · set by your teacher')

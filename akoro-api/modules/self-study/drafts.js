@@ -315,11 +315,28 @@ export async function createActivityDraft({ instructor, input, sessionId = null,
     if (hint) audienceLabel += ` · ${hint}`;
   } else if (type === "battle") {
     // The battle form (human) completes questions/XP; the agent drafts intent.
+    // What the instructor said about its shape and timing travels to the form,
+    // which opens prefilled with it: a study review or a battle, when it
+    // starts, whether it repeats, how many questions.
+    const repeat = input?.repeat && typeof input.repeat === "object" ? input.repeat : null;
+    const scheduledAt = input?.scheduled_at && !Number.isNaN(Date.parse(input.scheduled_at)) ? new Date(input.scheduled_at).toISOString() : null;
+    const total = Math.round(Number(input?.total_questions));
     payload.details = {
       topic,
       difficulty: payload.difficulty,
       note: String(input?.instructions || "").trim() || null,
+      mode: input?.battle_format === "review" ? "review" : "battle",
+      scheduled_at: repeat ? null : scheduledAt,
+      scheduled_hint: String(input?.scheduled_hint || "").trim() || null,
+      repeat: repeat ? {
+        days: (Array.isArray(repeat.days) ? repeat.days : []).map(Number).filter((d) => d >= 0 && d <= 6),
+        time: String(repeat.time || "").slice(0, 5) || null,
+        until: repeat.until && !Number.isNaN(Date.parse(repeat.until)) ? new Date(repeat.until).toISOString() : null,
+      } : null,
+      total_questions: Number.isFinite(total) && total >= 5 ? Math.min(30, total) : null,
     };
+    if (repeat) audienceLabel += " · repeats";
+    else if (scheduledAt || payload.details.scheduled_hint) audienceLabel += ` · ${payload.details.scheduled_hint || "scheduled"}`;
   } else if (type === "multi_stage") {
     const stages = normalizeStages(input?.stages, subject);
     if (!stages.length) throw invalid("A multi-stage journey needs at least one stage with a topic");
@@ -439,6 +456,8 @@ export async function updateActivityDraft(instructor, id, patch) {
     // draft just records provenance.
     updates.status = "assigned";
     updates.assignment_id = patch.assignment_id ?? null;
+    // A recurring battle: the series it became (its battles come later).
+    if (patch.series_id) updates.series_id = patch.series_id;
     updates.resolved_at = new Date().toISOString();
   }
   if (!Object.keys(updates).length) return draft;

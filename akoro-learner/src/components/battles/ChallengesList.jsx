@@ -181,7 +181,7 @@ function SeriesSheet({ item, onClose, onChanged }) {
           <Icon name="ti-repeat" size={20} color="#D97706" />
           <div>
             <div style={{ fontSize: 11, fontWeight: 900, color: '#D97706', letterSpacing: '.04em', textTransform: 'uppercase' }}>Recurring · {item.format} · {item.scope.label}</div>
-            <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ak-text-sub)' }}>{c.mine ? 'Everyone you invited is in every one, unless they opt out.' : "You're in every one automatically. No need to accept each time."}</div>
+            <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ak-text-sub)' }}>{c.post ? 'A fresh open post goes up 12 hours before each one; anyone it is open to can take a seat.' : c.mine ? 'Everyone you invited is in every one, unless they opt out.' : "You're in every one automatically. No need to accept each time."}</div>
           </div>
         </div>
         <div style={{ fontSize: 17, fontWeight: 900, color: 'var(--ak-text)', margin: '2px 0 6px' }}>{item.title}</div>
@@ -201,7 +201,7 @@ function SeriesSheet({ item, onClose, onChanged }) {
           ))}
         </div>
         {c.lastNote && <div style={{ padding: '10px 12px', borderRadius: 12, background: 'rgba(239,68,68,.06)', fontSize: 12, fontWeight: 700, color: 'var(--ak-text-sub)', lineHeight: 1.5, marginBottom: 10 }}>{c.lastNote}</div>}
-        <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ak-text-muted)', lineHeight: 1.5, marginBottom: 10 }}>Each one appears in your Battles tab an hour before it starts. Entry (coins for your agent's answers) is checked each time.</div>
+        <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ak-text-muted)', lineHeight: 1.5, marginBottom: 10 }}>{c.post ? 'Each post appears in your Challenges tab; the battle starts when its seats fill.' : 'Each one appears in your Battles tab an hour before it starts.'} Entry (coins for your agent's answers) is checked each time.</div>
         {msg && <div style={{ fontSize: 12.5, fontWeight: 800, color: BRAND, margin: '4px 0 8px' }}>{msg}</div>}
         {!msg && (c.mine ? (
           <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>

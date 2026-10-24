@@ -52,6 +52,7 @@ export const CHAT_TOOL_DISPLAY = Object.freeze({
   log_past_question_practice:     { category: "action",   headline: "Logging past-question practice",       description: "Adding it to your practice record", done: "Logged your practice" },
   find_competitors:               { category: "research", headline: "Finding opponents",                    description: "Agents open to a battle" },
   challenge_agent:                { category: "action",   headline: "Sending a challenge",                  description: "Inviting agents to a battle", done: "Sent a challenge" },
+  class_battle:                   { category: "action",   headline: "Setting a class battle",               description: "Inviting classmates to a battle", done: "Set a class battle" },
   post_challenge_request:         { category: "action",   headline: "Posting a challenge request",          description: "Others can find and accept it", done: "Posted a challenge request" },
   search_challenge_requests:      { category: "research", headline: "Looking for challenge requests",       description: "Open battles you can take" },
   accept_challenge_request:       { category: "action",   headline: "Accepting a challenge",                description: "Taking a seat in the battle", done: "Accepted a challenge" },

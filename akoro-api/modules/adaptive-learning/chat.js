@@ -52,6 +52,7 @@ import { consultPeerAgents, PEER_QUESTION_MIN, PEER_QUESTION_MAX } from "./peerC
 import { searchAgents, saveSettings as saveAgentNetworkSettings, block as blockAgent, report as reportAgent, logPastQuestions, pastQuestionSummary } from "../agent-network/network.js";
 import { challengeAgents, postChallengeRequest, searchChallengeRequests, acceptChallengeRequest, cancelChallengeRequest, rematch } from "../agent-network/challenges.js";
 import { requestGuideReview } from "../battle/guideReview.js";
+import { classBattleFromChat } from "../battle/chatBattle.js";
 import { messageAgent, inbox as agentInbox, replyToAgent, consultOnlineAgents, inboxBrief } from "../agent-network/messaging.js";
 import {
   requestBuddy, respondBuddy, listBuddies, buddyCheckin, endBuddy, buddyBrief,
@@ -271,6 +272,18 @@ async function reconstructHistoryBlocks(sessionId, topic, subject, agentName, ag
 
 // ─── Unified Agent Chat tools ────────────────────────────────────────────────
 // These execute against the student's real data when the agent needs them.
+
+
+// A recurring battle (battle/series.js): days of the week + a time, until an end date and time.
+const REPEAT_SCHEMA = {
+  type: "object",
+  description: "RECURRING only, when the learner asks for a battle that repeats. days: 0=Sun … 6=Sat; time: 'HH:MM' 24-hour in their time zone; until: ISO 8601 (+01:00) when the series ends — ask for the end date if they gave none.",
+  properties: {
+    days: { type: "array", items: { type: "number" } }, time: { type: "string" },
+    tz: { type: "string", description: "IANA zone, default Africa/Lagos." }, until: { type: "string" },
+  },
+  required: ["days", "time", "until"],
+};
 
 export const CHAT_TOOLS = [
   {
@@ -572,7 +585,8 @@ export const CHAT_TOOLS = [
     featureGate: "agent_network",
     description: "Challenge other learners' agents to a battle — ONLY when the learner explicitly asks. Use userIds from search_agents / find_competitors " +
       "(or @usernames). kind: 1v1 (one opponent), group (2–7 opponents), team (2v2: teammate + two opponents). Start now, or pass scheduled_for " +
-      "(ISO 8601 with +01:00, resolved against the current date and time) to schedule it. They get an invitation to accept. Questions come from past papers and AI.",
+      "(ISO 8601 with +01:00, resolved against the current date and time) to schedule it. They get an invitation to accept. Questions come from past papers and AI. " +
+      "RECURRING (\u201cevery Monday and Thursday at 4pm until December\u201d): pass repeat instead of scheduled_for — the opponents are in every one automatically unless they opt out.",
     input_schema: {
       type: "object",
       properties: {
@@ -585,8 +599,30 @@ export const CHAT_TOOLS = [
         hp_per_miss: { type: "number", description: "HP each agent loses per question it misses (0–50, default 10; 100 HP to start, 0 HP = out and unranked). The invitee sees it before accepting." },
         min_xp: { type: "number", description: "Minimum XP an agent needs to accept (default 0 = open to all)." },
         scheduled_for: { type: "string" }, title: { type: "string" },
+        repeat: REPEAT_SCHEMA,
       },
       required: ["opponents", "subject"],
+    },
+  },
+  {
+    name: "class_battle",
+    description: "Battle CLASSMATES in one of the learner's classes (questions from the class subject) or courses (from the course) — ONLY when the learner explicitly asks. " +
+      "opponents: classmates' @usernames, or whole_class. One classmate = a 1v1; more = a group battle (they each accept). Start now, scheduled_for (ISO 8601 +01:00), " +
+      "or repeat for a RECURRING one (they're in every one automatically). Name the class (class_name) or course (course_name) if they have more than one. " +
+      "For agents outside their classes, use challenge_agent. A learner never battles a teacher — for being checked by a teacher or the guide, use request_guide_review.",
+    input_schema: {
+      type: "object",
+      properties: {
+        class_name: { type: "string" }, classroom_id: { type: "string" }, course_name: { type: "string" }, course_id: { type: "string" },
+        opponents: { type: "array", items: { type: "string" }, description: "Classmates' @usernames." },
+        whole_class: { type: "boolean" },
+        subject: { type: "string" }, topic: { type: "string" }, difficulty: { type: "string", enum: ["easy", "intermediate", "hard"] },
+        total_questions: { type: "number", description: "5–30 (default 10)." },
+        hp_per_miss: { type: "number" }, min_xp: { type: "number" },
+        scheduled_for: { type: "string" }, title: { type: "string" },
+        repeat: REPEAT_SCHEMA,
+      },
+      required: [],
     },
   },
   {
@@ -594,7 +630,8 @@ export const CHAT_TOOLS = [
     featureGate: "agent_network",
     description: "Post an open challenge request other agents can find and accept (\u201cJAMB Chemistry 1v1, 10 questions, tonight at 8\u201d) — ONLY when the learner explicitly asks. " +
       "kind: 1v1 | team (2v2) | group (3–8, set max_players). scope: everyone | school | classmates | course | community (scope_id for one course/community). " +
-      "Optional XP range for fair matches, scheduled_for (ISO 8601 +01:00), expires_in_hours (default 24). The battle starts when the seats fill (or at its time).",
+      "Optional XP range for fair matches, scheduled_for (ISO 8601 +01:00), expires_in_hours (default 24). The battle starts when the seats fill (or at its time). " +
+      "RECURRING (\u201cpost this every Saturday at 8pm\u201d): pass repeat instead of scheduled_for — a fresh post goes up 12 hours before each one.",
     input_schema: {
       type: "object",
       properties: {
@@ -605,6 +642,7 @@ export const CHAT_TOOLS = [
         scope: { type: "string", enum: ["everyone", "school", "classmates", "course", "community"] }, scope_id: { type: "string" },
         min_xp: { type: "number" }, max_xp: { type: "number" }, scheduled_for: { type: "string" }, expires_in_hours: { type: "number" },
         note: { type: "string" }, title: { type: "string" },
+        repeat: REPEAT_SCHEMA,
       },
       required: ["subject"],
     },
@@ -1143,6 +1181,10 @@ export const INSTRUCTOR_TOOLS = [
           options: { type: "number", enum: [4, 5], description: "Options per MCQ — 4 unless they asked for 5 (A–E)." },
           total_points: { type: "number", description: "Total marks, if they said." },
         } },
+        battle_format: { type: "string", enum: ["battle", "review"], description: "battle only: 'review' = a STUDY REVIEW of ONE learner (a mark sheet, no opponent); otherwise a battle between two or more learners. A teacher never competes — they host." },
+        total_questions: { type: "number", description: "battle only: how many questions, if the instructor said (5–30)." },
+        scheduled_at: { type: "string", description: "battle only: when it starts, ISO 8601 with offset (+01:00), resolved against the current date and time — only if the instructor gave a time." },
+        repeat: { ...REPEAT_SCHEMA, description: "battle only, RECURRING ('every Friday at 2pm until the end of term'): days 0=Sun…6=Sat, time 'HH:MM', until ISO 8601. Ask for the end date if they gave none." },
         audience: { type: "object", description: "WHO this is for, from the instructor's own words. Ask first if unknown.", properties: {
           whole_class: { type: "boolean", description: "True for 'my whole class' / 'everyone'." },
           classroom_name: { type: "string", description: "The class as named, e.g. 'JSS 2'." },
@@ -1333,7 +1375,7 @@ async function resolveLearnerSchoolContext(studentId) {
  */
 export const SIDE_EFFECT_TOOLS = ["create_task", "suggest_help", "schedule_chat_follow_up", "post_to_chat", "create_tool", "cancel_scheduled_chat_follow_up", "submit_tool_request", "prepare_activity", "revise_activity_draft",
           "create_goal", "update_goal_progress", "save_blog_draft", "publish_blog", "update_agent_network_settings", "block_agent", "log_past_question_practice",
-          "challenge_agent", "post_challenge_request", "accept_challenge_request", "cancel_challenge_request", "rematch_battle", "request_guide_review", "message_agent", "reply_to_agent", "start_study_prep_session", "cancel_study_prep_session",
+          "challenge_agent", "class_battle", "post_challenge_request", "accept_challenge_request", "cancel_challenge_request", "rematch_battle", "request_guide_review", "message_agent", "reply_to_agent", "start_study_prep_session", "cancel_study_prep_session",
           "consult_peer_agents", "discard_activity_draft", "schedule_activity_routine", "cancel_activity_routine", "run_teaching_tool"];
 /** The multi-action tools change things only on their writing actions. */
 export const isSideEffectingAction = (tool, input) =>
@@ -2317,15 +2359,29 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       if (!input?.subject) return clarify("subject", "Which subject should the battle be on?");
       try {
         const b = await challengeAgents(studentId, input);
+        if (b.seriesId) return { challenged: true, recurring: true, seriesId: b.seriesId, kind: b.kind, invited: b.invited.length, nextAt: b.nextAt, repeats: b.repeats,
+          note: "A recurring battle: they're in every one automatically (they can skip one or opt out). Each one appears in the Battles tab an hour before it starts; the series is on the Challenges tab." };
         return { challenged: true, battleId: b.battleId, kind: b.kind, invited: b.invited.length, questions: b.placed, status: b.status,
           note: b.status === "invited" ? "They've been sent the challenge — it starts when they accept (or at the scheduled time). It's in the Battles tab." : "Starting soon." };
       } catch (e) { return { challenged: false, error: e.message }; }
+    }
+    case "class_battle": {
+      if (role === "instructor") return { error: "Teachers set class battles from the battle form (prepare_activity type battle)." };
+      try {
+        const r = await classBattleFromChat(studentId, input || {});
+        if (r.series_id) return { created: true, recurring: true, seriesId: r.series_id, nextAt: r.next_at, invited: r.invited, where: r.place, repeats: r.repeats,
+          note: "A recurring battle: they're in every one automatically (they can skip one or opt out). The series is on the Challenges tab." };
+        return { created: true, battleId: r.battle_id, battleType: r.battle_type, status: r.status, invited: r.invited, questions: r.questions, where: r.place,
+          skipped: r.skipped, note: "They've been invited; it's in the Battles tab." };
+      } catch (e) { return { created: false, error: e.message }; }
     }
     case "post_challenge_request": {
       if (role === "instructor") return { error: "The agent network is for learners." };
       if (!input?.subject) return clarify("subject", "Which subject should the challenge be on?");
       try {
         const r = await postChallengeRequest(studentId, input);
+        if (r.series) return { posted: true, recurring: true, seriesId: r.seriesId, nextAt: r.nextAt, scope: r.scope, repeats: r.repeats,
+          note: "A recurring post: a fresh one goes up 12 hours before each start for others to take. The series is on the Challenges tab." };
         return { posted: true, requestId: r.id, title: r.title, scope: r.scope, expiresAt: r.expires_at, scheduledFor: r.scheduled_for, seats: `1/${r.max_players}` };
       } catch (e) { return { posted: false, error: e.message }; }
     }

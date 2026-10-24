@@ -10,7 +10,7 @@
  *
  * Phases: loading → ready ⇄ editing → assigning → assigned | discarded | error
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ClipboardList, Download } from 'lucide-react';
 import { downloadActivityPdf } from '../lib/activityPdf.js';
@@ -40,6 +40,25 @@ const datetimeLocal = (iso) => {
 
 /* The draft payload, shaped for ActivityForm's `initial` — the SAME form the
    workbench renders, prefilled from what the agent prepared. */
+/* A battle draft → BattleForm's starting values: what the instructor said in chat. */
+function battleInitialFrom(payload) {
+  const d = payload.details || {};
+  const base = prefillFrom(payload);
+  const review = d.mode === 'review';
+  const cls = review || !!payload.classroom_id;
+  const rep = d.repeat && d.repeat.days?.length ? d.repeat : null;
+  return {
+    kind: review ? 'review' : cls ? 'class' : 'course',
+    title: base.title, topic: base.topic, subject: payload.subject || '', difficulty: base.difficulty,
+    description: d.note || '',
+    ...(cls ? { classId: payload.classroom_id || '' } : {}),
+    audience: base.audience,
+    ...(d.total_questions ? { totalQuestions: String(d.total_questions) } : {}),
+    scheduledAt: rep ? '' : datetimeLocal(d.scheduled_at),
+    ...(rep ? { repeats: true, days: rep.days, repeatTime: rep.time || '16:00', repeatUntil: datetimeLocal(rep.until) } : {}),
+  };
+}
+
 const localZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Africa/Lagos'; } catch { return 'Africa/Lagos'; } };
 
 function prefillFrom(payload, version = null) {
@@ -208,13 +227,18 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
       // The invite answers { success, data: { battle_id, invited, … } } — without battle_id the draft was closed
       // with no link to the battle it created.
       const battleId = res?.data?.battle_id ?? res?.battle_id ?? res?.data?.battle?.id ?? res?.battle?.id ?? res?.data?.id ?? res?.id ?? null;
-      await apiPatch(`/api/self-study/drafts/${draftId}`, { status: 'assigned', assignment_id: battleId });
+      // A recurring battle is a series (its battles are made before each start): the draft records the series.
+      const seriesId = res?.data?.series_id ?? null;
+      await apiPatch(`/api/self-study/drafts/${draftId}`, { status: 'assigned', assignment_id: battleId, ...(seriesId ? { series_id: seriesId } : {}) });
       markResolved('assigned', res?.data?.invited ?? res?.invited ?? 0);
     } catch (e) {
       setError(e?.message || 'Could not create the battle.');
       setPhase('ready');
     }
   };
+
+  // Stable per draft: BattleForm re-seeds itself whenever `initial` changes.
+  const battleInitial = useMemo(() => (draft?.type === 'battle' ? battleInitialFrom(draft.payload || {}) : null), [draft]);
 
   if (phase === 'loading') {
     return (
@@ -372,7 +396,7 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
           <div style={{ fontSize: 11.5, color: C.muted, fontFamily: C.font, margin: '4px 0 12px', lineHeight: 1.5 }}>
             Finish it with the same battle form as the workbench — pick the questions and stakes, then create. The draft closes when the battle goes live.
           </div>
-          <BattleForm onSubmit={battleSubmit} courses={courses || []} submitLabel="Create battle & close draft" embedded />
+          <BattleForm onSubmit={battleSubmit} courses={courses || []} initial={battleInitial} submitLabel="Create battle & close draft" embedded />
         </div>
       ) : isJourney ? (
         <div style={{ flex: 1, overflowY: 'auto', paddingRight: 2 }}>

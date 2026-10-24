@@ -21,7 +21,7 @@
 import db from "../../db.js";
 import { addLater, cancelLater } from "../../lib/deferredJobs.js";
 import { entryCheck } from "./entry.js";
-import { SERIES, cleanRepeat, nextOccurrence, makeAt, occurrenceJobId, playersFor, ruleText } from "./seriesCore.js";
+import { SERIES, cleanRepeat, nextOccurrence, makeAt, leadOf, occurrenceJobId, playersFor, ruleText, seriesCardType } from "./seriesCore.js";
 
 const series = () => db.from("battle_series");
 const members = () => db.from("battle_series_members");
@@ -47,7 +47,7 @@ async function scheduleNext(s, afterMs) {
   }
   await series().update({ next_at: new Date(next).toISOString() }).eq("id", s.id);
   await addLater(await queue(), "series-occurrence", { action: "series-occurrence", seriesId: s.id, startMs: next },
-    { delay: Math.max(0, makeAt(next) - Date.now()), jobId: occurrenceJobId(s.id, next) });
+    { delay: Math.max(0, makeAt(next, Date.now(), leadOf(s)) - Date.now()), jobId: occurrenceJobId(s.id, next) });
   return next;
 }
 
@@ -76,7 +76,7 @@ export async function createSeries({ creatorId, scope, classroomId = null, cours
 }
 
 /** Run an invite route handler in-process. → { status, body } */
-async function callRoute(handler, req) {
+export async function callRoute(handler, req) {
   const out = { status: 200, body: null };
   const res = { status(c) { out.status = c; return res; }, json(b) { out.body = b; return res; } };
   await handler(req, res);
@@ -95,8 +95,14 @@ export async function runOccurrence(seriesId, startMs) {
   const finish = async (result) => ({ ...result, next: await scheduleNext(s, startMs) });
 
   // Released twice (a retry, a duplicate row): the battle is already there.
-  const { data: made } = await db.from("battles").select("id").eq("series_id", s.id).eq("scheduled_start", startIso).limit(1);
-  if (made?.length) return finish({ battleId: made[0].id, existed: true });
+  const t = s.template || {};
+  if (t.post) {
+    const { data: posted } = await db.schema("edu").from("challenge_requests").select("id").eq("series_id", s.id).eq("scheduled_for", startIso).limit(1);
+    if (posted?.length) return finish({ requestId: posted[0].id, existed: true });
+  } else {
+    const { data: made } = await db.from("battles").select("id").eq("series_id", s.id).eq("scheduled_start", startIso).limit(1);
+    if (made?.length) return finish({ battleId: made[0].id, existed: true });
+  }
 
   // The previous one still running: this one is skipped, and says so.
   if (s.last_battle_id) {
@@ -109,7 +115,6 @@ export async function runOccurrence(seriesId, startMs) {
 
   // Everyone in, less who opted out or skips this one; entry checked per occurrence.
   const { data: rows } = await members().select("user_id, opted_out_at, skips").eq("series_id", s.id);
-  const t = s.template || {};
   const players = [];
   for (const uid of playersFor(rows, startMs)) {
     const entry = await entryCheck(uid, { battle_type: "battle", total_questions: t.total_questions ?? 15, min_xp: t.min_xp ?? 0 });
@@ -119,6 +124,29 @@ export async function runOccurrence(seriesId, startMs) {
 
   const { data: creator } = await db.from("users").select("id, role").eq("id", s.created_by).maybeSingle();
   if (!creator) return { skipped: "creator gone" };
+  const when = startIso.slice(0, 16).replace("T", " ");
+
+  // The agent network: an open post goes up again, or the invite is made with everyone already in.
+  if (s.scope === "network") {
+    try {
+      if (t.post) {
+        const { postChallengeRequest } = await import("../agent-network/challenges.js");
+        const { post: _post, teams: _teams, ...input } = t;
+        const r = await postChallengeRequest(s.created_by, { ...input, scheduled_for: startIso }, { seriesId: s.id });
+        await series().update({ last_note: null }).eq("id", s.id);
+        return finish({ requestId: r.id });
+      }
+      const { createNetworkBattle } = await import("./networkBattle.js");
+      const b = await createNetworkBattle({ creatorId: s.created_by, opponents: players, joined: players, teams: t.teams || {},
+        options: { ...t, scheduled_for: startIso }, source: "series", seriesId: s.id });
+      await series().update({ last_battle_id: b.battleId, last_note: null }).eq("id", s.id);
+      return finish({ battleId: b.battleId });
+    } catch (e) {
+      if (!e.status) console.warn("[series] network occurrence failed:", e.message);
+      await note(`The ${when} one was skipped: ${e.message}`);
+      return finish({ skipped: e.message });
+    }
+  }
   const { occurrenceHandlers } = await import("./routes.js");
   const handler = s.scope === "class" ? occurrenceHandlers.classInvite : occurrenceHandlers.courseInvite;
   const out = await callRoute(handler, {
@@ -130,7 +158,7 @@ export async function runOccurrence(seriesId, startMs) {
   }).catch((e) => ({ status: 500, body: { error: e.message } }));
 
   if (out.status !== 201) {
-    await note(`The ${startIso.slice(0, 16).replace("T", " ")} one was skipped: ${out.body?.error ?? "it could not be set up"}.`);
+    await note(`The ${when} one was skipped: ${out.body?.error ?? "it could not be set up"}.`);
     return finish({ skipped: out.body?.error ?? `status ${out.status}` });
   }
   const battleId = out.body?.data?.battle_id;
@@ -200,6 +228,9 @@ export async function endSeries(seriesId, userId) {
   if (s.next_at) await cancelLater(await queue(), occurrenceJobId(seriesId, new Date(s.next_at).getTime()));
   const { data: upcoming } = await db.from("battles").update({ status: "cancelled" })
     .eq("series_id", seriesId).in("status", ["lobby", "scheduled"]).select("id");
+  if (s.template?.post) {
+    await db.schema("edu").from("challenge_requests").update({ status: "cancelled" }).eq("series_id", seriesId).eq("status", "open");
+  }
   return { ended: true, cancelled: (upcoming || []).length };
 }
 
@@ -241,7 +272,10 @@ export async function seriesCards(userId) {
       title: t.title ?? "Recurring battle",
       subject: t.subject ?? null,
       topic: t.topic ?? null,
-      type: players <= 2 && u?.role !== "instructor" && u?.role !== "teacher" ? "1v1" : "classroom",
+      type: seriesCardType(s, players, u?.role === "instructor" || u?.role === "teacher"),
+      // An open post repeats for anyone to take; nobody is "in" it until they take a seat.
+      post: !!t.post,
+      kind: t.kind ?? null,
       scope: s.scope,
       scopeName: nameOf.get(s.course_id || s.classroom_id) ?? null,
       courseId: s.course_id, classroomId: s.classroom_id,

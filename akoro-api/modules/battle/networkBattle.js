@@ -83,7 +83,7 @@ export function assignTeams(creatorId, others, given = {}) {
  * Create the battle and send the invitations.
  * → { battleId, status, invited: [userIds], joined: [userIds], placed }
  */
-export async function createNetworkBattle({ creatorId, opponents = [], joined = [], teams = {}, options, startNowIfReady = false, source = "challenge" }) {
+export async function createNetworkBattle({ creatorId, opponents = [], joined = [], teams = {}, options, startNowIfReady = false, source = "challenge", seriesId = null }) {
   const o = cleanBattleOptions(options);
   const others = [...new Set([...opponents, ...joined])].filter((id) => id && id !== creatorId);
   seatsFor(o.kind, opponents.filter((id) => !joined.includes(id)), joined);
@@ -135,6 +135,8 @@ export async function createNetworkBattle({ creatorId, opponents = [], joined = 
     // whoever accepted (if enough did) or expire — never wait for ever.
     scheduled_start: o.scheduledFor, expires_at: o.scheduledFor || new Date(Date.now() + IDLE_HOURS * 3600_000).toISOString(),
     created_by: creatorId,
+    // An occurrence of a recurring series (battle/series.js).
+    ...(seriesId ? { series_id: seriesId } : {}),
   }).select().single();
   if (error) throw new Error(error.message);
 

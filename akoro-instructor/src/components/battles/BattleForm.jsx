@@ -36,7 +36,7 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
  * one implementation, two hosts. `onSubmit(form)` receives the validated
  * form; the host owns the API call.
  */
-export default function BattleForm({ onSubmit, onCancel, courses = [], editing = null, submitLabel, embedded = false }) {
+export default function BattleForm({ onSubmit, onCancel, courses = [], editing = null, initial = null, submitLabel, embedded = false }) {
   const [form, setForm]     = useState(BLANK);
   const [classes, setClasses] = useState([]);
   const [classesLoading, setClassesLoading] = useState(true);
@@ -83,9 +83,10 @@ export default function BattleForm({ onSubmit, onCancel, courses = [], editing =
         scheduledAt: editing.scheduledAt ? toLocalInput(editing.scheduledAt) : '',
       });
     } else {
-      setForm({ ...BLANK, courseId: courses[0]?.id || '' });
+      // A chat draft opens the form already filled with what the instructor said.
+      setForm({ ...BLANK, courseId: courses[0]?.id || '', ...(initial || {}) });
     }
-  }, [editing, courses]);
+  }, [editing, courses, initial]);
 
   useEffect(() => {
     if (!classes.length) return;
