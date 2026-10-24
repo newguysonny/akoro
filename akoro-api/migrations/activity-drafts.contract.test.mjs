@@ -127,11 +127,11 @@ test("the chat hands the human a Preview button and a side-by-side panel", () =>
   // narrow desktops while the chat column shrinks.
   assert.match(chatPage, /@media \(max-width: 767px\)/);
   assert.doesNotMatch(chatPage, /max-width: 1100px/);
-  // An assignment's paper (and a teaching resource) needs more room than the other drafts.
-  assert.match(chatPage, /width: \['assignment', 'teaching_tool'\]\.includes\(previewType\) \? 600 : 430, maxWidth: \['assignment', 'teaching_tool'\]\.includes\(previewType\) \? '58vw' : '46vw', flexShrink: 0/);
+  // An assignment's paper, a teaching resource and the battle / self-study previews need more room.
+  assert.match(chatPage, /width: \['assignment', 'teaching_tool', 'battle', 'self_study'\]\.includes\(previewType\) \? 600 : 430, maxWidth: \['assignment', 'teaching_tool', 'battle', 'self_study'\]\.includes\(previewType\) \? '58vw' : '46vw', flexShrink: 0/);
 });
 
-test("the preview reuses the workbench's own forms — no forked editors", () => {
+test("the preview reuses the workbench's own forms — no forked editors", async () => {
   // ActivityForm grew prefill + save-override seams; the panel points it at
   // the draft-assign approval instead of the bench.
   assert.match(page, /function ActivityForm\(\{ type, onAssigned, initial = null, savePayload = null \}\)/);
@@ -139,7 +139,10 @@ test("the preview reuses the workbench's own forms — no forked editors", () =>
   assert.match(panel, /<ActivityForm[\s\S]*?initial=\{prefillFrom\(payload, shown\)\}[\s\S]*?savePayload=/);
   assert.match(panel, /\/api\/self-study\/drafts\/\$\{draftId\}\/assign/);
   // Battles go through the one shared BattleForm, embedded.
-  assert.match(panel, /<BattleForm onSubmit=\{battleSubmit\}[^>]*embedded/);
+  // (inside the battle preview's Settings tab, components/preview/BattleDraftPreview.jsx)
+  assert.match(panel, /<BattleDraftPreview draft=\{draft\} initial=\{battleInitial\} courses=\{courses\} onSubmit=\{battleSubmit\}/);
+  const battlePreview = await readFile(new URL("../../akoro-instructor/src/components/preview/BattleDraftPreview.jsx", import.meta.url), "utf8");
+  assert.match(battlePreview, /<BattleForm onSubmit=\{onSubmit\}[^>]*embedded/);
   // The approval states exist, and the panel says what is true.
   assert.match(panel, /phase === 'assigning'/);
   assert.match(panel, /nothing is sent until you assign/);

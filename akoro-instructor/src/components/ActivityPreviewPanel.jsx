@@ -23,7 +23,9 @@ import { Ico } from '../theme/Ico.jsx';
 import { ActivityForm, byKey, rowsFromQuestions } from './activities/ActivityForm.jsx';
 import DraftVersions, { versionsOf } from './paper/DraftVersions.jsx';
 import { apiPut } from '../services/api.js';
-import BattleForm from './battles/BattleForm.jsx';
+import BattleDraftPreview from './preview/BattleDraftPreview.jsx';
+import SelfStudyDraftPreview from './preview/SelfStudyDraftPreview.jsx';
+import ReviewBattleSettings, { REVIEW_DEFAULT } from './preview/ReviewBattleSettings.jsx';
 import { useBattlesAPI } from '../hooks/useBattlesAPI.js';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
 import { audienceBody } from './AudiencePicker.jsx';
@@ -41,17 +43,18 @@ const datetimeLocal = (iso) => {
 /* The draft payload, shaped for ActivityForm's `initial` — the SAME form the
    workbench renders, prefilled from what the agent prepared. */
 /* A battle draft → BattleForm's starting values: what the instructor said in chat. */
-function battleInitialFrom(payload) {
+function battleInitialFrom(payload, draft = {}) {
   const d = payload.details || {};
   const base = prefillFrom(payload);
   const review = d.mode === 'review';
-  const cls = review || !!payload.classroom_id;
+  const classroomId = payload.classroom_id || draft.audience?.classroom_id || '';
+  const cls = review || !!classroomId || !!draft.audience?.class_name;
   const rep = d.repeat && d.repeat.days?.length ? d.repeat : null;
   return {
     kind: review ? 'review' : cls ? 'class' : 'course',
-    title: base.title, topic: base.topic, subject: payload.subject || '', difficulty: base.difficulty,
+    title: base.title || draft.title || '', topic: base.topic, subject: payload.subject || '', difficulty: base.difficulty,
     description: d.note || '',
-    ...(cls ? { classId: payload.classroom_id || '' } : {}),
+    ...(cls ? { classId: classroomId } : {}),
     audience: base.audience,
     ...(d.total_questions ? { totalQuestions: String(d.total_questions) } : {}),
     scheduledAt: rep ? '' : datetimeLocal(d.scheduled_at),
@@ -111,6 +114,8 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
   const [error, setError] = useState('');
   const [assignedCount, setAssignedCount] = useState(0);
   const [dueLocal, setDueLocal] = useState(null);   // the due date picked here (datetime-local), null = as drafted
+  // The review battle an assignment / self study comes with (on by default; Plan: Activity + Review).
+  const [review, setReview] = useState(REVIEW_DEFAULT);
   const { createBattle } = useBattlesAPI();
   const { courses } = useCoursesAPI();
 
@@ -237,8 +242,14 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
     }
   };
 
+  // The review battle runs at the due date unless the instructor picks another time.
+  useEffect(() => {
+    const due = draft?.payload?.due_at ? datetimeLocal(draft.payload.due_at) : '';
+    if (due) setReview((r) => (r.at ? r : { ...r, at: due }));
+  }, [draft?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
+
   // Stable per draft: BattleForm re-seeds itself whenever `initial` changes.
-  const battleInitial = useMemo(() => (draft?.type === 'battle' ? battleInitialFrom(draft.payload || {}) : null), [draft]);
+  const battleInitial = useMemo(() => (draft?.type === 'battle' ? battleInitialFrom(draft.payload || {}, draft) : null), [draft]);
 
   if (phase === 'loading') {
     return (
@@ -297,6 +308,7 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
   };
   const assignOverrides = () => ({
     ...(shown ? { version: shown.n } : {}),
+    ...(['assignment', 'self_study'].includes(draft.type) ? { review: { on: review.on, at: review.at ? new Date(review.at).toISOString() : null, questions: review.questions } } : {}),
     ...(dueLocal != null ? { due_at: dueLocal ? new Date(dueLocal).toISOString() : null } : {}),
   });
 
@@ -392,11 +404,12 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
         </div>
       ) : isBattle ? (
         <div style={{ flex: 1, overflowY: 'auto', paddingRight: 2 }}>
-          <Row label="Audience">{audience.label || '—'}</Row>
-          <div style={{ fontSize: 11.5, color: C.muted, fontFamily: C.font, margin: '4px 0 12px', lineHeight: 1.5 }}>
-            Finish it with the same battle form as the workbench — pick the questions and stakes, then create. The draft closes when the battle goes live.
-          </div>
-          <BattleForm onSubmit={battleSubmit} courses={courses || []} initial={battleInitial} submitLabel="Create battle & close draft" embedded />
+          <BattleDraftPreview draft={draft} initial={battleInitial} courses={courses} onSubmit={battleSubmit} audienceLabel={audience.label || '—'} />
+        </div>
+      ) : draft.type === 'self_study' ? (
+        <div style={{ flex: 1, overflowY: 'auto', paddingRight: 2 }}>
+          <SelfStudyDraftPreview draft={draft} audience={audience} dueLocal={dueValue} onDue={setDueLocal} dueHint={payload.due_hint}
+            review={review} onReview={setReview} onEditPlan={() => setPhase('editing')} />
         </div>
       ) : isJourney ? (
         <div style={{ flex: 1, overflowY: 'auto', paddingRight: 2 }}>
@@ -461,6 +474,11 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
               <DraftVersions draft={draft} selected={shown?.n} onSelect={setVSel}
                 onSave={saveVersion} onRetry={retryVersion} busy={vBusy}
                 editing={vEditing} setEditing={setVEditing} />
+            </div>
+          )}
+          {draft.type === 'assignment' && (
+            <div style={{ marginBottom: 12, borderTop: `1px solid ${C.border}` }}>
+              <ReviewBattleSettings value={review} onChange={setReview} dueLocal={dueValue} defaultOpen={false} />
             </div>
           )}
           {isLive && (
@@ -570,7 +588,7 @@ function Frame({ children, onClose, meta, type }) {
   const Icon = meta.icon || ClipboardList;
   const color = meta.color || PURPLE;
   return (
-    <div style={{ height: '100%', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, display: 'flex', flexDirection: 'column', padding: '18px 18px 16px', overflow: 'hidden' }}>
+    <div data-preview-panel={type} style={{ height: '100%', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, display: 'flex', flexDirection: 'column', padding: '18px 18px 16px', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexShrink: 0 }}>
         <div style={{ width: 38, height: 38, borderRadius: 11, background: tint(9, color), display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ico ti={meta.ti || 'ti-clipboard-list'} size={18} color={color} /></div>
         <div style={{ flex: 1, minWidth: 0 }}>

@@ -8,6 +8,7 @@
  * 13 messages through the API and deletes it at the end.
  */
 import { historyPagesCheck } from './chat.mjs';
+import { draftPreviewScenarios } from './draftPreviews.mjs';
 
 // Every instructor route with no id in it (the console rebuild's screenshots —
 // reference/Akoro Console Rebuild — Plan.md). /courses* redirect to Course Creator.
@@ -68,4 +69,5 @@ export const scenarios = [
     description: 'The instructor chat opens on its newest 10 messages; scrolling to the top loads the earlier ones above, keeping the place.',
     run: (t) => historyPagesCheck(t, { path: '/chat' }),
   },
+  ...draftPreviewScenarios,
 ];
