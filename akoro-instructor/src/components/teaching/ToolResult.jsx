@@ -25,6 +25,11 @@ export const TOOL_ACCENT = {
   'essay-grader':   '#CA8A04',
   'podcast':        '#6C3BFF',
 };
+export const TOOL_NAME = { 'podcast': 'Podcast Generator', 'misconceptions': 'Common Misconceptions', 'real-world': 'Real-World Connections',
+  'lesson-hooks': 'Lesson Hooks', 'vocabulary': 'Vocabulary Builder', 'essay-grader': 'Essay Grader', 'lesson-plan': 'Lesson Plan',
+  'activity': 'Activities Creator', 'assignment': 'Assignment Creator' };
+export const TOOL_EMOJI = { 'podcast': '🎧', 'misconceptions': '🧠', 'real-world': '🌍', 'lesson-hooks': '🪝', 'vocabulary': '🔤',
+  'essay-grader': '📊', 'lesson-plan': '📋', 'activity': '✨', 'assignment': '✍️' };
 export const accentFor = (key) => TOOL_ACCENT[key] || '#6C3BFF';
 
 const TONE = {

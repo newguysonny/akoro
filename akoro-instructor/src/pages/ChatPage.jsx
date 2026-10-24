@@ -736,15 +736,22 @@ export default function ChatPage() {
   const [aiStatus, setAiStatus] = useState('');
   const [running, setRunning] = useState(false);   // a turn is in flight — the composer's send becomes a stop
   const abortRef = useRef(null);                 // aborts the in-flight stream (user Stop)             // live tool status ("Resolving your class…")
-  const [draftStates, setDraftStates] = useState({});       // { [id]: 'assigned'|'discarded' }
+  const [draftStates, setDraftStates] = useState({});       // { [id]: 'assigned'|'saved'|'discarded' }
+  const [draftOutputs, setDraftOutputs] = useState({});     // { [id]: Library row id } — a saved teaching resource
   const [draftsById, setDraftsById] = useState({});         // the draft each card loaded — its ideas read it
   const [draftRevisions, setDraftRevisions] = useState({}); // { [id]: bump count }
   // Resolutions are pushed as chat messages: the instructor sees the outcome,
   // and because replies ride the history, the agent knows it too next turn —
   // it can then confirm to the instructor that the work was assigned (the
   // LEARNERS are notified by the platform itself at assign time, not by the agent).
-  const resolveDraft = (id, state) => {
+  const resolveDraft = (id, state, info = {}) => {
     setDraftStates((prev) => ({ ...prev, [id]: state }));
+    if (state === 'saved') {
+      // A teaching resource was saved: say so in the chat, with the card that links to its page.
+      if (info.outputId) setDraftOutputs((prev) => ({ ...prev, [id]: info.outputId }));
+      pushAgent('Saved to your Library.', { previews: [{ id, title: info.title || 'Your resource', type: 'teaching_tool', audience: '' }] });
+      return;
+    }
     pushAgent(state === 'assigned'
       ? 'Assigned — the learners on this draft have been notified and it is on their Activities feed.'
       : 'Draft discarded — nothing was sent to anyone.');
@@ -935,7 +942,8 @@ export default function ChatPage() {
                   {!isMe && (msg.previews || []).length > 0 && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
                       {msg.previews.map((d, pi) => (
-                        <DraftCard key={`${d.id}-${d.version || 0}`} preview={d} state={draftStates[d.id]}
+                        <DraftCard key={`${d.id}-${d.version || 0}`} preview={d} state={draftStates[d.id]} outputId={draftOutputs[d.id]}
+                          onOpenOutput={(outId) => navigate(`/library/${outId}`)}
                           onDraft={(dr) => setDraftsById((prev) => (prev[dr.id] === dr ? prev : { ...prev, [dr.id]: dr }))}
                           label={msg.previews.length > 1 ? `Preview ${pi + 1}` : 'Preview'}
                           onOpen={(id, version) => { setPreviewDraft(id); setPreviewVersion(version); setPreviewType(d.type); }} />
@@ -1103,7 +1111,7 @@ export default function ChatPage() {
         </div>
 
         {previewDraft && (
-          <div className="ci-preview-panel" style={{ width: previewType === 'assignment' ? 600 : 430, maxWidth: previewType === 'assignment' ? '58vw' : '46vw', flexShrink: 0, minHeight: 0 }}>
+          <div className="ci-preview-panel" style={{ width: ['assignment', 'teaching_tool'].includes(previewType) ? 600 : 430, maxWidth: ['assignment', 'teaching_tool'].includes(previewType) ? '58vw' : '46vw', flexShrink: 0, minHeight: 0 }}>
             <ActivityPreviewPanel
               draftId={previewDraft}
               initialVersion={previewVersion}

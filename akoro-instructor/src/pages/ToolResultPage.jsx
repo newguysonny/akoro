@@ -10,12 +10,8 @@ import { Ico } from '../theme/Ico.jsx';
 import { C } from '../theme/colors.js';
 import { apiGet } from '../services/api.js';
 import { ToolRunner } from '../components/teaching/TeachingTools.jsx';
+import { TOOL_NAME, TOOL_EMOJI } from '../components/teaching/ToolResult.jsx';
 
-const TOOL_NAME = { 'podcast': 'Podcast Generator', 'misconceptions': 'Common Misconceptions', 'real-world': 'Real-World Connections',
-  'lesson-hooks': 'Lesson Hooks', 'vocabulary': 'Vocabulary Builder', 'essay-grader': 'Essay Grader', 'lesson-plan': 'Lesson Plan',
-  'activity': 'Activities Creator', 'assignment': 'Assignment Creator' };
-const TOOL_EMOJI = { 'podcast': '🎧', 'misconceptions': '🧠', 'real-world': '🌍', 'lesson-hooks': '🪝', 'vocabulary': '🔤',
-  'essay-grader': '📊', 'lesson-plan': '📋', 'activity': '✨', 'assignment': '✍️' };
 const OUTPUT_OF = { 'podcast': 'script', 'vocabulary': 'cards', 'essay-grader': 'grades' };
 // Saved payloads predate the `output` field, so infer it from what is inside.
 function guessOutput(c, kind) {

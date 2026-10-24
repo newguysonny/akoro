@@ -6,8 +6,9 @@
  *        6 questions (4 MCQ · 2 Theory) · 24 marks · JSS 2 · due Fri 1 PM
  *        [👁 Preview]
  *
- * An assignment's version is written in the background, so the card shows
- * "Drafting questions…" and looks again every few seconds until it's ready.
+ * An assignment's (or teaching resource's) version is written in the background, so the card shows
+ * "Drafting…" and looks again every few seconds until it's ready. A resource that was saved
+ * shows "Saved to Library · Open" — the link to its page.
  */
 import { useEffect, useState } from 'react';
 import { apiGet } from '../../services/api.js';
@@ -23,8 +24,9 @@ const fmtDue = (iso) => {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
 };
 
-export default function DraftCard({ preview, state = null, label = 'Preview', onOpen, onDraft }) {
-  const versioned = preview.type === 'assignment' && !!preview.version;
+export default function DraftCard({ preview, state = null, label = 'Preview', onOpen, onDraft, outputId = null, onOpenOutput }) {
+  const isTool = preview.type === 'teaching_tool';
+  const versioned = (preview.type === 'assignment' || isTool) && !!preview.version;
   const [draft, setDraft] = useState(null);
 
   useEffect(() => {
@@ -44,6 +46,9 @@ export default function DraftCard({ preview, state = null, label = 'Preview', on
     return () => { dead = true; clearTimeout(timer); };
   }, [preview.id, preview.version, versioned, state]);   // eslint-disable-line react-hooks/exhaustive-deps
 
+  // A card the page has not just resolved still knows how its draft ended (a reload, another tab).
+  const resolved = state || (draft?.status === 'assigned' ? (isTool ? 'saved' : 'assigned') : draft?.status === 'discarded' ? 'discarded' : null);
+  const savedId = outputId || draft?.assignment_id || null;
   const v = (draft?.payload?.versions || []).find((x) => x.n === preview.version);
   const due = draft?.payload?.due_at ? fmtDue(draft.payload.due_at) : draft?.payload?.due_hint || '';
   const audience = draft?.audience?.label || preview.audience || '';
@@ -56,20 +61,27 @@ export default function DraftCard({ preview, state = null, label = 'Preview', on
       </div>
       <div style={{ fontSize: 11.5, color: C.muted, marginTop: 3, lineHeight: 1.45, display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
         {!versioned ? <span>{[audience, due].filter(Boolean).join(' · ') || 'Ready to preview'}</span>
-          : !v || v.status === 'drafting' ? <><Ico ti="ti-loader-2" size={11} color={PURPLE} style={{ animation: 'spin .8s linear infinite' }} /> Drafting questions…</>
-          : v.status === 'failed' ? <span style={{ color: RED, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Ico ti="ti-alert-triangle" size={11} /> Couldn't draft the questions — open to try again</span>
+          : !v || v.status === 'drafting' ? <><Ico ti="ti-loader-2" size={11} color={PURPLE} style={{ animation: 'spin .8s linear infinite' }} /> {isTool ? 'Writing it…' : 'Drafting questions…'}</>
+          : v.status === 'failed' ? <span style={{ color: RED, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Ico ti="ti-alert-triangle" size={11} /> Couldn't draft it — open to try again</span>
           : <span>{[v.summary?.line, audience, due && `due ${due}`].filter(Boolean).join(' · ')}{v.basedOn && v.note ? <><br />{v.note}</> : null}</span>}
       </div>
       {versioned && v?.warning && <div style={{ fontSize: 11, color: '#B45309', fontWeight: 700, marginTop: 4 }}><Ico ti="ti-alert-triangle" size={11} style={{ verticalAlign: '-2px', marginRight: 3 }} />{v.warning}</div>}
-      <div style={{ marginTop: 8 }}>
-        <button type="button" disabled={!!state} onClick={() => onOpen(preview.id, versioned ? preview.version : null)}
-          title={state ? undefined : 'Preview this draft — assigning is your call'}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 9, cursor: state ? 'default' : 'pointer', fontFamily: C.font, fontSize: 11.5, fontWeight: 800,
-            border: state === 'assigned' ? '1px solid #BBF7D0' : state === 'discarded' ? `1px solid ${C.border}` : 'none',
-            background: state === 'assigned' ? '#DCFCE7' : state === 'discarded' ? C.bg : PURPLE,
-            color: state === 'assigned' ? GREEN : state === 'discarded' ? C.muted2 : '#fff' }}>
-          {state === 'assigned' ? <><Ico ti="ti-circle-check" size={12} /> Assigned ✓</> : state === 'discarded' ? 'Discarded' : <><Ico ti="ti-eye" size={12} /> {label}</>}
+      <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {resolved === 'saved' && savedId ? (
+          <button type="button" onClick={() => onOpenOutput?.(savedId)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 9, cursor: 'pointer', fontFamily: C.font, fontSize: 11.5, fontWeight: 800, border: '1px solid #BBF7D0', background: '#DCFCE7', color: GREEN }}>
+            <Ico ti="ti-circle-check" size={12} /> Saved to Library · Open
+          </button>
+        ) : (
+        <button type="button" disabled={!!resolved} onClick={() => onOpen(preview.id, versioned ? preview.version : null)}
+          title={resolved ? undefined : isTool ? 'Preview this draft — saving it to the Library is your call' : 'Preview this draft — assigning is your call'}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 9, cursor: resolved ? 'default' : 'pointer', fontFamily: C.font, fontSize: 11.5, fontWeight: 800,
+            border: resolved === 'assigned' ? '1px solid #BBF7D0' : resolved === 'discarded' ? `1px solid ${C.border}` : 'none',
+            background: resolved === 'assigned' ? '#DCFCE7' : resolved === 'discarded' ? C.bg : PURPLE,
+            color: resolved === 'assigned' ? GREEN : resolved === 'discarded' ? C.muted2 : '#fff' }}>
+          {resolved === 'assigned' ? <><Ico ti="ti-circle-check" size={12} /> Assigned ✓</> : resolved === 'discarded' ? 'Discarded' : <><Ico ti="ti-eye" size={12} /> {label}</>}
         </button>
+        )}
       </div>
     </div>
   );

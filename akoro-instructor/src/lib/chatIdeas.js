@@ -67,6 +67,24 @@ export function versionIdeas(version) {
   return out;
 }
 
+/** Ideas for a teaching-resource draft: ways to change the version on screen. */
+const TOOL_IDEAS = {
+  'lesson-hooks':   [['Make them more playful', 'Make the hooks more playful'], ['Add a story hook', 'Add one more hook that opens with a short story']],
+  'misconceptions': [['Add two more', 'Add two more misconceptions'], ['Simpler wording', 'Use simpler wording for the clarifications']],
+  'real-world':     [['More local examples', 'Make the examples more local to Nigeria'], ['Add careers', 'Add one more connection about careers']],
+  'vocabulary':     [['Add 5 more terms', 'Add 5 more terms'], ['Simpler definitions', 'Make the definitions simpler']],
+  'podcast':        [['Make it funnier', 'Make the episode funnier'], ['Shorter episode', 'Make the episode shorter']],
+  'lesson-plan':    [['Add a practice activity', 'Add a short practice activity to the plan'], ['Tighten the timing', 'Tighten the timings so they fit the period']],
+  'activity':       [['Make it a game', 'Turn it into a game'], ['Fewer materials', 'Make it work with only a board and exercise books']],
+  'assignment':     [['Make it harder', 'Make the questions a little harder'], ['Add 2 more questions', 'Add 2 more questions']],
+  'essay-grader':   [['Gentler feedback', 'Make the feedback gentler and more encouraging']],
+};
+function toolIdeas(draft) {
+  const out = (TOOL_IDEAS[draft?.payload?.tool] || []).map(([label, fill]) => ({ label, fill }));
+  out.push({ label: 'Make it shorter', fill: 'Make it shorter' });
+  return out.slice(0, MAX);
+}
+
 /** Ideas for a draft that isn't an assignment (self study, project…). */
 function draftIdeas(draft) {
   const p = draft?.payload || {};
@@ -91,8 +109,20 @@ export function chatIdeas({ latest = null, tools = [] } = {}) {
       { label: 'Same for another class', fill: 'Prepare the same assignment for ' },
     ];
   }
+  if (latest?.state === 'saved') {
+    return [
+      { label: 'Another for a different class', fill: 'Make the same resource for ' },
+      { label: 'Turn it into an assignment', fill: 'Prepare an assignment on the same topic for my class' },
+    ];
+  }
   if (latest?.draft && latest.state !== 'discarded') {
     const d = latest.draft;
+    if (d.type === 'teaching_tool') {
+      const vs = Array.isArray(d.payload?.versions) ? d.payload.versions : [];
+      const v = vs.find((x) => x.n === latest.version) || vs.at(-1);
+      if (v?.status === 'drafting') return [];
+      return toolIdeas(d);
+    }
     if (d.type === 'assignment') {
       const vs = Array.isArray(d.payload?.versions) ? d.payload.versions : [];
       const v = vs.find((x) => x.n === latest.version) || vs.at(-1);

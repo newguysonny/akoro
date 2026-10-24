@@ -11,6 +11,7 @@
  * Phases: loading → ready ⇄ editing → assigning → assigned | discarded | error
  */
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ClipboardList, Download } from 'lucide-react';
 import { downloadActivityPdf } from '../lib/activityPdf.js';
 import { printPaperHtml } from './paper/PaperFrame.jsx';
@@ -26,6 +27,8 @@ import BattleForm from './battles/BattleForm.jsx';
 import { useBattlesAPI } from '../hooks/useBattlesAPI.js';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
 import { audienceBody } from './AudiencePicker.jsx';
+import ToolDraftPreview from './teaching/ToolDraftPreview.jsx';
+import { TOOL_NAME, TOOL_EMOJI, accentFor } from './teaching/ToolResult.jsx';
 
 const datetimeLocal = (iso) => {
   if (!iso) return '';
@@ -74,6 +77,8 @@ const Row = ({ label, children }) => (
 );
 
 export default function ActivityPreviewPanel({ draftId, revision = 0, initialVersion = null, onClose, onResolved }) {
+  const navigate = useNavigate();
+  const [savedOut, setSavedOut] = useState(null);   // { outputId, title } once a teaching resource is saved
   const [draft, setDraft] = useState(null);
   const [vSel, setVSel] = useState(initialVersion);   // the version tab on screen (null = newest)
   const [vEditing, setVEditing] = useState(false);
@@ -132,16 +137,33 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
     finally { setVBusy(false); }
   };
 
-  const markResolved = (state, count = 0) => {
+  const markResolved = (state, count = 0, info = {}) => {
     setAssignedCount(count);
     setPhase(state);
-    onResolved?.(draftId, state);
+    onResolved?.(draftId, state, info);
+  };
+
+  /* Go back to (or forward to) one round of a draft that isn't an assignment. */
+  const restoreRound = async (n) => {
+    setVBusy(true); setError('');
+    try {
+      const d = await apiPost(`/api/self-study/drafts/${draftId}/history/${n}/restore`, {});
+      setDraft(d?.data?.draft ?? d?.draft ?? draft);
+    } catch (e) { setError(e?.message || 'Could not go back to that version.'); }
+    finally { setVBusy(false); }
   };
 
   const assign = async (overrides = null) => {
     setPhase('assigning'); setError('');
     try {
       const d = await apiPost(`/api/self-study/drafts/${draftId}/assign`, overrides || {});
+      // A teaching resource is saved to the Library, not assigned — its row id is the link.
+      if (d?.data?.saved) {
+        const info = { outputId: d.data.outputId, title: d.data.title };
+        setSavedOut(info);
+        markResolved('saved', 0, info);
+        return;
+      }
       markResolved('assigned', d?.data?.assigned ?? 0);
     } catch (e) {
       setError(e?.message || 'Could not assign it.');
@@ -211,7 +233,11 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
     );
   }
 
-  const meta = byKey(draft.type) || {};
+  const isTool = draft.type === 'teaching_tool';
+  const toolKey = draft.payload?.tool;
+  const meta = isTool
+    ? { name: TOOL_NAME[toolKey] || 'Teaching resource', ti: 'ti-wand', color: accentFor(toolKey) }
+    : byKey(draft.type) || {};
   const payload = draft.payload || {};
   const isBattle = draft.type === 'battle';
   const isJourney = draft.type === 'multi_stage';
@@ -225,7 +251,7 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
   // refers to, and an exact due date when the teacher said one in words.
   const needsFigure = !!shown && (shown.paper?.questions || []).some((q) => q?.figure_note && !q.figure);
   const dueValue = dueLocal ?? datetimeLocal(payload.due_at);
-  const dueUnset = !isLive && !isBattle && !isJourney && !!payload.due_hint && !dueValue;
+  const dueUnset = !isLive && !isBattle && !isJourney && !isTool && !!payload.due_hint && !dueValue;
   const assignBlock = needsFigure ? 'Add the missing figure first (Edit on the version).' : dueUnset ? `Set the exact due date for “${payload.due_hint}” first.` : '';
   const downloadPdf = () => {
     // A version with questions downloads as the paper, with its marking scheme after it.
@@ -246,6 +272,25 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
     ...(shown ? { version: shown.n } : {}),
     ...(dueLocal != null ? { due_at: dueLocal ? new Date(dueLocal).toISOString() : null } : {}),
   });
+
+  if (phase === 'saved') {
+    return (
+      <Frame onClose={onClose} meta={meta} type={draft.type}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, textAlign: 'center', padding: 20 }}>
+          <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ico ti="ti-circle-check" size={26} color={GREEN} /></div>
+          <div style={{ fontSize: 16, fontWeight: 900, color: C.ink }}>Saved to your Library ✓</div>
+          <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.55, maxWidth: 280 }}>“{savedOut?.title || draft.title}” is in your Library, ready to open, copy or print.</div>
+          {savedOut?.outputId && (
+            <button onClick={() => navigate(`/library/${savedOut.outputId}`)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 6, padding: '9px 16px', borderRadius: 12, border: 'none', cursor: 'pointer', background: C.hero, color: '#fff', fontSize: 12.5, fontWeight: 800, fontFamily: C.font }}>
+              <Ico ti="ti-external-link" size={13} /> Open it
+            </button>
+          )}
+          <Btn2 onClick={onClose}>Back to chat</Btn2>
+        </div>
+      </Frame>
+    );
+  }
 
   if (phase === 'assigned') {
     return (
@@ -284,7 +329,7 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 11px', borderRadius: 10, background: 'rgba(168,85,247,.08)', border: '1px solid rgba(168,85,247,.3)', marginBottom: 14 }}>
         <Ico ti="ti-sparkles" size={13} color={PURPLE} />
         <span style={{ fontSize: 11.5, fontWeight: 800, color: PURPLE, fontFamily: C.font }}>
-          {phase === 'editing' ? 'Editing before assign — you can change anything.' : 'AI prepared — nothing is sent until you assign.'}
+          {phase === 'editing' ? 'Editing before assign — you can change anything.' : isTool ? 'AI drafted — it only reaches your Library when you save it.' : 'AI prepared — nothing is sent until you assign.'}
         </span>
       </div>
 
@@ -313,6 +358,11 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
             <Btn2 onClick={() => { setPhase('ready'); load(); }}>Back to preview</Btn2>
           </div>
         </div>
+      ) : isTool ? (
+        <div style={{ flex: 1, overflowY: 'auto', paddingRight: 2 }}>
+          <ToolDraftPreview draft={draft} selected={shown?.n} onSelect={setVSel} onRetry={retryVersion} busy={vBusy}
+            toolName={TOOL_NAME[toolKey]} toolEmoji={TOOL_EMOJI[toolKey]} />
+        </div>
       ) : isBattle ? (
         <div style={{ flex: 1, overflowY: 'auto', paddingRight: 2 }}>
           <Row label="Audience">{audience.label || '—'}</Row>
@@ -323,6 +373,9 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
         </div>
       ) : isJourney ? (
         <div style={{ flex: 1, overflowY: 'auto', paddingRight: 2 }}>
+          {(payload.history || []).length > 1 && (
+            <HistoryTabs history={payload.history} current={payload.history_current} busy={vBusy} onPick={restoreRound} />
+          )}
           <Row label="Audience">{audience.label || '—'}</Row>
           <Row label="Instructions">{payload.instructions || <span style={{ color: C.muted2 }}>None</span>}</Row>
           <Row label={`Roadmap — ${stages.length} stage${stages.length === 1 ? '' : 's'}`}>
@@ -345,6 +398,9 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
         </div>
       ) : (
         <div style={{ flex: 1, overflowY: 'auto', paddingRight: 2 }}>
+          {(payload.history || []).length > 1 && (
+            <HistoryTabs history={payload.history} current={payload.history_current} busy={vBusy} onPick={restoreRound} />
+          )}
           {/* The brief at a glance: class, subject, topic, due — then who gets it. */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0 14px' }}>
             <Row label="Class">{audience.class_name || <span style={{ color: C.muted2 }}>Not set — choose one in Edit details</span>}</Row>
@@ -412,16 +468,16 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
       {/* Footer — the human decision. Assign is the ONLY path to learners. */}
       {phase !== 'editing' && !isBattle && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 12, borderTop: `1px solid ${C.border}`, marginTop: 12 }}>
-          <button onClick={downloadPdf} disabled={!isJourney && !questionsExist && !(payload.subtopics || []).length}
+          {!isTool && <button onClick={downloadPdf} disabled={!isJourney && !questionsExist && !(payload.subtopics || []).length}
             title="Download this activity as a PDF"
             style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '9px 13px', borderRadius: 11, border: `1px solid ${C.border}`, background: C.surface, color: C.ink, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
             <Ico ti="ti-download" size={13} /> PDF
-          </button>
+          </button>}
           <button onClick={discard}
             style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '9px 13px', borderRadius: 11, border: `1px solid ${C.border}`, background: C.surface, color: C.muted, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
             <Ico ti="ti-trash" size={13} /> Discard
           </button>
-          {(phase === 'ready') && !isJourney && !vEditing && (!shown || shown.status === 'ready') && (
+          {(phase === 'ready') && !isJourney && !isTool && !vEditing && (!shown || shown.status === 'ready') && (
             <button onClick={() => setPhase('editing')}
               title={shown ? `Title, due date, who it's for — with Version ${shown.n}'s questions` : undefined}
               style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '9px 13px', borderRadius: 11, border: `1px solid ${C.border}`, background: C.surface, color: C.ink, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
@@ -433,13 +489,13 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
             <span style={{ fontSize: 11.5, color: RED, fontWeight: 700, fontFamily: C.font, textAlign: 'right' }}>{assignBlock}</span>
           ) : shown && (
             <span style={{ fontSize: 11.5, color: C.muted, fontWeight: 700, fontFamily: C.font, textAlign: 'right' }}>
-              Assigns <b style={{ color: C.ink }}>Version {shown.n}</b>{audience.label ? <> to {audience.label}</> : null}
+              {isTool ? 'Saves' : 'Assigns'} <b style={{ color: C.ink }}>Version {shown.n}</b>{!isTool && audience.label ? <> to {audience.label}</> : null}
             </span>
           )}
           <button onClick={() => assign(assignOverrides())} disabled={phase === 'assigning' || vEditing || (shown && shown.status !== 'ready') || !!assignBlock}
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 11, border: 'none', background: phase === 'assigning' || assignBlock ? C.border : C.hero, color: '#fff', fontSize: 12.5, fontWeight: 900, cursor: phase === 'assigning' ? 'wait' : assignBlock ? 'not-allowed' : 'pointer', fontFamily: C.font }}>
-            {phase === 'assigning' ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-send" size={13} />}
-            {phase === 'assigning' ? 'Assigning…' : 'Assign'}
+            {phase === 'assigning' ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti={isTool ? 'ti-books' : 'ti-send'} size={13} />}
+            {phase === 'assigning' ? (isTool ? 'Saving…' : 'Assigning…') : isTool ? 'Save to Library' : 'Assign'}
           </button>
         </div>
       )}
@@ -453,6 +509,32 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
         </div>
       )}
     </Frame>
+  );
+}
+
+/* Every round of a draft that isn't an assignment: V1 as it was prepared, then each follow-up.
+   Picking one makes it the draft (what Assign sends) — nothing is lost, you can come back. */
+function HistoryTabs({ history, current, busy, onPick }) {
+  const now = current ?? history.at(-1)?.n;
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase', color: C.muted2, marginBottom: 5, fontFamily: C.font }}>Versions</div>
+      <div role="tablist" aria-label="Versions" style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+        {history.map((h) => {
+          const on = h.n === now;
+          return (
+            <button key={h.n} type="button" role="tab" aria-selected={on} disabled={busy} onClick={() => { if (!on) onPick(h.n); }} title={h.request}
+              style={{ padding: '5px 11px', borderRadius: 9, cursor: on ? 'default' : 'pointer', fontFamily: C.font, fontSize: 12, fontWeight: 800,
+                border: `1px solid ${on ? PURPLE : C.border}`, background: on ? 'rgba(168,85,247,.1)' : C.surface, color: on ? PURPLE : C.muted }}>
+              V{h.n}{on ? ' · on screen' : ''}
+            </button>
+          );
+        })}
+      </div>
+      {history.find((h) => h.n === now)?.request && (
+        <div style={{ fontSize: 11.5, color: C.muted, marginTop: 5, fontFamily: C.font }}>“{history.find((h) => h.n === now).request}”</div>
+      )}
+    </div>
   );
 }
 
