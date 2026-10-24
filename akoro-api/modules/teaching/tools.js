@@ -15,7 +15,8 @@
  * Every tool returns the one result template (see template.js):
  *   { version:2, title, summary, meta, highlights[], entries[{title, sections[]}], content }
  * `output` names the legacy shape also included beside it (doc → cards, cards,
- * script → turns, grades), for consumers not yet on the template.
+ * script → turns), for consumers not yet on the template. (Results saved by the retired essay
+ * grader keep their `grades` shape and still open in the Library.)
  *
  * Billing: metered on real usage via chargeForAI, charged to the school when
  * the caller belongs to one, otherwise to the teacher — the same rule as every
@@ -137,33 +138,6 @@ Then a final entry "Expected Outcomes" with a list "By The End" of what students
     prompt: (i) => `Build a vocabulary set of ${i.count || 15} terms for "${i.topic}"${i.subject ? ` (${i.subject})` : ""}${i.class ? `, ${i.class} level` : ""}.
 ${i.notes ? `Context: ${i.notes}\n` : ""}
 Produce one entry per term (layout "compact"): the title is the term, then sections text "Definition", text "Example" (a sentence using the term in context) and text "Memory tip" (tone idea; leave this section out if there isn't a genuine one). Put the term count in "highlights".`,
-  },
-  {
-    key: "essay-grader", name: "Essay Grader", emoji: "📊", output: "grades",
-    blurb: "Grade essays against your own rubric, with a score breakdown and feedback for each student.",
-    fields: [
-      { name: "rubric", label: "Your rubric", placeholder: "Paste the marking scheme — criteria and marks", long: true, required: true },
-      { name: "essays", label: "Essays", placeholder: "Paste the essays. Separate each with a line containing only ---", long: true, required: true, rows: 10 },
-      F.subject, F.klass,
-    ],
-    maxTokens: 6000,
-    // Each essay is marked in its own call (see generateToolResult), then merged.
-    splitInput: (input) => String(input.essays || "").split(/^\s*-{3,}\s*$/m).map((e) => e.trim()).filter(Boolean).slice(0, 8).map((e) => ({ ...input, essays: e })),
-    validate: (result, input) => result.entries.length >= String(input.essays || "").split(/^\s*-{3,}\s*$/m).filter((e) => e.trim()).length,
-    system: `${HOUSE} You mark to the rubric GIVEN — never your own criteria, never a curve. Be specific about where marks were lost. Feedback is addressed to the student, encouraging but honest. ${DOC_RULE}`,
-    prompt: (i) => `Mark these essays${i.subject ? ` (${i.subject}` : ""}${i.class ? `${i.subject ? ", " : " ("}${i.class}` : ""}${i.subject || i.class ? ")" : ""} strictly against the rubric.
-
-RUBRIC:
-${i.rubric}
-
-ESSAYS (separated by ---):
-${i.essays}
-
-Produce EXACTLY one entry per essay, in the order given — every essay gets its entry. Keep each criterion comment to one sentence and each feedback paragraph under 60 words, so none is cut short. The title is the student's name if the essay states one, otherwise "Essay 1", "Essay 2"…; "tag" is the total as "score/outOf". Sections in order:
-- scores "Mark breakdown" — one item per rubric criterion, with the marks lost explained in "comment".
-- list "Strengths" (tone success).
-- list "To improve" (tone warn).
-- text "Feedback to the student" (tone info) — addressed to the student.`,
   },
   {
     key: "lesson-plan", name: "Lesson Plan", emoji: "📋", output: "doc",
@@ -345,7 +319,7 @@ export const toolPayload = (tool, result) => ({ ...toLegacy(result, tool.output)
  * changed and the teacher's request) → a usable template result, billed to the user.
  * Throws ToolError with a code. Nothing is saved here.
  */
-async function generateOnce({ tool, input, userId, base = null, request = null }) {
+export async function generateToolResult({ tool, input, userId, base = null, request = null }) {
   // One retry when the model's answer can't be used (empty, unparseable JSON, a doc with no
   // sections): these are intermittent, and a failed run is free (charged after the call). Token
   // use is summed across the attempts so the charge stays honest.
@@ -354,8 +328,7 @@ async function generateOnce({ tool, input, userId, base = null, request = null }
     const data = parseJson(r);
     if (!data) return null;
     const result = normalizeResult(data, { tool, input });
-    if (!result.entries.length) return null;
-    return tool.validate && !tool.validate(result, input) ? null : result;
+    return result.entries.length ? result : null;
   };
   const unusable = (raw) => {
     return !resultOf(raw);
@@ -402,23 +375,6 @@ async function generateOnce({ tool, input, userId, base = null, request = null }
     console.error("[teaching/tools] charge failed:", e.message);
   }
   return { result, coinsCharged: charged };
-}
-
-/**
- * generateToolResult — one model round per resource, except a tool that marks independent items
- * (the essay grader): each item gets its OWN call and the entries are merged in order. One call for
- * several essays kept coming back with only the first one marked.
- */
-export async function generateToolResult({ tool, input, userId, base = null, request = null }) {
-  const parts = !base && tool.splitInput ? tool.splitInput(input) : null;
-  if (!parts || parts.length < 2) return generateOnce({ tool, input, userId, base, request });
-  const runs = await Promise.all(parts.map((part) => generateOnce({ tool, input: part, userId })));
-  const entries = runs.flatMap((r) => r.result.entries).map((e, i) => (/^essay\s*\d+$/i.test(e.title) ? { ...e, title: `Essay ${i + 1}` } : e));
-  const first = runs[0].result;
-  return {
-    result: { ...first, title: "Essay grades", summary: `${entries.length} essays marked`, entries },
-    coinsCharged: runs.reduce((n, r) => n + (r.coinsCharged || 0), 0),
-  };
 }
 
 /** Keep it in the teacher's Library. → the saved row's id (null if the save failed). */

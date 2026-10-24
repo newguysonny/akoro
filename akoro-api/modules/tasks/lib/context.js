@@ -114,7 +114,7 @@ const TEACHER_INTENTS = {
   // "study plan" and "assign a battle" can't be eaten by "assess".
   assign_self_study:  ["self study", "self-study", "assign study", "study assignment", "independent study"],
   run_teaching_tool:  ["podcast", "misconception", "real-world", "real world connection", "lesson hook",
-                       "vocabulary", "essay grade", "grade this essay", "lesson plan", "assignment creator"],
+                       "vocabulary", "lesson plan", "assignment creator"],
   create_battle:      ["study review", "check what", "battle", "challenge",
                        "competition", "speed round", "quiz game", "duel"],
   attendance_rollcall:["attendance", "roll call", "rollcall", "register"],

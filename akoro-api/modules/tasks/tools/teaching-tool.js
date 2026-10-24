@@ -1,7 +1,7 @@
 // modules/tasks/tools/teaching-tool.js
 //
 // Bridges the eight teaching tools (Podcast, Misconceptions, Real-World
-// Connections, Lesson Hooks, Vocabulary Builder, Essay Grader, Lesson Plan,
+// Connections, Lesson Hooks, Vocabulary Builder, Lesson Plan,
 // Assignment Creator) into the task engine, so a teacher can SCHEDULE them —
 // "every Sunday, draft next week's lesson hooks for JSS1 Basic Science" —
 // instead of only running them by hand in the workbench.
@@ -33,13 +33,13 @@ export const teachingToolDefinition = {
   description:
     "Run one of the platform's teaching tools and save the result to the teacher's " +
     "tool library. Use this when the teacher asks for a podcast, common misconceptions, " +
-    "real-world connections, lesson hooks, a vocabulary list, an essay graded, a lesson " +
+    "real-world connections, lesson hooks, a vocabulary list, a lesson " +
     "plan, or an assignment.\n\nAvailable tools:\n" + FIELD_HINTS,
   input_schema: {
     type: "object",
     properties: {
       tool:    { type: "string", enum: KEYS, description: "Which teaching tool to run" },
-      topic:   { type: "string", description: "The topic or, for the essay grader, the essay text" },
+      topic:   { type: "string", description: "The topic" },
       subject: { type: "string", description: "Subject, e.g. Basic Science" },
       class:   { type: "string", description: "Class or year group, e.g. JSS1" },
       notes:   { type: "string", description: "Any extra direction from the teacher" },

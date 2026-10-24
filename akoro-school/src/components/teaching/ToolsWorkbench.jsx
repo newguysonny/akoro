@@ -31,7 +31,6 @@ const NOTES = {
   'real-world':   ['Answer “why are we learning this?” before it is asked.', 'Grounded in everyday Nigerian life, with the jobs that actually depend on the topic.'],
   'lesson-hooks': ['Win the first two minutes.', 'Every hook is something you DO, with materials a real classroom has.'],
   vocabulary:     ['Key terms as flashcards, a list, or a printed handout.', 'Definitions are written for the class level you enter, not for a dictionary.'],
-  'essay-grader': ['Mark to YOUR rubric, not a generic one.', 'Paste the marking scheme and the essays, separated by a line of ---. You get a breakdown per criterion and feedback written to the student.'],
   'lesson-plan':  ['A full period, minute by minute.', 'Every activity says what you do and what the students do, with differentiation both ways.'],
   assignment:     ['Homework with the marking scheme already written.', 'The questions and the answers are separate cards, so you can hand out one without the other.'],
 };

@@ -77,7 +77,6 @@ const TOOL_IDEAS = {
   'lesson-plan':    [['Add a practice activity', 'Add a short practice activity to the plan'], ['Tighten the timing', 'Tighten the timings so they fit the period']],
   'activity':       [['Make it a game', 'Turn it into a game'], ['Fewer materials', 'Make it work with only a board and exercise books']],
   'assignment':     [['Make it harder', 'Make the questions a little harder'], ['Add 2 more questions', 'Add 2 more questions']],
-  'essay-grader':   [['Gentler feedback', 'Make the feedback gentler and more encouraging']],
 };
 function toolIdeas(draft) {
   const out = (TOOL_IDEAS[draft?.payload?.tool] || []).map(([label, fill]) => ({ label, fill }));

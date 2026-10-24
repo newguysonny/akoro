@@ -26,7 +26,6 @@ const KINDS = [
   { key: 'misconceptions', label: 'Misconceptions', ti: 'ti-brain' },
   { key: 'real-world',     label: 'Real-world',     ti: 'ti-world' },
   { key: 'vocabulary',     label: 'Vocabulary',     ti: 'ti-letter-case' },
-  { key: 'essay-grader',   label: 'Essay grades',   ti: 'ti-writing' },
   { key: 'activity',       label: 'Activity packs', ti: 'ti-sparkles' },
   { key: 'assignment',     label: 'Assignment sheets', ti: 'ti-pencil' },
 ];

@@ -101,7 +101,7 @@ test("the agent prepares but never assigns — tools, gating, and honesty", () =
 
 test("all six workbench types are draftable; journeys stage through the shared path", () => {
   assert.match(chat, /enum: \["self_study", "assignment", "project", "live_course", "multi_stage", "battle"\]/);
-  assert.match(drafts, /DRAFT_TYPES = Object\.freeze\(\[\.\.\.ACTIVITY_TYPES, "battle"\]\)/);
+  assert.match(drafts, /DRAFT_TYPES = Object\.freeze\(\[\.\.\.ACTIVITY_TYPES, "battle", "teaching_tool"\]\)/);
   // Journey assign: each stage becomes real work via createAssignment, then the parent.
   const journey = drafts.slice(drafts.indexOf('type === "multi_stage"'), drafts.indexOf("return { ...result, announce"));
   assert.match(journey, /for \(const st of stages\)/);
@@ -464,12 +464,11 @@ test("classroom name resolution never chains .catch on a Supabase builder", () =
 });
 
 
-test("run_teaching_tool tells the model every field the teaching tools take (the essay grader needs rubric + essays)", () => {
+test("run_teaching_tool tells the model every field the teaching tools take", () => {
   // The schema is built from the tools' own field lists, so none can be missing.
   assert.match(chat, /const TEACHING_FIELD_PROPS = \(\(\) => \{/);
   assert.match(chat, /\.\.\.TEACHING_FIELD_PROPS,/);
   assert.match(chat, /REQUIRED for \$\{p\.required\.join/);
-  assert.match(chat, /the essay grader needs the rubric and the essay text/);
 });
 
 test("revising a plan adds/removes on the stored list — the agent can't wipe a plan it never saw", () => {

@@ -1080,8 +1080,7 @@ export function getLearnerChatTools({ allowToolRequest = true, selfTooling = tru
  * types are draftable; battles assign through their battle form.
  */
 /* Every field any teaching tool accepts, taken from the tools' own definitions so
-   the model is told about all of them (the essay grader's rubric and essays,
-   the vocabulary count, a lesson plan's duration…) and the two can't drift.
+   the model is told about all of them (the vocabulary count, a lesson plan's duration…) and the two can't drift.
    Voices stay at their defaults. */
 const TEACHING_FIELD_PROPS = (() => {
   const props = {};
@@ -1146,7 +1145,7 @@ export const INSTRUCTOR_TOOLS = [
     // workbench and the task scheduler use, so unlock checks, charge-after
     // billing and saving to the Library behave identically.
     name: "run_teaching_tool",
-    description: "Draft a teaching resource for the instructor to preview — it reaches their Library only when they approve it (Save to Library), and each follow-up (\"make it more playful\") becomes a new version via revise_activity_draft with change_request. Use when they ask for a podcast, common misconceptions, real-world connections, lesson hooks, a vocabulary list, an essay graded, a lesson plan, an activities pack or an assignment sheet. (Activities that go to learners — assignments, projects, battles, self study — use prepare_activity instead.) Ask for the topic if it is missing; the essay grader needs the rubric and the essay text.\n\nAvailable tools:\n" +
+    description: "Draft a teaching resource for the instructor to preview — it reaches their Library only when they approve it (Save to Library), and each follow-up (\"make it more playful\") becomes a new version via revise_activity_draft with change_request. Use when they ask for a podcast, common misconceptions, real-world connections, lesson hooks, a vocabulary list, a lesson plan, an activities pack or an assignment sheet. (Activities that go to learners — assignments, projects, battles, self study — use prepare_activity instead.) Ask for the topic if it is missing;\n\nAvailable tools:\n" +
       TEACHING_TOOLS.map((t) => `  • ${t.key} — ${t.name}: ${t.blurb} (fields: ${t.fields.map((f) => f.name).join(", ")})`).join("\n"),
     input_schema: {
       type: "object",
