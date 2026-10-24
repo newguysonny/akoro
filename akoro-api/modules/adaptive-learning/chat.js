@@ -67,7 +67,8 @@ import {
   createActivityDraft, listActivityDrafts, getActivityDraft, discardActivityDraft, reviseDraftPayload,
   instructorClassrooms,
 } from "../self-study/drafts.js";
-import { TOOLS as TEACHING_TOOLS, runTeachingTool, ToolError as TeachingToolError } from "../teaching/tools.js";
+import { TOOLS as TEACHING_TOOLS, ToolError as TeachingToolError } from "../teaching/tools.js";
+import { createToolDraft } from "../teaching/toolDrafts.js";
 import { activityOutcomeSummary, listRecentActivities } from "../self-study/outcomes.js";
 import {
   listRoutines, createRoutine, updateRoutine, deleteRoutine,
@@ -97,7 +98,7 @@ import {
   scheduleAutonomyReviewForTask,
   setLearnerAutonomy,
 } from "./learner-autonomy.js";
-import { requiresAgentCapabilitiesTool, requiresActivityPreparation, isDraftFollowUp, requiredLearnerDataTool, requiredStudyPrepTool, classForExam } from "./agent-chat-intent.js";
+import { requiresAgentCapabilitiesTool, requiresActivityPreparation, isDraftFollowUp, isToolDraftFollowUp, requiredLearnerDataTool, requiredStudyPrepTool, classForExam } from "./agent-chat-intent.js";
 import { agentToolActivity } from "../../lib/agentActivity.js";
 import { noteChatTurn } from "../agent-memory/quietLearning.js";
 import { createChatTrace, decisionNarration, TALK_AFTER_TOOLS, talkAfterTool } from "./chat-trace.js";
@@ -1145,7 +1146,7 @@ export const INSTRUCTOR_TOOLS = [
     // workbench and the task scheduler use, so unlock checks, charge-after
     // billing and saving to the Library behave identically.
     name: "run_teaching_tool",
-    description: "Create a teaching resource and save it to the instructor's Library. Use when they ask for a podcast, common misconceptions, real-world connections, lesson hooks, a vocabulary list, an essay graded, a lesson plan, an activities pack or an assignment sheet. (Activities that go to learners — assignments, projects, battles, self study — use prepare_activity instead.) Ask for the topic if it is missing; the essay grader needs the rubric and the essay text.\n\nAvailable tools:\n" +
+    description: "Draft a teaching resource for the instructor to preview — it reaches their Library only when they approve it (Save to Library), and each follow-up (\"make it more playful\") becomes a new version via revise_activity_draft with change_request. Use when they ask for a podcast, common misconceptions, real-world connections, lesson hooks, a vocabulary list, an essay graded, a lesson plan, an activities pack or an assignment sheet. (Activities that go to learners — assignments, projects, battles, self study — use prepare_activity instead.) Ask for the topic if it is missing; the essay grader needs the rubric and the essay text.\n\nAvailable tools:\n" +
       TEACHING_TOOLS.map((t) => `  • ${t.key} — ${t.name}: ${t.blurb} (fields: ${t.fields.map((f) => f.name).join(", ")})`).join("\n"),
     input_schema: {
       type: "object",
@@ -1224,7 +1225,8 @@ export const INSTRUCTOR_TOOLS = [
         draftId: { type: "string", description: "The draft id being revised." },
         changeNote: { type: "string", description: "One short line summarising what changed, e.g. 'Entry 2 made easier, added a recap entry'." },
         question_request: { type: "string", description: "assignment only: the instructor's follow-up about the QUESTIONS, verbatim (\"make question 4 harder and add a diagram question\"). The server writes the next version in the background from the latest one (their edits included) and changes only what was asked — never write the questions yourself." },
-        base_version: { type: "number", description: "assignment only: the version to build on when the instructor names one (\"go back to version 1 and…\"). Omit to build on the latest." },
+        change_request: { type: "string", description: "teaching-resource drafts only (type teaching_tool): the instructor's follow-up about the resource, verbatim (\"make the hooks more playful\", \"add two more misconceptions\"). The server writes the next version in the background from the latest one and changes only what was asked — never write the resource yourself." },
+        base_version: { type: "number", description: "assignment or teaching-resource drafts: the version to build on when the instructor names one (\"go back to version 1 and…\"). Omit to build on the latest." },
         title: { type: "string", description: "Replacement title." },
         instructions: { type: "string", description: "Replacement instructions to learners." },
         due_at: { type: "string", description: "A new exact due instant, ISO 8601 with a timezone offset (+01:00 for Africa/Lagos), resolved against the Current date and time. Only when the instructor states one." },
@@ -1356,23 +1358,27 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       if (role !== "instructor") return { error: "Teaching tools are only available to instructor accounts" };
       const { tool, ...body } = input || {};
       try {
-        const out = await runTeachingTool({ key: tool, body, userId: studentId });
-        const text = typeof out.content === "string" ? out.content : "";
+        // A draft first: the instructor previews it, asks for changes (each becomes the next
+        // version) and saves it to the Library when they are happy — see teaching/toolDrafts.js.
+        const { draft, tool: def } = await createToolDraft({ instructor: { id: studentId, role }, key: tool, body, sessionId: conversationId, channel });
         return {
-          created: true, tool: out.key, name: out.name, topic: out.topic, subject: out.subject, class: out.class,
-          coinsCharged: out.coinsCharged,
-          preview: text.slice(0, 1500), truncated: text.length > 1500,
-          savedTo: "Library",
-          hint: "It is saved in the instructor's Library. Give a two-line summary of what you made and say it is in Library — do not paste the whole thing.",
+          prepared: true, draftId: draft.id, title: draft.title, type: "teaching_tool", tool: def.key, name: def.name,
+          audience: "Saved to your Library when you approve it", version: 1,
+          previewHint: "Awaiting the instructor's preview — it is NOT in the Library yet. Never say it is saved or share a link.",
+          questionsNote: "Version 1 is being written now — it appears on the Preview card in a minute. Reply with one short line saying what you are making; don't write the resource out or invent its content.",
         };
       } catch (e) {
+        if (e?.status === "clarify") {
+          return clarify("details", e.message, { prepared: false, error: "details_required",
+            message: "Ask the instructor the question in `question`, then call run_teaching_tool again with their answer." });
+        }
         if (e instanceof TeachingToolError) {
-          return { created: false, error: e.message, code: e.code,
+          return { prepared: false, error: e.message, code: e.code,
             guidance: e.code === "INSUFFICIENT_COINS" ? "Tell the instructor they need to top up coins."
               : "Tell the instructor exactly what is missing and ask for it." };
         }
         console.error("[run_teaching_tool] failed:", e.message);
-        return { created: false, error: "Could not create that just now", guidance: "Say it did not work and offer to try again." };
+        return { prepared: false, error: e.message || "Could not start that just now", guidance: "Say it did not work and offer to try again." };
       }
     }
     case "prepare_activity": {
@@ -1550,6 +1556,13 @@ export async function executeChatTool(name, input, studentId, { conversationId =
             return v ? (v.paper?.questions || []).map((q, i) => `Q${i + 1} [${q.type || (q.options ? "MCQ" : "open")}${q.figure ? ", diagram" : ""}] ${String(q.q).slice(0, 140)}`) : null;
           })(),
           audience: draft.audience ?? null,
+          ...(draft.type === "teaching_tool" ? {
+            tool: draft.payload?.tool ?? null,
+            latestResult: (() => {
+              const v = [...(draft.payload?.versions || [])].reverse().find((x) => x.status === "ready");
+              return v?.result ? v.result.entries.map((e) => e.title).filter(Boolean).slice(0, 12) : null;
+            })(),
+          } : {}),
         };
       } catch (error) { return { error: error.message || "Could not read the draft" }; }
     }
@@ -3877,7 +3890,7 @@ async function runningWorkBrief(learnerId) {
 function previewMetaFrom(toolExecutions) {
   const execs = Array.isArray(toolExecutions) ? toolExecutions : [];
   const previews = execs
-    .filter((x) => (x.tool === "prepare_activity" || x.tool === "revise_activity_draft") && x.success && x.draft)
+    .filter((x) => (x.tool === "prepare_activity" || x.tool === "run_teaching_tool" || x.tool === "revise_activity_draft") && x.success && x.draft)
     .map((x) => x.draft);
   // The reply's material links come back on reload too.
   const materials = collectMaterials(execs.map((x) => x.materials || []));
@@ -4110,7 +4123,7 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         // `requestsMine`: the learner's OWN requests get Cancel, not Accept.
         ...(tool === "search_challenge_requests" && Array.isArray(toolResult?.requests) ? { requests: toolResult.requests.slice(0, 6), requestsMine: !!input?.mine } : {}),
         ...(tool === "consult_teaching_guide" && toolResult?.consulted ? { guide: { name: toolResult.guide, ...(toolResult.teach ? { teach: toolResult.teach } : {}) } } : {}),
-        ...((tool === "prepare_activity" && toolResult?.prepared
+        ...(((tool === "prepare_activity" || tool === "run_teaching_tool") && toolResult?.prepared
             || tool === "revise_activity_draft" && toolResult?.revised)
           && toolResult?.draftId
           ? { draft: { id: toolResult.draftId, title: toolResult.title, type: toolResult.type, audience: toolResult.audience, ...(toolResult.version ? { version: toolResult.version } : {}) } }
@@ -4558,7 +4571,7 @@ router.post("/agent", async (req, res) => {
         const vs = Array.isArray(d.payload?.versions) ? d.payload.versions : [];
         const topic = String(d.payload?.topic || d.topic || "").replace(/[\r\n]+/g, " ").slice(0, 80);
         return `- draftId ${d.id} · ${String(d.title || "").replace(/[\r\n]+/g, " ").slice(0, 80)} · ${d.type}${topic ? ` · ${topic}` : ""}${vs.length ? ` · latest Version ${vs.at(-1).n}` : ""}`;
-      }).join("\n") + "\nThe instructor's follow-ups about a draft — questions, parts, diagrams, marks, types, versions, title, instructions — change the NEWEST draft: call revise_activity_draft with its draftId (their words about the questions verbatim in question_request; base_version when they name a version). Call prepare_activity only for a new activity."
+      }).join("\n") + "\nThe instructor's follow-ups about a draft — questions, parts, diagrams, marks, types, versions, title, instructions — change the NEWEST draft: call revise_activity_draft with its draftId (their words about the questions verbatim in question_request, or about a teaching resource verbatim in change_request; base_version when they name a version). Call prepare_activity only for a new activity, run_teaching_tool only for a new resource."
       : "";
     const systemContent = (await assembleChatDoctrine({
       agentName: safeAgentName || "Akoro",
@@ -4591,7 +4604,8 @@ router.post("/agent", async (req, res) => {
       ? [...openAiChatTools({ allowToolRequest: false, selfTooling: true }).filter((t) => t.function.name === "schema_lookup" || t.function.name === "create_tool"),
         ...await learnerToolDefs(req.user.id, "instructor").catch(() => [])]
       : []);
-    const draftFollowUp = instructorTools.length > 0 && pendingDrafts.length > 0 && isDraftFollowUp(userMessage);
+    const draftFollowUp = instructorTools.length > 0 && pendingDrafts.length > 0
+      && (isDraftFollowUp(userMessage) || (pendingDrafts[0]?.type === "teaching_tool" && isToolDraftFollowUp(userMessage)));
     const prepared = await runAgentToolLoop({
       teacherWords: draftFollowUp ? userMessage.slice(0, 1500) : null,
       systemContent,

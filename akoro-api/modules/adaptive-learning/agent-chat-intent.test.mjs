@@ -302,3 +302,13 @@ test("'make it …' edits the pending draft; homework sheets and worksheets are 
   }
   assert.equal(requiresActivityPreparation("Create an assignment with 10 questions on fractions"), true, "an assignment is still an activity");
 });
+
+test("with a teaching-resource draft pending, an edit of it is a follow-up and a new resource is not", async () => {
+  const { isToolDraftFollowUp } = await import("./agent-chat-intent.js");
+  for (const m of ["make the hooks more playful", "make it shorter", "add two more misconceptions", "go back to version 1", "change the third hook to use a story", "make it a bit shorter"]) {
+    assert.equal(isToolDraftFollowUp(m), true, m);
+  }
+  for (const m of ["make a podcast on fractions for JSS1", "give me a new lesson plan on the water cycle", "create another vocabulary list", "what's the weather", "discard it"]) {
+    assert.equal(isToolDraftFollowUp(m), false, m);
+  }
+});

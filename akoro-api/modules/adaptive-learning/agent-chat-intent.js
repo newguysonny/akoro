@@ -115,6 +115,18 @@ export function isDraftFollowUp(message) {
   return DRAFT_EDIT_RE.test(text) || DRAFT_POINTER_RE.test(text);
 }
 
+/* A follow-up on a pending TEACHING-RESOURCE draft. "Make the hooks more playful" names the
+   resource ("hooks") so the general check above reads it as a NEW request; with a resource draft
+   pending it is an edit of that draft — unless the instructor asks for another one ("make a
+   podcast on …", "give me a new lesson plan"). */
+const NEW_RESOURCE_ASK_RE = /\b(?:make|create|give|write|generate|build|prepare|run|do)\s+(?:me\s+|us\s+)?(?:a|an|another|new|some|\d+)\b/i;
+export function isToolDraftFollowUp(message) {
+  const text = String(message || "").trim();
+  if (!text || NEW_RESOURCE_ASK_RE.test(text)) return false;
+  if (/^\s*(?:please\s+)?(?:cancel|discard|scrap)\b/i.test(text)) return false;
+  return DRAFT_EDIT_RE.test(text) || DRAFT_POINTER_RE.test(text) || POINTS_AT_DRAFT_RE.test(text);
+}
+
 /* ── Study-prep session requests ─────────────────────────────────────────────
    The live 2026-10-01 transcript: the learner asked "let's plan for a test"
    twice; start_study_prep_session was in the tool list both times and the

@@ -320,10 +320,8 @@ export class ToolError extends Error {
   constructor(message, code, extra = {}) { super(message); this.code = code; Object.assign(this, extra); }
 }
 
-export async function runTeachingTool({ key, body = {}, userId }) {
-  const tool = byKey[key];
-  if (!tool) throw new ToolError("Unknown tool", "UNKNOWN_TOOL");
-
+/** The tool's form fields, trimmed and defaulted from whatever the caller sent. */
+export function cleanToolInput(tool, body = {}) {
   const input = {};
   for (const f of tool.fields) {
     const v = body?.[f.name];
@@ -331,7 +329,20 @@ export async function runTeachingTool({ key, body = {}, userId }) {
     if (f.required && !input[f.name]) throw new ToolError(`${f.label} is required`, "MISSING_FIELD");
     if (!input[f.name] && f.default) input[f.name] = f.default;
   }
+  return input;
+}
 
+export const toolByKey = (key) => byKey[key] || null;
+
+/** What is stored and returned for a result: the template, plus the legacy keys and readable text. */
+export const toolPayload = (tool, result) => ({ ...toLegacy(result, tool.output), ...result, content: toMarkdown(result) });
+
+/**
+ * One model round: the tool's prompt (or, for a revision, that prompt plus the version being
+ * changed and the teacher's request) → a usable template result, billed to the user.
+ * Throws ToolError with a code. Nothing is saved here.
+ */
+export async function generateToolResult({ tool, input, userId, base = null, request = null }) {
   // One retry when the model's answer can't be used (empty, unparseable JSON, a doc with no
   // sections): these are intermittent, and a failed run is free (charged after the call). Token
   // use is summed across the attempts so the charge stays honest.
@@ -345,12 +356,15 @@ export async function runTeachingTool({ key, body = {}, userId }) {
   const unusable = (raw) => {
     return !resultOf(raw);
   };
+  const ask = base && request
+    ? `${tool.prompt(input)}\n\nCURRENT VERSION (the same template, as JSON):\n${JSON.stringify({ title: base.title, summary: base.summary, highlights: base.highlights, entries: base.entries })}\n\nThe teacher asks for this change: ${request}\nReturn the COMPLETE revised result in the same JSON template. Change only what they asked and keep everything else as it is.`
+    : tool.prompt(input);
   let resp, raw = "";
   const usage = {};
   for (let attempt = 0; attempt < 2; attempt++) {
     resp = await openai.chat.completions.create({
       model: OPENAI_MODEL, max_tokens: tool.maxTokens, temperature: 0.6,
-      messages: [{ role: "system", content: tool.system }, { role: "user", content: tool.prompt(input) }],
+      messages: [{ role: "system", content: tool.system }, { role: "user", content: ask }],
     });
     for (const [k, v] of Object.entries(resp.usage || {})) if (typeof v === "number") usage[k] = (usage[k] || 0) + v;
     raw = resp.choices?.[0]?.message?.content?.trim() || "";
@@ -364,10 +378,6 @@ export async function runTeachingTool({ key, body = {}, userId }) {
     throw new ToolError(parseJson(raw) ? "That came back without any sections — try again." : "That came back in an unusable shape — try again.",
       parseJson(raw) ? "NO_SECTIONS" : "UNPARSEABLE");
   }
-  // The template is the result. The per-tool legacy keys ride along (cards / turns /
-  // grades) so the podcast narrator, the school portal and saved-output readers
-  // keep working while they move over.
-  const payload = { ...toLegacy(result, tool.output), ...result, content: toMarkdown(result) };
 
   // Charged AFTER the call, so a failed generation is free.
   let charged = 0;
@@ -385,21 +395,41 @@ export async function runTeachingTool({ key, body = {}, userId }) {
     }
     console.error("[teaching/tools] charge failed:", e.message);
   }
+  return { result, coinsCharged: charged };
+}
 
-  // Keep it: teachers reuse what they generated, and the tool library is where
-  // they look for it — including for work a scheduled task produced overnight.
-  db.schema("edu").from("tool_outputs").insert({
+/** Keep it in the teacher's Library. → the saved row's id (null if the save failed). */
+export async function saveToolOutput({ userId, tool, input, payload }) {
+  const { data, error } = await db.schema("edu").from("tool_outputs").insert({
     instructor_id: userId, tool: `teaching_${tool.key}`, kind: tool.key,
     title: input.topic || payload.title || tool.name, subject: input.subject || null,
     content: payload,
-  }).then(({ error }) => { if (error) console.warn("[teaching/tools] save failed:", error.message); });
+  }).select("id").maybeSingle();
+  if (error) console.warn("[teaching/tools] save failed:", error.message);
+  return data?.id ?? null;
+}
 
-  return {
-    key: tool.key, name: tool.name, output: tool.output, ...payload,
-    topic: input.topic || null, subject: input.subject || null, class: input.class || null,
-    ...(tool.key === "podcast" ? { voiceA: input.voiceA, voiceB: input.voiceB } : {}),
-    coinsCharged: charged,
-  };
+/** What a run returns to its caller (the workbench, the task worker). */
+const runResponse = (tool, input, payload, coinsCharged, outputId = null) => ({
+  key: tool.key, name: tool.name, output: tool.output, ...payload,
+  topic: input.topic || null, subject: input.subject || null, class: input.class || null,
+  ...(tool.key === "podcast" ? { voiceA: input.voiceA, voiceB: input.voiceB } : {}),
+  coinsCharged, ...(outputId ? { outputId } : {}),
+});
+
+export async function runTeachingTool({ key, body = {}, userId }) {
+  const tool = byKey[key];
+  if (!tool) throw new ToolError("Unknown tool", "UNKNOWN_TOOL");
+  const input = cleanToolInput(tool, body);
+  const { result, coinsCharged } = await generateToolResult({ tool, input, userId });
+  // The template is the result. The per-tool legacy keys ride along (cards / turns /
+  // grades) so the podcast narrator, the school portal and saved-output readers
+  // keep working while they move over.
+  const payload = toolPayload(tool, result);
+  // Keep it: teachers reuse what they generated, and the tool library is where
+  // they look for it — including for work a scheduled task produced overnight.
+  const outputId = await saveToolOutput({ userId, tool, input, payload });
+  return runResponse(tool, input, payload, coinsCharged, outputId);
 }
 
 // ── POST /api/teaching/tools/:key ────────────────────────────────────────────

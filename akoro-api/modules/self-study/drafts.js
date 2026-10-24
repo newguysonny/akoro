@@ -19,6 +19,7 @@
  */
 
 import { normalizeStages } from "./journeyStages.js";
+import { saveToolDraft, reviseToolDraft, retryToolVersion } from "../teaching/toolDrafts.js";
 import { callAsUser } from "../tasks/tools/assign-battle.js";
 import { mergePlanItems, wantsPlanEdit } from "./planEdit.js";
 import db from "../../db.js";
@@ -37,7 +38,7 @@ const questionChat = (instructorId) => (messages, opts = {}) =>
 
 /** Battles ride the same drafting flow but assign through their battle form
  *  (the one shared BattleForm), so they are valid drafts, not bench assigns. */
-export const DRAFT_TYPES = Object.freeze([...ACTIVITY_TYPES, "battle"]);
+export const DRAFT_TYPES = Object.freeze([...ACTIVITY_TYPES, "battle", "teaching_tool"]);
 
 /** Pending drafts older than this are lazily expired on read (no cron). */
 const DRAFT_TTL_DAYS = 7;
@@ -46,7 +47,7 @@ const PREPARE_HOURLY_CAP = 10;
 
 const TYPE_NAMES = {
   self_study: "self study", assignment: "assignment", project: "project",
-  live_course: "live course", multi_stage: "multi-stage journey", battle: "battle",
+  live_course: "live course", multi_stage: "multi-stage journey", battle: "battle", teaching_tool: "teaching resource",
 };
 const typeName = (t) => TYPE_NAMES[t] || t;
 
@@ -246,6 +247,7 @@ async function enforceDraftCap(instructorId, cap = 20) {
  */
 export async function createActivityDraft({ instructor, input, sessionId = null, channel = "ai_chat" }) {
   const type = input?.type || "self_study";
+  if (type === "teaching_tool") throw invalid("Teaching resources are drafted with run_teaching_tool, not prepare_activity.");
   if (!DRAFT_TYPES.includes(type)) throw invalid(`Unknown activity type: ${type}. Valid: ${DRAFT_TYPES.join(", ")}`);
 
   // Soft cost guard: each prepare runs the plan generator (several LLM calls).
@@ -475,6 +477,36 @@ const asPlan = (subtopics, objectives, existing) => {
   return { items, objectives: next };
 };
 
+/* ── History: a draft that isn't an assignment still keeps every round ─────────
+   An assignment's rounds are question VERSIONS (draftVersions.js). Self study, projects,
+   live courses, journeys and battles change a plan, stages or a brief instead — each round
+   is stored as a snapshot, so V1 is never lost and "go back to version 1" is one tap. */
+export const HISTORY_KEYS = ["title", "instructions", "difficulty", "details", "topic", "subtopics", "objectives", "due_at", "due_hint"];
+const HISTORY_MAX = 8;
+const snapshotOf = (p) => structuredClone(Object.fromEntries(HISTORY_KEYS.filter((k) => k in p).map((k) => [k, p[k]])));
+
+/** `before` → `after` as one more history entry (seeding V1 from `before` the first time). */
+function withHistory(before, after, request) {
+  const list = Array.isArray(before.history) && before.history.length
+    ? before.history
+    : [{ n: 1, request: "First draft", at: new Date().toISOString(), snapshot: snapshotOf(before) }];
+  const n = (list.at(-1)?.n || 0) + 1;
+  const kept = [...list, { n, request: String(request || "Revised").slice(0, 200), at: new Date().toISOString(), snapshot: snapshotOf(after) }];
+  return { ...after, history: kept.length > HISTORY_MAX ? [kept[0], ...kept.slice(-(HISTORY_MAX - 1))] : kept, history_current: n };
+}
+
+/** Go back to (or forward to) one round: the draft's fields become that snapshot. */
+export async function restoreDraftHistory(instructor, id, n) {
+  const draft = await getActivityDraft(instructor, id);
+  if (draft.status !== "draft") throw invalid("Only pending drafts can be changed", 409);
+  const entry = (draft.payload?.history || []).find((h) => h.n === Number(n));
+  if (!entry) throw invalid("No such version", 404);
+  await updateDraftPayload(draft.id, (p) => ({ ...p, ...structuredClone(entry.snapshot), history_current: entry.n }));
+  const { data, error } = await db.from("activity_drafts").select().eq("id", draft.id).single();
+  if (error) throw invalid(error.message, 500);
+  return data;
+}
+
 /**
  * reviseDraftPayload — conversational revision of a PENDING draft.
  *
@@ -488,6 +520,13 @@ export async function reviseDraftPayload(instructor, id, changes) {
   if (draft.status !== "draft") throw invalid("Only pending drafts can be revised", 409);
   const c = changes && typeof changes === "object" ? changes : {};
   if (!Object.keys(c).length) throw invalid("Say what to change — e.g. which entry to make easier, add, or remove");
+
+  if (draft.type === "teaching_tool") {
+    // A resource changes by VERSION only: the follow-up builds the next one in the background.
+    const { version } = await reviseToolDraft(draft, { request: c.change_request ?? c.question_request, baseVersion: c.base_version });
+    const { data: fresh } = await db.from("activity_drafts").select().eq("id", draft.id).single();
+    return { draft: fresh, applied: ["resource"], version };
+  }
 
   const payload = { ...(draft.payload || {}) };
   const applied = [];
@@ -575,11 +614,15 @@ export async function reviseDraftPayload(instructor, id, changes) {
   // lost: this round's fields go over whatever the payload holds by then.
   const CHANGED = ["title", "instructions", "difficulty", "details", "topic", "subtopics", "objectives", "last_change",
     "due_at", "due_hint", "usernames", "user_ids", "whole_class", "classroom_id"];
-  await updateDraftPayload(draft.id, (p) => ({
-    ...p,
-    ...Object.fromEntries(CHANGED.filter((k) => k in payload && payload[k] !== draft.payload?.[k]).map((k) => [k, payload[k]])),
-    ...(newVersionN ? { versions: [...versionsOf(p), payload.versions.at(-1)] } : {}),
-  }));
+  await updateDraftPayload(draft.id, (p) => {
+    const next = {
+      ...p,
+      ...Object.fromEntries(CHANGED.filter((k) => k in payload && payload[k] !== draft.payload?.[k]).map((k) => [k, payload[k]])),
+      ...(newVersionN ? { versions: [...versionsOf(p), payload.versions.at(-1)] } : {}),
+    };
+    // Every other activity keeps its rounds too: what it was, and what each follow-up made it.
+    return type === "assignment" ? next : withHistory(p, next, String(c.changeNote || applied.join(", ")));
+  });
   if (audienceRow) await db.from("activity_drafts").update({ audience: audienceRow }).eq("id", draft.id);
   const { data, error } = await db.from("activity_drafts").select().eq("id", draft.id).single();
   if (error) throw invalid(error.message, 500);
@@ -632,6 +675,9 @@ async function createJourneyBattle(instructor, payload, st) {
 export async function assignActivityDraft({ instructor, id, overrides = null }) {
   const draft = await getActivityDraft(instructor, id);
 
+  // A teaching resource has no learners: approving it saves it to the Library.
+  if (draft.type === "teaching_tool") return { saved: await saveToolDraft(draft, { version: overrides?.version ?? null }) };
+
   // The due date: an exact one from the preview wins; a date the teacher only
   // said in words ("Friday 1 PM") must be pinned down before learners get it.
   if (overrides && typeof overrides === "object" && "due_at" in overrides && overrides.due_at != null) {
@@ -671,6 +717,8 @@ export async function assignActivityDraft({ instructor, id, overrides = null }) 
   }
   delete payload.versions;
   delete payload.paper_request;
+  delete payload.history;
+  delete payload.history_current;
 
   // Battle drafts are completed through their battle form, not this path —
   // release the claim so the instructor can still finish it there.
@@ -757,6 +805,7 @@ export async function saveDraftVersion(instructor, id, n, body) {
 export async function retryDraftVersion(instructor, id, n) {
   const draft = await getActivityDraft(instructor, id);
   if (draft.status !== "draft") throw invalid("Only pending drafts can be retried", 409);
+  if (draft.type === "teaching_tool") return retryToolVersion(draft, n);
   const v = versionAt(draft.payload, n);
   if (!v) throw invalid("No such version", 404);
   if (v.status !== "failed") throw invalid(`Version ${v.n} didn't fail — nothing to retry.`, 409);

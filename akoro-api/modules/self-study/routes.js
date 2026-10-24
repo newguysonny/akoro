@@ -63,7 +63,7 @@ import {
 import {
   createActivityDraft, assignActivityDraft, DRAFT_TYPES,
   listActivityDrafts, getActivityDraft, updateActivityDraft, discardActivityDraft,
-  saveDraftVersion, retryDraftVersion, classroomName,
+  saveDraftVersion, retryDraftVersion, restoreDraftHistory, classroomName,
 } from "./drafts.js";
 import {
   listRoutines, createRoutine, updateRoutine, deleteRoutine,
@@ -260,7 +260,10 @@ router.patch("/drafts/:id", requireRole(TEACHER_ROLES), asyncHandler(async (req,
  */
 router.post("/drafts/:id/assign", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
   try {
-    const { assignment, assigned } = await assignActivityDraft({ instructor: req.user, id: req.params.id, overrides: req.body });
+    const out = await assignActivityDraft({ instructor: req.user, id: req.params.id, overrides: req.body });
+    // A teaching resource is saved, not assigned: the Library row's id lets chat link to it.
+    if (out.saved) return res.status(201).json({ success: true, data: { saved: true, ...out.saved } });
+    const { assignment, assigned } = out;
     res.status(201).json({ success: true, data: { ...assignment, assigned } });
   } catch (e) {
     if (e.status === 404) return missing(res, e.message);
@@ -287,6 +290,12 @@ router.put("/drafts/:id/versions/:n", requireRole(TEACHER_ROLES), asyncHandler(a
 /** POST /api/self-study/drafts/:id/versions/:n/retry — draft a failed version again. */
 router.post("/drafts/:id/versions/:n/retry", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
   try { ok(res, { version: await retryDraftVersion(req.user, req.params.id, req.params.n) }); }
+  catch (e) { return draftError(res, e); }
+}));
+
+/** POST /api/self-study/drafts/:id/history/:n/restore — go back to one round of a non-assignment draft. */
+router.post("/drafts/:id/history/:n/restore", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
+  try { ok(res, { draft: await restoreDraftHistory(req.user, req.params.id, req.params.n) }); }
   catch (e) { return draftError(res, e); }
 }));
 
