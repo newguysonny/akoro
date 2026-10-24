@@ -282,7 +282,7 @@ function AiDraftCard({ ai, onApply, onRequest, requesting }) {
 }
 
 export default function GradeSubmissionModal({
-  assignment, students, initialIndex, onClose, onPublished, onUnpublished, onMarkup, onAiGrade,
+  assignment, students, initialIndex, onClose, onPublished, onUnpublished, onMarkup, onAiGrade, onSession,
 }) {
   /* students: the gradeable queue [{ student:{id,name,username,emoji}, status, completedAt, grade }] */
   // The learner on screen is kept by id, not position: the page re-sorts the
@@ -559,6 +559,21 @@ export default function GradeSubmissionModal({
       setError(e?.message || 'Could not unpublish — try again.');
     } finally { setPublishing(false); }
   };
+
+  // Tell the shell what is on screen — the Now grading bar keeps it parked when this closes.
+  const markedCount = qList.filter((_, i) => qMarks[i]?.awarded != null && qMarks[i]?.awarded !== '').length;
+  const progressPct = current?.grade != null ? 100
+    : mode === 'questions' ? (qList.length ? Math.round((markedCount / qList.length) * 100) : 0)
+    : mode === 'manual' ? (manualScore === '' ? 0 : 100)
+    : Math.round((rubric.filter((v) => v != null).length / Math.max(1, rubric.length)) * 100);
+  useEffect(() => {
+    if (!current || !brief?.id) return;
+    onSession?.({
+      assignmentId: brief.id, title: brief.title || 'Activity', subject: brief.subject || '',
+      studentId: current.student.id, studentName: current.student.name, progress: progressPct,
+      queue: students.map((st) => ({ studentId: st.student.id, name: st.student.name, graded: st.grade != null })),
+    });
+  }, [current?.student?.id, current?.grade, progressPct, students.length, brief?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Escape closes it, like the round X.
   useEffect(() => {

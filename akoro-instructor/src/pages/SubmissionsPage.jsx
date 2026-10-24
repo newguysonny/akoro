@@ -9,6 +9,8 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext.jsx';
+import { useNowGrading } from '../lib/nowGrading.js';
 import { BookOpen, PencilLine, FolderKanban, MonitorPlay, ListChecks, Pin } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Badge } from '../components/Primitives.jsx';
@@ -31,8 +33,11 @@ const fmtWhen = (iso) => {
 export default function SubmissionsPage() {
   const navigate = useNavigate();
   // Deep links: the gradebook (and anything else) can send ?activity=<id>.
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const deepLinked = params.get('activity');
+  const resumeStudent = params.get('grade');   // the Now grading bar's Resume: open the workspace on this learner
+  const { user } = useAuth();
+  const [, nowActs] = useNowGrading(user?.id);
   const [activities, setActivities] = useState(null);
   const [key, setKey] = useState(null);              // selected activity id
   const [detail, setDetail] = useState(null);        // { assignment, targets }
@@ -96,6 +101,20 @@ export default function SubmissionsPage() {
     .sort((x, y) => (x.grade != null) - (y.grade != null) || String(x.completedAt || '').localeCompare(String(y.completedAt || '')));
 
   const ungraded = queue.filter(s => s.grade == null).length;
+
+  // Resume from the Now grading bar: once that activity's roster is here, open on the learner and tidy the URL.
+  useEffect(() => { if (resumeStudent && deepLinked) setKey(deepLinked); }, [resumeStudent, deepLinked]);
+  useEffect(() => {
+    if (!resumeStudent || !detail?.assignment?.id || detail.assignment.id !== deepLinked) return;
+    if (queue.some(s => s.student.id === resumeStudent)) setGrading({ studentId: resumeStudent, assignmentId: detail.assignment.id });
+    const next = new URLSearchParams(params); next.delete('grade'); setParams(next, { replace: true });
+  }, [resumeStudent, detail, deepLinked]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The workspace reports what is on screen; closing it leaves this parked (minimized) in the Now grading bar.
+  const onSession = (s) => {
+    if (s.queue.length && s.queue.every(q => q.graded)) { nowActs.clear(); return; }   // everyone is graded: nothing left to resume
+    nowActs.setCurrent(s);
+  };
 
   const onPublished = (studentId, grade, feedback = null) => {
     // Fold the published grade (and what went with it) into the roster without a refetch.
@@ -279,6 +298,7 @@ export default function SubmissionsPage() {
           onUnpublished={onUnpublished}
           onMarkup={(sid, marks) => foldTarget(sid, { markup: { marks, updatedAt: new Date().toISOString() } })}
           onAiGrade={(sid, ai) => foldTarget(sid, { ai_grade: ai })}
+          onSession={onSession}
         />
       )}
 

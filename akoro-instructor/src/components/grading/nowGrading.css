@@ -1,0 +1,19 @@
+/* NowGradingBar — the learner app's now-studying rules, for the instructor shell.
+   Tablet + desktop (≥769px): a full-width bar at the bottom; the sidebar and the page stop above it.
+   Phone (≤768px): one compact row above the bottom nav (the centre controls fold away). */
+@keyframes ak-nowg-in { from { transform: translateY(100%); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+.ak-nowg-pct-inline { display: none; }
+
+@media (min-width: 769px) {
+  body.ak-has-nowgrading .ak-sidebar    { height: calc(100vh - 78px); }
+  body.ak-has-nowgrading .ak-shell-main { height: calc(100vh - 78px); }
+}
+
+@media (max-width: 768px) {
+  .ak-nowg { --ak-nowg-h: 58px; bottom: 62px !important; border-radius: 14px 14px 0 0; }
+  .ak-nowg-row { grid-template-columns: minmax(0,1fr) auto !important; gap: 8px !important; padding: 0 12px !important; }
+  .ak-nowg-center { display: none !important; }
+  .ak-nowg-skip { display: none !important; }
+  .ak-nowg-pct-inline { display: inline !important; }
+  body.ak-has-nowgrading .ak-shell-main:not(.ak-bare) { padding-bottom: 150px !important; }
+}

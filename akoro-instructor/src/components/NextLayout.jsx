@@ -13,6 +13,8 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import { useInstructorSocket } from '../hooks/useWebSocket.js';
 import { apiGet } from '../services/api.js';
 import { useJoinRequestCount } from './Layout.jsx';
+import NowGradingBar from './grading/NowGradingBar.jsx';
+import { useNowGrading } from '../lib/nowGrading.js';
 
 /** PURE: the instructor's nav for the shared frame. */
 export function instructorNav({ isAdmin = false, joinRequests = 0 } = {}) {
@@ -106,6 +108,32 @@ function useAgentXp() {
 // Every page spans the frame, like the learner app's (onboarding keeps its card width).
 const NARROW = ['/onboarding'];
 
+/* The parked submission (Now grading): a bar on every page, like the learner's Now studying. Resume
+   opens the workspace on that learner; prev/next move the parked item along its queue. */
+function NowGradingHost({ userId }) {
+  const navigate = useNavigate();
+  const [now, acts] = useNowGrading(userId);
+  const item = now.item && !now.dismissed ? now.item : null;
+  useEffect(() => {
+    document.body.classList.toggle('ak-has-nowgrading', !!item);
+    return () => document.body.classList.remove('ak-has-nowgrading');
+  }, [item]);
+  if (!item) return null;
+  const queue = Array.isArray(item.queue) ? item.queue : [];
+  const at = queue.findIndex((q) => q.studentId === item.studentId);
+  const move = (dir) => {
+    const next = queue[at + dir];
+    if (next) acts.setCurrent({ ...item, studentId: next.studentId, studentName: next.name, progress: next.graded ? 100 : 0 });
+  };
+  return (
+    <NowGradingBar item={item}
+      onOpen={() => navigate(`/submissions?activity=${encodeURIComponent(item.assignmentId)}&grade=${encodeURIComponent(item.studentId)}`)}
+      onDismiss={acts.dismiss}
+      onPrev={() => move(-1)} onNext={() => move(1)}
+      canPrev={at > 0} canNext={at > -1 && at < queue.length - 1} />
+  );
+}
+
 export default function NextLayout({ children, title, subtitle, action, bare = false }) {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -141,6 +169,7 @@ export default function NextLayout({ children, title, subtitle, action, bare = f
       )}
     >
       {children}
+      <NowGradingHost userId={user?.id} />
     </Shell>
   );
 }
