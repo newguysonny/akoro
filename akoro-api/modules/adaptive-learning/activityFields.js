@@ -66,6 +66,10 @@ function learnerNamed(handle, text, fullName) {
   return !!fullName && (norm(text).includes(norm(fullName)) || (!!first && first.length >= 3 && hasWord(text, first)));
 }
 
+// "My three strongest learners", "a few students": SOME of a class — the class alone doesn't say who.
+const SUBSET = /\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|a few|few|some|several|a couple of|top|best|strongest|weakest|brightest|fastest|slowest|struggling|selected|certain)\s+(?:(?:best|top|strongest|weakest|brightest|struggling|fastest|slowest|good|bright|selected)\s+)?(?:learners?|students?|pupils?|kids|children)\b/i;
+// Said outright: everyone in it.
+const EXPLICIT_WHOLE = /\b(whole|entire|full) class\b|\beveryone\b|\ball (of )?((my|the|our) )?(learners|students|pupils|class)\b/i;
 const WHOLE_CLASS = /\b(whole|entire|full) class\b|\beveryone\b|\ball (of )?(my|the|our) (learners|students|pupils|class)\b|\ball (the )?(learners|students|pupils)\b|\bthe (whole )?class\b|\bmy class\b/i;
 
 /**
@@ -101,6 +105,8 @@ export function unnamedFields(input = {}, text = "", { known = {}, check = ["top
     } else if (a.whole_class || a.classroom_name || a.classroom_id) {
       const cls = a.classroom_name || known.classes?.[a.classroom_id] || "";
       ok = (!!cls && squash(text).includes(squash(cls))) || (a.classroom_id && norm(text).includes(norm(a.classroom_id))) || WHOLE_CLASS.test(text);
+      // Some of the class was asked for: who, by name — or "the whole class" said outright.
+      if (ok && SUBSET.test(text) && !EXPLICIT_WHOLE.test(text)) ok = false;
     } else ok = true;   // no audience at all: the tool's own question
     if (!ok) out.push({ field: "audience", question: "Who is this for — which class, or which learners?" });
   }

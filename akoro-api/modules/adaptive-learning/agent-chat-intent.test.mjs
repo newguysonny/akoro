@@ -312,3 +312,12 @@ test("with a teaching-resource draft pending, an edit of it is a follow-up and a
     assert.equal(isToolDraftFollowUp(m), false, m);
   }
 });
+
+test("a teaching resource asked for first stays a resource, whatever activity words describe it", async () => {
+  const { requiresActivityPreparation } = await import("./agent-chat-intent.js");
+  assert.equal(requiresActivityPreparation("Give me lesson hooks for Early Humans, JSS1 History. Direction: a journey through time, striking exciting activities."), false);
+  assert.equal(requiresActivityPreparation("Make a lesson plan on fractions with a quick quiz at the end."), false);
+  // An activity asked for first is still an activity.
+  assert.equal(requiresActivityPreparation("Prepare an assignment from my lesson plan on fractions for JSS 2."), true);
+  assert.equal(requiresActivityPreparation("Set a battle on fractions for JSS 2."), true);
+});

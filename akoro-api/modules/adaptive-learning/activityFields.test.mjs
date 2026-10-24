@@ -62,3 +62,14 @@ test("the chat loop runs it before the activity tools", () => {
   assert.match(src, /if \(unsaid\) toolResult = unsaid;/);
   assert.match(src, /tool === "prepare_activity"\) \{ fields = input; check = \["topic", "subject", "audience"\]/);
 });
+
+test("some of a class is not the class: who, by name, or 'the whole class' said outright", () => {
+  const cls = { type: "battle", topic: "Fractions", audience: { classroom_name: "Tester Class A" } };
+  assert.deepEqual(unnamedFields(cls, "a fractions battle for my three strongest learners in Tester Class A").map((m) => m.field), ["audience"]);
+  assert.deepEqual(unnamedFields(cls, "fractions battle for a few students in Tester Class A").map((m) => m.field), ["audience"]);
+  assert.deepEqual(unnamedFields(cls, "fractions battle for my three strongest learners in Tester Class A\nJust do the whole class then."), []);
+  assert.deepEqual(unnamedFields(cls, "fractions battle for Tester Class A"), []);
+  assert.deepEqual(unnamedFields(cls, "fractions battle for all the learners in Tester Class A"), []);
+  // Named learners are fine whatever else was said.
+  assert.deepEqual(unnamedFields({ ...cls, audience: { usernames: ["tester01", "tester02", "tester03"] } }, "my three strongest learners in Tester Class A on fractions: @tester01, @tester02, @tester03"), []);
+});

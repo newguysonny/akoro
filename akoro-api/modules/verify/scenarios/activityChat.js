@@ -190,11 +190,9 @@ export const activityChatBattleSelfStudyAsk = {
     // Battle: learners the teacher didn't name → asked for, never picked.
     say = fresh();
     const b3 = await say(`Set a fractions battle for my three strongest learners in ${classroom.name}.`, "battle, unnamed learners");
-    const p3 = lastCall(b3, "prepare_activity");
-    if (prepared(b3)) {
-      const d3 = await draftRow(ctx, INSTRUCTOR, p3.result.draftId);
-      ctx.expect.ok("if prepared, it is for the class named — never learners the agent chose", !(d3?.payload?.usernames || []).length && !(d3?.payload?.user_ids || []).length, d3?.audience);
-    } else ctx.expect.ok("the agent asks which learners", asks(b3.reply, /\b(which|who|learners?|students?|names?)\b/i), b3.reply);
+    // Neither learners it picks nor the whole class instead: "three strongest" is the teacher's to name.
+    noDraft("battle, three unnamed learners", b3);
+    ctx.expect.ok("the agent asks which learners", asks(b3.reply, /\b(which|who|learners?|students?|names?)\b/i), b3.reply);
 
     // Self study: no audience → asked; then no subject → asked; then prepared as said.
     say = fresh();
