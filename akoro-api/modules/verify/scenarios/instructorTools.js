@@ -252,7 +252,8 @@ export const draftLifecycle = {
 export const routineLifecycle = {
   name: "instructor.routine_lifecycle", area: "instructor-chat", risk: "write",
   description: "A weekly routine set in chat is stored, listed and cancelled — and only ever prepares drafts, never assigns.",
-  params: { instructor: { default: DEFAULT_INSTRUCTOR }, learner: { default: DEFAULT_LEARNER } },
+  // A learner IN the instructor's class: the agent checks the roster and rightly asks about anyone else.
+  params: { instructor: { default: DEFAULT_INSTRUCTOR }, learner: { default: "@tester01" } },
   async run(ctx, p) {
     const teacher = await teacherOf(ctx, p.instructor);
     await cleanSlate(ctx, teacher);
