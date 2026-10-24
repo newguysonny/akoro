@@ -43,16 +43,15 @@ export default function SelfStudyDraftPreview({ draft, audience = {}, dueLocal, 
             </Field>
           </Section>
           <ReviewBattleSettings value={review} onChange={onReview} dueLocal={dueLocal} defaultOpen={false} />
-          <Section title="Teaching session" icon="ti-brain" chips={['Guide: NaNa Esumai', 'Sargeant checks', 'Learner teaches their protégé', 'Voice or text']} />
+          <Section title="Teaching session" icon="ti-brain" chips={['Teaching guide: NaNa Esumai', 'The learner teaches their protégé', 'Voice or text']} />
           <Section title="Language" icon="ti-language" chips={['English', 'Learners may answer in their language']} />
         </div>
       )}
 
       {tab === 'preview' && (playing ? (
-        <SessionSimulator topic={p.topic} subject={p.subject} concepts={concepts} objectives={objectives}
-          review={{ on: review?.on, label: review?.at ? fmt(review.at) : '' }} onClose={() => setPlaying(false)} />
+        <SessionSimulator topic={p.topic} subject={p.subject} concepts={concepts} objectives={objectives} onClose={() => setPlaying(false)} />
       ) : (
-        <PlayStage onPlay={() => setPlaying(true)} label="Play preview" sub="See the session as a learner will: the guide frames each concept, the learner teaches it, the protégé asks."
+        <PlayStage onPlay={() => setPlaying(true)} label="Play preview" sub="Watch a sample session: the teaching guide, the learner and their protégé, message by message."
           glimpse={<SessionGlimpse topic={p.topic} />} />
       ))}
 

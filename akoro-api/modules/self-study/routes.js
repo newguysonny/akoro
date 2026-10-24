@@ -224,33 +224,6 @@ router.get("/drafts", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) 
   ok(res, { drafts: await listActivityDrafts(req.user) });
 }));
 
-/**
- * GET /api/self-study/drafts/:id/battle-sample?count=8&seed=… — sample
- * questions for a battle draft's preview (its Questions tab and the simulated
- * battle). Read-only: verified past-paper questions for the subject, nothing
- * written or charged; the battle draws its own when it is created.
- */
-router.get("/drafts/:id/battle-sample", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
-  let draft;
-  try { draft = await getActivityDraft(req.user, req.params.id); }
-  catch (e) { if (e.status === 404) return missing(res, e.message); if (e.status === 403) return denied(res, e.message); throw e; }
-  const p = draft.payload || {};
-  const subject = String(p.subject || p.details?.subject || "").trim();
-  const count = Math.min(10, Math.max(3, Number(req.query.count) || 8));
-  if (!subject) return ok(res, { questions: [], source: null, note: "Pick a subject in Settings to see sample questions." });
-  const { fromPastPapers } = await import("../battle/questionSource.js");
-  const pool = await fromPastPapers({ subject, difficulty: p.difficulty || p.details?.difficulty || "intermediate", limit: count * 3 });
-  // A new sample on request: shuffle the pool by the seed, then take `count`.
-  let seed = Number(req.query.seed) || 1;
-  const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
-  const picked = [...pool].sort(() => rnd() - 0.5).slice(0, count);
-  ok(res, {
-    source: picked.length ? "past_papers" : null,
-    note: picked.length ? null : `No verified ${subject} past questions yet; the battle will write its own when it's created.`,
-    questions: picked.map((q) => ({ text: q.stem, options: q.options.map((o) => o.text), correct: q.correctIndex, topic: q.topic || p.topic || null, exam: q.exam || null })),
-  });
-}));
-
 /** GET /api/self-study/drafts/:id — one draft for the preview panel. */
 router.get("/drafts/:id", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
   try {

@@ -1,16 +1,17 @@
 /*
  * BattleDraftPreview — a battle drafted in chat: Settings (the battle form,
  * prefilled), Preview (Play runs the battle as learners will see it, with
- * simulated agents) and Questions (a sample from the question bank — the
- * battle draws its own when it's created).
+ * simulated agents) and Questions (the sample questions it plays). Sample
+ * data only, no API calls (previewSamples.js); the battle draws its own
+ * questions from the bank when it's created.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { apiGet } from '../../services/api.js';
+import { useMemo, useState } from 'react';
 import { C } from '../../theme/colors.js';
 import { Ico } from '../../theme/Ico.jsx';
 import BattleForm from '../battles/BattleForm.jsx';
 import { PreviewTabs, Section, PlayStage } from './PreviewKit.jsx';
 import BattleSimulator from './BattleSimulator.jsx';
+import { sampleBattleQuestions } from './previewSamples.js';
 
 const DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -23,27 +24,21 @@ function whenLabel(init) {
 export default function BattleDraftPreview({ draft, initial, courses, onSubmit, audienceLabel }) {
   const [tab, setTab] = useState('settings');
   const [playing, setPlaying] = useState(false);
-  const [sample, setSample] = useState({ state: 'loading', questions: [] });
   const details = draft.payload?.details || {};
   const isReview = details.mode === 'review' || initial?.kind === 'review';
   const total = Number(initial?.totalQuestions) || details.total_questions || 10;
 
-  const load = useCallback((fresh = false) => {
-    setSample((s) => ({ ...s, state: 'loading' }));
-    apiGet(`/api/self-study/drafts/${draft.id}/battle-sample?count=${Math.min(total, 10)}${fresh ? `&seed=${Date.now()}` : ''}`)
-      .then((r) => setSample({ state: 'ready', questions: r?.data?.questions || [], source: r?.data?.source || null, note: r?.data?.note || null }))
-      .catch((e) => setSample({ state: 'error', questions: [], error: e?.message || 'Could not load sample questions' }));
-  }, [draft.id, total]);
-  useEffect(() => { load(); }, [load]);
 
   const names = draft.audience?.names?.length ? draft.audience.names : ['Learner 1', 'Learner 2', 'Learner 3', 'Learner 4'];
   const players = useMemo(() => (isReview ? names.slice(0, 1) : names.slice(0, 6)).map((n, i) => ({ id: `p${i}`, name: `${String(n).replace(/^@/, '')}'s agent` })), [names, isReview]);
   const format = isReview ? 'review' : 'group';
+  // The simulation plays sample data only (no API calls).
+  const simQuestions = useMemo(() => sampleBattleQuestions({ subject: initial?.subject || draft.payload?.subject, topic: initial?.topic, count: total }), [initial?.subject, initial?.topic, draft.payload?.subject, total]);
 
   return (
     <div data-battle-preview="" style={{ fontFamily: C.font }}>
       <PreviewTabs value={tab} onChange={(t) => { setTab(t); setPlaying(false); }}
-        tabs={[['settings', 'Settings'], ['preview', 'Preview'], ['questions', `Questions${sample.questions.length ? ` (${sample.questions.length})` : ''}`]]} />
+        tabs={[['settings', 'Settings'], ['preview', 'Preview'], ['questions', `Questions (${simQuestions.length})`]]} />
 
       {tab === 'settings' && (
         <div>
@@ -62,26 +57,20 @@ export default function BattleDraftPreview({ draft, initial, courses, onSubmit, 
         </div>
       )}
 
-      {tab === 'preview' && (playing && sample.questions.length ? (
-        <BattleSimulator title={draft.title} topic={initial?.topic} subject={initial?.subject} questions={sample.questions}
+      {tab === 'preview' && (playing ? (
+        <BattleSimulator title={draft.title} topic={initial?.topic} subject={initial?.subject} questions={simQuestions}
           format={format} players={players} hpPerMiss={Number(initial?.hpPerMiss ?? 10)} onClose={() => setPlaying(false)} />
       ) : (
-        <PlayStage onPlay={() => sample.questions.length && setPlaying(true)} label="Play preview"
-          sub={sample.state === 'error' ? sample.error : sample.state === 'loading' ? 'Getting sample questions…' : sample.note || 'Watch it as your learners will: simulated agents answer the sample questions.'}
+        <PlayStage onPlay={() => setPlaying(true)} label="Play preview"
+          sub="Watch it as your learners will: simulated agents, sample questions."
           glimpse={<ArenaGlimpse title={draft.title} />} />
       ))}
 
       {tab === 'questions' && (
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <span style={{ flex: 1, fontSize: 11.5, color: C.muted, lineHeight: 1.45 }}>A sample from the question bank. The battle draws its own {total} when it's created.</span>
-            <button type="button" onClick={() => load(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 11px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.surface, color: C.ink, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}><Ico ti="ti-refresh" size={12} />New sample</button>
-          </div>
-          {sample.state === 'loading' && <div style={{ fontSize: 12, color: C.muted2, padding: 14 }}>Loading…</div>}
-          {sample.state === 'error' && <div style={{ fontSize: 12, color: '#DC2626', padding: 14 }}>{sample.error}</div>}
-          {sample.state === 'ready' && !sample.questions.length && <div style={{ fontSize: 12, color: C.muted, padding: 14 }}>{sample.note || 'No sample questions yet.'}</div>}
+          <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.45, marginBottom: 10 }}>Sample questions, the ones the preview plays. The battle draws its own {total} from the question bank when it's created.</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-            {sample.questions.map((q, i) => (
+            {simQuestions.map((q, i) => (
               <div key={i} style={{ borderRadius: 12, border: `1px solid ${C.borderSoft}`, background: C.surface, padding: '11px 12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
                   <span style={{ fontSize: 10, fontWeight: 900, color: C.muted2 }}>Q{i + 1}</span>

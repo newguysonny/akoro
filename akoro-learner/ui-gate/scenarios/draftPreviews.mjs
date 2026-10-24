@@ -38,14 +38,6 @@ const DRAFTS = {
     },
   },
 };
-const SAMPLE = [
-  { text: 'What is 3/4 + 1/8?', options: ['4/12', '7/8', '1', '5/8'], correct: 1, topic: 'Adding fractions' },
-  { text: 'Which fraction is equivalent to 6/9?', options: ['2/3', '3/6', '9/6', '1/3'], correct: 0, topic: 'Equivalent fractions' },
-  { text: 'Simplify 12/16.', options: ['6/9', '3/4', '4/3', '2/4'], correct: 1, topic: 'Simplifying' },
-  { text: 'What is 2/5 of 30?', options: ['6', '10', '12', '15'], correct: 2, topic: 'Fraction of a quantity' },
-  { text: 'Which is larger: 5/8 or 3/5?', options: ['5/8', '3/5', 'They are equal', 'Cannot tell'], correct: 0, topic: 'Comparing' },
-  { text: 'What is 1 1/2 × 2/3?', options: ['1', '2/3', '1 1/3', '3/4'], correct: 0, topic: 'Multiplying' },
-];
 
 export const draftPreviewScenarios = [{
   name: 'instructor.draft_previews',
@@ -55,10 +47,9 @@ export const draftPreviewScenarios = [{
     const { page } = t;
     fs.mkdirSync(OUT, { recursive: true });
     await page.setViewportSize({ width: 1280, height: 1500 });
-    await page.route(/\/api\/self-study\/drafts\/gatefake-[a-z]+(\/battle-sample)?(\?.*)?$/, (route) => {
+    await page.route(/\/api\/self-study\/drafts\/gatefake-[a-z]+(\?.*)?$/, (route) => {
       const url = new URL(route.request().url());
       const id = url.pathname.split('/').find((s) => s.startsWith('gatefake-'));
-      if (url.pathname.endsWith('/battle-sample')) return route.fulfill({ json: { success: true, data: { questions: SAMPLE, source: 'past_papers' } } });
       return route.fulfill({ json: { success: true, data: { draft: DRAFTS[id] } } });
     });
     const errors = [];
