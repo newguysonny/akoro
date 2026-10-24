@@ -1153,7 +1153,7 @@ const TEACHING_FIELD_PROPS = (() => {
 export const INSTRUCTOR_TOOLS = [
   {
     name: "prepare_activity",
-    description: "Prepare an activity draft for the instructor to review and assign (human-in-the-loop: you never assign — the instructor previews the draft and taps Assign). Use when the instructor asks you to create/set/prepare an activity, assignment, project, self study, live session, journey or battle. AUDIENCE IS REQUIRED: if the instructor did not say who the work is for, do not call this tool — ask them first, then call it with their answer. The server drafts the study plan itself (subtopics and objectives — the same generator the workbench uses), so you never supply those. But subject IS required for every type except battle: if the instructor did not name one, ask before calling. ` For a batch request (\"prep this week's activities\"), call this once per activity in the same reply - each gets its own Preview button. ASSIGNMENTS: pass the instructor's words about the questions in question_request VERBATIM (e.g. \"5 questions on photosynthesis, 3 MCQ, 2 direct theory\") and fill question_plan from them; the server writes the questions in the background (Version 1) and holds them to that count and mix — never write the questions yourself. Add diagrams only when the instructor asks for them or a question can't be asked without one.",
+    description: "Prepare an activity draft for the instructor to review and assign (human-in-the-loop: you never assign — the instructor previews the draft and taps Assign). Use when the instructor asks you to create/set/prepare an activity, assignment, project, self study, live session, journey or battle. AUDIENCE IS REQUIRED: if the instructor did not say who the work is for, do not call this tool — ask them first, then call it with their answer. The server drafts the study plan itself (subtopics and objectives — the same generator the workbench uses), so you never supply those. But subject IS required for every type except battle: if the instructor did not NAME it, ask before calling — even when the topic makes it look obvious ('fractions' is still 'Which subject is it for?'). The same for who it's for and the topic: only what the instructor said, never your guess (the server refuses unsaid fields and hands back the question to ask). ` For a batch request (\"prep this week's activities\"), call this once per activity in the same reply - each gets its own Preview button. ASSIGNMENTS: pass the instructor's words about the questions in question_request VERBATIM (e.g. \"5 questions on photosynthesis, 3 MCQ, 2 direct theory\") and fill question_plan from them; the server writes the questions in the background (Version 1) and holds them to that count and mix — never write the questions yourself. Add diagrams only when the instructor asks for them or a question can't be asked without one.",
     input_schema: {
       type: "object",
       properties: {
@@ -4040,6 +4040,22 @@ function inspectResult(value) {
   } catch { return { unserializable: true }; }
 }
 
+/** Before an activity tool runs from the instructor's chat: what the teacher never said → a clarify result, else null. */
+async function unsaidActivityFields(tool, input, transcript) {
+  const { unnamedFields, askFor, teacherTextOf, knownNames } = await import("./activityFields.js");
+  let fields = null, check;
+  if (tool === "prepare_activity") { fields = input; check = ["topic", "subject", "audience"]; }
+  else if (tool === "schedule_activity_routine" && input?.brief) { fields = input.brief; check = ["topic", "subject", "audience"]; }
+  else if (tool === "revise_activity_draft" && input?.audience) { fields = { audience: input.audience }; check = ["audience"]; }
+  if (!fields) return null;
+  const missing = unnamedFields(fields, teacherTextOf(transcript), { known: await knownNames(db, fields), check });
+  if (!missing.length) return null;
+  return clarify(missing.map((m) => m.field).join(","), askFor(missing), {
+    prepared: false, error: "details_required", unsaid: missing.map((m) => m.field),
+    message: "The instructor didn't say this. Ask them the question in `question` (in your own short words) and wait for their answer — never fill it in yourself, even when it seems obvious. Then call the tool again with what they said.",
+  });
+}
+
 export function clarify(field, question, extra = {}) {
   return { needsClarification: true, missing: field, question, ...extra };
 }
@@ -4148,7 +4164,11 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
       if (tool === "revise_activity_draft" && teacherWords && input?.question_request) input = { ...input, question_request: teacherWords };
       const traceRow = trace?.toolStart(tool, input);
       let toolResult;
-      try { toolResult = await executeChatTool(tool, input, studentId, { conversationId, role }); }
+      // The important fields come from the TEACHER (activityFields.js): a subject, an audience or a
+      // topic they never said is asked for, not filled in — nothing is prepared until they answer.
+      const unsaid = role === "instructor" ? await unsaidActivityFields(tool, input, transcript).catch(() => null) : null;
+      if (unsaid) toolResult = unsaid;
+      else try { toolResult = await executeChatTool(tool, input, studentId, { conversationId, role }); }
       catch (error) {
         // The observation stays generic (internal detail never reaches the
         // learner), but the log carries the real cause — the 2026-10-01

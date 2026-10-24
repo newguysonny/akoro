@@ -109,51 +109,57 @@ async function learnerCopy(ctx, learner, id) {
 /* ── The agent asks for what's missing ──────────────────────────────────── */
 
 export const activityChatAskMissing = {
-  name: "activity_chat.ask_missing", area: "instructor-chat", risk: "write", regression: false, timeoutMs: 420_000,
-  description: "Asked for an assignment with no audience or subject, the agent asks before preparing anything, then prepares it from the answers; a self study with no subject is not prepared without one; a due date said only in words must be pinned down before assigning.",
+  name: "activity_chat.ask_missing", area: "instructor-chat", risk: "write", regression: false, timeoutMs: 540_000,
+  description: "Strict: the agent prepares nothing until the teacher has SAID who it's for, the subject and the topic — it asks for each, even when the topic makes the subject look obvious; learners the teacher never named are asked about; a due date said only in words must be pinned down before assigning.",
   async run(ctx) {
     const { classroom, learners, say, who } = await classOf(ctx);
+    const noDraft = (label, turn) => ctx.expect.ok(`${label}: nothing is prepared`, !prepared(turn), { tools: toolsOf(turn), results: (turn.tools || []).map((t) => t.result?.unsaid || t.result?.error || null) });
 
-    // 1. No audience, no subject: ask, don't prepare.
-    const t1 = await say("Prepare an assignment on fractions: 5 questions, 3 MCQ and 2 short answer.", "no audience");
-    ctx.expect.ok("nothing is prepared without knowing who it's for", !prepared(t1), { tools: toolsOf(t1) });
-    ctx.expect.ok("the agent asks who it is for", asks(t1.reply, /\b(who|which|class|learners?|students?)\b/i), t1.reply);
+    // 1. No audience, no subject (fractions — the subject "looks obvious"): ask, prepare nothing.
+    const t1 = await say("Prepare an assignment on fractions: 5 questions, 3 MCQ and 2 short answer.", "no audience, no subject");
+    noDraft("no audience, no subject", t1);
+    ctx.expect.ok("the agent asks who it is for (or the subject too)", asks(t1.reply, /\b(who|which|class|learners?|students?|subject)\b/i), t1.reply);
 
-    // 2. The audience given: prepared now — or one more question (the subject), answered.
-    let t2 = await say(`It's for ${who} in ${classroom.name}.`, "audience given");
-    if (!prepared(t2)) {
-      ctx.expect.ok("…then it asks for the subject", asks(t2.reply, /subject|mathematics|maths/i), t2.reply);
-      t2 = await say("Mathematics.", "subject given");
-    }
-    const prep = lastCall(t2, "prepare_activity");
-    ctx.expect.ok("now it prepares the assignment", prep?.result?.prepared === true, { tools: toolsOf(t2), result: prep?.result });
+    // 2. Only the audience given: still no subject said → it asks for the subject.
+    const t2 = await say(`It's for ${who} in ${classroom.name}.`, "audience given");
+    noDraft("audience given, subject still unsaid", t2);
+    ctx.expect.ok("…it asks which subject (never assumed from \"fractions\")", asks(t2.reply, /subject/i), t2.reply);
+
+    // 3. The subject said: prepared, exactly as said.
+    const t3 = await say("Mathematics.", "subject given");
+    const prep = lastCall(t3, "prepare_activity");
+    ctx.expect.ok("now it prepares the assignment", prep?.result?.prepared === true, { tools: toolsOf(t3), result: prep?.result });
     const d1 = prep?.result?.draftId ? await draftRow(ctx, INSTRUCTOR, prep.result.draftId) : null;
-    ctx.expect.eq("an assignment", d1?.type, "assignment");
-    ctx.expect.ok("in Mathematics", /math/i.test(d1?.subject || d1?.payload?.subject || ""), { subject: d1?.subject });
+    ctx.expect.eq("an assignment in Mathematics", [d1?.type, d1?.subject || d1?.payload?.subject], ["assignment", "Mathematics"]);
     const names = (d1?.audience?.names || []).map((n) => String(n).replace(/^@/, ""));
-    ctx.expect.ok("for both learners named", learners.every((l) => names.includes(l.username) || (d1?.payload?.usernames || []).includes(l.username)), d1?.audience);
+    ctx.expect.ok("for exactly the learners named", learners.every((l) => names.includes(l.username) || (d1?.payload?.usernames || []).includes(l.username)) && names.length <= learners.length, d1?.audience);
 
-    // 3. A new conversation: a self study with no subject — never prepared without one.
+    // 4. A new conversation: a self study whose subject the teacher never says ("measurement").
     const fresh = talk(ctx, { instructor: INSTRUCTOR }, await ctx.as(INSTRUCTOR));
-    const t3 = await fresh(`Set a self study on measurement for ${who} in ${classroom.name}.`, "no subject");
-    const p3 = lastCall(t3, "prepare_activity");
-    if (prepared(t3)) {
-      const d3 = await draftRow(ctx, INSTRUCTOR, p3.result.draftId);
-      ctx.expect.ok("if prepared, it carries a subject (never an empty one)", !!(d3?.subject || d3?.payload?.subject), { subject: d3?.subject });
-      ctx.note(`the agent picked a subject itself for "measurement": ${d3?.subject || d3?.payload?.subject}`);
+    const t4 = await fresh(`Set a self study on measurement for ${who} in ${classroom.name}.`, "no subject");
+    noDraft("no subject", t4);
+    ctx.expect.ok("the agent asks which subject", asks(t4.reply, /subject/i), t4.reply);
+    const t5 = await fresh("Basic Science, due Friday.", "subject given");
+    const p5 = lastCall(t5, "prepare_activity");
+    ctx.expect.ok("now it prepares the self study", p5?.result?.prepared === true, { tools: toolsOf(t5), result: p5?.result });
+    const d5 = p5?.result?.draftId ? await draftRow(ctx, INSTRUCTOR, p5.result.draftId) : null;
+    ctx.expect.eq("a self study in Basic Science", [d5?.type, d5?.subject || d5?.payload?.subject], ["self_study", "Basic Science"]);
+    // "Friday" with no time: kept as said, and assigning asks for the exact time first.
+    if (d5?.payload?.due_hint && !d5?.payload?.due_at) {
+      const a = await ctx.http({ as: INSTRUCTOR, method: "POST", path: `/api/self-study/drafts/${d5.id}/assign`, body: {} });
+      ctx.expect.ok("a due date said only in words must be pinned down before assigning", a.status === 409 && /exact due date/i.test(a.body?.error || ""), { status: a.status, body: a.body });
+      ctx.expect.eq("…and the draft stays pending", (await draftRow(ctx, INSTRUCTOR, d5.id))?.status, "draft");
+    } else ctx.note(`"due Friday" was resolved to ${d5?.payload?.due_at || "nothing"} (no words-only due date to pin)`);
+
+    // 5. A new conversation: learners the teacher never named ("my best learners") — asked, not picked.
+    const third = talk(ctx, { instructor: INSTRUCTOR }, await ctx.as(INSTRUCTOR));
+    const t6 = await third(`Prepare a Mathematics assignment on fractions for my two best learners in ${classroom.name}: 4 MCQ.`, "unnamed learners");
+    const p6 = lastCall(t6, "prepare_activity");
+    if (prepared(t6)) {
+      const d6 = await draftRow(ctx, INSTRUCTOR, p6.result.draftId);
+      ctx.expect.ok("if prepared, it is for the class the teacher named — never two learners the agent chose", !(d6?.payload?.usernames || []).length && !(d6?.payload?.user_ids || []).length, d6?.audience);
     } else {
-      ctx.expect.ok("the agent asks which subject", asks(t3.reply, /subject|mathematics|science|physics/i), t3.reply);
-      const t4 = await fresh("Basic Science, due Friday.", "subject given");
-      const p4 = lastCall(t4, "prepare_activity");
-      ctx.expect.ok("now it prepares the self study", p4?.result?.prepared === true, { tools: toolsOf(t4), result: p4?.result });
-      const d4 = p4?.result?.draftId ? await draftRow(ctx, INSTRUCTOR, p4.result.draftId) : null;
-      ctx.expect.eq("a self study in Basic Science", [d4?.type, d4?.subject || d4?.payload?.subject], ["self_study", "Basic Science"]);
-      // "Friday" with no time: kept as said, and assigning asks for the exact time first.
-      if (d4?.payload?.due_hint && !d4?.payload?.due_at) {
-        const a = await ctx.http({ as: INSTRUCTOR, method: "POST", path: `/api/self-study/drafts/${d4.id}/assign`, body: {} });
-        ctx.expect.ok("a due date said only in words must be pinned down before assigning", a.status === 409 && /exact due date/i.test(a.body?.error || ""), { status: a.status, body: a.body });
-        ctx.expect.eq("…and the draft stays pending", (await draftRow(ctx, INSTRUCTOR, d4.id))?.status, "draft");
-      } else ctx.note(`"due Friday" was resolved to ${d4?.payload?.due_at || "nothing"} (no words-only due date to pin)`);
+      ctx.expect.ok("the agent asks which learners", asks(t6.reply, /\b(which|who|learners?|students?|names?)\b/i), t6.reply);
     }
   },
 };
