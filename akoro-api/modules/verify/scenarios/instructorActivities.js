@@ -298,3 +298,79 @@ export const assignmentPreviewAssign = {
     ctx.expect.gte("the learner was notified", await ctx.db.count("notifications", { user_id: learner.id, related_id: id }), 1);
   },
 };
+
+/* ── Journey with a battle stage + version history ──────────────────────── */
+
+export const journeyBattleStage = {
+  name: "instructor.journey_battle_stage", area: "instructor-chat", risk: "write",
+  description: "A journey set in chat with a self-study stage and a battle stage: drafted with both, revised into version 2 (version 1 kept, and restorable), assigned — which creates a real battle for the class and chains it, and the learner sees a battle stage.",
+  params: { instructor: { default: INSTRUCTOR } },
+  async run(ctx, p) {
+    const teacher = await teacherOf(ctx, p.instructor);
+    await cleanSlate(ctx, teacher);
+    await sweepGateBattles(ctx, p.instructor);
+    const found = await battleClass(ctx, p.instructor, 2);
+    if (!found) ctx.expect.blocked(`${p.instructor} has no class with 2 test learners who have an agent — a battle stage needs them`);
+    const { classroom, learners } = found;
+    const who = learners.map((l) => `@${l.username}`).join(" and ");
+    const say = talk(ctx, p, teacher);
+
+    // 1. Chat → a journey draft with a battle stage.
+    const t1 = await say(`Prepare a Mathematics journey on fractions for ${who} in ${classroom.name} with two stages: first a self study on fractions, then a battle on fractions.`, "prepare");
+    const prep = lastCall(t1, "prepare_activity");
+    ctx.expect.ok("the agent called prepare_activity", !!prep, toolsOf(t1));
+    ctx.expect.eq("it is a journey", prep?.input?.type, "multi_stage");
+    const draftId = prep?.result?.draftId;
+    ctx.expect.ok("a draft was prepared", !!draftId, prep?.result);
+    if (!draftId) return;
+    let draft = await draftOf(ctx, p.instructor, draftId);
+    const stageKinds = (draft?.payload?.details?.stages || []).map((s) => s.kind);
+    ctx.expect.ok("the journey has a battle stage", stageKinds.includes("battle"), stageKinds);
+    ctx.expect.ok("…and a study stage before it", stageKinds.indexOf("self_study") !== -1 && stageKinds.indexOf("self_study") < stageKinds.indexOf("battle"), stageKinds);
+
+    // 2. A follow-up becomes the next version; the first is kept and can be brought back.
+    const t2 = await say("Change the instructions to: finish the stages in order.", "revise");
+    const rev = lastCall(t2, "revise_activity_draft");
+    ctx.expect.ok("the agent revised the same draft", rev?.input?.draftId === draftId && rev?.success !== false, { tools: toolsOf(t2), input: rev?.input });
+    draft = await draftOf(ctx, p.instructor, draftId);
+    const history = draft?.payload?.history || [];
+    ctx.expect.gte("the draft keeps its rounds", history.length, 2);
+    ctx.expect.eq("version 2 is on screen", draft?.payload?.history_current, history.at(-1)?.n);
+    ctx.expect.ok("version 2 has the new instructions", /in order/i.test(draft?.payload?.instructions || ""), draft?.payload?.instructions);
+    const back = await ctx.http({ as: p.instructor, method: "POST", path: `/api/self-study/drafts/${draftId}/history/1/restore`, body: {} });
+    ctx.expect.eq("going back to version 1 works", back.status, 200);
+    draft = await draftOf(ctx, p.instructor, draftId);
+    ctx.expect.eq("version 1 is on screen", draft?.payload?.history_current, 1);
+    ctx.expect.ok("version 1 has its own instructions", !/finish the stages in order/i.test(draft?.payload?.instructions || ""), draft?.payload?.instructions);
+    const fwd = await ctx.http({ as: p.instructor, method: "POST", path: `/api/self-study/drafts/${draftId}/history/${history.at(-1).n}/restore`, body: {} });
+    ctx.expect.eq("and forward to version 2 again", fwd.status, 200);
+
+    // 3. The approval creates the battle for the class and chains it as a stage.
+    const made = await ctx.http({ as: p.instructor, method: "POST", path: `/api/self-study/drafts/${draftId}/assign`, body: {} });
+    if (made.status >= 400 && made.status < 500) ctx.expect.blocked(`assigning the journey was refused (${made.status}): ${made.body?.error || made.body?.message || "no reason given"}`);
+    ctx.expect.eq("assigned", made.status, 201);
+    const journey = made.body?.data || {};
+    const refs = journey.details?.stages || [];
+    const battleRef = refs.find((r) => r.kind === "battle");
+    ctx.expect.ok("the journey carries a battle stage with the battle's id", !!battleRef?.battleId, refs);
+    ctx.cleanup(() => ctx.db.deleteOwned("edu.self_study_assignments", { ownerColumn: "created_by", ownerId: teacher.id, filters: { id: journey.id } }));
+    for (const r of refs.filter((x) => x.refId)) ctx.cleanup(() => ctx.db.deleteOwned("edu.self_study_assignments", { ownerColumn: "created_by", ownerId: teacher.id, filters: { id: r.refId } }));
+    if (battleRef?.battleId) {
+      ctx.cleanup(() => ctx.http({ as: p.instructor, method: "DELETE", path: `/api/battle/battles/${battleRef.battleId}` }));
+      for (const l of learners) {
+        const acct = await ctx.as(`@${l.username}`);
+        ctx.cleanup(() => ctx.db.deleteOwned("notifications", { ownerColumn: "user_id", ownerId: acct.id, filters: { related_id: battleRef.battleId } }));
+        ctx.cleanup(() => ctx.db.deleteOwned("notifications", { ownerColumn: "user_id", ownerId: acct.id, filters: { related_id: journey.id } }));
+      }
+      const mine = (await ctx.http({ as: p.instructor, path: "/api/battle/my-battles" })).body?.data || [];
+      ctx.expect.ok("the battle exists on the instructor's list", mine.some((b) => b.id === battleRef.battleId), mine.map((b) => b.title));
+    }
+
+    // 4. The learner's roadmap shows the battle stage.
+    const theirs = (await ctx.http({ as: `@${learners[0].username}`, path: "/api/self-study/mine" })).body?.data || [];
+    const row = theirs.find((r) => r.id === journey.id);
+    ctx.expect.ok("the learner sees the journey", !!row, theirs.map((r) => r.title));
+    ctx.expect.ok("…with a battle stage on its roadmap", (row?.stages || []).some((s) => s.kind === "battle"), row?.stages);
+    ctx.expect.eq("the draft is closed as assigned", (await draftOf(ctx, p.instructor, draftId))?.status, "assigned");
+  },
+};

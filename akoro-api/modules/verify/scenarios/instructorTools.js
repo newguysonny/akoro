@@ -36,6 +36,24 @@ export async function cleanSlate(ctx, teacher) {
 export const toolsOf = (turn) => (turn.tools || []).map((t) => t.tool);
 export const lastCall = (turn, name) => (turn.tools || []).filter((t) => t.tool === name).at(-1) || null;
 
+/** The draft as the preview reads it. */
+export const draftRow = async (ctx, as, id) => (await ctx.http({ as, path: `/api/self-study/drafts/${id}` })).body?.data?.draft || null;
+
+/** Wait for version `n` of a teaching-resource draft to finish: → { draft, v } (v.status ready | failed), or null. */
+export async function toolVersion(ctx, as, draftId, n = 1, timeoutMs = 150_000) {
+  return ctx.until(async () => {
+    const draft = await draftRow(ctx, as, draftId);
+    const v = (draft?.payload?.versions || []).find((x) => x.n === n);
+    return v && v.status !== "drafting" ? { draft, v } : null;
+  }, { timeoutMs, everyMs: 4_000 });
+}
+
+/** Every teaching tool answers in the one result template (teaching/template.js). */
+export const isTemplate = (c) => !!c && c.version === 2 && typeof c.title === "string" && c.title.length > 0
+  && Array.isArray(c.entries) && c.entries.length >= 1
+  && c.entries.every((e) => e.title !== undefined && Array.isArray(e.sections) && e.sections.length >= 1
+    && e.sections.every((x) => ["text", "list", "chips", "fields", "script", "scores"].includes(x.kind)));
+
 /* ── Teaching tools ─────────────────────────────────────────────────────── */
 
 const TEACHING_PROMPTS = [
@@ -78,7 +96,7 @@ const RUNNABLE = [
 
 export const teachingToolRuns = {
   name: "instructor.teaching_tool_runs", area: "instructor-chat", risk: "write",
-  description: "A teaching resource asked for in chat is made with an unlocked tool, saved to the instructor's Library and opens from there.",
+  description: "A teaching resource asked for in chat is drafted with an unlocked tool (Version 1 written in the background), is NOT in the Library until the instructor saves it, and opens from the Library once saved.",
   params: { instructor: { default: DEFAULT_INSTRUCTOR } },
   async run(ctx, p) {
     const teacher = await teacherOf(ctx, p.instructor);
@@ -99,29 +117,39 @@ export const teachingToolRuns = {
     ctx.expect.toolNotCalled(turn, "prepare_activity");
     if (!run) return;
     // An empty wallet is a missing precondition, not a bug.
-    if (run.result?.created === false && run.result?.code === "INSUFFICIENT_COINS") {
+    if (run.result?.prepared === false && run.result?.code === "INSUFFICIENT_COINS") {
       ctx.expect.blocked(`${p.instructor} can't pay for the tool: ${run.result.error}`);
     }
     ctx.expect.eq("the tool the request asked for", run.input?.tool, pick.key);
-    ctx.expect.ok("it was created", run.result?.created === true, run.result);
-    ctx.expect.eq("it says where it was saved", run.result?.savedTo, "Library");
-    ctx.expect.gte("the preview carries the content", String(run.result?.preview || "").length, 100);
+    ctx.expect.ok("it was drafted for preview", run.result?.prepared === true && !!run.result?.draftId, run.result);
+    const draftId = run.result?.draftId;
+    if (!draftId) return;
+    ctx.cleanup(() => ctx.db.deleteOwned("activity_drafts", { ownerColumn: "created_by", ownerId: teacher.id, filters: { id: draftId } }));
 
-    // Saved for the instructor (the insert is fire-and-forget: give it a moment).
-    const row = await ctx.until(async () => {
-      const r = await ctx.http({ as: p.instructor, path: `/api/instructor/tools/outputs?kind=${pick.key}` });
-      return (r.body?.outputs || []).find((o) => new Date(o.created_at).getTime() >= startedAt) || null;
-    }, { timeoutMs: 20_000, everyMs: 2_000 });
-    ctx.expect.ok("it is in the Library list", !!row, `no ${pick.key} output after the turn`);
-    if (!row) return;
-    ctx.cleanup(() => ctx.db.deleteOwned("edu.tool_outputs", { ownerColumn: "instructor_id", ownerId: teacher.id, filters: { id: row.id } }));
-    ctx.expect.ok("it is filed under the teaching tool", String(row.tool || "").startsWith("teaching_"), row.tool);
+    // A draft is not a Library item: nothing is saved until the instructor approves.
+    const early = await ctx.http({ as: p.instructor, path: `/api/instructor/tools/outputs?kind=${pick.key}` });
+    ctx.expect.ok("it is not in the Library yet", !(early.body?.outputs || []).some((o) => new Date(o.created_at).getTime() >= startedAt), early.body?.outputs);
 
-    // …and opens, which is what the Library's viewer reads.
-    const full = await ctx.http({ as: p.instructor, path: `/api/instructor/tools/outputs/${row.id}` });
+    const ready = await toolVersion(ctx, p.instructor, draftId, 1);
+    ctx.expect.eq("version 1 was written", ready?.v?.status, "ready");
+    if (ready?.v?.status !== "ready") return;
+    ctx.expect.ok("it follows the shared template", isTemplate(ready.v.result), Object.keys(ready.v.result || {}));
+
+    // The approval (the Save to Library tap on the preview).
+    const saved = await ctx.http({ as: p.instructor, method: "POST", path: `/api/self-study/drafts/${draftId}/assign`, body: { version: 1 } });
+    ctx.expect.eq("saved", saved.status, 201);
+    const outputId = saved.body?.data?.outputId;
+    ctx.expect.ok("it returns the Library id the chat links to", !!outputId, saved.body);
+    if (!outputId) return;
+    ctx.cleanup(() => ctx.db.deleteOwned("edu.tool_outputs", { ownerColumn: "instructor_id", ownerId: teacher.id, filters: { id: outputId } }));
+    ctx.expect.eq("the draft is closed", (await draftRow(ctx, p.instructor, draftId))?.status, "assigned");
+
+    // …and opens, which is what the Library's page reads.
+    const full = await ctx.http({ as: p.instructor, path: `/api/instructor/tools/outputs/${outputId}` });
     ctx.expect.eq("the saved resource opens", full.status, 200);
     const body = full.body?.output?.content;
-    ctx.expect.ok("it has content", !!(body && (body.content || body.cards || body.turns || body.grades)), body && Object.keys(body));
+    ctx.expect.ok("it follows the shared template", isTemplate(body), body && Object.keys(body));
+    ctx.expect.ok("it is filed under the teaching tool", String(full.body?.output?.tool || "").startsWith("teaching_"), full.body?.output?.tool);
     ctx.expect.noBackendNames("reply has no backend names", turn.reply);
     ctx.expect.loopHealthy(turn);
   },
@@ -163,7 +191,7 @@ export function talk(ctx, p, teacher) {
     history.push({ role: "user", content: prompt }, { role: "assistant", content: String(turn.reply || "") });
     // Anything a turn prepared is the gate's to remove, strays included.
     for (const t of turn.tools || []) {
-      const id = t.tool === "prepare_activity" ? t.result?.draftId : null;
+      const id = ["prepare_activity", "run_teaching_tool"].includes(t.tool) ? t.result?.draftId : null;
       if (id) ctx.cleanup(() => ctx.db.deleteOwned("activity_drafts", { ownerColumn: "created_by", ownerId: teacher.id, filters: { id } }));
     }
     return turn;
