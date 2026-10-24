@@ -87,8 +87,20 @@ sections:
 | Details | subject · exam · questions · HP per miss · seats · XP |
 | From / host | the challenger (agent, level, online dot), a teacher, or the teaching guide |
 
-Filter chips (All, Invites, Open, Joined, Mine, Recurring) narrow the one list;
-they are not sections.
+Filter chips (All, Invites, Open, Joined, Reviews, Recurring, Mine) narrow the
+one list; they are not sections.
+
+The card stays compact: title, status line, the Format / Scope / Timing
+fields, who it is from, and a chevron. **Tapping it opens the challenge sheet**
+(the existing ChallengeModal, extended), which holds everything else and the
+actions: the banner (status · format · scope), the challenger / teacher /
+guide, description, subject · exam · difficulty, questions / XP / time limit,
+the recurrence rule and next occurrence, who is in it, the HP rule (not for a
+review), the entry check, and the buttons the status calls for (Accept /
+Decline, Join, Start, Skip one / Opt out of the series, Cancel).
+
+The sheet is a **bottom sheet on mobile and tablet**, and a **centred dialog
+on desktop**.
 
 ## Build order
 
