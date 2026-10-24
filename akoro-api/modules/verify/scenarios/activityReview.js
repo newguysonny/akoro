@@ -14,6 +14,21 @@
 import { battleClass, BATTLE_INSTRUCTOR } from "./instructorActivities.js";
 import { teacherOf, cleanSlate } from "./instructorTools.js";
 
+/** An assigned activity and its review battle are the gate's to remove: battles, jobs, notifications, targets. */
+export function cleanReviewedActivity(ctx, assignmentId) {
+  ctx.cleanup(async () => {
+    const db = (await import("../../../db.js")).default;
+    const { data: bs } = await db.from("battles").select("id").eq("activity_assignment_id", assignmentId);
+    const ids = (bs || []).map((b) => b.id);
+    for (const id of ids) await db.schema("edu").from("deferred_jobs").delete().eq("job_key", `start-${id}`);
+    if (ids.length) { await db.from("notifications").delete().in("related_id", ids); await db.from("battles").delete().in("id", ids); }
+    await db.from("notifications").delete().eq("related_id", assignmentId);
+    await db.schema("edu").from("deferred_jobs").delete().like("job_key", `activity-review-${assignmentId}%`);
+    await db.schema("edu").from("self_study_targets").delete().eq("assignment_id", assignmentId);
+    await db.schema("edu").from("self_study_assignments").delete().eq("id", assignmentId);
+  });
+}
+
 /** A self study for 2 test learners, assigned with its review on (a day away, due in three). Cleans up after. */
 async function assignWithReview(ctx) {
     const probe = await ctx.db.probe("edu.self_study_targets", "id, review_battle_id");
@@ -42,16 +57,7 @@ async function assignWithReview(ctx) {
     ctx.expect.status("assigned", res, 201);
     const assignmentId = res.body?.data?.id;
     if (!assignmentId) return {};
-    ctx.cleanup(async () => {
-      const { data: bs } = await db.from("battles").select("id").eq("activity_assignment_id", assignmentId);
-      const ids = (bs || []).map((b) => b.id);
-      for (const id of ids) await db.schema("edu").from("deferred_jobs").delete().eq("job_key", `start-${id}`);
-      if (ids.length) { await db.from("notifications").delete().in("related_id", ids); await db.from("battles").delete().in("id", ids); }
-      await db.from("notifications").delete().eq("related_id", assignmentId);
-      await db.schema("edu").from("deferred_jobs").delete().like("job_key", `activity-review-${assignmentId}%`);
-      await db.schema("edu").from("self_study_targets").delete().eq("assignment_id", assignmentId);
-      await db.schema("edu").from("self_study_assignments").delete().eq("id", assignmentId);
-    });
+    cleanReviewedActivity(ctx, assignmentId);
 
     return { teacher, learners, assignmentId, db, runActivityReview, at, due };
 }
