@@ -147,7 +147,8 @@ Produce one entry per term (layout "compact"): the title is the term, then secti
       F.subject, F.klass,
     ],
     maxTokens: 6000,
-    // One entry per essay, always: a verbose first entry once crowded the second out.
+    // Each essay is marked in its own call (see generateToolResult), then merged.
+    splitInput: (input) => String(input.essays || "").split(/^\s*-{3,}\s*$/m).map((e) => e.trim()).filter(Boolean).slice(0, 8).map((e) => ({ ...input, essays: e })),
     validate: (result, input) => result.entries.length >= String(input.essays || "").split(/^\s*-{3,}\s*$/m).filter((e) => e.trim()).length,
     system: `${HOUSE} You mark to the rubric GIVEN — never your own criteria, never a curve. Be specific about where marks were lost. Feedback is addressed to the student, encouraging but honest. ${DOC_RULE}`,
     prompt: (i) => `Mark these essays${i.subject ? ` (${i.subject}` : ""}${i.class ? `${i.subject ? ", " : " ("}${i.class}` : ""}${i.subject || i.class ? ")" : ""} strictly against the rubric.
@@ -344,7 +345,7 @@ export const toolPayload = (tool, result) => ({ ...toLegacy(result, tool.output)
  * changed and the teacher's request) → a usable template result, billed to the user.
  * Throws ToolError with a code. Nothing is saved here.
  */
-export async function generateToolResult({ tool, input, userId, base = null, request = null }) {
+async function generateOnce({ tool, input, userId, base = null, request = null }) {
   // One retry when the model's answer can't be used (empty, unparseable JSON, a doc with no
   // sections): these are intermittent, and a failed run is free (charged after the call). Token
   // use is summed across the attempts so the charge stays honest.
@@ -401,6 +402,23 @@ export async function generateToolResult({ tool, input, userId, base = null, req
     console.error("[teaching/tools] charge failed:", e.message);
   }
   return { result, coinsCharged: charged };
+}
+
+/**
+ * generateToolResult — one model round per resource, except a tool that marks independent items
+ * (the essay grader): each item gets its OWN call and the entries are merged in order. One call for
+ * several essays kept coming back with only the first one marked.
+ */
+export async function generateToolResult({ tool, input, userId, base = null, request = null }) {
+  const parts = !base && tool.splitInput ? tool.splitInput(input) : null;
+  if (!parts || parts.length < 2) return generateOnce({ tool, input, userId, base, request });
+  const runs = await Promise.all(parts.map((part) => generateOnce({ tool, input: part, userId })));
+  const entries = runs.flatMap((r) => r.result.entries).map((e, i) => (/^essay\s*\d+$/i.test(e.title) ? { ...e, title: `Essay ${i + 1}` } : e));
+  const first = runs[0].result;
+  return {
+    result: { ...first, title: "Essay grades", summary: `${entries.length} essays marked`, entries },
+    coinsCharged: runs.reduce((n, r) => n + (r.coinsCharged || 0), 0),
+  };
 }
 
 /** Keep it in the teacher's Library. → the saved row's id (null if the save failed). */
