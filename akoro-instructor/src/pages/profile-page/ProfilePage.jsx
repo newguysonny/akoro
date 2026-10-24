@@ -13,7 +13,7 @@ import { apiGet, apiPut } from '../../services/api.js';
 import { GREEN, RED } from '../../constants.js';
 import { C } from '../../theme/colors.js';
 
-import { ACCENT_DEFAULT, BRAND, FONTF, ALL_SUBJECTS, SCHOOL_TYPES, COUNTRIES, EMOJI_LIST, ACCENTS, ProgressBar, SubjectChip, Section, rowBase, Row, AvatarCircle, Sheet, SheetButtons, AvatarPickerSheet, SubjectsSheet, GenericSheet, PublishSheet, SubjectsRow, TPL_TOOLS, ToolTemplatesSection, ProfileTab, AgentTab, LoadingSkeleton } from './parts.jsx';
+import { ACCENT_DEFAULT, BRAND, FONTF, ALL_SUBJECTS, SCHOOL_TYPES, COUNTRIES, ACCENTS, ProgressBar, SubjectChip, Section, rowBase, Row, AvatarCircle, Sheet, SheetButtons, AvatarPickerSheet, SubjectsSheet, GenericSheet, PublishSheet, SubjectsRow, TPL_TOOLS, ToolTemplatesSection, ProfileTab, AgentTab, LoadingSkeleton } from './parts.jsx';
 
 export default function ProfilePage() {
   const { user } = useAuth();

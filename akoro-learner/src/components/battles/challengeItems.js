@@ -4,6 +4,7 @@
  *
  *   invites   GET /api/battle/my-challenges        (battle cards, battle/card.js)
  *   requests  GET /api/agent-network/challenge-requests (open / mine / joined)
+ *   series    one card per recurring series, in my-challenges (battle/series.js)
  *
  * PURE: no React, no fetch, so the shape is testable.
  *
@@ -11,6 +12,7 @@
  *     title, statusLine, from:{name, sub, initial, online, host}, sortAt, raw }
  *
  * status drives the sheet's buttons: invite · open · joined · mine · review.
+ * source picks the sheet: invite (ChallengeModal) · request · series.
  */
 
 const FORMAT_BY_TYPE = { '1v1': '1v1', classroom: 'Group', team: 'Team 2v2', open: 'Open lobby', review: 'Review', check: 'Review' };
@@ -72,15 +74,17 @@ export function fromInvite(c, now = new Date()) {
   const expires = c.expiresAt ? left(c.expiresAt, now.getTime()) : null;
   const teacher = c.hostRole === 'teacher';
   const guide = c.reviewHost === 'guide';
-  const status = isReview ? 'review' : series && c.autoJoined ? 'joined' : 'invite';
-  const statusLine = isReview
+  const status = isReview ? 'review' : series && c.mine ? 'mine' : series && c.autoJoined ? 'joined' : 'invite';
+  const statusLine = series && c.mine ? (c.lastNote ? 'Your series · last one skipped' : 'Your series · everyone is in')
+    : series && c.skippingNext ? "You're in · sitting out the next one"
+    : isReview
     ? (guide ? 'Review · with your teaching guide' : 'Review · set by your teacher')
     : series ? (c.autoJoined ? "You're in every occurrence · opt out any time" : 'Invite · recurring')
     : teacher ? 'Invite · hosted by your teacher'
     : expires ? `Invite · expires in ${expires}` : 'Invite';
   return {
     key: `b:${c.id}`,
-    source: 'invite',
+    source: c.seriesId ? 'series' : 'invite',
     status,
     format: c.daily ? 'Daily' : FORMAT_BY_TYPE[c.type] || '1v1',
     scope: scopeOf(c.reviewHost === 'guide' && c.sessionTitle ? 'session' : c.scope, c.sessionTitle || c.scopeName),
@@ -90,9 +94,11 @@ export function fromInvite(c, now = new Date()) {
     recurring: !!series,
     title: c.title || 'Battle',
     statusLine,
-    from: guide ? { name: 'Teaching guide', sub: 'Asks the questions · your protégé answers', initial: 'G', host: 'guide' }
+    from: c.seriesId && c.mine ? { name: 'You', sub: `${c.players ?? 1} in it`, initial: 'Y', host: c.hostRole === 'teacher' ? 'teacher' : 'player' }
+      : guide ? { name: 'Teaching guide', sub: 'Asks the questions · your protégé answers', initial: 'G', host: 'guide' }
       : { name: c.challenger || 'Someone', sub: teacher ? 'Teacher · hosts, doesn’t compete' : null, initial: (c.challenger || '?').trim().charAt(0).toUpperCase(), avatar: c.avatar || null, host: teacher ? 'teacher' : 'player' },
     sortAt: new Date(c.scheduledFor || c.expiresAt || 0).getTime() || Number.MAX_SAFE_INTEGER,
+    next: series && c.nextAt ? when(c.nextAt, now) : null,
     raw: c,
   };
 }

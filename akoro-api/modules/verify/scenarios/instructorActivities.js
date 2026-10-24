@@ -374,3 +374,6 @@ export const journeyBattleStage = {
     ctx.expect.eq("the draft is closed as assigned", (await draftOf(ctx, p.instructor, draftId))?.status, "assigned");
   },
 };
+
+// The recurring-battle scenario (battleSeries.js) uses the same class and subjects.
+export { battleClass, BATTLE_SUBJECTS, INSTRUCTOR as BATTLE_INSTRUCTOR };

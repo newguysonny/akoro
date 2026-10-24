@@ -26,7 +26,7 @@ is **Network**.
 | Team | 2v2, the higher team total wins | network | yes |
 | Open lobby | anyone in the course joins until full | course | yes |
 | Daily | the system's group battle, every day 19:00 Lagos, 30 seats | network | yes |
-| Review | **no opponent**: a host sets a paper, the learner's **protégé** answers, a mark sheet at the end | see below | teacher review: yes · guide review: **to build** |
+| Review | **no opponent**: a host sets a paper, the learner's **protégé** answers, a mark sheet at the end | see below | teacher review: yes · guide review: **built** (`battle/guideReview.js`; gate `battles.guide_review`) |
 
 ### 3. Timing: when it runs
 
@@ -34,7 +34,7 @@ is **Network**.
 |---|---|---|
 | Now | starts when the players are in | yes |
 | Scheduled | one start time (network up to 30 days ahead) | yes |
-| Recurring | days of the week + a time, until an end date and time | **to build** |
+| Recurring | days of the week + a time, until an end date and time | **built** for class and course battles (`battle/series.js`; gate `battles.recurring`) |
 
 Any format can be scheduled or recurring.
 
@@ -110,3 +110,11 @@ on desktop**.
 3. Recurring battles: series table, create (all scopes), occurrences from the
    deferred rows, opt-out, end; card shows "Repeats …".
 4. Verify scenarios for each; Battles tab shows occurrences like any battle.
+
+Status (2026-10-24): 1–3 built. Recurring covers class and course battles
+(teachers and students); a network challenge post doesn't repeat yet. A
+series stores the battle's settings and its members
+(`battle_series`, `battle_series_members`); an hour before each start the
+battle worker runs the same invite route with everyone already in, then
+queues the next start as a Postgres row. The Challenges tab shows one card
+per series (Skip next one · Opt out of series · End series for its creator).

@@ -60,6 +60,8 @@ const worker = new Worker("battles", async (job) => {
     case "end-battle":          return endBattle(battleId);
     case "expire-battle":       return expireBattle(battleId);
     case "refresh-leaderboard": return refreshLeaderboard(job.data.courseId, job.data.scope);
+    // A recurring series: make the battle that starts at startMs (battle/series.js).
+    case "series-occurrence":   return (await import("./series.js")).runOccurrence(job.data.seriesId, job.data.startMs);
     default: throw new Error(`Unknown action: ${action}`);
   }
 }, {

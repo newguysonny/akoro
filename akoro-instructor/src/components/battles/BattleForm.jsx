@@ -22,7 +22,12 @@ const BLANK = {
   audience: BLANK_AUDIENCE,
   totalQuestions: '15', duration: '15', xpPrize: '200', hpPerMiss: '10', minXp: '0',
   difficulty: 'intermediate', scheduledAt: '', expiresInMinutes: '60',
+  // Recurring (battle/series.js): days of the week, a time, an end date and time.
+  repeats: false, days: [], repeatTime: '16:00', repeatUntil: '',
 };
+
+const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 /**
  * BattleForm — the full battle creation form, self-contained: battle type,
@@ -113,6 +118,11 @@ export default function BattleForm({ onSubmit, onCancel, courses = [], editing =
       }
     }
     if (!form.title.trim()) return setError('Give the battle a title.');
+    if (!editing && form.repeats) {
+      if (form.kind === 'review') return setError('A study review is set once; it does not repeat.');
+      if (!form.days.length) return setError('Pick the days it repeats on.');
+      if (!form.repeatUntil) return setError('Pick when the series ends.');
+    }
     if (!editing) {
       const aud = form.audience;
       if (aud.mode === 'class' && !aud.classroomId) return setError('Pick which class this is for.');
@@ -280,8 +290,39 @@ export default function BattleForm({ onSubmit, onCancel, courses = [], editing =
             <option value="intermediate">Medium</option>
             <option value="hard">Hard</option>
           </Sel>
-          <Inp label="Schedule for (optional)" type="datetime-local" value={form.scheduledAt} onChange={e => setField('scheduledAt', e.target.value)} />
+          {!form.repeats && <Inp label="Schedule for (optional)" type="datetime-local" value={form.scheduledAt} onChange={e => setField('scheduledAt', e.target.value)} />}
         </div>
+
+        {!editing && form.kind !== 'review' && (
+          <div style={{ fontFamily: C.font }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 800, color: C.ink, cursor: 'pointer' }}>
+              <input type="checkbox" checked={form.repeats} onChange={e => setField('repeats', e.target.checked)} />
+              <Ico ti="ti-repeat" size={14} color={C.brand} /> Repeats
+            </label>
+            {form.repeats && (
+              <div style={{ marginTop: 10, padding: 12, borderRadius: 12, border: `1px solid ${C.border}`, background: C.bg }}>
+                <div style={{ display: 'flex', gap: 5, marginBottom: 10 }}>
+                  {DAY_LETTERS.map((l, d) => {
+                    const on = form.days.includes(d);
+                    return (
+                      <button key={d} type="button" aria-label={DAY_NAMES[d]} aria-pressed={on}
+                        onClick={() => setField('days', on ? form.days.filter((x) => x !== d) : [...form.days, d].sort())}
+                        style={{ flex: 1, height: 34, borderRadius: 9, cursor: 'pointer', fontFamily: C.font, fontSize: 12, fontWeight: 900,
+                          border: `1.5px solid ${on ? C.brand : C.border}`, background: on ? C.brand : C.surface, color: on ? '#fff' : C.muted }}>{l}</button>
+                    );
+                  })}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: 10 }}>
+                  <Inp label="Starts at" type="time" value={form.repeatTime} onChange={e => setField('repeatTime', e.target.value)} />
+                  <Inp label="Ends" type="datetime-local" value={form.repeatUntil} onChange={e => setField('repeatUntil', e.target.value)} />
+                </div>
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 8, lineHeight: 1.5 }}>
+                  Everyone picked is in every one automatically; a learner can skip one or opt out. Each one is set up an hour before it starts, with fresh questions.
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {error && <div style={{ fontSize: 12, color: RED, fontWeight: 700, fontFamily: C.font }}>{error}</div>}
 

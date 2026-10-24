@@ -5,7 +5,8 @@
  * not sections; filter chips narrow the same list. Tapping a card opens the
  * challenge sheet (bottom sheet on phones/tablets, dialog on desktop):
  * invitations and reviews the existing ChallengeModal (via onOpenInvite), the
- * agent network's challenge requests the RequestSheet below.
+ * agent network's challenge requests the RequestSheet below, a recurring
+ * series the SeriesSheet (skip the next one, opt out; the creator ends it).
  * reference/Akoro Battles — Model.md.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -15,6 +16,7 @@ import SheetFrame from './SheetFrame.jsx';
 import { BRAND, RED } from '../../constants.js';
 import { FILTERS, filterItems, mergeItems } from './challengeItems.js';
 import { acceptChallengeRequest, cancelChallengeRequest, fetchChallengeRequests } from '../../services/agentNetworkApi.js';
+import { apiPost } from '../../services/api.js';
 
 const NUNITO = "'Nunito',sans-serif";
 const FORMAT_ICON = { '1v1': 'ti-swords', Group: 'ti-users-group', 'Team 2v2': 'ti-users', 'Open lobby': 'ti-door-enter', Daily: 'ti-calendar-event', Review: 'ti-clipboard-check' };
@@ -144,7 +146,84 @@ function RequestSheet({ item, onClose, onChanged }) {
   );
 }
 
-export default function ChallengesList({ invites = [], onOpenInvite, onCount, onBattleCreated }) {
+const DAY_LONG = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
+
+/** The sheet for a recurring series: its rule, the next one, and Skip / Opt out (or End, for its creator). */
+function SeriesSheet({ item, onClose, onChanged }) {
+  const c = item.raw;
+  const [busy, setBusy] = useState(null);
+  const [msg, setMsg] = useState(null);
+  const [confirm, setConfirm] = useState(null);
+  const act = async (kind) => {
+    setBusy(kind);
+    try {
+      await apiPost(`/api/battle/series/${c.seriesId}/${kind}`, {});
+      setMsg(kind === 'skip' ? "You'll sit the next one out. You're still in the rest."
+        : kind === 'opt-out' ? "You've left the series. You won't be put in any more of them."
+        : 'Series ended. No more of them will be set.');
+      onChanged?.();
+    } catch (e) {
+      setMsg(e?.message || 'Could not do that.');
+    } finally { setBusy(null); setConfirm(null); }
+  };
+  const days = (c.series?.days || []).slice().sort((a, b) => a - b).map((d) => DAY_LONG[d]);
+  const until = c.series?.until ? new Date(c.series.until).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : '';
+  const tiles = [
+    { label: 'Questions', value: c.totalQuestions ?? '—' },
+    { label: 'Length', value: c.durationMin ? `${c.durationMin} min` : '—' },
+    { label: 'In it', value: c.players ?? '—' },
+  ];
+  const btn = (primary, danger) => ({ flex: 1, padding: 13, borderRadius: 14, border: primary ? 'none' : `1.5px solid ${danger ? `${RED}55` : 'var(--ak-border2)'}`, background: primary ? BRAND : 'var(--ak-surface)', color: primary ? '#fff' : danger ? RED : 'var(--ak-text-sub)', fontSize: 14, fontWeight: 900, cursor: 'pointer', fontFamily: NUNITO });
+  return (
+    <SheetFrame onClose={onClose} label={item.title}>
+      <div style={{ padding: '16px 20px 0' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '10px 12px', borderRadius: 12, background: 'rgba(245,158,11,.10)', marginBottom: 14 }}>
+          <Icon name="ti-repeat" size={20} color="#D97706" />
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 900, color: '#D97706', letterSpacing: '.04em', textTransform: 'uppercase' }}>Recurring · {item.format} · {item.scope.label}</div>
+            <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ak-text-sub)' }}>{c.mine ? 'Everyone you invited is in every one, unless they opt out.' : "You're in every one automatically. No need to accept each time."}</div>
+          </div>
+        </div>
+        <div style={{ fontSize: 17, fontWeight: 900, color: 'var(--ak-text)', margin: '2px 0 6px' }}>{item.title}</div>
+        <Fields item={item} />
+        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ak-text-sub)', marginTop: 8 }}>{[c.subject, c.topic].filter(Boolean).join(' · ')}</div>
+        <div style={{ margin: '12px 0', padding: '11px 12px', borderRadius: 12, background: 'var(--ak-bg)', border: '1px solid var(--ak-border)', fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text-sub)', lineHeight: 1.6 }}>
+          <div><b style={{ color: 'var(--ak-text)' }}>Repeats</b> {days.join(', ')} at {c.series?.time}{c.series?.tz ? ` (${c.series.tz.split('/').pop().replace(/_/g, ' ')} time)` : ''}</div>
+          {until && <div><b style={{ color: 'var(--ak-text)' }}>Ends</b> {until}</div>}
+          {item.next && <div><b style={{ color: 'var(--ak-text)' }}>Next</b> {item.next}{c.skippingNext ? ' · you are sitting this one out' : ''}</div>}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 12 }}>
+          {tiles.map((t) => (
+            <div key={t.label} style={{ background: 'var(--ak-bg)', border: '1px solid var(--ak-border)', borderRadius: 12, padding: 9, textAlign: 'center' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--ak-text-muted)' }}>{t.label}</div>
+              <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--ak-text)' }}>{t.value}</div>
+            </div>
+          ))}
+        </div>
+        {c.lastNote && <div style={{ padding: '10px 12px', borderRadius: 12, background: 'rgba(239,68,68,.06)', fontSize: 12, fontWeight: 700, color: 'var(--ak-text-sub)', lineHeight: 1.5, marginBottom: 10 }}>{c.lastNote}</div>}
+        <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ak-text-muted)', lineHeight: 1.5, marginBottom: 10 }}>Each one appears in your Battles tab an hour before it starts. Entry (coins for your agent's answers) is checked each time.</div>
+        {msg && <div style={{ fontSize: 12.5, fontWeight: 800, color: BRAND, margin: '4px 0 8px' }}>{msg}</div>}
+        {!msg && (c.mine ? (
+          <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
+            <button type="button" onClick={onClose} style={btn(false)}>Close</button>
+            {confirm === 'end'
+              ? <button type="button" disabled={!!busy} onClick={() => act('end')} style={{ ...btn(true), background: RED, flex: 1.6 }}>{busy ? '…' : 'Yes, end it'}</button>
+              : <button type="button" onClick={() => setConfirm('end')} style={{ ...btn(false, true), flex: 1.6 }}>End series</button>}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
+            <button type="button" disabled={!!busy || c.skippingNext || !c.nextAt} onClick={() => act('skip')} style={{ ...btn(false), opacity: c.skippingNext ? .5 : 1 }}>{busy === 'skip' ? '…' : 'Skip next one'}</button>
+            {confirm === 'opt-out'
+              ? <button type="button" disabled={!!busy} onClick={() => act('opt-out')} style={{ ...btn(true), background: RED }}>{busy ? '…' : 'Yes, opt out'}</button>
+              : <button type="button" onClick={() => setConfirm('opt-out')} style={btn(false, true)}>Opt out of series</button>}
+          </div>
+        ))}
+      </div>
+    </SheetFrame>
+  );
+}
+
+export default function ChallengesList({ invites = [], onOpenInvite, onCount, onBattleCreated, onSeriesChanged }) {
   const [req, setReq] = useState(null);
   const [filter, setFilter] = useState('all');
   const [open, setOpen] = useState(null);
@@ -196,7 +275,8 @@ export default function ChallengesList({ invites = [], onOpenInvite, onCount, on
           {shown.map((it) => <ChallengeCard key={it.key} item={it} onOpen={openItem} />)}
         </div>
       )}
-      {open && <RequestSheet item={open} onClose={() => setOpen(null)} onChanged={() => { load(); onBattleCreated?.(); }} />}
+      {open && open.source === 'series' && <SeriesSheet item={open} onClose={() => setOpen(null)} onChanged={() => onSeriesChanged?.()} />}
+      {open && open.source === 'request' && <RequestSheet item={open} onClose={() => setOpen(null)} onChanged={() => { load(); onBattleCreated?.(); }} />}
     </div>
   );
 }

@@ -40,6 +40,8 @@ const datetimeLocal = (iso) => {
 
 /* The draft payload, shaped for ActivityForm's `initial` — the SAME form the
    workbench renders, prefilled from what the agent prepared. */
+const localZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Africa/Lagos'; } catch { return 'Africa/Lagos'; } };
+
 function prefillFrom(payload, version = null) {
   const paper = version?.status === 'ready' ? version.paper : null;
   return {
@@ -199,7 +201,8 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
         time_limit_seconds: (parseInt(form.duration, 10) || 15) * 60,
         xp_prize: parseInt(form.xpPrize, 10) || 200,
         expires_in_minutes: parseInt(form.expiresInMinutes, 10) || 60,
-        scheduled_for: scheduledIso,
+        scheduled_for: form.repeats ? null : scheduledIso,
+        ...(form.repeats ? { repeat: { days: form.days, time: form.repeatTime, tz: localZone(), until: new Date(form.repeatUntil).toISOString() } } : {}),
         ...audienceBody(form.audience),
       });
       // The invite answers { success, data: { battle_id, invited, … } } — without battle_id the draft was closed

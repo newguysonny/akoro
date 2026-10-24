@@ -1181,7 +1181,8 @@ export default function LearnerDashboard() {
               invites={challenges.filter(c=>!acceptedIds.has(c.id))}
               onOpenInvite={setSelectedChallenge}
               onCount={setOpenRequestCount}
-              onBattleCreated={loadBattles}/>
+              onBattleCreated={loadBattles}
+              onSeriesChanged={loadBattles}/>
           )}
           {tab==="discovery" && (higherEd
             ? (discoverView==="courses"
