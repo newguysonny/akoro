@@ -255,6 +255,7 @@ export const routineLifecycle = {
   params: { instructor: { default: DEFAULT_INSTRUCTOR }, learner: { default: DEFAULT_LEARNER } },
   async run(ctx, p) {
     const teacher = await teacherOf(ctx, p.instructor);
+    await cleanSlate(ctx, teacher);
     const learner = await ctx.as(p.learner);
     const say = talk(ctx, p, teacher);
     const title = `${ctx.marker} Friday revision`;

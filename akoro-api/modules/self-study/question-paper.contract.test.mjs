@@ -252,3 +252,25 @@ test("a follow-up that makes a question harder gets it rewritten, not just new o
   assert.deepEqual(unchangedRewrites("Give question 2 5 marks.", base, base), []);
   assert.equal(unchangedRewrites("Reword Q1", base, base).length, 1);
 });
+
+test("marksOnly: a follow-up that only sets marks is read exactly; anything else goes to the writer", async () => {
+  const { marksOnly } = await import("./questionPaper.js");
+  assert.deepEqual(marksOnly("Give question 7 5 marks."), [{ n: 7, points: 5 }]);
+  assert.deepEqual(marksOnly("make Q2 and Q3 worth 4 marks each"), [{ n: 2, points: 4 }, { n: 3, points: 4 }]);
+  assert.deepEqual(marksOnly("question 5: 10 marks"), [{ n: 5, points: 10 }]);
+  assert.deepEqual(marksOnly("Set q1 to 3 marks; give question 4 2 marks"), [{ n: 1, points: 3 }, { n: 4, points: 2 }]);
+  assert.equal(marksOnly("Give question 7 5 marks and make question 2 harder"), null);
+  assert.equal(marksOnly("Make question 2 harder"), null);
+  assert.equal(marksOnly("give question 7 five marks"), null);
+});
+
+test("revisePaper: marks alone change only the marks — every question word for word, no writer call", async () => {
+  const { revisePaper } = await import("./questionPaper.js");
+  const base = { instructions: "Answer all.", questions: [{ q: "One?", max_points: 2 }, { q: "Two?", max_points: 2 }, { q: "Three?" }] };
+  let called = 0;
+  const out = await revisePaper({ chat: async () => { called++; return "{}"; }, topic: "t", request: "Give question 3 5 marks.", base });
+  assert.equal(called, 0);
+  assert.deepEqual(out.paper.questions.map((q) => [q.q, q.max_points]), [["One?", 2], ["Two?", 2], ["Three?", 5]]);
+  assert.deepEqual(out.changes, { 2: "changed" });
+  assert.equal(base.questions[2].max_points, undefined);   // the base version is untouched
+});
