@@ -31,6 +31,9 @@ export async function teacherOf(ctx, who) {
 export async function cleanSlate(ctx, teacher) {
   const n = await ctx.db.deleteOwned("activity_drafts", { ownerColumn: "created_by", ownerId: teacher.id, filters: { status: "draft" } });
   if (n) ctx.note(`cleared ${n} stale pending draft(s) left on ${teacher.username || "the test instructor"}`);
+  // Weekly routines an earlier run left active change "cancel that routine" into "which one?".
+  const r = await ctx.db.deleteOwned("draft_routines", { ownerColumn: "created_by", ownerId: teacher.id, filters: { status: "active" } }).catch(() => 0);
+  if (r) ctx.note(`cleared ${r} stale routine(s) left on ${teacher.username || "the test instructor"}`);
 }
 
 export const toolsOf = (turn) => (turn.tools || []).map((t) => t.tool);
