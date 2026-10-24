@@ -53,6 +53,8 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
   const [tab,          setTab]          = useState('watch');
   const [notice,       setNotice]       = useState(null);
   const [battleType,   setBattleType]   = useState(initialBattle?.type ?? initialBattle?.battleType ?? null);
+  // 'guide': a review the learner asked their teaching guide for (battle/guideReview.js).
+  const [reviewHost,   setReviewHost]   = useState(initialBattle?.reviewHost ?? null);
   const [verdict,      setVerdict]      = useState(null);   // Sergeant's, when the battle ends
 
   const qStartRef  = useRef(0);
@@ -86,6 +88,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
         setParticipants((st.participants || []).map(mapStateP));
         setViewerCount(st.viewer_count || 0);
         if (st.battleType) setBattleType(st.battleType);
+        if (st.reviewHost) setReviewHost(st.reviewHost);
       }
       if (lg?.logs?.length) setLog(lg.logs.map((e) => ({ msg: e.message, ts: e.created_at ? new Date(e.created_at).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '' })));
       if (qd?.questions?.length) {
@@ -179,6 +182,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
     const iv = setInterval(async () => {
       const st = await apiGet(`${B}/battles/${battleId}/state`).catch(() => null);
       if (st?.battleType) setBattleType(st.battleType);
+      if (st?.reviewHost) setReviewHost(st.reviewHost);
       if (st) { setStatus(st.status); setParticipants((st.participants || []).map(mapStateP)); if (st.viewer_count != null) setViewerCount(st.viewer_count); }
       if (!questionRef.current || (selectedRef.current != null && !revealRef.current)) {
         const qd = await apiGet(`${B}/battles/${battleId}/questions`).catch(() => null);
@@ -363,7 +367,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
                     <div style={{ flex: 1, textAlign: 'center' }}>{Bp && <><AgentPill p={Bp} big /><div style={{ color: '#fff', fontWeight: 800, fontSize: 12.5, marginTop: 6 }}>{Bp.agentName}</div></>}</div>
                   </div>
                   <div style={{ textAlign: 'center', marginTop: 14 }}>
-                    <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,.6)', marginBottom: 10 }}>{isCheck ? 'The Agent Check starts in a moment…' : 'Waiting for the battle to start…'}</div>
+                    <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,.6)', marginBottom: 10 }}>{isCheck ? (reviewHost === 'guide' ? 'Your guide’s review starts in a moment…' : 'The Agent Check starts in a moment…') : 'Waiting for the battle to start…'}</div>
                     {!isCheck && <button onClick={startBattle} style={{ padding: '10px 18px', borderRadius: 14, border: 'none', background: 'linear-gradient(135deg,#E8884A,#D97706)', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, display: 'inline-flex', alignItems: 'center', gap: 7 }}><PlayIcon size={13} color="#fff" />Start battle</button>}
                     {notice && <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,.5)', marginTop: 8 }}>{notice}</div>}
                   </div>
@@ -636,7 +640,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
             <span>·</span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><BookIcon size={11} color="rgba(255,255,255,.35)" />Your class</span>
           </div>
-          {isLive && iAmParticipant && <span style={{ fontSize: 11, fontWeight: 700, color: '#E8884A', display: 'flex', alignItems: 'center', gap: 5 }}><ZapIcon size={11} color="#E8884A" />{isCheck ? 'Agent Check — your agent is answering' : isReview ? 'Your review — your agent is answering' : 'Your agent is playing'}</span>}
+          {isLive && iAmParticipant && <span style={{ fontSize: 11, fontWeight: 700, color: '#E8884A', display: 'flex', alignItems: 'center', gap: 5 }}><ZapIcon size={11} color="#E8884A" />{isCheck ? (reviewHost === 'guide' ? 'Review with your guide — your agent is answering' : 'Agent Check — your agent is answering') : isReview ? 'Your review — your agent is answering' : 'Your agent is playing'}</span>}
         </div>
       </div>
     </div>

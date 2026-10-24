@@ -51,6 +51,7 @@ import config from "../../config/index.js";
 import { consultPeerAgents, PEER_QUESTION_MIN, PEER_QUESTION_MAX } from "./peerConsult.js";
 import { searchAgents, saveSettings as saveAgentNetworkSettings, block as blockAgent, report as reportAgent, logPastQuestions, pastQuestionSummary } from "../agent-network/network.js";
 import { challengeAgents, postChallengeRequest, searchChallengeRequests, acceptChallengeRequest, cancelChallengeRequest, rematch } from "../agent-network/challenges.js";
+import { requestGuideReview } from "../battle/guideReview.js";
 import { messageAgent, inbox as agentInbox, replyToAgent, consultOnlineAgents, inboxBrief } from "../agent-network/messaging.js";
 import {
   requestBuddy, respondBuddy, listBuddies, buddyCheckin, endBuddy, buddyBrief,
@@ -638,6 +639,19 @@ export const CHAT_TOOLS = [
     featureGate: "agent_network",
     description: "Challenge the same agents to the same battle again (a finished battle's id, e.g. from find_battles or the learner's last battle) — ONLY when the learner asks for a rematch.",
     input_schema: { type: "object", properties: { battleId: { type: "string" } }, required: ["battleId"] },
+  },
+  {
+    name: "request_guide_review",
+    description: "Ask the teaching guide for a REVIEW of what the learner taught: the guide asks questions, the learner's PROTÉGÉ answers from its notes, a mark sheet at the end (no opponent, no HP, no XP). " +
+      "A learner can never battle a teacher or the guide; this is how they get checked. Use when the learner asks to be reviewed, to have their agent tested on what they taught, or after a teaching session. " +
+      "Pass sessionId for a teaching session (from their recent sessions), otherwise subject + topic. It starts at once and is in their Battles tab.",
+    input_schema: {
+      type: "object",
+      properties: {
+        sessionId: { type: "string", description: "The teaching session to review (its id)." },
+        subject: { type: "string" }, topic: { type: "string" },
+      },
+    },
   },
   {
     name: "message_agent",
@@ -1319,7 +1333,7 @@ async function resolveLearnerSchoolContext(studentId) {
  */
 export const SIDE_EFFECT_TOOLS = ["create_task", "suggest_help", "schedule_chat_follow_up", "post_to_chat", "create_tool", "cancel_scheduled_chat_follow_up", "submit_tool_request", "prepare_activity", "revise_activity_draft",
           "create_goal", "update_goal_progress", "save_blog_draft", "publish_blog", "update_agent_network_settings", "block_agent", "log_past_question_practice",
-          "challenge_agent", "post_challenge_request", "accept_challenge_request", "cancel_challenge_request", "rematch_battle", "message_agent", "reply_to_agent", "start_study_prep_session", "cancel_study_prep_session",
+          "challenge_agent", "post_challenge_request", "accept_challenge_request", "cancel_challenge_request", "rematch_battle", "request_guide_review", "message_agent", "reply_to_agent", "start_study_prep_session", "cancel_study_prep_session",
           "consult_peer_agents", "discard_activity_draft", "schedule_activity_routine", "cancel_activity_routine", "run_teaching_tool"];
 /** The multi-action tools change things only on their writing actions. */
 export const isSideEffectingAction = (tool, input) =>
@@ -2336,6 +2350,14 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       if (!input?.battleId) return clarify("battleId", "Which battle should I rematch?");
       try { const b = await rematch(studentId, input.battleId); return { rematch: true, battleId: b.battleId, invited: b.invited.length }; }
       catch (e) { return { rematch: false, error: e.message }; }
+    }
+    case "request_guide_review": {
+      if (role === "instructor") return { error: "A guide review is for learners." };
+      if (!input?.sessionId && !input?.topic) return clarify("topic", "Which topic should the guide review? Or pick one of your teaching sessions.");
+      try {
+        const r = await requestGuideReview({ learnerId: studentId, sessionId: input.sessionId || null, subject: input.subject || null, topic: input.topic || null });
+        return { started: true, battleId: r.battleId, title: r.title, questions: r.questions, reviewsLeftToday: r.left, link: `/app?tab=battles&battle=${r.battleId}` };
+      } catch (e) { return { started: false, error: e.message }; }
     }
     case "message_agent": {
       if (role === "instructor") return { error: "The agent network is for learners." };

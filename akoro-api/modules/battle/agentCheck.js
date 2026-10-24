@@ -37,12 +37,12 @@ async function protegeOf(learnerId) {
  * Starts on its own after START_DELAY_MS, so the learner can open the arena
  * first; the learner's sockets are told to join its room.
  */
-export async function createCheckBattle({ learnerId, subject, topic, total = CHECK_DEFAULTS.QUESTIONS, studyPrepTopicId = null, mode = "diagnostic", secondsPerQuestion = CHECK_DEFAULTS.SECONDS_PER_QUESTION, basedOn = [] }) {
+export async function createCheckBattle({ learnerId, subject, topic, total = CHECK_DEFAULTS.QUESTIONS, studyPrepTopicId = null, mode = "diagnostic", secondsPerQuestion = CHECK_DEFAULTS.SECONDS_PER_QUESTION, basedOn = [], title: titleIn = null, extra = {} }) {
   const agentId = await protegeOf(learnerId);
   if (!agentId) throw fail("Create your agent first — the Agent Check is your agent answering.", 409);
   const count = Math.max(3, Math.min(10, Number(total) || CHECK_DEFAULTS.QUESTIONS));
   const seconds = Math.max(8, Math.min(60, Number(secondsPerQuestion) || CHECK_DEFAULTS.SECONDS_PER_QUESTION));
-  const title = `Agent Check${mode === "retest" ? " (retest)" : ""}: ${topic}`.slice(0, 200);
+  const title = (titleIn || `Agent Check${mode === "retest" ? " (retest)" : ""}: ${topic}`).slice(0, 200);
 
   const { data: battle, error } = await db.from("battles").insert({
     course_id: null, classroom_id: null, battle_type: "check",
@@ -54,6 +54,8 @@ export async function createCheckBattle({ learnerId, subject, topic, total = CHE
     // The platform asks (and pays for the questions); nobody "created" it.
     created_by: null,
     study_prep_topic_id: studyPrepTopicId,
+    // A guide review (battle/guideReview.js) marks itself: who asked, from which session.
+    ...extra,
   }).select().single();
   if (error) throw new Error(error.message);
 

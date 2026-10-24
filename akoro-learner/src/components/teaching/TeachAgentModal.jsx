@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { startMicCapture } from '../../utils/micCapture.js';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, STUDENT_ID } from '../../constants.js';
@@ -55,6 +56,21 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
   const [activeTab,  setActiveTab]  = useState("chat");
   const [summary,    setSummary]    = useState(null);
   const [summaryErr, setSummaryErr] = useState("");
+  // A review with the teaching guide on what was just taught (battle/guideReview.js).
+  const [review,     setReview]     = useState({ busy: false, msg: "" });
+  const navigate = useNavigate();
+  const requestReview = async () => {
+    setReview({ busy: true, msg: "" });
+    try {
+      const r = await apiPost('/api/battle/guide-reviews', sessionId ? { sessionId } : { subject: session?.subject, topic: session?.topic });
+      const id = r?.data?.battleId ?? r?.battleId;
+      if (!id) throw new Error(r?.error || 'Could not start the review.');
+      onClose?.();
+      navigate(`/app?tab=battles&battle=${id}`);
+    } catch (e) {
+      setReview({ busy: false, msg: e?.message || 'Could not start the review.' });
+    }
+  };
   const [wsReady,    setWsReady]    = useState(false);
   // Socket lifecycle for the connection chip: "connecting" | "connected" | "reconnecting"
   const [connState,  setConnState]  = useState("connecting");
@@ -884,6 +900,16 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
               <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
                 <div style={{ background:"rgba(16,185,129,.08)",border:"1px solid rgba(16,185,129,.20)",borderRadius:14,padding:"12px" }}><p style={{ fontSize:10,fontWeight:800,color:GREEN,margin:"0 0 8px",letterSpacing:.3 }}>{t('teaching.strengths')}</p>{summary.strengthAreas?.map((s,i)=><p key={i} style={{ fontSize:11.5,fontWeight:600,color:"var(--ak-success-text)",margin:"0 0 4px",lineHeight:1.4 }}>· {s}</p>)}</div>
                 <div style={{ background:"rgba(245,158,11,.08)",border:"1px solid rgba(245,158,11,.20)",borderRadius:14,padding:"12px" }}><p style={{ fontSize:10,fontWeight:800,color:GOLD,margin:"0 0 8px",letterSpacing:.3 }}>{t('teaching.gaps')}</p>{summary.gapsIdentified?.map((g,i)=><p key={i} style={{ fontSize:11.5,fontWeight:600,color:"var(--ak-warn-text)",margin:"0 0 4px",lineHeight:1.4 }}>· {g}</p>)}</div>
+              </div>
+              {/* Not a battle: you never battle the guide. It asks, your protégé answers, a mark sheet. */}
+              <div style={{ background:`${BRAND}0C`,border:`1px solid ${BRAND}26`,borderRadius:14,padding:"13px 14px",display:"flex",alignItems:"center",gap:12 }}>
+                <Icon name="ti-clipboard-check" size={22} color={BRAND}/>
+                <div style={{ flex:1,minWidth:0 }}>
+                  <p style={{ fontSize:12.5,fontWeight:900,color:"var(--ak-text)",margin:0 }}>Review with your teaching guide</p>
+                  <p style={{ fontSize:11.5,fontWeight:600,color:"var(--ak-text-sub)",margin:"2px 0 0",lineHeight:1.45 }}>Your guide asks questions on what you just taught; your protégé answers. A mark sheet, no opponent.</p>
+                  {review.msg&&<p style={{ fontSize:11.5,fontWeight:800,color:RED,margin:"6px 0 0" }}>{review.msg}</p>}
+                </div>
+                <button onClick={requestReview} disabled={review.busy} style={{ padding:"9px 14px",borderRadius:12,border:"none",background:BRAND,color:"#fff",fontSize:12.5,fontWeight:900,cursor:review.busy?"default":"pointer",opacity:review.busy?.6:1,fontFamily:"'Nunito',sans-serif",flexShrink:0 }}>{review.busy?"Starting…":"Request a review"}</button>
               </div>
               <button onClick={onClose} style={{ padding:"13px",borderRadius:14,border:"none",background:`linear-gradient(135deg,${sc},${sc}CC)`,fontSize:13,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif",marginBottom:8 }}>{t('teaching.save_close')}</button>
             </div>

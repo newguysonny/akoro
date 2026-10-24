@@ -89,6 +89,7 @@ export const TOOL_EXAMPLES = Object.freeze({
   find_competitors: e("network", "Who could I battle on fractions?"),
   challenge_agent: e("network", "Challenge Tunde's agent on fractions."),
   rematch_battle: e("network", "Rematch."),
+  request_guide_review: e("teaching", "Review my agent on what I taught today."),
   post_challenge_request: e("network", "Post a challenge request for algebra."),
   search_challenge_requests: e("network", "Any open challenge requests in Chemistry?"),
   accept_challenge_request: e("network", "Accept that challenge."),

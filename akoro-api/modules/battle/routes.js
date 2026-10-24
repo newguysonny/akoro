@@ -60,6 +60,7 @@ import { buildQuestions, perQuestionSeconds } from "./questionSource.js";
 import { InsufficientCoins } from "../../lib/coins.js";
 
 import { addLater } from "../../lib/deferredJobs.js";
+import { requestGuideReview } from "./guideReview.js";
 // ─── Lazy-load battle queue ───────────────────────────────────────────────────
 let _battleQueue = null;
 async function getBattleQueue() {
@@ -305,6 +306,26 @@ async function assignQuestions(battleId, courseId, topic, subject, difficulty, t
 // ─── CREATION ROUTES ─────────────────────────────────────────────────────────
 
 // POST /api/courses/:courseId/battles/challenge
+/**
+ * POST /api/battle/guide-reviews  { sessionId? | subject + topic }
+ * A review with the teaching guide (battle/guideReview.js): the guide asks,
+ * your protégé answers, a mark sheet. Runs at once; it is in the Battles tab.
+ */
+router.post("/guide-reviews", authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const out = await requestGuideReview({
+      learnerId: req.user.id,
+      sessionId: req.body?.sessionId || null,
+      subject: req.body?.subject || null,
+      topic: req.body?.topic || null,
+    });
+    res.status(201).json({ success: true, data: out });
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ success: false, error: e.message });
+    throw e;
+  }
+}));
+
 router.post("/courses/:courseId/battles/challenge", authenticateToken, asyncHandler(async (req, res) => {
   const { courseId } = req.params;
   const {
@@ -1818,7 +1839,7 @@ router.post("/battles/:battleId/heartbeat", authenticateToken, asyncHandler(asyn
 
 router.get("/battles/:battleId/state", authenticateToken, asyncHandler(async (req, res) => {
   const { data: battle } = await db.from("battles")
-    .select("status, total_questions, battle_type").eq("id", req.params.battleId).single();
+    .select("status, total_questions, battle_type, review_host").eq("id", req.params.battleId).single();
   if (!battle) return res.status(404).json({ error: "Battle not found" });
 
   const { data: participants } = await db.from("battle_participants")
@@ -1832,7 +1853,7 @@ router.get("/battles/:battleId/state", authenticateToken, asyncHandler(async (re
   // opened from does not always carry it — accepting an invitation opens the
   // arena with only an id and a status.
   res.json({
-    status: battle.status, battleType: battle.battle_type,
+    status: battle.status, battleType: battle.battle_type, reviewHost: battle.review_host ?? null,
     totalQuestions: battle.total_questions ?? 0,
     participants: participants ?? [], viewer_count: count ?? 0,
   });

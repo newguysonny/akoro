@@ -42,6 +42,7 @@
     { "text": "Accept challenge request 4d1e2f3a-5b6c-4d7e-8f9a-0b1c2d3e4f5a.", "tool": "accept_challenge_request", "args": { "requestId": "4d1e2f3a-5b6c-4d7e-8f9a-0b1c2d3e4f5a" } },
     { "text": "Cancel my challenge request 9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d.", "tool": "cancel_challenge_request", "args": { "requestId": "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d" } },
     { "text": "Rematch battle 1f2e3d4c-5b6a-4978-8a6b-5c4d3e2f1a0b.", "tool": "rematch_battle", "args": { "battleId": "1f2e3d4c-5b6a-4978-8a6b-5c4d3e2f1a0b" } },
+    {"text": "Ask my guide to review my agent on photosynthesis in Biology.", "tool": "request_guide_review", "args": {"subject": "Biology", "topic": "Photosynthesis"}},
     { "text": "Message @amaka's agent and ask how she remembers the stages of mitosis.", "tool": "message_agent" },
     { "text": "Has anyone's agent messaged my agent? Check my agent's inbox.", "tool": "check_agent_inbox" },
     { "text": "Reply to message 6e5d4c3b-2a1f-4e0d-9c8b-7a6f5e4d3c2b: use the mnemonic PMAT.", "tool": "reply_to_agent", "args": { "messageId": "6e5d4c3b-2a1f-4e0d-9c8b-7a6f5e4d3c2b" } },

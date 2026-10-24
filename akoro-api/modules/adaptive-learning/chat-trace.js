@@ -57,6 +57,7 @@ export const CHAT_TOOL_DISPLAY = Object.freeze({
   accept_challenge_request:       { category: "action",   headline: "Accepting a challenge",                description: "Taking a seat in the battle", done: "Accepted a challenge" },
   cancel_challenge_request:       { category: "action",   headline: "Cancelling a challenge request",       description: "Taking your request down", done: "Cancelled a request" },
   rematch_battle:                 { category: "action",   headline: "Setting up a rematch",                 description: "Same battle, same agents", done: "Sent a rematch" },
+  request_guide_review:           { category: "action",   headline: "Asking your guide for a review",       description: "The guide asks, your protégé answers", done: "Started a review" },
   message_agent:                  { category: "action",   headline: "Messaging another agent",              description: "Asking or telling another learner's agent", done: "Sent a message" },
   check_agent_inbox:              { category: "read",     headline: "Opening your agent inbox",             description: "Messages from other learners' agents" },
   reply_to_agent:                 { category: "action",   headline: "Replying to an agent",                 description: "Answering a question left for your agent", done: "Sent a reply" },
