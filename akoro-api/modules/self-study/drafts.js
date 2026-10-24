@@ -20,6 +20,7 @@
 
 import { normalizeStages } from "./journeyStages.js";
 import { saveToolDraft, reviseToolDraft, retryToolVersion } from "../teaching/toolDrafts.js";
+import { cleanReview, reviewInstruction, scheduleActivityReview } from "./activityReview.js";
 import { callAsUser } from "../tasks/tools/assign-battle.js";
 import { mergePlanItems, wantsPlanEdit } from "./planEdit.js";
 import db from "../../db.js";
@@ -721,7 +722,8 @@ export async function assignActivityDraft({ instructor, id, overrides = null }) 
   if (claimErr) throw invalid(claimErr.message, 500);
   if (!claim?.length) throw invalid("This draft was already resolved", 409);
 
-  const { version: pickedVersion, ...rest } = overrides && typeof overrides === "object" ? overrides : {};
+  // `review`: the review battle the activity comes with (self-study/activityReview.js).
+  const { version: pickedVersion, review: reviewIn = undefined, ...rest } = overrides && typeof overrides === "object" ? overrides : {};
   const payload = { ...(draft.payload || {}), ...rest };
   const type = payload.type || draft.type;
 
@@ -751,7 +753,13 @@ export async function assignActivityDraft({ instructor, id, overrides = null }) 
   }
 
   let result;
+  let review = null;
   try {
+    // The review battle: checked before anything is created, so a bad time is a clear refusal.
+    if (["assignment", "self_study", "project"].includes(type) && reviewIn !== undefined) {
+      review = cleanReview(reviewIn, { dueAt: payload.due_at ?? null });
+      if (review) payload.instructions = [payload.instructions, reviewInstruction(review.at)].filter(Boolean).join("\n\n");
+    }
     if (type === "multi_stage") {
     const stages = Array.isArray(payload.details?.stages) ? payload.details.stages.slice(0, 6) : [];
     if (!stages.length) throw invalid("The journey has no stages", 400);
@@ -803,7 +811,11 @@ export async function assignActivityDraft({ instructor, id, overrides = null }) 
     .eq("id", draft.id);
   if (error) console.warn("[drafts] assign bookkeeping failed:", error.message);
 
-  return { ...result, announce: announceFor(type) };
+  // Queue the review battle's runs (the assignment stands even if this fails: it is logged).
+  if (review) {
+    review = await scheduleActivityReview(result.assignment, review).catch((e) => { console.error("[drafts] review battle not scheduled:", e.message); return null; });
+  }
+  return { ...result, review, announce: announceFor(type) };
 }
 
 /* ── Versions: the teacher's edits and retries (the preview) ──────────── */

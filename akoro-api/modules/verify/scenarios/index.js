@@ -32,12 +32,13 @@ import { deferredRelease } from "./redisIdle.js";
 import { guideReviewRuns } from "./guideReview.js";
 import { battleSeriesRuns } from "./battleSeries.js";
 import { battleChatScenarios } from "./battleChat.js";
+import { activityReviewRuns } from "./activityReview.js";
 
 const ALL = [healthBuild, toolsCatalogue, r2Live, embeddingsLive, embeddingsCompare, searchTextFallback, scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity,
   privacyEdges, rateLimitCountedOnce, battleEntryGates, followUpDeliverIntoChat, taskDueInMinutes, noResidue,
   viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, suggestionsSurviveRefresh, studyToolRouting, untaughtFlashcards, tailoredChips, chatUploadFiled, pastPaperStructured, sortOwnFolders, readyProposal, goalWork, ideasFlow, consentsQuietBudget, instructorProactive, voiceSpeak, voiceLive, sweepStale, agentCheckBattle, agentCheckStop, classSyllabusFirst, historyPages, workflowMirror, agentWakes, replaceAndCancel, teachingHandoff, eventStream, paperStructured, ...chatToSubmissionScenarios, authoringVersionsParts, authoringDiagramsEdits, inboxOneList, quietLearningPass, plannerRichGather, proactiveInChat, readerBackend, socketSession, courseOneRecord,
   teachingToolRouting, teachingToolRuns, activityToolRouting, draftLifecycle, routineLifecycle,
-  battleFromChat, battleReviewFromChat, selfStudyFull, assignmentPreviewAssign, journeyBattleStage, ...teachingToolScenarios, teachingToolVersions, teachingToolTry, toolsAllOpen, deferredRelease, sessionReminders, guideReviewRuns, battleSeriesRuns, ...battleChatScenarios];
+  battleFromChat, battleReviewFromChat, selfStudyFull, assignmentPreviewAssign, journeyBattleStage, ...teachingToolScenarios, teachingToolVersions, teachingToolTry, toolsAllOpen, deferredRelease, sessionReminders, guideReviewRuns, battleSeriesRuns, ...battleChatScenarios, activityReviewRuns];
 
 export const SCENARIOS = Object.fromEntries(ALL.map((s) => [s.name, s]));
 
@@ -67,7 +68,7 @@ export const SUITES = {
   // Redis idle cost: far-off jobs in Postgres, one background worker, drained old queues.
   redis: ["ops.deferred_release"],
   // Reviews with the teaching guide (and, next, recurring battles).
-  "battle-model": ["battles.guide_review", "battles.recurring"],
+  "battle-model": ["battles.guide_review", "battles.recurring", "activity.review_battle"],
   "battle-chat": ["battles.chat_network", "battles.chat_posts", "battles.chat_class", "battles.chat_instructor"],
   curriculum: ["curriculum.syllabus_coverage"],
   // The instructor's agent tools from chat: teaching tools (Library) and activity tools (drafts, routines, results).

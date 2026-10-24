@@ -205,6 +205,7 @@
     "2026-guide-review.sql",
     "2026-battle-series.sql",
     "2026-battle-series-network.sql",
+    "2026-activity-review.sql",
     "2026-follow-ups-into-existing-chat.sql",
     "2026-verify-gate.sql",
     "2026-self-tooling-grants.sql",

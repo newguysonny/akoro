@@ -46,7 +46,7 @@ export default function ReviewBattleSettings({ value = REVIEW_DEFAULT, onChange,
           </Field>
           <Field inline label="Questions" hint="Written from the topic, concepts and objectives.">
             <select value={value.questions} onChange={(e) => set({ questions: Number(e.target.value) })} aria-label="Review questions" style={{ ...inputStyle, width: 90 }}>
-              {[5, 8, 10, 12, 15].map((n) => <option key={n} value={n}>{n}</option>)}
+              {[5, 8, 10].map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
           </Field>
           <div style={{ display: 'flex', gap: 8, padding: '9px 11px', borderRadius: 10, background: C.tagBg, border: `1px solid ${C.borderSoft}`, fontSize: 11.5, color: C.muted, lineHeight: 1.5 }}>
