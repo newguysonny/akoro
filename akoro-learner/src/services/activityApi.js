@@ -177,6 +177,20 @@ export async function downloadMySubmissionPdf(targetId, title, { marked = false 
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
+/* A finished battle's questions, options and answers as one PDF (the Questions tab's menu). */
+export async function downloadBattleQuestionsPdf(battleId, title) {
+  const r = await authFetch(`${API}/api/battle/battles/${battleId}/questions.pdf`);
+  if (!r.ok) throw new Error(r.status === 409 ? 'The questions can be downloaded once the battle has finished.' : 'Could not get the PDF — try again in a moment.');
+  const url = URL.createObjectURL(await r.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${String(title || 'battle').replace(/[^\w .-]/g, '').trim() || 'battle'} - questions.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
 /* My submission as the paper — the server's template, ready to show or print. */
 export async function fetchMySubmissionPaper(targetId) {
   const r = await authFetch(`${API}/api/self-study/targets/${targetId}/submission.html?embed=1`);

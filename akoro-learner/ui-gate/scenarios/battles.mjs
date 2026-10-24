@@ -41,4 +41,53 @@ export const scenarios = [
       t.check('no page errors', errors.length === 0, { actual: errors.slice(0, 3) });
     },
   },
+  {
+    name: 'battles.questions_menu',
+    description: 'A finished battle\'s Questions tab: ALL QUESTIONS, the ⋮ menu (Download as PDF, Create activity and Agent session marked Soon) and the PDF download. A fixture battle, intercepted in the browser — nothing is created.',
+    async run(t) {
+      const { page } = t;
+      const errors = [];
+      page.on('pageerror', (e) => errors.push(e.message));
+      const ID = '00000000-0000-4000-8000-0000000fa4e0';
+      const qs = [
+        ['Where in the leaf does photosynthesis happen?', ['Roots', 'Chloroplasts', 'Stem', 'Flowers'], 1],
+        ['Which gas do plants give off in photosynthesis?', ['Oxygen', 'Nitrogen', 'Helium', 'Argon'], 0],
+        ['Why are leaves green?', ['They absorb green light', 'Chlorophyll reflects green light', 'Water is green', 'Glucose is green'], 1],
+      ];
+      const fixtures = {
+        state: { status: 'completed', battleType: 'check', reviewHost: 'teacher', participants: [], viewer_count: 0 },
+        questions: { total: qs.length, questions: qs.map(([text, options, c], i) => ({ questionOrder: i + 1, questionText: text, options, topic: 'Photosynthesis', correctAnswerIndex: c, correctAnswer: options[c], myAnswer: c, isCorrect: true, xpGained: 0 })) },
+        log: { logs: [] },
+        results: { type: 'check', score: { correct: 3, total: 3, wrong: 0, unanswered: 0, guessed: 0, percent: 100 }, markSheet: [], learner: null, battle: { id: ID } },
+      };
+      let pdfAsked = false;
+      await page.route(new RegExp(`/api/battle/battles/${ID}/(state|questions|log|results|questions\\.pdf)(\\?.*)?$`), (route) => {
+        const what = new URL(route.request().url()).pathname.split('/').pop();
+        if (what === 'questions.pdf') { pdfAsked = true; return route.fulfill({ status: 200, contentType: 'application/pdf', body: '%PDF-1.4\n%fixture\n' }); }
+        return route.fulfill({ json: fixtures[what] });
+      });
+      await page.goto(`${t.app}/app?tab=battles&battle=${ID}`, { waitUntil: 'domcontentloaded' });
+      const tab = page.getByRole('button', { name: /^Questions$/ });
+      t.check('the finished battle opens', await tab.first().waitFor({ timeout: 25_000 }).then(() => true, () => false));
+      await tab.first().click();
+      t.check('ALL QUESTIONS, with the count', await page.getByText('ALL QUESTIONS').first().waitFor({ timeout: 8_000 }).then(() => true, () => false));
+      const menuBtn = page.getByRole('button', { name: 'Question options' });
+      t.check('the ⋮ button sits beside the count', await menuBtn.first().isVisible().catch(() => false));
+      await t.shot('questions-tab');
+      await menuBtn.first().click();
+      const menu = page.getByRole('menu');
+      t.check('it opens the menu', await menu.first().waitFor({ timeout: 5_000 }).then(() => true, () => false));
+      const items = (await page.getByRole('menuitem').allInnerTexts()).map((x) => x.replace(/\s+/g, ' ').trim());
+      t.check('three options: Download as PDF, Create activity (Soon), Agent session (Soon)',
+        items.length === 3 && /^Download as PDF/.test(items[0]) && /^Create activity\s*Soon$/.test(items[1]) && /^Agent session\s*Soon$/.test(items[2]), { actual: items });
+      t.check('the coming-soon ones are disabled', await page.getByRole('menuitem', { name: /Create activity/ }).isDisabled() && await page.getByRole('menuitem', { name: /Agent session/ }).isDisabled());
+      await t.shot('questions-menu');
+      const dl = page.waitForEvent('download', { timeout: 15_000 }).catch(() => null);
+      await page.getByRole('menuitem', { name: /Download as PDF/ }).click();
+      const file = await dl;
+      t.check('Download as PDF asks the API and saves a .pdf', pdfAsked && !!file && /questions\.pdf$/.test(file.suggestedFilename()), { pdfAsked, name: file?.suggestedFilename() });
+      t.check('the menu closes after the download', await menu.first().waitFor({ state: 'detached', timeout: 5_000 }).then(() => true, () => false));
+      t.check('no page errors', errors.length === 0, { actual: errors.slice(0, 3) });
+    },
+  },
 ];

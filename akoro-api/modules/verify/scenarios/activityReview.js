@@ -185,6 +185,10 @@ export const activityReviewPlay = {
       ctx.expect.ok(`…as their own mark sheet`, r.body?.learner?.userId === l.id && (r.body?.score?.total ?? 0) >= 3 && Array.isArray(r.body?.markSheet) && r.body.markSheet.length === r.body.score.total, { learner: r.body?.learner, score: r.body?.score, keys: Object.keys(r.body || {}) });
     }
 
+    // The Questions tab's "Download as PDF": the finished battle's questions as a PDF.
+    const pdf = await ctx.http({ as: `@${taught.username}`, path: `/api/battle/battles/${battleId}/questions.pdf` });
+    ctx.expect.ok("the questions download as a PDF once it has finished", pdf.status === 200 && /application\/pdf/.test(pdf.headers["content-type"] || "") && String(pdf.body).startsWith("%PDF-"), { status: pdf.status, type: pdf.headers["content-type"] });
+
     const v = await ctx.http({ as: BATTLE_INSTRUCTOR, path: `/api/self-study/${assignmentId}/reviews` });
     const reviews = v.body?.data?.reviews || [];
     ctx.expect.ok("the instructor sees both done, each with a mark", reviews.length === learners.length && reviews.every((r) => r.status === "done" && r.total >= 3 && r.correct != null), reviews);

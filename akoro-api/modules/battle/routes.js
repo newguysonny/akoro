@@ -2108,6 +2108,25 @@ router.get("/battles/:battleId/results", authenticateToken, asyncHandler(async (
  * preserves the client's socket-drop fallback, which looks for the first
  * question with no revealed key and finds it as the last item here.
  */
+/**
+ * GET /api/battle/battles/:battleId/questions.pdf — a FINISHED battle's
+ * questions, options, answers and explanations as one PDF (the Questions
+ * tab's "Download as PDF"). Before the end the answers aren't everyone's yet.
+ */
+router.get("/battles/:battleId/questions.pdf", authenticateToken, asyncHandler(async (req, res) => {
+  const { data: battle } = await db.from("battles").select("id, title, subject, topic, status, actual_end").eq("id", req.params.battleId).maybeSingle();
+  if (!battle) return res.status(404).json({ error: "Battle not found" });
+  if (battle.status !== "completed") return res.status(409).json({ code: "NOT_FINISHED", error: "The questions can be downloaded once the battle has finished." });
+  const { data: questions } = await db.from("battle_questions")
+    .select("question_order, question_text, options_json, correct_answer_index, explanation, topic").eq("battle_id", battle.id).order("question_order");
+  const { buildQuestionsPdf } = await import("./questionsPdf.js");
+  const bytes = await buildQuestionsPdf({ battle, questions: questions ?? [] });
+  const name = `${String(battle.title || "battle").replace(/[^\w .-]/g, "").trim() || "battle"} - questions.pdf`;
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+  res.send(Buffer.from(bytes));
+}));
+
 router.get("/battles/:battleId/questions", authenticateToken, asyncHandler(async (req, res) => {
   const { data: battle } = await db.from("battles").select("status, total_questions").eq("id", req.params.battleId).single();
   if (!battle) return res.status(404).json({ error: "Battle not found" });
