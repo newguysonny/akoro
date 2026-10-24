@@ -1,7 +1,8 @@
 /*
- * ReviewBattleCard — an activity's review battle on its detail page: when it
- * runs, and each learner's review (waiting · sent to their Challenges ·
- * running · done, with the mark · missed).
+ * ReviewBattleCard — an activity's review battle on its detail page: one
+ * class battle, sent to every learner's Challenges; when it runs, and each
+ * learner's state (sent · accepted · running · done with the mark · missed),
+ * plus the class average. The class ranking is the Ranking page's.
  * Not graded. GET /api/self-study/:id/reviews (self-study/activityReview.js).
  */
 import { useEffect, useState } from 'react';
@@ -20,12 +21,15 @@ export default function ReviewBattleCard({ activityId }) {
   }, [activityId]);
   if (!data?.review) return null;
   const done = data.reviews.filter((r) => r.status === 'done');
+  const accepted = data.reviews.filter((r) => ['accepted', 'running', 'done'].includes(r.status)).length;
   const avg = done.length ? Math.round(done.reduce((n, r) => n + (r.total ? (r.correct / r.total) * 100 : 0), 0) / done.length) : null;
   const chip = (r) => (r.status === 'done'
     ? { label: r.total ? `${r.correct}/${r.total}` : 'Done', color: GREEN, bg: '#DCFCE7' }
     : r.status === 'running' ? { label: 'Running', color: BLUE, bg: '#EFF6FF' }
     : r.status === 'sent' ? { label: 'In Challenges', color: '#7C3AED', bg: '#F3E8FF' }
+    : r.status === 'accepted' ? { label: 'Accepted', color: '#047857', bg: '#ECFDF5' }
     : r.status === 'missed' ? { label: 'Missed', color: '#B45309', bg: '#FEF3C7' }
+    : r.status === 'no_agent' ? { label: 'No agent', color: C.muted, bg: C.bg }
     : { label: 'Waiting', color: C.muted, bg: C.bg });
   return (
     <div data-review-card="" style={{ marginTop: 14, fontFamily: C.font }}>
@@ -34,7 +38,8 @@ export default function ReviewBattleCard({ activityId }) {
         <div style={{ fontSize: 11, fontWeight: 700, color: C.muted }}>{fmt(data.review.at)} · {data.review.questions} questions · not graded</div>
       </div>
       <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 8, lineHeight: 1.5 }}>
-        Sent to each learner as a challenge in their Challenges list; their protégé answers what they taught it. Learners who hadn't submitted by then are reviewed at the due date.
+        One battle for the whole class, sent to each learner's Challenges. It starts {fmt(data.startsAt || data.review.at)} with everyone who accepted; each protégé answers what its learner taught it.
+        {accepted > 0 && data.battleStatus !== 'completed' && <> <b style={{ color: C.ink }}>{accepted}</b> of {data.reviews.length} in.</>}
         {avg != null && <> Average so far: <b style={{ color: C.ink }}>{avg}%</b> ({done.length} done).</>}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 260, overflowY: 'auto' }}>

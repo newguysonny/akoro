@@ -2001,8 +2001,10 @@ router.get("/battles/:battleId/results", authenticateToken, asyncHandler(async (
   // actively misleading.
   // An Agent Check (D45) is a mark sheet too: one seat, no winner.
   if (isMarkSheet(battle.battle_type)) {
-    const learner = scoreboard[0] ?? null;
-    const seat = (participants ?? []).find((p) => p.role !== "teacher");
+    // A class review has a seat per learner: each sees their own sheet (anyone else, the first).
+    const seat = (participants ?? []).find((p) => p.role !== "teacher" && p.user_id === req.user.id)
+      ?? (participants ?? []).find((p) => p.role !== "teacher");
+    const learner = scoreboard.find((r) => r.userId === seat?.user_id) ?? scoreboard[0] ?? null;
 
     const { data: questions } = await db.from("battle_questions")
       .select("*").eq("battle_id", battle.id).order("question_order");

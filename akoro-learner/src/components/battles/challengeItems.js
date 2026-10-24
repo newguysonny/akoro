@@ -78,7 +78,7 @@ export function fromInvite(c, now = new Date()) {
   const statusLine = series && c.mine ? (c.lastNote ? 'Your series · last one skipped' : c.post ? 'Your recurring post · open to anyone' : 'Your series · everyone is in')
     : series && c.skippingNext ? "You're in · sitting out the next one"
     : isReview
-    ? (guide ? 'Review · with your teaching guide' : 'Review · set by your teacher')
+    ? (guide ? 'Review · with your teaching guide' : (c.maxParticipants ?? 1) > 1 ? 'Class review · set by your teacher' : 'Review · set by your teacher')
     : series ? (c.autoJoined ? "You're in every occurrence · opt out any time" : 'Invite · recurring')
     : teacher ? 'Invite · hosted by your teacher'
     : expires ? `Invite · expires in ${expires}` : 'Invite';

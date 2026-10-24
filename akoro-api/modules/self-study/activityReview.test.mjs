@@ -1,10 +1,10 @@
-// node --test modules/self-study/activityReview.test.mjs — an activity's review battle: when it runs, who it reviews.
+// node --test modules/self-study/activityReview.test.mjs — an activity's review battle: one class battle, sent as a challenge.
 import "../../test-env.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const { cleanReview, reviewRuns, reviewInstruction, dueForReview, reviewStatus, reviewCloses, REVIEW_LIMITS } = await import("./activityReview.js");
+const { cleanReview, reviewInstruction, reviewStatus, REVIEW_LIMITS } = await import("./activityReview.js");
 const NOW = Date.parse("2026-10-24T10:00:00Z");
 
 test("cleanReview: off, at the instructor's time, else the due date; questions clamped; a past or missing time refuses", () => {
@@ -17,46 +17,30 @@ test("cleanReview: off, at the instructor's time, else the due date; questions c
   assert.throws(() => cleanReview({ on: true, at: "2026-10-01T10:00:00Z" }, { now: NOW }), /has passed/);
 });
 
-test("reviewRuns: submitters at the review time, everyone left at the due date; one run when the due date isn't later", () => {
-  assert.deepEqual(reviewRuns({ at: "2026-10-26T15:00:00Z", dueAt: "2026-10-28T16:00:00Z" }).map((r) => r.who), ["submitted", "all"]);
-  assert.deepEqual(reviewRuns({ at: "2026-10-26T15:00:00Z", dueAt: "2026-10-25T16:00:00Z" }).map((r) => r.who), ["all"]);
-  assert.deepEqual(reviewRuns({ at: "2026-10-26T15:00:00Z" }).map((r) => r.who), ["all"]);
-});
-
-test("dueForReview: once per learner; 'submitted' only those who handed in", () => {
-  const targets = [
-    { student_id: "a", status: "complete" }, { student_id: "b", status: "started" },
-    { student_id: "c", status: "assigned", submission: { submittedAt: "x" } }, { student_id: "d", status: "complete", review_battle_id: "r1" },
-  ];
-  assert.deepEqual(dueForReview(targets, "submitted"), ["a", "c"]);
-  assert.deepEqual(dueForReview(targets, "all"), ["a", "b", "c"]);
-});
-
-test("the instruction line, and the wiring: assign keeps it, the worker runs it", () => {
-  assert.match(reviewInstruction("2026-10-26T15:00:00Z"), /^After you submit, teach your agent this topic: your review battle is on Mon,? 26 Oct, 4:00 pm\.$/);
+test("the instruction line, and the wiring: assign keeps it and sends it now; one class battle at the review time", () => {
+  assert.match(reviewInstruction("2026-10-26T15:00:00Z"), /^After you submit, teach your agent this topic: your class review battle is on Mon,? 26 Oct, 4:00 pm\. Accept it in your Challenges before it starts\.$/);
   const drafts = readFileSync(new URL("./drafts.js", import.meta.url), "utf8");
   assert.match(drafts, /review = cleanReview\(reviewIn, \{ dueAt: payload\.due_at \?\? null \}\)/);
   assert.match(drafts, /await scheduleActivityReview\(result\.assignment, review\)/);
   const worker = readFileSync(new URL("../battle/worker.js", import.meta.url), "utf8");
-  assert.match(worker, /case "activity-review":/);
-});
-
-test("reviewStatus: sent to Challenges until accepted; running; done; missed when declined or expired", () => {
-  const t = Date.parse("2026-10-26T12:00:00Z");
-  assert.equal(reviewStatus(null, null, t), "waiting");
-  assert.equal(reviewStatus({ status: "lobby", expires_at: "2026-10-30T00:00:00Z" }, { joined_at: null }, t), "sent");
-  assert.equal(reviewStatus({ status: "lobby", expires_at: "2026-10-20T00:00:00Z" }, { joined_at: null }, t), "missed");
-  assert.equal(reviewStatus({ status: "lobby" }, { joined_at: "x" }, t), "running");
-  assert.equal(reviewStatus({ status: "live" }, { joined_at: "x" }, t), "running");
-  assert.equal(reviewStatus({ status: "cancelled" }, { declined_at: "x" }, t), "missed");
-  assert.equal(reviewStatus({ status: "completed" }, { joined_at: "x" }, t), "done");
+  assert.match(worker, /case "activity-review":.*runActivityReview\(job\.data\.assignmentId\)/);
   const src = readFileSync(new URL("./activityReview.js", import.meta.url), "utf8");
-  assert.match(src, /invite: true, inviteUntil: reviewCloses\(a\.due_at\)/);
+  assert.match(src, /delay: 0, jobId: `activity-review-\$\{assignment\.id\}`/);
+  assert.match(src, /learnerIds, startsAt: at,/);
+  const check = readFileSync(new URL("../battle/agentCheck.js", import.meta.url), "utf8");
+  assert.match(check, /joined_at: group \? null : now\(\)/);
+  assert.match(check, /expires_at: new Date\(startMs \?\? Date\.now\(\) \+ 3600_000\)/);
 });
 
-test("reviewCloses: at the due date; a day when it's made at (or after) the due date, or there is none", () => {
-  const t = Date.parse("2026-10-26T12:00:00Z");
-  assert.equal(reviewCloses("2026-10-28T16:00:00Z", t), Date.parse("2026-10-28T16:00:00Z"));
-  assert.equal(reviewCloses("2026-10-26T12:00:00Z", t), t + 86400_000);
-  assert.equal(reviewCloses(null, t), t + 86400_000);
+test("reviewStatus: sent until accepted, accepted until it starts; running; done; missed when declined or not accepted by the start", () => {
+  assert.equal(reviewStatus(null, null), "waiting");
+  assert.equal(reviewStatus({ status: "scheduled" }, null), "no_agent");
+  assert.equal(reviewStatus({ status: "scheduled" }, { joined_at: null }), "sent");
+  assert.equal(reviewStatus({ status: "scheduled" }, { joined_at: "x" }), "accepted");
+  assert.equal(reviewStatus({ status: "scheduled" }, { declined_at: "x" }), "missed");
+  assert.equal(reviewStatus({ status: "live" }, { joined_at: "x" }), "running");
+  assert.equal(reviewStatus({ status: "live" }, null, { sent: true }), "missed");          // the start dropped the unanswered seat
+  assert.equal(reviewStatus({ status: "completed" }, { joined_at: "x" }), "done");
+  assert.equal(reviewStatus({ status: "completed" }, null, { sent: true }), "missed");
+  assert.equal(reviewStatus({ status: "cancelled" }, { joined_at: null }), "missed");
 });

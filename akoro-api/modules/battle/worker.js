@@ -63,7 +63,7 @@ const worker = new Worker("battles", async (job) => {
     // A recurring series: make the battle that starts at startMs (battle/series.js).
     case "series-occurrence":   return (await import("./series.js")).runOccurrence(job.data.seriesId, job.data.startMs);
     // An activity's review battle: each learner's protégé reviewed (self-study/activityReview.js).
-    case "activity-review":     return (await import("../self-study/activityReview.js")).runActivityReview(job.data.assignmentId, job.data.who);
+    case "activity-review":     return (await import("../self-study/activityReview.js")).runActivityReview(job.data.assignmentId);
     default: throw new Error(`Unknown action: ${action}`);
   }
 }, {
@@ -215,6 +215,8 @@ async function startBattle(battleId) {
   await appendLog(battleId, "battle_start",
     battle.battle_type === "review"
       ? `Study review started — ${competing.length} learner working through the questions.`
+      : battle.battle_type === "check" && competing.length > 1
+        ? `Class review started — ${competing.length} agents answer from what their learners taught them; ${JUDGE.name} judges.`
       : battle.battle_type === "check"
         ? `Agent Check started — ${JUDGE.name} judges, and your agent answers only from what you taught it.`
         : `Battle started! ${competing.length} agents competing.`);

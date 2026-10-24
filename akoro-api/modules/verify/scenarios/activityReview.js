@@ -1,21 +1,22 @@
 /**
  * An activity's review battle (reference/Akoro Activity + Review — Plan.md):
  * a self study assigned from its draft with the review on; the review is kept
- * on the activity, the instructions gain the line, the runs wait in Postgres;
- * a run makes each learner's review (an Agent Check hosted by the teacher,
- * linked to the activity) once, SENT AS A CHALLENGE: it shows in the
- * learner's Challenges list and waits for them; accepting starts it; the
- * instructor's view lists them (sent, then running).
+ * on the activity, the instructions gain the line, and ONE class review battle
+ * is sent: a teacher-hosted Agent Check with a seat for each learner, in their
+ * Challenges list until the review time, when it starts with whoever accepted.
+ * Accepting holds the seat (it doesn't start early); declining is a miss; the
+ * instructor's view follows each learner.
  *
- * The run is made in-process (runActivityReview, what the battle worker runs
- * at the review time), so the gate needn't wait for the clock.
+ * The send is made in-process (runActivityReview, what the battle worker runs
+ * on assign), so the gate needn't wait for the worker; it never waits for the
+ * start (a day away).
  */
 import { battleClass, BATTLE_INSTRUCTOR } from "./instructorActivities.js";
 import { teacherOf, cleanSlate } from "./instructorTools.js";
 
 export const activityReviewRuns = {
   name: "activity.review_battle", area: "activities", risk: "write", regression: false, timeoutMs: 300_000,
-  description: "A self study assigned with its review battle: kept on the activity, the instruction line added, runs queued at the review time and the due date; a run reviews each learner once (a teacher-hosted Agent Check); the instructor's view lists them.",
+  description: "A self study assigned with its review battle: kept on the activity, the instruction line added, one class review battle sent to every learner's Challenges, starting at the review time; accept holds a seat, decline is a miss; the instructor's view follows each learner.",
   async run(ctx) {
     const probe = await ctx.db.probe("edu.self_study_targets", "id, review_battle_id");
     if (!probe.ok) ctx.expect.blocked(`no review_battle_id yet (migration 2026-activity-review.sql): ${probe.error}`);
@@ -46,52 +47,57 @@ export const activityReviewRuns = {
     ctx.cleanup(async () => {
       const { data: bs } = await db.from("battles").select("id").eq("activity_assignment_id", assignmentId);
       const ids = (bs || []).map((b) => b.id);
+      for (const id of ids) await db.schema("edu").from("deferred_jobs").delete().eq("job_key", `start-${id}`);
       if (ids.length) { await db.from("notifications").delete().in("related_id", ids); await db.from("battles").delete().in("id", ids); }
-      await db.schema("edu").from("deferred_jobs").delete().like("job_key", `activity-review-${assignmentId}-%`);
+      await db.from("notifications").delete().eq("related_id", assignmentId);
+      await db.schema("edu").from("deferred_jobs").delete().like("job_key", `activity-review-${assignmentId}%`);
       await db.schema("edu").from("self_study_targets").delete().eq("assignment_id", assignmentId);
       await db.schema("edu").from("self_study_assignments").delete().eq("id", assignmentId);
     });
 
     const [a] = await ctx.db.rows("edu.self_study_assignments", { id: assignmentId }, { columns: "details, instructions, due_at" });
     ctx.expect.eq("the review is kept on the activity", [a?.details?.review?.on, a?.details?.review?.questions, new Date(a?.details?.review?.at).getTime()], [true, 5, new Date(at).getTime()]);
-    ctx.expect.ok("the learners' instructions gain the line", /After you submit, teach your agent this topic: your review battle is on/.test(a?.instructions || ""), a?.instructions);
-    const waits = await ctx.db.rows("edu.deferred_jobs", { job_key: { like: `activity-review-${assignmentId}-%` } }, { columns: "job_key, due_at" });
-    ctx.expect.eq("two runs wait in Postgres: the review time (submitters) and the due date (everyone left)", waits.map((w) => w.job_key.split("-").pop()).sort(), ["all", "submitted"]);
+    ctx.expect.ok("the learners' instructions gain the line", /your class review battle is on .+ Accept it in your Challenges before it starts\./.test(a?.instructions || ""), a?.instructions);
 
-    // Nobody has submitted: the review-time run reviews nobody; the due-date run reviews everyone.
-    const first = await runActivityReview(assignmentId, "submitted");
-    ctx.expect.eq("at the review time, nobody had submitted: no reviews", first.reviewed, 0);
-    const second = await runActivityReview(assignmentId, "all");
-    if (second.reviewed === 0 && second.skipped) ctx.expect.blocked(`no review could be made (${second.skipped} skipped — see the logs: agents or question writing)`);
-    ctx.expect.eq("at the due date, each learner is reviewed", second.reviewed, learners.length);
+    // The send (the worker runs it on assign; here in-process, so a racing worker run is fine: once per activity).
+    const sent = await runActivityReview(assignmentId);
+    const battleId = sent.battleId;
+    if (!battleId && sent.skipped) ctx.expect.blocked(`the class review wasn't sent: ${sent.skipped}`);
+    ctx.expect.ok("one class review is sent to every learner (or was, by the worker)", sent.sent === learners.length || sent.skipped === "already sent", sent);
+    const again = await runActivityReview(assignmentId);
+    ctx.expect.eq("a repeat run sends nothing twice", [again.sent, again.battleId], [0, battleId]);
+
+    const battles = await ctx.db.rows("battles", { activity_assignment_id: assignmentId }, { columns: "id, battle_type, review_host, xp_prize, status, scheduled_start, expires_at, max_participants" });
+    const b = battles[0];
+    ctx.expect.ok("ONE battle for the class: a teacher-hosted Agent Check, no prize, a seat each", battles.length === 1 && b.battle_type === "check" && b.review_host === "teacher" && b.xp_prize === 0 && b.max_participants === learners.length, battles);
+    ctx.expect.ok("it starts at the review time, and the accept window closes then", b?.status === "scheduled" && Math.abs(Date.parse(b.scheduled_start) - Date.parse(at)) < 1000 && Math.abs(Date.parse(b.expires_at) - Date.parse(at)) < 1000, b);
+    const seats = await ctx.db.rows("battle_participants", { battle_id: battleId }, { columns: "user_id, role, joined_at" });
+    ctx.expect.ok("every learner has an unanswered seat", seats.length === learners.length && seats.every((s) => s.role === "participant" && !s.joined_at) && learners.every((l) => seats.some((s) => s.user_id === l.id)), seats);
     const targets = await ctx.db.rows("edu.self_study_targets", { assignment_id: assignmentId }, { columns: "student_id, review_battle_id" });
-    ctx.expect.ok("each learner's review is recorded", targets.every((t) => !!t.review_battle_id), targets);
-    const battles = await ctx.db.rows("battles", { activity_assignment_id: assignmentId }, { columns: "id, battle_type, review_host, xp_prize, title" });
-    ctx.expect.ok("each is an Agent Check hosted by the teacher, linked to the activity, with no prize", battles.length === learners.length && battles.every((b) => b.battle_type === "check" && b.review_host === "teacher" && b.xp_prize === 0), battles);
-    const third = await runActivityReview(assignmentId, "all");
-    ctx.expect.eq("a repeat run reviews nobody twice", third.reviewed, 0);
+    ctx.expect.ok("each learner's review is recorded as the class battle", targets.length === learners.length && targets.every((t) => t.review_battle_id === battleId), targets);
 
-    // Sent as a challenge: waiting in the learner's Challenges, not started on its own.
-    const mine = battles.find((b) => b.id === targets.find((t) => t.student_id === learners[0].id)?.review_battle_id);
-    const seat = await ctx.db.rows("battle_participants", { battle_id: mine?.id }, { columns: "role, joined_at" });
-    ctx.expect.ok("the review waits for the learner (an unanswered seat, nothing started)", seat.length === 1 && seat[0].role === "participant" && !seat[0].joined_at, seat);
-    const list = await ctx.http({ as: `@${learners[0].username}`, path: "/api/battle/my-challenges" });
-    const [mb] = await ctx.db.rows("battles", { id: mine?.id }, { columns: "expires_at" });
-    ctx.expect.ok("it stays in Challenges until the activity's due date (made at the due date: a day)", !!mb && Math.abs(Date.parse(mb.expires_at) - Date.now() - 86400_000) < 600_000 || Math.abs(Date.parse(mb?.expires_at) - Date.parse(due)) < 1000, { expires_at: mb?.expires_at, due });
-    ctx.expect.status("the learner's Challenges list answers", list, 200);
-    const card = (list.body?.data || []).find((c) => c.id === mine?.id);
-    ctx.expect.ok("…and shows the review, set by the teacher, at no coin cost", !!card && card.type === "check" && card.reviewHost === "teacher" && card.hostRole === "teacher" && card.entry?.coins === 0, card || (list.body?.data || []).map((c) => c.title));
+    // In each learner's Challenges list.
+    for (const l of learners) {
+      const list = await ctx.http({ as: `@${l.username}`, path: "/api/battle/my-challenges" });
+      const card = (list.body?.data || []).find((c) => c.id === battleId);
+      ctx.expect.ok(`@${l.username}'s Challenges list shows the class review, set by the teacher, at no coin cost`, !!card && card.battleType === "review" && card.reviewHost === "teacher" && card.hostRole === "teacher" && card.entry?.coins === 0 && card.maxParticipants === learners.length, card || (list.body?.data || []).map((c) => c.title));
+    }
+    const statuses = async () => {
+      const v = await ctx.http({ as: BATTLE_INSTRUCTOR, path: `/api/self-study/${assignmentId}/reviews` });
+      return Object.fromEntries((v.body?.data?.reviews || []).map((r) => [r.learnerId, r.status]));
+    };
+    ctx.expect.eq("the instructor sees everyone sent", Object.values(await statuses()), learners.map(() => "sent"));
 
-    const view = await ctx.http({ as: BATTLE_INSTRUCTOR, path: `/api/self-study/${assignmentId}/reviews` });
-    ctx.expect.status("the instructor's view answers", view, 200);
-    ctx.expect.eq("…listing each learner's review as sent to their Challenges", (view.body?.data?.reviews || []).filter((r) => r.battleId).map((r) => r.status), learners.map(() => "sent"));
-
-    // The learner accepts it: it starts (a review is one learner; it isn't cancelled for having one player).
-    const acc = await ctx.http({ as: `@${learners[0].username}`, method: "POST", path: `/api/battle/challenges/${mine?.id}/accept` });
-    ctx.expect.status("the learner accepts the review", acc, 200);
-    const [after] = await ctx.db.rows("battles", { id: mine?.id }, { columns: "status" });
-    ctx.expect.ok("…and it isn't cancelled", after && after.status !== "cancelled", after);
-    const view2 = await ctx.http({ as: BATTLE_INSTRUCTOR, path: `/api/self-study/${assignmentId}/reviews` });
-    ctx.expect.ok("the instructor sees it running (or done)", ["running", "done"].includes((view2.body?.data?.reviews || []).find((r) => r.battleId === mine?.id)?.status), view2.body?.data?.reviews);
+    // One accepts: they're in, and it waits for its time (not started early, not cancelled).
+    const [A, B] = learners;
+    const acc = await ctx.http({ as: `@${A.username}`, method: "POST", path: `/api/battle/challenges/${battleId}/accept` });
+    ctx.expect.status(`@${A.username} accepts`, acc, 200);
+    // The other declines: a miss; the battle still runs at its time for whoever is in.
+    const dec = await ctx.http({ as: `@${B.username}`, method: "POST", path: `/api/battle/challenges/${battleId}/decline` });
+    ctx.expect.status(`@${B.username} declines`, dec, 200);
+    const [after] = await ctx.db.rows("battles", { id: battleId }, { columns: "status" });
+    ctx.expect.eq("it still waits for the review time", after?.status, "scheduled");
+    const s2 = await statuses();
+    ctx.expect.eq("the instructor sees one accepted, one missed", [s2[A.id], s2[B.id]], ["accepted", "missed"]);
   },
 };
