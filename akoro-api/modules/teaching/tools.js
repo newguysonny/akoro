@@ -29,6 +29,7 @@ import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { chargeForAI, schoolBillTo, debitCoins, coinsAvailable, InsufficientCoins } from "../../lib/coins.js";
 import { serverError } from "../../lib/httpError.js";
+import { closeJson } from "./jsonRepair.js";
 import { TEMPLATE_RULE, normalizeResult, toMarkdown, toLegacy } from "./template.js";
 
 const router = Router();
@@ -219,11 +220,13 @@ Put the question count and total marks in "highlights". Produce these entries in
 const byKey = Object.fromEntries(TOOLS.map((t) => [t.key, t]));
 
 // Models wrap JSON in fences often enough that stripping is cheaper than retrying.
-function parseJson(text) {
+export function parseJson(text) {
   const clean = String(text || "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
   try { return JSON.parse(clean); } catch { /* fall through */ }
   const m = clean.match(/[{[][\s\S]*[}\]]/);
   if (m) { try { return JSON.parse(m[0]); } catch { /* ignore */ } }
+  const closed = closeJson(clean.replace(/^[^{[]*/, ""));
+  if (closed) { try { return JSON.parse(closed); } catch { /* ignore */ } }
   return null;
 }
 
