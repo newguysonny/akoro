@@ -1115,8 +1115,9 @@ export const INSTRUCTOR_TOOLS = [
         due_at: { type: "string", description: "Optional exact due instant in ISO 8601 with a timezone offset. Resolve relative phrases ('tomorrow at 8pm') against the Current date and time in your context (+01:00 for Africa/Lagos). If you still cannot resolve it precisely, send due_hint as the label instead — never guess an exact time." },
         scheduled_hint: { type: "string", description: "For live_course: when the session holds, as the instructor said it." },
         stages: { type: "array", maxItems: 6, description: "For multi_stage: the ordered journey.", items: { type: "object", properties: {
-          kind: { type: "string", enum: ["self_study", "assignment", "project"] },
+          kind: { type: "string", enum: ["self_study", "assignment", "project", "battle"], description: "battle = a real learner-vs-learner battle in the journey (needs a class and the whole class or two+ learners)." },
           title: { type: "string" }, topic: { type: "string" }, subject: { type: "string" },
+          questions: { type: "number", description: "battle stage only: how many questions (5-20, default 5)." },
         }, required: ["topic"] } },
         question_request: { type: "string", description: "assignment only: the instructor's own words about the questions, verbatim — count, mix of types, diagrams, marks." },
         question_plan: { type: "object", description: "assignment only: the same request as structure. Only what the instructor said — leave the rest out.", properties: {
@@ -1238,8 +1239,9 @@ export const INSTRUCTOR_TOOLS = [
         subtopics: { type: "array", items: { type: "string" }, description: "ONLY to reorder or rewrite the WHOLE plan: the FULL list in order. Never send it to add or remove one entry, and never from memory — you usually have not seen the stored plan (call get_activity_draft first if you really must rewrite it)." },
         objectives: { type: "object", description: "Map of entry title to its objective lines. Omitted entries keep their existing objectives." },
         stages: { type: "array", description: "multi_stage only: the full revised ordered journey.", items: { type: "object", properties: {
-          kind: { type: "string", enum: ["self_study", "assignment", "project"] },
+          kind: { type: "string", enum: ["self_study", "assignment", "project", "battle"] },
           title: { type: "string" }, topic: { type: "string" }, subject: { type: "string" },
+          questions: { type: "number", description: "battle stage only: how many questions (5-20)." },
         } } },
         scheduled_hint: { type: "string", description: "live_course only." },
         note: { type: "string", description: "battle only: the intent note the instructor completes in the battle form." },

@@ -18,6 +18,8 @@
  * clarification instead of guessing.
  */
 
+import { normalizeStages } from "./journeyStages.js";
+import { callAsUser } from "../tasks/tools/assign-battle.js";
 import { mergePlanItems, wantsPlanEdit } from "./planEdit.js";
 import db from "../../db.js";
 import {
@@ -317,14 +319,7 @@ export async function createActivityDraft({ instructor, input, sessionId = null,
       note: String(input?.instructions || "").trim() || null,
     };
   } else if (type === "multi_stage") {
-    const stages = (Array.isArray(input?.stages) ? input.stages : []).slice(0, 6)
-      .map((st, i) => ({
-        kind: ["self_study", "assignment", "project"].includes(st?.kind) ? st.kind : "self_study",
-        title: String(st?.title || st?.topic || `Stage ${i + 1}`).trim(),
-        topic: String(st?.topic || st?.title || "").trim(),
-        subject: String(st?.subject || subject || "General").trim(),
-      }))
-      .filter(st => st.topic);
+    const stages = normalizeStages(input?.stages, subject);
     if (!stages.length) throw invalid("A multi-stage journey needs at least one stage with a topic");
     payload.details = { stages };
     payload.topic = topic;
@@ -536,12 +531,7 @@ export async function reviseDraftPayload(instructor, id, changes) {
     if (topic) { payload.topic = topic; applied.push("topic"); }
   } else if (type === "multi_stage") {
     if (Array.isArray(c.stages)) {
-      const stages = c.stages.slice(0, 6).map((st, i) => ({
-        kind: ["self_study", "assignment", "project"].includes(st?.kind) ? st.kind : "self_study",
-        title: String(st?.title || st?.topic || `Stage ${i + 1}`).trim(),
-        topic: String(st?.topic || st?.title || "").trim(),
-        subject: String(st?.subject || payload.subject || "General").trim(),
-      })).filter(st => st.topic);
+      const stages = normalizeStages(c.stages, payload.subject);
       if (!stages.length) throw invalid("A journey needs at least one stage with a topic");
       payload.details = { ...payload.details, stages };
       applied.push("stages");
@@ -595,6 +585,42 @@ export async function reviseDraftPayload(instructor, id, changes) {
   if (error) throw invalid(error.message, 500);
   if (newVersionN) void runVersionJob(draft.id, newVersionN, { chat: questionChat(instructor.id) });
   return { draft: data, applied, version: newVersionN };
+}
+
+/**
+ * createJourneyBattle — a journey's battle stage, made for the journey's own learners.
+ * It goes through the same invite endpoint the battle form and the task tool use, as the
+ * instructor, so the battle behaves exactly as one set any other way. The learner side
+ * reads the stage from the refs (kind "battle" + battleId) and unlocks the next stage when
+ * the battle completes.
+ */
+async function createJourneyBattle(instructor, payload, st) {
+  const classId = payload.classroom_id;
+  if (!classId) throw invalid("A battle stage needs a class — pick one for this journey.", 400);
+  let usernames = [...(payload.usernames ?? [])];
+  if (!payload.whole_class) {
+    if (payload.user_ids?.length) {
+      const { data } = await db.from("users").select("username").in("id", payload.user_ids);
+      usernames.push(...(data ?? []).map((u) => u.username).filter(Boolean));
+    }
+    usernames = [...new Set(usernames)];
+    if (usernames.length < 2) throw invalid("A battle stage needs the whole class or at least two learners — a battle is learner against learner.", 400);
+  }
+  const { data: me } = await db.from("users").select("role, email").eq("id", instructor.id).maybeSingle();
+  const out = await callAsUser(`/api/battle/classes/${classId}/battles/invite`, {
+    userId: instructor.id, role: me?.role || instructor.role, email: me?.email,
+    body: {
+      title: st.title, topic: st.topic, subject: st.subject,
+      difficulty: payload.difficulty || "intermediate",
+      total_questions: st.questions || 5, time_limit_seconds: 15 * 60, xp_prize: 200, min_xp: 0,
+      question_source: "auto",
+      whole_class: !!payload.whole_class,
+      usernames: payload.whole_class ? [] : usernames,
+    },
+  });
+  const id = out?.data?.battle_id ?? out?.battle_id;
+  if (!id) throw invalid(`The battle for "${st.title}" could not be created.`, 502);
+  return { id };
 }
 
 /**
@@ -662,7 +688,12 @@ export async function assignActivityDraft({ instructor, id, overrides = null }) 
     if (!stages.length) throw invalid("The journey has no stages", 400);
     const refs = [];
     for (const st of stages) {
-      if (st.refId) { refs.push(st); continue; }   // already-created stage ref
+      if (st.refId || st.battleId) { refs.push(st); continue; }   // already-created stage ref
+      if (st.kind === "battle") {
+        const battle = await createJourneyBattle(instructor, payload, st);
+        refs.push({ kind: "battle", battleId: battle.id, title: st.title, emoji: "\u2694\uFE0F" });
+        continue;
+      }
       const stageOut = await createAssignment(instructor, {
         type: st.kind || "self_study",
         title: st.title, subject: st.subject || "General", topic: st.topic || st.title,

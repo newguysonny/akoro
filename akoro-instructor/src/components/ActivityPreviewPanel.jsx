@@ -334,13 +334,13 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
                     <div style={{ fontSize: 12.5, fontWeight: 800, color: C.ink }}>{st.title}</div>
                     <div style={{ fontSize: 10.5, color: C.muted2 }}>{st.subject} · {st.topic}</div>
                   </div>
-                  <Chip color={PURPLE} bg="rgba(168,85,247,.1)">{st.kind?.replace('_', ' ')}</Chip>
+                  <Chip color={st.kind === 'battle' ? '#DC2626' : PURPLE} bg={st.kind === 'battle' ? 'rgba(220,38,38,.1)' : 'rgba(168,85,247,.1)'}>{st.kind === 'battle' ? `⚔️ battle · ${st.questions || 5} questions` : st.kind?.replace('_', ' ')}</Chip>
                 </div>
               ))}
             </div>
           </Row>
           <div style={{ fontSize: 11, color: C.muted2, fontFamily: C.font, lineHeight: 1.5 }}>
-            Assigning creates each stage as real work (same path as the workbench), then chains them into the journey.
+            Assigning creates each stage as real work (same path as the workbench), then chains them into the journey. A battle stage becomes a real battle for the same learners, and the next stage unlocks when it finishes.
           </div>
         </div>
       ) : (
