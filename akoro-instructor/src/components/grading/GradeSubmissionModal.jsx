@@ -376,14 +376,21 @@ export default function GradeSubmissionModal({
   // while marking (the step), the whole paper on Review.
   const [paperHtml, setPaperHtml] = useState(null);
   const paperOnly = Array.isArray(brief?.details?.questions) && step < brief.details.questions.length ? step : null;
+  // A different learner starts from a blank paper; everything else keeps what is on screen.
+  useEffect(() => { setPaperHtml(null); }, [current?.targetId]);
+  const paperReady = !!current?.targetId && !!current?.submission?.submittedAt && (brief?.details?.questions || []).length > 0;
   useEffect(() => {
-    if (!current?.targetId || !current?.submission?.submittedAt || !(brief?.details?.questions || []).length) { setPaperHtml(null); return undefined; }
-    let live = true;
-    apiBlob(`/api/self-study/targets/${current.targetId}/submission.html?embed=1${paperOnly != null ? `&only=${paperOnly}` : ''}`)
-      .then((b) => b.text()).then((t) => { if (live) setPaperHtml(t); })
-      .catch(() => { if (live) setPaperHtml(null); });
-    return () => { live = false; };
-  }, [current?.targetId, current?.submission?.submittedAt, paperOnly, brief]);
+    if (!paperReady) { setPaperHtml(null); return undefined; }
+    let live = true, tries = 0, timer = null;
+    // Never drop the paper because a refresh failed or came back the same — on slow mobile data the
+    // fetch can fail, and falling back to the plain answer list and then back again looked like flicker.
+    const run = () => apiBlob(`/api/self-study/targets/${current.targetId}/submission.html?embed=1${paperOnly != null ? `&only=${paperOnly}` : ''}`)
+      .then((b) => b.text())
+      .then((t) => { if (live) setPaperHtml((prev) => (prev === t ? prev : t)); })
+      .catch(() => { if (live && tries++ < 2) timer = setTimeout(run, 1500); });
+    run();
+    return () => { live = false; clearTimeout(timer); };
+  }, [paperReady, current?.targetId, current?.submission?.submittedAt, paperOnly, brief?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Grading state — autosaved locally on every change. */
   const [mode, setMode] = useState('rubric');                 // 'questions' | 'rubric' | 'manual'
