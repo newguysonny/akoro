@@ -177,3 +177,44 @@ export const teachingToolVersions = {
     ctx.expect.eq("the Library item carries version 2's content", JSON.stringify(full.body?.output?.content?.entries), JSON.stringify(v2.v.result?.entries));
   },
 };
+
+/* A sample on demand: ask for any resource in your own words and read what comes back.
+   Params: prompt — what the instructor says in chat (name the tool: "lesson hooks", "common
+   misconceptions", "real-world connections"…, the topic, the class, and any direction).
+   The result is saved, its readable text is written into the run's notes in ≤1,100-character
+   pieces (evidence cuts longer strings), and everything is removed afterwards. */
+export const teachingToolTry = {
+  name: "instructor.teaching_tool_try", area: "instructor-chat", risk: "write",
+  description: "Draft a teaching resource from a prompt you supply, save it, and put its text in the run's notes so the output can be judged. Cleans up after itself.",
+  params: {
+    instructor: { default: INSTRUCTOR },
+    prompt: { default: "Give me lesson hooks for Early Humans, JSS1 History. Direction: a journey through time, striking exciting activities." },
+  },
+  async run(ctx, p) {
+    const teacher = await teacherOf(ctx, p.instructor);
+    await cleanSlate(ctx, teacher);
+    const startedAt = Date.now() - 5_000;
+    const turn = await ctx.agent.chat({ as: p.instructor, mode: "live", model: p.model, prompt: String(p.prompt || "").slice(0, 1500) });
+    ctx.expect.eq("turn answered", turn.status, 200);
+    const run = lastCall(turn, "run_teaching_tool");
+    ctx.expect.ok("the agent called run_teaching_tool", !!run, toolsOf(turn));
+    if (run?.result?.prepared === false && run.result?.code === "INSUFFICIENT_COINS") ctx.expect.blocked(`${p.instructor} can't pay for the tool: ${run.result.error}`);
+    const draftId = run?.result?.draftId;
+    ctx.expect.ok("it was drafted", !!draftId, run?.result);
+    if (!draftId) return;
+    ctx.cleanup(() => ctx.db.deleteOwned("activity_drafts", { ownerColumn: "created_by", ownerId: teacher.id, filters: { id: draftId } }));
+    const ready = await toolVersion(ctx, p.instructor, draftId, 1);
+    ctx.expect.eq("version 1 was written", ready?.v?.status, "ready");
+    if (ready?.v?.status !== "ready") { ctx.note(`failed: ${ready?.v?.error || "no answer"} ${ready?.v?.debug || ""}`.slice(0, 1000)); return; }
+    const saved = await ctx.http({ as: p.instructor, method: "POST", path: `/api/self-study/drafts/${draftId}/assign`, body: { version: 1 } });
+    ctx.expect.eq("saved", saved.status, 201);
+    const outputId = saved.body?.data?.outputId;
+    if (!outputId) return;
+    ctx.cleanup(() => ctx.db.deleteOwned("edu.tool_outputs", { ownerColumn: "instructor_id", ownerId: teacher.id, filters: { id: outputId } }));
+    const full = await ctx.http({ as: p.instructor, path: `/api/instructor/tools/outputs/${outputId}` });
+    const text = String(full.body?.output?.content?.content || "");
+    ctx.expect.ok("it has readable text", text.length > 200, text.length);
+    ctx.note(`tool=${draftId ? run.input?.tool : ""} topic="${run.input?.topic || ""}" notes="${run.input?.notes || ""}" chars=${text.length}`);
+    for (let i = 0; i < text.length && i < 24_000; i += 1_100) ctx.note(`§${Math.floor(i / 1_100) + 1} ${text.slice(i, i + 1_100)}`);
+  },
+};

@@ -187,6 +187,25 @@ function PaperAnswers({ current, brief, marks, focus }) {
   );
 }
 
+/* The paper while it is on its way: a sheet-shaped placeholder, so nothing else flashes in first. */
+function PaperLoading() {
+  const bar = (w, h = 12, mt = 10) => <div style={{ width: w, height: h, borderRadius: 6, background: C.tagBg, marginTop: mt }} />;
+  return (
+    <div role="status" aria-label="Loading the paper" style={{ padding: '18px 20px 28px', animation: 'pulse-dot 1.5s ease-in-out infinite' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 800, color: C.muted }}>
+        <Ico ti="ti-loader-2" size={14} color={C.brand} style={{ animation: 'spin .8s linear infinite' }} /> Loading the paper…
+      </div>
+      <div style={{ marginTop: 14, border: `1px solid ${C.border}`, borderRadius: 10, padding: '22px 22px 28px', background: C.surface }}>
+        <div style={{ margin: '0 auto' }}>{bar('52%', 14, 0)}</div>
+        {bar('90%')}{bar('80%')}
+        <div style={{ marginTop: 22, border: `1px solid ${C.border}`, borderRadius: 8, height: 120, background: C.bg }} />
+        {bar('86%', 12, 22)}{bar('72%')}
+        <div style={{ marginTop: 18, border: `1px solid ${C.border}`, borderRadius: 8, height: 90, background: C.bg }} />
+      </div>
+    </div>
+  );
+}
+
 /* The whole submission as one PDF — fetched as a blob (cookie auth) and
    drawn by SubmissionMarkup, where the grader marks it up. The original
    opens in a tab or downloads; the marked copy can be previewed. */
@@ -375,9 +394,10 @@ export default function GradeSubmissionModal({
   // The submission as the server's paper template: one question at a time
   // while marking (the step), the whole paper on Review.
   const [paperHtml, setPaperHtml] = useState(null);
+  const [paperFailed, setPaperFailed] = useState(false);   // gave up after the retries — only then is the plain answer list shown
   const paperOnly = Array.isArray(brief?.details?.questions) && step < brief.details.questions.length ? step : null;
   // A different learner starts from a blank paper; everything else keeps what is on screen.
-  useEffect(() => { setPaperHtml(null); }, [current?.targetId]);
+  useEffect(() => { setPaperHtml(null); setPaperFailed(false); }, [current?.targetId]);
   const paperReady = !!current?.targetId && !!current?.submission?.submittedAt && (brief?.details?.questions || []).length > 0;
   useEffect(() => {
     if (!paperReady) { setPaperHtml(null); return undefined; }
@@ -386,8 +406,8 @@ export default function GradeSubmissionModal({
     // fetch can fail, and falling back to the plain answer list and then back again looked like flicker.
     const run = () => apiBlob(`/api/self-study/targets/${current.targetId}/submission.html?embed=1${paperOnly != null ? `&only=${paperOnly}` : ''}`)
       .then((b) => b.text())
-      .then((t) => { if (live) setPaperHtml((prev) => (prev === t ? prev : t)); })
-      .catch(() => { if (live && tries++ < 2) timer = setTimeout(run, 1500); });
+      .then((t) => { if (live) { setPaperHtml((prev) => (prev === t ? prev : t)); setPaperFailed(false); } })
+      .catch(() => { if (!live) return; if (tries++ < 2) timer = setTimeout(run, 1500); else setPaperFailed(true); });
     run();
     return () => { live = false; clearTimeout(timer); };
   }, [paperReady, current?.targetId, current?.submission?.submittedAt, paperOnly, brief?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -601,7 +621,8 @@ export default function GradeSubmissionModal({
         .gsm-title{min-width:0;flex:1 1 220px}
         .gsm-tools{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
         .gsm-grid{display:grid;grid-template-columns:1.55fr 1fr;gap:22px;max-width:1440px;margin:0 auto;align-items:start}
-        @media (max-width: 1000px){ .gsm-grid{grid-template-columns:1fr} .gsm-topbar{padding-left:14px;padding-right:14px} }
+        @media (max-width: 1000px){ .gsm-topbar{padding-left:14px;padding-right:14px} .gsm-grid{gap:14px} }
+        @media (max-width: 768px){ .gsm-grid{grid-template-columns:1fr} }
       `}</style>
       {/* ── Topbar ── */}
       <div className="gsm-topbar" style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
@@ -690,8 +711,11 @@ export default function GradeSubmissionModal({
             hasQuestions && (Object.keys(current.submission?.answers || {}).length > 0 || (current.submission?.files || current.files || []).length > 0) ? (
               paperHtml ? (
                 <PaperFrame html={paperHtml} marks={qMarks} title={`${current.student.name} — paper`} />
+              ) : paperReady && !paperFailed ? (
+                <PaperLoading />
               ) : (
               <div style={{ padding: '18px 20px 24px' }}>
+                {paperFailed && <div style={{ fontSize: 12, color: C.muted, fontWeight: 700, marginBottom: 10 }}>The paper didn't load — showing their answers instead.</div>}
                 <PaperAnswers current={current} brief={brief} marks={qMarks} focus={qIndex} />
               </div>
               )

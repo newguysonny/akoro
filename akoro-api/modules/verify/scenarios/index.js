@@ -27,14 +27,14 @@ import { socketSession } from "./socket.js";
 import { courseOneRecord, sessionReminders } from "./courses.js";
 import { teachingToolRouting, teachingToolRuns, activityToolRouting, draftLifecycle, routineLifecycle, toolsAllOpen } from "./instructorTools.js";
 import { battleFromChat, battleReviewFromChat, selfStudyFull, assignmentPreviewAssign, journeyBattleStage } from "./instructorActivities.js";
-import { teachingToolScenarios, teachingToolVersions } from "./teachingTools.js";
+import { teachingToolScenarios, teachingToolVersions, teachingToolTry } from "./teachingTools.js";
 import { deferredRelease } from "./redisIdle.js";
 
 const ALL = [healthBuild, toolsCatalogue, r2Live, embeddingsLive, embeddingsCompare, searchTextFallback, scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity,
   privacyEdges, rateLimitCountedOnce, battleEntryGates, followUpDeliverIntoChat, taskDueInMinutes, noResidue,
   viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, suggestionsSurviveRefresh, studyToolRouting, untaughtFlashcards, tailoredChips, chatUploadFiled, pastPaperStructured, sortOwnFolders, readyProposal, goalWork, ideasFlow, consentsQuietBudget, instructorProactive, voiceSpeak, voiceLive, sweepStale, agentCheckBattle, agentCheckStop, classSyllabusFirst, historyPages, workflowMirror, agentWakes, replaceAndCancel, teachingHandoff, eventStream, paperStructured, ...chatToSubmissionScenarios, authoringVersionsParts, authoringDiagramsEdits, inboxOneList, quietLearningPass, plannerRichGather, proactiveInChat, readerBackend, socketSession, courseOneRecord,
   teachingToolRouting, teachingToolRuns, activityToolRouting, draftLifecycle, routineLifecycle,
-  battleFromChat, battleReviewFromChat, selfStudyFull, assignmentPreviewAssign, journeyBattleStage, ...teachingToolScenarios, teachingToolVersions, toolsAllOpen, deferredRelease, sessionReminders];
+  battleFromChat, battleReviewFromChat, selfStudyFull, assignmentPreviewAssign, journeyBattleStage, ...teachingToolScenarios, teachingToolVersions, teachingToolTry, toolsAllOpen, deferredRelease, sessionReminders];
 
 export const SCENARIOS = Object.fromEntries(ALL.map((s) => [s.name, s]));
 
