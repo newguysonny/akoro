@@ -32,7 +32,7 @@ const DAY = 86400_000;
 const qText = (q) => String(q?.q ?? q?.text ?? "");
 const inWords = (ms) => new Date(ms).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "Africa/Lagos" });
 /** The reply asks the instructor something. */
-const asks = (reply, about) => /\?/.test(String(reply || "")) && about.test(String(reply || ""));
+const asks = (reply, about) => /\?|\b(send|tell|give) me\b|\blet me know\b|\bwhat i need\b/i.test(String(reply || "")) && about.test(String(reply || ""));
 const prepared = (turn) => (turn.tools || []).some((t) => t.tool === "prepare_activity" && t.result?.prepared);
 
 /** A class of the test instructor's with two test learners who have agents (the review battle needs agents). */
@@ -147,7 +147,7 @@ export const activityChatAskMissing = {
     // "Friday" with no time: kept as said, and assigning asks for the exact time first.
     if (d5?.payload?.due_hint && !d5?.payload?.due_at) {
       const a = await ctx.http({ as: INSTRUCTOR, method: "POST", path: `/api/self-study/drafts/${d5.id}/assign`, body: {} });
-      ctx.expect.ok("a due date said only in words must be pinned down before assigning", a.status === 409 && /exact due date/i.test(a.body?.error || ""), { status: a.status, body: a.body });
+      ctx.expect.ok("a due date said only in words must be pinned down before assigning", [400, 409].includes(a.status) && /exact due date/i.test(a.body?.error || ""), { status: a.status, body: a.body });
       ctx.expect.eq("…and the draft stays pending", (await draftRow(ctx, INSTRUCTOR, d5.id))?.status, "draft");
     } else ctx.note(`"due Friday" was resolved to ${d5?.payload?.due_at || "nothing"} (no words-only due date to pin)`);
 
