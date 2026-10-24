@@ -1086,7 +1086,7 @@ router.get("/my-challenges", authenticateToken, asyncHandler(async (req, res) =>
   // Challenges tab was permanently empty and nothing anywhere said why. This is
   // the third time this shape has bitten: /my-battles had exactly the same bug.
   const { data, error } = await db.from("battles")
-    .select("*, users!battles_created_by_fkey(full_name, avatar_url), battle_participants!inner(user_id, role, joined_at, declined_at)")
+    .select("*, users!battles_created_by_fkey(full_name, avatar_url, role), battle_participants!inner(user_id, role, joined_at, declined_at)")
     .eq("battle_participants.user_id", req.user.id)
     .in("battle_participants.role", ["opponent", "participant"])
     // Unanswered: neither accepted nor declined.
@@ -1104,7 +1104,21 @@ router.get("/my-challenges", authenticateToken, asyncHandler(async (req, res) =>
   // one invisible for so long.
   if (error) throw new Error(`my-challenges: ${error.message}`);
 
-  res200(res, (data ?? []).map((b) => toCard(b)));
+  // The scope's name for the card ("Class · JSS1-2", "Course · Biology 101"),
+  // and whether a teacher set it (a teacher hosts; the card says so).
+  const rows = data ?? [];
+  const courseIds = [...new Set(rows.map((b) => b.course_id).filter(Boolean))];
+  const classIds  = [...new Set(rows.map((b) => b.classroom_id).filter(Boolean))];
+  const [{ data: courses }, { data: classes }] = await Promise.all([
+    courseIds.length ? db.from("courses").select("id, title").in("id", courseIds) : { data: [] },
+    classIds.length ? db.from("classrooms").select("id, name").in("id", classIds) : { data: [] },
+  ]);
+  const courseName = new Map((courses ?? []).map((c) => [c.id, c.title]));
+  const className  = new Map((classes ?? []).map((c) => [c.id, c.name]));
+  res200(res, rows.map((b) => toCard(b, {
+    scopeName: b.course_id ? courseName.get(b.course_id) ?? null : b.classroom_id ? className.get(b.classroom_id) ?? null : null,
+    hostRole:  b.users?.role === "instructor" || b.users?.role === "teacher" ? "teacher" : (b.users?.role || null),
+  })));
 }));
 
 /**

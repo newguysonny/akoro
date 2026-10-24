@@ -5,6 +5,7 @@ import { useLang } from '../../contexts/LanguageContext.jsx';
 import { useNavigate } from 'react-router-dom';
 import { apiGet } from '../../services/api.js';
 
+import SheetFrame from './SheetFrame.jsx';
 /**
  * Time left to accept, ticking.
  *
@@ -62,12 +63,13 @@ function ChallengeModal({ challenge, onAccept, onDecline, onClose }) {
   const short = entry && !entry.ok;
   const subj=subjectStyle(challenge.subject),sc=subj.color,diff=difficultyStyle(challenge.difficulty),isImmediate=challenge.battleType==="immediate",isClassroom=challenge.battleType==="classroom";
   const isReviewCard=challenge.battleType==="review";
+  // Same Scope field as the card (challengeItems.js): Course · name / Class · name / Network.
+  const scopeText=challenge.scope==="course"?`Course${challenge.scopeName?` · ${challenge.scopeName}`:""}`:challenge.scope==="class"?`Class${challenge.scopeName?` · ${challenge.scopeName}`:""}`:challenge.scope==="network"?"Network":"";
   const typePill=isReviewCard?{label:"STUDY REVIEW",bg:"rgba(59,130,246,.10)",color:"#3B82F6",border:"rgba(59,130,246,.25)"}:isClassroom?{label:t('challenge.classroom'),bg:"rgba(16,185,129,.10)",color:"#10B981",border:"rgba(16,185,129,.25)"}:isImmediate?{label:t('challenge.immediate'),bg:"rgba(239,68,68,.10)",color:RED,border:"rgba(239,68,68,.25)"}:{label:t('challenge.scheduled'),bg:"rgba(108,59,255,.10)",color:BRAND,border:"rgba(108,59,255,.25)"};
   return (
-    <><div onClick={onClose} style={{ position:"fixed",inset:0,zIndex:2000,background:"rgba(6,6,18,.72)",backdropFilter:"blur(8px)" }}/><div style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:2100,background:"var(--ak-surface)",borderRadius:"24px 24px 0 0",padding:"0 0 40px",boxShadow:"0 -8px 40px rgba(0,0,0,.18)",animation:"sheet-up .32s cubic-bezier(.32,1.2,.64,1)",fontFamily:"'Nunito',sans-serif",maxHeight:"88vh",overflowY:"auto" }}>
-      <div style={{ width:38,height:4,borderRadius:2,background:"var(--ak-border2)",margin:"14px auto 0" }}/><div style={{ padding:"18px 20px 0" }}>
+    <SheetFrame onClose={onClose} label={challenge.title || "Challenge"}><div style={{ padding:"18px 20px 0" }}>
         <div style={{ display:"flex",alignItems:"center",gap:8,padding:"9px 14px",borderRadius:12,background:typePill.bg,border:`1px solid ${typePill.border}`,marginBottom:16 }}>
-          <div style={{ flex:1 }}><div style={{ fontSize:11,fontWeight:900,color:typePill.color,marginBottom:2 }}>{typePill.label}</div><div style={{ fontSize:11,fontWeight:600,color:"var(--ak-text-sub)" }}>{isReviewCard?"Your teacher set a review of what you know. Your agent works through it from your notes — no winner, a mark sheet at the end.":isClassroom?t('challenge.hint_classroom')
+          <div style={{ flex:1 }}><div style={{ fontSize:11,fontWeight:900,color:typePill.color,marginBottom:2 }}>{typePill.label}{scopeText&&<span style={{ textTransform:"uppercase" }}> · {scopeText}</span>}</div><div style={{ fontSize:11,fontWeight:600,color:"var(--ak-text-sub)" }}>{isReviewCard?"Your teacher set a review of what you know. Your agent works through it from your notes — no winner, a mark sheet at the end.":isClassroom?t('challenge.hint_classroom')
             :isImmediate?t('challenge.hint_immediate')
             :challenge.scheduledFor?`${t('challenge.hint_scheduled')} · ${new Date(challenge.scheduledFor).toLocaleString([], {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}`
             :t('challenge.hint_scheduled')}</div></div>
@@ -136,7 +138,7 @@ function ChallengeModal({ challenge, onAccept, onDecline, onClose }) {
           <button onClick={onDecline} style={{ flex:1,padding:"14px",borderRadius:14,border:"1.5px solid var(--ak-border2)",background:"var(--ak-bg)",fontSize:14,fontWeight:800,color:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('challenge.decline')}</button>
           <button onClick={onAccept} disabled={short} title={short?entry.message:undefined} style={{ flex:1.8,padding:"14px",borderRadius:14,border:"none",opacity:short?.45:1,cursor:short?"not-allowed":"pointer",background:isClassroom?"linear-gradient(135deg,#10B981,#059669)":isImmediate?`linear-gradient(135deg,${RED},#DC2626)`:`linear-gradient(135deg,${BRAND},#4C1DCC)`,fontSize:14,fontWeight:800,color:"#fff",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}><ZapIcon size={15} color="#fff"/>{t('challenge.accept')}</button>
         </div>
-      </div></div></>
+      </div></SheetFrame>
   );
 }
 
