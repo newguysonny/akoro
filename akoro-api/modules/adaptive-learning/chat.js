@@ -1283,7 +1283,8 @@ export const INSTRUCTOR_TOOLS = [
         change_request: { type: "string", description: "teaching-resource drafts only (type teaching_tool): the instructor's follow-up about the resource, verbatim (\"make the hooks more playful\", \"add two more misconceptions\"). The server writes the next version in the background from the latest one and changes only what was asked — never write the resource yourself." },
         base_version: { type: "number", description: "assignment or teaching-resource drafts: the version to build on when the instructor names one (\"go back to version 1 and…\"). Omit to build on the latest." },
         title: { type: "string", description: "Replacement title." },
-        instructions: { type: "string", description: "Replacement instructions to learners." },
+        instructions: { type: "string", description: "REPLACES the instructions to learners entirely — only when the instructor gives the whole new text." },
+        add_instructions: { type: "string", description: "A line to ADD to the instructions, keeping what's there — use for \"add to the instructions: …\", \"also tell them …\". Their words, as said." },
         due_at: { type: "string", description: "A new exact due instant, ISO 8601 with a timezone offset (+01:00 for Africa/Lagos), resolved against the Current date and time. Only when the instructor states one." },
         due_hint: { type: "string", description: "The due date as said, when it can't be resolved exactly ('end of the week')." },
         audience: { type: "object", description: "A new audience — same shape as prepare_activity's audience — when the instructor changes who it's for.", properties: {

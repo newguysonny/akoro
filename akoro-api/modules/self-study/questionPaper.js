@@ -28,7 +28,7 @@
  */
 import { sanitizeSvg } from "./paperLayout.js";
 import { ANSWER_SPACES, answerSpaceFor, dropNulls, paperResponseFormat, revisionResponseFormat } from "./paperSchema.js";
-import { layoutPaper } from "./paperTemplate.js";
+import { layoutPaper, familyOf } from "./paperTemplate.js";
 
 const WORD_NUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, fifteen: 15, twenty: 20 };
 const num = (s) => (s == null ? null : /^\d+$/.test(s) ? Number(s) : WORD_NUM[String(s).toLowerCase()] ?? null);
@@ -455,7 +455,30 @@ const templateParts = (sections) => !Array.isArray(sections) || !sections.length
  * (the teacher's own edits included); changed ones are rewritten.
  * → { paper, changes: { [newIndex]: "new"|"changed" }, note }
  */
-export function applyRevision(base, json) {
+/** PURE: the instructions with one more line — what's there kept (each once), the line added once. */
+export function withInstructionLine(current, line) {
+  const parts = (Array.isArray(current) ? current : [current]).map((x) => String(x || "").trim()).filter(Boolean);
+  const now = parts.filter((x, i) => !parts.slice(0, i).some((y) => y.toLowerCase().includes(x.toLowerCase()))).join(" ");
+  const add = String(line || "").trim();
+  if (!add || now.toLowerCase().includes(add.toLowerCase())) return now;
+  return [now, add].filter(Boolean).join(now && !/[.!?]$/.test(now) ? ". " : " ");
+}
+
+/** PURE: the part a follow-up names for what it adds ("…to Part A", "in section B") → "A" | null. */
+export function targetPart(request) {
+  const m = String(request || "").match(/\b(?:to|in|into|under|inside|within|for|on)\s+(?:the\s+)?(?:part|section)\s+([A-H])\b/i);
+  return m ? m[1].toUpperCase() : null;
+}
+
+/** PURE: the template family of the base paper's Part <letter> (by its first question), or null. */
+function partFamily(base, letter) {
+  if (!letter) return null;
+  const s = (base.sections || []).findIndex((x) => new RegExp(`^Part ${letter}\\b`, "i").test(String(x?.title || "")));
+  const first = s < 0 ? null : (base.questions || []).find((q) => q.section === s);
+  return first ? familyOf(first) : null;
+}
+
+export function applyRevision(base, json, { pinPart = null } = {}) {
   const j = json && typeof json === "object" ? json : {};
   const src = base.questions || [];
   const opts = Math.max(4, ...src.map((q) => (Array.isArray(q.options) ? q.options.length : 0)));
@@ -491,6 +514,9 @@ export function applyRevision(base, json) {
     ...(questions.some((q) => Number.isInteger(q.passage)) ? { passages } : {}),
   };
   if (!templateParts(base.sections)) return { paper: revised, changes, note: str(j.note, 200) };
+  // What the teacher added to a named part stays in that part (at its end), whatever its kind.
+  const fam = partFamily(base, pinPart);
+  if (fam) for (const [i, c] of Object.entries(changes)) if (c === "new" && questions[i]) questions[i]._part = fam;
   // The template's Parts again (a new MCQ joins Part A); the change marks follow their questions.
   const { paper, order } = layoutPaper(revised);
   const moved = {};
@@ -641,7 +667,7 @@ export async function revisePaper({ chat, topic, subject, classLevel, request, b
     let json = {};
     const text = await chat(buildRevisionMessages({ topic, subject, classLevel, request, base, plan, feedback, previous }), { response_format: revisionResponseFormat() });
     try { json = JSON.parse(text || "{}"); } catch { json = {}; }
-    return { json, ...applyRevision(base, json) };
+    return { json, ...applyRevision(base, json, { pinPart: targetPart(request) }) };
   };
   const check = (paper) => [...checkPaper(paper, contract), ...unchangedRewrites(request, base, paper)];
   const first = await ask(null, null);

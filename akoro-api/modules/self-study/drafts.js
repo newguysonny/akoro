@@ -18,6 +18,7 @@
  * clarification instead of guessing.
  */
 
+import { withInstructionLine } from "./questionPaper.js";
 import { normalizeStages } from "./journeyStages.js";
 import { saveToolDraft, reviseToolDraft, retryToolVersion } from "../teaching/toolDrafts.js";
 import { cleanReview, reviewInstruction, scheduleActivityReview } from "./activityReview.js";
@@ -556,6 +557,13 @@ export async function reviseDraftPayload(instructor, id, changes) {
   if (title) { payload.title = title; applied.push("title"); }
   const instructions = asText(c.instructions, 2000);
   if (instructions !== undefined) { payload.instructions = instructions || null; applied.push("instructions"); }
+  // "Add to the instructions: …" keeps what is there (an assignment's are its paper's) and adds the line.
+  const addLine = asText(c.add_instructions, 600);
+  if (addLine) {
+    // An assignment's start from its paper's own ("Answer all questions.") plus any the draft carries.
+    payload.instructions = withInstructionLine([latestReady(payload)?.paper?.instructions, payload.instructions], addLine);
+    if (!applied.includes("instructions")) applied.push("instructions");
+  }
   if (["easy", "intermediate", "hard"].includes(c.difficulty) && c.difficulty !== payload.difficulty) {
     payload.difficulty = c.difficulty; applied.push("difficulty");
   }
@@ -640,6 +648,10 @@ export async function reviseDraftPayload(instructor, id, changes) {
       ...Object.fromEntries(CHANGED.filter((k) => k in payload && payload[k] !== draft.payload?.[k]).map((k) => [k, payload[k]])),
       ...(newVersionN ? { versions: [...versionsOf(p), payload.versions.at(-1)] } : {}),
     };
+    // An assignment's instructions are its paper's: every version shows (and assigns) the same ones.
+    if (type === "assignment" && applied.includes("instructions")) {
+      next.versions = versionsOf(next).map((v) => (v.paper ? { ...v, paper: { ...v.paper, instructions: payload.instructions || "" } } : v));
+    }
     // Every other activity keeps its rounds too: what it was, and what each follow-up made it.
     return type === "assignment" ? next : withHistory(p, next, String(c.changeNote || applied.join(", ")));
   });

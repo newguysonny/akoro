@@ -273,6 +273,62 @@ export const activityChatAssignmentVersions = {
   },
 };
 
+/* ── Assignment: an added instruction, a diagram question into Part A ──── */
+
+export const activityChatPartsInstructions = {
+  name: "activity_chat.assignment_parts_instructions", area: "instructor-chat", risk: "write", regression: false, timeoutMs: 600_000,
+  description: "An assignment's follow-ups land where the teacher said: an added instruction keeps the paper's own and shows on every version (no new version); \"add a diagram question to Part A\" puts it at the end of Part A (not in a Diagrams part); \"add a question with a diagram\" adds one more with a diagram, everything else kept.",
+  async run(ctx) {
+    const { classroom, say, who } = await classOf(ctx);
+    const t1 = await say(`Prepare a Basic Science assignment on photosynthesis for ${who} in ${classroom.name}: 4 MCQ and 2 short answer questions.`, "prepare");
+    const prep = lastCall(t1, "prepare_activity");
+    ctx.expect.ok("prepared as an assignment", prep?.result?.prepared === true && prep?.input?.type === "assignment", { tools: toolsOf(t1), input: prep?.input });
+    const draftId = prep?.result?.draftId;
+    if (!draftId) return;
+    const v1 = await versionOf(ctx, draftId, 1);
+    ctx.expect.eq("version 1 is ready", v1?.status, "ready");
+    if (v1?.status !== "ready") return;
+    const before = String(v1.paper.instructions || "");
+
+    // 1. An instruction added: kept with the paper's own, on the paper, no new version.
+    const t2 = await say("Add to the instructions: Do not spend too much time on one question.", "instructions");
+    const rev = lastCall(t2, "revise_activity_draft");
+    ctx.expect.ok("the agent added to the instructions", rev?.result?.revised === true && (rev?.result?.applied || []).includes("instructions"), { input: rev?.input, result: rev?.result });
+    const d2 = await draftRow(ctx, INSTRUCTOR, draftId);
+    const p1 = (d2?.payload?.versions || [])[0]?.paper?.instructions || "";
+    ctx.expect.ok("the paper's instructions now carry the line", /too much time on one question/i.test(p1), p1);
+    ctx.expect.ok("…and keep what the paper said before", !before || p1.toLowerCase().includes(before.toLowerCase().replace(/[.!?]$/, "")), { before, after: p1 });
+    ctx.expect.eq("no new version for an instructions change", (d2?.payload?.versions || []).length, 1);
+
+    // 2. A diagram question into Part A: at the end of Part A.
+    const aBefore = partsOf(v1.paper)[0]?.questions.map(qText) || [];
+    const bBefore = partB(v1.paper)?.questions.map(qText) || [];
+    const v2 = await reviseVersion(ctx, say, draftId, { prompt: "Add a diagram question to Part A.", label: "diagram → Part A", n: 2, base: 1 });
+    if (v2) {
+      const parts = partsOf(v2.paper);
+      const a = parts[0];
+      ctx.expect.ok("V2: Part A has one more question, the new one at its end", a && /^Part A/i.test(a.title) && a.questions.length === aBefore.length + 1 && aBefore.every((t, i) => qText(a.questions[i]) === t), parts.map((x) => [x.title, x.questions.map(qText)]));
+      const added = a?.questions.at(-1);
+      ctx.expect.ok("V2: the new Part A question has a diagram", !!(added?.figure || added?.figure_note), added);
+      ctx.expect.ok("V2: no separate Diagrams part was made for it", !parts.some((x) => /Diagrams/i.test(x.title)), parts.map((x) => x.title));
+      ctx.expect.eq("V2: Part B unchanged", partB(v2.paper)?.questions.map(qText), bBefore);
+      ctx.expect.ok("V2 keeps the added instruction", /too much time on one question/i.test(v2.paper.instructions || ""), v2.paper.instructions);
+    }
+
+    // 3. A question with a diagram, no part named: one more, with a diagram; the rest kept.
+    const base = v2 || v1;
+    const v3 = await reviseVersion(ctx, say, draftId, { prompt: "Add a question with a diagram.", label: "question with a diagram", n: 3, base: base.n });
+    if (v3) {
+      const was = new Set(base.paper.questions.map(qText));
+      const fresh = v3.paper.questions.filter((q) => !was.has(qText(q)));
+      ctx.expect.eq("V3: one more question", v3.paper.questions.length, base.paper.questions.length + 1);
+      ctx.expect.ok("V3: the new one has a diagram", fresh.length === 1 && !!(fresh[0].figure || fresh[0].figure_note), fresh);
+      ctx.expect.ok("V3: every earlier question kept", base.paper.questions.every((q) => v3.paper.questions.some((x) => qText(x) === qText(q))));
+      ctx.expect.ok("V3 keeps the added instruction", /too much time on one question/i.test(v3.paper.instructions || ""), v3.paper.instructions);
+    }
+  },
+};
+
 /* ── Assignment: instructions, switched questions, assigned with its review ── */
 
 export const activityChatAssignmentAssign = {
@@ -393,4 +449,4 @@ export const activityChatSelfStudyAssign = {
   },
 };
 
-export const activityChatScenarios = [activityChatAskMissing, activityChatBattleSelfStudyAsk, activityChatAssignmentVersions, activityChatAssignmentAssign, activityChatSelfStudyAssign];
+export const activityChatScenarios = [activityChatAskMissing, activityChatBattleSelfStudyAsk, activityChatPartsInstructions, activityChatAssignmentVersions, activityChatAssignmentAssign, activityChatSelfStudyAssign];

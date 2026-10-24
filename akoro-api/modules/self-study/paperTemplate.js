@@ -86,7 +86,9 @@ const whenOf = (iso) => {
 /* ── The layout rules every AI-made paper follows ──────────────────────── */
 
 const FAMILY_ORDER = ["objective", "truefalse", "short", "label", "case", "essay"];
-function familyOf(q) {
+export function familyOf(q) {
+  // A question the teacher put in a named part ("add a diagram question to Part A") goes with that part.
+  if (q?._part && FAMILY_ORDER.includes(q._part)) return q._part;
   if (q?.format === "case_study") return "case";
   if (q?.format === "label") return "label";
   // True or false is a part of its own, as in the template (not with the MCQs).
@@ -132,7 +134,7 @@ export function layoutPaper(paper, { keepSections = false } = {}) {
     if (fam === "case") idx.sort((a, b) => (a[0].passage ?? 99) - (b[0].passage ?? 99) || a[1] - b[1]);
     const first = questions.length + 1;
     sections.push({ title: `Part ${LETTERS[s]} – ${partTitle(fam, idx.map(([q]) => q))}`, instructions: partNote(fam, idx.map(([q]) => q), first) });
-    for (const [q, i] of idx) { order.push(i); questions.push({ ...q, section: s }); }
+    for (const [{ _part, ...q }, i] of idx) { order.push(i); questions.push({ ...q, section: s }); }
   });
   return { paper: { ...paper, questions, sections }, order };
 }
