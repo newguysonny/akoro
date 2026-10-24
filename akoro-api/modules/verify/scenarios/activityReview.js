@@ -111,20 +111,36 @@ export const activityReviewRuns = {
 };
 
 /**
- * The class review played through: both learners accept, the start is
- * brought forward to now (what the review time does), and the battle runs on
- * the worker with both agents answering; each learner gets their own mark
- * sheet and the instructor's view shows both done with their marks.
+ * The class review played through: one learner taught their agent the topic,
+ * the other didn't; both accept, the start is brought forward to now (what
+ * the review time does), and the worker runs it. The taught agent answers
+ * from its notes, the untaught one gives no answer (agents never guess); each
+ * learner gets their own mark sheet and the instructor sees both done.
  */
 export const activityReviewPlay = {
   name: "activity.review_battle_play", area: "activities", risk: "write", regression: false, timeoutMs: 600_000,
-  description: "A class review battle played through: both learners accept, the start is brought forward to now, the worker runs it with both agents; each learner gets their own mark sheet, the instructor sees both done.",
+  description: "A class review battle played through: one learner taught their agent the topic, one didn't; both accept, the start is brought forward to now, the worker runs it; the taught agent answers, the untaught one gives no answer; each gets their own mark sheet, the instructor sees both done with marks.",
   async run(ctx) {
     const { learners, assignmentId, runActivityReview, db } = await assignWithReview(ctx);
     if (!assignmentId) return;
     const sent = await runActivityReview(assignmentId);
     const battleId = sent.battleId;
     if (!battleId) ctx.expect.blocked(`the class review wasn't sent: ${sent.skipped}`);
+
+    // The first learner "submits and teaches": their agent gets a note on the topic (as a teaching
+    // session writes one). The second taught it nothing. Agents answer only from their learner's notes.
+    const [taught, untaught] = learners;
+    const ks = await import("../../adaptive-learning/agents/student/knowledge.js");
+    const { data: had } = await db.schema("edu").from("student_knowledge").select("id")
+      .eq("student_id", taught.id).eq("topic", "Photosynthesis").eq("subtopic", "").maybeSingle();
+    if (!had) {
+      const agent = await ks.getOrCreateStudentAgent(taught.id);
+      const note = await ks.saveStudentKnowledge({
+        studentId: taught.id, agentId: agent?.id, topic: "Photosynthesis", subject: "Basic Science", confidence: 0.8,
+        content: "Photosynthesis is how green plants make their own food (glucose) from carbon dioxide and water, using light energy trapped by chlorophyll in the chloroplasts of leaf cells. Word equation: carbon dioxide + water → (light, chlorophyll) → glucose + oxygen. Oxygen is released as a by-product through the stomata. Leaves are green because chlorophyll reflects green light and absorbs red and blue light. The raw materials are carbon dioxide (from the air, through the stomata) and water (from the soil, through the roots and xylem). The glucose is used for respiration (energy), stored as starch, or made into cellulose for cell walls. The rate rises with light intensity, carbon dioxide concentration and a suitable temperature.",
+      });
+      ctx.cleanup(() => note?.id && db.schema("edu").from("student_knowledge").delete().eq("id", note.id));
+    } else ctx.note(`@${taught.username} already has a Photosynthesis note; it is used as is`);
 
     for (const l of learners) {
       const acc = await ctx.http({ as: `@${l.username}`, method: "POST", path: `/api/battle/challenges/${battleId}/accept` });
@@ -155,7 +171,12 @@ export const activityReviewPlay = {
     if (done !== "completed") return;
 
     const { data: answers } = await db.from("battle_answers").select("participant_id").in("participant_id", seated.map((x) => x.id));
-    ctx.expect.ok("both agents answered", new Set((answers || []).map((x) => x.participant_id)).size === learners.length, { answers: (answers || []).length });
+    const seatOf = (l) => seated.find((x) => x.user_id === l.id)?.id;
+    const { data: noAnswers } = await db.from("battle_log").select("user_id, message, meta_json").eq("battle_id", battleId).eq("event_type", "no_answer");
+    const why = (l) => (noAnswers || []).filter((x) => x.user_id === l.id).map((x) => { try { return JSON.parse(x.meta_json || "{}").reason; } catch { return null; } });
+    const answered = (l) => (answers || []).filter((x) => x.participant_id === seatOf(l)).length;
+    ctx.expect.ok(`the taught agent (@${taught.username}) answers from its notes`, answered(taught) >= 1, { answered: answered(taught), noAnswer: why(taught) });
+    ctx.expect.ok(`the untaught agent (@${untaught.username}) gives no answer, for want of notes (never a guess, never out of credit)`, answered(untaught) === 0 && why(untaught).length >= 1 && why(untaught).every((r) => r === "no_knowledge"), { answered: answered(untaught), noAnswer: why(untaught) });
 
     // Each learner's own mark sheet.
     for (const l of learners) {
@@ -167,5 +188,7 @@ export const activityReviewPlay = {
     const v = await ctx.http({ as: BATTLE_INSTRUCTOR, path: `/api/self-study/${assignmentId}/reviews` });
     const reviews = v.body?.data?.reviews || [];
     ctx.expect.ok("the instructor sees both done, each with a mark", reviews.length === learners.length && reviews.every((r) => r.status === "done" && r.total >= 3 && r.correct != null), reviews);
+    const markOf = (l) => reviews.find((r) => r.learnerId === l.id);
+    ctx.expect.ok("…the taught learner's mark above the untaught one's", (markOf(taught)?.correct ?? 0) > (markOf(untaught)?.correct ?? 0), reviews.map((r) => [r.name, r.correct, r.total]));
   },
 };
