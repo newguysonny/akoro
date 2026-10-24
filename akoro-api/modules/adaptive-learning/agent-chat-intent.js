@@ -73,7 +73,14 @@ const DRAFT_MANAGE_RE = /^\s*(?:please\s+)?(?:show|open|read|view|list|display|s
 // A resource request that also names an activity for learners ("an assignment from my lesson plan") is
 // still an activity. "questions" alone doesn't make one: "a homework sheet with 10 questions" is a resource.
 const STRONG_ACTIVITY_NOUN_RE = /\b(?:assignments?|quiz(?:zes)?|tests?|projects?|self[-\s]?study|live\s+(?:course|class|lesson|session)|battles?|journeys?|multi[-\s]?stage)\b/i;
-const isTeachingResource = (text) => TEACHING_RESOURCE_RE.test(text) && !STRONG_ACTIVITY_NOUN_RE.test(text);
+// Whichever is asked for FIRST decides: "lesson hooks … direction: a journey through time" is hooks
+// (the later words describe them); "an assignment from my lesson plan" is an assignment.
+const isTeachingResource = (text) => {
+  const r = String(text).search(TEACHING_RESOURCE_RE);
+  if (r < 0) return false;
+  const a = String(text).search(STRONG_ACTIVITY_NOUN_RE);
+  return a < 0 || r < a;
+};
 // "Make it a hard battle", "turn this into…": the pronoun points at the pending draft, so it is an edit
 // even when the sentence also names an activity ("a hard battle" is not a NEW one).
 const POINTS_AT_DRAFT_RE = /^\s*(?:(?:please|now|also|and|then|ok(?:ay)?|can\s+you|could\s+you)[\s,!.]+)*(?:make|turn|change|set|keep|use)\s+(?:it|this|that|the\s+draft)\b/i;
