@@ -6,6 +6,55 @@ This plan audits every layer: browser, frontend bundles, API, sessions, database
 
 ---
 
+## Your tree → this plan
+
+Every branch of the original audit tree, and where its tests are (§5 workstream letters; F = early findings in §2).
+
+| Tree branch | Leaf | Plan section · key tests | Early findings |
+|---|---|---|---|
+| **1. Browser** | Network | J1 (passive ZAP), G1 (response diets), I2 (CORS) | CORS ✓ |
+| | Storage | A1, A7 | F9 |
+| | Cookies | A2, I4 (CSRF with `SameSite=None`) | httpOnly ✓ |
+| | IndexedDB | A3, W1–W2 (service worker, offline queue) | |
+| | Console | A4, H1 | F8 |
+| | JS/source maps | B1 (every chunk), B2 (`.map`, `.env`, `.git`) | maps 403 ✓ |
+| **2. Frontend** | Secrets | B1, M2 | none in main bundles ✓ |
+| | Exposed configuration | B1 (internal URLs, `VITE_*`), B2, L (Vercel env) | |
+| | XSS | B3 (sinks), B4 (iframes), P5 (AI output), N4 (generated papers/PDFs), X2 (school sites) | |
+| | CSP | I1, F5 fix | **F5** |
+| **3. API** | Authentication | C1–C8 | |
+| | Authorization | D1–D6, §4 matrix | F4 |
+| | IDOR/BOLA | D1, N2, §4 resource list | |
+| | Rate limits | U1–U5 | auth ✓ |
+| | Input validation | H1, H3, H5, N1 | |
+| | Error leakage | H1–H2, A4 | **F8** |
+| **4. Database** | RLS | F3 | **F3** |
+| | Policies | F1–F4 | |
+| | Storage | F6, N2–N3 | **F6** |
+| | Privilege boundaries | F2, F4–F5, F7, D4 | |
+| **5. Sessions** | Access tokens | E1–E2, E6, C8 | **F1** |
+| | Refresh tokens | E4–E5 | rotation ✓ |
+| | Logout | E3, A6–A7 | |
+| | Password reset | C3, T2 | |
+| **6. Business logic** | Credits | O1, O4, O8, P7 | |
+| | Payments | O2–O3, R4 | F7 |
+| | Attempts | O5–O7 | |
+| | Permissions | O9–O10, D2 | |
+| | Race conditions | O1, O4–O5 (`security-logic` suite) | |
+| **7. Infrastructure** | Vercel · Render · Supabase · Cloudflare · GitHub/CI | L (one row per platform), M, R3, S | **F2**, F10 |
+| **8. Dependencies** | npm audit · Dependabot · Snyk/OSV | K1–K5 | |
+| **9. Automated scanning** | OWASP ZAP | J1–J4 (passive on prod, active on sandbox only) | |
+| | Security headers | I1, I3 | **F5** |
+| **10. Manual penetration testing** | Account A → B | §4 matrix, D1, N2 | |
+| | Student → Teacher | D2, O6, O9 | |
+| | School A → B | D3, X1–X3 | |
+| | User → Admin | D2, C2, C8, G3 (mass assignment), S1 | |
+| | Anonymous → Private | D1, S1, F1 (anon PostgREST), Q1 | |
+
+Added beyond the tree: **P** AI agents & prompt injection · **Q** real-time sockets · **R** service-to-service & webhooks · **S** the Verification Gate · **T** email, redirects & OAuth · **V** privacy & minors (NDPA 2023) · **W** PWA/offline · **X** multi-tenant school sites · **Y** SSRF · **Z** logging, backups & incident response.
+
+---
+
 ## 0. Scope
 
 | Layer | What is in scope |
