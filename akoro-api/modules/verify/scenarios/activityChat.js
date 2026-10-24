@@ -86,8 +86,9 @@ async function assignWithReview(ctx, { draftId, body, learners }) {
   if (!id) return {};
   cleanReviewedActivity(ctx, id);
   ctx.expect.eq("the draft is closed as assigned", (await draftRow(ctx, INSTRUCTOR, draftId))?.status, "assigned");
-  // The worker sends it on assign; the gate makes sure (once per activity either way).
-  let battleId = await ctx.until(async () => (await ctx.db.rows("battles", { activity_assignment_id: id }, { columns: "id" }))[0]?.id || null, { timeoutMs: 45_000, everyMs: 3_000 });
+  // The worker sends it on assign; the gate makes sure (once per activity either way). Sent =
+  // recorded on the activity, which happens after the seats are in (the battle row comes first).
+  let battleId = await ctx.until(async () => (await ctx.db.rows("edu.self_study_assignments", { id }, { columns: "details" }))[0]?.details?.review?.battle_id || null, { timeoutMs: 60_000, everyMs: 3_000 });
   if (!battleId) battleId = (await (await import("../../self-study/activityReview.js")).runActivityReview(id)).battleId || null;
   ctx.expect.ok("its class review battle was sent", !!battleId);
   for (const l of learners) {
