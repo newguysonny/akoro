@@ -560,27 +560,37 @@ export default function GradeSubmissionModal({
     } finally { setPublishing(false); }
   };
 
+  // Escape closes it, like the round X.
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   if (!current) return null;
   const q = questions[Math.min(qIndex, questions.length - 1)];
   const published = current.grade != null;
 
   return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 3600, background: tint(7), display: 'flex', flexDirection: 'column', fontFamily: C.font }}>
+    <div role="dialog" aria-modal="true" aria-label="Grade submission" className="gsm-root"
+      style={{ position: 'fixed', inset: 0, zIndex: 3600, background: C.bg, display: 'flex', flexDirection: 'column', fontFamily: C.font }}>
+      <style>{`
+        .gsm-topbar{display:flex;align-items:center;gap:12px 16px;flex-wrap:wrap;padding:calc(env(safe-area-inset-top,0px) + 12px) 22px 12px}
+        .gsm-title{min-width:0;flex:1 1 220px}
+        .gsm-tools{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+        .gsm-grid{display:grid;grid-template-columns:1.55fr 1fr;gap:22px;max-width:1440px;margin:0 auto;align-items:start}
+        @media (max-width: 1000px){ .gsm-grid{grid-template-columns:1fr} .gsm-topbar{padding-left:14px;padding-right:14px} }
+      `}</style>
       {/* ── Topbar ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 22px', background: C.surface, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
-        <button onClick={onClose} title="Back to the workbench"
-          style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: C.muted2, fontSize: 12.5, fontWeight: 700, fontFamily: C.font, padding: '4px 0' }}>
-          <Ico ti="ti-arrow-left" size={14} /> Workbench
-        </button>
-        <div style={{ width: 1, height: 24, background: C.border }} />
-        <div style={{ minWidth: 0 }}>
+      <div className="gsm-topbar" style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+        <div className="gsm-title">
           <div style={{ fontSize: 14.5, fontWeight: 800, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             Grade submission — {brief?.title}
           </div>
           <div style={{ fontSize: 11, color: C.muted2, fontWeight: 600 }}>{brief?.subject} · {brief?.topic}</div>
         </div>
 
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+        <div className="gsm-tools">
           {/* Autosave label */}
           <span style={{ fontSize: 11.5, fontWeight: 700, color: saveState === 'saving' ? C.brand : C.muted2, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             {saveState === 'saving'
@@ -617,12 +627,17 @@ export default function GradeSubmissionModal({
             {publishing ? <Ico ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-check" size={13} />}
             Publish grade
           </button>
+          {/* Close — the round X every modal in the app uses */}
+          <button onClick={onClose} aria-label="Close" title="Close"
+            style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', background: C.tagBg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+            <Ico ti="ti-x" size={16} color={C.muted} />
+          </button>
         </div>
       </div>
 
       {/* ── Workspace: paper + grading panel ── */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '22px 24px 60px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: 22, maxWidth: 1440, margin: '0 auto', alignItems: 'start' }}>
+        <div className="gsm-grid">
           {/* Paper — the work, question by question */}
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, boxShadow: '0 1px 2px rgba(33,31,53,.04), 0 12px 28px -12px rgba(33,31,53,.18)', overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 20px', borderBottom: `1px solid ${C.border}`, background: C.bg }}>
