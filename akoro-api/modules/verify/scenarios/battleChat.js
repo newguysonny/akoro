@@ -89,12 +89,15 @@ async function learnerCase(ctx, made, { as, label, prompt, tool, args = {} }) {
   return call;
 }
 
-/** A class of the instructor's with `need` test learners who have an agent, leaving out the privacy seeds. */
+/** A class of the instructor's with `need` test learners who have an agent (privacy seeds last, the blocker out). */
 async function classWith(ctx, as, need) {
   const classes = (await ctx.http({ as, path: "/api/instructor/classrooms" })).body?.data || [];
   for (const c of classes) {
     const roster = (await ctx.http({ as, path: `/api/instructor/classrooms/${c.id}/students` })).body?.data || [];
-    const ok = roster.filter((r) => r.has_agent && /^tester\d+$/.test(r.username || "") && !/^tester0[345]$/.test(r.username));
+    // Class battles don't use network privacy, but tester04 (the blocker) is left out and the other seeds go last.
+    const seed = (u) => /^tester0[35]$/.test(u);
+    const ok = roster.filter((r) => r.has_agent && /^tester\d+$/.test(r.username || "") && r.username !== "tester04")
+      .sort((x, y) => Number(seed(x.username)) - Number(seed(y.username)));
     if (ok.length >= need) return { classroom: c, learners: ok.slice(0, need) };
   }
   return null;
