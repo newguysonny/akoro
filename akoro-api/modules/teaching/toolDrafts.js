@@ -38,17 +38,24 @@ export async function runToolVersion(draftId, n) {
     if (!tool) throw new ToolError("That tool is no longer available.", "UNKNOWN_TOOL");
     const base = v.basedOn ? versionAt(payload, v.basedOn) : null;
     if (v.basedOn && !base?.result) throw new Error(`Version ${v.basedOn} isn't ready to build on.`);
-    const { result, coinsCharged } = await generateToolResult({
-      tool, input: payload.input || {}, userId: draft.created_by,
-      base: base?.result || null, request: base ? v.request : null,
-    });
+    const ask = { tool, input: payload.input || {}, userId: draft.created_by, base: base?.result || null, request: base ? v.request : null };
+    let { result, coinsCharged } = await generateToolResult(ask);
+    // A follow-up that comes back unchanged is the model ignoring it: ask once more, firmly.
+    const same = (a, b) => JSON.stringify(a?.entries) === JSON.stringify(b?.entries);
+    let unchanged = false;
+    if (base?.result && same(result, base.result)) {
+      const again = await generateToolResult({ ...ask, request: `${v.request}\n\nYour last answer was identical to the current version. Make the change visibly: rewrite every entry it affects, not just one word.` });
+      coinsCharged = (coinsCharged || 0) + (again.coinsCharged || 0);
+      result = again.result;
+      unchanged = same(result, base.result);
+    }
     await updateDraftPayload(draftId, (p, row) => {
       if (row.status !== "draft") return null;
       const i = versionsOf(p).findIndex((x) => x.n === n);
       if (i < 0 || p.versions[i].status !== "drafting") return null;
       p.versions[i] = {
         ...p.versions[i], status: "ready", result, coinsCharged, error: null, summary: summaryOf(result),
-        note: base ? "Revised as asked." : "First draft.", readyAt: new Date().toISOString(),
+        note: base ? (unchanged ? "The writer returned this unchanged — try asking again in different words." : "Revised as asked.") : "First draft.", readyAt: new Date().toISOString(),
       };
       return p;
     });
