@@ -277,7 +277,7 @@ async function reconstructHistoryBlocks(sessionId, topic, subject, agentName, ag
 // A recurring battle (battle/series.js): days of the week + a time, until an end date and time.
 const REPEAT_SCHEMA = {
   type: "object",
-  description: "RECURRING only, when the learner asks for a battle that repeats. days: 0=Sun … 6=Sat; time: 'HH:MM' 24-hour in their time zone; until: ISO 8601 (+01:00) when the series ends — ask for the end date if they gave none.",
+  description: "RECURRING only, when the learner asks for a battle that repeats. days: 0=Sun … 6=Sat; time: 'HH:MM' 24-hour in their time zone; until: ISO 8601 (+01:00) when the series ends — a date without a year is its next occurrence (don't ask which year); ask only if they gave no end at all.",
   properties: {
     days: { type: "array", items: { type: "number" } }, time: { type: "string" },
     tz: { type: "string", description: "IANA zone, default Africa/Lagos." }, until: { type: "string" },
@@ -607,7 +607,7 @@ export const CHAT_TOOLS = [
   {
     name: "class_battle",
     description: "Battle CLASSMATES in one of the learner's classes (questions from the class subject) or courses (from the course) — ONLY when the learner explicitly asks. " +
-      "opponents: classmates' @usernames, or whole_class. One classmate = a 1v1; more = a group battle (they each accept). Start now, scheduled_for (ISO 8601 +01:00), " +
+      "opponents: classmates' @usernames exactly as the learner gave them, or whole_class — no need to search_agents first (the class itself is checked). One classmate = a 1v1; more = a group battle (they each accept). Start now, scheduled_for (ISO 8601 +01:00), " +
       "or repeat for a RECURRING one (they're in every one automatically). Name the class (class_name) or course (course_name) if they have more than one. " +
       "For agents outside their classes, use challenge_agent. A learner never battles a teacher — for being checked by a teacher or the guide, use request_guide_review.",
     input_schema: {

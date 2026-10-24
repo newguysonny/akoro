@@ -59,10 +59,16 @@ function tracker(ctx) {
   return made;
 }
 
-/** One live learner turn: the tool, its success (or BLOCKED for coins / questions), and what it returned. */
+/** One live learner turn: the tool, its success (or BLOCKED for coins / questions), and what it returned.
+ *  An agent may confirm before a write ("Shall I set it up?"): one "yes" turn follows, as a learner would answer. */
 async function learnerCase(ctx, made, { as, label, prompt, tool, args = {} }) {
-  const turn = await ctx.agent.chat({ as: `@${as}`, mode: "live", prompt });
+  let turn = await ctx.agent.chat({ as: `@${as}`, mode: "live", prompt });
   ctx.expect.eq(`${label}: turn answered`, turn.status, 200);
+  if (!lastCall(turn, tool) && /\?\s*$|say yes|confirm/i.test(String(turn.reply || "").trim())) {
+    ctx.note(`${label}: the agent confirmed first — "${String(turn.reply || "").slice(0, 160)}"`);
+    turn = await ctx.agent.chat({ as: `@${as}`, mode: "live", prompt: "Yes, go ahead.",
+      history: [{ role: "user", content: prompt }, { role: "assistant", content: String(turn.reply || "") }] });
+  }
   const call = lastCall(turn, tool);
   for (const t of turn.tools || []) {
     const r = t.result || {};
@@ -198,9 +204,11 @@ export const battleChatClass = {
   description: "From learner chat: a class duel, a class group battle at a set time, a recurring class battle; a review with the guide; joining the daily battle.",
   async run(ctx) {
     const made = tracker(ctx);
-    const found = await battleClass(ctx, BATTLE_INSTRUCTOR, 4);
-    if (!found) ctx.expect.blocked(`${BATTLE_INSTRUCTOR} has no class with 4 test learners who have an agent`);
-    const { classroom, learners } = found;
+    // tester03–05 carry the agent-network privacy seeds (hidden, blocking): not for these cases.
+    const found = await battleClass(ctx, BATTLE_INSTRUCTOR, 7);
+    const learners = (found?.learners || []).filter((l) => !/^tester0[345]$/.test(l.username)).slice(0, 4);
+    if (!found || learners.length < 4) ctx.expect.blocked(`${BATTLE_INSTRUCTOR} has no class with 4 test learners (besides the privacy seeds) who have an agent`);
+    const { classroom } = found;
     const [a, b, c, d] = learners;
     const cls = classroom.name;
 
