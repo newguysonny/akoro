@@ -1264,7 +1264,7 @@ export const INSTRUCTOR_TOOLS = [
   {
     name: "cancel_activity_routine",
     description: "Cancel one weekly routine at the instructor's request.",
-    input_schema: { type: "object", properties: { routineId: { type: "string" } }, required: ["routineId"] },
+    input_schema: { type: "object", properties: { routineId: { type: "string", description: "The routineId from list_activity_routines (its exact title works too)." } }, required: ["routineId"] },
   },
   {
     name: "get_activity_draft",

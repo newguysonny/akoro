@@ -280,7 +280,8 @@ export const routineLifecycle = {
     const t3 = await say("Cancel that routine.", "cancel");
     const cancelled = lastCall(t3, "cancel_activity_routine");
     ctx.expect.ok("the agent called cancel_activity_routine", !!cancelled, toolsOf(t3));
-    ctx.expect.eq("it cancelled the same routine", cancelled?.input?.routineId, routineId);
+    // By id or by its title: what counts is which routine was cancelled.
+    ctx.expect.eq("it cancelled the same routine", cancelled?.result?.routineId, routineId);
     ctx.expect.ok("it was cancelled", cancelled?.result?.cancelled === true, cancelled?.result);
     ctx.expect.toolNotCalled(t3, "prepare_activity");   // cancelling must not start a draft
 
