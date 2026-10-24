@@ -164,6 +164,61 @@ export const activityChatAskMissing = {
   },
 };
 
+/* ── Battles and self study ask too ─────────────────────────────────────── */
+
+export const activityChatBattleSelfStudyAsk = {
+  name: "activity_chat.battle_self_study_ask", area: "instructor-chat", risk: "write", regression: false, timeoutMs: 540_000,
+  description: "The strict rule for battles and self study: a battle or a self study with no audience is asked about, learners the teacher never named are asked for (never picked), a self study's subject is asked for; each is prepared once the teacher has said it.",
+  async run(ctx) {
+    const { classroom, learners, who } = await classOf(ctx);
+    const teacher = await ctx.as(INSTRUCTOR);
+    const fresh = () => talk(ctx, { instructor: INSTRUCTOR }, teacher);
+    const noDraft = (label, turn) => ctx.expect.ok(`${label}: nothing is prepared`, !prepared(turn), { tools: toolsOf(turn), results: (turn.tools || []).map((t) => t.result?.unsaid || t.result?.error || null) });
+
+    // Battle: no audience → asked; then the class named → prepared for it.
+    let say = fresh();
+    const b1 = await say("Set up a battle on fractions, 10 questions.", "battle, no audience");
+    noDraft("battle, no audience", b1);
+    ctx.expect.ok("the agent asks who the battle is for", asks(b1.reply, /\b(who|which|class|learners?|students?)\b/i), b1.reply);
+    const b2 = await say(`For ${who} in ${classroom.name}.`, "battle, audience given");
+    const pb = lastCall(b2, "prepare_activity");
+    ctx.expect.ok("now it prepares the battle", pb?.result?.prepared === true && pb?.input?.type === "battle", { tools: toolsOf(b2), input: pb?.input, result: pb?.result });
+    const db2 = pb?.result?.draftId ? await draftRow(ctx, INSTRUCTOR, pb.result.draftId) : null;
+    const bn = (db2?.audience?.names || []).map((n) => String(n).replace(/^@/, ""));
+    ctx.expect.ok("for exactly the learners named", learners.every((l) => bn.includes(l.username) || (db2?.payload?.usernames || []).includes(l.username)) && bn.length <= learners.length, db2?.audience);
+
+    // Battle: learners the teacher didn't name → asked for, never picked.
+    say = fresh();
+    const b3 = await say(`Set a fractions battle for my three strongest learners in ${classroom.name}.`, "battle, unnamed learners");
+    const p3 = lastCall(b3, "prepare_activity");
+    if (prepared(b3)) {
+      const d3 = await draftRow(ctx, INSTRUCTOR, p3.result.draftId);
+      ctx.expect.ok("if prepared, it is for the class named — never learners the agent chose", !(d3?.payload?.usernames || []).length && !(d3?.payload?.user_ids || []).length, d3?.audience);
+    } else ctx.expect.ok("the agent asks which learners", asks(b3.reply, /\b(which|who|learners?|students?|names?)\b/i), b3.reply);
+
+    // Self study: no audience → asked; then no subject → asked; then prepared as said.
+    say = fresh();
+    const s1 = await say("Set a self study on the water cycle.", "self study, no audience");
+    noDraft("self study, no audience", s1);
+    ctx.expect.ok("the agent asks who it is for (or the subject too)", asks(s1.reply, /\b(who|which|class|learners?|students?|subject)\b/i), s1.reply);
+    const s2 = await say(`For ${who} in ${classroom.name}.`, "self study, audience given");
+    noDraft("self study, subject still unsaid", s2);
+    ctx.expect.ok("…it asks which subject (never assumed from \"the water cycle\")", asks(s2.reply, /subject/i), s2.reply);
+    const s3 = await say("Basic Science.", "self study, subject given");
+    const ps = lastCall(s3, "prepare_activity");
+    ctx.expect.ok("now it prepares the self study", ps?.result?.prepared === true && ps?.input?.type === "self_study", { tools: toolsOf(s3), result: ps?.result });
+    const ds = ps?.result?.draftId ? await draftRow(ctx, INSTRUCTOR, ps.result.draftId) : null;
+    ctx.expect.eq("in Basic Science", ds?.subject || ds?.payload?.subject, "Basic Science");
+
+    // Self study: changing who it's for to someone never named is asked about too.
+    const s4 = await say("Actually, give it to my weakest learner instead.", "self study, unnamed new audience");
+    const rv = lastCall(s4, "revise_activity_draft");
+    const after = ds ? await draftRow(ctx, INSTRUCTOR, ds.id) : null;
+    ctx.expect.ok("the audience isn't changed to a learner the agent picked", JSON.stringify(after?.audience) === JSON.stringify(ds?.audience) || rv?.result?.revised !== true, { revise: rv?.result, before: ds?.audience, after: after?.audience });
+    ctx.expect.ok("the agent asks which learner", asks(s4.reply, /\b(which|who|learners?|students?|names?)\b/i), s4.reply);
+  },
+};
+
 /* ── Assignment: versions, parts, going back ────────────────────────────── */
 
 export const activityChatAssignmentVersions = {
@@ -340,4 +395,4 @@ export const activityChatSelfStudyAssign = {
   },
 };
 
-export const activityChatScenarios = [activityChatAskMissing, activityChatAssignmentVersions, activityChatAssignmentAssign, activityChatSelfStudyAssign];
+export const activityChatScenarios = [activityChatAskMissing, activityChatBattleSelfStudyAsk, activityChatAssignmentVersions, activityChatAssignmentAssign, activityChatSelfStudyAssign];
