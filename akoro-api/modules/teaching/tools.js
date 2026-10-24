@@ -120,7 +120,7 @@ Then one final entry "Quick Checks" with a list "Questions" of 5 short questions
     prompt: (i) => `${BRIEF(i)}
 ${DIRECTION(i)}
 Produce 5 entries, each a different real-world connection, drawn from different parts of life (home, school or sport, money or market, technology, work or community). Use layout "split". The entry title is a short, vivid, human name (for example "Our Shared Recipes", "Team Traditions"). Sections in order:
-- text "Context" (tone info) — 3-4 sentences. Start from the everyday situation, make the comparison to the topic obvious, **bold** the key terms, and end with one sentence of the form "Knowing about … helps us …" that says why it matters to the student.
+- text "Context" (tone info) — 3-4 sentences. Start from the everyday situation, make the comparison to the topic obvious, **bold** the key terms, and close with one sentence on why this matters to the student — worded differently in every entry (never the same stock phrase twice). Keep it to about 60 words.
 - chips "Professions" (tone accent) — exactly 3 real, specific job titles whose daily work depends on this (not just "Teacher").
 Then two final entries (layout "stack"): "Talk About It" with a list "Discussion" of 5 open questions linking the topic to students' own lives, and "Try This" with a text "Activity" describing one thing they can do or observe outside class this week, with what to bring back.`,
   },
@@ -132,7 +132,7 @@ Then two final entries (layout "stack"): "Talk About It" with a list "Discussion
     prompt: (i) => `${BRIEF(i)}
 ${DIRECTION(i)}
 Produce 5 entries, one per hook. The entry title is the hook's name (for example "The Time Traveler's Dilemma", "Stone Age Survivor"). Sections in order:
-- text (no label) — one paragraph: what the hook is, and the learning idea behind it (for instance "This hook uses a hypothetical scenario to get students thinking about … without naming it"). If it is a game or role-play, start with the line the teacher says to launch it ("Let's play '…'! You are …").
+- text (no label) — one paragraph: what the hook is, and the learning idea behind it (the curiosity, prediction, role or puzzle that makes students need the topic). Do NOT begin two descriptions with the same words, and do not use a stock opening such as "This hook uses…" more than once. If it is a game or role-play, start with the line the teacher says to launch it ("Let's play '…'! You are …").
 - list "Implementation Steps" (ordered true, tone accent) — 4-5 steps for the teacher. Give the teacher's exact words in quotes where they speak, say what students do, and end every step with its minutes in brackets, e.g. "Pose the challenge: '…' (2 min)". The LAST step is always a transition into the lesson ("Transition: 'Today we …'"). Total time 5-10 minutes.
 - fields — "Expected Outcome" (what students will feel, notice or be able to say, and how that leads into the topic) and "Materials Needed" (specific items, or "None").`,
   },
