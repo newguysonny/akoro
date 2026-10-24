@@ -14,10 +14,8 @@
 import { battleClass, BATTLE_INSTRUCTOR } from "./instructorActivities.js";
 import { teacherOf, cleanSlate } from "./instructorTools.js";
 
-export const activityReviewRuns = {
-  name: "activity.review_battle", area: "activities", risk: "write", regression: false, timeoutMs: 300_000,
-  description: "A self study assigned with its review battle: kept on the activity, the instruction line added, one class review battle sent to every learner's Challenges, starting at the review time; accept holds a seat, decline is a miss; the instructor's view follows each learner.",
-  async run(ctx) {
+/** A self study for 2 test learners, assigned with its review on (a day away, due in three). Cleans up after. */
+async function assignWithReview(ctx) {
     const probe = await ctx.db.probe("edu.self_study_targets", "id, review_battle_id");
     if (!probe.ok) ctx.expect.blocked(`no review_battle_id yet (migration 2026-activity-review.sql): ${probe.error}`);
     const teacher = await teacherOf(ctx, BATTLE_INSTRUCTOR);
@@ -43,7 +41,7 @@ export const activityReviewRuns = {
     const res = await ctx.http({ as: BATTLE_INSTRUCTOR, method: "POST", path: `/api/self-study/drafts/${draft.id}/assign`, body: { due_at: due, review: { on: true, at, questions: 5 } } });
     ctx.expect.status("assigned", res, 201);
     const assignmentId = res.body?.data?.id;
-    if (!assignmentId) return;
+    if (!assignmentId) return {};
     ctx.cleanup(async () => {
       const { data: bs } = await db.from("battles").select("id").eq("activity_assignment_id", assignmentId);
       const ids = (bs || []).map((b) => b.id);
@@ -54,6 +52,16 @@ export const activityReviewRuns = {
       await db.schema("edu").from("self_study_targets").delete().eq("assignment_id", assignmentId);
       await db.schema("edu").from("self_study_assignments").delete().eq("id", assignmentId);
     });
+
+    return { teacher, learners, assignmentId, db, runActivityReview, at, due };
+}
+
+export const activityReviewRuns = {
+  name: "activity.review_battle", area: "activities", risk: "write", regression: false, timeoutMs: 300_000,
+  description: "A self study assigned with its review battle: kept on the activity, the instruction line added, one class review battle sent to every learner's Challenges, starting at the review time; accept holds a seat, decline is a miss; the instructor's view follows each learner.",
+  async run(ctx) {
+    const { learners, assignmentId, runActivityReview, at } = await assignWithReview(ctx);
+    if (!assignmentId) return;
 
     const [a] = await ctx.db.rows("edu.self_study_assignments", { id: assignmentId }, { columns: "details, instructions, due_at" });
     ctx.expect.eq("the review is kept on the activity", [a?.details?.review?.on, a?.details?.review?.questions, new Date(a?.details?.review?.at).getTime()], [true, 5, new Date(at).getTime()]);
@@ -99,5 +107,65 @@ export const activityReviewRuns = {
     ctx.expect.eq("it still waits for the review time", after?.status, "scheduled");
     const s2 = await statuses();
     ctx.expect.eq("the instructor sees one accepted, one missed", [s2[A.id], s2[B.id]], ["accepted", "missed"]);
+  },
+};
+
+/**
+ * The class review played through: both learners accept, the start is
+ * brought forward to now (what the review time does), and the battle runs on
+ * the worker with both agents answering; each learner gets their own mark
+ * sheet and the instructor's view shows both done with their marks.
+ */
+export const activityReviewPlay = {
+  name: "activity.review_battle_play", area: "activities", risk: "write", regression: false, timeoutMs: 600_000,
+  description: "A class review battle played through: both learners accept, the start is brought forward to now, the worker runs it with both agents; each learner gets their own mark sheet, the instructor sees both done.",
+  async run(ctx) {
+    const { learners, assignmentId, runActivityReview, db } = await assignWithReview(ctx);
+    if (!assignmentId) return;
+    const sent = await runActivityReview(assignmentId);
+    const battleId = sent.battleId;
+    if (!battleId) ctx.expect.blocked(`the class review wasn't sent: ${sent.skipped}`);
+
+    for (const l of learners) {
+      const acc = await ctx.http({ as: `@${l.username}`, method: "POST", path: `/api/battle/challenges/${battleId}/accept` });
+      ctx.expect.status(`@${l.username} accepts`, acc, 200);
+    }
+
+    // The review time, brought forward: the day-away start moves to now.
+    const { cancelLater, addLater } = await import("../../../lib/deferredJobs.js");
+    const { battleQueue } = await import("../../battle/worker.js");
+    await cancelLater(battleQueue, `start-${battleId}`);
+    const nowIso = new Date().toISOString();
+    await db.from("battles").update({ scheduled_start: nowIso, expires_at: nowIso }).eq("id", battleId);
+    await addLater(battleQueue, "start-battle", { action: "start-battle", battleId }, { delay: 2000, jobId: `start-${battleId}` });
+
+    const live = await ctx.until(async () => {
+      const [b] = await ctx.db.rows("battles", { id: battleId }, { columns: "status" });
+      return ["live", "completed", "cancelled"].includes(b?.status) ? b.status : null;
+    }, { timeoutMs: 90_000, everyMs: 3_000 });
+    ctx.expect.ok("it starts at the (brought-forward) review time", live === "live" || live === "completed", { status: live });
+    const seated = await ctx.db.rows("battle_participants", { battle_id: battleId }, { columns: "id, user_id, joined_at" });
+    ctx.expect.eq("both learners' agents are in it", seated.filter((s) => s.joined_at).length, learners.length);
+
+    const done = await ctx.until(async () => {
+      const [b] = await ctx.db.rows("battles", { id: battleId }, { columns: "status" });
+      return ["completed", "cancelled"].includes(b?.status) ? b.status : null;
+    }, { timeoutMs: 420_000, everyMs: 5_000 });
+    ctx.expect.eq("it plays through to the end", done, "completed");
+    if (done !== "completed") return;
+
+    const { data: answers } = await db.from("battle_answers").select("participant_id").in("participant_id", seated.map((x) => x.id));
+    ctx.expect.ok("both agents answered", new Set((answers || []).map((x) => x.participant_id)).size === learners.length, { answers: (answers || []).length });
+
+    // Each learner's own mark sheet.
+    for (const l of learners) {
+      const r = await ctx.http({ as: `@${l.username}`, path: `/api/battle/battles/${battleId}/results` });
+      ctx.expect.status(`@${l.username}'s results answer`, r, 200);
+      ctx.expect.ok(`…as their own mark sheet`, r.body?.learner?.userId === l.id && (r.body?.score?.total ?? 0) >= 3 && Array.isArray(r.body?.markSheet) && r.body.markSheet.length === r.body.score.total, { learner: r.body?.learner, score: r.body?.score, keys: Object.keys(r.body || {}) });
+    }
+
+    const v = await ctx.http({ as: BATTLE_INSTRUCTOR, path: `/api/self-study/${assignmentId}/reviews` });
+    const reviews = v.body?.data?.reviews || [];
+    ctx.expect.ok("the instructor sees both done, each with a mark", reviews.length === learners.length && reviews.every((r) => r.status === "done" && r.total >= 3 && r.correct != null), reviews);
   },
 };
