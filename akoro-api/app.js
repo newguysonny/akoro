@@ -661,22 +661,30 @@ if (process.env.MIGRATIONS_ON_BOOT !== "false") {
   if (!mUrl) {
     console.warn("[MIGRATIONS] no MIGRATION_DATABASE_URL/DATABASE_URL configured — boot migration SKIPPED. Set the Supabase Postgres connection string so deploys self-migrate.");
   } else {
-    try {
+    // The boot waits for the migrations at most MIGRATIONS_BOOT_WAIT_MS (default
+    // 60s), then opens its port with them still running: the host fails a
+    // deploy whose port doesn't open in time, and a slow database once made
+    // the whole run outlast it ("Port scan timeout reached").
+    const run = (async () => {
       if (await migrationsAlreadyApplied(mUrl, mSha)) {
         console.log(`[MIGRATIONS] already applied for ${String(mSha).slice(0, 7) || "this build"} — skipping boot run`);
-      } else {
-        // The gate's sandbox (VERIFY_TARGET=sandbox, its own database) also gets the
-        // demo seeds — schools, courses, classes — so its testers have a world to act in.
-        const groups = process.env.VERIFY_TARGET === "sandbox" ? ["schema", "demo"] : ["schema"];
-        const { applied, failed } = await applyMigrations({ url: mUrl, groups, label: "boot" });
-        if (failed) console.error(`[MIGRATIONS] ${failed} migration(s) FAILED at boot — check the logs above; the API is starting anyway.`);
+        return;
       }
-    } catch (e) {
+      // The gate's sandbox (VERIFY_TARGET=sandbox, its own database) also gets the
+      // demo seeds — schools, courses, classes — so its testers have a world to act in.
+      const groups = process.env.VERIFY_TARGET === "sandbox" ? ["schema", "demo"] : ["schema"];
+      const { failed } = await applyMigrations({ url: mUrl, groups, label: "boot" });
+      if (failed) console.error(`[MIGRATIONS] ${failed} migration(s) FAILED at boot — check the logs above; the API is starting anyway.`);
+    })().catch((e) => {
       // A failed migration must not crash-loop the whole service: start and
       // let the loud log (and /health) tell the operator. The error is also
       // recorded in edu.migration_log for the next boot to retry.
       console.error("[MIGRATIONS] boot run failed — starting anyway:", e.message);
-    }
+    });
+    const waitMs = Math.max(5_000, Number(process.env.MIGRATIONS_BOOT_WAIT_MS) || 60_000);
+    let waited = false;
+    await Promise.race([run, new Promise((r) => setTimeout(() => { waited = true; r(); }, waitMs).unref())]);
+    if (waited) console.warn(`[MIGRATIONS] still running after ${Math.round(waitMs / 1000)}s — starting the API; they finish in the background.`);
   }
 }
 
