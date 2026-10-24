@@ -1231,7 +1231,7 @@ export default function LearnerDashboard() {
               )
             : <DiscoveryTab/>)}
           {tab==="rankings" && <RankingsTab/>}
-          {tab==="battles"  && <BattlesTab battles={battles} onViewChallenge={()=>goTab("challenges")} onBattleCreated={loadBattles}/>}
+          {tab==="battles"  && <BattlesTab battles={battles} invites={challenges} onViewChallenge={()=>goTab("challenges")} onBattleCreated={loadBattles}/>}
           {tab==="agent"    && <AgentChatTab onStartTeach={s=>{ setTeachSession(s); }} onTeachTopic={({ topic, subject })=>{ setConfigInitial({ topic, subject: subject ? subject.charAt(0).toUpperCase()+subject.slice(1) : 'Science' }); setConfigOpen(true); }} onStartExamPrep={()=>setExamPrepOpen(true)} onOpenConceptTracker={()=>setConceptTrackerOpen(true)} onOpenAdaptiveControls={()=>setAdaptiveControlsOpen(true)} agentNameProp={agentProfile.name} agentEmojiProp={agentProfile.emoji} onChatActive={setChatActive}
             agentOnline={agentOnline} agentAutonomyLoaded={agentAutonomyLoaded} agentAutonomySaving={agentAutonomySaving}
             onToggleAgentAutonomy={toggleAgentAutonomy}

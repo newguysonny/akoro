@@ -90,4 +90,43 @@ export const scenarios = [
       t.check('no page errors', errors.length === 0, { actual: errors.slice(0, 3) });
     },
   },
+  {
+    name: 'battles.waiting_to_fill',
+    description: 'Challenges holds only what waits for my answer (no Joined or Mine); a request I joined waits in Battles → Scheduled under "Waiting to fill", named by who posted it, and opens its sheet. Fixture requests, intercepted in the browser — nothing is created.',
+    async run(t) {
+      const { page } = t;
+      const errors = [];
+      page.on('pageerror', (e) => errors.push(e.message));
+      const at = new Date(Date.now() + 2 * 86400000).toISOString();
+      const joined = { id: 'gatefake-joined', title: 'Gate team battle (joined)', battle_type: 'team', subject: 'Economics', max_players: 4, accepted_by: ['me'], scheduled_for: at, status: 'open',
+        by: { userId: 'u9', name: 'Tola', username: '@tester09', agent: '🦉 Bolt', level: 3 } };
+      const open = { id: 'gatefake-open', title: 'Gate open 1v1', kind: '1v1', subject: 'Physics', seats: '1/2', scheduledFor: at, by: { userId: 'u8', name: 'Ada', username: '@tester08', agent: '🐨 Nova', level: 2 } };
+      await page.route(/\/api\/agent-network\/challenge-requests\?.*$/, (route) => {
+        const q = new URL(route.request().url()).searchParams;
+        const requests = q.get('joined') ? [joined] : q.get('mine') ? [] : [open];
+        return route.fulfill({ json: { success: true, data: { requests, total: requests.length } } });
+      });
+      await page.goto(`${t.app}/app?tab=challenges`, { waitUntil: 'domcontentloaded' });
+      await page.getByRole('button', { name: /^All\s*\d+/ }).first().waitFor({ timeout: 20_000 }).catch(() => {});
+      await page.getByText('Gate open 1v1').first().waitFor({ timeout: 20_000 }).catch(() => {});
+      t.check('an open request is in Challenges', await page.getByText('Gate open 1v1').first().isVisible().catch(() => false));
+      t.check('a request I joined is NOT in Challenges', !(await page.getByText('Gate team battle (joined)').first().isVisible().catch(() => false)));
+      const chips = (await page.locator('button').filter({ hasText: /^(All|Invites|Open|Joined|Reviews|Recurring|Mine)\s*\d+$/ }).allInnerTexts()).map((x) => x.replace(/\s*\d+$/, '').trim());
+      t.check('no Joined or Mine chip in Challenges', !chips.includes('Joined') && !chips.includes('Mine'), { actual: chips });
+      await t.shot('challenges');
+
+      await page.goto(`${t.app}/app?tab=battles`, { waitUntil: 'domcontentloaded' });
+      const sched = page.getByRole('button', { name: /Scheduled/ }).first();
+      await sched.waitFor({ timeout: 20_000 }).catch(() => {});
+      await sched.click().catch(() => {});
+      const group = page.locator('[data-waiting-to-fill]');
+      t.check('Battles → Scheduled has "Waiting to fill"', await group.first().waitFor({ timeout: 15_000 }).then(() => true, () => false));
+      t.check('…with the joined request, named by who posted it (not "Someone")', await group.getByText('Gate team battle (joined)').first().isVisible().catch(() => false) && await group.getByText(/Tola/).first().isVisible().catch(() => false));
+      await t.shot('battles-scheduled');
+      await group.getByText('Gate team battle (joined)').first().click();
+      t.check('tapping it opens its sheet ("You\'re in")', await page.getByText(/You're in/).first().waitFor({ timeout: 8_000 }).then(() => true, () => false));
+      await t.shot('waiting-sheet');
+      t.check('no page errors', errors.length === 0, { actual: errors.slice(0, 3) });
+    },
+  },
 ];

@@ -6,7 +6,9 @@ import BattleModal from './BattleModal.jsx';
 import { formatLeft } from './ChallengeModal.jsx';
 import CreateBattleSheet from './CreateBattleSheet.jsx';
 import ParticipantsSheet from './ParticipantsSheet.jsx';
-import { rematchBattle, joinDaily, skipDaily } from '../../services/agentNetworkApi.js';
+import { rematchBattle, joinDaily, skipDaily, fetchChallengeRequests } from '../../services/agentNetworkApi.js';
+import { ChallengeCard, RequestSheet, SeriesSheet } from './ChallengesList.jsx';
+import { waitingItems } from './challengeItems.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
 function ChallengeRow({ challenge, onTap }) {
@@ -126,8 +128,18 @@ function versus(b) {
   return null;
 }
 
-function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
+function BattlesTab({ battles, invites = [], onViewChallenge, onBattleCreated }) {
   const { t } = useLang();
+  // Waiting to fill: requests I took a seat in or posted, and series I'm in or set — accepted, so
+  // they live here (Scheduled), not in Challenges (which is only what waits for my answer).
+  const [reqs, setReqs] = useState({ mine: [], joined: [] });
+  const [openWait, setOpenWait] = useState(null);
+  const loadWaiting = React.useCallback(() => {
+    Promise.all([fetchChallengeRequests({ mine: 'true' }).catch(() => null), fetchChallengeRequests({ joined: 'true' }).catch(() => null)])
+      .then(([m, j]) => setReqs({ mine: (m?.requests || []).filter((r) => r.status === 'open'), joined: (j?.requests || []).filter((r) => r.status === 'open') }));
+  }, []);
+  useEffect(() => { loadWaiting(); }, [loadWaiting, battles]);
+  const waiting = React.useMemo(() => waitingItems({ invites, ...reqs }), [invites, reqs]);
   const [viewFilter, setViewFilter] = useState("active");
   const [watching,   setWatching]   = useState(null);
   const [rosterOf,   setRosterOf]   = useState(null);   // battle whose roster is open
@@ -174,11 +186,11 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
     completed:{label:"COMPLETED",bg:"rgba(16,185,129,.10)", color:GREEN, border:"rgba(16,185,129,.25)" },
     lobby:    {label:"WAITING",  bg:"rgba(245,158,11,.12)", color:GOLD,  border:"rgba(245,158,11,.28)" },
   };
-  const TABS=[{key:"active",label:t('battles.active'),icon:"ti-bolt",count:liveBattles.length+waitingBattles.length},{key:"scheduled",label:t('battles.scheduled'),icon:"ti-calendar",count:scheduledBattles.length},{key:"completed",label:t('battles.completed'),icon:"ti-trophy",count:completedBattles.length}];
+  const TABS=[{key:"active",label:t('battles.active'),icon:"ti-bolt",count:liveBattles.length+waitingBattles.length},{key:"scheduled",label:t('battles.scheduled'),icon:"ti-calendar",count:scheduledBattles.length+waiting.length},{key:"completed",label:t('battles.completed'),icon:"ti-trophy",count:completedBattles.length}];
   return (
     <div style={{ flex:1,overflowY:"auto",background:"var(--ak-surface)",display:"flex",flexDirection:"column" }}>
       <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,padding:"12px 16px 10px",borderBottom:"1px solid var(--ak-border)" }}>
-        {[{val:liveBattles.length,label:t('battles.live'),color:RED,bg:`${RED}0a`},{val:scheduledBattles.length,label:t('battles.scheduled'),color:BRAND,bg:`${BRAND}0a`},{val:completedBattles.length,label:t('battles.completed'),color:GREEN,bg:"rgba(16,185,129,.07)"},{val:`+${totalXP}`,label:t('battles.xp_at_stake'),color:GOLD,bg:"rgba(245,158,11,.07)"}].map(({val,label,color,bg})=>(
+        {[{val:liveBattles.length,label:t('battles.live'),color:RED,bg:`${RED}0a`},{val:scheduledBattles.length+waiting.length,label:t('battles.scheduled'),color:BRAND,bg:`${BRAND}0a`},{val:completedBattles.length,label:t('battles.completed'),color:GREEN,bg:"rgba(16,185,129,.07)"},{val:`+${totalXP}`,label:t('battles.xp_at_stake'),color:GOLD,bg:"rgba(245,158,11,.07)"}].map(({val,label,color,bg})=>(
           <div key={label} style={{ textAlign:"center",background:bg,borderRadius:12,padding:"9px 4px",border:`1px solid ${color}25` }}>
             <div style={{ fontSize:17,fontWeight:900,color }}>{val}</div>
             <div style={{ fontSize:9.5,color:"var(--ak-text-muted)",marginTop:1,fontWeight:600 }}>{label}</div>
@@ -211,7 +223,13 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
           <button onClick={()=>dailyAction(()=>joinDaily({}))} disabled={dailyBusy} style={{ padding:"6px 12px",borderRadius:20,border:`1.5px solid ${BRAND}40`,background:`${BRAND}0A`,color:BRAND,fontSize:11.5,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>Join</button>
         </div>
       )}
-      {mine.length===0&&!dailySkipped&&(
+      {viewFilter==="scheduled"&&waiting.length>0&&(
+        <div data-waiting-to-fill="" style={{ padding:"10px 16px 0",display:"flex",flexDirection:"column",gap:8 }}>
+          <div style={{ fontSize:10.5,fontWeight:900,letterSpacing:".06em",color:"var(--ak-text-muted)" }}>WAITING TO FILL</div>
+          {waiting.map((it)=><ChallengeCard key={it.key} item={it} onOpen={setOpenWait}/>)}
+        </div>
+      )}
+      {mine.length===0&&!dailySkipped&&!(viewFilter==="scheduled"&&waiting.length)&&(
         <div style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,padding:"40px 24px" }}>
           <Icon name="ti-swords" size={52} color="var(--ak-text-muted)" style={{opacity:.2}}/>
           <p style={{ fontSize:15,fontWeight:800,color:"var(--ak-text-muted)",textAlign:"center" }}>{t('battles.empty')}</p>
@@ -219,7 +237,7 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
           <button onClick={onViewChallenge} style={{ padding:"10px 22px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",gap:7 }}><ZapIcon size={13} color="#fff"/>{t('battles.view_challenges')}</button>
         </div>
       )}
-      {mine.length>0&&displayed.length===0&&!(viewFilter==="scheduled"&&dailySkipped)&&(
+      {mine.length>0&&displayed.length===0&&!(viewFilter==="scheduled"&&(dailySkipped||waiting.length))&&(
         <div style={{ textAlign:"center",padding:"36px 24px",color:"var(--ak-text-muted)" }}>
           <Icon name={viewFilter==="active"?"ti-bolt":viewFilter==="scheduled"?"ti-calendar":"ti-trophy"} size={36} color="var(--ak-text-muted)" style={{opacity:.3}}/>
           <p style={{ fontSize:13,fontWeight:700,marginTop:8 }}>{viewFilter==="active"?t('battles.none_live'):viewFilter==="scheduled"?t('battles.none_scheduled'):t('battles.none_completed')}</p>
@@ -294,6 +312,8 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
         })}
       </div>
       {watching&&<BattleModal battle={watching} onClose={()=>setWatching(null)}/>}
+      {openWait&&openWait.source==="request"&&<RequestSheet item={openWait} onClose={()=>setOpenWait(null)} onChanged={()=>{ loadWaiting(); onBattleCreated?.(); }}/>}
+      {openWait&&openWait.source==="series"&&<SeriesSheet item={openWait} onClose={()=>setOpenWait(null)} onChanged={()=>onBattleCreated?.()}/>}
       {creating&&<CreateBattleSheet onClose={()=>setCreating(false)} onCreated={onBattleCreated}/>}
       {rosterOf&&<ParticipantsSheet battle={rosterOf} onClose={()=>setRosterOf(null)}/>}
     </div>

@@ -19,15 +19,15 @@ const FORMAT_BY_TYPE = { '1v1': '1v1', classroom: 'Group', team: 'Team 2v2', ope
 const FORMAT_BY_KIND = { '1v1': '1v1', group: 'Group', team: 'Team 2v2' };
 const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+// The Challenges tab is requests waiting for MY answer (accept or decline). What I've joined, posted
+// or am in already waits in the Battles tab (Scheduled · Waiting to fill) — waitingItems below.
 export const FILTERS = [
   { key: 'all', label: 'All' },
   { key: 'invite', label: 'Invites' },
   { key: 'open', label: 'Open' },
-  { key: 'joined', label: 'Joined' },
   { key: 'review', label: 'Reviews' },
-  { key: 'recurring', label: 'Recurring' },
-  { key: 'mine', label: 'Mine' },
 ];
+const ANSWERABLE = new Set(['invite', 'review', 'open']);
 
 const when = (iso, now = new Date()) => {
   const d = new Date(iso || '');
@@ -151,6 +151,16 @@ export function mergeItems({ invites = [], open = [], mine = [], joined = [] }, 
   const seen = new Set();
   return items.filter((i) => (seen.has(i.key) ? false : seen.add(i.key)))
     .sort((a, b) => (rank[a.status] - rank[b.status]) || (a.sortAt - b.sortAt));
+}
+
+/** PURE: the Challenges tab — only what waits for my answer. */
+export function challengeItems(src, now = new Date()) {
+  return mergeItems(src, now).filter((i) => ANSWERABLE.has(i.status));
+}
+
+/** PURE: the Battles tab's "Waiting to fill" — requests I joined or posted, and series I'm in or set. */
+export function waitingItems({ invites = [], mine = [], joined = [] }, now = new Date()) {
+  return mergeItems({ invites, mine, joined, open: [] }, now).filter((i) => i.status === 'joined' || i.status === 'mine');
 }
 
 /** PURE: the items a filter chip keeps. */
