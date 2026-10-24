@@ -378,8 +378,10 @@ export async function generateToolResult({ tool, input, userId, base = null, req
   if (!result) console.warn(`[teaching/tools] ${tool.key} unusable (finish=${resp?.choices?.[0]?.finish_reason}, ${raw.length} chars): ${raw.slice(-160).replace(/\s+/g, " ")}`);
   if (!raw) throw new ToolError("Nothing came back — try again.", "EMPTY");
   if (!result) {
+    // `detail` rides to the failed version (and the gate's evidence) so a bad answer can be diagnosed.
     throw new ToolError(parseJson(raw) ? "That came back without any sections — try again." : "That came back in an unusable shape — try again.",
-      parseJson(raw) ? "NO_SECTIONS" : "UNPARSEABLE");
+      parseJson(raw) ? "NO_SECTIONS" : "UNPARSEABLE",
+      { detail: `finish=${resp?.choices?.[0]?.finish_reason} chars=${raw.length} head=${raw.slice(0, 80).replace(/\s+/g, " ")} tail=${raw.slice(-160).replace(/\s+/g, " ")}` });
   }
 
   // Charged AFTER the call, so a failed generation is free.

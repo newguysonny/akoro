@@ -62,7 +62,7 @@ export async function runToolVersion(draftId, n) {
     await updateDraftPayload(draftId, (p) => {
       const i = versionsOf(p).findIndex((x) => x.n === n);
       if (i < 0 || p.versions[i].status !== "drafting") return null;
-      p.versions[i] = { ...p.versions[i], status: "failed", error: String(e?.message || "Could not draft this.").slice(0, 200), code: e?.code || null };
+      p.versions[i] = { ...p.versions[i], status: "failed", error: String(e?.message || "Could not draft this.").slice(0, 200), code: e?.code || null, ...(e?.detail ? { debug: String(e.detail).slice(0, 400) } : {}) };
       return p;
     }).catch(() => {});
   } finally { clearTimeout(timer); }
