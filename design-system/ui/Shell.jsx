@@ -234,9 +234,9 @@ export function AgentToggle({ online, loaded = true, saving = false, onToggle, o
   );
 }
 
-function Header({ user, headerRight, onToggle, collapsed, onProfile, online }) {
+function Header({ user, headerRight, onToggle, collapsed, onProfile, online, mobileHide = false }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 18px', paddingTop: 'calc(12px + env(safe-area-inset-top, 0px))', background: 'var(--ak-surface)', borderBottom: '1px solid var(--ak-border)', flexShrink: 0, fontFamily: FONT }}>
+    <div className={mobileHide ? 'ak-mobile-hide' : undefined} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 18px', paddingTop: 'calc(12px + env(safe-area-inset-top, 0px))', background: 'var(--ak-surface)', borderBottom: '1px solid var(--ak-border)', flexShrink: 0, fontFamily: FONT }}>
       <button type="button" onClick={onToggle} className="ak-sb-toggle" title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} style={roundBtn}>
         <Icon name="ti-menu-2" size={17}/>
       </button>
@@ -342,7 +342,7 @@ export default function Shell({ brand, nav, bottom = [], user, online, headerRig
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--ak-bg)', fontFamily: FONT, color: 'var(--ak-text)' }}>
       <Sidebar brand={brand} nav={nav} collapsed={collapsed}/>
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
-        <Header user={user} online={online} headerRight={headerRight} onToggle={toggle} collapsed={collapsed} onProfile={onProfile}/>
+        <Header user={user} online={online} headerRight={headerRight} onToggle={toggle} collapsed={collapsed} onProfile={onProfile} mobileHide={bare}/>
         <main className={`ak-shell-main${bare ? ' ak-bare' : ''}${wide && !bare ? ' ak-wide' : ''}`}
           style={bare ? { flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' } : { flex: 1, overflowY: 'auto', padding: 16 }}>
           {!bare && (title || subtitle || action) && (

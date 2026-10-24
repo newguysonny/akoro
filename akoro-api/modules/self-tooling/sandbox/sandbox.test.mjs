@@ -1,4 +1,5 @@
 // Sandbox escape test pack (plan phase S5 exit): every attempt is contained.
+import "../../../test-env.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { runCode, staticCheck, asRows, CODE_LIMITS } from "./index.js";

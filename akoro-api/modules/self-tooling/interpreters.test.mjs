@@ -1,4 +1,5 @@
 // Self-tooling S2: data ops, validation and the recipe interpreter (no database).
+import "../../test-env.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as O from "./ops.js";

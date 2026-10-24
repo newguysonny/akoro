@@ -12,7 +12,11 @@ const { buildAiGradeMessages } = await import("./aiGrade.js");
 const read = (p) => readFile(new URL(p, import.meta.url), "utf8");
 const [guide, routes, createAssignment, page, builder, learnerPaper, instructorPaper, detail, marker] = await Promise.all([
   read("../adaptive-learning/agents/nana-esumai/guide.js"), read("./routes.js"), read("./createAssignment.js"),
-  read("../../../akoro-instructor/src/pages/ActivitiesPage.jsx"), read("../../../akoro-instructor/src/components/paper/PaperBuilder.jsx"),
+  Promise.all([   // the Activities page and the parts it was split into
+    "../../../akoro-instructor/src/pages/ActivitiesPage.jsx", "../../../akoro-instructor/src/components/activities/ActivityForm.jsx",
+    "../../../akoro-instructor/src/pages/activities-page/ActivitiesHome.jsx", "../../../akoro-instructor/src/pages/activities-page/DetailPage.jsx",
+    "../../../akoro-instructor/src/pages/activities-page/DraftsStrip.jsx",
+  ].map(read)).then((parts) => parts.join("\n")), read("../../../akoro-instructor/src/components/paper/PaperBuilder.jsx"),
   read("../../../akoro-learner/src/lib/paper.js"), read("../../../akoro-instructor/src/lib/paper.js"),
   read("../../../akoro-learner/src/pages/ActivityDetailPage.jsx"), read("../../../akoro-instructor/src/components/grading/QuestionMarker.jsx"),
 ]);

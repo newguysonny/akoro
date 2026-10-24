@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const source = await readFile(new URL("./chat.js", import.meta.url), "utf8");
@@ -245,8 +246,10 @@ test("draft cards survive a reload — tool previews ride the persisted message 
 });
 
 test("the instructor chat opts out of the mobile TopBar — the conversation gets the room", () => {
-  assert.match(instructorChatPage, /hideTopBarOnMobile>/);
-  assert.match(instructorChatPage, /height: isMobile \? 'calc\(100vh - 86px\)' : 'calc\(100vh - 150px\)'/);
+  // The console frame: a `bare` page owns the content area and the header hides on phones (ui/Shell.jsx).
+  assert.match(instructorChatPage, /<PageLayout bare>/);
+  const shell = readFileSync(new URL("../../../akoro-instructor/src/ui/Shell.jsx", import.meta.url), "utf8");
+  assert.match(shell, /mobileHide=\{bare\}/);
 });
 
 test("the instructor composer is the learner composer, exactly — stop, menu, semantics", async () => {
@@ -256,7 +259,7 @@ test("the instructor composer is the learner composer, exactly — stop, menu, s
   // the learner's running→stop affordance: send arrow becomes a ■ stop button
   assert.match(composer, /running = false,\s*\n\s*onStop,/);
   assert.match(composer, /\{running && onStop \? \(/);
-  assert.match(composer, /borderRadius: 2, background: INK/);
+  assert.match(composer, /borderRadius: 2, background: C\.ink/);   // the ■, in the theme's ink (dark mode)
   // the learner ModelSwitch's exact model: sections, meta badges, disabled
   // options with radio semantics, a scrolling 270px menu, aria-expanded chip
   assert.match(composer, /aria-haspopup="menu"/);

@@ -55,6 +55,16 @@
   outline: 2px solid var(--ak-brand, #6C3BFF) !important;
   outline-offset: 2px;
 }
+/* Text fields sit inside a rounded shell (the chat composer): a rectangular
+   outline cuts across it as a box. The shell's own focus border + the caret
+   already show focus, so only the text-entry outline is dropped (as in the
+   learner app). */
+[data-ui="next"] input:focus-visible,
+[data-ui="next"] textarea:focus-visible,
+[data-ui="next"] select:focus-visible {
+  outline: none !important;
+  outline-offset: 0;
+}
 [data-ui="next"] body {
   font-family: var(--ak-font);
   color: var(--ak-text);

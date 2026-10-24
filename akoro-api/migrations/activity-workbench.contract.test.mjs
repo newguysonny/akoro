@@ -138,7 +138,10 @@ test("multi-stage activities chain real work into one journey", async () => {
   const drafts = await read("../../akoro-api/modules/self-study/drafts.js");
   assert.match(drafts, /type: "multi_stage"/);
   assert.match(drafts, /details: \{ stages: refs \}/);
-  assert.match(drafts, /\["self_study", "assignment", "project"\]\.includes\(st\?\.kind\)/);
+  // Stage kinds live in journeyStages.js (pure); a battle stage is a real battle.
+  const stagesMod = await read("../../akoro-api/modules/self-study/journeyStages.js");
+  assert.match(stagesMod, /STAGE_KINDS = Object\.freeze\(\["self_study", "assignment", "project", "battle"\]\)/);
+  assert.match(stagesMod, /STAGE_KINDS\.includes\(st\?\.kind\)/);
   // The backend knows the type and announces it.
   assert.match(routes, /"multi_stage"/);
   assert.match(migration, /'multi_stage'/);

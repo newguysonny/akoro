@@ -19,7 +19,7 @@ const [routes, migration, manifest, page, modal, drafts, nowGrading, appRoutes, 
   read("../../akoro-instructor/src/components/grading/gradingDrafts.js"),
   read("../../akoro-instructor/src/components/grading/NowGrading.jsx"),
   read("../../akoro-instructor/src/App.jsx"),
-  read("../../akoro-instructor/src/components/Layout.jsx"),
+  read("../../akoro-instructor/src/components/NextLayout.jsx"),   // the console frame (the legacy Layout nav is gone)
   read("../../akoro-learner/src/services/activityApi.js"),
   read("../../akoro-learner/src/services/gradebookApi.js"),
 ]);
@@ -69,7 +69,7 @@ test("drafts autosave locally and resume through NowGrading", () => {
   assert.ok(nowGrading.includes("clearDraft(d.assignmentId, d.studentId)"), "dismiss discards");
   // Routed.
   assert.ok(appRoutes.includes('path="/submissions"'), "workbench route");
-  assert.ok(layout.includes("label: 'Submissions'"), "nav entry");
+  assert.ok(layout.includes("label: 'Submissions', to: '/submissions'"), "nav entry");
 });
 
 test("the work itself is captured end to end — upload, submit, grade against it", async () => {

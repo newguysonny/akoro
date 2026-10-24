@@ -28,7 +28,7 @@ import { useBattlesAPI } from '../hooks/useBattlesAPI.js';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
 import { audienceBody } from './AudiencePicker.jsx';
 import ToolDraftPreview from './teaching/ToolDraftPreview.jsx';
-import { TOOL_NAME, TOOL_EMOJI, accentFor } from './teaching/ToolResult.jsx';
+import { TOOL_NAME, TOOL_ICON, accentFor } from './teaching/ToolResult.jsx';
 
 const datetimeLocal = (iso) => {
   if (!iso) return '';
@@ -388,7 +388,7 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
       ) : isTool ? (
         <div style={{ flex: 1, overflowY: 'auto', paddingRight: 2 }}>
           <ToolDraftPreview draft={draft} selected={shown?.n} onSelect={setVSel} onRetry={retryVersion} busy={vBusy}
-            toolName={TOOL_NAME[toolKey]} toolEmoji={TOOL_EMOJI[toolKey]} />
+            toolName={TOOL_NAME[toolKey]} toolEmoji={TOOL_ICON[toolKey]} />
         </div>
       ) : isBattle ? (
         <div style={{ flex: 1, overflowY: 'auto', paddingRight: 2 }}>
@@ -414,7 +414,7 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
                     <div style={{ fontSize: 12.5, fontWeight: 800, color: C.ink }}>{st.title}</div>
                     <div style={{ fontSize: 10.5, color: C.muted2 }}>{st.subject} · {st.topic}</div>
                   </div>
-                  <Chip color={st.kind === 'battle' ? '#DC2626' : PURPLE} bg={st.kind === 'battle' ? 'rgba(220,38,38,.1)' : 'rgba(168,85,247,.1)'}>{st.kind === 'battle' ? `⚔️ battle · ${st.questions || 5} questions` : st.kind?.replace('_', ' ')}</Chip>
+                  <Chip color={st.kind === 'battle' ? '#DC2626' : PURPLE} bg={st.kind === 'battle' ? 'rgba(220,38,38,.1)' : 'rgba(168,85,247,.1)'}>{st.kind === 'battle' ? <><Ico ti="ti-swords" size={12} color="#DC2626" /> battle · {st.questions || 5} questions</> : st.kind?.replace('_', ' ')}</Chip>
                 </div>
               ))}
             </div>
