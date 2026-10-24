@@ -147,6 +147,8 @@ Produce one entry per term (layout "compact"): the title is the term, then secti
       F.subject, F.klass,
     ],
     maxTokens: 6000,
+    // One entry per essay, always: a verbose first entry once crowded the second out.
+    validate: (result, input) => result.entries.length >= String(input.essays || "").split(/^\s*-{3,}\s*$/m).filter((e) => e.trim()).length,
     system: `${HOUSE} You mark to the rubric GIVEN — never your own criteria, never a curve. Be specific about where marks were lost. Feedback is addressed to the student, encouraging but honest. ${DOC_RULE}`,
     prompt: (i) => `Mark these essays${i.subject ? ` (${i.subject}` : ""}${i.class ? `${i.subject ? ", " : " ("}${i.class}` : ""}${i.subject || i.class ? ")" : ""} strictly against the rubric.
 
@@ -156,7 +158,7 @@ ${i.rubric}
 ESSAYS (separated by ---):
 ${i.essays}
 
-Produce one entry per essay, in the order given. The title is the student's name if the essay states one, otherwise "Essay 1", "Essay 2"…; "tag" is the total as "score/outOf". Sections in order:
+Produce EXACTLY one entry per essay, in the order given — every essay gets its entry. Keep each criterion comment to one sentence and each feedback paragraph under 60 words, so none is cut short. The title is the student's name if the essay states one, otherwise "Essay 1", "Essay 2"…; "tag" is the total as "score/outOf". Sections in order:
 - scores "Mark breakdown" — one item per rubric criterion, with the marks lost explained in "comment".
 - list "Strengths" (tone success).
 - list "To improve" (tone warn).
@@ -351,7 +353,8 @@ export async function generateToolResult({ tool, input, userId, base = null, req
     const data = parseJson(r);
     if (!data) return null;
     const result = normalizeResult(data, { tool, input });
-    return result.entries.length ? result : null;
+    if (!result.entries.length) return null;
+    return tool.validate && !tool.validate(result, input) ? null : result;
   };
   const unusable = (raw) => {
     return !resultOf(raw);

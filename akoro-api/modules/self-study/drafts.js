@@ -637,8 +637,10 @@ export async function reviseDraftPayload(instructor, id, changes) {
  * reads the stage from the refs (kind "battle" + battleId) and unlocks the next stage when
  * the battle completes.
  */
-async function createJourneyBattle(instructor, payload, st) {
-  const classId = payload.classroom_id;
+async function createJourneyBattle(instructor, payload, st, audience = {}) {
+  // Named learners within a class carry the class by NAME (the id is only kept for "everyone").
+  const classId = payload.classroom_id || audience.classroom_id
+    || (audience.class_name ? (await resolveClassroomByName(instructor.id, audience.class_name))?.id : null);
   if (!classId) throw invalid("A battle stage needs a class — pick one for this journey.", 400);
   let usernames = [...(payload.usernames ?? [])];
   if (!payload.whole_class) {
@@ -738,7 +740,7 @@ export async function assignActivityDraft({ instructor, id, overrides = null }) 
     for (const st of stages) {
       if (st.refId || st.battleId) { refs.push(st); continue; }   // already-created stage ref
       if (st.kind === "battle") {
-        const battle = await createJourneyBattle(instructor, payload, st);
+        const battle = await createJourneyBattle(instructor, payload, st, draft.audience || {});
         refs.push({ kind: "battle", battleId: battle.id, title: st.title, emoji: "\u2694\uFE0F" });
         continue;
       }
