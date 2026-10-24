@@ -14,6 +14,7 @@ import { confirmDialog } from '../components/ConfirmHost.jsx';
 import { RED } from '../constants.js';
 import { C, tint } from '../theme/colors.js';
 import { Ico } from '../theme/Ico.jsx';
+import Loading from "../components/Loading.jsx";
 
 const when = (iso) => (iso ? new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short' }) : null);
 
@@ -115,7 +116,7 @@ export default function AgentToolsPage() {
     <PageLayout title="My agent tools" subtitle="Tools your AI Chat agent built to answer your questions">
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
         <Section title="Tools">
-          {!state ? note('Loading…')
+          {!state ? <Loading variant="rows" label="Loading tools…" rows={2} />
             : !state.enabled ? note('Agent-built tools aren\'t switched on for your account yet.')
             : state.tools.length === 0 ? (
               <>

@@ -8,6 +8,7 @@ import { apiGet, apiDelete } from '../services/api.js';
 import { GREEN } from '../constants.js';
 import { C, tint } from '../theme/colors.js';
 import { Ico } from '../theme/Ico.jsx';
+import Loading from "../components/Loading.jsx";
 
 const FONTF = C.font;
 
@@ -270,7 +271,7 @@ export default function LibraryPage() {
       {/* Detail modal */}
       <Modal open={!!open} onClose={() => setOpen(null)} title={open ? `${open.title || (KIND_META[open.kind] || {}).label || 'Artifact'}` : ''} width={600}>
         {openLoading && !open?.content ? (
-          <p style={{ fontSize: 13, color: C.muted }}>Loading…</p>
+          <Loading label="Loading the resource…" />
         ) : open ? <ArtifactDetail output={open} /> : null}
       </Modal>
     </PageLayout>

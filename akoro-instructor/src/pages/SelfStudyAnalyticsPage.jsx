@@ -13,6 +13,7 @@ import { Btn, Badge } from '../components/Primitives.jsx';
 import { apiGet, apiPost } from '../services/api.js';
 import { GREEN, PURPLE, BLUE, RED } from '../constants.js';
 import { C, tint } from '../theme/colors.js';
+import Loading from "../components/Loading.jsx";
 
 const STATUS = {
   assigned: { color: C.muted,  bg: C.bg,     label: 'Not started' },
@@ -189,7 +190,7 @@ export default function SelfStudyAnalyticsPage() {
       }
     >
       {loading ? (
-        <div style={{ color: C.muted2, fontFamily: C.font }}>Loading analytics…</div>
+        <Loading label="Loading analytics…" />
       ) : err ? (
         <div style={{ color: RED, fontSize: 13.5, fontWeight: 700, fontFamily: C.font }}>{err}</div>
       ) : (

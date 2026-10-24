@@ -17,6 +17,7 @@ import { Ico } from '../../theme/Ico.jsx';
 import { apiGet, apiPost } from '../../services/api.js';
 import { C } from '../../theme/colors.js';
 import { ResultHeader, ResultEntries, resultToHtml, accentFor } from './ToolResult.jsx';
+import Loading from "../Loading.jsx";
 
 const TT_FONT = "'Nunito', sans-serif";
 const BRAND = '#6C3BFF', TT_AMBER = '#E8853A', TT_MUTED2 = '#9A96A8',
@@ -468,7 +469,7 @@ export default function TeachingTools({ onInsert, compact = false }) {
           </button>
         ))}
       </div>
-      {!tools.length && !error && <div style={{ color: TT_MUTED2, fontSize: 13, padding: 20 }}>Loading tools…</div>}
+      {!tools.length && !error && <Loading variant="rows" label="Loading tools…" rows={4} />}
     </div>
   );
 }

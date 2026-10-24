@@ -11,6 +11,7 @@ import { GREEN, PURPLE, BLUE, RED } from '../../constants.js';
 import { C } from '../../theme/colors.js';
 
 import { Ico } from '../../theme/Ico.jsx';
+import Loading from "../Loading.jsx";
 
 /* ── New / Edit Battle Modal ────────────────────────────────────────────── */
 export function BattleModal({ open, onClose, onSubmit, courses, editing }) {
@@ -75,7 +76,7 @@ export function ParticipantsModal({ open, onClose, battleId }) {
       {error ? (
         <div style={{ fontSize: 13, color: RED, fontFamily: C.font, padding: '10px 0' }}>{error}</div>
       ) : !data ? (
-        <div style={{ fontSize: 13, color: C.muted, fontFamily: C.font, padding: '10px 0' }}>Loading…</div>
+        <Loading label="Loading the battle…" />
       ) : (
         <div style={{ fontFamily: C.font }}>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
@@ -153,7 +154,7 @@ export function MarkSheetModal({ open, onClose, battleId }) {
       {error ? (
         <div style={{ fontSize: 13, color: RED, fontFamily: C.font, padding: '10px 0' }}>{error}</div>
       ) : !data ? (
-        <div style={{ fontSize: 13, color: C.muted, fontFamily: C.font, padding: '10px 0' }}>Loading…</div>
+        <Loading label="Loading the battle…" />
       ) : data.type !== 'review' ? (
         <div style={{ fontSize: 13, color: C.muted, fontFamily: C.font }}>This battle is not a study review.</div>
       ) : (

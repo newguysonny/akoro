@@ -29,6 +29,7 @@ import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
 import { audienceBody } from './AudiencePicker.jsx';
 import ToolDraftPreview from './teaching/ToolDraftPreview.jsx';
 import { TOOL_NAME, TOOL_EMOJI, accentFor } from './teaching/ToolResult.jsx';
+import Loading from "./Loading.jsx";
 
 const datetimeLocal = (iso) => {
   if (!iso) return '';
@@ -215,9 +216,8 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
 
   if (phase === 'loading') {
     return (
-      <div style={{ height: '100%', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, fontFamily: C.font }}>
-        <Ico ti="ti-loader-2" size={20} color={C.brand} style={{ animation: 'spin .8s linear infinite' }} />
-        <div style={{ fontSize: 12.5, color: C.muted, fontWeight: 700 }}>Loading the draft…</div>
+      <div style={{ height: '100%', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, overflow: 'hidden', fontFamily: C.font }}>
+        <Loading label="Loading the draft…" />
       </div>
     );
   }

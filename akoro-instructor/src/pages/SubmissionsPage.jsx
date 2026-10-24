@@ -21,6 +21,7 @@ import { loadDraft } from '../components/grading/gradingDrafts.js';
 import { GREEN, PURPLE, BLUE, RED } from '../constants.js';
 import { C, tint } from '../theme/colors.js';
 import { Ico } from '../theme/Ico.jsx';
+import Loading from "../components/Loading.jsx";
 
 const TYPE_ICON = { self_study: [BookOpen, 'ti-book'], assignment: [PencilLine, 'ti-pencil'], project: [FolderKanban, 'ti-layout-kanban'], live_course: [MonitorPlay, 'ti-device-desktop'], multi_stage: [ListChecks, 'ti-list-check'] };
 
@@ -155,7 +156,7 @@ export default function SubmissionsPage() {
         <aside style={{ width: 268, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
             <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1, color: C.muted2, padding: '8px 13px 6px', fontFamily: C.font }}>SUBMITTED ACTIVITIES</div>
-            {activities === null && <div style={{ padding: '10px 13px', fontSize: 12.5, color: C.muted2, fontFamily: C.font }}>Loading…</div>}
+            {activities === null && <Loading variant="rows" label="Loading activities…" rows={3} />}
             {activities?.length === 0 && (
               <div style={{ padding: '12px 13px', fontSize: 12.5, color: C.muted2, fontFamily: C.font, lineHeight: 1.5 }}>
                 Nothing assigned yet. Create one under Activities.
@@ -223,9 +224,7 @@ export default function SubmissionsPage() {
           {!activity ? (
             <div style={{ color: C.muted2, fontSize: 13 }}>Pick an activity to see its submissions.</div>
           ) : detailLoading ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.muted2, fontSize: 13 }}>
-              <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> Loading the roster…
-            </div>
+            <Loading label="Loading the roster…" variant="rows" rows={4} />
           ) : (
             <>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>

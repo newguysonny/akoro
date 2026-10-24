@@ -86,6 +86,7 @@ function CopyMsgButton({ text }) {
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { GREEN, RED, PURPLE, BLUE } from '../constants.js';
 import { C, tint } from '../theme/colors.js';
+import Loading from "../components/Loading.jsx";
 
 const bdr = (w, c) => `${w}px solid ${c}`;
 
@@ -1169,7 +1170,7 @@ export default function ChatPage() {
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '0 10px 16px' }}>
               {sessionsLoading && chatSessions.length === 0 ? (
-                <p style={{ textAlign: 'center', fontSize: 12, color: C.muted2, padding: '20px 0' }}>Loading…</p>
+                <Loading variant="rows" label="Loading chats…" rows={4} />
               ) : chatSessions.length === 0 ? (
                 historyError ? (
                   <div style={{ textAlign: 'center', padding: '28px 16px', color: C.brand }}>

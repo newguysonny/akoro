@@ -27,6 +27,7 @@ import { apiGet } from '../services/api.js';
 import { GREEN } from '../constants.js';
 import { C, tint } from '../theme/colors.js';
 import { Ico } from '../theme/Ico.jsx';
+import Loading from "./Loading.jsx";
 
 const MODES = [
   { key: 'course', label: 'Everyone on the course', hint: 'All active enrolments', Icon: Users, ti: 'ti-users' },
@@ -178,7 +179,7 @@ export default function AudiencePicker({
 
           <div style={{ maxHeight: 190, overflowY: 'auto' }}>
             {rLoading ? (
-              <div style={{ padding: 14, fontSize: 12, color: C.muted, fontFamily: C.font }}>Loading roster…</div>
+              <Loading variant="inline" label="Loading roster…" />
             ) : shown.length === 0 ? (
               <div style={{ padding: 14, fontSize: 12, color: C.muted, fontFamily: C.font }}>
                 {roster.length === 0 ? 'Nobody enrolled on this course yet.' : 'No match.'}

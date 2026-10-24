@@ -10,6 +10,7 @@ import { apiGet, apiPost } from '../../services/api.js';
 import { GREEN, RED } from '../../constants.js';
 import { C, tint } from '../../theme/colors.js';
 import { Ico } from '../../theme/Ico.jsx';
+import Loading from "../../components/Loading.jsx";
 
 export default function JoinRequests({ onChanged, showEmpty = false }) {
   const [rows, setRows] = useState([]);
@@ -38,11 +39,12 @@ export default function JoinRequests({ onChanged, showEmpty = false }) {
   // Empty: as a banner (default) render nothing; as a page, show an empty state.
   if (!rows.length) {
     if (!showEmpty) return null;
+    if (loading) return <Loading variant="rows" label="Loading requests…" rows={3} />;
     return (
       <div style={{ border: `1.5px solid ${C.border}`, background: C.surface, borderRadius: 14, padding: '48px 24px', textAlign: 'center', fontFamily: C.font }}>
         <Ico ti="ti-user-plus" size={30} color={C.muted} style={{ marginBottom: 10 }} />
-        <div style={{ fontSize: 15, fontWeight: 800, color: C.ink }}>{loading ? 'Loading requests…' : 'No pending join requests'}</div>
-        {!loading && <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>When a learner asks to join your class, they’ll appear here for approval.</div>}
+        <div style={{ fontSize: 15, fontWeight: 800, color: C.ink }}>No pending join requests</div>
+        <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>When a learner asks to join your class, they’ll appear here for approval.</div>
       </div>
     );
   }

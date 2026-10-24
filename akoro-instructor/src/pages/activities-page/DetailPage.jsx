@@ -12,6 +12,7 @@ import { C, tint } from '../../theme/colors.js';
 import { Ico } from '../../theme/Ico.jsx';
 import { confirmDialog } from '../../components/ConfirmHost.jsx';
 import { byKey } from '../../components/activities/ActivityForm.jsx';
+import Loading from "../../components/Loading.jsx";
 
 /* ── Per-learner progress modal — same brief view the self-study page uses ── */
 export default function DetailPage({ activity, onDeleted, onClose }) {
@@ -89,7 +90,7 @@ export default function DetailPage({ activity, onDeleted, onClose }) {
           Back to activities
         </button>
       {!data ? (
-        <div style={{ fontSize: 13, color: C.muted, fontFamily: C.font, padding: '10px 0' }}>Loading…</div>
+        <Loading label="Loading the activity…" />
       ) : (
         <div style={{ fontFamily: C.font }}>
           {/* The brief — same data the self-study detail shows, whatever the kind. */}

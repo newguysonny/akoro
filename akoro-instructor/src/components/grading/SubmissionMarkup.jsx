@@ -18,6 +18,7 @@ import { Check, X, MessageSquare, Highlighter, MousePointer2 } from 'lucide-reac
 import { PURPLE, GREEN, RED } from '../../constants.js';
 import { C, tint } from '../../theme/colors.js';
 import { Ico } from '../../theme/Ico.jsx';
+import Loading from "../Loading.jsx";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -250,7 +251,7 @@ export default function SubmissionMarkup({ blob, marks, onChange, saveState = 'i
       {/* Pages */}
       <div ref={wrapRef} style={{ background: '#525659', borderRadius: 10, padding: '12px 0', maxHeight: '76vh', overflowY: 'auto' }}>
         {error ? <div style={{ color: '#fff', fontSize: 13, fontWeight: 700, padding: 20, textAlign: 'center' }}>{error}</div>
-          : !pdf || !width ? <div style={{ color: '#ddd', fontSize: 13, fontWeight: 700, padding: 40, display: 'flex', justifyContent: 'center', gap: 8 }}><Ico ti="ti-loader-2" size={15} style={{ animation: 'spin .8s linear infinite' }} /> Loading pages…</div>
+          : !pdf || !width ? <Loading variant="inline" label="Loading pages…" color="#ddd" style={{ padding: 40, display: 'flex', justifyContent: 'center' }} />
           : Array.from({ length: pdf.numPages }, (_, i) => (
             <MarkupPage key={i + 1} pdf={pdf} pageNumber={i + 1} width={width} tool={tool}
               marks={marks.filter((m) => m.page === i + 1)} numbers={numbers} selectedId={selectedId}

@@ -21,6 +21,7 @@ import { Ico } from '../theme/Ico.jsx';
 import { apiGet, apiPost } from '../services/api.js';
 import { GREEN } from '../constants.js';
 import { C } from '../theme/colors.js';
+import Loading from "./Loading.jsx";
 
 /* ── One rendered card of a doc output ───────────────────────────── */
 // The server returns { title, subtitle, cards:[{ heading, blocks:[…] }] } and
@@ -309,9 +310,7 @@ export default function ToolWorkbench({ toolKey, onBack }) {
     return <div style={{ fontFamily: C.font, color: C.muted, padding: 20 }}>{error}</div>;
   }
   if (!tool) {
-    return <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 20, fontFamily: C.font, color: C.muted }}>
-      <Ico ti="ti-loader-2" size={15} className="spin"/> Loading…
-    </div>;
+    return <Loading label="Loading the tool…" />;
   }
 
   return (

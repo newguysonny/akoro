@@ -24,6 +24,7 @@ const EMPTY_STATS = {
 };
 
 import { STREAM_META, StatCard, SessionItem, QuickAction, PLATFORM_KEYS, STREAM_ERRORS, StreamingPanel } from './parts.jsx';
+import Loading from "../../components/Loading.jsx";
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -248,7 +249,7 @@ export default function HomePage() {
                 </span>
               </div>
               <p style={{ fontSize: 12, color: C.muted, margin: '0 0 14px', lineHeight: 1.5 }}>
-                {loading ? 'Loading…' : (profile?.agentDescription || 'Your AI teaching assistant handles student questions 24/7.')}
+                {loading ? <Loading variant="bar" label="Loading your agent" /> : (profile?.agentDescription || 'Your AI teaching assistant handles student questions 24/7.')}
               </p>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <div style={{ textAlign: 'center', background: C.bg, borderRadius: 10, padding: '10px' }}>
