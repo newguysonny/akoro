@@ -25,8 +25,15 @@ const edu = () => db.schema("edu");
 const invalid = (message, status = 400) => Object.assign(new Error(message), { status });
 export const REVIEW_LIMITS = Object.freeze({ MIN_Q: 5, MAX_Q: 10, DEFAULT_Q: 8 });
 const REVIEWABLE = ["assignment", "self_study", "project"];
-// How long a review sent as a challenge stays in the learner's Challenges list.
-export const REVIEW_OPEN_MS = 7 * 86400_000;
+// A review sent as a challenge stays in the learner's Challenges list until the
+// activity's due date. One made AT the due date (or with no due date) gets a day.
+export const REVIEW_GRACE_MS = 86400_000;
+
+/** PURE: when a review's challenge closes. */
+export function reviewCloses(dueAt, now = Date.now()) {
+  const d = dueAt ? Date.parse(dueAt) : NaN;
+  return Number.isFinite(d) && d - now > 3600_000 ? d : now + REVIEW_GRACE_MS;
+}
 
 /** PURE: the instructor's choice → what is kept, or null (no review). Throws when it can't run. */
 export function cleanReview(review, { dueAt = null, now = Date.now() } = {}) {
@@ -94,7 +101,7 @@ export async function runActivityReview(assignmentId, who = "all") {
         learnerId, subject: a.subject, topic, total: a.details.review.questions || REVIEW_LIMITS.DEFAULT_Q,
         title: `Review: ${a.title}`,
         // Sent as a challenge: it waits in the learner's Challenges list; they start it.
-        invite: true, inviteUntil: Date.now() + REVIEW_OPEN_MS,
+        invite: true, inviteUntil: reviewCloses(a.due_at),
         extra: { review_host: "teacher", requested_by: a.created_by, activity_assignment_id: a.id },
       });
       await edu().from("self_study_targets").update({ review_battle_id: made.battleId }).eq("assignment_id", a.id).eq("student_id", learnerId);

@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const { cleanReview, reviewRuns, reviewInstruction, dueForReview, reviewStatus, REVIEW_LIMITS } = await import("./activityReview.js");
+const { cleanReview, reviewRuns, reviewInstruction, dueForReview, reviewStatus, reviewCloses, REVIEW_LIMITS } = await import("./activityReview.js");
 const NOW = Date.parse("2026-10-24T10:00:00Z");
 
 test("cleanReview: off, at the instructor's time, else the due date; questions clamped; a past or missing time refuses", () => {
@@ -51,5 +51,12 @@ test("reviewStatus: sent to Challenges until accepted; running; done; missed whe
   assert.equal(reviewStatus({ status: "cancelled" }, { declined_at: "x" }, t), "missed");
   assert.equal(reviewStatus({ status: "completed" }, { joined_at: "x" }, t), "done");
   const src = readFileSync(new URL("./activityReview.js", import.meta.url), "utf8");
-  assert.match(src, /invite: true, inviteUntil:/);
+  assert.match(src, /invite: true, inviteUntil: reviewCloses\(a\.due_at\)/);
+});
+
+test("reviewCloses: at the due date; a day when it's made at (or after) the due date, or there is none", () => {
+  const t = Date.parse("2026-10-26T12:00:00Z");
+  assert.equal(reviewCloses("2026-10-28T16:00:00Z", t), Date.parse("2026-10-28T16:00:00Z"));
+  assert.equal(reviewCloses("2026-10-26T12:00:00Z", t), t + 86400_000);
+  assert.equal(reviewCloses(null, t), t + 86400_000);
 });

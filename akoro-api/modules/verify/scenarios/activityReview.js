@@ -76,6 +76,8 @@ export const activityReviewRuns = {
     const seat = await ctx.db.rows("battle_participants", { battle_id: mine?.id }, { columns: "role, joined_at" });
     ctx.expect.ok("the review waits for the learner (an unanswered seat, nothing started)", seat.length === 1 && seat[0].role === "participant" && !seat[0].joined_at, seat);
     const list = await ctx.http({ as: `@${learners[0].username}`, path: "/api/battle/my-challenges" });
+    const [mb] = await ctx.db.rows("battles", { id: mine?.id }, { columns: "expires_at" });
+    ctx.expect.ok("it stays in Challenges until the activity's due date (made at the due date: a day)", !!mb && Math.abs(Date.parse(mb.expires_at) - Date.now() - 86400_000) < 600_000 || Math.abs(Date.parse(mb?.expires_at) - Date.parse(due)) < 1000, { expires_at: mb?.expires_at, due });
     ctx.expect.status("the learner's Challenges list answers", list, 200);
     const card = (list.body?.data || []).find((c) => c.id === mine?.id);
     ctx.expect.ok("…and shows the review, set by the teacher, at no coin cost", !!card && card.type === "check" && card.reviewHost === "teacher" && card.hostRole === "teacher" && card.entry?.coins === 0, card || (list.body?.data || []).map((c) => c.title));
