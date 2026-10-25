@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { DATA_VIEWS, describeView, viewColumns } from "./views.js";
-import { CAPABILITIES, FORBIDDEN, forbiddenFor } from "./capabilities.js";
+import { CAPABILITIES, FORBIDDEN, forbiddenFor, learnerGrantable } from "./capabilities.js";
 import { decideAccess } from "./access.js";
 
 const chatSrc = readFileSync(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
@@ -95,4 +95,11 @@ test("access: off unless enabled; testers always; real users by switch or by nam
   assert.equal(decideAccess(real, { enabled: true, realUsers: false, named: ["ada@gmail.com"] }), true, "named by email");
   assert.equal(decideAccess(real, { enabled: true, realUsers: true, named: [] }), true, "all real users");
   assert.equal(decideAccess(tester, { enabled: true, realUsers: true, named: [] }), true, "testers keep it");
+});
+
+test("learnerGrantable: a learner may allow only changes to their own rows that a tool can target", () => {
+  for (const c of ["tasks.delete", "tasks.mark_done", "buddies.end"]) assert.equal(learnerGrantable(c), true, c);
+  // Other learners' data, plain reads, writes no tool can target, and unknown names stay with admins.
+  for (const c of ["battles.class_results", "tasks.list_mine", "circles.leave", "challenges.cancel_mine", "verify.probe", "verify.task_done", "nope.nope"]) assert.equal(learnerGrantable(c), false, c);
+  for (const [name, c] of Object.entries(CAPABILITIES)) if (learnerGrantable(name)) assert.ok(c.target && c.kind === "write" && (c.scope || "self") === "self", name);
 });

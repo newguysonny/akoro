@@ -9,14 +9,14 @@
  */
 import db from "../../db.js";
 import { schemaLookup, capabilityStatus } from "./registry.js";
-import { forbiddenFor, CAPABILITIES } from "./capabilities.js";
+import { forbiddenFor, CAPABILITIES, learnerGrantable } from "./capabilities.js";
 import { DATA_VIEWS } from "./views.js";
 import { validateDefinition, runDefinition } from "./interpreters.js";
 import { validateParams, coerceInput, paramProps, wellFormedParams } from "./bind.js";
 import { buildDefinition, registrySlice } from "./builder.js";
 import { createExpect, repeatVerdict } from "../verify/assertions.js";
 import { escalate } from "./escalation.js";
-import { proposeWrite } from "./confirmations.js";
+import { proposeWrite, proposePermission } from "./confirmations.js";
 import { codeEnabled } from "./sandbox/index.js";
 
 const edu = () => db.schema("edu");
@@ -165,19 +165,28 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
 
   // What could it use?
   // learnerId is the OWNER: a learner, or an instructor for instructor tools (S7).
-  const lookup = await schemaLookup(goal, { audience });
+  const lookup = await schemaLookup(goal, { audience, learnerId });
   const slice = registrySlice(lookup, hint, audience);
   // A resume after an approval must USE what was approved — a gate run once
   // 'resumed' into a tool that answered from an unrelated view instead.
   const mustUse = resumed ? [].concat(hint.capabilities || []).filter((c) => c in CAPABILITIES) : [];
   const lockedIn = async (names) => {
     const out = [];
-    for (const c of names) if (CAPABILITIES[c]?.status === "locked" && (await capabilityStatus(c)) === "locked") out.push(c);
+    for (const c of names) if (CAPABILITIES[c]?.status === "locked" && (await capabilityStatus(c, { learnerId })) === "locked") out.push(c);
     return out;
   };
   const locked = await lockedIn((lookup.capabilities || []).filter((c) => c.status === "needs_approval").map((c) => c.name));
   // ── 4. escalate (§7.8) — a locked capability named in the hint, or the only thing that fits.
   const toEscalate = async (capability, why) => {
+    // A change to the learner's own rows: THEY turn it on, on a card in this chat — no admin.
+    if (learnerGrantable(capability) && audience === "learner") {
+      ev.stages_tried.push("permission"); ev.capabilities = [capability];
+      const proposed = { name, label, goal, params, audience, hint: { views: [].concat(hint.views || []), capabilities: [capability] }, run: input?.run && typeof input.run === "object" ? input.run : {} };
+      if (dry) return finish("dry", { status: "needs_permission", dryRun: true, capability: CAPABILITIES[capability].description,
+        note: "DRY RUN — no card was made. Live, the learner would get a card to approve this and the tool would be built when they do." });
+      const out = await proposePermission({ learnerId, conversationId, capability, proposed });
+      return finish("escalated", out);   // logged as asked-for (stages_tried says "permission"), the outcome list is fixed
+    }
     const out = await escalate({ learnerId, capability, goal, dry, conversationId,
       proposed: { name, label, params, audience, hint: { views: [].concat(hint.views || []), capabilities: [capability] }, run: input?.run && typeof input.run === "object" ? input.run : {} } });
     ev.stages_tried.push("escalate"); ev.capabilities = [capability]; ev.request_id = out.requestId || null;
@@ -229,7 +238,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       }
       if (!built.definition) { feedback = built.error || "no definition"; lastProblem = feedback; tried.push(`${stage}#${attempt}: ${feedback}`); continue; }
       if (built.definition.kind !== stage) built.definition.kind = stage === "spec" && built.definition.from ? "spec" : built.definition.kind;
-      const v = await validateDefinition(built.definition, params, { audience });
+      const v = await validateDefinition(built.definition, params, { audience, learnerId });
       if (v.ok && built.definition.kind === "code") v.errors.push(...inventedDates(built.definition.source, goal, params));
       for (const c of mustUse) if (!v.uses.capabilities.includes(c)) v.errors.push(`use the approved capability ${c} (a step {"id":"x","cap":"${c}"} — returns ${JSON.stringify(CAPABILITIES[c].returns || [])})`);
       if (v.errors.length) v.ok = false;
@@ -320,7 +329,7 @@ export async function runLearnerTool(name, input, learnerId, { callCapability, c
   // Re-check on EVERY call: a revoked grant or removed view takes effect at once (§7.10).
   for (const c of t.capabilities || []) {
     const cap = CAPABILITIES[c];
-    if ((await capabilityStatus(c)) !== "enabled" || !(cap?.kind === "read" || cap?.target)) return { error: "This tool uses something that's no longer allowed, so it can't run." };
+    if ((await capabilityStatus(c, { learnerId })) !== "enabled" || !(cap?.kind === "read" || cap?.target)) return { error: "This tool uses something that's no longer allowed, so it can't run." };
   }
   for (const v of t.views || []) if (!DATA_VIEWS[v]) return { error: "This tool uses data that's no longer available." };
   // Always as THIS learner: views are forced to their own rows (viewRuntime).

@@ -209,6 +209,7 @@
     "2026-follow-ups-into-existing-chat.sql",
     "2026-verify-gate.sql",
     "2026-self-tooling-grants.sql",
+    "2026-self-tooling-learner-grants.sql",
     "2026-self-tooling-tools.sql",
     "2026-self-tooling-escalation.sql",
     "2026-self-tooling-instructors.sql",

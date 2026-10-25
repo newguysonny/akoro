@@ -12,7 +12,8 @@
  *   analytics                 how create_tool goals end, what's escalated, usage
  */
 import db from "../../db.js";
-import { CAPABILITIES } from "./capabilities.js";
+import { CAPABILITIES, learnerGrantable } from "./capabilities.js";
+import { activeGrants } from "./registry.js";
 
 const edu = () => db.schema("edu");
 const NAME = /^[a-z][a-z0-9_]{2,47}$/;
@@ -38,6 +39,8 @@ async function owners(rows) {
 const publicTool = (t, who) => ({
   id: t.id, scope: t.scope, audience: t.audience || "learner", name: t.name, label: t.label, goal: t.goal, mode: t.mode, status: t.status, version: t.version,
   capabilities: t.capabilities || [], views: t.views || [], uses: t.usage_count || 0, failStreak: t.fail_streak || 0,
+  // What it can change (each change still waits for the learner's Confirm).
+  changes: (t.capabilities || []).filter((c) => CAPABILITIES[c]?.kind === "write").map((c) => CAPABILITIES[c].description),
   lastUsedAt: t.last_used_at, createdAt: t.created_at, promotedFrom: t.promoted_from || null,
   owner: t.owner_id ? (who.get(t.owner_id) || { name: null, username: null }) : null,
   verified: t.verification?.verdict || null, promotion: t.verification?.promotion || null,
@@ -75,6 +78,11 @@ export async function setToolStatus({ id, status, admin }) {
   const { data, error } = await edu().from("agent_tools").update({ status, fail_streak: 0, updated_at: new Date().toISOString() })
     .eq("id", id).select("id, status").maybeSingle();
   if (error) throw new Error(`Couldn't update the tool: ${error.message}`);
+  if (status === "revoked") {
+    // A change it turned on for everyone when it was promoted goes with it.
+    await edu().from("capability_grants").update({ revoked_at: new Date().toISOString(), revoked_by: admin?.id || null }).eq("tool_id", id).is("revoked_at", null);
+    await activeGrants({ fresh: true });
+  }
   await audit(admin, `agent_tool.${status === "active" ? "enable" : status === "disabled" ? "disable" : "revoke"}`, id, { status: before.status }, { status });
   return data;
 }
@@ -94,7 +102,8 @@ export async function promoteTool({ id, name, label, goal, replaces = [], admin,
   if (builtIn.has(finalName)) throw httpError(422, `"${finalName}" is a built-in tool name`);
   const { data: clash } = await edu().from("agent_tools").select("id").eq("scope", "platform").eq("name", finalName).in("status", ["active", "disabled"]).maybeSingle();
   if (clash) throw httpError(409, `A platform tool called ${finalName} already exists`);
-  for (const c of t.capabilities || []) if (CAPABILITIES[c]?.kind !== "read") throw httpError(422, `Uses ${c}, which isn't a read capability`);
+  // Reads, or a change to each learner's OWN rows (every change still waits for their Confirm).
+  for (const c of t.capabilities || []) if (CAPABILITIES[c]?.kind !== "read" && !learnerGrantable(c)) throw httpError(422, `Uses ${c}, which can't be given to everyone`);
 
   // The gate decides (plan §9): the tool's samples on three test learners.
   const run = await runGate(id, t.audience || "learner");
@@ -113,6 +122,17 @@ export async function promoteTool({ id, name, label, goal, replaces = [], admin,
     created_at: now, updated_at: now,
   }).select("id, name, label").single();
   if (error) throw new Error(`Couldn't save the platform tool: ${error.message}`);
+
+  // Promoting a tool that changes data turns that change on for everyone, tied to this
+  // platform tool: revoking the tool revokes it (setToolStatus).
+  const changes = (t.capabilities || []).filter((c) => CAPABILITIES[c]?.status === "locked");
+  const granted = await activeGrants({ fresh: true });
+  for (const c of changes) {
+    if (granted.has(c)) continue;
+    const { error: gErr } = await edu().from("capability_grants").insert({ capability: c, granted_by: admin?.id || null, tool_id: row.id, note: `Promoted tool "${row.label}"` });
+    if (gErr) throw new Error(`Promoted, but couldn't turn on ${c} for everyone: ${gErr.message}`);
+  }
+  if (changes.length) await activeGrants({ fresh: true });
 
   // Merge: the learner copies it replaces are retired (their owners now get the platform tool).
   let retired = 0;

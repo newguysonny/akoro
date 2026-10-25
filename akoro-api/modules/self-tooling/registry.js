@@ -7,7 +7,7 @@
  * isn't an allowlisted view field (rule 25).
  */
 import db from "../../db.js";
-import { CAPABILITIES, FORBIDDEN, forbiddenFor, capAudience } from "./capabilities.js";
+import { CAPABILITIES, FORBIDDEN, forbiddenFor, capAudience, learnerGrantable } from "./capabilities.js";
 import { DATA_VIEWS, describeView, audienceOf } from "./views.js";
 
 let grantsCache = { at: 0, active: new Set() };
@@ -18,18 +18,37 @@ export async function activeGrants({ fresh = false } = {}) {
   if (!fresh && Date.now() - grantsCache.at < GRANTS_TTL_MS) return grantsCache.active;
   const now = new Date().toISOString();
   const { data, error } = await db.schema("edu").from("capability_grants")
-    .select("capability, expires_at").is("revoked_at", null).limit(500);
+    .select("capability, expires_at").is("revoked_at", null).is("learner_id", null).limit(500);
   if (error) return grantsCache.active;          // keep the last known set; never widen on error
   grantsCache = { at: Date.now(), active: new Set((data || []).filter((g) => !g.expires_at || g.expires_at > now).map((g) => g.capability)) };
   return grantsCache.active;
 }
 
-/** enabled | locked | forbidden | unknown — after grants. */
-export async function capabilityStatus(name) {
+// What each learner turned on for themselves (an own-data change they approved on a card).
+const learnerCache = new Map();
+export async function learnerGrants(learnerId, { fresh = false } = {}) {
+  if (!learnerId) return new Set();
+  const hit = learnerCache.get(learnerId);
+  if (!fresh && hit && Date.now() - hit.at < GRANTS_TTL_MS) return hit.active;
+  const now = new Date().toISOString();
+  const { data, error } = await db.schema("edu").from("capability_grants")
+    .select("capability, expires_at").eq("learner_id", learnerId).is("revoked_at", null).limit(100);
+  if (error) return hit?.active || new Set();
+  const active = new Set((data || []).filter((g) => !g.expires_at || g.expires_at > now).map((g) => g.capability).filter(learnerGrantable));
+  if (learnerCache.size > 2000) learnerCache.clear();
+  learnerCache.set(learnerId, { at: Date.now(), active });
+  return active;
+}
+
+/** enabled | locked | forbidden | unknown — after grants (an admin's for everyone, or this learner's own). */
+export async function capabilityStatus(name, { learnerId = null } = {}) {
   const cap = CAPABILITIES[name];
   if (!cap) return FORBIDDEN.some((f) => f.name === name) ? "forbidden" : "unknown";
   if (cap.status === "enabled") return "enabled";
-  if (cap.status === "locked") return (await activeGrants()).has(name) ? "enabled" : "locked";
+  if (cap.status === "locked") {
+    if ((await activeGrants()).has(name)) return "enabled";
+    return learnerId && learnerGrantable(name) && (await learnerGrants(learnerId)).has(name) ? "enabled" : "locked";
+  }
   return "forbidden";
 }
 
@@ -48,7 +67,7 @@ function score(goalWords, goalText, item) {
  * The views and capabilities relevant to a goal. Read-only metadata.
  * → { views:[…], capabilities:[{name, does, status}], notAllowed:[…], note }
  */
-export async function schemaLookup(goal, { limit = 6, audience = "learner" } = {}) {
+export async function schemaLookup(goal, { limit = 6, audience = "learner", learnerId = null } = {}) {
   const goalText = ` ${String(goal || "").toLowerCase()} `;
   const goalWords = words(goal).filter((w) => !STOP.has(w));
   const forbidden = forbiddenFor(goal);
@@ -62,8 +81,9 @@ export async function schemaLookup(goal, { limit = 6, audience = "learner" } = {
 
   const capabilities = [];
   for (const { name, c } of rankedCaps) {
-    const status = await capabilityStatus(name);
-    capabilities.push({ name, does: c.description, kind: c.kind, status: status === "enabled" ? "available" : "needs_approval",
+    const status = await capabilityStatus(name, { learnerId });
+    // needs_your_ok: the learner turns it on themselves on a card; needs_approval: only an admin can.
+    capabilities.push({ name, does: c.description, kind: c.kind, status: status === "enabled" ? "available" : learnerGrantable(name) && audience === "learner" ? "needs_your_ok" : "needs_approval",
       ...(c.returns ? { returns: c.returns } : {}) });
   }
   return {
@@ -74,7 +94,7 @@ export async function schemaLookup(goal, { limit = 6, audience = "learner" } = {
       ? "Nothing in the registry matches this goal — it can't be built from what's available."
       : forbidden.length
         ? "Part of this goal isn't allowed (see notAllowed) — tell the learner plainly; don't try to build it."
-        : "Views can be filtered, sorted and counted; capabilities are existing operations. Next: call create_tool with this goal to build the tool and answer from its result. A tool can only use what's listed here as available; needs_approval means an admin must allow it first — if the goal needs one, call create_tool with it in hint.capabilities and it will ask an admin for you. These names are internal — tell the learner in plain words (\"your learning sessions\"), never the names.",
+        : "Views can be filtered, sorted and counted; capabilities are existing operations. Next: call create_tool with this goal to build the tool and answer from its result. A tool can only use what's listed here as available; needs_your_ok means the learner can turn it on for themselves: tell them you don't have that ability yet but can build a tool for it, and when they agree call create_tool with it in hint.capabilities — they approve on a card and the tool is built. needs_approval means an admin must allow it first — call create_tool with it in hint.capabilities and it will ask an admin for you. These names are internal — tell the learner in plain words (\"your learning sessions\"), never the names.",
   };
 }
 

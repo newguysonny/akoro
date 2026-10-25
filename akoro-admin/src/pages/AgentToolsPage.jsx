@@ -115,6 +115,7 @@ function ToolRow({ t, onOpen, extra }) {
       <div style={{ color: MUTED, fontSize: 12.5, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.goal}</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, color: MUTED2, fontSize: 11.5, marginTop: 7 }}>
         <span>{owner(t)}</span><span>·</span><span>{t.mode}</span><span>·</span><span>used {t.uses}×</span>
+        {t.changes?.length > 0 && <><span>·</span><span style={{ color: AMBER, fontWeight: 700 }}>changes data</span></>}
         {t.failStreak > 0 && <><span>·</span><span style={{ color: RED }}>{t.failStreak} failure{t.failStreak === 1 ? '' : 's'} in a row</span></>}
         <span>·</span><span>{when(t.createdAt)}</span>{extra}
       </div>
@@ -181,6 +182,7 @@ function ToolModal({ id, onClose, onToast, onChanged }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, padding: 12, background: LIGHT, borderRadius: 10, marginBottom: 14, fontFamily: FONT, fontSize: 12 }}>
         {row('Owner', owner(t))}{row('Name', <code>{t.name}</code>)}{row('Mode', t.mode)}{row('Used', `${t.uses}×`)}
         {row('Data', [...t.views, ...t.capabilities].join(', ') || '—')}{row('Created', when(t.createdAt))}
+        {t.changes?.length > 0 && row('Can change', t.changes.join(' '))}
       </div>
       <details style={{ marginBottom: 14, fontFamily: FONT, fontSize: 12 }}>
         <summary style={{ cursor: 'pointer', color: MUTED, fontWeight: 700 }}>Definition and verification</summary>
@@ -202,7 +204,7 @@ function ToolModal({ id, onClose, onToast, onChanged }) {
         </div>}
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 12px', background: '#FFFBEB', borderRadius: 9, marginTop: 12, fontFamily: FONT, fontSize: 12, color: INK, lineHeight: 1.5 }}>
           <ShieldCheck size={15} color={AMBER} style={{ flexShrink: 0, marginTop: 1 }} />
-          <span>Promoting first runs a Verification Gate check: the tool's samples on three test learners, each on their own data. It's only promoted if that passes. Every learner then gets it, run on their own data only.</span>
+          <span>Promoting first runs a Verification Gate check: the tool's samples on three test learners, each on their own data. It's only promoted if that passes. Every learner then gets it, run on their own data only.{t.changes?.length > 0 && <> It changes data ({t.changes.join(' ')}): promoting turns that on for everyone, and every change still waits for each learner's Confirm. Revoking the tool turns it off again.</>}</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
           <Btn variant="secondary" onClick={() => setPromote(null)} disabled={busy}>Back</Btn>
@@ -211,7 +213,7 @@ function ToolModal({ id, onClose, onToast, onChanged }) {
       </div> : <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
         {t.status === 'active' && <Btn variant="secondary" onClick={() => setStatus('disabled')} disabled={busy}>Turn off</Btn>}
         {t.status === 'disabled' && <Btn variant="secondary" onClick={() => setStatus('active')} disabled={busy}>Turn on</Btn>}
-        {['active', 'disabled'].includes(t.status) && <Btn variant="secondary" onClick={() => setStatus('revoked')} disabled={busy}>Revoke</Btn>}
+        {['active', 'disabled'].includes(t.status) && <Btn variant="secondary" onClick={() => setStatus('revoked')} disabled={busy}>Revoke (delete)</Btn>}
         {t.scope === 'learner' && t.status === 'active' && <Btn onClick={() => setPromote({ name: t.name, label: t.label, goal: t.goal, replaces: new Set() })} disabled={busy}><Globe size={14} /> Promote to everyone</Btn>}
       </div>}
     </>}

@@ -327,7 +327,8 @@ function GrantsPanel({ onToast }) {
   }, [onToast]);
   useEffect(() => { load(); }, [load]);
   async function revoke(g) {
-    if (!window.confirm(`Turn off "${g.does || g.capability}" for everyone? Tools that use it stop at once.`)) return;
+    const who = g.forLearner ? (g.forLearner.username ? `@${g.forLearner.username}` : 'this learner') : 'everyone';
+    if (!window.confirm(`Turn off "${g.does || g.capability}" for ${who}? Tools that use it stop at once.`)) return;
     setBusyId(g.id);
     try { await apiPost(`/api/admin/capability-grants/${g.id}/revoke`, {}); onToast({ type: 'success', message: 'Revoked.' }); await load(); }
     catch (e) { onToast({ type: 'error', message: e.message || 'Could not revoke.' }); }
@@ -340,7 +341,7 @@ function GrantsPanel({ onToast }) {
     {shown.map((g) => <div key={g.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 12, padding: 16, borderBottom: `1px solid ${BORDER}`, fontFamily: FONT }}>
       <div style={{ minWidth: 0 }}>
         <div style={{ color: INK, fontWeight: 700, fontSize: 14 }}>{g.does || g.capability}</div>
-        <div style={{ color: MUTED2, fontSize: 11.5, marginTop: 6 }}><code>{g.capability}</code> · granted {formatWhen(g.created_at)}{g.expires_at ? ` · until ${formatWhen(g.expires_at)}` : ''}{g.revoked_at ? ` · revoked ${formatWhen(g.revoked_at)}` : ''}</div>
+        <div style={{ color: MUTED2, fontSize: 11.5, marginTop: 6 }}><code>{g.capability}</code> · {g.forLearner ? `only ${g.forLearner.username ? `@${g.forLearner.username}` : g.forLearner.name || 'one learner'} (they approved it in their chat)` : 'everyone'} · granted {formatWhen(g.created_at)}{g.expires_at ? ` · until ${formatWhen(g.expires_at)}` : ''}{g.revoked_at ? ` · revoked ${formatWhen(g.revoked_at)}` : ''}</div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {g.active ? <><StatusPill status="approved" /><Btn variant="secondary" size="sm" onClick={() => revoke(g)} disabled={busyId === g.id}>{busyId === g.id ? 'Revoking…' : 'Revoke'}</Btn></> : <StatusPill status="expired" />}

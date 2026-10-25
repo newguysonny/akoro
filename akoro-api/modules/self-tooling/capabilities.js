@@ -57,8 +57,6 @@ export const CAPABILITIES = Object.freeze({
   "verify.probe":           locked("Gate probe: returns the current time (testing escalation only).", [], { kind: "read", runtime: true, hidden: true, returns: ["checkedAt", "ok"] }),
   // The gate's write probe (scenario selftool.write_confirm): marks a task done like
   // tasks.mark_done, hidden from schema_lookup; granted only during a gate run.
-  // The gate's delete probe (scenario selftool.delete_tasks): deletes like tasks.delete, hidden.
-  "verify.task_delete":     locked("Gate probe: delete the learner's tasks (testing deletes only).", [], { hidden: true, target: "my_tasks", item: (r) => r.title || "a task" }),
   "verify.task_done":       locked("Gate probe: mark the learner's tasks as done (testing confirmations only).", [], { hidden: true, target: "my_tasks", item: (r) => r.title || "a task" }),
   // Writes (S6): a recipe's final `write` step applies one to rows of `target`
   // (the learner's own rows, by their private id) — only after the learner
@@ -69,6 +67,17 @@ export const CAPABILITIES = Object.freeze({
   "circles.leave":          locked("Leave a revision circle the learner joined.", ["leave circle"]),
   "challenges.cancel_mine": locked("Cancel one of the learner's own open challenge requests.", ["cancel challenge"]),
 });
+
+/**
+ * A capability the LEARNER may turn on for themselves (approving a card in their
+ * chat): a change to their own rows that a tool can target, where every change
+ * still waits for their Confirm. Other learners' data, and reads of it, stay
+ * admin-only.
+ */
+export function learnerGrantable(name) {
+  const c = CAPABILITIES[name];
+  return !!c && !c.hidden && c.status === "locked" && c.kind === "write" && !!c.target && (c.scope || "self") === "self" && capAudience(c) === "learner";
+}
 
 /** Never — cannot be requested or granted (rule 27). Matched against goals and requested names. */
 export const FORBIDDEN = Object.freeze([

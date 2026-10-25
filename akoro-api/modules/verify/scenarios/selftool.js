@@ -296,9 +296,14 @@ export const promotionCheck = {
 
     const audience = t.audience || "learner";
     const role = audience === "instructor" ? "instructor" : "student";
+    const { learnerGrantable } = await import("../../self-tooling/capabilities.js");
     const v = await validateDefinition(structuredClone(t.definition), t.params_schema, { audience });
-    ctx.expect.ok("definition validates", v.ok, v.errors);
+    // Not yet on for everyone is expected for an own-data change: the promotion turns it on.
+    const errs = v.errors.filter((e) => !(/capability (\S+) needs approval/.test(e) && learnerGrantable(e.match(/capability (\S+) needs approval/)[1])));
+    ctx.expect.ok("definition validates", !errs.length, errs);
     for (const c of t.capabilities || []) {
+      // A change to each learner's own rows is turned on for everyone by the promotion itself.
+      if (learnerGrantable(c)) { ctx.note(`${c}: a change to each learner's own rows — promotion turns it on for everyone; each change waits for their Confirm`); continue; }
       ctx.expect.eq(`capability ${c} is on`, await capabilityStatus(c), "enabled");
       ctx.expect.eq(`capability ${c} only reads`, CAPABILITIES[c]?.kind, "read");
     }
@@ -619,7 +624,7 @@ export const instructorAgentBuilds = {
  */
 export const permissionRequestIsReal = {
   name: "selftool.permission_request_is_real", area: "self-tooling", risk: "write",
-  description: "Asked to delete tasks, then to ask for permission, the agent files a real request on the admins' Agent requests page — and only ever says a request was made when one exists there.",
+  description: "Asked to delete tasks, then to ask for permission, the agent makes a real request — a permission card the learner approves (own data) or one on the admins' Agent requests page — and only ever says a request was made when one exists.",
   params: { learner: { default: "@tester25" }, first: { default: "Delete my old tasks please." }, prompt: { default: "Ask for permission to delete task" } },
   async run(ctx, p) {
     const me = await ctx.as(p.learner);
@@ -637,8 +642,11 @@ export const permissionRequestIsReal = {
     const claims = /\b(filed|submitted|sent|made|raised|logged)\b[^.]{0,40}\brequest\b|\brequest\b[^.]{0,40}\b(filed|submitted|sent|pending|made)\b|\bI(?:'ve| have) asked\b|\basked an admin\b/i.test(String(turn.reply || ""));
     ctx.note(`reply: ${String(turn.reply || "").replace(/\s+/g, " ").slice(0, 400)}`);
     ctx.note(`requests made this turn: ${rows.length} ${JSON.stringify(rows.map((r) => [r.kind, r.requested_capability, r.title]))}`);
-    ctx.expect.ok("if the reply says a request was made, the admin's queue has it", !claims || rows.length > 0, { claims, rows, tools: (turn.tools || []).map((t) => t.tool) });
-    ctx.expect.ok("the learner asked for permission outright: a request reached the admins' queue", rows.length > 0, { rows, tools: (turn.tools || []).map((t) => t.tool), reply: String(turn.reply || "").slice(0, 300) });
+    // An own-data change (deleting their tasks) is the learner's to allow: a permission card in the chat is the real request.
+    const card = (turn.tools || []).find((t) => t.tool === "create_tool" && t.result?.status === "needs_permission")?.result?.confirmation;
+    if (card?.confirmationId) ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tool_write_confirmations", { ownerColumn: "principal_id", ownerId: me.id, filters: { id: card.confirmationId } }));
+    ctx.expect.ok("if the reply says a request was made, it exists (admins' queue or the learner's card)", !claims || rows.length > 0 || !!card, { claims, rows, card: !!card, tools: (turn.tools || []).map((t) => t.tool) });
+    ctx.expect.ok("the learner asked for permission outright: a real request (admins' queue, or a permission card for them)", rows.length > 0 || !!card, { rows, tools: (turn.tools || []).map((t) => t.tool), reply: String(turn.reply || "").slice(0, 300) });
   },
 };
 
@@ -728,67 +736,99 @@ export const toolJourney = {
 };
 
 /**
- * "Delete my old tasks" → "ask for permission": the agent asks for the
- * delete-tasks PERMISSION (Permissions tab, approvable), not a tool idea; and a
- * delete tool, once allowed, deletes exactly the rows the learner confirms.
- * tasks.delete itself is never granted here (it would turn on for everyone):
- * the deleting runs on the hidden probe verify.task_delete, which deletes the same way.
+ * A learner wants their old tasks deleted and no tool does it. The agent says
+ * it can't yet but can build a tool, and when the learner agrees a PERMISSION
+ * card appears (no admin). Approve turns "delete my tasks" on for this learner
+ * only and builds the tool; its first proposal is the usual change card, and
+ * only Confirm deletes — exactly the tasks it listed. Admins then see the new
+ * tool on Agent tools. The grant is this test learner's own and is revoked after.
  */
 export const deleteTasks = {
   name: "selftool.delete_tasks", area: "self-tooling", risk: "write",
-  description: "Asked to delete tasks and then to ask for permission, the agent files the delete-tasks permission request admins can approve; a delete tool deletes only the tasks the learner confirms.",
-  params: { learner: { default: "@tester29" }, first: { default: "Delete my old tasks please." }, prompt: { default: "Ask for permission to delete task" } },
+  description: "No tool deletes tasks: the agent offers to build one, the learner approves it on a permission card (no admin), the tool is built and deletes only the tasks the learner confirms; admins see the new tool.",
+  params: { learner: { default: "@tester29" }, first: { default: "Delete my old tasks please." }, agree: { default: "Yes please, build it." } },
   async run(ctx, p) {
     await needCreate(ctx);
     const me = await ctx.as(p.learner);
-    const since = new Date(Date.now() - 5_000).toISOString();
-
-    // 1. The ask, then "ask for permission" — as in the learner's chat.
-    const t1 = await ctx.agent.chat({ as: p.learner, mode: "live", model: p.model, prompt: String(p.first) });
-    ctx.note(`turn 1: ${String(t1.reply || "").replace(/\s+/g, " ").slice(0, 250)} · tools ${JSON.stringify((t1.tools || []).map((t) => t.tool))}`);
-    const t2 = await ctx.agent.chat({ as: p.learner, mode: "live", model: p.model, prompt: String(p.prompt),
-      history: [{ role: "user", content: String(p.first) }, { role: "assistant", content: String(t1.reply || "") }] });
-    ctx.note(`turn 2: ${String(t2.reply || "").replace(/\s+/g, " ").slice(0, 250)} · tools ${JSON.stringify((t2.tools || []).map((t) => t.tool))}`);
-    const rows = (await ctx.db.rows("edu.agent_tool_requests", { requester_id: me.id }, { columns: "id, kind, requested_capability, status, created_at, updated_at", limit: 100 }))
-      .filter((r) => Date.parse(r.updated_at || r.created_at) >= Date.parse(since));
-    for (const r of rows) ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tool_requests", { ownerColumn: "requester_id", ownerId: me.id, filters: { id: r.id } }));
-    ctx.note(`requests: ${JSON.stringify(rows.map((r) => [r.kind, r.requested_capability, r.status]))}`);
-    ctx.expect.ok("1. a delete-tasks permission request is on the admins' Permissions tab",
-      rows.some((r) => r.kind === "capability" && r.requested_capability === "tasks.delete"), rows);
-    ctx.expect.ok("1. not filed as a tool idea instead", !rows.some((r) => r.kind !== "capability"), rows);
-
-    // 2. Once allowed: deletes exactly what the learner confirms.
     const { default: db } = await import("../../../db.js");
-    const { activeGrants } = await import("../../self-tooling/registry.js");
+    const { learnerGrants } = await import("../../self-tooling/registry.js");
+    const revokeMine = async () => {
+      await db.schema("edu").from("capability_grants").update({ revoked_at: new Date().toISOString() }).eq("learner_id", me.id).eq("capability", "tasks.delete").is("revoked_at", null);
+      await learnerGrants(me.id, { fresh: true });
+    };
+    await revokeMine();          // start from "can't do it yet"
+    ctx.cleanup(revokeMine);
+    const since = new Date(Date.now() - 5_000).toISOString();
     const tag = ctx.marker.slice(8, 16).replace(/[^a-z0-9]/g, "x");
     const name = `verify_del_${tag}`;
-    const { data: grant, error: gErr } = await db.schema("edu").from("capability_grants")
-      .insert({ capability: "verify.task_delete", note: `gate ${ctx.marker}`, expires_at: new Date(Date.now() + 15 * 60_000).toISOString() }).select("id").single();
-    if (gErr) ctx.expect.blocked(`couldn't grant the probe: ${gErr.message}`);
-    ctx.cleanup(async () => { await db.schema("edu").from("capability_grants").update({ revoked_at: new Date().toISOString() }).eq("id", grant.id); await activeGrants({ fresh: true }); });
-    await activeGrants({ fresh: true });
     ctx.cleanup(() => ctx.db.deleteOwned("tasks", { ownerColumn: "creator_id", ownerId: me.id, filters: { title: { like: `${ctx.marker}%` } } }));
-    ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tools", { ownerColumn: "owner_id", ownerId: me.id, filters: { name } }));
-    ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tool_write_confirmations", { ownerColumn: "principal_id", ownerId: me.id, filters: { tool_name: "selftool:verify.task_delete" } }));
+    ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tools", { ownerColumn: "owner_id", ownerId: me.id, filters: { name: { like: `${name}%` } } }));
+    ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tool_write_confirmations", { ownerColumn: "principal_id", ownerId: me.id, filters: { tool_name: { like: "selftool:%tasks.delete" } } }));
+
+    // 1. In chat: the agent offers to build it; when the learner agrees, a permission card — no admin request.
+    const t1 = await ctx.agent.chat({ as: p.learner, mode: "live", model: p.model, prompt: String(p.first) });
+    ctx.note(`turn 1: ${String(t1.reply || "").replace(/\s+/g, " ").slice(0, 300)} · tools ${JSON.stringify((t1.tools || []).map((t) => t.tool))}`);
+    let card = (t1.tools || []).find((t) => t.tool === "create_tool" && t.result?.status === "needs_permission")?.result?.confirmation;
+    if (!card) {
+      ctx.expect.ok("1. offers to build a tool instead of giving up", /\b(build|make|create)\b/i.test(String(t1.reply || "")), String(t1.reply || "").slice(0, 300));
+      const t2 = await ctx.agent.chat({ as: p.learner, mode: "live", model: p.model, prompt: String(p.agree),
+        history: [{ role: "user", content: String(p.first) }, { role: "assistant", content: String(t1.reply || "") }] });
+      ctx.note(`turn 2: ${String(t2.reply || "").replace(/\s+/g, " ").slice(0, 300)} · tools ${JSON.stringify((t2.tools || []).map((t) => [t.tool, t.result?.status]))}`);
+      card = (t2.tools || []).find((t) => t.tool === "create_tool" && t.result?.status === "needs_permission")?.result?.confirmation;
+      ctx.expect.ok("1. reply asks the learner to approve (nothing built yet)", /approv|allow/i.test(String(t2.reply || "")) && !/\b(deleted|it's built|I've built)\b/i.test(String(t2.reply || "")), String(t2.reply || "").slice(0, 300));
+    }
+    ctx.expect.ok("1. a permission card for deleting tasks", card?.kind === "permission" && /delete your tasks/i.test(card?.action || ""), card);
+    const asked = (await ctx.db.rows("edu.agent_tool_requests", { requester_id: me.id }, { columns: "id, kind, created_at", limit: 50 })).filter((r) => Date.parse(r.created_at) >= Date.parse(since));
+    for (const r of asked) ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tool_requests", { ownerColumn: "requester_id", ownerId: me.id, filters: { id: r.id } }));
+    ctx.expect.eq("1. no admin request was made", asked.length, 0);
+    if (card?.confirmationId) {
+      const no = await ctx.http({ as: p.learner, method: "POST", path: `/api/self-tooling/confirmations/${card.confirmationId}/reject` });
+      ctx.expect.eq("1. 'Not now' leaves it off", no.body?.data?.status, "rejected");
+    }
+    ctx.expect.eq("1. still off for the learner", (await learnerGrants(me.id, { fresh: true })).has("tasks.delete"), false);
+
+    // 2. Approve on the card: on for this learner, the tool is built, and it deletes only what they confirm.
+    const made = await ctx.http({ as: p.learner, method: "POST", path: "/api/adaptive/chat/sessions", body: { title: `${ctx.marker} delete tasks` } });
+    const chatId = made.body?.session?.id;
+    if (chatId) {
+      ctx.cleanup(() => ctx.db.deleteOwned("chat_sessions", { ownerColumn: "user_id", ownerId: me.id, filters: { id: chatId } }));
+      ctx.cleanup(() => ctx.db.deleteOwned("notifications", { ownerColumn: "user_id", ownerId: me.id, filters: { related_id: chatId } }));
+    }
     const old = [`${ctx.marker} old fractions`, `${ctx.marker} old motion`], keep = `${ctx.marker} keep essay`;
     for (const title of [...old, keep]) {
       const t = await ctx.agent.tool({ as: p.learner, tool: "create_task", mode: "live", input: { title, priority: "low", dueInMinutes: 60 } });
       ctx.expect.ok(`task "${title.slice(-12)}" created`, !t?.error, t?.error);
     }
     const titles = async () => (await ctx.db.rows("tasks", { creator_id: me.id, title: { like: `${ctx.marker}%` } }, { columns: "title" })).map((r) => r.title).sort();
-
-    const r = await ctx.agent.tool({ as: p.learner, tool: "create_tool", mode: "live", input: {
+    const r = await ctx.agent.tool({ as: p.learner, tool: "create_tool", mode: "live", conversationId: chatId, input: {
       goal: `Delete my tasks whose title starts with "${ctx.marker} old"`, name, label: `${ctx.marker} Clear old tasks`,
-      hint: { views: ["my_tasks"], capabilities: ["verify.task_delete"] } } });
-    ctx.expect.eq("2. delete tool created", r?.status, "created");
-    const card = r?.result?.confirmation;
-    ctx.note(`definition: ${JSON.stringify(r?.definition || null).slice(0, 300)}; card: ${JSON.stringify(card || null).slice(0, 300)}`);
-    ctx.expect.eq("2. asks the learner to confirm first", r?.result?.status, "needs_confirmation");
-    if (!card?.confirmationId) return;
-    ctx.expect.eq("2. card lists exactly the two old tasks", [...(card.items || [])].sort().join(" | "), [...old].sort().join(" | "));
-    ctx.expect.eq("2. nothing deleted before confirming", (await titles()).length, 3);
-    const ok = await ctx.http({ as: p.learner, method: "POST", path: `/api/self-tooling/confirmations/${card.confirmationId}/confirm` });
+      hint: { views: ["my_tasks"], capabilities: ["tasks.delete"] } } });
+    ctx.expect.eq("2. create_tool asks the learner (not an admin)", r?.status, "needs_permission");
+    const perm = r?.confirmation;
+    if (!perm?.confirmationId) return;
+    const approved = await ctx.http({ as: p.learner, method: "POST", path: `/api/self-tooling/confirmations/${perm.confirmationId}/confirm` });
+    ctx.note(`approve → ${JSON.stringify(approved.body?.data?.result || approved.body).slice(0, 400)}`);
+    ctx.expect.status("2. approved", approved, 200);
+    ctx.expect.eq("2. the tool was built", approved.body?.data?.result?.status, "created");
+    ctx.expect.eq("2. on for this learner", (await learnerGrants(me.id, { fresh: true })).has("tasks.delete"), true);
+    const { capabilityStatus } = await import("../../self-tooling/registry.js");
+    ctx.expect.eq("2. still off for everyone else", await capabilityStatus("tasks.delete"), "locked");
+    const next = approved.body?.data?.next;
+    ctx.expect.eq("2. its change card lists exactly the two old tasks", [...(next?.items || [])].sort().join(" | "), [...old].sort().join(" | "));
+    ctx.expect.eq("2. nothing deleted before Confirm", (await titles()).length, 3);
+    if (chatId) {
+      const msgs = await ctx.db.rows("chat_messages", { session_id: chatId, user_id: me.id }, { columns: "role, text", limit: 10 });
+      ctx.expect.ok("2. the chat is told it was built", msgs.some((m) => m.role === "agent" && /built/i.test(m.text)), msgs.map((m) => m.text.slice(0, 80)));
+    }
+    if (!next?.confirmationId) return;
+    const ok = await ctx.http({ as: p.learner, method: "POST", path: `/api/self-tooling/confirmations/${next.confirmationId}/confirm` });
     ctx.expect.status("2. confirmed", ok, 200);
     ctx.expect.eq("2. only the kept task is left", (await titles()).join(" | "), keep);
+
+    // 3. Admins see the new tool (Agent tools), marked as one that changes data.
+    const { listTools } = await import("../../self-tooling/library.js");
+    const listed = await listTools({ scope: "learner", status: "active", search: "Clear old tasks", limit: 20 }).catch((e) => ({ error: e.message }));
+    const row = (listed?.tools || []).find((t) => String(t.label).startsWith(ctx.marker));
+    ctx.expect.ok("3. on the admins' Agent tools page, marked as changing data", !!row && (row.changes || []).length > 0, listed);
   },
 };

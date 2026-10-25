@@ -84,7 +84,6 @@ const deleteTask = async (learnerId, ref) => {
 export const WRITE_RUNNERS = {
   "tasks.mark_done": markTaskDone,
   "tasks.delete": deleteTask,
-  "verify.task_delete": deleteTask,
   "verify.task_done": markTaskDone,
   /** Through the study_buddy tool, so its own checks (and notifications) run. */
   async "buddies.end"(learnerId, ref, { callTool }) {

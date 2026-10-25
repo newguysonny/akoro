@@ -6,7 +6,8 @@
  *   POST  /api/self-tooling/requests/:id/cancel   withdraw a waiting one
  *   GET   /api/self-tooling/confirmations            changes still waiting for the learner (resurface after reload)
  *   GET   /api/self-tooling/confirmations/:id        a change a tool proposed (S6)
- *   POST  /api/self-tooling/confirmations/:id/confirm | /reject   ONLY the learner's tap runs a write
+ *   POST  /api/self-tooling/confirmations/:id/confirm | /reject   ONLY the learner's tap runs a write (or, on a
+ *         permission card, turns the change on for them and builds the tool)
  * No definitions or internal names are returned (rule 36) — label, goal, status, usage.
  */
 import express from "express";
@@ -60,9 +61,12 @@ router.get("/confirmations", authenticateToken, asyncHandler(async (req, res) =>
 router.get("/confirmations/:id", authenticateToken, confirmationRoute((req) => getConfirmation(req.params.id, req.user.id)));
 router.post("/confirmations/:id/reject", authenticateToken, confirmationRoute((req) => rejectWrite({ id: req.params.id, userId: req.user.id })));
 router.post("/confirmations/:id/confirm", authenticateToken, confirmationRoute(async (req) => {
-  const { executeChatTool } = await import("../adaptive-learning/chat.js");
+  const [{ executeChatTool, selfToolDeps }, { createTool }, { postIntoChat }] = await Promise.all([
+    import("../adaptive-learning/chat.js"), import("./pipeline.js"), import("./escalation.js")]);
   return confirmWrite({ id: req.params.id, userId: req.user.id,
-    callTool: (tool, args) => executeChatTool(tool, args, req.user.id, { role: "student", channel: "self_tooling_confirmed" }) });
+    callTool: (tool, args) => executeChatTool(tool, args, req.user.id, { role: "student", channel: "self_tooling_confirmed" }),
+    // A permission card: approving builds the tool, as this learner.
+    buildTool: (args) => createTool({ ...args, ...selfToolDeps(req.user.id, "student") }), postIntoChat });
 }));
 
 export default router;
