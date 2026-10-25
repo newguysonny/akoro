@@ -18,7 +18,16 @@ const AUDIENCE = { label: 'Everyone in Tester Class A', whole_class: true, class
 const DRAFTS = {
   'gatefake-battle': {
     id: 'gatefake-battle', type: 'battle', status: 'draft', title: 'Fractions Showdown', audience: AUDIENCE, created_at: new Date().toISOString(),
-    payload: { subject: 'Mathematics', topic: 'Fractions', difficulty: 'intermediate', details: { topic: 'Fractions', mode: 'battle', total_questions: 6, scheduled_at: inDays(2, 10), note: 'Bring a calculator.' } },
+    payload: { subject: 'Mathematics', topic: 'Fractions', difficulty: 'intermediate', details: { topic: 'Fractions', mode: 'battle', total_questions: 6, scheduled_at: inDays(2, 10), note: 'Bring a calculator.',
+      // The draft's real questions (bank first, AI tops up), as the sandbox draft made them.
+      questions: [
+        ['What is 3/4 + 1/6?', ['10/12', '11/12', '4/10', '1'], 1],
+        ['Simplify 18/24 to its lowest terms.', ['9/12', '3/4', '6/8', '2/3'], 1],
+        ['Which fraction is equivalent to 3/4?', ['6/8', '4/3', '3/8', '9/16'], 0],
+        ['What is 2/3 of 45?', ['15', '20', '30', '35'], 2],
+        ['Arrange 2/3, 5/6, 1/2 and 1/4 in ascending order.', ['1/4, 1/2, 2/3, 5/6', '1/2, 1/4, 2/3, 5/6', '5/6, 2/3, 1/2, 1/4', '1/4, 2/3, 1/2, 5/6'], 0, 'NECO', 2018],
+        ['Find the square root of 4/9.', ['2/9', '4/3', '2/3', '16/81'], 2, 'NCEE', 2019],
+      ].map(([stem, opts, correctIndex, exam, year]) => ({ stem, options: opts.map((text, i) => ({ label: 'ABCD'[i], text })), correctIndex, topic: 'Fractions', ...(exam ? { exam, year } : {}) })) } },
   },
   'gatefake-review': {
     id: 'gatefake-review', type: 'battle', status: 'draft', title: 'Fractions review: Amaka', audience: { label: '@amaka in Tester Class A', class_name: 'Tester Class A', names: ['amaka'] }, created_at: new Date().toISOString(),
