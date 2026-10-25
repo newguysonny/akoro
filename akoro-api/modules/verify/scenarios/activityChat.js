@@ -468,7 +468,7 @@ export const activityChatSwitchTypeAsks = {
     noDraft("assignment asked for with no details", a1);
     ctx.expect.eq("no other kind of activity is made instead", madeOfType(a1, "assignment"), []);
     ctx.expect.ok("the agent asks — the same topic as before, or what it's on", asks(a1.reply, /\b(same|topic|fractions|subject|what)\b/i), a1.reply);
-    const a2 = await say("Same topic and class, 5 multiple choice questions.", "assignment, same details");
+    const a2 = await say(`Same topic and subject, for ${who} in ${classroom.name} again, 5 multiple choice questions.`, "assignment, same details");
     const pa = lastCall(a2, "prepare_activity");
     ctx.expect.ok("now it prepares an assignment", pa?.result?.prepared === true && pa?.input?.type === "assignment", { tools: toolsOf(a2), input: pa?.input, result: pa?.result });
 
@@ -476,7 +476,7 @@ export const activityChatSwitchTypeAsks = {
     noDraft("self study asked for with no details", s1);
     ctx.expect.eq("no other kind of activity is made instead", madeOfType(s1, "self_study"), []);
     ctx.expect.ok("the agent asks whether it's the same topic/subject", asks(s1.reply, /\b(same|topic|fractions|subject)\b/i), s1.reply);
-    const s2 = await say("Yes, the same topic and subject.", "self study, same details");
+    const s2 = await say(`Yes, the same topic and subject, for ${who} in ${classroom.name} again.`, "self study, same details");
     const ps = lastCall(s2, "prepare_activity");
     ctx.expect.ok("now it prepares the self study", ps?.result?.prepared === true && ps?.input?.type === "self_study", { tools: toolsOf(s2), input: ps?.input, result: ps?.result });
     const draftId = ps?.result?.draftId;
