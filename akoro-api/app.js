@@ -93,7 +93,6 @@ import pilotApplicationsModule from "./modules/pilot-applications/routes.js";
 import ticksRouter                     from "./modules/admin/ticks.js";
 import billingGatewayModule    from "./modules/billing/gateway.js";
 import "./modules/billing/jobs.js"; // billing cron jobs (trial-expiry / invoice-generation / payment-retry)
-import agentToolRequestsModule  from "./modules/agent-tool-requests/routes.js";
 import learnerGoalsModule       from "./modules/learner-goals/routes.js";
 import agentProposalsModule      from "./modules/agent-proposals/routes.js";
 import agentLearnerModule      from "./modules/autonomy/learnerRoutes.js";
@@ -881,7 +880,6 @@ app.use("/api/school",     standardLimit, schoolModule);        // school partne
 app.use("/api/voice",      aiLimit,       voiceModule);
 app.use("/api/content",    standardLimit, contentModule);   // public blog + careers, admin CRUD
 app.use("/api/admin",      standardLimit, adminModule);     // admin-only: users, instructors, courses, stats
-app.use("/api",            standardLimit, agentToolRequestsModule); // explicit learner Agent Chat feature/tool requests
 app.use("/api/goals",      standardLimit, learnerGoalsModule); // the learner's educational goals (Full Autonomy spine)
 app.use("/api/workflows", standardLimit, workflowsModule);   // event stream: replay + live (§7.9.6)
 app.use("/api/agent", standardLimit, agentLearnerModule);   // proactive agent: settings (consents, quiet hours, budget) + Ideas (§7.16)

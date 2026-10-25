@@ -329,102 +329,6 @@ router.post("/guide-reviews", authenticateToken, asyncHandler(async (req, res) =
   }
 }));
 
-router.post("/courses/:courseId/battles/challenge", authenticateToken, asyncHandler(async (req, res) => {
-  const { courseId } = req.params;
-  const {
-    opponent_id, title, description, topic, subject,
-    difficulty = "intermediate", total_questions = 15,
-    time_limit_seconds = 900, xp_prize = 200,
-    expires_in_minutes = 30, scheduled_for = null,
-  } = req.body;
-
-  if (!opponent_id || !title) return res.status(400).json({ error: "opponent_id and title are required" });
-  if (opponent_id === req.user.id) return res.status(400).json({ error: "You cannot challenge yourself" });
-
-  const { eligible } = await isEligible(req.user.id, courseId);
-  if (!eligible) return res.status(403).json({ error: "Not enrolled in this course" });
-
-  const opponentCheck = await isEligible(opponent_id, courseId);
-  if (!opponentCheck.eligible) return res.status(400).json({ error: "Opponent is not in this course" });
-
-  const [myAgent, oppAgent] = await Promise.all([resolveAgent(req.user.id), resolveAgent(opponent_id)]);
-  if (!myAgent)  return res.status(400).json({ error: "Create your agent first" });
-  if (!oppAgent) return res.status(400).json({ error: "Opponent has no agent yet" });
-
-  // One open duel per PAIR. This used to match any open seat the opponent
-  // held — including invitations they had never answered from anyone — so
-  // one ignored challenge blocked that learner from being challenged at all.
-  const { data: mineOpen } = await db.from("battle_participants")
-    .select("battle_id, battles!inner(status, battle_type)")
-    .eq("user_id", req.user.id).eq("battles.battle_type", "1v1")
-    .in("battles.status", ["lobby", "scheduled", "live"]).limit(100);
-  const myIds = (mineOpen ?? []).map((r) => r.battle_id);
-  if (myIds.length) {
-    const { data: shared } = await db.from("battle_participants").select("battle_id")
-      .in("battle_id", myIds).eq("user_id", opponent_id).is("declined_at", null).limit(1);
-    if (shared?.length) return res.status(409).json({ error: "You already have a battle open with this person — finish or cancel it first." });
-  }
-
-  const isScheduled = !!scheduled_for && new Date(scheduled_for) > new Date();
-  // A deadline only where there is a start time to be a deadline. See
-  // acceptDeadline; an unscheduled one stays open BATTLE_IDLE_HOURS.
-  const expiresAt   = isScheduled ? acceptDeadline(scheduled_for) : idleDeadline();
-
-  // A learner who creates a battle plays in it: they need the coins for their own agent's answers.
-  {
-    const creatorEntry = await entryCheck(req.user.id, { battle_type: "battle", total_questions, min_xp: 0 });
-    if (!creatorEntry.ok) return res.status(402).json({ code: "ENTRY_REQUIREMENTS", error: creatorEntry.message.replace("to join", "to start it"), requirements: creatorEntry });
-  }
-  const { data: battle, error } = await db.from("battles").insert({
-    hp_per_miss: cleanHpPerMiss(req.body?.hp_per_miss),
-    min_xp: Math.max(0, Math.round(Number(req.body?.min_xp) || 0)),
-    course_id: courseId, battle_type: "1v1", title, description: description ?? null,
-    topic: topic ?? null, subject: subject ?? null, difficulty,
-    total_questions, time_limit_seconds, xp_prize, xp_pool: xp_prize,
-    status: isScheduled ? "scheduled" : "lobby",
-    scheduled_start: scheduled_for ?? null, expires_at: expiresAt,
-    created_by: req.user.id,
-  }).select().single();
-
-  if (error) throw new Error(error.message);
-  // Unscheduled invitations don't wait for ever: after BATTLE_IDLE_HOURS it
-  // runs with whoever accepted (if enough did) or expires.
-  if (!isScheduled) await queueIdleExpiry(battle.id);
-
-  await db.from("battle_participants").insert([
-    { battle_id: battle.id, user_id: req.user.id, agent_id: myAgent.id, role: "creator" },
-    { battle_id: battle.id, user_id: opponent_id,  agent_id: oppAgent.id, role: "opponent" },
-  ]);
-
-  await assignQuestions(battle.id, courseId, topic, subject, difficulty, total_questions, time_limit_seconds);
-
-  const q = await getBattleQueue();
-  // No deadline, no expiry job — an unscheduled invitation waits.
-  if (expiresAt) {
-    await addLater(q, "expire-battle", { action: "expire-battle", battleId: battle.id },
-      { delay: Math.max(0, new Date(expiresAt).getTime() - Date.now() + EXPIRE_AFTER_START_MS) });
-  }
-  if (isScheduled) {
-    await addLater(q, "start-battle", { action: "start-battle", battleId: battle.id },
-      { delay: new Date(scheduled_for).getTime() - Date.now() });
-  }
-
-  const { data: me } = await db.from("users").select("full_name, avatar_url").eq("id", req.user.id).single();
-  await notifyUser(opponent_id, "battle_challenge",
-    `${me?.full_name} challenged you!`,
-    `${title} · ${xp_prize} XP · ${isScheduled ? "Starts " + new Date(scheduled_for).toLocaleString("en-GB", { timeZone: "Africa/Lagos" }) : "Open for " + IDLE_HOURS + " hours"}`,
-    battle.id
-  );
-
-  // ── WebSocket: push challenge card directly to opponent's session ─────────
-  const io = req.app.get("io");
-  if (io) {
-    { const card = await challengeCardFor(battle.id, me); if (card) io.to(`user:${opponent_id}`).emit("new_challenge", card); }
-  }
-
-  res.status(201).json({ success: true, battle_id: battle.id, status: isScheduled ? "scheduled" : "lobby", expires_at: expiresAt });
-}));
-
 // POST /api/courses/:courseId/battles/open
 router.post("/courses/:courseId/battles/open", authenticateToken, asyncHandler(async (req, res) => {
   const { courseId } = req.params;
@@ -494,76 +398,6 @@ router.post("/courses/:courseId/battles/open", authenticateToken, asyncHandler(a
 
   res.status(201).json({ success: true, battle_id: battle.id, status: isScheduled ? "scheduled" : "lobby", expires_at: expiresAt, max_participants, current_participants: 1 });
 }));
-
-// POST /api/courses/:courseId/battles/classroom  (teacher only)
-router.post("/courses/:courseId/battles/classroom", authenticateToken, requireRole(["instructor", "admin"]), asyncHandler(async (req, res) => {
-  const { courseId } = req.params;
-  const {
-    title, description, topic, subject,
-    difficulty = "hard", total_questions = 15,
-    time_limit_seconds = 1200, xp_pool = 500,
-    expires_in_minutes = 1440, scheduled_for = null,
-  } = req.body;
-
-  if (!title) return res.status(400).json({ error: "title is required" });
-
-  const { data: course } = await db.from("courses").select("instructor_id").eq("id", courseId).single();
-  if (!course || course.instructor_id !== req.user.id) return res.status(403).json({ error: "You do not own this course" });
-
-  const teacherAgent = await resolveAgent(req.user.id);
-  if (!teacherAgent) return res.status(400).json({ error: "Create your agent first" });
-
-  const isScheduled = !!scheduled_for && new Date(scheduled_for) > new Date();
-  // A deadline only where there is a start time to be a deadline. See
-  // acceptDeadline; an unscheduled one stays open BATTLE_IDLE_HOURS.
-  const expiresAt   = isScheduled ? acceptDeadline(scheduled_for) : idleDeadline();
-
-  const { data: battle, error } = await db.from("battles").insert({
-    hp_per_miss: cleanHpPerMiss(req.body?.hp_per_miss),
-    min_xp: Math.max(0, Math.round(Number(req.body?.min_xp) || 0)),
-    course_id: courseId, battle_type: "classroom", title, description: description ?? null,
-    topic: topic ?? null, subject: subject ?? null, difficulty,
-    total_questions, time_limit_seconds, xp_prize: xp_pool, xp_pool,
-    status: isScheduled ? "scheduled" : "lobby",
-    scheduled_start: scheduled_for ?? null, expires_at: expiresAt, created_by: req.user.id,
-  }).select().single();
-  if (error) throw new Error(error.message);
-  // Unscheduled invitations don't wait for ever: after BATTLE_IDLE_HOURS it
-  // runs with whoever accepted (if enough did) or expires.
-  if (!isScheduled) await queueIdleExpiry(battle.id);
-
-  await db.from("battle_participants").insert({
-    battle_id: battle.id, user_id: req.user.id, agent_id: teacherAgent.id, role: "teacher", joined_at: now(),
-  });
-
-  // Auto-register all enrolled students with agents
-  const { data: students } = await db.from("enrollments")
-    .select("user_id, user_agents!inner(id)")
-    .eq("course_id", courseId).eq("status", "active").neq("user_id", req.user.id);
-
-  for (const s of (students ?? [])) {
-    await db.from("battle_participants").upsert({
-      battle_id: battle.id, user_id: s.user_id, agent_id: s.user_agents.id, role: "participant", joined_at: now(),
-    }, { onConflict: "battle_id,user_id" });
-    await notifyUser(s.user_id, "classroom_battle", `Class battle: ${title}`,
-      `Your agent is competing! ${isScheduled ? "Starts: " + scheduled_for : "Starting soon!"}`, battle.id);
-  }
-
-  await db.from("battles").update({ total_participants: (students?.length ?? 0) + 1 }).eq("id", battle.id);
-  await assignQuestions(battle.id, courseId, topic, subject, difficulty, total_questions, time_limit_seconds);
-
-  const q = await getBattleQueue();
-  // No deadline, no expiry job — an unscheduled invitation waits.
-  if (expiresAt) {
-    await addLater(q, "expire-battle", { action: "expire-battle", battleId: battle.id },
-      { delay: Math.max(0, new Date(expiresAt).getTime() - Date.now() + EXPIRE_AFTER_START_MS) });
-  }
-  const delay = isScheduled ? new Date(scheduled_for).getTime() - Date.now() : 5000;
-  await addLater(q, "start-battle", { action: "start-battle", battleId: battle.id }, { delay });
-
-  res.status(201).json({ success: true, battle_id: battle.id, status: isScheduled ? "scheduled" : "starting", participants: (students?.length ?? 0) + 1, expires_at: expiresAt });
-}));
-
 
 // ─── CLASS BATTLES ───────────────────────────────────────────────────────────
 // A class battle belongs to a classroom and a subject rather than a course.
@@ -962,7 +796,6 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
 // Battles pages both need "everything I'm involved in" without knowing a course
 // id up front, and both render the same card shape the WebSocket push uses —
 // so the mapping lives in battle/card.js, once.
-
 
 // GET /api/battle/my-battles — every battle I take part in or created
 router.get("/my-battles", authenticateToken, asyncHandler(async (req, res) => {
@@ -2211,25 +2044,6 @@ router.get("/battles/:battleId/log", authenticateToken, asyncHandler(async (req,
 }));
 
 // ─── LEADERBOARDS ─────────────────────────────────────────────────────────────
-
-router.get("/courses/:courseId/leaderboard", authenticateToken, asyncHandler(async (req, res) => {
-  const { scope = "classroom" } = req.query;
-  const { data: rows } = await db.from("xp_leaderboard")
-    .select(`*, users(username, full_name), user_agents(agent_name, agent_emoji, agent_color, agent_bg)`)
-    .eq("scope", scope === "classroom" ? "battle_course" : scope)
-    .eq("scope_ref_id", req.params.courseId)
-    .order("rank").limit(50);
-
-  const myEntry = (rows ?? []).find((r) => r.user_id === req.user.id);
-  res.json({ leaderboard: (rows ?? []).map((r) => ({ ...r, isMe: r.user_id === req.user.id })), my_rank: myEntry?.rank ?? null, my_xp: myEntry?.total_xp ?? 0, scope });
-}));
-
-router.get("/leaderboard/global", authenticateToken, asyncHandler(async (req, res) => {
-  const { data } = await db.from("xp_leaderboard")
-    .select(`*, users(username, full_name), user_agents(agent_name, agent_emoji, agent_color)`)
-    .eq("scope", "global").order("total_xp", { ascending: false }).limit(100);
-  res.json({ leaderboard: (data ?? []).map((r) => ({ ...r, isMe: r.user_id === req.user.id })) });
-}));
 
 // ─── QUESTION BANK ────────────────────────────────────────────────────────────
 

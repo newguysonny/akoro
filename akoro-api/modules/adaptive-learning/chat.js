@@ -63,8 +63,7 @@ import { listGoals, createGoal, updateGoal } from "../learner-goals/service.js";
 import { listMyBlogs, createBlogPost, updateBlogPost } from "../blogs/service.js";
 import { newToolRequestId, toolObservation } from "../../utils/toolObservation.js";
 
-import { getOrchestrator, listAgentPairs, getAgentPairProfile } from "./agents/registry.js";
-import { getAgentPreferences, saveAgentPreferences } from "./student-state.js";
+import { getOrchestrator } from "./agents/registry.js";
 import {
   createActivityDraft, listActivityDrafts, getActivityDraft, discardActivityDraft, reviseDraftPayload,
   instructorClassrooms,
@@ -83,7 +82,6 @@ import {
   getAgentGrowthHistory,
   getAgentIntelligence,
   retrieveAgentKnowledge,
-  saveStudentKnowledge,
   getAgentKnowledgeBySubject,
   getTopicsBySubject,
 } from "./agents/student/knowledge.js";
@@ -274,7 +272,6 @@ async function reconstructHistoryBlocks(sessionId, topic, subject, agentName, ag
 
 // ─── Unified Agent Chat tools ────────────────────────────────────────────────
 // These execute against the student's real data when the agent needs them.
-
 
 // A recurring battle (battle/series.js): days of the week + a time, until an end date and time.
 const REPEAT_SCHEMA = {
@@ -3147,28 +3144,6 @@ router.put("/soul-state/preferences", async (req, res) => {
   }
 });
 
-router.put("/soul-state/check-in", async (req, res) => {
-  if (!learnerSoulStateEnabled) return res.status(409).json({ success: false, error: "Soul-state controls are not enabled" });
-  const sessionId = String(req.body?.sessionId || "").trim();
-  const values = Object.fromEntries(Object.keys(SOUL_VALUES).slice(4).map((key) => [key, safeSoulValue(req.body?.[key], key)]));
-  if (!/^[A-Za-z0-9_-]{1,180}$/.test(sessionId) || Object.values(values).some((value) => !value)) {
-    return res.status(422).json({ success: false, error: "sessionId and recognised check-in values are required" });
-  }
-  try {
-    const now = new Date();
-    const { error } = await db.schema("edu").from("learner_soul_checkins").upsert({
-      learner_id: req.user.id, source_session_id: sessionId,
-      feeling: values.feeling, study_context: values.studyContext, study_intent: values.studyIntent,
-      requested_support: values.requestedSupport, policy_version: "learner-soul-v1",
-      checked_in_at: now.toISOString(), expires_at: new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString(), updated_at: now.toISOString(),
-    }, { onConflict: "learner_id,source_session_id" });
-    if (error) throw error;
-    return res.json({ success: true, checkIn: { sessionId, ...values } });
-  } catch {
-    return res.status(503).json({ success: false, error: "Soul check-in could not be saved" });
-  }
-});
-
 router.delete("/soul-state", async (req, res) => {
   if (!learnerSoulStateEnabled) return res.status(409).json({ success: false, error: "Soul-state controls are not enabled" });
   const scope = String(req.body?.scope || "all").toLowerCase();
@@ -3188,34 +3163,6 @@ router.delete("/soul-state", async (req, res) => {
 // =============================================================
 // AGENT PAIR ROUTES
 // =============================================================
-
-router.get("/agents/pairs", async (req, res) => {
-  try { res.json({ success: true, pairs: await listAgentPairs() }); }
-  catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-router.get("/agents/pairs/:pairId", async (req, res) => {
-  try {
-    const profile = await getAgentPairProfile(req.params.pairId);
-    if (!profile) return res.status(404).json({ error: "Not found" });
-    res.json({ success: true, profile });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-router.get("/agents/preferences/:agentId", async (req, res) => {
-  try { res.json({ success: true, ...(await getAgentPreferences(req.user.id)) }); }
-  catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-router.post("/agents/preferences", async (req, res) => {
-  try {
-    const { agentPairId } = req.body;
-    const agentId = req.user.id;   // caller's own agent — never a body-supplied id
-    if (!agentPairId) return res.status(400).json({ error: "agentPairId required" });
-    await saveAgentPreferences(agentId, agentPairId);
-    res.json({ success: true, agentId, agentPairId });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
 
 // =============================================================
 // DECAY ROUTES  (v3.1)
@@ -3304,7 +3251,6 @@ router.get("/decay/topics/:studentId/:subject", async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-
 // POST /decay/acknowledge/:notifId — mark notification as read
 router.post("/decay/acknowledge/:notifId", async (req, res) => {
   try {
@@ -3356,45 +3302,6 @@ router.get("/student/agent/:studentId/growth", async (req, res) => {
     const agent   = await getOrCreateStudentAgent(req.user.id);
     const history = await getAgentGrowthHistory(agent.id, Number(limit));
     res.json({ success: true, agent, history });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-router.get("/student/:studentId/knowledge", async (req, res) => {
-  try {
-    const { limit = 20, offset = 0, subject } = req.query;
-    let q = db
-      .schema("edu").from("student_knowledge")
-      .select("id, topic, subject, content, source, confidence, tags, created_at")
-      .eq("student_id", req.user.id)
-      .order("created_at", { ascending: false })
-      .range(Number(offset), Number(offset) + Number(limit) - 1);
-    if (subject) q = q.eq("subject", subject);
-    const { data, error } = await q;
-    if (error) throw error;
-    res.json({ success: true, knowledge: data });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-router.post("/student/:studentId/knowledge", async (req, res) => {
-  try {
-    const { topic, subject, content, source = "manual", tags = [] } = req.body;
-    if (!topic || !content) return res.status(400).json({ error: "topic and content required" });
-    const agent = await getOrCreateStudentAgent(req.user.id);
-    await saveStudentKnowledge({
-      studentId: req.user.id, agentId: agent.id,
-      topic, subject, content, source, tags, confidence: 0.8,
-    });
-    res.json({ success: true, message: "Knowledge saved" });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-router.get("/student/agent/:studentId/knowledge-search", async (req, res) => {
-  try {
-    const { q, limit = 5 } = req.query;
-    if (!q) return res.status(400).json({ error: "q is required" });
-    const agent  = await getOrCreateStudentAgent(req.user.id);
-    const chunks = await retrieveAgentKnowledge(agent.id, q, Number(limit));
-    res.json({ success: true, chunks });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

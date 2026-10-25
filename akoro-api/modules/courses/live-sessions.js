@@ -831,33 +831,6 @@ const participantHandlers = {
   }),
 };
 
-// ─── § WAITLIST HANDLER ───────────────────────────────────────────────────────
-
-const waitlistHandler = asyncHandler(async (req, res) => {
-  const { sessionId } = req.params;
-
-  const { data: session } = await db
-    .from("live_sessions")
-    .select("id, max_participants, waitlist_enabled, course_id")
-    .eq("id", sessionId)
-    .single();
-
-  if (!session)                return res404(res, "Session not found");
-  if (!session.waitlist_enabled) return res400(res, "Waitlist is not enabled for this session");
-
-  const { count } = await db
-    .from("session_waitlist")
-    .select("id", { count: "exact", head: true })
-    .eq("session_id", sessionId);
-
-  await db.from("session_waitlist").upsert(
-    { session_id: sessionId, user_id: req.user.id, position: (count ?? 0) + 1 },
-    { onConflict: "session_id,user_id" }
-  );
-
-  res201(res, { waitlisted: true, position: (count ?? 0) + 1 });
-});
-
 // ─── § ANALYTICS HANDLER ─────────────────────────────────────────────────────
 
 const analyticsHandler = asyncHandler(async (req, res) => {
@@ -1048,7 +1021,6 @@ router.delete("/live-sessions/:sessionId",                   authenticateToken, 
 router.post("/live-sessions/:sessionId/register",            authenticateToken, participantHandlers.register);
 router.post("/live-sessions/:sessionId/join",                authenticateToken, participantHandlers.join);
 router.post("/live-sessions/:sessionId/leave",               authenticateToken, participantHandlers.leave);
-router.post("/live-sessions/:sessionId/waitlist",            authenticateToken, waitlistHandler);
 router.post("/live-sessions/:sessionId/feedback",            authenticateToken, rules.feedback, runValidation, participantHandlers.feedback);
 
 // Instructor controls

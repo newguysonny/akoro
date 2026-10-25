@@ -48,7 +48,8 @@ test("every search embeds its question through the limit, and the vector-only se
     read("../modules/records/searchLib.js"), read("../modules/agent-tools/conversation-context-routes.js"), read("../modules/battle/agentRecall.js"),
     read("../modules/adaptive-learning/agents/student/knowledge.js"), read("../migrations/2026-search-text-fallback.sql"), read("../migrations/manifest.json"),
   ]);
-  for (const [name, src, n] of [["past questions", pq, 3], ["curriculum", cur, 3]]) {
+  // curriculum: 2 — its /search/topics endpoint had no caller and was removed
+  for (const [name, src, n] of [["past questions", pq, 3], ["curriculum", cur, 2]]) {
     assert.equal((src.match(/p_query_embedding: await embedForSearch\(/g) || []).length, n, `${name}: every search`);
     assert.equal((src.match(/p_query_text:/g) || []).length, n, `${name}: its text for the fallback`);
     assert.doesNotMatch(src, /p_query_embedding: await embed\(/, `${name}: no search waits on the plain embed`);

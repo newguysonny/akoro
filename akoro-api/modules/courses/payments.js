@@ -584,7 +584,6 @@ router.patch ("/coupons/:couponId",           authenticateToken, requireRole(["i
 
 // Enrollments
 router.get("/user/enrollments",               authenticateToken, enrollmentHandlers.listMine);
-router.get("/user/enrollments/:courseId",     authenticateToken, enrollmentHandlers.checkAccess);
 router.get("/courses/:courseId/students",     authenticateToken, requireRole(["instructor", "admin"]), enrollmentHandlers.listStudents);
 
 // Transaction history
