@@ -67,10 +67,10 @@ test("forbidden goals are caught; the learner's own data is not", () => {
   yes("Which classmates beat me in battles this month?");   // escalates (locked), not forbidden
 });
 
-test("wiring: off by default, allow-listed, gated in the catalogue and in the tool", () => {
+test("wiring: on by default (a switch can turn it off), gated in the catalogue and in the tool", () => {
   const access = readFileSync(new URL("./access.js", import.meta.url), "utf8");
-  assert.match(access, /export const selfToolingEnabled = \(\) => on\("AKORO_SELF_TOOLING_ENABLED"\);/);
-  assert.match(access, /export const selfToolingRealUsers = \(\) => on\("AKORO_SELF_TOOLING_REAL_USERS"\);/);
+  assert.match(access, /export const selfToolingEnabled = \(\) => onUnlessOff\("AKORO_SELF_TOOLING_ENABLED"\);/);
+  assert.match(access, /export const selfToolingRealUsers = \(\) => onUnlessOff\("AKORO_SELF_TOOLING_REAL_USERS"\);/);
   assert.match(chatSrc, /self_tooling: selfToolingEnabled\(\) && selfTooling,/);
   assert.match(chatSrc, /const selfToolOn = \(role === "student" \|\| role === "instructor"\) && await selfToolingAllowedFor\(req\.user\.id\);/);
   assert.match(chatSrc, /selfTooling: selfToolOn,/);
@@ -95,6 +95,21 @@ test("access: off unless enabled; testers always; real users by switch or by nam
   assert.equal(decideAccess(real, { enabled: true, realUsers: false, named: ["ada@gmail.com"] }), true, "named by email");
   assert.equal(decideAccess(real, { enabled: true, realUsers: true, named: [] }), true, "all real users");
   assert.equal(decideAccess(tester, { enabled: true, realUsers: true, named: [] }), true, "testers keep it");
+});
+
+test("access: on for everyone by default; only an explicit false turns it off", async () => {
+  const { selfToolingEnabled, selfToolingRealUsers } = await import("./access.js");
+  const keep = { e: process.env.AKORO_SELF_TOOLING_ENABLED, r: process.env.AKORO_SELF_TOOLING_REAL_USERS };
+  try {
+    delete process.env.AKORO_SELF_TOOLING_ENABLED; delete process.env.AKORO_SELF_TOOLING_REAL_USERS;
+    assert.equal(selfToolingEnabled(), true, "unset → on");
+    assert.equal(selfToolingRealUsers(), true, "unset → every learner");
+    process.env.AKORO_SELF_TOOLING_ENABLED = "true"; assert.equal(selfToolingEnabled(), true);
+    for (const v of ["false", "FALSE", "0", "off"]) { process.env.AKORO_SELF_TOOLING_ENABLED = v; assert.equal(selfToolingEnabled(), false, v); }
+    process.env.AKORO_SELF_TOOLING_REAL_USERS = "false"; assert.equal(selfToolingRealUsers(), false, "testers and named accounts only");
+  } finally {
+    for (const [k, v] of [["AKORO_SELF_TOOLING_ENABLED", keep.e], ["AKORO_SELF_TOOLING_REAL_USERS", keep.r]]) if (v === undefined) delete process.env[k]; else process.env[k] = v;
+  }
 });
 
 test("learnerGrantable: a learner may allow only changes to their own rows that a tool can target", () => {

@@ -1039,8 +1039,8 @@ Retention: verify runs 90 days; self-tool events 180 days.
 
 | Name | Default | Purpose |
 |---|---|---|
-| `AKORO_SELF_TOOLING_ENABLED` | **false** | `schema_lookup` / `create_tool` / learner tools in the catalogue |
-| `AKORO_SELF_TOOLING_REAL_USERS` | **false** | when the feature is on, also every real learner (test learners always have it) |
+| `AKORO_SELF_TOOLING_ENABLED` | **on** (unset = on; `false` turns it off for everyone) | `schema_lookup` / `create_tool` / learner tools in the catalogue |
+| `AKORO_SELF_TOOLING_REAL_USERS` | **on** (unset = on; `false` = only test learners and `AKORO_SELF_TOOLING_LEARNERS`) | every real learner and instructor (test learners always have it) |
 | `AKORO_SELF_TOOLING_LEARNERS` | — | when on, also these named real accounts (`@username` / email) |
 | `AKORO_SELF_TOOLING_CODE_ENABLED` | **false** | stage 3 |
 | `AKORO_SELF_TOOLING_WRITES_ENABLED` | **false** | phase S6 |
