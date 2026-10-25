@@ -463,7 +463,7 @@ async function draftBattleQuestions(instructor, payload) {
     const { collectQuestions } = await import("../battle/questionSource.js");
     const out = await Promise.race([
       collectQuestions({ source: "auto", total, subject: payload.subject || "General", topic: d.topic || payload.topic || null,
-        difficulty: payload.difficulty || "intermediate", userId: instructor.id }),
+        difficulty: payload.difficulty || "intermediate", userId: instructor.id, onTopic: true }),
       new Promise((_, reject) => setTimeout(() => reject(new Error("took too long")), 60_000)),
     ]);
     const questions = (out.questions || []).map((q) => ({ stem: q.stem, options: q.options, correctIndex: q.correctIndex, topic: q.topic || null,

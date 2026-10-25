@@ -298,6 +298,8 @@ export async function generate({
 export async function collectQuestions({
   source = "auto", total = 15, subject, topic, difficulty = "intermediate", classLabel,
   courseId = null, userId, basedOn = [], have = [],
+  // Only bank questions about the topic (a draft on "fractions" shouldn't open with simple interest); AI writes the rest on it.
+  onTopic = false,
 }) {
   const bankOf = courseId
     ? () => fromCourseBank({ courseId, topic, subject, difficulty, limit: total })
@@ -309,7 +311,8 @@ export async function collectQuestions({
   const seen = new Set(questions.map(dedupeKey));
   const add = (q) => { const k = dedupeKey(q); if (questions.length >= total || seen.has(k)) return; seen.add(k); questions.push(q); };
 
-  if (source !== "ai" && questions.length < total) for (const q of await bankOf()) add(q);
+  const about = onTopic ? topicMatcher(topic) : null;
+  if (source !== "ai" && questions.length < total) for (const q of await bankOf()) if (!about || about(q)) add(q);
 
   if (source !== "bank" && questions.length < total) {
     // Even when generating everything, pull a few real ones purely as style
@@ -331,6 +334,17 @@ export async function collectQuestions({
     generated = questions.length - before;
   }
   return { questions: questions.slice(0, total), charged, generated };
+}
+
+const TOPIC_STOP = new Set(["and", "the", "of", "for", "with", "basic", "introduction", "intro", "simple", "general", "topic"]);
+/** PURE: does a question belong to this topic? Its own topic or its stem shares a topic word ("fraction" ~ "fractions"). No topic → everything. */
+export function topicMatcher(topic) {
+  const ws = String(topic || "").toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !TOPIC_STOP.has(w)).map((w) => w.replace(/(ies|es|s)$/, ""));
+  if (!ws.length) return () => true;
+  return (q) => {
+    const hay = `${q.topic || ""} ${q.stem || ""}`.toLowerCase();
+    return ws.some((w) => hay.includes(w));
+  };
 }
 
 /** PURE: questions a draft saved, back through the same gate as every source (a bad key is dropped). */
