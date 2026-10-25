@@ -66,7 +66,8 @@ router.post("/confirmations/:id/confirm", authenticateToken, confirmationRoute(a
   return confirmWrite({ id: req.params.id, userId: req.user.id,
     callTool: (tool, args) => executeChatTool(tool, args, req.user.id, { role: "student", channel: "self_tooling_confirmed" }),
     // A permission card: approving builds the tool, as this learner.
-    buildTool: (args) => createTool({ ...args, ...selfToolDeps(req.user.id, "student") }), postIntoChat });
+    buildTool: (args) => createTool({ ...args, ...selfToolDeps(req.user.id, "student") }), postIntoChat,
+    toolDeps: selfToolDeps(req.user.id, "student") });
 }));
 
 export default router;

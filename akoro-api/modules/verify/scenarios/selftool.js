@@ -709,7 +709,7 @@ export const toolJourney = {
     const tool = (await ctx.db.rows("edu.agent_tools", { owner_id: me.id, name: { like: `${name}%` } }, { columns: "name, label, capabilities, status", limit: 1 }))[0];
     ctx.expect.ok("4. tool saved, active, using the permission", !!tool && tool.status === "active" && (tool.capabilities || []).includes("verify.probe"), tool);
     const msgs = await ctx.db.rows("chat_messages", { session_id: chatId, user_id: me.id }, { columns: "role, text", limit: 10 });
-    ctx.expect.ok("4. learner told in the same chat", msgs.some((m) => m.role === "agent" && /built/i.test(m.text)), msgs.map((m) => m.text.slice(0, 80)));
+    ctx.expect.ok("4. learner told in the same chat", msgs.some((m) => m.role === "agent" && /built|switched on/i.test(m.text)), msgs.map((m) => m.text.slice(0, 80)));
     ctx.expect.gte("4. learner notified", await ctx.db.count("notifications", { user_id: me.id, related_id: chatId }), 1);
     if (!tool) return;
 
@@ -822,10 +822,17 @@ export const deleteTasks = {
     ctx.expect.eq("2. create_tool asks the learner (not an admin)", r?.status, "needs_permission");
     const perm = r?.confirmation;
     if (!perm?.confirmationId) return;
+    ctx.expect.ok("2. the tool is drafted first, and the card shows what it would change", perm.drafted === true && r?.drafted === true, perm);
+    ctx.expect.eq("2. card lists exactly the two old tasks", [...(perm.items || [])].sort().join(" | "), [...old].sort().join(" | "));
+    const draftRow = async () => (await ctx.db.rows("edu.agent_tools", { owner_id: me.id, name }, { columns: "status, capabilities", limit: 1 }))[0];
+    ctx.expect.eq("2. the draft is OFF until approved", (await draftRow())?.status, "disabled");
+    const { learnerToolDefs } = await import("../../self-tooling/pipeline.js");
+    ctx.expect.ok("2. and not usable by the agent yet", !(await learnerToolDefs(me.id)).some((d) => d.function?.name === name));
     const approved = await ctx.http({ as: p.learner, method: "POST", path: `/api/self-tooling/confirmations/${perm.confirmationId}/confirm` });
     ctx.note(`approve → ${JSON.stringify(approved.body?.data?.result || approved.body).slice(0, 400)}`);
     ctx.expect.status("2. approved", approved, 200);
     ctx.expect.eq("2. the tool was built", approved.body?.data?.result?.status, "created");
+    ctx.expect.eq("2. approval switched it on", (await draftRow())?.status, "active");
     ctx.expect.eq("2. on for this learner", (await learnerGrants(me.id, { fresh: true })).has("tasks.delete"), true);
     const { capabilityStatus } = await import("../../self-tooling/registry.js");
     ctx.expect.eq("2. still off for everyone else", await capabilityStatus("tasks.delete"), "locked");
@@ -834,7 +841,7 @@ export const deleteTasks = {
     ctx.expect.eq("2. nothing deleted before Confirm", (await titles()).length, 3);
     if (chatId) {
       const msgs = await ctx.db.rows("chat_messages", { session_id: chatId, user_id: me.id }, { columns: "role, text", limit: 10 });
-      ctx.expect.ok("2. the chat is told it was built", msgs.some((m) => m.role === "agent" && /built/i.test(m.text)), msgs.map((m) => m.text.slice(0, 80)));
+      ctx.expect.ok("2. the chat is told it's on", msgs.some((m) => m.role === "agent" && /built|switched on/i.test(m.text)), msgs.map((m) => m.text.slice(0, 80)));
     }
     if (!next?.confirmationId) return;
     const ok = await ctx.http({ as: p.learner, method: "POST", path: `/api/self-tooling/confirmations/${next.confirmationId}/confirm` });

@@ -171,6 +171,9 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     const { count: today } = await edu().from("agent_tools").select("*", { count: "exact", head: true })
       .eq("owner_id", learnerId).gte("created_at", since);
     if ((today || 0) >= LIMITS.dailyCreates) return finish("rejected", reject(`You can build ${LIMITS.dailyCreates} tools a day — try again tomorrow, or reuse one you have.`));
+    // A draft of this name the learner never approved (the card expired) makes way for this one.
+    await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() })
+      .eq("owner_id", learnerId).eq("name", name).eq("status", "disabled").not("verification->awaitingPermission", "is", null);
     const { data: mine } = await edu().from("agent_tools").select("name").eq("owner_id", learnerId).in("status", ["active", "disabled"]).limit(LIMITS.maxTools + 1);
     if ((mine || []).some((t) => t.name === name)) return reject(`You already have a tool called ${name} — call it, or pick another name.`);
     if ((mine || []).length >= LIMITS.maxTools) return finish("rejected", reject(`You have ${LIMITS.maxTools} tools — delete one in Settings → Agent → My tools first.`));
@@ -182,7 +185,9 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   const slice = registrySlice(lookup, hint, audience);
   // A resume after an approval must USE what was approved — a gate run once
   // 'resumed' into a tool that answered from an unrelated view instead.
-  const mustUse = resumed ? [].concat(hint.capabilities || []).filter((c) => c in CAPABILITIES) : [];
+  let mustUse = resumed ? [].concat(hint.capabilities || []).filter((c) => c in CAPABILITIES) : [];
+  // A change the learner can allow, after they said yes: build it as a DRAFT (saved off), then ask on a card.
+  let draftCap = null;
   const lockedIn = async (names) => {
     const out = [];
     for (const c of names) if (CAPABILITIES[c]?.status === "locked" && (await capabilityStatus(c, { learnerId })) === "locked") out.push(c);
@@ -210,11 +215,12 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   };
   if (!resumed) {
     const hinted = await lockedIn([].concat(hint.capabilities || []));
-    if (hinted.length) return toEscalate(hinted[0]);
+    if (hinted.length && input?.__agreed === true && learnerGrantable(hinted[0]) && audience === "learner") { draftCap = hinted[0]; mustUse = [draftCap]; ev.stages_tried.push("draft"); }
+    else if (hinted.length) return toEscalate(hinted[0]);
     // About OTHER learners, and the best match for that is a locked network
     // capability: the learner's own views can't answer it, and a build from
     // them passed the learner's own scores off as "the other players'".
-    const others = othersCapabilityFirst(goal, lookup.capabilities || []);
+    const others = draftCap ? null : othersCapabilityFirst(goal, lookup.capabilities || []);
     if (others && locked.includes(others)) return toEscalate(others);
   }
   if (!slice.views.length && !slice.capabilities.length) {
@@ -254,7 +260,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       }
       if (!built.definition) { feedback = built.error || "no definition"; lastProblem = feedback; tried.push(`${stage}#${attempt}: ${feedback}`); continue; }
       if (built.definition.kind !== stage) built.definition.kind = stage === "spec" && built.definition.from ? "spec" : built.definition.kind;
-      const v = await validateDefinition(built.definition, params, { audience, learnerId });
+      const v = await validateDefinition(built.definition, params, { audience, learnerId, assume: draftCap ? [draftCap] : [] });
       if (v.ok && built.definition.kind === "code") v.errors.push(...inventedDates(built.definition.source, goal, params));
       for (const c of mustUse) if (!v.uses.capabilities.includes(c)) v.errors.push(howToUse(c));
       if (v.errors.length) v.ok = false;
@@ -275,8 +281,26 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     if (fallback) return register({ stage, ...fallback });
   }
   // Nothing available could express it, but a locked capability might.
-  if (locked.length && !resumed && inexpressible) return toEscalate(locked[0], lastProblem);
+  if (locked.length && !resumed && !draftCap && inexpressible) return toEscalate(locked[0], lastProblem);
   return finish("rejected", reject(`Couldn't build it safely: ${String(lastProblem || "no stage could express it").slice(0, 240)}`, resumed ? { tried: tried.map((t) => t.slice(0, 300)) } : {}));
+
+  /** Save the built tool switched OFF and ask the learner on a card, showing what it would change right now. */
+  async function draftAndAsk({ def, runNow }) {
+    if (!runNow.ok) return finish("rejected", reject(`Built, but it couldn't run: ${runNow.error}`));
+    const changes = { items: (runNow.write?.targets || []).map((t) => t.label), more: runNow.write?.more || 0 };
+    if (dry) {
+      await finish("dry", {});
+      return { status: "needs_permission", dryRun: true, tool: name, label, wouldChange: changes.items,
+        note: "DRY RUN — the tool was drafted and checked but NOT saved, and no card was made. Live, the learner gets a card showing what it would change; Approve turns it on." };
+    }
+    const { data: row, error } = await edu().from("agent_tools").insert({ owner_id: learnerId, scope: "learner", audience, ...def,
+      status: "disabled", verification: { ...def.verification, awaitingPermission: draftCap }, usage_count: 0 }).select("id").single();
+    if (error) return finish("failed", reject(`Couldn't save the draft: ${error.message}`));
+    ev.tool_id = row.id; ev.mode = def.mode; ev.capabilities = def.capabilities;
+    const out = await proposePermission({ learnerId, conversationId, capability: draftCap, proposed: { name, label, goal }, toolId: row.id, changes });
+    await finish("escalated", {});   // logged as asked-for (stages_tried says "draft"), the outcome list is fixed
+    return { ...out, tool: name, label, drafted: true };
+  }
 
   async function register({ stage, built, v, check }) {
     ev.mode = stage;
@@ -286,6 +310,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     const runNow = await tryRun(built.definition, params, input?.run && typeof input.run === "object" ? input.run : (built.samples || [])[0] || {}, ctx);
     const def = { name, label, goal, mode: stage, definition: built.definition, params_schema: params,
       capabilities: v.uses.capabilities, views: [...new Set(v.uses.views)], verification };
+    if (draftCap) return draftAndAsk({ def, runNow });
     if (dry) {
       await finish("created", {});
       return { status: "created", dryRun: true, tool: name, label, mode: stage, verified: true, definition: built.definition,
