@@ -136,6 +136,12 @@ export function asksForChange(goal) {
   return /^\s*(?:please\s+)?(?:delete|remove|clear|erase|wipe|move|reschedule|postpone|delay|rename|change|update|edit|archive|dismiss|cancel|leave|unsubscribe|hide|reset|send|post|share|enrol|enroll|join|accept|decline|reply|mark|tick)\b/i.test(String(goal || ""));
 }
 
+/** PURE: a learner's MESSAGE asking for a change ("Can you rename my chats…", "Please move…"). */
+export function changeAskedOf(message) {
+  const m = String(message || "").replace(/^\s*(?:hey|hi|ok(?:ay)?|so)?[,\s]*(?:can|could|would|will) you\s+|^\s*(?:i (?:want|need|would like) (?:you )?to|help me|please)\s+/i, "");
+  return asksForChange(m);
+}
+
 /** Never — cannot be requested or granted (rule 27). Matched against goals and requested names. */
 export const FORBIDDEN = Object.freeze([
   { name: "others.private_data", description: "Another learner's private data (scores, notes, chats, messages, grades, contact details).",

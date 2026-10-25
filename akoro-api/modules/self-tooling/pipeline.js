@@ -9,7 +9,7 @@
  */
 import db from "../../db.js";
 import { schemaLookup, capabilityStatus } from "./registry.js";
-import { forbiddenFor, CAPABILITIES, learnerGrantable, ownChangeAsked, asksForChange } from "./capabilities.js";
+import { forbiddenFor, CAPABILITIES, learnerGrantable, ownChangeAsked, asksForChange, changeAskedOf } from "./capabilities.js";
 import { DATA_VIEWS } from "./views.js";
 import { validateDefinition, runDefinition } from "./interpreters.js";
 import { validateParams, coerceInput, paramProps, wellFormedParams } from "./bind.js";
@@ -79,6 +79,9 @@ export async function forcedSelfTool(learnerId, message) {
       .or(`owner_id.eq.${learnerId},scope.eq.platform`).contains("capabilities", [change]).limit(1);
     return data?.length ? null : "schema_lookup";
   }
+  // Any other change ("rename my chats"): look up first too — it either can be built, or the
+  // agent says it can't yet and offers to ask the Akoro team (it used to just give a workaround).
+  if (changeAskedOf(message)) return "schema_lookup";
   if (!asksAboutOthersInBattles(message)) return null;
   const { data } = await edu().from("agent_tools").select("id").eq("status", "active")
     .or(`owner_id.eq.${learnerId},scope.eq.platform`).contains("capabilities", ["battles.class_results"]).limit(1);

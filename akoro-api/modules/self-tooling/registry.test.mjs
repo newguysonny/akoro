@@ -148,3 +148,9 @@ test("asksForChange: an instruction to change, not a question to show", async ()
   for (const g of ["Delete my old tasks", "Rename my chats by subject", "Leave the revision circles I joined", "Please reply to my agent's messages"]) assert.equal(asksForChange(g), true, g);
   for (const g of ["How many tasks did I finish each week?", "Show my goals", "Make a table of my scores", "List chats I deleted"]) assert.equal(asksForChange(g), false, g);
 });
+
+test("changeAskedOf: a message asking for a change, however it starts", async () => {
+  const { changeAskedOf } = await import("./capabilities.js");
+  for (const m of ["Rename my chats so each title starts with its subject.", "Can you rename my chats?", "Could you please cancel my battle?", "Please leave the circle", "I want you to delete my notes"]) assert.equal(changeAskedOf(m), true, m);
+  for (const m of ["What chats do I have?", "Can you explain osmosis?", "Make me a quiz", "How do I rename a chat?"]) assert.equal(changeAskedOf(m), false, m);
+});

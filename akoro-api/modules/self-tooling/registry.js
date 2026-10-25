@@ -92,7 +92,7 @@ export async function schemaLookup(goal, { limit = 6, audience = "learner", lear
     ...(forbidden.length ? { notAllowed: forbidden.map((f) => f.description) } : {}),
     ...(asksForChange(goal) && !capabilities.some((c) => c.kind === "write") && audience === "learner" ? { changeNotPossible: true } : {}),
     note: asksForChange(goal) && !capabilities.some((c) => c.kind === "write") && audience === "learner"
-      ? "No change like this can be made yet — nothing you have or can build does it. Say so plainly and offer to ask the Akoro team to add it; when they agree, call create_tool with this goal and it sends the request."
+      ? "If one of your own tools already makes this change (ending a study buddy, cancelling a scheduled message…), use it. Otherwise no change like this can be made yet — nothing you can build does it: say so plainly and offer to ask the Akoro team to add it (don't offer a workaround instead); when they agree, call create_tool with this goal and it sends the request."
       : !rankedViews.length && !rankedCaps.length
       ? "Nothing in the registry matches this goal — it can't be built from what's available."
       : forbidden.length

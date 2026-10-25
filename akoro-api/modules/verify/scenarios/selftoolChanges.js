@@ -120,7 +120,7 @@ export const changeInboxRead = {
 export const changeChatsDelete = {
   name: "selftool.change_chats_delete", area: "self-tooling", risk: "write",
   description: "Delete chats: drafted, carded, approved, confirmed; only those chats are deleted.",
-  params: { learner: { default: "@tester35" } },
+  params: { learner: { default: "@tester30" } },   // building costs coins: a tester who has them
   async run(ctx, p) {
     await needCreate(ctx);
     const me = await ctx.as(p.learner);
