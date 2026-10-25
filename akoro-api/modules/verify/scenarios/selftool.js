@@ -641,3 +641,88 @@ export const permissionRequestIsReal = {
     ctx.expect.ok("the learner asked for permission outright: a request reached the admins' queue", rows.length > 0, { rows, tools: (turn.tools || []).map((t) => t.tool), reply: String(turn.reply || "").slice(0, 300) });
   },
 };
+
+/**
+ * The whole journey a learner and an admin go through, end to end: the
+ * learner's build needs a locked permission → the request is on the admins'
+ * Agent requests page → the admin approves (decideRequest, the call behind the
+ * page's Approve button) → the build resumes and answers in the learner's chat
+ * → the learner USES the tool from Agent Chat and gets its answer → revoking
+ * stops it. The probe permission is harmless (it returns the time) and hidden.
+ */
+export const toolJourney = {
+  name: "selftool.tool_journey", area: "self-tooling", risk: "write",
+  description: "Create a tool that needs a permission, approve it as the admin, then use it as the learner in Agent Chat; revoking stops it.",
+  params: { learner: { default: "@tester26" } },
+  async run(ctx, p) {
+    await needCreate(ctx);
+    const me = await ctx.as(p.learner);
+    const made = await ctx.http({ as: p.learner, method: "POST", path: "/api/adaptive/chat/sessions", body: { title: `${ctx.marker} tool journey` } });
+    ctx.expect.status("chat created", made, 201);
+    const chatId = made.body?.session?.id;
+    if (!chatId) ctx.expect.blocked("couldn't create the chat");
+    const name = `probe_${ctx.marker.slice(8, 16).replace(/[^a-z0-9]/g, "x")}`;
+    const label = `${ctx.marker} Probe check`;
+    const goal = `${ctx.marker} show the gate probe's check-in time`;
+    ctx.cleanup(() => ctx.db.deleteOwned("chat_sessions", { ownerColumn: "user_id", ownerId: me.id, filters: { id: chatId } }));
+    ctx.cleanup(() => ctx.db.deleteOwned("notifications", { ownerColumn: "user_id", ownerId: me.id, filters: { related_id: chatId } }));
+    ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tools", { ownerColumn: "owner_id", ownerId: me.id, filters: { name: { like: `${name}%` } } }));
+    ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tool_requests", { ownerColumn: "requester_id", ownerId: me.id, filters: { goal } }));
+
+    // 1. Learner: the build needs a permission that isn't on.
+    const r = await ctx.agent.tool({ as: p.learner, tool: "create_tool", mode: "live", conversationId: chatId,
+      input: { goal, name, label, hint: { capabilities: ["verify.probe"] } } });
+    ctx.expect.eq("1. create: needs permission (escalated)", r?.status, "escalated");
+    if (!r?.requestId) return;
+
+    // 2. Admin: the request is on the Agent requests page, ready to decide.
+    const queued = (await ctx.db.rows("edu.agent_tool_requests", { kind: "capability", status: "new", requester_id: me.id },
+      { columns: "id, requested_capability, goal, proposed_tool, resume_status, last_status_changed_at", limit: 50 })).find((x) => x.id === r.requestId);
+    ctx.expect.ok("2. admin page lists it (new, waiting, with the tool to build)",
+      !!queued && queued.requested_capability === "verify.probe" && queued.resume_status === "waiting" && queued.proposed_tool?.name === name, queued);
+
+    // 3. Admin approves.
+    const { decideRequest, revokeGrant } = await import("../../self-tooling/escalation.js");
+    const { enqueueResume } = await import("../../self-tooling/resumeQueue.js");
+    const admin = { id: null, label: "verification gate" };
+    const decided = await decideRequest({ requestId: r.requestId, decision: "approve", note: "gate journey", expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(), admin, enqueue: enqueueResume });
+    ctx.expect.ok("3. admin approved: permission granted", decided?.request?.status === "approved" && !!decided?.grant?.id, decided);
+    const grantId = decided?.grant?.id;
+    if (grantId) ctx.cleanup(() => revokeGrant({ grantId, admin }).catch(() => {}));
+
+    // 4. The build resumes and answers in the learner's chat.
+    const done = await ctx.until(async () => {
+      const x = (await ctx.db.rows("edu.agent_tool_requests", { id: r.requestId }, { columns: "status, resume_status, resume_result", limit: 1 }))[0];
+      return x && ["resumed", "failed"].includes(x.resume_status) ? x : null;
+    }, { timeoutMs: 150_000, everyMs: 4_000 });
+    ctx.note(`resume: ${JSON.stringify(done?.resume_result || null).slice(0, 300)}`);
+    ctx.expect.eq("4. build resumed", done?.resume_status, "resumed");
+    ctx.expect.eq("4. request implemented", done?.status, "implemented");
+    const tool = (await ctx.db.rows("edu.agent_tools", { owner_id: me.id, name: { like: `${name}%` } }, { columns: "name, label, capabilities, status", limit: 1 }))[0];
+    ctx.expect.ok("4. tool saved, active, using the permission", !!tool && tool.status === "active" && (tool.capabilities || []).includes("verify.probe"), tool);
+    const msgs = await ctx.db.rows("chat_messages", { session_id: chatId, user_id: me.id }, { columns: "role, text", limit: 10 });
+    ctx.expect.ok("4. learner told in the same chat", msgs.some((m) => m.role === "agent" && /built/i.test(m.text)), msgs.map((m) => m.text.slice(0, 80)));
+    ctx.expect.gte("4. learner notified", await ctx.db.count("notifications", { user_id: me.id, related_id: chatId }), 1);
+    if (!tool) return;
+
+    // 5. Learner uses it from Agent Chat.
+    const turn = await ctx.agent.chat({ as: p.learner, mode: "live", model: p.model,
+      prompt: `Run my "${tool.label || label}" tool and tell me what time the gate probe checked in.` });
+    ctx.expect.eq("5. turn answered", turn.status, 200);
+    const used = (turn.tools || []).find((t) => t.tool === tool.name);
+    ctx.note(`tools: ${JSON.stringify((turn.tools || []).map((t) => t.tool))} · used → ${JSON.stringify(used?.result || null).slice(0, 300)}`);
+    ctx.note(`reply: ${String(turn.reply || "").replace(/\s+/g, " ").slice(0, 300)}`);
+    ctx.expect.ok("5. agent ran the learner's tool", !!used, (turn.tools || []).map((t) => t.tool));
+    const rows = used?.result?.rows || [];
+    ctx.expect.ok("5. tool answered (a check-in time)", !used?.result?.error && rows.some((x) => x?.checkedAt), used?.result);
+    ctx.expect.ok("5. reply gives the answer", /\d{1,2}:\d{2}|\d{4}-\d{2}-\d{2}|checked in/i.test(String(turn.reply || "")), String(turn.reply || "").slice(0, 300));
+    ctx.expect.noBackendNames("5. reply has no backend names", turn.reply);
+
+    // 6. Admin revokes: the tool stops at once.
+    if (grantId) {
+      await revokeGrant({ grantId, admin });
+      const after = await ctx.agent.tool({ as: p.learner, tool: tool.name, learnerTool: true, mode: "live", input: {} });
+      ctx.expect.ok("6. revoked: the tool stops", !!after?.error && !after?.rows, after);
+    }
+  },
+};
