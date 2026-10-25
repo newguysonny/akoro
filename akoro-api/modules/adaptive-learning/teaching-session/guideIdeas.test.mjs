@@ -1,7 +1,7 @@
 // The teaching guide speaks in ideas (pills under the protégé's reply), never a message.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { guideIdeas, openingIdeas } from "./guideIdeas.js";
+import { guideIdeas, openingIdeas, shortConcept } from "./guideIdeas.js";
 import { resultToTypedBlocks } from "./blocks.js";
 
 test("guideIdeas: the model's suggestions, cleaned and capped at three", () => {
@@ -29,4 +29,10 @@ test("openingIdeas: three starters about the current idea", () => {
   assert.equal(openingIdeas("photosynthesis").length, 3);
   assert.ok(openingIdeas("photosynthesis").every((s) => s.includes("photosynthesis")));
   assert.ok(openingIdeas("cells", { review: true })[0].includes("remember"));
+});
+
+test("shortConcept: an objective's label becomes a phrase", () => {
+  assert.equal(shortConcept("What a plant is made of: cells, leaves, and chloroplasts"), "what a plant is made of");
+  assert.equal(shortConcept("Osmosis"), "Osmosis");
+  assert.equal(shortConcept(null), "");
 });

@@ -275,7 +275,7 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
         agent:            guideName,
         emoji:            guideEmoji,
         hint:             openGuideText,
-        ideas:            openingIdeas(mustKnow[activeObjectiveIndex] || topic, { review: isDecaySession }),
+        ideas:            openingIdeas(topic, { review: isDecaySession }),   // the topic reads naturally; an objective's label is a sentence
       },
     ];
 

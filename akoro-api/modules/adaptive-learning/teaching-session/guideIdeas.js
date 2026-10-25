@@ -44,6 +44,12 @@ export function guideIdeas(suggestions, { nextAction = null, concept = "" } = {}
   return out;
 }
 
+/** PURE: an objective's label as a phrase ("What a plant is made of: cells…" → "what a plant is made of"). */
+export function shortConcept(label) {
+  const t = String(label || "").split(":")[0].trim();
+  return /^(what|how|why|where|when|which)\b/i.test(t) ? t.charAt(0).toLowerCase() + t.slice(1) : t;
+}
+
 /** PURE: the ideas a session opens with — before the protégé has said anything. */
 export function openingIdeas(concept, { review = false } = {}) {
   const c = concept || "this";

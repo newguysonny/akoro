@@ -9,7 +9,7 @@
 // (same format as teachingSession.js REST endpoint)
 // =============================================================
 
-import { guideIdeas } from "./guideIdeas.js";
+import { guideIdeas, shortConcept } from "./guideIdeas.js";
 
 const NANA_RENDER_STYLE = {
   bubbleBg:     "rgba(124,58,237,0.10)",
@@ -71,7 +71,7 @@ export function resultToTypedBlocks(result, agentPairId) {
       whyThisResponse: learningState.whyThisResponse || null,
       text:            result.studentAgentResponse,
       guide: { name: guideName, emoji: guideEmoji,
-        ideas: guideIdeas(result.guideSuggestions, { nextAction: result.guideNextAction, concept: result.currentSubtopic || result.topic || "" }) },
+        ideas: guideIdeas(result.guideSuggestions, { nextAction: result.guideNextAction, concept: result.topic || shortConcept(result.currentSubtopic) }) },
     });
   }
 
