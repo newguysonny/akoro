@@ -16,6 +16,7 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import { extractRecordPages, getExtractionStatus, getRecordExtraction } from '../../services/recordsApi.js';
 import { runExtraction } from '../../lib/extractRun.js';
+import { looksScanned } from '../../lib/textLayer.js';
 
 export const MAX_RECORD_PAGES = 60;   // matches the API's cap
 
@@ -112,6 +113,7 @@ export async function extractUpload(record, { onProgress, isCancelled } = {}) {
   const isImage = /^image\//.test(record.mime || '');
   if (!isPdf && !isImage) return { status: 'skipped' };   // text files read as-is; A/V is the API's lane
   let pages;
+  let scan = false;
   try {
     if (isPdf) {
       // Loaded the way the reader loads it: PdfPages.jsx also points pdf.js
@@ -119,9 +121,10 @@ export async function extractUpload(record, { onProgress, isCancelled } = {}) {
       const { loadPdfDocument } = await import('./PdfPages.jsx');
       const { pdf, texts } = await loadPdfDocument(record.fileUrl);
       // A PDF with a real text layer is read by the server for free at
-      // registration — only a scan needs the paid parse.
-      const chars = (texts || []).join('').replace(/\s+/g, '').length;
-      if (chars >= 20 * Math.max(1, (texts || []).length)) return { status: 'skipped' };
+      // registration — only a scan needs the paid parse. A watermark repeated
+      // on every page is not a text layer (lib/textLayer.js).
+      if (!looksScanned(texts || [])) return { status: 'skipped' };
+      scan = true;
       pages = await rasterizePdfPages(pdf);
     } else {
       pages = await rasterizeImageFile(record.fileUrl);
@@ -132,7 +135,8 @@ export async function extractUpload(record, { onProgress, isCancelled } = {}) {
   if (!pages.length) return { status: 'skipped' };
   // Pages already saved (an earlier run, or a retry) aren't sent again.
   const saved = await getRecordExtraction(record.id).catch(() => ({ pages: [] }));
-  const have = new Set((saved?.pages || []).map((p) => p.pageNumber));
+  // A scan's saved text-layer pages (the watermark, read before this rule) are parsed again.
+  const have = new Set((saved?.pages || []).filter((p) => !(scan && p.model === 'pdf-text')).map((p) => p.pageNumber));
   const toSend = pages.filter((p) => !have.has(p.pageNumber));
   const total = pages.length;
   onProgress?.(have.size, total);

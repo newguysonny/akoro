@@ -4559,6 +4559,16 @@ router.post("/agent", async (req, res) => {
     const ingestCtx = live.length
       ? `\n\n## The learner's upload\nThe file(s) they attached are being saved to their Library${where.length ? ` — ${[...new Set(where)].join(", ")}` : ""} (private to them) and read in the background; each folder's card shows its files with an Undo. Say so in one short clause — don't repeat the cards' details or any ids. Answer from what you can read now; if the file isn't readable yet, say you'll be able to work on it once it's read.`
       : "";
+    // The files already in this chat and what their reads found (materials/ingestCore.js chatFilesBrief).
+    let chatFilesCtx = "";
+    if (role === "student" && conversationId) {
+      try {
+        const { data } = await db.schema("edu").from("material_ingests").select("names, state, structure")
+          .eq("user_id", req.user.id).eq("chat_session_id", conversationId).neq("state", "undone").order("created_at", { ascending: true }).limit(10);
+        const { chatFilesBrief } = await import("../materials/ingestCore.js");
+        chatFilesCtx = chatFilesBrief(data || []);
+      } catch { chatFilesCtx = ""; }
+    }
     const inboxCtx = role === "student" && agentNetworkEnabled
       ? (await inboxBrief(req.user.id).catch(() => "")) + (await buddyBrief(req.user.id).catch(() => ""))
       : "";
@@ -4629,7 +4639,7 @@ router.post("/agent", async (req, res) => {
       renderRelevantMemory(relevantMemories) +
       renderScratchpad(conversation?.scratchpad) +
       (goalsCtx || "") +
-      protegeCtx + inboxCtx + runningCtx + ingestCtx + selfToolCtx + draftsCtx +
+      protegeCtx + inboxCtx + runningCtx + ingestCtx + chatFilesCtx + selfToolCtx + draftsCtx +
       (syllabusCtx ? `\n\n${syllabusCtx}` : "") +
       (pastCtx ? `\n\n${pastCtx}` : "") +
       (curriculumCtx ? `\n\n${curriculumCtx}` : "") +

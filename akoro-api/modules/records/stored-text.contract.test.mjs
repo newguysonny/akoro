@@ -188,5 +188,5 @@ test("wiring: extracted at upload, a retry route, a startup job, a script; the b
   assert.match(routes, /router\.post\(\["\/extract\/text", "\/extract\/office"\], authenticateToken/);
   assert.match(app, /skipJob\("record text backfill"\)[\s\S]{0,300}backfillRecordText\(\)/);
   assert.equal(pkg.scripts["records:backfill-text"], "node scripts/backfill-record-text.mjs");
-  assert.match(autoExtract, /if \(chars >= 20 \* Math\.max\(1, \(texts \|\| \[\]\)\.length\)\) return \{ status: 'skipped' \};/);
+  assert.match(autoExtract, /if \(!looksScanned\(texts \|\| \[\]\)\) return \{ status: 'skipped' \};/);   // textLayer.js: a repeated watermark isn't text
 });
