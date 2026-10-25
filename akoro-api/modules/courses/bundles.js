@@ -14,6 +14,7 @@
  */
 
 import { Router }                         from "express";
+import { peekAccessToken }                from "../../lib/tokenPeek.js";
 import axios                              from "axios";
 import { paystackPost, paystackGet }            from "../../lib/paystackBreaker.js";
 import { body, query, validationResult }  from "express-validator";
@@ -391,18 +392,11 @@ const router = Router();
 
 // Search (optionally authenticated for enroll/wishlist status)
 router.get("/courses/search",                         (req, res, next) => {
-  // Try to attach user from token if present — but don't require it
-  const token = req.headers["authorization"]?.split(" ")[1];
-  if (token) {
-    import("jsonwebtoken").then(({ default: jwt }) => {
-      try {
-        req.user = jwt.verify(token, process.env.JWT_SECRET ?? "akoro-dev-secret-change-in-production");
-      } catch {
-        req.user = null;
-      }
-      next();
-    });
-  } else { next(); }
+  // Attach the signed-in learner if there is one (for enrolled / wishlist flags) — never required.
+  // The same check every login uses: signature, issuer, audience, and a session token only.
+  const claims = peekAccessToken(req);
+  req.user = claims ? { id: claims.sub, role: claims.role } : null;
+  next();
 }, searchHandler);
 
 // Wishlist
