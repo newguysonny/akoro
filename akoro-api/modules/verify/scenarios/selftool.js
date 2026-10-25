@@ -781,7 +781,7 @@ export const deleteTasks = {
     ctx.note(`turn 1: ${String(t1.reply || "").replace(/\s+/g, " ").slice(0, 300)} · tools ${JSON.stringify((t1.tools || []).map((t) => t.tool))}`);
     const early = (t1.tools || []).find((t) => t.tool === "create_tool" && t.result?.status === "needs_permission")?.result?.confirmation;
     ctx.expect.ok("1. first answer is a conversation — no card yet", !early, early);
-    ctx.expect.ok("1. says it can't yet and offers to build a tool", /\b(build|make|create)\b/i.test(String(t1.reply || "")) && /\?/.test(String(t1.reply || "")), String(t1.reply || "").slice(0, 300));
+    ctx.expect.ok("1. says it can't yet and offers to build a tool", /\b(build|make|create)\b/i.test(String(t1.reply || "")) && /\b(can'?t|cannot|don'?t have|not yet|isn'?t)\b/i.test(String(t1.reply || "")), String(t1.reply || "").slice(0, 300));
     if (early) await ctx.http({ as: p.learner, method: "POST", path: `/api/self-tooling/confirmations/${early.confirmationId}/reject` });
     let card = null;
     {
