@@ -1084,7 +1084,7 @@ export const CHAT_TOOLS = [
   },
   {
     name: "submit_tool_request",
-    description: "Create a compact product request for Akoro admins to consider a missing study tool or integration. Use ONLY after the learner explicitly asks you to submit the request after you have explained that it is feature feedback, not an immediate action. Never submit automatically merely because a request is unsupported, and never copy raw chat, attachments, passwords, contact details, or sensitive account data. Describe the needed capability concisely instead.",
+    description: "Create a compact request for Akoro admins: a missing ability or permission you don't have (e.g. deleting the learner's tasks), a study tool, or an integration. It lands on the admins' Agent requests page; the answer comes later, not now. Use ONLY when the learner explicitly asks — 'ask for permission to …', 'request access', 'send it to the admins', 'submit it' — and when they do, CALL it: never say a request was made without this call succeeding, and tell them exactly what its `tell` says (a repeat of an earlier request is NOT a new one). Never submit automatically merely because something is unsupported, and never copy raw chat, attachments, passwords, contact details, or sensitive account data. Describe the needed capability concisely instead.",
     input_schema: {
       type: "object",
       properties: {
