@@ -213,12 +213,17 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     for (let attempt = 1; attempt <= 3 && ev.builder_calls < LIMITS.builderCalls; attempt++) {
       ev.builder_calls++;
       let built;
-      try { built = await buildDefinition({ stage, goal, params, slice, feedback, learnerId, platformPays: dry || resumed }); }
+      try { built = await buildDefinition({ stage, goal, params, slice, feedback, learnerId, platformPays: dry || resumed, approved: mustUse }); }
       catch (e) {
         if (/coin|balance/i.test(String(e?.message))) return finish("rejected", reject("Not enough coins to build a tool."));
         lastProblem = `builder failed: ${e.message}`; break;
       }
-      if (built.notExpressible) { lastProblem = built.notExpressible; inexpressible = true; break; }
+      if (built.notExpressible) {
+        lastProblem = built.notExpressible; inexpressible = true;
+        // What was approved for this goal answers it: one repair before giving up.
+        if (mustUse.length && attempt === 1) { feedback = `"${built.notExpressible}" — but ${mustUse.join(", ")} was approved for this goal: use it`; continue; }
+        break;
+      }
       if (!built.definition) { feedback = built.error || "no definition"; lastProblem = feedback; continue; }
       if (built.definition.kind !== stage) built.definition.kind = stage === "spec" && built.definition.from ? "spec" : built.definition.kind;
       const v = await validateDefinition(built.definition, params, { audience });

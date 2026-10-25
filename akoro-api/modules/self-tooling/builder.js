@@ -82,11 +82,13 @@ export function registrySlice(lookup, hint = {}, audience = "learner") {
  * previous attempt's validation/verification errors for one repair.
  * → { definition?, samples?, notExpressible?, raw }
  */
-export async function buildDefinition({ stage, goal, params, slice, feedback = null, learnerId, platformPays = false }) {
+export async function buildDefinition({ stage, goal, params, slice, feedback = null, learnerId, platformPays = false, approved = [] }) {
   const messages = [
     { role: "system", content: `${COMMON}\n\n${FORMATS[stage] || RECIPE_FORMAT}` },
     { role: "user", content: JSON.stringify({ goal, params: params || {}, available: slice }) },
   ];
+  // A resume: an admin approved these capabilities FOR this goal — they are what answers it.
+  if (approved.length) messages.push({ role: "user", content: `An admin approved ${approved.join(", ")} for exactly this goal: build it from ${approved.length > 1 ? "them" : "it"} (a step {"id":"x","cap":"${approved[0]}"}), answering the goal with what ${approved.length > 1 ? "they return" : "it returns"}. Don't answer notExpressible.` });
   if (feedback) messages.push({ role: "user", content: `Your previous attempt failed: ${feedback}\nFix it and answer again with ONE JSON object.` });
   const resp = await openai.chat.completions.create({
     model: stage === "code" ? CODE_MODEL() : BUILDER_MODEL(), temperature: 0, max_tokens: stage === "code" ? 2000 : 1200,
