@@ -261,6 +261,61 @@ export const scenarios = [
     },
   },
   {
+    name: 'reader.guide_ideas_screens',
+    description: "What the learner sees: 'Guide' idea pills under the protégé's reply, no guide message — the session's socket is played in the browser with the shapes the server sends (teaching.guide_ideas checks the real server).",
+    async run(t) {
+      const { page } = t;
+      const marker = newMarker();
+      const made = await t.api('POST', '/api/records', { kind: 'paste', name: `${marker} Cell Structure notes`, content: PARAS.join('\n\n') });
+      const record = made.body?.data?.record || made.body?.data;
+      if (!record?.id) t.block(`saving the pasted record answered ${made.status}`);
+      t.cleanup(async () => { await t.api('DELETE', `/api/records/${record.id}`); });
+      const opening = ['What do you already know about Cell Structure?', 'Let me explain Cell Structure in my own words.', 'Can you guess what Cell Structure means?'];
+      const replyIdeas = ['Picture a cell as a tiny walled city — what guards the gate?', 'What if a plant cell had no cell wall?', 'Name one thing a plant cell has that an animal cell doesn\'t.'];
+      // A socket.io server in the page: engine.io open, namespace connect, then the session's events.
+      await page.routeWebSocket(/\/socket\.io\//, (ws) => {
+        const emit = (e, d) => ws.send('42' + JSON.stringify(d === undefined ? [e] : [e, d]));
+        ws.send('0' + JSON.stringify({ sid: 'gate', upgrades: [], pingInterval: 300000, pingTimeout: 300000, maxPayload: 1000000 }));
+        ws.onMessage((m) => {
+          const s = String(m);
+          if (s === '2') return ws.send('3');
+          if (s.startsWith('40')) return ws.send('40' + JSON.stringify({ sid: 'gate-ns' }));
+          if (!s.startsWith('42')) return;
+          const [ev] = JSON.parse(s.slice(2));
+          if (ev === 'start_adaptive_session') emit('session_ready', { sessionId: 'gate-live', guideProfile: { name: 'NaNa Esumai', emoji: '🧠' }, openingBlocks: [
+            { type: 'subtopic-hdr', subtopic: 'The cell wall', items: ['The cell wall', 'Mitochondria', 'Plant vs animal cells'], idx: 0, total: 3, topic: 'Cell Structure', subject: 'Biology' },
+            { type: 'guide-ideas', agent: 'NaNa Esumai', emoji: '🧠', ideas: opening, hint: "Let's teach Cell Structure to your agent. Start by explaining the current idea in your own words." },
+          ] });
+          if (ev === 'teacher_message') {
+            emit('typing_start');
+            setTimeout(() => emit('turn_complete', { type: 'teaching_response', blocks: [{ type: 'student-agent', agent: 'Atlas', emoji: '🤖', currentIdea: 'The cell wall',
+              text: "Okay — so a cell wall is like a strong outer layer around a plant cell? I'm not sure yet why animal cells don't need one.",
+              guide: { name: 'NaNa Esumai', emoji: '🧠', ideas: replyIdeas } }] }), 900);
+          }
+          if (ev === 'get_state') emit('state_snapshot', { state: { cognitive: { understanding: 0.35, confusion: 0.2 } } });
+        });
+      });
+      await openRecordReader(t, marker, '[data-page-index] [data-page-content] p');
+      const row = () => page.locator('[data-guide-ideas]').last();
+      t.check('the session opens with the guide\'s ideas', await row().waitFor({ timeout: 45_000 }).then(() => true, () => false));
+      // A phone opens the reader over the chat: back to the session chat.
+      const back = page.getByRole('button', { name: 'Back to the session chat' }).first();
+      if (await back.isVisible().catch(() => false)) { await back.click(); t.note('phone: back to the session chat'); }
+      await row().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
+      await row().scrollIntoViewIfNeeded().catch(() => {});
+      await t.shot('opening-ideas');
+      await row().getByRole('button', { name: opening[1] }).click();
+      const box = page.getByPlaceholder(/^Explain to/).last();
+      const typed = await box.inputValue().catch(async () => (await box.innerText().catch(() => '')));
+      t.check('a tap puts the idea in the message box', typed === opening[1], { actual: typed });
+      await page.getByRole('button', { name: 'Send message' }).last().click();
+      t.check('the protégé\'s reply comes with fresh ideas', await page.getByRole('button', { name: replyIdeas[0] }).waitFor({ timeout: 20_000 }).then(() => true, () => false));
+      t.check('no guide message in the conversation', (await page.locator('[data-block="guide"]').count()) === 0);
+      await row().scrollIntoViewIfNeeded().catch(() => {});
+      await t.shot('reply-ideas');
+    },
+  },
+  {
     name: 'reader.quote_chip',
     needs: ['reader.opens_text'],
     description: '"Ask the tutor" on a selection puts it as a quote above the chat box; the sent message shows the quote above the question.',
