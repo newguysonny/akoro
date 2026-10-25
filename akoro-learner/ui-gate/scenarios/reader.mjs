@@ -234,6 +234,33 @@ export const scenarios = [
     },
   },
   {
+    name: 'reader.guide_ideas',
+    needs: ['reader.session_connects'],
+    description: "The teaching session is the learner and the protégé: the guide's help is 'Guide' idea pills under the latest reply (a tap fills the message box), and the guide never posts a message.",
+    async run(t) {
+      const { page } = t;
+      const row = () => page.locator('[data-guide-ideas]').last();
+      t.check('the session opens with the guide\'s ideas', await row().waitFor({ timeout: 60_000 }).then(() => true, () => false));
+      const opening = await row().getByRole('button').allInnerTexts().catch(() => []);
+      t.note(`opening ideas: ${opening.join(' | ')}`);
+      t.check('…two or three of them', opening.length >= 2 && opening.length <= 3, { actual: opening });
+      await t.shot('opening-ideas');
+      const pick = opening[1] || opening[0];
+      await row().getByRole('button', { name: pick }).click();
+      const box = page.locator('textarea').last();
+      t.check('a tap puts the idea in the message box', (await box.inputValue().catch(() => '')) === pick, { actual: await box.inputValue().catch(() => '') });
+      const before = await page.locator('[data-block="student-agent"]').count();
+      await page.getByRole('button', { name: 'Send message' }).last().click();
+      const replied = await page.waitForFunction((n) => document.querySelectorAll('[data-block="student-agent"]').length > n, before, { timeout: 150_000 }).then(() => true, () => false);
+      t.check('the protégé replies', replied);
+      t.check('…with fresh ideas from the guide under it', await page.locator('[data-guide-ideas]').last().waitFor({ timeout: 20_000 }).then(() => true, () => false));
+      t.note(`after the reply: ${(await row().getByRole('button').allInnerTexts().catch(() => [])).join(' | ')}`);
+      t.check('the guide posted no message in the conversation', (await page.locator('[data-block="guide"]').count()) === 0, { actual: await page.locator('[data-block="guide"]').count() });
+      await page.locator('[data-guide-ideas]').last().scrollIntoViewIfNeeded().catch(() => {});
+      await t.shot('reply-ideas');
+    },
+  },
+  {
     name: 'reader.quote_chip',
     needs: ['reader.opens_text'],
     description: '"Ask the tutor" on a selection puts it as a quote above the chat box; the sent message shows the quote above the question.',

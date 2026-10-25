@@ -254,7 +254,7 @@ function BlockRenderer({ block, agentName, agentEmoji, onCite = null }) {
 
   /* ── guide (NaNa Esumai) — older sessions saved the guide's tips as messages ── */
   if (block.type === "guide") return (
-    <div style={{ display:"flex", alignItems:"flex-end", gap:8, marginBottom:4, opacity }}>
+    <div data-block="guide" style={{ display:"flex", alignItems:"flex-end", gap:8, marginBottom:4, opacity }}>
       <div style={{ width:28, height:28, borderRadius:"50%", background:nana.bg,
         border:`1.5px solid ${nana.ring}`, flexShrink:0, display:"flex",
         alignItems:"center", justifyContent:"center" }}><AgentAvatar emoji={nana.emoji} size={19}/></div>
@@ -286,7 +286,7 @@ function BlockRenderer({ block, agentName, agentEmoji, onCite = null }) {
 
   /* ── student-agent (Atlas / real agent name) ── */
   if (block.type === "student-agent") return (
-    <div style={{ display:"flex", alignItems:"flex-end", gap:8, marginBottom:4, opacity }}>
+    <div data-block="student-agent" style={{ display:"flex", alignItems:"flex-end", gap:8, marginBottom:4, opacity }}>
       <div style={{ width:28, height:28, borderRadius:"50%", background:student.bg,
         border:`1.5px solid ${student.ring}`, flexShrink:0, display:"flex",
         alignItems:"center", justifyContent:"center" }}><AgentAvatar emoji={student.emoji} size={19}/></div>

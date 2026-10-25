@@ -89,3 +89,51 @@ export const socketSession = {
     b.socket.close();
   },
 };
+
+/**
+ * The guide speaks in ideas, not messages: the session opens with starter
+ * ideas (no guide message), and each turn's protégé reply carries 2-3 "say
+ * this next" ideas from the guide — never a guide block in the conversation.
+ */
+export const guideIdeasSession = {
+  name: "teaching.guide_ideas", area: "teaching", risk: "write",
+  description: "A live teaching session: it opens with the guide's starter ideas, not a guide message; each reply from the protégé carries 2-3 ideas from the guide for the learner's next message; the guide posts no message.",
+  params: { learner: { default: "@tester21" } },
+  async run(ctx, p) {
+    const learner = await ctx.as(p.learner);
+    const rows = [];
+    ctx.cleanup(async () => {
+      for (const id of rows) await ctx.db.deleteOwned("edu.adaptive_sessions", { ownerColumn: "student_id", ownerId: learner.id, filters: { id } });
+    });
+    const a = await connect(learner);
+    ctx.expect.ok("the socket connects", a.ok);
+    if (!a.ok) { a.socket.close(); return; }
+    const saved = once(a.socket, "session_saved", 120_000);
+    a.socket.emit("start_adaptive_session", { topic: `${ctx.marker} Photosynthesis`, subject: "Basic Science", mode: "fresh" });
+    const ready = await once(a.socket, "session_ready", 120_000);
+    ctx.expect.ok("the session is ready", !!ready.data, ready.error || (ready.timeout ? "timed out" : null));
+    if (!ready.data) { a.socket.close(); return; }
+    const opening = ready.data.openingBlocks || [];
+    const starters = opening.find((b) => b.type === "guide-ideas");
+    ctx.note(`opening: ${JSON.stringify(opening.map((b) => b.type))} · ideas: ${JSON.stringify(starters?.ideas || [])}`);
+    ctx.expect.ok("opens with the guide's starter ideas", (starters?.ideas || []).length >= 2, starters);
+    ctx.expect.ok("…and no guide message", !opening.some((b) => b.type === "guide"), opening.map((b) => b.type));
+    const s = await saved;
+    if (s.data?.rowId) rows.push(s.data.rowId);
+
+    for (const [i, message] of [starters?.ideas?.[1] || "Let me explain photosynthesis in my own words.",
+      "Plants use sunlight, water and carbon dioxide to make their own food, and they give out oxygen."].entries()) {
+      a.socket.emit("teacher_message", { message });
+      const turn = await once(a.socket, "turn_complete", 150_000);
+      const blocks = turn.data?.blocks || [];
+      const reply = blocks.find((b) => b.type === "student-agent");
+      ctx.note(`turn ${i + 1}: "${message.slice(0, 60)}" → ${JSON.stringify(blocks.map((b) => b.type))} · reply "${String(reply?.text || "").slice(0, 120)}" · ideas ${JSON.stringify(reply?.guide?.ideas || [])}`);
+      ctx.expect.ok(`turn ${i + 1}: the protégé replies`, !!reply?.text, turn.error || (turn.timeout ? "timed out" : blocks.map((b) => b.type)));
+      ctx.expect.ok(`turn ${i + 1}: with 2-3 ideas from the guide`, (reply?.guide?.ideas || []).length >= 2 && reply.guide.ideas.length <= 3, reply?.guide);
+      ctx.expect.ok(`turn ${i + 1}: the guide posts no message`, !blocks.some((b) => b.type === "guide"), blocks.map((b) => b.type));
+    }
+    a.socket.emit("end_session", {});
+    await new Promise((r) => setTimeout(r, 2_000));
+    a.socket.close();
+  },
+};
