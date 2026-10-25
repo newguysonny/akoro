@@ -5,8 +5,7 @@ Integrated Brochure & Syllabus System (IBASS).
 
 - **Source:** https://ibass.jamb.gov.ng/e-syllabus (each subject's PDF is a static file served by that site)
 - **Downloaded:** 2026-10-25, unmodified, one PDF per subject (25 subjects)
-- **Not included:** the IBASS *brochure* PDFs (course lists by faculty, ND/NCE courses, specific entry requirements) —
-  the site serves them from the same place and they can be added if wanted.
+- **Also see:** `reference/jamb-brochure/` — the IBASS brochure (course lists by field, ND/NCE courses, specific entry requirements)
 
 | Subject | File | Pages | Size |
 |---|---|---|---|
