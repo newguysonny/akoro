@@ -4061,15 +4061,28 @@ function latestUserText(transcript = []) {
 }
 
 async function unsaidActivityFields(tool, input, transcript) {
-  const { unnamedFields, askFor, teacherTextOf, knownNames } = await import("./activityFields.js");
+  const { unnamedFields, askFor, teacherTextOf, knownNames, currentRequest, TYPE_LABEL } = await import("./activityFields.js");
   let fields = null, check;
   if (tool === "prepare_activity") { fields = input; check = ["topic", "subject", "audience"]; }
   else if (tool === "schedule_activity_routine" && input?.brief) { fields = input.brief; check = ["topic", "subject", "audience"]; }
   else if (tool === "revise_activity_draft" && input?.audience) { fields = { audience: input.audience }; check = ["audience"]; }
   if (!fields) return null;
-  const missing = unnamedFields(fields, teacherTextOf(transcript), { known: await knownNames(db, fields), check });
+  // The activity asked for NOW, and only what was said since asking for it: a battle's
+  // topic and class don't silently become the new assignment's (unless they say "the same").
+  const req = tool === "prepare_activity" ? currentRequest(transcript) : { type: null, text: teacherTextOf(transcript), earlier: "" };
+  if (req.type && input?.type && req.type !== input.type && !(req.type === "self_study" && input.type === "project")) {
+    return { prepared: false, error: "wrong_type", asked: req.type,
+      message: `The instructor asked for a ${TYPE_LABEL[req.type] || req.type}, not a ${TYPE_LABEL[input.type] || input.type}. Call prepare_activity with type "${req.type}" (asking first for anything they haven't said for it). Don't re-send or mention the earlier draft.` };
+  }
+  const missing = unnamedFields(fields, req.text, { known: await knownNames(db, fields), check });
   if (!missing.length) return null;
-  return clarify(missing.map((m) => m.field).join(","), askFor(missing), {
+  // Said for an earlier activity: ask whether it's the same, rather than reuse it silently.
+  const earlier = req.earlier ? unnamedFields(fields, req.earlier, { known: await knownNames(db, fields), check: missing.map((m) => m.field) }) : missing;
+  const fromBefore = missing.filter((m) => !earlier.some((e) => e.field === m.field));
+  const value = { topic: fields.topic, subject: fields.subject, audience: fields.audience?.classroom_name || (fields.audience?.whole_class ? "the whole class" : null) };
+  const asks = missing.map((m) => (fromBefore.includes(m) && value[m.field]
+    ? { ...m, question: `Same ${m.field === "audience" ? "class" : m.field} as before (${value[m.field]}), or a different one?` } : m));
+  return clarify(missing.map((m) => m.field).join(","), askFor(asks), {
     prepared: false, error: "details_required", unsaid: missing.map((m) => m.field),
     message: "The instructor didn't say this. Ask them the question in `question` (in your own short words) and wait for their answer — never fill it in yourself, even when it seems obvious. Then call the tool again with what they said.",
   });

@@ -73,3 +73,21 @@ test("some of a class is not the class: who, by name, or 'the whole class' said 
   // Named learners are fine whatever else was said.
   assert.deepEqual(unnamedFields({ ...cls, audience: { usernames: ["tester01", "tester02", "tester03"] } }, "my three strongest learners in Tester Class A on fractions: @tester01, @tester02, @tester03"), []);
 });
+
+test("activityTypeNamed: the type asked for, a negated one aside", async () => {
+  const { activityTypeNamed } = await import("./activityFields.js");
+  for (const [m, t] of [["Let's create a battle", "battle"], ["It should be a review battle", "battle"], ["Let's create a self study", "self_study"],
+    ["Not battles a. Self study activity", "self_study"], ["Assignment activity not battle", "assignment"], ["Set homework on fractions", "assignment"],
+    ["Cell structure for basic science", null], ["Make it 10 questions", null]]) assert.equal(activityTypeNamed(m), t, m);
+});
+
+test("currentRequest: a new activity doesn't inherit the last one's details unless they say 'same'", async () => {
+  const { currentRequest } = await import("./activityFields.js");
+  const say = (...xs) => xs.map((content) => ({ role: "user", content }));
+  const r = currentRequest(say("Let's create a battle", "Cell structure, the whole class, 5 questions", "Let's create an assignment"));
+  assert.equal(r.type, "assignment");
+  assert.ok(!/cell structure/i.test(r.text), "the battle's topic isn't the assignment's");
+  assert.ok(/cell structure/i.test(r.earlier));
+  assert.ok(/cell structure/i.test(currentRequest(say("Let's create a battle", "Cell structure, the whole class", "Let's create an assignment", "Same topic and class")).text));
+  assert.ok(/whole class/i.test(currentRequest(say("Let's create a battle", "Cell structure, the whole class, 5 questions")).text), "answers to the battle's own questions count");
+});
