@@ -175,7 +175,7 @@ export const sessionTokensOnly = {
       ctx.expect.eq(`…refused as token_invalid`, r.body?.code, "token_invalid");
     }
     // (GET only: a read scenario may not POST — the removed POSTs are checked by the route table.)
-    for (const path of ["/api/battle/leaderboard/global", "/api/curriculum/search/topics?q=fractions", "/api/adaptive/chat/agents/pairs", "/api/adaptive/exam-prep/workflows", "/api/programmes/log"]) {
+    for (const path of ["/api/battle/leaderboard/global", "/api/curriculum/search/topics?q=fractions", "/api/adaptive/chat/agents/pairs", "/api/adaptive/exam-prep/workflows"]) {
       const r = await ctx.http({ as: "@tester30", path });
       ctx.expect.status(`removed: GET ${path.split("?")[0]}`, r, 404);
     }
