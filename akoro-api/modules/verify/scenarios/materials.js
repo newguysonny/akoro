@@ -317,3 +317,39 @@ export const sortOwnFolders = {
     ctx.expect.status("…and can't be restored (410)", late, 410);
   },
 };
+
+/* ── Diagnostic: several files in one chat message ─────────────────────── */
+// Read-only (2026-10-25: "more than one upload on chat, only one file extracted
+// and parsed"). The newest uploads that carried 2+ files, and what became of
+// each file: saved as a record, pages extracted, read by the structure step.
+// Counts and ids only — never a file name or its text.
+export const materialsMultiFileDiag = {
+  name: "materials.multi_file_diag", area: "materials", risk: "read",
+  description: "Diagnostic: for the newest chat uploads with 2+ files, how many files became records, how many have extracted pages, and how many the structure step read — per upload, counts and ids only.",
+  async run(ctx) {
+    const { default: db } = await import("../../../db.js");
+    const { getExtraction } = await import("../../records/extractLib.js");
+    const edu = () => db.schema("edu");
+    const { data: rows, error } = await edu().from("material_ingests")
+      .select("id, state, names, record_ids, structure, created_at, folder_id").order("created_at", { ascending: false }).limit(200);
+    if (error) ctx.expect.blocked(`material_ingests: ${error.message}`);
+    // A message's files may be split into several uploads (one per folder): group by message via chat_message_id is not selected — count per upload, and also per sibling batch (same created second).
+    const multi = (rows || []).filter((r) => (r.names || []).length >= 2).slice(0, 12);
+    ctx.note(`${(rows || []).length} recent uploads · ${multi.length} with 2+ files`);
+    const split = (rows || []).filter((r, i, all) => all.some((o) => o.id !== r.id && Math.abs(new Date(o.created_at) - new Date(r.created_at)) < 1500)).length;
+    ctx.note(`${split} uploads were created within 1.5 s of another (one message split into folders)`);
+    for (const r of multi) {
+      const ids = r.record_ids || [];
+      const { data: recs } = ids.length ? await edu().from("records").select("id, kind, mime, file_key").in("id", ids) : { data: [] };
+      const perFile = [];
+      for (const rec of recs || []) {
+        const ext = rec.file_key ? await getExtraction(rec.file_key).catch(() => ({ pages: [] })) : { pages: [] };
+        const pages = (ext.pages || []).filter((p) => String(p.markdown || "").trim()).length;
+        perFile.push(`${String(rec.mime || rec.kind).replace(/^application\//, "")}:${pages}p`);
+      }
+      const read = Array.isArray(r.structure?.items) ? r.structure.items.length : (r.structure ? "?" : 0);
+      ctx.note(`${r.id.slice(0, 8)} ${r.created_at.slice(0, 16)} · ${r.state} · files named ${(r.names || []).length} · records ${ids.length} · pages per file [${perFile.join(", ")}] · structured ${read}`);
+    }
+    ctx.expect.ok("diagnostic ran", true);
+  },
+};
