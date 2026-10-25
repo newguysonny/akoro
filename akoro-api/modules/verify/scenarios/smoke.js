@@ -149,3 +149,34 @@ export const searchTextFallback = {
     ctx.expect.ok("a slow embedding gives up at its limit", v === null && waited < 1500, { v, waited });
   },
 };
+
+// Only a session token signs in (2026-10-25): a refresh token, a 2FA challenge
+// (password given, no code yet) and the AI-login hand-off share the access
+// token's key, issuer and audience — before the fix each one worked as a login.
+// Signs one of each for a test learner with the server's own key; nothing is stored.
+export const sessionTokensOnly = {
+  name: "smoke.session_tokens_only", area: "smoke", risk: "read",
+  description: "Only an access token signs in: a refresh, 2FA-challenge or hand-off token gets 401 token_invalid on /api/auth/me. The endpoints removed by the audit answer 404.",
+  async run(ctx) {
+    const auth = await import("../../auth/routes.js");
+    const { signInternalAccess } = auth;
+    const me = await ctx.as("@tester30");
+    const asBearer = (token) => ctx.http({ path: "/api/auth/me", headers: { Authorization: `Bearer ${token}` } });
+    const ok = await asBearer(signInternalAccess({ id: me.id, role: me.role }, 120));
+    ctx.expect.status("an access token signs in", ok, 200);
+    const typed = {
+      "2FA challenge": auth.signChallengeForGate(me.id),
+      refresh: auth.signRefreshForGate(me.id, "gate-check").token,
+      "AI-login hand-off": auth.signHandoff(me.id),
+    };
+    for (const [label, token] of Object.entries(typed)) {
+      const r = await asBearer(token);
+      ctx.expect.status(`a ${label} token does not sign in`, r, 401);
+      ctx.expect.eq(`…refused as token_invalid`, r.body?.code, "token_invalid");
+    }
+    for (const [method, path] of [["GET", "/api/battle/leaderboard/global"], ["GET", "/api/curriculum/search/topics?q=fractions"], ["GET", "/api/adaptive/chat/agents/pairs"], ["POST", "/api/profiles/invite-redeem"], ["POST", "/api/agent-tool-requests"]]) {
+      const r = await ctx.http({ as: "@tester30", method, path, ...(method === "POST" ? { body: {} } : {}) });
+      ctx.expect.status(`removed: ${method} ${path.split("?")[0]}`, r, 404);
+    }
+  },
+};

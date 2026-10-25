@@ -236,6 +236,8 @@ const verifyHandoff = (token) => {
   } catch { return null; }
 };
 export { signHandoff, verifyHandoff };
+// For the verification gate only (smoke.session_tokens_only): proves these never sign in.
+export { signChallenge as signChallengeForGate, signRefresh as signRefreshForGate };
 
 /**
  * authenticateSocket — verify the JWT for a Socket.IO connection.
