@@ -188,15 +188,15 @@ function GuideIdeas({ blocks, onPick }) {
   }
   if (!g?.ideas?.length) return null;
   return (
-    <div data-guide-ideas="" style={{ display:"flex", flexWrap:"wrap", alignItems:"center", gap:6, margin:"2px 0 4px 36px" }} aria-label="Ideas from your guide">
-      {g.hint && <div style={{ flexBasis:"100%", fontSize:11.5, fontWeight:600, color:"var(--ak-text-muted)", lineHeight:1.45, marginBottom:2 }}>{g.hint}</div>}
-      <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:10.5, fontWeight:800, color:AGENT_STYLES.nana.color, fontFamily:"'Nunito',sans-serif" }}>
-        <Icon name="ti-school" size={12}/> Guide
+    <div data-guide-ideas="" style={{ display:"flex", flexWrap:"wrap", alignItems:"center", gap:5, width:"100%", margin:"2px 0 4px" }} aria-label="Ideas from your guide">
+      {g.hint && <div style={{ flexBasis:"100%", fontSize:11, fontWeight:600, color:"var(--ak-text-muted)", lineHeight:1.4, marginBottom:1 }}>{g.hint}</div>}
+      <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:10.5, fontWeight:800, color:"var(--ak-text-muted)", fontFamily:"'Nunito',sans-serif" }}>
+        <Icon name="ti-school" size={11}/> Guide
       </span>
       {g.ideas.map((idea) => (
         <button key={idea} type="button" onClick={() => onPick?.(idea)} title="Tap to put it in the message box — change it if you like, then send"
-          style={{ padding:"5px 11px", borderRadius:999, background:AGENT_STYLES.nana.bg, border:`1px solid ${AGENT_STYLES.nana.ring}`,
-            color:AGENT_STYLES.nana.color, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif", textAlign:"left", lineHeight:1.35 }}>
+          style={{ padding:"4px 10px", borderRadius:20, background:"var(--ak-surface)", border:`1.5px solid ${AGENT_STYLES.nana.ring}55`,
+            color:AGENT_STYLES.nana.color, fontSize:11.5, fontWeight:600, cursor:"pointer", fontFamily:"'Nunito',sans-serif", textAlign:"left", lineHeight:1.3 }}>
           {idea}
         </button>
       ))}
