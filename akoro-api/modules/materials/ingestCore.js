@@ -163,3 +163,29 @@ export function folderItemFor(record, kind) {
   const fileKind = /pdf/.test(ft) ? "pdf" : /image|png|jpe?g|webp/.test(ft) ? "image" : /word|docx/.test(ft) ? "docx" : /powerpoint|pptx/.test(ft) ? "pptx" : /audio/.test(ft) ? "audio" : /video/.test(ft) ? "video" : "text";
   return { item_type: "record", item_ref: String(record.id), title: clip(record.name, 255) || "File", sub: `From chat · ${kindLabel(kind)}`, kind: fileKind, link: null };
 }
+
+/**
+ * The agent's note on the files already in this chat (2026-10-25): with nothing
+ * said on later turns, it told a learner it "can't read a file straight from
+ * this chat box" — wrong, and it left two unread scans unexplained. Each file
+ * and what its read found; the true rule; what to offer when a read found
+ * nothing. rows: material_ingests (names, state, structure). → prompt text or "".
+ */
+export function chatFilesBrief(rows = [], { max = 8 } = {}) {
+  const lines = [];
+  for (const r of rows) {
+    if (!r || r.state === "undone") continue;
+    const items = Array.isArray(r.structure?.items) ? r.structure.items : [];
+    (r.names || []).forEach((name, i) => {
+      if (lines.length >= max) return;
+      const it = items.find((x) => x?.name === name) || items[i] || null;
+      const said = !r.structure ? (r.state === "failed" ? "couldn't be saved" : "saved, not read yet")
+        : !it ? "saved; not read (more files than one read covers)"
+        : (it.topics || []).length ? `read — ${(it.topics || []).length} topic(s)${it.questionCount ? `, ${it.questionCount} question(s)` : ""}`
+        : "read, but its pages had no readable text (most likely a scan whose only text is a watermark)";
+      lines.push(`- ${String(name).slice(0, 100)}: ${said}`);
+    });
+  }
+  if (!lines.length) return "";
+  return `\n\n## Files in this chat\n${lines.join("\n")}\nHow files work: anything the learner attaches here is saved to their Library and read — PDFs with text from their text, scans and photos by Akoro's page reader. Never say you can't read files sent in this chat. When a file's read found nothing, say so plainly and suggest they send it again here to have it read as a scan.`;
+}

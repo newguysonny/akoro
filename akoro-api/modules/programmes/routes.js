@@ -493,10 +493,4 @@ router.delete("/materials/:id", asyncHandler(async (req, res) => {
   ok(res, { deleted: true });
 }));
 
-/* ── Activity log ──────────────────────────────────────────────────────── */
-router.get("/log", asyncHandler(async (_req, res) => {
-  const { data } = await edu().from("programme_log").select("*").order("created_at", { ascending: false }).limit(6);
-  ok(res, data ?? []);
-}));
-
 export default router;

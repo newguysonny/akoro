@@ -84,6 +84,11 @@ function battleScenario({ key, mode, learnersNeeded, description }) {
       ctx.expect.eq("the draft is a battle", draft?.type, "battle");
       ctx.expect.eq("still pending", draft?.status, "draft");
       ctx.expect.ok("it carries the topic", /fraction/i.test(`${draft?.topic || ""} ${draft?.payload?.details?.topic || ""}`), draft?.payload?.details);
+      // The draft makes the battle's REAL questions — the preview shows the ones it will ask.
+      const qs = draft?.payload?.details?.questions || [];
+      ctx.note(`draft questions: ${qs.length} · ${JSON.stringify(qs.slice(0, 2).map((q) => q.stem))} · note ${draft?.payload?.details?.questions_note || "-"}`);
+      ctx.expect.gte("the draft has its real questions", qs.length, 5);
+      ctx.expect.ok("…real ones (not samples), each with a right answer", qs.every((q) => !/^Sample question/i.test(q.stem || "") && (q.options || [])[q.correctIndex]?.text), qs.slice(0, 2));
 
       // 3. A conversational revision lands on the same draft.
       const t2 = await say("Make it a hard battle, and add the note: bring a calculator.", "revise");
@@ -92,6 +97,9 @@ function battleScenario({ key, mode, learnersNeeded, description }) {
       ctx.expect.toolNotCalled(t2, "prepare_activity");
       draft = await draftOf(ctx, p.instructor, draftId);
       ctx.expect.eq("difficulty is hard", draft?.payload?.difficulty, "hard");
+      const draftQs = draft?.payload?.details?.questions || [];
+      ctx.note(`after the revision: ${draftQs.length} questions · subject ${draft?.payload?.subject || "-"} · note ${draft?.payload?.details?.questions_note || "-"}`);
+      ctx.expect.gte("…and the questions were written again for it", draftQs.length, 5);
       ctx.expect.ok("the note is kept", /calculator/i.test(draft?.payload?.details?.note || ""), draft?.payload?.details);
 
       // 4. The approval guard: a battle can't be assigned like other activities.
@@ -111,6 +119,7 @@ function battleScenario({ key, mode, learnersNeeded, description }) {
           title, subject, topic: "Fractions", difficulty: "hard", total_questions: 5,
           time_limit_seconds: 600, xp_prize: 100, question_source: "bank", expires_in_minutes: 60,
           usernames: learners.map((l) => l.username), ...(review ? { mode: "review" } : {}),
+          draft_id: draftId,   // as the preview's form sends it: the battle asks the draft's questions
         } });
         if (made.status >= 200 && made.status < 300) { ctx.note(`created in ${subject}`); break; }
         const why = made.body?.error || made.body?.message || `HTTP ${made.status}`;
@@ -125,6 +134,12 @@ function battleScenario({ key, mode, learnersNeeded, description }) {
       ctx.expect.ok("it has an id", !!battleId, made.body);
       if (!battleId) return;
       ctx.cleanup(() => ctx.http({ as: p.instructor, method: "DELETE", path: `/api/battle/battles/${battleId}` }));
+      ctx.note(`questions from the draft: ${made.body?.data?.questions_from_draft ?? made.body?.questions_from_draft ?? "-"}`);
+      const asked = (await ctx.db.rows("battle_questions", { battle_id: battleId }, { columns: "question_order, question_text, correct_answer_index, options_json", limit: 40 }))
+        .sort((a, b) => a.question_order - b.question_order);
+      ctx.expect.eq(`the ${review ? "review" : "battle"} asks exactly the draft's questions, in order`,
+        asked.map((q) => q.question_text).join(" | "), draftQs.slice(0, asked.length).map((q) => q.stem).join(" | "));
+      ctx.expect.ok("…with the same right answers", asked.every((q, i) => q.correct_answer_index === draftQs[i]?.correctIndex), asked.map((q) => q.correct_answer_index));
       for (const l of learners) {
         const acct = await ctx.as(`@${l.username}`);
         ctx.cleanup(() => ctx.db.deleteOwned("notifications", { ownerColumn: "user_id", ownerId: acct.id, filters: { related_id: battleId } }));

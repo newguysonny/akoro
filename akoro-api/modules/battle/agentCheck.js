@@ -43,7 +43,7 @@ async function protegeOf(learnerId) {
  * until it starts); it starts at `startsAt` with whoever accepted. Each gets a
  * mark sheet. → also { seated, noAgent }.
  */
-export async function createCheckBattle({ learnerId = null, learnerIds = null, startsAt = null, subject, topic, total = CHECK_DEFAULTS.QUESTIONS, studyPrepTopicId = null, mode = "diagnostic", secondsPerQuestion = CHECK_DEFAULTS.SECONDS_PER_QUESTION, basedOn = [], title: titleIn = null, extra = {} }) {
+export async function createCheckBattle({ learnerId = null, learnerIds = null, startsAt = null, subject, topic, total = CHECK_DEFAULTS.QUESTIONS, studyPrepTopicId = null, mode = "diagnostic", secondsPerQuestion = CHECK_DEFAULTS.SECONDS_PER_QUESTION, basedOn = [], title: titleIn = null, extra = {}, preset = null }) {
   const group = Array.isArray(learnerIds);
   const seats = [], noAgent = [];
   for (const id of group ? learnerIds : [learnerId]) {
@@ -83,6 +83,8 @@ export async function createCheckBattle({ learnerId = null, learnerIds = null, s
       difficulty: "intermediate", classLabel: null, userId: null, durationSeconds: count * seconds,
       // Planned from the learner's own past papers: ask what those papers ask (§7.17.3).
       ...(basedOn?.length ? { basedOn } : {}),
+      // Questions prepared ahead (an activity draft's review battle): asked as they are.
+      ...(preset?.length ? { preset } : {}),
     });
   } catch (e) {
     await db.from("battles").delete().eq("id", battle.id);

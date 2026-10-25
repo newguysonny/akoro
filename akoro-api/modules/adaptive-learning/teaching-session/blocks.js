@@ -9,6 +9,8 @@
 // (same format as teachingSession.js REST endpoint)
 // =============================================================
 
+import { guideIdeas, shortConcept } from "./guideIdeas.js";
+
 const NANA_RENDER_STYLE = {
   bubbleBg:     "rgba(124,58,237,0.10)",
   bubbleBorder: "#7C3AED",
@@ -57,6 +59,9 @@ export function resultToTypedBlocks(result, agentPairId) {
   // Student Agent response. The current idea and short explanation of the
   // prompt's purpose are deterministic server-owned UI copy—never an inferred
   // browser state and never a claim that the agent has mastered the concept.
+  // The guide doesn't speak in the conversation (it's the human and their
+  // protégé): its help rides on the reply as 2-3 "say this next" ideas, shown
+  // as pills under the latest reply (guideIdeas.js).
   if (result.studentAgentResponse) {
     blocks.push({
       type:            "student-agent",
@@ -65,13 +70,13 @@ export function resultToTypedBlocks(result, agentPairId) {
       currentIdea:     learningState.currentIdea || null,
       whyThisResponse: learningState.whyThisResponse || null,
       text:            result.studentAgentResponse,
+      guide: { name: guideName, emoji: guideEmoji,
+        ideas: guideIdeas(result.guideSuggestions, { nextAction: result.guideNextAction, concept: result.topic || shortConcept(result.currentSubtopic) }) },
     });
   }
 
-  // Teaching Guide response. A short evidence status and next learning move
-  // replace the internal phase label; private scores and evaluator rationale
-  // stay on the server.
-  if (result.guideMessage) {
+  // No protégé reply this turn (rare): the guide's tip is still a message, so the learner isn't left with nothing.
+  if (result.guideMessage && !result.studentAgentResponse) {
     blocks.push({
       type:             "guide",
       agent:            guideName,

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { DATA_VIEWS, describeView, viewColumns } from "./views.js";
-import { CAPABILITIES, FORBIDDEN, forbiddenFor } from "./capabilities.js";
+import { CAPABILITIES, FORBIDDEN, forbiddenFor, learnerGrantable, ownChangeAsked, agreesToBuild } from "./capabilities.js";
 import { decideAccess } from "./access.js";
 
 const chatSrc = readFileSync(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
@@ -67,10 +67,10 @@ test("forbidden goals are caught; the learner's own data is not", () => {
   yes("Which classmates beat me in battles this month?");   // escalates (locked), not forbidden
 });
 
-test("wiring: off by default, allow-listed, gated in the catalogue and in the tool", () => {
+test("wiring: on by default (a switch can turn it off), gated in the catalogue and in the tool", () => {
   const access = readFileSync(new URL("./access.js", import.meta.url), "utf8");
-  assert.match(access, /export const selfToolingEnabled = \(\) => on\("AKORO_SELF_TOOLING_ENABLED"\);/);
-  assert.match(access, /export const selfToolingRealUsers = \(\) => on\("AKORO_SELF_TOOLING_REAL_USERS"\);/);
+  assert.match(access, /export const selfToolingEnabled = \(\) => onUnlessOff\("AKORO_SELF_TOOLING_ENABLED"\);/);
+  assert.match(access, /export const selfToolingRealUsers = \(\) => onUnlessOff\("AKORO_SELF_TOOLING_REAL_USERS"\);/);
   assert.match(chatSrc, /self_tooling: selfToolingEnabled\(\) && selfTooling,/);
   assert.match(chatSrc, /const selfToolOn = \(role === "student" \|\| role === "instructor"\) && await selfToolingAllowedFor\(req\.user\.id\);/);
   assert.match(chatSrc, /selfTooling: selfToolOn,/);
@@ -95,4 +95,62 @@ test("access: off unless enabled; testers always; real users by switch or by nam
   assert.equal(decideAccess(real, { enabled: true, realUsers: false, named: ["ada@gmail.com"] }), true, "named by email");
   assert.equal(decideAccess(real, { enabled: true, realUsers: true, named: [] }), true, "all real users");
   assert.equal(decideAccess(tester, { enabled: true, realUsers: true, named: [] }), true, "testers keep it");
+});
+
+test("access: on for everyone by default; only an explicit false turns it off", async () => {
+  const { selfToolingEnabled, selfToolingRealUsers } = await import("./access.js");
+  const keep = { e: process.env.AKORO_SELF_TOOLING_ENABLED, r: process.env.AKORO_SELF_TOOLING_REAL_USERS };
+  try {
+    delete process.env.AKORO_SELF_TOOLING_ENABLED; delete process.env.AKORO_SELF_TOOLING_REAL_USERS;
+    assert.equal(selfToolingEnabled(), true, "unset → on");
+    assert.equal(selfToolingRealUsers(), true, "unset → every learner");
+    process.env.AKORO_SELF_TOOLING_ENABLED = "true"; assert.equal(selfToolingEnabled(), true);
+    for (const v of ["false", "FALSE", "0", "off"]) { process.env.AKORO_SELF_TOOLING_ENABLED = v; assert.equal(selfToolingEnabled(), false, v); }
+    process.env.AKORO_SELF_TOOLING_REAL_USERS = "false"; assert.equal(selfToolingRealUsers(), false, "testers and named accounts only");
+  } finally {
+    for (const [k, v] of [["AKORO_SELF_TOOLING_ENABLED", keep.e], ["AKORO_SELF_TOOLING_REAL_USERS", keep.r]]) if (v === undefined) delete process.env[k]; else process.env[k] = v;
+  }
+});
+
+test("learnerGrantable: a learner may allow only changes to their own rows that a tool can target", () => {
+  for (const c of ["tasks.delete", "tasks.mark_done", "buddies.end"]) assert.equal(learnerGrantable(c), true, c);
+  // Other learners' data, plain reads, writes no tool can target, and unknown names stay with admins.
+  for (const c of ["battles.class_results", "tasks.list_mine", "circles.leave", "challenges.cancel_mine", "verify.probe", "verify.task_done", "nope.nope"]) assert.equal(learnerGrantable(c), false, c);
+  for (const [name, c] of Object.entries(CAPABILITIES)) if (learnerGrantable(name)) assert.ok(c.target && c.kind === "write" && (c.scope || "self") === "self", name);
+});
+
+test("ownChangeAsked: deleting or completing the learner's own tasks, and nothing else", () => {
+  for (const m of ["Delete my old tasks please.", "can you remove all my done tasks", "clear out my to-dos", "get rid of the overdue tasks", "my old tasks should be deleted"]) assert.equal(ownChangeAsked(m), "tasks.delete", m);
+  for (const m of ["Mark my homework task as done", "tick off my tasks for today", "mark all my tasks complete"]) assert.equal(ownChangeAsked(m), "tasks.mark_done", m);
+  for (const m of ["Create a task to revise fractions", "What tasks do I have?", "Delete my account", "help me with my homework", "remove the last message"]) assert.equal(ownChangeAsked(m), null, m);
+});
+
+test("agreesToBuild: the learner said yes to building it — the card waits for that", () => {
+  for (const m of ["Yes please, build it.", "sure", "ok go ahead", "yeah do it", "Build me a tool that deletes my done tasks", "make it", "sounds good", "Ask for permission to delete task"]) assert.equal(agreesToBuild(m), true, m);
+  for (const m of ["Delete my old tasks please.", "Delete my old tasks please", "no thanks", "not now", "don't build it", "what would it do?", "which tasks are old?"]) assert.equal(agreesToBuild(m), false, m);
+});
+
+test("the new change permissions: each one the learner can allow, on a view it can target", async () => {
+  const { DATA_VIEWS } = await import("./views.js");
+  const { WRITE_RUNNERS } = await import("./capRuntime.js");
+  for (const c of ["tasks.reschedule", "tasks.set_priority", "goals.complete", "goals.dismiss", "inbox.mark_read", "chats.delete"]) {
+    assert.equal(learnerGrantable(c), true, c);
+    assert.ok(DATA_VIEWS[CAPABILITIES[c].target]?.ref, `${c}: its view gives each row's id`);
+    assert.equal(typeof WRITE_RUNNERS[c], "function", `${c}: has a runner`);
+  }
+  for (const [m, c] of [["Move my overdue tasks to tomorrow", "tasks.reschedule"], ["Make all my exam revision tasks high priority", "tasks.set_priority"],
+    ["Mark my goals I've hit as achieved", "goals.complete"], ["Archive goals I haven't touched in a month", "goals.dismiss"],
+    ["Mark all my agent inbox messages as read", "inbox.mark_read"], ["Delete my empty chats from last week", "chats.delete"]]) assert.equal(ownChangeAsked(m), c, m);
+});
+
+test("asksForChange: an instruction to change, not a question to show", async () => {
+  const { asksForChange } = await import("./capabilities.js");
+  for (const g of ["Delete my old tasks", "Rename my chats by subject", "Leave the revision circles I joined", "Please reply to my agent's messages"]) assert.equal(asksForChange(g), true, g);
+  for (const g of ["How many tasks did I finish each week?", "Show my goals", "Make a table of my scores", "List chats I deleted"]) assert.equal(asksForChange(g), false, g);
+});
+
+test("changeAskedOf: a message asking for a change, however it starts", async () => {
+  const { changeAskedOf } = await import("./capabilities.js");
+  for (const m of ["Rename my chats so each title starts with its subject.", "Can you rename my chats?", "Could you please cancel my battle?", "Please leave the circle", "I want you to delete my notes"]) assert.equal(changeAskedOf(m), true, m);
+  for (const m of ["What chats do I have?", "Can you explain osmosis?", "Make me a quiz", "How do I rename a chat?"]) assert.equal(changeAskedOf(m), false, m);
 });

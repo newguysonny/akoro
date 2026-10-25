@@ -49,7 +49,7 @@ export function planBattle({ questions, players, hpPerMiss = 10, seed = 1 }) {
   return rounds;
 }
 
-export default function BattleSimulator({ title, topic, subject, questions = [], format = '1v1', players = [], hpPerMiss = 10, onClose }) {
+export default function BattleSimulator({ title, topic, subject, questions = [], format = '1v1', players = [], hpPerMiss = 10, sample = true, onClose }) {
   const isReview = format === 'review';
   const isClass = format === 'group';
   const cast = useMemo(() => players.map((p, i) => ({ id: p.id || `p${i}`, name: p.name, color: COLORS[i % COLORS.length], skill: p.skill ?? 0.55 + ((i * 17) % 30) / 100 })), [players]);
@@ -257,7 +257,7 @@ export default function BattleSimulator({ title, topic, subject, questions = [],
 
       {/* Footer */}
       <div style={{ padding: '10px 16px', borderTop: '1px solid rgba(255,255,255,.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <span style={{ fontSize: 11, color: 'rgba(255,255,255,.35)', display: 'flex', alignItems: 'center', gap: 5 }}><Ico ti="ti-flame" size={11} color="#F97316" />Simulated agents · sample questions</span>
+        <span style={{ fontSize: 11, color: 'rgba(255,255,255,.35)', display: 'flex', alignItems: 'center', gap: 5 }}><Ico ti="ti-flame" size={11} color="#F97316" />Simulated agents · {sample ? 'sample questions' : 'the real questions'}</span>
         <div style={{ display: 'flex', gap: 8 }}>
           <button type="button" onClick={() => setRun((r) => r + 1)} style={{ padding: '7px 13px', borderRadius: 11, border: 'none', background: 'rgba(255,255,255,.10)', color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, display: 'inline-flex', alignItems: 'center', gap: 5 }}><Ico ti="ti-reload" size={12} />Replay</button>
           {onClose && <button type="button" onClick={onClose} style={{ padding: '7px 13px', borderRadius: 11, border: 'none', background: 'linear-gradient(135deg,#E8884A,#D97706)', color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Done</button>}

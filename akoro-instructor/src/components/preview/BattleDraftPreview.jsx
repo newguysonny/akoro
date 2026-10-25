@@ -1,17 +1,19 @@
 /*
  * BattleDraftPreview — a battle drafted in chat: Settings (the battle form,
  * prefilled), Preview (Play runs the battle as learners will see it, with
- * simulated agents) and Questions (the sample questions it plays). Sample
- * data only, no API calls (previewSamples.js); the battle draws its own
- * questions from the bank when it's created.
+ * simulated agents) and Questions. The draft makes its REAL questions
+ * (payload.details.questions — bank first, AI tops up): the Questions tab
+ * shows them, Play plays them, and the battle made from the draft asks
+ * exactly those. Only a draft without them (none could be prepared) falls
+ * back to sample questions, and says so.
  */
 import { useMemo, useState } from 'react';
 import { C } from '../../theme/colors.js';
-import { Ico } from '../../theme/Ico.jsx';
 import BattleForm from '../battles/BattleForm.jsx';
 import { PreviewTabs, Section, PlayStage } from './PreviewKit.jsx';
 import BattleSimulator from './BattleSimulator.jsx';
 import { sampleBattleQuestions } from './previewSamples.js';
+import { BattleQuestionList, ArenaGlimpse } from './ReviewBattleTabs.jsx';
 
 const DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -33,7 +35,11 @@ export default function BattleDraftPreview({ draft, initial, courses, onSubmit, 
   const players = useMemo(() => (isReview ? names.slice(0, 1) : names.slice(0, 6)).map((n, i) => ({ id: `p${i}`, name: `${String(n).replace(/^@/, '')}'s agent` })), [names, isReview]);
   const format = isReview ? 'review' : 'group';
   // The simulation plays sample data only (no API calls).
-  const simQuestions = useMemo(() => sampleBattleQuestions({ subject: initial?.subject || draft.payload?.subject, topic: initial?.topic, count: total }), [initial?.subject, initial?.topic, draft.payload?.subject, total]);
+  const real = useMemo(() => (Array.isArray(details.questions) ? details.questions : []).map((q) => ({
+    text: q.stem, options: (q.options || []).map((o) => o.text), correct: q.correctIndex, topic: q.topic || initial?.topic || null, exam: q.exam || null, year: q.year || null,
+  })), [details.questions, initial?.topic]);
+  const simQuestions = useMemo(() => (real.length ? real
+    : sampleBattleQuestions({ subject: initial?.subject || draft.payload?.subject, topic: initial?.topic, count: total })), [real, initial?.subject, initial?.topic, draft.payload?.subject, total]);
 
   return (
     <div data-battle-preview="" style={{ fontFamily: C.font }}>
@@ -58,50 +64,24 @@ export default function BattleDraftPreview({ draft, initial, courses, onSubmit, 
       )}
 
       {tab === 'preview' && (playing ? (
-        <BattleSimulator title={draft.title} topic={initial?.topic} subject={initial?.subject} questions={simQuestions}
+        <BattleSimulator title={draft.title} topic={initial?.topic} subject={initial?.subject} questions={simQuestions} sample={!real.length}
           format={format} players={players} hpPerMiss={Number(initial?.hpPerMiss ?? 10)} onClose={() => setPlaying(false)} />
       ) : (
         <PlayStage onPlay={() => setPlaying(true)} label="Play preview"
-          sub="Watch it as your learners will: simulated agents, sample questions."
+          sub={real.length ? "Watch it as your learners will: simulated agents, the battle's own questions." : "Watch it as your learners will: simulated agents, sample questions."}
           glimpse={<ArenaGlimpse title={draft.title} />} />
       ))}
 
       {tab === 'questions' && (
         <div>
-          <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.45, marginBottom: 10 }}>Sample questions, the ones the preview plays. The battle draws its own {total} from the question bank when it's created.</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-            {simQuestions.map((q, i) => (
-              <div key={i} style={{ borderRadius: 12, border: `1px solid ${C.borderSoft}`, background: C.surface, padding: '11px 12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
-                  <span style={{ fontSize: 10, fontWeight: 900, color: C.muted2 }}>Q{i + 1}</span>
-                  {q.topic && <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 8px', borderRadius: 20, background: 'rgba(232,136,74,.14)', color: '#C2410C' }}>{q.topic}</span>}
-                </div>
-                <div style={{ fontSize: 13, fontWeight: 650, color: C.ink, lineHeight: 1.5, marginBottom: 7 }}>{q.text}</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
-                  {q.options.map((o, j) => (
-                    <div key={j} style={{ fontSize: 11.5, padding: '5px 8px', borderRadius: 8, background: j === q.correct ? 'rgba(16,185,129,.12)' : C.bg, color: j === q.correct ? '#047857' : C.muted, fontWeight: j === q.correct ? 800 : 600, display: 'flex', gap: 6 }}>
-                      <span style={{ fontWeight: 900 }}>{'ABCDE'[j]}</span>{o}{j === q.correct && <Ico ti="ti-check" size={12} color="#047857" style={{ marginLeft: 'auto' }} />}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+          <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.45, marginBottom: 10 }}>
+            {real.length
+              ? `The questions this ${isReview ? 'review' : 'battle'} will ask${real.length < total ? ` — ${real.length} of ${total}; it tops up the rest when it's created` : ''}. Change the subject in Settings and it draws fresh ones.`
+              : (details.questions_note || `Sample questions — the battle draws its own ${total} when it's created.`)}
           </div>
+          <BattleQuestionList questions={simQuestions} />
         </div>
       )}
-    </div>
-  );
-}
-
-/* What sits blurred behind Play: the arena's shape. */
-function ArenaGlimpse({ title }) {
-  return (
-    <div style={{ borderRadius: 16, background: 'linear-gradient(160deg,#0f1320,#141c2e,#1a1430)', padding: 14, minHeight: 340 }}>
-      <div style={{ color: '#fff', fontWeight: 800, fontSize: 13 }}>{title}</div>
-      <div style={{ display: 'flex', justifyContent: 'space-around', margin: '22px 0' }}>
-        {['#6C3BFF', '#EC4899'].map((c) => <div key={c} style={{ width: 52, height: 52, borderRadius: '50%', background: `${c}44` }} />)}
-      </div>
-      {[0, 1, 2, 3].map((i) => <div key={i} style={{ height: 34, borderRadius: 12, background: 'rgba(255,255,255,.08)', marginBottom: 7 }} />)}
     </div>
   );
 }

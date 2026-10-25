@@ -23,6 +23,7 @@ import { capabilityStatus } from "./registry.js";
 import { readView } from "./viewRuntime.js";
 import { bind, refsIn, paramProps } from "./bind.js";
 import * as O from "./ops.js";
+import { checkArgs, resolveArgs } from "./writeArgs.js";
 
 const { ToolError, valid } = O;
 const MAX_STEPS = 4, MAX_THEN = 14;
@@ -148,18 +149,19 @@ export const MAX_WRITE_ROWS = 20;
  * applied to rows that still come from its target view (not grouped). It
  * changes nothing when the tool runs — it proposes; the learner confirms.
  */
-async function checkWrite(errors, o, { origin, last, label, uses }) {
+async function checkWrite(errors, o, { origin, last, label, uses, learnerId = null, assume = [] }) {
   const cap = CAPABILITIES[o.cap];
   if (!cap) return errors.push(`${label}: unknown capability ${o.cap}`);
   if (cap.kind !== "write" || !cap.target) return errors.push(`${label}: ${o.cap} isn't a write a tool can make`);
-  if ((await capabilityStatus(o.cap)) !== "enabled") errors.push(`${label}: capability ${o.cap} needs approval`);
+  if (!assume.includes(o.cap) && (await capabilityStatus(o.cap, { learnerId })) !== "enabled") errors.push(`${label}: capability ${o.cap} needs approval`);
   if (!last) errors.push(`${label}: write must be the last step`);
   if (origin !== cap.target) errors.push(`${label}: ${o.cap} works on rows from ${cap.target} (filter/sort/pick them; don't group)`);
+  for (const e of checkArgs(o.cap, cap, o.args)) errors.push(`${label}: ${e}`);
   uses.capabilities.push(o.cap);
 }
 
 /** Validate read steps (views or capabilities). → the set of step ids. */
-async function checkSteps(errors, steps, uses) {
+async function checkSteps(errors, steps, uses, learnerId = null, assume = []) {
   const ids = new Set();
   for (const st of steps) {
     if (!st?.id || !/^[a-z][a-z0-9_]{0,23}$/.test(st.id) || ids.has(st.id)) { errors.push(`step id ${st?.id} invalid or repeated`); continue; }
@@ -170,9 +172,9 @@ async function checkSteps(errors, steps, uses) {
     } else if (st.cap) {
       const cap = CAPABILITIES[st.cap];
       if (!cap) { errors.push(`step ${st.id}: unknown capability ${st.cap}`); continue; }
-      const status = await capabilityStatus(st.cap);
+      const status = assume.includes(st.cap) ? "enabled" : await capabilityStatus(st.cap, { learnerId });
       if (status !== "enabled") errors.push(`step ${st.id}: capability ${st.cap} needs approval`);
-      if (cap.kind !== "read") errors.push(`step ${st.id}: ${st.cap} changes data — tools are read-only for now`);
+      if (cap.kind !== "read") errors.push(cap.target ? `step ${st.id}: ${st.cap} is a change, not a read — read ${cap.target} in a step and end the recipe with {"op":"write","cap":"${st.cap}"}` : `step ${st.id}: ${st.cap} changes data — tools are read-only for now`);
       uses.capabilities.push(st.cap);
       if (st.rows != null && typeof st.rows !== "string") errors.push(`step ${st.id}: rows is a path like "weak_topics"`);
     } else errors.push(`step ${st.id}: needs view or cap`);
@@ -181,7 +183,11 @@ async function checkSteps(errors, steps, uses) {
 }
 
 /** → { ok, errors, uses: { views:[], capabilities:[] } } */
-export async function validateDefinition(def, params, { audience = "learner" } = {}) {
+/**
+ * `assume`: capabilities to treat as on — a DRAFT built for the learner to
+ * approve (it is saved switched off, and only their Approve turns both on).
+ */
+export async function validateDefinition(def, params, { audience = "learner", learnerId = null, assume = [] } = {}) {
   const errors = [];
   const uses = { views: [], capabilities: [] };
   if (!def || typeof def !== "object") return { ok: false, errors: ["definition must be an object"], uses };
@@ -212,13 +218,13 @@ export async function validateDefinition(def, params, { audience = "learner" } =
     if (!codeEnabled()) errors.push("code tools are turned off on this server");
     const steps = Array.isArray(def.steps) ? def.steps : [];
     if (steps.length > MAX_STEPS) errors.push(`at most ${MAX_STEPS} reads`);
-    await checkSteps(errors, steps, uses);
+    await checkSteps(errors, steps, uses, learnerId, assume);
     if (def.then != null) errors.push("a code tool has no then-ops — do it in the code");
     for (const e of staticCheck(def.source)) errors.push(`code: ${e}`);
   } else if (def.kind === "recipe") {
     const steps = Array.isArray(def.steps) ? def.steps : [];
     if (!steps.length || steps.length > MAX_STEPS) errors.push(`recipe needs 1–${MAX_STEPS} steps`);
-    const ids = await checkSteps(errors, steps, uses);
+    const ids = await checkSteps(errors, steps, uses, learnerId, assume);
     const then = Array.isArray(def.then) ? def.then : [];
     if (then.length > MAX_THEN) errors.push(`at most ${MAX_THEN} then-ops`);
     const tables = new Map(steps.filter((st) => st?.id).map((st) => [st.id, st.view && DATA_VIEWS[st.view] ? viewTypes(DATA_VIEWS[st.view]) : null]));
@@ -239,7 +245,7 @@ export async function validateDefinition(def, params, { audience = "learner" } =
         cur = union(left, right);
         if (o.left) origin = origins.get(o.left) ?? null;
       }
-      else if (o.op === "write") await checkWrite(errors, o, { origin, last: i === then.length - 1, label: `then[${i}]`, uses });
+      else if (o.op === "write") await checkWrite(errors, o, { origin, last: i === then.length - 1, label: `then[${i}]`, uses, learnerId, assume });
       else if (OUT_OPS.has(o.op)) { cur = flowOp(errors, o, cur, `then[${i}]`); if (o.op === "group") origin = null; }
     }
     for (const st of steps) if (st?.id && !used.has(st.id)) errors.push(`step ${st.id} is never used — remove it`);
@@ -337,7 +343,9 @@ export async function runDefinition(def, input, { learnerId, callCapability }) {
         // Propose, never apply: the rows it would change, by private id.
         const cap = CAPABILITIES[o.cap];
         const targets = (rows || []).filter((r) => r?._ref);
-        write = { cap: o.cap, does: cap.description, targets: targets.slice(0, MAX_WRITE_ROWS).map((r) => ({ ref: r._ref, label: String(cap.item ? cap.item(r) : r._ref).slice(0, 120) })), more: Math.max(0, targets.length - MAX_WRITE_ROWS) };
+        // Its value (a date, a priority) as it will be applied — dates from the learner's today.
+        const args = resolveArgs(o.cap, cap, o.args, new Date().toLocaleDateString("en-CA", { timeZone: TIMEZONE }));
+        write = { cap: o.cap, ...(args ? { args } : {}), does: cap.describe && args ? cap.describe(args) : cap.description, targets: targets.slice(0, MAX_WRITE_ROWS).map((r) => ({ ref: r._ref, label: String(cap.item ? cap.item(r) : r._ref).slice(0, 120) })), more: Math.max(0, targets.length - MAX_WRITE_ROWS) };
         continue;
       }
       else rows = applyOp(rows || [], o);

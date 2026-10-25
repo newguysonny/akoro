@@ -661,7 +661,7 @@ export function setupWebSocket(io) {
           studentAgentName: init.studentAgentName,
           // The client appends this one server-shaped guide message after its
           // switch divider; it must not manufacture a phase or learning state.
-          guideOpeningBlock: init.openingBlocks?.find((block) => block.type === "guide") || null,
+          guideOpeningBlock: init.openingBlocks?.find((block) => block.type === "guide" || block.type === "guide-ideas") || null,
           guideProfile: {
             name:        orchestrator.guideOrchestrator?.guide?.name  || "NaNa Esumai",
             emoji:       orchestrator.guideOrchestrator?.guide?.emoji || "🧠",

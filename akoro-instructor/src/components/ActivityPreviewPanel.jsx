@@ -25,6 +25,7 @@ import DraftVersions, { versionsOf } from './paper/DraftVersions.jsx';
 import { apiPut } from '../services/api.js';
 import BattleDraftPreview from './preview/BattleDraftPreview.jsx';
 import SelfStudyDraftPreview from './preview/SelfStudyDraftPreview.jsx';
+import AssignmentDraftPreview from './preview/AssignmentDraftPreview.jsx';
 import ReviewBattleSettings, { REVIEW_DEFAULT } from './preview/ReviewBattleSettings.jsx';
 import { useBattlesAPI } from '../hooks/useBattlesAPI.js';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
@@ -117,6 +118,9 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
   const [dueLocal, setDueLocal] = useState(null);   // the due date picked here (datetime-local), null = as drafted
   // The review battle an assignment / self study comes with (on by default; Plan: Activity + Review).
   const [review, setReview] = useState(REVIEW_DEFAULT);
+  // The questions that review battle will ask, written on the draft (null = not yet).
+  const [reviewQs, setReviewQs] = useState(null);
+  const [reviewQsBusy, setReviewQsBusy] = useState(false);
   const { createBattle } = useBattlesAPI();
   const { courses } = useCoursesAPI();
 
@@ -229,6 +233,8 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
         scheduled_for: form.repeats ? null : scheduledIso,
         ...(form.repeats ? { repeat: { days: form.days, time: form.repeatTime, tz: localZone(), until: new Date(form.repeatUntil).toISOString() } } : {}),
         ...audienceBody(form.audience),
+        // The draft's own questions (the ones its preview shows): the battle asks exactly those.
+        draft_id: draftId,
       });
       // The invite answers { success, data: { battle_id, invited, … } } — without battle_id the draft was closed
       // with no link to the battle it created.
@@ -248,6 +254,26 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
     const due = draft?.payload?.due_at ? datetimeLocal(draft.payload.due_at) : '';
     if (due) setReview((r) => (r.at ? r : { ...r, at: due }));
   }, [draft?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Seed from the draft; (re)write them when the review is on and the count changed.
+  useEffect(() => { setReviewQs(draft?.payload?.review_questions || null); }, [draft?.id, draft?.payload?.review_questions]);
+  const reviewable = ['assignment', 'self_study'].includes(draft?.type) && draft?.status !== 'assigned';
+  useEffect(() => {
+    if (!reviewable || !review.on || !draftId) return undefined;
+    if (reviewQs?.items?.length && reviewQs.count === review.questions) return undefined;
+    let gone = false;
+    const t = setTimeout(async () => {
+      setReviewQsBusy(true);
+      try {
+        const r = await apiPost(`/api/self-study/drafts/${draftId}/review-questions`, { count: review.questions });
+        const rq = r?.data?.review_questions ?? r?.review_questions;
+        if (!gone && rq) setReviewQs(rq);
+      } catch (e) {
+        if (!gone) setReviewQs((q) => ({ ...(q || {}), count: review.questions, note: e?.message || "Couldn't write the review battle's questions." }));
+      } finally { if (!gone) setReviewQsBusy(false); }
+    }, 700);
+    return () => { gone = true; clearTimeout(t); };
+  }, [reviewable, review.on, review.questions, draftId, reviewQs?.count, reviewQs?.items?.length]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Stable per draft: BattleForm re-seeds itself whenever `initial` changes.
   const battleInitial = useMemo(() => (draft?.type === 'battle' ? battleInitialFrom(draft.payload || {}, draft) : null), [draft]);
@@ -282,6 +308,10 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
   const isLive = draft.type === 'live_course';
   const stages = payload.details?.stages || [];
   const audience = draft.audience || {};
+  const reviewBattle = reviewable ? {
+    on: review.on, title: `Review battle · ${payload.topic || payload.title || draft.title || 'the activity'}`, topic: payload.topic, subject: payload.subject,
+    questions: reviewQs?.items || [], loading: reviewQsBusy, note: reviewQs?.note, players: audience.names || [],
+  } : null;
   const versions = versionsOf(draft);
   const questionsExist = versions.some((v) => (v.paper?.questions || []).length > 0);
   const shown = versions.find((v) => v.n === vSel) || versions.at(-1) || null;
@@ -290,6 +320,8 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
   const needsFigure = !!shown && (shown.paper?.questions || []).some((q) => q?.figure_note && !q.figure);
   const dueValue = dueLocal ?? datetimeLocal(payload.due_at);
   const dueUnset = !isLive && !isBattle && !isJourney && !isTool && !!payload.due_hint && !dueValue;
+  // The review battle's questions are being (re)written: assign once they're on screen.
+  const reviewWriting = !!reviewBattle?.on && (reviewQsBusy || (!reviewQs?.note && reviewQs?.count !== review.questions));
   const assignBlock = needsFigure ? 'Add the missing figure first (Edit on the version).' : dueUnset ? `Set the exact due date for “${payload.due_hint}” first.` : '';
   const downloadPdf = () => {
     // A version with questions downloads as the paper, with its marking scheme after it.
@@ -362,6 +394,39 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
     );
   }
 
+  /* The brief at a glance — shared by the Settings tab and the other activity types. */
+  const renderBrief = () => (
+    <>
+      {/* The brief at a glance: class, subject, topic, due — then who gets it. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0 14px' }}>
+        <Row label="Class">{audience.class_name || <span style={{ color: C.muted2 }}>Not set — choose one in Edit details</span>}</Row>
+        <Row label="Subject">{payload.subject || <span style={{ color: C.muted2 }}>—</span>}</Row>
+        <Row label={isLive ? 'Session focus' : 'Topic'}>{payload.topic}</Row>
+        <Row label="Due">
+          {isLive ? (payload.due_hint || <span style={{ color: C.muted2 }}>—</span>) : (
+            <>
+              <input type="datetime-local" value={dueValue} aria-label="Due date" onChange={(e) => setDueLocal(e.target.value)}
+                style={{ padding: '5px 7px', borderRadius: 8, border: `1px solid ${dueUnset ? RED : C.border}`, fontSize: 12, fontFamily: C.font, color: C.ink, maxWidth: '100%' }} />
+              {payload.due_hint && !dueValue && <div style={{ fontSize: 11, color: RED, marginTop: 3 }}>You said “{payload.due_hint}” — pick the exact date and time.</div>}
+            </>
+          )}
+        </Row>
+      </div>
+      <Row label="Who gets it">
+        {audience.whole_class ? `Everyone in ${audience.class_name || 'the class'}` : (audience.label || '—')}
+        {audience.resolved_count ? <Chip color={GREEN} bg="#DCFCE7">{audience.resolved_count} learner{audience.resolved_count === 1 ? '' : 's'}</Chip> : null}
+        {(audience.names || []).length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
+            {audience.names.map((n) => <Chip key={n} color={C.ink} bg={C.bg}>@{n}</Chip>)}
+            {(audience.resolved_count || 0) > audience.names.length && (
+              <Chip color={C.muted2} bg={C.bg}>+{audience.resolved_count - audience.names.length} more</Chip>
+            )}
+          </div>
+        )}
+      </Row>
+    </>
+  );
+
   return (
     <Frame onClose={onClose} meta={meta} type={draft.type}>
       {/* The AI-prepared banner — honest about who made this and what it is */}
@@ -409,7 +474,27 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
       ) : draft.type === 'self_study' ? (
         <div style={{ flex: 1, overflowY: 'auto', paddingRight: 2 }}>
           <SelfStudyDraftPreview draft={draft} audience={audience} dueLocal={dueValue} onDue={setDueLocal} dueHint={payload.due_hint}
-            review={review} onReview={setReview} onEditPlan={() => setPhase('editing')} />
+            review={review} onReview={setReview} onEditPlan={() => setPhase('editing')} battle={reviewBattle} />
+        </div>
+      ) : draft.type === 'assignment' && versions.length > 0 ? (
+        <div style={{ flex: 1, overflowY: 'auto', paddingRight: 2 }}>
+          <AssignmentDraftPreview version={shown} title={payload.title || draft.title} topic={payload.topic} battle={reviewBattle}
+            settings={(
+              <div>
+                {renderBrief()}
+                <Row label="Instructions to learners">{shown?.paper?.instructions || payload.instructions || <span style={{ color: C.muted2 }}>None</span>}</Row>
+                <div style={{ marginBottom: 12, borderTop: `1px solid ${C.border}` }}>
+                  <ReviewBattleSettings value={review} onChange={setReview} dueLocal={dueValue} defaultOpen={false} />
+                </div>
+              </div>
+            )}
+            questions={(
+              <div style={{ marginBottom: 14 }}>
+                <DraftVersions draft={draft} selected={shown?.n} onSelect={setVSel}
+                  onSave={saveVersion} onRetry={retryVersion} busy={vBusy}
+                  editing={vEditing} setEditing={setVEditing} />
+              </div>
+            )} />
         </div>
       ) : isJourney ? (
         <div style={{ flex: 1, overflowY: 'auto', paddingRight: 2 }}>
@@ -441,33 +526,7 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
           {(payload.history || []).length > 1 && (
             <HistoryTabs history={payload.history} current={payload.history_current} busy={vBusy} onPick={restoreRound} />
           )}
-          {/* The brief at a glance: class, subject, topic, due — then who gets it. */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0 14px' }}>
-            <Row label="Class">{audience.class_name || <span style={{ color: C.muted2 }}>Not set — choose one in Edit details</span>}</Row>
-            <Row label="Subject">{payload.subject || <span style={{ color: C.muted2 }}>—</span>}</Row>
-            <Row label={isLive ? 'Session focus' : 'Topic'}>{payload.topic}</Row>
-            <Row label="Due">
-              {isLive ? (payload.due_hint || <span style={{ color: C.muted2 }}>—</span>) : (
-                <>
-                  <input type="datetime-local" value={dueValue} aria-label="Due date" onChange={(e) => setDueLocal(e.target.value)}
-                    style={{ padding: '5px 7px', borderRadius: 8, border: `1px solid ${dueUnset ? RED : C.border}`, fontSize: 12, fontFamily: C.font, color: C.ink, maxWidth: '100%' }} />
-                  {payload.due_hint && !dueValue && <div style={{ fontSize: 11, color: RED, marginTop: 3 }}>You said “{payload.due_hint}” — pick the exact date and time.</div>}
-                </>
-              )}
-            </Row>
-          </div>
-          <Row label="Who gets it">
-            {audience.whole_class ? `Everyone in ${audience.class_name || 'the class'}` : (audience.label || '—')}
-            {audience.resolved_count ? <Chip color={GREEN} bg="#DCFCE7">{audience.resolved_count} learner{audience.resolved_count === 1 ? '' : 's'}</Chip> : null}
-            {(audience.names || []).length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
-                {audience.names.map((n) => <Chip key={n} color={C.ink} bg={C.bg}>@{n}</Chip>)}
-                {(audience.resolved_count || 0) > audience.names.length && (
-                  <Chip color={C.muted2} bg={C.bg}>+{audience.resolved_count - audience.names.length} more</Chip>
-                )}
-              </div>
-            )}
-          </Row>
+          {renderBrief()}
           {!versions.length && <Row label="Instructions to learners">{payload.instructions || <span style={{ color: C.muted2 }}>None</span>}</Row>}
           {versions.length > 0 && (
             <div style={{ marginBottom: 14 }}>
@@ -537,10 +596,11 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
               {isTool ? 'Saves' : 'Assigns'} <b style={{ color: C.ink }}>Version {shown.n}</b>{!isTool && audience.label ? <> to {audience.label}</> : null}
             </span>
           )}
-          <button onClick={() => assign(assignOverrides())} disabled={phase === 'assigning' || vEditing || (shown && shown.status !== 'ready') || !!assignBlock}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 11, border: 'none', background: phase === 'assigning' || assignBlock ? C.border : C.hero, color: '#fff', fontSize: 12.5, fontWeight: 900, cursor: phase === 'assigning' ? 'wait' : assignBlock ? 'not-allowed' : 'pointer', fontFamily: C.font }}>
-            {phase === 'assigning' ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti={isTool ? 'ti-books' : 'ti-send'} size={13} />}
-            {phase === 'assigning' ? (isTool ? 'Saving…' : 'Assigning…') : isTool ? 'Save to Library' : 'Assign'}
+          <button onClick={() => assign(assignOverrides())} disabled={phase === 'assigning' || vEditing || (shown && shown.status !== 'ready') || !!assignBlock || reviewWriting}
+            data-review-writing={reviewWriting ? '' : undefined}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 11, border: 'none', background: phase === 'assigning' || assignBlock || reviewWriting ? C.border : C.hero, color: '#fff', fontSize: 12.5, fontWeight: 900, cursor: phase === 'assigning' || reviewWriting ? 'wait' : assignBlock ? 'not-allowed' : 'pointer', fontFamily: C.font }}>
+            {phase === 'assigning' || reviewWriting ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti={isTool ? 'ti-books' : 'ti-send'} size={13} />}
+            {phase === 'assigning' ? (isTool ? 'Saving…' : 'Assigning…') : reviewWriting ? 'Writing review questions…' : isTool ? 'Save to Library' : 'Assign'}
           </button>
         </div>
       )}

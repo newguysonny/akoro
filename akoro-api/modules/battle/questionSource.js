@@ -290,6 +290,73 @@ export async function generate({
  * Inserts nothing until it knows what it has, so a battle is never created with
  * a partial set that silently plays short.
  */
+/**
+ * collectQuestions — the same choice as buildQuestions (archive first, AI for
+ * the shortfall), but placed nowhere: a battle DRAFT shows the real questions
+ * it will ask, and the battle made from it places exactly these (`preset`).
+ */
+export async function collectQuestions({
+  source = "auto", total = 15, subject, topic, difficulty = "intermediate", classLabel,
+  courseId = null, userId, basedOn = [], have = [],
+  // Only bank questions about the topic (a draft on "fractions" shouldn't open with simple interest); AI writes the rest on it.
+  onTopic = false,
+}) {
+  const bankOf = courseId
+    ? () => fromCourseBank({ courseId, topic, subject, difficulty, limit: total })
+    : () => fromPastPapers({ subject, difficulty, limit: total });
+
+  let questions = [...have];
+  let charged = 0;
+  let generated = 0;
+  const seen = new Set(questions.map(dedupeKey));
+  const add = (q) => { const k = dedupeKey(q); if (questions.length >= total || seen.has(k)) return; seen.add(k); questions.push(q); };
+
+  const about = onTopic ? topicMatcher(topic) : null;
+  if (source !== "ai" && questions.length < total) for (const q of await bankOf()) if (!about || about(q)) add(q);
+
+  if (source !== "bank" && questions.length < total) {
+    // Even when generating everything, pull a few real ones purely as style
+    // exemplars — that is what makes the output look like the bank rather than
+    // like a chatbot.
+    const exemplars = questions.length
+      ? questions
+      : await fromPastPapers({ subject, difficulty, limit: 4 });
+
+    // Two rounds at most: a round that comes back short (answers that didn't resolve,
+    // duplicates) is topped up once rather than leaving the set short.
+    const before = questions.length;
+    for (let round = 0; round < 2 && questions.length < total; round++) {
+      const res = await generate({
+        subject, topic, difficulty, count: total - questions.length, classLabel, userId,
+        exemplars: source === "ai" ? exemplars : questions,
+        ...(basedOn?.length ? { basedOn } : {}),
+      });
+      charged += res.charged || 0;
+      const had = questions.length;
+      for (const q of res.questions) add(q);
+      if (questions.length === had) break;   // nothing new: don't spend again
+    }
+    generated = questions.length - before;
+  }
+  return { questions: questions.slice(0, total), charged, generated };
+}
+
+const TOPIC_STOP = new Set(["and", "the", "of", "for", "with", "basic", "introduction", "intro", "simple", "general", "topic"]);
+/** PURE: does a question belong to this topic? Its own topic or its stem shares a topic word ("fraction" ~ "fractions"). No topic → everything. */
+export function topicMatcher(topic) {
+  const ws = String(topic || "").toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !TOPIC_STOP.has(w)).map((w) => w.replace(/(ies|es|s)$/, ""));
+  if (!ws.length) return () => true;
+  return (q) => {
+    const hay = `${q.topic || ""} ${q.stem || ""}`.toLowerCase();
+    return ws.some((w) => hay.includes(w));
+  };
+}
+
+/** PURE: questions a draft saved, back through the same gate as every source (a bad key is dropped). */
+export function presetQuestions(list, fallbackTopic = null) {
+  return (Array.isArray(list) ? list : []).map((q) => normalise({ ...q, stem: q.stem ?? q.text, answer: q.options?.[q.correctIndex]?.label, correct_answer_index: q.correctIndex }, fallbackTopic)).filter(Boolean);
+}
+
 export async function buildQuestions({
   battleId, source = "auto", total = 15,
   subject, topic, difficulty = "intermediate", classLabel,
@@ -300,51 +367,20 @@ export async function buildQuestions({
   durationSeconds = null,
   // The learner's own past-paper questions to base generated ones on (§7.17.3).
   basedOn = [],
+  // A draft's questions (collectQuestions): placed as they are, in order; topped up only if short.
+  preset = null,
 }) {
-  const bankOf = courseId
-    ? () => fromCourseBank({ courseId, topic, subject, difficulty, limit: total })
-    : () => fromPastPapers({ subject, difficulty, limit: total });
-
-  let questions = [];
-  let charged = 0;
-  let generated = 0;
-
-  if (source !== "ai") questions = await bankOf();
-
-  if (source !== "bank" && questions.length < total) {
-    // Even when generating everything, pull a few real ones purely as style
-    // exemplars — that is what makes the output look like the bank rather than
-    // like a chatbot.
-    const exemplars = questions.length
-      ? questions
-      : await fromPastPapers({ subject, difficulty, limit: 4 });
-
-    const need = total - questions.length;
-    const res = await generate({
-      subject, topic, difficulty, count: need, classLabel, userId,
-      exemplars: source === "ai" ? exemplars : questions,
-      ...(basedOn?.length ? { basedOn } : {}),
-    });
-    charged = res.charged;
-    generated = res.questions.length;
-
-    const seen = new Set(questions.map(dedupeKey));
-    for (const q of res.questions) {
-      if (questions.length >= total) break;
-      const k = dedupeKey(q);
-      if (seen.has(k)) continue;
-      seen.add(k);
-      questions.push(q);
-    }
-  }
-
-  questions = questions.slice(0, total);
+  const have = presetQuestions(preset, topic);
+  const { questions, charged, generated } = have.length >= total
+    ? { questions: have.slice(0, total), charged: 0, generated: 0 }
+    : await collectQuestions({ source, total, subject, topic, difficulty, classLabel, courseId, userId, basedOn, have });
   const secs = perQuestionSeconds(durationSeconds, questions.length);
   if (questions.length) {
     await db.from("battle_questions").insert(questions.map((q, i) => row(battleId, i + 1, q, secs)));
   }
   return {
     placed: questions.length, fromBank: questions.length - generated, generated, charged,
+    ...(have.length ? { fromDraft: Math.min(have.length, questions.length) } : {}),
     // So the caller can correct the battle's stored duration when fewer
     // questions were placed than asked for, and report the real pace.
     secondsPerQuestion: secs,

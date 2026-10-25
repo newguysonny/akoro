@@ -78,7 +78,7 @@ test("api: /api/programmes is the admin-only CRUD the section drives", () => {
     '"/overview"', '"/programs"', '"/programs/:id"', 'router.post(`/programs/:id/${status}`',
     '"/programs/:id/sections"', '"/programs/:id/sections/reorder"', '"/sections/:id"',
     '"/courses"', '"/courses/:id"', '"/courses/:id/move"',
-    '"/materials"', '"/materials/:id"', '"/materials/:id/move"', '"/log"',
+    '"/materials"', '"/materials/:id"', '"/materials/:id/move"',
   ]) {
     assert.ok(routes.includes(ep), `endpoint ${ep}`);
   }

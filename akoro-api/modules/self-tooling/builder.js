@@ -45,7 +45,7 @@ Example — weak topics in subjects where past-question accuracy is under $maxAc
 {"definition":{"kind":"recipe","steps":[{"id":"weak","view":"my_weak_topics","where":[{"field":"confidence","op":"lt","value":0.5}]},{"id":"pq","view":"my_past_questions"}],
  "then":[{"op":"from","ref":"pq"},{"op":"group","by":["subject"],"sum":["attempted","correct"]},{"op":"compute","as":"accuracy","fn":"divide","a":"sum_correct","b":"sum_attempted"},{"op":"filter","where":[{"field":"accuracy","op":"lt","value":"$maxAccuracy"}]},{"op":"save","as":"acc"},
  {"op":"from","ref":"weak"},{"op":"join","right":"acc","on":["subject"]},{"op":"sort","by":"confidence","dir":"asc"},{"op":"pick","fields":["subject","topic","confidence","accuracy"]}]},"samples":[{"maxAccuracy":0.6},{"maxAccuracy":0.9}]}
-Changing data (only when "writes" are listed and the goal asks to DO something, e.g. "mark my overdue tasks done"): end the recipe with {"op":"write","cap":"<write name>"} on rows still from its onRowsOf view (filter/sort/limit/pick them — never group). It changes NOTHING when the tool runs: the learner is shown exactly those rows and confirms. Pick the rows precisely (filter by the goal's conditions); a write never touches rows the filter didn't keep.
+Changing data (only when "writes" are listed and the goal asks to DO something, e.g. "mark my overdue tasks done"): end the recipe with {"op":"write","cap":"<write name>"} on rows still from its onRowsOf view (filter/sort/limit/pick them — never group). A write that lists "args" needs them: {"op":"write","cap":"<write name>","args":{…}} — the value the goal gives (a new due date, a priority); use "$paramName" if the learner should choose it each time. It changes NOTHING when the tool runs: the learner is shown exactly those rows and confirms. Pick the rows precisely (filter by the goal's conditions); a write never touches rows the filter didn't keep.
 How rows flow: "from" makes a step's (or saved table's) rows current; ops change the current rows; "save" names them; "join" joins the current rows with "right".
 Capability steps: "rows" is the path to the list inside its result (see "returns", e.g. "bySubject" for "bySubject[].x").`;
 
@@ -73,7 +73,8 @@ export function registrySlice(lookup, hint = {}, audience = "learner") {
   return {
     views: [...viewNames].map((n) => describeView(n, DATA_VIEWS[n])),
     capabilities: [...capNames].filter((n) => CAPABILITIES[n]?.kind === "read").map((n) => ({ name: n, does: CAPABILITIES[n].description, returns: CAPABILITIES[n].returns })),
-    ...(writeNames.length ? { writes: writeNames.map((n) => ({ name: n, does: CAPABILITIES[n].description, onRowsOf: CAPABILITIES[n].target })) } : {}),
+    ...(writeNames.length ? { writes: writeNames.map((n) => ({ name: n, does: CAPABILITIES[n].description, onRowsOf: CAPABILITIES[n].target,
+      ...(CAPABILITIES[n].args ? { args: Object.fromEntries(Object.entries(CAPABILITIES[n].args).map(([k, t]) => [k, Array.isArray(t) ? `one of ${t.join(" | ")}` : 'YYYY-MM-DD | "today" | "tomorrow" | "+3d" | a weekday like "monday"'])) } : {}) })) } : {}),
   };
 }
 
@@ -82,11 +83,14 @@ export function registrySlice(lookup, hint = {}, audience = "learner") {
  * previous attempt's validation/verification errors for one repair.
  * → { definition?, samples?, notExpressible?, raw }
  */
-export async function buildDefinition({ stage, goal, params, slice, feedback = null, learnerId, platformPays = false }) {
+export async function buildDefinition({ stage, goal, params, slice, feedback = null, learnerId, platformPays = false, approved = [] }) {
   const messages = [
     { role: "system", content: `${COMMON}\n\n${FORMATS[stage] || RECIPE_FORMAT}` },
     { role: "user", content: JSON.stringify({ goal, params: params || {}, available: slice }) },
   ];
+  // A resume: these capabilities were approved FOR this goal (by an admin, or the learner) — they are what answers it.
+  // `approved`: one line per capability, saying how to use it (pipeline.howToUse).
+  if (approved.length) messages.push({ role: "user", content: `This was approved for exactly this goal — build it with what was approved: ${approved.join("; ")}. Don't answer notExpressible.` });
   if (feedback) messages.push({ role: "user", content: `Your previous attempt failed: ${feedback}\nFix it and answer again with ONE JSON object.` });
   const resp = await openai.chat.completions.create({
     model: stage === "code" ? CODE_MODEL() : BUILDER_MODEL(), temperature: 0, max_tokens: stage === "code" ? 2000 : 1200,
@@ -96,6 +100,6 @@ export async function buildDefinition({ stage, goal, params, slice, feedback = n
   });
   const raw = resp.choices?.[0]?.message?.content || "";
   let parsed = null;
-  try { parsed = JSON.parse(raw); } catch { return { raw, notExpressible: null, error: "the builder didn't answer with JSON" }; }
+  try { parsed = JSON.parse(raw); } catch { return { raw, notExpressible: null, error: `the builder didn't answer with JSON (${raw.length} chars: ${raw.slice(0, 60).replace(/\s+/g, " ")}…${raw.slice(-40).replace(/\s+/g, " ")})` }; }
   return { raw, definition: parsed.definition || null, samples: Array.isArray(parsed.samples) ? parsed.samples.slice(0, 3) : [], notExpressible: parsed.notExpressible || null };
 }

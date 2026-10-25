@@ -274,3 +274,38 @@ test("revisePaper: marks alone change only the marks — every question word for
   assert.deepEqual(out.changes, { 2: "changed" });
   assert.equal(base.questions[2].max_points, undefined);   // the base version is untouched
 });
+
+test("a question added to a named part stays in that part (at its end), whatever its kind", async () => {
+  const { applyRevision, targetPart } = await import("./questionPaper.js");
+  assert.equal(targetPart("Add a diagram question to Part A"), "A");
+  assert.equal(targetPart("put two more questions in section b"), "B");
+  assert.equal(targetPart("Add a question with a diagram"), null);
+  const base = {
+    instructions: "Answer all questions.",
+    sections: [{ title: "Part A – Multiple Choice" }, { title: "Part B – Short Answers" }],
+    questions: [
+      { q: "MCQ one?", options: ["a", "b", "c", "d"], correct: 0, section: 0 },
+      { q: "MCQ two?", options: ["a", "b", "c", "d"], correct: 1, section: 0 },
+      { q: "Explain evaporation.", section: 1 },
+    ],
+  };
+  const json = { questions: [{ from: 0 }, { from: 1 }, { from: 2 }, { text: "Name the labelled parts of the leaf.", format: "label", labels: ["P", "Q"], label_answers: [{ label: "P", answer: "vein" }, { label: "Q", answer: "stoma" }], figure_note: "A leaf with P on a vein and Q on a stoma." }] };
+  const pinned = applyRevision(base, json, { pinPart: "A" });
+  const partOf = (paper, i) => paper.sections[paper.questions[i].section].title;
+  assert.deepEqual(pinned.paper.questions.map((q) => q.q), ["MCQ one?", "MCQ two?", "Name the labelled parts of the leaf.", "Explain evaporation."]);
+  assert.match(partOf(pinned.paper, 2), /^Part A/);
+  assert.equal(pinned.paper.sections.length, 2);
+  assert.equal(pinned.changes[2], "new");
+  assert.ok(pinned.paper.questions.every((q) => !("_part" in q)));
+  // No part named: the template's own order (a labelling question gets the Diagrams part).
+  const free = applyRevision(base, json);
+  assert.match(free.paper.sections.at(-1).title, /Diagrams/);
+});
+
+test("withInstructionLine: the paper's instructions kept, the teacher's line added once", async () => {
+  const { withInstructionLine } = await import("./questionPaper.js");
+  assert.equal(withInstructionLine(["Answer all questions.", null], "Do not spend too much time on one question."), "Answer all questions. Do not spend too much time on one question.");
+  assert.equal(withInstructionLine(["Answer all questions", "Answer all questions"], "Show your working"), "Answer all questions. Show your working");
+  assert.equal(withInstructionLine(["Answer all questions. Show your working."], "show your working"), "Answer all questions. Show your working.");
+  assert.equal(withInstructionLine([null, ""], "Use a pencil."), "Use a pencil.");
+});

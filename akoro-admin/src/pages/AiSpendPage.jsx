@@ -18,6 +18,7 @@ import { PageLayout } from '../components/Layout.jsx';
 import { Skeleton, Toast } from '../components/Primitives.jsx';
 import { apiGet } from '../services/api.js';
 import { StatCard } from './analytics-page/parts.jsx';
+import EmbeddingsPanel from './EmbeddingsPanel.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../constants.js';
 
 const WINDOWS = [
@@ -239,6 +240,9 @@ export default function AiSpendPage() {
           />
         </Panel>
       )}
+
+      {/* ── Search embeddings: the model and the switch ─────────────────── */}
+      <EmbeddingsPanel />
 
       {data && !loading && (
         <p style={{ color: MUTED2, fontFamily: FONT, fontSize: 12, marginTop: 18 }}>

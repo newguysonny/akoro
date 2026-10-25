@@ -1,8 +1,8 @@
 // The scenario registry. Add a scenario: export it from an area file and list it here.
-import { healthBuild, toolsCatalogue, r2Live, embeddingsLive, embeddingsCompare, searchTextFallback } from "./smoke.js";
+import { healthBuild, toolsCatalogue, sessionTokensOnly, r2Live, embeddingsLive, embeddingsCompare, searchTextFallback } from "./smoke.js";
 import { scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity, historyPages } from "./chat.js";
 import { followUpDeliverIntoChat, taskDueInMinutes, noResidue, sweepStale } from "./writes.js";
-import { viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds } from "./selftool.js";
+import { viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, permissionRequestIsReal, toolJourney, deleteTasks } from "./selftool.js";
 import { privacyEdges } from "./network.js";
 import { rateLimitCountedOnce, battleEntryGates } from "./platform.js";
 import { realUserRun } from "./realuser.js";
@@ -13,7 +13,7 @@ import { bridgePersists } from "./teaching.js";
 import { conceptCurve } from "./decay.js";
 import { suggestionsAnswer, suggestionsSurviveRefresh, studyToolRouting, untaughtFlashcards } from "./suggestions.js";
 import { tailoredChips } from "./tailored.js";
-import { chatUploadFiled, pastPaperStructured, sortOwnFolders } from "./materials.js";
+import { chatUploadFiled, pastPaperStructured, sortOwnFolders, materialsMultiFileDiag } from "./materials.js";
 import { readyProposal, goalWork, ideasFlow, consentsQuietBudget, instructorProactive } from "./proactiveP13.js";
 import { voiceSpeak, voiceLive } from "./voice.js";
 import { paperStructured, chatToSubmissionScenarios } from "./activities.js";
@@ -23,7 +23,8 @@ import { quietLearningPass } from "./quietLearning.js";
 import { plannerRichGather } from "./richGather.js";
 import { proactiveInChat } from "./proactiveChat.js";
 import { readerBackend } from "./reader.js";
-import { socketSession } from "./socket.js";
+import { socketSession, guideIdeasSession } from "./socket.js";
+import { SELFTOOL_CHANGES } from "./selftoolChanges.js";
 import { courseOneRecord, sessionReminders } from "./courses.js";
 import { teachingToolRouting, teachingToolRuns, activityToolRouting, draftLifecycle, routineLifecycle, toolsAllOpen } from "./instructorTools.js";
 import { battleFromChat, battleReviewFromChat, selfStudyFull, assignmentPreviewAssign, journeyBattleStage } from "./instructorActivities.js";
@@ -35,16 +36,16 @@ import { battleChatScenarios } from "./battleChat.js";
 import { activityReviewRuns, activityReviewPlay } from "./activityReview.js";
 import { activityChatScenarios } from "./activityChat.js";
 
-const ALL = [healthBuild, toolsCatalogue, r2Live, embeddingsLive, embeddingsCompare, searchTextFallback, scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity,
+const ALL = [healthBuild, toolsCatalogue, sessionTokensOnly, r2Live, embeddingsLive, embeddingsCompare, searchTextFallback, scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity,
   privacyEdges, rateLimitCountedOnce, battleEntryGates, followUpDeliverIntoChat, taskDueInMinutes, noResidue,
-  viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, suggestionsSurviveRefresh, studyToolRouting, untaughtFlashcards, tailoredChips, chatUploadFiled, pastPaperStructured, sortOwnFolders, readyProposal, goalWork, ideasFlow, consentsQuietBudget, instructorProactive, voiceSpeak, voiceLive, sweepStale, agentCheckBattle, agentCheckStop, classSyllabusFirst, historyPages, workflowMirror, agentWakes, replaceAndCancel, teachingHandoff, eventStream, paperStructured, ...chatToSubmissionScenarios, authoringVersionsParts, authoringDiagramsEdits, inboxOneList, quietLearningPass, plannerRichGather, proactiveInChat, readerBackend, socketSession, courseOneRecord,
+  viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, suggestionsSurviveRefresh, studyToolRouting, untaughtFlashcards, tailoredChips, chatUploadFiled, pastPaperStructured, sortOwnFolders, materialsMultiFileDiag, readyProposal, goalWork, ideasFlow, consentsQuietBudget, instructorProactive, voiceSpeak, voiceLive, sweepStale, agentCheckBattle, agentCheckStop, classSyllabusFirst, historyPages, workflowMirror, agentWakes, replaceAndCancel, teachingHandoff, eventStream, paperStructured, ...chatToSubmissionScenarios, authoringVersionsParts, authoringDiagramsEdits, inboxOneList, quietLearningPass, plannerRichGather, proactiveInChat, readerBackend, socketSession, guideIdeasSession, courseOneRecord,
   teachingToolRouting, teachingToolRuns, activityToolRouting, draftLifecycle, routineLifecycle,
-  battleFromChat, battleReviewFromChat, selfStudyFull, assignmentPreviewAssign, journeyBattleStage, ...teachingToolScenarios, teachingToolVersions, teachingToolTry, toolsAllOpen, deferredRelease, sessionReminders, guideReviewRuns, battleSeriesRuns, ...battleChatScenarios, activityReviewRuns, activityReviewPlay, ...activityChatScenarios];
+  battleFromChat, battleReviewFromChat, selfStudyFull, assignmentPreviewAssign, journeyBattleStage, ...teachingToolScenarios, teachingToolVersions, teachingToolTry, toolsAllOpen, deferredRelease, sessionReminders, guideReviewRuns, battleSeriesRuns, ...battleChatScenarios, activityReviewRuns, activityReviewPlay, ...activityChatScenarios, permissionRequestIsReal, toolJourney, deleteTasks, ...SELFTOOL_CHANGES];
 
 export const SCENARIOS = Object.fromEntries(ALL.map((s) => [s.name, s]));
 
 export const SUITES = {
-  smoke: ["smoke.health_build", "smoke.tools_catalogue", "ratelimit.counted_once"],
+  smoke: ["smoke.health_build", "smoke.tools_catalogue", "smoke.session_tokens_only", "ratelimit.counted_once"],
   storage: ["smoke.r2_live"],
   embeddings: ["smoke.embeddings_live"],
   "embeddings-compare": ["smoke.embeddings_compare"],
@@ -70,7 +71,7 @@ export const SUITES = {
   redis: ["ops.deferred_release"],
   // Reviews with the teaching guide (and, next, recurring battles).
   "battle-model": ["battles.guide_review", "battles.recurring", "activity.review_battle", "activity.review_battle_play"],
-  "activity-chat": ["activity_chat.ask_missing", "activity_chat.battle_self_study_ask", "activity_chat.assignment_versions", "activity_chat.assignment_assign", "activity_chat.self_study_assign"],
+  "activity-chat": ["activity_chat.ask_missing", "activity_chat.battle_self_study_ask", "activity_chat.switch_type_asks", "activity_chat.assignment_parts_instructions", "activity_chat.assignment_versions", "activity_chat.assignment_assign", "activity_chat.self_study_assign"],
   "battle-chat": ["battles.chat_network", "battles.chat_posts", "battles.chat_class", "battles.chat_instructor"],
   curriculum: ["curriculum.syllabus_coverage"],
   // The instructor's agent tools from chat: teaching tools (Library) and activity tools (drafts, routines, results).
@@ -93,7 +94,7 @@ export const SUITES = {
   "self-tooling": ["selftool.views_match_schema", "selftool.schema_lookup_safe", "selftool.create_spec_matches_db", "selftool.create_rejects_forbidden",
     "selftool.agent_builds_tool", "selftool.agent_uses_schema_lookup", "selftool.agent_escalates", "selftool.sandbox_contained", "selftool.code_tool",
     "selftool.instructor_scope", "selftool.instructor_tool_matches_db", "selftool.instructor_agent_builds"],
-  "self-tooling-writes": ["selftool.register_reuse_disable", "selftool.escalate_and_resume", "selftool.promote_platform", "selftool.write_confirm", "writes.no_residue"],
+  "self-tooling-writes": ["selftool.register_reuse_disable", "selftool.escalate_and_resume", "selftool.tool_journey", "selftool.promote_platform", "selftool.write_confirm", "selftool.delete_tasks", "selftool.change_tasks_reschedule", "selftool.change_tasks_priority", "selftool.change_goals", "selftool.change_inbox_read", "selftool.change_chats_delete", "selftool.change_unsupported", "writes.no_residue"],
   // Self-tooling scenarios that need the feature on stay in their own suite
   // (BLOCKED while the flag is off); the schema check runs everywhere.
   // One dry build (create_spec_matches_db) exercises the whole create_tool

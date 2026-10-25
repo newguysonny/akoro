@@ -18,6 +18,7 @@
  * clarification instead of guessing.
  */
 
+import { withInstructionLine } from "./questionPaper.js";
 import { normalizeStages } from "./journeyStages.js";
 import { saveToolDraft, reviseToolDraft, retryToolVersion } from "../teaching/toolDrafts.js";
 import { cleanReview, reviewInstruction, scheduleActivityReview } from "./activityReview.js";
@@ -336,6 +337,8 @@ export async function createActivityDraft({ instructor, input, sessionId = null,
       } : null,
       total_questions: Number.isFinite(total) && total >= 5 ? Math.min(30, total) : null,
     };
+    // Its real questions, now: the preview shows the ones the battle (or the study review) asks.
+    Object.assign(payload.details, await draftBattleQuestions(instructor, payload));
     if (repeat) audienceLabel += " · repeats";
     else if (scheduledAt || payload.details.scheduled_hint) audienceLabel += ` · ${payload.details.scheduled_hint || "scheduled"}`;
   } else if (type === "multi_stage") {
@@ -446,6 +449,60 @@ export async function listActivityDrafts(instructor) {
 }
 
 /** Human edits before assign — the preview's Edit flow saves here. */
+/**
+ * A battle draft's real questions — archive first, AI tops up, as the battle
+ * would draw them (battle/questionSource.js collectQuestions). The battle made
+ * from the draft places exactly these (battle routes: draft_id). A failure (no
+ * coins, nothing on the topic) leaves none and says why; the battle then draws
+ * its own when it's created, as before.
+ */
+async function draftBattleQuestions(instructor, payload, keep = []) {
+  const d = payload.details || {};
+  const total = d.total_questions || 10;
+  try {
+    const { collectQuestions, presetQuestions } = await import("../battle/questionSource.js");
+    const topic = d.topic || payload.topic || null;
+    const out = await Promise.race([
+      // `keep`: questions already on the draft — kept first, in order; only the rest are written.
+      collectQuestions({ source: "auto", total, subject: payload.subject || "General", topic,
+        difficulty: payload.difficulty || "intermediate", userId: instructor.id, onTopic: true, have: presetQuestions(keep, topic) }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("took too long")), 60_000)),
+    ]);
+    const questions = (out.questions || []).map((q) => ({ stem: q.stem, options: q.options, correctIndex: q.correctIndex, topic: q.topic || null,
+      ...(q.explanation ? { explanation: q.explanation } : {}), ...(q.exam ? { exam: q.exam, year: q.year ?? null } : {}) }));
+    return { questions, questions_note: questions.length < 5 ? `Only ${questions.length} questions could be prepared — the battle tops up the rest when it's created.` : null };
+  } catch (e) {
+    return { questions: [], questions_note: /coin/i.test(String(e?.message)) ? "Not enough coins to write the questions yet — top up, and they're written when the battle is created." : "The questions couldn't be prepared right now — the battle draws its own when it's created." };
+  }
+}
+
+/**
+ * The review battle's questions for a self study or assignment draft — written
+ * when the instructor turns the review on (or changes how many), on the
+ * activity's topic and concepts, the same way a battle draft's are. Saved on
+ * the draft (payload.review_questions); assigning it carries them into the
+ * review battle, which asks exactly these.
+ */
+export async function prepareReviewQuestions(instructor, id, count) {
+  const draft = await getActivityDraft(instructor, id);
+  if (!["self_study", "assignment", "project"].includes(draft.type)) throw invalid("Only a self study or an assignment has a review battle", 400);
+  if (draft.status !== "draft") throw invalid("Only pending drafts can be changed", 409);
+  const { REVIEW_LIMITS } = await import("./activityReview.js");
+  const { reviewFocus } = await import("../battle/guideReview.js");
+  const p = draft.payload || {};
+  const n = Math.min(REVIEW_LIMITS.MAX_Q, Math.max(REVIEW_LIMITS.MIN_Q, Math.round(Number(count) || REVIEW_LIMITS.DEFAULT_Q)));
+  const topic = reviewFocus(p.topic || draft.title, Array.isArray(p.subtopics) ? p.subtopics : []);
+  // The questions the instructor has already seen stay: fewer → the first n (the rest kept
+  // aside for going back up), more → those plus only the extra ones written. A new topic starts over.
+  const was = p.review_questions?.topic === topic ? [...(p.review_questions.items || []), ...(p.review_questions.spare || [])] : [];
+  const out = was.length >= n ? { questions: was, questions_note: null }
+    : await draftBattleQuestions(instructor, { subject: p.subject, difficulty: p.difficulty, details: { topic, total_questions: n } }, was);
+  const all = out.questions.length ? out.questions : was;
+  const review_questions = { count: n, topic, items: all.slice(0, n), spare: all.slice(n), note: out.questions_note, at: new Date().toISOString() };
+  await updateDraftPayload(draft.id, (pp, row) => (row.status !== "draft" ? null : { ...pp, review_questions }));
+  return review_questions;
+}
+
 export async function updateActivityDraft(instructor, id, patch) {
   const draft = await getActivityDraft(instructor, id);
   if (draft.status !== "draft") throw invalid("Only pending drafts can be edited", 409);
@@ -556,6 +613,13 @@ export async function reviseDraftPayload(instructor, id, changes) {
   if (title) { payload.title = title; applied.push("title"); }
   const instructions = asText(c.instructions, 2000);
   if (instructions !== undefined) { payload.instructions = instructions || null; applied.push("instructions"); }
+  // "Add to the instructions: …" keeps what is there (an assignment's are its paper's) and adds the line.
+  const addLine = asText(c.add_instructions, 600);
+  if (addLine) {
+    // An assignment's start from its paper's own ("Answer all questions.") plus any the draft carries.
+    payload.instructions = withInstructionLine([latestReady(payload)?.paper?.instructions, payload.instructions], addLine);
+    if (!applied.includes("instructions")) applied.push("instructions");
+  }
   if (["easy", "intermediate", "hard"].includes(c.difficulty) && c.difficulty !== payload.difficulty) {
     payload.difficulty = c.difficulty; applied.push("difficulty");
   }
@@ -587,7 +651,12 @@ export async function reviseDraftPayload(instructor, id, changes) {
     const note = asText(c.note, 600);
     if (note !== undefined) { payload.details = { ...payload.details, note: note || null }; applied.push("note"); }
     const topic = asText(c.topic, 200);
-    if (topic) { payload.topic = topic; applied.push("topic"); }
+    if (topic) { payload.topic = topic; payload.details = { ...payload.details, topic }; applied.push("topic"); }
+    // A new topic or difficulty: new questions (the old ones were written for the old one).
+    if (topic || applied.includes("difficulty")) {
+      payload.details = { ...payload.details, ...(await draftBattleQuestions(instructor, payload)) };
+      applied.push("questions");
+    }
   } else if (type === "multi_stage") {
     if (Array.isArray(c.stages)) {
       const stages = normalizeStages(c.stages, payload.subject);
@@ -640,6 +709,10 @@ export async function reviseDraftPayload(instructor, id, changes) {
       ...Object.fromEntries(CHANGED.filter((k) => k in payload && payload[k] !== draft.payload?.[k]).map((k) => [k, payload[k]])),
       ...(newVersionN ? { versions: [...versionsOf(p), payload.versions.at(-1)] } : {}),
     };
+    // An assignment's instructions are its paper's: every version shows (and assigns) the same ones.
+    if (type === "assignment" && applied.includes("instructions")) {
+      next.versions = versionsOf(next).map((v) => (v.paper ? { ...v, paper: { ...v.paper, instructions: payload.instructions || "" } } : v));
+    }
     // Every other activity keeps its rounds too: what it was, and what each follow-up made it.
     return type === "assignment" ? next : withHistory(p, next, String(c.changeNote || applied.join(", ")));
   });
@@ -758,6 +831,9 @@ export async function assignActivityDraft({ instructor, id, overrides = null }) 
     // The review battle: checked before anything is created, so a bad time is a clear refusal.
     if (["assignment", "self_study", "project"].includes(type) && reviewIn !== undefined) {
       review = cleanReview(reviewIn, { dueAt: payload.due_at ?? null });
+      // The questions its preview showed (Battle questions tab): the review battle asks exactly those.
+      const prepared = draft.payload?.review_questions;
+      if (review && Array.isArray(prepared?.items) && prepared.items.length) review.items = prepared.items.slice(0, review.questions);
       if (review) payload.instructions = [payload.instructions, reviewInstruction(review.at)].filter(Boolean).join("\n\n");
     }
     if (type === "multi_stage") {

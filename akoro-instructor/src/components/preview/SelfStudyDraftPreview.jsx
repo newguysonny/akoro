@@ -7,13 +7,14 @@
 import { useState } from 'react';
 import { C } from '../../theme/colors.js';
 import { Ico } from '../../theme/Ico.jsx';
+import ReviewBattleTab, { reviewBattleTabs } from './ReviewBattleTabs.jsx';
 import { PreviewTabs, Section, Field, PlayStage, inputStyle } from './PreviewKit.jsx';
 import ReviewBattleSettings from './ReviewBattleSettings.jsx';
 import SessionSimulator from './SessionSimulator.jsx';
 
 const fmt = (local) => (local ? new Date(local).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true }) : '');
 
-export default function SelfStudyDraftPreview({ draft, audience = {}, dueLocal, onDue, dueHint, review, onReview, onEditPlan }) {
+export default function SelfStudyDraftPreview({ draft, audience = {}, dueLocal, onDue, dueHint, review, onReview, onEditPlan, battle = null }) {
   const [tab, setTab] = useState('settings');
   const [playing, setPlaying] = useState(false);
   const p = draft.payload || {};
@@ -24,7 +25,7 @@ export default function SelfStudyDraftPreview({ draft, audience = {}, dueLocal, 
   return (
     <div data-selfstudy-preview="" style={{ fontFamily: C.font }}>
       <PreviewTabs value={tab} onChange={(t) => { setTab(t); setPlaying(false); }}
-        tabs={[['settings', 'Settings'], ['preview', 'Preview'], ['plan', 'Study plan']]} />
+        tabs={[['settings', 'Settings'], ['preview', 'Preview'], ['plan', 'Study plan'], ...reviewBattleTabs(battle)]} />
 
       {tab === 'settings' && (
         <div>
@@ -89,6 +90,7 @@ export default function SelfStudyDraftPreview({ draft, audience = {}, dueLocal, 
           )}
         </div>
       )}
+      {tab.startsWith('battle-') && <ReviewBattleTab key={tab} tab={tab} battle={battle} />}
     </div>
   );
 }

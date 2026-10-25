@@ -18,13 +18,13 @@
  * so citations flash the paragraph on the page, just as an OCR'd scan does.
  */
 import { officeKindOf, officeToPages, paginate, downloadCapped, OFFICE_MODELS } from "./officeText.js";
+import { looksScanned } from "./textLayer.js";
 
 export const STORED_TEXT_LIMITS = Object.freeze({
   MAX_PDF_BYTES: 60 * 1024 * 1024,
   MAX_TEXT_BYTES: 3 * 1024 * 1024,
   MAX_PDF_PAGES: 200,                  // the search index keeps 200 page chunks per record
   MAX_BLOCKS_PER_PAGE: 400,
-  SCANNED_CHARS_PER_PAGE: 20,          // the reader's own "this is a scan" rule
   TEXT_PIECE_CHARS: 1500,              // a long run of lines (a CSV) is cut into pieces
 });
 
@@ -112,7 +112,8 @@ export function pdfPageFromParagraphs(paras, width, height, cap = STORED_TEXT_LI
 /**
  * PDF bytes → { pages, scanned, totalPages }. Pages without text are left
  * out (a scan page stays for the tap-to-extract offer); a document whose
- * text layer is thinner than the reader's scan rule counts as scanned.
+ * text layer is thinner than the scan rule (textLayer.js — repeated
+ * watermark text doesn't count) counts as scanned.
  */
 export async function pdfTextPages(buffer, { maxPages = STORED_TEXT_LIMITS.MAX_PDF_PAGES } = {}) {
   const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
@@ -120,7 +121,7 @@ export async function pdfTextPages(buffer, { maxPages = STORED_TEXT_LIMITS.MAX_P
   try {
     const total = doc.numPages;
     const pages = [];
-    let chars = 0;
+    const texts = [];   // every page's text, empty ones too — the scan rule needs them all
     for (let i = 1; i <= Math.min(total, maxPages); i++) {
       const page = await doc.getPage(i);
       const vp = page.getViewport({ scale: 1 });
@@ -136,10 +137,11 @@ export async function pdfTextPages(buffer, { maxPages = STORED_TEXT_LIMITS.MAX_P
       }
       page.cleanup();
       const built = pdfPageFromParagraphs(runsToParagraphs(runs), vp.width, vp.height);
-      chars += built.markdown.replace(/\s+/g, "").length;
+      texts.push(built.markdown);
       if (built.markdown.trim()) pages.push({ pageNumber: i, ...built });
     }
-    const scanned = chars < STORED_TEXT_LIMITS.SCANNED_CHARS_PER_PAGE * Math.max(1, Math.min(total, maxPages));
+    // A watermark or running header on every page isn't the document (textLayer.js).
+    const scanned = looksScanned(texts);
     return { pages: scanned ? [] : pages, scanned, totalPages: total };
   } finally {
     await doc.destroy().catch(() => {});

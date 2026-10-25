@@ -11,6 +11,9 @@ import { createHash } from "node:crypto";
 import db from "../../db.js";
 import { normaliseToolRequest } from "./validation.js";
 
+/** A request in one of these is closed: asking again re-opens it. */
+export const CLOSED_STATUSES = new Set(["declined", "implemented", "expired"]);
+
 function fingerprint({ title, description, category }) {
   return createHash("sha256")
     .update(JSON.stringify({
@@ -70,5 +73,16 @@ export async function createLearnerToolRequest({ learnerId, body }) {
     .eq("request_fingerprint", requestFingerprint)
     .maybeSingle();
   if (existing.error || !existing.data) throw new Error("Tool request could not be saved");
+  // Asked again after it was closed (declined, implemented, expired): it is a live ask
+  // again — re-opened as new, so it is back on the admins' Agent requests page.
+  if (CLOSED_STATUSES.has(existing.data.status)) {
+    const reopened = await db.schema("edu").from("agent_tool_requests")
+      .update({ status: "new", updated_at: now, last_status_changed_at: now })
+      .eq("id", existing.data.id)
+      .select("id, title, category, status, created_at")
+      .maybeSingle();
+    if (reopened.error || !reopened.data) throw new Error("Tool request could not be re-opened");
+    return { ...publicLearnerToolRequest({ ...reopened.data, createdNew: false }), reopened: true, previousStatus: existing.data.status };
+  }
   return publicLearnerToolRequest({ ...existing.data, createdNew: false });
 }

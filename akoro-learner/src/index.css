@@ -207,3 +207,36 @@ select:focus-visible {
   .ak-has-nowbar .ak-fab         { bottom: calc(var(--ak-tabnow-h) + 20px) !important; }
   .ak-has-nowbar .ak-dash-scroll { padding-bottom: calc(var(--ak-tabnow-h) + 64px) !important; }
 }
+
+/* ── Battles: the list is a grid that follows the content column's width (not
+   the window — the sidebar takes part of it): 1 column on phones, 2 on a
+   tablet-width column, 3 then 4 on desktop. */
+.ak-battles { container-type: inline-size; }
+.ak-battle-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; align-items: start; }
+@container (min-width: 520px)  { .ak-battle-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (min-width: 900px)  { .ak-battle-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@container (min-width: 1240px) { .ak-battle-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+/* ── The battle player: phone size as before; on tablet and desktop wider and
+   scaled up as a whole (text, avatars, options), so it reads at a distance.
+   Widths are in pre-zoom units: rendered ≈ min(900px, 94vw) on tablet and
+   min(1200px, 88vw) on desktop (a little less scaled on short screens). */
+.ak-bplayer { max-width: 640px; max-height: 95vh; }
+@media (min-width: 769px) {
+  .ak-bplayer { zoom: 1.12; max-width: min(804px, calc(94vw / 1.12)); max-height: calc(94vh / 1.12); }
+}
+@media (min-width: 1200px) and (min-height: 900px) {
+  .ak-bplayer { zoom: 1.25; max-width: min(960px, calc(88vw / 1.25)); max-height: calc(94vh / 1.25); }
+}
+/* A wide but short laptop screen: wide, scaled a little less, so the options stay in view. */
+@media (min-width: 1200px) and (max-height: 899px) {
+  .ak-bplayer { zoom: 1.1; max-width: min(1050px, calc(88vw / 1.1)); max-height: calc(94vh / 1.1); }
+}
+
+/* The player's arena: scoreboard over the question on phones and tablets; side
+   by side on a wide screen, so the question and its options stay in view. */
+.ak-arena { display: flex; flex-direction: column; gap: 12px; }
+@media (min-width: 1200px) {
+  .ak-arena { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); gap: 14px; align-items: start; }
+  .ak-arena > :only-child { grid-column: 1 / -1; }
+}

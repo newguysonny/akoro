@@ -63,8 +63,7 @@ import { listGoals, createGoal, updateGoal } from "../learner-goals/service.js";
 import { listMyBlogs, createBlogPost, updateBlogPost } from "../blogs/service.js";
 import { newToolRequestId, toolObservation } from "../../utils/toolObservation.js";
 
-import { getOrchestrator, listAgentPairs, getAgentPairProfile } from "./agents/registry.js";
-import { getAgentPreferences, saveAgentPreferences } from "./student-state.js";
+import { getOrchestrator } from "./agents/registry.js";
 import {
   createActivityDraft, listActivityDrafts, getActivityDraft, discardActivityDraft, reviseDraftPayload,
   instructorClassrooms,
@@ -83,7 +82,6 @@ import {
   getAgentGrowthHistory,
   getAgentIntelligence,
   retrieveAgentKnowledge,
-  saveStudentKnowledge,
   getAgentKnowledgeBySubject,
   getTopicsBySubject,
 } from "./agents/student/knowledge.js";
@@ -100,6 +98,7 @@ import {
   scheduleAutonomyReviewForTask,
   setLearnerAutonomy,
 } from "./learner-autonomy.js";
+import { adminRequestOf, requestClaimCorrection } from "./requestClaims.js";
 import { requiresAgentCapabilitiesTool, requiresActivityPreparation, isDraftFollowUp, isToolDraftFollowUp, requiredLearnerDataTool, requiredStudyPrepTool, classForExam } from "./agent-chat-intent.js";
 import { agentToolActivity } from "../../lib/agentActivity.js";
 import { noteChatTurn } from "../agent-memory/quietLearning.js";
@@ -111,6 +110,7 @@ import { validateLearnerTaskInput } from "./learner-task-validation.js";
 import { listChats, readChat, postToChat, ownedChatId } from "./chat-history-tools.js";
 import { schemaLookup } from "../self-tooling/registry.js";
 import { createTool, runLearnerTool, learnerToolDefs, forcedSelfTool } from "../self-tooling/pipeline.js";
+import { agreesToBuild } from "../self-tooling/capabilities.js";
 import { selfToolingEnabled, selfToolingAllowedFor } from "../self-tooling/access.js";
 import { createLearnerToolRequest } from "../agent-tool-requests/service.js";
 import {
@@ -273,7 +273,6 @@ async function reconstructHistoryBlocks(sessionId, topic, subject, agentName, ag
 // ─── Unified Agent Chat tools ────────────────────────────────────────────────
 // These execute against the student's real data when the agent needs them.
 
-
 // A recurring battle (battle/series.js): days of the week + a time, until an end date and time.
 const REPEAT_SCHEMA = {
   type: "object",
@@ -412,7 +411,7 @@ export const CHAT_TOOLS = [
   {
     name: "schema_lookup",
     featureGate: "self_tooling",
-    description: "Self-tooling (preview): find what data and operations a NEW tool could use for a goal no existing tool covers. Returns data views (fields you can filter, sort and count — always the learner's own data or published content) and capabilities, each 'available' or 'needs_approval', plus anything not allowed. Read-only; builds nothing. Use an existing tool first; call this only when none fits. If it finds available views or capabilities for the goal, call create_tool next IN THE SAME TURN to build the tool and answer the learner from its result — don't just describe what a tool could do. Only explain what can't be done when nothing available fits, or part of the goal isn't allowed. Never tell the learner some data doesn't exist just because an unrelated tool came back empty — check here first. Never show the learner view or capability names (e.g. my_learning_sessions); describe them in plain words (\"your learning sessions\").",
+    description: "Self-tooling (preview): find what data and operations a NEW tool could use for a goal no existing tool covers. Returns data views (fields you can filter, sort and count — always the learner's own data or published content) and capabilities, each 'available', 'needs_your_ok' (the learner can allow it themselves) or 'needs_approval' (only an admin), plus anything not allowed. Read-only; builds nothing. Use an existing tool first; call this only when none fits. If it finds available views or capabilities for the goal, call create_tool next IN THE SAME TURN to build the tool and answer the learner from its result — don't just describe what a tool could do. Only explain what can't be done when nothing available fits, or part of the goal isn't allowed. Never tell the learner some data doesn't exist just because an unrelated tool came back empty — check here first. Never show the learner view or capability names (e.g. my_learning_sessions); describe them in plain words (\"your learning sessions\").",
     input_schema: {
       type: "object",
       properties: {
@@ -424,7 +423,7 @@ export const CHAT_TOOLS = [
   {
     name: "create_tool",
     featureGate: "self_tooling",
-    description: "Self-tooling (preview): BUILD a new read-only tool when no existing tool answers the learner's question (call schema_lookup first to see what it can use). It is built safely from the learner's own data, checked, saved for this learner, and RUN at once — the answer comes back in `result`. Outcomes: created (answer from result; next time call the tool by name); escalated (it needs a permission only an admin can give — a request was made; tell the learner in plain words that you've asked, and that the answer will come back in this chat); rejected (say plainly it can't be done and why). If schema_lookup shows a needed capability as needs_approval, pass it in hint.capabilities so the request names it. Never describe how it was built; never show internal names.",
+    description: "Self-tooling (preview): BUILD a new tool when no existing tool answers the learner's question or does what they ask (it reads their own data; when schema_lookup lists a write such as deleting or completing their tasks, the tool changes only the rows the learner confirms on a card) (call schema_lookup first to see what it can use). It is built safely from the learner's own data, checked, saved for this learner, and RUN at once — the answer comes back in `result`. Outcomes: created (answer from result; next time call the tool by name); offer (a change they can allow — ask if they want it built) / offer_request (a change nothing can make yet — offer to ask the Akoro team); requested (the request was sent — say exactly what `tell` says); needs_permission (a change to the learner's own data they can allow themselves — a card is shown; tell them you don't have that ability yet but will build it as soon as they approve on the card; nothing is built or changed yet); escalated (it needs a permission only an admin can give — a request was made; tell the learner in plain words that you've asked, and that the answer will come back in this chat); rejected (say plainly it can't be done and why). If schema_lookup shows a needed capability as needs_approval, pass it in hint.capabilities so the request names it. Never describe how it was built; never show internal names.",
     input_schema: {
       type: "object",
       properties: {
@@ -1083,7 +1082,7 @@ export const CHAT_TOOLS = [
   },
   {
     name: "submit_tool_request",
-    description: "Create a compact product request for Akoro admins to consider a missing study tool or integration. Use ONLY after the learner explicitly asks you to submit the request after you have explained that it is feature feedback, not an immediate action. Never submit automatically merely because a request is unsupported, and never copy raw chat, attachments, passwords, contact details, or sensitive account data. Describe the needed capability concisely instead.",
+    description: "Create a compact request for Akoro admins: a missing ability you don't have, a study tool, or an integration. NOT for anything schema_lookup lists as needs_your_ok or needs_approval (e.g. deleting or completing the learner's tasks): for those call create_tool with it in hint.capabilities — the learner allows a needs_your_ok change themselves on a card, and an admin decides a needs_approval one; either way the tool is finished in this chat. It lands on the admins' Agent requests page; the answer comes later, not now. Use ONLY when the learner explicitly asks — 'ask for permission to …', 'request access', 'send it to the admins', 'submit it' — and when they do, CALL it: never say a request was made without this call succeeding, and tell them exactly what its `tell` says (a repeat of an earlier request is NOT a new one). Never submit automatically merely because something is unsupported, and never copy raw chat, attachments, passwords, contact details, or sensitive account data. Describe the needed capability concisely instead.",
     input_schema: {
       type: "object",
       properties: {
@@ -1283,7 +1282,8 @@ export const INSTRUCTOR_TOOLS = [
         change_request: { type: "string", description: "teaching-resource drafts only (type teaching_tool): the instructor's follow-up about the resource, verbatim (\"make the hooks more playful\", \"add two more misconceptions\"). The server writes the next version in the background from the latest one and changes only what was asked — never write the resource yourself." },
         base_version: { type: "number", description: "assignment or teaching-resource drafts: the version to build on when the instructor names one (\"go back to version 1 and…\"). Omit to build on the latest." },
         title: { type: "string", description: "Replacement title." },
-        instructions: { type: "string", description: "Replacement instructions to learners." },
+        instructions: { type: "string", description: "REPLACES the instructions to learners entirely — only when the instructor gives the whole new text." },
+        add_instructions: { type: "string", description: "A line to ADD to the instructions, keeping what's there — use for \"add to the instructions: …\", \"also tell them …\". Their words, as said." },
         due_at: { type: "string", description: "A new exact due instant, ISO 8601 with a timezone offset (+01:00 for Africa/Lagos), resolved against the Current date and time. Only when the instructor states one." },
         due_hint: { type: "string", description: "The due date as said, when it can't be resolved exactly ('end of the week')." },
         audience: { type: "object", description: "A new audience — same shape as prepare_activity's audience — when the instructor changes who it's for.", properties: {
@@ -2247,7 +2247,7 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       if (!SELF_TOOLING_ROLES.has(role)) return { error: "Building tools is for learners and instructors." };
       if (!(await selfToolingAllowedFor(studentId))) return { error: "Building new tools isn't turned on for this account yet." };
       if (!input?.goal || !String(input.goal).trim()) return clarify("goal", "What would you like the new tool to find out or do?", { action: "schema_lookup" });
-      try { return await schemaLookup(String(input.goal).slice(0, 300), { audience: toolAudience(role) }); }
+      try { return await schemaLookup(String(input.goal).slice(0, 300), { audience: toolAudience(role), learnerId: studentId }); }
       catch (error) { return { error: error.message || "Couldn't check what's available right now" }; }
     }
     case "create_tool": {
@@ -2800,13 +2800,19 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       // fix it and retry, instead of the generic "could not be completed".
       try { request = await createLearnerToolRequest({ learnerId: studentId, body: input }); }
       catch (e) { return { submitted: false, error: e?.message || "Could not send the request." }; }
+      const when = request.created ? new Date(request.created).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : null;
       return {
-        submitted: request.createdNew,
+        submitted: request.createdNew || !!request.reopened,
         duplicate: !request.createdNew,
-        requestId: request.id,
+        reopened: !!request.reopened,
+        // No id: it means nothing to the learner (the reply scrub removed it, leaving "Reference:").
         status: request.status,
         title: request.title,
         category: request.category,
+        // Say exactly this much — never more (a duplicate is NOT a new request).
+        tell: request.createdNew ? "Sent: it is on the admins' Agent requests page now, waiting for a decision."
+          : request.reopened ? `You had asked for this before (${request.previousStatus}); it is re-opened and back on the admins' Agent requests page.`
+          : `You already asked for this${when ? ` on ${when}` : ""}; that request is still ${String(request.status).replace(/_/g, " ")}. Say it is the same request, still waiting — not a new one.`,
       };
     }
     default: {
@@ -3138,28 +3144,6 @@ router.put("/soul-state/preferences", async (req, res) => {
   }
 });
 
-router.put("/soul-state/check-in", async (req, res) => {
-  if (!learnerSoulStateEnabled) return res.status(409).json({ success: false, error: "Soul-state controls are not enabled" });
-  const sessionId = String(req.body?.sessionId || "").trim();
-  const values = Object.fromEntries(Object.keys(SOUL_VALUES).slice(4).map((key) => [key, safeSoulValue(req.body?.[key], key)]));
-  if (!/^[A-Za-z0-9_-]{1,180}$/.test(sessionId) || Object.values(values).some((value) => !value)) {
-    return res.status(422).json({ success: false, error: "sessionId and recognised check-in values are required" });
-  }
-  try {
-    const now = new Date();
-    const { error } = await db.schema("edu").from("learner_soul_checkins").upsert({
-      learner_id: req.user.id, source_session_id: sessionId,
-      feeling: values.feeling, study_context: values.studyContext, study_intent: values.studyIntent,
-      requested_support: values.requestedSupport, policy_version: "learner-soul-v1",
-      checked_in_at: now.toISOString(), expires_at: new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString(), updated_at: now.toISOString(),
-    }, { onConflict: "learner_id,source_session_id" });
-    if (error) throw error;
-    return res.json({ success: true, checkIn: { sessionId, ...values } });
-  } catch {
-    return res.status(503).json({ success: false, error: "Soul check-in could not be saved" });
-  }
-});
-
 router.delete("/soul-state", async (req, res) => {
   if (!learnerSoulStateEnabled) return res.status(409).json({ success: false, error: "Soul-state controls are not enabled" });
   const scope = String(req.body?.scope || "all").toLowerCase();
@@ -3179,34 +3163,6 @@ router.delete("/soul-state", async (req, res) => {
 // =============================================================
 // AGENT PAIR ROUTES
 // =============================================================
-
-router.get("/agents/pairs", async (req, res) => {
-  try { res.json({ success: true, pairs: await listAgentPairs() }); }
-  catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-router.get("/agents/pairs/:pairId", async (req, res) => {
-  try {
-    const profile = await getAgentPairProfile(req.params.pairId);
-    if (!profile) return res.status(404).json({ error: "Not found" });
-    res.json({ success: true, profile });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-router.get("/agents/preferences/:agentId", async (req, res) => {
-  try { res.json({ success: true, ...(await getAgentPreferences(req.user.id)) }); }
-  catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-router.post("/agents/preferences", async (req, res) => {
-  try {
-    const { agentPairId } = req.body;
-    const agentId = req.user.id;   // caller's own agent — never a body-supplied id
-    if (!agentPairId) return res.status(400).json({ error: "agentPairId required" });
-    await saveAgentPreferences(agentId, agentPairId);
-    res.json({ success: true, agentId, agentPairId });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
 
 // =============================================================
 // DECAY ROUTES  (v3.1)
@@ -3295,7 +3251,6 @@ router.get("/decay/topics/:studentId/:subject", async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-
 // POST /decay/acknowledge/:notifId — mark notification as read
 router.post("/decay/acknowledge/:notifId", async (req, res) => {
   try {
@@ -3347,45 +3302,6 @@ router.get("/student/agent/:studentId/growth", async (req, res) => {
     const agent   = await getOrCreateStudentAgent(req.user.id);
     const history = await getAgentGrowthHistory(agent.id, Number(limit));
     res.json({ success: true, agent, history });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-router.get("/student/:studentId/knowledge", async (req, res) => {
-  try {
-    const { limit = 20, offset = 0, subject } = req.query;
-    let q = db
-      .schema("edu").from("student_knowledge")
-      .select("id, topic, subject, content, source, confidence, tags, created_at")
-      .eq("student_id", req.user.id)
-      .order("created_at", { ascending: false })
-      .range(Number(offset), Number(offset) + Number(limit) - 1);
-    if (subject) q = q.eq("subject", subject);
-    const { data, error } = await q;
-    if (error) throw error;
-    res.json({ success: true, knowledge: data });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-router.post("/student/:studentId/knowledge", async (req, res) => {
-  try {
-    const { topic, subject, content, source = "manual", tags = [] } = req.body;
-    if (!topic || !content) return res.status(400).json({ error: "topic and content required" });
-    const agent = await getOrCreateStudentAgent(req.user.id);
-    await saveStudentKnowledge({
-      studentId: req.user.id, agentId: agent.id,
-      topic, subject, content, source, tags, confidence: 0.8,
-    });
-    res.json({ success: true, message: "Knowledge saved" });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-router.get("/student/agent/:studentId/knowledge-search", async (req, res) => {
-  try {
-    const { q, limit = 5 } = req.query;
-    if (!q) return res.status(400).json({ error: "q is required" });
-    const agent  = await getOrCreateStudentAgent(req.user.id);
-    const chunks = await retrieveAgentKnowledge(agent.id, q, Number(limit));
-    res.json({ success: true, chunks });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -4041,16 +3957,39 @@ function inspectResult(value) {
 }
 
 /** Before an activity tool runs from the instructor's chat: what the teacher never said → a clarify result, else null. */
+/** The learner's latest message in this turn's transcript (text parts only). */
+function latestUserText(transcript = []) {
+  for (let i = transcript.length - 1; i >= 0; i--) {
+    const m = transcript[i];
+    if (m?.role !== "user") continue;
+    return typeof m.content === "string" ? m.content : Array.isArray(m.content) ? m.content.filter((x) => x?.type === "text").map((x) => x.text).join(" ") : "";
+  }
+  return "";
+}
+
 async function unsaidActivityFields(tool, input, transcript) {
-  const { unnamedFields, askFor, teacherTextOf, knownNames } = await import("./activityFields.js");
+  const { unnamedFields, askFor, teacherTextOf, knownNames, currentRequest, TYPE_LABEL } = await import("./activityFields.js");
   let fields = null, check;
   if (tool === "prepare_activity") { fields = input; check = ["topic", "subject", "audience"]; }
   else if (tool === "schedule_activity_routine" && input?.brief) { fields = input.brief; check = ["topic", "subject", "audience"]; }
   else if (tool === "revise_activity_draft" && input?.audience) { fields = { audience: input.audience }; check = ["audience"]; }
   if (!fields) return null;
-  const missing = unnamedFields(fields, teacherTextOf(transcript), { known: await knownNames(db, fields), check });
+  // The activity asked for NOW, and only what was said since asking for it: a battle's
+  // topic and class don't silently become the new assignment's (unless they say "the same").
+  const req = tool === "prepare_activity" ? currentRequest(transcript) : { type: null, text: teacherTextOf(transcript), earlier: "" };
+  if (req.type && input?.type && req.type !== input.type && !(req.type === "self_study" && input.type === "project")) {
+    return { prepared: false, error: "wrong_type", asked: req.type,
+      message: `The instructor asked for a ${TYPE_LABEL[req.type] || req.type}, not a ${TYPE_LABEL[input.type] || input.type}. Call prepare_activity with type "${req.type}" (asking first for anything they haven't said for it). Don't re-send or mention the earlier draft.` };
+  }
+  const missing = unnamedFields(fields, req.text, { known: await knownNames(db, fields), check });
   if (!missing.length) return null;
-  return clarify(missing.map((m) => m.field).join(","), askFor(missing), {
+  // Said for an earlier activity: ask whether it's the same, rather than reuse it silently.
+  const earlier = req.earlier ? unnamedFields(fields, req.earlier, { known: await knownNames(db, fields), check: missing.map((m) => m.field) }) : missing;
+  const fromBefore = missing.filter((m) => !earlier.some((e) => e.field === m.field));
+  const value = { topic: fields.topic, subject: fields.subject, audience: fields.audience?.classroom_name || (fields.audience?.whole_class ? "the whole class" : null) };
+  const asks = missing.map((m) => (fromBefore.includes(m) && value[m.field]
+    ? { ...m, question: `Same ${m.field === "audience" ? "class" : m.field} as before (${value[m.field]}), or a different one?` } : m));
+  return clarify(missing.map((m) => m.field).join(","), askFor(asks), {
     prepared: false, error: "details_required", unsaid: missing.map((m) => m.field),
     message: "The instructor didn't say this. Ask them the question in `question` (in your own short words) and wait for their answer — never fill it in yourself, even when it seems obvious. Then call the tool again with what they said.",
   });
@@ -4162,6 +4101,11 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
       // teacher's own words: the model rewrote "Remove question 3" as the
       // whole question list, and the revision changed other questions too.
       if (tool === "revise_activity_draft" && teacherWords && input?.question_request) input = { ...input, question_request: teacherWords };
+      // A permission card only after the learner said yes to building it (their latest message, never the model's say-so).
+      if (tool === "create_tool" && input && typeof input === "object") {
+        const { __agreed, ...rest } = input;
+        input = role === "student" && agreesToBuild(latestUserText(transcript)) ? { ...rest, __agreed: true } : rest;
+      }
       const traceRow = trace?.toolStart(tool, input);
       let toolResult;
       // The important fields come from the TEACHER (activityFields.js): a subject, an audience or a
@@ -4203,6 +4147,8 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         requestId: observation.request_id,
         sideEffecting: SIDE_EFFECT_TOOLS.includes(tool)
           || isSideEffectingAction(tool, input),
+        // Did this turn really put a request in front of an admin? (requestClaims.js checks the reply against it.)
+        ...(tool === "submit_tool_request" || tool === "create_tool" ? { adminRequest: adminRequestOf(tool, toolResult) } : {}),
         ...(isInspected() ? { input, result: inspectResult(toolResult) } : {}),
         // A small echo so the chat UI can render the Preview affordance for
         // the human-in-the-loop approval without parsing the model's prose.
@@ -4613,6 +4559,16 @@ router.post("/agent", async (req, res) => {
     const ingestCtx = live.length
       ? `\n\n## The learner's upload\nThe file(s) they attached are being saved to their Library${where.length ? ` — ${[...new Set(where)].join(", ")}` : ""} (private to them) and read in the background; each folder's card shows its files with an Undo. Say so in one short clause — don't repeat the cards' details or any ids. Answer from what you can read now; if the file isn't readable yet, say you'll be able to work on it once it's read.`
       : "";
+    // The files already in this chat and what their reads found (materials/ingestCore.js chatFilesBrief).
+    let chatFilesCtx = "";
+    if (role === "student" && conversationId) {
+      try {
+        const { data } = await db.schema("edu").from("material_ingests").select("names, state, structure")
+          .eq("user_id", req.user.id).eq("chat_session_id", conversationId).neq("state", "undone").order("created_at", { ascending: true }).limit(10);
+        const { chatFilesBrief } = await import("../materials/ingestCore.js");
+        chatFilesCtx = chatFilesBrief(data || []);
+      } catch { chatFilesCtx = ""; }
+    }
     const inboxCtx = role === "student" && agentNetworkEnabled
       ? (await inboxBrief(req.user.id).catch(() => "")) + (await buddyBrief(req.user.id).catch(() => ""))
       : "";
@@ -4643,7 +4599,7 @@ router.post("/agent", async (req, res) => {
     const selfToolCtx = selfToolOn && role === "instructor"
       ? "\n\n## Building tools (preview)\nWhen the instructor asks for something none of your tools gives directly — a total, average, count, ranking or breakdown over THEIR OWN classes and activities (average grade per activity, who hasn't started, completion by class, students below a mark) — call create_tool (schema_lookup first if unsure what it can use) and answer from its result; don't say you don't have the data. check_activity_outcomes is for ONE activity's summary — a question across several activities (each activity's average, who hasn't started anything) is a create_tool question. Tools only ever see this instructor's own classes and the work set in them — students by name only, never another teacher's class or a learner's private chats or notes. Only say it can't be done after create_tool is rejected, and say why."
       : selfToolOn
-      ? "\n\n## Building tools (preview)\nWhen the learner asks for something none of your tools gives directly — a total, average, count or breakdown over their own data (hours of sessions per month, tasks finished per week, accuracy by year) — don't say you don't have the data and don't piece it together from unrelated tools. Call create_tool (schema_lookup first if unsure what it can use), then answer from its result. The same goes for comparisons with other learners (how others scored in battles they played together): create_tool either builds it or, if it needs a permission, asks an admin and the answer comes back in this chat — tell the learner that plainly. Only say it can't be done after create_tool is rejected, and say why."
+      ? "\n\n## Building tools (preview)\nWhen the learner asks for something none of your tools gives directly — a total, average, count or breakdown over their own data (hours of sessions per month, tasks finished per week, accuracy by year) — don't say you don't have the data and don't piece it together from unrelated tools. Call create_tool (schema_lookup first if unsure what it can use), then answer from its result. The same goes for comparisons with other learners (how others scored in battles they played together): create_tool either builds it or, if it needs a permission, asks an admin and the answer comes back in this chat — tell the learner that plainly. Only say it can't be done after create_tool is rejected, and say why.\nWhen the learner asks you to CHANGE their own things and no tool does it (delete or complete their tasks, end a study buddy) — don't just say you can't. Call schema_lookup: if it lists that change as needs_your_ok, tell them you don't have that ability yet but you can build a tool that does it, and ask if they want it. When they agree, call create_tool with it in hint.capabilities: they get a card to allow it, and when they tap Approve the tool is built for them (each change it makes still waits for their Confirm). Never file submit_tool_request for these."
       : "";
     // Who this learner's agent is (their protégé): its name, level and
     // sessions from edu.student_agents, and the learner's first name.
@@ -4683,7 +4639,7 @@ router.post("/agent", async (req, res) => {
       renderRelevantMemory(relevantMemories) +
       renderScratchpad(conversation?.scratchpad) +
       (goalsCtx || "") +
-      protegeCtx + inboxCtx + runningCtx + ingestCtx + selfToolCtx + draftsCtx +
+      protegeCtx + inboxCtx + runningCtx + ingestCtx + chatFilesCtx + selfToolCtx + draftsCtx +
       (syllabusCtx ? `\n\n${syllabusCtx}` : "") +
       (pastCtx ? `\n\n${pastCtx}` : "") +
       (curriculumCtx ? `\n\n${curriculumCtx}` : "") +
@@ -4725,7 +4681,8 @@ router.post("/agent", async (req, res) => {
           // Other players' results in the learner's battles: go through
           // create_tool (it builds, or asks an admin for the permission) —
           // left on auto the model sometimes said "I can't see that" instead.
-          : forceSelfTool ? "create_tool"
+          // A change to their own tasks: schema_lookup first, so the agent offers to build it.
+          : forceSelfTool ? forceSelfTool
           // Identity questions about the learner's OWN school/class/subjects/
           // teachers/progress are fact questions about data the model cannot
           // see — the live 2026-10-01 transcript had tools=0 and an invented
@@ -4820,6 +4777,11 @@ router.post("/agent", async (req, res) => {
         const mats = collectMaterials([materialsFrom("ask_to_be_taught", { materials: found })]);
         prepared.toolExecutions.push({ tool: "ask_to_be_taught", success: true, backfilled: true, input: { topic: teach.topic }, teach, ...(mats.length ? { materials: mats } : {}) });
       }
+    }
+    // A reply that says a request went to an admin when none did this turn is corrected, not left standing.
+    if (!stopped()) {
+      const fix = requestClaimCorrection(reply, prepared.toolExecutions);
+      if (fix) { reply = `${reply.trim()}\n\n${fix}`; if (wantsStream) send("delta", { text: `\n\n${fix}` }); }
     }
     if (!reply.trim()) reply = "I'm here to help with your studies — ask me anything about your subjects!";
     const traceBlocks = trace.blocks();

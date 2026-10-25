@@ -273,6 +273,62 @@ export const activityChatAssignmentVersions = {
   },
 };
 
+/* ── Assignment: an added instruction, a diagram question into Part A ──── */
+
+export const activityChatPartsInstructions = {
+  name: "activity_chat.assignment_parts_instructions", area: "instructor-chat", risk: "write", regression: false, timeoutMs: 600_000,
+  description: "An assignment's follow-ups land where the teacher said: an added instruction keeps the paper's own and shows on every version (no new version); \"add a diagram question to Part A\" puts it at the end of Part A (not in a Diagrams part); \"add a question with a diagram\" adds one more with a diagram, everything else kept.",
+  async run(ctx) {
+    const { classroom, say, who } = await classOf(ctx);
+    const t1 = await say(`Prepare a Basic Science assignment on photosynthesis for ${who} in ${classroom.name}: 4 MCQ and 2 short answer questions.`, "prepare");
+    const prep = lastCall(t1, "prepare_activity");
+    ctx.expect.ok("prepared as an assignment", prep?.result?.prepared === true && prep?.input?.type === "assignment", { tools: toolsOf(t1), input: prep?.input });
+    const draftId = prep?.result?.draftId;
+    if (!draftId) return;
+    const v1 = await versionOf(ctx, draftId, 1);
+    ctx.expect.eq("version 1 is ready", v1?.status, "ready");
+    if (v1?.status !== "ready") return;
+    const before = String(v1.paper.instructions || "");
+
+    // 1. An instruction added: kept with the paper's own, on the paper, no new version.
+    const t2 = await say("Add to the instructions: Do not spend too much time on one question.", "instructions");
+    const rev = lastCall(t2, "revise_activity_draft");
+    ctx.expect.ok("the agent added to the instructions", rev?.result?.revised === true && (rev?.result?.applied || []).includes("instructions"), { input: rev?.input, result: rev?.result });
+    const d2 = await draftRow(ctx, INSTRUCTOR, draftId);
+    const p1 = (d2?.payload?.versions || [])[0]?.paper?.instructions || "";
+    ctx.expect.ok("the paper's instructions now carry the line", /too much time on one question/i.test(p1), p1);
+    ctx.expect.ok("…and keep what the paper said before", !before || p1.toLowerCase().includes(before.toLowerCase().replace(/[.!?]$/, "")), { before, after: p1 });
+    ctx.expect.eq("no new version for an instructions change", (d2?.payload?.versions || []).length, 1);
+
+    // 2. A diagram question into Part A: at the end of Part A.
+    const aBefore = partsOf(v1.paper)[0]?.questions.map(qText) || [];
+    const bBefore = partB(v1.paper)?.questions.map(qText) || [];
+    const v2 = await reviseVersion(ctx, say, draftId, { prompt: "Add a diagram question to Part A.", label: "diagram → Part A", n: 2, base: 1 });
+    if (v2) {
+      const parts = partsOf(v2.paper);
+      const a = parts[0];
+      ctx.expect.ok("V2: Part A has one more question, the new one at its end", a && /^Part A/i.test(a.title) && a.questions.length === aBefore.length + 1 && aBefore.every((t, i) => qText(a.questions[i]) === t), parts.map((x) => [x.title, x.questions.map(qText)]));
+      const added = a?.questions.at(-1);
+      ctx.expect.ok("V2: the new Part A question has a diagram", !!(added?.figure || added?.figure_note), added);
+      ctx.expect.ok("V2: no separate Diagrams part was made for it", !parts.some((x) => /Diagrams/i.test(x.title)), parts.map((x) => x.title));
+      ctx.expect.eq("V2: Part B unchanged", partB(v2.paper)?.questions.map(qText), bBefore);
+      ctx.expect.ok("V2 keeps the added instruction", /too much time on one question/i.test(v2.paper.instructions || ""), v2.paper.instructions);
+    }
+
+    // 3. A question with a diagram, no part named: one more, with a diagram; the rest kept.
+    const base = v2 || v1;
+    const v3 = await reviseVersion(ctx, say, draftId, { prompt: "Add a question with a diagram.", label: "question with a diagram", n: 3, base: base.n });
+    if (v3) {
+      // The version's own record of what's new (two diagram questions can open with the same words).
+      const fresh = Object.entries(v3.changes || {}).filter(([, c]) => c === "new").map(([i]) => v3.paper.questions[Number(i)]).filter(Boolean);
+      ctx.expect.eq("V3: one more question", v3.paper.questions.length, base.paper.questions.length + 1);
+      ctx.expect.ok("V3: the new one has a diagram", fresh.length === 1 && !!(fresh[0].figure || fresh[0].figure_note), fresh);
+      ctx.expect.ok("V3: every earlier question kept", base.paper.questions.every((q) => v3.paper.questions.some((x) => qText(x) === qText(q))));
+      ctx.expect.ok("V3 keeps the added instruction", /too much time on one question/i.test(v3.paper.instructions || ""), v3.paper.instructions);
+    }
+  },
+};
+
 /* ── Assignment: instructions, switched questions, assigned with its review ── */
 
 export const activityChatAssignmentAssign = {
@@ -393,4 +449,70 @@ export const activityChatSelfStudyAssign = {
   },
 };
 
-export const activityChatScenarios = [activityChatAskMissing, activityChatBattleSelfStudyAsk, activityChatAssignmentVersions, activityChatAssignmentAssign, activityChatSelfStudyAssign];
+
+/* ── Switching type: the right kind, and earlier details asked about ───── */
+
+export const activityChatSwitchTypeAsks = {
+  name: "activity_chat.switch_type_asks", area: "instructor-chat", risk: "write", regression: false, timeoutMs: 600_000,
+  description: "After a battle is prepared, \"let's create an assignment\" makes an assignment, not another battle, and the earlier topic/class are asked about (\"same topic?\"), never reused silently; the same for a self study. The self study's review battle then asks exactly the questions written on its draft.",
+  async run(ctx) {
+    const { classroom, learners, say, who } = await classOf(ctx);
+    const noDraft = (label, turn) => ctx.expect.ok(`${label}: nothing is prepared`, !prepared(turn), { tools: toolsOf(turn), results: (turn.tools || []).map((t) => t.result?.unsaid || t.result?.error || null) });
+    const madeOfType = (turn, type) => (turn.tools || []).filter((t) => t.tool === "prepare_activity" && t.result?.prepared).map((t) => t.input?.type).filter((x) => x !== type);
+
+    const b = await say(`Set up a Mathematics battle on fractions, 10 questions, for ${who} in ${classroom.name}.`, "battle");
+    const pb = lastCall(b, "prepare_activity");
+    ctx.expect.ok("the battle is prepared", pb?.result?.prepared === true && pb?.input?.type === "battle", { tools: toolsOf(b), input: pb?.input });
+
+    const a1 = await say("Let's create an assignment.", "assignment, nothing said");
+    noDraft("assignment asked for with no details", a1);
+    ctx.expect.eq("no other kind of activity is made instead", madeOfType(a1, "assignment"), []);
+    ctx.expect.ok("the agent asks — the same topic as before, or what it's on", asks(a1.reply, /\b(same|topic|fractions|subject|what)\b/i), a1.reply);
+    const a2 = await say(`Same topic and subject, for ${who} in ${classroom.name} again, 5 multiple choice questions.`, "assignment, same details");
+    const pa = lastCall(a2, "prepare_activity");
+    ctx.expect.ok("now it prepares an assignment", pa?.result?.prepared === true && pa?.input?.type === "assignment", { tools: toolsOf(a2), input: pa?.input, result: pa?.result });
+
+    const s1 = await say("Now a self study for them too.", "self study, nothing said");
+    noDraft("self study asked for with no details", s1);
+    ctx.expect.eq("no other kind of activity is made instead", madeOfType(s1, "self_study"), []);
+    ctx.expect.ok("the agent asks whether it's the same topic/subject", asks(s1.reply, /\b(same|topic|fractions|subject)\b/i), s1.reply);
+    const s2 = await say(`Yes, the same topic and subject, for ${who} in ${classroom.name} again.`, "self study, same details");
+    const ps = lastCall(s2, "prepare_activity");
+    ctx.expect.ok("now it prepares the self study", ps?.result?.prepared === true && ps?.input?.type === "self_study", { tools: toolsOf(s2), input: ps?.input, result: ps?.result });
+    const draftId = ps?.result?.draftId;
+    if (!draftId) return;
+
+    // The review battle's questions, written on the draft (the Battle questions tab) …
+    const rq = await ctx.http({ as: INSTRUCTOR, method: "POST", path: `/api/self-study/drafts/${draftId}/review-questions`, body: { count: 5 } });
+    ctx.expect.status("review questions written", rq, 200);
+    const items = rq.body?.data?.review_questions?.items || rq.body?.review_questions?.items || [];
+    ctx.note(`review questions: ${items.length} — ${rq.body?.data?.review_questions?.note || ""}`);
+    ctx.expect.eq("5 review questions on the draft", items.length, 5);
+    ctx.expect.ok("…kept on the draft", ((await draftRow(ctx, INSTRUCTOR, draftId))?.payload?.review_questions?.items || []).length === 5);
+    // More keeps the five already seen and writes only the extra; fewer keeps the first ones; back up reuses the set aside.
+    const reAsk = async (count) => {
+      const t0 = Date.now();
+      const r = await ctx.http({ as: INSTRUCTOR, method: "POST", path: `/api/self-study/drafts/${draftId}/review-questions`, body: { count } });
+      return { items: r.body?.data?.review_questions?.items || [], ms: Date.now() - t0 };
+    };
+    const stems = (list) => list.map((q) => q.stem).join(" | ");
+    const up = await reAsk(7);
+    ctx.expect.eq("7: seven questions", up.items.length, 7);
+    ctx.expect.eq("…the first five are the ones already seen", stems(up.items.slice(0, 5)), stems(items));
+    const down = await reAsk(5);
+    ctx.expect.eq("back to 5: the same first five", stems(down.items), stems(items));
+    ctx.note(`fewer took ${down.ms} ms`);
+    const again = await reAsk(7);
+    ctx.expect.eq("7 again: the same seven, nothing rewritten", stems(again.items), stems(up.items));
+    await reAsk(5);
+    // … are the ones the review battle asks.
+    const { battleId } = await assignWithReview(ctx, { draftId, body: {}, learners });
+    if (!battleId) return;
+    const asked = (await ctx.db.rows("battle_questions", { battle_id: battleId }, { columns: "question_order, question_text, correct_answer_index", limit: 40 }))
+      .sort((x, y) => x.question_order - y.question_order);
+    ctx.expect.eq("the review battle asks exactly the draft's review questions, in order", asked.map((q) => q.question_text).join(" | "), items.slice(0, asked.length).map((q) => q.stem).join(" | "));
+    ctx.expect.ok("…with the same right answers", asked.length > 0 && asked.every((q, i) => q.correct_answer_index === items[i]?.correctIndex), asked.map((q) => q.correct_answer_index));
+  },
+};
+
+export const activityChatScenarios = [activityChatAskMissing, activityChatBattleSelfStudyAsk, activityChatSwitchTypeAsks, activityChatPartsInstructions, activityChatAssignmentVersions, activityChatAssignmentAssign, activityChatSelfStudyAssign];

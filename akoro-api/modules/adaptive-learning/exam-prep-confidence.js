@@ -13,11 +13,10 @@ import express from "express";
 
 import {
   ExamPrepConflictError, ExamPrepRequestError,
-  examPrepInput, getExamPrepAttemptRow, getOwnedExamPrepRun,
+  examPrepInput,
   listExamPrepRuns, publicAttempt, publicRun,
   startExamPrepRetest, startExamPrepRun, submitExamPrepAttempt,
 } from "./exam-prep-service.js";
-import { listLearnerWorkflows } from "./adaptive-workflows.js";
 
 const router = express.Router();
 // Default-on kill switch: the confidence loop ships enabled; =false removes it.
@@ -45,44 +44,6 @@ router.get("/confidence-runs", async (req, res) => {
   } catch (error) {
     console.error("[exam-prep-confidence/list]", error?.message || error);
     return fail(res, 503, "Exam-prep runs are unavailable");
-  }
-});
-
-router.get("/workflows", async (req, res) => {
-  if (!enabled) return fail(res, 409, "Exam-prep confidence loop is not enabled", "exam_prep_disabled");
-  try {
-    return res.json({ success: true, workflows: await listLearnerWorkflows(req.user.id) });
-  } catch (error) {
-    console.error("[exam-prep-confidence/workflows]", error?.message || error);
-    return fail(res, 503, "Adaptive workflows are unavailable");
-  }
-});
-
-router.get("/confidence-runs/:runId", async (req, res) => {
-  if (!enabled) return fail(res, 409, "Exam-prep confidence loop is not enabled", "exam_prep_disabled");
-  try {
-    const run = await getOwnedExamPrepRun(req.params.runId, req.user.id);
-    if (!run) return fail(res, 404, "Exam-prep run was not found", "exam_prep_run_not_found");
-    return res.json({ success: true, run: publicRun(run) });
-  } catch (error) {
-    console.error("[exam-prep-confidence/get]", error?.message || error);
-    return fail(res, 503, "Exam-prep run is unavailable");
-  }
-});
-
-router.get("/confidence-runs/:runId/attempts/:attemptNumber", async (req, res) => {
-  if (!enabled) return fail(res, 409, "Exam-prep confidence loop is not enabled", "exam_prep_disabled");
-  try {
-    const result = await getExamPrepAttemptRow(req.user.id, req.params.runId, req.params.attemptNumber);
-    if (result.notFound) return fail(res, 404, "Exam-prep run was not found", "exam_prep_run_not_found");
-    if (result.notReady) return fail(res, 409, "That attempt has not been submitted yet", "attempt_not_submitted");
-    return res.json({
-      success: true, run: publicRun(result.run), attempt: publicAttempt(result.attempt),
-      submittedAnswers: result.attempt.submitted_answers || {},
-    });
-  } catch (error) {
-    console.error("[exam-prep-confidence/attempt]", error?.message || error);
-    return fail(res, 503, "Exam-prep attempt is unavailable");
   }
 });
 

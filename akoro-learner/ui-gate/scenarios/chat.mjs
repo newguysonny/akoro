@@ -37,6 +37,43 @@ export const scenarios = [
     run: (t) => historyPagesCheck(t, { path: '/app?tab=agent' }),
   },
   {
+    name: 'chat.permission_card',
+    description: "A change tool the agent drafted: the card asks to turn it on, lists what it would change right now; Approve shows it on and the usual Confirm card underneath. Sample data — the confirmation routes are mocked, nothing is changed.",
+    async run(t) {
+      const { page } = t;
+      const id = '11111111-2222-4333-8444-555555555555', next = '66666666-7777-4888-9999-000000000000';
+      const items = ['Homework Assistance', 'Review last battle results'];
+      const perm = { confirmationId: id, kind: 'permission', drafted: true, status: 'pending', title: 'Clear old tasks',
+        action: 'delete your tasks (a running task is never deleted)', goal: 'Delete my tasks that are overdue', items, more: 0,
+        result: null, expiresAt: new Date(Date.now() + 86_400_000).toISOString() };
+      const change = { confirmationId: next, kind: 'change', status: 'pending', title: 'Clear old tasks', action: 'Delete your tasks (a running task is never deleted)',
+        items, more: 0, result: null, expiresAt: new Date(Date.now() + 600_000).toISOString() };
+      let state = perm;
+      await page.route('**/api/self-tooling/confirmations', (r) => r.fulfill({ json: { success: true, data: { pending: state.status === 'pending' ? [state] : [] } } }));
+      await page.route(`**/api/self-tooling/confirmations/${id}`, (r) => r.fulfill({ json: { success: true, data: state } }));
+      await page.route(`**/api/self-tooling/confirmations/${next}`, (r) => r.fulfill({ json: { success: true, data: change } }));
+      await page.route(`**/api/self-tooling/confirmations/${id}/confirm`, (r) => {
+        state = { ...perm, status: 'consumed', result: { granted: true, status: 'created', tool: 'clear_old_tasks', label: 'Clear old tasks', found: 2 } };
+        return r.fulfill({ json: { success: true, data: { ...state, next: change } } });
+      });
+      await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
+      const card = page.locator('[data-permission-card]').first();
+      t.check('the permission card shows in the chat', await card.waitFor({ timeout: 45_000 }).then(() => true, () => false));
+      await page.getByText('Loading…').first().waitFor({ state: 'hidden', timeout: 30_000 }).catch(() => {});
+      await page.waitForTimeout(800);
+      await card.scrollIntoViewIfNeeded().catch(() => {});
+      t.check('…asks to turn on the drafted tool', await card.getByText(/Turn on “Clear old tasks”\?/).isVisible().catch(() => false));
+      t.check('…and lists what it would change right now', await card.getByText('Right now it would change:').isVisible().catch(() => false)
+        && await card.getByText('Homework Assistance').isVisible().catch(() => false));
+      await t.shot('permission-card');
+      await card.getByRole('button', { name: 'Approve' }).click();
+      t.check('Approve: it is on', await card.getByText(/is on and saved in your tools/).waitFor({ timeout: 10_000 }).then(() => true, () => false));
+      t.check('…and the Confirm card for its first change shows underneath', await card.getByRole('button', { name: /Confirm/ }).first().isVisible().catch(() => false));
+      await card.scrollIntoViewIfNeeded().catch(() => {});
+      await t.shot('approved');
+    },
+  },
+  {
     name: 'chat.suggestions_inbox',
     description: "The agent's ideas show in one Suggestions list; accepting a task idea adds the task; dismissing asks why and keeps the reason.",
     async run(t) {
@@ -275,6 +312,70 @@ export const scenarios = [
       t.check('Restore brings the card back', await page.locator('[data-ingest="ready"]').last().waitFor({ timeout: 20_000 }).then(() => true, () => false));
       const again = (await t.api('GET', '/api/records')).body?.data || [];
       t.check('…and the record', again.some((r) => r.id === rec?.id));
+    },
+  },
+  {
+    name: 'chat.upload_two_files',
+    description: "Two files in one message — picked together, or attached one after the other — both go to the Library upload (its names) and both to the agent's turn (its attachments). The upload and the turn are answered in the browser: nothing is saved, no AI is called.",
+    async run(t) {
+      const { page } = t;
+      const tag = newMarker().replace(/[^a-z0-9]/gi, '').slice(-6);
+      const sent = { ingest: [], turns: [], presign: 0 };
+      await page.route('**/api/agent/materials/ingest', async (r) => {
+        if (r.request().method() !== 'POST') return r.continue();
+        const body = r.request().postDataJSON() || {};
+        sent.ingest.push(body.names || []);
+        const names = body.names || [];
+        return r.fulfill({ status: 201, json: { success: true, data: { id: '00000000-0000-4000-8000-00000000f001', state: 'received', names, fileIndexes: names.map((_, i) => i) },
+          ingests: [{ id: '00000000-0000-4000-8000-00000000f001', state: 'received', names, fileIndexes: names.map((_, i) => i) }] } });
+      });
+      // The files' own upload (presign, records, reading) isn't what this checks: refused, counted.
+      await page.route(/\/api\/(records\/(presign|upload)|agent\/materials\/ingest\/[^/]+\/)/, (r) => { if (/presign/.test(r.request().url())) sent.presign += 1; return r.fulfill({ status: 503, json: { success: false } }); });
+      await page.route('**/api/adaptive/chat/agent**', (r) => {
+        const body = r.request().postDataJSON() || {};
+        sent.turns.push((body.attachments || []).map((a) => a.name));
+        return r.fulfill({ json: { success: true, reply: 'Got them.', response: 'Got them.' } });
+      });
+      const pdf = (n) => ({ name: `Notes ${n} ${tag}.pdf`, mimeType: 'application/pdf', buffer: Buffer.from(`%PDF-1.4\n% ${n}\n%%EOF\n`) });
+      const png = { name: `Diagram ${tag}.png`, mimeType: 'image/png', buffer: Buffer.from('89504e470d0a1a0a0000000d4948445200000001000000010806000000', 'hex') };
+
+      const firstLoad = page.waitForResponse((r) => /\/api\/adaptive\/chat\/sessions/.test(r.url()), { timeout: 30_000 }).catch(() => null);
+      await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
+      await firstLoad;
+      await page.waitForTimeout(1_500);
+      const box = page.getByRole('textbox', { name: /^Ask / }).last();
+      const input = page.locator('input[type=file]').first();
+
+      // 1. Two picked together.
+      await input.setInputFiles([pdf('A'), pdf('B')]);
+      await page.waitForTimeout(300);
+      const chips1 = await page.getByText(tag).count();
+      t.note(`picked together: ${chips1} chips`);
+      // Sent = the turn went out (the chat may still be settling its first load: send again until it does).
+      const sendAndWait = async (text, n) => {
+        for (let i = 0; i < 4 && sent.turns.length < n; i++) {
+          await box.fill(text); await box.press('Enter');
+          for (let w = 0; w < 20 && sent.turns.length < n; w++) await page.waitForTimeout(250);
+        }
+        await page.waitForTimeout(800);
+      };
+      await sendAndWait(`Two together ${tag}`, 1);
+
+      // 2. One, then another (the phone's usual way).
+      await input.setInputFiles([pdf('C')]);
+      await page.waitForTimeout(300);
+      await input.setInputFiles([png]);
+      await page.waitForTimeout(300);
+      await sendAndWait(`One then another ${tag}`, 2);
+
+      t.note(`ingest names: ${JSON.stringify(sent.ingest)}`);
+      t.note(`turn attachments: ${JSON.stringify(sent.turns)}`);
+      t.note(`presigns: ${sent.presign}`);
+      t.check('picked together: both chips show', chips1 >= 2, { chips1 });
+      t.check('picked together: the Library upload names both', (sent.ingest[0] || []).length === 2, { ingest: sent.ingest });
+      t.check('…and the turn carries both', (sent.turns[0] || []).length === 2, { turns: sent.turns });
+      t.check('one then another: the Library upload names both', (sent.ingest[1] || []).length === 2, { ingest: sent.ingest });
+      t.check('…and the turn carries both', (sent.turns[1] || []).length === 2, { turns: sent.turns });
     },
   },
   {
@@ -921,4 +1022,19 @@ export async function historyPagesCheck(t, { path }) {
   const after = await anchor.boundingBox();
   // The message that was at the top stays on screen (not pushed far below).
   t.check('the reading place is kept', !!before && !!after && after.y >= -5 && after.y < (page.viewportSize()?.height || 900), { actual: { before: before?.y, after: after?.y } });
+
+  // Scrolled up to read: the ↓ button shows, and a tap returns to the latest message.
+  const jump = page.locator('button[aria-label="Jump to latest"], button[aria-label="Jump to latest message"]').first();
+  t.check('scrolled up, the ↓ "jump to latest" button shows', await jump.waitFor({ timeout: 8_000 }).then(() => true, () => false));
+  await t.shot('jump-button');
+  await jump.click().catch(() => {});
+  const latest = page.getByText(`${marker} history message ${TOTAL}`, { exact: true });
+  const back = await page.waitForFunction((m) => {
+    const el = [...document.querySelectorAll('body *')].reverse().find((d) => d.textContent.includes(m));
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    return r.top >= 0 && r.bottom <= window.innerHeight + 2;
+  }, `${marker} history message ${TOTAL}`, { timeout: 8_000 }).then(() => true, () => false);
+  t.check('…tapping it brings the latest message back into view', back && await latest.isVisible().catch(() => false));
+  t.check('…and the button goes away', await jump.waitFor({ state: 'hidden', timeout: 5_000 }).then(() => true, () => false));
 }

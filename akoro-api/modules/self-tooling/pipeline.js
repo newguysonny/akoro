@@ -9,14 +9,14 @@
  */
 import db from "../../db.js";
 import { schemaLookup, capabilityStatus } from "./registry.js";
-import { forbiddenFor, CAPABILITIES } from "./capabilities.js";
+import { forbiddenFor, CAPABILITIES, learnerGrantable, ownChangeAsked, asksForChange, changeAskedOf } from "./capabilities.js";
 import { DATA_VIEWS } from "./views.js";
 import { validateDefinition, runDefinition } from "./interpreters.js";
 import { validateParams, coerceInput, paramProps, wellFormedParams } from "./bind.js";
 import { buildDefinition, registrySlice } from "./builder.js";
 import { createExpect, repeatVerdict } from "../verify/assertions.js";
 import { escalate } from "./escalation.js";
-import { proposeWrite } from "./confirmations.js";
+import { proposeWrite, proposePermission } from "./confirmations.js";
 import { codeEnabled } from "./sandbox/index.js";
 
 const edu = () => db.schema("edu");
@@ -30,6 +30,10 @@ export const LIMITS = {
 };
 
 const reject = (reason, extra = {}) => ({ status: "rejected", reason, ...extra });
+/** How a build uses an approved capability: a read is a step; a change is the recipe's final write op. */
+export const howToUse = (c) => (CAPABILITIES[c]?.kind === "write"
+  ? `use the approved change ${c}: read the rows from the view ${CAPABILITIES[c].target}, filter them to exactly what the goal says, and END the recipe with {"op":"write","cap":"${c}"${CAPABILITIES[c].args ? `,"args":{${Object.keys(CAPABILITIES[c].args).map((k) => `"${k}":…`).join(",")}}` : ""}} (never a step with "cap" for a change)`
+  : `use the approved capability ${c} (a step {"id":"x","cap":"${c}"} — returns ${JSON.stringify(CAPABILITIES[c].returns || [])})`);
 
 async function logEvent(row) {
   const { error } = await edu().from("self_tool_events").insert(row);
@@ -66,6 +70,18 @@ export const asksAboutOthersInBattles = (message) => BATTLE_WORDS.test(String(me
  * → "create_tool" | null
  */
 export async function forcedSelfTool(learnerId, message) {
+  // A change to their own tasks no tool makes yet: look up what can be built FIRST,
+  // so the agent offers to build it — left on auto (with an older "only an admin
+  // can" turn in the history) it told the learner to ask an admin instead.
+  const change = ownChangeAsked(message);
+  if (change) {
+    const { data } = await edu().from("agent_tools").select("id").eq("status", "active")
+      .or(`owner_id.eq.${learnerId},scope.eq.platform`).contains("capabilities", [change]).limit(1);
+    return data?.length ? null : "schema_lookup";
+  }
+  // Any other change ("rename my chats"): look up first too — it either can be built, or the
+  // agent says it can't yet and offers to ask the Akoro team (it used to just give a workaround).
+  if (changeAskedOf(message)) return "schema_lookup";
   if (!asksAboutOthersInBattles(message)) return null;
   const { data } = await edu().from("agent_tools").select("id").eq("status", "active")
     .or(`owner_id.eq.${learnerId},scope.eq.platform`).contains("capabilities", ["battles.class_results"]).limit(1);
@@ -158,6 +174,9 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     const { count: today } = await edu().from("agent_tools").select("*", { count: "exact", head: true })
       .eq("owner_id", learnerId).gte("created_at", since);
     if ((today || 0) >= LIMITS.dailyCreates) return finish("rejected", reject(`You can build ${LIMITS.dailyCreates} tools a day — try again tomorrow, or reuse one you have.`));
+    // A draft of this name the learner never approved (the card expired) makes way for this one.
+    await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() })
+      .eq("owner_id", learnerId).eq("name", name).eq("status", "disabled").not("verification->awaitingPermission", "is", null);
     const { data: mine } = await edu().from("agent_tools").select("name").eq("owner_id", learnerId).in("status", ["active", "disabled"]).limit(LIMITS.maxTools + 1);
     if ((mine || []).some((t) => t.name === name)) return reject(`You already have a tool called ${name} — call it, or pick another name.`);
     if ((mine || []).length >= LIMITS.maxTools) return finish("rejected", reject(`You have ${LIMITS.maxTools} tools — delete one in Settings → Agent → My tools first.`));
@@ -165,35 +184,72 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
 
   // What could it use?
   // learnerId is the OWNER: a learner, or an instructor for instructor tools (S7).
-  const lookup = await schemaLookup(goal, { audience });
+  const lookup = await schemaLookup(goal, { audience, learnerId });
   const slice = registrySlice(lookup, hint, audience);
   // A resume after an approval must USE what was approved — a gate run once
   // 'resumed' into a tool that answered from an unrelated view instead.
-  const mustUse = resumed ? [].concat(hint.capabilities || []).filter((c) => c in CAPABILITIES) : [];
+  let mustUse = resumed ? [].concat(hint.capabilities || []).filter((c) => c in CAPABILITIES) : [];
+  // A change the learner can allow, after they said yes: build it as a DRAFT (saved off), then ask on a card.
+  let draftCap = null;
   const lockedIn = async (names) => {
     const out = [];
-    for (const c of names) if (CAPABILITIES[c]?.status === "locked" && (await capabilityStatus(c)) === "locked") out.push(c);
+    for (const c of names) if (CAPABILITIES[c]?.status === "locked" && (await capabilityStatus(c, { learnerId })) === "locked") out.push(c);
     return out;
   };
   const locked = await lockedIn((lookup.capabilities || []).filter((c) => c.status === "needs_approval").map((c) => c.name));
   // ── 4. escalate (§7.8) — a locked capability named in the hint, or the only thing that fits.
   const toEscalate = async (capability, why) => {
+    // A change to the learner's own rows: THEY turn it on, on a card in this chat — no admin.
+    if (learnerGrantable(capability) && audience === "learner") {
+      ev.stages_tried.push("permission"); ev.capabilities = [capability];
+      // Not before they've said yes to building it: the agent asks first, in its own words.
+      if (input?.__agreed !== true) return finish("escalated", { status: "offer", capability: CAPABILITIES[capability].description, buildable: true,
+        note: "NOTHING IS BUILT AND NO CARD IS SHOWN YET. You can't do this right now — no tool you have does it — but you CAN build one that does, and the learner can allow it themselves. In your own words, briefly: say you can't do that yet, offer to build a tool for it (they'd approve it on a card, and every change it makes still waits for their Confirm), and ask if they'd like you to. Call create_tool again once they say yes. Don't list workarounds or their data unless they ask." });
+      const proposed = { name, label, goal, params, audience, hint: { views: [].concat(hint.views || []), capabilities: [capability] }, run: input?.run && typeof input.run === "object" ? input.run : {} };
+      if (dry) return finish("dry", { status: "needs_permission", dryRun: true, capability: CAPABILITIES[capability].description,
+        note: "DRY RUN — no card was made. Live, the learner would get a card to approve this and the tool would be built when they do." });
+      const out = await proposePermission({ learnerId, conversationId, capability, proposed });
+      return finish("escalated", out);   // logged as asked-for (stages_tried says "permission"), the outcome list is fixed
+    }
     const out = await escalate({ learnerId, capability, goal, dry, conversationId,
       proposed: { name, label, params, audience, hint: { views: [].concat(hint.views || []), capabilities: [capability] }, run: input?.run && typeof input.run === "object" ? input.run : {} } });
     ev.stages_tried.push("escalate"); ev.capabilities = [capability]; ev.request_id = out.requestId || null;
     return finish(out.status === "escalated" ? (dry ? "dry" : "escalated") : "rejected", { ...out, ...(why ? { why } : {}) });
   };
+  // A change no capability can make (no tool can be built for it): say so and offer to ask
+  // the Akoro team; with the learner's yes, that request is a Tool idea on the admins' page.
+  // Matched on the CHANGE asked for, not the thing it's about: "rename my chats" isn't "delete chats".
+  const writeCaps = (names) => names.some((c) => CAPABILITIES[c]?.kind === "write");
+  if (!resumed && audience === "learner" && asksForChange(goal) && !ownChangeAsked(goal) && !writeCaps([].concat(hint.capabilities || []))) {
+    ev.stages_tried.push("change_request");
+    if (input?.__agreed !== true) return finish("rejected", { status: "offer_request", reason: "no change like this exists yet",
+      note: "NOTHING IS SENT. This change can't be made yet — no tool you have or can build does it. In your own words: say you can't do that right now, and offer to ask the Akoro team to add it. Call create_tool again with the same goal once they say yes — that sends the request. Don't suggest workarounds unless they ask." });
+    if (dry) return finish("dry", { status: "requested", dryRun: true, note: "DRY RUN — live, this would send the request to the Akoro team." });
+    const { createLearnerToolRequest } = await import("../agent-tool-requests/service.js");
+    let r;
+    try {
+      r = await createLearnerToolRequest({ learnerId, body: { category: "other", title: `Change: ${goal}`.slice(0, 120),
+        description: `A learner asked their agent to: "${goal.slice(0, 300)}". No change permission does this yet, so no tool could be built for it.` } });
+    } catch (e) { return finish("failed", reject(`Couldn't send the request: ${e.message}`)); }
+    const when = r.created ? new Date(r.created).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : null;
+    return finish("escalated", { status: "requested", submitted: r.createdNew || !!r.reopened, duplicate: !r.createdNew, reopened: !!r.reopened,
+      tell: r.createdNew ? "Sent: the Akoro team sees it on their Agent requests page and decides whether to add it."
+        : r.reopened ? "You had asked for this before; it is re-opened for the Akoro team."
+        : `You already asked for this${when ? ` on ${when}` : ""}; it is still waiting — say it is the same request, not a new one.` });
+  }
   if (!resumed) {
     const hinted = await lockedIn([].concat(hint.capabilities || []));
-    if (hinted.length) return toEscalate(hinted[0]);
+    if (hinted.length && input?.__agreed === true && learnerGrantable(hinted[0]) && audience === "learner") { draftCap = hinted[0]; mustUse = [draftCap]; ev.stages_tried.push("draft"); }
+    else if (hinted.length) return toEscalate(hinted[0]);
     // About OTHER learners, and the best match for that is a locked network
     // capability: the learner's own views can't answer it, and a build from
     // them passed the learner's own scores off as "the other players'".
-    const others = othersCapabilityFirst(goal, lookup.capabilities || []);
+    const others = draftCap ? null : othersCapabilityFirst(goal, lookup.capabilities || []);
     if (others && locked.includes(others)) return toEscalate(others);
   }
   if (!slice.views.length && !slice.capabilities.length) {
-    if (locked.length && !resumed) return toEscalate(locked[0]);
+    const first = locked.find((c) => !asksForChange(goal) || CAPABILITIES[c]?.kind !== "write" || c === ownChangeAsked(goal));
+    if (first && !resumed) return toEscalate(first);
     return finish("rejected", reject(locked.length ? "This needs a permission that isn't on." : "Nothing available matches this goal, so it can't be built."));
   }
 
@@ -202,10 +258,13 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   // A goal that reads as planning/scheduling goes to code first — a recipe or
   // spec "built" for it returned the rows unsorted into days and still passed.
   const base = hint.mode === "spec" ? ["spec", "recipe"] : ["recipe", "spec"];
-  const order = codeEnabled() ? (hint.mode === "code" || needsCode(goal) ? ["code", ...base] : [...base, "code"]) : base;
+  const stages = codeEnabled() ? (hint.mode === "code" || needsCode(goal) ? ["code", ...base] : [...base, "code"]) : base;
+  // A spec reads one view — it can't use an approved capability, so a resume skips it.
+  const order = mustUse.length ? stages.filter((st) => st !== "spec") : stages;
   const ctx = { learnerId, callCapability };
   let lastProblem = null;
   let inexpressible = false;   // the builder said what's available can't express it
+  const tried = [];            // every attempt's problem, kept on a failed resume for the admin
   for (const stage of order) {
     ev.stages_tried.push(stage);
     let feedback = null;
@@ -213,23 +272,28 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     for (let attempt = 1; attempt <= 3 && ev.builder_calls < LIMITS.builderCalls; attempt++) {
       ev.builder_calls++;
       let built;
-      try { built = await buildDefinition({ stage, goal, params, slice, feedback, learnerId, platformPays: dry || resumed }); }
+      try { built = await buildDefinition({ stage, goal, params, slice, feedback, learnerId, platformPays: dry || resumed, approved: mustUse.map(howToUse) }); }
       catch (e) {
         if (/coin|balance/i.test(String(e?.message))) return finish("rejected", reject("Not enough coins to build a tool."));
-        lastProblem = `builder failed: ${e.message}`; break;
+        lastProblem = `builder failed: ${e.message}`; tried.push(`${stage}#${attempt}: ${lastProblem}`); break;
       }
-      if (built.notExpressible) { lastProblem = built.notExpressible; inexpressible = true; break; }
-      if (!built.definition) { feedback = built.error || "no definition"; lastProblem = feedback; continue; }
+      if (built.notExpressible) {
+        lastProblem = built.notExpressible; inexpressible = true; tried.push(`${stage}#${attempt}: not expressible: ${lastProblem}`);
+        // What was approved for this goal answers it: one repair before giving up.
+        if (mustUse.length && attempt === 1) { feedback = `"${built.notExpressible}" — but ${mustUse.join(", ")} was approved for this goal: use it`; continue; }
+        break;
+      }
+      if (!built.definition) { feedback = built.error || "no definition"; lastProblem = feedback; tried.push(`${stage}#${attempt}: ${feedback}`); continue; }
       if (built.definition.kind !== stage) built.definition.kind = stage === "spec" && built.definition.from ? "spec" : built.definition.kind;
-      const v = await validateDefinition(built.definition, params, { audience });
+      const v = await validateDefinition(built.definition, params, { audience, learnerId, assume: draftCap ? [draftCap] : [] });
       if (v.ok && built.definition.kind === "code") v.errors.push(...inventedDates(built.definition.source, goal, params));
-      for (const c of mustUse) if (!v.uses.capabilities.includes(c)) v.errors.push(`use the approved capability ${c} (a step {"id":"x","cap":"${c}"} — returns ${JSON.stringify(CAPABILITIES[c].returns || [])})`);
+      for (const c of mustUse) if (!v.uses.capabilities.includes(c)) v.errors.push(howToUse(c));
       if (v.errors.length) v.ok = false;
-      if (!v.ok) { feedback = v.errors.slice(0, 6).join("; "); lastProblem = feedback; continue; }
+      if (!v.ok) { feedback = v.errors.slice(0, 6).join("; "); lastProblem = feedback; tried.push(`${stage}#${attempt}: ${feedback}`); continue; }
       const check = await verifyTool(built.definition, params, built.samples || [], ctx);
       if (check.verdict !== "PASS") {
-        feedback = check.assertions.filter((a) => !a.passed).map((a) => `${a.name}: ${a.actual ?? ""}`).join("; ");
-        lastProblem = feedback; continue;
+        feedback = check.assertions.filter((a) => !a.passed).map((a) => `${a.name}: ${a.detail ? (typeof a.detail === "string" ? a.detail : JSON.stringify(a.detail)).slice(0, 200) : a.actual ?? ""}`).join("; ");
+        lastProblem = feedback; tried.push(`${stage}#${attempt}: verify: ${feedback}`); continue;
       }
       if (check.emptyEverywhere && attempt === 1) {
         fallback = { built, v, check };
@@ -242,8 +306,28 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     if (fallback) return register({ stage, ...fallback });
   }
   // Nothing available could express it, but a locked capability might.
-  if (locked.length && !resumed && inexpressible) return toEscalate(locked[0], lastProblem);
-  return finish("rejected", reject(`Couldn't build it safely: ${String(lastProblem || "no stage could express it").slice(0, 240)}`));
+  // Never offer a DIFFERENT change than the one asked for (a rename must not become a delete card).
+  const fallback = locked.find((c) => !asksForChange(goal) || CAPABILITIES[c]?.kind !== "write" || c === ownChangeAsked(goal));
+  if (fallback && !resumed && !draftCap && inexpressible) return toEscalate(fallback, lastProblem);
+  return finish("rejected", reject(`Couldn't build it safely: ${String(lastProblem || "no stage could express it").slice(0, 240)}`, resumed ? { tried: tried.map((t) => t.slice(0, 300)) } : {}));
+
+  /** Save the built tool switched OFF and ask the learner on a card, showing what it would change right now. */
+  async function draftAndAsk({ def, runNow }) {
+    if (!runNow.ok) return finish("rejected", reject(`Built, but it couldn't run: ${runNow.error}`));
+    const changes = { items: (runNow.write?.targets || []).map((t) => t.label), more: runNow.write?.more || 0 };
+    if (dry) {
+      await finish("dry", {});
+      return { status: "needs_permission", dryRun: true, tool: name, label, wouldChange: changes.items,
+        note: "DRY RUN — the tool was drafted and checked but NOT saved, and no card was made. Live, the learner gets a card showing what it would change; Approve turns it on." };
+    }
+    const { data: row, error } = await edu().from("agent_tools").insert({ owner_id: learnerId, scope: "learner", audience, ...def,
+      status: "disabled", verification: { ...def.verification, awaitingPermission: draftCap }, usage_count: 0 }).select("id").single();
+    if (error) return finish("failed", reject(`Couldn't save the draft: ${error.message}`));
+    ev.tool_id = row.id; ev.mode = def.mode; ev.capabilities = def.capabilities;
+    const out = await proposePermission({ learnerId, conversationId, capability: draftCap, proposed: { name, label, goal }, toolId: row.id, changes });
+    await finish("escalated", {});   // logged as asked-for (stages_tried says "draft"), the outcome list is fixed
+    return { ...out, tool: name, label, drafted: true };
+  }
 
   async function register({ stage, built, v, check }) {
     ev.mode = stage;
@@ -253,6 +337,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     const runNow = await tryRun(built.definition, params, input?.run && typeof input.run === "object" ? input.run : (built.samples || [])[0] || {}, ctx);
     const def = { name, label, goal, mode: stage, definition: built.definition, params_schema: params,
       capabilities: v.uses.capabilities, views: [...new Set(v.uses.views)], verification };
+    if (draftCap) return draftAndAsk({ def, runNow });
     if (dry) {
       await finish("created", {});
       return { status: "created", dryRun: true, tool: name, label, mode: stage, verified: true, definition: built.definition,
@@ -312,7 +397,7 @@ export async function runLearnerTool(name, input, learnerId, { callCapability, c
   // Re-check on EVERY call: a revoked grant or removed view takes effect at once (§7.10).
   for (const c of t.capabilities || []) {
     const cap = CAPABILITIES[c];
-    if ((await capabilityStatus(c)) !== "enabled" || !(cap?.kind === "read" || cap?.target)) return { error: "This tool uses something that's no longer allowed, so it can't run." };
+    if ((await capabilityStatus(c, { learnerId })) !== "enabled" || !(cap?.kind === "read" || cap?.target)) return { error: "This tool uses something that's no longer allowed, so it can't run." };
   }
   for (const v of t.views || []) if (!DATA_VIEWS[v]) return { error: "This tool uses data that's no longer available." };
   // Always as THIS learner: views are forced to their own rows (viewRuntime).

@@ -146,3 +146,50 @@ export async function knownNames(db, input = {}) {
   }
   return known;
 }
+
+/* ── Which activity the teacher asked for, and the details since they asked ── */
+
+const TYPE_WORDS = [
+  ["self_study", /\bself[\s-]?stud(?:y|ies)\b/i],
+  ["assignment", /\b(?:assignments?|homework)\b/i],
+  ["project", /\bprojects?\b/i],
+  ["live_course", /\blive (?:course|class|lesson)s?\b/i],
+  ["multi_stage", /\b(?:journeys?|multi[\s-]?stage)\b/i],
+  ["battle", /\b(?:battles?|study reviews?|quiz battles?)\b/i],
+];
+const NEGATED = /\b(?:not|no|instead of|rather than)\s+(?:an?\s+|the\s+)?(?:review\s+|quiz\s+)?(?:self[\s-]?stud(?:y|ies)|assignments?|homework|projects?|live (?:course|class|lesson)s?|journeys?|multi[\s-]?stage|battles?)\b/gi;
+export const TYPE_LABEL = { self_study: "self study", assignment: "assignment", project: "project", live_course: "live course", multi_stage: "multi-stage journey", battle: "battle" };
+
+/** PURE: the activity type a message asks for ("Assignment activity not battle" → assignment). → type | null */
+export function activityTypeNamed(text) {
+  const t = String(text || "").replace(NEGATED, " ");
+  let best = null;
+  for (const [type, re] of TYPE_WORDS) {
+    const m = t.match(re);
+    if (m && (best == null || m.index < best.at)) best = { type, at: m.index };
+  }
+  return best?.type || null;
+}
+
+const userText = (m) => (typeof m?.content === "string" ? m.content
+  : Array.isArray(m?.content) ? m.content.filter((p) => p?.type === "text").map((p) => p.text).join(" ") : "");
+
+/**
+ * PURE: the activity the teacher is asking for now, and what they've said since
+ * asking. The details of an EARLIER activity don't carry over to a new one on
+ * their own ("let's create an assignment" after a battle on cells is not "an
+ * assignment on cells") — unless they say so ("the same topic", "same as before").
+ * → { type, text, earlier }   text: the teacher's words since the request; earlier: before it
+ */
+export function currentRequest(messages = []) {
+  const teacher = messages.filter((m) => m?.role === "user");
+  for (let i = teacher.length - 1; i >= 0; i--) {
+    const type = activityTypeNamed(userText(teacher[i]));
+    if (!type) continue;
+    const since = teacher.slice(i).map(userText).join("\n");
+    const earlier = teacher.slice(0, i).map(userText).join("\n");
+    const same = /\b(?:same|as before|as earlier|that one|those)\b/i.test(since);
+    return { type, text: same ? `${earlier}\n${since}` : since, earlier };
+  }
+  return { type: null, text: teacher.map(userText).join("\n"), earlier: "" };
+}

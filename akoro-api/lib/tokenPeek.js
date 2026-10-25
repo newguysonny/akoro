@@ -64,7 +64,8 @@ export function peekAccessToken(req) {
       issuer:     JWT_ISSUER,
       audience:   JWT_AUDIENCE,
     });
-    return decoded?.sub ? decoded : null;
+    // Only session tokens count: a refresh / 2FA-challenge / hand-off token carries a `type`.
+    return decoded?.sub && !decoded.type ? decoded : null;
   } catch {
     return null;
   }

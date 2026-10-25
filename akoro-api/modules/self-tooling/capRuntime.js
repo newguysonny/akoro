@@ -63,8 +63,88 @@ const markTaskDone = async (learnerId, ref) => {
   } catch { /* the task is done; follow-ups are best effort, as in the route */ }
   return { ok: true };
 };
+/** The same as the app's delete (DELETE /api/tasks/:id): never a running task; its schedule is cancelled first. */
+const deleteTask = async (learnerId, ref) => {
+  const { data: task, error } = await db.from("tasks").select("id, status, bull_job_id").eq("id", ref).eq("creator_id", learnerId).maybeSingle();
+  if (error) return { ok: false, error: "couldn't read the task" };
+  if (!task) return { ok: false, error: "not found or already deleted" };
+  if (task.status === "running") return { ok: false, error: "it's running right now" };
+  try {
+    const { cancelTask } = await import("../tasks/scheduler.js");
+    await cancelTask(task.bull_job_id, task.id);
+  } catch { /* nothing scheduled to cancel */ }
+  const { error: delErr } = await db.from("tasks").delete().eq("id", task.id).eq("creator_id", learnerId);
+  if (delErr) return { ok: false, error: "couldn't delete the task" };
+  try {
+    const { cancelAutonomyReviewForTask } = await import("../adaptive-learning/learner-autonomy.js");
+    await cancelAutonomyReviewForTask({ taskId: task.id, userId: learnerId }).catch(() => {});
+  } catch { /* best effort, as for mark done */ }
+  return { ok: true };
+};
+/** A task the learner can still edit (as PATCH /api/tasks/:id): not running, not done. */
+const editableTask = async (learnerId, ref) => {
+  const { data: task, error } = await db.from("tasks").select("id, status, due_at, bull_job_id").eq("id", ref).eq("creator_id", learnerId).maybeSingle();
+  if (error) return { error: "couldn't read the task" };
+  if (!task) return { error: "not found" };
+  if (!["pending", "queued", "cancelled"].includes(task.status)) return { error: task.status === "running" ? "it's running right now" : "it's already finished" };
+  return { task };
+};
+
+/** The same as moving a task's due date in the app: keeps its time of day (17:00 when it had none), re-points its review. */
+const rescheduleTask = async (learnerId, ref, { args } = {}) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(args?.date || ""))) return { ok: false, error: "no date to move it to" };
+  const { task, error } = await editableTask(learnerId, ref);
+  if (error) return { ok: false, error };
+  const time = task.due_at ? new Date(task.due_at).toLocaleTimeString("en-GB", { timeZone: "Africa/Lagos", hour: "2-digit", minute: "2-digit", hour12: false }) : "17:00";
+  const dueAt = new Date(`${args.date}T${time}:00+01:00`).toISOString();   // Africa/Lagos is UTC+1 all year
+  try { const { cancelTask } = await import("../tasks/scheduler.js"); await cancelTask(task.bull_job_id, task.id); } catch { /* nothing scheduled */ }
+  const { data: updated, error: upErr } = await db.from("tasks").update({ due_at: dueAt, status: "pending", bull_job_id: null, updated_at: new Date().toISOString() })
+    .eq("id", task.id).eq("creator_id", learnerId).select("*").maybeSingle();
+  if (upErr || !updated) return { ok: false, error: "couldn't move the task" };
+  try { const { scheduleAutonomyReviewForTask } = await import("../adaptive-learning/learner-autonomy.js"); await scheduleAutonomyReviewForTask(updated); } catch { /* best effort, as in the route */ }
+  return { ok: true };
+};
+
+const setTaskPriority = async (learnerId, ref, { args } = {}) => {
+  if (!["low", "medium", "high", "critical"].includes(args?.priority)) return { ok: false, error: "no priority to set" };
+  const { task, error } = await editableTask(learnerId, ref);
+  if (error) return { ok: false, error };
+  const { error: upErr } = await db.from("tasks").update({ priority: args.priority, updated_at: new Date().toISOString() }).eq("id", task.id).eq("creator_id", learnerId);
+  return upErr ? { ok: false, error: "couldn't change the priority" } : { ok: true };
+};
+
+/** Through the goals service (PATCH /api/learner-goals/:id), so its checks apply. */
+const goalStatus = (status) => async (learnerId, ref) => {
+  const { updateGoal } = await import("../learner-goals/service.js");
+  const r = await updateGoal(learnerId, ref, { status });
+  return r?.goal ? { ok: true } : { ok: false, error: r?.notFound ? "not found" : String(r?.error || "couldn't update the goal").slice(0, 120) };
+};
+
+/** As opening the message in the inbox: marks it read (only messages sent TO the learner). */
+const markMessageRead = async (learnerId, ref) => {
+  const { data, error } = await db.schema("edu").from("agent_messages").update({ read_at: new Date().toISOString() })
+    .eq("id", ref).eq("to_user", learnerId).is("read_at", null).select("id").maybeSingle();
+  if (error) return { ok: false, error: "couldn't update the message" };
+  return data ? { ok: true } : { ok: false, error: "not found or already read" };
+};
+
+/** As DELETE /api/adaptive/chat/sessions/:id: the learner's own chat, gone with its messages. */
+const deleteChat = async (learnerId, ref, { conversationId = null } = {}) => {
+  if (conversationId && String(conversationId) === String(ref)) return { ok: false, error: "that's the chat you're in" };
+  const { data, error } = await db.from("chat_sessions").delete().eq("id", ref).eq("user_id", learnerId).select("id").maybeSingle();
+  if (error) return { ok: false, error: "couldn't delete the chat" };
+  return data ? { ok: true } : { ok: false, error: "not found" };
+};
+
 export const WRITE_RUNNERS = {
+  "tasks.reschedule": rescheduleTask,
+  "tasks.set_priority": setTaskPriority,
+  "goals.complete": goalStatus("achieved"),
+  "goals.dismiss": goalStatus("dismissed"),
+  "inbox.mark_read": markMessageRead,
+  "chats.delete": deleteChat,
   "tasks.mark_done": markTaskDone,
+  "tasks.delete": deleteTask,
   "verify.task_done": markTaskDone,
   /** Through the study_buddy tool, so its own checks (and notifications) run. */
   async "buddies.end"(learnerId, ref, { callTool }) {

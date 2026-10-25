@@ -23,6 +23,7 @@ import { createPublicLearningState } from "../../public-learning-state.js";
 import { executeTeachingTurnWorkflow } from "../../teaching-workflow/runner.js";
 import { blocksToConversationHistory } from "./continuation-history.js";
 import { STUDENT_PHASES, ACTION_FOR_DIALOGUE_MOVE } from "../../teaching-session/state-machine.js";
+import { openingIdeas } from "../../teaching-session/guideIdeas.js";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -244,10 +245,6 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
     // part is the opening subtopic. Built from real data — no fabricated content.
     const guideEmoji = this.guideOrchestrator.guide?.emoji || "🧠";
     const activeObjectiveIndex = this.session.mustKnowIndex;
-    const initialLearningState = createPublicLearningState({
-      currentConcept: mustKnow[activeObjectiveIndex] || topic,
-      dialogue: this.getTeachingEvidenceSnapshot().dialogue,
-    });
     const openGuideText = isDecaySession
       ? `Let's reinforce ${topic}. Re-teach the current idea to your agent and I'll guide you one step at a time.`
       : `Let's teach ${topic} to your agent. Start by explaining the current idea in your own words.`;
@@ -273,12 +270,12 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
         subject:  this.subject || "",
       },
       {
-        type:             "guide",
+        // The guide opens with ideas for the learner's first message (pills), not a message of its own.
+        type:             "guide-ideas",
         agent:            guideName,
         emoji:            guideEmoji,
-        learningState:    initialLearningState.learningState,
-        nextLearningMove: initialLearningState.nextLearningMove,
-        text:             openGuideText,
+        hint:             openGuideText,
+        ideas:            openingIdeas(topic, { review: isDecaySession }),   // the topic reads naturally; an objective's label is a sentence
       },
     ];
 
@@ -362,6 +359,9 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
       type: "teaching_response",
       studentAgentResponse: studentReply,
       guideMessage: guideResult.tip,
+      // The guide's ideas for the human's next message (shown as pills, not a message).
+      guideSuggestions: Array.isArray(guideResult.suggestions) ? guideResult.suggestions : null,
+      guideNextAction: guideResult.nextAction || null,
       guideIsUrgent: guideResult.isUrgent || false,
       guideName,
       studentAgentName: this.studentAgentRecord?.name || "Agent",

@@ -198,6 +198,15 @@ function withAuthDeadline(promise, label) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+/**
+ * A session token is one that signs someone in: an access token (or a job's
+ * internal access token). Every other token this module signs carries a `type`
+ * — "refresh", "2fa_challenge", "ai_handoff" — and is only good at its own
+ * endpoint. Same key, issuer and audience, so the type is the only thing that
+ * keeps a 2FA challenge (password, no code yet) from working as a login.
+ */
+export const isSessionToken = (decoded) => !!decoded && !decoded.type;
+
 function verifyToken(token) {
   const verifyKey = USE_RSA ? PUBLIC_KEY : DEV_SECRET;
   const algs      = USE_RSA ? ALLOWED_ALGS : ["HS256"];
@@ -227,6 +236,8 @@ const verifyHandoff = (token) => {
   } catch { return null; }
 };
 export { signHandoff, verifyHandoff };
+// For the verification gate only (smoke.session_tokens_only): proves these never sign in.
+export { signChallenge as signChallengeForGate, signRefresh as signRefreshForGate };
 
 /**
  * authenticateSocket — verify the JWT for a Socket.IO connection.
@@ -262,6 +273,7 @@ export async function authenticateSocket(socket) {
     if (!header.alg || header.alg === "none" || (!USE_RSA && header.alg !== "HS256") || (USE_RSA && !ALLOWED_ALGS.includes(header.alg))) return null;
 
     const decoded = verifyToken(token);
+    if (!isSessionToken(decoded)) return null;
     if (decoded.jti && await DenyList.has(decoded.jti)) return null;
 
     const { data: user } = await db.from("users")
@@ -517,6 +529,10 @@ export const authenticateToken = asyncHandler(async (req, res, next) => {
       err.name === "TokenExpiredError" ? "Access token expired" : "Invalid token",
       err.name === "TokenExpiredError" ? "token_expired" : "token_invalid");
   }
+
+  // 3b. Only a session token signs in — a refresh, 2FA-challenge or hand-off
+  // token is good at its own endpoint only.
+  if (!isSessionToken(decoded)) return res401(res, "Invalid token", "token_invalid");
 
   // 4. Check deny-list
   if (decoded.jti && await withAuthDeadline(DenyList.has(decoded.jti), "denylist")) {

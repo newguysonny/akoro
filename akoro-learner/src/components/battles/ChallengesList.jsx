@@ -1,8 +1,10 @@
 /*
  * ChallengesList — the Challenges tab: ONE list, one compact card for every
- * challenge (invitations, open seats, seats you took, your own posts,
- * reviews, recurring series). Format, Scope and Timing are fields on the card,
- * not sections; filter chips narrow the same list. Tapping a card opens the
+ * challenge waiting for MY answer (invitations, reviews, open seats, a
+ * recurring series I'm invited to). What I joined, posted or am in already
+ * waits in the Battles tab (Scheduled · Waiting to fill). Format, Scope and
+ * Timing are fields on the card, not sections; filter chips narrow the same
+ * list. Tapping a card opens the
  * challenge sheet (bottom sheet on phones/tablets, dialog on desktop):
  * invitations and reviews the existing ChallengeModal (via onOpenInvite), the
  * agent network's challenge requests the RequestSheet below, a recurring
@@ -14,7 +16,7 @@ import { Icon } from '../common/Icons.jsx';
 import Spinner from '../common/Spinner.jsx';
 import SheetFrame from './SheetFrame.jsx';
 import { BRAND, RED } from '../../constants.js';
-import { FILTERS, filterItems, mergeItems } from './challengeItems.js';
+import { FILTERS, filterItems, challengeItems } from './challengeItems.js';
 import { acceptChallengeRequest, cancelChallengeRequest, fetchChallengeRequests } from '../../services/agentNetworkApi.js';
 import { apiPost } from '../../services/api.js';
 
@@ -78,7 +80,7 @@ export function ChallengeCard({ item, onOpen }) {
 }
 
 /** The sheet for an agent-network challenge request (open seat, seat you took, your own post). */
-function RequestSheet({ item, onClose, onChanged }) {
+export function RequestSheet({ item, onClose, onChanged }) {
   const r = item.raw;
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
@@ -149,7 +151,7 @@ function RequestSheet({ item, onClose, onChanged }) {
 const DAY_LONG = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
 
 /** The sheet for a recurring series: its rule, the next one, and Skip / Opt out (or End, for its creator). */
-function SeriesSheet({ item, onClose, onChanged }) {
+export function SeriesSheet({ item, onClose, onChanged }) {
   const c = item.raw;
   const [busy, setBusy] = useState(null);
   const [msg, setMsg] = useState(null);
@@ -227,24 +229,17 @@ export default function ChallengesList({ invites = [], onOpenInvite, onCount, on
   const [req, setReq] = useState(null);
   const [filter, setFilter] = useState('all');
   const [open, setOpen] = useState(null);
+  // Open requests from others (mine and the ones I joined wait in the Battles tab).
   const load = useCallback(() => {
-    Promise.all([
-      fetchChallengeRequests().catch(() => null),
-      fetchChallengeRequests({ mine: 'true' }).catch(() => null),
-      fetchChallengeRequests({ joined: 'true' }).catch(() => null),
-    ]).then(([o, m, j]) => {
+    fetchChallengeRequests().catch(() => null).then((o) => {
       const openList = o?.requests || [];
       onCount?.(openList.length);
-      setReq({
-        open: openList,
-        mine: (m?.requests || []).filter((r) => r.status === 'open'),
-        joined: (j?.requests || []).filter((r) => r.status === 'open'),
-      });
+      setReq({ open: openList });
     });
   }, [onCount]);
   useEffect(() => { load(); }, [load]);
 
-  const items = useMemo(() => mergeItems({ invites, ...(req || {}) }), [invites, req]);
+  const items = useMemo(() => challengeItems({ invites, ...(req || {}) }), [invites, req]);
   const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.key, filterItems(items, f.key).length])), [items]);
   const shown = filterItems(items, filter);
   const openItem = (item) => (item.source === 'invite' ? onOpenInvite?.(item.raw) : setOpen(item));

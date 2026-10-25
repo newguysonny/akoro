@@ -121,6 +121,8 @@ router.get("/agent-tool-requests", adminOnly, asyncHandler(async (req, res) => {
   const search = searchTerm(req.query.search);
   let requestsQuery = db.schema("edu").from("agent_tool_requests")
     .select(REQUEST_COLUMNS, { count: "exact" })
+    // Latest activity first: a request asked again (re-opened) comes back to the top.
+    .order("last_status_changed_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
   if (requestedStatus) requestsQuery = requestsQuery.eq("status", requestedStatus);
@@ -188,12 +190,16 @@ router.post("/agent-tool-requests/:requestId/decide", adminOnly, asyncHandler(as
 /** GET /api/admin/capability-grants — every grant (active first). */
 router.get("/capability-grants", adminOnly, asyncHandler(async (_req, res) => {
   const { data, error } = await db.schema("edu").from("capability_grants")
-    .select("id, capability, granted_by, request_id, note, expires_at, revoked_at, created_at").order("created_at", { ascending: false }).limit(200);
+    .select("id, capability, granted_by, request_id, learner_id, tool_id, note, expires_at, revoked_at, created_at").order("created_at", { ascending: false }).limit(200);
   if (error) throw error;
   const now = new Date().toISOString();
-  return res.json({ success: true, grants: (data || []).map((g) => ({
-    ...g, does: CAPABILITIES[g.capability]?.description || null, active: !g.revoked_at && (!g.expires_at || g.expires_at > now),
-  })) });
+  // A learner's own grant (they approved it on a card in their chat) names them; NULL is everyone.
+  const learners = await requesterMap((data || []).map((g) => ({ requester_id: g.learner_id })));
+  return res.json({ success: true, grants: (data || []).map((g) => {
+    const u = g.learner_id ? learners.get(String(g.learner_id)) : null;
+    return { ...g, does: CAPABILITIES[g.capability]?.description || null, active: !g.revoked_at && (!g.expires_at || g.expires_at > now),
+      forLearner: g.learner_id ? { id: g.learner_id, name: u?.full_name || null, username: u?.username || null } : null };
+  }) });
 }));
 
 /** POST /api/admin/capability-grants/:id/revoke — the capability is off for everyone at once. */

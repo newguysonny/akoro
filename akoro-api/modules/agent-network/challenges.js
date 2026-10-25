@@ -183,7 +183,18 @@ export async function searchChallengeRequests(meId, f = {}) {
     let mq = edu().from("challenge_requests").select("*").order("created_at", { ascending: false }).limit(20);
     mq = f.joined ? mq.contains("accepted_by", [meId]).eq("status", "open") : mq.eq("created_by", meId);
     const { data } = await mq;
-    return { requests: await expireStale(data || []) };
+    const rows = await expireStale(data || []);
+    // Who posted each (the open list has this; these were raw rows, so a joined card said "Someone").
+    const ids = [...new Set(rows.map((r) => r.created_by).filter(Boolean))];
+    const [{ data: users }, { data: agents }] = ids.length ? await Promise.all([
+      db.from("users").select("id, full_name, username").in("id", ids),
+      db.from("user_agents").select("user_id, agent_name, agent_emoji, total_xp, level").in("user_id", ids),
+    ]) : [{ data: [] }, { data: [] }];
+    const U = new Map((users || []).map((u) => [u.id, u])), A = new Map((agents || []).map((a) => [a.user_id, a]));
+    return { requests: rows.map((r) => {
+      const u = U.get(r.created_by), a = A.get(r.created_by);
+      return u ? { ...r, by: { userId: u.id, name: (u.full_name || u.username || "").split(" ")[0], username: `@${u.username}`, ...(a ? { agent: `${a.agent_emoji || "🤖"} ${a.agent_name}`, level: a.level || 1, xp: a.total_xp || 0 } : {}) } } : r;
+    }) };
   }
   let q = edu().from("challenge_requests").select("*").eq("status", "open").gt("expires_at", nowIso).order("created_at", { ascending: false }).limit(200);
   if (f.subject) q = q.ilike("subject", `%${String(f.subject).slice(0, 60)}%`);
