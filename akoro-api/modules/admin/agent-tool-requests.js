@@ -121,6 +121,8 @@ router.get("/agent-tool-requests", adminOnly, asyncHandler(async (req, res) => {
   const search = searchTerm(req.query.search);
   let requestsQuery = db.schema("edu").from("agent_tool_requests")
     .select(REQUEST_COLUMNS, { count: "exact" })
+    // Latest activity first: a request asked again (re-opened) comes back to the top.
+    .order("last_status_changed_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
   if (requestedStatus) requestsQuery = requestsQuery.eq("status", requestedStatus);

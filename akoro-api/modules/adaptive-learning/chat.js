@@ -100,6 +100,7 @@ import {
   scheduleAutonomyReviewForTask,
   setLearnerAutonomy,
 } from "./learner-autonomy.js";
+import { adminRequestOf, requestClaimCorrection } from "./requestClaims.js";
 import { requiresAgentCapabilitiesTool, requiresActivityPreparation, isDraftFollowUp, isToolDraftFollowUp, requiredLearnerDataTool, requiredStudyPrepTool, classForExam } from "./agent-chat-intent.js";
 import { agentToolActivity } from "../../lib/agentActivity.js";
 import { noteChatTurn } from "../agent-memory/quietLearning.js";
@@ -2801,13 +2802,19 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       // fix it and retry, instead of the generic "could not be completed".
       try { request = await createLearnerToolRequest({ learnerId: studentId, body: input }); }
       catch (e) { return { submitted: false, error: e?.message || "Could not send the request." }; }
+      const when = request.created ? new Date(request.created).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : null;
       return {
-        submitted: request.createdNew,
+        submitted: request.createdNew || !!request.reopened,
         duplicate: !request.createdNew,
+        reopened: !!request.reopened,
         requestId: request.id,
         status: request.status,
         title: request.title,
         category: request.category,
+        // Say exactly this much — never more (a duplicate is NOT a new request).
+        tell: request.createdNew ? "Sent: it is on the admins' Agent requests page now, waiting for a decision."
+          : request.reopened ? `You had asked for this before (${request.previousStatus}); it is re-opened and back on the admins' Agent requests page.`
+          : `You already asked for this${when ? ` on ${when}` : ""}; that request is still ${String(request.status).replace(/_/g, " ")}. Say it is the same request, still waiting — not a new one.`,
       };
     }
     default: {
@@ -4204,6 +4211,8 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         requestId: observation.request_id,
         sideEffecting: SIDE_EFFECT_TOOLS.includes(tool)
           || isSideEffectingAction(tool, input),
+        // Did this turn really put a request in front of an admin? (requestClaims.js checks the reply against it.)
+        ...(tool === "submit_tool_request" || tool === "create_tool" ? { adminRequest: adminRequestOf(tool, toolResult) } : {}),
         ...(isInspected() ? { input, result: inspectResult(toolResult) } : {}),
         // A small echo so the chat UI can render the Preview affordance for
         // the human-in-the-loop approval without parsing the model's prose.
@@ -4821,6 +4830,11 @@ router.post("/agent", async (req, res) => {
         const mats = collectMaterials([materialsFrom("ask_to_be_taught", { materials: found })]);
         prepared.toolExecutions.push({ tool: "ask_to_be_taught", success: true, backfilled: true, input: { topic: teach.topic }, teach, ...(mats.length ? { materials: mats } : {}) });
       }
+    }
+    // A reply that says a request went to an admin when none did this turn is corrected, not left standing.
+    if (!stopped()) {
+      const fix = requestClaimCorrection(reply, prepared.toolExecutions);
+      if (fix) { reply = `${reply.trim()}\n\n${fix}`; if (wantsStream) send("delta", { text: `\n\n${fix}` }); }
     }
     if (!reply.trim()) reply = "I'm here to help with your studies — ask me anything about your subjects!";
     const traceBlocks = trace.blocks();

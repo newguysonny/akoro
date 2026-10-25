@@ -16,7 +16,7 @@ test("internal ids the model saw in tool results never reach the learner", () =>
 });
 
 test("wired into every Agent Chat reply before it is shown or saved", () => {
-  assert.match(chat, /reply = scrubInternalIds\(reply\);\n\s*if \(!stopped\(\)\) reply = ensureNotTaughtOpener\(reply, prepared\.toolExecutions\);\n[\s\S]{0,900}?\n\s*if \(!reply\.trim\(\)\)/);
+  assert.match(chat, /reply = scrubInternalIds\(reply\);\n\s*if \(!stopped\(\)\) reply = ensureNotTaughtOpener\(reply, prepared\.toolExecutions\);\n[\s\S]{0,1500}?\n\s*if \(!reply\.trim\(\)\)/);
 });
 
 test("Teach me given: the reply opens by saying it wasn't taught, unless it already does", () => {
