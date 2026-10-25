@@ -337,6 +337,8 @@ export async function createActivityDraft({ instructor, input, sessionId = null,
       } : null,
       total_questions: Number.isFinite(total) && total >= 5 ? Math.min(30, total) : null,
     };
+    // Its real questions, now: the preview shows the ones the battle (or the study review) asks.
+    Object.assign(payload.details, await draftBattleQuestions(instructor, payload));
     if (repeat) audienceLabel += " · repeats";
     else if (scheduledAt || payload.details.scheduled_hint) audienceLabel += ` · ${payload.details.scheduled_hint || "scheduled"}`;
   } else if (type === "multi_stage") {
@@ -447,6 +449,31 @@ export async function listActivityDrafts(instructor) {
 }
 
 /** Human edits before assign — the preview's Edit flow saves here. */
+/**
+ * A battle draft's real questions — archive first, AI tops up, as the battle
+ * would draw them (battle/questionSource.js collectQuestions). The battle made
+ * from the draft places exactly these (battle routes: draft_id). A failure (no
+ * coins, nothing on the topic) leaves none and says why; the battle then draws
+ * its own when it's created, as before.
+ */
+async function draftBattleQuestions(instructor, payload) {
+  const d = payload.details || {};
+  const total = d.total_questions || 10;
+  try {
+    const { collectQuestions } = await import("../battle/questionSource.js");
+    const out = await Promise.race([
+      collectQuestions({ source: "auto", total, subject: payload.subject || "General", topic: d.topic || payload.topic || null,
+        difficulty: payload.difficulty || "intermediate", userId: instructor.id }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("took too long")), 60_000)),
+    ]);
+    const questions = (out.questions || []).map((q) => ({ stem: q.stem, options: q.options, correctIndex: q.correctIndex, topic: q.topic || null,
+      ...(q.explanation ? { explanation: q.explanation } : {}), ...(q.exam ? { exam: q.exam, year: q.year ?? null } : {}) }));
+    return { questions, questions_note: questions.length < 5 ? `Only ${questions.length} questions could be prepared — the battle tops up the rest when it's created.` : null };
+  } catch (e) {
+    return { questions: [], questions_note: /coin/i.test(String(e?.message)) ? "Not enough coins to write the questions yet — top up, and they're written when the battle is created." : "The questions couldn't be prepared right now — the battle draws its own when it's created." };
+  }
+}
+
 export async function updateActivityDraft(instructor, id, patch) {
   const draft = await getActivityDraft(instructor, id);
   if (draft.status !== "draft") throw invalid("Only pending drafts can be edited", 409);
@@ -595,7 +622,12 @@ export async function reviseDraftPayload(instructor, id, changes) {
     const note = asText(c.note, 600);
     if (note !== undefined) { payload.details = { ...payload.details, note: note || null }; applied.push("note"); }
     const topic = asText(c.topic, 200);
-    if (topic) { payload.topic = topic; applied.push("topic"); }
+    if (topic) { payload.topic = topic; payload.details = { ...payload.details, topic }; applied.push("topic"); }
+    // A new topic or difficulty: new questions (the old ones were written for the old one).
+    if (topic || applied.includes("difficulty")) {
+      payload.details = { ...payload.details, ...(await draftBattleQuestions(instructor, payload)) };
+      applied.push("questions");
+    }
   } else if (type === "multi_stage") {
     if (Array.isArray(c.stages)) {
       const stages = normalizeStages(c.stages, payload.subject);

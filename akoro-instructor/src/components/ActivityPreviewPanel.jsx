@@ -230,6 +230,8 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
         scheduled_for: form.repeats ? null : scheduledIso,
         ...(form.repeats ? { repeat: { days: form.days, time: form.repeatTime, tz: localZone(), until: new Date(form.repeatUntil).toISOString() } } : {}),
         ...audienceBody(form.audience),
+        // The draft's own questions (the ones its preview shows): the battle asks exactly those.
+        draft_id: draftId,
       });
       // The invite answers { success, data: { battle_id, invited, … } } — without battle_id the draft was closed
       // with no link to the battle it created.

@@ -290,26 +290,26 @@ export async function generate({
  * Inserts nothing until it knows what it has, so a battle is never created with
  * a partial set that silently plays short.
  */
-export async function buildQuestions({
-  battleId, source = "auto", total = 15,
-  subject, topic, difficulty = "intermediate", classLabel,
-  courseId = null, userId,
-  // The battle's Duration. Divided across however many questions actually get
-  // placed — not across `total`, because a battle that could only be filled
-  // with 9 of 15 questions still has the whole duration to spend.
-  durationSeconds = null,
-  // The learner's own past-paper questions to base generated ones on (§7.17.3).
-  basedOn = [],
+/**
+ * collectQuestions — the same choice as buildQuestions (archive first, AI for
+ * the shortfall), but placed nowhere: a battle DRAFT shows the real questions
+ * it will ask, and the battle made from it places exactly these (`preset`).
+ */
+export async function collectQuestions({
+  source = "auto", total = 15, subject, topic, difficulty = "intermediate", classLabel,
+  courseId = null, userId, basedOn = [], have = [],
 }) {
   const bankOf = courseId
     ? () => fromCourseBank({ courseId, topic, subject, difficulty, limit: total })
     : () => fromPastPapers({ subject, difficulty, limit: total });
 
-  let questions = [];
+  let questions = [...have];
   let charged = 0;
   let generated = 0;
+  const seen = new Set(questions.map(dedupeKey));
+  const add = (q) => { const k = dedupeKey(q); if (questions.length >= total || seen.has(k)) return; seen.add(k); questions.push(q); };
 
-  if (source !== "ai") questions = await bankOf();
+  if (source !== "ai" && questions.length < total) for (const q of await bankOf()) add(q);
 
   if (source !== "bank" && questions.length < total) {
     // Even when generating everything, pull a few real ones purely as style
@@ -326,25 +326,42 @@ export async function buildQuestions({
       ...(basedOn?.length ? { basedOn } : {}),
     });
     charged = res.charged;
-    generated = res.questions.length;
-
-    const seen = new Set(questions.map(dedupeKey));
-    for (const q of res.questions) {
-      if (questions.length >= total) break;
-      const k = dedupeKey(q);
-      if (seen.has(k)) continue;
-      seen.add(k);
-      questions.push(q);
-    }
+    const before = questions.length;
+    for (const q of res.questions) add(q);
+    generated = questions.length - before;
   }
+  return { questions: questions.slice(0, total), charged, generated };
+}
 
-  questions = questions.slice(0, total);
+/** PURE: questions a draft saved, back through the same gate as every source (a bad key is dropped). */
+export function presetQuestions(list, fallbackTopic = null) {
+  return (Array.isArray(list) ? list : []).map((q) => normalise({ ...q, stem: q.stem ?? q.text, answer: q.options?.[q.correctIndex]?.label, correct_answer_index: q.correctIndex }, fallbackTopic)).filter(Boolean);
+}
+
+export async function buildQuestions({
+  battleId, source = "auto", total = 15,
+  subject, topic, difficulty = "intermediate", classLabel,
+  courseId = null, userId,
+  // The battle's Duration. Divided across however many questions actually get
+  // placed — not across `total`, because a battle that could only be filled
+  // with 9 of 15 questions still has the whole duration to spend.
+  durationSeconds = null,
+  // The learner's own past-paper questions to base generated ones on (§7.17.3).
+  basedOn = [],
+  // A draft's questions (collectQuestions): placed as they are, in order; topped up only if short.
+  preset = null,
+}) {
+  const have = presetQuestions(preset, topic);
+  const { questions, charged, generated } = have.length >= total
+    ? { questions: have.slice(0, total), charged: 0, generated: 0 }
+    : await collectQuestions({ source, total, subject, topic, difficulty, classLabel, courseId, userId, basedOn, have });
   const secs = perQuestionSeconds(durationSeconds, questions.length);
   if (questions.length) {
     await db.from("battle_questions").insert(questions.map((q, i) => row(battleId, i + 1, q, secs)));
   }
   return {
     placed: questions.length, fromBank: questions.length - generated, generated, charged,
+    ...(have.length ? { fromDraft: Math.min(have.length, questions.length) } : {}),
     // So the caller can correct the battle's stored duration when fewer
     // questions were placed than asked for, and report the real pace.
     secondsPerQuestion: secs,

@@ -699,6 +699,22 @@ async function classroomRole(userId, role, classroomId) {
  * group battle — but scoped to classmates and a class subject.
  */
 // Named so a recurring series can make each occurrence with the same checks (battle/series.js).
+/**
+ * The questions a battle DRAFT prepared (self-study/drafts.js): a battle made
+ * from that draft asks exactly those — the instructor saw them in the preview.
+ * Only the instructor's own pending battle draft, and only when the form still
+ * has the draft's subject (a changed subject draws fresh ones).
+ */
+async function draftPreset(req, subject) {
+  const id = String(req.body?.draft_id || "");
+  if (!/^[0-9a-f-]{36}$/i.test(id) || req.series) return null;   // a series' later battles draw their own
+  const { data: d } = await db.from("activity_drafts").select("type, status, created_by, payload").eq("id", id).maybeSingle();
+  if (!d || d.type !== "battle" || d.status !== "draft" || d.created_by !== req.user.id) return null;
+  const qs = d.payload?.details?.questions;
+  const same = !subject || !d.payload?.subject || String(subject).trim().toLowerCase() === String(d.payload.subject).trim().toLowerCase();
+  return same && Array.isArray(qs) && qs.length ? qs : null;
+}
+
 const classInvite = async (req, res) => {
   const { classroomId } = req.params;
   const {
@@ -828,6 +844,7 @@ const classInvite = async (req, res) => {
       battleId: battle.id, source: question_source, total: total_questions,
       subject, topic, difficulty, classLabel: room?.name, userId: req.user.id,
       durationSeconds: time_limit_seconds,
+      preset: await draftPreset(req, subject),
     });
   } catch (e) {
     await db.from("battles").delete().eq("id", battle.id);
@@ -1469,6 +1486,7 @@ const courseInvite = async (req, res) => {
       battleId: battle.id, source: question_source, total: total_questions,
       courseId, subject: subject || topic || "General", topic, difficulty, userId: req.user.id,
       durationSeconds: time_limit_seconds,
+      preset: await draftPreset(req, subject),
     });
   } catch (e) {
     await db.from("battles").delete().eq("id", battle.id);
