@@ -344,8 +344,15 @@ export const materialsMultiFileDiag = {
       const perFile = [];
       for (const rec of recs || []) {
         const ext = rec.file_key ? await getExtraction(rec.file_key).catch(() => ({ pages: [] })) : { pages: [] };
-        const pages = (ext.pages || []).filter((p) => String(p.markdown || "").trim()).length;
-        perFile.push(`${String(rec.mime || rec.kind).replace(/^application\//, "")}:${pages}p`);
+        const texts = (ext.pages || []).map((p) => String(p.markdown || "").replace(/\s+/g, " ").trim()).filter(Boolean);
+        const pages = texts.length;
+        // How much text a page holds, and how much of it is the same on every page (a watermark).
+        const avg = pages ? Math.round(texts.reduce((n, t) => n + t.length, 0) / pages) : 0;
+        const lines = texts.flatMap((t) => t.split(/(?<=[.!?])\s+|\s{2,}/).map((x) => x.trim().toLowerCase()).filter((x) => x.length > 8));
+        const counts = new Map(); for (const l of lines) counts.set(l, (counts.get(l) || 0) + 1);
+        const repeated = lines.filter((l) => counts.get(l) >= Math.max(3, Math.ceil(pages * 0.6))).length;
+        const uniqueChars = new Set(lines).size ? [...new Set(lines)].reduce((n, l) => n + l.length, 0) : 0;
+        perFile.push(`${String(rec.mime || rec.kind).replace(/^application\//, "")}:${pages}p ~${avg}ch/p, ${lines.length ? Math.round(100 * repeated / lines.length) : 0}% repeated, ${uniqueChars}ch unique, via ${ext.model || "?"}`);
       }
       const read = Array.isArray(r.structure?.items) ? r.structure.items.length : (r.structure ? "?" : 0);
       ctx.note(`${r.id.slice(0, 8)} ${r.created_at.slice(0, 16)} · ${r.state} · files named ${(r.names || []).length} · records ${ids.length} · pages per file [${perFile.join(", ")}] · structured ${read}`);
