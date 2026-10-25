@@ -218,9 +218,9 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   };
   // A change no capability can make (no tool can be built for it): say so and offer to ask
   // the Akoro team; with the learner's yes, that request is a Tool idea on the admins' page.
+  // Matched on the CHANGE asked for, not the thing it's about: "rename my chats" isn't "delete chats".
   const writeCaps = (names) => names.some((c) => CAPABILITIES[c]?.kind === "write");
-  if (!resumed && audience === "learner" && asksForChange(goal)
-      && !writeCaps((lookup.capabilities || []).map((c) => c.name)) && !writeCaps([].concat(hint.capabilities || []))) {
+  if (!resumed && audience === "learner" && asksForChange(goal) && !ownChangeAsked(goal) && !writeCaps([].concat(hint.capabilities || []))) {
     ev.stages_tried.push("change_request");
     if (input?.__agreed !== true) return finish("rejected", { status: "offer_request", reason: "no change like this exists yet",
       note: "NOTHING IS SENT. This change can't be made yet — no tool you have or can build does it. In your own words: say you can't do that right now, and offer to ask the Akoro team to add it. Call create_tool again with the same goal once they say yes — that sends the request. Don't suggest workarounds unless they ask." });
@@ -248,7 +248,8 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     if (others && locked.includes(others)) return toEscalate(others);
   }
   if (!slice.views.length && !slice.capabilities.length) {
-    if (locked.length && !resumed) return toEscalate(locked[0]);
+    const first = locked.find((c) => !asksForChange(goal) || CAPABILITIES[c]?.kind !== "write" || c === ownChangeAsked(goal));
+    if (first && !resumed) return toEscalate(first);
     return finish("rejected", reject(locked.length ? "This needs a permission that isn't on." : "Nothing available matches this goal, so it can't be built."));
   }
 
@@ -305,7 +306,9 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     if (fallback) return register({ stage, ...fallback });
   }
   // Nothing available could express it, but a locked capability might.
-  if (locked.length && !resumed && !draftCap && inexpressible) return toEscalate(locked[0], lastProblem);
+  // Never offer a DIFFERENT change than the one asked for (a rename must not become a delete card).
+  const fallback = locked.find((c) => !asksForChange(goal) || CAPABILITIES[c]?.kind !== "write" || c === ownChangeAsked(goal));
+  if (fallback && !resumed && !draftCap && inexpressible) return toEscalate(fallback, lastProblem);
   return finish("rejected", reject(`Couldn't build it safely: ${String(lastProblem || "no stage could express it").slice(0, 240)}`, resumed ? { tried: tried.map((t) => t.slice(0, 300)) } : {}));
 
   /** Save the built tool switched OFF and ask the learner on a card, showing what it would change right now. */

@@ -98,14 +98,14 @@ export function learnerGrantable(name) {
 // "Delete my old tasks", "mark my tasks done": a change to the learner's own tasks no
 // built-in tool makes. (Ending a study buddy has its own tool, study_buddy.)
 const OWN_CHANGES = [
-  { cap: "tasks.delete", re: /\b(delete|remove|clear(?: out)?|get rid of|erase|wipe)\b[^.?!\n]{0,40}\b(tasks?|to-?dos?)\b|\b(tasks?|to-?dos?)\b[^.?!\n]{0,30}\b(deleted|removed)\b/i },
-  { cap: "tasks.reschedule", re: /\b(move|reschedule|postpone|push(?: back)?|delay|shift)\b[^.?!\n]{0,40}\b(tasks?|to-?dos?)\b|\b(tasks?|to-?dos?)\b[^.?!\n]{0,30}\b(to|until) (tomorrow|today|next week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i },
-  { cap: "tasks.set_priority", re: /\b(tasks?|to-?dos?)\b[^.?!\n]{0,40}\b(high|low|medium|top|critical) priority\b|\b(make|set|mark)\b[^.?!\n]{0,40}\b(tasks?|to-?dos?)\b[^.?!\n]{0,30}\b(priority|urgent)\b/i },
-  { cap: "goals.complete", re: /\b(mark|tick|set)\b[^.?!\n]{0,40}\bgoals?\b[^.?!\n]{0,30}\b(achieved|done|complete|completed|reached)\b/i },
-  { cap: "goals.dismiss", re: /\b(archive|dismiss|drop|remove|delete|clear)\b[^.?!\n]{0,40}\bgoals?\b/i },
-  { cap: "inbox.mark_read", re: /\b(mark|set)\b[^.?!\n]{0,40}\b(messages?|inbox)\b[^.?!\n]{0,20}\bread\b|\bclear\b[^.?!\n]{0,20}\b(my )?inbox\b/i },
-  { cap: "chats.delete", re: /\b(delete|remove|clear|get rid of|wipe)\b[^.?!\n]{0,40}\b(chats?|conversations?)\b/i },
-  { cap: "tasks.mark_done", re: /\b(mark|tick(?: off)?|check off)\b[^.?!\n]{0,40}\b(tasks?|to-?dos?)\b|\b(tasks?|to-?dos?)\b[^.?!\n]{0,30}\b(as )?(done|complete|completed|finished)\b/i },
+  { cap: "tasks.delete", re: /\b(delete|remove|clear(?: out)?|get rid of|erase|wipe)\b[^.?!\n]{0,80}\b(tasks?|to-?dos?)\b|\b(tasks?|to-?dos?)\b[^.?!\n]{0,80}\b(deleted|removed)\b/i },
+  { cap: "tasks.reschedule", re: /\b(move|reschedule|postpone|push(?: back)?|delay|shift)\b[^.?!\n]{0,80}\b(tasks?|to-?dos?)\b|\b(tasks?|to-?dos?)\b[^.?!\n]{0,80}\b(to|until) (tomorrow|today|next week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i },
+  { cap: "tasks.set_priority", re: /\b(tasks?|to-?dos?)\b[^.?!\n]{0,80}\b(high|low|medium|top|critical) priority\b|\b(make|set|mark)\b[^.?!\n]{0,80}\b(tasks?|to-?dos?)\b[^.?!\n]{0,80}\b(priority|urgent)\b/i },
+  { cap: "goals.complete", re: /\b(mark|tick|set)\b[^.?!\n]{0,80}\bgoals?\b[^.?!\n]{0,80}\b(achieved|done|complete|completed|reached)\b/i },
+  { cap: "goals.dismiss", re: /\b(archive|dismiss|drop|remove|delete|clear)\b[^.?!\n]{0,80}\bgoals?\b/i },
+  { cap: "inbox.mark_read", re: /\b(mark|set)\b[^.?!\n]{0,80}\b(messages?|inbox)\b[^.?!\n]{0,80}\bread\b|\bclear\b[^.?!\n]{0,80}\b(my )?inbox\b/i },
+  { cap: "chats.delete", re: /\b(delete|remove|clear|get rid of|wipe)\b[^.?!\n]{0,80}\b(chats?|conversations?)\b/i },
+  { cap: "tasks.mark_done", re: /\b(mark|tick(?: off)?|check off)\b[^.?!\n]{0,80}\b(tasks?|to-?dos?)\b|\b(tasks?|to-?dos?)\b[^.?!\n]{0,80}\b(as )?(done|complete|completed|finished)\b/i },
 ];
 /** PURE: the own-data change a learner's message asks for, if any. → capability | null */
 export function ownChangeAsked(message) {

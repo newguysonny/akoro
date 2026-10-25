@@ -7,7 +7,7 @@
  * isn't an allowlisted view field (rule 25).
  */
 import db from "../../db.js";
-import { CAPABILITIES, FORBIDDEN, forbiddenFor, capAudience, learnerGrantable, asksForChange } from "./capabilities.js";
+import { CAPABILITIES, FORBIDDEN, forbiddenFor, capAudience, learnerGrantable, asksForChange, ownChangeAsked } from "./capabilities.js";
 import { DATA_VIEWS, describeView, audienceOf } from "./views.js";
 
 let grantsCache = { at: 0, active: new Set() };
@@ -90,8 +90,8 @@ export async function schemaLookup(goal, { limit = 6, audience = "learner", lear
     views: rankedViews.map(({ name, v }) => ({ ...describeView(name, v), status: "available" })),
     capabilities,
     ...(forbidden.length ? { notAllowed: forbidden.map((f) => f.description) } : {}),
-    ...(asksForChange(goal) && !capabilities.some((c) => c.kind === "write") && audience === "learner" ? { changeNotPossible: true } : {}),
-    note: asksForChange(goal) && !capabilities.some((c) => c.kind === "write") && audience === "learner"
+    ...(asksForChange(goal) && !ownChangeAsked(goal) && audience === "learner" ? { changeNotPossible: true } : {}),
+    note: asksForChange(goal) && !ownChangeAsked(goal) && audience === "learner"
       ? "If one of your own tools already makes this change (ending a study buddy, cancelling a scheduled message…), use it. Otherwise no change like this can be made yet — nothing you can build does it: say so plainly and offer to ask the Akoro team to add it (don't offer a workaround instead); when they agree, call create_tool with this goal and it sends the request."
       : !rankedViews.length && !rankedCaps.length
       ? "Nothing in the registry matches this goal — it can't be built from what's available."
