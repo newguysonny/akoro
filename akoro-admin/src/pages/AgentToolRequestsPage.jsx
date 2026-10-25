@@ -186,7 +186,7 @@ export default function AgentToolRequestsPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: FONT, color: INK, fontSize: 13, fontWeight: 700 }}><ClipboardList size={16} color={AMBER} /> {shownCount} of {total} request{total === 1 ? '' : 's'}</div>
               <div style={{ fontFamily: FONT, fontSize: 12, color: MUTED }}>Newest first</div>
             </div>
-            {requests.length === 0 ? <EmptyState activeStatus={activeStatus} hasSearch={!!submittedSearch} /> : <RequestList requests={requests} onOpen={setSelected} />}
+            {requests.length === 0 ? <EmptyState kind={kind} activeStatus={activeStatus} hasSearch={!!submittedSearch} /> : <RequestList requests={requests} onOpen={setSelected} />}
           </div>
         )}
         </>}
@@ -198,12 +198,16 @@ export default function AgentToolRequestsPage() {
   );
 }
 
-function EmptyState({ activeStatus, hasSearch }) {
-  const message = hasSearch ? 'No requests match that search.' : activeStatus ? `No ${STATUS[activeStatus]?.label.toLowerCase() || 'matching'} requests.` : 'No learner-approved tool requests yet.';
+function EmptyState({ kind, activeStatus, hasSearch }) {
+  const permissions = kind === 'capability';
+  const message = hasSearch ? 'No requests match that search.' : activeStatus ? `No ${STATUS[activeStatus]?.label.toLowerCase() || 'matching'} requests.` : permissions ? 'No permission requests waiting.' : 'No learner-approved tool requests yet.';
+  const hint = permissions
+    ? "These appear on their own when a learner's agent builds a tool that needs a permission that's off — approve it here and the tool is finished in their chat."
+    : 'Agent Chat never files these automatically; the learner must ask for submission.';
   return <div style={{ minHeight: 220, display: 'grid', placeItems: 'center', padding: 28, textAlign: 'center' }}>
     <div><div style={{ width: 46, height: 46, display: 'inline-grid', placeItems: 'center', background: '#FFF7ED', borderRadius: 14, marginBottom: 10 }}><Wrench size={21} color={AMBER} /></div>
       <div style={{ fontFamily: FONT, color: INK, fontWeight: 700, fontSize: 14 }}>{message}</div>
-      <div style={{ fontFamily: FONT, color: MUTED, fontSize: 12, marginTop: 5 }}>Agent Chat never files these automatically; the learner must ask for submission.</div>
+      <div style={{ fontFamily: FONT, color: MUTED, fontSize: 12, marginTop: 5, maxWidth: 460 }}>{hint}</div>
     </div>
   </div>;
 }
