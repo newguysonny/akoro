@@ -320,6 +320,8 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
   const needsFigure = !!shown && (shown.paper?.questions || []).some((q) => q?.figure_note && !q.figure);
   const dueValue = dueLocal ?? datetimeLocal(payload.due_at);
   const dueUnset = !isLive && !isBattle && !isJourney && !isTool && !!payload.due_hint && !dueValue;
+  // The review battle's questions are being (re)written: assign once they're on screen.
+  const reviewWriting = !!reviewBattle?.on && (reviewQsBusy || (!reviewQs?.note && reviewQs?.count !== review.questions));
   const assignBlock = needsFigure ? 'Add the missing figure first (Edit on the version).' : dueUnset ? `Set the exact due date for “${payload.due_hint}” first.` : '';
   const downloadPdf = () => {
     // A version with questions downloads as the paper, with its marking scheme after it.
@@ -594,10 +596,11 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
               {isTool ? 'Saves' : 'Assigns'} <b style={{ color: C.ink }}>Version {shown.n}</b>{!isTool && audience.label ? <> to {audience.label}</> : null}
             </span>
           )}
-          <button onClick={() => assign(assignOverrides())} disabled={phase === 'assigning' || vEditing || (shown && shown.status !== 'ready') || !!assignBlock}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 11, border: 'none', background: phase === 'assigning' || assignBlock ? C.border : C.hero, color: '#fff', fontSize: 12.5, fontWeight: 900, cursor: phase === 'assigning' ? 'wait' : assignBlock ? 'not-allowed' : 'pointer', fontFamily: C.font }}>
-            {phase === 'assigning' ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti={isTool ? 'ti-books' : 'ti-send'} size={13} />}
-            {phase === 'assigning' ? (isTool ? 'Saving…' : 'Assigning…') : isTool ? 'Save to Library' : 'Assign'}
+          <button onClick={() => assign(assignOverrides())} disabled={phase === 'assigning' || vEditing || (shown && shown.status !== 'ready') || !!assignBlock || reviewWriting}
+            data-review-writing={reviewWriting ? '' : undefined}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 11, border: 'none', background: phase === 'assigning' || assignBlock || reviewWriting ? C.border : C.hero, color: '#fff', fontSize: 12.5, fontWeight: 900, cursor: phase === 'assigning' || reviewWriting ? 'wait' : assignBlock ? 'not-allowed' : 'pointer', fontFamily: C.font }}>
+            {phase === 'assigning' || reviewWriting ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti={isTool ? 'ti-books' : 'ti-send'} size={13} />}
+            {phase === 'assigning' ? (isTool ? 'Saving…' : 'Assigning…') : reviewWriting ? 'Writing review questions…' : isTool ? 'Save to Library' : 'Assign'}
           </button>
         </div>
       )}

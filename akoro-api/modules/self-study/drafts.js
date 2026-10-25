@@ -456,14 +456,16 @@ export async function listActivityDrafts(instructor) {
  * coins, nothing on the topic) leaves none and says why; the battle then draws
  * its own when it's created, as before.
  */
-async function draftBattleQuestions(instructor, payload) {
+async function draftBattleQuestions(instructor, payload, keep = []) {
   const d = payload.details || {};
   const total = d.total_questions || 10;
   try {
-    const { collectQuestions } = await import("../battle/questionSource.js");
+    const { collectQuestions, presetQuestions } = await import("../battle/questionSource.js");
+    const topic = d.topic || payload.topic || null;
     const out = await Promise.race([
-      collectQuestions({ source: "auto", total, subject: payload.subject || "General", topic: d.topic || payload.topic || null,
-        difficulty: payload.difficulty || "intermediate", userId: instructor.id, onTopic: true }),
+      // `keep`: questions already on the draft — kept first, in order; only the rest are written.
+      collectQuestions({ source: "auto", total, subject: payload.subject || "General", topic,
+        difficulty: payload.difficulty || "intermediate", userId: instructor.id, onTopic: true, have: presetQuestions(keep, topic) }),
       new Promise((_, reject) => setTimeout(() => reject(new Error("took too long")), 60_000)),
     ]);
     const questions = (out.questions || []).map((q) => ({ stem: q.stem, options: q.options, correctIndex: q.correctIndex, topic: q.topic || null,
@@ -490,8 +492,13 @@ export async function prepareReviewQuestions(instructor, id, count) {
   const p = draft.payload || {};
   const n = Math.min(REVIEW_LIMITS.MAX_Q, Math.max(REVIEW_LIMITS.MIN_Q, Math.round(Number(count) || REVIEW_LIMITS.DEFAULT_Q)));
   const topic = reviewFocus(p.topic || draft.title, Array.isArray(p.subtopics) ? p.subtopics : []);
-  const out = await draftBattleQuestions(instructor, { subject: p.subject, difficulty: p.difficulty, details: { topic, total_questions: n } });
-  const review_questions = { count: n, topic, items: out.questions, note: out.questions_note, at: new Date().toISOString() };
+  // The questions the instructor has already seen stay: fewer → the first n (the rest kept
+  // aside for going back up), more → those plus only the extra ones written. A new topic starts over.
+  const was = p.review_questions?.topic === topic ? [...(p.review_questions.items || []), ...(p.review_questions.spare || [])] : [];
+  const out = was.length >= n ? { questions: was, questions_note: null }
+    : await draftBattleQuestions(instructor, { subject: p.subject, difficulty: p.difficulty, details: { topic, total_questions: n } }, was);
+  const all = out.questions.length ? out.questions : was;
+  const review_questions = { count: n, topic, items: all.slice(0, n), spare: all.slice(n), note: out.questions_note, at: new Date().toISOString() };
   await updateDraftPayload(draft.id, (pp, row) => (row.status !== "draft" ? null : { ...pp, review_questions }));
   return review_questions;
 }

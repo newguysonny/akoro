@@ -82,8 +82,13 @@ export default function ReviewBattleTab({ tab, battle }) {
     return (
       <div data-review-battle-questions="">
         <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.45, marginBottom: 10 }}>
-          The questions the class review battle will ask — every learner's protégé answers them after the activity. Change how many in Settings and they're written again.
+          The questions the class review battle will ask — every learner's protégé answers them after the activity. Change how many in Settings: fewer keeps the first ones, more keeps these and adds the rest.
         </div>
+        {battle.loading && (
+          <div data-review-battle-writing="" style={{ fontSize: 11.5, fontWeight: 700, color: '#6C3BFF', marginBottom: 9, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Ico ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} />Writing the extra questions…
+          </div>
+        )}
         <BattleQuestionList questions={questions} />
       </div>
     );

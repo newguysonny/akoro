@@ -92,10 +92,11 @@ export const draftPreviewScenarios = [{
     });
     // The review battle's questions, written on the draft (fake: N photosynthesis questions).
     const reviewAsks = [];
-    await page.route(/\/api\/self-study\/drafts\/gatefake-[a-z]+\/review-questions$/, (route) => {
+    await page.route(/\/api\/self-study\/drafts\/gatefake-[a-z]+\/review-questions$/, async (route) => {
       const count = Number(route.request().postDataJSON()?.count) || 8;
       reviewAsks.push({ url: route.request().url(), count });
-      const items = Array.from({ length: count }, (_, i) => REVIEW_QS[i % REVIEW_QS.length]);
+      const items = Array.from({ length: count }, (_, i) => ({ ...REVIEW_QS[i % REVIEW_QS.length], stem: `${REVIEW_QS[i % REVIEW_QS.length].stem} (${i + 1})` }));
+      await new Promise((r) => setTimeout(r, 1500));
       return route.fulfill({ json: { success: true, data: { review_questions: { count, topic: 'Photosynthesis', items, note: null, at: new Date().toISOString() } } } });
     });
     const tabNames = async (root) => page.locator(`${root} [role=tablist]`).first().locator('[role=tab]').allInnerTexts();
@@ -157,6 +158,15 @@ export const draftPreviewScenarios = [{
     await snap('10-selfstudy-settings');
     await page.getByRole('button', { name: /Review battle/ }).first().click();
     await page.waitForTimeout(400); await snap('11-selfstudy-review-battle');
+    // More review questions: Assign waits while they're written, then the tab shows the new count.
+    await page.getByLabel('Review questions').first().selectOption('10');
+    const writing = await page.locator('[data-review-writing]').first().waitFor({ timeout: 5000 }).then(() => true).catch(() => false);
+    const writingLabel = writing ? await page.locator('[data-review-writing]').first().innerText() : '';
+    t.check('Assign waits while the review questions are written', writing && /Writing review questions/.test(writingLabel), { writingLabel });
+    await page.locator('[data-review-writing]').first().waitFor({ state: 'detached', timeout: 15000 }).catch(() => {});
+    t.check('…then Assign is back and the tab counts 10', !(await page.locator('[data-review-writing]').count())
+      && /Battle questions \(10\)/.test((await tabNames('[data-selfstudy-preview]')).join('|')), { tabs: await tabNames('[data-selfstudy-preview]') });
+    t.check('the new count was asked for', reviewAsks.some((a) => a.url.includes('gatefake-selfstudy') && a.count === 10), { reviewAsks });
     await tab('Preview'); await page.waitForTimeout(500); await snap('12-selfstudy-preview');
     await page.getByRole('button', { name: /Play preview/ }).click();
     await page.waitForTimeout(7000); await snap('13-selfstudy-session');

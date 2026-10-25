@@ -489,6 +489,22 @@ export const activityChatSwitchTypeAsks = {
     ctx.note(`review questions: ${items.length} — ${rq.body?.data?.review_questions?.note || ""}`);
     ctx.expect.eq("5 review questions on the draft", items.length, 5);
     ctx.expect.ok("…kept on the draft", ((await draftRow(ctx, INSTRUCTOR, draftId))?.payload?.review_questions?.items || []).length === 5);
+    // More keeps the five already seen and writes only the extra; fewer keeps the first ones; back up reuses the set aside.
+    const reAsk = async (count) => {
+      const t0 = Date.now();
+      const r = await ctx.http({ as: INSTRUCTOR, method: "POST", path: `/api/self-study/drafts/${draftId}/review-questions`, body: { count } });
+      return { items: r.body?.data?.review_questions?.items || [], ms: Date.now() - t0 };
+    };
+    const stems = (list) => list.map((q) => q.stem).join(" | ");
+    const up = await reAsk(7);
+    ctx.expect.eq("7: seven questions", up.items.length, 7);
+    ctx.expect.eq("…the first five are the ones already seen", stems(up.items.slice(0, 5)), stems(items));
+    const down = await reAsk(5);
+    ctx.expect.eq("back to 5: the same first five", stems(down.items), stems(items));
+    ctx.note(`fewer took ${down.ms} ms`);
+    const again = await reAsk(7);
+    ctx.expect.eq("7 again: the same seven, nothing rewritten", stems(again.items), stems(up.items));
+    await reAsk(5);
     // … are the ones the review battle asks.
     const { battleId } = await assignWithReview(ctx, { draftId, body: {}, learners });
     if (!battleId) return;
