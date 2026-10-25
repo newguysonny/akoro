@@ -91,6 +91,20 @@ export function ownChangeAsked(message) {
   return OWN_CHANGES.find((x) => x.re.test(m))?.cap || null;
 }
 
+/**
+ * PURE: did the learner's latest message say yes to building a tool ("yes",
+ * "sure, go ahead", "build it", "make me a tool that…")? A permission card is
+ * only shown after they have — the first answer to "delete my tasks" is a
+ * conversation (the agent can't yet, offers to build it), not a card.
+ */
+export function agreesToBuild(text) {
+  const t = String(text || "");
+  if (/\b(no|nope|don'?t|do not|not now|never ?mind|cancel|stop)\b/i.test(t)) return false;
+  return /\b(yes|yeah|yep|yup|sure|ok(?:ay)?|alright|go ahead|go for it|do it|please do|sounds good|let'?s do (?:it|that)|build|make (?:it|one|that|me)|create (?:it|one|that))\b/i.test(t)
+    // "Ask for permission to delete my tasks": asking for it outright is a yes.
+    || /\b(ask|request|get)\b[^.?!]{0,25}\b(permission|access|approval)\b/i.test(t);
+}
+
 /** Never — cannot be requested or granted (rule 27). Matched against goals and requested names. */
 export const FORBIDDEN = Object.freeze([
   { name: "others.private_data", description: "Another learner's private data (scores, notes, chats, messages, grades, contact details).",

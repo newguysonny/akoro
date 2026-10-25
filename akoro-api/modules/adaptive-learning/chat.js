@@ -112,6 +112,7 @@ import { validateLearnerTaskInput } from "./learner-task-validation.js";
 import { listChats, readChat, postToChat, ownedChatId } from "./chat-history-tools.js";
 import { schemaLookup } from "../self-tooling/registry.js";
 import { createTool, runLearnerTool, learnerToolDefs, forcedSelfTool } from "../self-tooling/pipeline.js";
+import { agreesToBuild } from "../self-tooling/capabilities.js";
 import { selfToolingEnabled, selfToolingAllowedFor } from "../self-tooling/access.js";
 import { createLearnerToolRequest } from "../agent-tool-requests/service.js";
 import {
@@ -4049,6 +4050,16 @@ function inspectResult(value) {
 }
 
 /** Before an activity tool runs from the instructor's chat: what the teacher never said → a clarify result, else null. */
+/** The learner's latest message in this turn's transcript (text parts only). */
+function latestUserText(transcript = []) {
+  for (let i = transcript.length - 1; i >= 0; i--) {
+    const m = transcript[i];
+    if (m?.role !== "user") continue;
+    return typeof m.content === "string" ? m.content : Array.isArray(m.content) ? m.content.filter((x) => x?.type === "text").map((x) => x.text).join(" ") : "";
+  }
+  return "";
+}
+
 async function unsaidActivityFields(tool, input, transcript) {
   const { unnamedFields, askFor, teacherTextOf, knownNames } = await import("./activityFields.js");
   let fields = null, check;
@@ -4170,6 +4181,11 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
       // teacher's own words: the model rewrote "Remove question 3" as the
       // whole question list, and the revision changed other questions too.
       if (tool === "revise_activity_draft" && teacherWords && input?.question_request) input = { ...input, question_request: teacherWords };
+      // A permission card only after the learner said yes to building it (their latest message, never the model's say-so).
+      if (tool === "create_tool" && input && typeof input === "object") {
+        const { __agreed, ...rest } = input;
+        input = role === "student" && agreesToBuild(latestUserText(transcript)) ? { ...rest, __agreed: true } : rest;
+      }
       const traceRow = trace?.toolStart(tool, input);
       let toolResult;
       // The important fields come from the TEACHER (activityFields.js): a subject, an audience or a

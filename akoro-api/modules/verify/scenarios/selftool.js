@@ -773,19 +773,23 @@ export const deleteTasks = {
     ctx.expect.ok("0. looks up what it can build first", (t0.tools || [])[0]?.tool === "schema_lookup", (t0.tools || []).map((t) => t.tool));
     ctx.expect.ok("0. offers to build it (not 'ask an admin')", /\b(build|make|create)\b/i.test(String(t0.reply || "")) && !/only an admin|admin (can|must|has to) (grant|approve)/i.test(String(t0.reply || "")), String(t0.reply || "").slice(0, 300));
     const c0 = (t0.tools || []).find((t) => t.tool === "create_tool" && t.result?.confirmation?.confirmationId)?.result?.confirmation;
+    ctx.expect.ok("0. no card before the learner says yes", !c0, c0);
     if (c0) await ctx.http({ as: p.learner, method: "POST", path: `/api/self-tooling/confirmations/${c0.confirmationId}/reject` });
 
     // 1. In chat: the agent offers to build it; when the learner agrees, a permission card — no admin request.
     const t1 = await ctx.agent.chat({ as: p.learner, mode: "live", model: p.model, prompt: String(p.first) });
     ctx.note(`turn 1: ${String(t1.reply || "").replace(/\s+/g, " ").slice(0, 300)} · tools ${JSON.stringify((t1.tools || []).map((t) => t.tool))}`);
-    let card = (t1.tools || []).find((t) => t.tool === "create_tool" && t.result?.status === "needs_permission")?.result?.confirmation;
-    if (!card) {
-      ctx.expect.ok("1. offers to build a tool instead of giving up", /\b(build|make|create)\b/i.test(String(t1.reply || "")), String(t1.reply || "").slice(0, 300));
+    const early = (t1.tools || []).find((t) => t.tool === "create_tool" && t.result?.status === "needs_permission")?.result?.confirmation;
+    ctx.expect.ok("1. first answer is a conversation — no card yet", !early, early);
+    ctx.expect.ok("1. says it can't yet and offers to build a tool", /\b(build|make|create)\b/i.test(String(t1.reply || "")) && /\?/.test(String(t1.reply || "")), String(t1.reply || "").slice(0, 300));
+    if (early) await ctx.http({ as: p.learner, method: "POST", path: `/api/self-tooling/confirmations/${early.confirmationId}/reject` });
+    let card = null;
+    {
       const t2 = await ctx.agent.chat({ as: p.learner, mode: "live", model: p.model, prompt: String(p.agree),
         history: [{ role: "user", content: String(p.first) }, { role: "assistant", content: String(t1.reply || "") }] });
       ctx.note(`turn 2: ${String(t2.reply || "").replace(/\s+/g, " ").slice(0, 300)} · tools ${JSON.stringify((t2.tools || []).map((t) => [t.tool, t.result?.status]))}`);
       card = (t2.tools || []).find((t) => t.tool === "create_tool" && t.result?.status === "needs_permission")?.result?.confirmation;
-      ctx.expect.ok("1. reply asks the learner to approve (nothing built yet)", /approv|allow/i.test(String(t2.reply || "")) && !/\b(I've deleted|have been deleted|are deleted|it's built|I've built)\b/i.test(String(t2.reply || "")), String(t2.reply || "").slice(0, 300));
+      ctx.expect.ok("1. after yes: a card, and the reply asks them to approve (nothing built yet)", /approv|allow/i.test(String(t2.reply || "")) && !/\b(I've deleted|have been deleted|are deleted|it's built|I've built)\b/i.test(String(t2.reply || "")), String(t2.reply || "").slice(0, 300));
     }
     ctx.expect.ok("1. a permission card for deleting tasks", card?.kind === "permission" && /delete your tasks/i.test(card?.action || ""), card);
     const asked = (await ctx.db.rows("edu.agent_tool_requests", { requester_id: me.id }, { columns: "id, kind, created_at", limit: 50 })).filter((r) => Date.parse(r.created_at) >= Date.parse(since));
@@ -810,9 +814,11 @@ export const deleteTasks = {
       ctx.expect.ok(`task "${title.slice(-12)}" created`, !t?.error, t?.error);
     }
     const titles = async () => (await ctx.db.rows("tasks", { creator_id: me.id, title: { like: `${ctx.marker}%` } }, { columns: "title" })).map((r) => r.title).sort();
-    const r = await ctx.agent.tool({ as: p.learner, tool: "create_tool", mode: "live", conversationId: chatId, input: {
-      goal: `Delete my tasks whose title starts with "${ctx.marker} old"`, name, label: `${ctx.marker} Clear old tasks`,
-      hint: { views: ["my_tasks"], capabilities: ["tasks.delete"] } } });
+    const ask = { goal: `Delete my tasks whose title starts with "${ctx.marker} old"`, name, label: `${ctx.marker} Clear old tasks`, hint: { views: ["my_tasks"], capabilities: ["tasks.delete"] } };
+    const before = await ctx.agent.tool({ as: p.learner, tool: "create_tool", mode: "live", conversationId: chatId, input: ask });
+    ctx.expect.eq("2. before the learner says yes: an offer, no card", `${before?.status}|${!!before?.confirmation}`, "offer|false");
+    // As in chat after the learner said yes (the chat loop sets this from their message).
+    const r = await ctx.agent.tool({ as: p.learner, tool: "create_tool", mode: "live", conversationId: chatId, input: { ...ask, __agreed: true } });
     ctx.expect.eq("2. create_tool asks the learner (not an admin)", r?.status, "needs_permission");
     const perm = r?.confirmation;
     if (!perm?.confirmationId) return;

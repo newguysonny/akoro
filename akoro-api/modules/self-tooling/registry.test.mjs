@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { DATA_VIEWS, describeView, viewColumns } from "./views.js";
-import { CAPABILITIES, FORBIDDEN, forbiddenFor, learnerGrantable, ownChangeAsked } from "./capabilities.js";
+import { CAPABILITIES, FORBIDDEN, forbiddenFor, learnerGrantable, ownChangeAsked, agreesToBuild } from "./capabilities.js";
 import { decideAccess } from "./access.js";
 
 const chatSrc = readFileSync(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
@@ -123,4 +123,9 @@ test("ownChangeAsked: deleting or completing the learner's own tasks, and nothin
   for (const m of ["Delete my old tasks please.", "can you remove all my done tasks", "clear out my to-dos", "get rid of the overdue tasks", "my old tasks should be deleted"]) assert.equal(ownChangeAsked(m), "tasks.delete", m);
   for (const m of ["Mark my homework task as done", "tick off my tasks for today", "mark all my tasks complete"]) assert.equal(ownChangeAsked(m), "tasks.mark_done", m);
   for (const m of ["Create a task to revise fractions", "What tasks do I have?", "Delete my account", "help me with my homework", "remove the last message"]) assert.equal(ownChangeAsked(m), null, m);
+});
+
+test("agreesToBuild: the learner said yes to building it — the card waits for that", () => {
+  for (const m of ["Yes please, build it.", "sure", "ok go ahead", "yeah do it", "Build me a tool that deletes my done tasks", "make it", "sounds good", "Ask for permission to delete task"]) assert.equal(agreesToBuild(m), true, m);
+  for (const m of ["Delete my old tasks please.", "Delete my old tasks please", "no thanks", "not now", "don't build it", "what would it do?", "which tasks are old?"]) assert.equal(agreesToBuild(m), false, m);
 });
