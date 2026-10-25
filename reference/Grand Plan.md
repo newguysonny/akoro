@@ -3180,7 +3180,8 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   endpoints, each with its middleware chain, matched against every caller in
   the repo (four apps, Python agent, workers, gate). Rules: every route checks
   sign-in and role, or is public on purpose / guarded by its own key; nothing
-  ships that nothing calls.
+  ships that nothing calls. Tracked as findings F11–F18 in
+  `reference/Akoro Security Audit — Plan.md` (§2a and the §7 register).
 - **Done (2026-10-25, green on the sandbox — `smoke.session_tokens_only`):**
   - ✅ Only a session token signs in. `authenticateToken` and the socket
     check refuse any token with a `type`; the 2FA challenge, refresh and

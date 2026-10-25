@@ -108,6 +108,23 @@ A read of the code and passive checks on production (2026-10-25). Each needs con
 | **F9** | **User profile cached in `localStorage`** (`AuthContext`). Tokens are httpOnly cookies (good), but the cached object should hold nothing beyond display needs. | **Info → verify** | `akoro-learner/src/contexts/AuthContext.jsx` (and other portals) | §5.A: inspect the stored object; strip email/phone/role-internal fields; clear on logout. |
 | **F10** | **Credentials were pasted into chat earlier** (a GitHub PAT and the agent-console key). | **High until rotated** | — | Rotate both now; record rotation in §7. |
 
+### 2a. Endpoint audit (2026-10-25)
+
+The live route table (Express, loaded locally with placeholder settings) lists **1,203 endpoints**, each with its middleware chain, matched against every caller in the repo (learner, instructor, school and admin apps, the Python agent, workers, the gate). The full lists are in the session's audit folder; the follow-ups are also Grand Plan Phase 15.
+
+| ID | Finding | Severity | Where | Status / fix |
+|---|---|---|---|---|
+| **F11** | **Typed tokens worked as logins — a 2FA bypass.** `authenticateToken` and the socket check verified the signature but not the token's `type`. The 2FA challenge (password given, no code yet; 5 min), the refresh token (30 days) and the AI-login hand-off (2 min) share the access token's key, issuer and audience, so each one signed in. | **Critical** | `modules/auth/routes.js` | ✅ **Fixed 2026-10-25** (`7bad5ffe`): any token with a `type` → 401 `token_invalid`, before any lookup; rate-limit peek and course search use the same check. Regression: `modules/auth/session-token.seam.test.mjs`, gate `smoke.session_tokens_only` (sandbox ✅). |
+| **F12** | **Course invite redemption trusted a fallback-secret token.** `POST /api/profiles/invite-redeem` verified invites with `JWT_SECRET ?? "akoro-dev-secret"` and enrolled the caller in every course in the token — paid ones too. No app called it. | **High** if `JWT_SECRET` is unset in any env | `modules/profiles/routes.js` | ✅ **Removed 2026-10-25** (`437d85eb`) with 22 other endpoints nothing called (1,203 → 1,179). Invite *sending* remains and links to a `/join` page no app has — see F15. |
+| **F13** | **Any approved teacher reads every school record** through `GET /api/school/mgmt/:resource`: payroll (`gross`/`net` aren't in the hidden columns), staff loans, salary templates, appraisals, student health records, bank balances, expenses, complaints, admission applications. Writes are role-limited; reads are only school-scoped. 58 other school routes have no role check either. | **High** | `modules/school/mgmt.js` | Open. A per-resource read list for teachers (like `INSTRUCTOR_WRITABLE`); payroll money columns → admin-only; review the 58. |
+| **F14** | **Payments router mounted twice** (`/api` and `/api/payments`) → 7 `/api/payments/payments/…` copies, one of them a Paystack webhook. | **Low** (surface, confusion) | `modules/courses/index.js` | Open. Owner: check the webhook URL in the Paystack dashboard; then drop the extra mount. |
+| **F15** | **Course invite emails link to `akoro.app/join/…`**, a page no app has; invites are signed with the fallback secret. | **Low** (broken feature) | `POST /api/profiles/teacher/invite` | Open. Build a join page on properly signed tokens, or remove invite sending. |
+| **F16** | **Shared-secret checks fail open when unset.** `/api/stream/internal/*` compares `x-internal-secret` to `INTERNAL_SECRET` with `!==` — an unset secret matches an absent header. Set on prod and sandbox today (anonymous probes → 403). | **Medium** (latent) | `modules/courses/stream.js` | Open. Refuse when unset (as `admin/ticks.js` does); `timingSafeEqual` (with F7). |
+| **F17** | **Hard-coded fallback secrets remain** (`JWT_SECRET ?? "akoro-dev-…"` in invites, config, token peek, auth). | **Medium** (Critical where F1 applies) | several | Open — with F1: no default, and a missing key stops the server. |
+| **F18** | **Ownership not yet audited on the 1,094 signed-in routes.** Sign-in is checked everywhere and all 147 `/api/admin` routes check the admin role; routes that take `:studentId`, `:userId` or a row id still need a route-by-route ownership check (§5.D). | **Unknown** | all | Next pass (workstream D). |
+
+Also confirmed by the endpoint audit: the 115 routes without the standard sign-in are public on purpose (login, catalogue, blog, school sites, health) or guarded by their own key or signature (webhooks, agent tools, consoles, ticks); school AI-login refuses 2FA accounts; teachers never see result PINs.
+
 **Confirmed good so far** (keep them that way with regression checks):
 - Access and refresh tokens are **httpOnly cookies** (`Secure` + `SameSite=None` in production); RS256 allow-list; `alg:none`/HS256 rejected when RSA is on; refresh-token rotation with family revocation on reuse (30 s grace).
 - **CORS**: an unknown origin and a look-alike (`akoro.name.ng.evil.example`) get no `Access-Control-Allow-Origin` from the API; credentials only for listed portal origins.
@@ -514,6 +531,14 @@ Many learners are **minors** (JSS/SS). Nigeria Data Protection Act 2023 (NDPA) a
 | ID | Area | Title | Severity | Steps to reproduce | Expected | Actual / evidence | Owner | Status | Fixed in | Regression check |
 |---|---|---|---|---|---|---|---|---|---|---|
 | F1 | E/Auth | JWT dev-secret fallback, no prod guard | Critical? | Sign `{sub,role:admin}` with the default secret, call `/api/auth/me` on prod & sandbox | 401 | _pending_ | agent | open | | unit test + boot guard |
+| F11 | E/Auth | Typed tokens (2FA challenge, refresh, hand-off) worked as logins | Critical | Sign a `2fa_challenge` token, call `/api/auth/me` | 401 | was 200; now 401 `token_invalid` | agent | **closed** | `7bad5ffe` | seam test + `smoke.session_tokens_only` |
+| F12 | D/Logic | Invite redeem trusted a fallback-secret token | High? | Forge `course_invite` with the default secret, POST invite-redeem | 400 | endpoint removed | agent | **closed** | `437d85eb` | route table diff |
+| F13 | D/Authz | Teachers read payroll, loans, health records… | High | As an approved teacher: `GET /api/school/mgmt/payroll-records` | 403 | 200 with gross/net (code read) | agent | open | | gate scenario per resource |
+| F14 | R | Payments router mounted twice | Low | `GET /api/payments/payments/history` | 404 | served | owner + agent | open | | route table |
+| F15 | T | Invite emails link to a missing `/join` page | Low | Send an invite, open the link | join page | 404 | owner decides | open | | — |
+| F16 | R | `INTERNAL_SECRET` check fails open when unset | Medium | Unset secret, call `/api/stream/internal/update` without header | 403/503 | passes (code read; set today → 403) | agent | open | | unit test |
+| F17 | E | Hard-coded fallback secrets remain | Medium | grep `?? "akoro-dev` | none | 4 places | agent | open | | boot guard + test |
+| F18 | D | Ownership audit of signed-in routes | ? | per route | — | — | agent | open | | `security-authz` suite |
 | … | | | | | | | | | | |
 
 Status: `open → confirmed → fixing → fixed → retested → closed` (or `accepted-risk` with a reason and an expiry date).
