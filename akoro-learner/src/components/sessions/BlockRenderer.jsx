@@ -249,7 +249,10 @@ function BlockRenderer({ block, agentName, agentEmoji, onCite = null }) {
      out longhand: identical array, identical order. The existing objective
      header remains the single source of visible progress. */
 
-  /* ── guide (NaNa Esumai) ── */
+  /* ── guide ideas: drawn by the chat view as pills under the latest reply, never as a message ── */
+  if (block.type === "guide-ideas") return null;
+
+  /* ── guide (NaNa Esumai) — older sessions saved the guide's tips as messages ── */
   if (block.type === "guide") return (
     <div style={{ display:"flex", alignItems:"flex-end", gap:8, marginBottom:4, opacity }}>
       <div style={{ width:28, height:28, borderRadius:"50%", background:nana.bg,

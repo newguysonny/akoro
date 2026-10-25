@@ -467,7 +467,8 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       // accepted ({token} from the node socket path, {text} from the
       // python SSE bridge contract).
       ws.on("student_token", (d) => setLiveStudent(prev => (prev || "") + (d?.token ?? d?.text ?? "")));
-      ws.on("guide_token",   (d) => setLiveGuide(prev => (prev || "") + (d?.token ?? d?.text ?? "")));
+      // The guide's tip isn't shown as it streams: it arrives as ideas on the protégé's reply (turn_complete).
+      ws.on("guide_token",   () => {});
       ws.on("turn_complete", ({ blocks: newBlocks, currentPhase }) => {
         setLoading(false);
         clearLiveStream();

@@ -34,9 +34,17 @@ Decide:
 - isUrgent: boolean
 - detectedMisconception: string or null
 
+
+SUGGESTIONS — the learner sees no message from you, only 2-3 tappable ideas under the agent's reply.
+Write each as the exact message the HUMAN could send their agent next (their voice, to the agent, not to you):
+- short: 4-12 words, one idea each, concrete to "the current idea" or "{{topic}}"
+- mix the moves above (an everyday example, a check question, a "what if…", a quick challenge)
+- e.g. "Imagine a raisin left in water overnight — what happens?", "Explain it back to me in your own words."
+
 Return JSON only:
 {
   "tip": "...",
+  "suggestions": ["...", "..."],
   "nextAction": "...",
   "nextPhase": null,
   "nextMustKnowIndex": {{mustKnowIndex}},

@@ -172,6 +172,38 @@ function GuideChat({ messages, guideName, guideEmoji, onSuggestion, suggestions 
   );
 }
 
+/**
+ * The guide's ideas for the learner's next message — from the protégé's latest
+ * reply (block.guide.ideas) or the session's opening (a "guide-ideas" block),
+ * only while nothing newer has been said. A tap puts the idea in the message
+ * box to edit or send; the guide itself never posts in the chat.
+ */
+function GuideIdeas({ blocks, onPick }) {
+  let g = null;
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const b = blocks[i];
+    if (b.type === "user") break;
+    if (b.type === "student-agent") { g = b.guide?.ideas?.length ? b.guide : null; break; }
+    if (b.type === "guide-ideas") { g = b; break; }
+  }
+  if (!g?.ideas?.length) return null;
+  return (
+    <div data-guide-ideas="" style={{ display:"flex", flexWrap:"wrap", alignItems:"center", gap:6, margin:"2px 0 4px 36px" }} aria-label="Ideas from your guide">
+      {g.hint && <div style={{ flexBasis:"100%", fontSize:11.5, fontWeight:600, color:"var(--ak-text-muted)", lineHeight:1.45, marginBottom:2 }}>{g.hint}</div>}
+      <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:10.5, fontWeight:800, color:AGENT_STYLES.nana.color, fontFamily:"'Nunito',sans-serif" }}>
+        <Icon name="ti-school" size={12}/> Guide
+      </span>
+      {g.ideas.map((idea) => (
+        <button key={idea} type="button" onClick={() => onPick?.(idea)} title="Tap to put it in the message box — change it if you like, then send"
+          style={{ padding:"5px 11px", borderRadius:999, background:AGENT_STYLES.nana.bg, border:`1px solid ${AGENT_STYLES.nana.ring}`,
+            color:AGENT_STYLES.nana.color, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif", textAlign:"left", lineHeight:1.35 }}>
+          {idea}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function SessionChatView({
   blocks, loading, loadingNote = '', input, onInputChange, onSend,
   // A reader passage quoted into the next message (lib/quotedMessage.js).
@@ -398,6 +430,8 @@ function SessionChatView({
         {blocks.map((b,i) => (
           <BlockRenderer key={i} block={b} agentName={agentName} agentEmoji={agentEmoji} onCite={onCite}/>
         ))}
+        {/* The guide doesn't speak in the conversation: its ideas for what to say next sit under the protégé's latest reply. */}
+        {!loading && !liveStudent && <GuideIdeas blocks={blocks} onPick={onInputChange}/>}
         {/* ── Streaming token feedback — the turn in flight, drawn as it is
             generated. Styles mirror BlockRenderer's protégé / guide bubbles
             so the finished block simply replaces this in place. ── */}
@@ -414,19 +448,7 @@ function SessionChatView({
             </div>
           </div>
         )}
-        {liveGuide != null && liveGuide !== "" && (
-          <div style={{ display:"flex",alignItems:"flex-end",gap:8,marginBottom:4 }}>
-            <div style={{ width:28,height:28,borderRadius:"50%",background:AGENT_STYLES.nana.bg,
-              border:`1.5px solid ${AGENT_STYLES.nana.ring}`,flexShrink:0,
-              display:"flex",alignItems:"center",justifyContent:"center",fontSize:14 }}>🧠</div>
-            <div style={{ maxWidth:"84%",padding:"9px 13px",borderRadius:"4px 18px 18px 18px",
-              background:AGENT_STYLES.nana.bg,border:`1px solid ${AGENT_STYLES.nana.ring}`,
-              color:AGENT_STYLES.nana.color,fontSize:13.5,lineHeight:1.6,
-              whiteSpace:"pre-wrap",fontWeight:500 }}>
-              {liveGuide}<StreamCaret/>
-            </div>
-          </div>
-        )}
+        {/* No live guide bubble: the guide's tip arrives as ideas on the protégé's reply. */}
         {loading && !liveStudent && !liveGuide && (
           <div style={{ display:"flex",alignItems:"flex-end",gap:8 }}>
             <div style={{ width:28,height:28,borderRadius:"50%",background:AGENT_STYLES.nana.bg,
