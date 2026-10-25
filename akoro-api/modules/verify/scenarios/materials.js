@@ -349,6 +349,10 @@ export const materialsMultiFileDiag = {
       }
       const read = Array.isArray(r.structure?.items) ? r.structure.items.length : (r.structure ? "?" : 0);
       ctx.note(`${r.id.slice(0, 8)} ${r.created_at.slice(0, 16)} · ${r.state} · files named ${(r.names || []).length} · records ${ids.length} · pages per file [${perFile.join(", ")}] · structured ${read}`);
+      // Per file read: did the call succeed, how long, what was kept (kind, topics, questions) — no names, no text.
+      for (const it of (Array.isArray(r.structure?.items) ? r.structure.items : [])) {
+        ctx.note(`   read: kind ${it.kind || "?"} · ${it.pages ?? "?"} pages · topics ${(it.topics || []).length} · questions ${it.questionCount ?? "?"} · dropped ${(it.dropped || []).length ?? 0} · title ${it.title ? "yes" : "no"}`);
+      }
     }
     ctx.expect.ok("diagnostic ran", true);
   },
