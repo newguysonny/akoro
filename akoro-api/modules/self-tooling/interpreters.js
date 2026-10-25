@@ -23,6 +23,7 @@ import { capabilityStatus } from "./registry.js";
 import { readView } from "./viewRuntime.js";
 import { bind, refsIn, paramProps } from "./bind.js";
 import * as O from "./ops.js";
+import { checkArgs, resolveArgs } from "./writeArgs.js";
 
 const { ToolError, valid } = O;
 const MAX_STEPS = 4, MAX_THEN = 14;
@@ -155,6 +156,7 @@ async function checkWrite(errors, o, { origin, last, label, uses, learnerId = nu
   if (!assume.includes(o.cap) && (await capabilityStatus(o.cap, { learnerId })) !== "enabled") errors.push(`${label}: capability ${o.cap} needs approval`);
   if (!last) errors.push(`${label}: write must be the last step`);
   if (origin !== cap.target) errors.push(`${label}: ${o.cap} works on rows from ${cap.target} (filter/sort/pick them; don't group)`);
+  for (const e of checkArgs(o.cap, cap, o.args)) errors.push(`${label}: ${e}`);
   uses.capabilities.push(o.cap);
 }
 
@@ -341,7 +343,9 @@ export async function runDefinition(def, input, { learnerId, callCapability }) {
         // Propose, never apply: the rows it would change, by private id.
         const cap = CAPABILITIES[o.cap];
         const targets = (rows || []).filter((r) => r?._ref);
-        write = { cap: o.cap, does: cap.description, targets: targets.slice(0, MAX_WRITE_ROWS).map((r) => ({ ref: r._ref, label: String(cap.item ? cap.item(r) : r._ref).slice(0, 120) })), more: Math.max(0, targets.length - MAX_WRITE_ROWS) };
+        // Its value (a date, a priority) as it will be applied — dates from the learner's today.
+        const args = resolveArgs(o.cap, cap, o.args, new Date().toLocaleDateString("en-CA", { timeZone: TIMEZONE }));
+        write = { cap: o.cap, ...(args ? { args } : {}), does: cap.describe && args ? cap.describe(args) : cap.description, targets: targets.slice(0, MAX_WRITE_ROWS).map((r) => ({ ref: r._ref, label: String(cap.item ? cap.item(r) : r._ref).slice(0, 120) })), more: Math.max(0, targets.length - MAX_WRITE_ROWS) };
         continue;
       }
       else rows = applyOp(rows || [], o);

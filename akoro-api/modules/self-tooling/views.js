@@ -33,13 +33,13 @@ export const DATA_VIEWS = Object.freeze({
   my_goals: {
     description: "The learner's own goals: title, category, target date, exam, status.",
     keywords: ["goal", "aim", "target", "achieve"],
-    scope: "self", source: { schema: "edu", table: "learner_goals", owner: "user_id" },
+    scope: "self", source: { schema: "edu", table: "learner_goals", owner: "user_id" }, ref: "id",
     fields: { title: text({ sort: false }), category: text(), metric: text(), target_date: date(), exam: text(), status: text(), source: text(), created_at: time() },
   },
   my_chats: {
     description: "The learner's Agent Chat conversations: title and when they were active (not the messages).",
     keywords: ["chat", "conversation", "talked", "discussed"],
-    scope: "self", source: { schema: "public", table: "chat_sessions", owner: "user_id" },
+    scope: "self", source: { schema: "public", table: "chat_sessions", owner: "user_id" }, ref: "id",
     fields: { title: text({ sort: false }), created_at: time(), last_message_at: time() },
   },
   my_weak_topics: {
@@ -103,8 +103,8 @@ export const DATA_VIEWS = Object.freeze({
   my_agent_messages: {
     description: "Messages other learners' agents sent to the learner's agent: kind, subject, topic, status, when (not the text).",
     keywords: ["message", "messages", "inbox", "asked", "consult"],
-    scope: "self", source: { schema: "edu", table: "agent_messages", owner: "to_user" },
-    fields: { kind: text(), subject: text(), topic: text(), status: text(), created_at: time(), answered_at: time() },
+    scope: "self", source: { schema: "edu", table: "agent_messages", owner: "to_user" }, ref: "id",
+    fields: { kind: text(), subject: text(), topic: text(), status: text(), created_at: time(), answered_at: time(), read_at: time() },
   },
   public_blog_posts: {
     description: "Published Akoro blog articles: title, category, author, reading time, publish date.",

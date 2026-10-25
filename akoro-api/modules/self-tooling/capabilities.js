@@ -63,6 +63,22 @@ export const CAPABILITIES = Object.freeze({
   // confirms the exact list on a card. Runners: capRuntime.js WRITE_RUNNERS.
   "tasks.delete":           locked("Delete the learner's tasks (a running task is never deleted).", ["delete", "remove", "clear", "delete task", "remove task", "clear tasks", "old tasks"], { target: "my_tasks", item: (r) => r.title || "a task" }),
   "tasks.mark_done":        locked("Mark the learner's tasks as done.", ["done", "complete", "finish task", "mark", "tick off"], { target: "my_tasks", item: (r) => r.title || "a task" }),
+  // A change can take a value the learner's goal gives (`args`): checked against
+  // its type when the tool is built and shown on the Confirm card ("Move … to Tue 27 Oct").
+  "tasks.reschedule":       locked("Move the learner's tasks to a new due date (a running or finished task is left alone).", ["move", "reschedule", "postpone", "push back", "push my", "delay", "due date", "tomorrow", "next week"], {
+    target: "my_tasks", item: (r) => r.title || "a task", args: { date: "date" },
+    describe: (a) => `move your tasks to ${a.dateLabel || a.date}` }),
+  "tasks.set_priority":     locked("Set the priority of the learner's tasks (a running or finished task is left alone).", ["priority", "high priority", "low priority", "urgent", "important"], {
+    target: "my_tasks", item: (r) => r.title || "a task", args: { priority: ["low", "medium", "high", "critical"] },
+    describe: (a) => `set your tasks to ${a.priority} priority` }),
+  "goals.complete":         locked("Mark the learner's goals as achieved.", ["achieved", "complete goal", "goal done", "hit my goal", "reached"], {
+    target: "my_goals", item: (r) => r.title || "a goal" }),
+  "goals.dismiss":          locked("Dismiss (archive) the learner's goals.", ["archive", "dismiss", "drop goal", "remove goal", "old goals"], {
+    target: "my_goals", item: (r) => r.title || "a goal" }),
+  "inbox.mark_read":        locked("Mark messages in the learner's agent inbox as read.", ["mark read", "read", "inbox", "unread", "clear inbox"], {
+    target: "my_agent_messages", item: (r) => [r.kind, r.topic || r.subject].filter(Boolean).join(" · ") || "a message" }),
+  "chats.delete":           locked("Delete the learner's Agent Chat conversations.", ["delete chat", "remove chat", "clear chats", "old chats", "empty chats"], {
+    target: "my_chats", item: (r) => r.title || "a chat" }),
   "buddies.end":            locked("End the learner's study buddy pairings.", ["end buddy", "stop buddy"], { target: "my_buddies", item: (r) => `Study buddy${r.subject ? ` for ${r.subject}` : ""}` }),
   "circles.leave":          locked("Leave a revision circle the learner joined.", ["leave circle"]),
   "challenges.cancel_mine": locked("Cancel one of the learner's own open challenge requests.", ["cancel challenge"]),
@@ -83,6 +99,12 @@ export function learnerGrantable(name) {
 // built-in tool makes. (Ending a study buddy has its own tool, study_buddy.)
 const OWN_CHANGES = [
   { cap: "tasks.delete", re: /\b(delete|remove|clear(?: out)?|get rid of|erase|wipe)\b[^.?!\n]{0,40}\b(tasks?|to-?dos?)\b|\b(tasks?|to-?dos?)\b[^.?!\n]{0,30}\b(deleted|removed)\b/i },
+  { cap: "tasks.reschedule", re: /\b(move|reschedule|postpone|push(?: back)?|delay|shift)\b[^.?!\n]{0,40}\b(tasks?|to-?dos?)\b|\b(tasks?|to-?dos?)\b[^.?!\n]{0,30}\b(to|until) (tomorrow|today|next week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i },
+  { cap: "tasks.set_priority", re: /\b(tasks?|to-?dos?)\b[^.?!\n]{0,40}\b(high|low|medium|top|critical) priority\b|\b(make|set|mark)\b[^.?!\n]{0,40}\b(tasks?|to-?dos?)\b[^.?!\n]{0,30}\b(priority|urgent)\b/i },
+  { cap: "goals.complete", re: /\b(mark|tick|set)\b[^.?!\n]{0,40}\bgoals?\b[^.?!\n]{0,30}\b(achieved|done|complete|completed|reached)\b/i },
+  { cap: "goals.dismiss", re: /\b(archive|dismiss|drop|remove|delete|clear)\b[^.?!\n]{0,40}\bgoals?\b/i },
+  { cap: "inbox.mark_read", re: /\b(mark|set)\b[^.?!\n]{0,40}\b(messages?|inbox)\b[^.?!\n]{0,20}\bread\b|\bclear\b[^.?!\n]{0,20}\b(my )?inbox\b/i },
+  { cap: "chats.delete", re: /\b(delete|remove|clear|get rid of|wipe)\b[^.?!\n]{0,40}\b(chats?|conversations?)\b/i },
   { cap: "tasks.mark_done", re: /\b(mark|tick(?: off)?|check off)\b[^.?!\n]{0,40}\b(tasks?|to-?dos?)\b|\b(tasks?|to-?dos?)\b[^.?!\n]{0,30}\b(as )?(done|complete|completed|finished)\b/i },
 ];
 /** PURE: the own-data change a learner's message asks for, if any. → capability | null */
@@ -103,6 +125,15 @@ export function agreesToBuild(text) {
   return /\b(yes|yeah|yep|yup|sure|ok(?:ay)?|alright|go ahead|go for it|do it|please do|sounds good|let'?s do (?:it|that)|build|make (?:it|one|that|me)|create (?:it|one|that))\b/i.test(t)
     // "Ask for permission to delete my tasks": asking for it outright is a yes.
     || /\b(ask|request|get)\b[^.?!]{0,25}\b(permission|access|approval)\b/i.test(t);
+}
+
+/**
+ * PURE: does this tool goal ask to CHANGE something (not to show it)? Read by
+ * its leading verb — the agent writes goals as an instruction ("Delete my…",
+ * "Move my…"). "Make"/"set"/"add" are left out: "make a table of my scores" reads.
+ */
+export function asksForChange(goal) {
+  return /^\s*(?:please\s+)?(?:delete|remove|clear|erase|wipe|move|reschedule|postpone|delay|rename|change|update|edit|archive|dismiss|cancel|leave|unsubscribe|hide|reset|send|post|share|enrol|enroll|join|accept|decline|reply|mark|tick)\b/i.test(String(goal || ""));
 }
 
 /** Never — cannot be requested or granted (rule 27). Matched against goals and requested names. */

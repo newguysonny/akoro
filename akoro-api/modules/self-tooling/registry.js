@@ -7,7 +7,7 @@
  * isn't an allowlisted view field (rule 25).
  */
 import db from "../../db.js";
-import { CAPABILITIES, FORBIDDEN, forbiddenFor, capAudience, learnerGrantable } from "./capabilities.js";
+import { CAPABILITIES, FORBIDDEN, forbiddenFor, capAudience, learnerGrantable, asksForChange } from "./capabilities.js";
 import { DATA_VIEWS, describeView, audienceOf } from "./views.js";
 
 let grantsCache = { at: 0, active: new Set() };
@@ -90,7 +90,10 @@ export async function schemaLookup(goal, { limit = 6, audience = "learner", lear
     views: rankedViews.map(({ name, v }) => ({ ...describeView(name, v), status: "available" })),
     capabilities,
     ...(forbidden.length ? { notAllowed: forbidden.map((f) => f.description) } : {}),
-    note: !rankedViews.length && !rankedCaps.length
+    ...(asksForChange(goal) && !capabilities.some((c) => c.kind === "write") && audience === "learner" ? { changeNotPossible: true } : {}),
+    note: asksForChange(goal) && !capabilities.some((c) => c.kind === "write") && audience === "learner"
+      ? "No change like this can be made yet — nothing you have or can build does it. Say so plainly and offer to ask the Akoro team to add it; when they agree, call create_tool with this goal and it sends the request."
+      : !rankedViews.length && !rankedCaps.length
       ? "Nothing in the registry matches this goal — it can't be built from what's available."
       : forbidden.length
         ? "Part of this goal isn't allowed (see notAllowed) — tell the learner plainly; don't try to build it."

@@ -50,10 +50,11 @@ const publicConfirmation = (row) => ({
  */
 export async function proposeWrite({ learnerId, conversationId = null, tool, write }) {
   if (!write?.targets?.length) return { status: "nothing_to_change", note: "Nothing matched, so nothing would change. Tell the learner plainly." };
-  const args = { toolId: tool.id, toolName: tool.name, cap: write.cap, refs: write.targets.map((t) => t.ref).sort() };
+  const args = { toolId: tool.id, toolName: tool.name, cap: write.cap, refs: write.targets.map((t) => t.ref).sort(), ...(write.args ? { args: write.args } : {}) };
   const digest = agentToolArgumentsDigest(args);
   const bucket = Math.floor(Date.now() / CONFIRM_TTL_MS);
-  const preview = { title: tool.label, action: toLearner(write.does), items: write.targets.map((t) => t.label), more: write.more || 0 };
+  const said = toLearner(write.does);
+  const preview = { title: tool.label, action: said.charAt(0).toUpperCase() + said.slice(1), items: write.targets.map((t) => t.label), more: write.more || 0 };
   const row = {
     id: randomUUID(), capability_jti: JTI, session_id: conversationId || "none", principal_id: learnerId,
     tool_name: `selftool:${write.cap}`, tool_arguments: args, arguments_digest: digest, preview,
@@ -148,7 +149,7 @@ export async function confirmWrite({ id, userId, callTool, buildTool = null, pos
     throw httpError(410, "This confirmation expired — ask your agent again.");
   }
   if (row.tool_arguments?.kind === "permission") return confirmPermission(row, { userId, buildTool, postIntoChat, toolDeps });
-  const { cap, refs } = row.tool_arguments || {};
+  const { cap, refs, args: values = null } = row.tool_arguments || {};
   const runner = WRITE_RUNNERS[cap];
   // Re-check BEFORE claiming: a revoked grant means nothing is changed.
   if (!runner || !CAPABILITIES[cap]?.target || (await capabilityStatus(cap, { learnerId: userId })) !== "enabled") {
@@ -165,7 +166,7 @@ export async function confirmWrite({ id, userId, callTool, buildTool = null, pos
   const failed = [];
   for (const ref of (Array.isArray(refs) ? refs : []).slice(0, 50)) {
     let r;
-    try { r = await runner(userId, String(ref), { callTool }); } catch (e) { r = { ok: false, error: e.message }; }
+    try { r = await runner(userId, String(ref), { callTool, args: values, conversationId: row.session_id !== "none" ? row.session_id : null }); } catch (e) { r = { ok: false, error: e.message }; }
     if (r?.ok) done++; else failed.push(String(r?.error || "failed").slice(0, 120));
   }
   const result = { done, failed: failed.length, errors: [...new Set(failed)].slice(0, 3), at: new Date().toISOString() };

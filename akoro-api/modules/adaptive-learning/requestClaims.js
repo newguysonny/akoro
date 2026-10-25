@@ -17,6 +17,8 @@ export function adminRequestOf(tool, result) {
     return { made: r.submitted === true, waiting: r.duplicate === true && ["new", "under_review", "planned"].includes(r.status) };
   }
   if (tool === "create_tool") {
+    // A change no tool can make, asked of the Akoro team with the learner's yes (a Tool idea).
+    if (r.status === "requested" && !r.dryRun) return { made: r.submitted === true, waiting: r.duplicate === true && !r.reopened };
     const real = r.status === "escalated" && !r.dryRun && !!r.requestId;
     return { made: real && !r.duplicate, waiting: real && !!r.duplicate };
   }

@@ -129,3 +129,22 @@ test("agreesToBuild: the learner said yes to building it — the card waits for 
   for (const m of ["Yes please, build it.", "sure", "ok go ahead", "yeah do it", "Build me a tool that deletes my done tasks", "make it", "sounds good", "Ask for permission to delete task"]) assert.equal(agreesToBuild(m), true, m);
   for (const m of ["Delete my old tasks please.", "Delete my old tasks please", "no thanks", "not now", "don't build it", "what would it do?", "which tasks are old?"]) assert.equal(agreesToBuild(m), false, m);
 });
+
+test("the new change permissions: each one the learner can allow, on a view it can target", async () => {
+  const { DATA_VIEWS } = await import("./views.js");
+  const { WRITE_RUNNERS } = await import("./capRuntime.js");
+  for (const c of ["tasks.reschedule", "tasks.set_priority", "goals.complete", "goals.dismiss", "inbox.mark_read", "chats.delete"]) {
+    assert.equal(learnerGrantable(c), true, c);
+    assert.ok(DATA_VIEWS[CAPABILITIES[c].target]?.ref, `${c}: its view gives each row's id`);
+    assert.equal(typeof WRITE_RUNNERS[c], "function", `${c}: has a runner`);
+  }
+  for (const [m, c] of [["Move my overdue tasks to tomorrow", "tasks.reschedule"], ["Make all my exam revision tasks high priority", "tasks.set_priority"],
+    ["Mark my goals I've hit as achieved", "goals.complete"], ["Archive goals I haven't touched in a month", "goals.dismiss"],
+    ["Mark all my agent inbox messages as read", "inbox.mark_read"], ["Delete my empty chats from last week", "chats.delete"]]) assert.equal(ownChangeAsked(m), c, m);
+});
+
+test("asksForChange: an instruction to change, not a question to show", async () => {
+  const { asksForChange } = await import("./capabilities.js");
+  for (const g of ["Delete my old tasks", "Rename my chats by subject", "Leave the revision circles I joined", "Please reply to my agent's messages"]) assert.equal(asksForChange(g), true, g);
+  for (const g of ["How many tasks did I finish each week?", "Show my goals", "Make a table of my scores", "List chats I deleted"]) assert.equal(asksForChange(g), false, g);
+});

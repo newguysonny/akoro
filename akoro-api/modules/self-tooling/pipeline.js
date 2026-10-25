@@ -9,7 +9,7 @@
  */
 import db from "../../db.js";
 import { schemaLookup, capabilityStatus } from "./registry.js";
-import { forbiddenFor, CAPABILITIES, learnerGrantable, ownChangeAsked } from "./capabilities.js";
+import { forbiddenFor, CAPABILITIES, learnerGrantable, ownChangeAsked, asksForChange } from "./capabilities.js";
 import { DATA_VIEWS } from "./views.js";
 import { validateDefinition, runDefinition } from "./interpreters.js";
 import { validateParams, coerceInput, paramProps, wellFormedParams } from "./bind.js";
@@ -32,7 +32,7 @@ export const LIMITS = {
 const reject = (reason, extra = {}) => ({ status: "rejected", reason, ...extra });
 /** How a build uses an approved capability: a read is a step; a change is the recipe's final write op. */
 export const howToUse = (c) => (CAPABILITIES[c]?.kind === "write"
-  ? `use the approved change ${c}: read the rows from the view ${CAPABILITIES[c].target}, filter them to exactly what the goal says, and END the recipe with {"op":"write","cap":"${c}"} (never a step with "cap" for a change)`
+  ? `use the approved change ${c}: read the rows from the view ${CAPABILITIES[c].target}, filter them to exactly what the goal says, and END the recipe with {"op":"write","cap":"${c}"${CAPABILITIES[c].args ? `,"args":{${Object.keys(CAPABILITIES[c].args).map((k) => `"${k}":…`).join(",")}}` : ""}} (never a step with "cap" for a change)`
   : `use the approved capability ${c} (a step {"id":"x","cap":"${c}"} — returns ${JSON.stringify(CAPABILITIES[c].returns || [])})`);
 
 async function logEvent(row) {
@@ -213,6 +213,27 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     ev.stages_tried.push("escalate"); ev.capabilities = [capability]; ev.request_id = out.requestId || null;
     return finish(out.status === "escalated" ? (dry ? "dry" : "escalated") : "rejected", { ...out, ...(why ? { why } : {}) });
   };
+  // A change no capability can make (no tool can be built for it): say so and offer to ask
+  // the Akoro team; with the learner's yes, that request is a Tool idea on the admins' page.
+  const writeCaps = (names) => names.some((c) => CAPABILITIES[c]?.kind === "write");
+  if (!resumed && audience === "learner" && asksForChange(goal)
+      && !writeCaps((lookup.capabilities || []).map((c) => c.name)) && !writeCaps([].concat(hint.capabilities || []))) {
+    ev.stages_tried.push("change_request");
+    if (input?.__agreed !== true) return finish("rejected", { status: "offer_request", reason: "no change like this exists yet",
+      note: "NOTHING IS SENT. This change can't be made yet — no tool you have or can build does it. In your own words: say you can't do that right now, and offer to ask the Akoro team to add it. Call create_tool again with the same goal once they say yes — that sends the request. Don't suggest workarounds unless they ask." });
+    if (dry) return finish("dry", { status: "requested", dryRun: true, note: "DRY RUN — live, this would send the request to the Akoro team." });
+    const { createLearnerToolRequest } = await import("../agent-tool-requests/service.js");
+    let r;
+    try {
+      r = await createLearnerToolRequest({ learnerId, body: { category: "other", title: `Change: ${goal}`.slice(0, 120),
+        description: `A learner asked their agent to: "${goal.slice(0, 300)}". No change permission does this yet, so no tool could be built for it.` } });
+    } catch (e) { return finish("failed", reject(`Couldn't send the request: ${e.message}`)); }
+    const when = r.created ? new Date(r.created).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : null;
+    return finish("escalated", { status: "requested", submitted: r.createdNew || !!r.reopened, duplicate: !r.createdNew, reopened: !!r.reopened,
+      tell: r.createdNew ? "Sent: the Akoro team sees it on their Agent requests page and decides whether to add it."
+        : r.reopened ? "You had asked for this before; it is re-opened for the Akoro team."
+        : `You already asked for this${when ? ` on ${when}` : ""}; it is still waiting — say it is the same request, not a new one.` });
+  }
   if (!resumed) {
     const hinted = await lockedIn([].concat(hint.capabilities || []));
     if (hinted.length && input?.__agreed === true && learnerGrantable(hinted[0]) && audience === "learner") { draftCap = hinted[0]; mustUse = [draftCap]; ev.stages_tried.push("draft"); }
