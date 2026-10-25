@@ -30,6 +30,10 @@ export const LIMITS = {
 };
 
 const reject = (reason, extra = {}) => ({ status: "rejected", reason, ...extra });
+/** How a build uses an approved capability: a read is a step; a change is the recipe's final write op. */
+export const howToUse = (c) => (CAPABILITIES[c]?.kind === "write"
+  ? `use the approved change ${c}: read the rows from the view ${CAPABILITIES[c].target}, filter them to exactly what the goal says, and END the recipe with {"op":"write","cap":"${c}"} (never a step with "cap" for a change)`
+  : `use the approved capability ${c} (a step {"id":"x","cap":"${c}"} — returns ${JSON.stringify(CAPABILITIES[c].returns || [])})`);
 
 async function logEvent(row) {
   const { error } = await edu().from("self_tool_events").insert(row);
@@ -225,7 +229,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     for (let attempt = 1; attempt <= 3 && ev.builder_calls < LIMITS.builderCalls; attempt++) {
       ev.builder_calls++;
       let built;
-      try { built = await buildDefinition({ stage, goal, params, slice, feedback, learnerId, platformPays: dry || resumed, approved: mustUse }); }
+      try { built = await buildDefinition({ stage, goal, params, slice, feedback, learnerId, platformPays: dry || resumed, approved: mustUse.map(howToUse) }); }
       catch (e) {
         if (/coin|balance/i.test(String(e?.message))) return finish("rejected", reject("Not enough coins to build a tool."));
         lastProblem = `builder failed: ${e.message}`; tried.push(`${stage}#${attempt}: ${lastProblem}`); break;
@@ -240,7 +244,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       if (built.definition.kind !== stage) built.definition.kind = stage === "spec" && built.definition.from ? "spec" : built.definition.kind;
       const v = await validateDefinition(built.definition, params, { audience, learnerId });
       if (v.ok && built.definition.kind === "code") v.errors.push(...inventedDates(built.definition.source, goal, params));
-      for (const c of mustUse) if (!v.uses.capabilities.includes(c)) v.errors.push(`use the approved capability ${c} (a step {"id":"x","cap":"${c}"} — returns ${JSON.stringify(CAPABILITIES[c].returns || [])})`);
+      for (const c of mustUse) if (!v.uses.capabilities.includes(c)) v.errors.push(howToUse(c));
       if (v.errors.length) v.ok = false;
       if (!v.ok) { feedback = v.errors.slice(0, 6).join("; "); lastProblem = feedback; tried.push(`${stage}#${attempt}: ${feedback}`); continue; }
       const check = await verifyTool(built.definition, params, built.samples || [], ctx);

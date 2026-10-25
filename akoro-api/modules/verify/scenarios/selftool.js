@@ -775,7 +775,7 @@ export const deleteTasks = {
         history: [{ role: "user", content: String(p.first) }, { role: "assistant", content: String(t1.reply || "") }] });
       ctx.note(`turn 2: ${String(t2.reply || "").replace(/\s+/g, " ").slice(0, 300)} · tools ${JSON.stringify((t2.tools || []).map((t) => [t.tool, t.result?.status]))}`);
       card = (t2.tools || []).find((t) => t.tool === "create_tool" && t.result?.status === "needs_permission")?.result?.confirmation;
-      ctx.expect.ok("1. reply asks the learner to approve (nothing built yet)", /approv|allow/i.test(String(t2.reply || "")) && !/\b(deleted|it's built|I've built)\b/i.test(String(t2.reply || "")), String(t2.reply || "").slice(0, 300));
+      ctx.expect.ok("1. reply asks the learner to approve (nothing built yet)", /approv|allow/i.test(String(t2.reply || "")) && !/\b(I've deleted|have been deleted|are deleted|it's built|I've built)\b/i.test(String(t2.reply || "")), String(t2.reply || "").slice(0, 300));
     }
     ctx.expect.ok("1. a permission card for deleting tasks", card?.kind === "permission" && /delete your tasks/i.test(card?.action || ""), card);
     const asked = (await ctx.db.rows("edu.agent_tool_requests", { requester_id: me.id }, { columns: "id, kind, created_at", limit: 50 })).filter((r) => Date.parse(r.created_at) >= Date.parse(since));

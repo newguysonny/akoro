@@ -172,7 +172,7 @@ async function checkSteps(errors, steps, uses, learnerId = null) {
       if (!cap) { errors.push(`step ${st.id}: unknown capability ${st.cap}`); continue; }
       const status = await capabilityStatus(st.cap, { learnerId });
       if (status !== "enabled") errors.push(`step ${st.id}: capability ${st.cap} needs approval`);
-      if (cap.kind !== "read") errors.push(`step ${st.id}: ${st.cap} changes data — tools are read-only for now`);
+      if (cap.kind !== "read") errors.push(cap.target ? `step ${st.id}: ${st.cap} is a change, not a read — read ${cap.target} in a step and end the recipe with {"op":"write","cap":"${st.cap}"}` : `step ${st.id}: ${st.cap} changes data — tools are read-only for now`);
       uses.capabilities.push(st.cap);
       if (st.rows != null && typeof st.rows !== "string") errors.push(`step ${st.id}: rows is a path like "weak_topics"`);
     } else errors.push(`step ${st.id}: needs view or cap`);
