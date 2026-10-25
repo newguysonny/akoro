@@ -765,6 +765,16 @@ export const deleteTasks = {
     ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tools", { ownerColumn: "owner_id", ownerId: me.id, filters: { name: { like: `${name}%` } } }));
     ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tool_write_confirmations", { ownerColumn: "principal_id", ownerId: me.id, filters: { tool_name: { like: "selftool:%tasks.delete" } } }));
 
+    // 0. A chat that already holds the old "only an admin can grant" answer: it still looks up and offers to build.
+    const stale = "I can't delete them — that needs a permission only an admin can grant, and I won't pretend otherwise. Want me to file the delete request anyway, or will you clear them in the Tasks tab?";
+    const t0 = await ctx.agent.chat({ as: p.learner, mode: "live", model: p.model, prompt: String(p.first),
+      history: [{ role: "user", content: String(p.first) }, { role: "assistant", content: stale }] });
+    ctx.note(`turn 0 (stale chat): ${String(t0.reply || "").replace(/\s+/g, " ").slice(0, 300)} · tools ${JSON.stringify((t0.tools || []).map((t) => [t.tool, t.result?.status]))}`);
+    ctx.expect.ok("0. looks up what it can build first", (t0.tools || [])[0]?.tool === "schema_lookup", (t0.tools || []).map((t) => t.tool));
+    ctx.expect.ok("0. offers to build it (not 'ask an admin')", /\b(build|make|create)\b/i.test(String(t0.reply || "")) && !/only an admin|admin (can|must|has to) (grant|approve)/i.test(String(t0.reply || "")), String(t0.reply || "").slice(0, 300));
+    const c0 = (t0.tools || []).find((t) => t.tool === "create_tool" && t.result?.confirmation?.confirmationId)?.result?.confirmation;
+    if (c0) await ctx.http({ as: p.learner, method: "POST", path: `/api/self-tooling/confirmations/${c0.confirmationId}/reject` });
+
     // 1. In chat: the agent offers to build it; when the learner agrees, a permission card — no admin request.
     const t1 = await ctx.agent.chat({ as: p.learner, mode: "live", model: p.model, prompt: String(p.first) });
     ctx.note(`turn 1: ${String(t1.reply || "").replace(/\s+/g, " ").slice(0, 300)} · tools ${JSON.stringify((t1.tools || []).map((t) => t.tool))}`);

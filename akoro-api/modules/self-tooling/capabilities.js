@@ -79,6 +79,18 @@ export function learnerGrantable(name) {
   return !!c && !c.hidden && c.status === "locked" && c.kind === "write" && !!c.target && (c.scope || "self") === "self" && capAudience(c) === "learner";
 }
 
+// "Delete my old tasks", "mark my tasks done": a change to the learner's own tasks no
+// built-in tool makes. (Ending a study buddy has its own tool, study_buddy.)
+const OWN_CHANGES = [
+  { cap: "tasks.delete", re: /\b(delete|remove|clear(?: out)?|get rid of|erase|wipe)\b[^.?!\n]{0,40}\b(tasks?|to-?dos?)\b|\b(tasks?|to-?dos?)\b[^.?!\n]{0,30}\b(deleted|removed)\b/i },
+  { cap: "tasks.mark_done", re: /\b(mark|tick(?: off)?|check off)\b[^.?!\n]{0,40}\b(tasks?|to-?dos?)\b|\b(tasks?|to-?dos?)\b[^.?!\n]{0,30}\b(as )?(done|complete|completed|finished)\b/i },
+];
+/** PURE: the own-data change a learner's message asks for, if any. → capability | null */
+export function ownChangeAsked(message) {
+  const m = String(message || "");
+  return OWN_CHANGES.find((x) => x.re.test(m))?.cap || null;
+}
+
 /** Never — cannot be requested or granted (rule 27). Matched against goals and requested names. */
 export const FORBIDDEN = Object.freeze([
   { name: "others.private_data", description: "Another learner's private data (scores, notes, chats, messages, grades, contact details).",

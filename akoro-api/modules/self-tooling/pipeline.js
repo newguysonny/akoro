@@ -9,7 +9,7 @@
  */
 import db from "../../db.js";
 import { schemaLookup, capabilityStatus } from "./registry.js";
-import { forbiddenFor, CAPABILITIES, learnerGrantable } from "./capabilities.js";
+import { forbiddenFor, CAPABILITIES, learnerGrantable, ownChangeAsked } from "./capabilities.js";
 import { DATA_VIEWS } from "./views.js";
 import { validateDefinition, runDefinition } from "./interpreters.js";
 import { validateParams, coerceInput, paramProps, wellFormedParams } from "./bind.js";
@@ -70,6 +70,15 @@ export const asksAboutOthersInBattles = (message) => BATTLE_WORDS.test(String(me
  * → "create_tool" | null
  */
 export async function forcedSelfTool(learnerId, message) {
+  // A change to their own tasks no tool makes yet: look up what can be built FIRST,
+  // so the agent offers to build it — left on auto (with an older "only an admin
+  // can" turn in the history) it told the learner to ask an admin instead.
+  const change = ownChangeAsked(message);
+  if (change) {
+    const { data } = await edu().from("agent_tools").select("id").eq("status", "active")
+      .or(`owner_id.eq.${learnerId},scope.eq.platform`).contains("capabilities", [change]).limit(1);
+    return data?.length ? null : "schema_lookup";
+  }
   if (!asksAboutOthersInBattles(message)) return null;
   const { data } = await edu().from("agent_tools").select("id").eq("status", "active")
     .or(`owner_id.eq.${learnerId},scope.eq.platform`).contains("capabilities", ["battles.class_results"]).limit(1);

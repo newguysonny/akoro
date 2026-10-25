@@ -4735,7 +4735,8 @@ router.post("/agent", async (req, res) => {
           // Other players' results in the learner's battles: go through
           // create_tool (it builds, or asks an admin for the permission) —
           // left on auto the model sometimes said "I can't see that" instead.
-          : forceSelfTool ? "create_tool"
+          // A change to their own tasks: schema_lookup first, so the agent offers to build it.
+          : forceSelfTool ? forceSelfTool
           // Identity questions about the learner's OWN school/class/subjects/
           // teachers/progress are fact questions about data the model cannot
           // see — the live 2026-10-01 transcript had tools=0 and an invented

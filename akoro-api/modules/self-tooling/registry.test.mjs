@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { DATA_VIEWS, describeView, viewColumns } from "./views.js";
-import { CAPABILITIES, FORBIDDEN, forbiddenFor, learnerGrantable } from "./capabilities.js";
+import { CAPABILITIES, FORBIDDEN, forbiddenFor, learnerGrantable, ownChangeAsked } from "./capabilities.js";
 import { decideAccess } from "./access.js";
 
 const chatSrc = readFileSync(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
@@ -117,4 +117,10 @@ test("learnerGrantable: a learner may allow only changes to their own rows that 
   // Other learners' data, plain reads, writes no tool can target, and unknown names stay with admins.
   for (const c of ["battles.class_results", "tasks.list_mine", "circles.leave", "challenges.cancel_mine", "verify.probe", "verify.task_done", "nope.nope"]) assert.equal(learnerGrantable(c), false, c);
   for (const [name, c] of Object.entries(CAPABILITIES)) if (learnerGrantable(name)) assert.ok(c.target && c.kind === "write" && (c.scope || "self") === "self", name);
+});
+
+test("ownChangeAsked: deleting or completing the learner's own tasks, and nothing else", () => {
+  for (const m of ["Delete my old tasks please.", "can you remove all my done tasks", "clear out my to-dos", "get rid of the overdue tasks", "my old tasks should be deleted"]) assert.equal(ownChangeAsked(m), "tasks.delete", m);
+  for (const m of ["Mark my homework task as done", "tick off my tasks for today", "mark all my tasks complete"]) assert.equal(ownChangeAsked(m), "tasks.mark_done", m);
+  for (const m of ["Create a task to revise fractions", "What tasks do I have?", "Delete my account", "help me with my homework", "remove the last message"]) assert.equal(ownChangeAsked(m), null, m);
 });
