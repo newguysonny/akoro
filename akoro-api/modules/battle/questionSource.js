@@ -322,15 +322,20 @@ export async function collectQuestions({
       ? questions
       : await fromPastPapers({ subject, difficulty, limit: 4 });
 
-    const need = total - questions.length;
-    const res = await generate({
-      subject, topic, difficulty, count: need, classLabel, userId,
-      exemplars: source === "ai" ? exemplars : questions,
-      ...(basedOn?.length ? { basedOn } : {}),
-    });
-    charged = res.charged;
+    // Two rounds at most: a round that comes back short (answers that didn't resolve,
+    // duplicates) is topped up once rather than leaving the set short.
     const before = questions.length;
-    for (const q of res.questions) add(q);
+    for (let round = 0; round < 2 && questions.length < total; round++) {
+      const res = await generate({
+        subject, topic, difficulty, count: total - questions.length, classLabel, userId,
+        exemplars: source === "ai" ? exemplars : questions,
+        ...(basedOn?.length ? { basedOn } : {}),
+      });
+      charged += res.charged || 0;
+      const had = questions.length;
+      for (const q of res.questions) add(q);
+      if (questions.length === had) break;   // nothing new: don't spend again
+    }
     generated = questions.length - before;
   }
   return { questions: questions.slice(0, total), charged, generated };

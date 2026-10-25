@@ -98,6 +98,7 @@ function battleScenario({ key, mode, learnersNeeded, description }) {
       draft = await draftOf(ctx, p.instructor, draftId);
       ctx.expect.eq("difficulty is hard", draft?.payload?.difficulty, "hard");
       const draftQs = draft?.payload?.details?.questions || [];
+      ctx.note(`after the revision: ${draftQs.length} questions · subject ${draft?.payload?.subject || "-"} · note ${draft?.payload?.details?.questions_note || "-"}`);
       ctx.expect.gte("…and the questions were written again for it", draftQs.length, 5);
       ctx.expect.ok("the note is kept", /calculator/i.test(draft?.payload?.details?.note || ""), draft?.payload?.details);
 
@@ -133,6 +134,7 @@ function battleScenario({ key, mode, learnersNeeded, description }) {
       ctx.expect.ok("it has an id", !!battleId, made.body);
       if (!battleId) return;
       ctx.cleanup(() => ctx.http({ as: p.instructor, method: "DELETE", path: `/api/battle/battles/${battleId}` }));
+      ctx.note(`questions from the draft: ${made.body?.data?.questions_from_draft ?? made.body?.questions_from_draft ?? "-"}`);
       const asked = (await ctx.db.rows("battle_questions", { battle_id: battleId }, { columns: "question_order, question_text, correct_answer_index, options_json", limit: 40 }))
         .sort((a, b) => a.question_order - b.question_order);
       ctx.expect.eq(`the ${review ? "review" : "battle"} asks exactly the draft's questions, in order`,

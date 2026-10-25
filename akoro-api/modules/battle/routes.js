@@ -711,7 +711,9 @@ async function draftPreset(req, subject) {
   const { data: d } = await db.from("activity_drafts").select("type, status, created_by, payload").eq("id", id).maybeSingle();
   if (!d || d.type !== "battle" || d.status !== "draft" || d.created_by !== req.user.id) return null;
   const qs = d.payload?.details?.questions;
-  const same = !subject || !d.payload?.subject || String(subject).trim().toLowerCase() === String(d.payload.subject).trim().toLowerCase();
+  // "Mathematics" and "General Mathematics" are the same subject; "English" and "Chemistry" aren't.
+  const norm = (x) => String(x || "").toLowerCase().replace(/\b(general|further|basic)\b/g, "").replace(/[^a-z]/g, "");
+  const same = !subject || !d.payload?.subject || norm(subject).includes(norm(d.payload.subject)) || norm(d.payload.subject).includes(norm(subject));
   return same && Array.isArray(qs) && qs.length ? qs : null;
 }
 
@@ -943,6 +945,8 @@ const classInvite = async (req, res) => {
     // type and so answered "classroom" for a review.
     battle_type: battle.battle_type,
     status: battle.status,
+    // How many of its questions are the draft's own (the ones its preview showed).
+    questions_from_draft: fill.fromDraft || 0,
     invited: opponents.length, expires_at: expiresAt,
     questions: fill.placed, fromBank: fill.fromBank, generated: fill.generated, coinsCharged: fill.charged,
     skipped: {
@@ -1563,6 +1567,8 @@ const courseInvite = async (req, res) => {
     success: true, battle_id: battle.id,
     battle_type: battle.battle_type,
     status: battle.status,
+    // How many of its questions are the draft's own (the ones its preview showed).
+    questions_from_draft: fill.fromDraft || 0,
     invited: opponents.length, expires_at: expiresAt, skipped: named,
     questions: fill.placed, fromBank: fill.fromBank, generated: fill.generated, coinsCharged: fill.charged,
   });
