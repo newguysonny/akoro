@@ -81,6 +81,8 @@ export async function runActivityReview(assignmentId) {
       learnerIds, startsAt: at, subject: a.subject,
       topic: reviewFocus(a.topic || a.title, Array.isArray(a.subtopics) ? a.subtopics : []),
       total: a.details.review.questions || REVIEW_LIMITS.DEFAULT_Q,
+      // The questions the draft's Battle questions tab showed, when it prepared them.
+      preset: Array.isArray(a.details.review.items) ? a.details.review.items : null,
       title: `Class review: ${a.title}`,
       extra: { review_host: "teacher", requested_by: a.created_by, activity_assignment_id: a.id },
     });

@@ -63,7 +63,7 @@ import {
 import {
   createActivityDraft, assignActivityDraft, DRAFT_TYPES,
   listActivityDrafts, getActivityDraft, updateActivityDraft, discardActivityDraft,
-  saveDraftVersion, retryDraftVersion, restoreDraftHistory, classroomName,
+  saveDraftVersion, retryDraftVersion, restoreDraftHistory, classroomName, prepareReviewQuestions,
 } from "./drafts.js";
 import {
   listRoutines, createRoutine, updateRoutine, deleteRoutine,
@@ -290,6 +290,12 @@ router.put("/drafts/:id/versions/:n", requireRole(TEACHER_ROLES), asyncHandler(a
 /** POST /api/self-study/drafts/:id/versions/:n/retry — draft a failed version again. */
 router.post("/drafts/:id/versions/:n/retry", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
   try { ok(res, { version: await retryDraftVersion(req.user, req.params.id, req.params.n) }); }
+  catch (e) { return draftError(res, e); }
+}));
+
+/** POST /api/self-study/drafts/:id/review-questions { count } — write the review battle's questions for this draft. */
+router.post("/drafts/:id/review-questions", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
+  try { ok(res, { review_questions: await prepareReviewQuestions(req.user, req.params.id, req.body?.count) }); }
   catch (e) { return draftError(res, e); }
 }));
 

@@ -9,11 +9,12 @@
  */
 import { useState } from 'react';
 import { C } from '../../theme/colors.js';
+import ReviewBattleTab, { reviewBattleTabs } from './ReviewBattleTabs.jsx';
 import { PreviewTabs, PlayStage } from './PreviewKit.jsx';
 import AssignmentSimulator from './AssignmentSimulator.jsx';
 import { MathText } from '../paper/PaperView.jsx';
 
-export default function AssignmentDraftPreview({ settings, questions, version, title, topic, initialTab = 'settings' }) {
+export default function AssignmentDraftPreview({ settings, questions, version, title, topic, battle = null, initialTab = 'settings' }) {
   const [tab, setTab] = useState(initialTab);
   const [playing, setPlaying] = useState(false);
   const paper = version?.status === 'ready' ? version.paper : null;
@@ -21,7 +22,7 @@ export default function AssignmentDraftPreview({ settings, questions, version, t
   return (
     <div data-assignment-preview="" style={{ fontFamily: C.font }}>
       <PreviewTabs value={tab} onChange={(t) => { setTab(t); setPlaying(false); }}
-        tabs={[['settings', 'Settings'], ['preview', 'Preview'], ['questions', count ? `Questions (${count})` : 'Questions']]} />
+        tabs={[['settings', 'Settings'], ['preview', 'Preview'], ['questions', count ? `Questions (${count})` : 'Questions'], ...reviewBattleTabs(battle)]} />
       {tab === 'settings' && settings}
       {tab === 'preview' && (!paper ? (
         <div style={{ padding: '30px 16px', textAlign: 'center', fontSize: 12.5, color: C.muted }}>
@@ -35,6 +36,7 @@ export default function AssignmentDraftPreview({ settings, questions, version, t
           glimpse={<Glimpse paper={paper} />} />
       ))}
       {tab === 'questions' && questions}
+      {tab.startsWith('battle-') && <ReviewBattleTab key={tab} tab={tab} battle={battle} />}
     </div>
   );
 }

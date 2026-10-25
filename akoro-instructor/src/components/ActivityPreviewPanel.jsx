@@ -118,6 +118,9 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
   const [dueLocal, setDueLocal] = useState(null);   // the due date picked here (datetime-local), null = as drafted
   // The review battle an assignment / self study comes with (on by default; Plan: Activity + Review).
   const [review, setReview] = useState(REVIEW_DEFAULT);
+  // The questions that review battle will ask, written on the draft (null = not yet).
+  const [reviewQs, setReviewQs] = useState(null);
+  const [reviewQsBusy, setReviewQsBusy] = useState(false);
   const { createBattle } = useBattlesAPI();
   const { courses } = useCoursesAPI();
 
@@ -252,6 +255,26 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
     if (due) setReview((r) => (r.at ? r : { ...r, at: due }));
   }, [draft?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Seed from the draft; (re)write them when the review is on and the count changed.
+  useEffect(() => { setReviewQs(draft?.payload?.review_questions || null); }, [draft?.id, draft?.payload?.review_questions]);
+  const reviewable = ['assignment', 'self_study'].includes(draft?.type) && draft?.status !== 'assigned';
+  useEffect(() => {
+    if (!reviewable || !review.on || !draftId) return undefined;
+    if (reviewQs?.items?.length && reviewQs.count === review.questions) return undefined;
+    let gone = false;
+    const t = setTimeout(async () => {
+      setReviewQsBusy(true);
+      try {
+        const r = await apiPost(`/api/self-study/drafts/${draftId}/review-questions`, { count: review.questions });
+        const rq = r?.data?.review_questions ?? r?.review_questions;
+        if (!gone && rq) setReviewQs(rq);
+      } catch (e) {
+        if (!gone) setReviewQs((q) => ({ ...(q || {}), count: review.questions, note: e?.message || "Couldn't write the review battle's questions." }));
+      } finally { if (!gone) setReviewQsBusy(false); }
+    }, 700);
+    return () => { gone = true; clearTimeout(t); };
+  }, [reviewable, review.on, review.questions, draftId, reviewQs?.count, reviewQs?.items?.length]);   // eslint-disable-line react-hooks/exhaustive-deps
+
   // Stable per draft: BattleForm re-seeds itself whenever `initial` changes.
   const battleInitial = useMemo(() => (draft?.type === 'battle' ? battleInitialFrom(draft.payload || {}, draft) : null), [draft]);
 
@@ -285,6 +308,10 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
   const isLive = draft.type === 'live_course';
   const stages = payload.details?.stages || [];
   const audience = draft.audience || {};
+  const reviewBattle = reviewable ? {
+    on: review.on, title: `Review battle · ${payload.topic || payload.title || draft.title || 'the activity'}`, topic: payload.topic, subject: payload.subject,
+    questions: reviewQs?.items || [], loading: reviewQsBusy, note: reviewQs?.note, players: audience.names || [],
+  } : null;
   const versions = versionsOf(draft);
   const questionsExist = versions.some((v) => (v.paper?.questions || []).length > 0);
   const shown = versions.find((v) => v.n === vSel) || versions.at(-1) || null;
@@ -445,11 +472,11 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
       ) : draft.type === 'self_study' ? (
         <div style={{ flex: 1, overflowY: 'auto', paddingRight: 2 }}>
           <SelfStudyDraftPreview draft={draft} audience={audience} dueLocal={dueValue} onDue={setDueLocal} dueHint={payload.due_hint}
-            review={review} onReview={setReview} onEditPlan={() => setPhase('editing')} />
+            review={review} onReview={setReview} onEditPlan={() => setPhase('editing')} battle={reviewBattle} />
         </div>
       ) : draft.type === 'assignment' && versions.length > 0 ? (
         <div style={{ flex: 1, overflowY: 'auto', paddingRight: 2 }}>
-          <AssignmentDraftPreview version={shown} title={payload.title || draft.title} topic={payload.topic}
+          <AssignmentDraftPreview version={shown} title={payload.title || draft.title} topic={payload.topic} battle={reviewBattle}
             settings={(
               <div>
                 {renderBrief()}

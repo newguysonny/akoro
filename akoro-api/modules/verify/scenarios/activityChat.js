@@ -449,4 +449,54 @@ export const activityChatSelfStudyAssign = {
   },
 };
 
-export const activityChatScenarios = [activityChatAskMissing, activityChatBattleSelfStudyAsk, activityChatPartsInstructions, activityChatAssignmentVersions, activityChatAssignmentAssign, activityChatSelfStudyAssign];
+
+/* ── Switching type: the right kind, and earlier details asked about ───── */
+
+export const activityChatSwitchTypeAsks = {
+  name: "activity_chat.switch_type_asks", area: "instructor-chat", risk: "write", regression: false, timeoutMs: 600_000,
+  description: "After a battle is prepared, \"let's create an assignment\" makes an assignment, not another battle, and the earlier topic/class are asked about (\"same topic?\"), never reused silently; the same for a self study. The self study's review battle then asks exactly the questions written on its draft.",
+  async run(ctx) {
+    const { classroom, learners, say, who } = await classOf(ctx);
+    const noDraft = (label, turn) => ctx.expect.ok(`${label}: nothing is prepared`, !prepared(turn), { tools: toolsOf(turn), results: (turn.tools || []).map((t) => t.result?.unsaid || t.result?.error || null) });
+    const madeOfType = (turn, type) => (turn.tools || []).filter((t) => t.tool === "prepare_activity" && t.result?.prepared).map((t) => t.input?.type).filter((x) => x !== type);
+
+    const b = await say(`Set up a Mathematics battle on fractions, 10 questions, for ${who} in ${classroom.name}.`, "battle");
+    const pb = lastCall(b, "prepare_activity");
+    ctx.expect.ok("the battle is prepared", pb?.result?.prepared === true && pb?.input?.type === "battle", { tools: toolsOf(b), input: pb?.input });
+
+    const a1 = await say("Let's create an assignment.", "assignment, nothing said");
+    noDraft("assignment asked for with no details", a1);
+    ctx.expect.eq("no other kind of activity is made instead", madeOfType(a1, "assignment"), []);
+    ctx.expect.ok("the agent asks — the same topic as before, or what it's on", asks(a1.reply, /\b(same|topic|fractions|subject|what)\b/i), a1.reply);
+    const a2 = await say("Same topic and class, 5 multiple choice questions.", "assignment, same details");
+    const pa = lastCall(a2, "prepare_activity");
+    ctx.expect.ok("now it prepares an assignment", pa?.result?.prepared === true && pa?.input?.type === "assignment", { tools: toolsOf(a2), input: pa?.input, result: pa?.result });
+
+    const s1 = await say("Now a self study for them too.", "self study, nothing said");
+    noDraft("self study asked for with no details", s1);
+    ctx.expect.eq("no other kind of activity is made instead", madeOfType(s1, "self_study"), []);
+    ctx.expect.ok("the agent asks whether it's the same topic/subject", asks(s1.reply, /\b(same|topic|fractions|subject)\b/i), s1.reply);
+    const s2 = await say("Yes, the same topic and subject.", "self study, same details");
+    const ps = lastCall(s2, "prepare_activity");
+    ctx.expect.ok("now it prepares the self study", ps?.result?.prepared === true && ps?.input?.type === "self_study", { tools: toolsOf(s2), input: ps?.input, result: ps?.result });
+    const draftId = ps?.result?.draftId;
+    if (!draftId) return;
+
+    // The review battle's questions, written on the draft (the Battle questions tab) …
+    const rq = await ctx.http({ as: INSTRUCTOR, method: "POST", path: `/api/self-study/drafts/${draftId}/review-questions`, body: { count: 5 } });
+    ctx.expect.status("review questions written", rq, 200);
+    const items = rq.body?.data?.review_questions?.items || rq.body?.review_questions?.items || [];
+    ctx.note(`review questions: ${items.length} — ${rq.body?.data?.review_questions?.note || ""}`);
+    ctx.expect.eq("5 review questions on the draft", items.length, 5);
+    ctx.expect.ok("…kept on the draft", ((await draftRow(ctx, INSTRUCTOR, draftId))?.payload?.review_questions?.items || []).length === 5);
+    // … are the ones the review battle asks.
+    const { battleId } = await assignWithReview(ctx, { draftId, body: {}, learners });
+    if (!battleId) return;
+    const asked = (await ctx.db.rows("battle_questions", { battle_id: battleId }, { columns: "question_order, question_text, correct_answer_index", limit: 40 }))
+      .sort((x, y) => x.question_order - y.question_order);
+    ctx.expect.eq("the review battle asks exactly the draft's review questions, in order", asked.map((q) => q.question_text).join(" | "), items.slice(0, asked.length).map((q) => q.stem).join(" | "));
+    ctx.expect.ok("…with the same right answers", asked.length > 0 && asked.every((q, i) => q.correct_answer_index === items[i]?.correctIndex), asked.map((q) => q.correct_answer_index));
+  },
+};
+
+export const activityChatScenarios = [activityChatAskMissing, activityChatBattleSelfStudyAsk, activityChatSwitchTypeAsks, activityChatPartsInstructions, activityChatAssignmentVersions, activityChatAssignmentAssign, activityChatSelfStudyAssign];

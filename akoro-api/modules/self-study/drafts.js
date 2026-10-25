@@ -474,6 +474,28 @@ async function draftBattleQuestions(instructor, payload) {
   }
 }
 
+/**
+ * The review battle's questions for a self study or assignment draft — written
+ * when the instructor turns the review on (or changes how many), on the
+ * activity's topic and concepts, the same way a battle draft's are. Saved on
+ * the draft (payload.review_questions); assigning it carries them into the
+ * review battle, which asks exactly these.
+ */
+export async function prepareReviewQuestions(instructor, id, count) {
+  const draft = await getActivityDraft(instructor, id);
+  if (!["self_study", "assignment", "project"].includes(draft.type)) throw invalid("Only a self study or an assignment has a review battle", 400);
+  if (draft.status !== "draft") throw invalid("Only pending drafts can be changed", 409);
+  const { REVIEW_LIMITS } = await import("./activityReview.js");
+  const { reviewFocus } = await import("../battle/guideReview.js");
+  const p = draft.payload || {};
+  const n = Math.min(REVIEW_LIMITS.MAX_Q, Math.max(REVIEW_LIMITS.MIN_Q, Math.round(Number(count) || REVIEW_LIMITS.DEFAULT_Q)));
+  const topic = reviewFocus(p.topic || draft.title, Array.isArray(p.subtopics) ? p.subtopics : []);
+  const out = await draftBattleQuestions(instructor, { subject: p.subject, difficulty: p.difficulty, details: { topic, total_questions: n } });
+  const review_questions = { count: n, topic, items: out.questions, note: out.questions_note, at: new Date().toISOString() };
+  await updateDraftPayload(draft.id, (pp, row) => (row.status !== "draft" ? null : { ...pp, review_questions }));
+  return review_questions;
+}
+
 export async function updateActivityDraft(instructor, id, patch) {
   const draft = await getActivityDraft(instructor, id);
   if (draft.status !== "draft") throw invalid("Only pending drafts can be edited", 409);
@@ -802,6 +824,9 @@ export async function assignActivityDraft({ instructor, id, overrides = null }) 
     // The review battle: checked before anything is created, so a bad time is a clear refusal.
     if (["assignment", "self_study", "project"].includes(type) && reviewIn !== undefined) {
       review = cleanReview(reviewIn, { dueAt: payload.due_at ?? null });
+      // The questions its preview showed (Battle questions tab): the review battle asks exactly those.
+      const prepared = draft.payload?.review_questions;
+      if (review && Array.isArray(prepared?.items) && prepared.items.length) review.items = prepared.items.slice(0, review.questions);
       if (review) payload.instructions = [payload.instructions, reviewInstruction(review.at)].filter(Boolean).join("\n\n");
     }
     if (type === "multi_stage") {

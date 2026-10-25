@@ -69,6 +69,14 @@ const DRAFTS = {
   },
 };
 
+const mcq = (stem, opts, correctIndex) => ({ stem, options: opts.map((text, i) => ({ label: 'ABCD'[i], text })), correctIndex, topic: 'Photosynthesis' });
+const REVIEW_QS = [
+  mcq('Which pigment absorbs light for photosynthesis?', ['Chlorophyll', 'Haemoglobin', 'Keratin', 'Melanin'], 0),
+  mcq('Which gas do plants take in for photosynthesis?', ['Oxygen', 'Nitrogen', 'Carbon dioxide', 'Hydrogen'], 2),
+  mcq('Where in the cell does photosynthesis happen?', ['Nucleus', 'Chloroplast', 'Ribosome', 'Vacuole'], 1),
+  mcq('Which is a product of photosynthesis?', ['Glucose', 'Protein', 'Urea', 'Salt'], 0),
+];
+
 export const draftPreviewScenarios = [{
   name: 'instructor.draft_previews',
   portal: 'instructor',
@@ -82,6 +90,15 @@ export const draftPreviewScenarios = [{
       const id = url.pathname.split('/').find((s) => s.startsWith('gatefake-'));
       return route.fulfill({ json: { success: true, data: { draft: DRAFTS[id] } } });
     });
+    // The review battle's questions, written on the draft (fake: N photosynthesis questions).
+    const reviewAsks = [];
+    await page.route(/\/api\/self-study\/drafts\/gatefake-[a-z]+\/review-questions$/, (route) => {
+      const count = Number(route.request().postDataJSON()?.count) || 8;
+      reviewAsks.push({ url: route.request().url(), count });
+      const items = Array.from({ length: count }, (_, i) => REVIEW_QS[i % REVIEW_QS.length]);
+      return route.fulfill({ json: { success: true, data: { review_questions: { count, topic: 'Photosynthesis', items, note: null, at: new Date().toISOString() } } } });
+    });
+    const tabNames = async (root) => page.locator(`${root} [role=tablist]`).first().locator('[role=tab]').allInnerTexts();
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     const shots = [];
@@ -127,6 +144,13 @@ export const draftPreviewScenarios = [{
     await page.locator('[data-sim-submitted]').waitFor({ timeout: 30000 }).catch(() => {});
     await page.waitForTimeout(400); await snap('21-assignment-submitted');
     await tab('Questions'); await page.waitForTimeout(1500); await snap('22-assignment-questions');
+    const aTabs = await tabNames('[data-assignment-preview]');
+    t.check('assignment with the review battle on has 5 tabs', aTabs.length === 5 && /Battle preview/.test(aTabs[3]) && /Battle questions/.test(aTabs[4]), { tabs: aTabs });
+    await tab('Battle questions'); await page.locator('[data-review-battle-questions]').waitFor({ timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(400); await snap('23-assignment-battle-questions');
+    await tab('Battle preview'); await page.waitForTimeout(400); await snap('24-assignment-battle-preview');
+    await page.getByRole('button', { name: /Play preview/ }).click();
+    await page.waitForTimeout(6000); await snap('25-assignment-battle-playing');
 
     // ── Self study ───────────────────────────────────────────────────────
     await open('gatefake-selfstudy', '[data-selfstudy-preview]');
@@ -139,9 +163,15 @@ export const draftPreviewScenarios = [{
     await page.locator('text=End of the session').first().waitFor({ timeout: 60000 }).catch(() => {});
     await page.waitForTimeout(500); await snap('14-selfstudy-session-end');
     await tab('Study plan'); await page.waitForTimeout(400); await snap('15-selfstudy-plan');
+    const sTabs = await tabNames('[data-selfstudy-preview]');
+    t.check('self study with the review battle on has 5 tabs', sTabs.length === 5 && /Battle preview/.test(sTabs[3]) && /Battle questions/.test(sTabs[4]), { tabs: sTabs });
+    await tab('Battle questions'); await page.locator('[data-review-battle-questions]').waitFor({ timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(400); await snap('26-selfstudy-battle-questions');
+    await tab('Battle preview'); await page.waitForTimeout(400); await snap('27-selfstudy-battle-preview');
+    t.check('the review battle questions were written for both drafts', ['assignment', 'selfstudy'].every((k) => reviewAsks.some((a) => a.url.includes(`gatefake-${k}`))), { reviewAsks });
 
     t.note(`${shots.length} screenshots in ui-gate/.out/previews`);
     t.check('the previews rendered without errors', errors.length === 0, { errors: errors.slice(0, 5) });
-    t.check('every screenshot was taken', shots.length === 22, { shots: shots.length });
+    t.check('every screenshot was taken', shots.length === 27, { shots: shots.length });
   },
 }];

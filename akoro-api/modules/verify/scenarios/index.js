@@ -71,7 +71,7 @@ export const SUITES = {
   redis: ["ops.deferred_release"],
   // Reviews with the teaching guide (and, next, recurring battles).
   "battle-model": ["battles.guide_review", "battles.recurring", "activity.review_battle", "activity.review_battle_play"],
-  "activity-chat": ["activity_chat.ask_missing", "activity_chat.battle_self_study_ask", "activity_chat.assignment_parts_instructions", "activity_chat.assignment_versions", "activity_chat.assignment_assign", "activity_chat.self_study_assign"],
+  "activity-chat": ["activity_chat.ask_missing", "activity_chat.battle_self_study_ask", "activity_chat.switch_type_asks", "activity_chat.assignment_parts_instructions", "activity_chat.assignment_versions", "activity_chat.assignment_assign", "activity_chat.self_study_assign"],
   "battle-chat": ["battles.chat_network", "battles.chat_posts", "battles.chat_class", "battles.chat_instructor"],
   curriculum: ["curriculum.syllabus_coverage"],
   // The instructor's agent tools from chat: teaching tools (Library) and activity tools (drafts, routines, results).
