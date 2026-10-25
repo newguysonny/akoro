@@ -3174,6 +3174,52 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   document, so the agent routes there — `search_my_library` with the tool asked
   for links `/library?record=<id>&tool=<tool>`, which opens the reader on that
   tool (chat.study_tool_routing, reader.tool_link).
+
+### Phase 15 — Endpoint and security audit follow-ups (audit 2026-10-25)
+- **Audit.** The live route table (Express, loaded locally) lists 1,203
+  endpoints, each with its middleware chain, matched against every caller in
+  the repo (four apps, Python agent, workers, gate). Rules: every route checks
+  sign-in and role, or is public on purpose / guarded by its own key; nothing
+  ships that nothing calls.
+- **Done (2026-10-25, green on the sandbox — `smoke.session_tokens_only`):**
+  - ✅ Only a session token signs in. `authenticateToken` and the socket
+    check refuse any token with a `type`; the 2FA challenge, refresh and
+    AI-login hand-off tokens used to work as logins (a 5-minute 2FA bypass).
+    The rate-limit peek and course search use the same verified check.
+  - ✅ 23 endpoints with no caller removed (1,203 → 1,179), including course
+    invite redemption, whose tokens were signed with a fallback secret.
+- **To do, in this order:**
+  1. **Teachers read every school record.** The generic school-management read
+     (`GET /api/school/mgmt/:resource`) is open to any approved teacher of the
+     school: payroll (`gross`/`net` are not in the hidden columns), staff
+     loans, salary templates, appraisals, student health records, bank
+     balances, expenses, complaints, admission applications. Fix: a per-resource
+     read list for teachers matching `INSTRUCTOR_WRITABLE`, and payroll's money
+     columns added to the admin-only columns. Review the 58 other school routes
+     without a role check the same way (they are school-scoped, not
+     role-scoped).
+  2. **Payments router mounted twice** (`/api` and `/api/payments`), which makes
+     7 `/api/payments/payments/…` copies. Check which webhook URL is set in the
+     Paystack dashboard, then drop the extra mount.
+  3. **Course invite emails link to `akoro.app/join/…`, a page no app has.**
+     Either build a join page with redemption on a properly signed token
+     (not `JWT_SECRET ?? "akoro-dev-secret"`), or remove invite sending
+     (`POST /api/profiles/teacher/invite`).
+  4. **Shared secrets fail open when unset.** The video-worker routes
+     (`/api/stream/internal/*`) compare `x-internal-secret` to
+     `INTERNAL_SECRET` with `!==`, so an unset secret lets everyone in (set on
+     both servers today). Refuse when unset, as `admin/ticks.js` does, and
+     compare with `timingSafeEqual`; the same constant-time compare for the
+     Paystack signature checks.
+  5. **No hard-coded fallback secrets.** Remove the `JWT_SECRET ?? "akoro-dev-…"`
+     fallbacks that remain in code; a missing key stops the server (preflight
+     already flags it).
+  6. **Authorisation on the 1,094 signed-in routes.** Sign-in is checked
+     everywhere; ownership is not yet audited route by route (a route that
+     takes `:studentId`, `:userId` or a row id must check it belongs to the
+     caller). Next pass of the audit.
+- **Exit:** items 1–5 fixed, each with a gate scenario on the sandbox; item 6
+  audited with its findings listed here.
 ---
 
 ## 18. Acceptance tests
