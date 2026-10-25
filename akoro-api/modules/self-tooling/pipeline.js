@@ -236,7 +236,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       if (!v.ok) { feedback = v.errors.slice(0, 6).join("; "); lastProblem = feedback; tried.push(`${stage}#${attempt}: ${feedback}`); continue; }
       const check = await verifyTool(built.definition, params, built.samples || [], ctx);
       if (check.verdict !== "PASS") {
-        feedback = check.assertions.filter((a) => !a.passed).map((a) => `${a.name}: ${a.actual ?? ""}`).join("; ");
+        feedback = check.assertions.filter((a) => !a.passed).map((a) => `${a.name}: ${a.detail ? (typeof a.detail === "string" ? a.detail : JSON.stringify(a.detail)).slice(0, 200) : a.actual ?? ""}`).join("; ");
         lastProblem = feedback; tried.push(`${stage}#${attempt}: verify: ${feedback}`); continue;
       }
       if (check.emptyEverywhere && attempt === 1) {

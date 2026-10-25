@@ -98,6 +98,6 @@ export async function buildDefinition({ stage, goal, params, slice, feedback = n
   });
   const raw = resp.choices?.[0]?.message?.content || "";
   let parsed = null;
-  try { parsed = JSON.parse(raw); } catch { return { raw, notExpressible: null, error: "the builder didn't answer with JSON" }; }
+  try { parsed = JSON.parse(raw); } catch { return { raw, notExpressible: null, error: `the builder didn't answer with JSON (${raw.length} chars: ${raw.slice(0, 60).replace(/\s+/g, " ")}…${raw.slice(-40).replace(/\s+/g, " ")})` }; }
   return { raw, definition: parsed.definition || null, samples: Array.isArray(parsed.samples) ? parsed.samples.slice(0, 3) : [], notExpressible: parsed.notExpressible || null };
 }
