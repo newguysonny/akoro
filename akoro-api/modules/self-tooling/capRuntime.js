@@ -63,8 +63,28 @@ const markTaskDone = async (learnerId, ref) => {
   } catch { /* the task is done; follow-ups are best effort, as in the route */ }
   return { ok: true };
 };
+/** The same as the app's delete (DELETE /api/tasks/:id): never a running task; its schedule is cancelled first. */
+const deleteTask = async (learnerId, ref) => {
+  const { data: task, error } = await db.from("tasks").select("id, status, bull_job_id").eq("id", ref).eq("creator_id", learnerId).maybeSingle();
+  if (error) return { ok: false, error: "couldn't read the task" };
+  if (!task) return { ok: false, error: "not found or already deleted" };
+  if (task.status === "running") return { ok: false, error: "it's running right now" };
+  try {
+    const { cancelTask } = await import("../tasks/scheduler.js");
+    await cancelTask(task.bull_job_id, task.id);
+  } catch { /* nothing scheduled to cancel */ }
+  const { error: delErr } = await db.from("tasks").delete().eq("id", task.id).eq("creator_id", learnerId);
+  if (delErr) return { ok: false, error: "couldn't delete the task" };
+  try {
+    const { cancelAutonomyReviewForTask } = await import("../adaptive-learning/learner-autonomy.js");
+    await cancelAutonomyReviewForTask({ taskId: task.id, userId: learnerId }).catch(() => {});
+  } catch { /* best effort, as for mark done */ }
+  return { ok: true };
+};
 export const WRITE_RUNNERS = {
   "tasks.mark_done": markTaskDone,
+  "tasks.delete": deleteTask,
+  "verify.task_delete": deleteTask,
   "verify.task_done": markTaskDone,
   /** Through the study_buddy tool, so its own checks (and notifications) run. */
   async "buddies.end"(learnerId, ref, { callTool }) {
