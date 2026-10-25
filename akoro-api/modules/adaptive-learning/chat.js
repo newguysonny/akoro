@@ -2807,7 +2807,7 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         submitted: request.createdNew || !!request.reopened,
         duplicate: !request.createdNew,
         reopened: !!request.reopened,
-        requestId: request.id,
+        // No id: it means nothing to the learner (the reply scrub removed it, leaving "Reference:").
         status: request.status,
         title: request.title,
         category: request.category,
