@@ -41,3 +41,9 @@ test("the pure core passes its checks", async () => {
   assert.equal(code, 0, out.slice(-800));
   assert.match(out, /CORE-CHECK: all passed/);
 });
+
+test("the image carries a C toolchain for triton's first-run JIT (Qwen3 died without it, 2026-10-23)", () => {
+  assert.match(dockerfile, /apt-get install[^\n]*build-essential/);
+  assert.match(dockerfile, /rm -rf \/var\/lib\/apt\/lists\/\*/);
+  assert.ok(dockerfile.indexOf("build-essential") < dockerfile.indexOf("pip install"), "toolchain before the Python packages");
+});
