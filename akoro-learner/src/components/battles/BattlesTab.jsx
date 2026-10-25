@@ -188,7 +188,7 @@ function BattlesTab({ battles, invites = [], onViewChallenge, onBattleCreated })
   };
   const TABS=[{key:"active",label:t('battles.active'),icon:"ti-bolt",count:liveBattles.length+waitingBattles.length},{key:"scheduled",label:t('battles.scheduled'),icon:"ti-calendar",count:scheduledBattles.length+waiting.length},{key:"completed",label:t('battles.completed'),icon:"ti-trophy",count:completedBattles.length}];
   return (
-    <div style={{ flex:1,overflowY:"auto",background:"var(--ak-surface)",display:"flex",flexDirection:"column" }}>
+    <div className="ak-battles" style={{ flex:1,overflowY:"auto",background:"var(--ak-surface)",display:"flex",flexDirection:"column" }}>
       <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,padding:"12px 16px 10px",borderBottom:"1px solid var(--ak-border)" }}>
         {[{val:liveBattles.length,label:t('battles.live'),color:RED,bg:`${RED}0a`},{val:scheduledBattles.length+waiting.length,label:t('battles.scheduled'),color:BRAND,bg:`${BRAND}0a`},{val:completedBattles.length,label:t('battles.completed'),color:GREEN,bg:"rgba(16,185,129,.07)"},{val:`+${totalXP}`,label:t('battles.xp_at_stake'),color:GOLD,bg:"rgba(245,158,11,.07)"}].map(({val,label,color,bg})=>(
           <div key={label} style={{ textAlign:"center",background:bg,borderRadius:12,padding:"9px 4px",border:`1px solid ${color}25` }}>
@@ -224,9 +224,9 @@ function BattlesTab({ battles, invites = [], onViewChallenge, onBattleCreated })
         </div>
       )}
       {viewFilter==="scheduled"&&waiting.length>0&&(
-        <div data-waiting-to-fill="" style={{ padding:"10px 16px 0",display:"flex",flexDirection:"column",gap:8 }}>
-          <div style={{ fontSize:10.5,fontWeight:900,letterSpacing:".06em",color:"var(--ak-text-muted)" }}>WAITING TO FILL</div>
-          {waiting.map((it)=><ChallengeCard key={it.key} item={it} onOpen={setOpenWait}/>)}
+        <div data-waiting-to-fill="" style={{ padding:"10px 16px 0" }}>
+          <div style={{ fontSize:10.5,fontWeight:900,letterSpacing:".06em",color:"var(--ak-text-muted)",marginBottom:8 }}>WAITING TO FILL</div>
+          <div className="ak-battle-grid">{waiting.map((it)=><ChallengeCard key={it.key} item={it} onOpen={setOpenWait}/>)}</div>
         </div>
       )}
       {mine.length===0&&!dailySkipped&&!(viewFilter==="scheduled"&&waiting.length)&&(
@@ -243,7 +243,7 @@ function BattlesTab({ battles, invites = [], onViewChallenge, onBattleCreated })
           <p style={{ fontSize:13,fontWeight:700,marginTop:8 }}>{viewFilter==="active"?t('battles.none_live'):viewFilter==="scheduled"?t('battles.none_scheduled'):t('battles.none_completed')}</p>
         </div>
       )}
-      <div style={{ padding:"10px 16px",display:"flex",flexDirection:"column",gap:10 }}>
+      <div className="ak-battle-grid" style={{ padding:"10px 16px" }}>
         {displayed.map(b=>{
           const bs=subjectStyle(b.subject),sc=bs.color,diff=difficultyStyle(b.difficulty),st=ST_STYLE[b.status]||ST_STYLE.scheduled,vs=versus(b);
           return (

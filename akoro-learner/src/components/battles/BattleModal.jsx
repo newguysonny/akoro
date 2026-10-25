@@ -312,7 +312,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
     <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position: 'fixed', inset: 0, zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, background: 'rgba(0,0,0,.82)', backdropFilter: 'blur(8px)', fontFamily: FONT }}>
       <style>{`@keyframes bm-ticker{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}@keyframes bm-up{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}`}</style>
-      <div style={{ width: '100%', maxWidth: 640, maxHeight: '95vh', borderRadius: 24, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: 'linear-gradient(160deg,#0f1320,#141c2e,#1a1430)', border: '1px solid rgba(255,255,255,.1)', animation: 'bm-up .35s cubic-bezier(.32,1,.64,1)' }}>
+      <div className="ak-bplayer" style={{ width: '100%', borderRadius: 24, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: 'linear-gradient(160deg,#0f1320,#141c2e,#1a1430)', border: '1px solid rgba(255,255,255,.1)', animation: 'bm-up .35s cubic-bezier(.32,1,.64,1)' }}>
 
         {/* Notification ticker */}
         <div style={{ overflow: 'hidden', whiteSpace: 'nowrap', background: 'rgba(0,0,0,.30)', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,.08)' }}>
@@ -375,6 +375,8 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
                 </div>
               )}
 
+              {/* The arena: scoreboard and the question — stacked, or side by side on a wide screen (.ak-arena). */}
+              <div className="ak-arena">
               {/* Scoreboard */}
               {(isLive || isCompleted) && (
                 <div style={panel}>
@@ -485,6 +487,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
               )}
 
               {isLive && !question && <div style={{ ...panel, textAlign: 'center', color: 'rgba(255,255,255,.4)', fontSize: 12.5 }}>Next question loading…</div>}
+              </div>
 
               {/* Review result — a review has no winner, so the panel below
                   rendered nothing at all for one: a finished review showed no
