@@ -1,0 +1,54 @@
+# Cambridge IGCSE — core subject syllabuses
+
+The syllabus PDFs for the core IGCSE subjects, as published by Cambridge University Press & Assessment
+(Cambridge International Education), unmodified.
+
+- **Source:** https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-upper-secondary/cambridge-igcse/subjects/
+  — each subject page links its syllabus under `/Images/…-syllabus.pdf`
+- **Downloaded:** 2026-10-25. Where a subject has several editions, this is the one valid for the **2026** exams.
+- **Core subjects:** Mathematics, English (first and second language, literature), Biology, Chemistry, Physics,
+  Co-ordinated and Combined Sciences, Computer Science, ICT, Economics, Business Studies, Accounting, Geography,
+  History and Agriculture — both the original (A*–G) and the 9–1 version where Cambridge runs both, since they
+  are separate syllabuses with separate codes.
+- **Not included:** the other ~70 subjects (languages, art, music, religious studies and so on). The same
+  site serves them; the "Newer edition" column shows where Cambridge has already published a later syllabus.
+
+| Subject | Code | Exam years | File | Pages | Size | Newer edition published | Source |
+|---|---|---|---|---|---|---|---|
+| Cambridge IGCSE (9-1) Accounting | 0985 | 2026 | [accounting-9-1-0985-2026.pdf](accounting-9-1-0985-2026.pdf) | 28 | 586 KB | 2027-2029 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-accounting-9-1-0985/) |
+| Cambridge IGCSE (9-1) Biology | 0970 | 2026–2028 | [biology-9-1-0970-2026-2028.pdf](biology-9-1-0970-2026-2028.pdf) | 64 | 829 KB | 2029 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-biology-9-1-0970/) |
+| Cambridge IGCSE (9-1) Business Studies | 0986 | 2026 | [business-studies-9-1-0986-2026.pdf](business-studies-9-1-0986-2026.pdf) | 32 | 528 KB | — | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-business-studies-9-1-0986/) |
+| Cambridge IGCSE (9-1) Chemistry | 0971 | 2026–2028 | [chemistry-9-1-0971-2026-2028.pdf](chemistry-9-1-0971-2026-2028.pdf) | 59 | 1097 KB | 2029 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-chemistry-9-1-0971/) |
+| Cambridge IGCSE (9-1) Computer Science | 0984 | 2026–2028 | [9-1-computer-science-0984-2026-2028.pdf](9-1-computer-science-0984-2026-2028.pdf) | 56 | 753 KB | 2029-2031 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-9-1-computer-science-0984/) |
+| Cambridge IGCSE (9-1) Economics | 0987 | 2026 | [economics-9-1-0987-2026.pdf](economics-9-1-0987-2026.pdf) | 32 | 541 KB | 2027-2029 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-economics-9-1-0987/) |
+| Cambridge IGCSE (9-1) English - First Language | 0990 | 2024–2026 | [9-1-first-language-english-0990-2024-2026.pdf](9-1-first-language-english-0990-2024-2026.pdf) | 36 | 790 KB | 2027-2029 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-9-1-first-language-english-0990/) |
+| Cambridge IGCSE (9-1) English as a Second Language (Speaking Endorsement) | 0993 | 2024–2026 | [english-second-language-speaking-endorsement-9-1-0993-2024-2026.pdf](english-second-language-speaking-endorsement-9-1-0993-2024-2026.pdf) | 34 | 650 KB | 2027-2029 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-english-second-language-speaking-endorsement-9-1-0993/) |
+| Cambridge IGCSE (9-1) Geography | 0976 | 2025–2026 | [geography-9-1-0976-2025-2026.pdf](geography-9-1-0976-2025-2026.pdf) | 44 | 463 KB | 2027-2029 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-geography-9-1-0976/) |
+| Cambridge IGCSE (9-1) History | 0977 | 2024–2026 | [history-9-1-0977-2024-2026.pdf](history-9-1-0977-2024-2026.pdf) | 44 | 422 KB | 2027-2028, 2029-2030 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-history-9-1-0977/) |
+| Cambridge IGCSE (9-1) Information and Communication Technology | 0983 | 2026–2028 | [information-and-communication-technology-9-1-0983-2026-2028.pdf](information-and-communication-technology-9-1-0983-2026-2028.pdf) | 45 | 698 KB | 2029 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-information-and-communication-technology-9-1-0983/) |
+| Cambridge IGCSE (9-1) Literature in English | 0992 | 2026 | [english-literature-0992-2026.pdf](english-literature-0992-2026.pdf) | 28 | 757 KB | 2027, 2028-2030 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-english-literature-0992/) |
+| Cambridge IGCSE (9-1) Physics | 0972 | 2026–2028 | [physics-9-1-0972-2026-2028.pdf](physics-9-1-0972-2026-2028.pdf) | 61 | 776 KB | 2029 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-physics-9-1-0972/) |
+| Cambridge IGCSE (9-1) Sciences - Co-ordinated | 0973 | 2025–2027 | [sciences-9-1-only-0973-2025-2027.pdf](sciences-9-1-only-0973-2025-2027.pdf) | 108 | 1900 KB | 2028-2029 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-sciences-9-1-only-0973/) |
+| Cambridge IGCSE (9–1) Mathematics | 0980 | 2025–2027 | [mathematics-9-1-0980-2025-2027.pdf](mathematics-9-1-0980-2025-2027.pdf) | 71 | 1301 KB | 2028-2030 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-mathematics-9-1-0980/) |
+| Cambridge IGCSE Accounting | 0452 | 2026 | [accounting-0452-2026.pdf](accounting-0452-2026.pdf) | 28 | 585 KB | 2027-2029 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-accounting-0452/) |
+| Cambridge IGCSE Agriculture | 0600 | 2026 | [agriculture-0600-2026.pdf](agriculture-0600-2026.pdf) | 43 | 602 KB | 2027-2028, 2029-2031 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-agriculture-0600/) |
+| Cambridge IGCSE Biology | 0610 | 2026–2028 | [biology-0610-2026-2028.pdf](biology-0610-2026-2028.pdf) | 64 | 841 KB | 2029 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-biology-0610/) |
+| Cambridge IGCSE Business Studies | 0450 | 2026 | [business-studies-0450-2026.pdf](business-studies-0450-2026.pdf) | 32 | 548 KB | — | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-business-studies-0450/) |
+| Cambridge IGCSE Chemistry | 0620 | 2026–2028 | [chemistry-0620-2026-2028.pdf](chemistry-0620-2026-2028.pdf) | 59 | 1095 KB | 2029 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-chemistry-0620/) |
+| Cambridge IGCSE Computer Science | 0478 | 2026–2028 | [computer-science-0478-2026-2028.pdf](computer-science-0478-2026-2028.pdf) | 56 | 785 KB | 2029-2031 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-computer-science-0478/) |
+| Cambridge IGCSE Economics | 0455 | 2026 | [economics-0455-2026.pdf](economics-0455-2026.pdf) | 32 | 540 KB | 2027-2029 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-economics-0455/) |
+| Cambridge IGCSE English - First Language | 0500 | 2024–2026 | [english-first-language-0500-2024-2026.pdf](english-first-language-0500-2024-2026.pdf) | 36 | 645 KB | 2027-2029 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-english-first-language-0500/) |
+| Cambridge IGCSE Geography | 0460 | 2025–2026 | [geography-0460-2025-2026.pdf](geography-0460-2025-2026.pdf) | 44 | 462 KB | 2027-2029 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-geography-0460/) |
+| Cambridge IGCSE History | 0470 | 2024–2026 | [history-0470-2024-2026.pdf](history-0470-2024-2026.pdf) | 44 | 729 KB | 2027-2028, 2029-2030 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-history-0470/) |
+| Cambridge IGCSE Information and Communication Technology | 0417 | 2026–2028 | [information-and-communication-technology-0417-2026-2028.pdf](information-and-communication-technology-0417-2026-2028.pdf) | 45 | 748 KB | 2029 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-information-and-communication-technology-0417/) |
+| Cambridge IGCSE Mathematics | 0580 | 2025–2027 | [mathematics-0580-2025-2027.pdf](mathematics-0580-2025-2027.pdf) | 71 | 1297 KB | 2028-2030 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-mathematics-0580/) |
+| Cambridge IGCSE Mathematics - Additional | 0606 | 2025–2027 | [mathematics-additional-0606-2025-2027.pdf](mathematics-additional-0606-2025-2027.pdf) | 31 | 837 KB | 2028-2030 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-mathematics-additional-0606/) |
+| Cambridge IGCSE Physics | 0625 | 2026–2028 | [physics-0625-2026-2028.pdf](physics-0625-2026-2028.pdf) | 61 | 775 KB | 2029 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-physics-0625/) |
+| Cambridge IGCSE Science - Combined | 0653 | 2025–2027 | [science-combined-0653-2025-2027.pdf](science-combined-0653-2025-2027.pdf) | 88 | 1643 KB | 2028-2029 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-science-combined-0653/) |
+| Cambridge IGCSE Sciences - Co-ordinated (Double) | 0654 | 2025–2027 | [sciences-co-ordinated-double-0654-2025-2027.pdf](sciences-co-ordinated-double-0654-2025-2027.pdf) | 108 | 1898 KB | 2028-2029 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-sciences-co-ordinated-double-0654/) |
+| English as a Second Language (Count-in speaking) | 0511 | 2024–2026 | [english-second-language-count-in-oral-0511-2024-2026.pdf](english-second-language-count-in-oral-0511-2024-2026.pdf) | 33 | 741 KB | 2027-2029 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-english-second-language-count-in-oral-0511/) |
+| English as a Second Language (Speaking endorsement) | 0510 | 2024–2026 | [english-second-language-oral-endorsement-0510-2024-2026.pdf](english-second-language-oral-endorsement-0510-2024-2026.pdf) | 33 | 742 KB | 2027-2029 | [page](https://www.cambridgeinternational.org/programmes-and-qualifications/cambridge-igcse-english-second-language-oral-endorsement-0510/) |
+
+Cambridge's own documents: keep them as published and credit Cambridge when anything is quoted or reused.
+The file names on the site carry a content number that changes when a syllabus is reissued, so to refresh,
+read the subject page's links again.
