@@ -291,7 +291,37 @@ async function pagesOfRecord(record) {
   return (ext.pages || []).map((p) => ({ pageNumber: p.pageNumber, text: p.markdown || "" })).filter((p) => p.text.trim());
 }
 
-const STRUCTURE_FILES = 3;
+/** One file's read into topics and questions → { item, questions }, or null when it has no text. Never throws. */
+async function readStructure(record, row, userId) {
+  const pages = await pagesOfRecord(record).catch(() => []);
+  if (!pages.length) return null;
+  let raw = "{}";
+  const readStarted = Date.now();
+  let readOk = true;
+  try {
+    const out = await openai.chat.completions.create({
+      __role: "background", messages: structureMessages({ names: [record.name], kindHint: row.doc_kind, pages }),
+      temperature: 0, max_tokens: STRUCTURE_LIMITS.MAX_TOKENS, response_format: structureSchema(),
+      __payer: "platform", __feature: "material_structure", __userId: userId,
+      // Under the breaker's 60 s backstop: a slow read must not count as the provider failing for every chat.
+      __timeoutMs: 50_000, __maxRetries: 0,
+    });
+    raw = out?.choices?.[0]?.message?.content || "{}";
+  } catch (error) {
+    readOk = false;
+    console.warn("[materials] structure call failed:", String(error?.message || error).slice(0, 160));
+  }
+  const s = cleanStructure(raw, { pageNumbers: pages.map((p) => p.pageNumber), fallbackKind: row.doc_kind || "other" });
+  return {
+    item: { recordId: record.id, name: record.name, pages: pages.length, ...s, questions: undefined, questionCount: s.questions.length, ms: Date.now() - readStarted, ok: readOk },
+    questions: s.questions.map((q) => ({ ...q, record_id: record.id, exam: s.exam, subject: s.subject || row.subject, year: s.year })),
+  };
+}
+
+// Every file an upload can hold is read (2026-10-25: a 4-file upload read only 3), and all
+// at once — one after another, 3–5 reads of up to 50 s outran the app's 120 s wait, so the
+// "here's what I found" message never reached the open chat.
+const STRUCTURE_FILES = INGEST_LIMITS.FILES;
 router.post("/ingest/:id/structure", asyncHandler(async (req, res) => {
   const userId = req.user.id;
   let row = await loadOwn(req.params.id, userId);
@@ -300,36 +330,21 @@ router.post("/ingest/:id/structure", asyncHandler(async (req, res) => {
   if (row.structure) return res.json({ success: true, data: ingestToApi(row), message: null });
   if (row.state !== "ready") return res.status(409).json({ success: false, code: "not_ready", message: "It isn't read yet." });
   const ids = (row.record_ids || []).slice(0, STRUCTURE_FILES);
-  const { data: records } = await edu().from("records").select("id, name, kind, mime, file_key, content").eq("user_id", userId).in("id", ids);
+  const { data: fetched } = await edu().from("records").select("id, name, kind, mime, file_key, content").eq("user_id", userId).in("id", ids);
+  // In the order they were attached: the first file leads the message, its chips and its folder.
+  const records = ids.map((id) => (fetched || []).find((r) => r.id === id)).filter(Boolean);
   row = await move(row, "structured");
 
+  const reads = await Promise.all(records.map((record) => readStructure(record, row, userId)));
   const items = [];
   const questions = [];
   let calls = 0, failures = 0;
-  for (const record of records || []) {
-    const pages = await pagesOfRecord(record);
-    if (!pages.length) continue;
-    let raw = "{}";
+  for (const r of reads) {
+    if (!r) continue;
     calls += 1;
-    const readStarted = Date.now();
-    let readOk = true;
-    try {
-      const out = await openai.chat.completions.create({
-        __role: "background", messages: structureMessages({ names: [record.name], kindHint: row.doc_kind, pages }),
-        temperature: 0, max_tokens: STRUCTURE_LIMITS.MAX_TOKENS, response_format: structureSchema(),
-        __payer: "platform", __feature: "material_structure", __userId: userId,
-        // Under the breaker's 60 s backstop: a slow read must not count as the provider failing for every chat.
-        __timeoutMs: 50_000, __maxRetries: 0,
-      });
-      raw = out?.choices?.[0]?.message?.content || "{}";
-    } catch (error) {
-      failures += 1;
-      readOk = false;
-      console.warn("[materials] structure call failed:", String(error?.message || error).slice(0, 160));
-    }
-    const s = cleanStructure(raw, { pageNumbers: pages.map((p) => p.pageNumber), fallbackKind: row.doc_kind || "other" });
-    items.push({ recordId: record.id, name: record.name, pages: pages.length, ...s, questions: undefined, questionCount: s.questions.length, ms: Date.now() - readStarted, ok: readOk });
-    for (const q of s.questions) questions.push({ ...q, record_id: record.id, exam: s.exam, subject: s.subject || row.subject, year: s.year });
+    if (!r.item.ok) failures += 1;
+    items.push(r.item);
+    questions.push(...r.questions);
   }
 
   // Every read failed (the model was unavailable): keep nothing, say nothing — it can be tried again.
@@ -389,7 +404,9 @@ router.post("/ingest/:id/structure", asyncHandler(async (req, res) => {
       ...(row.folder_id ? [{ kind: "folder", title: row.folder_name, href: `/library?folder=${row.folder_id}` }] : []),
       ...items.map((it) => ({ kind: "record", title: it.title || it.name, href: `/library?record=${it.recordId}` })),
     ].slice(0, 6);
-    const meta = { ingest: { id: row.id }, materials, ideas: main ? structureChips({ ...main, questions }) : [] };
+    // The chips from every file read: the most tested topic across them all, a paper's study step if any is a paper.
+    const allFiles = { ...main, kind: items.some((it) => it.kind === "past_paper") ? "past_paper" : main?.kind, topics: items.flatMap((it) => it.topics || []), questions };
+    const meta = { ingest: { id: row.id }, materials, ideas: main ? structureChips(allFiles) : [] };
     const { data: msg } = await db.from("chat_messages").insert({ session_id: row.chat_session_id, user_id: userId, role: "agent", text, meta }).select("id, text, meta, created_at").single();
     if (msg) {
       message = msg;

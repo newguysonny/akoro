@@ -315,6 +315,70 @@ export const scenarios = [
     },
   },
   {
+    name: 'chat.upload_two_files',
+    description: "Two files in one message — picked together, or attached one after the other — both go to the Library upload (its names) and both to the agent's turn (its attachments). The upload and the turn are answered in the browser: nothing is saved, no AI is called.",
+    async run(t) {
+      const { page } = t;
+      const tag = newMarker().replace(/[^a-z0-9]/gi, '').slice(-6);
+      const sent = { ingest: [], turns: [], presign: 0 };
+      await page.route('**/api/agent/materials/ingest', async (r) => {
+        if (r.request().method() !== 'POST') return r.continue();
+        const body = r.request().postDataJSON() || {};
+        sent.ingest.push(body.names || []);
+        const names = body.names || [];
+        return r.fulfill({ status: 201, json: { success: true, data: { id: '00000000-0000-4000-8000-00000000f001', state: 'received', names, fileIndexes: names.map((_, i) => i) },
+          ingests: [{ id: '00000000-0000-4000-8000-00000000f001', state: 'received', names, fileIndexes: names.map((_, i) => i) }] } });
+      });
+      // The files' own upload (presign, records, reading) isn't what this checks: refused, counted.
+      await page.route(/\/api\/(records\/(presign|upload)|agent\/materials\/ingest\/[^/]+\/)/, (r) => { if (/presign/.test(r.request().url())) sent.presign += 1; return r.fulfill({ status: 503, json: { success: false } }); });
+      await page.route('**/api/adaptive/chat/agent**', (r) => {
+        const body = r.request().postDataJSON() || {};
+        sent.turns.push((body.attachments || []).map((a) => a.name));
+        return r.fulfill({ json: { success: true, reply: 'Got them.', response: 'Got them.' } });
+      });
+      const pdf = (n) => ({ name: `Notes ${n} ${tag}.pdf`, mimeType: 'application/pdf', buffer: Buffer.from(`%PDF-1.4\n% ${n}\n%%EOF\n`) });
+      const png = { name: `Diagram ${tag}.png`, mimeType: 'image/png', buffer: Buffer.from('89504e470d0a1a0a0000000d4948445200000001000000010806000000', 'hex') };
+
+      const firstLoad = page.waitForResponse((r) => /\/api\/adaptive\/chat\/sessions/.test(r.url()), { timeout: 30_000 }).catch(() => null);
+      await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
+      await firstLoad;
+      await page.waitForTimeout(1_500);
+      const box = page.getByRole('textbox', { name: /^Ask / }).last();
+      const input = page.locator('input[type=file]').first();
+
+      // 1. Two picked together.
+      await input.setInputFiles([pdf('A'), pdf('B')]);
+      await page.waitForTimeout(300);
+      const chips1 = await page.getByText(tag).count();
+      t.note(`picked together: ${chips1} chips`);
+      // Sent = the turn went out (the chat may still be settling its first load: send again until it does).
+      const sendAndWait = async (text, n) => {
+        for (let i = 0; i < 4 && sent.turns.length < n; i++) {
+          await box.fill(text); await box.press('Enter');
+          for (let w = 0; w < 20 && sent.turns.length < n; w++) await page.waitForTimeout(250);
+        }
+        await page.waitForTimeout(800);
+      };
+      await sendAndWait(`Two together ${tag}`, 1);
+
+      // 2. One, then another (the phone's usual way).
+      await input.setInputFiles([pdf('C')]);
+      await page.waitForTimeout(300);
+      await input.setInputFiles([png]);
+      await page.waitForTimeout(300);
+      await sendAndWait(`One then another ${tag}`, 2);
+
+      t.note(`ingest names: ${JSON.stringify(sent.ingest)}`);
+      t.note(`turn attachments: ${JSON.stringify(sent.turns)}`);
+      t.note(`presigns: ${sent.presign}`);
+      t.check('picked together: both chips show', chips1 >= 2, { chips1 });
+      t.check('picked together: the Library upload names both', (sent.ingest[0] || []).length === 2, { ingest: sent.ingest });
+      t.check('…and the turn carries both', (sent.turns[0] || []).length === 2, { turns: sent.turns });
+      t.check('one then another: the Library upload names both', (sent.ingest[1] || []).length === 2, { ingest: sent.ingest });
+      t.check('…and the turn carries both', (sent.turns[1] || []).length === 2, { turns: sent.turns });
+    },
+  },
+  {
     name: 'agent.ideas_and_suggestions',
     description: "Ideas sit beside To do · Done · Suggestions: a card with where it came from, Do it sends its brief as the learner's message; a ready suggestion shows its preview and its own Yes, and Yes shows the report. (The ideas and the suggestion are served by the test so the screens can be checked; the server side is the backend gate's agent.ideas / agent.ready_proposal.)",
     async run(t) {
