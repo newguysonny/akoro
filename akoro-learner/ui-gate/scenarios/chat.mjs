@@ -37,6 +37,43 @@ export const scenarios = [
     run: (t) => historyPagesCheck(t, { path: '/app?tab=agent' }),
   },
   {
+    name: 'chat.permission_card',
+    description: "A change tool the agent drafted: the card asks to turn it on, lists what it would change right now; Approve shows it on and the usual Confirm card underneath. Sample data — the confirmation routes are mocked, nothing is changed.",
+    async run(t) {
+      const { page } = t;
+      const id = '11111111-2222-4333-8444-555555555555', next = '66666666-7777-4888-9999-000000000000';
+      const items = ['Homework Assistance', 'Review last battle results'];
+      const perm = { confirmationId: id, kind: 'permission', drafted: true, status: 'pending', title: 'Clear old tasks',
+        action: 'delete your tasks (a running task is never deleted)', goal: 'Delete my tasks that are overdue', items, more: 0,
+        result: null, expiresAt: new Date(Date.now() + 86_400_000).toISOString() };
+      const change = { confirmationId: next, kind: 'change', status: 'pending', title: 'Clear old tasks', action: 'Delete your tasks (a running task is never deleted)',
+        items, more: 0, result: null, expiresAt: new Date(Date.now() + 600_000).toISOString() };
+      let state = perm;
+      await page.route('**/api/self-tooling/confirmations', (r) => r.fulfill({ json: { success: true, data: { pending: state.status === 'pending' ? [state] : [] } } }));
+      await page.route(`**/api/self-tooling/confirmations/${id}`, (r) => r.fulfill({ json: { success: true, data: state } }));
+      await page.route(`**/api/self-tooling/confirmations/${next}`, (r) => r.fulfill({ json: { success: true, data: change } }));
+      await page.route(`**/api/self-tooling/confirmations/${id}/confirm`, (r) => {
+        state = { ...perm, status: 'consumed', result: { granted: true, status: 'created', tool: 'clear_old_tasks', label: 'Clear old tasks', found: 2 } };
+        return r.fulfill({ json: { success: true, data: { ...state, next: change } } });
+      });
+      await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
+      const card = page.locator('[data-permission-card]').first();
+      t.check('the permission card shows in the chat', await card.waitFor({ timeout: 45_000 }).then(() => true, () => false));
+      await page.getByText('Loading…').first().waitFor({ state: 'hidden', timeout: 30_000 }).catch(() => {});
+      await page.waitForTimeout(800);
+      await card.scrollIntoViewIfNeeded().catch(() => {});
+      t.check('…asks to turn on the drafted tool', await card.getByText(/Turn on “Clear old tasks”\?/).isVisible().catch(() => false));
+      t.check('…and lists what it would change right now', await card.getByText('Right now it would change:').isVisible().catch(() => false)
+        && await card.getByText('Homework Assistance').isVisible().catch(() => false));
+      await t.shot('permission-card');
+      await card.getByRole('button', { name: 'Approve' }).click();
+      t.check('Approve: it is on', await card.getByText(/is on and saved in your tools/).waitFor({ timeout: 10_000 }).then(() => true, () => false));
+      t.check('…and the Confirm card for its first change shows underneath', await card.getByRole('button', { name: /Confirm/ }).first().isVisible().catch(() => false));
+      await card.scrollIntoViewIfNeeded().catch(() => {});
+      await t.shot('approved');
+    },
+  },
+  {
     name: 'chat.suggestions_inbox',
     description: "The agent's ideas show in one Suggestions list; accepting a task idea adds the task; dismissing asks why and keeps the reason.",
     async run(t) {

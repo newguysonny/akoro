@@ -27,6 +27,8 @@ export const PERMISSION_TTL_MS = 24 * 60 * 60 * 1000;
 const JTI = "selftool";
 
 const httpError = (status, message) => Object.assign(new Error(message), { status });
+/** A capability's description, said to the learner: "Delete the learner's tasks." → "Delete your tasks". */
+const toLearner = (description) => String(description || "").replace(/\bthe learner's\b/gi, "your").replace(/\bthe learner\b/gi, "you").replace(/\.$/, "");
 
 const publicConfirmation = (row) => ({
   confirmationId: row.id,
@@ -51,7 +53,7 @@ export async function proposeWrite({ learnerId, conversationId = null, tool, wri
   const args = { toolId: tool.id, toolName: tool.name, cap: write.cap, refs: write.targets.map((t) => t.ref).sort() };
   const digest = agentToolArgumentsDigest(args);
   const bucket = Math.floor(Date.now() / CONFIRM_TTL_MS);
-  const preview = { title: tool.label, action: write.does, items: write.targets.map((t) => t.label), more: write.more || 0 };
+  const preview = { title: tool.label, action: toLearner(write.does), items: write.targets.map((t) => t.label), more: write.more || 0 };
   const row = {
     id: randomUUID(), capability_jti: JTI, session_id: conversationId || "none", principal_id: learnerId,
     tool_name: `selftool:${write.cap}`, tool_arguments: args, arguments_digest: digest, preview,
@@ -87,7 +89,7 @@ export async function proposePermission({ learnerId, conversationId = null, capa
   const digest = agentToolArgumentsDigest({ kind: "permission", cap: capability, goal: proposed.goal, name: proposed.name, toolId });
   const bucket = Math.floor(Date.now() / PERMISSION_TTL_MS);
   // Said to the learner: "delete your tasks (…)".
-  const action = cap.description.replace(/\bthe learner's\b/gi, "your").replace(/\bthe learner\b/gi, "you").replace(/\.$/, "");
+  const action = toLearner(cap.description);
   // A drafted tool shows exactly what it would change right now; otherwise the goal.
   const preview = { title: proposed.label, action: action.charAt(0).toLowerCase() + action.slice(1), goal: proposed.goal,
     items: changes ? changes.items.slice(0, 20) : [proposed.goal], more: changes ? Math.max(0, changes.items.length - 20) + (changes.more || 0) : 0 };

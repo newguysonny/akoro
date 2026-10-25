@@ -109,7 +109,7 @@ function PermissionCard({ state, expired, busy, err, act }) {
       </> : (state.items || [])[0] && <div style={{ marginTop: 9, fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text)', lineHeight: 1.5 }}>{state.items[0]}</div>}
       {pending && (
         <>
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)', marginTop: 8 }}>Only for you. {state.drafted ? 'Approve turns it on; ' : ''}Nothing changes until you confirm each change it proposes.</div>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)', marginTop: 8 }}>{state.drafted ? 'Only for you. Approve turns it on, and nothing changes until you confirm each change it proposes.' : 'Only for you. Nothing changes until you confirm each change it proposes.'}</div>
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
             <button type="button" disabled={busy} onClick={() => act('confirm')}
               style={{ padding: '7px 14px', borderRadius: 999, border: 'none', background: BRAND, color: '#fff', fontSize: 12.5, fontWeight: 900, cursor: 'pointer', fontFamily: NUNITO }}>
