@@ -174,9 +174,10 @@ export const sessionTokensOnly = {
       ctx.expect.status(`a ${label} token does not sign in`, r, 401);
       ctx.expect.eq(`…refused as token_invalid`, r.body?.code, "token_invalid");
     }
-    for (const [method, path] of [["GET", "/api/battle/leaderboard/global"], ["GET", "/api/curriculum/search/topics?q=fractions"], ["GET", "/api/adaptive/chat/agents/pairs"], ["POST", "/api/profiles/invite-redeem"], ["POST", "/api/agent-tool-requests"]]) {
-      const r = await ctx.http({ as: "@tester30", method, path, ...(method === "POST" ? { body: {} } : {}) });
-      ctx.expect.status(`removed: ${method} ${path.split("?")[0]}`, r, 404);
+    // (GET only: a read scenario may not POST — the removed POSTs are checked by the route table.)
+    for (const path of ["/api/battle/leaderboard/global", "/api/curriculum/search/topics?q=fractions", "/api/adaptive/chat/agents/pairs", "/api/adaptive/exam-prep/workflows", "/api/programmes/log"]) {
+      const r = await ctx.http({ as: "@tester30", path });
+      ctx.expect.status(`removed: GET ${path.split("?")[0]}`, r, 404);
     }
   },
 };
