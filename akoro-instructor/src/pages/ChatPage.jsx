@@ -464,9 +464,11 @@ export default function ChatPage() {
   };
   const onFeedScroll = () => {
     const el = feedRef.current; if (!el) return;
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    const fromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const atBottom = fromBottom < 80;
     atBottomRef.current = atBottom;
-    if (atBottom) setShowJump(false);
+    // Scrolled up to read back: ↓ returns to the latest message.
+    setShowJump(!atBottom && fromBottom > Math.min(300, el.clientHeight * 0.5));
   };
   // Older messages went in above: keep what the instructor was reading in
   // place. A first page too short to scroll fetches the next one straight away.

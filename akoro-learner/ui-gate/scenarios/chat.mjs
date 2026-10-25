@@ -958,4 +958,19 @@ export async function historyPagesCheck(t, { path }) {
   const after = await anchor.boundingBox();
   // The message that was at the top stays on screen (not pushed far below).
   t.check('the reading place is kept', !!before && !!after && after.y >= -5 && after.y < (page.viewportSize()?.height || 900), { actual: { before: before?.y, after: after?.y } });
+
+  // Scrolled up to read: the ↓ button shows, and a tap returns to the latest message.
+  const jump = page.locator('button[aria-label="Jump to latest"], button[aria-label="Jump to latest message"]').first();
+  t.check('scrolled up, the ↓ "jump to latest" button shows', await jump.waitFor({ timeout: 8_000 }).then(() => true, () => false));
+  await t.shot('jump-button');
+  await jump.click().catch(() => {});
+  const latest = page.getByText(`${marker} history message ${TOTAL}`, { exact: true });
+  const back = await page.waitForFunction((m) => {
+    const el = [...document.querySelectorAll('body *')].reverse().find((d) => d.textContent.includes(m));
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    return r.top >= 0 && r.bottom <= window.innerHeight + 2;
+  }, `${marker} history message ${TOTAL}`, { timeout: 8_000 }).then(() => true, () => false);
+  t.check('…tapping it brings the latest message back into view', back && await latest.isVisible().catch(() => false));
+  t.check('…and the button goes away', await jump.waitFor({ state: 'hidden', timeout: 5_000 }).then(() => true, () => false));
 }

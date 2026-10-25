@@ -733,9 +733,11 @@ function AgentChatTab({
   };
   const onFeedScroll=()=>{
     const el=feedRef.current; if(!el) return;
-    const atBottom=el.scrollHeight-el.scrollTop-el.clientHeight<80;
+    const fromBottom=el.scrollHeight-el.scrollTop-el.clientHeight;
+    const atBottom=fromBottom<80;
     atBottomRef.current=atBottom;
-    if(atBottom) setShowJump(false);
+    // Scrolled up a screen's worth (to read back): ↓ returns to the latest message.
+    setShowJump(!atBottom&&fromBottom>Math.min(300,el.clientHeight*0.5));
     if(el.scrollTop<80) loadOlder();
   };
   // Older messages went in above: keep what the learner was reading in place.
