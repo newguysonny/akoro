@@ -202,10 +202,13 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   // A goal that reads as planning/scheduling goes to code first — a recipe or
   // spec "built" for it returned the rows unsorted into days and still passed.
   const base = hint.mode === "spec" ? ["spec", "recipe"] : ["recipe", "spec"];
-  const order = codeEnabled() ? (hint.mode === "code" || needsCode(goal) ? ["code", ...base] : [...base, "code"]) : base;
+  const stages = codeEnabled() ? (hint.mode === "code" || needsCode(goal) ? ["code", ...base] : [...base, "code"]) : base;
+  // A spec reads one view — it can't use an approved capability, so a resume skips it.
+  const order = mustUse.length ? stages.filter((st) => st !== "spec") : stages;
   const ctx = { learnerId, callCapability };
   let lastProblem = null;
   let inexpressible = false;   // the builder said what's available can't express it
+  const tried = [];            // every attempt's problem, kept on a failed resume for the admin
   for (const stage of order) {
     ev.stages_tried.push(stage);
     let feedback = null;
@@ -216,25 +219,25 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       try { built = await buildDefinition({ stage, goal, params, slice, feedback, learnerId, platformPays: dry || resumed, approved: mustUse }); }
       catch (e) {
         if (/coin|balance/i.test(String(e?.message))) return finish("rejected", reject("Not enough coins to build a tool."));
-        lastProblem = `builder failed: ${e.message}`; break;
+        lastProblem = `builder failed: ${e.message}`; tried.push(`${stage}#${attempt}: ${lastProblem}`); break;
       }
       if (built.notExpressible) {
-        lastProblem = built.notExpressible; inexpressible = true;
+        lastProblem = built.notExpressible; inexpressible = true; tried.push(`${stage}#${attempt}: not expressible: ${lastProblem}`);
         // What was approved for this goal answers it: one repair before giving up.
         if (mustUse.length && attempt === 1) { feedback = `"${built.notExpressible}" — but ${mustUse.join(", ")} was approved for this goal: use it`; continue; }
         break;
       }
-      if (!built.definition) { feedback = built.error || "no definition"; lastProblem = feedback; continue; }
+      if (!built.definition) { feedback = built.error || "no definition"; lastProblem = feedback; tried.push(`${stage}#${attempt}: ${feedback}`); continue; }
       if (built.definition.kind !== stage) built.definition.kind = stage === "spec" && built.definition.from ? "spec" : built.definition.kind;
       const v = await validateDefinition(built.definition, params, { audience });
       if (v.ok && built.definition.kind === "code") v.errors.push(...inventedDates(built.definition.source, goal, params));
       for (const c of mustUse) if (!v.uses.capabilities.includes(c)) v.errors.push(`use the approved capability ${c} (a step {"id":"x","cap":"${c}"} — returns ${JSON.stringify(CAPABILITIES[c].returns || [])})`);
       if (v.errors.length) v.ok = false;
-      if (!v.ok) { feedback = v.errors.slice(0, 6).join("; "); lastProblem = feedback; continue; }
+      if (!v.ok) { feedback = v.errors.slice(0, 6).join("; "); lastProblem = feedback; tried.push(`${stage}#${attempt}: ${feedback}`); continue; }
       const check = await verifyTool(built.definition, params, built.samples || [], ctx);
       if (check.verdict !== "PASS") {
         feedback = check.assertions.filter((a) => !a.passed).map((a) => `${a.name}: ${a.actual ?? ""}`).join("; ");
-        lastProblem = feedback; continue;
+        lastProblem = feedback; tried.push(`${stage}#${attempt}: verify: ${feedback}`); continue;
       }
       if (check.emptyEverywhere && attempt === 1) {
         fallback = { built, v, check };
@@ -248,7 +251,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   }
   // Nothing available could express it, but a locked capability might.
   if (locked.length && !resumed && inexpressible) return toEscalate(locked[0], lastProblem);
-  return finish("rejected", reject(`Couldn't build it safely: ${String(lastProblem || "no stage could express it").slice(0, 240)}`));
+  return finish("rejected", reject(`Couldn't build it safely: ${String(lastProblem || "no stage could express it").slice(0, 240)}`, resumed ? { tried: tried.map((t) => t.slice(0, 300)) } : {}));
 
   async function register({ stage, built, v, check }) {
     ev.mode = stage;

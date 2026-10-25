@@ -695,7 +695,7 @@ export const toolJourney = {
       const x = (await ctx.db.rows("edu.agent_tool_requests", { id: r.requestId }, { columns: "status, resume_status, resume_result", limit: 1 }))[0];
       return x && ["resumed", "failed"].includes(x.resume_status) ? x : null;
     }, { timeoutMs: 150_000, everyMs: 4_000 });
-    ctx.note(`resume: ${JSON.stringify(done?.resume_result || null).slice(0, 300)}`);
+    ctx.note(`resume: ${JSON.stringify(done?.resume_result || null).slice(0, 1500)}`);
     ctx.expect.eq("4. build resumed", done?.resume_status, "resumed");
     ctx.expect.eq("4. request implemented", done?.status, "implemented");
     const tool = (await ctx.db.rows("edu.agent_tools", { owner_id: me.id, name: { like: `${name}%` } }, { columns: "name, label, capabilities, status", limit: 1 }))[0];

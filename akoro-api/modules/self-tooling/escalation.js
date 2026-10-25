@@ -253,7 +253,7 @@ export async function resumeRequest(requestId, { createTool }) {
   await edu().from("agent_tool_requests").update({
     resume_status: delivered.error ? "failed" : ok ? "resumed" : "failed",
     status: ok ? "implemented" : "approved",
-    resume_result: { status: out.status, reason: out.reason || null, tool: out.tool || null, sessionId: delivered.sessionId || null, at: new Date().toISOString() },
+    resume_result: { status: out.status, reason: out.reason || null, ...(out.tried?.length ? { tried: out.tried } : {}), tool: out.tool || null, sessionId: delivered.sessionId || null, at: new Date().toISOString() },
     resolved_at: ok ? new Date().toISOString() : null, updated_at: new Date().toISOString(),
   }).eq("id", requestId);
   return { resumed: ok, status: out.status, sessionId: delivered.sessionId || null };
