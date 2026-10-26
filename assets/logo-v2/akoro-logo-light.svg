@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 412 447" fill="none" role="img" aria-label="Akoro">
+  <defs>
+    <linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="286" x2="0" y2="455">
+      <stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#FFFFFF"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(-275 -73)">
+    <path d="M663 297.7C663 206.8 598.8 97.1 480 97.1C362.6 97.1 299.3 206.8 299.3 297.7C299.3 436.7 362.6 495.3 480 495.3L588 495.3L588 481.3L663 481.3Z" fill="#6C3BFF"/>
+    <path d="M663 496L663 297.7C663 206.8 598.8 97.1 480 97.1C362.6 97.1 299.3 206.8 299.3 297.7C299.3 436.7 362.6 495.3 480 495.3L588 495.3" stroke="#6C3BFF" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M663 496L663 297.7C663 206.8 598.8 97.1 480 97.1C362.6 97.1 299.3 206.8 299.3 297.7C299.3 436.7 362.6 495.3 480 495.3L588 495.3" stroke="#FFFFFF" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M542 290L586 290L586 323L523 323L523 311ZM487 353L586 353L586 386L468 386L468 374ZM432 418L586 418L586 451L413 451L413 439Z" fill="url(#g)" stroke="url(#g)" stroke-width="8" stroke-linejoin="round"/>
+  </g>
+</svg>
