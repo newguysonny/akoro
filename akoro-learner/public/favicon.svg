@@ -1,32 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 140 140">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-17.5 0 447 447" fill="none" role="img" aria-label="Akoro">
   <defs>
-    <linearGradient id="gf" x1="20%" y1="0%" x2="80%" y2="100%">
-      <stop offset="0%" stop-color="#5B8AFF"/>
-      <stop offset="100%" stop-color="#A658F8"/>
+    <linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="286" x2="0" y2="455">
+      <stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#FFFFFF"/>
     </linearGradient>
   </defs>
-
-  <rect x="0" y="0" width="140" height="140" rx="30" fill="#0B0818"/>
-
-  <path d="M30,120 L62,40 Q70,22 78,40 L110,120"
-        fill="none" stroke="url(#gf)" stroke-width="26"
-        stroke-linecap="round" stroke-linejoin="round"/>
-
-  <path d="M70,36
-           C72,52 76,60 88,63
-           C76,66 72,74 70,96
-           C68,74 64,66 52,63
-           C64,60 68,52 70,36 Z"
-        fill="#0B0818"/>
-
-  <path d="M70,88
-           C68,100 64,110 58,118
-           L70,113 L82,118
-           C76,110 72,100 70,88 Z"
-        fill="#0B0818"/>
-
-  <path d="M70,108
-           L81,126 Q84,131 78,131
-           L62,131 Q56,131 59,126 Z"
-        fill="url(#gf)"/>
+  <g transform="translate(-275 -73)">
+    <path d="M663 297.7C663 206.8 598.8 97.1 480 97.1C362.6 97.1 299.3 206.8 299.3 297.7C299.3 436.7 362.6 495.3 480 495.3L588 495.3L588 481.3L663 481.3Z" fill="#6C3BFF"/>
+    <path d="M663 496L663 297.7C663 206.8 598.8 97.1 480 97.1C362.6 97.1 299.3 206.8 299.3 297.7C299.3 436.7 362.6 495.3 480 495.3L588 495.3" stroke="#6C3BFF" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M663 496L663 297.7C663 206.8 598.8 97.1 480 97.1C362.6 97.1 299.3 206.8 299.3 297.7C299.3 436.7 362.6 495.3 480 495.3L588 495.3" stroke="#FFFFFF" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M542 290L586 290L586 323L523 323L523 311ZM487 353L586 353L586 386L468 386L468 374ZM432 418L586 418L586 451L413 451L413 439Z" fill="url(#g)" stroke="url(#g)" stroke-width="8" stroke-linejoin="round"/>
+  </g>
 </svg>
