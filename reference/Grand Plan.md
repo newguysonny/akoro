@@ -3262,6 +3262,21 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   agent-tasks eval at or above its threshold with the ledger on.
 - **Needs:** a working AI provider for the evals and the sandbox runs
   (DeepSeek ran out of credit 2026-10-25).
+- **Status (2026-10-31):** steps 1–6 built and unit-tested (1,563 API tests
+  green): `taskLedger.js` (update_plan, done only when a call backs it, stored
+  in the scratchpad row — validation widened to 8 steps with their tool),
+  `turnCheck.js` (claimed actions vs real changes, Confirm-pending, "all done"
+  vs the ledger), `toolRecovery.js` (one retry for temporary failures — a
+  change only when it never ran — then the documented read alternative),
+  `contextBudget.js` (whole prompt counted, ≤16 newest messages that fit, the
+  rest summarised once by the model, marked), `intentStep.js` (kind,
+  multi-step, missing — fail-open, `AGENT_INTENT_STEP=off` to disable); evals
+  `agent-checks` (21 recorded cases, no model, all pass) and `intent` (16
+  cases incl. hand-offs, needs a model). **Not yet run against a model** —
+  waits for AI credit: the intent eval, the agent-tasks eval with the ledger
+  on, and the chat gate scenarios on the sandbox. Not done: an eval that runs
+  the chat loop itself with tools failing on purpose (the recovery rule is
+  covered by recorded cases only).
 ---
 
 ## 18. Acceptance tests

@@ -101,7 +101,7 @@ test("stop (■) ends the turn between steps and while the answer streams", () =
   assert.match(chatSource, /router\.post\("\/agent\/stop"/);
   assert.match(chatSource, /activeTurnStops\.get\(turnStopKey\(req\.user\.id, turnId\)\)/);
   assert.match(route, /const isAborted = \(\) => Boolean\(stopEntry\?\.stop\);/);
-  assert.match(loop, /if \(isAborted\(\)\) return \{ messages: transcript, toolExecutions: executions, aborted: true \}/);
+  assert.match(loop, /if \(isAborted\(\)\) return \{ messages: transcript, toolExecutions: executions, ledger: ledgerNow, aborted: true \}/);   // the task ledger rides every return (Phase 16)
   assert.match(route, /isAborted,\n\s+\}\);/);
   assert.match(route, /if \(!reply && !stopped\(\)\)/);
   assert.match(chatSource, /if \(isAborted\(\)\) break;/);

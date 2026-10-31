@@ -1,0 +1,33 @@
+{
+  "_comment": [
+    "Goldens for the agent-checks suite (Grand Plan Phase 16): the rules Agent Chat's code applies",
+    "around the model — the end-of-turn check, the task ledger, recovery after a failure, and the",
+    "context budget for long chats. No model is called: each case runs the real rule on a recorded",
+    "turn. kind: claim | left | ledger | recovery | budget. Add a case without a deploy."
+  ],
+  "threshold": 1,
+  "thresholdNote": "These are code rules, not model behaviour: every case must pass.",
+  "cases": [
+    { "kind": "claim", "name": "claimed task, nothing ran", "reply": "Done! I've created a revision task for Thursday at 5pm.", "executions": [], "expect": "correction" },
+    { "kind": "claim", "name": "claimed task, create_task succeeded", "reply": "I've created a revision task for Thursday at 5pm.", "executions": [{ "tool": "create_task", "success": true, "sideEffecting": true }], "expect": "none" },
+    { "kind": "claim", "name": "claimed task, create_task failed", "reply": "I've created your task.", "executions": [{ "tool": "create_task", "success": false, "sideEffecting": true }], "expect": "correction" },
+    { "kind": "claim", "name": "passive claim, only a read ran", "reply": "Your battle has been scheduled for Friday.", "executions": [{ "tool": "find_battles", "success": true }], "expect": "correction" },
+    { "kind": "claim", "name": "claimed delete, only a Confirm card", "reply": "I've deleted those three tasks.", "executions": [{ "tool": "delete_my_tasks", "success": true, "sideEffecting": true, "confirm": { "confirmationId": "c1" } }], "expect": "confirm" },
+    { "kind": "claim", "name": "offer, not a claim", "reply": "I can create a task for Thursday — shall I?", "executions": [], "expect": "none" },
+    { "kind": "claim", "name": "plan, not a claim", "reply": "Once you confirm, I'll delete them for you.", "executions": [], "expect": "none" },
+    { "kind": "claim", "name": "explanation, no claim", "reply": "Osmosis is the movement of water across a membrane.", "executions": [], "expect": "none" },
+    { "kind": "left", "name": "all set, a step left", "reply": "You're all set for Friday!", "ledger": { "plan": [{ "step": "Create the revision task", "status": "completed" }, { "step": "Book a practice battle", "status": "pending" }] }, "expect": "Still to do: Book a practice battle." },
+    { "kind": "left", "name": "all set, nothing left", "reply": "That's everything.", "ledger": { "plan": [{ "step": "Create the revision task", "status": "completed" }] }, "expect": null },
+    { "kind": "left", "name": "no done-claim, steps left", "reply": "Here is the first part.", "ledger": { "plan": [{ "step": "b", "status": "pending" }] }, "expect": null },
+    { "kind": "ledger", "name": "done backed by a success", "input": { "steps": [{ "step": "Create the task", "status": "done", "tool": "create_task" }] }, "executions": [{ "tool": "create_task", "success": true }], "expectStatuses": ["done"] },
+    { "kind": "ledger", "name": "done with no tool named", "input": { "steps": [{ "step": "Quiz on osmosis", "status": "done" }] }, "executions": [], "expectStatuses": ["in_progress"] },
+    { "kind": "ledger", "name": "done, its tool failed", "input": { "steps": [{ "step": "Schedule a check-in", "status": "done", "tool": "schedule_chat_follow_up" }] }, "executions": [{ "tool": "schedule_chat_follow_up", "success": false }], "expectStatuses": ["in_progress"] },
+    { "kind": "recovery", "name": "read timed out → retry", "tool": "search_my_library", "result": { "success": false, "error": "The search timed out, try again" }, "expectRetry": true },
+    { "kind": "recovery", "name": "change timed out → no retry (it may have run)", "tool": "create_task", "sideEffecting": true, "result": { "success": false, "error": "timed out" }, "expectRetry": false },
+    { "kind": "recovery", "name": "change refused at the door → retry", "tool": "create_task", "sideEffecting": true, "result": { "success": false, "error": "service unavailable (503)" }, "expectRetry": true },
+    { "kind": "recovery", "name": "library failed → try study knowledge", "tool": "search_my_library", "result": { "success": false, "error": "No index" }, "expectRetry": false, "expectNext": "/search_my_study_knowledge/" },
+    { "kind": "recovery", "name": "no alternative → say it plainly", "tool": "create_goal", "result": { "success": false, "error": "invalid date" }, "expectRetry": false, "expectNext": "/Tell the learner plainly/" },
+    { "kind": "budget", "name": "long chat: newest kept, older summarised", "messages": 24, "chars": 6000, "systemChars": 90000, "expectKeptBelow": 24, "expectKeepsNewest": true },
+    { "kind": "budget", "name": "short chat: at most 16 in front of the model", "messages": 24, "chars": 40, "systemChars": 2000, "expectKept": 16, "expectKeepsNewest": true }
+  ]
+}
