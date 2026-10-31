@@ -14,6 +14,8 @@
  * own event log; the loop records, it never decides state.
  */
 
+import { classifyError } from "../agent-contract/contract.js";
+
 export class DecisionTimeout extends Error {
   constructor(ms) { super(`The agent did not decide within ${ms} ms`); this.name = "DecisionTimeout"; this.code = "decision_timeout"; }
 }
@@ -30,11 +32,10 @@ const withTimeout = (promise, ms) => {
 /** The observation the agent sees after an execution or a rejection. Bounded. */
 export function observationFor({ ok, result, error }) {
   if (ok) return { ok: true, result: boundedResult(result) };
-  return {
-    ok: false,
-    code: error?.code || "unknown_action",
-    message: String(error?.message || "The action was not allowed").slice(0, 300),
-  };
+  const code = error?.code || "unknown_action";
+  const message = String(error?.message || "The action was not allowed").slice(0, 300);
+  // The agent contract's code beside the workflow's own (agent-contract/contract.js).
+  return { ok: false, code, message, error_code: classifyError({ code, message }).code };
 }
 
 /** No nested run rows, no answer-shaped payloads: strings, numbers, short lists. */
@@ -68,6 +69,7 @@ export async function runAgentLoop({
   agent, registry, goal, caps, operation = null,
   terminalActions = [], finalActions = null, stopCodes = [],
   record = async () => {}, onToolCallCap = async () => {}, onLoopCap = async () => {}, fallback = null,
+  episode = null,   // agent-contract/episode.js recorder, when the run is recorded
 }) {
   const { maxIterations, maxToolCalls = Infinity, decisionTimeoutMs = null } = caps || {};
   const observations = [];
@@ -105,6 +107,7 @@ export async function runAgentLoop({
     }
 
     await record({ kind: "decision", iteration, step });
+    episode?.decision({ tool_calls: [{ name: requested, arguments: step.args || {} }], intent: step.intent || null });
 
     let observation;
     let stopped = null;
@@ -128,6 +131,7 @@ export async function runAgentLoop({
     // With think, the agent's own notes for the step ride along, so its analysis builds across decisions.
     observations.push({ tool: requested, ...(step.thinking ? { yourNotes: String(step.thinking).slice(0, 900) } : {}), ...observation });
     await record({ kind: "observation", iteration, observation, tool: requested });
+    episode?.observation({ success: observation.ok === true, action: requested, result: observation.result ?? null, error: observation.ok ? null : observation.message, ...(observation.ok ? {} : { error_code: observation.error_code }) });
     if (stopped) return { ended: `stop:${stopped}`, iterations: iteration, terminal: null, observations };
     if (terminal) return { ended: "terminal", iterations: iteration, terminal, observations };
   }

@@ -68,6 +68,7 @@ export async function runAgentLoop({
   maxIterations = MAX_TOOL_ITERATIONS,
   maxTokens = 4096,
   meta = {},
+  recorder = null,   // agent-contract/episode.js recorder, when the run is recorded
 }) {
   const steps   = [];
   const outputs = [];
@@ -91,6 +92,10 @@ export async function runAgentLoop({
     const step   = { role: "assistant", content: msg.content ?? null, toolCalls: msg.tool_calls ?? null, finishReason: finish, iteration: iterations };
     steps.push(step);
     await onStep?.(step, steps);
+    if (recorder) {
+      const tc = (msg.tool_calls ?? []).map((c) => { let a = {}; try { a = JSON.parse(c.function?.arguments || "{}"); } catch { a = {}; } return { name: c.function?.name, arguments: a }; });
+      recorder.decision(tc.length ? { tool_calls: tc } : { reply: msg.content ?? "" });
+    }
 
     // Echo the assistant turn back (may carry tool_calls) — required before
     // the matching tool results.
@@ -135,6 +140,7 @@ export async function runAgentLoop({
         }
       }
       // One tool message per tool_call_id, or OpenAI rejects the next call.
+      recorder?.observation(observation);
       messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(observation) });
     }
   }

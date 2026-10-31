@@ -3221,6 +3221,93 @@ planning loop's tool names, the double practice charge, empty syllabus data).
      caller). Next pass of the audit.
 - **Exit:** items 1–5 fixed, each with a gate scenario on the sandbox; item 6
   audited with its findings listed here.
+
+### Phase 16 — Agent Chat: plan, check, recover, measure (review 2026-10-31)
+- **Why.** Measured against eight agent capabilities (intent, planning, tool
+  selection, tool execution, context, error recovery, verification,
+  coordination) the workflows (Study Prep, teaching, the autonomy planner) hold
+  up; Agent Chat — the agent learners use most — does not. It plans nothing
+  (its scratchpad is a placeholder: `nextScratchpad` writes the same two
+  generic steps every turn and the goal is the chat's first message forever),
+  never checks its reply against what happened (only admin-request claims are
+  checked, `requestClaims.js`), recovers from a failure mostly by telling the
+  learner, keeps the last 24 messages plus a "summary" that is the latest
+  exchange cut to 4,000 characters, and reads intent partly through word
+  rules (`activityTypeNamed`, `ownChangeAsked`, `agreesToBuild`) patched
+  several times this month. Evals cover tool selection and arguments (routing
+  15, learner tools 73, agent tasks 8) and nothing else.
+- **Steps, in order:**
+  1. **Task ledger.** An `update_plan` tool: the agent writes its goal and up
+     to 8 steps (pending · in progress · done · blocked) into the existing
+     scratchpad table, shown every turn. A step is accepted as done only when
+     a successful tool call backs it (named, this turn or an earlier one); the
+     ledger survives the chat. Replaces the placeholder `nextScratchpad`.
+  2. **End-of-turn check.** Every action the reply claims ("I've created /
+     scheduled / deleted / set…") must match a successful side-effecting tool
+     call this turn, else a plain correction is appended (requestClaims
+     generalised). When the ledger still has steps left, a reply that says
+     it's all done gets what is left appended.
+  3. **Recovery rule.** After a failed tool call: one retry when the error is
+     temporary, else the documented alternative tool for that job, before
+     telling the learner. Fallbacks written per tool; the observation codes
+     (`observationFor`) drive it.
+  4. **Context budget.** Token count across the whole prompt; a long chat's
+     older part is summarised by the model (not cut), kept with the ledger.
+  5. **Intent step.** A small classification of what the learner wants before
+     tool choice, the word rules kept only as a safety net.
+  6. **Evals for all eight.** Intent; fail-and-recover (stub tools that fail
+     on purpose); claims vs what happened; long chats; hand-offs to workflows
+     and other agents. Each step above lands with its eval.
+- **Exit:** steps 1–6 in, each with its eval passing on the sandbox, and the
+  agent-tasks eval at or above its threshold with the ledger on.
+- **Needs:** a working AI provider for the evals and the sandbox runs
+  (DeepSeek ran out of credit 2026-10-25).
+- **Status (2026-10-31):** steps 1–6 built and unit-tested (1,563 API tests
+  green): `taskLedger.js` (update_plan, done only when a call backs it, stored
+  in the scratchpad row — validation widened to 8 steps with their tool),
+  `turnCheck.js` (claimed actions vs real changes, Confirm-pending, "all done"
+  vs the ledger), `toolRecovery.js` (one retry for temporary failures — a
+  change only when it never ran — then the documented read alternative),
+  `contextBudget.js` (whole prompt counted, ≤16 newest messages that fit, the
+  rest summarised once by the model, marked), `intentStep.js` (kind,
+  multi-step, missing — fail-open, `AGENT_INTENT_STEP=off` to disable); evals
+  `agent-checks` (21 recorded cases, no model, all pass) and `intent` (16
+  cases incl. hand-offs, needs a model). **Not yet run against a model** —
+  waits for AI credit: the intent eval, the agent-tasks eval with the ledger
+  on, and the chat gate scenarios on the sandbox. Not done: an eval that runs
+  the chat loop itself with tools failing on purpose (the recovery rule is
+  covered by recorded cases only).
+
+### Phase 17 — Akoro Agent Model (fine-tuned Qwen3-4B; started 2026-10-31)
+- **Goal.** A small model specialised in operating the Akoro agent runtime
+  (plan, pick tools, valid calls, read results, recover, verify, hand off,
+  stop) that takes routine agent traffic, with DeepSeek kept for hard
+  reasoning. The model proposes; the harness, policy and workflow engine stay
+  in control.
+- **Decisions (2026-10-31):** base Qwen3-4B (text; Qwen3-VL-4B at the
+  multimodal stage); synthetic episodes first, anonymised opt-in real traffic
+  planned now; DeepSeek as the teacher; work in `training/` in this repo.
+- **Spec:** `training/SPEC.md` — the agent contract (one format for the chat,
+  workflow and task loops), the episode format with code-computed verdicts,
+  the eight capabilities, the quality gate, the benchmark, the training
+  stages, and consent and anonymisation rules.
+- **Phases:** 0 spec · 1 the three loops on the contract + trajectory
+  recorder · 2 benchmark (100–500 multi-step tasks, stub tools, scripted
+  failures; DeepSeek and Qwen3-4B baselines) · 3 synthetic episodes gated by
+  code checks · 4 LoRA SFT, staged · 5 served on RunPod behind `aiModel.js`,
+  routed, shadow first · 6 live where it wins · 7 DPO, multimodal, other apps.
+  The consent setting and anonymisation pipeline are built alongside 1–3.
+- **Real traffic (2026-10-31):** all users, with an opt-out ("Help improve
+  Akoro's study agent" in Settings) that always wins; `AGENT_EPISODES` =
+  off | synthetic (default) | consented | all. Set `all` on Render only after
+  the privacy policy says so.
+- **Status (2026-10-31):** 0 ✅ · 1 ✅ `modules/agent-contract/` (error codes
+  on every failed observation in all three loops, episode recorder with
+  code-computed checks, anonymiser, store, `edu.agent_episodes` migration,
+  opt-out setting) · 2 ✅ built (`lib/evals/benchmark.js`, 110 scenarios
+  through the real chat loop with stub tools; proved end to end with a fake
+  model) — DeepSeek baseline run waits for API credit.
+
 ---
 
 ## 18. Acceptance tests

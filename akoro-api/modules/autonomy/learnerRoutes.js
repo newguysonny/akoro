@@ -3,7 +3,7 @@
  * agent (Grand Plan §7.16.4, §7.16.7), mounted at /api/agent:
  *
  *   GET   /settings          Agent Online, the three switches, quiet hours, time zone, this week's budget
- *   PATCH /settings          { agentOnline?, proactive?, learnFromChats?, checkins?, quietStart?, quietEnd?, timeZone? }
+ *   PATCH /settings          { agentOnline?, proactive?, learnFromChats?, checkins?, improveAgent?, quietStart?, quietEnd?, timeZone? }
  *   GET   /ideas             live ideas, newest first (≤ 6)
  *   POST  /ideas/:id/use     → { brief } — the app sends it as the learner's chat message
  *   POST  /ideas/:id/dismiss → "Not for me"
@@ -25,9 +25,11 @@ const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, ne
 const UUID = /^[0-9a-f-]{36}$/i;
 
 async function settingsOf(userId) {
-  const [{ data: row }, { data: us }] = await Promise.all([
+  const [{ data: row }, { data: us }, { data: user }] = await Promise.all([
     edu().from("learner_agent_autonomy").select("enabled, level, proactive, learn_from_chats, checkins, quiet_start, quiet_end, time_zone").eq("user_id", userId).maybeSingle(),
     db.from("user_settings").select("settings").eq("user_id", userId).maybeSingle(),
+    // Older schemas lack the column: read it on its own so a miss never breaks the settings.
+    Promise.resolve(db.from("users").select("agent_training_opt_out").eq("id", userId).maybeSingle()).catch(() => ({ data: null })),
   ]);
   const quiet = quietOf(row || {}, us?.settings?.timezone);
   const budget = await budgetState(userId, { timeZone: quiet.timeZone }).catch(() => null);
@@ -37,6 +39,8 @@ async function settingsOf(userId) {
     proactive: row?.proactive !== false,
     learnFromChats: row?.learn_from_chats !== false,
     checkins: row?.checkins !== false,
+    // "Help improve Akoro's study agent" (training/SPEC.md §9): on unless they opted out.
+    improveAgent: user?.agent_training_opt_out !== true,
     quietStart: quiet.start, quietEnd: quiet.end, timeZone: quiet.timeZone,
     budget: budget ? { usedPct: budget.usedPct, resetsAt: budget.resetsAt, paused: budget.stop } : null,
   };
@@ -54,6 +58,11 @@ router.patch("/settings", authenticateToken, asyncHandler(async (req, res) => {
   if ("quietStart" in b) { if (!validHHMM(b.quietStart)) return bad("quietStart must be HH:MM"); patch.quiet_start = b.quietStart; }
   if ("quietEnd" in b) { if (!validHHMM(b.quietEnd)) return bad("quietEnd must be HH:MM"); patch.quiet_end = b.quietEnd; }
   if ("timeZone" in b) { if (!validTimeZone(b.timeZone)) return bad("timeZone must be an IANA time zone, e.g. Africa/Lagos"); patch.time_zone = b.timeZone; }
+  if ("improveAgent" in b) {
+    if (typeof b.improveAgent !== "boolean") return bad("improveAgent must be a boolean");
+    const { error } = await db.from("users").update({ agent_training_opt_out: !b.improveAgent }).eq("id", req.user.id);
+    if (error) throw error;
+  }
   if ("agentOnline" in b) {
     if (typeof b.agentOnline !== "boolean") return bad("agentOnline must be a boolean");
     await setLearnerAutonomy({ userId: req.user.id, enabled: b.agentOnline });

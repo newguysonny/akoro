@@ -37,22 +37,27 @@ export function normaliseScratchpad(value) {
     if (clean.length !== new Set(clean).size) throw new Error("scratchpad checklist must not contain duplicates");
     return clean;
   };
-  const scratchpad = { goal, progressSummary: boundedText(value.progressSummary, 1_200) };
+  const scratchpad = { goal, progressSummary: boundedText(value.progressSummary, 2_000) };
   for (const name of SCRATCHPAD_SECTIONS) scratchpad[name] = normaliseItems(value[name]);
-  if (!Array.isArray(value.plan) || value.plan.length > 6) throw new Error("scratchpad plan is invalid");
+  // Agent Chat's task ledger (adaptive-learning/taskLedger.js, Phase 16): up to 8
+  // steps, each with the tool that did it; "done" is the ledger's word for completed.
+  if (!Array.isArray(value.plan) || value.plan.length > 8) throw new Error("scratchpad plan is invalid");
   scratchpad.plan = value.plan.map((item) => {
     if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("scratchpad plan is invalid");
     const step = boundedText(item.step, 320);
-    const status = boundedText(item.status, 32).toLowerCase() || "pending";
+    const raw = boundedText(item.status, 32).toLowerCase() || "pending";
+    const status = raw === "done" ? "completed" : raw;
     if (!step || !["pending", "in_progress", "completed", "blocked"].includes(status)) {
       throw new Error("scratchpad plan is invalid");
     }
-    return { step, status };
+    const tool = boundedText(item.tool, 80);
+    return { step, status, ...(tool && TOOL_NAME.test(tool) ? { tool } : {}) };
   });
   if (new Set(scratchpad.plan.map((item) => item.step)).size !== scratchpad.plan.length) {
     throw new Error("scratchpad plan must not contain duplicates");
   }
-  if (!Array.isArray(value.toolState) || value.toolState.length > 4) throw new Error("scratchpad tool state is invalid");
+  // Four tool results, plus at most one summary_mark (where the ledger's summary of the chat reaches).
+  if (!Array.isArray(value.toolState) || value.toolState.length > 5) throw new Error("scratchpad tool state is invalid");
   scratchpad.toolState = value.toolState.map((item) => {
     if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("scratchpad tool state is invalid");
     const tool = boundedText(item.tool, 80);
@@ -60,6 +65,7 @@ export function normaliseScratchpad(value) {
     const safe = { tool, success: item.success };
     if (item.sideEffecting === true) safe.sideEffecting = true;
     if (item.requiresConfirmation === true) safe.requiresConfirmation = true;
+    if (tool === "summary_mark" && typeof item.mark === "string" && /^[a-f0-9]{8,40}$/.test(item.mark)) safe.mark = item.mark;
     return safe;
   });
   return scratchpad;

@@ -210,6 +210,7 @@
     "2026-verify-gate.sql",
     "2026-self-tooling-grants.sql",
     "2026-self-tooling-learner-grants.sql",
+    "2026-agent-episodes.sql",
     "2026-self-tooling-tools.sql",
     "2026-self-tooling-escalation.sql",
     "2026-self-tooling-instructors.sql",

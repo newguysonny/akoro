@@ -45,6 +45,9 @@ export default function AutonomySection() {
         <Row icon="ti-clock-check" label="Task check-ins" sub="A short message when a task is due or overdue." noArrow>
           <Toggle on={s.checkins} onChange={() => save({ checkins: !s.checkins })} />
         </Row>
+        <Row icon="ti-sparkles" label="Help improve Akoro's study agent" sub="Your chats with the agent — with names, contact details and ids removed, and never anything about health, family or feelings — help train Akoro's own agent model. Nothing can be traced back to you. Turn it off any time." noArrow>
+          <Toggle on={s.improveAgent !== false} onChange={() => save({ improveAgent: !(s.improveAgent !== false) })} />
+        </Row>
       </Section>
       <Section title="When">
         <Row icon="ti-moon" label="Quiet hours" sub="No messages from your agent in this time." noArrow>
