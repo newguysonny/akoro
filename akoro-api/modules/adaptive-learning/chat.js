@@ -105,6 +105,9 @@ import { turnCorrections } from "./turnCheck.js";
 import { failed as toolFailed, shouldRetry, recoveryHint } from "./toolRecovery.js";
 import { fitDialogue, summariseEarlier } from "./contextBudget.js";
 import { runIntentStep, renderIntent } from "./intentStep.js";
+// Phase 17: a live turn is recorded per AGENT_EPISODES — opted-in learners, or everyone who hasn't opted out (agent-contract/store.js).
+import { createEpisodeRecorder } from "../agent-contract/episode.js";
+import { recordsRealTraffic, saveEpisode } from "../agent-contract/store.js";
 import { requiresAgentCapabilitiesTool, requiresActivityPreparation, isDraftFollowUp, isToolDraftFollowUp, requiredLearnerDataTool, requiredStudyPrepTool, classForExam } from "./agent-chat-intent.js";
 import { agentToolActivity } from "../../lib/agentActivity.js";
 import { noteChatTurn } from "../agent-memory/quietLearning.js";
@@ -3968,7 +3971,11 @@ export function clarify(field, question, extra = {}) {
   return { needsClarification: true, missing: field, question, ...extra };
 }
 
-async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, status, tools = openAiChatTools(), requiredTool = null, role = "student", trace = null, isAborted = () => false, think = false, streamText = true, model = null, teacherWords = null, ledger = null }) {
+// Exported (below) for the benchmark (lib/evals/benchmark.js), which runs this same loop with stub tools.
+// `callTool` is the one seam: production executes the real tools; the benchmark passes stubs.
+// `recorder`: an agent-contract/episode.js recorder when the turn is recorded.
+async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, status, tools = openAiChatTools(), requiredTool = null, role = "student", trace = null, isAborted = () => false, think = false, streamText = true, model = null, teacherWords = null, ledger = null, callTool = null, recorder = null }) {
+  const runTool = callTool || ((name, input) => executeChatTool(name, input, studentId, { conversationId, role }));
   // The task ledger (taskLedger.js): the agent keeps its goal and steps with update_plan; offered every turn.
   let ledgerNow = ledger;
   if (!tools.some((t) => t.function?.name === UPDATE_PLAN_TOOL.name)) {
@@ -4044,6 +4051,10 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
     }
     const calls = Array.isArray(assistant.tool_calls) ? assistant.tool_calls : [];
     closeThink(decisionNarration(calls));
+    if (recorder && calls.length) {
+      recorder.decision({ tool_calls: calls.map((c) => { let args = {}; try { args = JSON.parse(c?.function?.arguments || "{}"); } catch { args = {}; } return { name: c?.function?.name, arguments: args }; }),
+        intent: typeof assistant.content === "string" ? assistant.content.trim().slice(0, 300) : null });
+    }
     const content = typeof assistant.content === "string" ? assistant.content.trim() : "";
     if (!calls.length) {
       // A decision that calls no tool IS the answer: what already streamed
@@ -4092,11 +4103,11 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         toolResult = applied.result;
       } else if (unsaid) toolResult = unsaid;
       else try {
-        toolResult = await executeChatTool(tool, input, studentId, { conversationId, role });
+        toolResult = await runTool(tool, input);
         // Recovery (toolRecovery.js): a temporary failure is tried once more before the agent sees it.
         if (shouldRetry(tool, toolResult, { sideEffecting: isSideEffecting(tool, input) })) {
           console.log(`[agent-chat] tool ${tool} failed temporarily — retrying once`);
-          const again = await executeChatTool(tool, input, studentId, { conversationId, role }).catch(() => null);
+          const again = await runTool(tool, input).catch(() => null);
           if (again != null) toolResult = toolFailed(again) ? { ...(typeof again === "object" ? again : {}), retried: true } : again;
         }
       }
@@ -4129,6 +4140,7 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         if (hint) toolResult = { ...toolResult, recovery: hint.next };
       }
       const observation = toolObservation({ action: tool, result: toolResult, requestId: newToolRequestId() });
+      recorder?.observation(observation);
       // Every tool call is logged: with nothing here, "the agent ignores my
       // data" is undiagnosable from server logs — zero lines means the model
       // never called a tool; a failed line points at the tool's backend.
@@ -4671,7 +4683,12 @@ router.post("/agent", async (req, res) => {
       + (summaryNow ? `\n\n## Earlier in this chat (summary)\n${summaryNow}` : "")
       + renderIntent(intent);
     const ledgerIn = conversation?.scratchpad ? { ...conversation.scratchpad, progressSummary: summaryNow, summaryMark } : (summaryNow ? { progressSummary: summaryNow, summaryMark } : null);
+    const recorder = (await recordsRealTraffic(req.user.id).catch(() => false))
+      ? createEpisodeRecorder({ surface: "agent_chat", role, system: turnSystem, source: "real",
+        state: { ledger: ledgerIn, intent, summary: summaryNow || null }, messages: [...fit.kept, { role: "user", content: userText }] })
+      : null;
     const prepared = await runAgentToolLoop({
+      recorder,
       ledger: ledgerIn,
       teacherWords: draftFollowUp ? userMessage.slice(0, 1500) : null,
       systemContent: turnSystem,
@@ -4802,6 +4819,13 @@ router.post("/agent", async (req, res) => {
       }
     }
     if (!reply.trim()) reply = "I'm here to help with your studies — ask me anything about your subjects!";
+    // The episode (per AGENT_EPISODES; never for an opted-out user): the reply as shown, code-computed checks,
+    // stored anonymised; never holds up the reply.
+    if (recorder && !stopped()) {
+      recorder.decision({ reply });
+      const episode = recorder.finish({ ledger: prepared.ledger || ledgerIn, sideEffecting: (t) => isSideEffecting(t, {}), capabilities: intent?.multiStep ? ["planning"] : [] });
+      void saveEpisode(episode, { names: [req.user.username, req.user.fullName, req.user.email].filter(Boolean) }).catch(() => {});
+    }
     const traceBlocks = trace.blocks();
 
     // Persist EVERY completed turn. The previous gate — skip the save when

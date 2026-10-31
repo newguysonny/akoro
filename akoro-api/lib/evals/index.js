@@ -15,8 +15,9 @@ import { recallSuite }    from "./recall.js";
 import { ladderSuite }    from "./ladder.js";
 import { learnerToolsSuite } from "./learnerTools.js";
 import { agentChecksSuite, intentSuite } from "./agentChecks.js";
+import { benchmarkSuite } from "./benchmark.js";
 
-export const SUITES = [questionsSuite, routingSuite, agentSuite, recallSuite, ladderSuite, learnerToolsSuite, agentChecksSuite, intentSuite];
+export const SUITES = [questionsSuite, routingSuite, agentSuite, recallSuite, ladderSuite, learnerToolsSuite, agentChecksSuite, intentSuite, benchmarkSuite];
 export const suiteByKey = (key) => SUITES.find((s) => s.key === key) ?? null;
 
 /**

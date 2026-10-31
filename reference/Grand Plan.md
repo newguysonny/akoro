@@ -3297,6 +3297,16 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   code checks · 4 LoRA SFT, staged · 5 served on RunPod behind `aiModel.js`,
   routed, shadow first · 6 live where it wins · 7 DPO, multimodal, other apps.
   The consent setting and anonymisation pipeline are built alongside 1–3.
+- **Real traffic (2026-10-31):** all users, with an opt-out ("Help improve
+  Akoro's study agent" in Settings) that always wins; `AGENT_EPISODES` =
+  off | synthetic (default) | consented | all. Set `all` on Render only after
+  the privacy policy says so.
+- **Status (2026-10-31):** 0 ✅ · 1 ✅ `modules/agent-contract/` (error codes
+  on every failed observation in all three loops, episode recorder with
+  code-computed checks, anonymiser, store, `edu.agent_episodes` migration,
+  opt-out setting) · 2 ✅ built (`lib/evals/benchmark.js`, 110 scenarios
+  through the real chat loop with stub tools; proved end to end with a fake
+  model) — DeepSeek baseline run waits for API credit.
 
 ---
 

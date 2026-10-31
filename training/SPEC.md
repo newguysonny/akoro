@@ -7,7 +7,7 @@ Decisions taken (2026-10-31):
 | Decision | Choice |
 |---|---|
 | Base model | **Qwen3-4B** (text). The vision-language model comes at the multimodal stage, not before. |
-| Training data | Synthetic episodes first; **anonymised, opt-in real traffic** planned now (§9). |
+| Training data | Synthetic episodes, **plus anonymised real traffic from all users who haven't opted out** (§9; changed from opt-in on 2026-10-31). |
 | Teacher model | **DeepSeek**, operating our real harness with stub tools. |
 | Location | this folder, `training/`, in the main repo — it shares the contract, the tools and the evals. |
 
@@ -183,16 +183,18 @@ A fine-tuned version ships only where it beats the original on every metric and 
 
 ---
 
-## 9. Real traffic: consent and anonymisation (planned now)
+## 9. Real traffic: notice, opt-out and anonymisation
 
-Real conversations are mostly minors'. Nothing from real traffic enters training until all of this is live:
+Decided 2026-10-31: real-traffic episodes are recorded for **all users except those who opt out** (changed from opt-in). Most users are minors, so the rest of this section is what makes that defensible.
 
-1. **Consent:** a separate, off-by-default setting ("Help improve Akoro's study agent with my anonymised chats"), with a guardian's consent where the learner is a minor; withdrawable at any time, withdrawal removes their episodes from future training sets. The privacy policy states what is used, how it is anonymised, and how long it is kept.
-2. **What is collected:** only agent episodes (§3) — decisions, tool calls, observations and verdicts — never voice, uploaded files, images, or the learner's Library content.
-3. **Anonymisation, before storage in the training store:** names, usernames, emails, phone numbers, school names, ids and dates of birth replaced with typed placeholders (`<LEARNER_NAME>`, `<SCHOOL>`, `<ID>`); free text in tool results reduced to the fields the decision needed; a second pass by a detector for anything left; episodes with sensitive topics (health, family, safeguarding) dropped entirely.
-4. **Review:** a sample of every batch read by a person before it joins a training set.
-5. **Separation:** the training store is separate from the production database, access-logged, and never holds the mapping back to a learner.
-6. **Never trained:** credentials, tokens, payment details, safeguarding reports, anything from a learner who hasn't opted in.
+1. **Switch:** `AGENT_EPISODES=all` on the API (code: `agent-contract/store.js`). Modes: `off` · `synthetic` (default — benchmark and teacher runs only) · `consented` (opt-in only) · `all`.
+2. **Notice first:** before `all` is switched on, the privacy policy and terms say that anonymised agent chats are used to train Akoro's own agent model, what is removed, how long it is kept, and how to opt out. Nigeria's data protection law (NDPA) expects a lawful basis and clear notice, with extra care for children's data; the policy wording should be checked against it.
+3. **Opt-out:** Settings → Agent → "Help improve Akoro's study agent" (`improveAgent`, stored as `users.agent_training_opt_out`). An opt-out always wins, in every mode; it stops recording from the next turn. Removing a learner's past episodes is not possible by design — nothing in the store links back to them (point 6).
+4. **What is collected:** only agent episodes (§3) — decisions, tool calls, observations and verdicts — never voice, uploaded files, images, or the learner's Library content.
+5. **Anonymisation, before anything is written** (`agent-contract/anonymise.js`): the learner's name, username and email, other emails, phone numbers, ids and dates of birth replaced with typed placeholders (`<NAME>`, `<EMAIL>`, `<PHONE>`, `<ID>`, `<USERNAME>`, `<DOB>`); identifying keys in tool results redacted; long strings in tool results cut; the system prompt not stored; any episode touching a sensitive topic (health, family, feelings, safeguarding, bullying, police) dropped entirely; a second pass drops the episode if anything identifying is still there.
+6. **Separation:** `edu.agent_episodes` holds no user id and no mapping back; service role only (RLS on, no client grants); access-logged.
+7. **Review:** a sample of every batch read by a person before it joins a training set.
+8. **Never trained:** credentials, tokens, payment details, safeguarding reports, anything from a user who opted out.
 
 ---
 
@@ -208,4 +210,4 @@ Real conversations are mostly minors'. Nothing from real traffic enters training
 | 5 | served on RunPod behind `aiModel.js`; a router that sends routine kinds to it and escalates on failed checks; shadow mode first |
 | 6 | live for the kinds where it wins on the benchmark |
 | 7 | DPO on failures; multimodal; other applications on the same contract |
-| — | §9 consent setting and anonymisation pipeline, built in parallel with phases 1–3 |
+| — | §9 notice in the privacy policy before `AGENT_EPISODES=all`; opt-out setting and anonymiser built in phase 1 |

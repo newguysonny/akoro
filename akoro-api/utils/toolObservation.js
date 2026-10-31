@@ -22,6 +22,7 @@
  * (`{success, result, error}`), with request/action correlation added so a
  * confirmation can be traced to exactly one execution.
  */
+import { classifyError } from "../modules/agent-contract/contract.js";
 import { randomBytes } from "node:crypto";
 
 const MAX_ERROR_CHARS = 500;
@@ -73,12 +74,16 @@ export function toolObservation({ action, result, requestId = null, extra = null
     normalisedResult = rest;      // hoisted keys live on the envelope only
   }
 
+  // The agent contract (agent-contract/contract.js): a failure says what kind it is,
+  // the same codes in every loop. A success keeps exactly its old shape.
+  const failure = success ? null : classifyError({ ...(canHoist ? payload : {}), error });
   return {
     success,
     request_id: requestId ? String(requestId).slice(0, MAX_REQUEST_ID_CHARS) : null,
     action: String(action || "unknown_tool").slice(0, MAX_ACTION_CHARS),
     result: normalisedResult,
     error,
+    ...(failure ? { error_code: failure.code, retryable: failure.retryable } : {}),
     ...(extra && typeof extra === "object" ? extra : {}),
   };
 }
