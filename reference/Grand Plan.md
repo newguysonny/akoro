@@ -3277,6 +3277,27 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   on, and the chat gate scenarios on the sandbox. Not done: an eval that runs
   the chat loop itself with tools failing on purpose (the recovery rule is
   covered by recorded cases only).
+
+### Phase 17 — Akoro Agent Model (fine-tuned Qwen3-4B; started 2026-10-31)
+- **Goal.** A small model specialised in operating the Akoro agent runtime
+  (plan, pick tools, valid calls, read results, recover, verify, hand off,
+  stop) that takes routine agent traffic, with DeepSeek kept for hard
+  reasoning. The model proposes; the harness, policy and workflow engine stay
+  in control.
+- **Decisions (2026-10-31):** base Qwen3-4B (text; Qwen3-VL-4B at the
+  multimodal stage); synthetic episodes first, anonymised opt-in real traffic
+  planned now; DeepSeek as the teacher; work in `training/` in this repo.
+- **Spec:** `training/SPEC.md` — the agent contract (one format for the chat,
+  workflow and task loops), the episode format with code-computed verdicts,
+  the eight capabilities, the quality gate, the benchmark, the training
+  stages, and consent and anonymisation rules.
+- **Phases:** 0 spec · 1 the three loops on the contract + trajectory
+  recorder · 2 benchmark (100–500 multi-step tasks, stub tools, scripted
+  failures; DeepSeek and Qwen3-4B baselines) · 3 synthetic episodes gated by
+  code checks · 4 LoRA SFT, staged · 5 served on RunPod behind `aiModel.js`,
+  routed, shadow first · 6 live where it wins · 7 DPO, multimodal, other apps.
+  The consent setting and anonymisation pipeline are built alongside 1–3.
+
 ---
 
 ## 18. Acceptance tests
