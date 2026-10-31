@@ -126,14 +126,14 @@ Then two final entries (layout "stack"): "Talk About It" with a list "Discussion
   },
   {
     key: "lesson-hooks", name: "Lesson Hooks", emoji: "🪝", output: "doc",
-    blurb: "Openings that grab the class in the first two minutes — with materials and outcomes.",
+    blurb: "Open a lesson with a question, story, demonstration, image or challenge that sparks genuine curiosity — five 5-minute hooks, with materials and outcomes.",
     fields: [F.topic, F.subject, F.klass, F.notes], maxTokens: 6000,
-    system: `${HOUSE} ${CRAFT} A lesson hook is something the teacher DOES or SAYS in the first minutes of a lesson that makes students lean in: a story, a mystery, a role-play or game, a prediction, a challenge, a vote on their feet. It never explains the topic — it makes them need to know. Every hook must run with what a Nigerian classroom actually has (chalkboard, exercise books, bottle caps, a phone torch, or nothing at all) and work with 40-70 students. Vary the five: no two with the same format. ${DOC_RULE}`,
+    system: `${HOUSE} ${CRAFT} A lesson hook is something the teacher DOES or SAYS in the first 5 minutes of a lesson that makes students lean in: a question, a story, a demonstration, an image (a sketch on the board or a picture to look at), a mystery, a role-play or game, a prediction, a challenge, a vote on their feet. It never explains the topic — it makes them need to know. Every hook must run with what a Nigerian classroom actually has (chalkboard, exercise books, bottle caps, a phone torch, or nothing at all) and work with 40-70 students. Vary the five: no two with the same format, and the set must mix types — at least one question or mystery, one demonstration or image, and one story, role-play or game. ${DOC_RULE}`,
     prompt: (i) => `${BRIEF(i)}
 ${DIRECTION(i)}
 Produce 5 entries, one per hook. The entry title is the hook's name (for example "The Time Traveler's Dilemma", "Stone Age Survivor"). Sections in order:
 - text (no label) — one paragraph: what the hook is, and the learning idea behind it (the curiosity, prediction, role or puzzle that makes students need the topic). Do NOT begin two descriptions with the same words, and do not use a stock opening such as "This hook uses…" more than once. If it is a game or role-play, start with the line the teacher says to launch it ("Let's play '…'! You are …").
-- list "Implementation Steps" (ordered true, tone accent) — 4-5 steps for the teacher. Give the teacher's exact words in quotes where they speak, say what students do, and end every step with its minutes in brackets, e.g. "Pose the challenge: '…' (2 min)". The LAST step is always a transition into the lesson ("Transition: 'Today we …'"). Total time 5-10 minutes.
+- list "Implementation Steps" (ordered true, tone accent) — 4-5 steps for the teacher. Give the teacher's exact words in quotes where they speak, say what students do, and end every step with its minutes in brackets, e.g. "Pose the challenge: '…' (2 min)". The LAST step is always a transition into the lesson ("Transition: 'Today we …'"). Every hook takes 5 minutes in total, so the step minutes add up to exactly 5.
 - fields — "Expected Outcome" (what students will feel, notice or be able to say, and how that leads into the topic) and "Materials Needed" (specific items, or "None").`,
   },
   {

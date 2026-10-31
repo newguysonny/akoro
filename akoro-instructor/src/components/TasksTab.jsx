@@ -55,7 +55,7 @@ const EXAMPLES = [
   },
   {
     title: "Draft lesson hooks for next week's Basic Science lesson",
-    description: 'JSS1, topic: photosynthesis. Five openers I can use in the first two minutes of the lesson.',
+    description: 'JSS1, topic: photosynthesis. Five openers I can use in the first five minutes of the lesson.',
   },
   {
     title: 'Every Friday, take attendance for JSS1',
