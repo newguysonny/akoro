@@ -3272,11 +3272,17 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   rest summarised once by the model, marked), `intentStep.js` (kind,
   multi-step, missing — fail-open, `AGENT_INTENT_STEP=off` to disable); evals
   `agent-checks` (21 recorded cases, no model, all pass) and `intent` (16
-  cases incl. hand-offs, needs a model). **Not yet run against a model** —
-  waits for AI credit: the intent eval, the agent-tasks eval with the ledger
-  on, and the chat gate scenarios on the sandbox. Not done: an eval that runs
-  the chat loop itself with tools failing on purpose (the recovery rule is
-  covered by recorded cases only).
+  cases incl. hand-offs, needs a model).
+- **Status (2026-11-01):** ✅ run against DeepSeek on the sandbox (through the
+  gate's `evals.run`): Agent Chat checks 21/21, Intent reading 18/19 (19
+  cases now, incl. "what must be asked" — the step asks only for what has no
+  sensible default), Agent loop 8/8, and the Phase 17 benchmark — which runs
+  the chat loop itself with tools failing on purpose — 98/110. Chat gate
+  scenarios green on the sandbox. Fixed on the way: false "Correction" on
+  honest failures, over-asking from the intent step. Follow-ups shipped the
+  same day: approve card in the same reply, one change card, Approve/Confirm
+  and an admin's approval continue the chat as a real agent turn, open work
+  never stacked under the latest turn.
 
 ### Phase 17 — Akoro Agent Model (fine-tuned Qwen3-4B; started 2026-10-31)
 - **Goal.** A small model specialised in operating the Akoro agent runtime
