@@ -215,6 +215,9 @@ export const teachingToolTry = {
     const text = String(full.body?.output?.content?.content || "");
     ctx.expect.ok("it has readable text", text.length > 200, text.length);
     ctx.note(`tool=${draftId ? run.input?.tool : ""} topic="${run.input?.topic || ""}" notes="${run.input?.notes || ""}" chars=${text.length}`);
-    for (let i = 0; i < text.length && i < 24_000; i += 1_100) ctx.note(`§${Math.floor(i / 1_100) + 1} ${text.slice(i, i + 1_100)}`);
+    // ctx.note keeps 500 characters and the evidence keeps 40 notes, so slice the text to fit both:
+    // the whole output (up to ~18k characters) survives instead of the first half of each slice.
+    const SLICE = 470;
+    for (let i = 0; i < text.length && i < 18_000; i += SLICE) ctx.note(`§${Math.floor(i / SLICE) + 1} ${text.slice(i, i + SLICE)}`);
   },
 };
