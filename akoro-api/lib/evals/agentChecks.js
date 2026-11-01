@@ -84,10 +84,10 @@ export const intentSuite = {
     async run({ model, userId }) {
       if (c.kind === "chat") {
         // Greetings and thanks skip the model call by design; a reading is only checked when the step runs.
-        const read = await runIntentStep({ message: c.text, create: (body) => openai.chat.completions.create({ ...body, model, __feature: "eval", __userId: userId }) });
+        const read = await runIntentStep({ message: c.text, create: (body) => openai.chat.completions.create({ ...body, model, __feature: "eval", __userId: userId, __payer: "platform" }) });
         return { passed: read === null || read.kind === "chat", expected: "chat (or no call)", actual: read?.kind ?? "skipped (greeting)" };
       }
-      const read = await runIntentStep({ message: c.text, timeoutMs: 20_000, create: (body) => openai.chat.completions.create({ ...body, model, __feature: "eval", __userId: userId }) });
+      const read = await runIntentStep({ message: c.text, timeoutMs: 20_000, create: (body) => openai.chat.completions.create({ ...body, model, __feature: "eval", __userId: userId, __payer: "platform" }) });
       if (!read) return { passed: false, expected: c.kind, actual: "no reading", detail: "The intent step returned nothing (model error or unparseable answer)." };
       // missing: "none" — nothing to ask (defaults or a look-up cover it); "some" — the action can't run without asking.
       const missingOk = c.missing === undefined || (c.missing === "none" ? read.missing.length === 0 : read.missing.length > 0);

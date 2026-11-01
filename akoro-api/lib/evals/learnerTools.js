@@ -61,7 +61,7 @@ export const learnerToolsSuite = {
 
       const resp = await openai.chat.completions.create({
         model, max_tokens: 500, temperature: 0,
-        __feature: "eval", __userId: userId,
+        __feature: "eval", __userId: userId, __payer: "platform",
         tools, tool_choice: "required",
         messages: [{ role: "system", content: SYSTEM }, { role: "user", content: c.text }],
       });

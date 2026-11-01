@@ -56,7 +56,7 @@ export const routingSuite = {
 
       const resp = await openai.chat.completions.create({
         model, max_tokens: 700, temperature: 0,   // 0: this is a judgement, not a draft
-        __feature: "eval", __userId: userId,
+        __feature: "eval", __userId: userId, __payer: "platform",
         tools,
         // Nudged toward acting, because a model that asks a clarifying question
         // instead of calling a tool is a different (also real) failure, and
