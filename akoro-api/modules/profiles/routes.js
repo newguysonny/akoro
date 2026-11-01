@@ -1029,6 +1029,9 @@ router.patch("/me", authenticateToken, [
     console.error("[profiles/me PATCH]", updateError.message);
     return res.status(500).json({ success: false, message: "Failed to update profile" });
   }
+  // The auth cache holds full_name and onboarding_completed for 45 s: finishing onboarding and then
+  // reloading (or opening a second tab) read the stale "not onboarded" and sent the learner back to it.
+  invalidateCachedUser(userId);
 
   // Match GET /me's compatibility behaviour while additive columns are
   // rolling out. The base projection includes the values returned below,
