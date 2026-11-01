@@ -141,14 +141,14 @@ export async function getConfirmation(id, userId) {
  * `callTool(name, args)` runs a learner chat tool as them (for runners that go
  * through an existing write tool).
  */
-export async function confirmWrite({ id, userId, callTool, buildTool = null, postIntoChat = null, toolDeps = null }) {
+export async function confirmWrite({ id, userId, callTool, buildTool = null, postIntoChat = null, toolDeps = null, continueInChat = false }) {
   const row = await owned(id, userId);
   if (row.status !== "pending") throw httpError(409, row.status === "consumed" ? "Already done" : `This change was ${row.status}`);
   if (Date.parse(row.expires_at) <= Date.now()) {
     await edu().from(TABLE).update({ status: "expired", updated_at: new Date().toISOString() }).eq("id", id).eq("status", "pending");
     throw httpError(410, "This confirmation expired — ask your agent again.");
   }
-  if (row.tool_arguments?.kind === "permission") return confirmPermission(row, { userId, buildTool, postIntoChat, toolDeps });
+  if (row.tool_arguments?.kind === "permission") return confirmPermission(row, { userId, buildTool, postIntoChat, toolDeps, continueInChat });
   const { cap, refs, args: values = null } = row.tool_arguments || {};
   const runner = WRITE_RUNNERS[cap];
   // Re-check BEFORE claiming: a revoked grant means nothing is changed.
@@ -191,7 +191,7 @@ export async function rejectWrite({ id, userId }) {
  * tool as they asked, as in a resume. `buildTool(args)` is createTool with the
  * chat's deps; `postIntoChat` tells the agent's chat what happened.
  */
-async function confirmPermission(row, { userId, buildTool, postIntoChat, toolDeps }) {
+async function confirmPermission(row, { userId, buildTool, postIntoChat, toolDeps, continueInChat = false }) {
   const { cap, proposed = {} } = row.tool_arguments || {};
   const toolId = row.tool_arguments?.toolId || null;
   if (!learnerGrantable(cap) || (!toolId && !buildTool)) {
@@ -218,7 +218,9 @@ async function confirmPermission(row, { userId, buildTool, postIntoChat, toolDep
     else {
       const { verification: { awaitingPermission, ...kept } = {} } = t;
       await edu().from("agent_tools").update({ status: "active", verification: { ...kept, approvedAt: new Date().toISOString(), approvedCapability: awaitingPermission || cap }, updated_at: new Date().toISOString() }).eq("id", t.id);
-      try {
+      // The chat carries on (continueInChat): the agent's next turn runs the tool where the learner sees it — one change card, from that turn.
+      if (continueInChat) out = { status: "created", tool: t.name, label: t.label, result: {} };
+      else try {
         const { runLearnerTool } = await import("./pipeline.js");
         const ran = await runLearnerTool(t.name, {}, userId, { callCapability: toolDeps?.callCapability, conversationId });
         out = { status: "created", tool: t.name, label: t.label, result: ran || {} };
@@ -229,12 +231,17 @@ async function confirmPermission(row, { userId, buildTool, postIntoChat, toolDep
       input: { goal: proposed.goal, name: proposed.name, label: proposed.label, params: proposed.params || {}, run: proposed.run || {},
         hint: { ...(proposed.hint || {}), capabilities: [...new Set([...[].concat(proposed.hint?.capabilities || []), cap])] } } });
   } catch (e) { out = { status: "failed", reason: e.message }; }
-  const next = out?.result?.confirmation || null;
+  let next = out?.result?.confirmation || null;
+  // Built on approval and run once already: that run's card would be a second one — the agent's turn makes the card.
+  if (continueInChat && next?.confirmationId) {
+    await edu().from(TABLE).delete().eq("id", next.confirmationId).eq("principal_id", userId).eq("status", "pending");
+    next = null;
+  }
   const result = { granted: true, status: out?.status || "failed", tool: out?.tool || null, label: out?.label || proposed.label || null,
     reason: out?.status === "created" ? null : String(out?.reason || "something went wrong").slice(0, 240),
     found: next ? (next.items || []).length : null, at: new Date().toISOString() };
   await edu().from(TABLE).update({ preview: { ...claimed.preview, result }, updated_at: new Date().toISOString() }).eq("id", row.id);
-  if (postIntoChat && conversationId) {
+  if (postIntoChat && conversationId && !continueInChat) {
     const text = out?.status !== "created"
       ? `You allowed it, but I couldn't build "${result.label}" safely: ${result.reason} Ask me again and I'll try a different way.`
       : next ? `Thanks — ${toolId ? `"${result.label}" is switched on` : `I built "${result.label}"`}. It would change: ${(next.items || []).slice(0, 5).join(", ")}${(next.items || []).length > 5 ? "…" : ""}. Nothing has changed yet — confirm on the card when you're ready.`

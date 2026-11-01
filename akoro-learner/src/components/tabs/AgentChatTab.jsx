@@ -858,6 +858,14 @@ function AgentChatTab({
     return () => { alive = false; };
   }, [sessionId, filingKey]);   // eslint-disable-line react-hooks/exhaustive-deps
 
+  // After Approve or Confirm on a card the chat carries on, so the agent follows through where the learner can see it:
+  // approved → it runs the tool (thinking, tools, the Confirm card); confirmed → it checks what changed and what's left.
+  const onCardDone=(what,card)=>{
+    const name=card?.result?.label||card?.title||"the tool";
+    void sendMessage(what==="approved"
+      ? `Approved "${name}" — go ahead.`
+      : `Confirmed the change to ${(card?.items||[]).length||"those"} item${(card?.items||[]).length===1?"":"s"} — check it went through and tell me if anything is left.`);
+  };
   const sendMessage=async(overrideText)=>{
     // Attachments can be sent with an empty message — a friendly default text
     // stands in so the model (and the transcript) knows what's being asked.
@@ -1278,7 +1286,7 @@ function AgentChatTab({
                   )}
                   {msg.agents?.length>0&&<AgentCards agents={msg.agents} onFill={applyIdea}/>}
                   {msg.requests?.length>0&&<ChallengeRequestCards requests={msg.requests} mine={!!msg.requestsMine}/>}
-                  {msg.confirm&&<ConfirmChangeCard confirm={msg.confirm}/>}
+                  {msg.confirm&&<ConfirmChangeCard confirm={msg.confirm} onDone={onCardDone}/>}
                   {/* Not taught yet — the learner can teach it now. */}
                   {msg.teach&&onTeachTopic&&(
                     <div style={{ display:"flex",alignItems:"center",gap:10,marginTop:10,padding:"10px 12px",borderRadius:14,background:`${BRAND}0D`,border:`1px solid ${BRAND}33` }}>
@@ -1387,7 +1395,7 @@ function AgentChatTab({
               );
             })}
             {/* Changes a built tool proposed that are still waiting for the learner's tap — shown again after a reload (S6). */}
-            {pendingChanges.filter((c)=>!messages.some((m)=>m.confirm?.confirmationId===c.confirmationId)).map((c)=><ConfirmChangeCard key={c.confirmationId} confirm={c}/>)}
+            {pendingChanges.filter((c)=>!messages.some((m)=>m.confirm?.confirmationId===c.confirmationId)).map((c)=><ConfirmChangeCard key={c.confirmationId} confirm={c} onDone={onCardDone}/>)}
             {loading&&(
               <div style={{ display:"flex",alignItems:"center",gap:8,color:"var(--ak-text-muted)",fontSize:12.5,fontWeight:600 }}>
                 <span style={{ display:"flex",gap:5 }}>{[0,.25,.5].map((d,i)=><span key={i} style={{ width:6,height:6,borderRadius:"50%",background:BRAND,display:"inline-block",animation:`bounce-dot .7s ease-in-out ${d}s infinite alternate` }}/>)}</span>

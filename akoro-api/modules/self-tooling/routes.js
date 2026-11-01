@@ -67,7 +67,9 @@ router.post("/confirmations/:id/confirm", authenticateToken, confirmationRoute(a
     callTool: (tool, args) => executeChatTool(tool, args, req.user.id, { role: "student", channel: "self_tooling_confirmed" }),
     // A permission card: approving builds the tool, as this learner.
     buildTool: (args) => createTool({ ...args, ...selfToolDeps(req.user.id, "student") }), postIntoChat,
-    toolDeps: selfToolDeps(req.user.id, "student") });
+    toolDeps: selfToolDeps(req.user.id, "student"),
+    // The app carries the chat on after Approve: the agent runs the tool in its next turn (thinking, tools, one card).
+    continueInChat: req.body?.continueInChat === true });
 }));
 
 export default router;
