@@ -12,7 +12,7 @@ function report(ctx, run, results) {
   ctx.note(`${run.suite} on ${run.model}: ${run.status} · ${run.cases_passed}/${run.cases_total} passed (${Math.round(rate * 100)}%) · bar ${Math.round(Number(run.threshold ?? 1) * 100)}% · ${run.met_threshold ? "meets the bar" : "below the bar"} · $${Number(run.cost_usd ?? 0).toFixed(4)} · ${Math.round((run.ms || 0) / 1000)} s · run ${run.id}`);
   if (run.error) ctx.note(`run error: ${run.error}`);
   for (const r of (results || []).filter((x) => !x.passed).slice(0, 40)) {
-    ctx.note(`FAILED ${r.case_key} — ${r.name}: ${String(r.detail ?? JSON.stringify(r.actual ?? "")).slice(0, 380)}`);
+    ctx.note(`FAILED ${r.case_key} — ${r.name}: ${String(r.detail ?? "").slice(0, 300)}${r.actual ? ` · got ${JSON.stringify(r.actual).slice(0, 180)}` : ""}`);
   }
   ctx.expect.eq("the run finished", run.status, "done");
   ctx.expect.eq("every case has a result", (results || []).length, run.cases_total);
@@ -61,7 +61,7 @@ export const evalsResult = {
   description: "Read one eval run (param runId) as the test admin: its score, bar, cost and every failed case.",
   params: { runId: { default: null } },
   async run(ctx, params) {
-    if (!/^[0-9a-f-]{36}$/i.test(String(params.runId || ""))) ctx.expect.blocked("Pass runId (from evals.run).");
+    if (!/^(\d{1,12}|[0-9a-f-]{36})$/i.test(String(params.runId ?? ""))) ctx.expect.blocked("Pass runId (from evals.run).");
     const { run, results } = await readRun(ctx, params.runId);
     if (["queued", "running"].includes(run?.status)) {
       ctx.note(`${run.cases_passed + run.cases_failed}/${run.cases_total} cases done so far`);
