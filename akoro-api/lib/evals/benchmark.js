@@ -92,7 +92,7 @@ async function runOnce(sc, { model, userId }) {
     return JSON.parse(JSON.stringify(answer));
   };
   const messages = [...(sc.history || []), { role: "user", content: sc.request }];
-  const meta = { __feature: "eval", __userId: userId };
+  const meta = { __feature: "eval", __userId: userId, __payer: "platform" };   // counted against the run, paid by the platform, never a wallet
   const started = Date.now();
   // The intent step, as the chat route runs it before the loop — on the model under test, so the whole turn is one model's.
   const intent = await runIntentStep({ message: sc.request, recent: sc.history || [], timeoutMs: 20_000,
