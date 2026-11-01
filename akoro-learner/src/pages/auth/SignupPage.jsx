@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext.jsx';
+import { nextPath } from '../../utils/nextPath.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import AkoroLogo from '../../components/common/AkoroLogo.jsx';
 
@@ -20,6 +21,8 @@ function GoogleIcon() {
 
 export default function SignupPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const after = nextPath(location.search) || '/app';   // e.g. back to a /join/:token invite
   const { register, loginWithGoogle, loading, clearError } = useAuth();
   const { t } = useLang();
   const [form,    setForm]   = useState({ fullName:'', username:'', email:'', password:'' });
@@ -32,7 +35,7 @@ export default function SignupPage() {
     const { fullName, username, email, password } = form;
     if (!fullName || !username || !email || !password) { setFormErr(t('auth.fill_all_fields')); return; }
     if (password.length < 8) { setFormErr(t('auth.password_min8')); return; }
-    try { await register({ fullName, username, email, password }); navigate('/app', { replace:true }); }
+    try { await register({ fullName, username, email, password }); navigate(after, { replace:true }); }
     catch (err) { setFormErr(err.message); }
   };
 
@@ -58,7 +61,7 @@ export default function SignupPage() {
         border:'1px solid var(--ak-border)' }}>
         <h1 style={{ fontSize:22, fontWeight:900, color:'var(--ak-text)', margin:'0 0 6px' }}>{t('auth.create_account')}</h1>
         <p style={{ fontSize:13, color:'var(--ak-text-sub)', margin:'0 0 24px' }}>{t('auth.start_today')}</p>
-        <button onClick={() => loginWithGoogle('/app')}
+        <button onClick={() => loginWithGoogle(after)}
           style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'center',
             gap:10, padding:'12px', borderRadius:14, border:'1.5px solid var(--ak-border2)',
             background:'var(--ak-surface)', cursor:'pointer', fontSize:14, fontWeight:700,
@@ -113,7 +116,7 @@ export default function SignupPage() {
         </p>
         <p style={{ textAlign:'center', fontSize:13, color:'var(--ak-text-sub)', marginTop:20, marginBottom:0 }}>
           {t('auth.have_account')}{' '}
-          <Link to="/signin" style={{ color:BRAND, fontWeight:800, textDecoration:'none' }}>{t('auth.signin')}</Link>
+          <Link to={after === '/app' ? '/signin' : `/signin?next=${encodeURIComponent(after)}`} style={{ color:BRAND, fontWeight:800, textDecoration:'none' }}>{t('auth.signin')}</Link>
         </p>
       </div>
     </div>

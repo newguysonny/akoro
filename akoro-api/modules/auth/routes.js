@@ -236,6 +236,29 @@ const verifyHandoff = (token) => {
   } catch { return null; }
 };
 export { signHandoff, verifyHandoff };
+
+// Course invite — a teacher's link into their own courses (POST
+// /api/profiles/teacher/invite, redeemed at /api/profiles/invite/…). Signed by
+// the same factory and key as a login, but typed, so authenticateToken and the
+// socket check refuse it as a sign-in. Days are clamped to 1–30.
+export const INVITE_MAX_DAYS = 30;
+export function signCourseInvite({ teacherId, courseIds }, days = 7) {
+  const ttl = Math.min(INVITE_MAX_DAYS, Math.max(1, Math.round(Number(days) || 7))) * 86400;
+  const payload = { sub: teacherId, courseIds, type: "course_invite", iss: JWT_ISSUER, aud: JWT_AUDIENCE };
+  return USE_RSA
+    ? jwt.sign(payload, PRIVATE_KEY, { algorithm: "RS256", expiresIn: ttl })
+    : jwt.sign(payload, DEV_SECRET,  { algorithm: "HS256", expiresIn: ttl });
+}
+/** → { teacherId, courseIds, expiresAt } for a valid, unexpired invite; null for anything else. */
+export function verifyCourseInvite(token) {
+  if (typeof token !== "string" || !token || token.length > 4096) return null;
+  try {
+    const d = verifyToken(token);
+    const courseIds = Array.isArray(d?.courseIds) ? [...new Set(d.courseIds.filter((id) => typeof id === "string" && id))] : [];
+    if (d?.type !== "course_invite" || !d.sub || !courseIds.length) return null;
+    return { teacherId: d.sub, courseIds, expiresAt: new Date(d.exp * 1000).toISOString() };
+  } catch { return null; }
+}
 // For the verification gate only (smoke.session_tokens_only): proves these never sign in.
 export { signChallenge as signChallengeForGate, signRefresh as signRefreshForGate };
 

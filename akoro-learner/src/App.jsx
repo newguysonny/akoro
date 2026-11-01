@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useEffect, Suspense } from 'react';
 import { lazyWithRetry } from './utils/lazyWithRetry.js';
+import { nextPath } from './utils/nextPath.js';
 import { AuthProvider, useAuth }   from './contexts/AuthContext.jsx';
 import { ThemeProvider }           from './contexts/ThemeContext.jsx';
 import { LanguageProvider }        from './contexts/LanguageContext.jsx';
@@ -59,6 +60,7 @@ const WalletPage         = lazyWithRetry(() => import('./pages/WalletPage.jsx'))
 const CheckoutPage       = lazyWithRetry(() => import('./pages/CheckoutPage.jsx'));
 const OrderHistoryPage   = lazyWithRetry(() => import('./pages/OrderHistoryPage.jsx'));
 const NotFoundPage       = lazyWithRetry(() => import('./pages/NotFoundPage.jsx'));
+const JoinPage           = lazyWithRetry(() => import('./pages/JoinPage.jsx'));
 // DEV-ONLY layout preview (/dev/shell) — gated on import.meta.env.DEV so the
 // route, this reference and the chunk are all dead-code-eliminated from
 // production builds. Lets the AppShell sidebar / rail / bottom-nav behaviour
@@ -90,10 +92,11 @@ function OnboardingRoute({ children }) {
   return children;
 }
 
-/* ── GuestRoute: redirects to /app if already signed in ─────────── */
+/* ── GuestRoute: redirects to /app (or ?next=) if already signed in ── */
 function GuestRoute({ children }) {
   const { isAuthenticated } = useAuth();
-  if (isAuthenticated) return <Navigate to="/app" replace />;
+  const location = useLocation();
+  if (isAuthenticated) return <Navigate to={nextPath(location.search) || '/app'} replace />;
   return children;
 }
 
@@ -168,6 +171,7 @@ function AppRoutes() {
       <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>}/>
       <Route path="/reset-password"  element={<ResetPasswordPage />}/>
       <Route path="/auth/callback"   element={<AuthCallback />}/>
+      <Route path="/join/:token"     element={<JoinPage />}/>
       {import.meta.env.DEV && <Route path="/dev/shell" element={<ShellPreviewPage />}/>}
       <Route path="*" element={<NotFoundPage />}/>
     </Routes>

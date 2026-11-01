@@ -38,3 +38,29 @@ export const paymentsSingleMount = {
     }
   },
 };
+
+// Item 3: a teacher's course invite links to the learner app's /join/:token page. The token is
+// signed with the auth key (no fallback secret), previews publicly, never signs in, and redeeming
+// needs a signed-in learner. Read-only: the invite is signed in-process and only previewed.
+export const courseInviteJoin = {
+  name: "security.course_invite_join", area: "security", risk: "read",
+  description: "An invite for a teacher's own course previews at GET /api/profiles/invite/:token (200, the course title); the same token is 401 as a login on /api/auth/me; tokens signed with the old fallback secret or of another type are 400; redeeming signed-out is 401.",
+  params: { teacher: { default: "@demo_teacher1" } },
+  async run(ctx, p) {
+    const jwt = (await import("jsonwebtoken")).default;
+    const { signCourseInvite, signHandoff } = await import("../../auth/routes.js");
+    const teacher = await ctx.as(p.teacher);
+    const course = (await ctx.db.rows("courses", { instructor_id: teacher.id }, { columns: "id, title", limit: 1 }))[0];
+    if (!course) ctx.expect.blocked(`${p.teacher} has no course on this server to invite to`);
+    const token = signCourseInvite({ teacherId: teacher.id, courseIds: [course.id] }, 1);
+    const preview = await ctx.http({ path: `/api/profiles/invite/${token}` });
+    ctx.expect.status("the invite previews signed-out", preview, 200);
+    ctx.expect.eq("…with the course's title", preview.body?.data?.courses?.[0]?.title, course.title);
+    const me = await ctx.http({ path: "/api/auth/me", headers: { Authorization: `Bearer ${token}` } });
+    ctx.expect.status("the invite does not sign in", me, 401);
+    const old = jwt.sign({ courseIds: [course.id], courseId: course.id, teacherId: teacher.id, type: "course_invite" }, "akoro-dev-secret", { expiresIn: "1d" });
+    ctx.expect.status("an invite signed with the old fallback secret is refused", await ctx.http({ path: `/api/profiles/invite/${old}` }), 400);
+    ctx.expect.status("a hand-off token is not an invite", await ctx.http({ path: `/api/profiles/invite/${signHandoff(teacher.id)}` }), 400);
+    ctx.expect.status("redeeming signed-out is refused", await ctx.http({ method: "POST", path: "/api/profiles/invite/redeem", body: { token } }), 401);
+  },
+};

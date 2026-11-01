@@ -1016,6 +1016,7 @@ httpServer.listen(config.server.port, config.server.host, () => {
 [ENDPOINTS]
     /api/profiles/instructor/students    global student list
     /api/profiles/teacher/invite         magic invite link
+    /api/profiles/invite/:token          invite preview (public) · POST /invite/redeem joins
     /api/profiles/teacher/students/import CSV bulk import
     /api/profiles/students/:id           edit + message student
     /api/battle/instructor/stats         battle dashboard stats
