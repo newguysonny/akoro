@@ -24,10 +24,7 @@ export const SUBJECT_OPTIONS = [
 ];
 
 /* The guide's avatar choices: [stored emoji key, Tabler icon] — the emoji is what the profile keeps (cross-app). */
-export const GUIDE_ICONS = [
-  ['🧠', 'ti-brain'], ['👩‍🏫', 'ti-presentation'], ['👨‍🏫', 'ti-users'], ['🎓', 'ti-school'], ['📚', 'ti-book'], ['💡', 'ti-bulb'],
-  ['🦉', 'ti-feather'], ['⚡', 'ti-bolt'], ['🌟', 'ti-sparkles'], ['🔮', 'ti-wand'], ['🚀', 'ti-rocket'], ['🎯', 'ti-target'],
-];
+export const GUIDE_ICONS = [['🧠', 'ti-brain'], ['👩‍🏫', 'ti-presentation'], ['👨‍🏫', 'ti-users'], ['🎓', 'ti-school'], ['📚', 'ti-book'], ['💡', 'ti-bulb'], ['🦉', 'ti-feather'], ['⚡', 'ti-bolt'], ['🌟', 'ti-sparkles'], ['🔮', 'ti-wand'], ['🚀', 'ti-rocket'], ['🎯', 'ti-target']];
 
 export const emptyAnswers = (name = '') => ({ name, schoolId: '', schoolName: '', subjects: [], guideName: '', guideEmoji: '🧠' });
 
