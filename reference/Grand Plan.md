@@ -3226,19 +3226,40 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   2. **Payments router mounted twice** (`/api` and `/api/payments`), which makes
      7 `/api/payments/payments/…` copies. Check which webhook URL is set in the
      Paystack dashboard, then drop the extra mount.
-  3. **Course invite emails link to `akoro.app/join/…`, a page no app has.**
+  3. ✅ **Course invite emails link to `akoro.app/join/…`, a page no app has.**
      Either build a join page with redemption on a properly signed token
      (not `JWT_SECRET ?? "akoro-dev-secret"`), or remove invite sending
      (`POST /api/profiles/teacher/invite`).
-  4. **Shared secrets fail open when unset.** The video-worker routes
+     *Done 2026-11-01 (`dc578fe5`): built, since the instructor and school apps'
+     Invite Link tab call it — typed `course_invite` token from the auth signer
+     (no fallback, never a login), link `FRONTEND_URL/join/:token`, public
+     preview `GET /api/profiles/invite/:token`, signed-in
+     `POST /api/profiles/invite/redeem`, learner-app `/join/:token` page with
+     sign-in/up `?next=` back to it. Gate: `security.course_invite_join`.*
+  4. ✅ **Shared secrets fail open when unset.** The video-worker routes
      (`/api/stream/internal/*`) compare `x-internal-secret` to
      `INTERNAL_SECRET` with `!==`, so an unset secret lets everyone in (set on
      both servers today). Refuse when unset, as `admin/ticks.js` does, and
      compare with `timingSafeEqual`; the same constant-time compare for the
      Paystack signature checks.
-  5. **No hard-coded fallback secrets.** Remove the `JWT_SECRET ?? "akoro-dev-…"`
+     *Done 2026-11-01 (`d9186852`): `lib/safeCompare.js` (constant-time, unset →
+     refuse) used by the worker routes, ticks, `/internal/*`, all four Paystack
+     signature checks and the console/gate keys; the payout webhook (which threw
+     on `require()`) now verifies. Gate: `security.shared_secrets_fail_closed`.*
+  5. ✅ **No hard-coded fallback secrets.** Remove the `JWT_SECRET ?? "akoro-dev-…"`
      fallbacks that remain in code; a missing key stops the server (preflight
      already flags it).
+     *Done 2026-11-01 (`0cb4bff4`): no JWT default in auth, token peek or config
+     (no key → sign-in off; production refuses to boot without an RSA keypair or
+     `JWT_SECRET`); the OAuth state keys lost `"akoro-oauth-state"` (unset →
+     account connection off); preflight warns on `INTERNAL_SECRET` /
+     `OAUTH_STATE_SECRET`. Gate: `security.no_fallback_secrets`.*
+     *Owner, before/at deploy (Render env, prod and sandbox): a JWT key must be
+     set (RSA keypair or `JWT_SECRET`) — a non-production server without one
+     now has sign-in off instead of using the old default; `OAUTH_STATE_SECRET`
+     (or `COOKIE_SECRET`) for meeting/streaming/social account connection;
+     `FRONTEND_URL` = the learner app's URL for invite links. Then run the three
+     gate scenarios above with items 1–2's.*
   6. **Authorisation on the 1,094 signed-in routes.** Sign-in is checked
      everywhere; ownership is not yet audited route by route (a route that
      takes `:studentId`, `:userId` or a row id must check it belongs to the
