@@ -3628,8 +3628,9 @@ async function streamChat({ send, messages, model, max_tokens = 700, temperature
  * calls are assembled from their deltas. Returns the assistant message in
  * the chat-completions shape, or { aborted } when the learner stopped.
  */
-async function streamDecision({ messages, tools, toolChoice, onText = null, isAborted = () => false, model = null }) {
+async function streamDecision({ messages, tools, toolChoice, onText = null, isAborted = () => false, model = null, meta = null }) {
   const stream = await openai.chat.completions.create({
+    ...(meta || {}),   // e.g. the eval runner's { __feature: "eval", __userId }
     model: model || OPENAI_MODEL,
     temperature: 0.6,
     max_tokens: 900,
@@ -3974,7 +3975,7 @@ export function clarify(field, question, extra = {}) {
 // Exported (below) for the benchmark (lib/evals/benchmark.js), which runs this same loop with stub tools.
 // `callTool` is the one seam: production executes the real tools; the benchmark passes stubs.
 // `recorder`: an agent-contract/episode.js recorder when the turn is recorded.
-async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, status, tools = openAiChatTools(), requiredTool = null, role = "student", trace = null, isAborted = () => false, think = false, streamText = true, model = null, teacherWords = null, ledger = null, callTool = null, recorder = null }) {
+async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, status, tools = openAiChatTools(), requiredTool = null, role = "student", trace = null, isAborted = () => false, think = false, streamText = true, model = null, teacherWords = null, ledger = null, callTool = null, recorder = null, meta = null }) {
   const runTool = callTool || ((name, input) => executeChatTool(name, input, studentId, { conversationId, role }));
   // The task ledger (taskLedger.js): the agent keeps its goal and steps with update_plan; offered every turn.
   let ledgerNow = ledger;
@@ -4044,7 +4045,7 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
     if (!assistant) {
       const decision = await streamDecision({
         messages: [{ role: "system", content: systemContent }, ...transcript],
-        tools, toolChoice, onText, isAborted, model,
+        tools, toolChoice, onText, isAborted, model, meta,
       });
       if (decision.aborted) return stoppedHere(decision.assistant);
       assistant = decision.assistant;

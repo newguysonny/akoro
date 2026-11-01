@@ -25,6 +25,11 @@ const server = http.createServer((req, res) => {
   let body = "";
   req.on("data", (c) => { body += c; });
   req.on("end", () => {
+    // The intent step (a JSON reading before the loop) gets a fixed answer and doesn't use up the script.
+    if (/"response_format"/.test(body)) {
+      res.writeHead(200, { "content-type": "application/json" });
+      return res.end(JSON.stringify({ id: "i", object: "chat.completion", choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: JSON.stringify({ want: "the learner's request", kind: "question", multiStep: false, missing: [] }) } }] }));
+    }
     const turn = script[Math.min(served++, script.length - 1)] || { content: "" };
     const chunk = (delta) => `data: ${JSON.stringify({ id: "x", object: "chat.completion.chunk", choices: [{ index: 0, delta, finish_reason: null }] })}\n\n`;
     res.writeHead(200, { "content-type": "text/event-stream" });
