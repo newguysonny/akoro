@@ -33,17 +33,17 @@ import { fulfillCoinTopup } from "../wallet/routes.js";
 import { fulfillVoucherWalletTopup } from "../vouchers/index.js";
 import { fulfillVoucherTransferEvent } from "../vouchers/transferEvents.js";
 import { logPaymentEvent } from "./paymentAudit.js";
+import { paystackSignatureValid } from "../../lib/safeCompare.js";
 
 const router = Router();
 
 // POST /api/webhooks/paystack  (mounted with express.raw — req.body is a Buffer)
 router.post("/", async (req, res) => {
   try {
-    const secret = process.env.PAYSTACK_SECRET_KEY ?? "";
     const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body ?? {}));
 
-    const hash = crypto.createHmac("sha512", secret).update(raw).digest("hex");
-    const signatureValid = hash === req.headers["x-paystack-signature"];
+    // Constant-time; false when PAYSTACK_SECRET_KEY is unset (an empty key is forgeable).
+    const signatureValid = paystackSignatureValid(raw, req.headers["x-paystack-signature"]);
 
     // Log the raw event first — even a bad-signature attempt is worth a durable
     // record. We can't trust the body if the signature is invalid, so keep it in

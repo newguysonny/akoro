@@ -63,6 +63,7 @@ import { autoTranscribeContent }          from "../records/avTranscribeLib.js";
 import { mediaWorkerEnabled }             from "../records/mediaClient.js";
 import { dispatchEncode }                 from "./encodeDispatch.js";
 import { r2Send } from "../../lib/r2Breaker.js";
+import { requireSharedSecret }            from "../../lib/safeCompare.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -105,6 +106,9 @@ const res200 = (res, data, meta = {}) => res.status(200).json({ success: true,  
 const res202 = (res, data)            => res.status(202).json({ success: true,  data });
 const res400 = (res, msg)             => res.status(400).json({ success: false, message: msg });
 const res403 = (res, msg)             => res.status(403).json({ success: false, message: msg });
+// Worker-only routes: x-internal-secret must equal INTERNAL_SECRET (constant-time).
+// Unset secret → 503, never open; missing or wrong header → 403. True when let through.
+const internalGuard = (req, res) => { let ok = false; requireSharedSecret("INTERNAL_SECRET")(req, res, () => { ok = true; }); return ok; };
 const res404 = (res, msg)             => res.status(404).json({ success: false, message: msg });
 
 // ─── § MULTER ─────────────────────────────────────────────────────────────────
@@ -412,8 +416,7 @@ const streamHandlers = {
    * Protected by x-internal-secret header — not a public endpoint.
    */
   getSourceUrl: asyncHandler(async (req, res) => {
-    if (req.headers["x-internal-secret"] !== process.env.INTERNAL_SECRET)
-      return res403(res, "Forbidden");
+    if (!internalGuard(req, res)) return;
 
     const video = VideoStore.get(req.params.videoId);
     if (!video?.sourceKey) return res404(res, "Source file not found");
@@ -432,8 +435,7 @@ const streamHandlers = {
    *         duration?, fileSize?, variants?, errorMessage? }
    */
   internalUpdate: asyncHandler(async (req, res) => {
-    if (req.headers["x-internal-secret"] !== process.env.INTERNAL_SECRET)
-      return res403(res, "Forbidden");
+    if (!internalGuard(req, res)) return;
 
     const { videoId, ...data } = req.body;
     if (!videoId) return res400(res, "videoId is required");

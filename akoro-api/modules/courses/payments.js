@@ -22,6 +22,7 @@ import { businessConfig }                 from "../../config/index.js";
 import { cartHandlers }                   from "./cart.js";
 import { recordPaymentItems, logPaymentEvent } from "../webhooks/paymentAudit.js";
 import { notify }                           from "../notifications/events.js";
+import { paystackSignatureValid } from "../../lib/safeCompare.js";
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -291,10 +292,7 @@ const paymentHandlers = {
 
   // POST /api/payments/verify  (Paystack webhook — no JWT)
   verifyWebhook: asyncHandler(async (req, res) => {
-    const hash = crypto
-      .createHmac("sha512", process.env.PAYSTACK_SECRET_KEY ?? "")
-      .update(JSON.stringify(req.body)).digest("hex");
-    if (hash !== req.headers["x-paystack-signature"])
+    if (!paystackSignatureValid(JSON.stringify(req.body), req.headers["x-paystack-signature"]))
       return res.status(400).json({ success: false, message: "Invalid signature" });
 
     const { event, data } = req.body;

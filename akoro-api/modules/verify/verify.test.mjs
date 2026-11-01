@@ -72,7 +72,7 @@ test("wiring: guarded mount, policy rules, inspected tool calls, persisted runs"
   assert.match(routes, /router\.use\(guard\);/);
   assert.match(policy, /Real users are read-only to the gate/);
   assert.match(policy, /VERIFY_ALLOW_WRITES/);
-  assert.match(chat, /req\.get\("x-agent-console-inspect"\) === key/);
+  assert.match(chat, /safeCompare\(req\.get\("x-agent-console-inspect"\), key\)/);
   assert.match(chat, /\.\.\.\(isInspected\(\) \? \{ input, result: inspectResult\(toolResult\) \} : \{\}\)/);
   assert.match(runner, /stale deploy: expected/);
   assert.match(runner, /action: "verify\.run_as_user"/);
