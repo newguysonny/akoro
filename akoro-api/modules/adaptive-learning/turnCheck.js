@@ -21,22 +21,26 @@ const PASSIVE = new RegExp(String.raw`\b(?:is|has been|have been|was|were|it's b
 // Not a claim: a question, an offer, a plan or a conditional ("I can create", "Shall I…", "once you confirm, I'll…").
 const HEDGE = /\b(?:can I|shall I|should I|would you like|want me to|do you want|I can|I could|I'll|I will|I would|once you|when you|if you|after you|to (?:create|schedule|delete)|not (?:yet )?(?:created|scheduled|deleted|sent|saved))\b/i;
 
+// Not a claim either: the verb negated — an honest failure ("nothing was added", "it wasn't created", "I haven't scheduled it").
+const NEGATED = new RegExp(String.raw`\b(?:nothing|not|never|no longer|\w+n['’]t)\s+(?:\w+\s+){0,3}?(?:${VERBS})\b`, "i");
+
 const sentences = (text) => String(text || "").replace(/\s+/g, " ").match(/[^.!?\n]+[.!?]*/g) || [];
 
 /** PURE: the sentences that claim an action happened. */
 export function actionClaims(reply) {
-  return sentences(reply).filter((s) => (CLAIM.test(s) || PASSIVE.test(s)) && !HEDGE.test(s) && !/\?\s*$/.test(s)).map((s) => s.trim());
+  return sentences(reply).filter((s) => (CLAIM.test(s) || PASSIVE.test(s)) && !HEDGE.test(s) && !NEGATED.test(s) && !/\?\s*$/.test(s)).map((s) => s.trim());
 }
 
 /**
  * PURE: the correction for claimed actions this turn didn't do, or null.
- * executions: this turn's tool calls ({ tool, success, sideEffecting, confirm, adminRequest }).
+ * executions: this turn's tool calls ({ tool, success, sideEffecting, confirm, adminRequest, teach }).
  */
 export function actionClaimCorrection(reply, executions = []) {
   const claims = actionClaims(reply);
   if (!claims.length) return null;
   const xs = (executions || []).filter((x) => x && x.tool !== "update_plan");
-  const changed = xs.some((x) => x.success && x.sideEffecting && !x.confirm);
+  // A Teach me button the protégé put in this chat backs "I've set up a Teach me button".
+  const changed = xs.some((x) => x.success && (x.sideEffecting || x.teach) && !x.confirm);
   if (changed) return null;
   if (xs.some((x) => x.confirm)) return "Note: nothing has changed yet — it happens when you tap **Confirm** on the card above.";
   // Admin requests are requestClaims.js's to judge; a failed change is the honest-failure path's.

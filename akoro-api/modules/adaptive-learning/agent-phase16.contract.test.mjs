@@ -171,3 +171,15 @@ test("the chat turn uses all five", () => {
   assert.match(chat, /__feature: "chat_summary", __userId: req\.user\.id, __timeoutMs: 45_000/);
   assert.doesNotMatch(chat, /function nextScratchpad|Address the current learner request/);
 });
+
+// Found by the DeepSeek benchmark (2026-11-01): honest failures and a Teach me button drew a false "Correction".
+test("an honest failure is not a claim; a Teach me button backs 'I've set up'", () => {
+  for (const honest of [
+    "The task didn't save — the task service is down right now, so nothing was added to your Tasks list.",
+    "It wasn't created.", "I haven't scheduled it yet.", "Nothing was saved, sorry.",
+  ]) assert.deepEqual(actionClaims(honest), [], honest);
+  assert.equal(actionClaims("I've created your task.").length, 1);
+  assert.equal(actionClaims("Your task has been created.").length, 1);
+  assert.equal(actionClaimCorrection("I've set up a Teach me button for Mole concept.", [{ tool: "ask_to_be_taught", success: true, teach: { topic: "Mole concept" } }]), null);
+  assert.match(actionClaimCorrection("I've set up a Teach me button for Mole concept.", [{ tool: "ask_to_be_taught", success: true }]), /Correction/);
+});

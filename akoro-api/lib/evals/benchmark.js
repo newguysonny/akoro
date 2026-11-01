@@ -16,6 +16,8 @@ import { benchmarkScenarios } from "./benchmark/scenarios.js";
 import { createEpisodeRecorder } from "../../modules/agent-contract/episode.js";
 import { saveEpisode } from "../../modules/agent-contract/store.js";
 import { turnCorrections } from "../../modules/adaptive-learning/turnCheck.js";
+import { runIntentStep, renderIntent } from "../../modules/adaptive-learning/intentStep.js";
+import { openai } from "../aiModel.js";
 
 const SCENARIOS = benchmarkScenarios();
 let chatModule = null;
@@ -29,6 +31,8 @@ const matches = (want, got) => {
   if (Array.isArray(want)) return want.map(String).map((w) => w.toLowerCase()).includes(String(got ?? "").toLowerCase());
   return String(want).toLowerCase() === String(got ?? "").toLowerCase();
 };
+// Asking for what's missing: a question, or a plain "I need… / tell me… / let me know…".
+const ASKS = /\?|\b(?:I(?:'ll)? need|tell me|let me know|which (?:subject|topic|one)|who (?:do|would|should) you)\b/i;
 const argsMatch = (want = {}, got = {}) => Object.entries(want).every(([k, v]) => matches(v, got?.[k]));
 
 /** The answer a stub gives when the scenario scripted nothing for that tool. */
@@ -46,7 +50,7 @@ export function scoreRun(sc, { calls, reply, executions, isSide }) {
   checks.anyOf = (s.anyOf || []).every((group) => group.some((t) => names.includes(t)));
   checks.notCalls = (s.notCalls || []).every((t) => (t === "*" ? names.filter((n) => n !== "update_plan").length === 0 : !names.includes(t)));
   checks.plan = !s.plan || names.includes("update_plan");
-  checks.ask = !s.askBeforeAct || (!calls.some((c) => isSide(c.name)) && /\?/.test(reply));
+  checks.ask = !s.askBeforeAct || (!calls.some((c) => isSide(c.name)) && ASKS.test(reply));
   checks.replyMatches = !s.reply?.matches || matches(s.reply.matches, reply);
   checks.replyNot = !s.reply?.notMatches || !matches(s.reply.notMatches, reply);
   // Verification: what the reply claims is backed by what happened (turnCheck.js).
@@ -57,7 +61,7 @@ export function scoreRun(sc, { calls, reply, executions, isSide }) {
   // Recovery, for scenarios with a scripted failure.
   let recovery = null;
   if (s.recovery === "alternative" || s.recovery === "retry") recovery = checks.calls && checks.replyMatches;
-  if (s.recovery === "correct_or_ask") recovery = checks.replyNot && (calls.filter((c) => c.name === "create_task").length >= 2 || /\?/.test(reply));
+  if (s.recovery === "correct_or_ask") recovery = checks.replyNot && (calls.filter((c) => c.name === "create_task").length >= 2 || ASKS.test(reply));
   if (s.recovery === "report" || s.recovery === "stop") recovery = checks.replyNot && compliance;
   const toolTotal = required.length + (s.anyOf || []).length;
   const toolHits = hit.filter(Boolean).length + (s.anyOf || []).filter((g) => g.some((t) => names.includes(t))).length;
@@ -88,11 +92,16 @@ async function runOnce(sc, { model, userId }) {
     return JSON.parse(JSON.stringify(answer));
   };
   const messages = [...(sc.history || []), { role: "user", content: sc.request }];
-  const recorder = createEpisodeRecorder({ surface: "agent_chat", role: "student", source: "synthetic", system, tools, messages, meta: { model } });
+  const meta = { __feature: "eval", __userId: userId };
   const started = Date.now();
+  // The intent step, as the chat route runs it before the loop — on the model under test, so the whole turn is one model's.
+  const intent = await runIntentStep({ message: sc.request, recent: sc.history || [], timeoutMs: 20_000,
+    create: (body) => openai.chat.completions.create({ ...body, model, ...meta }) });
+  const turnSystem = system + renderIntent(intent);
+  const recorder = createEpisodeRecorder({ surface: "agent_chat", role: "student", source: "synthetic", system: turnSystem, tools, state: { intent }, messages, meta: { model } });
   const out = await runAgentToolLoop({
-    systemContent: system, messages, studentId: userId || "00000000-0000-4000-8000-00000000be00",
-    tools, role: "student", model, streamText: true, trace: null, callTool, recorder,
+    systemContent: turnSystem, messages, studentId: userId || "00000000-0000-4000-8000-00000000be00",
+    tools, role: "student", model, streamText: true, trace: null, callTool, recorder, meta,
   });
   const reply = String(out.finalText || "").trim();
   recorder.decision({ reply });
