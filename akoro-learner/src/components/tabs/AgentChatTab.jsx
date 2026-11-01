@@ -393,6 +393,8 @@ function AgentChatTab({
       return { ingestId: ids[0], ingestIds: ids };
     })() : {}),
     ...(m.role !== "user" && Array.isArray(m.meta?.ideas) && m.meta.ideas.length ? { ideas: cleanIdeas(m.meta.ideas) } : {}),
+    // The Akoro team approved a tool while the learner was away: Run it now starts the agent's turn.
+    ...(m.role !== "user" && m.meta?.runTool?.label ? { runTool: m.meta.runTool } : {}),
   });
 
   // Which chat the learner asked for last: a slower load of an earlier choice
@@ -449,6 +451,7 @@ function AgentChatTab({
               .map((m) => ({ id: m.id, from: "agent", text: m.text, ...(m.meta?.proposal ? { proposal: m.meta.proposal } : {}),
                 ...(m.meta?.studyPrepWake?.wakeId ? { studyPrepWake: m.meta.studyPrepWake } : {}),
                 ...(m.meta?.agentCheck?.battleId ? { agentCheck: m.meta.agentCheck } : {}),
+                ...(m.meta?.runTool?.label ? { runTool: m.meta.runTool } : {}),
                 at: m.created_at, time: new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }));
             return fresh.length ? [...prev, ...fresh] : prev;
           });
@@ -858,6 +861,14 @@ function AgentChatTab({
     return () => { alive = false; };
   }, [sessionId, filingKey]);   // eslint-disable-line react-hooks/exhaustive-deps
 
+  // After Approve or Confirm on a card the chat carries on, so the agent follows through where the learner can see it:
+  // approved → it runs the tool (thinking, tools, the Confirm card); confirmed → it checks what changed and what's left.
+  const onCardDone=(what,card)=>{
+    const name=card?.result?.label||card?.title||"the tool";
+    void sendMessage(what==="approved"
+      ? `Approved "${name}" — go ahead.`
+      : `Confirmed the change to ${(card?.items||[]).length||"those"} item${(card?.items||[]).length===1?"":"s"} — check it went through and tell me if anything is left.`);
+  };
   const sendMessage=async(overrideText)=>{
     // Attachments can be sent with an empty message — a friendly default text
     // stands in so the model (and the transcript) knows what's being asked.
@@ -1278,7 +1289,14 @@ function AgentChatTab({
                   )}
                   {msg.agents?.length>0&&<AgentCards agents={msg.agents} onFill={applyIdea}/>}
                   {msg.requests?.length>0&&<ChallengeRequestCards requests={msg.requests} mine={!!msg.requestsMine}/>}
-                  {msg.confirm&&<ConfirmChangeCard confirm={msg.confirm}/>}
+                  {msg.confirm&&<ConfirmChangeCard confirm={msg.confirm} onDone={onCardDone}/>}
+                  {/* Approved by the Akoro team while away: one tap runs it in a normal turn (gone once the chat moves on). */}
+                  {msg.runTool&&!messages.slice(messages.indexOf(msg)+1).some((m)=>m.from==="me")&&(
+                    <button type="button" disabled={loading||running} onClick={()=>sendMessage(`Run "${msg.runTool.label}" now.`)}
+                      style={{ display:"inline-flex",alignItems:"center",gap:6,marginTop:10,padding:"7px 14px",borderRadius:999,border:"none",background:BRAND,color:"#fff",fontSize:12.5,fontWeight:900,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
+                      <Icon name="ti-player-play" size={13}/> Run it now
+                    </button>
+                  )}
                   {/* Not taught yet — the learner can teach it now. */}
                   {msg.teach&&onTeachTopic&&(
                     <div style={{ display:"flex",alignItems:"center",gap:10,marginTop:10,padding:"10px 12px",borderRadius:14,background:`${BRAND}0D`,border:`1px solid ${BRAND}33` }}>
@@ -1387,7 +1405,7 @@ function AgentChatTab({
               );
             })}
             {/* Changes a built tool proposed that are still waiting for the learner's tap — shown again after a reload (S6). */}
-            {pendingChanges.filter((c)=>!messages.some((m)=>m.confirm?.confirmationId===c.confirmationId)).map((c)=><ConfirmChangeCard key={c.confirmationId} confirm={c}/>)}
+            {pendingChanges.filter((c)=>!messages.some((m)=>m.confirm?.confirmationId===c.confirmationId)).map((c)=><ConfirmChangeCard key={c.confirmationId} confirm={c} onDone={onCardDone}/>)}
             {loading&&(
               <div style={{ display:"flex",alignItems:"center",gap:8,color:"var(--ak-text-muted)",fontSize:12.5,fontWeight:600 }}>
                 <span style={{ display:"flex",gap:5 }}>{[0,.25,.5].map((d,i)=><span key={i} style={{ width:6,height:6,borderRadius:"50%",background:BRAND,display:"inline-block",animation:`bounce-dot .7s ease-in-out ${d}s infinite alternate` }}/>)}</span>

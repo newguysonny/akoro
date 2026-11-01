@@ -202,9 +202,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     // A change to the learner's own rows: THEY turn it on, on a card in this chat — no admin.
     if (learnerGrantable(capability) && audience === "learner") {
       ev.stages_tried.push("permission"); ev.capabilities = [capability];
-      // Not before they've said yes to building it: the agent asks first, in its own words.
-      if (input?.__agreed !== true) return finish("escalated", { status: "offer", capability: CAPABILITIES[capability].description, buildable: true,
-        note: "NOTHING IS BUILT AND NO CARD IS SHOWN YET. You can't do this right now — no tool you have does it — but you CAN build one that does, and the learner can allow it themselves. In your own words, briefly: say you can't do that yet, offer to build a tool for it (they'd approve it on a card, and every change it makes still waits for their Confirm), and ask if they'd like you to. Call create_tool again once they say yes. Don't list workarounds or their data unless they ask." });
+      // No separate "shall I build it?" round: the card is where they say yes (Approve) or no (Not now).
       const proposed = { name, label, goal, params, audience, hint: { views: [].concat(hint.views || []), capabilities: [capability] }, run: input?.run && typeof input.run === "object" ? input.run : {} };
       if (dry) return finish("dry", { status: "needs_permission", dryRun: true, capability: CAPABILITIES[capability].description,
         note: "DRY RUN — no card was made. Live, the learner would get a card to approve this and the tool would be built when they do." });
@@ -239,7 +237,8 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   }
   if (!resumed) {
     const hinted = await lockedIn([].concat(hint.capabilities || []));
-    if (hinted.length && input?.__agreed === true && learnerGrantable(hinted[0]) && audience === "learner") { draftCap = hinted[0]; mustUse = [draftCap]; ev.stages_tried.push("draft"); }
+    // A change the learner can allow: draft it now and show the card in this same reply (Approve is their yes).
+    if (hinted.length && learnerGrantable(hinted[0]) && audience === "learner") { draftCap = hinted[0]; mustUse = [draftCap]; ev.stages_tried.push("draft"); }
     else if (hinted.length) return toEscalate(hinted[0]);
     // About OTHER learners, and the best match for that is a locked network
     // capability: the learner's own views can't answer it, and a build from

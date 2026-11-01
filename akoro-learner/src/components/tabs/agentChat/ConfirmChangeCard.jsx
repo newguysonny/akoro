@@ -5,9 +5,10 @@
  * it (POST /api/self-tooling/confirmations/:id/confirm). The agent can't.
  *
  * kind 'permission': the agent has no ability for what the learner asked
- * (e.g. deleting their tasks) but can build a tool for it. Approve turns that
- * ability on for this learner only and builds the tool; its first proposed
- * change then shows as an ordinary card underneath (nothing changed yet).
+ * (e.g. deleting their tasks) but drafted a tool for it. Approve turns that
+ * ability on for this learner only; then the chat carries on (onDone): the
+ * agent runs the tool in its next turn and its change card comes from there.
+ * After a Confirm, the chat carries on too, so the agent checks what changed.
  */
 import { useEffect, useState } from 'react';
 import { Icon } from '../../common/Icons.jsx';
@@ -17,7 +18,7 @@ import { apiGet, apiPost } from '../../../services/api.js';
 const NUNITO = "'Nunito',sans-serif";
 const unwrap = (r) => r?.data || r;
 
-export default function ConfirmChangeCard({ confirm }) {
+export default function ConfirmChangeCard({ confirm, onDone = null }) {
   const [state, setState] = useState(confirm);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -32,8 +33,9 @@ export default function ConfirmChangeCard({ confirm }) {
   const act = async (what) => {
     setBusy(true); setErr('');
     try {
-      const r = unwrap(await apiPost(`/api/self-tooling/confirmations/${state.confirmationId}/${what}`, {}));
+      const r = unwrap(await apiPost(`/api/self-tooling/confirmations/${state.confirmationId}/${what}`, state.kind === 'permission' && onDone ? { continueInChat: true } : {}));
       setState((s) => ({ ...s, ...r }));
+      if (what === 'confirm' && onDone) onDone(state.kind === 'permission' ? 'approved' : 'confirmed', { ...state, ...r });
     } catch (e) { setErr(e?.message || 'Could not do that.'); }
     finally { setBusy(false); }
   };
@@ -99,14 +101,14 @@ function PermissionCard({ state, expired, busy, err, act }) {
           <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)' }}>{state.drafted ? 'Your agent drafted this tool. It needs your OK to' : "Your agent can't do this yet. Allow it to"}: {state.action}</div>
         </div>
       </div>
-      {state.drafted ? <>
+      {pending && state.drafted ? <>
         {state.goal && <div style={{ marginTop: 9, fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text)', lineHeight: 1.5 }}>{state.goal}</div>}
         <div style={{ marginTop: 8, fontSize: 11.5, fontWeight: 800, color: 'var(--ak-text-muted)' }}>{(state.items || []).length ? 'Right now it would change:' : 'Right now nothing matches it.'}</div>
         <ul style={{ margin: '4px 0 0', paddingLeft: 18, fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text)', lineHeight: 1.6 }}>
           {(state.items || []).slice(0, 20).map((it, i) => <li key={i}>{it}</li>)}
           {state.more > 0 && <li style={{ color: 'var(--ak-text-muted)' }}>…and {state.more} more</li>}
         </ul>
-      </> : (state.items || [])[0] && <div style={{ marginTop: 9, fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text)', lineHeight: 1.5 }}>{state.items[0]}</div>}
+      </> : pending && (state.items || [])[0] && <div style={{ marginTop: 9, fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text)', lineHeight: 1.5 }}>{state.items[0]}</div>}
       {pending && (
         <>
           <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)', marginTop: 8 }}>{state.drafted ? 'Only for you. Approve turns it on, and nothing changes until you confirm each change it proposes.' : 'Only for you. Nothing changes until you confirm each change it proposes.'}</div>
@@ -130,7 +132,6 @@ function PermissionCard({ state, expired, busy, err, act }) {
               : state.status === 'rejected' ? (state.drafted ? 'Not now — the draft was discarded.' : 'Not allowed — nothing was built.') : 'Expired — ask your agent again.'}
         </div>
       )}
-      {state.next?.confirmationId && <ConfirmChangeCard confirm={state.next} />}
       {err && <div style={{ fontSize: 12, fontWeight: 800, color: '#EF4444', marginTop: 6 }}>{err}</div>}
     </div>
   );

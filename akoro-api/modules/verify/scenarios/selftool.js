@@ -232,11 +232,21 @@ export const escalateAndResume = {
     ctx.expect.eq("resumed", done?.resume_status, "resumed");
     ctx.expect.eq("request implemented", done?.status, "implemented");
     ctx.note(`resume result: ${JSON.stringify(done?.resume_result || null).slice(0, 300)}`);
-    const msgs = await ctx.db.rows("chat_messages", { session_id: chatId, user_id: me.id }, { columns: "role, text", limit: 10 });
-    ctx.expect.ok("answer posted into the same chat", msgs.some((m) => m.role === "agent" && /permission/i.test(m.text) && /built/i.test(m.text)), msgs.map((m) => m.text.slice(0, 80)));
+    const msgs = await ctx.db.rows("chat_messages", { session_id: chatId, user_id: me.id }, { columns: "role, text, meta", limit: 10 });
+    const told = msgs.find((m) => m.role === "agent" && /permission/i.test(m.text) && /built/i.test(m.text));
+    ctx.expect.ok("answer posted into the same chat", !!told, msgs.map((m) => m.text.slice(0, 80)));
+    ctx.expect.ok("it carries a Run it now button for the tool (nothing run in the background)", !!told?.meta?.runTool?.label && /Run it now/.test(told?.text || ""), told?.meta);
     ctx.expect.gte("learner notified", await ctx.db.count("notifications", { user_id: me.id, related_id: chatId }), 1);
     const tool = (await ctx.db.rows("edu.agent_tools", { owner_id: me.id, name: { like: `${name}%` } }, { columns: "name, capabilities, status", limit: 1 }))[0];
     ctx.expect.ok("tool saved with the capability", !!tool && tool.status === "active" && (tool.capabilities || []).includes("verify.probe"), tool);
+    // The learner taps Run it now: a normal agent turn runs the tool and explains what it found.
+    if (tool && told?.meta?.runTool?.label) {
+      const t = await ctx.agent.chat({ as: p.learner, mode: "live", model: p.model, prompt: `Run "${told.meta.runTool.label}" now.`,
+        history: [{ role: "user", content: goal }, { role: "assistant", content: told.text }] });
+      ctx.note(`Run it now: ${String(t.reply || "").replace(/\s+/g, " ").slice(0, 300)} · tools ${JSON.stringify((t.tools || []).map((x) => x.tool))}`);
+      ctx.expect.ok("Run it now: the agent runs the tool in its turn", (t.tools || []).some((x) => x.tool === tool.name), (t.tools || []).map((x) => x.tool));
+      ctx.expect.ok("…and answers in words, not a raw row dump", String(t.reply || "").trim().length > 20 && !/^•/m.test(String(t.reply || "")), String(t.reply || "").slice(0, 200));
+    }
 
     // Revoke: the saved tool stops at once.
     if (grantId && tool) {
@@ -736,17 +746,18 @@ export const toolJourney = {
 };
 
 /**
- * A learner wants their old tasks deleted and no tool does it. The agent says
- * it can't yet but can build a tool, and when the learner agrees a PERMISSION
- * card appears (no admin). Approve turns "delete my tasks" on for this learner
- * only and builds the tool; its first proposal is the usual change card, and
- * only Confirm deletes — exactly the tasks it listed. Admins then see the new
- * tool on Agent tools. The grant is this test learner's own and is revoked after.
+ * A learner wants their old tasks deleted and no tool does it. The agent drafts
+ * a tool and a PERMISSION card appears in the same reply (no admin, no "shall I
+ * build it?" round). Approve turns "delete my tasks" on for this learner only;
+ * the chat carries on and the agent's next turn runs the tool — one change card —
+ * and only Confirm deletes, exactly the tasks it listed; then it looks again.
+ * Admins then see the new tool on Agent tools. The grant is this test learner's
+ * own and is revoked after.
  */
 export const deleteTasks = {
   name: "selftool.delete_tasks", area: "self-tooling", risk: "write",
-  description: "No tool deletes tasks: the agent offers to build one, the learner approves it on a permission card (no admin), the tool is built and deletes only the tasks the learner confirms; admins see the new tool.",
-  params: { learner: { default: "@tester29" }, first: { default: "Delete my old tasks please." }, agree: { default: "Yes please, build it." } },
+  description: "No tool deletes tasks: the agent drafts one and shows the permission card in the same reply (no admin, no offer round); after Approve its next turn runs the tool and shows one change card; it deletes only what the learner confirms, then looks again; admins see the new tool.",
+  params: { learner: { default: "@tester29" }, first: { default: "Delete my old tasks please." } },
   async run(ctx, p) {
     await needCreate(ctx);
     const me = await ctx.as(p.learner);
@@ -765,43 +776,36 @@ export const deleteTasks = {
     ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tools", { ownerColumn: "owner_id", ownerId: me.id, filters: { name: { like: `${name}%` } } }));
     ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tool_write_confirmations", { ownerColumn: "principal_id", ownerId: me.id, filters: { tool_name: { like: "selftool:%tasks.delete" } } }));
 
-    // 0. A chat that already holds the old "only an admin can grant" answer: it still looks up and offers to build.
+    const cardOf = (turn) => (turn.tools || []).find((t) => t.tool === "create_tool" && t.result?.status === "needs_permission")?.result?.confirmation || null;
+    const say = (turn) => String(turn.reply || "").replace(/\s+/g, " ").slice(0, 300);
+    const reject = (c) => (c?.confirmationId ? ctx.http({ as: p.learner, method: "POST", path: `/api/self-tooling/confirmations/${c.confirmationId}/reject` }) : null);
+
+    // 0. A chat that already holds the old "only an admin can grant" answer: it still looks up, and drafts it with the card.
     const stale = "I can't delete them — that needs a permission only an admin can grant, and I won't pretend otherwise. Want me to file the delete request anyway, or will you clear them in the Tasks tab?";
     const t0 = await ctx.agent.chat({ as: p.learner, mode: "live", model: p.model, prompt: String(p.first),
       history: [{ role: "user", content: String(p.first) }, { role: "assistant", content: stale }] });
-    ctx.note(`turn 0 (stale chat): ${String(t0.reply || "").replace(/\s+/g, " ").slice(0, 300)} · tools ${JSON.stringify((t0.tools || []).map((t) => [t.tool, t.result?.status]))}`);
+    ctx.note(`turn 0 (stale chat): ${say(t0)} · tools ${JSON.stringify((t0.tools || []).map((t) => [t.tool, t.result?.status]))}`);
     ctx.expect.ok("0. looks up what it can build first", (t0.tools || [])[0]?.tool === "schema_lookup", (t0.tools || []).map((t) => t.tool));
-    ctx.expect.ok("0. offers to build it (not 'ask an admin')", /\b(build|make|create)\b/i.test(String(t0.reply || "")) && !/only an admin|admin (can|must|has to) (grant|approve)/i.test(String(t0.reply || "")), String(t0.reply || "").slice(0, 300));
-    const c0 = (t0.tools || []).find((t) => t.tool === "create_tool" && t.result?.confirmation?.confirmationId)?.result?.confirmation;
-    ctx.expect.ok("0. no card before the learner says yes", !c0, c0);
-    if (c0) await ctx.http({ as: p.learner, method: "POST", path: `/api/self-tooling/confirmations/${c0.confirmationId}/reject` });
+    ctx.expect.ok("0. not 'ask an admin'", !/only an admin|admin (can|must|has to) (grant|approve)/i.test(String(t0.reply || "")), say(t0));
+    await reject(cardOf(t0));
 
-    // 1. In chat: the agent offers to build it; when the learner agrees, a permission card — no admin request.
+    // 1. In chat: the card comes in the SAME reply as the draft (no "shall I build it?" round) — no admin request.
     const t1 = await ctx.agent.chat({ as: p.learner, mode: "live", model: p.model, prompt: String(p.first) });
-    ctx.note(`turn 1: ${String(t1.reply || "").replace(/\s+/g, " ").slice(0, 300)} · tools ${JSON.stringify((t1.tools || []).map((t) => t.tool))}`);
-    const early = (t1.tools || []).find((t) => t.tool === "create_tool" && t.result?.status === "needs_permission")?.result?.confirmation;
-    ctx.expect.ok("1. first answer is a conversation — no card yet", !early, early);
-    ctx.expect.ok("1. says it can't yet and offers to build a tool", /\b(build|make|create)\b/i.test(String(t1.reply || "")) && /\b(can'?t|cannot|don'?t have|not yet|isn'?t)\b/i.test(String(t1.reply || "")), String(t1.reply || "").slice(0, 300));
-    if (early) await ctx.http({ as: p.learner, method: "POST", path: `/api/self-tooling/confirmations/${early.confirmationId}/reject` });
-    let card = null;
-    {
-      const t2 = await ctx.agent.chat({ as: p.learner, mode: "live", model: p.model, prompt: String(p.agree),
-        history: [{ role: "user", content: String(p.first) }, { role: "assistant", content: String(t1.reply || "") }] });
-      ctx.note(`turn 2: ${String(t2.reply || "").replace(/\s+/g, " ").slice(0, 300)} · tools ${JSON.stringify((t2.tools || []).map((t) => [t.tool, t.result?.status]))}`);
-      card = (t2.tools || []).find((t) => t.tool === "create_tool" && t.result?.status === "needs_permission")?.result?.confirmation;
-      ctx.expect.ok("1. after yes: a card, and the reply asks them to approve (nothing built yet)", /approv|allow/i.test(String(t2.reply || "")) && !/\b(I've deleted|have been deleted|are deleted|it's built|I've built)\b/i.test(String(t2.reply || "")), String(t2.reply || "").slice(0, 300));
-    }
-    ctx.expect.ok("1. a permission card for deleting tasks", card?.kind === "permission" && /delete your tasks/i.test(card?.action || ""), card);
+    ctx.note(`turn 1: ${say(t1)} · tools ${JSON.stringify((t1.tools || []).map((t) => [t.tool, t.result?.status]))}`);
+    const card = cardOf(t1);
+    ctx.expect.ok("1. a permission card for deleting tasks, in the first reply", card?.kind === "permission" && /delete your tasks/i.test(card?.action || ""), card);
+    ctx.expect.ok("1. the reply points to the card (nothing done yet)", /approv|allow|card/i.test(String(t1.reply || "")) && !/\b(I've deleted|have been deleted|are deleted)\b/i.test(String(t1.reply || "")), say(t1));
     const asked = (await ctx.db.rows("edu.agent_tool_requests", { requester_id: me.id }, { columns: "id, kind, created_at", limit: 50 })).filter((r) => Date.parse(r.created_at) >= Date.parse(since));
     for (const r of asked) ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tool_requests", { ownerColumn: "requester_id", ownerId: me.id, filters: { id: r.id } }));
     ctx.expect.eq("1. no admin request was made", asked.length, 0);
     if (card?.confirmationId) {
-      const no = await ctx.http({ as: p.learner, method: "POST", path: `/api/self-tooling/confirmations/${card.confirmationId}/reject` });
+      const no = await reject(card);
       ctx.expect.eq("1. 'Not now' leaves it off", no.body?.data?.status, "rejected");
     }
     ctx.expect.eq("1. still off for the learner", (await learnerGrants(me.id, { fresh: true })).has("tasks.delete"), false);
 
-    // 2. Approve on the card: on for this learner, the tool is built, and it deletes only what they confirm.
+    // 2. Approve on the card (as the app does: the chat carries on): on for this learner; the agent's next turn
+    //    runs the tool and shows ONE change card; after Confirm it checks again and reports.
     const made = await ctx.http({ as: p.learner, method: "POST", path: "/api/adaptive/chat/sessions", body: { title: `${ctx.marker} delete tasks` } });
     const chatId = made.body?.session?.id;
     if (chatId) {
@@ -815,11 +819,8 @@ export const deleteTasks = {
     }
     const titles = async () => (await ctx.db.rows("tasks", { creator_id: me.id, title: { like: `${ctx.marker}%` } }, { columns: "title" })).map((r) => r.title).sort();
     const ask = { goal: `Delete my tasks whose title starts with "${ctx.marker} old"`, name, label: `${ctx.marker} Clear old tasks`, hint: { views: ["my_tasks"], capabilities: ["tasks.delete"] } };
-    const before = await ctx.agent.tool({ as: p.learner, tool: "create_tool", mode: "live", conversationId: chatId, input: ask });
-    ctx.expect.eq("2. before the learner says yes: an offer, no card", `${before?.status}|${!!before?.confirmation}`, "offer|false");
-    // As in chat after the learner said yes (the chat loop sets this from their message).
-    const r = await ctx.agent.tool({ as: p.learner, tool: "create_tool", mode: "live", conversationId: chatId, input: { ...ask, __agreed: true } });
-    ctx.expect.eq("2. create_tool asks the learner (not an admin)", r?.status, "needs_permission");
+    const r = await ctx.agent.tool({ as: p.learner, tool: "create_tool", mode: "live", conversationId: chatId, input: ask });
+    ctx.expect.eq("2. create_tool drafts it and asks the learner at once (not an admin, no offer round)", r?.status, "needs_permission");
     const perm = r?.confirmation;
     if (!perm?.confirmationId) return;
     ctx.expect.ok("2. the tool is drafted first, and the card shows what it would change", perm.drafted === true && r?.drafted === true, perm);
@@ -828,25 +829,33 @@ export const deleteTasks = {
     ctx.expect.eq("2. the draft is OFF until approved", (await draftRow())?.status, "disabled");
     const { learnerToolDefs } = await import("../../self-tooling/pipeline.js");
     ctx.expect.ok("2. and not usable by the agent yet", !(await learnerToolDefs(me.id)).some((d) => d.function?.name === name));
-    const approved = await ctx.http({ as: p.learner, method: "POST", path: `/api/self-tooling/confirmations/${perm.confirmationId}/confirm` });
+    const approved = await ctx.http({ as: p.learner, method: "POST", path: `/api/self-tooling/confirmations/${perm.confirmationId}/confirm`, body: { continueInChat: true } });
     ctx.note(`approve → ${JSON.stringify(approved.body?.data?.result || approved.body).slice(0, 400)}`);
     ctx.expect.status("2. approved", approved, 200);
-    ctx.expect.eq("2. the tool was built", approved.body?.data?.result?.status, "created");
     ctx.expect.eq("2. approval switched it on", (await draftRow())?.status, "active");
     ctx.expect.eq("2. on for this learner", (await learnerGrants(me.id, { fresh: true })).has("tasks.delete"), true);
     const { capabilityStatus } = await import("../../self-tooling/registry.js");
     ctx.expect.eq("2. still off for everyone else", await capabilityStatus("tasks.delete"), "locked");
-    const next = approved.body?.data?.next;
-    ctx.expect.eq("2. its change card lists exactly the two old tasks", [...(next?.items || [])].sort().join(" | "), [...old].sort().join(" | "));
+    ctx.expect.ok("2. no second change card from the approval itself", !approved.body?.data?.next, approved.body?.data?.next);
     ctx.expect.eq("2. nothing deleted before Confirm", (await titles()).length, 3);
-    if (chatId) {
-      const msgs = await ctx.db.rows("chat_messages", { session_id: chatId, user_id: me.id }, { columns: "role, text", limit: 10 });
-      ctx.expect.ok("2. the chat is told it's on", msgs.some((m) => m.role === "agent" && /built|switched on/i.test(m.text)), msgs.map((m) => m.text.slice(0, 80)));
-    }
-    if (!next?.confirmationId) return;
-    const ok = await ctx.http({ as: p.learner, method: "POST", path: `/api/self-tooling/confirmations/${next.confirmationId}/confirm` });
+    // The app's follow-up turn after Approve: the agent runs the tool → one Confirm card.
+    const label = approved.body?.data?.result?.label || ask.label;
+    const t3 = await ctx.agent.chat({ as: p.learner, mode: "live", model: p.model, prompt: `Approved "${label}" — go ahead.`,
+      history: [{ role: "user", content: ask.goal }, { role: "assistant", content: `I've drafted "${label}". Approve it on the card and I'll run it.` }] });
+    ctx.note(`after Approve: ${say(t3)} · tools ${JSON.stringify((t3.tools || []).map((t) => [t.tool, t.result?.status || (t.result?.confirmation ? "card" : null)]))}`);
+    const change = (t3.tools || []).map((t) => t.result?.confirmation).find((c) => c?.confirmationId && c.kind !== "permission");
+    ctx.expect.ok("2. after Approve the agent runs the tool and shows one change card", !!change, (t3.tools || []).map((t) => t.tool));
+    ctx.expect.eq("2. its change card lists exactly the two old tasks", [...(change?.items || [])].sort().join(" | "), [...old].sort().join(" | "));
+    ctx.expect.eq("2. still nothing deleted before Confirm", (await titles()).length, 3);
+    if (!change?.confirmationId) return;
+    const ok = await ctx.http({ as: p.learner, method: "POST", path: `/api/self-tooling/confirmations/${change.confirmationId}/confirm` });
     ctx.expect.status("2. confirmed", ok, 200);
     ctx.expect.eq("2. only the kept task is left", (await titles()).join(" | "), keep);
+    // The app's follow-up after Confirm: the agent looks again and reports.
+    const t4 = await ctx.agent.chat({ as: p.learner, mode: "live", model: p.model, prompt: "Confirmed the change to 2 items — check it went through and tell me if anything is left.",
+      history: [{ role: "user", content: `Approved "${label}" — go ahead.` }, { role: "assistant", content: String(t3.reply || "") }] });
+    ctx.note(`after Confirm: ${say(t4)} · tools ${JSON.stringify((t4.tools || []).map((t) => t.tool))}`);
+    ctx.expect.ok("2. after Confirm it looks again before reporting", (t4.tools || []).length > 0, (t4.tools || []).map((t) => t.tool));
 
     // 3. Admins see the new tool (Agent tools), marked as one that changes data.
     const { listTools } = await import("../../self-tooling/library.js");
