@@ -6,6 +6,7 @@
 
 import crypto from "crypto";
 import { paystackThrough } from "../../../lib/paystackBreaker.js";
+import { paystackSignatureValid } from "../../../lib/safeCompare.js";
 
 const PAYSTACK_BASE    = "https://api.paystack.co";
 const SECRET_KEY       = process.env.PAYSTACK_SECRET_KEY;
@@ -111,12 +112,8 @@ export async function verifyTransaction(reference) {
  * @returns {boolean}
  */
 export function validateWebhookSignature(rawBody, signature) {
-  if (!signature) return false;
-  const hash = crypto
-    .createHmac("sha512", SECRET_KEY || "")
-    .update(rawBody)
-    .digest("hex");
-  return hash === signature;
+  // Constant-time; false when PAYSTACK_SECRET_KEY is unset (an empty key is forgeable).
+  return paystackSignatureValid(rawBody, signature);
 }
 
 // =============================================================

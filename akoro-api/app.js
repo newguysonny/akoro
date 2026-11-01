@@ -38,6 +38,7 @@ import {
 } from "./middleware/security.js";
 
 import config                     from "./config/index.js";
+import { requireSharedSecret }    from "./lib/safeCompare.js";
 import { runConfigChecks }         from "./lib/preflightChecks.js";
 import { runWithRouteUsage } from "./lib/usageMeter.js";
 import { schoolBillTo }            from "./lib/coins.js";
@@ -479,18 +480,13 @@ app.get("/ready", (_req, res) =>
 // GET /internal/preflight — the SECURITY_CHECKLIST §1 config-blocker gate as an
 // endpoint (same checks as `npm run preflight`). A posture report is sensitive
 // (it names what's misconfigured), so it is NOT public: it requires the
-// x-internal-secret header (same guard as the worker-callback endpoints). In dev
-// (no INTERNAL_SECRET set) it's open for convenience. Returns 200 when all
-// blockers pass, 503 when any fail — so an uptime monitor / deploy step can gate.
+// x-internal-secret header (same guard as the worker-callback endpoints). With
+// INTERNAL_SECRET unset it answers 503 — off, never open (Phase 15 item 4).
+// Returns 200 when all blockers pass, 503 when any fail — so an uptime
+// monitor / deploy step can gate.
 // GET /internal/egress — the per-route answer to "what is eating the
-// bandwidth". Same guard as preflight: x-internal-secret, or dev when no
-// secret is configured.
-app.get("/internal/egress", (req, res) => {
-  const secret = config.internalSecret;
-  const authorized = secret
-    ? req.headers["x-internal-secret"] === secret
-    : config.isDev;
-  if (!authorized) return res.status(403).json({ success: false, message: "Forbidden" });
+// bandwidth". Same guard as preflight.
+app.get("/internal/egress", requireSharedSecret("INTERNAL_SECRET"), (req, res) => {
   res.json({
     since: egress.since,
     totalBytes: egress.totalBytes,
@@ -503,12 +499,7 @@ app.get("/internal/egress", (req, res) => {
       .slice(0, 30),
   });
 });
-app.get("/internal/preflight", (req, res) => {
-  const secret = config.internalSecret;
-  const authorized = secret
-    ? req.headers["x-internal-secret"] === secret
-    : config.isDev;   // no secret configured → allow only in dev
-  if (!authorized) return res.status(403).json({ success: false, message: "Forbidden" });
+app.get("/internal/preflight", requireSharedSecret("INTERNAL_SECRET"), (req, res) => {
   const result = runConfigChecks(process.env);
   res.status(result.ok ? 200 : 503).json({
     ready: result.ok, instance: config.instanceId, env: config.nodeEnv, ...result,

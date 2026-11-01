@@ -12,6 +12,7 @@
  */
 import db from "../../db.js";
 import { BlockedError } from "./assertions.js";
+import { safeCompare } from "../../lib/safeCompare.js";
 
 export const RISKS = ["read", "dry", "write"];
 export const TARGET = ["production", "local", "sandbox"].includes(process.env.VERIFY_TARGET) ? process.env.VERIFY_TARGET : "production";
@@ -32,7 +33,7 @@ export function guard(req, res, next) {
   if (!want) return res.status(501).json({ success: false, error: "Verification gate not configured — set AGENT_CONSOLE_KEY on the server." });
   const bearer = /^Bearer\s+(.+)$/i.exec(req.get("authorization") || "")?.[1]?.trim();
   const got = req.get("x-agent-console-key") || bearer || req.query.key;
-  if (got !== want) return res.status(401).json({ success: false, error: "Bad gate key" });
+  if (!safeCompare(got, want)) return res.status(401).json({ success: false, error: "Bad gate key" });
   next();
 }
 

@@ -64,3 +64,35 @@ export const courseInviteJoin = {
     ctx.expect.status("redeeming signed-out is refused", await ctx.http({ method: "POST", path: "/api/profiles/invite/redeem", body: { token } }), 401);
   },
 };
+
+// Item 4: shared-secret routes refuse without the secret (403 when it is set, 503 when it isn't —
+// never open), and Paystack webhooks refuse a forged signature. Signed-out probes only; every one is
+// refused before any work, so nothing changes. (/api/webhooks/paystack is left out: it records
+// even a refused attempt.)
+export const sharedSecretsFailClosed = {
+  name: "security.shared_secrets_fail_closed", area: "security", risk: "read",
+  description: "The video-worker routes, scheduler ticks and /internal/{preflight,egress} answer 403/503 to a missing or wrong x-internal-secret; the course-payment, payout and marketplace Paystack webhooks answer 400 to a missing or forged x-paystack-signature (including one keyed with an empty secret).",
+  async run(ctx) {
+    const crypto = (await import("node:crypto")).default;
+    const refused = [403, 503];
+    const probes = [
+      ["GET", "/api/stream/internal/source-url/gate-probe"],
+      ["POST", "/api/stream/internal/update", { videoId: "gate-probe", encodingStatus: "failed" }],
+      ["GET", "/api/internal/ticks"],
+      ["GET", "/internal/preflight"],
+      ["GET", "/internal/egress"],
+    ];
+    for (const [method, path, body] of probes) {
+      ctx.expect.status(`${method} ${path} without the secret is refused`, await ctx.http({ method, path, body }), refused);
+      ctx.expect.status(`${method} ${path} with a wrong secret is refused`, await ctx.http({ method, path, body, headers: { "x-internal-secret": "gate-wrong-secret" } }), refused);
+    }
+    const event = { event: "charge.success", data: { reference: `gate-forged-${ctx.marker}` } };
+    const raw = JSON.stringify(event);
+    const emptyKeySig = crypto.createHmac("sha512", "").update(raw).digest("hex");
+    for (const path of ["/api/payments/verify", "/api/payouts/webhook", "/api/adaptive/marketplace/webhook"]) {
+      ctx.expect.status(`${path} without a signature is refused`, await ctx.http({ method: "POST", path, body: event }), 400);
+      ctx.expect.status(`${path} with a forged signature is refused`, await ctx.http({ method: "POST", path, body: event, headers: { "x-paystack-signature": "0".repeat(128) } }), 400);
+      ctx.expect.status(`${path} with an empty-key signature is refused`, await ctx.http({ method: "POST", path, body: event, headers: { "x-paystack-signature": emptyKeySig } }), 400);
+    }
+  },
+};

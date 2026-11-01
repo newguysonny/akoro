@@ -31,6 +31,7 @@ import { Router }             from "express";
 import db                     from "../../db.js";
 import { authenticateToken }  from "../auth/routes.js";
 import { runPharmdUpload }    from "./uploader.js";
+import { safeCompare } from "../../lib/safeCompare.js";
 
 const edu = () => db.schema("edu");
 
@@ -128,7 +129,7 @@ const uploadGuard = (req, res, next) => {
   const want = process.env.PHARMD_UPLOAD_KEY;
   if (!want) return missing(res, "Upload console not configured — set PHARMD_UPLOAD_KEY");
   const got = req.get("x-pharmd-upload-key") || req.query.key;
-  if (got !== want) return res.status(401).json({ success: false, error: "Bad upload key" });
+  if (!safeCompare(got, want)) return res.status(401).json({ success: false, error: "Bad upload key" });
   next();
 };
 
