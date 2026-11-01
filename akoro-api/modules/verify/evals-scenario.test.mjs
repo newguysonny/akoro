@@ -27,5 +27,5 @@ test("evals.run and evals.result are registered", async () => {
   assert.equal(evalsRun.risk, "write");
   assert.equal(evalsResult.risk, "read");
   assert.equal(evalsRun.params.model.default, "deepseek");
-  assert.match(read("./scenarios/index.js"), /\.\.\.SELFTOOL_CHANGES, evalsRun, evalsResult\]/);
+  assert.match(read("./scenarios/index.js"), /\.\.\.SELFTOOL_CHANGES, evalsRun, evalsResult[,\]]/);
 });
