@@ -100,7 +100,7 @@ Use at most two distinct speaker names. Keep each turn under 60 words so it narr
   {
     key: "misconceptions", name: "Common Misconceptions", emoji: "🧠", output: "doc",
     blurb: "The wrong ideas students arrive with, where they'll struggle, and how to fix each one.",
-    fields: [F.topic, F.subject, F.klass, F.notes], maxTokens: 4500,
+    fields: [F.topic, F.subject, F.klass, F.notes], maxTokens: 4500, minEntries: 5,
     system: `${HOUSE} ${CRAFT} You know the research on student misconceptions in every school subject. A misconception is a wrong idea students genuinely hold, written the way a student would say it — one plain sentence ("Plants get their food from the soil"), never a vague topic. The five must differ in kind: an overgeneralised rule, an everyday word that means something else in this subject, a rule used outside where it holds, cause and effect reversed, a half-truth that sounds complete. ${DOC_RULE}`,
     prompt: (i) => `${BRIEF(i)}
 ${DIRECTION(i)}
@@ -115,7 +115,7 @@ Then one final entry "Quick Checks" with a list "Questions" of 5 short questions
   {
     key: "real-world", name: "Real-World Connections", emoji: "🌍", output: "doc",
     blurb: "Why this topic matters — everyday contexts, local examples, and the careers built on it.",
-    fields: [F.topic, F.subject, F.klass, F.notes], maxTokens: 4500,
+    fields: [F.topic, F.subject, F.klass, F.notes], maxTokens: 4500, minEntries: 5,
     system: `${HOUSE} ${CRAFT} You write for students, not teachers: warm, second person ("your", "you"), starting from something the student already does or has seen — a meal, a game, a phone, a market stall, the walk to school — and only then connecting it to the idea. Ground the connections in Nigerian and West African daily life where it is natural (markets, farming, transport, weather, mobile money, football, local industry, family occasions), and never force it. ${DOC_RULE}`,
     prompt: (i) => `${BRIEF(i)}
 ${DIRECTION(i)}
@@ -127,7 +127,7 @@ Then two final entries (layout "stack"): "Talk About It" with a list "Discussion
   {
     key: "lesson-hooks", name: "Lesson Hooks", emoji: "🪝", output: "doc",
     blurb: "Open a lesson with a question, story, demonstration, image or challenge that sparks genuine curiosity — five 5-minute hooks, with materials and outcomes.",
-    fields: [F.topic, F.subject, F.klass, F.notes], maxTokens: 6000,
+    fields: [F.topic, F.subject, F.klass, F.notes], maxTokens: 6000, minEntries: 5,
     system: `${HOUSE} ${CRAFT} A lesson hook is something the teacher DOES or SAYS in the first 5 minutes of a lesson that makes students lean in: a question, a story, a demonstration, an image (a sketch on the board or a picture to look at), a mystery, a role-play or game, a prediction, a challenge, a vote on their feet. It never explains the topic — it makes them need to know. Every hook must run with what a Nigerian classroom actually has (chalkboard, exercise books, bottle caps, a phone torch, or nothing at all) and work with 40-70 students. Vary the five: no two with the same format, and the set must mix types — at least one question or mystery, one demonstration or image, and one story, role-play or game. ${DOC_RULE}`,
     prompt: (i) => `${BRIEF(i)}
 ${DIRECTION(i)}
@@ -341,23 +341,35 @@ export async function generateToolResult({ tool, input, userId, base = null, req
     const result = normalizeResult(data, { tool, input });
     return result.entries.length ? result : null;
   };
+  // A first draft that comes back short ("Five Ways In" holding two hooks) is not usable either:
+  // the model stopped early. Revisions are exempt — "drop the last two" is a legitimate ask.
+  const wanted = base && request ? 0 : (tool.minEntries || 0);
+  const entriesIn = (raw) => resultOf(raw)?.entries.length || 0;
   const unusable = (raw) => {
-    return !resultOf(raw);
+    const r = resultOf(raw);
+    return !r || r.entries.length < wanted;
   };
   const ask = base && request
     ? `${tool.prompt(input)}\n\nCURRENT VERSION (the same template, as JSON):\n${JSON.stringify({ title: base.title, summary: base.summary, highlights: base.highlights, entries: base.entries })}\n\nThe teacher asks for this change: ${request}\nReturn the COMPLETE revised result in the same JSON template. Change only what they asked and keep everything else as it is.`
     : tool.prompt(input);
   let resp, raw = "";
   const usage = {};
+  const tried = [];
   for (let attempt = 0; attempt < 2; attempt++) {
+    const firmer = attempt && wanted && tried.length
+      ? `\n\nYour last answer had only ${entriesIn(tried.at(-1))} of the ${wanted} entries the brief asks for. Return ALL of them, each one complete.`
+      : "";
     resp = await openai.chat.completions.create({
       model: OPENAI_MODEL, max_tokens: tool.maxTokens, temperature: 0.6,
-      messages: [{ role: "system", content: tool.system }, { role: "user", content: ask }],
+      messages: [{ role: "system", content: tool.system }, { role: "user", content: ask + firmer }],
     });
     for (const [k, v] of Object.entries(resp.usage || {})) if (typeof v === "number") usage[k] = (usage[k] || 0) + v;
     raw = resp.choices?.[0]?.message?.content?.trim() || "";
+    tried.push(raw);
     if (!unusable(raw)) break;
   }
+  // Both attempts short: keep the fuller one rather than the last one.
+  raw = tried.reduce((best, r) => (entriesIn(r) > entriesIn(best) ? r : best), raw);
 
   const result = resultOf(raw);
   if (!result) console.warn(`[teaching/tools] ${tool.key} unusable (finish=${resp?.choices?.[0]?.finish_reason}, ${raw.length} chars): ${raw.slice(-160).replace(/\s+/g, " ")}`);

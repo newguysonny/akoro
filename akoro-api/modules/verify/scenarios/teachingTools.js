@@ -214,6 +214,8 @@ export const teachingToolTry = {
     const full = await ctx.http({ as: p.instructor, path: `/api/instructor/tools/outputs/${outputId}` });
     const text = String(full.body?.output?.content?.content || "");
     ctx.expect.ok("it has readable text", text.length > 200, text.length);
+    // Found by the gate: a "Five Ways In" set came back with two hooks and still passed.
+    if (run.input?.tool === "lesson-hooks") ctx.expect.ok("all five hooks came back", (text.match(/^## /gm) || []).length >= 5, (text.match(/^## /gm) || []).length);
     ctx.note(`tool=${draftId ? run.input?.tool : ""} topic="${run.input?.topic || ""}" notes="${run.input?.notes || ""}" chars=${text.length}`);
     // ctx.note keeps 500 characters and the evidence keeps 40 notes, so slice the text to fit both:
     // the whole output (up to ~18k characters) survives instead of the first half of each slice.
