@@ -8,21 +8,88 @@
   "threshold": 0.85,
   "thresholdNote": "A misread kind sends the agent to the wrong kind of tool; a few borderline readings are tolerable.",
   "cases": [
-    { "text": "What's the difference between mitosis and meiosis?", "kind": "question" },
-    { "text": "Can you explain how to balance a redox equation step by step?", "kind": "question" },
-    { "text": "How am I doing in Chemistry this week compared to last week?", "kind": "look_up" },
-    { "text": "What tasks do I have due before Friday?", "kind": "look_up" },
-    { "text": "Show me the notes I uploaded about photosynthesis", "kind": "look_up" },
-    { "text": "Create a task to revise organic chemistry on Thursday at 5pm", "kind": "action" },
-    { "text": "Set up a battle with my class on fractions for tomorrow morning", "kind": "action" },
-    { "text": "Make me a revision plan for my Biology exam and add a task for each day this week", "kind": "action", "multiStep": true },
-    { "text": "Delete the three tasks I finished yesterday", "kind": "change" },
-    { "text": "Move my physics test goal to next Monday", "kind": "change" },
-    { "text": "Rename my chat about waves to Physics revision", "kind": "change" },
-    { "text": "Start a study prep session for my WAEC Chemistry paper", "kind": "handoff" },
-    { "text": "I want to teach my protégé about the water cycle now", "kind": "handoff" },
-    { "text": "Ask other learners' agents how they understood moles", "kind": "handoff" },
-    { "text": "Thanks, that helped a lot!", "kind": "chat" },
-    { "text": "good morning how are you doing today", "kind": "chat" }
+    {
+      "text": "What's the difference between mitosis and meiosis?",
+      "kind": "question"
+    },
+    {
+      "text": "Can you explain how to balance a redox equation step by step?",
+      "kind": "question"
+    },
+    {
+      "text": "How am I doing in Chemistry this week compared to last week?",
+      "kind": "look_up"
+    },
+    {
+      "text": "What tasks do I have due before Friday?",
+      "kind": "look_up"
+    },
+    {
+      "text": "Show me the notes I uploaded about photosynthesis",
+      "kind": "look_up"
+    },
+    {
+      "text": "Create a task to revise organic chemistry on Thursday at 5pm",
+      "kind": "action",
+      "missing": "none"
+    },
+    {
+      "text": "Set up a battle with my class on fractions for tomorrow morning",
+      "kind": "action"
+    },
+    {
+      "text": "Make me a revision plan for my Biology exam and add a task for each day this week",
+      "kind": "action",
+      "multiStep": true
+    },
+    {
+      "text": "Delete the three tasks I finished yesterday",
+      "kind": "change"
+    },
+    {
+      "text": "Move my physics test goal to next Monday",
+      "kind": "change"
+    },
+    {
+      "text": "Rename my chat about waves to Physics revision",
+      "kind": "change"
+    },
+    {
+      "text": "Start a study prep session for my WAEC Chemistry paper",
+      "kind": "handoff",
+      "missing": "none"
+    },
+    {
+      "text": "I want to teach my protégé about the water cycle now",
+      "kind": "handoff"
+    },
+    {
+      "text": "Ask other learners' agents how they understood moles",
+      "kind": "handoff",
+      "missing": "none"
+    },
+    {
+      "text": "Thanks, that helped a lot!",
+      "kind": "chat"
+    },
+    {
+      "text": "Add a task to revise moles tomorrow",
+      "kind": "action",
+      "missing": "none"
+    },
+    {
+      "text": "Set up a battle for me",
+      "kind": "action",
+      "missing": "some"
+    },
+    {
+      "text": "Ask a few agents how they revise electromagnetism",
+      "kind": "handoff",
+      "missing": "none"
+    },
+    {
+      "text": "good morning how are you doing today",
+      "kind": "chat"
+    }
   ]
 }

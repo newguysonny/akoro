@@ -74,7 +74,7 @@ export const agentChecksSuite = {
 export const intentSuite = {
   key: "intent",
   title: "Intent reading",
-  purpose: "The intent step reads what the learner wants before the agent picks a tool: the kind of request (question, look-up, action, change, hand-off, chat) and whether it takes several steps. Hand-off cases cover coordination — a session, the teaching guide or other agents taking over.",
+  purpose: "The intent step reads what the learner wants before the agent picks a tool: the kind of request (question, look-up, action, change, hand-off, chat), whether it takes several steps, and whether anything must be asked first (only what has no sensible default). Hand-off cases cover coordination — a session, the teaching guide or other agents taking over.",
   threshold: INTENT.threshold,
   thresholdNote: INTENT.thresholdNote,
   estimatedCalls: INTENT.cases.length,
@@ -89,8 +89,11 @@ export const intentSuite = {
       }
       const read = await runIntentStep({ message: c.text, timeoutMs: 20_000, create: (body) => openai.chat.completions.create({ ...body, model, __feature: "eval", __userId: userId }) });
       if (!read) return { passed: false, expected: c.kind, actual: "no reading", detail: "The intent step returned nothing (model error or unparseable answer)." };
-      const passed = read.kind === c.kind && (c.multiStep === undefined || read.multiStep === c.multiStep);
-      return { passed, expected: { kind: c.kind, ...(c.multiStep !== undefined ? { multiStep: c.multiStep } : {}) }, actual: { kind: read.kind, multiStep: read.multiStep }, detail: read.want };
+      // missing: "none" — nothing to ask (defaults or a look-up cover it); "some" — the action can't run without asking.
+      const missingOk = c.missing === undefined || (c.missing === "none" ? read.missing.length === 0 : read.missing.length > 0);
+      const passed = read.kind === c.kind && (c.multiStep === undefined || read.multiStep === c.multiStep) && missingOk;
+      return { passed, expected: { kind: c.kind, ...(c.multiStep !== undefined ? { multiStep: c.multiStep } : {}), ...(c.missing ? { missing: c.missing } : {}) },
+        actual: { kind: read.kind, multiStep: read.multiStep, missing: read.missing }, detail: read.want };
     },
   })),
 };
