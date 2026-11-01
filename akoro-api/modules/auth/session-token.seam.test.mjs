@@ -12,6 +12,7 @@ import jwt from "jsonwebtoken";
 process.env.SUPABASE_URL ||= "http://127.0.0.1:9";
 process.env.SUPABASE_SERVICE_KEY ||= "test";
 process.env.AKORO_BACKGROUND_JOBS_ENABLED = "false";
+process.env.JWT_SECRET ||= "session-token-seam-test-secret-0123456789";   // the server has no built-in key any more
 // auth/routes.js builds a Google strategy at import (needs a client id) and starts a 60s
 // DenyList sweep that would keep this process alive: load it with intervals unref'd.
 for (const k of ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]) process.env[k] ||= "test";
@@ -19,7 +20,7 @@ const realSetInterval = globalThis.setInterval;
 globalThis.setInterval = (...args) => { const t = realSetInterval(...args); t?.unref?.(); return t; };
 const { authenticateToken, authenticateSocket, isSessionToken } = await import("./routes.js").finally(() => { globalThis.setInterval = realSetInterval; });
 
-const SECRET = process.env.JWT_SECRET || "akoro-dev-secret-change-in-production";
+const SECRET = process.env.JWT_SECRET;
 const ISS = process.env.JWT_ISSUER || "https://api.akoro.app";
 const AUD = process.env.JWT_AUDIENCE || "https://akoro.app";
 const sign = (claims, ttl = 300) => jwt.sign({ sub: "00000000-0000-0000-0000-000000000001", iss: ISS, aud: AUD, ...claims }, SECRET, { algorithm: "HS256", expiresIn: ttl });

@@ -96,3 +96,25 @@ export const sharedSecretsFailClosed = {
     }
   },
 };
+
+// Item 5: no hard-coded fallback secrets. A session token signed with the default that used to be in
+// the code (HS256, right issuer and audience, a real test learner) does not sign in — whatever keys
+// this server has. Read-only.
+export const noFallbackSecrets = {
+  name: "security.no_fallback_secrets", area: "security", risk: "read",
+  description: "A session token signed with the old built-in default (\"akoro-dev-secret-change-in-production\" or \"akoro-dev-secret\") gets 401 on /api/auth/me; a real access token for the same learner still gets 200.",
+  params: { learner: { default: "@tester30" } },
+  async run(ctx, p) {
+    const jwt = (await import("jsonwebtoken")).default;
+    const { signInternalAccess } = await import("../../auth/routes.js");
+    const me = await ctx.as(p.learner);
+    const asBearer = (token) => ctx.http({ path: "/api/auth/me", headers: { Authorization: `Bearer ${token}` } });
+    ctx.expect.status("a real access token signs in", await asBearer(signInternalAccess({ id: me.id, role: me.role }, 120)), 200);
+    const iss = process.env.JWT_ISSUER || "https://api.akoro.app";
+    const aud = process.env.JWT_AUDIENCE || "https://akoro.app";
+    for (const key of ["akoro-dev-secret-change-in-production", "akoro-dev-secret"]) {
+      const forged = jwt.sign({ sub: me.id, email: me.email ?? null, role: me.role, jti: `gate-${Date.now()}`, iss, aud }, key, { algorithm: "HS256", expiresIn: 120 });
+      ctx.expect.status(`a token signed with "${key}" does not sign in`, await asBearer(forged), 401);
+    }
+  },
+};

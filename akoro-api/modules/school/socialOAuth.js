@@ -22,7 +22,9 @@ const router = Router();
 const SCHOOL_ROLES = ["instructor", "teacher", "admin"];
 const SCHOOL_PORTAL_URL = (process.env.SCHOOL_FRONTEND_URL || "https://akoro-school.akoro.name.ng").replace(/\/$/, "");
 const API_BASE = (process.env.API_URL || "").replace(/\/$/, "");
-const STATE_SECRET = process.env.OAUTH_STATE_SECRET || process.env.COOKIE_SECRET || "akoro-oauth-state";
+// No default: with neither set, connecting a social account is off (a known key
+// would let anyone forge a state). The callback's jwt.verify then fails → invalid_state.
+const STATE_SECRET = process.env.OAUTH_STATE_SECRET || process.env.COOKIE_SECRET || null;
 
 const b64url = (buf) => buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
@@ -73,7 +75,7 @@ router.get("/social/auth/:provider", authenticateToken, requireRole(SCHOOL_ROLES
     const cfg = PROVIDERS[provider];
     if (!cfg) return res.redirect(backTo(provider, "social_error=unknown_provider"));
     const clientId = cfg.clientId();
-    if (!clientId || !cfg.clientSecret()) return res.redirect(backTo(provider, "social_error=not_configured"));
+    if (!clientId || !cfg.clientSecret() || !STATE_SECRET) return res.redirect(backTo(provider, "social_error=not_configured"));
 
     // PKCE (X) — carry the verifier inside the signed state.
     let codeVerifier = null, codeChallenge = null;

@@ -21,7 +21,7 @@ const PRIVATE_KEY  = (process.env.JWT_PRIVATE_KEY || "").replace(/\\n/g, "\n").t
 const PUBLIC_KEY   = (process.env.JWT_PUBLIC_KEY  || "").replace(/\\n/g, "\n").trim();
 const JWT_ISSUER   = process.env.JWT_ISSUER   || "https://api.akoro.app";
 const JWT_AUDIENCE = process.env.JWT_AUDIENCE || "https://akoro.app";
-const DEV_SECRET   = process.env.JWT_SECRET   || "akoro-dev-secret-change-in-production";
+const HS_SECRET    = process.env.JWT_SECRET || null;   // no default: no key → nothing verifies
 const USE_RSA      = PRIVATE_KEY.includes("-----BEGIN") && PUBLIC_KEY.includes("-----BEGIN");
 
 // Never HS256 when RSA is configured, and never "none" in either mode — an
@@ -59,7 +59,7 @@ export function peekAccessToken(req) {
   const token = readAccessToken(req);
   if (!token) return null;
   try {
-    const decoded = jwt.verify(token, USE_RSA ? PUBLIC_KEY : DEV_SECRET, {
+    const decoded = jwt.verify(token, USE_RSA ? PUBLIC_KEY : HS_SECRET, {
       algorithms: ALLOWED_ALGS,
       issuer:     JWT_ISSUER,
       audience:   JWT_AUDIENCE,

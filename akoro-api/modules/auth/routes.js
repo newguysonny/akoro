@@ -87,9 +87,12 @@ const REFRESH_TTL_SECS = Math.max(3600, parseInt(process.env.REFRESH_TTL_SECS ??
 const REFRESH_GRACE_MS = Math.max(0, parseInt(process.env.REFRESH_GRACE_SECS ?? "30", 10)) * 1000;
 const ALLOWED_ALGS     = ["RS256"];       // whitelist — never HS256 / none
 
-// Fall back to HS256 with a secret in dev when no RSA keys provided
+// RS256 when the keypair is set, else HS256 with JWT_SECRET. There is no
+// built-in default: with neither, nothing can be signed or verified (sign-in
+// is off), and config/index.js refuses to boot in production.
 const USE_RSA = PRIVATE_KEY.includes("-----BEGIN") && PUBLIC_KEY.includes("-----BEGIN");
-const DEV_SECRET = process.env.JWT_SECRET || "akoro-dev-secret-change-in-production";
+const HS_SECRET = process.env.JWT_SECRET || null;   // used as-is (never trimmed: that would change a live key)
+if (!USE_RSA && !HS_SECRET) console.error("[auth] ❌ No JWT key: set JWT_PRIVATE_KEY + JWT_PUBLIC_KEY or JWT_SECRET. Sign-in is disabled.");
 
 // ─── § HELPERS ────────────────────────────────────────────────────────────────
 
@@ -126,7 +129,7 @@ function signAccess(user) {
   };
   const token = USE_RSA
     ? jwt.sign(payload, PRIVATE_KEY, { algorithm: "RS256", expiresIn: ACCESS_TTL_SECS })
-    : jwt.sign(payload, DEV_SECRET,  { algorithm: "HS256", expiresIn: ACCESS_TTL_SECS });
+    : jwt.sign(payload, HS_SECRET,  { algorithm: "HS256", expiresIn: ACCESS_TTL_SECS });
   return { token, jti };
 }
 
@@ -152,7 +155,7 @@ export function signInternalAccess(user, ttlSeconds = 120) {
   };
   return USE_RSA
     ? jwt.sign(payload, PRIVATE_KEY, { algorithm: "RS256", expiresIn: ttlSeconds })
-    : jwt.sign(payload, DEV_SECRET,  { algorithm: "HS256", expiresIn: ttlSeconds });
+    : jwt.sign(payload, HS_SECRET,  { algorithm: "HS256", expiresIn: ttlSeconds });
 }
 
 function signRefresh(userId, family) {
@@ -167,7 +170,7 @@ function signRefresh(userId, family) {
   };
   const token = USE_RSA
     ? jwt.sign(payload, PRIVATE_KEY, { algorithm: "RS256", expiresIn: REFRESH_TTL_SECS })
-    : jwt.sign(payload, DEV_SECRET,  { algorithm: "HS256", expiresIn: REFRESH_TTL_SECS });
+    : jwt.sign(payload, HS_SECRET,  { algorithm: "HS256", expiresIn: REFRESH_TTL_SECS });
   return { token, jti };
 }
 
@@ -208,7 +211,7 @@ function withAuthDeadline(promise, label) {
 export const isSessionToken = (decoded) => !!decoded && !decoded.type;
 
 function verifyToken(token) {
-  const verifyKey = USE_RSA ? PUBLIC_KEY : DEV_SECRET;
+  const verifyKey = USE_RSA ? PUBLIC_KEY : HS_SECRET;
   const algs      = USE_RSA ? ALLOWED_ALGS : ["HS256"];
   return jwt.verify(token, verifyKey, {
     algorithms: algs,
@@ -227,7 +230,7 @@ const signHandoff = (userId) => {
   const payload = { sub: userId, type: "ai_handoff", iss: JWT_ISSUER, aud: JWT_AUDIENCE };
   return USE_RSA
     ? jwt.sign(payload, PRIVATE_KEY, { algorithm: "RS256", expiresIn: 120 })
-    : jwt.sign(payload, DEV_SECRET,  { algorithm: "HS256", expiresIn: 120 });
+    : jwt.sign(payload, HS_SECRET,  { algorithm: "HS256", expiresIn: 120 });
 };
 const verifyHandoff = (token) => {
   try {
@@ -247,7 +250,7 @@ export function signCourseInvite({ teacherId, courseIds }, days = 7) {
   const payload = { sub: teacherId, courseIds, type: "course_invite", iss: JWT_ISSUER, aud: JWT_AUDIENCE };
   return USE_RSA
     ? jwt.sign(payload, PRIVATE_KEY, { algorithm: "RS256", expiresIn: ttl })
-    : jwt.sign(payload, DEV_SECRET,  { algorithm: "HS256", expiresIn: ttl });
+    : jwt.sign(payload, HS_SECRET,  { algorithm: "HS256", expiresIn: ttl });
 }
 /** → { teacherId, courseIds, expiresAt } for a valid, unexpired invite; null for anything else. */
 export function verifyCourseInvite(token) {
@@ -658,7 +661,7 @@ const signChallenge = (userId) => {
   const payload = { sub: userId, type: "2fa_challenge", iss: JWT_ISSUER, aud: JWT_AUDIENCE };
   return USE_RSA
     ? jwt.sign(payload, PRIVATE_KEY, { algorithm: "RS256", expiresIn: 300 })
-    : jwt.sign(payload, DEV_SECRET,  { algorithm: "HS256", expiresIn: 300 });
+    : jwt.sign(payload, HS_SECRET,  { algorithm: "HS256", expiresIn: 300 });
 };
 
 const issueTokenPair = async (res, user, portal = "student") => {
