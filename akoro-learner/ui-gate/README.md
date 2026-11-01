@@ -61,6 +61,12 @@ not faked:
 | reader | `reader.session_connects` | the live teaching session connects |
 | reader | `reader.quote_chip` | "Ask the tutor" → quote chip (page, words, focus) → sent bubble with the quote |
 | reader | `guide.learn_suggestions` | Learn suggestions are about the document, never the old generic list |
+| onboarding | `onboarding.conversation` | the learner setup chat: required answers can't be skipped, optional ones can, school and teacher are searched, and the saves the app sends match the old form's (intercepted, never sent) |
+| onboarding-instructor | `onboarding.instructor_conversation` | the same for the instructor setup chat (name, school, subject required; guide name optional) |
+
+**Onboarding suites** run on demand (not in `all`): a test account is already onboarded, so the scenario
+shows the app an un-onboarded session and intercepts every write the onboarding makes — nothing about the
+account changes and no real teacher or school admin gets a join request.
 
 Add one: a `{ name, description, needs?, devices?, run(t) }` in
 `scenarios/*.mjs`, listed in `scenarios/index.mjs`. `t` gives `page`,
