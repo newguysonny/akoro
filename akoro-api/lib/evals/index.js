@@ -16,21 +16,34 @@ import { ladderSuite }    from "./ladder.js";
 import { learnerToolsSuite } from "./learnerTools.js";
 import { agentChecksSuite, intentSuite } from "./agentChecks.js";
 import { benchmarkSuite } from "./benchmark.js";
+import { modelRegistry, availabilityOf } from "../modelRegistry.js";
 
 export const SUITES = [questionsSuite, routingSuite, agentSuite, recallSuite, ladderSuite, learnerToolsSuite, agentChecksSuite, intentSuite, benchmarkSuite];
 export const suiteByKey = (key) => SUITES.find((s) => s.key === key) ?? null;
 
 /**
  * Models worth comparing. Only tiers priced in aiPricing.js, because a run
- * whose cost cannot be computed is a run that answers half the question.
+ * whose cost cannot be computed is a run that answers half the question —
+ * plus every OpenAI-compatible model set up on this server (DeepSeek, a
+ * served Qwen3-4B: id, key and AI_MODELS price present), so the Phase 17
+ * baselines are recorded under their own names.
  */
-export const EVAL_MODELS = ["gpt-4o-mini", "gpt-4.1-mini", "gpt-4o", "gpt-4.1"];
+const OPENAI_EVAL_MODELS = ["gpt-4o-mini", "gpt-4.1-mini", "gpt-4o", "gpt-4.1"];
+export const EVAL_MODELS = [
+  ...OPENAI_EVAL_MODELS,
+  ...modelRegistry.catalogue
+    .filter((e) => e.provider === "openai_compatible" && availabilityOf(e).available && !OPENAI_EVAL_MODELS.includes(e.id))
+    .map((e) => e.id),
+];
 
 /** Rough per-run cost, so the page can warn before anything is spent. */
 export function estimateUsd(suite, model) {
   // Order-of-magnitude only: ~1.2k in / ~1.2k out for a generation case, far
   // less for a routing case. Presented as "about", never as a quote.
   const perCall = { "gpt-4o-mini": 0.0009, "gpt-4.1-mini": 0.0024, "gpt-4o": 0.015, "gpt-4.1": 0.012 };
+  // An OpenAI-compatible model: its AI_MODELS price at the same ~1.2k in / ~1.2k out.
+  const price = modelRegistry.get(model)?.price;
+  if (perCall[model] == null && price) perCall[model] = (1200 * Number(price.in || 0) + 1200 * Number(price.out || 0)) / 1e6;
   // costFactor: a suite whose every call carries a big prompt (the whole learner
   // tool catalogue) costs more per call than a routing case.
   return Number(((perCall[model] ?? 0.002) * (suite.costFactor ?? 1) * (suite.estimatedCalls ?? suite.cases.length)).toFixed(4));

@@ -16,6 +16,7 @@ import { evalQueue } from "../../lib/evalWorker.js";
 import { assertQueueCapacity } from "../../lib/queueGuard.js";
 
 const router = Router();
+const OPENAI_EVAL_MODEL = /^gpt-/;
 const adminOnly = [authenticateToken, requireRole(["admin"])];
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
@@ -72,7 +73,8 @@ router.post("/evals/run", adminOnly, asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, error: `Unknown model. Try one of: ${EVAL_MODELS.join(", ")}` });
   }
   // A green board from the stand-in model would be worse than no board.
-  if (!process.env.OPENAI_API_KEY) {
+  // (An OpenAI-compatible model is only listed when its own key is set.)
+  if (OPENAI_EVAL_MODEL.test(model) && !process.env.OPENAI_API_KEY) {
     return res.status(503).json({
       success: false,
       error: "Evals need a live OPENAI_API_KEY. Without one this would run against the stand-in model and pass everything, which proves nothing.",
