@@ -176,7 +176,7 @@ test("the chat turn uses all five", () => {
 test("an honest failure is not a claim; a Teach me button backs 'I've set up'", () => {
   for (const honest of [
     "The task didn't save — the task service is down right now, so nothing was added to your Tasks list.",
-    "It wasn't created.", "I haven't scheduled it yet.", "Nothing was saved, sorry.",
+    "It wasn't created.", "I haven't scheduled it yet.", "Nothing was saved, sorry.", "The service is down, so no task was created.",
   ]) assert.deepEqual(actionClaims(honest), [], honest);
   assert.equal(actionClaims("I've created your task.").length, 1);
   assert.equal(actionClaims("Your task has been created.").length, 1);
