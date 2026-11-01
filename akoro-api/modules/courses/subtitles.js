@@ -34,6 +34,19 @@ const res400 = (res, msg)             => res.status(400).json({ success: false, 
 const res403 = (res, msg)             => res.status(403).json({ success: false, message: msg });
 const res404 = (res, msg)             => res.status(404).json({ success: false, message: msg });
 
+/**
+ * The video's course must be the caller's (or the caller an admin) — the same
+ * rule the upload uses; changing or deleting a track used to need only the
+ * instructor role (Phase 15 item 6).
+ */
+async function guardVideoOwner(req, res, videoId) {
+  const { data: video } = await db.from("videos")
+    .select("id, courses(instructor_id)").eq("id", videoId).maybeSingle();
+  if (!video) { res404(res, "Video not found"); return false; }
+  if (req.user.role !== "admin" && video.courses?.instructor_id !== req.user.id) { res403(res, "You do not own this video"); return false; }
+  return true;
+}
+
 const runValidation = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty())
@@ -213,6 +226,7 @@ const handlers = {
    */
   setDefault: asyncHandler(async (req, res) => {
     const { videoId, language } = req.params;
+    if (!(await guardVideoOwner(req, res, videoId))) return;
 
     // Unset all current defaults
     await db.from("video_subtitles")
@@ -238,6 +252,7 @@ const handlers = {
    */
   delete: asyncHandler(async (req, res) => {
     const { videoId, language } = req.params;
+    if (!(await guardVideoOwner(req, res, videoId))) return;
 
     const { data: subtitle } = await db
       .from("video_subtitles")

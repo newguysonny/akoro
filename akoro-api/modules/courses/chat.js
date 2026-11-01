@@ -21,6 +21,7 @@ import { Router }                         from "express";
 import { body, validationResult }         from "express-validator";
 import db                                 from "../../db.js";
 import { authenticateToken }              from "../auth/routes.js";
+import { canManageCourse, canUseCourse }  from "./courseAccess.js";
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -183,6 +184,10 @@ const handlers = {
   toggleLike: asyncHandler(async (req, res) => {
     const { messageId } = req.params;
 
+    const { data: target } = await db.from("class_messages").select("course_id").eq("id", messageId).maybeSingle();
+    if (!target) return res404(res, "Message not found");
+    if (!(await canUseCourse(req.user, target.course_id))) return res403(res, "Join this course to use its chat");
+
     const { data: existing } = await db
       .from("class_message_likes")
       .select("id")
@@ -225,9 +230,6 @@ const handlers = {
    * Toggle pin (teacher only).
    */
   togglePin: asyncHandler(async (req, res) => {
-    if (!["instructor", "admin"].includes(req.user.role))
-      return res403(res, "Only teachers can pin messages");
-
     const { data: msg } = await db
       .from("class_messages")
       .select("id, is_pinned, course_id")
@@ -235,6 +237,8 @@ const handlers = {
       .single();
 
     if (!msg) return res404(res, "Message not found");
+    // The course's own teacher — not any account with the instructor role.
+    if (!(await canManageCourse(req.user, msg.course_id))) return res403(res, "Only this course's teacher can pin messages");
 
     const { data: updated } = await db
       .from("class_messages")
@@ -265,8 +269,7 @@ const handlers = {
     if (!msg) return res404(res, "Message not found");
 
     const isOwner   = msg.sender_id === req.user.id;
-    const isTeacher = ["instructor", "admin"].includes(req.user.role);
-    if (!isOwner && !isTeacher) return res403(res, "Not authorised to delete this message");
+    if (!isOwner && !(await canManageCourse(req.user, msg.course_id))) return res403(res, "Not authorised to delete this message");
 
     await db.from("class_messages").delete().eq("id", msg.id);
     res204(res);
@@ -277,10 +280,16 @@ const handlers = {
 
 const router = Router();
 
-router.get   ("/courses/:courseId/messages",            authenticateToken, handlers.list);
-router.get   ("/courses/:courseId/messages/pinned",     authenticateToken, handlers.pinned);
-router.post  ("/courses/:courseId/messages",            authenticateToken, [body("message").notEmpty()], runValidation, handlers.post);
-router.post  ("/courses/:courseId/messages/agent",      authenticateToken, [body("trigger_message").notEmpty()], runValidation, handlers.postAgent);
+/** A course's chat is for the people in it: its teacher, an admin, or an enrolled learner (Phase 15 item 6). */
+const requireCourseMember = asyncHandler(async (req, res, next) => {
+  if (!(await canUseCourse(req.user, req.params.courseId))) return res403(res, "Join this course to use its chat");
+  next();
+});
+
+router.get   ("/courses/:courseId/messages",            authenticateToken, requireCourseMember, handlers.list);
+router.get   ("/courses/:courseId/messages/pinned",     authenticateToken, requireCourseMember, handlers.pinned);
+router.post  ("/courses/:courseId/messages",            authenticateToken, requireCourseMember, [body("message").notEmpty()], runValidation, handlers.post);
+router.post  ("/courses/:courseId/messages/agent",      authenticateToken, requireCourseMember, [body("trigger_message").notEmpty()], runValidation, handlers.postAgent);
 router.post  ("/messages/:messageId/like",              authenticateToken, handlers.toggleLike);
 router.post  ("/messages/:messageId/pin",               authenticateToken, handlers.togglePin);
 router.delete("/messages/:messageId",                   authenticateToken, handlers.delete);

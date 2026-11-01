@@ -23,6 +23,7 @@ import { cartHandlers }                   from "./cart.js";
 import { recordPaymentItems, logPaymentEvent } from "../webhooks/paymentAudit.js";
 import { notify }                           from "../notifications/events.js";
 import { paystackSignatureValid } from "../../lib/safeCompare.js";
+import { requireCourseManager }             from "./courseAccess.js";
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -486,13 +487,28 @@ const enrollmentHandlers = {
 
 // ─── Transaction history handlers ─────────────────────────────────────────────
 
+/**
+ * Whose payments a caller sees: an admin all of them, an instructor their own
+ * courses' sales, everyone else only their own payments. (Phase 15 item 6:
+ * this used to filter only `student` and `instructor`, so a teacher, school or
+ * school admin account got every payment on the platform with payer emails.)
+ * Returns null when an instructor has no courses (nothing to show).
+ */
+async function scopeToCaller(q, user) {
+  if (user.role === "admin") return q;
+  if (user.role === "instructor") {
+    const { data: myCourses } = await db.from("courses").select("id").eq("instructor_id", user.id);
+    const ids = (myCourses ?? []).map((c) => c.id);
+    return ids.length ? q.in("course_id", ids) : null;
+  }
+  return q.eq("user_id", user.id);
+}
+
 const transactionHandlers = {
 
   // GET /api/transactions
   list: asyncHandler(async (req, res) => {
     const { limit = 50, offset = 0, status } = req.query;
-    const userId = req.user.id;
-    const role   = req.user.role;
 
     let q = db.from("payments")
       .select(`
@@ -507,14 +523,8 @@ const transactionHandlers = {
 
     if (status) q = q.eq("status", status);
 
-    if (role === "student") {
-      q = q.eq("user_id", userId);
-    } else if (role === "instructor") {
-      const { data: myCourses } = await db.from("courses").select("id").eq("instructor_id", userId);
-      const ids = (myCourses ?? []).map((c) => c.id);
-      if (!ids.length) return res200(res, [], { total: 0 });
-      q = q.in("course_id", ids);
-    }
+    q = await scopeToCaller(q, req.user);
+    if (!q) return res200(res, [], { total: 0 });
 
     const { data, error, count } = await q;
     if (error) throw new Error(error.message);
@@ -537,18 +547,8 @@ const transactionHandlers = {
 
   // GET /api/transactions/summary
   summary: asyncHandler(async (req, res) => {
-    const userId = req.user.id;
-    const role   = req.user.role;
-
-    let q = db.from("payments").select("amount_paid, status, created_at, course_id");
-    if (role === "student") {
-      q = q.eq("user_id", userId);
-    } else if (role === "instructor") {
-      const { data: myCourses } = await db.from("courses").select("id").eq("instructor_id", userId);
-      const ids = (myCourses ?? []).map((c) => c.id);
-      if (!ids.length) return res200(res, { total_revenue_ngn: 0, total_orders: 0 });
-      q = q.in("course_id", ids);
-    }
+    const q = await scopeToCaller(db.from("payments").select("amount_paid, status, created_at, course_id"), req.user);
+    if (!q) return res200(res, { total_revenue_ngn: 0, total_orders: 0 });
 
     const { data: payments } = await q.eq("status", "success");
     const grossKobo = (payments ?? []).reduce((s, p) => s + p.amount_paid, 0);
@@ -585,7 +585,7 @@ router.patch ("/coupons/:couponId",           authenticateToken, requireRole(["i
 
 // Enrollments
 router.get("/user/enrollments",               authenticateToken, enrollmentHandlers.listMine);
-router.get("/courses/:courseId/students",     authenticateToken, requireRole(["instructor", "admin"]), enrollmentHandlers.listStudents);
+router.get("/courses/:courseId/students",     authenticateToken, requireRole(["instructor", "admin"]), requireCourseManager(), enrollmentHandlers.listStudents);
 
 // Transaction history
 router.get("/transactions",                   authenticateToken, transactionHandlers.list);
