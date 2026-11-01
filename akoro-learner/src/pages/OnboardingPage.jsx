@@ -1,572 +1,426 @@
-import { useState, useEffect, useMemo } from 'react';
+/**
+ * OnboardingPage — the learner's setup as one conversation with Ako (no AI call).
+ *
+ * A scripted chat: Ako asks, the learner answers through the chat composer (typing, a quick-reply
+ * chip above it, or a pick in an in-chat card that stages its answer as the draft), and the send
+ * arrow commits. The script and its rules are pure (lib/onboardingChat.js); the three saves are
+ * the ones the old form made, so nothing downstream changes. There is no Back: it is one chat the
+ * learner can scroll, and the progress bar follows what they are reading.
+ */
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
-import { Icon } from '../components/common/Icons.jsx';
 import { useTheme } from '../contexts/ThemeContext.jsx';
 import { useLang, SUPPORTED_LANGUAGES } from '../contexts/LanguageContext.jsx';
 import { API } from '../services/api.js';
 import { isHigherEdUI, setCachedTier } from '../utils/studyLevel.js';
 import AkoroLogo from '../components/common/AkoroLogo.jsx';
-import { AgentAvatar } from '../components/common/AgentAvatar.jsx';
+import FortizoChatComposer from '../components/common/FortizoChatComposer.jsx';
+import AkoMascot from './onboarding/AkoMascot.jsx';
+import { TermsCard, AgentCard, TeacherCards, SearchBox, SchoolResults, PrefsCard, SummaryCard } from './onboarding/Cards.jsx';
+import {
+  STEP_IDS, STUDY_LEVELS, classesFor, subjectChoices, emptyAnswers, firstName, answerText, stepError, progressOf,
+  profilePayload, agentPayload, applyPrefill, filterTeachers, filterSchools, missingRequired, subjectsDraft, subjectsLabel,
+} from '../lib/onboardingChat.js';
+import './onboarding/onboarding.css';
 
-const BRAND  = '#6C3BFF';
-const RED    = '#EF4444';
+const BRAND = '#6C3BFF';
 const ACCENTS = [BRAND, '#3B82F6', '#10B981', '#E8884A', '#EC4899', '#F59E0B', '#EF4444', '#8B5CF6'];
-/* The avatar choices — emoji strings are stored keys into the drawn
-   AgentAvatar set (AgentAvatar.jsx), never rendered as glyphs. */
-const GUIDE_EMOJIS = ['🧠', '🤖', '👾', '🦉', '🎓', '⚡', '🌟', '🔮', '🦋', '🎯', '🚀', '💡'];
-const STUDY_LEVELS = ['Primary', 'Junior Secondary', 'Senior Secondary', 'University', 'Adult learner'];
-// Class/year options shown in the dropdown, dependent on the chosen study level.
-const CLASSES_BY_LEVEL = {
-  'Primary':           ['Primary 1', 'Primary 2', 'Primary 3', 'Primary 4', 'Primary 5', 'Primary 6'],
-  'Junior Secondary':  ['JSS 1', 'JSS 2', 'JSS 3'],
-  'Senior Secondary':  ['SSS 1', 'SSS 2', 'SSS 3'],
-  'University':        ['100 Level', '200 Level', '300 Level', '400 Level', '500 Level', 'Postgraduate'],
-  'Adult learner':     [],
-};
-/* The list was Further Mathematics, English Literature, Computer Science — a
-   UK sixth-form shape, on a platform built around the Nigerian curriculum
-   (NERDC schemes, NCEE papers, JSS/SSS classes). A JSS1 learner could not pick
-   Basic Science or Social Studies at all, which are two of the four their class
-   actually teaches. Junior-secondary cores added, seniors kept. */
-const SUBJECT_OPTIONS = [
-  'Mathematics', 'English Language', 'Basic Science', 'Basic Technology',
-  'Social Studies', 'Civic Education', 'Agricultural Science', 'Computer Studies',
-  'Business Studies', 'Home Economics', 'Cultural and Creative Arts',
-  'Physics', 'Chemistry', 'Biology', 'Further Mathematics', 'Economics',
-  'Geography', 'History', 'Government', 'Literature in English',
-  'Christian Religious Studies', 'Islamic Religious Studies',
-  'French', 'Yoruba', 'Igbo', 'Hausa',
-];
+const ACCENT_NAMES = ['Purple', 'Blue', 'Green', 'Orange', 'Pink', 'Amber', 'Red', 'Violet'];
+const SUBJECTS_SHOWN = 9;
+const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+const fill = (text, vars = {}) => String(text).replace(/\{(\w+)\}/g, (m, k) => (vars[k] ?? m));
 
-/* Shown in a teacher card in place of their profile photo when they don't
-   have one (or it fails to load). */
-const TEACHER_PLACEHOLDER = '/placeholder-teacher.jpg';
-
-/**
- * TeacherCard — discover-hub style card for the teacher step:
- * profile photo on top (or the branded placeholder), class badge over the
- * photo, teacher name + school beneath, subject chips and class size.
- * Click to select; click again to clear.
- */
-function TeacherCard({ teacher, selected, accent, onPick }) {
-  const { t } = useLang();
-  const [imgFailed, setImgFailed] = useState(false);
-  const hasPhoto = !imgFailed && !!teacher.avatar_url;
-  return (
-    <button
-      type="button"
-      onClick={onPick}
-      aria-pressed={selected}
-      style={{
-        textAlign: 'left', background: 'var(--ak-surface)', cursor: 'pointer',
-        borderRadius: 14, padding: 6, display: 'flex', flexDirection: 'column',
-        border: selected ? `2px solid ${accent}` : '1.5px solid var(--ak-border)',
-        boxShadow: selected ? `0 4px 14px ${accent}33` : 'none',
-        transition: 'border .15s, box-shadow .15s', fontFamily: "'Nunito',sans-serif",
-      }}
-    >
-      {/* Photo — teacher profile picture or placeholder image */}
-      <div style={{ width: '100%', aspectRatio: '16/10', borderRadius: 10, overflow: 'hidden',
-        position: 'relative', background: 'linear-gradient(135deg,#EDE9FE,#DDD3FF)', flexShrink: 0 }}>
-        <img
-          src={hasPhoto ? teacher.avatar_url : TEACHER_PLACEHOLDER}
-          alt={teacher.full_name || 'Teacher'}
-          loading="lazy"
-          onError={() => setImgFailed(true)}
-          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-        />
-        {teacher.class_name && (
-          <span style={{ position: 'absolute', bottom: 6, right: 6, maxWidth: '72%', fontSize: 9,
-            fontWeight: 900, color: accent, background: '#fff', padding: '3px 7px', borderRadius: 6,
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-            boxShadow: '0 1px 3px rgba(17,12,40,.12)' }}>{teacher.class_name}</span>
-        )}
-        {selected && (
-          <span style={{ position: 'absolute', top: 6, right: 6, width: 20, height: 20, borderRadius: '50%',
-            background: accent, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 11, fontWeight: 900, boxShadow: '0 1px 4px rgba(17,12,40,.25)' }}><Icon name="ti-check" size={12} color="#fff"/></span>
-        )}
-      </div>
-      <div style={{ padding: '7px 5px 6px', display: 'flex', flexDirection: 'column', gap: 3 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 900, color: 'var(--ak-text)', lineHeight: 1.2,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {teacher.full_name || 'Teacher'}
-        </div>
-        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ak-text-muted)',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {teacher.school_name || `@${teacher.username || 'teacher'}`}
-        </div>
-        {teacher.subjects?.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-            {teacher.subjects.slice(0, 2).map(s => (
-              <span key={s} style={{ fontSize: 10, fontWeight: 800, color: 'var(--ak-text-sec)',
-                background: 'var(--ak-tag-bg)', borderRadius: 99, padding: '2px 7px', whiteSpace: 'nowrap',
-                overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{s}</span>
-            ))}
-            {teacher.subjects.length > 2 && (
-              <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--ak-text-muted)',
-                background: 'var(--ak-tag-bg)', borderRadius: 99, padding: '2px 7px' }}>+{teacher.subjects.length - 2}</span>
-            )}
-          </div>
-        )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: 'var(--ak-text-sec)' }}>
-          {teacher.student_count > 0
-            ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="ti-users" size={11}/> {teacher.student_count} {t('onboarding.students')}</span>
-            : <span style={{ color: BRAND, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="ti-plant" size={11}/> {t('onboarding.teacher_new')}</span>}
-          {teacher.classroom_count > 0 && (
-            <span style={{ color: 'var(--ak-text-muted)' }}>· {teacher.classroom_count} {t('onboarding.classes')}</span>
-          )}
-        </div>
-      </div>
-    </button>
-  );
+/** **bold** → <strong>; nothing else is interpreted. */
+function Rich({ text }) {
+  return String(text).split(/(\*\*.+?\*\*)/g).map((p, i) => (p.startsWith('**') && p.endsWith('**') ? <strong key={i}>{p.slice(2, -2)}</strong> : p));
 }
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
   const { user, markOnboarded, logout } = useAuth();
-  const { displayMode, accentColor, setMode, setAccent } = useTheme();
+  const { displayMode, accentColor, setMode, setAccent, isDark } = useTheme();
   const { language, setLanguage, t } = useLang();
+  const tf = useCallback((key, vars) => fill(t(`onboarding.${key}`), vars), [t]);
+  const tr = (key) => t(`onboarding.${key}`);
 
-  const [step, setStep]   = useState(0);
+  // What the learner has said so far. The ref mirrors it so the script can read the latest value mid-flow.
+  const [ans, setAns] = useState(emptyAnswers);
+  const ansRef = useRef(ans);
+  const patch = useCallback((p) => { ansRef.current = { ...ansRef.current, ...p }; setAns(ansRef.current); }, []);
+
+  const [log, setLog] = useState([]);             // the transcript: Ako's lines, cards and the learner's replies
+  const [stepIdx, setStepIdx] = useState(0);
+  const [viewStep, setViewStep] = useState(0);    // the step the learner is reading (the bar follows scroll)
+  const [sub, setSub] = useState('');             // inside the level step: 'prefill' | 'level' | 'class'
+  const [typing, setTyping] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
-  const [err, setErr]     = useState('');
-
-  // Step 1 — profile
-  const [fullName, setFullName]     = useState(user?.fullName || '');
-  const [yearGroup, setYearGroup]   = useState('');
-  const [studyLevel, setStudyLevel] = useState('');
-  const [schoolName, setSchoolName] = useState('');
-  const [subjects, setSubjects]     = useState([]);
-  const [teachers, setTeachers]     = useState([]);
-  const [teachersLoading, setTeachersLoading] = useState(true);
-  const [teacherId, setTeacherId]   = useState('');   // '' = self-study, no teacher
-  // Step 3 — teacher picker: free-text search over the loaded directory.
-  // The whole directory (≤500) is already in memory, so filtering is instant
-  // and also covers school + subjects, not just the name.
+  const [failed, setFailed] = useState(false);
+  const [launching, setLaunching] = useState(false);
+  const [moreSubjects, setMoreSubjects] = useState(false);
   const [teacherQuery, setTeacherQuery] = useState('');
-  // Step 2 — student agent
-  // What the teacher already told us. Pre-filled, never assumed: the learner
-  // still walks every step and can change any of it.
-  const [prefill, setPrefill] = useState(null);
+  const [teachers, setTeachers] = useState([]);
+  const [teachersLoading, setTeachersLoading] = useState(true);
+  const [schools, setSchools] = useState([]);
+  const prefillRef = useRef(null);
 
-  const [agentName,  setAgentName]  = useState('');
-  const [agentEmoji, setAgentEmoji] = useState('🤖');
+  const chatRef = useRef(null);
+  const timers = useRef([]);
+  const alive = useRef(true);
+  const seq = useRef(0);
+  const reduced = useMemo(() => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches, []);
 
-  const toggleSubject = (s) =>
-    setSubjects(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
+  const stepId = STEP_IDS[stepIdx];
+  const busy = typing || saving;
+  // A teacher is required — unless the directory is empty, then there is no one to choose yet.
+  const teachersAvailable = teachersLoading || teachers.length > 0;
 
-  const filteredTeachers = useMemo(() => {
-    const q = teacherQuery.trim().toLowerCase();
-    if (!q) return teachers;
-    const tokens = q.split(/\s+/);
-    return teachers.filter(tt => {
-      const hay = [tt.full_name, tt.username, tt.school_name, tt.class_name, ...(tt.subjects || [])]
-        .filter(Boolean).join(' ').toLowerCase();
-      return tokens.every(tok => hay.includes(tok));
-    });
-  }, [teachers, teacherQuery]);
-
+  /* ── directory + teacher-added prefill (unchanged requests) ── */
   useEffect(() => {
     fetch(`${API}/api/profiles/directory/teachers`, { credentials: 'include' })
-      .then(r => r.json()).then(j => setTeachers(j.data || []))
-      .catch(() => {})
-      .finally(() => setTeachersLoading(false));
+      .then((r) => r.json()).then((j) => setTeachers(j.data || []))
+      .catch(() => {}).finally(() => setTeachersLoading(false));
   }, []);
-
-  /* A learner their teacher added has already been told apart: their school,
-     their year, their subjects and who teaches them are all on file. Making
-     them retype it invites a near-miss ("JSS1" for "JSS 1") that then matches
-     nothing. Fill it in, say where it came from, and let them edit. */
+  useEffect(() => {
+    fetch(`${API}/api/profiles/directory/schools`, { credentials: 'include' })
+      .then((r) => r.json()).then((j) => setSchools(j.data || [])).catch(() => {});
+  }, []);
+  /* A learner their teacher added already has a class, school, subjects and teacher on file. Fill it in,
+     say where it came from, and let them change it — a retyped "JSS1" for "JSS 1" would match nothing. */
   useEffect(() => {
     fetch(`${API}/api/profiles/onboarding-prefill`, { credentials: 'include' })
-      .then(r => r.json())
-      .then(j => {
+      .then((r) => r.json())
+      .then((j) => {
         const p = j?.data;
         if (!p || !p.className) return;
-        setPrefill(p);
-        // Only fill what the learner hasn't already touched.
-        setStudyLevel(v => v || p.studyLevel || '');
-        setYearGroup(v  => v || p.yearGroup  || '');
-        setSchoolName(v => v || p.schoolName || '');
-        if (p.teacherId) setTeacherId(v => v || p.teacherId);
-        // Selected as-is, not filtered against the canonical list: a school that
-        // teaches something we didn't think of must not have it silently
-        // dropped from its own learners' profiles.
-        if (p.subjects?.length) setSubjects(v => (v.length ? v : p.subjects));
+        prefillRef.current = p;
+        ansRef.current = applyPrefill(ansRef.current, p);
+        setAns(ansRef.current);
       })
       .catch(() => {});
   }, []);
 
-  const STEPS = [t('onboarding.step_profile'), t('onboarding.step_agent'), t('onboarding.step_teacher'), t('onboarding.step_prefs')];
+  /* ── the conversation engine ── */
+  const nid = () => `m${++seq.current}`;
+  const later = (fn, ms) => { const id = setTimeout(fn, ms); timers.current.push(id); };
+  const tell = (text) => setLog((l) => [...l, { id: nid(), who: 'me', text }]);
+  /** Ako types for a moment, then says each line (or shows a card). `step` marks where the stepper should point. */
+  const say = useCallback((lines, step, then) => {
+    setTyping(true);
+    later(() => {
+      if (!alive.current) return;
+      setLog((l) => [...l, ...lines.map((ln, i) => ({ id: nid(), who: 'ako', ...ln, step: i === 0 ? step : undefined }))]);
+      setTyping(false);
+      then?.();
+    }, reduced ? 0 : 560);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reduced]);
 
-  const validateStep = () => {
-    setErr('');
-    if (step === 0) {
-      if (!fullName.trim())   { setErr(t('onboarding.err_name')); return false; }
-      if (!studyLevel)        { setErr(t('onboarding.err_level')); return false; }
-    }
-    if (step === 1) {
-      if (!agentName.trim())  { setErr(t('onboarding.err_agent')); return false; }
-    }
-    // A teacher is required (unless none exist yet to choose from).
-    if (step === 2 && teachers.length > 0 && !teacherId) {
-      setErr(t('onboarding.err_teacher')); return false;
-    }
-    return true;
+  const summaryRows = () => {
+    const a = ansRef.current;
+    return [
+      [tr('chat_sum_class'), a.cls ? `${a.cls} · ${a.level}` : a.level],
+      [tr('chat_sum_school'), a.school || tr('chat_sum_own')],
+      [tr('chat_sum_subjects'), a.subjects.length ? tf('chat_sum_picked', { n: a.subjects.length }) : tr('chat_sum_later')],
+      [tr('chat_sum_agent'), a.agentName],
+      [tr('chat_sum_teacher'), a.teacherId ? tr('chat_sum_requested') : tr('chat_sum_none')],
+    ];
   };
 
-  const next = () => { if (validateStep()) setStep(s => s + 1); };
-  const back = () => { setErr(''); setStep(s => s - 1); };
+  const ask = useCallback((idx) => {
+    const id = STEP_IDS[idx];
+    const a = ansRef.current;
+    const p = prefillRef.current;
+    setStepIdx(idx); setViewStep(idx); setErr(''); setSub(''); setDraft(''); setTeacherQuery(''); setMoreSubjects(false);
+    let lines = []; let after;
+    if (id === 'welcome') lines = [{ text: tr('chat_hi') }, { text: tr('chat_promise'), dim: tr('chat_tick_hint') }];
+    if (id === 'name') lines = [{ text: tr('chat_name_q') }];
+    if (id === 'level') {
+      if (p && a.level && a.cls) { lines = [{ text: tf('chat_prefill_q', { source: p.source || 'your teacher', class: a.cls }) }]; after = () => setSub('prefill'); }
+      else { lines = [{ text: tf('chat_level_q', { name: firstName(a.name) }) }]; after = () => setSub('level'); }
+    }
+    if (id === 'school') {
+      if (a.school) { lines = [{ text: tf('chat_school_prefill', { school: a.school }) }]; after = () => setDraft(a.school); }
+      else lines = [{ text: tr('chat_school_q'), dim: tr('chat_school_hint') }];
+    }
+    if (id === 'subjects') { lines = [{ text: tr('chat_subjects_q'), dim: tr('chat_subjects_hint') }]; after = () => setDraft(subjectsDraft(ansRef.current.subjects)); }
+    if (id === 'agent') lines = [{ text: tr('chat_agent_q1') }, { text: tr('chat_agent_q2') }];
+    if (id === 'teacher') {
+      lines = teachers.length || teachersLoading
+        ? [{ text: tr('chat_teacher_q'), dim: tr('chat_teacher_hint') }]
+        : [{ text: t('onboarding.teacher_none') }];
+      if (p?.teacherId && a.teacherId === p.teacherId) lines.push({ text: tf('chat_teacher_prefilled', { teacher: p.teacherName || a.teacherName, class: p.className }) });
+    }
+    if (id === 'prefs') lines = [{ text: tr('chat_prefs_q') }];
+    if (id === 'done') lines = [{ text: tf('chat_done_q', { name: firstName(a.name) }) }, { card: 'summary', rows: summaryRows() }, { text: tr('chat_done_q2') }];
+    say(lines, idx, after);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [say, tf]);
 
-  const finish = async () => {
-    if (!validateStep()) return;
-    setSaving(true); setErr('');
+  useEffect(() => {
+    alive.current = true;
+    ask(0);
+    return () => { alive.current = false; timers.current.forEach(clearTimeout); timers.current = []; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* ── saving: the same three requests the form made ── */
+  const save = async () => {
+    setSaving(true); setFailed(false); setErr('');
+    const a = ansRef.current;
     try {
-      // 1. Save profile fields to users table
       const profileRes = await fetch(`${API}/api/profiles/me`, {
-        method: 'PATCH',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fullName:            fullName.trim(),
-          yearGroup:           yearGroup.trim() || undefined,
-          studyLevel,
-          schoolName:          schoolName.trim() || undefined,
-          subjects,
-          language,
-          displayMode,
-          accentColor,
-          onboardingCompleted: true,
-        }),
+        method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profilePayload(a, { language, displayMode, accentColor })),
       });
-      if (!profileRes.ok) {
-        const j = await profileRes.json().catch(() => ({}));
-        throw new Error(j.message || t('onboarding.err_profile'));
-      }
-
-      // 2. Save student AI agent to user_agents table (separate from instructor teaching guide)
-      const agentPayload = {
-        agent_name:  agentName.trim() || `Agent_${user?.username || 'me'}`,
-        agent_emoji: agentEmoji,
-        study_level: studyLevel || undefined,
-        year_group:  yearGroup.trim() || undefined,
-        subjects:    subjects.length ? subjects : undefined,
-      };
+      if (!profileRes.ok) { const j = await profileRes.json().catch(() => ({})); throw new Error(j.message || t('onboarding.err_profile')); }
       const agentRes = await fetch(`${API}/api/user/agent`, {
-        method: 'PUT',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(agentPayload),
+        method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(agentPayload(a, user?.username)),
       });
-      if (!agentRes.ok) {
-        const j = await agentRes.json().catch(() => ({}));
-        throw new Error(j.message || 'Could not save your agent. Please try again.');
-      }
-
-      // 3. Request to join the chosen teacher's class (teacher approves).
-      if (teacherId) {
+      if (!agentRes.ok) { const j = await agentRes.json().catch(() => ({})); throw new Error(j.message || 'Could not save your agent. Please try again.'); }
+      if (a.teacherId) {
         await fetch(`${API}/api/profiles/me/teacher-request`, {
           method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ teacher_id: teacherId }),
+          body: JSON.stringify({ teacher_id: a.teacherId }),
         }).catch(() => {});
       }
-
-      // Seed the UI-tier cache with the level the learner just chose, so
-      // even the very first dashboard load renders the right tier with no
-      // school-UI flash (studyLevel.js cache + useStudyTier.js revalidate).
-      setCachedTier(isHigherEdUI({ studyLevel }) ? 'higher' : 'school');
-
-      markOnboarded();
-      navigate('/app', { replace: true });
-    } catch (e) {
-      setErr(e.message);
-    } finally {
       setSaving(false);
+      ask(STEP_IDS.indexOf('done'));
+    } catch (e) {
+      setSaving(false); setFailed(true);
+      say([{ text: tf('chat_save_err', { error: e.message || '' }) }], null);
     }
   };
 
-  /* ── shared styles ── */
-  const inp = {
-    width: '100%', padding: '11px 14px', borderRadius: 12,
-    border: '1.5px solid var(--ak-border2)', outline: 'none', fontSize: 14,
-    fontFamily: "'Nunito',sans-serif", color: 'var(--ak-text)',
-    background: 'var(--ak-input-bg)', boxSizing: 'border-box',
+  const start = () => {
+    if (launching) return;
+    setLaunching(true);
+    // Seed the UI-tier cache with the level just chosen, so even the first dashboard load renders the
+    // right tier with no school-UI flash (studyLevel.js cache + useStudyTier.js revalidate).
+    setCachedTier(isHigherEdUI({ studyLevel: ansRef.current.level }) ? 'higher' : 'school');
+    markOnboarded();
+    navigate('/app', { replace: true });
   };
-  const lbl = { display: 'block', fontSize: 12, fontWeight: 800, color: 'var(--ak-text-sec)', marginBottom: 6 };
-  const chip = (active) => ({
-    padding: '8px 14px', borderRadius: 99, fontSize: 13, fontWeight: 700, cursor: 'pointer',
-    border: `1.5px solid ${active ? accentColor : 'var(--ak-border2)'}`,
-    background: active ? accentColor : 'var(--ak-surface)',
-    color: active ? '#fff' : 'var(--ak-text-sec)', fontFamily: "'Nunito',sans-serif",
-    transition: 'all .15s',
-  });
+
+  /* ── what the learner can do at each step ── */
+  const goNext = () => ask(stepIdx + 1);
+  const replyFor = (id) => {
+    const a = ansRef.current;
+    if (id === 'school' && !a.school.trim()) return tr('chat_own');
+    return answerText(id, a, { language, theme: cap(displayMode), accent: ACCENT_NAMES[Math.max(0, ACCENTS.indexOf(accentColor))] });
+  };
+
+  const send = () => {
+    if (busy || launching) return;
+    const id = stepId;
+    if (id === 'name') patch({ name: draft.trim() });
+    if (id === 'school') patch({ school: draft.trim() });
+    if (id === 'agent') patch({ agentName: draft.trim() });
+    if (id === 'level') {
+      if (sub !== 'class' || !ansRef.current.cls) return;
+    }
+    const problem = stepError(id, ansRef.current, { teachersAvailable });
+    if (problem) { setErr(t(problem)); return; }
+    tell(replyFor(id));
+    if (id === 'prefs') {
+      // Everything required must have been collected by now; if not, say what is missing instead of saving half a profile.
+      const missing = missingRequired(ansRef.current, { teachersAvailable });
+      if (missing.length) { setErr(t(missing[0][1])); return; }
+      save(); return;
+    }
+    goNext();
+  };
+
+  const pickLevel = (level) => {
+    if (busy) return;
+    patch({ level, cls: '' });
+    tell(level);
+    const classes = classesFor(level);
+    if (!classes.length) { goNext(); return; }
+    setSub('');                                     // chips hide while Ako asks the class
+    say([{ text: tr('chat_class_q') }], stepIdx, () => setSub('class'));
+  };
+  const pickClass = (cls) => { patch({ cls }); setDraft(cls); };
+  const prefillYes = () => { if (busy) return; tell(answerText('level', ansRef.current)); goNext(); };
+  const prefillNo = () => {
+    if (busy) return;
+    patch({ level: '', cls: '' }); tell(tr('chat_prefill_no')); setSub('');
+    say([{ text: tf('chat_level_q', { name: firstName(ansRef.current.name) }) }], stepIdx, () => setSub('level'));
+  };
+  const skipClass = () => { if (busy) return; patch({ cls: '' }); tell(tr('chat_skip')); goNext(); };
+  const skipSubjects = () => { if (busy) return; patch({ subjects: [] }); tell(subjectsLabel([])); goNext(); };
+  const continueWithoutTeacher = () => { if (busy) return; tell(tr('chat_teacher_continue')); goNext(); };
+  const skipSchool = () => { if (busy) return; patch({ school: '' }); tell(tr('chat_own')); goNext(); };
+  const toggleSubject = (s) => {
+    const cur = ansRef.current.subjects;
+    const next = cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s];
+    patch({ subjects: next }); setDraft(subjectsDraft(next));
+  };
+  const pickTeacher = (tt) => {
+    const same = ansRef.current.teacherId === tt.id;
+    patch({ teacherId: same ? '' : tt.id, teacherName: same ? '' : (tt.full_name || '') });
+  };
+
+  /* ── composer wiring ── */
+  const composerValue = (() => {
+    if (stepId === 'welcome') return ans.agreed ? answerText('welcome', ans) : '';
+    if (stepId === 'teacher') return ans.teacherName || teacherQuery;   // typing searches; a pick replaces the text and is what send commits
+    return draft;
+  })();
+  const onComposerChange = (v) => {
+    if (busy) return;
+    if (stepId === 'name' || stepId === 'school') setDraft(v);   // school: typing searches, a tap on a result replaces it
+    if (stepId === 'agent') { setDraft(v); patch({ agentName: v }); }
+    if (stepId === 'teacher') { setTeacherQuery(v); patch({ teacherId: '', teacherName: '' }); }
+  };
+  const sendDisabled = busy || launching || ({
+    welcome: !ans.agreed,
+    name: !draft.trim(),
+    level: sub !== 'class' || !ans.cls,
+    school: !draft.trim(),
+    subjects: false,
+    agent: !draft.trim(),
+    teacher: teachersAvailable ? !ans.teacherId : true,   // required; with no teachers yet, the Continue chip is the way on
+    prefs: false,
+    done: true,
+  }[stepId] ?? true);
+  const placeholder = busy ? tr('chat_ph_busy') : ({
+    welcome: tr('chat_ph_terms'),
+    name: tr('chat_ph_name'),
+    level: tr('chat_ph_chip'),
+    school: tr('chat_ph_school'),
+    subjects: tr('chat_ph_subjects'),
+    agent: tr('chat_ph_agent'),
+    teacher: ans.teacherId ? tr('chat_ph_teacher_pick') : tr('chat_ph_teacher'),
+    prefs: tr('chat_ph_prefs'),
+    done: tr('chat_ph_done'),
+  }[stepId] || tr('chat_ph_default'));
+
+  const focusComposer = () => document.querySelector('.ob-composer input')?.focus();
+  const teacherList = useMemo(() => filterTeachers(teachers, teacherQuery), [teachers, teacherQuery]);
+  const subjectList = useMemo(() => subjectChoices(prefillRef.current?.subjects, ans.level), [ans.level, stepIdx]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── chips above the composer ── */
+  const chip = (label, onClick, { on = false, skip = false, go = false, key } = {}) => (
+    <button key={key || label} type="button" onClick={onClick} className={`ob-chip${on ? ' on' : ''}${skip ? ' skip' : ''}${go ? ' go' : ''}`}
+      style={on || go ? { background: accentColor, borderColor: accentColor } : undefined}>{label}</button>
+  );
+  const chips = (() => {
+    if (typing || saving || launching) return null;
+    if (failed) return chip(tr('chat_retry'), save, { go: true });
+    if (stepId === 'level') {
+      if (sub === 'prefill') return [chip(tr('chat_prefill_yes'), prefillYes, { go: true }), chip(tr('chat_prefill_no'), prefillNo)];
+      if (sub === 'level') return STUDY_LEVELS.map((l) => chip(l, () => pickLevel(l)));
+      if (sub === 'class') return [...classesFor(ans.level).map((c) => chip(c, () => pickClass(c), { on: ans.cls === c })), chip(tr('chat_skip'), skipClass, { skip: true, key: 'skip-class' })];
+    }
+    if (stepId === 'school') return chip(tr('chat_own'), skipSchool, { skip: true });
+    if (stepId === 'subjects') {
+      const shown = moreSubjects ? subjectList : subjectList.slice(0, SUBJECTS_SHOWN);
+      const extra = subjectList.length - SUBJECTS_SHOWN;
+      return [
+        ...shown.map((s) => chip(s, () => toggleSubject(s), { on: ans.subjects.includes(s) })),
+        chip(tr('chat_skip_subjects'), skipSubjects, { skip: true, key: 'skip-subjects' }),
+        extra > 0 && chip(moreSubjects ? tr('chat_fewer') : tf('chat_more', { n: extra }), () => setMoreSubjects((m) => !m), { skip: true, key: 'more' }),
+      ];
+    }
+    if (stepId === 'teacher') return !teachersLoading && !teachers.length ? chip(tr('chat_teacher_continue'), continueWithoutTeacher, { go: true }) : null;   // required: no skip while teachers exist
+    if (stepId === 'done') return chip(launching ? tr('chat_opening') : tr('chat_start'), start, { go: true });
+    return null;
+  })();
+
+  /* ── the live card for the step being asked (replaced by the learner's reply once sent) ── */
+  const card = (() => {
+    if (typing || saving) return null;
+    if (stepId === 'welcome') {
+      const parts = t('onboarding.chat_terms').split(/(\{terms\}|\{privacy\})/);
+      const label = parts.map((p, i) => p === '{terms}'
+        ? <a key={i} href="/terms" target="_blank" rel="noreferrer">{t('onboarding.chat_terms_link')}</a>
+        : p === '{privacy}' ? <a key={i} href="/privacy" target="_blank" rel="noreferrer">{t('onboarding.chat_privacy_link')}</a> : p);
+      return <TermsCard checked={ans.agreed} accent={accentColor} label={label} onChange={(v) => { patch({ agreed: v }); setErr(''); }}/>;
+    }
+    if (stepId === 'school') {
+      return (
+        <>
+          <SearchBox value={draft} placeholder={tr('chat_search_school')} accent={accentColor} onFocusComposer={focusComposer}/>
+          <SchoolResults schools={filterSchools(schools, draft)} query={draft} selectedName={draft} accent={accentColor}
+            listedLabel={tr('chat_school_listed')} noMatchText={tr('chat_school_nomatch')} onPick={(sc) => setDraft(sc.name)}/>
+        </>
+      );
+    }
+    if (stepId === 'agent') return <AgentCard emoji={ans.agentEmoji} accent={accentColor} onPick={(em) => patch({ agentEmoji: em })}/>;
+    if (stepId === 'teacher') {
+      if (teachersLoading) return <div className="ob-empty">{tr('chat_loading_teachers')}</div>;
+      if (!teachers.length) return null;
+      return (
+        <>
+          <SearchBox value={ans.teacherName || teacherQuery} placeholder={tr('chat_search_teacher')} accent={accentColor} onFocusComposer={focusComposer}/>
+          <TeacherCards teachers={teacherList} selectedId={ans.teacherId} onPick={pickTeacher} accent={accentColor} emptyText={t('onboarding.teacher_no_match')}/>
+        </>
+      );
+    }
+    if (stepId === 'prefs') {
+      return <PrefsCard labels={{ language: t('onboarding.language'), theme: t('onboarding.theme'), accent: t('onboarding.accent_colour') }}
+        languages={SUPPORTED_LANGUAGES} language={language} onLanguage={setLanguage} mode={displayMode} onMode={setMode}
+        accents={ACCENTS} accent={accentColor} onAccent={setAccent}/>;
+    }
+    return null;
+  })();
+
+  /* ── keep the latest line in view; the bar follows where the learner is reading ── */
+  useEffect(() => {
+    const el = chatRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: reduced ? 'auto' : 'smooth' });
+  }, [log.length, typing, stepIdx, sub, teachersLoading, reduced, draft, teacherQuery]);   // draft/query: the match list below changes as they type
+  const spy = () => {
+    const el = chatRef.current;
+    if (!el) return;
+    let view = 0;
+    const mid = el.scrollTop + el.clientHeight * 0.3;
+    el.querySelectorAll('[data-step]').forEach((r) => { if (r.offsetTop <= mid) view = Number(r.getAttribute('data-step')); });
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 48) view = stepIdx;
+    setViewStep(view);
+  };
+
+  const progress = progressOf(viewStep);
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center',
-      justifyContent: 'center', background: 'var(--ak-bg)', padding: '24px 20px', fontFamily: "'Nunito',sans-serif" }}>
-      {/* Responsive rules: teacher grid is 2 cols on mobile, 3 on tablet+
-          (the card widens on tablet so the 3-up grid has room). */}
-      <style>{`
-        .ob-card-wrap { width: 100%; max-width: 460px; }
-        .ob-teachers-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-        @media (min-width: 640px) {
-          .ob-card-wrap { max-width: 700px; }
-          .ob-teachers-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-        }
-      `}</style>
-      {/* Escape hatch: never get stuck on onboarding */}
-      <button onClick={logout} style={{ position: 'fixed', top: 16, right: 18, zIndex: 50, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 9, border: '1px solid rgba(0,0,0,0.12)', background: 'rgba(255,255,255,0.92)', color: '#6B6B80', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Log out</button>
-
-      {/* Brand + progress */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-        <AkoroLogo size={36} radius={11}/>
-        <span style={{ fontSize: 20, fontWeight: 900, color: 'var(--ak-text)' }}>Akoro</span>
-      </div>
-
-      <div className="ob-card-wrap" style={{ marginBottom: 16, display: 'flex', gap: 8 }}>
-        {STEPS.map((s, i) => (
-          <div key={s} style={{ flex: 1 }}>
-            <div style={{ height: 5, borderRadius: 99, background: i <= step ? accentColor : 'var(--ak-border2)', transition: 'background .2s' }}/>
-            <div style={{ fontSize: 11, fontWeight: 700, marginTop: 6, color: i === step ? 'var(--ak-text)' : 'var(--ak-text-muted)' }}>{s}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Card */}
-      <div className="ob-card-wrap" style={{ background: 'var(--ak-surface)', borderRadius: 24,
-        padding: '28px 26px', boxShadow: '0 4px 32px rgba(0,0,0,.10)', border: '1px solid var(--ak-border)' }}>
-
-        {step === 0 && (
-          <>
-            <h1 style={{ fontSize: 21, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 4px' }}>{t('onboarding.welcome')}</h1>
-            <p style={{ fontSize: 13, color: 'var(--ak-text-sub)', margin: '0 0 22px' }}>{t('onboarding.setup_profile')}</p>
-
-            {prefill && (
-              <div style={{
-                display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 18,
-                padding: '11px 13px', borderRadius: 12,
-                background: `${BRAND}0d`, border: `1px solid ${BRAND}33`,
-              }}>
-                <Icon name="ti-school" size={15} color={BRAND}/>
-                <div style={{ fontSize: 12, color: 'var(--ak-text-sub)', lineHeight: 1.5 }}>
-                  We filled some of this in from <strong>{prefill.source}</strong>
-                  {prefill.className ? <> — you're in <strong>{prefill.className}</strong></> : null}.
-                  Change anything that isn't right.
-                </div>
-              </div>
-            )}
-
-            <div style={{ marginBottom: 14 }}>
-              <label style={lbl}>{t('onboarding.full_name')}</label>
-              <input value={fullName} onChange={e => setFullName(e.target.value)} placeholder={t('onboarding.name_ph')} style={inp}/>
-            </div>
-            <div style={{ marginBottom: 14 }}>
-              <label style={lbl}>{t('onboarding.study_level')}</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {STUDY_LEVELS.map(l => <span key={l} onClick={() => { setStudyLevel(l); setYearGroup(''); }} style={chip(studyLevel === l)}>{l}</span>)}
-              </div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-              <div>
-                <label style={lbl}>{t('onboarding.year_class')} <span style={{ fontWeight: 500, color: 'var(--ak-text-muted)' }}>({t('common.optional')})</span></label>
-                {(() => {
-                  const classes = CLASSES_BY_LEVEL[studyLevel] || [];
-                  const disabled = !studyLevel || classes.length === 0;
-                  return (
-                    <select
-                      value={yearGroup}
-                      onChange={e => setYearGroup(e.target.value)}
-                      disabled={disabled}
-                      style={{ ...inp, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.6 : 1 }}
-                    >
-                      <option value="">
-                        {!studyLevel ? 'Choose a level first' : classes.length ? 'Select class…' : 'Not applicable'}
-                      </option>
-                      {classes.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  );
-                })()}
-              </div>
-              <div>
-                <label style={lbl}>{t('onboarding.school')} <span style={{ fontWeight: 500, color: 'var(--ak-text-muted)' }}>({t('common.optional')})</span></label>
-                <input value={schoolName} onChange={e => setSchoolName(e.target.value)} placeholder={t('onboarding.school_ph')} style={inp}/>
-              </div>
-            </div>
-            <div>
-              <label style={lbl}>{t('onboarding.subjects_studying')} <span style={{ fontWeight: 500, color: 'var(--ak-text-muted)' }}>({t('common.optional')})</span></label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {/* The school's own subjects first, then the rest — so a learner
-                    sees what their class actually teaches at the top, and any
-                    subject we don't carry still appears and can be removed. */}
-                {[...new Set([...(prefill?.subjects ?? []), ...SUBJECT_OPTIONS])].map(s => (
-                  <span key={s} onClick={() => toggleSubject(s)} style={chip(subjects.includes(s))}>{s}</span>
-                ))}
-              </div>
-            </div>
-          </>
-        )}
-
-        {step === 1 && (
-          <>
-            <h1 style={{ fontSize: 21, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 4px' }}>{t('onboarding.meet_agent')}</h1>
-            <p style={{ fontSize: 13, color: 'var(--ak-text-sub)', margin: '0 0 22px' }}>{t('onboarding.agent_desc')}</p>
-
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
-              <div style={{ width: 76, height: 76, borderRadius: 22, background: `linear-gradient(135deg,${accentColor},#4C1DCC)`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 6px 20px ${accentColor}44` }}>
-                <AgentAvatar emoji={agentEmoji} size={46}/>
-              </div>
-            </div>
-            <div style={{ marginBottom: 16 }}>
-              <label style={lbl}>{t('onboarding.agent_name')}</label>
-              <input value={agentName} onChange={e => setAgentName(e.target.value)} placeholder={t('onboarding.agent_name_ph')} style={inp}/>
-            </div>
-            <div>
-              <label style={lbl}>{t('onboarding.pick_avatar')}</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-                {GUIDE_EMOJIS.map(em => (
-                  <button key={em} onClick={() => setAgentEmoji(em)} aria-label={`Avatar ${em}`} style={{
-                    width: 44, height: 44, borderRadius: 12, cursor: 'pointer',
-                    border: `2px solid ${agentEmoji === em ? accentColor : 'var(--ak-border2)'}`,
-                    background: agentEmoji === em ? `${accentColor}18` : 'var(--ak-surface)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}><AgentAvatar emoji={em} size={30}/></button>
-                ))}
-              </div>
-            </div>
-          </>
-        )}
-
-        {step === 2 && (
-          <>
-            <h1 style={{ fontSize: 21, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 4px' }}>{t('onboarding.teacher_title')}</h1>
-            <p style={{ fontSize: 13, color: 'var(--ak-text-sub)', margin: '0 0 18px' }}>{t('onboarding.teacher_desc')}</p>
-
-            {teachersLoading ? (
-              <div className="ob-teachers-grid" style={{ maxHeight: 340, overflowY: 'auto', padding: 2 }}>
-                {[0, 1, 2, 3].map(i => (
-                  <div key={i} style={{ borderRadius: 14, border: '1.5px solid var(--ak-border)',
-                    background: 'var(--ak-surface)', overflow: 'hidden', opacity: .6 }}>
-                    <div style={{ width: '100%', aspectRatio: '16/10', background: 'var(--ak-border)' }} />
-                    <div style={{ height: 11, margin: 10, borderRadius: 4, background: 'var(--ak-border)' }} />
-                    <div style={{ height: 8, width: '60%', margin: '0 10px 11px', borderRadius: 4, background: 'var(--ak-border)' }} />
-                  </div>
-                ))}
-              </div>
-            ) : teachers.length > 0 ? (
-              <>
-                {/* Search — instant, client-side over the loaded directory, so it
-                    also matches school, class and subjects, not just names. */}
-                <div style={{ position: 'relative', marginBottom: 12 }}>
-                  <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: 0.55, pointerEvents: 'none' }}><Icon name="ti-search" size={14}/></span>
-                  <input
-                    value={teacherQuery}
-                    onChange={e => setTeacherQuery(e.target.value)}
-                    placeholder={t('onboarding.teacher_search')}
-                    style={{ ...inp, paddingLeft: 38, paddingRight: teacherQuery ? 36 : 14 }}
-                  />
-                  {teacherQuery && (
-                    <button onClick={() => setTeacherQuery('')} aria-label="Clear search" style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', width: 22, height: 22, borderRadius: '50%', border: 'none', background: 'var(--ak-tag-bg)', color: 'var(--ak-text-sec)', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}><Icon name="ti-x" size={11}/></button>
-                  )}
-                </div>
-
-                {filteredTeachers.length > 0 ? (
-                  <div className="ob-teachers-grid" style={{ maxHeight: 340, overflowY: 'auto', padding: 2 }} aria-label="Choose your teacher">
-                    {filteredTeachers.map(tt => (
-                      <TeacherCard key={tt.id} teacher={tt} selected={teacherId === tt.id} accent={accentColor}
-                        onPick={() => { setTeacherId(teacherId === tt.id ? '' : tt.id); setErr(''); }} />
-                    ))}
-                  </div>
-                ) : (
-                  <div style={{ padding: '20px 16px', borderRadius: 14, background: 'var(--ak-tag-bg)',
-                    border: '1px dashed var(--ak-border2)', textAlign: 'center' }}>
-                    <div style={{ marginBottom: 6 }}><Icon name="ti-search" size={22} color="var(--ak-text-sec)"/></div>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text-sec)' }}>{t('onboarding.teacher_no_match')}</div>
-                    <button onClick={() => setTeacherQuery('')} style={{ marginTop: 10, padding: '7px 16px', borderRadius: 99,
-                      border: 'none', background: accentColor, color: '#fff', fontSize: 12, fontWeight: 800,
-                      cursor: 'pointer', fontFamily: 'inherit' }}>{t('onboarding.teacher_clear')}</button>
-                  </div>
-                )}
-
-                {teacherId && (
-                  <p style={{ fontSize: 11.5, color: 'var(--ak-text-muted)', margin: '10px 2px 0', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Icon name="ti-circle-check" size={14} color="#10B981"/>
-                    <span>
-                      {prefill?.teacherId === teacherId
-                        ? <>{prefill.teacherName} already has you in <strong>{prefill.className}</strong>.</>
-                        : t('onboarding.teacher_pending_note')}
-                    </span>
-                  </p>
-                )}
-              </>
-            ) : (
-              <div style={{ padding: '22px 18px', borderRadius: 14, background: 'var(--ak-tag-bg)',
-                border: '1px dashed var(--ak-border2)', textAlign: 'center' }}>
-                <div style={{ marginBottom: 8 }}><Icon name="ti-school" size={26} color="var(--ak-text-sec)"/></div>
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text-sec)', lineHeight: 1.5 }}>
-                  {t('onboarding.teacher_none')}
-                </div>
-              </div>
-            )}
-          </>
-        )}
-
-        {step === 3 && (
-          <>
-            <h1 style={{ fontSize: 21, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 4px' }}>{t('onboarding.make_yours')}</h1>
-            <p style={{ fontSize: 13, color: 'var(--ak-text-sub)', margin: '0 0 22px' }}>{t('onboarding.appearance')}</p>
-
-            <div style={{ marginBottom: 18 }}>
-              <label style={lbl}>{t('onboarding.language')}</label>
-              <select value={language} onChange={e => setLanguage(e.target.value)} style={inp}>
-                {SUPPORTED_LANGUAGES.map(l => <option key={l.code} value={l.label}>{l.label}</option>)}
-              </select>
-            </div>
-            <div style={{ marginBottom: 18 }}>
-              <label style={lbl}>{t('onboarding.theme')}</label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {['light', 'dark', 'system'].map(m => (
-                  <span key={m} onClick={() => setMode(m)} style={{ ...chip(displayMode === m), textTransform: 'capitalize', flex: 1, textAlign: 'center' }}>{m}</span>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label style={lbl}>{t('onboarding.accent_colour')}</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-                {ACCENTS.map(c => (
-                  <button key={c} onClick={() => setAccent(c)} style={{
-                    width: 36, height: 36, borderRadius: '50%', background: c, cursor: 'pointer',
-                    border: accentColor === c ? '3px solid var(--ak-text)' : '3px solid transparent',
-                    boxShadow: `0 2px 8px ${c}55`,
-                  }}/>
-                ))}
-              </div>
-            </div>
-          </>
-        )}
-
-        {err && (
-          <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10,
-            padding: '10px 14px', marginTop: 18, fontSize: 13, fontWeight: 700, color: RED }}>{err}</div>
-        )}
-
-        {/* Nav */}
-        <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
-          {step > 0 && (
-            <button onClick={back} disabled={saving} style={{ flex: '0 0 auto', padding: '13px 20px', borderRadius: 14,
-              border: '1.5px solid var(--ak-border2)', background: 'var(--ak-surface)', color: 'var(--ak-text-sec)',
-              fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: "'Nunito',sans-serif" }}>{t('onboarding.back')}</button>
-          )}
-          <button onClick={step === STEPS.length - 1 ? finish : next} disabled={saving} style={{ flex: 1, padding: '13px',
-            borderRadius: 14, border: 'none', background: saving ? 'var(--ak-tag-bg)' : `linear-gradient(135deg,${accentColor},#4C1DCC)`,
-            color: saving ? 'var(--ak-text-muted)' : '#fff', fontSize: 14, fontWeight: 800,
-            cursor: saving ? 'not-allowed' : 'pointer', fontFamily: "'Nunito',sans-serif",
-            boxShadow: saving ? 'none' : `0 4px 14px ${accentColor}44` }}>
-            {step === STEPS.length - 1 ? (saving ? t('onboarding.setting_up') : t('onboarding.finish')) : t('onboarding.continue')}
-          </button>
+    <div className="ob-root">
+      <div className="ob-shell">
+        <div className="ob-head">
+          <div className="ob-logo"><AkoroLogo size={28} radius={0}/>Akoro</div>
+          <button type="button" className="ob-signout" onClick={logout}>{tr('chat_signout')}</button>
         </div>
+        <div className="ob-prog" role="progressbar" aria-valuemin={1} aria-valuemax={STEP_IDS.length} aria-valuenow={progress.number}>
+          <div className="ob-bar"><i style={{ width: `${progress.pct}%`, background: `linear-gradient(90deg,${accentColor},#9B7BFF)` }}/></div>
+          <div className="ob-lbl">{progress.done ? tr('chat_all_done') : tf('chat_step_of', { n: progress.number, total: STEP_IDS.length })}</div>
+        </div>
+
+        <div className="ob-chat" ref={chatRef} onScroll={spy} role="log" aria-live="polite">
+          {log.map((m) => {
+            if (m.who === 'me') return <div key={m.id} className="ob-me" style={{ background: `linear-gradient(135deg,${accentColor},#7D52FF)` }}>{m.text}</div>;
+            if (m.card === 'summary') return <div key={m.id} className="ob-row"><div className="ob-spacer"/><SummaryCard rows={m.rows}/></div>;
+            return (
+              <div key={m.id} className="ob-row" data-step={m.step ?? undefined}>
+                <AkoMascot/>
+                <div className="ob-bubble"><Rich text={m.text}/>{m.dim && <span className="dim">{m.dim}</span>}</div>
+              </div>
+            );
+          })}
+          {typing && <div className="ob-row"><AkoMascot/><div className="ob-typing" aria-label="Ako is typing"><i/><i/><i/></div></div>}
+          {card && <div className="ob-row"><div className="ob-spacer"/><div className="ob-card">{card}</div></div>}
+          {err && <div className="ob-err" role="alert">{err}</div>}
+        </div>
+
+        <div className="ob-q">{chips}</div>
+        <div className="ob-composer">
+          <FortizoChatComposer
+            value={composerValue} onChange={onComposerChange} onSend={send} placeholder={placeholder}
+            disabled={launching || stepId === 'done'} sendDisabled={sendDisabled} modelLabel="Ako" dark={!!isDark}/>
+        </div>
+        <div className="ob-foot"><a href="/contact" target="_blank" rel="noreferrer">Help</a><a href="/privacy" target="_blank" rel="noreferrer">Privacy</a></div>
       </div>
     </div>
   );

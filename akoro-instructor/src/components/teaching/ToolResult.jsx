@@ -60,9 +60,9 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 const rich = (t) => ({ __html: esc(t).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') });
 const Rich = ({ children, style }) => <span style={style} dangerouslySetInnerHTML={rich(children)} />;
 
-// "Ask the class (2 min)" → { text: "Ask the class", min: "2 min" }
+// "Ask the class (2 min)" → { text: "Ask the class", min: "2 min" }; halves work too: "(0.5 min)", "(1.5 min)"
 const splitMinutes = (t) => {
-  const m = String(t).match(/^(.*?)\s*\((\d+\s*(?:min|mins|minutes?))\)\.?$/i);
+  const m = String(t).match(/^(.*?)\s*\((\d+(?:[.,]\d+)?\s*(?:min|mins|minutes?))\)\.?$/i);
   return m ? { text: m[1], min: m[2].replace(/minutes?|mins/i, 'min') } : { text: t, min: '' };
 };
 

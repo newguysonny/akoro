@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "test:onboarding": "node --test src/lib/onboardingChat.test.mjs",
     "test:agent-actions": "node --test src/lib/agentChatEndpoint.test.mjs src/lib/agentChatTransport.contract.test.mjs src/lib/agentChatTrace.test.mjs src/lib/agentChatUi.contract.test.mjs",
     "check:header": "esbuild scripts/check-subtopic-header.mjs --bundle --platform=node --format=cjs --outfile=node_modules/.cache/csh.cjs --loader:.jsx=jsx --jsx=automatic && node node_modules/.cache/csh.cjs",
     "check:dhub": "node scripts/check-dhub-hub.mjs && node scripts/check-dhub-search.mjs",
