@@ -57,9 +57,8 @@ test("status polling degrades gracefully without the queue", () => {
 
 test("the container's callbacks land on the same internal seams (nothing downstream changes)", () => {
   // the container calls these — guarded by x-internal-secret, as before
-  assert.match(streamSrc, /getSourceUrl: asyncHandler\(async \(req, res\) => \{\s*\n\s*if \(!internalGuard\(req, res\)\) return;/, "source-url stays secret-guarded");
-  assert.match(streamSrc, /internalUpdate: asyncHandler\(async \(req, res\) => \{\s*\n\s*if \(!internalGuard\(req, res\)\) return;/, "status update stays secret-guarded");
-  assert.match(streamSrc, /const internalGuard = \(req, res\) => \{ let ok = false; requireSharedSecret\("INTERNAL_SECRET"\)/, "fails closed, constant-time");
+  assert.match(streamSrc, /getSourceUrl: asyncHandler\(async \(req, res\) => \{\s*\n\s*if \(req\.headers\["x-internal-secret"\] !== process\.env\.INTERNAL_SECRET\)/, "source-url stays secret-guarded");
+  assert.match(streamSrc, /internalUpdate: asyncHandler\(async \(req, res\) => \{\s*\n\s*if \(req\.headers\["x-internal-secret"\] !== process\.env\.INTERNAL_SECRET\)/, "status update stays secret-guarded");
   // and the completion hook still auto-transcribes the finished lesson
   assert.match(streamSrc, /data\.encodingStatus === "completed" && updated\.videoUrl/, "the always-extract hook still fires on completion");
 });

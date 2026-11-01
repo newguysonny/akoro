@@ -143,12 +143,12 @@ test("a tap approves at once; the dashboard opens it; parts are reported; the en
   await w.handoff.progress({ workflowId: offered.workflowId, result: { subtopicIdx: 1, totalSubtopics: 2, currentPhase: "MASTERY", phaseChanged: true } });
   assert.match((await w.parentEvents(parent.id)).filter((e) => e.event_type === "activity").pop().payload.message, /That's every part — plasmolysis too\. End the session when you're ready/);
 
-  assert.deepEqual((await w.handoff.finish({ workflowId: offered.workflowId, endResult: { totalTurns: 0 } })).ignored, "nothing_taught", "an empty session stays open");
-  assert.equal(w.calls.confirm.length, 0);
   const done = await w.handoff.finish({ workflowId: offered.workflowId, endResult: { totalTurns: 6, learnerEvidenceScore: 72 }, notesAdded: 6 });
   assert.equal(done.view.state, "completed");
   assert.deepEqual(w.calls.confirm, [{ sessionId: "s1", learnerId: L, topicId: "t1" }], "the retest unlocks");
-  assert.equal(w.calls.wake[0].trigger, "teaching_done");
+  assert.equal(w.calls.wake[0].trigger, "teaching_done", "every part taught → the objective is met");
+  assert.equal(done.outcome.objectiveMet, true);
+  assert.equal(done.outcome.recommendedNextAction, "retest");
   assert.equal(w.calls.wake[0].facts.notesAdded, 6);
   assert.match((await w.parentEvents(parent.id)).find((e) => e.event_type === "workflow.handoff_completed").payload.narrative, /You finished teaching Osmosis · 2 of 2 parts/);
   assert.equal((await w.handoff.listOpen(L)).length, 0);
@@ -164,4 +164,44 @@ test("the topic moving on (or taught elsewhere) closes its session; a closed one
   assert.equal(await w.handoff.bind({ workflowId: offered.workflowId, learnerId: L, liveSessionId: "x" }), null);
   assert.equal(await w.handoff.cancelFor({ parentId: parent.id, topicId: "t1" }), null);
   assert.equal(await w.handoff.propose({ session: { ...session(parent), workflow_id: null }, topic, outcome: "retest_offered", gaps: ["x"] }), null, "no Study Prep workflow → the old teach-back tap");
+});
+
+// Phase 7 (2026-11-01): ending before any teaching is an explicit abandon — no teach-back, offered once
+// more; ending with parts still missing completes with objectiveMet false — the retest still runs.
+test("an empty end is abandoned and offered once more; an unmet end completes honestly", async () => {
+  const w = world();
+  const parent = await studyPrepParent(w.engine);
+  const offered = await w.handoff.propose({ session: session(parent), topic, outcome: "retest_offered", gaps: ["Why water moves in", "Plasmolysis"] });
+  await w.handoff.approve({ workflowId: offered.workflowId, learnerId: L });
+  await w.handoff.bind({ workflowId: offered.workflowId, learnerId: L, liveSessionId: "fresh_x_1" });
+  const gone = await w.handoff.finish({ workflowId: offered.workflowId, endResult: { totalTurns: 0 }, endedBy: "learner" });
+  assert.equal(gone.view.state, "abandoned");
+  assert.equal(gone.outcome.abandoned, true);
+  assert.equal(gone.outcome.recommendedNextAction, "reoffer");
+  assert.equal(w.calls.confirm.length, 0, "no teach-back: nothing was taught");
+  assert.equal(w.calls.wake.at(-1).trigger, "teaching_abandoned");
+  assert.equal(w.calls.wake.at(-1).facts.reoffered, true);
+  const again = (await w.parentEvents(parent.id)).filter((e) => e.event_type === "learner.action_required").at(-1);
+  assert.notEqual(again.payload.teachingWorkflowId, offered.workflowId, "a fresh proposal");
+
+  // The second offer: taught one part of two, then ended → completed, objective not met, retest still unlocks.
+  const second = again.payload.teachingWorkflowId;
+  await w.handoff.approve({ workflowId: second, learnerId: L });
+  await w.handoff.bind({ workflowId: second, learnerId: L, liveSessionId: "fresh_x_2" });
+  await w.handoff.progress({ workflowId: second, result: { subtopicIdx: 1, totalSubtopics: 2, currentPhase: "PHASE_2", phaseChanged: true } });
+  const ended = await w.handoff.finish({ workflowId: second, endResult: { totalTurns: 4 }, endedBy: "bounded_end", bounded: "turn_cap" });
+  assert.equal(ended.view.state, "completed");
+  assert.equal(ended.outcome.objectiveMet, false);
+  assert.equal(ended.outcome.boundedEnd, "turn_cap");
+  assert.equal(ended.outcome.recommendedNextAction, "flag_gap");
+  assert.deepEqual(ended.outcome.objectiveEvidence.map((e) => e.status), ["demonstrated", "not_yet"]);
+  assert.equal(w.calls.confirm.length, 1, "the retest still runs");
+  assert.equal(w.calls.wake.at(-1).trigger, "teaching_unmet");
+
+  // A second empty end of a re-offered session isn't offered a third time.
+  const third = await w.handoff.propose({ session: session(parent), topic: { ...topic, attemptsUsed: 2 }, outcome: "retest_offered", gaps: ["Plasmolysis"] });
+  await w.handoff.approve({ workflowId: third.workflowId, learnerId: L });
+  await w.handoff.bind({ workflowId: third.workflowId, learnerId: L, liveSessionId: "fresh_x_3" });
+  await w.handoff.finish({ workflowId: third.workflowId, endResult: { totalTurns: 0 } });
+  assert.equal(w.calls.wake.at(-1).trigger, "teaching_abandoned");
 });

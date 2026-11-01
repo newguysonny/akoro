@@ -37,6 +37,8 @@ const GOALS = {
   over_estimate: "The next Agent Check would go past the coins the learner approved. Tell them how many coins are left of the estimate and that the next check needs their OK (the card has the button). Then wait.",
   coins_approved: "The learner approved more coins. Say what happens next with them (the check that was waiting starts by itself), then wait.",
   teaching_done: "The learner finished the teaching session on this topic (from their dashboard). Read what it covered (session.get_state, topic.get_notes): name one or two things they taught you, in their words where you can. The retest starts by itself in a minute, or when they tap Start now. Then wait.",
+  teaching_unmet: "The teaching session on this topic ended before every part was taught (they ended it, or it reached its limit). Read what it covered (session.get_state, topic.get_notes): say honestly which parts they taught you and which are still missing. The retest still starts by itself in a minute (or when they tap Start now) and will show what stuck. Then wait.",
+  teaching_abandoned: "The learner ended the teaching session before teaching anything. Don't scold. If it was offered again (session.get_state shows a new teaching session on the card), say it's there whenever they're ready and sets itself up in a minute; otherwise say the topic waits, and that you can defer_topic if they'd rather move on. Then wait.",
 };
 export const WAKE_TRIGGERS = Object.freeze(Object.keys(GOALS));
 
@@ -44,7 +46,7 @@ export const WAKE_TRIGGERS = Object.freeze(Object.keys(GOALS));
 export const WAKE_LABELS = Object.freeze({
   plan_adjusted: "You adjusted the plan", plan_confirmed: "You approved the plan", topic_started: "A new topic started",
   check_scored: "An Agent Check was marked", teach_back: "You taught it back", over_estimate: "The estimate is used up",
-  coins_approved: "You approved more coins", teaching_done: "You finished teaching",
+  coins_approved: "You approved more coins", teaching_done: "You finished teaching", teaching_unmet: "The teaching session ended", teaching_abandoned: "The teaching session ended early",
 });
 
 export function wakeGoal(trigger, facts = {}) {

@@ -7,8 +7,7 @@
  * the gateway verifies it on every catalogue and invocation request.
  */
 import jwt from "jsonwebtoken";
-import { createHash, randomUUID } from "node:crypto";
-import { safeCompare } from "../../lib/safeCompare.js";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 
 const ISSUER = "akoro-api-agent-tools";
 const AUDIENCE = "akoro-python-agent-tools";
@@ -42,12 +41,19 @@ function learningScope(value) {
   return { curriculumKey, subject, topicKey };
 }
 
+function safeEqual(left, right) {
+  if (!left || !right) return false;
+  const a = Buffer.from(String(left));
+  const b = Buffer.from(String(right));
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 export function requireAgentToolsCredential(req, res, next) {
   const expected = gatewaySecret();
   if (!expected) {
     return res.status(503).json({ success: false, error: "Agent tools gateway is not configured" });
   }
-  if (!safeCompare(req.get("X-Akoro-Tools-Secret"), expected)) {
+  if (!safeEqual(req.get("X-Akoro-Tools-Secret"), expected)) {
     return res.status(401).json({ success: false, error: "Invalid agent tools credential" });
   }
   next();

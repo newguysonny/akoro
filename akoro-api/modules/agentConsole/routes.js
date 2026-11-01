@@ -34,7 +34,6 @@ import { openai } from "../../lib/aiModel.js";
 import { readLogs, logSeq } from "../../lib/logTap.js";
 import { runDry } from "../../lib/dryRunContext.js";
 import { signInternalAccess } from "../auth/routes.js";
-import { safeCompare } from "../../lib/safeCompare.js";
 
 const router = express.Router();
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -51,7 +50,7 @@ const guard = (req, res, next) => {
   // "Authorization: Bearer <key>" but not a custom header.
   const bearer = /^Bearer\s+(.+)$/i.exec(req.get("authorization") || "")?.[1]?.trim();
   const got = req.get("x-agent-console-key") || bearer || req.query.key;
-  if (!safeCompare(got, want)) return res.status(401).json({ success: false, error: "Bad console key" });
+  if (got !== want) return res.status(401).json({ success: false, error: "Bad console key" });
   next();
 };
 const bad = (res, msg, code = 400) => res.status(code).json({ success: false, error: msg });

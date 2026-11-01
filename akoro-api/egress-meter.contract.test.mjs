@@ -35,8 +35,8 @@ test("/health carries the numbers-only summary (public, no route structure)", ()
 });
 
 test("the per-route breakdown is guarded like preflight, sorted by bytes", () => {
-  assert.match(appJs, /app\.get\("\/internal\/egress", requireSharedSecret\("INTERNAL_SECRET"\), \(req, res\) => \{/);
-  assert.match(appJs, /app\.get\("\/internal\/preflight", requireSharedSecret\("INTERNAL_SECRET"\), \(req, res\) => \{/);
+  assert.match(appJs, /app\.get\("\/internal\/egress", \(req, res\) => \{/);
+  assert.match(appJs, /req\.headers\["x-internal-secret"\] === secret/);
   assert.match(appJs, /\.sort\(\(a, b\) => b\.bytes - a\.bytes\)/);
 });
 

@@ -3080,8 +3080,22 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   fallback on timeout/malformed, loop stops on reply, cap enforced,
   `propose_complete` rejected until objective met, phases unchanged vs
   today's gate tests (`state-machine.test.mjs`, `runner.test.mjs` equivalents).
-- **Status: 🟡 partly built (2026-10-20), paused — we come back to it later.**
-  Built: a teaching session is a workflow of the engine
+- **Status (2026-11-01): ✅ built — sandbox run pending (`teaching.agent_turns`).**
+  Each turn is agent-driven (`teaching-session/controller.js`, policy in
+  `policy.js`): the fixed pre-steps (load state, observe evidence), then the
+  teaching agent — ≤3 decisions, 8 s each — reads the state, picks a strategy
+  (cap 2), sets a coaching focus, then ONE reply: `protege.respond` in a move
+  (teach_agent) or `guide.teach` in a move (learn_with_guide, NaNa replies,
+  the protégé is never called); `teaching.propose_complete` is accepted only
+  when the gate is at MASTERY with every part verified (then the session ends
+  itself); `teaching.propose_pause`. Invalid / slow / missing → the fallback
+  move from the evidence (`decision.fallback`, audited on the workflow). The
+  post-steps (assess, persist, record, coach, gate) always run. §9.5 bounds:
+  60 turns, 2 strategy changes → bounded end. The modal's guide chat runs on
+  the live session (`set_teaching_mode`, `teacher_message {mode}`,
+  `guide_reply_token`) and shows a session that ended itself.
+  `AKORO_TEACHING_AGENT=off` keeps the fixed sequence for teach mode.
+  Earlier (2026-10-20): a teaching session is a workflow of the engine
   (`teaching-session/workflow.js`: proposed → scheduled → teaching_active ↔
   adapt_strategy → assessment → completed); `start_adaptive_session` with
   `workflowId` ties the live socket to it (owner and open state checked); its
@@ -3099,7 +3113,17 @@ planning loop's tool names, the double practice charge, empty syllabus data).
 - Outcome delivery → `StudyPrepController.onChildOutcome` → `retest_ready`.
 - Abandon/unmet handling.
 - **Exit:** Scenario B (critical end-to-end) passes, including app close and later resume.
-- **Status: 🟡 mostly built (2026-10-20), paused with Phase 6.** Built
+- **Status (2026-11-01): ✅ built — sandbox run pending (`studyprep.teaching_outcomes`).**
+  Ended before any teaching → `abandoned` (reason learner_ended), no
+  teach-back, offered once more on the card (a fresh proposal; once), wake
+  `teaching_abandoned`. Ended with parts missing (the learner, or a bound) →
+  completed with `objectiveMet: false`, `objectiveEvidence`,
+  `recommendedNextAction` (`flag_gap` on a bound); the retest still unlocks;
+  wake `teaching_unmet`. `open_workflow { workflowId }` reopens a workflow
+  after closing the app (the live session → `resume_session`; otherwise a
+  continuation of its row) with its learner-visible events. Study Prep hears
+  each step as its own agent message — no cards pushed under the turns.
+  Earlier: **🟡 mostly built (2026-10-20).** Built
   (`study-prep/teaching-handoff.js`): an Agent Check below the pass mark with
   tries left offers a teaching session on its gaps (`learner.action_required`
   card, auto-approve after a minute); approve → `start_teaching_session` puts it

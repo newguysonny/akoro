@@ -28,7 +28,6 @@ import { businessConfig }                 from "../../config/index.js";
 import { verifyTransaction }              from "../adaptive-learning/marketplace/paystackService.js";
 import { performRefund }                  from "./payments.js";
 import { notify }                         from "../notifications/events.js";
-import { paystackSignatureValid } from "../../lib/safeCompare.js";
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -415,7 +414,11 @@ const payoutHandlers = {
    * No JWT auth — Paystack signature verification is the security check.
    */
   webhook: asyncHandler(async (req, res) => {
-    if (!paystackSignatureValid(JSON.stringify(req.body), req.headers["x-paystack-signature"]))
+    const hash = require("crypto")
+      .createHmac("sha512", PAYSTACK_KEY())
+      .update(JSON.stringify(req.body)).digest("hex");
+
+    if (hash !== req.headers["x-paystack-signature"])
       return res.status(400).json({ success: false, message: "Invalid signature" });
 
     const { event, data } = req.body;

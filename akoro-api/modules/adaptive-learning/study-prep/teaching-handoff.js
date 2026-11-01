@@ -21,6 +21,7 @@
  * from the facts — no model call, no cost — except the wake after the session.
  */
 import { autoApproveAt, dueForAutoApprove, handoffFromCheck, OPEN_TEACHING_STATES, teachingOutcome, teachingProgress, teachingView } from "../teaching-session/workflow.js";
+import { normaliseMode, recommendedNextAction } from "../teaching-session/policy.js";
 
 export const START_TEACHING_TOOL = "teaching.start_session";
 /** The tool row for following a live session (started, each part taught). */
@@ -194,21 +195,61 @@ export function makeTeachingHandoff({ engine, findOpen, listDueProposals, studyP
     return p;
   }
 
+  /** One agent-driven turn, for the audit trail (§9.3): what the agent chose, and any fallback. Never shown to the learner. */
+  async function recordTurn({ workflowId, decisions = [], fallback = null, reply = null, mode = null }) {
+    if (!workflowId) return null;
+    return engine.appendEvent(workflowId, {
+      event_type: fallback ? "decision.fallback" : "decision.made", category: "teaching", actor: "agent", visibility: "audit",
+      payload: { mode, reply, decisions: decisions.slice(0, 6), ...(fallback ? { fallback } : {}) },
+    }).catch(quiet("turn"));
+  }
+
+  /** What the learner can see of a teaching workflow since `after` (open_workflow's replay). */
+  async function eventsFor({ workflowId, after = 0 }) {
+    const rows = await engine.events(workflowId, { after: Number.isInteger(after) && after > 0 ? after : null }).catch(() => []);
+    return (rows || []).filter((r) => r.visibility === "learner");
+  }
+
+  /** The learner switched mode in the modal (D24): kept on the workflow, applies from the next turn. */
+  async function setMode({ workflowId, mode }) {
+    if (!workflowId) return null;
+    return engine.annotate(workflowId, { teachingMode: normaliseMode(mode) }).catch(quiet("mode"));
+  }
+
   /**
-   * 5. The learner ended it: assessment → completed, and the outcome goes to
-   * Study Prep. A session that ended before any teaching stays open (the
-   * dashboard offers it again).
+   * 5. The session ended (§9.6, Phase 7):
+   *   · the learner ended it before teaching anything → abandoned (reason
+   *     learner_ended); Study Prep hears it and the session is offered once more;
+   *   · it ended with teaching → assessment → completed, with objectiveMet
+   *     (the gate reached mastery) or not (a §9.5 bound, or ended early) —
+   *     the outcome goes to Study Prep either way.
+   * endedBy: "learner" (the End button) | "objective_met" | "bounded_end".
    */
-  async function finish({ workflowId, endResult = {}, notesAdded = 0 }) {
+  async function finish({ workflowId, endResult = {}, notesAdded = 0, endedBy = "learner", bounded = null, mode = null, strategy = null }) {
     const child = await engine.get(workflowId).catch(() => null);
     if (!child || !["teaching_active", "adapt_strategy"].includes(child.state)) return null;
-    const outcome = teachingOutcome(endResult, { focus: child.metadata?.focus || [], notesAdded, progress: child.metadata?.progress || null });
-    if (!outcome.taught) return { ignored: "nothing_taught", view: teachingView(child) };
+    const base = teachingOutcome(endResult, { focus: child.metadata?.focus || [], notesAdded, progress: child.metadata?.progress || null });
+    if (!base.taught) {
+      const outcome = { ...base, objectiveMet: false, abandoned: true, reason: "learner_ended", recommendedNextAction: recommendedNextAction({ abandoned: true }) };
+      const gone = await engine.transition(child.id, { from: child.state, to: "abandoned", reason: "learner_ended", patch: { metadata: { outcome, endedAt: now() } } });
+      if (!gone) return null;
+      await engine.appendEvent(gone.id, { event_type: "workflow.abandoned", actor: "learner", visibility: "learner", payload: { outcome, narrative: "Ended before any teaching" } }).catch(quiet("child abandoned"));
+      await engine.emitOutcome(gone.id, outcome).catch(quiet("outcome"));
+      return { view: teachingView(gone), outcome };
+    }
+    const met = Boolean(base.mastery) || endedBy === "objective_met";
+    const focus = child.metadata?.focus || [];
+    const outcome = {
+      ...base, objectiveMet: met, endedBy, ...(bounded ? { boundedEnd: bounded } : {}),
+      objectiveEvidence: focus.map((f, i) => ({ concept: f, status: met || i < (base.partsDone || 0) ? "demonstrated" : "not_yet" })),
+      teachingMode: normaliseMode(mode || child.metadata?.teachingMode), strategyUsed: strategy || "teach_back",
+      recommendedNextAction: recommendedNextAction({ met, bounded }),
+    };
     const assessing = await engine.transition(child.id, { from: child.state, to: "assessment" });
     if (!assessing) return null;
     const done = await engine.transition(child.id, { from: "assessment", to: "completed", patch: { metadata: { outcome, endedAt: now() } } });
     if (!done) return null;
-    await engine.appendEvent(done.id, { event_type: "workflow.completed", actor: "learner", visibility: "learner", payload: { outcome, narrative: "Session finished" } }).catch(quiet("child completed"));
+    await engine.appendEvent(done.id, { event_type: "workflow.completed", actor: endedBy === "learner" ? "learner" : "system", visibility: "learner", payload: { outcome, narrative: met ? "Session finished — every part taught" : "Session finished" } }).catch(quiet("child completed"));
     await engine.emitOutcome(done.id, outcome).catch(quiet("outcome"));
     return { view: teachingView(done), outcome };
   }
@@ -225,6 +266,28 @@ export function makeTeachingHandoff({ engine, findOpen, listDueProposals, studyP
     return rows.filter((r) => r.workflow_type === "teaching" && OPEN_TEACHING_STATES.includes(r.state)).map(teachingView);
   }
 
+  /** An abandoned session, offered once more on the card (a fresh proposal; it sets itself up after a minute). */
+  async function reoffer(parent, child) {
+    const m = child.metadata || {};
+    const proposedAt = now();
+    const made = await engine.create({
+      workflowType: "teaching", learnerId: child.learner_id, entryMode: "study_prep_handoff", state: "proposed",
+      parent: parent.id, source: { workflowId: parent.id, topicId: m.topicId, reason: "teach_back" },
+      idempotencyKey: `reoffer:${child.id}`,
+      metadata: { topic: m.topic, subject: m.subject || null, focus: m.focus || [], studyPrepSessionId: m.studyPrepSessionId, topicId: m.topicId,
+        fromLabel: m.fromLabel || null, proposedAt, autoApproveAt: autoApproveAt(proposedAt), reoffers: (Number(m.reoffers) || 0) + 1 },
+    });
+    const again = made?.instance;
+    if (!again || !made.created) return again || null;
+    await toParent(parent.id, {
+      event_type: "learner.action_required", category: "teaching",
+      payload: { kind: "teaching_handoff", teachingWorkflowId: again.id, topicId: m.topicId, topic: m.topic, focus: m.focus || [],
+        autoApproveAt: again.metadata.autoApproveAt, label: "Confirm the teaching session",
+        narrative: `The teaching session on ${m.topic} again — confirm it, or it's set up by itself in a minute` },
+    });
+    return again;
+  }
+
   /**
    * Study Prep's side of the outcome hook: the teach-back is confirmed (the
    * retest unlocks and starts a minute later), the card and chat hear it, and
@@ -235,15 +298,26 @@ export function makeTeachingHandoff({ engine, findOpen, listDueProposals, studyP
       const m = child.metadata || {};
       const sessionId = parent.metadata?.studyPrepSessionId || m.studyPrepSessionId;
       if (!sessionId || !m.topicId) return;
+      // Ended before any teaching: no teach-back, the topic waits; the session is offered once more.
+      if (outcome.abandoned) {
+        const again = (Number(m.reoffers) || 0) < 1 ? await reoffer(parent, child).catch(quiet("re-offer")) : null;
+        await toParent(parent.id, {
+          event_type: "workflow.handoff_completed", category: "teaching", actor: "learner",
+          payload: { teachingWorkflowId: child.id, topicId: m.topicId, topic: m.topic, outcome, abandoned: true, reoffered: !!again,
+            narrative: `The teaching session on ${m.topic} ended before any teaching` },
+        });
+        studyPrep.wake?.({ sessionId, learnerId: parent.learner_id, trigger: "teaching_abandoned", facts: { topic: m.topic, reoffered: !!again } });
+        return;
+      }
       await studyPrep.confirmTeachBack({ sessionId, learnerId: parent.learner_id, topicId: m.topicId }).catch(quiet("teach-back"));
       const parts = outcome.parts ? ` · ${outcome.partsDone ?? 0} of ${outcome.parts} parts` : "";
       await toParent(parent.id, {
         event_type: "workflow.handoff_completed", category: "teaching", actor: "learner",
         payload: { teachingWorkflowId: child.id, topicId: m.topicId, topic: m.topic, outcome, narrative: `You finished teaching ${m.topic}${parts}` },
       });
-      studyPrep.wake?.({ sessionId, learnerId: parent.learner_id, trigger: "teaching_done", facts: { topic: m.topic, notesAdded: outcome.notesAdded, partsDone: outcome.partsDone, parts: outcome.parts } });
+      studyPrep.wake?.({ sessionId, learnerId: parent.learner_id, trigger: outcome.objectiveMet === false ? "teaching_unmet" : "teaching_done", facts: { topic: m.topic, notesAdded: outcome.notesAdded, partsDone: outcome.partsDone, parts: outcome.parts, boundedEnd: outcome.boundedEnd || null } });
     },
   };
 
-  return { propose, approve, autoApproveDue, cancelFor, bind, saved, progress, finish, listOpen, forSessionRow, controller, findOpen };
+  return { propose, approve, autoApproveDue, cancelFor, bind, saved, progress, finish, recordTurn, setMode, eventsFor, listOpen, forSessionRow, controller, findOpen };
 }

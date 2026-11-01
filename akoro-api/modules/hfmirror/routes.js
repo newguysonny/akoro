@@ -28,7 +28,6 @@
 import express from "express";
 import { DEFAULT_MAX_FILE_MB, parseRepoId, runMirrorJob, scrub } from "./engine.js";
 import { whoAmI } from "@huggingface/hub";
-import { safeCompare } from "../../lib/safeCompare.js";
 
 const router = express.Router();
 
@@ -38,7 +37,7 @@ const mirrorGuard = (req, res, next) => {
   const want = process.env.HF_MIRROR_KEY;
   if (!want) return res.status(501).json({ success: false, error: "Mirror console not configured — set HF_MIRROR_KEY" });
   const got = req.get("x-hf-mirror-key") || req.query.key;
-  if (!safeCompare(got, want)) return res.status(401).json({ success: false, error: "Bad mirror key" });
+  if (got !== want) return res.status(401).json({ success: false, error: "Bad mirror key" });
   next();
 };
 

@@ -387,7 +387,7 @@ export function setupWebSocket(io) {
     });
 
     // ── teacher_message (all session types) ──────────────────
-    socket.on("teacher_message", async ({ message }) => {
+    socket.on("teacher_message", async ({ message, mode } = {}) => {
       const { sessionId, agentPairId } = socket.data;
       const orchestrator = activeSessions.get(sessionId);
       if (!orchestrator) return socket.emit("error", { message: "No active session." });
@@ -412,10 +412,12 @@ export function setupWebSocket(io) {
           onStudentChunk: (token) => socket.emit("student_token",  { token }),
           onStateUpdate:  (state) => socket.emit("state_update",   state),
           onGuideChunk:   (token) => socket.emit("guide_token",    { token }),
+          // Guide mode (learn_with_guide): NaNa's teaching reply IS the turn's reply.
+          onGuideReplyChunk: (token) => socket.emit("guide_reply_token", { token }),
           // Observable workflow labels only—never raw messages, model rationale,
           // or an instruction that the browser may use to choose a tool.
           onWorkflowStep: (step) => socket.emit("teaching_workflow_step", step),
-        });
+        }, { mode: mode || null });
 
         socket.emit("student_done");
         socket.emit("guide_done");
@@ -444,6 +446,7 @@ export function setupWebSocket(io) {
           turnXP:         result.turnXP || 0,
           sessionType:    result.sessionType,
           workflow:       result.workflow || null,
+          teachingMode:   result.teachingMode || "teach_agent",
         });
 
         // Persist the turn and compact server-owned evidence before another
@@ -451,9 +454,16 @@ export function setupWebSocket(io) {
         await appendSessionBlocks(orchestrator, [{ type: "user", text: message }, ...blocks]);
         // Phase 6: a handed-over session tells Study Prep each part taught (its card and chat follow).
         if (orchestrator.teachingWorkflowId) {
-          import("./study-prep/wiring.js").then((w) => w.teachingHandoff().progress({ workflowId: orchestrator.teachingWorkflowId, result }))
-            .catch((e) => console.warn("[teaching handoff] progress:", e.message));
+          import("./study-prep/wiring.js").then((w) => {
+            const h = w.teachingHandoff();
+            h.recordTurn({ workflowId: orchestrator.teachingWorkflowId, decisions: result.decisions, fallback: result.fallback, reply: result.workflow?.reply || null, mode: result.teachingMode });
+            return h.progress({ workflowId: orchestrator.teachingWorkflowId, result });
+          }).catch((e) => console.warn("[teaching handoff] progress:", e.message));
         }
+        // The agent paused it: keep it resumable (the row exists), as a minimise does.
+        if (result.pauseRequested) await ensureSessionRecord(orchestrator).catch(() => null);
+        // Every part verified and the agent proposed finishing, or a §9.5 bound was reached: the session ends itself.
+        if (result.endRequested) await endLiveSession(socket, { endedBy: result.endRequested, bounded: result.boundedEnd });
       } catch (err) {
         console.error("[teacher_message]", err);
         socket.emit("student_done"); socket.emit("guide_done");
@@ -546,7 +556,45 @@ export function setupWebSocket(io) {
     });
 
     // ── end_session ───────────────────────────────────────────
-    socket.on("end_session", async () => {
+    socket.on("end_session", async () => endLiveSession(socket, { endedBy: "learner" }));
+
+    // ── set_teaching_mode (D24) ───────────────────────────────
+    // Learn by teaching ↔ learn with the guide, from the next turn. Transcript,
+    // evidence, phase and part carry across.
+    socket.on("set_teaching_mode", async ({ mode } = {}) => {
+      const orchestrator = activeSessions.get(socket.data?.sessionId);
+      if (!orchestrator?.session) return socket.emit("error", { message: "No active session." });
+      const { normaliseMode } = await import("./teaching-session/policy.js");
+      orchestrator.session.teachingMode = normaliseMode(mode);
+      socket.emit("teaching_mode", { mode: orchestrator.session.teachingMode });
+      if (orchestrator.teachingWorkflowId) {
+        import("./study-prep/wiring.js").then((w) => w.teachingHandoff().setMode({ workflowId: orchestrator.teachingWorkflowId, mode: orchestrator.session.teachingMode })).catch(() => null);
+      }
+    });
+
+    // ── open_workflow (§9.7) ──────────────────────────────────
+    // Reopen a teaching workflow by id — after closing the app, or from another
+    // device: a live session resumes as resume_session does; otherwise the
+    // client starts it as a continuation of its saved row. Always the
+    // authenticated learner's own, and only while it is open.
+    socket.on("open_workflow", async ({ workflowId, afterSeq = 0 } = {}) => {
+      const me = socket.data?.user?.id;
+      if (!me || typeof workflowId !== "string") return socket.emit("workflow_open_failed", { workflowId: workflowId || null, reason: "not_found" });
+      try {
+        const w = await import("./study-prep/wiring.js");
+        const handoff = w.teachingHandoff();
+        const view = (await handoff.listOpen(me)).find((t) => t.workflowId === workflowId) || null;
+        if (!view) return socket.emit("workflow_open_failed", { workflowId, reason: "not_open" });
+        const events = await handoff.eventsFor({ workflowId, after: Number(afterSeq) || 0 });
+        const liveId = [...activeSessions.entries()].find(([, o]) => o.teachingWorkflowId === workflowId && (o.userId || o.studentId) === me)?.[0] || null;
+        socket.emit("workflow_opened", { workflow: view, events: (events || []).slice(-50), liveSessionId: liveId, resumeWith: liveId ? "resume_session" : "start_adaptive_session", adaptiveSessionId: view.adaptiveSessionId || null });
+      } catch (e) {
+        socket.emit("workflow_open_failed", { workflowId, reason: "error" });
+        console.warn("[open_workflow]", e.message);
+      }
+    });
+
+    async function endLiveSession(socket, { endedBy = "learner", bounded = null } = {}) {
       const { sessionId, agentId, agentPairId } = socket.data;
       const orchestrator = activeSessions.get(sessionId);
       if (sessionId) cancelSessionReap(sessionId);
@@ -559,7 +607,8 @@ export function setupWebSocket(io) {
         // Phase 6: a handed-over session's outcome goes back to Study Prep (its retest unlocks).
         if (orchestrator.teachingWorkflowId) {
           await import("./study-prep/wiring.js")
-            .then((w) => w.teachingHandoff().finish({ workflowId: orchestrator.teachingWorkflowId, endResult, notesAdded: orchestrator.stats?.agentKnowledgeAdded || 0 }))
+            .then((w) => w.teachingHandoff().finish({ workflowId: orchestrator.teachingWorkflowId, endResult, notesAdded: orchestrator.stats?.agentKnowledgeAdded || 0,
+              endedBy, bounded, mode: orchestrator.session?.teachingMode || null, strategy: orchestrator.session?.strategy || null }))
             .catch((e) => console.warn("[teaching handoff] finish:", e.message));
         }
         activeSessions.delete(sessionId);
@@ -569,9 +618,11 @@ export function setupWebSocket(io) {
           agentGrowth:  endResult.agentGrowth  || null,
           decayResult:  endResult.decayResult  || null,
           sessionType:  endResult.sessionType  || "free_teaching",
+          // Who ended it: the learner, or the session itself (every part taught / a limit reached).
+          endedBy, ...(bounded ? { bounded } : {}),
         });
       } catch (err) { console.error("[end_session]", err); socket.emit("error", { message: err.message }); }
-    });
+    }
 
     // ── switch_agent_pair ─────────────────────────────────────
     // v3.2: verifies ownership, then rebuilds the live session with the new

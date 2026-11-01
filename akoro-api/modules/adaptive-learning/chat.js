@@ -149,8 +149,8 @@ const router     = express.Router();
 router.use((req, res, next) => {
   const key = process.env.AGENT_CONSOLE_KEY;
   if (!key) return next();
-  const dry = safeCompare(req.get("x-agent-console-dry"), key);
-  const inspect = safeCompare(req.get("x-agent-console-inspect"), key);
+  const dry = req.get("x-agent-console-dry") === key;
+  const inspect = req.get("x-agent-console-inspect") === key;
   let go = next;
   if (inspect) { const inner = go; go = () => runInspected(inner); }
   if (dry) { const inner = go; go = () => runDry(inner); }
@@ -3603,7 +3603,6 @@ async function processAttachments(attachments = []) {
 // directly — a re-export-only line made every chat turn throw
 // ReferenceError: assembleChatDoctrine is not defined.
 import { tutorSystemPrompt, assembleChatDoctrine } from "../agent-context/chat-doctrine.js";
-import { safeCompare } from "../../lib/safeCompare.js";
 export { tutorSystemPrompt, assembleChatDoctrine };
 
 /* chat.completions streaming → `delta` events. Returns the full text. */

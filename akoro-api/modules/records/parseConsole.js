@@ -17,7 +17,6 @@
  */
 import express from "express";
 import { parsePageRunAsync, getParseJob, MAX_IMAGE_B64_CHARS, recordsExtractionEnabled } from "./extractLib.js";
-import { safeCompare } from "../../lib/safeCompare.js";
 
 const router = express.Router();
 
@@ -28,7 +27,7 @@ const consoleGuard = (req, res, next) => {
   const want = process.env.PARSE_CONSOLE_KEY;
   if (!want) return res.status(501).json({ success: false, error: "Parse console not configured — set PARSE_CONSOLE_KEY" });
   const got = req.get("x-parse-console-key") || req.query.key;
-  if (!safeCompare(got, want)) return res.status(401).json({ success: false, error: "Bad console key" });
+  if (got !== want) return res.status(401).json({ success: false, error: "Bad console key" });
   next();
 };
 

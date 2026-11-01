@@ -21,6 +21,8 @@ import { getStudentState } from "../../student-state.js";
 import { createTeachingEvidenceState, publicTeachingEvidence } from "../../teaching-evidence.js";
 import { createPublicLearningState } from "../../public-learning-state.js";
 import { executeTeachingTurnWorkflow } from "../../teaching-workflow/runner.js";
+import { executeAgentTeachingTurn } from "../../teaching-session/controller.js";
+import { normaliseMode } from "../../teaching-session/policy.js";
 import { blocksToConversationHistory } from "./continuation-history.js";
 import { STUDENT_PHASES, ACTION_FOR_DIALOGUE_MOVE } from "../../teaching-session/state-machine.js";
 import { openingIdeas } from "../../teaching-session/guideIdeas.js";
@@ -299,20 +301,27 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
   }
 
   // ── PROCESS ONE TURN ─────────────────────────────────────────
-  async processTeachingMessage(humanMessage, callbacks = {}) {
-    // The turn is a fixed server workflow, not a model-routed collection of
-    // capabilities. Its named tools run in an evidence-first sequence and the
-    // final deterministic gate is the sole authority for lesson progress.
+  async processTeachingMessage(humanMessage, callbacks = {}, { mode = null } = {}) {
+    // Phase 6: the turn is agent-driven (teaching-session/controller.js) — the
+    // harness's evidence pre-steps and the deterministic gate still run every
+    // turn, the agent only picks the reply's move. AKORO_TEACHING_AGENT=off
+    // keeps the fixed evidence-first sequence (teaching-workflow/runner.js).
     this.session.turnCount++;
     this.stats.turnsCompleted++;
+    if (mode) this.session.teachingMode = normaliseMode(mode);
+    const teachingMode = normaliseMode(this.session.teachingMode);
 
-    const workflow = await executeTeachingTurnWorkflow({
+    const workflowArgs = {
       orchestrator: this,
       humanMessage,
       callbacks,
       phaseLabels: STUDENT_PHASES,
       actionForDialogueMove: ACTION_FOR_DIALOGUE_MOVE,
-    });
+    };
+    const agentTurns = String(process.env.AKORO_TEACHING_AGENT || "on").toLowerCase() !== "off";
+    const workflow = agentTurns || teachingMode === "learn_with_guide"
+      ? await executeAgentTeachingTurn({ ...workflowArgs, mode: teachingMode })
+      : await executeTeachingTurnWorkflow(workflowArgs);
     const {
       topic,
       mustKnowParts,
@@ -343,7 +352,9 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
     // The workflow trace itself carries only named public steps, never raw
     // messages, LLM rationale, or hidden chain-of-thought.
     this.session.history.push({ role: "human_teacher", content: humanMessage, timestamp: new Date() });
-    this.session.history.push({ role: "student_agent", content: studentReply, timestamp: new Date() });
+    // Guide mode: NaNa taught this turn (no protégé reply).
+    if (workflow.guideReply) this.session.history.push({ role: "guide", content: workflow.guideReply, timestamp: new Date() });
+    else this.session.history.push({ role: "student_agent", content: studentReply, timestamp: new Date() });
 
     // Reward verified work, not an unverified well-worded response.
     const baseXP = 5 +
@@ -357,8 +368,16 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
 
     return {
       type: "teaching_response",
-      studentAgentResponse: studentReply,
-      guideMessage: guideResult.tip,
+      studentAgentResponse: workflow.guideReply ? null : studentReply,
+      guideMessage: workflow.guideReply || guideResult.tip,
+      teachingMode,
+      // The session asks to end (objective met, or a §9.5 bound reached) — websocket.js ends it.
+      endRequested: workflow.endRequested || null,
+      boundedEnd: workflow.boundedEnd || null,
+      objectiveMet: !!workflow.objectiveMet,
+      pauseRequested: workflow.pauseRequested || null,
+      decisions: workflow.decisions || [],
+      fallback: workflow.fallback || null,
       // The guide's ideas for the human's next message (shown as pills, not a message).
       guideSuggestions: Array.isArray(guideResult.suggestions) ? guideResult.suggestions : null,
       guideNextAction: guideResult.nextAction || null,
