@@ -692,27 +692,18 @@ function AgentChatTab({
   const PRI_LABEL = {high:t('agent.pri_high_label'),medium:t('agent.pri_medium_label'),low:t('agent.pri_low_label')};
   const PRI_BG    = {high:`${RED}15`,medium:`${GOLD}15`,low:`${GREEN}15`};
 
-  // The study-prep session is the durable layer — it outlives chats. On mount,
-  // restore an active session as an agent message carrying the session card,
-  // exactly like a fresh start_study_prep_session tool echo would.
+  // The study-prep session is the durable layer — it outlives chats. An active one this chat doesn't show
+  // gets a slim bar above the message box: Continue starts the agent's turn, and the card comes in that turn
+  // (it used to be pushed onto the end of the chat as a message of its own, below the latest turn).
+  const [activePrep, setActivePrep] = useState(null);
   useEffect(() => {
     let cancelled = false;
     fetchActiveStudyPrepSession()
-      .then((response) => {
-        if (cancelled || !response?.session?.id) return;
-        setMessages((prev) => prev.some((m) => m.studyPrepSessionId === response.session.id) ? prev : [...prev, {
-          id: `study-prep-${response.session.id}`,
-          from: "agent",
-          text: "Your study-prep session is active — pick up where you left off:",
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          at: new Date().toISOString(),
-          phase: "done",
-          studyPrepSessionId: response.session.id,
-        }]);
-      })
+      .then((response) => { if (!cancelled && response?.session?.id) setActivePrep({ id: response.session.id, subject: response.session.subject || null }); })
       .catch(() => {});
     return () => { cancelled = true; };
   }, []);
+  const [showWaiting, setShowWaiting] = useState(false);
 
   // The parent fetches the agent profile asynchronously; if it resolves after
   // this tab mounts, sync the incoming name/emoji so the header isn't blank.
@@ -1316,7 +1307,9 @@ function AgentChatTab({
                       <span style={{ width:8,height:8,borderRadius:2,background:"var(--ak-text-muted)",display:"inline-block" }}/>{t('agent.stopped')}
                     </div>
                   )}
-                  {!isMe&&msg.studyPrepSessionId&&(pinnedPrep===msg.studyPrepSessionId&&lastPrepCardId===msg.id
+                  {!isMe&&msg.studyPrepSessionId&&lastPrepCardIdOf(msg.studyPrepSessionId)!==msg.id
+                    ? <div data-workflow-earlier-card="" style={{ display:"flex",alignItems:"center",gap:6,marginTop:6,fontSize:11.5,fontWeight:750,color:"var(--ak-text-muted)" }}><Icon name="ti-arrow-down" size={13}/>Study Prep — continued further down</div>
+                    : !isMe&&msg.studyPrepSessionId&&(pinnedPrep===msg.studyPrepSessionId&&lastPrepCardId===msg.id
                     ? <div data-workflow-pinned-note="" style={{ display:"flex",alignItems:"center",gap:6,marginTop:6,fontSize:11.5,fontWeight:750,color:"var(--ak-text-muted)" }}><Icon name="ti-pin" size={13}/>Study Prep is running — pinned above the message box</div>
                     : <StudyPrepChatCard sessionId={msg.studyPrepSessionId} onEvents={onStudyPrepEvents} onRunning={onStudyPrepRunning} developer={devView} onNotes={onStudyPrepNotes} conversationId={sessionId}/>)}
                   {!isMe&&msg.proposal?.status==="proposed"&&msg.proposal.preview&&<ProposalPreview preview={msg.proposal.preview}/>}
@@ -1404,8 +1397,6 @@ function AgentChatTab({
                 </div>
               );
             })}
-            {/* Changes a built tool proposed that are still waiting for the learner's tap — shown again after a reload (S6). */}
-            {pendingChanges.filter((c)=>!messages.some((m)=>m.confirm?.confirmationId===c.confirmationId)).map((c)=><ConfirmChangeCard key={c.confirmationId} confirm={c} onDone={onCardDone}/>)}
             {loading&&(
               <div style={{ display:"flex",alignItems:"center",gap:8,color:"var(--ak-text-muted)",fontSize:12.5,fontWeight:600 }}>
                 <span style={{ display:"flex",gap:5 }}>{[0,.25,.5].map((d,i)=><span key={i} style={{ width:6,height:6,borderRadius:"50%",background:BRAND,display:"inline-block",animation:`bounce-dot .7s ease-in-out ${d}s infinite alternate` }}/>)}</span>
@@ -1452,6 +1443,23 @@ function AgentChatTab({
                 ))}
               </div>
             )}
+            {/* What is still open but not in the turns on screen: one slim bar, never cards stacked under the latest turn. */}
+            {(()=>{
+              const waiting=pendingChanges.filter((c)=>c.sessionId&&c.sessionId===sessionId&&!messages.some((m)=>m.confirm?.confirmationId===c.confirmationId));
+              const prep=activePrep&&!pinnedPrep&&!messages.some((m)=>m.studyPrepSessionId===activePrep.id)?activePrep:null;
+              if(!waiting.length&&!prep) return null;
+              const bar={ display:"flex",alignItems:"center",gap:8,padding:"7px 11px",borderRadius:12,border:"1px solid var(--ak-border)",background:"var(--ak-surface-hover)",fontSize:12,fontWeight:800,color:"var(--ak-text)",fontFamily:"'Nunito',sans-serif" };
+              const btn={ marginLeft:"auto",padding:"5px 12px",borderRadius:999,border:"none",background:BRAND,color:"#fff",fontSize:11.5,fontWeight:900,cursor:"pointer",fontFamily:"'Nunito',sans-serif" };
+              return (
+                <div data-open-bar="" style={{ display:"flex",flexDirection:"column",gap:6,margin:"0 0 8px" }}>
+                  {prep&&<div style={bar}><Icon name="ti-route" size={14} color={BRAND}/><span>Study Prep{prep.subject?` · ${prep.subject}`:""} — in progress</span>
+                    <button type="button" disabled={loading||running} style={btn} onClick={()=>sendMessage("Continue my study prep session.")}>Continue</button></div>}
+                  {waiting.length>0&&<div style={bar}><Icon name="ti-shield-check" size={14} color={BRAND}/><span>{waiting.length} change{waiting.length===1?"":"s"} waiting for your OK</span>
+                    <button type="button" style={btn} onClick={()=>setShowWaiting((v)=>!v)}>{showWaiting?"Hide":"Show"}</button></div>}
+                  {waiting.length>0&&showWaiting&&<div style={{ maxHeight:"36vh",overflowY:"auto" }}>{waiting.map((c)=><ConfirmChangeCard key={c.confirmationId} confirm={c} onDone={onCardDone}/>)}</div>}
+                </div>
+              );
+            })()}
             {pinnedPrep && (
               <div data-workflow-pinned="" style={{ width:"min(560px,100%)",maxHeight:"42vh",overflowY:"auto",margin:"0 0 8px",boxShadow:"0 4px 18px rgba(30,20,60,.12)",borderRadius:14 }}>
                 <StudyPrepChatCard sessionId={pinnedPrep} onEvents={onStudyPrepEvents} onRunning={onStudyPrepRunning} pinned developer={devView} onNotes={onStudyPrepNotes} conversationId={sessionId}/>

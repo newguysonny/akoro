@@ -33,6 +33,8 @@ const toLearner = (description) => String(description || "").replace(/\bthe lear
 const publicConfirmation = (row) => ({
   confirmationId: row.id,
   kind: row.tool_arguments?.kind === "permission" ? "permission" : "change",
+  // The chat it was made in: the app shows a waiting change only there.
+  sessionId: row.session_id && row.session_id !== "none" ? row.session_id : null,
   // A permission card for a drafted tool: its goal, and the items are what it would change right now.
   ...(row.tool_arguments?.kind === "permission" ? { goal: row.preview?.goal || null, drafted: !!row.tool_arguments?.toolId } : {}),
   status: row.status,
