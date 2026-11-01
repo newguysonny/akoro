@@ -40,3 +40,14 @@ test("the app: one card, compact once decided, and the chat carries on after a t
   assert.match(tab, /Approved "\$\{name\}" — go ahead\./);
   assert.match(tab, /check it went through and tell me if anything is left/);
 });
+
+test("an admin's approval: the tool is turned on, no background run or stray card, and Run it now starts the agent's turn", () => {
+  const src = read("./escalation.js");
+  assert.match(src, /if \(stray\) await edu\(\)\.from\("agent_tool_write_confirmations"\)\.delete\(\)/);
+  assert.match(src, /meta = \{ runTool: \{ name: out\.tool \|\| p\.name, label: out\.label \|\| label, changes \} \};/);
+  assert.doesNotMatch(src, /Here's what it found:/, "no raw row dump posted for the learner");
+  assert.match(read("../adaptive-learning/chat.js"), /asks you to run one of your tools by name \(after the Akoro team approved it\), run that tool now/);
+  const tab = read("../../../akoro-learner/src/components/tabs/AgentChatTab.jsx");
+  assert.match(tab, /m\.meta\?\.runTool\?\.label \? \{ runTool: m\.meta\.runTool \}/);
+  assert.match(tab, /sendMessage\(`Run "\$\{msg\.runTool\.label\}" now\.`\)/);
+});

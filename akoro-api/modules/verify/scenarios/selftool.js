@@ -232,11 +232,21 @@ export const escalateAndResume = {
     ctx.expect.eq("resumed", done?.resume_status, "resumed");
     ctx.expect.eq("request implemented", done?.status, "implemented");
     ctx.note(`resume result: ${JSON.stringify(done?.resume_result || null).slice(0, 300)}`);
-    const msgs = await ctx.db.rows("chat_messages", { session_id: chatId, user_id: me.id }, { columns: "role, text", limit: 10 });
-    ctx.expect.ok("answer posted into the same chat", msgs.some((m) => m.role === "agent" && /permission/i.test(m.text) && /built/i.test(m.text)), msgs.map((m) => m.text.slice(0, 80)));
+    const msgs = await ctx.db.rows("chat_messages", { session_id: chatId, user_id: me.id }, { columns: "role, text, meta", limit: 10 });
+    const told = msgs.find((m) => m.role === "agent" && /permission/i.test(m.text) && /built/i.test(m.text));
+    ctx.expect.ok("answer posted into the same chat", !!told, msgs.map((m) => m.text.slice(0, 80)));
+    ctx.expect.ok("it carries a Run it now button for the tool (nothing run in the background)", !!told?.meta?.runTool?.label && /Run it now/.test(told?.text || ""), told?.meta);
     ctx.expect.gte("learner notified", await ctx.db.count("notifications", { user_id: me.id, related_id: chatId }), 1);
     const tool = (await ctx.db.rows("edu.agent_tools", { owner_id: me.id, name: { like: `${name}%` } }, { columns: "name, capabilities, status", limit: 1 }))[0];
     ctx.expect.ok("tool saved with the capability", !!tool && tool.status === "active" && (tool.capabilities || []).includes("verify.probe"), tool);
+    // The learner taps Run it now: a normal agent turn runs the tool and explains what it found.
+    if (tool && told?.meta?.runTool?.label) {
+      const t = await ctx.agent.chat({ as: p.learner, mode: "live", model: p.model, prompt: `Run "${told.meta.runTool.label}" now.`,
+        history: [{ role: "user", content: goal }, { role: "assistant", content: told.text }] });
+      ctx.note(`Run it now: ${String(t.reply || "").replace(/\s+/g, " ").slice(0, 300)} · tools ${JSON.stringify((t.tools || []).map((x) => x.tool))}`);
+      ctx.expect.ok("Run it now: the agent runs the tool in its turn", (t.tools || []).some((x) => x.tool === tool.name), (t.tools || []).map((x) => x.tool));
+      ctx.expect.ok("…and answers in words, not a raw row dump", String(t.reply || "").trim().length > 20 && !/^•/m.test(String(t.reply || "")), String(t.reply || "").slice(0, 200));
+    }
 
     // Revoke: the saved tool stops at once.
     if (grantId && tool) {

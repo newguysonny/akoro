@@ -216,8 +216,11 @@ export function rowsText(rows = [], max = 10) {
 
 /**
  * Resume one approved request: claim it (approved/waiting → resuming), rebuild
- * the proposed tool as the learner, post the answer into their chat.
- * `createTool` is injected (pipeline.js imports this module).
+ * the proposed tool as the learner, and tell their chat it's on, with a Run it
+ * now button (meta.runTool). The learner is usually not there when an admin
+ * decides, so nothing is run for them in the background: their tap starts a
+ * normal agent turn — thinking, the tool, an explained answer, or ONE Confirm
+ * card for a change, then a check. `createTool` is injected (pipeline.js imports this module).
  */
 export async function resumeRequest(requestId, { createTool }) {
   const now = new Date().toISOString();
@@ -236,19 +239,22 @@ export async function resumeRequest(requestId, { createTool }) {
     out = { status: "failed", reason: e.message };
   }
   const messageId = `00000000-0000-4000-8000-${createHash("sha256").update(requestId).digest("hex").slice(0, 12)}`;
+  // The build's own check run made a change card: that card would wait in the chat with no turn behind it,
+  // and running the tool from the chat would make a second one. The learner's Run it now makes the one card.
+  const stray = out.result?.confirmation?.confirmationId;
+  if (stray) await edu().from("agent_tool_write_confirmations").delete().eq("id", stray).eq("principal_id", claimed.requester_id).eq("status", "pending").then(() => {}, () => {});
   let text;
-  if (out.status === "created" && out.result?.confirmation) {
-    // A write tool: nothing is changed without the learner's tap, and a posted message can't carry the card.
-    text = `Good news — I was given permission, so I built "${out.label || label}" for you. It would change: ${(out.result.confirmation.items || []).slice(0, 5).join(", ") || "nothing right now"}. Nothing has changed yet — ask me to run it and confirm on the card.`;
-  } else if (out.status === "created") {
-    const rows = out.result?.rows || [];
-    text = `Good news — I was given permission, so I built "${out.label || label}" for you. Here's what it found:\n\n${out.result?.error ? `It couldn't run just now (${out.result.error}).` : rowsText(rows)}\n\nIt's saved in your tools, so you can ask me again any time.`;
+  let meta = null;
+  if (out.status === "created") {
+    const changes = !!out.result?.confirmation;
+    text = `Good news — the Akoro team gave me permission, so I built "${out.label || label}" for you. ${changes ? "Nothing has changed yet: tap **Run it now** and I'll show you exactly what it would change, and you confirm it." : "Tap **Run it now** and I'll run it here and walk you through what it finds."} It's saved in your tools for next time.`;
+    meta = { runTool: { name: out.tool || p.name, label: out.label || label, changes } };
   } else if (out.status === "escalated") {
     text = `I was given permission for "${label}", but it turned out to need one more permission, so I've asked for that too. I'll come back here when it's decided.`;
   } else {
     text = `I was given permission for "${label}", but I couldn't build it safely: ${String(out.reason || "something went wrong").slice(0, 200)} Ask me again and I'll try a different way.`;
   }
-  const delivered = await postIntoChat({ userId: claimed.requester_id, conversationId: claimed.conversation_id, title: label, text, kind: "agent_request_resumed", messageId }).catch((e) => ({ error: e.message }));
+  const delivered = await postIntoChat({ userId: claimed.requester_id, conversationId: claimed.conversation_id, title: label, text, kind: "agent_request_resumed", messageId, ...(meta ? { meta } : {}) }).catch((e) => ({ error: e.message }));
   const ok = out.status === "created" && !delivered.error;
   await edu().from("agent_tool_requests").update({
     resume_status: delivered.error ? "failed" : ok ? "resumed" : "failed",

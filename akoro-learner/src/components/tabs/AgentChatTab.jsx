@@ -393,6 +393,8 @@ function AgentChatTab({
       return { ingestId: ids[0], ingestIds: ids };
     })() : {}),
     ...(m.role !== "user" && Array.isArray(m.meta?.ideas) && m.meta.ideas.length ? { ideas: cleanIdeas(m.meta.ideas) } : {}),
+    // The Akoro team approved a tool while the learner was away: Run it now starts the agent's turn.
+    ...(m.role !== "user" && m.meta?.runTool?.label ? { runTool: m.meta.runTool } : {}),
   });
 
   // Which chat the learner asked for last: a slower load of an earlier choice
@@ -449,6 +451,7 @@ function AgentChatTab({
               .map((m) => ({ id: m.id, from: "agent", text: m.text, ...(m.meta?.proposal ? { proposal: m.meta.proposal } : {}),
                 ...(m.meta?.studyPrepWake?.wakeId ? { studyPrepWake: m.meta.studyPrepWake } : {}),
                 ...(m.meta?.agentCheck?.battleId ? { agentCheck: m.meta.agentCheck } : {}),
+                ...(m.meta?.runTool?.label ? { runTool: m.meta.runTool } : {}),
                 at: m.created_at, time: new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }));
             return fresh.length ? [...prev, ...fresh] : prev;
           });
@@ -1287,6 +1290,13 @@ function AgentChatTab({
                   {msg.agents?.length>0&&<AgentCards agents={msg.agents} onFill={applyIdea}/>}
                   {msg.requests?.length>0&&<ChallengeRequestCards requests={msg.requests} mine={!!msg.requestsMine}/>}
                   {msg.confirm&&<ConfirmChangeCard confirm={msg.confirm} onDone={onCardDone}/>}
+                  {/* Approved by the Akoro team while away: one tap runs it in a normal turn (gone once the chat moves on). */}
+                  {msg.runTool&&!messages.slice(messages.indexOf(msg)+1).some((m)=>m.from==="me")&&(
+                    <button type="button" disabled={loading||running} onClick={()=>sendMessage(`Run "${msg.runTool.label}" now.`)}
+                      style={{ display:"inline-flex",alignItems:"center",gap:6,marginTop:10,padding:"7px 14px",borderRadius:999,border:"none",background:BRAND,color:"#fff",fontSize:12.5,fontWeight:900,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
+                      <Icon name="ti-player-play" size={13}/> Run it now
+                    </button>
+                  )}
                   {/* Not taught yet — the learner can teach it now. */}
                   {msg.teach&&onTeachTopic&&(
                     <div style={{ display:"flex",alignItems:"center",gap:10,marginTop:10,padding:"10px 12px",borderRadius:14,background:`${BRAND}0D`,border:`1px solid ${BRAND}33` }}>
