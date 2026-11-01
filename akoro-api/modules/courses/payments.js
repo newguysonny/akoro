@@ -573,6 +573,9 @@ const router = Router();
 // Payments
 router.post("/payments/initiate",             authenticateToken, [body("course_id").notEmpty()], runValidation, paymentHandlers.initiate);
 router.post("/payments/verify",                                  paymentHandlers.verifyWebhook);
+// The router used to be mounted twice (/api and /api/payments), so this webhook also answered at
+// /api/payments/payments/verify. Kept only in case the Paystack dashboard points there; it says so in the log.
+router.post("/payments/payments/verify", (req, _res, next) => { console.warn("[payments] Paystack webhook hit the old /api/payments/payments/verify — point the dashboard at /api/payments/verify"); next(); }, paymentHandlers.verifyWebhook);
 router.get ("/payments/history",              authenticateToken, paymentHandlers.history);
 router.post("/payments/:paymentId/refund",    authenticateToken, paymentHandlers.refund);
 

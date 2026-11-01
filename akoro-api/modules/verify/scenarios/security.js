@@ -23,3 +23,18 @@ export const teacherSchoolReads = {
     }
   },
 };
+
+// Item 2: the payments router is mounted once — its paths answer at /api/payments/…, the doubled
+// /api/payments/payments/… copies are gone (the old webhook path is kept as a logged alias only).
+export const paymentsSingleMount = {
+  name: "security.payments_single_mount", area: "security", risk: "read",
+  description: "Payment routes answer once at /api/payments/… (history, enrollments, transactions); the doubled /api/payments/payments/…, /api/payments/user/… and /api/payments/transactions copies are 404.",
+  params: { learner: { default: "@tester01" } },
+  async run(ctx, p) {
+    ctx.expect.status("payment history at /api/payments/history", await ctx.http({ as: p.learner, path: "/api/payments/history" }), 200);
+    ctx.expect.status("enrollments at /api/user/enrollments", await ctx.http({ as: p.learner, path: "/api/user/enrollments" }), 200);
+    for (const path of ["/api/payments/payments/history", "/api/payments/user/enrollments", "/api/payments/transactions"]) {
+      ctx.expect.status(`no copy at ${path}`, await ctx.http({ as: p.learner, path }), 404);
+    }
+  },
+};

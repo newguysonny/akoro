@@ -44,7 +44,6 @@ router.use(publicCatalogRouter);   // /courses/published, /live-sessions, /instr
 
 // Prefixed sub-routers
 router.use("/meeting",   meetingRouter);
-router.use("/payments",  paymentsRouter);
 router.use("/stream",    streamRouter);
 router.use("/scheduler", schedulerRouter);
 
@@ -58,7 +57,7 @@ router.use(qaRouter);
 router.use(notificationsRouter);
 router.use(progressRouter);
 router.use(reviewsRouter);
-router.use(paymentsRouter);      // /user/enrollments, /transactions
+router.use(paymentsRouter);      // /payments/*, /user/enrollments, /transactions — its paths carry their own prefix (mounting it at /payments too doubled them)
 router.use(giftsRouter);
 router.use(certificatesRouter);
 router.use(subtitlesRouter);

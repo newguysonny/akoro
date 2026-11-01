@@ -36,13 +36,13 @@ import { battleChatScenarios } from "./battleChat.js";
 import { activityReviewRuns, activityReviewPlay } from "./activityReview.js";
 import { activityChatScenarios } from "./activityChat.js";
 import { evalsRun, evalsResult } from "./evals.js";
-import { teacherSchoolReads } from "./security.js";
+import { teacherSchoolReads, paymentsSingleMount } from "./security.js";
 
 const ALL = [healthBuild, toolsCatalogue, sessionTokensOnly, r2Live, embeddingsLive, embeddingsCompare, searchTextFallback, scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity,
   privacyEdges, rateLimitCountedOnce, battleEntryGates, followUpDeliverIntoChat, taskDueInMinutes, noResidue,
   viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, suggestionsSurviveRefresh, studyToolRouting, untaughtFlashcards, tailoredChips, chatUploadFiled, pastPaperStructured, sortOwnFolders, materialsMultiFileDiag, readyProposal, goalWork, ideasFlow, consentsQuietBudget, instructorProactive, voiceSpeak, voiceLive, sweepStale, agentCheckBattle, agentCheckStop, classSyllabusFirst, historyPages, workflowMirror, agentWakes, replaceAndCancel, teachingHandoff, eventStream, paperStructured, ...chatToSubmissionScenarios, authoringVersionsParts, authoringDiagramsEdits, inboxOneList, quietLearningPass, plannerRichGather, proactiveInChat, readerBackend, socketSession, guideIdeasSession, courseOneRecord,
   teachingToolRouting, teachingToolRuns, activityToolRouting, draftLifecycle, routineLifecycle,
-  battleFromChat, battleReviewFromChat, selfStudyFull, assignmentPreviewAssign, journeyBattleStage, ...teachingToolScenarios, teachingToolVersions, teachingToolTry, toolsAllOpen, deferredRelease, sessionReminders, guideReviewRuns, battleSeriesRuns, ...battleChatScenarios, activityReviewRuns, activityReviewPlay, ...activityChatScenarios, permissionRequestIsReal, toolJourney, deleteTasks, ...SELFTOOL_CHANGES, evalsRun, evalsResult, teacherSchoolReads];
+  battleFromChat, battleReviewFromChat, selfStudyFull, assignmentPreviewAssign, journeyBattleStage, ...teachingToolScenarios, teachingToolVersions, teachingToolTry, toolsAllOpen, deferredRelease, sessionReminders, guideReviewRuns, battleSeriesRuns, ...battleChatScenarios, activityReviewRuns, activityReviewPlay, ...activityChatScenarios, permissionRequestIsReal, toolJourney, deleteTasks, ...SELFTOOL_CHANGES, evalsRun, evalsResult, teacherSchoolReads, paymentsSingleMount];
 
 export const SCENARIOS = Object.fromEntries(ALL.map((s) => [s.name, s]));
 
