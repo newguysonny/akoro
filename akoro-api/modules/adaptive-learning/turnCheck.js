@@ -22,7 +22,7 @@ const PASSIVE = new RegExp(String.raw`\b(?:is|has been|have been|was|were|it's b
 const HEDGE = /\b(?:can I|shall I|should I|would you like|want me to|do you want|I can|I could|I'll|I will|I would|once you|when you|if you|after you|to (?:create|schedule|delete)|not (?:yet )?(?:created|scheduled|deleted|sent|saved))\b/i;
 
 // Not a claim either: the verb negated — an honest failure ("nothing was added", "it wasn't created", "I haven't scheduled it").
-const NEGATED = new RegExp(String.raw`\b(?:nothing|not|never|no longer|\w+n['’]t)\s+(?:\w+\s+){0,3}?(?:${VERBS})\b`, "i");
+const NEGATED = new RegExp(String.raw`\b(?:nothing|not|no|never|no longer|\w+n['’]t)\s+(?:\w+\s+){0,3}?(?:${VERBS})\b`, "i");
 
 const sentences = (text) => String(text || "").replace(/\s+/g, " ").match(/[^.!?\n]+[.!?]*/g) || [];
 

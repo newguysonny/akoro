@@ -3306,7 +3306,16 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   code-computed checks, anonymiser, store, `edu.agent_episodes` migration,
   opt-out setting) · 2 ✅ built (`lib/evals/benchmark.js`, 110 scenarios
   through the real chat loop with stub tools; proved end to end with a fake
-  model) — DeepSeek baseline run waits for API credit.
+  model).
+- **DeepSeek baseline (2026-11-01, sandbox, through the gate as test admin
+  tester90):** Agent Chat checks 21/21 · Intent reading 15/16 (missed
+  "start a study prep session" as a handoff) · Agent loop 8/8 · benchmark
+  98/110 = 89% (bar 80%), $0.75, 10.5 min. The misses, the Qwen3-4B training
+  targets: never calls update_plan on multi-step work (5/5 plan cases), asks
+  first where it could act (peer consult 4/5, task time 1/5 — the intent
+  step's "not said yet" line tips it into asking), one empty knowledge map
+  answer. The first run (88/110) also found a live bug: honest failures drew
+  a false "Correction" (fixed in turnCheck.js).
 
 ---
 

@@ -162,7 +162,7 @@ export const agentSuite = {
         // failed its budget, and paying for twenty proves nothing further.
         maxIterations: 10,
         maxTokens: 1200,
-        meta: { __feature: "eval", __userId: userId },
+        meta: { __feature: "eval", __userId: userId, __payer: "platform" },
       });
 
       const problems = judge(c.expect ?? {}, res);
