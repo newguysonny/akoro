@@ -68,6 +68,16 @@ not faked:
 shows the app an un-onboarded session and intercepts every write the onboarding makes — nothing about the
 account changes and no real teacher or school admin gets a join request.
 
+**Journey: onboarding and approvals** (`npm run journey:onboarding`) — the one run that uses REAL accounts,
+so it targets the sandbox API only (it refuses any other unless `--allow-api`). It builds and serves the
+learner, instructor and school apps, then: a new instructor signs up, onboards and lands on the dashboard → the
+school admin approves them on Teacher requests → a new learner signs up, onboards choosing that instructor and
+lands on /app → the instructor approves them on Join requests. Every save is read back through the API (name,
+level/class, school, subjects, agent, guide, onboarding flag, both join requests) and each app is reloaded to
+prove it stays routed. Accounts are "Ada Obi <tag>" / "Tunde Bello <tag>" at @demo.akoro.app, left as
+evidence. School admin: `SCHOOL_ADMIN_EMAIL` / `SCHOOL_ADMIN_PASSWORD` (default the demo school,
+`Admin2026`). Flags: `--no-build`, `--headed`. Output: `ui-gate/.out/journey-onboarding/`.
+
 Add one: a `{ name, description, needs?, devices?, run(t) }` in
 `scenarios/*.mjs`, listed in `scenarios/index.mjs`. `t` gives `page`,
 `context`, `app`, `api(method, path, body)` (as the learner), `check`,
