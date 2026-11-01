@@ -1128,7 +1128,10 @@ router.get("/instructor/students", authenticateToken, requireRole(["instructor",
   const courseIds = (courses ?? []).map((c) => c.id);
   if (!courseIds.length) return res200(res, [], { total: 0 });
 
-  // Filter to specific course if requested
+  // Filter to specific course if requested — one of the caller's own: any
+  // course_id used to be trusted, which listed another course's students with
+  // their emails and phones (Phase 15 item 6).
+  if (course_id && !courseIds.includes(course_id)) return res403(res, "Not your course");
   const targetIds = course_id ? [course_id] : courseIds;
 
   let q = db.from("enrollments")
@@ -1440,6 +1443,23 @@ router.post("/teacher/students/import", authenticateToken, requireRole(["instruc
   });
 });
 
+/** Does this teacher teach this learner — an enrolment in one of their courses, or a seat in one of their classes? */
+async function teachesLearner(teacherId, userId) {
+  const { data: courses } = await db.from("courses").select("id").eq("instructor_id", teacherId);
+  const courseIds = (courses ?? []).map((c) => c.id);
+  if (courseIds.length) {
+    const { data: enrolled } = await db.from("enrollments").select("id")
+      .eq("user_id", userId).in("course_id", courseIds).limit(1);
+    if (enrolled?.length) return true;
+  }
+  const { data: rooms } = await db.from("classrooms").select("id").eq("teacher_id", teacherId);
+  const roomIds = (rooms ?? []).map((r) => r.id);
+  if (!roomIds.length) return false;
+  const { data: seat } = await db.from("classroom_students").select("id")
+    .eq("user_id", userId).in("classroom_id", roomIds).eq("status", "active").limit(1);
+  return !!seat?.length;
+}
+
 /**
  * PATCH /api/profiles/students/:userId
  * Teacher edits a student's details (name, phone, access level).
@@ -1477,6 +1497,9 @@ router.post("/students/:userId/message", authenticateToken, requireRole(["instru
   const { subject, message, channel = "in_app" } = req.body;
 
   if (!message?.trim()) return res400(res, "message is required");
+  // Only a learner this teacher actually teaches (Phase 15 item 6): this used to
+  // send an in-app message and a platform email to any account id.
+  if (req.user.role !== "admin" && !(await teachesLearner(req.user.id, userId))) return res403(res, "This student is not in your courses or classes");
 
   const { data: student } = await db.from("users").select("id, full_name, email").eq("id", userId).single();
   if (!student) return res404(res, "Student not found");
