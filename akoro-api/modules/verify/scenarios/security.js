@@ -24,6 +24,86 @@ export const teacherSchoolReads = {
   },
 };
 
+// Item 6: ownership. A signed-in user changing an id in the URL must not reach someone else's row.
+// As one test learner, ask for another test learner's task runs, course chat and community member
+// list (and, as a test instructor, for other teachers' class rosters and course students) — each a
+// 403/404 — while the owners still read their own with a 200. Ids come from the database; GETs only.
+export const ownershipReads = {
+  name: "security.ownership_reads", area: "security", risk: "read",
+  description: "As @tester01, another learner's task runs/outputs, a course chat they're not in and a community member list/analytics they don't belong to answer 403/404 while @tester02 reads its own (200); /api/transactions holds only the caller's payments; as instructor @tester51, another teacher's class roster, course student list and ?course_id= filter answer 403/404 while its own class roster is 200.",
+  params: { learner: { default: "@tester01" }, other: { default: "@tester02" }, instructor: { default: "@tester51" } },
+  async run(ctx, p) {
+    const me = await ctx.as(p.learner);
+    const other = await ctx.as(p.other);
+    const refused = [403, 404];
+    let checked = 0;
+
+    // Tasks: runs and outputs are the creator's.
+    const [otherTask] = await ctx.db.rows("tasks", { creator_id: other.id }, { columns: "id", limit: 1 });
+    if (otherTask) {
+      for (const leaf of ["runs", "outputs"]) {
+        ctx.expect.status(`${p.learner} is refused ${p.other}'s task ${leaf}`, await ctx.http({ as: p.learner, path: `/api/tasks/${otherTask.id}/${leaf}` }), refused);
+        ctx.expect.status(`${p.other} reads its own task ${leaf}`, await ctx.http({ as: p.other, path: `/api/tasks/${otherTask.id}/${leaf}` }), 200);
+      }
+      checked += 1;
+    } else ctx.note(`${p.other} has no task — task checks skipped`);
+
+    // Course chat: for the course's people only.
+    const mine = new Set((await ctx.db.rows("enrollments", { user_id: me.id, status: "active" }, { columns: "course_id", limit: 200 })).map((r) => r.course_id));
+    const theirs = await ctx.db.rows("enrollments", { user_id: other.id, status: "active" }, { columns: "course_id", limit: 50 });
+    const courseId = theirs.map((r) => r.course_id).find((id) => id && !mine.has(id));
+    if (courseId) {
+      ctx.expect.status(`${p.learner} is refused a course chat it isn't in`, await ctx.http({ as: p.learner, path: `/api/courses/${courseId}/messages` }), 403);
+      ctx.expect.status(`${p.other} reads its own course chat`, await ctx.http({ as: p.other, path: `/api/courses/${courseId}/messages` }), 200);
+      checked += 1;
+    } else ctx.note(`no course ${p.other} is enrolled in without ${p.learner} — course chat check skipped`);
+
+    // Communities: members for members, analytics for the creator.
+    const joined = new Set((await ctx.db.rows("edu.community_members", { user_id: me.id }, { columns: "community_id", limit: 200 })).map((r) => r.community_id));
+    const owned = await ctx.db.rows("edu.communities", { owner_id: other.id }, { columns: "id", limit: 20 });
+    const community = owned.find((c) => !joined.has(c.id));
+    if (community) {
+      for (const leaf of ["members", "analytics"]) {
+        ctx.expect.status(`${p.learner} is refused the community ${leaf}`, await ctx.http({ as: p.learner, path: `/api/communities/${community.id}/${leaf}` }), 403);
+        ctx.expect.status(`${p.other} reads its own community ${leaf}`, await ctx.http({ as: p.other, path: `/api/communities/${community.id}/${leaf}` }), 200);
+      }
+      checked += 1;
+    } else ctx.note(`${p.other} owns no community ${p.learner} is outside — community checks skipped`);
+
+    // Transactions: a learner's list is their own payments only.
+    const tx = await ctx.http({ as: p.learner, path: "/api/transactions?limit=50" });
+    ctx.expect.status(`${p.learner} reads /api/transactions`, tx, 200);
+    const payers = [...new Set((tx.body?.data || []).map((r) => r.users?.id).filter(Boolean))];
+    ctx.expect.ok(`every transaction ${p.learner} sees is its own`, payers.every((id) => id === me.id), payers);
+
+    // Instructor: another teacher's class roster and course students.
+    const teacher = await ctx.as(p.instructor).catch(() => null);
+    if (teacher?.role === "instructor") {
+      // A class with no school, so the school-admin path can't apply.
+      const rooms = await ctx.db.rows("classrooms", {}, { columns: "id, teacher_id, school_id", limit: 200 });
+      const foreignRoom = rooms.find((r) => r.teacher_id && r.teacher_id !== teacher.id && !r.school_id);
+      if (foreignRoom) {
+        ctx.expect.status(`${p.instructor} is refused another teacher's class roster`, await ctx.http({ as: p.instructor, path: `/api/instructor/classrooms/${foreignRoom.id}/students` }), refused);
+        checked += 1;
+      }
+      const ownRoom = (await ctx.db.rows("classrooms", { teacher_id: teacher.id }, { columns: "id", limit: 1 }))[0];
+      if (ownRoom) ctx.expect.status(`${p.instructor} reads its own class roster`, await ctx.http({ as: p.instructor, path: `/api/instructor/classrooms/${ownRoom.id}/students` }), 200);
+      const courses = await ctx.db.rows("courses", {}, { columns: "id, instructor_id", limit: 100 });
+      const foreignCourse = courses.find((c) => c.instructor_id && c.instructor_id !== teacher.id);
+      if (foreignCourse) {
+        ctx.expect.status(`${p.instructor} is refused another teacher's course students`, await ctx.http({ as: p.instructor, path: `/api/courses/${foreignCourse.id}/students` }), 403);
+        const filtered = await ctx.http({ as: p.instructor, path: `/api/profiles/instructor/students?course_id=${foreignCourse.id}` });
+        // A teacher with no courses gets an empty list before the filter is read; either way, no one else's learners.
+        ctx.expect.ok(`${p.instructor} gets none of another course's learners through ?course_id=`,
+          filtered.status === 403 || (filtered.status === 200 && (filtered.body?.data || []).length === 0), { status: filtered.status, rows: (filtered.body?.data || []).length });
+        checked += 1;
+      }
+    } else ctx.note(`${p.instructor} isn't an instructor on this server — instructor checks skipped`);
+
+    if (!checked) ctx.expect.blocked("no fixture rows to test ownership against (tasks, enrolments, communities, classes, courses)");
+  },
+};
+
 // Item 2: the payments router is mounted once — its paths answer at /api/payments/…, the doubled
 // /api/payments/payments/… copies are gone (the old webhook path is kept as a logged alias only).
 export const paymentsSingleMount = {
