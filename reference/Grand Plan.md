@@ -3189,6 +3189,13 @@ planning loop's tool names, the double practice charge, empty syllabus data).
 - Developer mode.
 - Model picker in the chat box (§7.11.5) behind `AI_MODEL_PICKER_ENABLED`.
 - **Exit:** UI acceptance checks in §18; Scenario K.
+- **Status (2026-11-02):** backends built and green on the sandbox: dashboard
+  descriptors + deterministic routes + modals open by `workflowId`
+  (`workflow.dashboard_descriptors`), the school struggles view for linked
+  learners (`school.struggles_scope`; reads `edu.learning_struggles` once Phase 4a
+  builds it), the model-picker flag and cost hints (`models.picker_resolution`), and
+  a shared `streamReducer`. Visible UI waits for preview approval. Open: tier lists
+  for the picker, `POST /api/teaching/workflows`.
 
 ### Phase 12 — Hardening and rollout
 - Failure tests §19; data migration §14.3; flag-by-flag rollout; observability
@@ -3485,7 +3492,15 @@ planning loop's tool names, the double practice charge, empty syllabus data).
      persona golden tests stay green.
 - **Order of work:** 3 and 6 first (small, in the runtime), then 1 and 4,
   then 2 (needs the Phase 11 descriptors), then 5, then 7.
-- **Status (2026-11-02):** planned.
+- **Status (2026-11-02):** backend for all seven built and green on the sandbox
+  (gates `agent.loop_guard_time_limits`, `agent.action_basis`,
+  `agent.kind_observe_then_live`, `outbox.delivery`, `workflow.needs_you_categories`,
+  `ratings.saved_not_in_prompt`, `prompts.override_flagged`; API suite 1763/1763).
+  Admin pages built (proactive kinds, prompts, ratings on Evals). Learner/instructor
+  UI for items 2 and 4 waits for preview approval. Open: Teaching, Decay and
+  Practice don't run on the shared agent loop yet (no loop guard / basis refusal
+  there); in-app rows, socket events and some check-battle starts are not on the
+  outbox; the agent-loop eval needs a model run.
 
 ---
 
