@@ -3264,6 +3264,15 @@ planning loop's tool names, the double practice charge, empty syllabus data).
      everywhere; ownership is not yet audited route by route (a route that
      takes `:studentId`, `:userId` or a row id must check it belongs to the
      caller). Next pass of the audit.
+     *Audited 2026-11-01: 521 id-taking routes, 444 OK, 45 fixed
+     (`4da56c30` courses: content writes, student lists, transactions for
+     non-student roles, live-session participants, chat, Q&A, subtitles,
+     scheduler; `a186ca35` teacher rosters/students/messages, battle question
+     banks; `ccef161a` task runs, community members/analytics, training runs),
+     32 open — top: teaching history by session id (High, lead's area), battle
+     reads by id (needs a visibility rule, with F4), whole-class assignment to
+     another teacher's class, live-session join links. Table in the Security
+     Audit plan; gate `security.ownership_reads` (not yet run).*
 - **Exit:** items 1–5 fixed, each with a gate scenario on the sandbox; item 6
   audited with its findings listed here.
 

@@ -121,7 +121,7 @@ The live route table (Express, loaded locally with placeholder settings) lists *
 | **F15** | **Course invite emails link to `akoro.app/join/…`**, a page no app has; invites are signed with the fallback secret. | **Low** (broken feature) | `POST /api/profiles/teacher/invite` | ✅ **Fixed 2026-11-01** (`dc578fe5`): the instructor/school apps use it, so built — typed `course_invite` token from the auth signer (no fallback; never a login), link `FRONTEND_URL/join/:token`, public preview `GET /api/profiles/invite/:token`, signed-in `POST /api/profiles/invite/redeem`, learner `/join/:token` page. Test `modules/profiles/invite.contract.test.mjs`, gate `security.course_invite_join`. |
 | **F16** | **Shared-secret checks fail open when unset.** `/api/stream/internal/*` compares `x-internal-secret` to `INTERNAL_SECRET` with `!==` — an unset secret matches an absent header. Set on prod and sandbox today (anonymous probes → 403). | **Medium** (latent) | `modules/courses/stream.js` | ✅ **Fixed 2026-11-01** (`d9186852`): `lib/safeCompare.js` — unset → 503, missing/wrong → 403, constant-time — on the worker routes, ticks, `/internal/{preflight,egress}` (no dev-mode open door), the console/gate keys and Paystack. Test `lib/safeCompare.contract.test.mjs`, gate `security.shared_secrets_fail_closed`. |
 | **F17** | **Hard-coded fallback secrets remain** (`JWT_SECRET ?? "akoro-dev-…"` in invites, config, token peek, auth). | **Medium** (Critical where F1 applies) | several | ✅ **Fixed 2026-11-01** (0cb4bff4): no JWT default in auth, token peek or config; production won't boot with no JWT key; OAuth state keys lost `"akoro-oauth-state"` (unset → account connection off); preflight warns on `INTERNAL_SECRET`/`OAUTH_STATE_SECRET`. Test `modules/auth/no-fallback-secrets.contract.test.mjs` (also scans server code for literal secret fallbacks), gate `security.no_fallback_secrets`. |
-| **F18** | **Ownership not yet audited on the 1,094 signed-in routes.** Sign-in is checked everywhere and all 147 `/api/admin` routes check the admin role; routes that take `:studentId`, `:userId` or a row id still need a route-by-route ownership check (§5.D). | **Unknown** | all | Next pass (workstream D). |
+| **F18** | **Ownership not yet audited on the 1,094 signed-in routes.** Sign-in is checked everywhere and all 147 `/api/admin` routes check the admin role; routes that take `:studentId`, `:userId` or a row id still need a route-by-route ownership check (§5.D). | **High** (several High findings) | all | ✅ **Audited 2026-11-01** — see *Ownership audit (Phase 15 item 6)* below: 521 id-taking routes checked, 444 OK, 45 fixed (`4da56c30`, `a186ca35`, `ccef161a`), 32 open. Gate `security.ownership_reads` (`83e1b63d`). |
 
 Also confirmed by the endpoint audit: the 115 routes without the standard sign-in are public on purpose (login, catalogue, blog, school sites, health) or guarded by their own key or signature (webhooks, agent tools, consoles, ticks); school AI-login refuses 2FA accounts; teachers never see result PINs.
 
@@ -133,6 +133,77 @@ Also confirmed by the endpoint audit: the 115 routes without the standard sign-i
 - Login/register are rate-limited (5 / 15 min per IP); refresh 30 / 15 min.
 - Paystack webhooks verify the signature header; submission files are served by short-lived signed URLs.
 - The Verification Gate requires the agent-console key (to be re-verified anonymously from outside — §5.S).
+
+### Ownership audit (Phase 15 item 6) — 2026-11-01
+
+Method: every route under `akoro-api/modules/**` that takes an id from `req.params`, or a person/row id from `req.query`/`req.body`, read handler by handler, tracing the actual query. A check counts when the row is matched to `req.user.id` (`.eq("user_id", …)`, an owner join, a helper that does so) or the caller's role legitimately covers it (the course's instructor, the school's admin, platform `admin`). A lookup by id alone, or the `instructor` role alone (every teacher has it), does not. Not counted: the 147 `/api/admin` routes (admin role on every one, F18) and `modules/courses/courses.js` (an in-memory demo router that is not mounted). Agent-tool routes behind `requireAgentToolsCredential` take identity from signed claims and are out of scope here.
+
+**Totals: 521 routes checked — 444 OK, 45 fixed, 32 open.** Regression: seven `*-ownership.contract.test.mjs` files beside the code (27 tests) and the read-only gate scenario `security.ownership_reads` (`83e1b63d`; not yet run on the sandbox).
+
+| Route(s) | Routes | Verdict | Severity | Fixed in / status |
+|---|---|---|---|---|
+| **Fixed** | | | | |
+| `PUT/DELETE /api/modules/:moduleId`, `POST /api/courses/:courseId/modules/:moduleId/lessons`, `PUT/DELETE /api/lessons/:lessonId` — any instructor changed or deleted any course's content | 5 | finding | High | `4da56c30` |
+| `GET /api/courses/:courseId/students` — any instructor got any course's learners with emails | 1 | finding | High | `4da56c30` |
+| `GET /api/transactions`, `/transactions/summary` — only `student`/`instructor` were filtered; teacher, school and school_admin accounts got every platform payment with payer emails | 2 | finding | High | `4da56c30` |
+| `GET /api/live-sessions/:id/participants` (emails) | 1 | finding | High | `4da56c30` |
+| `GET /api/live-sessions/:id/analytics` | 1 | finding | Low | `4da56c30` |
+| `POST /api/lessons/:lessonId/complete`, `/quiz` — no enrolment check (XP on paid lessons, quiz answer key returned) | 2 | finding | Medium | `4da56c30` |
+| `GET /api/courses/:courseId/analytics/engagement`, `/sessions` — any instructor | 2 | finding | Low | `4da56c30` |
+| Course chat: `GET/POST /api/courses/:courseId/messages`, `/messages/pinned`, `/messages/agent`, `POST /api/messages/:id/like`, `/pin`, `DELETE /api/messages/:id` — no course membership; pin/delete by any instructor | 7 | finding | Medium | `4da56c30` |
+| `PUT /api/questions/:id/resolve`, `DELETE /api/questions/:id` — any instructor | 2 | finding | Medium | `4da56c30` |
+| `PATCH /api/videos/:videoId/subtitles/:lang/default`, `DELETE …/subtitles/:lang` — any instructor | 2 | finding | Medium | `4da56c30` |
+| `/api/scheduler/links/:sessionId` (GET/POST), `/activate/:id`, `/end/:id` — any instructor forced any session (with the host's meeting account); any user read the link | 4 | finding | Medium | `4da56c30` |
+| `GET /api/profiles/instructor/students?course_id=` — any course id trusted (emails, phones) | 1 | finding | High | `a186ca35` |
+| `POST /api/profiles/students/:userId/message` — in-app + platform email to any account | 1 | finding | Medium | `a186ca35` |
+| `GET /api/instructor/classrooms/:id/students` — any class roster | 1 | finding | Medium | `a186ca35` |
+| `GET/POST /api/battle/courses/:courseId/questions-bank`, `POST …/generate` — any course's bank (answers) | 3 | finding | Medium | `a186ca35` |
+| `GET /api/tasks/:taskId/runs`, `/outputs` — any task | 2 | finding | Medium | `ccef161a` |
+| `GET /api/communities/:id/members` (any user, private too), `/analytics` (creator tool), `/activities` of a private community | 3 | finding | Medium | `ccef161a` |
+| `GET /api/adaptive/training/run/:runId/{stream,logs,insights,status,export}` — any run | 5 | finding | Medium | `ccef161a` |
+| **Open** | | | | |
+| `GET /api/adaptive/teaching/sessions/:sessionId/history` — any learner's teaching transcript by id (`loadSessionState` with no owner check). In the teaching-session code the lead is changing; left for that owner. | 1 | finding | High | open |
+| `POST /api/self-study`, `POST /api/self-study/:id/assign` (and draft assign through `createAssignment`) with `whole_class` + another teacher's `classroom_id`/`course_id` — assigns that class's learners, whose names then show in `GET /:id`. Needs a rule for which classes school teachers/admins may target. | 2 | finding | Medium | open |
+| Battle reads by id: `GET /api/battle/battles/:id`, `/state`, `/log`, `/results`, `/questions`, `/questions.pdf`, `/entry`, `/challenges/:id`, `/courses/:id/challenges`, `/courses/:id/battles`, `/courses/:id/battles/open`, `/courses/:id/battles/session/:sid` — any signed-in user. Needs a battle visibility rule (participant / class / public), same as F4. | 12 | finding | Medium | open |
+| `GET /api/courses/:courseId/live-sessions`, `GET /api/live-sessions/:id` — return `join_url` (and the password to non-student roles) to users not enrolled | 2 | finding | Medium | open |
+| `GET /api/lessons/:id`, `/api/courses/:id/content` — the `instructor` role bypasses enrolment on every course's paid lessons | 2 | finding | Medium | open (product call) |
+| `/api/stream/status/:id`, `DELETE /videos/:id`, `GET /videos/:id`, `/courses/:id/videos` — no owner/enrolment check (in-memory store, process-local ids) | 4 | finding | Medium | open |
+| `GET /api/courses/:id/questions`, `/questions/:id`, `/courses/:id/announcements` — no enrolment check | 3 | finding | Low | open |
+| `POST /api/tasks` — `agentId` from the body not checked to be the caller's (another agent's name on your task) | 1 | finding | Low | open |
+| `/api/adaptive/training/orchestration/:agentId`, `POST /stream-start`, `/query` — `agentId` unchecked | 3 | finding | Low | open |
+| `POST /api/school/classrooms/:id/students` — body `user_id` adds any existing account to the school's class | 1 | finding | Low | open |
+| `POST /api/wallet/allocate` — school coins to any user id, not only the school's pupils | 1 | finding | Low | open |
+| **OK** | | | | |
+| `records/*` — discover open, folders/:id (PATCH/DELETE/items), folders/items, extract (+ /:recordId, /content/:key), tools/:tool, podcast(/:id), artifacts (CRUD), ask/history, PATCH/DELETE /:id, transcribe (lesson/record/content), /:id/file | 23 | OK | — | — |
+| `self-study` routines/:id, drafts/:id (+ versions, retry, review-questions, restore, assign, paper) | 11 | OK | — | `ownedRoutine` / `getActivityDraft` |
+| `self-study` /:id teacher routes (reviews, analytics, report, GET, PATCH, assign, targets grade/markup/ai-grade/delete, DELETE) | 12 | OK | — | `ownedAssignment` |
+| `self-study` learner + files (files, files/:fileId, paper/submission/marked, draft, draft-text, start, link, complete) | 14 | OK | — | own target / `viewableTarget` |
+| `adaptive/chat` decay/*/:studentId, student/agent/:studentId*, history/:ownerId (all ignore the param, token-scoped), sessions/:id (messages GET/POST, PATCH, DELETE), POST /agent conversationId | 15 | OK | — | — |
+| `adaptive/study-prep` sessions/:id/* | 18 | OK | — | harness `ownedSession` |
+| `tasks` GET/PATCH/DELETE /:taskId, trigger, toggle, create-challenge, files/:id, suggestions/:id | 9 | OK | — | — |
+| `materials` ingest/:id/*, chat/:chatId, POST ingest (chat id) | 14 | OK | — | `loadOwn` |
+| `agent-network` agents/:userId, blocks, reports, challenge-requests/:id, battles/:id/rematch, messages/:id/reply, buddies/:id/*, circles/:id/* | 13 | OK | — | — |
+| `battle` class/course rosters and invites, open POST, participants, challenges accept/decline/delete, start/end/PUT/DELETE, join, heartbeat, questions-bank/:questionId, series/:id/*, session POST, guide-reviews | 23 | OK | — | — |
+| `school/routes.js` param routes (teacher-requests, classrooms, content creations, alerts, domains, social accounts, website templates, backups, roles, admission fields, subscription verify) | 25 | OK | — | `school_id` = caller's school |
+| `school/mgmt.js` param routes (students/:id/*, staff, library, admissions, site pages/media, documents, :resource/:id) | 29 | OK | — | school-scoped (role lists = item 1) |
+| `vouchers/startups/:id/*` and purchases | 27 | OK | — | `ownedStartup` |
+| `wallet` admin overview/grant | 2 | OK | — | admin role |
+| `communities` activities submit/delete, items, discussion, POST activities, PATCH/DELETE, join, leave, GET /:id | 12 | OK | — | — |
+| `instructor/routes.js` courses, sessions, modules, schedule, curriculum, materials, students, battles, document templates | 23 | OK | — | `ownCourse` / `sessionOwned` / `created_by` |
+| `instructor/tools` templates/:id, outputs/:id, verify/:reference | 3 | OK | — | — |
+| `course-builder/*` | 11 | OK | — | `guardCourse/Section/Lesson` |
+| `programmes` (admin past the public catalogue) | 23 | OK | — | admin role |
+| `content`, `past-questions`, `curriculum` param routes (public reference + admin writes) | 23 | OK | — | — |
+| `courses/*` other: modules POST, lesson GET/progress, outlines, progress/certificates, live-session CRUD/participation/replay, peer sessions, Q&A answers/upvotes, announcements, notifications, reviews, refunds, coupons, bundles, cart, wishlist, subtitle upload/list | 52 | OK | — | — |
+| `profiles` teacher classrooms, schools/:schoolId/*, students/:userId PATCH, teacher/join requests | 14 | OK | — | — |
+| `ranking` course/classroom/school | 3 | OK | — | — |
+| `adaptive/training` sessions/profile/chunks/:teacherId, session DELETE, correct, upload | 6 | OK | — | — |
+| `adaptive/marketplace` listings PUT/DELETE, my-agents/purchases/:userId, set-default, verify, reviews | 8 | OK | — | — |
+| `assessments/:id`, `exam-prep` runs, `teaching/ladders/:id` | 4 | OK | — | — |
+| `agent-tools` confirmations, memories/:id, conversation summary/scratchpad | 5 | OK | — | — |
+| `agent-proposals`, `learner-goals`, `autonomy` ideas | 8 | OK | — | — |
+| `self-tooling` tools/requests/confirmations | 5 | OK | — | — |
+| `workflows`, `teaching/tools` outputs, `blogs`, `pharmd` topic complete | 9 | OK | — | — |
 
 ---
 
@@ -538,7 +609,7 @@ Many learners are **minors** (JSS/SS). Nigeria Data Protection Act 2023 (NDPA) a
 | F15 | T | Invite emails link to a missing `/join` page | Low | Send an invite, open the link | join page | learner `/join/:token` previews, signs in/up, redeems | agent | **closed** | `dc578fe5` | contract test + `security.course_invite_join` |
 | F16 | R | `INTERNAL_SECRET` check fails open when unset | Medium | Unset secret, call `/api/stream/internal/update` without header | 403/503 | 503 (unset) / 403 (wrong), constant-time | agent | **closed** | `d9186852` | `lib/safeCompare.contract.test.mjs` + `security.shared_secrets_fail_closed` |
 | F17 | E | Hard-coded fallback secrets remain | Medium | grep `?? "akoro-dev` | none | none (6 removed: auth, token peek, config, invites, 2× OAuth state) | agent | **closed** | 0cb4bff4 | boot guard + `no-fallback-secrets` test + `security.no_fallback_secrets` |
-| F18 | D | Ownership audit of signed-in routes | ? | per route | — | — | agent | open | | `security-authz` suite |
+| F18 | D | Ownership audit of signed-in routes | High | per route (see *Ownership audit*) | 403/404 | 45 routes fixed, 32 open | agent | **fixed (45) / open (32)** | `4da56c30`, `a186ca35`, `ccef161a` | 7 contract tests + `security.ownership_reads` |
 | … | | | | | | | | | | |
 
 Status: `open → confirmed → fixing → fixed → retested → closed` (or `accepted-risk` with a reason and an expiry date).
