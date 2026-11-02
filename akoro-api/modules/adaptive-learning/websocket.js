@@ -270,6 +270,7 @@ export function setupWebSocket(io) {
       teacherAgentId,             // the learner's chosen guide (ownership checked in the registry)
       userId,
       workflowId,                 // Phase 6: a teaching session handed over from Study Prep (ownership checked)
+      decayReviewWorkflowId,      // Phase 8: a Decay Review's re-teaching step (ownership checked)
     }) => {
       if (!studentId || !topic)
         return socket.emit("error", { message: "studentId and topic required" });
@@ -313,6 +314,11 @@ export function setupWebSocket(io) {
           await handoff.bind({ workflowId: teaching.workflowId, learnerId: owner, liveSessionId: id }).catch((e) => console.warn("[teaching handoff] bind:", e.message));
         }
 
+        // Phase 8: the re-teaching step of the learner's own Decay Review — its end starts the last retest.
+        if (mode === "decay" && isId(decayReviewWorkflowId)) {
+          const review = await import("./decay-review/wiring.js").then((w) => w.decayReview().view({ workflowId: decayReviewWorkflowId, learnerId: owner })).catch(() => null);
+          if (review?.state === "intervention" && review.teaching?.needed) orchestrator.decayReviewWorkflowId = decayReviewWorkflowId;
+        }
         activeSessions.set(id, orchestrator);
         socket.join(`session:${id}`);
         socket.join(`student:${studentId}`);
@@ -610,6 +616,11 @@ export function setupWebSocket(io) {
             .then((w) => w.teachingHandoff().finish({ workflowId: orchestrator.teachingWorkflowId, endResult, notesAdded: orchestrator.stats?.agentKnowledgeAdded || 0,
               endedBy, bounded, mode: orchestrator.session?.teachingMode || null, strategy: orchestrator.session?.strategy || null }))
             .catch((e) => console.warn("[teaching handoff] finish:", e.message));
+        }
+        if (orchestrator.decayReviewWorkflowId) {
+          await import("./decay-review/wiring.js")
+            .then((w) => w.decayReview().teachingDone({ workflowId: orchestrator.decayReviewWorkflowId, learnerId: orchestrator.userId || orchestrator.studentId }))
+            .catch((e) => console.warn("[decay review] teaching done:", e.message));
         }
         activeSessions.delete(sessionId);
         await clearStateCache(agentId);

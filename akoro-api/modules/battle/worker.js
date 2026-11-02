@@ -836,6 +836,11 @@ async function endBattle(battleId) {
       const { completeAgentCheckBattle } = await import("../adaptive-learning/study-prep/wiring.js");
       await completeAgentCheckBattle(battleId);
     } catch (e) { console.warn("[battle-worker] agent check result:", e.message); }
+    // A Decay Review's check or retest (Phase 8): retained / decayed / passed, decided in code.
+    try {
+      const { decayReview } = await import("../adaptive-learning/decay-review/wiring.js");
+      await decayReview().onCheckEnded(battleId);
+    } catch (e) { console.warn("[battle-worker] decay review check:", e.message); }
   }
 
   // Revisions, once, now that the whole battle can be seen.

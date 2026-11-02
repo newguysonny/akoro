@@ -20,6 +20,7 @@ import TeachAgentModal   from '../components/teaching/TeachAgentModal.jsx';
 import ConceptTrackerModal from '../components/teaching/ConceptTrackerModal.jsx';
 import AdaptiveControlsModal from '../components/teaching/AdaptiveControlsModal.jsx';
 import DecaySessionModal from '../components/teaching/DecaySessionModal.jsx';
+import DecayReviewModal from '../components/teaching/DecayReviewModal.jsx';
 import ConfigModal       from '../components/teaching/ConfigModal.jsx';
 import AssessmentRoom     from '../components/assessment/AssessmentRoom.jsx';
 import ExamPrepConfidenceModal from '../components/assessment/ExamPrepConfidenceModal.jsx';
@@ -1348,12 +1349,11 @@ export default function LearnerDashboard() {
 
         {/* DecaySessionModal — triggered from agent alerts tab */}
         {decaySession && (
-          <DecaySessionModal
-            onMinimize={minimizeDecaySession}
-            alert={decaySession}
-            agentProfile={agentProfile}
-            onClose={() => { setDecaySession(null); loadAgentSessions(); }}
-          />
+          // Phase 8: a Review is the Decay Review workflow (check → recall → retest → re-teach); a parked
+          // live decay session still reopens in its own modal.
+          decaySession.resumeSessionId
+            ? <DecaySessionModal onMinimize={minimizeDecaySession} alert={decaySession} agentProfile={agentProfile} onClose={() => { setDecaySession(null); loadAgentSessions(); }} />
+            : <DecayReviewModal alert={decaySession} agentProfile={agentProfile} onMinimize={minimizeDecaySession} onClose={() => { setDecaySession(null); loadAgentSessions(); }} />
         )}
 
         {selectedChallenge && <ChallengeModal challenge={selectedChallenge} onAccept={handleAcceptChallenge} onDecline={handleDeclineChallenge} onClose={()=>setSelectedChallenge(null)}/>}
