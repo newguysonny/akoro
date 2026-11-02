@@ -33,6 +33,7 @@ import { applyTraceEvent, blocksFromSavedTrace, ingestRunBlocks, promoteActivity
 import { CHAT_STARTERS, cleanIdeas, cleanMaterials, protegeMoves } from '../../lib/chatIdeas.js';
 import { useNavigate } from 'react-router-dom';
 import NeedsYouList, { useNeedsYou } from './agentChat/NeedsYouList.jsx';
+import ReplyRating, { ratableId, useReplyRatings } from './agentChat/ReplyRating.jsx';
 import AgentCards from '../network/AgentCards.jsx';
 import ChallengeRequestCards from '../network/ChallengeRequestCards.jsx';
 import ConfirmChangeCard from './agentChat/ConfirmChangeCard.jsx';
@@ -599,6 +600,8 @@ function AgentChatTab({
   const [ideas,setIdeas]=useState([]);
   // Needs you (Phase 18 item 2): one list of what waits for the learner, from the server.
   const needsYou=useNeedsYou();
+  // Ratings on replies (Phase 18 item 4): the learner's own, never shown to the agent.
+  const [replyRatings,setReplyRating]=useReplyRatings(messages);
   const openNeed=(it)=>{
     const href=it?.action?.href||'';
     if(href.includes('inbox=')){ setTaskFilter('suggestions'); return; }
@@ -977,7 +980,7 @@ function AgentChatTab({
         onDelta: appendDelta,
         onThinking: appendThinking,
         onStatus: (s)=>{ if(!started) setStatusLabel(t(statusKey[s?.step]||"") || s?.label || ""); },
-        onDone: ({ reply, syllabus, pastQuestions, thinking, toolExecutions, trace, stopped })=>{
+        onDone: ({ reply, syllabus, pastQuestions, thinking, toolExecutions, trace, stopped, messageId })=>{
           gotDone=true;
           ensureBubble(); setStatusLabel("");
           // Settle every step; if the live steps never arrived (an older API),
@@ -986,7 +989,7 @@ function AgentChatTab({
           // Study-prep sessions ride the reply as a session echo (the
           // activity-draft pattern) — render the interactive session card.
           const studyPrepSession = (toolExecutions || []).find((entry) => entry?.session?.id && entry?.success)?.session || null;
-          setMessages(prev=>prev.map(m=>m.id===replyId?{...m,...(reply!=null?{text:reply}:{}),thinking:thinking||m.thinking,syllabus:syllabus||[],pastQuestions:pastQuestions||[],phase:"done",...(stopped?{stopped:true}:{}),...(studyPrepSession?{studyPrepSessionId:studyPrepSession.id}:{}),...protegeMoves(toolExecutions)}:m));
+          setMessages(prev=>prev.map(m=>m.id===replyId?{...m,...(reply!=null?{text:reply}:{}),thinking:thinking||m.thinking,syllabus:syllabus||[],pastQuestions:pastQuestions||[],phase:"done",...(stopped?{stopped:true}:{}),...(messageId?{serverId:messageId}:{}),...(studyPrepSession?{studyPrepSessionId:studyPrepSession.id}:{}),...protegeMoves(toolExecutions)}:m));
           turnTools=toolExecutions||[];
           if ((toolExecutions || []).some((entry) => entry?.tool === "create_task" && entry?.success)) refetchTasks();
           if ((toolExecutions || []).some((entry) => entry?.tool === "suggest_help" && entry?.success)) refetchInbox();
@@ -1390,7 +1393,7 @@ function AgentChatTab({
                       ))}
                     </div>
                   )}
-                  <div style={{ fontSize:10,color:"var(--ak-text-muted)",marginTop:3,display:"flex",alignItems:"center",gap:4 }}>
+                  <div style={{ fontSize:10,color:"var(--ak-text-muted)",marginTop:3,display:"flex",alignItems:"center",gap:4,flexWrap:"wrap" }}>
                     {msg.time}
                     {msg.text&&<CopyMessageButton text={msg.text} />}
                     {msg.text&&msg.phase!=="answering"&&msg.phase!=="thinking"&&(
@@ -1399,6 +1402,9 @@ function AgentChatTab({
                         style={{ background:"none",border:"none",cursor:"pointer",padding:3,display:"inline-flex",alignItems:"center",color:tts.speakingId===msg.id?BRAND:"var(--ak-text-muted)" }}>
                         {tts.loadingId===msg.id?<Spinner size={11}/>:<Icon name={tts.speakingId===msg.id?"ti-player-stop":"ti-volume"} size={13}/>}
                       </button>
+                    )}
+                    {msg.text&&msg.phase!=="answering"&&msg.phase!=="thinking"&&ratableId(msg)&&(
+                      <ReplyRating messageId={ratableId(msg)} value={replyRatings[ratableId(msg)]} onChange={(v)=>setReplyRating(ratableId(msg),v)}/>
                     )}
                   </div>
                   {/* The agent keeps working after its reply: the workflow's run, live (thought → tool → its words). */}
