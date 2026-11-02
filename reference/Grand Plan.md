@@ -3400,6 +3400,93 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   answer. The first run (88/110) also found a live bug: honest failures drew
   a false "Correction" (fixed in turnCheck.js).
 
+### Phase 18 — Attention and agent hygiene (from the DeepSeek Harness review, 2026-11-02)
+- **Source.** A study of DeepSeek Harness (`deepseek-ai/deepseek-harness`, a
+  coding-agent runtime) and its research prototype `dsh-superagent` (both MIT).
+  The runtime itself is not adopted (shell, sandboxes, LSP, computer use,
+  GitHub/Feishu sources); seven of its design rules are, each mapped onto what
+  Akoro already has.
+- **Principle (from their "Philosophy").** Take as little of a person's
+  attention as possible and give as much value as possible: the agent speaks
+  when someone must act or can use a result, confirms once, stays quiet while
+  it works, asks one structured question at a time, and reports failure as
+  failure. Every item below is judged by the attention it costs.
+- **Items, in order:**
+  1. **Watch-only mode for proactive work.** Each proactive proposal kind
+     (§7.16, `modules/autonomy/`, `readyKinds.js`) gets a mode: `off` ·
+     `observe` (default for a new kind: the cycle records "would have
+     proposed X, because…" — never shown to the learner, never charged to
+     their budget) · `live`. An admin page lists the observe records per kind
+     with real outcomes beside them; switching a kind to `live` is an admin
+     decision, recorded with who and when. Instructor proactive work (P13.7)
+     follows the same modes.
+     *Exit:* a gate scenario: an observe kind runs a cycle, records, shows
+     nothing to the learner and spends nothing; after the switch it delivers.
+  2. **One "needs you" list.** A learner's and an instructor's open work across
+     workflows, proposals, approvals and change cards, sorted by what it waits
+     for — an answer, a review, a decision, blocked, failed — worked out by
+     code from workflow states (`status_bucket`, `waiting_learner`,
+     pending confirmations), never from reply text. Categories are checkable,
+     mutually exclusive and cover every case; each row says whom it waits for
+     and carries its action; a healthy state takes no space; a count equals
+     the list it links to. Builds on the unified inbox (P13) and the dashboard
+     descriptors (Phase 11); no new card stacks (turns, not cards).
+     *Exit:* a contract test over every workflow state → exactly one category
+     (or none); a UI gate on learner and instructor dashboards.
+  3. **Loop guard and per-tool time limits.** In `modules/agent-runtime/`
+     (`loop.js`, `harness.js`) and the chat tool loop: the same tool with the
+     same arguments called again in a row → a short reminder in the next
+     observation to change approach or finish; at a second threshold, a
+     firmer one naming the tool and the count. Every tool declares a time
+     limit (default per family); a call past it returns a `timeout`
+     observation code (the recovery rule, Phase 16 step 3, takes it from
+     there) instead of stalling the turn.
+     *Exit:* unit tests for both thresholds and the timeout; a Phase 17
+     benchmark case with a repeating stub; no regression in the agent-loop
+     eval.
+  4. **Ratings on agent replies.** A thumbs up / down (with an optional
+     short reason) on each Agent Chat reply and each workflow summary. Ratings
+     never reach the model's context. They are stored per message and join
+     the Phase 17 episode as a human label next to the code-computed verdict
+     (opt-out rules and anonymisation as in `training/SPEC.md`); the admin
+     evals page shows the rate per surface and the worst-rated turns.
+     *Exit:* migration + route + UI; a gate scenario that a rating is saved,
+     is absent from the next prompt, and appears on the episode.
+  5. **Store first, send after.** Every outgoing message (push, email,
+     WhatsApp, chat notices from the agent) and every outside action a
+     workflow takes is written as stored work before it is attempted, then
+     sent with growing backoff, in order per conversation, and kept with its
+     outcome (sent · failed after N tries · dropped and why) so it is never
+     sent twice. Reuses the Postgres deferred-job queue (#83). After a
+     deploy or restart, a workflow interrupted mid-step resumes with a
+     recovery note: check what already happened (battle created? message
+     sent?) before repeating any outside action.
+     *Exit:* failure tests (§19): a send that fails twice then succeeds is
+     delivered once and in order; a restart mid-step repeats nothing.
+  6. **Asked or inferred, on every agent action.** Each side-effecting agent
+     action records its basis: `explicit` (the learner, instructor or admin
+     asked in this conversation) or `inferred` (the agent decided), with the
+     rule that allowed an inferred one (a consent, a proactive kind, a
+     workflow policy). An inferred action with no rule is refused by the
+     harness. Shown on the self-tooling audit, the approvals page (V4) and in
+     developer mode.
+     *Exit:* contract test — an inferred write without a rule is refused; the
+     audit row carries the basis on every write.
+  7. **Admin-editable prompts with "default updated".** An admin page over the
+     persona and runtime prompt files (`akoro-api/akoro-agent/`, the D4
+     single-source workspace): edit, see the full assembled prompt, history,
+     reset. An override records the default it was based on; when a deploy
+     changes that default, the part is marked "Default updated" with the
+     difference, and the admin keeps their text or takes the new one. Code-
+     enforced rules (gates, policies, verdicts, tool checks) are never
+     prompt text and are not editable here. Golden tests compare the
+     defaults, not the overrides.
+     *Exit:* an override survives a deploy; a changed default is flagged; the
+     persona golden tests stay green.
+- **Order of work:** 3 and 6 first (small, in the runtime), then 1 and 4,
+  then 2 (needs the Phase 11 descriptors), then 5, then 7.
+- **Status (2026-11-02):** planned.
+
 ---
 
 ## 18. Acceptance tests
