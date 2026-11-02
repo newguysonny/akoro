@@ -33,10 +33,13 @@ export const decayReviewFlow = {
     wfId = v0?.workflowId;
     ctx.expect.eq("it opens with the short check", v0?.state, "diagnostic");
     if (v0?.check?.battleId) battles.push(v0.check.battleId);
+    // The in-between states (code deciding, the recall question being written) pass by themselves.
+    const PASSING = { diagnostic: ["diagnostic", "evaluating", "decayed", "retained"], retest: ["retest", "adapt_strategy"] };
     const waitPast = async (state, ms = 240_000) => {
       const until = Date.now() + ms;
+      const states = PASSING[state] || [state];
       let v = await get(wfId);
-      while (v?.state === state && Date.now() < until) { await sleep(5_000); v = await get(wfId); }
+      while (states.includes(v?.state) && Date.now() < until) { await sleep(5_000); v = await get(wfId); }
       return v;
     };
     let v = await waitPast("diagnostic");

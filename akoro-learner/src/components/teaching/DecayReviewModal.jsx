@@ -14,7 +14,7 @@ import { apiGet, apiPost } from '../../services/api.js';
 import DecaySessionModal from './DecaySessionModal.jsx';
 
 const NUNITO = "'Nunito',sans-serif";
-const WAITING = ['created', 'inspecting', 'diagnostic', 'evaluating', 'retest'];
+const WAITING = ['created', 'inspecting', 'diagnostic', 'evaluating', 'decayed', 'retained', 'retest', 'adapt_strategy'];
 const unwrap = (r) => r?.review || r?.data?.review || null;
 
 function Step({ icon, title, children, tone = 'default' }) {
