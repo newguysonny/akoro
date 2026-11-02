@@ -32,6 +32,7 @@ import TraceBlocks from './agentChat/TraceBlocks.jsx';
 import { applyTraceEvent, blocksFromSavedTrace, ingestRunBlocks, promoteActivity, settleRunning, splitWakes, studyPrepEventBlocks, workflowRunBlocks } from '../../lib/agentChatTrace.js';
 import { CHAT_STARTERS, cleanIdeas, cleanMaterials, protegeMoves } from '../../lib/chatIdeas.js';
 import { useNavigate } from 'react-router-dom';
+import NeedsYouList, { useNeedsYou } from './agentChat/NeedsYouList.jsx';
 import AgentCards from '../network/AgentCards.jsx';
 import ChallengeRequestCards from '../network/ChallengeRequestCards.jsx';
 import ConfirmChangeCard from './agentChat/ConfirmChangeCard.jsx';
@@ -596,6 +597,14 @@ function AgentChatTab({
   // Ideas (§7.16.4): buildable briefs the agent brings overnight. "Do it" sends the brief as
   // the learner's own chat message — the ordinary, already-tested path from there.
   const [ideas,setIdeas]=useState([]);
+  // Needs you (Phase 18 item 2): one list of what waits for the learner, from the server.
+  const needsYou=useNeedsYou();
+  const openNeed=(it)=>{
+    const href=it?.action?.href||'';
+    if(href.includes('inbox=')){ setTaskFilter('suggestions'); return; }
+    if(href==='/app?tab=agent'){ setInnerTab('chat'); return; }
+    if(href) navigate(href);
+  };
   const [ideaBusy,setIdeaBusy]=useState(null);
   const refetchIdeas=async()=>{ try{ const d=await apiGet('/api/agent/ideas'); setIdeas(Array.isArray(d?.data)?d.data:[]); }catch{} };
   useEffect(()=>{ refetchIdeas(); },[]);
@@ -1509,8 +1518,8 @@ function AgentChatTab({
             ))}
           </div>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px 8px" }}>
-            <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>{[["pending",t('agent.to_do')],["done",t('agent.done')],["suggestions",t('agent.suggestions')],["ideas",t('agent.ideas')]].map(([k,l])=><button key={k} onClick={()=>setTaskFilter(k)} style={{ padding:"5px 12px",borderRadius:20,border:`1.5px solid ${taskFilter===k?BRAND:"var(--ak-border2)"}`,background:taskFilter===k?`${BRAND}10`:"transparent",color:taskFilter===k?BRAND:"var(--ak-text-muted)",fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",gap:5 }}>{k==="ideas"&&<Icon name="ti-bulb" size={12}/>}{l}{k==="ideas"&&ideas.length>0&&<span style={{ fontSize:9,fontWeight:900,background:taskFilter===k?BRAND:"var(--ak-border)",color:taskFilter===k?"#fff":"var(--ak-text-muted)",borderRadius:8,padding:"1px 5px" }}>{ideas.length}</span>}{k==="suggestions"&&suggestionCount>0&&<span style={{ fontSize:9,fontWeight:900,background:taskFilter===k?BRAND:"var(--ak-border)",color:taskFilter===k?"#fff":"var(--ak-text-muted)",borderRadius:8,padding:"1px 5px" }}>{suggestionCount}</span>}</button>)}</div>
-            {taskFilter!=="suggestions"&&taskFilter!=="ideas"&&<button onClick={openNewTask} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:11.5,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
+            <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>{[["pending",t('agent.to_do')],["done",t('agent.done')],["needs",t('agent.needs_you')],["suggestions",t('agent.suggestions')],["ideas",t('agent.ideas')]].map(([k,l])=><button key={k} onClick={()=>{ setTaskFilter(k); if(k==="needs") needsYou.reload(); }} style={{ padding:"5px 12px",borderRadius:20,border:`1.5px solid ${taskFilter===k?BRAND:"var(--ak-border2)"}`,background:taskFilter===k?`${BRAND}10`:"transparent",color:taskFilter===k?BRAND:"var(--ak-text-muted)",fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",gap:5 }}>{k==="ideas"&&<Icon name="ti-bulb" size={12}/>}{k==="needs"&&<Icon name="ti-bell-ringing" size={12}/>}{l}{k==="needs"&&needsYou.count>0&&<span style={{ fontSize:9,fontWeight:900,background:taskFilter===k?BRAND:"var(--ak-border)",color:taskFilter===k?"#fff":"var(--ak-text-muted)",borderRadius:8,padding:"1px 5px" }}>{needsYou.count}</span>}{k==="ideas"&&ideas.length>0&&<span style={{ fontSize:9,fontWeight:900,background:taskFilter===k?BRAND:"var(--ak-border)",color:taskFilter===k?"#fff":"var(--ak-text-muted)",borderRadius:8,padding:"1px 5px" }}>{ideas.length}</span>}{k==="suggestions"&&suggestionCount>0&&<span style={{ fontSize:9,fontWeight:900,background:taskFilter===k?BRAND:"var(--ak-border)",color:taskFilter===k?"#fff":"var(--ak-text-muted)",borderRadius:8,padding:"1px 5px" }}>{suggestionCount}</span>}</button>)}</div>
+            {taskFilter!=="suggestions"&&taskFilter!=="ideas"&&taskFilter!=="needs"&&<button onClick={openNewTask} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:11.5,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
               <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>{t('agent.new_task')}
             </button>}
           </div>
@@ -1521,7 +1530,9 @@ function AgentChatTab({
             </div>
           )}
           <div style={{ flex:1,padding:"0 16px 16px",display:"flex",flexDirection:"column",gap:8 }}>
-            {taskFilter==="ideas"?(
+            {taskFilter==="needs"?(
+              <NeedsYouList state={needsYou} onOpen={openNeed}/>
+            ):taskFilter==="ideas"?(
               ideas.length===0?<div style={{ textAlign:"center",padding:"32px 16px",color:"var(--ak-text-muted)" }}><Icon name="ti-bulb" size={40} color="var(--ak-text-muted)" style={{opacity:.3}}/><p style={{ fontSize:13,fontWeight:700,marginTop:8,maxWidth:260,marginInline:"auto",lineHeight:1.5 }}>{t('agent.ideas_empty')}</p></div>
               :(<div data-ideas="">{ideas.map(idea=>(
                 <div key={idea.id} data-idea={idea.id} style={{ display:"flex",gap:11,alignItems:"flex-start",flexWrap:"wrap",padding:"12px 13px",borderRadius:14,border:"1px solid var(--ak-border)",background:"var(--ak-surface)",marginBottom:8 }}>

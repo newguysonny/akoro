@@ -8,6 +8,8 @@ import { GREEN, PURPLE, BLUE, RED } from '../constants.js';
 import { C, tint } from '../theme/colors.js';
 import { Ico } from '../theme/Ico.jsx';
 import { confirmDialog } from './ConfirmHost.jsx';
+import NeedsYouPanel, { useNeedsYou } from './tasks/NeedsYouPanel.jsx';
+import LearnersStuckPanel, { useStruggles } from './tasks/LearnersStuckPanel.jsx';
 
 /* datetime-local speaks local wall-clock; the API speaks ISO/UTC. */
 function toLocalInput(iso) {
@@ -280,13 +282,18 @@ const iconBtn = (disabled, color = C.muted) => ({
 });
 
 /* ── Main page ──────────────────────────────────────────────────────────── */
-export default function TasksTab() {
+/** onChat — opens the chat (ChatPage passes it); proposals and change cards are answered there. */
+export default function TasksTab({ onChat } = {}) {
   const [tasks,   setTasks]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal,   setModal]   = useState(false);
   const [editing, setEditing] = useState(null);
   const [toast,   setToast]   = useState(null);
   const [filter,  setFilter]  = useState('all');
+  // Needs you (Phase 18 item 2) and Where learners are stuck (Phase 11, D39) sit beside the task filters.
+  const needsYou = useNeedsYou();
+  const struggles = useStruggles();
+  const panel = filter === 'needs' || filter === 'stuck';
   const [noAgent, setNoAgent] = useState(null);   // holds the retry, so creating one resumes the save
 
   const showToast = (message, type = 'success') => {
@@ -397,7 +404,7 @@ export default function TasksTab() {
     <PageLayout
       title="Tasks"
       subtitle="Schedule work for your agent — once, or on a repeat"
-      action={<Btn size="sm" onClick={openNew}><Ico ti="ti-plus" size={14} /> New Task</Btn>}
+      action={panel ? null : <Btn size="sm" onClick={openNew}><Ico ti="ti-plus" size={14} /> New Task</Btn>}
     >
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 24, maxWidth: 480 }}>
@@ -414,31 +421,37 @@ export default function TasksTab() {
       </div>
 
       {/* Filter */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
         {[
           { key: 'all',       label: 'All' },
           { key: 'pending',   label: 'Pending' },
           { key: 'scheduled', label: 'Scheduled' },
           { key: 'done',      label: 'Done' },
-        ].map(({ key, label }) => (
+          { key: 'needs',     label: 'Needs you', icon: 'ti-bell-ringing', count: needsYou.count },
+          ...(struggles.available ? [{ key: 'stuck', label: 'Where learners are stuck', icon: 'ti-users' }] : []),
+        ].map(({ key, label, icon, count }) => (
           <button
             key={key}
-            onClick={() => setFilter(key)}
+            onClick={() => { setFilter(key); if (key === 'needs') needsYou.reload(); if (key === 'stuck') struggles.reload(); }}
             style={{
               padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600,
               background: filter === key ? C.brand : C.surface,
               color: filter === key ? '#fff' : C.muted,
               border: `1.5px solid ${filter === key ? C.brand : C.border}`,
               cursor: 'pointer', fontFamily: C.font,
+              display: 'inline-flex', alignItems: 'center', gap: 5,
             }}
           >
-            {label}
+            {icon && <Ico ti={icon} size={13} />}{label}
+            {count > 0 && <span style={{ fontSize: 10, fontWeight: 800, background: filter === key ? 'rgba(255,255,255,.25)' : C.border, borderRadius: 8, padding: '0 6px' }}>{count}</span>}
           </button>
         ))}
       </div>
 
-      {/* Task list */}
-      {loading ? (
+      {/* Task list — or the Needs you / Where learners are stuck panel */}
+      {filter === 'needs' ? <NeedsYouPanel state={needsYou} onChat={onChat} />
+      : filter === 'stuck' ? <LearnersStuckPanel state={struggles} />
+      : loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {[1,2,3,4].map(i => <div key={i} className="skeleton" style={{ height: 62, borderRadius: 12 }} />)}
         </div>
