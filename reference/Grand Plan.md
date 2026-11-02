@@ -3554,9 +3554,11 @@ planning loop's tool names, the double practice charge, empty syllabus data).
      trace rows on `streamReducer`, inbox, Tasks) and the dashboard; the giant
      modals split into data hooks + view pieces. Each screen is moved when its
      approved UI work touches it anyway.
-  7. **Tidy the repo root:** `update18/` (a 7 Oct copy of the API and learner app)
-     and the non-Akoro projects (`kpemu-*`, `lead-scout`, `cf`) go to an archive
-     or their own repositories — owner's decision; nothing is deleted without it.
+  7. **Tidy the repo root:** ✅ `update18/` (a 7 Oct copy of the API and learner
+     app) moved to `archive/update18-2026-10-07/` (2026-11-02). `cf/` stays (Akoro's
+     cron ticker). `kpemu-*` (Vercel) and `lead-scout` (Railway) deploy from their
+     folders: they move to `archive/` or their own repositories only after their
+     hosting root directory is changed (owner action); nothing is deleted.
 - **Safety.** No behaviour changes; files move with `git mv`; the API suite, the
   learner build and the gate's regression suite stay green after every step; one
   module per commit.
