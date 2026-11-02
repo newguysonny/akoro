@@ -57,5 +57,5 @@ test("the chat: the pick drives the standard mode only, and /models lists the ca
   assert.match(chat, /const chatModel = mode === "default" \? resolveChatModel\(req\.body\?\.model\) : null;/);
   assert.match(chat, /model: chatModel,/);
   assert.match(chat, /model: model \|\| OPENAI_MODEL,/);
-  assert.match(chat, /res\.json\(\{ modes: chatModelMenu\(\), models: publicModelList\(\) \}\);/);
+  assert.match(chat, /res\.json\(\{ modes: chatModelMenu\(\), models: publicModelList\(\), picker: pickerInfo\(\) \}\);/);
 });

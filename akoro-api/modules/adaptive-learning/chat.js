@@ -44,7 +44,7 @@ export const protegeDeps = {
     return data || [];
   },
 };
-import { publicModelList, resolveChatModel } from "../../lib/modelCatalogue.js";
+import { publicModelList, resolveChatModel, pickerInfo } from "../../lib/modelCatalogue.js";
 const { Pool } = pkg;
 import db from "../../db.js";
 import config from "../../config/index.js";
@@ -4270,8 +4270,9 @@ router.get("/models", (_req, res) => {
   res.set("Cache-Control", "private, max-age=300");
   // modes: the chat's modes and their models; models: the catalogue a
   // learner may pick for the standard mode (Grand Plan §7.11) — each says
-  // whether this server can use it, or why not ("coming soon").
-  res.json({ modes: chatModelMenu(), models: publicModelList() });
+  // whether this server can use it, or why not ("coming soon"), and its cost
+  // against the default; picker: whether the §7.11.5 picker is on here.
+  res.json({ modes: chatModelMenu(), models: publicModelList(), picker: pickerInfo() });
 });
 
 /**

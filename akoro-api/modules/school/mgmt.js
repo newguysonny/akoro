@@ -28,6 +28,7 @@ import { openai } from "../../lib/aiModel.js";
 import { renderPdfToImages } from "../adaptive-learning/pdfRender.js";
 import { DEFAULT_DOC_TEMPLATES, getDefaultDoc } from "./defaultDocs/index.js";
 import { PERIOD_DEFS, TEACH_PERIOD_NAMES, TEMPLATE_SUBJECTS, JUNIOR_GRID, SENIOR_GRID } from "./timetableTemplate.js";
+import { createStrugglesRouter } from "./learnerStruggles.js";
 
 const router = Router();
 const SCHOOL_ROLES = ["school", "school_admin", "admin"];
@@ -2423,6 +2424,10 @@ router.post("/attendance/mark", authenticateToken, requireRole(MGMT_ROLES), asyn
     res.json({ success: true, saved });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+// ── Learners' struggles (D39): linked students only; the admin sees every class, a teacher only theirs ──
+// GET /api/school/mgmt/learning/struggles · /learning/struggles/:studentId/support (logged)
+router.use("/learning", createStrugglesRouter({ getMySchool, authenticate: authenticateToken }));
 
 /* ═══════════════════════ Generic CRUD ════════════════════════════════════ */
 

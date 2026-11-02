@@ -42,12 +42,13 @@ import { practiceProctoredFlow, practiceIntegrityFlagged } from "./practice.js";
 import { dashboardDescriptors, needsYouCategories } from "./dashboard.js";
 import { teacherSchoolReads, paymentsSingleMount, courseInviteJoin, sharedSecretsFailClosed, noFallbackSecrets, ownershipReads } from "./security.js";
 import { loopGuardTimeLimits, actionBasis } from "./agentHygiene.js";
+import { schoolStrugglesScope, modelPickerResolution } from "./schoolStruggles.js";
 
 const ALL = [healthBuild, toolsCatalogue, sessionTokensOnly, r2Live, embeddingsLive, embeddingsCompare, searchTextFallback, scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity,
   privacyEdges, rateLimitCountedOnce, battleEntryGates, followUpDeliverIntoChat, taskDueInMinutes, noResidue,
   viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, suggestionsSurviveRefresh, studyToolRouting, untaughtFlashcards, tailoredChips, chatUploadFiled, pastPaperStructured, sortOwnFolders, materialsMultiFileDiag, readyProposal, goalWork, ideasFlow, consentsQuietBudget, instructorProactive, voiceSpeak, voiceLive, sweepStale, agentCheckBattle, agentCheckStop, classSyllabusFirst, historyPages, workflowMirror, agentWakes, replaceAndCancel, teachingHandoff, eventStream, paperStructured, ...chatToSubmissionScenarios, authoringVersionsParts, authoringDiagramsEdits, inboxOneList, quietLearningPass, plannerRichGather, proactiveInChat, readerBackend, socketSession, guideIdeasSession, courseOneRecord,
   teachingToolRouting, teachingToolRuns, activityToolRouting, draftLifecycle, routineLifecycle,
-  battleFromChat, battleReviewFromChat, selfStudyFull, assignmentPreviewAssign, journeyBattleStage, ...teachingToolScenarios, teachingToolVersions, teachingToolTry, toolsAllOpen, deferredRelease, sessionReminders, guideReviewRuns, battleSeriesRuns, ...battleChatScenarios, activityReviewRuns, activityReviewPlay, ...activityChatScenarios, permissionRequestIsReal, toolJourney, deleteTasks, ...SELFTOOL_CHANGES, evalsRun, evalsResult, teacherSchoolReads, paymentsSingleMount, courseInviteJoin, agentTurns, teachingOutcomes, sharedSecretsFailClosed, noFallbackSecrets, ownershipReads, decayReviewFlow, practiceProctoredFlow, practiceIntegrityFlagged, dashboardDescriptors, needsYouCategories, loopGuardTimeLimits, actionBasis];
+  battleFromChat, battleReviewFromChat, selfStudyFull, assignmentPreviewAssign, journeyBattleStage, ...teachingToolScenarios, teachingToolVersions, teachingToolTry, toolsAllOpen, deferredRelease, sessionReminders, guideReviewRuns, battleSeriesRuns, ...battleChatScenarios, activityReviewRuns, activityReviewPlay, ...activityChatScenarios, permissionRequestIsReal, toolJourney, deleteTasks, ...SELFTOOL_CHANGES, evalsRun, evalsResult, teacherSchoolReads, paymentsSingleMount, courseInviteJoin, agentTurns, teachingOutcomes, sharedSecretsFailClosed, noFallbackSecrets, ownershipReads, decayReviewFlow, practiceProctoredFlow, practiceIntegrityFlagged, dashboardDescriptors, needsYouCategories, loopGuardTimeLimits, actionBasis, schoolStrugglesScope, modelPickerResolution];
 
 export const SCENARIOS = Object.fromEntries(ALL.map((s) => [s.name, s]));
 
@@ -102,6 +103,8 @@ export const SUITES = {
   // Phase 18 items 3 and 6: the loop guard, tool time limits, asked or inferred.
   "agent-hygiene": ["agent.loop_guard_time_limits", "agent.action_basis"],
   battles: ["battles.entry_gates"],
+  // Phase 11 UI backends: the school's struggles view (D39) and the chat's model picker (§7.11.5).
+  "phase11-ui": ["school.struggles_scope", "models.picker_resolution"],
   "self-tooling": ["selftool.views_match_schema", "selftool.schema_lookup_safe", "selftool.create_spec_matches_db", "selftool.create_rejects_forbidden",
     "selftool.agent_builds_tool", "selftool.agent_uses_schema_lookup", "selftool.agent_escalates", "selftool.sandbox_contained", "selftool.code_tool",
     "selftool.instructor_scope", "selftool.instructor_tool_matches_db", "selftool.instructor_agent_builds"],
