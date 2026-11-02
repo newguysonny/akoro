@@ -51,7 +51,7 @@ export function costHint(entry, defaultEntry) {
   if (!a || !b) return { multiple: null, hint: null };
   const multiple = a / b;
   const shown = multiple >= 10 ? Math.round(multiple) : Math.round(multiple * 10) / 10;
-  return { multiple: Math.round(multiple * 100) / 100, hint: multiple < 1.05 ? "About the same coins" : `≈ ${shown}× coins per message` };
+  return { multiple: Math.round(multiple * 100) / 100, hint: multiple < 0.95 ? "Fewer coins per message" : multiple < 1.05 ? "About the same coins" : `≈ ${shown}× coins per message` };
 }
 
 /**

@@ -24,6 +24,7 @@ test("cost hints against the default: the default has none; Opus reads about 30x
   assert.equal(by["gpt-4o-mini"].costMultiple, 1);
   assert.match(by["claude-opus"].costHint, /^≈ 3\d× coins per message$/);
   assert.ok(by["claude-haiku"].costMultiple < 1, "cheaper than the default");
+  assert.equal(by["claude-haiku"].costHint, "Fewer coins per message");
   assert.equal(by.grok.costHint, null, "unpriced: no hint, never a guess");
   assert.deepEqual(costHint({ id: "x", price: null }, { id: "d", price: { in: 1, out: 1 } }), { multiple: null, hint: null });
 });
