@@ -3502,6 +3502,70 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   there); in-app rows, socket events and some check-battle starts are not on the
   outbox; the agent-loop eval needs a model run.
 
+
+### Phase 19 — Code structure: modules, layers, guardrails (from the DeepSeek Harness review, 2026-11-02)
+- **Why.** Measured 2026-11-02: the API is 655 files / 131k lines; `adaptive-learning/`
+  alone is 26.5k lines in 119 files (50 loose at its top level) and imports from 30+
+  other areas; `chat.js` is 5,001 lines (41 functions, 30 routes); five route files
+  are over 2,000 lines (school routes and mgmt, battle, instructor, profiles). The
+  learner app has `SessionReaderModal` 2,181, `AgentChatTab` 1,757 and
+  `LearnerDashboard` 1,467 lines. The four frontends each keep their own `api.js`
+  (four versions, 262–500 lines), WebSocket hook, constants and Sign in / Sign up /
+  Wallet / Settings / Terms pages; 28 files are byte-identical copies. DeepSeek
+  Harness (~2,950 source files) stays navigable because every package lives in one
+  group with one owner and a README, business rules sit in their own package and
+  attach through registration, and scripts enforce the import graph.
+- **Rules adopted (DeepSeek's, mapped):**
+  - *One home per feature.* A module owns one domain and exposes one entry
+    (`index.js`); other modules import only that, never its internals.
+  - *One layer pattern per module:* `routes.js` (thin HTTP: auth, parse, respond) →
+    `service.js` (the use cases) → pure rules (`policy.js` / `workflow.js`, no db,
+    no model, no clock) → `store.js` (the db). Phase 8/9 code (`decay-review/`,
+    `practice/`) is the reference.
+  - *Generic code doesn't know business branches.* The chat loop, the agent runtime,
+    the workflow engine and the gateways carry orchestration; each domain registers
+    its tools / workflow / routes into them.
+  - *Shared state has an owner.* No new module-level singletons; existing ones
+    (`decayReview()`, `practiceRun()`, …) move behind the module entry.
+  - *Frontend by feature, not by file type:* `features/<name>/{components,hooks,
+    api,lib}`; features import only shared pieces and never each other; only the
+    app shell assembles them.
+- **Steps, in order:**
+  1. **Guardrails first** (they stop new sprawl before any move): contract tests for
+     (a) the import graph — no cycles between modules, no import of another
+     module's internals; (b) a size ratchet — new files ≤ 600 lines, today's
+     oversized files listed in an allowlist that may only shrink; (c) a README per
+     module (purpose, entry, how to extend, known limits). Same tests for the
+     learner app's feature folders.
+  2. **Split `adaptive-learning/`** into owned areas — `chat/`, the workflows
+     (`study-prep/`, `teaching-*`, `decay-review/`, `practice/` already exist),
+     `proactive/`, `learner-model/`, `personas/` — and move every loose file to
+     its owner (`git mv`, imports updated, no behaviour change).
+  3. **Break up `chat.js`:** routes, the turn pipeline, the tool loop, and the tool
+     handlers per domain (registered, not imported by name).
+  4. **The big route files** (school routes/mgmt, battle, instructor, profiles,
+     records, auth, self-study) to routes → service → rules → store, one module at
+     a time.
+  5. **One shared client core** for the four apps — API client, auth, WebSocket,
+     i18n, and the Sign in / Sign up / Wallet / Settings / Terms pages — through
+     the existing copy-and-check method (`design-system/sync.mjs`, extended from
+     the UI kit to all four apps, with its contract test).
+  6. **Learner app by feature,** starting with Agent Chat (message list, composer,
+     trace rows on `streamReducer`, inbox, Tasks) and the dashboard; the giant
+     modals split into data hooks + view pieces. Each screen is moved when its
+     approved UI work touches it anyway.
+  7. **Tidy the repo root:** `update18/` (a 7 Oct copy of the API and learner app)
+     and the non-Akoro projects (`kpemu-*`, `lead-scout`, `cf`) go to an archive
+     or their own repositories — owner's decision; nothing is deleted without it.
+- **Safety.** No behaviour changes; files move with `git mv`; the API suite, the
+  learner build and the gate's regression suite stay green after every step; one
+  module per commit.
+- **Exit:** the three guardrail tests on and green; no module cycle; no file over
+  the ratchet that isn't on the shrinking list; `chat.js` under 1,000 lines;
+  `adaptive-learning/` with no loose top-level files; the four apps on one client
+  core.
+- **Status (2026-11-02):** planned.
+
 ---
 
 ## 18. Acceptance tests
