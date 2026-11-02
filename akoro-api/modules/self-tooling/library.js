@@ -10,10 +10,13 @@
  *   similarTools              near-duplicates (same data, similar goal) — merge
  *                             candidates: promote one, retire the rest
  *   analytics                 how create_tool goals end, what's escalated, usage
+ *   auditRows                 the audit trail: builds and changes, newest first,
+ *                             each with its basis (asked / inferred + rule, Phase 18)
  */
 import db from "../../db.js";
 import { CAPABILITIES, learnerGrantable } from "./capabilities.js";
 import { activeGrants } from "./registry.js";
+import { basisOfRow } from "../agent-runtime/actionBasis.js";
 
 const edu = () => db.schema("edu");
 const NAME = /^[a-z][a-z0-9_]{2,47}$/;
@@ -248,4 +251,35 @@ export async function analytics({ days = 30 } = {}) {
   ]);
   if (ev.error || rq.error || tl.error) throw new Error("Couldn't load analytics");
   return summarise({ events: (ev.data || []).filter((e) => e.outcome !== "dry"), requests: rq.data || [], tools: tl.data || [], days: d });
+}
+
+/** PURE: one audit row as the admin API shows it (a build or a change card). */
+export function auditRow(row, kind) {
+  if (kind === "build") {
+    return { kind, id: row.id, userId: row.user_id, goal: row.goal, outcome: row.outcome, toolId: row.tool_id || null,
+      reason: row.reason || null, createdAt: row.created_at, ...basisOfRow(row) };
+  }
+  return { kind, id: row.id, userId: row.principal_id, tool: String(row.tool_name || "").replace(/^selftool:/, ""),
+    title: row.preview?.title || null, action: row.preview?.action || null, status: row.status,
+    createdAt: row.created_at, decidedAt: row.confirmed_at || row.rejected_at || null, ...basisOfRow(row) };
+}
+
+/**
+ * The self-tooling audit trail (Phase 18 item 6): every build (self_tool_events)
+ * and every change card (agent_tool_write_confirmations, the self-tooling
+ * ones), newest first, each saying whether a person asked or the agent went
+ * ahead, and under which rule.
+ */
+export async function auditRows({ days = 7, limit = 100 } = {}) {
+  const d = Math.min(90, Math.max(1, Number(days) || 7));
+  const n = Math.min(500, Math.max(1, Number(limit) || 100));
+  const since = new Date(Date.now() - d * 86_400_000).toISOString();
+  const [ev, ch] = await Promise.all([
+    edu().from("self_tool_events").select("id, user_id, goal, outcome, tool_id, reason, created_at, basis, basis_rule").gte("created_at", since).order("created_at", { ascending: false }).limit(n),
+    edu().from("agent_tool_write_confirmations").select("id, principal_id, tool_name, preview, status, created_at, confirmed_at, rejected_at, basis, basis_rule")
+      .eq("capability_jti", "selftool").gte("created_at", since).order("created_at", { ascending: false }).limit(n),
+  ]);
+  if (ev.error || ch.error) throw httpError(503, "Couldn't load the self-tooling audit");
+  return [...(ev.data || []).map((r) => auditRow(r, "build")), ...(ch.data || []).map((r) => auditRow(r, "change"))]
+    .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))).slice(0, n);
 }

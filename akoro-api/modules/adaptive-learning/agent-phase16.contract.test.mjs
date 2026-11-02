@@ -160,7 +160,8 @@ test("the chat turn uses all five", () => {
   assert.match(chat, /if \(tool === UPDATE_PLAN_TOOL\.name\) \{[\s\S]{0,300}applyPlanUpdate\(ledgerNow, input, executions\)/);
   assert.match(chat, /scratchpad: nextLedger\(ledgerIn, prepared\.ledger \|\| null, userMessage, prepared\.toolExecutions\)/);
   assert.match(chat, /for \(const line of turnCorrections\(reply, \{ executions: prepared\.toolExecutions, ledger: prepared\.ledger \|\| ledgerIn \}\)\)/);
-  assert.match(chat, /if \(shouldRetry\(tool, toolResult, \{ sideEffecting: isSideEffecting\(tool, input\) \}\)\)/);
+  assert.match(chat, /const changes = isSideEffecting\(tool, input\);/);
+  assert.match(chat, /if \(shouldRetry\(tool, toolResult, \{ sideEffecting: changes \}\)\)/);
   assert.match(chat, /toolResult = \{ \.\.\.toolResult, recovery: hint\.next \}/);
   assert.match(chat, /const fit = fitDialogue\(dialogue,/);
   assert.match(chat, /messages: \[\.\.\.fit\.kept, \{ role: "user", content: userContent \}\]/);

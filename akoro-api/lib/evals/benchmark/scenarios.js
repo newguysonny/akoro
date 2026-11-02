@@ -3,7 +3,7 @@
 // The Akoro Agent Model benchmark (training/SPEC.md §7, Grand Plan Phase 17,
 // phase 2): multi-step tasks for the learner's Agent Chat, each with scripted
 // stub tool answers (failures included, on purpose) and a success test checked
-// by code. 22 templates × 5 subjects = 110 scenarios. NEVER used as training
+// by code. 23 templates × 5 subjects = 115 scenarios. NEVER used as training
 // data — training scenarios are generated separately (SPEC §5).
 //
 // A scenario:
@@ -19,6 +19,8 @@
 //     plan         true          update_plan was called
 //     reply        { matches?, notMatches? }  ('/re/flags' strings)
 //     recovery     what the scripted failure should lead to (scored as recovery)
+//     maxRepeats   n            the same tool with the same arguments at most n times in a row
+//                               (the loop guard's reminders, Phase 18 item 3)
 //   minCalls  the fewest tool calls a good run needs (efficiency)
 
 const SUBJECTS = [
@@ -187,6 +189,14 @@ const TEMPLATES = [
     // The protégé may ask to be taught it instead (the doctrine's move): a Teach me button, not a change.
     stubs: { ask_to_be_taught: [{ success: true, asked: true, topic: v.topic, subject: v.subject }] },
     success: { notCalls: ["create_task", "create_goal", "schedule_chat_follow_up", "start_study_prep_session"], reply: { matches: "/\\w{3,}/" } }, minCalls: 0,
+  }),
+  (v) => ({
+    // A status that never changes (a repeating stub): asked to keep checking, the agent checks, may look
+    // once more after the loop guard's reminder, then stops and says it's still running (Phase 18 item 3).
+    template: "repeat_guard", capabilities: ["stopping", "recovery"],
+    request: `Keep checking my ${v.subject} study prep until it has finished, then tell me.`,
+    stubs: { get_running_work: [{ running: [{ kind: "study_prep", subject: v.subject, topic: v.topic, status: "generating_practice", progress: "2 of 5 topics" }] }] },
+    success: { anyOf: [["get_running_work", "get_study_prep_session"]], maxRepeats: 3, reply: { matches: "/still|running|not (?:yet )?(?:finished|done)|n't (?:finished|done|complete)|in progress|2 of 5/i" } }, minCalls: 1,
   }),
 ];
 

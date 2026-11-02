@@ -19,6 +19,7 @@ import { notifyUser } from "../notify.js";
 import { inQuiet, quietOf } from "./quietHours.js";
 import { READY } from "./readyKinds.js";
 import { collectMaterials, materialsFrom } from "../adaptive-learning/chat-materials.js";
+import { RULES, actionBasis, basisRefusal } from "../agent-runtime/actionBasis.js";
 
 const edu = () => db.schema("edu");
 export const DELIVERY = Object.freeze({
@@ -37,12 +38,22 @@ export function proactiveMessage(p, { timeZone = "Africa/Lagos" } = {}) {
   return `One thing I noticed: ${why}\n\nI've got this ready — **${p.title}**${when}: ${READY[p.kind]?.doing || "ready when you are"}. Want me to go ahead?`;
 }
 
+/**
+ * Asked or inferred (Phase 18 item 6): a proactive delivery is the agent's own
+ * idea — inferred, allowed by its proactive kind (the learner's consent is
+ * checked before it). → { basis, rule }; no kind, no rule.
+ */
+export function proposalBasis(p) {
+  return actionBasis({ basis: p?.basis || "inferred", rule: p?.basis_rule || (p?.kind ? RULES.proactive(p.kind) : null) });
+}
+
 /** What the chat card carries: the buttons' words and the prepared preview (facts from code). */
 export function proposalMeta(p) {
   const r = READY[p.kind] || {};
+  const b = proposalBasis(p);
   return { id: p.id, kind: p.kind, title: p.title, status: "proposed",
     yes: p.kind === "goal" && p.payload?.implied ? "Make it a goal" : r.yes || "Yes, go ahead", ...(r.cost ? { cost: r.cost } : {}),
-    ...(p.preview ? { preview: p.preview } : {}) };
+    ...(p.preview ? { preview: p.preview } : {}), basis: b.basis, rule: b.rule };
 }
 
 /** Pick the chat by the D49 rule. → { chatId, created } | null */
@@ -85,10 +96,13 @@ export async function deliverProactive(userId, { now = new Date(), ignoreQuietHo
   if ((today ?? 0) >= DELIVERY.DAILY) return { posted: false, reason: "daily_cap" };
 
   const { data: p } = await edu().from("agent_proposals")
-    .select("id, kind, title, rationale, payload, preview, source_chat_id, expires_at")
+    .select("id, kind, title, rationale, payload, preview, source_chat_id, expires_at, basis, basis_rule")
     .eq("user_id", userId).eq("status", "proposed").is("posted_at", null).gt("expires_at", now.toISOString())
     .order("created_at", { ascending: false }).limit(1).maybeSingle();
   if (!p) return { posted: false, reason: "nothing_to_post" };
+  // An inferred delivery with no rule allowing it is never posted.
+  const refused = basisRefusal(proposalBasis(p), { action: "proactive delivery" });
+  if (refused) return { posted: false, reason: refused.code };
 
   const target = await chatFor(userId, p.source_chat_id, p.title);
   if (!target) return { posted: false, reason: "no_chat" };

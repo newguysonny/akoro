@@ -19,6 +19,7 @@ import { quietOf, afterQuiet } from "./quietHours.js";
 import { IDEAS, LEARNER_KINDS, shapeIdeas, shapeReady, fixIts, progressLine } from "./readyKinds.js";
 import { budgetState, noteBudget } from "./budget.js";
 import { usdCost } from "../../lib/aiPricing.js";
+import { RULES, basisColumns } from "../agent-runtime/actionBasis.js";
 
 const edu = () => db.schema("edu");
 
@@ -534,6 +535,8 @@ export async function runAutonomyCycleForUser(userId, trigger = "nightly") {
       payload: p.payload, source: trigger === "nightly" ? "cycle" : "event",
       ...(p.preview ? { preview: p.preview } : {}),
       ...(p.sourceChatId ? { source_chat_id: p.sourceChatId } : {}),
+      // Asked or inferred (Phase 18 item 6): the agent's idea, allowed by its proactive kind.
+      ...basisColumns({ basis: "inferred", rule: RULES.proactive(p.kind) }),
     }));
 
     let runId = null;

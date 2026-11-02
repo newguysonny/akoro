@@ -12,9 +12,15 @@
  * `agent.next(step)` → { tool|action, args, intent } — injected, so contract
  * tests run stub agents. `record(entry)` gets every step for the workflow's
  * own event log; the loop records, it never decides state.
+ *
+ * Phase 18: the loop guard (loopGuard.js) adds a reminder to the observation
+ * of a call that repeats the previous one exactly; a tool past its time limit
+ * (tools.js / toolTime.js) comes back as a `timeout` observation; each
+ * decision is recorded with its basis (actionBasis.js) when the registry has one.
  */
 
 import { classifyError } from "../agent-contract/contract.js";
+import { createLoopGuard } from "./loopGuard.js";
 
 export class DecisionTimeout extends Error {
   constructor(ms) { super(`The agent did not decide within ${ms} ms`); this.name = "DecisionTimeout"; this.code = "decision_timeout"; }
@@ -74,6 +80,7 @@ export async function runAgentLoop({
   const { maxIterations, maxToolCalls = Infinity, decisionTimeoutMs = null } = caps || {};
   const observations = [];
   const finals = finalActions || terminalActions;
+  const guard = createLoopGuard();
   let toolCalls = 0;
 
   for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
@@ -106,7 +113,8 @@ export async function runAgentLoop({
       return { ended: "tool_call_cap", iterations: iteration - 1, terminal: null, observations };
     }
 
-    await record({ kind: "decision", iteration, step });
+    const basis = registry.basisFor ? registry.basisFor(requested, step.args || {}) : null;
+    await record({ kind: "decision", iteration, step, ...(basis ? { basis } : {}) });
     episode?.decision({ tool_calls: [{ name: requested, arguments: step.args || {} }], intent: step.intent || null });
 
     let observation;
@@ -127,6 +135,9 @@ export async function runAgentLoop({
         if (stopCodes.includes(error?.code)) stopped = error.code;
       }
     }
+    // The same call again in a row: say so where the agent reads (a reminder, then a firmer one).
+    const repeat = guard.note(requested, step.args || {});
+    if (repeat) observation = { ...observation, reminder: repeat.text };
     // The agent's transcript names the tool each observation answers.
     // With think, the agent's own notes for the step ride along, so its analysis builds across decisions.
     observations.push({ tool: requested, ...(step.thinking ? { yourNotes: String(step.thinking).slice(0, 900) } : {}), ...observation });

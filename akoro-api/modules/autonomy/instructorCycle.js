@@ -12,6 +12,7 @@
 import db from "../../db.js";
 import { instructorProposals } from "./instructorCore.js";
 import { deliverProactive } from "./deliver.js";
+import { RULES, basisColumns } from "../agent-runtime/actionBasis.js";
 
 const edu = () => db.schema("edu");
 const DAY = 86_400_000;
@@ -55,6 +56,8 @@ export async function runInstructorCycle(instructorId, { trigger = "instructor",
     await edu().from("agent_proposals").insert(fresh.map((p) => ({
       user_id: instructorId, kind: p.kind, title: p.title, rationale: p.rationale, payload: p.payload, preview: p.preview,
       source: "cycle", run_id: run?.id ?? null,
+      // Asked or inferred (Phase 18 item 6): the agent's idea, allowed by its proactive kind.
+      ...basisColumns({ basis: "inferred", rule: RULES.proactive(p.kind) }),
     })));
     await deliverProactive(instructorId).catch(() => null);
   }

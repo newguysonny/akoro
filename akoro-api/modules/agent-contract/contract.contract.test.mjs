@@ -50,7 +50,7 @@ test("the loops record: chat (decision + observation), tasks (recorder), workflo
   const chat = read("../adaptive-learning/chat.js");
   assert.match(chat, /recorder\.decision\(\{ tool_calls: calls\.map/);
   assert.match(chat, /recorder\?\.observation\(observation\);/);
-  assert.match(chat, /const runTool = callTool \|\| \(\(name, input\) => executeChatTool\(name, input, studentId, \{ conversationId, role \}\)\);/, "the benchmark's one seam");
+  assert.match(chat, /const runTool = callTool \|\| \(\(name, input\) => executeChatTool\(name, input, studentId, \{ conversationId, role, basis: turnBasis \}\)\);/, "the benchmark's one seam");
   const tasks = read("../tasks/lib/agentLoop.js");
   assert.match(tasks, /recorder\.decision\(tc\.length \? \{ tool_calls: tc \} : \{ reply: msg\.content \?\? "" \}\);/);
   assert.match(tasks, /recorder\?\.observation\(observation\);/);

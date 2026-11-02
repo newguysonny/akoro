@@ -224,7 +224,8 @@
     "2026-study-prep-agent-check.sql",
     "2026-workflow-engine.sql",
     "2026-search-text-fallback.sql",
-    "2026-practice-workflow.sql"
+    "2026-practice-workflow.sql",
+    "2026-agent-action-basis.sql"
   ],
   "demo": [
     "2026-seed-school-passwords.sql",

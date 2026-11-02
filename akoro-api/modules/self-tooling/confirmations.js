@@ -18,6 +18,7 @@ import { CAPABILITIES, learnerGrantable } from "./capabilities.js";
 import { capabilityStatus, learnerGrants } from "./registry.js";
 import { WRITE_RUNNERS } from "./capRuntime.js";
 import { agentToolArgumentsDigest } from "../agent-tools/capability.js";
+import { basisColumns, basisOfRow, currentActionBasis } from "../agent-runtime/actionBasis.js";
 
 const edu = () => db.schema("edu");
 const TABLE = "agent_tool_write_confirmations";
@@ -44,6 +45,8 @@ const publicConfirmation = (row) => ({
   more: row.preview?.more || 0,
   result: row.preview?.result || null,
   expiresAt: row.expires_at,
+  // Asked or inferred (Phase 18 item 6).
+  ...basisOfRow(row),
 });
 
 /**
@@ -62,6 +65,8 @@ export async function proposeWrite({ learnerId, conversationId = null, tool, wri
     tool_name: `selftool:${write.cap}`, tool_arguments: args, arguments_digest: digest, preview,
     proposal_key: createHash("sha256").update(`${learnerId}:${digest}:${bucket}`).digest("hex"),
     status: "pending", expires_at: new Date(Date.now() + CONFIRM_TTL_MS).toISOString(),
+    // Asked or inferred (Phase 18 item 6): the card is the audit row of the change it proposes.
+    ...basisColumns(currentActionBasis() || { basis: "explicit" }),
   };
   let { data, error } = await edu().from(TABLE).insert(row).select("*").maybeSingle();
   if (error?.code === "23505") {
@@ -101,6 +106,7 @@ export async function proposePermission({ learnerId, conversationId = null, capa
     tool_name: `selftool:permission:${capability}`, tool_arguments: args, arguments_digest: digest, preview,
     proposal_key: createHash("sha256").update(`${learnerId}:permission:${digest}:${bucket}`).digest("hex"),
     status: "pending", expires_at: new Date(Date.now() + PERMISSION_TTL_MS).toISOString(),
+    ...basisColumns(currentActionBasis() || { basis: "explicit" }),
   };
   let { data, error } = await edu().from(TABLE).insert(row).select("*").maybeSingle();
   if (error?.code === "23505") {

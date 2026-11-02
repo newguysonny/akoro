@@ -33,6 +33,8 @@ const ALIASES = Object.freeze({
   unauthorized: "not_allowed", permission_denied: "not_allowed", not_ready: "state_conflict",
   wrong_state: "state_conflict", conflict: "state_conflict", no_balance: "insufficient_balance",
   wrong_type: "invalid_arguments", needs_permission: "needs_confirmation",
+  // Phase 18: an inferred change with no rule allowing it (agent-runtime/actionBasis.js).
+  no_rule_for_inferred_action: "not_allowed",
 });
 
 // Order matters: the first match wins.

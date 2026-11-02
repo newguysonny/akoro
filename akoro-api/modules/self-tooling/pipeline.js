@@ -18,6 +18,7 @@ import { createExpect, repeatVerdict } from "../verify/assertions.js";
 import { escalate } from "./escalation.js";
 import { proposeWrite, proposePermission } from "./confirmations.js";
 import { codeEnabled } from "./sandbox/index.js";
+import { basisColumns, currentActionBasis } from "../agent-runtime/actionBasis.js";
 
 const edu = () => db.schema("edu");
 const NAME = /^[a-z][a-z0-9_]{2,47}$/;
@@ -35,8 +36,9 @@ export const howToUse = (c) => (CAPABILITIES[c]?.kind === "write"
   ? `use the approved change ${c}: read the rows from the view ${CAPABILITIES[c].target}, filter them to exactly what the goal says, and END the recipe with {"op":"write","cap":"${c}"${CAPABILITIES[c].args ? `,"args":{${Object.keys(CAPABILITIES[c].args).map((k) => `"${k}":…`).join(",")}}` : ""}} (never a step with "cap" for a change)`
   : `use the approved capability ${c} (a step {"id":"x","cap":"${c}"} — returns ${JSON.stringify(CAPABILITIES[c].returns || [])})`);
 
+// The audit row says whether a person asked for this build or the agent went ahead under a rule (Phase 18 item 6).
 async function logEvent(row) {
-  const { error } = await edu().from("self_tool_events").insert(row);
+  const { error } = await edu().from("self_tool_events").insert({ ...row, ...basisColumns(currentActionBasis() || { basis: "explicit" }) });
   if (error) console.warn("[self-tooling] event not logged:", error.message);
 }
 
