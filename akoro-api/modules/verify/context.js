@@ -58,8 +58,10 @@ export function createContext({ scenario, sink, evidence, realUsers, runId = "lo
   async function http({ as: who = null, method = "GET", path, body, headers = {}, role } = {}) {
     if (!path || !path.startsWith("/")) throw new Error("ctx.http needs a path starting with /");
     const acct = who ? await as(who) : null;
-    // The test admin (tester90) reaches the evals and nothing else; no one else is signed in as an admin.
-    if (acct && acct.role === "admin" && !/^\/api\/admin\/evals(\/|\?|$)/.test(path)) throw new PolicyError(`The test admin may only use /api/admin/evals, not ${path}.`);
+    // The test admin (tester90) reaches the evals and nothing else — plus READS of the eval
+    // ratings and the prompt parts (Phase 18; a prompt edit would change every learner's agent).
+    // No one else is signed in as an admin.
+    if (acct && acct.role === "admin" && !/^\/api\/admin\/evals(\/|\?|$)/.test(path) && !(method === "GET" && /^\/api\/admin\/(agent-ratings|agent-prompts)(\/|\?|$)/.test(path))) throw new PolicyError(`The test admin may only use /api/admin/evals (and read the ratings and prompt parts), not ${method} ${path}.`);
     if (acct && role === "admin" && acct.role !== "admin") throw new PolicyError("A scenario can't sign a non-admin account in as an admin.");
     if (acct && method !== "GET" && risk === "read") throw new PolicyError(`A read scenario can't ${method} ${path}.`);
     if (acct && method !== "GET" && !writable(acct)) throw new PolicyError("Real users are read-only to the gate.");

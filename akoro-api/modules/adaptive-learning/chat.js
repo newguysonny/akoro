@@ -111,6 +111,7 @@ import { runIntentStep, renderIntent } from "./intentStep.js";
 // Phase 17: a live turn is recorded per AGENT_EPISODES — opted-in learners, or everyone who hasn't opted out (agent-contract/store.js).
 import { createEpisodeRecorder } from "../agent-contract/episode.js";
 import { recordsRealTraffic, saveEpisode } from "../agent-contract/store.js";
+import { labelKeyFor } from "../agent-ratings/ratings.js";
 import { requiresAgentCapabilitiesTool, requiresActivityPreparation, isDraftFollowUp, isToolDraftFollowUp, requiredLearnerDataTool, requiredStudyPrepTool, classForExam } from "./agent-chat-intent.js";
 import { agentToolActivity } from "../../lib/agentActivity.js";
 import { noteChatTurn } from "../agent-memory/quietLearning.js";
@@ -3806,7 +3807,7 @@ function agentSessionId(conversationId) {
   return `${AGENT_CHAT_SESSION_PREFIX}${String(conversationId).replace(/-/g, "")}`;
 }
 
-function safeHistory(history) {
+export function safeHistory(history) {
   return (Array.isArray(history) ? history : [])
     .filter((item) => item && (item.role === "user" || item.role === "assistant") && typeof item.content === "string")
     .map((item) => ({ role: item.role, content: item.content.trim().slice(0, 12_000) }))
@@ -4592,7 +4593,9 @@ router.post("/agent", async (req, res) => {
       } catch { ingests = []; }
     }
     // The reply's trace and meta (previews, materials, the uploads' cards), and the uploads pointed at it.
+    let savedReplyId = null;   // the stored reply's id: the episode's label key comes from it
     const saveTurn = async (messageId) => {
+      savedReplyId = messageId || null;
       const meta = { ...(previewMetaFrom(prepared.toolExecutions) || {}),
         ...(ingests.length ? { ingest: { id: ingests[0].id }, ingests: ingests.map((r) => ({ id: r.id })) } : {}) };
       await saveMessageTrace({ messageId, userId: req.user.id, trace: traceBlocks, meta: Object.keys(meta).length ? meta : null });
@@ -4866,10 +4869,11 @@ router.post("/agent", async (req, res) => {
     if (!reply.trim()) reply = "I'm here to help with your studies — ask me anything about your subjects!";
     // The episode (per AGENT_EPISODES; never for an opted-out user): the reply as shown, code-computed checks,
     // stored anonymised; never holds up the reply.
+    // Stored once the reply is saved, keyed to it (labelKeyFor) so a later rating joins it as a human label.
+    let episode = null;
     if (recorder && !stopped()) {
       recorder.decision({ reply });
-      const episode = recorder.finish({ ledger: prepared.ledger || ledgerIn, sideEffecting: (t) => isSideEffecting(t, {}), capabilities: intent?.multiStep ? ["planning"] : [] });
-      void saveEpisode(episode, { names: [req.user.username, req.user.fullName, req.user.email].filter(Boolean) }).catch(() => {});
+      episode = recorder.finish({ ledger: prepared.ledger || ledgerIn, sideEffecting: (t) => isSideEffecting(t, {}), capabilities: intent?.multiStep ? ["planning"] : [] });
     }
     const traceBlocks = trace.blocks();
 
@@ -4916,6 +4920,10 @@ router.post("/agent", async (req, res) => {
     } else if (!warnedUnsavedTurn) {
       warnedUnsavedTurn = true;
       console.warn("[/chat/agent] a completed turn was NOT saved (client sent no conversationId) — that reply cannot be restored on reload");
+    }
+    if (episode) {
+      void saveEpisode(episode, { names: [req.user.username, req.user.fullName, req.user.email].filter(Boolean),
+        labelKey: labelKeyFor("agent_chat", savedReplyId) }).catch(() => {});
     }
     // One line per completed turn, success or failure: with this, "my history
     // is empty" is diagnosable from the logs alone — saved=false names the

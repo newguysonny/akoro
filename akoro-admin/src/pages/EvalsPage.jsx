@@ -18,6 +18,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { FlaskConical, Play, XCircle, CheckCircle2, AlertTriangle, RefreshCw, Loader2 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
+import LearnerRatings from './evals/LearnerRatings.jsx';
 import { Skeleton, Toast } from '../components/Primitives.jsx';
 import { apiGet, apiPost } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, FONT } from '../constants.js';
@@ -168,6 +169,9 @@ export default function EvalsPage() {
         Recent runs
       </h3>
       <RunTable runs={runs} onOpen={openDetail} onCancel={cancel} />
+
+      {/* Phase 18: what learners say about the replies, beside the code's verdicts. */}
+      <LearnerRatings />
 
       {confirm && (
         <ConfirmDialog c={confirm} busy={busy} onCancel={() => setConfirm(null)} onGo={start}

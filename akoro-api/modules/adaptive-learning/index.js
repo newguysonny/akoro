@@ -33,6 +33,7 @@ import teachingSessionRouter     from "./teachingSession.js";
 import examPrepConfidenceRouter  from "./exam-prep-confidence.js";
 import studyPrepRouter         from "./study-prep/routes.js";
 import decayReviewRouter       from "./decay-review/routes.js";
+import agentRatingsRouter      from "../agent-ratings/routes.js";
 // Side-effect import: schedules the off-peak lesson-ladder pre-warm so the
 // first learner on a scheme-of-work topic never waits for generation.
 import "./ladderPrewarm.js";
@@ -81,6 +82,8 @@ router.use("/exam-prep",     authenticateToken, examPrepConfidenceRouter);
 router.use("/study-prep",    authenticateToken, studyPrepRouter);
 router.use("/decay-reviews", authenticateToken, decayReviewRouter);   // Phase 8: the Decay Review workflow
 
+// Phase 18 item 4: thumbs up / down on the learner's own agent replies (never in any prompt).
+router.use("/ratings",       authenticateToken, agentRatingsRouter);
 router.use("/chat",          authenticateToken, chatRouter);
 router.use("/draw",          authenticateToken, drawRouter);
 router.use("/syllabus",      authenticateToken, syllabusRouter);

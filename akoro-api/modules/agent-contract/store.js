@@ -31,7 +31,9 @@ export async function recordsRealTraffic(userId, env = process.env) {
 }
 
 /** Store one episode. → "stored" | "skipped" | "dropped" (anonymiser refused) | "failed" */
-export async function saveEpisode(episode, { names = [], model = null, env = process.env } = {}) {
+// `labelKey` (agent-ratings/ratings.js labelKeyFor): a keyed hash of the reply the episode
+// produced, so a later rating can join it as a human label — never the message id itself.
+export async function saveEpisode(episode, { names = [], model = null, labelKey = null, env = process.env } = {}) {
   const mode = episodeMode(env);
   if (!episode || mode === "off") return "skipped";
   let row = episode;
@@ -41,11 +43,14 @@ export async function saveEpisode(episode, { names = [], model = null, env = pro
     if (!row) return "dropped";
   }
   try {
-    const { error } = await db.schema("edu").from("agent_episodes").insert({
+    const insert = (extra) => db.schema("edu").from("agent_episodes").insert({
       id: row.id, source: row.source, surface: row.turn_input?.surface || "unknown",
       verdict: row.outcome?.verdict || "fail", failure_class: row.outcome?.failure_class || null,
-      capabilities: row.capabilities || [], scenario: row.meta?.scenario || null, model, episode: row,
+      capabilities: row.capabilities || [], scenario: row.meta?.scenario || null, model, episode: row, ...extra,
     });
+    let { error } = await insert(labelKey ? { label_key: String(labelKey) } : {});
+    // Rolling deploy: the label column may not exist yet — keep the episode without it.
+    if (error && labelKey && /label_key/i.test(String(error.message || ""))) ({ error } = await insert({}));
     if (error) throw error;
     return "stored";
   } catch (e) {

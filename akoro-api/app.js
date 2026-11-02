@@ -985,6 +985,11 @@ if (!skipJob("routine scheduler")) startRoutineScheduler();
     process.exit(1);
   }
   console.log(`[context-layer] ok v${contextLayer.version} — ${contextLayer.sets.length} sets, manifest v${contextLayer.manifestVersion}`);
+  // Admin-edited prompt parts (Phase 18 item 7): from now on a part with an
+  // override loads the admin's text (30-second cache; AGENT_PROMPT_OVERRIDES=off
+  // turns them all off). The preflight above checked the shipped defaults.
+  const { installPromptOverrides } = await import("./modules/agent-context/override-store.js");
+  if (installPromptOverrides()) console.log("[context-layer] prompt overrides on");
 }
 
 httpServer.listen(config.server.port, config.server.host, () => {
