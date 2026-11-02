@@ -5,8 +5,8 @@
  * `practice` workflow run: the agent picks each next move (next question,
  * one follow-up, a hint within policy), the score and the verdict are
  * computed in code, and the run closes with its outcome. The integrity
- * variant sends sustained proctoring signals: the exam is terminated, the
- * run ends `terminated`, and no evidence is written.
+ * variant sends sustained proctoring signals: the run is flagged whatever
+ * the score, and no evidence is written.
  */
 import { io } from "socket.io-client";
 import { signInternalAccess } from "../../auth/routes.js";
@@ -108,9 +108,9 @@ export const practiceProctoredFlow = {
   },
 };
 
-export const practiceIntegrityTerminate = {
-  name: "practice.integrity_terminate", area: "practice", risk: "write", timeoutMs: 300_000,
-  description: "Scenario D integrity variant: sustained proctoring signals (two faces, looking away, background speech) end the exam at 0.85 — the verdict is terminated, the run ends `terminated` (never the agent's call), its outcome recommends nothing and holds no evidence.",
+export const practiceIntegrityFlagged = {
+  name: "practice.integrity_flagged", area: "practice", risk: "write", timeoutMs: 480_000,
+  description: "Scenario D integrity variant: sustained proctoring signals (two faces, looking away, background speech) push the cheat probability past 0.4 — the exam still finishes, but the verdict is flagged whatever the score; the run completes with an outcome that recommends nothing and writes no evidence. (Auto-terminate at 0.85 needs the proctor service's signals; it is covered by the contract test.)",
   params: { learner: { default: "@tester38" } },
   async run(ctx, p) {
     const me = await ctx.as(p.learner);
@@ -119,37 +119,38 @@ export const practiceIntegrityTerminate = {
     const c = await connect(me);
     ctx.expect.ok("the socket connects", c.ok);
     if (!c.ok) { c.socket.close(); return; }
-    const ready = await startExam(ctx, c.socket, topic, 3);
+    const ready = await startExam(ctx, c.socket, topic, 2);
     if (!ready) { c.socket.close(); return; }
-    // One answer first, so there is a score the verdict must ignore.
-    c.socket.emit("assessment_message", { message: "Osmosis is the movement of water across a partially permeable membrane from a dilute to a concentrated solution." });
-    await once(c.socket, "assessment_turn", 120_000);
-
-    const terminatedP = once(c.socket, "assessment_terminated", 150_000);
-    const summaryP = once(c.socket, "assessment_summary", 180_000);
-    let stop = false;
-    terminatedP.then(() => { stop = true; });
     let peak = 0;
     c.socket.on("proctor_result", (r) => { peak = Math.max(peak, Number(r?.probability) || 0); });
-    for (let i = 0; i < 80 && !stop; i++) {
+    for (let i = 0; i < 40 && peak < 0.4; i++) {
       c.socket.emit("proctor_frame", { frame: null, signals: { faceCount: 2, facePresent: true, lookingAway: true, audioLevel: 0.9 } });
       await sleep(1_400);
     }
-    const term = await terminatedP;
     ctx.note(`peak probability seen: ${peak}`);
-    ctx.expect.ok("sustained signals terminate the exam", !!term.data, term.timeout ? "not terminated" : term.error);
+    ctx.expect.ok("sustained signals raise the cheat probability past the flag line (0.4)", peak >= 0.4, peak);
+    const summaryP = once(c.socket, "assessment_summary", 360_000);
+    let done = false;
+    for (let i = 0; i < 7 && !done; i++) {
+      c.socket.emit("assessment_message", { message: "Osmosis is the net movement of water molecules across a partially permeable membrane from a region of higher water potential (dilute solution) to lower water potential (concentrated solution). Plant cells become turgid in pure water; animal cells can burst." });
+      const turn = await once(c.socket, "assessment_turn", 120_000);
+      if (!turn.data) break;
+      done = !!turn.data.done;
+    }
     const summary = (await summaryP).data;
     c.socket.close();
-    ctx.expect.eq("the verdict is terminated", summary?.verdict, "terminated");
+    ctx.expect.eq("the verdict is flagged, whatever the score", summary?.verdict, "flagged");
+    ctx.note(`score ${summary?.assessmentScore}, cheat ${summary?.cheatProbability}`);
     if (!summary?.workflowId) { ctx.expect.ok("the summary names its workflow run", false); return; }
     await sleep(3_000);
     const [run] = await ctx.db.rows("edu.workflow_instances", { id: summary.workflowId }, { columns: "id, state, metadata", limit: 1 });
-    ctx.expect.eq("the run ends terminated", run?.state, "terminated");
+    ctx.expect.eq("the run completes", run?.state, "completed");
+    ctx.expect.eq("…its outcome is flagged", run?.metadata?.outcome?.verdict, "flagged");
     ctx.expect.eq("…recommending nothing", run?.metadata?.outcome?.recommendedNextAction, "none");
     ctx.expect.eq("…with no evidence", (run?.metadata?.outcome?.conceptEvidence || []).length, 0);
     const evidence = await ctx.db.rows("edu.learner_concept_evidence", { learner_id: me.id, source_session_id: `practice:${summary.workflowId}` }, { columns: "concept_id", limit: 5 }).catch(() => []);
     ctx.expect.eq("no evidence reaches the learner model", evidence.length, 0);
     const [row] = await ctx.db.rows("edu.assessment_sessions", { student_id: me.id, topic }, { columns: "status, final_verdict", limit: 1 });
-    ctx.expect.eq("the session row is terminated", `${row?.status}/${row?.final_verdict}`, "terminated/terminated");
+    ctx.expect.eq("the session row is completed and flagged", `${row?.status}/${row?.final_verdict}`, "completed/flagged");
   },
 };
