@@ -10,9 +10,11 @@
  *   instructorSweep({ limit })        the instructors due a pass (scheduler)
  */
 import db from "../../db.js";
-import { instructorProposals } from "./instructorCore.js";
+import { instructorProposals, INSTRUCTOR_LIMITS } from "./instructorCore.js";
 import { deliverProactive } from "./deliver.js";
 import { RULES, basisColumns } from "../agent-runtime/actionBasis.js";
+import { modesFor, recordObservations } from "./kindModes.js";
+import { defaultModeFor, INSTRUCTOR_PROACTIVE_KINDS, splitByMode } from "./kindModesCore.js";
 
 const edu = () => db.schema("edu");
 const DAY = 86_400_000;
@@ -23,6 +25,9 @@ export async function runInstructorCycle(instructorId, { trigger = "instructor",
   if (user?.role !== "instructor") return { skipped: "not_instructor" };
   const { data: auto } = await edu().from("learner_agent_autonomy").select("proactive").eq("user_id", instructorId).maybeSingle();
   if (auto?.proactive === false) return { skipped: "not_enabled" };
+  // Each kind's mode for this instructor (Phase 18 item 1): off dropped, observe recorded only.
+  const modeOf = await modesFor(instructorId).catch(() => null) || defaultModeFor;
+  if (INSTRUCTOR_PROACTIVE_KINDS.every((k) => modeOf(k) === "off")) return { skipped: "kinds_off" };
   if (!force) {
     const { data: last } = await edu().from("autonomy_runs").select("started_at").eq("user_id", instructorId).eq("trigger", "instructor")
       .order("started_at", { ascending: false }).limit(1).maybeSingle();
@@ -46,12 +51,21 @@ export async function runInstructorCycle(instructorId, { trigger = "instructor",
   ]);
   const seen = new Set((recent || []).map((r) => `${r.kind}:${r.payload?.assignmentId}`));
   const room = Math.max(0, INSTRUCTOR_CYCLE.MAX_PENDING - (pending ?? 0));
-  const fresh = instructorProposals(activities).filter((p) => !seen.has(`${p.kind}:${p.payload.assignmentId}`)).slice(0, room);
+  const notSeen = (p) => !seen.has(`${p.kind}:${p.payload.assignmentId}`);
+  // Every candidate is looked at; the per-run cap (and the pending room) apply to the live ones only —
+  // with every kind live this is exactly the old rule (top 3, then dedupe, then room).
+  const byMode = splitByMode(instructorProposals(activities, { limit: 30 }), modeOf);
+  const fresh = byMode.live.slice(0, INSTRUCTOR_LIMITS.PER_RUN).filter(notSeen).slice(0, room);
+  // Watch-only: never in their inbox or chat, never counted against the pending cap.
+  const watched = byMode.observe.filter(notSeen);
 
   const { data: run } = await edu().from("autonomy_runs").insert({
     user_id: instructorId, trigger, finished_at: new Date().toISOString(), proposals_created: fresh.length, tokens_used: 0, cost_usd: 0,
     summary: fresh.length ? fresh.map((p) => p.title).join(" · ").slice(0, 500) : "nothing to raise",
+    ...(watched.length ? { observed: watched.length } : {}),
+    ...(watched.length && !fresh.length ? { observe_only: true } : {}),
   }).select("id").single();
+  const observed = watched.length ? await recordObservations(watched, { userId: instructorId, runId: run?.id ?? null, audience: "instructor" }) : 0;
   if (fresh.length) {
     await edu().from("agent_proposals").insert(fresh.map((p) => ({
       user_id: instructorId, kind: p.kind, title: p.title, rationale: p.rationale, payload: p.payload, preview: p.preview,
@@ -61,7 +75,7 @@ export async function runInstructorCycle(instructorId, { trigger = "instructor",
     })));
     await deliverProactive(instructorId).catch(() => null);
   }
-  return { ok: true, created: fresh.length };
+  return { ok: true, created: fresh.length, observed, runId: run?.id ?? null };
 }
 
 /** Instructors with activities in the lookback window and no pass in the last ~20h. */

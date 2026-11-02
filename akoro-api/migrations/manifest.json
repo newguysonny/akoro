@@ -226,7 +226,9 @@
     "2026-search-text-fallback.sql",
     "2026-practice-workflow.sql",
     "2026-agent-action-basis.sql",
-    "2026-school-struggle-support-views.sql"
+    "2026-school-struggle-support-views.sql",
+    "2026-proactive-kind-modes.sql",
+    "2026-outbox.sql"
   ],
   "demo": [
     "2026-seed-school-passwords.sql",

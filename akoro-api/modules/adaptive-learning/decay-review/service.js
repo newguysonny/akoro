@@ -18,6 +18,14 @@ import { DECAY_POLICY, OPEN_DECAY_STATES, evaluateRetention, recallOutcome, next
 
 const clip = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 
+/** A review left in "inspecting" with no check for a minute: its step was interrupted (Phase 18 item 5). */
+export const STALLED_MS = 60_000;
+export function isStalledInspect(wf, nowMs = Date.now()) {
+  if (wf?.state !== "inspecting" || wf.metadata?.check) return false;
+  const at = Date.parse(wf.updated_at || wf.created_at || "");
+  return Number.isFinite(at) && nowMs - at >= STALLED_MS;
+}
+
 export function makeDecayReview({ engine, decay, checks, recall, agentOf, findByBattle, now = () => new Date().toISOString(), log = console }) {
   const quiet = (what) => (e) => { log.warn?.(`[decay-review] ${what} failed: ${e?.message || e}`); return null; };
   const event = (id, type, payload, actor = "system") => engine.appendEvent(id, { event_type: type, category: "decay", actor, visibility: "learner", payload }).catch(quiet(type));
@@ -32,7 +40,11 @@ export function makeDecayReview({ engine, decay, checks, recall, agentOf, findBy
   async function start({ learnerId, subject = null, topic, notificationId = null }) {
     if (!learnerId || !clip(topic, 200)) throw Object.assign(new Error("A review needs a topic."), { status: 400 });
     const open = (await listOpen(learnerId)).find((r) => String(meta(r).topic || "").toLowerCase() === String(topic).toLowerCase());
-    if (open) return decayView(open);
+    if (open) {
+      // Stuck mid-step (a restart between "inspect" and its check, a minute ago or more): resume it.
+      if (isStalledInspect(open)) return decayView(await diagnose(open).catch((e) => { quiet("resume")(e); return open; }));
+      return decayView(open);
+    }
     const agentId = await agentOf(learnerId);
     if (!agentId) throw Object.assign(new Error("Create your agent first — the review checks what your agent still remembers."), { status: 409 });
     const made = await engine.create({ workflowType: "decay_review", learnerId, entryMode: notificationId ? "decay_alert" : "decay_session", state: "created",
@@ -48,11 +60,19 @@ export function makeDecayReview({ engine, decay, checks, recall, agentOf, findBy
       daysSinceReview: payload.daysSinceReview ?? null, notificationId: owned ? notificationId : null,
     }) || wf;
     await event(wf.id, "workflow.created", { label: "Decay review", topic: meta(wf).topic, narrative: `Reviewing ${meta(wf).topic}` }, "learner");
-    // generate_diagnostic: a short Agent Check — has the protégé's knowledge faded?
-    const check = await checks.start({ learnerId, subject: meta(wf).subject, topic: meta(wf).topic, mode: "retention_check", total: DECAY_POLICY.CHECK_QUESTIONS, title: `Retention check: ${meta(wf).topic}` });
-    wf = await engine.transition(wf.id, { from: "inspecting", to: "diagnostic", patch: { metadata: { ...meta(wf), check: { battleId: check.battleId, kind: "retention_check", startedAt: now() } } } });
-    await event(wf.id, "tool.completed", { tool: "practice.run_agent_check", headline: "A short check on what your agent remembers", resultLine: `${DECAY_POLICY.CHECK_QUESTIONS} questions`, battleId: check.battleId });
-    return decayView(wf);
+    return decayView(await diagnose(wf));
+  }
+
+  /**
+   * generate_diagnostic: a short Agent Check — has the protégé's knowledge faded?
+   * The battle is a journaled outside step (actionKey, Phase 18 item 5): a review
+   * interrupted here (a deploy) resumes on the next tap and reuses a battle it already made.
+   */
+  async function diagnose(wf) {
+    const check = await checks.start({ learnerId: wf.learner_id, subject: meta(wf).subject, topic: meta(wf).topic, mode: "retention_check", total: DECAY_POLICY.CHECK_QUESTIONS, title: `Retention check: ${meta(wf).topic}`, actionKey: `decay_review:${wf.id}:check` });
+    const next = await engine.transition(wf.id, { from: "inspecting", to: "diagnostic", patch: { metadata: { ...meta(wf), check: { battleId: check.battleId, kind: "retention_check", startedAt: now() } } } });
+    await event(next.id, "tool.completed", { tool: "practice.run_agent_check", headline: "A short check on what your agent remembers", resultLine: `${DECAY_POLICY.CHECK_QUESTIONS} questions`, battleId: check.battleId });
+    return next;
   }
 
   /** A check's battle ended (the battle worker). → view | null */
@@ -143,7 +163,7 @@ export function makeDecayReview({ engine, decay, checks, recall, agentOf, findBy
   /** The retest: an Agent Check again (at most MAX_RETESTS). */
   async function startRetest(wf, from) {
     const retests = (meta(wf).retests || 0) + 1;
-    const check = await checks.start({ learnerId: wf.learner_id, subject: meta(wf).subject, topic: meta(wf).topic, mode: "retest", total: DECAY_POLICY.RETEST_QUESTIONS, title: `Retest: ${meta(wf).topic}` });
+    const check = await checks.start({ learnerId: wf.learner_id, subject: meta(wf).subject, topic: meta(wf).topic, mode: "retest", total: DECAY_POLICY.RETEST_QUESTIONS, title: `Retest: ${meta(wf).topic}`, actionKey: `decay_review:${wf.id}:retest:${retests}` });
     const next = await engine.transition(wf.id, { from, to: "retest", patch: { metadata: { ...meta(wf), retests, retest: { battleId: check.battleId, kind: "retest", startedAt: now() } } } });
     await event(next.id, "tool.completed", { tool: "practice.run_agent_check", headline: "The retest", resultLine: `${DECAY_POLICY.RETEST_QUESTIONS} questions`, battleId: check.battleId });
     return next;

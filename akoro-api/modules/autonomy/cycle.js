@@ -18,6 +18,8 @@ import { autonomyCadence, minCycleMs, weeklyRunsCap } from "./cadence.js";
 import { quietOf, afterQuiet } from "./quietHours.js";
 import { IDEAS, LEARNER_KINDS, shapeIdeas, shapeReady, fixIts, progressLine } from "./readyKinds.js";
 import { budgetState, noteBudget } from "./budget.js";
+import { modesFor, recordObservations } from "./kindModes.js";
+import { allOff, defaultModeFor, LEARNER_PROACTIVE_KINDS, MAX_OBSERVATIONS_PER_RUN, observeOnly, splitByMode } from "./kindModesCore.js";
 import { usdCost } from "../../lib/aiPricing.js";
 import { RULES, basisColumns } from "../agent-runtime/actionBasis.js";
 
@@ -28,6 +30,8 @@ export const MAX_PENDING_PROPOSALS = 5;
 export const DEDUPE_WINDOW_DAYS = 30;
 export const MIN_HOURS_BETWEEN_EVENT_RUNS = 4;
 export const MAX_EVENT_RUNS_PER_DAY = 2;
+/** A run nothing can be shown from (every kind off or observe): platform-paid, outside the learner's weekly budget (Phase 18 item 1). */
+export const OBSERVE_FEATURE = "agent_autonomy_observe";
 
 const LAGOS = "Africa/Lagos";
 // Quiet hours 20:00–07:30 Africa/Lagos (locked decision, plan §9.2).
@@ -345,11 +349,13 @@ export function planningSchema() {
 }
 
 /** ── 2. REASON — one structured call. The platform pays for background noticing (D46). */
-export async function reasonAboutSignals(userId, signals) {
+export async function reasonAboutSignals(userId, signals, { watchOnly = false } = {}) {
   const res = await openai.chat.completions.create({
     model: OPENAI_MODEL, temperature: 0.4, max_tokens: 1200,
     response_format: planningSchema(),
     __payer: "platform", __feature: "agent_autonomy", __ref: userId,
+    // Watch-only: the same call, logged under its own feature so it never counts against the learner's budget.
+    ...(watchOnly ? { __feature: OBSERVE_FEATURE } : {}),
     messages: planningMessages(signals),
   });
   let parsed = { summary: "", proposals: [], ideas: [] };
@@ -361,7 +367,7 @@ export async function reasonAboutSignals(userId, signals) {
 /** Clean-room validator: caps, dedupe (pending + 30-day history + tasks), shapes. */
 const READY_SHAPED = new Set(["quiz_from_records", "teach_weak_topic", "study_plan", "revision_battle", "follow_up_question", "goal_nudge"]);
 
-export async function validateAndShapeProposals(userId, rawProposals, { notes = [], refs = {}, quiet = null, impliedThisWeek = 0 } = {}) {
+export async function validateAndShapeProposals(userId, rawProposals, { notes = [], refs = {}, quiet = null, impliedThisWeek = 0, modeOf = null } = {}) {
   if (!Array.isArray(rawProposals)) return [];
   const since = new Date(Date.now() - DEDUPE_WINDOW_DAYS * 24 * 3600 * 1000).toISOString();
   const [history, openTasks, chatOpen] = await Promise.all([
@@ -387,9 +393,14 @@ export async function validateAndShapeProposals(userId, rawProposals, { notes = 
   const refsWithNotes = { ...refs, notes };
 
   const shaped = [];
+  // Watch-only kinds (Phase 18 item 1) are shaped the same way but never take a live proposal's place.
+  const observed = [];
   for (const p of rawProposals) {
-    if (shaped.length >= MAX_PROPOSALS_PER_CYCLE) break;
     if (!p || !LEARNER_KINDS.includes(p.kind)) continue;
+    const mode = modeOf ? modeOf(p.kind) : "live";
+    if (mode === "off") continue;
+    if (mode === "live" && shaped.length >= MAX_PROPOSALS_PER_CYCLE) continue;
+    if (mode === "observe" && observed.length >= MAX_OBSERVATIONS_PER_RUN) continue;
     const title = String(p.title || "").trim();
     if (!title || title.length > 120) continue;
     // Every suggestion says what it noticed (§7.16.3): no reason, no proposal.
@@ -438,7 +449,7 @@ export async function validateAndShapeProposals(userId, rawProposals, { notes = 
 
     // The chat the noticed note came from (D49: the proposal is posted there).
     const note = Number.isInteger(p.from_note) ? notes[p.from_note - 1] : null;
-    shaped.push({
+    (mode === "observe" ? observed : shaped).push({
       kind: p.kind,
       title,
       rationale: String(p.rationale || "").slice(0, 280) || null,
@@ -448,19 +459,24 @@ export async function validateAndShapeProposals(userId, rawProposals, { notes = 
     });
     seen.add(key);
   }
-  return shaped;
+  return modeOf ? [...shaped, ...observed] : shaped;
 }
 
 /** ── 4. The full cycle for one learner. Never throws — failures are recorded. */
-export async function runAutonomyCycleForUser(userId, trigger = "nightly") {
+export async function runAutonomyCycleForUser(userId, trigger = "nightly", { reason = reasonAboutSignals, force = false } = {}) {
   const startedAt = new Date();
-  reportAgentActivity(userId, "Reviewing your goals…");
+  // Each kind's mode for this learner (Phase 18 item 1); unreadable → the code defaults (existing kinds live).
+  const modeOf = await modesFor(userId).catch(() => null) || defaultModeFor;
+  // A learner nothing can be shown to (every kind observe) sees no "reviewing" either.
+  const watchOnlyLearner = observeOnly(modeOf);
+  if (!watchOnlyLearner) reportAgentActivity(userId, "Reviewing your goals…");
   try {
     // Gate + pace: autonomy on, planner level, one run per ~20h, weekly cap.
     const { data: auto } = await edu().from("learner_agent_autonomy")
       .select("enabled, level, proactive, time_zone, last_cycle_at").eq("user_id", userId).maybeSingle();
     // Agent Online, and "Suggestions and ideas" not switched off (D47: on by default with Online).
     if (!auto?.enabled || auto.proactive === false) return { skipped: "not_enabled" };
+    if (allOff(modeOf)) { clearAgentActivity(userId); return { skipped: "kinds_off" }; }
     const isEvent = trigger !== "nightly";
     // Pace against the LEDGER (last actual run), not last_cycle_at — the
     // scheduler claims by writing last_cycle_at, so it can't be the signal.
@@ -478,29 +494,36 @@ export async function runAutonomyCycleForUser(userId, trigger = "nightly") {
     const minGapMs = cadence.mode === "continuous"
       ? minCycleMs(cadence)
       : (isEvent ? MIN_HOURS_BETWEEN_EVENT_RUNS : cadence.minCycleHours) * 3600 * 1000;
-    if (lastRun?.[0]?.started_at && Date.now() - new Date(lastRun[0].started_at).getTime() < minGapMs) {
+    // force: the Verification Gate's lever for a test learner (every other rule stays).
+    if (!force && lastRun?.[0]?.started_at && Date.now() - new Date(lastRun[0].started_at).getTime() < minGapMs) {
       return { skipped: "recent_run" };
     }
-    if (isEvent) {
+    if (isEvent && !force) {
       const { count: todayEvents } = await edu().from("autonomy_runs")
         .select("id", { count: "exact", head: true })
-        .eq("user_id", userId).like("trigger", "event:%")
+        // Watch-only runs never count against the learner's caps.
+        .eq("user_id", userId).like("trigger", "event:%").eq("observe_only", false)
         .gte("started_at", new Date(Date.now() - 24 * 3600 * 1000).toISOString());
       if ((todayEvents ?? 0) >= MAX_EVENT_RUNS_PER_DAY) return { skipped: "event_cap" };
     }
     const weeklyCap = weeklyRunsCap();
     const { count: weekRuns } = await edu().from("autonomy_runs")
       .select("id", { count: "exact", head: true })
-      .eq("user_id", userId).gte("started_at", new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString());
-    if ((weekRuns ?? 0) >= weeklyCap) return { skipped: "budget" };
+      .eq("user_id", userId).eq("observe_only", false).gte("started_at", new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString());
+    if (!force && (weekRuns ?? 0) >= weeklyCap) return { skipped: "budget" };
 
     const { count: pendingCount } = await edu().from("agent_proposals")
       .select("id", { count: "exact", head: true })
       .eq("user_id", userId).eq("status", "proposed").gt("expires_at", new Date().toISOString());
-    if ((pendingCount ?? 0) >= MAX_PENDING_PROPOSALS) {
+    // A full inbox stops live proposals; a kind in observe still gets its look (its records are not the inbox).
+    const inboxFull = (pendingCount ?? 0) >= MAX_PENDING_PROPOSALS;
+    const anyObserve = LEARNER_PROACTIVE_KINDS.some((k) => modeOf(k) === "observe");
+    if (inboxFull && !anyObserve) {
       await edu().from("learner_agent_autonomy").update({ last_cycle_at: startedAt.toISOString() }).eq("user_id", userId);
       return { skipped: "inbox_full", pending: pendingCount };
     }
+    // Nothing from this run can reach the learner: watch-only (not their budget, not their caps).
+    const watchOnly = watchOnlyLearner || inboxFull;
 
     // The weekly USD budget for background work (§7.16.7): 80% warns ops, 100% stops.
     const budget = await budgetState(userId, { timeZone: quietOf(auto).timeZone }).catch(() => null);
@@ -518,18 +541,24 @@ export async function runAutonomyCycleForUser(userId, trigger = "nightly") {
     // A fix-it at most once a week (dismissed or not): it's a nudge, not a nag.
     const { count: fixItThisWeek } = await edu().from("agent_proposals").select("id", { count: "exact", head: true })
       .eq("user_id", userId).eq("kind", "fix_it").gte("created_at", new Date(Date.now() - 7 * 864e5).toISOString());
-    const signals = { ...await gatherSignals(userId), ideaRoom };
-    const reasoned = await reasonAboutSignals(userId, signals);
-    const shaped = [
-      ...await validateAndShapeProposals(userId, reasoned.proposals || [], { notes: signals.memories || [], refs: signals.refs, quiet: signals.quiet, impliedThisWeek: impliedThisWeek ?? 0 }),
+    const ideaMode = modeOf("idea");
+    const signals = { ...await gatherSignals(userId), ideaRoom: ideaMode === "off" ? 0 : ideaRoom };
+    const reasoned = await reason(userId, signals, { watchOnly });
+    const all = [
+      ...await validateAndShapeProposals(userId, reasoned.proposals || [], { notes: signals.memories || [], refs: signals.refs, quiet: signals.quiet, impliedThisWeek: impliedThisWeek ?? 0, modeOf }),
       // Problems in their own things, found by code (fix_it) — after the planner's, within the same caps.
       ...(fixItThisWeek ? [] : fixIts(signals)),
     ];
-    const ideas = ideaRoom ? shapeIdeas(reasoned.ideas || [], { ...signals.refs, notes: signals.memories || [] },
-      { room: ideaRoom, seen: new Set([...(liveIdeas || []).map((i) => normalizeTitle(i.title)), ...shaped.map((p) => normalizeTitle(p.title))]) }) : [];
+    // Live → the inbox as before; observe → "would have proposed" records only; off → dropped.
+    const byMode = splitByMode(all, modeOf);
+    const shaped = byMode.live;
+    const allIdeas = ideaRoom && ideaMode !== "off" ? shapeIdeas(reasoned.ideas || [], { ...signals.refs, notes: signals.memories || [] },
+      { room: ideaRoom, seen: new Set([...(liveIdeas || []).map((i) => normalizeTitle(i.title)), ...all.map((p) => normalizeTitle(p.title))]) }) : [];
+    const ideas = ideaMode === "live" ? allIdeas : [];
+    const watched = [...byMode.observe, ...(ideaMode === "observe" ? allIdeas.map((i) => ({ ...i, kind: "idea" })) : [])];
 
     // Respect the pending cap across what we insert.
-    const room = Math.max(0, MAX_PENDING_PROPOSALS - (pendingCount ?? 0));
+    const room = inboxFull ? 0 : Math.max(0, MAX_PENDING_PROPOSALS - (pendingCount ?? 0));
     const toInsert = shaped.slice(0, Math.min(room, MAX_PROPOSALS_PER_CYCLE)).map((p) => ({
       user_id: userId, kind: p.kind, title: p.title, rationale: p.rationale,
       payload: p.payload, source: trigger === "nightly" ? "cycle" : "event",
@@ -547,8 +576,12 @@ export async function runAutonomyCycleForUser(userId, trigger = "nightly") {
       tokens_used: reasoned.tokens ?? 0,
       cost_usd: reasoned.costUsd ?? null,
       summary: String(reasoned.summary || "").slice(0, 500) || null,
+      ...(watchOnly ? { observe_only: true } : {}),
+      ...(watched.length ? { observed: Math.min(watched.length, MAX_OBSERVATIONS_PER_RUN) } : {}),
     }).select("id").single();
     runId = run?.id ?? null;
+    // Watch-only kinds: "would have proposed X, because …" — never shown, never charged, never counted.
+    const observed = watched.length ? await recordObservations(watched, { userId, runId }) : 0;
     if (toInsert.length) {
       await edu().from("agent_proposals").insert(toInsert.map((p) => ({ ...p, run_id: runId })));
     }
@@ -557,7 +590,8 @@ export async function runAutonomyCycleForUser(userId, trigger = "nightly") {
     }
     // Goal progress (§7.16.5): the week in numbers on each active goal — never its target or status.
     const line = progressLine(signals.week);
-    if (line) {
+    // A watch-only run shows the learner nothing — not even a progress line.
+    if (line && !watchOnly) {
       for (const g of signals.refs?.goals || []) {
         const was = (signals.goals || []).find((x) => x.title === g.title)?.progress_note;
         if (was !== line) await edu().from("learner_goals").update({ progress_note: line }).eq("id", g.id).eq("user_id", userId);
@@ -581,7 +615,7 @@ export async function runAutonomyCycleForUser(userId, trigger = "nightly") {
     } else {
       clearAgentActivity(userId);
     }
-    return { ok: true, created: toInsert.length, ideas: ideas.length, tokens: reasoned.tokens ?? 0, costUsd: reasoned.costUsd ?? null };
+    return { ok: true, created: toInsert.length, ideas: ideas.length, observed, watchOnly, runId, tokens: reasoned.tokens ?? 0, costUsd: reasoned.costUsd ?? null };
   } catch (error) {
     console.error("[autonomy/cycle] failed:", error.message);
     clearAgentActivity(userId);

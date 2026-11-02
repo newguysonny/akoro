@@ -20,6 +20,7 @@ import { inQuiet, quietOf } from "./quietHours.js";
 import { READY } from "./readyKinds.js";
 import { collectMaterials, materialsFrom } from "../adaptive-learning/chat-materials.js";
 import { RULES, actionBasis, basisRefusal } from "../agent-runtime/actionBasis.js";
+import { modesFor } from "./kindModes.js";
 
 const edu = () => db.schema("edu");
 export const DELIVERY = Object.freeze({
@@ -95,10 +96,13 @@ export async function deliverProactive(userId, { now = new Date(), ignoreQuietHo
     .eq("user_id", userId).gte("posted_at", since);
   if ((today ?? 0) >= DELIVERY.DAILY) return { posted: false, reason: "daily_cap" };
 
-  const { data: p } = await edu().from("agent_proposals")
+  const { data: waiting } = await edu().from("agent_proposals")
     .select("id, kind, title, rationale, payload, preview, source_chat_id, expires_at, basis, basis_rule")
     .eq("user_id", userId).eq("status", "proposed").is("posted_at", null).gt("expires_at", now.toISOString())
-    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    .order("created_at", { ascending: false }).limit(5);
+  // A kind an admin switched out of live since it was proposed is held back (Phase 18 item 1).
+  const modeOf = await modesFor(userId).catch(() => null);
+  const p = (waiting || []).find((x) => !modeOf || modeOf(x.kind) === "live");
   if (!p) return { posted: false, reason: "nothing_to_post" };
   // An inferred delivery with no rule allowing it is never posted.
   const refused = basisRefusal(proposalBasis(p), { action: "proactive delivery" });

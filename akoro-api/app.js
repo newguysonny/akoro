@@ -835,6 +835,13 @@ if (process.env.REDIS_URL && !skipJob("session notifier")) {
     .then((m) => { m.startSessionNotifier(); console.log("[sessionNotifier] worker started at boot"); })
     .catch((e) => console.error("[sessionNotifier] failed to start:", e.message));
 }
+// Store first, send after (Phase 18 item 5): the outbox's clock retries failed
+// sends with backoff and resumes what a restart left. Postgres only — no Redis.
+if (!skipJob("outbox")) {
+  import("./lib/outbox.js")
+    .then((m) => { m.startOutbox(); console.log("[outbox] clock started (every 15 s)"); })
+    .catch((e) => console.error("[outbox] failed to start:", e.message));
+}
 if (process.env.REDIS_URL && !skipJob("deferred jobs")) {
   import("./lib/deferredJobs.js")
     .then((m) => { m.startDeferredRelease(); console.log("[deferred-jobs] release clock started (every minute)"); })

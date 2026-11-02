@@ -28,7 +28,15 @@ export const START_TEACHING_TOOL = "teaching.start_session";
 export const TRACK_TEACHING_TOOL = "teaching.track_session";
 const list = (items) => (items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`);
 
-export function makeTeachingHandoff({ engine, findOpen, listDueProposals, studyPrep, now = () => new Date().toISOString(), log = console }) {
+/** An approval whose session row was never made, a minute or more ago: its step was interrupted. */
+export const STALLED_APPROVAL_MS = 60_000;
+export function stalledApproval(child, nowMs = Date.now()) {
+  const m = child?.metadata || {};
+  if (child?.state !== "scheduled" || m.adaptiveSessionId || !m.approvedAt) return false;
+  return nowMs - Date.parse(m.approvedAt) >= STALLED_APPROVAL_MS;
+}
+
+export function makeTeachingHandoff({ engine, findOpen, listDueProposals, listStalled = null, studyPrep, now = () => new Date().toISOString(), log = console }) {
   const quiet = (what) => (error) => { log.warn?.(`[teaching-handoff] ${what} failed: ${error?.message || error}`); return null; };
 
   /** Learner-visible events on the Study Prep workflow (its card and chat read them). */
@@ -95,9 +103,17 @@ export function makeTeachingHandoff({ engine, findOpen, listDueProposals, studyP
   async function approve({ workflowId, learnerId, auto = false }) {
     const child = await engine.get(workflowId, learnerId);
     if (!child || child.workflow_type !== "teaching") return null;
+    // Approved, but its session row never made (a restart mid-step, Phase 18 item 5): finish the step —
+    // createSessionRow checks for a row already made before making one.
+    if (stalledApproval(child, Date.parse(now()))) return resumeApproval(child, auto);
     if (child.state !== "proposed") return teachingView(child);   // already done — idempotent
     const moved = await engine.transition(child.id, { from: "proposed", to: "scheduled", patch: { metadata: { approvedAt: now(), approvedBy: auto ? "auto" : "learner" } } });
     if (!moved) return teachingView(await engine.get(workflowId, learnerId));   // raced: the other one did it
+    return resumeApproval(moved, auto);
+  }
+
+  /** start_teaching_session's outside part: the dashboard row, the link, the run in chat. */
+  async function resumeApproval(moved, auto) {
     let latest = moved;
     const m0 = moved.metadata || {};
     // The session itself, in the dashboard's own sessions list (edu.adaptive_sessions), like any other.
@@ -115,9 +131,12 @@ export function makeTeachingHandoff({ engine, findOpen, listDueProposals, studyP
     return teachingView(latest);
   }
 
-  /** The sweep: proposals nobody tapped for a minute approve themselves. */
+  /** The sweep: proposals nobody tapped for a minute approve themselves; an approval cut off mid-step resumes. */
   async function autoApproveDue({ nowMs = Date.now() } = {}) {
     let approved = 0;
+    for (const row of (await listStalled?.(new Date(nowMs - STALLED_APPROVAL_MS).toISOString()).catch(() => [])) || []) {
+      if (stalledApproval(row, nowMs) && await approve({ workflowId: row.id, learnerId: row.learner_id, auto: true }).catch(quiet("resume approval"))) approved += 1;
+    }
     for (const row of (await listDueProposals(new Date(nowMs).toISOString()).catch(() => [])) || []) {
       if (!dueForAutoApprove(row, nowMs)) continue;
       if (await approve({ workflowId: row.id, learnerId: row.learner_id, auto: true }).catch(quiet("auto-approve"))) approved += 1;

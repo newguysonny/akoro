@@ -54,6 +54,15 @@ async function findByBattle(battleId) {
   return null;
 }
 
+/** The check battle a learner got since `since` with this title (recovery of an interrupted start). */
+async function madeSince({ learnerId, title, since }) {
+  const { data } = await db.from("battles").select("id, total_questions, title, battle_participants!inner(user_id)")
+    .eq("battle_type", "check").eq("title", String(title).slice(0, 200)).gte("created_at", since).neq("status", "cancelled")
+    .eq("battle_participants.user_id", learnerId).order("created_at", { ascending: false }).limit(1);
+  const b = data?.[0];
+  return b ? { battleId: b.id, placed: b.total_questions, title: b.title } : null;
+}
+
 let _svc = null;
 export const decayReview = () => (_svc ||= makeDecayReview({
   engine: createWorkflowEngine({ store: makeSupabaseWorkflowStore(db) }),
@@ -64,9 +73,15 @@ export const decayReview = () => (_svc ||= makeDecayReview({
     markActioned: async (id, sessionId, learnerId) => (await import("../agents/student/decayEngine.js")).decayEngine.markNotificationActioned(id, sessionId, learnerId),
   },
   checks: {
-    async start({ learnerId, subject, topic, mode, total, title }) {
+    // A journaled outside step (Phase 18 item 5): made once per actionKey; after an interruption
+    // the battle it already made (same title, this learner, since the step began) is reused.
+    async start({ learnerId, subject, topic, mode, total, title, actionKey = null }) {
       const { createCheckBattle } = await import("../../battle/agentCheck.js");
-      return createCheckBattle({ learnerId, subject, topic, mode, total, title });
+      const act = () => createCheckBattle({ learnerId, subject, topic, mode, total, title });
+      if (!actionKey) return act();
+      const { outsideAction } = await import("../../../lib/outbox.js");
+      return (await outsideAction({ kind: "decay_check", key: actionKey, userId: learnerId, act,
+        check: (journal) => madeSince({ learnerId, title, since: journal.created_at }) })).result;
     },
     async results(battleId) { return (await import("../../battle/agentCheck.js")).checkResults(battleId); },
   },

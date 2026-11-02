@@ -22,6 +22,7 @@ import { inboxOneList } from "./inbox.js";
 import { quietLearningPass } from "./quietLearning.js";
 import { plannerRichGather } from "./richGather.js";
 import { proactiveInChat } from "./proactiveChat.js";
+import { kindObserveThenLive, outboxDelivery } from "./proactiveModes.js";
 import { readerBackend } from "./reader.js";
 import { socketSession, guideIdeasSession } from "./socket.js";
 import { SELFTOOL_CHANGES } from "./selftoolChanges.js";
@@ -48,7 +49,7 @@ const ALL = [healthBuild, toolsCatalogue, sessionTokensOnly, r2Live, embeddingsL
   privacyEdges, rateLimitCountedOnce, battleEntryGates, followUpDeliverIntoChat, taskDueInMinutes, noResidue,
   viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, suggestionsSurviveRefresh, studyToolRouting, untaughtFlashcards, tailoredChips, chatUploadFiled, pastPaperStructured, sortOwnFolders, materialsMultiFileDiag, readyProposal, goalWork, ideasFlow, consentsQuietBudget, instructorProactive, voiceSpeak, voiceLive, sweepStale, agentCheckBattle, agentCheckStop, classSyllabusFirst, historyPages, workflowMirror, agentWakes, replaceAndCancel, teachingHandoff, eventStream, paperStructured, ...chatToSubmissionScenarios, authoringVersionsParts, authoringDiagramsEdits, inboxOneList, quietLearningPass, plannerRichGather, proactiveInChat, readerBackend, socketSession, guideIdeasSession, courseOneRecord,
   teachingToolRouting, teachingToolRuns, activityToolRouting, draftLifecycle, routineLifecycle,
-  battleFromChat, battleReviewFromChat, selfStudyFull, assignmentPreviewAssign, journeyBattleStage, ...teachingToolScenarios, teachingToolVersions, teachingToolTry, toolsAllOpen, deferredRelease, sessionReminders, guideReviewRuns, battleSeriesRuns, ...battleChatScenarios, activityReviewRuns, activityReviewPlay, ...activityChatScenarios, permissionRequestIsReal, toolJourney, deleteTasks, ...SELFTOOL_CHANGES, evalsRun, evalsResult, teacherSchoolReads, paymentsSingleMount, courseInviteJoin, agentTurns, teachingOutcomes, sharedSecretsFailClosed, noFallbackSecrets, ownershipReads, decayReviewFlow, practiceProctoredFlow, practiceIntegrityFlagged, dashboardDescriptors, needsYouCategories, loopGuardTimeLimits, actionBasis, schoolStrugglesScope, modelPickerResolution];
+  battleFromChat, battleReviewFromChat, selfStudyFull, assignmentPreviewAssign, journeyBattleStage, ...teachingToolScenarios, teachingToolVersions, teachingToolTry, toolsAllOpen, deferredRelease, sessionReminders, guideReviewRuns, battleSeriesRuns, ...battleChatScenarios, activityReviewRuns, activityReviewPlay, ...activityChatScenarios, permissionRequestIsReal, toolJourney, deleteTasks, ...SELFTOOL_CHANGES, evalsRun, evalsResult, teacherSchoolReads, paymentsSingleMount, courseInviteJoin, agentTurns, teachingOutcomes, sharedSecretsFailClosed, noFallbackSecrets, ownershipReads, decayReviewFlow, practiceProctoredFlow, practiceIntegrityFlagged, dashboardDescriptors, needsYouCategories, loopGuardTimeLimits, actionBasis, schoolStrugglesScope, modelPickerResolution, kindObserveThenLive, outboxDelivery];
 
 export const SCENARIOS = Object.fromEntries(ALL.map((s) => [s.name, s]));
 
@@ -68,7 +69,7 @@ export const SUITES = {
   // Teachers' follow-ups in one conversation: versions, parts, edits to specific questions, diagrams.
   authoring: ["activity.authoring_versions_parts", "activity.authoring_diagrams_edits", "writes.no_residue"],
   // The proactive agent (Grand Plan §7.16): one inbox, by-kind accept, dismiss reasons.
-  proactive: ["agent.inbox_one_list", "agent.quiet_learning", "agent.planner_rich_gather", "agent.proactive_in_chat", "agent.ready_proposal", "agent.goal_work", "agent.ideas", "agent.consents_quiet", "agent.instructor_proactive", "writes.no_residue"],
+  proactive: ["agent.inbox_one_list", "agent.quiet_learning", "agent.planner_rich_gather", "agent.proactive_in_chat", "agent.ready_proposal", "agent.goal_work", "agent.ideas", "agent.consents_quiet", "agent.instructor_proactive", "agent.kind_observe_then_live", "writes.no_residue"],
   // Real changes on test learners, then proof nothing was left behind.
   writes: ["tasks.create_due_in_minutes", "followups.deliver_into_chat", "writes.no_residue"],
   // Phase V4 end to end (sandbox only: BLOCKED on production).
