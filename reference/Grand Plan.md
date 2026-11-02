@@ -3080,7 +3080,7 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   fallback on timeout/malformed, loop stops on reply, cap enforced,
   `propose_complete` rejected until objective met, phases unchanged vs
   today's gate tests (`state-machine.test.mjs`, `runner.test.mjs` equivalents).
-- **Status (2026-11-01): ✅ built — sandbox run pending (`teaching.agent_turns`).**
+- **Status (2026-11-01): ✅ built — `teaching.agent_turns` green on the sandbox.** Open (circle back): a run to full mastery, the full Scenario B chain.
   Each turn is agent-driven (`teaching-session/controller.js`, policy in
   `policy.js`): the fixed pre-steps (load state, observe evidence), then the
   teaching agent — ≤3 decisions, 8 s each — reads the state, picks a strategy
@@ -3113,7 +3113,7 @@ planning loop's tool names, the double practice charge, empty syllabus data).
 - Outcome delivery → `StudyPrepController.onChildOutcome` → `retest_ready`.
 - Abandon/unmet handling.
 - **Exit:** Scenario B (critical end-to-end) passes, including app close and later resume.
-- **Status (2026-11-01): ✅ built — sandbox run pending (`studyprep.teaching_outcomes`).**
+- **Status (2026-11-01): ✅ built — `studyprep.teaching_outcomes` green on the sandbox.** Open (circle back): the mid-session assessment tool (`teaching.request_assessment`).
   Ended before any teaching → `abandoned` (reason learner_ended), no
   teach-back, offered once more on the card (a fresh proposal; once), wake
   `teaching_abandoned`. Ended with parts missing (the learner, or a bound) →
