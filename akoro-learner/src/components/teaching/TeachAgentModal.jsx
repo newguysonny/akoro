@@ -370,6 +370,9 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
         // { recordId } | { contentKey } — the server checks access, then
         // grounds every turn in the passages most relevant to it.
         document:       config?.document || null,
+        // Opened from a dashboard descriptor (§13.1): the teaching workflow this
+        // session belongs to. The server checks it is this learner's and open.
+        ...((config?.workflowId || session?.workflowId) ? { workflowId: config?.workflowId || session?.workflowId } : {}),
       });
 
       ws.on("connect", () => {

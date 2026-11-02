@@ -39,12 +39,15 @@ export default function DecayReviewModal({ alert, agentProfile, onClose, onMinim
   const started = useRef(false);
   const agentName = agentProfile?.name || 'your agent';
 
-  // The Review tap starts (or reopens) the review.
+  // The Review tap starts (or reopens) the review; opened by its workflowId
+  // (a dashboard descriptor, §13.1) it loads that review and starts nothing.
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    apiPost('/api/adaptive/decay-reviews', { topic: alert.topic, subject: alert.subject, notificationId: alert.id })
-      .then((r) => setReview(unwrap(r))).catch((e) => setErr(e?.message || 'Could not start the review.'));
+    const load = alert.workflowId
+      ? apiGet(`/api/adaptive/decay-reviews/${encodeURIComponent(alert.workflowId)}`)
+      : apiPost('/api/adaptive/decay-reviews', { topic: alert.topic, subject: alert.subject, notificationId: alert.id });
+    load.then((r) => setReview(unwrap(r))).catch((e) => setErr(e?.message || 'Could not start the review.'));
   }, [alert]);
   // While a check runs, follow it.
   useEffect(() => {
@@ -79,7 +82,7 @@ export default function DecayReviewModal({ alert, agentProfile, onClose, onMinim
       <div style={{ width: 'min(560px,100%)', maxHeight: '92vh', overflowY: 'auto', background: 'var(--ak-bg)', borderRadius: 18, padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 15, fontWeight: 900, color: 'var(--ak-text)', fontFamily: NUNITO }}>Review: {alert.topic}</div>
+            <div style={{ fontSize: 15, fontWeight: 900, color: 'var(--ak-text)', fontFamily: NUNITO }}>Review: {alert.topic || r?.topic}</div>
             <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)', fontFamily: NUNITO }}>{alert.subject || r?.subject || ''}</div>
           </div>
           <button type="button" aria-label="Close" onClick={onClose} style={{ border: 0, background: 'transparent', cursor: 'pointer', padding: 4 }}><Icon name="ti-x" size={18} /></button>
