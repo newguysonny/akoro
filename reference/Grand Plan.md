@@ -3140,6 +3140,15 @@ planning loop's tool names, the double practice charge, empty syllabus data).
 - `decay-review/controller.js`, tools, states; intervention reuses the teaching turn runtime.
 - `mode: "decay"` becomes a compatibility adapter.
 - **Exit:** Scenario C.
+- **Status: ✅ built, exit met (2026-11-02)** — `adaptive-learning/decay-review/`: `workflow.js`
+  (states §10.1, `DECAY_POLICY`, retention / recall outcome / hint ladder /
+  per-concept outcomes, all pure), `service.js` (start → a 3-question Agent Check
+  → retained or recall rounds with hints, scored server-side → retest → re-teach
+  through the decay teaching session → last retest; 2 retests at most),
+  `wiring.js`, routes at `/api/adaptive/decay-reviews`; the battle worker hands
+  each check's end to the review; `DecayReviewModal` shows it step by step.
+  Gate `decay.review_flow` green on the sandbox. Not done yet: moving the
+  retention functions out of `decayEngine.js` into the Education Engine.
 
 ### Phase 9 — Practice Workflow (proctored assessment)
 - `practice/controller.js` on top of `assessmentGateway.js`; `assessment_sessions.workflow_id`.
@@ -3147,6 +3156,20 @@ planning loop's tool names, the double practice charge, empty syllabus data).
 - Verdict computed in code; Sergeant's judgement normalised by the Education Engine; assessor model locked.
 - `AssessmentRoom` UI unchanged.
 - **Exit:** Scenario D and its integrity variants; existing assessment gateway tests green.
+- **Status: ✅ done (2026-11-02)** — `adaptive-learning/practice/`: `workflow.js` (one
+  `practice` definition shared with the Agent Check; `PRACTICE_POLICY`; score
+  with hint deductions, verdict, evidence rule and outcome in code),
+  `controller.js` (Sergeant judges with the assessor role; the agent picks next
+  question / one probe / a hint within policy, 3 picks, 8 s, fallback to the
+  generated order; each turn audited), `service.js` (run lifecycle, pause/resume
+  on socket drops, outcome, evidence only for a clean pass/fail). SergeantProctor
+  is split into judge/hint/probe/advance; `finalVerdict` only writes
+  `verdict_detail`. Migration `2026-practice-workflow.sql`
+  (`assessment_sessions.workflow_id`). Gates `practice.proctored_flow` and
+  `practice.integrity_flagged` green on the sandbox; termination is covered by the
+  contract test. Open: with browser-only signals the cheat probability peaks
+  near 0.41, so the 0.85 auto-terminate needs the proctor service (it fires only
+  when nearly every signal is on).
 
 ### Phase 10 — Learner model unification
 - Fold `decideNextAction` into Adaptive Learning Engine recommendations.
