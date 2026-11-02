@@ -263,6 +263,8 @@ router.get("/sessions/diagnose", authenticateToken, async (req, res) => {
 router.get("/sessions/:sessionId/history", authenticateToken, async (req, res) => {
   try {
     const session = await loadSessionState(req.params.sessionId);
+    // Only the learner's own transcript (ownership audit, Phase 15 item 6): someone else's id is a 404.
+    if (!session || session.student_id !== req.user.id) return res.status(404).json({ success: false, error: "Session not found" });
 
     const completedAt = session.completed_at || session.updated_at;
     const daysSince   = Math.max(0, Math.round(

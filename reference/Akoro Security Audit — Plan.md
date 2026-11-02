@@ -161,8 +161,8 @@ Method: every route under `akoro-api/modules/**` that takes an id from `req.para
 | `GET /api/tasks/:taskId/runs`, `/outputs` — any task | 2 | finding | Medium | `ccef161a` |
 | `GET /api/communities/:id/members` (any user, private too), `/analytics` (creator tool), `/activities` of a private community | 3 | finding | Medium | `ccef161a` |
 | `GET /api/adaptive/training/run/:runId/{stream,logs,insights,status,export}` — any run | 5 | finding | Medium | `ccef161a` |
+| `GET /api/adaptive/teaching/sessions/:sessionId/history` — any learner's teaching transcript by id (`loadSessionState` with no owner check) | 1 | finding | High | fixed (owner check → 404) |
 | **Open** | | | | |
-| `GET /api/adaptive/teaching/sessions/:sessionId/history` — any learner's teaching transcript by id (`loadSessionState` with no owner check). In the teaching-session code the lead is changing; left for that owner. | 1 | finding | High | open |
 | `POST /api/self-study`, `POST /api/self-study/:id/assign` (and draft assign through `createAssignment`) with `whole_class` + another teacher's `classroom_id`/`course_id` — assigns that class's learners, whose names then show in `GET /:id`. Needs a rule for which classes school teachers/admins may target. | 2 | finding | Medium | open |
 | Battle reads by id: `GET /api/battle/battles/:id`, `/state`, `/log`, `/results`, `/questions`, `/questions.pdf`, `/entry`, `/challenges/:id`, `/courses/:id/challenges`, `/courses/:id/battles`, `/courses/:id/battles/open`, `/courses/:id/battles/session/:sid` — any signed-in user. Needs a battle visibility rule (participant / class / public), same as F4. | 12 | finding | Medium | open |
 | `GET /api/courses/:courseId/live-sessions`, `GET /api/live-sessions/:id` — return `join_url` (and the password to non-student roles) to users not enrolled | 2 | finding | Medium | open |
