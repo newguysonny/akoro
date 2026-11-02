@@ -512,10 +512,24 @@ router.post("/upload", (req, res, next) => {
   });
 }));
 
+/**
+ * A training run is its teacher's (or an admin's) to watch: the logs and
+ * insights carry the uploaded material. Any run id used to answer anyone
+ * (Phase 15 item 6). Someone else's run reads as not found.
+ */
+function ownRun(req, res) {
+  const run = runs.get(req.params.runId);
+  if (!run || (run.teacherId !== req.user.id && req.user.role !== "admin")) {
+    res.status(404).json({ error: "Run not found" });
+    return null;
+  }
+  return run;
+}
+
 // GET /training/run/:runId/stream  (SSE)
 router.get("/run/:runId/stream", (req, res) => {
-  const run = runs.get(req.params.runId);
-  if (!run) return res.status(404).json({ error: "Run not found" });
+  const run = ownRun(req, res);
+  if (!run) return;
 
   res.setHeader("Content-Type",  "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
@@ -536,8 +550,8 @@ router.get("/run/:runId/stream", (req, res) => {
 
 // GET /training/run/:runId/logs
 router.get("/run/:runId/logs", (req, res) => {
-  const run = runs.get(req.params.runId);
-  if (!run) return res.status(404).json({ error: "Run not found" });
+  const run = ownRun(req, res);
+  if (!run) return;
   const from = parseInt(req.query.from || "0", 10);
   const tag  = req.query.tag;
   let logs   = run.logs.slice(from);
@@ -558,8 +572,8 @@ router.get("/run/:runId/logs", (req, res) => {
 
 // GET /training/run/:runId/insights
 router.get("/run/:runId/insights", (req, res) => {
-  const run = runs.get(req.params.runId);
-  if (!run) return res.status(404).json({ error: "Run not found" });
+  const run = ownRun(req, res);
+  if (!run) return;
   const from = parseInt(req.query.from || "0", 10);
   const type = req.query.type;
   let ins    = run.insights.slice(from);
@@ -573,8 +587,8 @@ router.get("/run/:runId/insights", (req, res) => {
 
 // GET /training/run/:runId/status
 router.get("/run/:runId/status", (req, res) => {
-  const run = runs.get(req.params.runId);
-  if (!run) return res.status(404).json({ error: "Run not found" });
+  const run = ownRun(req, res);
+  if (!run) return;
   const lastError = [...run.logs].reverse().find(l => l.tag === "err");
   res.json({
     runId: run.runId, sessionId: run.sessionId, subject: run.subject,
@@ -589,8 +603,8 @@ router.get("/run/:runId/status", (req, res) => {
 
 // GET /training/run/:runId/export
 router.get("/run/:runId/export", (req, res) => {
-  const run = runs.get(req.params.runId);
-  if (!run) return res.status(404).json({ error: "Run not found" });
+  const run = ownRun(req, res);
+  if (!run) return;
   const lines = [
     "=== Piabam Agent Training Log ===",
     `Run ID:  ${run.runId}`, `Subject: ${run.subject}`,
