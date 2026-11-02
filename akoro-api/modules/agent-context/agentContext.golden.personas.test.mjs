@@ -43,6 +43,7 @@ const BUILDERS = {
   "proctor-questions": (v) => sargeant.buildProctorQuestionsPrompt(v),
   "proctor-evaluate": (v) => sargeant.buildProctorEvaluatePrompt(v),
   "proctor-hint": () => sargeant.buildProctorHintPrompt(),
+  "proctor-probe": () => sargeant.buildProctorProbePrompt(),
   "proctor-verdict": (v) => sargeant.buildProctorVerdictPrompt(v),
   "student-clone-reply": (v) => clone.buildStudentCloneReplyPrompt(v),
   "student-clone-analyze": () => clone.buildStudentCloneAnalyzePrompt(),
@@ -66,7 +67,7 @@ const BUILDERS = {
 };
 
 test("every persona prompt is byte-identical to the pre-migration literals", async () => {
-  assert.equal(fixture.cases.length, 38);
+  assert.equal(fixture.cases.length, 39);   // +proctor-probe (Phase 9)
   for (const { label, values, builderArgs, expected } of fixture.cases) {
     const build = BUILDERS[label];
     assert.ok(build, `no builder mapped for ${label}`);

@@ -129,6 +129,7 @@ export const SETS = Object.freeze({
       "agents/sargeant/ASSESSMENT_VERDICT.md", "agents/sargeant/ASSESSMENT_DRIFT.md",
       "agents/sargeant/PROCTOR_QUESTIONS.md", "agents/sargeant/PROCTOR_EVALUATE.md",
       "agents/sargeant/PROCTOR_HINT.md", "agents/sargeant/PROCTOR_VERDICT.md",
+      "agents/sargeant/PROCTOR_PROBE.md",
     ]),
   }),
   persona_student: Object.freeze({
