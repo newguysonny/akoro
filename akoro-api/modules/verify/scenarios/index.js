@@ -71,6 +71,8 @@ export const SUITES = {
     "activity.chat_economics_case_study", "activity.chat_biology_cell", "writes.no_residue"],
   // Grading settings and instant scores: answer format, private mark scheme, score in seconds, the Review paper.
   grading: ["grading.answer_format_enforced", "grading.mark_scheme_private", "grading.instant_score", "grading.draft_paper_review", "writes.no_residue"],
+  // The model path: rubric written by the AI, answers marked against it, score in seconds (costs AI credit).
+  "grading-ai": ["grading.rubric_to_instant_score", "writes.no_residue"],
   // Teachers' follow-ups in one conversation: versions, parts, edits to specific questions, diagrams.
   authoring: ["activity.authoring_versions_parts", "activity.authoring_diagrams_edits", "writes.no_residue"],
   // The proactive agent (Grand Plan §7.16): one inbox, by-kind accept, dismiss reasons.
