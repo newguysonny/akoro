@@ -35,10 +35,18 @@ async function attachmentText(kind, bytes) {
 }
 
 /** Load everything a build needs for one target. */
-async function loadSubmission(targetId) {
+async function loadSubmission(targetId, { draft = false } = {}) {
   const { data: target } = await edu().from("self_study_targets")
-    .select("id, assignment_id, student_id, status, submission, submission_pdf").eq("id", targetId).maybeSingle();
+    .select("id, assignment_id, student_id, status, submission, submission_pdf, draft").eq("id", targetId).maybeSingle();
   if (!target) return null;
+  if (draft) {
+    // Not handed in yet: the answers saved so far and the files uploaded so far, laid out like a submission.
+    const { data: up } = await edu().from("self_study_files").select("id, question_index").eq("target_id", target.id).limit(200);
+    target.submission = {
+      answers: target.draft?.answers || {},
+      files: (up || []).map((f) => ({ id: f.id, ...(Number.isInteger(f.question_index) ? { question: f.question_index } : {}) })),
+    };
+  }
   const [{ data: assignment }, { data: learner }] = await Promise.all([
     edu().from("self_study_assignments").select("id, title, type, subject, topic, details, due_at").eq("id", target.assignment_id).maybeSingle(),
     db.from("users").select("full_name, username").eq("id", target.student_id).maybeSingle(),
@@ -61,8 +69,8 @@ async function loadSubmission(targetId) {
  * the data the apps and a printed copy render. Marks and feedback appear
  * once published (grade, feedback); a draft AI grade never does.
  */
-export async function loadSubmissionDocument(targetId) {
-  const loaded = await loadSubmission(targetId);
+export async function loadSubmissionDocument(targetId, { draft = false } = {}) {
+  const loaded = await loadSubmission(targetId, { draft });
   if (!loaded) return null;
   const { data: graded } = await edu().from("self_study_targets")
     .select("grade, feedback, graded_at").eq("id", targetId).maybeSingle();

@@ -1126,6 +1126,17 @@ router.get(/^\/targets\/([0-9a-f-]{36})\/submission\.html$/i, asyncHandler(async
   sendPaper(res, html, "submission.html");
 }));
 
+/** GET /api/self-study/targets/:targetId/draft.html?embed=1 — my answers so far, before hand-in, laid out
+ *  on the same paper template as the handed-in copy (the learner's "Review" step). Mine only. */
+router.get(/^\/targets\/([0-9a-f-]{36})\/draft\.html$/i, asyncHandler(async (req, res) => {
+  const seen = await viewableTarget(req, req.params[0]);
+  if (seen.error) return res.status(seen.status).json({ success: false, error: seen.error });
+  if (seen.target.student_id !== req.user.id) return denied(res, "Not yours to see");
+  const html = await submissionPaperHtml(seen.target.id, { embed: !!req.query.embed, draft: true });
+  if (!html) return missing(res, "Not found");
+  sendPaper(res, html, "answers.html");
+}));
+
 /** GET /api/self-study/targets/:targetId/submission.json — the submission as
  *  the paper template lays it out (paperSchema.js submissionDocument): the
  *  learner, answered / unanswered, each question with its answer, drawings

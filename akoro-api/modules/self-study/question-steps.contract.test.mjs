@@ -92,3 +92,11 @@ test("typed answers: the API and both apps read an MCQ answer the same way", asy
   assert.equal(learner.answerLabel(q, 1), "B · Carbon dioxide");
   assert.equal(learner.answerLabel(q, "b"), "b");
 });
+
+test("the learner's Review step reads the same paper template as the handed-in copy (draft.html, mine only)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const routes = readFileSync(new URL("./routes.js", import.meta.url), "utf8");
+  assert.match(routes, /draft\\\.html\$\/i/);
+  assert.match(routes, /seen\.target\.student_id !== req\.user\.id\) return denied/);
+  assert.match(routes, /submissionPaperHtml\(seen\.target\.id, \{ embed: !!req\.query\.embed, draft: true \}\)/);
+});

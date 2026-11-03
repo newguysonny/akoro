@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  fetchMyActivities, completeActivity, uploadActivityFile, removeActivityFile, downloadActivityFile, downloadMySubmissionPdf, fetchMySubmissionPaper,
+  fetchMyActivities, completeActivity, uploadActivityFile, removeActivityFile, downloadActivityFile, downloadMySubmissionPdf, fetchMySubmissionPaper, fetchMyDraftPaper,
   saveActivityAnswer, saveActivityText, fetchActivityFileBlob, saveBlobAs,
 } from '../services/activityApi.js';
 import { onActivityGraded } from '../services/activitySocket.js';
@@ -241,7 +241,7 @@ function AnswerBox({ format = 'all', q, idx, value, onType, files, onPick, onRem
   );
 }
 
-function Stepper({ questions, paper, work, saved, files, fileCounts, onType, onFlush, saveErrs, onPick, onRemove, onOpenFile, onDraw, onWrite, uploading, removing, fileErr, mid, dark, onHandIn, submitting, jumpRef }) {
+function Stepper({ questions, paper, work, saved, files, fileCounts, onType, onFlush, saveErrs, onPick, onRemove, onOpenFile, onDraw, onWrite, uploading, removing, fileErr, mid, dark, onHandIn, submitting, jumpRef, targetId }) {
   const total = questions.length;
   const [idx, setIdx] = useState(() => resumeStep(questions, work.answers, saved, fileCounts));
   const [moving, setMoving] = useState(false);
@@ -252,6 +252,15 @@ function Stepper({ questions, paper, work, saved, files, fileCounts, onType, onF
   const statuses = stepStatuses(questions, work.answers, saved, fileCounts);
   const answeredCount = statuses.filter((st) => st !== 'empty').length;
   const reviewing = idx >= total;
+  // The Review step shows my answers on the server's paper template (same as the handed-in copy).
+  const [draftHtml, setDraftHtml] = useState(null);
+  useEffect(() => {
+    if (!reviewing || !targetId) return undefined;
+    let live = true;
+    setDraftHtml(null);
+    fetchMyDraftPaper(targetId).then((h) => { if (live) setDraftHtml(h); }).catch(() => {});
+    return () => { live = false; };
+  }, [reviewing, targetId]);
   // Keep the question clear of the fixed dock, whatever height the answer box grows to.
   useEffect(() => {
     const el = dockRef.current;
@@ -325,7 +334,9 @@ function Stepper({ questions, paper, work, saved, files, fileCounts, onType, onF
             </div>
           ))}
         </div>
-        <AnswerPaper details={paper} answers={work.answers} files={files} onEdit={go} onOpenFile={onOpenFile} showLoose={false} sans="'Nunito',sans-serif"/>
+        {draftHtml
+          ? <PaperFrame html={draftHtml} title="My answers"/>
+          : <AnswerPaper details={paper} answers={work.answers} files={files} onEdit={go} onOpenFile={onOpenFile} showLoose={false} sans="'Nunito',sans-serif"/>}
         {loose.length > 0 && (
           <div style={{ marginTop: 12 }}>
             <p style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--ak-text-muted)', margin: '0 0 6px', fontFamily: "'Nunito',sans-serif" }}>Attached to the whole assignment</p>
@@ -800,7 +811,7 @@ export default function ActivityDetailPage() {
     let live = true;
     fetchMySubmissionPaper(row.targetId).then((t) => { if (live) setPaperHtml(t); }).catch(() => {});
     return () => { live = false; };
-  }, [row?.targetId, submittedAt, hasPaper]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [row?.targetId, submittedAt, hasPaper, row?.grade]);   // eslint-disable-line react-hooks/exhaustive-deps
   const downloadSubmission = () => {
     setPdfBusy(true); setSubmitErr('');
     const done = paperHtml
@@ -1170,7 +1181,7 @@ export default function ActivityDetailPage() {
           {(isDone || row.graded) && questions?.length > 0 && (
             <div style={{ marginBottom: 20 }}>
               <p style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', margin: '0 0 12px', fontFamily: "'Nunito',sans-serif" }}>{row.graded ? 'Your marked paper' : 'Your submission'}</p>
-              {!row.graded && paperHtml
+              {paperHtml
                 ? <PaperFrame html={paperHtml} title="My submission"/>
                 : <AnswerPaper details={row.briefDetails} answers={row.submission?.answers || {}} files={row.submission?.files || []}
                     marks={row.graded ? row.feedbackQuestions || [] : []} showKey={!!row.graded} onOpenFile={openFile} sans="'Nunito',sans-serif"/>}
@@ -1229,7 +1240,7 @@ export default function ActivityDetailPage() {
                   onType={typeAnswer} onFlush={flushAnswer} saveErrs={saveErrs}
                   onPick={pickFiles} onRemove={removeFile} onOpenFile={openFile} onDraw={(i) => { setFileErr(null); setBoard(i); }} onWrite={openDoc}
                   uploading={uploadingQ} removing={removing} fileErr={fileErr}
-                  mid={t.mid} dark={t.dark} onHandIn={() => { setSubmitErr(''); setChecking(true); }} submitting={submitting} jumpRef={stepperJump}/>
+                  mid={t.mid} dark={t.dark} onHandIn={() => { setSubmitErr(''); setChecking(true); }} submitting={submitting} jumpRef={stepperJump} targetId={row.targetId}/>
               ) : (
                 <>
                   <textarea

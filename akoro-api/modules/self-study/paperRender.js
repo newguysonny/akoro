@@ -70,8 +70,8 @@ export async function assignmentPaperHtml(assignment, { copy = "student", showKe
 }
 
 /** A target's submission paper, with its drawings and photos in the page. */
-export async function submissionPaperHtml(targetId, { only = null, embed = false } = {}) {
-  const doc = await loadSubmissionDocument(targetId);
+export async function submissionPaperHtml(targetId, { only = null, embed = false, draft = false } = {}) {
+  const doc = await loadSubmissionDocument(targetId, { draft });
   if (!doc) return null;
   const { data: target } = await edu().from("self_study_targets").select("assignment_id, student_id").eq("id", targetId).maybeSingle();
   const { data: assignment } = await edu().from("self_study_assignments").select("id, school_id, created_by, classroom_id").eq("id", target?.assignment_id).maybeSingle();

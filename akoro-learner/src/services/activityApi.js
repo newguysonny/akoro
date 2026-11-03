@@ -201,6 +201,13 @@ export async function fetchMySubmissionPaper(targetId) {
   return r.text();
 }
 
+/* My answers so far, before hand-in, on the same paper template (the Review step). */
+export async function fetchMyDraftPaper(targetId) {
+  const r = await authFetch(`${API}/api/self-study/targets/${targetId}/draft.html?embed=1`);
+  if (!r.ok) throw new Error('Could not load your answers.');
+  return r.text();
+}
+
 /* Download a submission file. Auth rides the session cookie, so a plain
    <a href> cannot carry it cross-origin — fetch the blob, then hand it to
    the browser as an object URL. */
