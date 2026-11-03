@@ -125,6 +125,7 @@ Rules:
 - A main heading (e.g. "A. BASIC CONCEPTS", "SECTION I: …", "THEME 1 …") is a topic; each numbered item under it (1., 2., …) is a subtopic; its lettered/roman points are its content.
 - When the outline is given, its headings (lettered like "A." or numbered like "3   Movement into and out of cells") are the ONLY topics in this part: a numbered item (e.g. "8. Transport System") is always a subtopic of the heading above it, never a topic. A "SECTION A/B/C" line is not a topic — put it in "section" of the topics under it.
 - If the part begins in the middle of a topic, start with that topic's title (given as context) and "continues": true.
+- Cambridge-style tables with "Core" and "Supplement" columns: every numbered statement ("1 Describe diffusion as…") is a learning objective — put them ALL in "objectives" in order, prefixing each Supplement one with "Supplement: "; leave "content" for any plain description and "notes" null.
 - Keep every item and every note. Do not summarise, merge different items, or invent. Fix only broken spacing.
 - Front matter (preamble, aims, scheme of examination), lists of recommended books, assessment details, practical-skills/assessment-objective tables, grade descriptions, glossaries of command words and administrative notes are NOT topics — skip them (return {"topics": []} for a part that has none).`;
 
@@ -257,10 +258,14 @@ async function pool(items, size, fn) {
  * hint: { exam, name, code } from the uploader. → { doc, stats, warnings }
  */
 export async function structureSyllabus({ pages, hint = {}, ask, concurrency = 3, onProgress = () => {} }) {
-  const front = pages.slice(0, 4).map((p) => p.text).join("\n").slice(0, 12_000);
   const outline = outlineFromPages(pages);
   // Parts that end before the first heading are front matter (the front pass reads it): not structured.
   const firstTheme = outline.find((e) => e.kind === "theme")?.page;
+  // The front pass reads everything before the first heading (Cambridge puts aims and the assessment
+  // overview on pages 7–11), at least the first 4 pages, at most 24k characters.
+  const before = pages.filter((p) => firstTheme && p.page < firstTheme);
+  const frontPages = before.length >= 4 ? before : pages.slice(0, 4);
+  const front = frontPages.map((p) => p.text).join("\n").slice(0, 24_000);
   const chunks = chunkPages(pages).filter((c) => !(outline.length >= 2 && firstTheme && c.to < firstTheme));
   let meta = {};
   try { meta = parseJson(await ask({ system: FRONT_SYSTEM, user: `${hint.exam ? `Exam: ${hint.exam}. ` : ""}${hint.name ? `Subject: ${hint.name}. ` : ""}\n\n${front}`, maxTokens: 1500 })); }
