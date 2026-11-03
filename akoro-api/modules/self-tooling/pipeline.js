@@ -1,7 +1,7 @@
 /**
  * modules/self-tooling/pipeline.js — create_tool and the learner-tool runtime
  * (plan §7.4, §7.9, §7.10). Stages 1 (recipe), 2 (spec), 3 (sandboxed code,
- * sandbox/ — flag AKORO_SELF_TOOLING_CODE_ENABLED) and 4 (escalate to an
+ * sandbox/ — on by default; AKORO_SELF_TOOLING_CODE_ENABLED=false turns it off) and 4 (escalate to an
  * admin, escalation.js).
  *
  *   createTool  → { status: created|escalated|rejected, … }   one call in, one status out

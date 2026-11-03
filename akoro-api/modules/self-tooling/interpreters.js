@@ -4,7 +4,7 @@
  *
  * SPEC (stage 2) — one Data View:
  *   { kind:"spec", from, where?, compute?, group?, sort?, limit?, select? }
- * CODE (stage 3, flag AKORO_SELF_TOOLING_CODE_ENABLED) — declared reads + one
+ * CODE (stage 3, flag AKORO_SELF_TOOLING_CODE_ENABLED, on unless "false") — declared reads + one
  *   sandboxed function: { kind:"code", steps:[…as recipe…], source:"function run(input, data, akoro) {…}" }
  *   (sandbox/index.js — data in, answer out; the code never calls Akoro)
  * RECIPE (stage 1, compose) — up to 4 steps (views or capabilities), then ops:

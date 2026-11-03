@@ -3654,7 +3654,30 @@ planning loop's tool names, the double practice charge, empty syllabus data).
      shared_with) + per-session usage log (time, calls, cost).
   6. **Sharing and marketplace:** share to classmates; admin review queue;
      instructor/school attach.
-  7. **Gate scenarios:** `plugins.add_only` (a recipe that tries to advance is
+  7. **New blocks through the self-tooling ladder; admins promote.** When a learner
+     asks for something the existing blocks can't do, the protégé builds it with
+     the same ladder as agent tools (`modules/self-tooling/pipeline.js`), stopping
+     at the first stage that works:
+     1. *Recipe* — combine existing blocks and settings (most ideas end here);
+     2. *Spec* — a structured definition our code already runs;
+     3. *Sandboxed code* — only for logic a recipe can't express (e.g. "spread 30
+        past questions over the days to my exam, skip Sundays"): one small
+        `run(input, data, akoro)` function in a fresh QuickJS (WebAssembly) runtime
+        per run — data in, answer out; no network, files, database, timers or
+        other learners; 8 KB source, 32 MB memory, 0.5 s CPU / 2 s wall, 64 KB
+        answer; `eval` / `import` / `fetch` / `process` refused before running.
+        **On by default** since 2026-11-03 (`AKORO_SELF_TOOLING_CODE_ENABLED=false`
+        turns it off on a server);
+     4. *Escalate* — anything needing a new screen, new data or a new question
+        type goes to the admin queue as a build request, not agent code.
+     A new block starts **private** to its learner (within their limits). One that
+     proves useful (used often, good results, copied by classmates) appears in the
+     admin queue; the admin runs its gate scenarios and **promotes** it, after which
+     it is an ordinary building block every protégé can use in recipes. A block's
+     output is always one of our existing, designed shapes (question, card, list,
+     timer…) — sandboxed code returns data, never its own UI; new kinds of screen
+     only come from us.
+  8. **Gate scenarios:** `plugins.add_only` (a recipe that tries to advance is
      refused; the gate decides), `plugins.past_question_per_concept` (each concept
      ends with one past question; wrong → easier one), `plugins.limits` (over-budget
      plugin skipped with a note), `plugins.off_in_practice`.
