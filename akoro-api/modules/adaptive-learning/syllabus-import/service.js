@@ -92,6 +92,7 @@ export async function start({ buffer, fileName, exam, name, code, userId }) {
  */
 export function nameFromFile(fileName) {
   let base = String(fileName || "").replace(/^.*[\\/]/, "").replace(/\.pdf$/i, "").replace(/^copy of\s+/i, "");
+  base = base.replace(/^(waec|wassce|neco|jamb|utme|bece|igcse|cambridge|ncee)[-_\s]+/i, "");   // the exam is chosen per batch
   let code = null;
   const graded = /(^|-)9-1(-|$)/.test(base);
   base = base.replace(/(^|-)9-1(?=-|$)/, "$1");

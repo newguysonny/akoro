@@ -127,6 +127,8 @@ test("a batch names each subject from its file name (code, 9-1, Alt A, years dro
   assert.deepEqual(nameFromFile("animal-husbandry-alt-a.pdf"), { name: "Animal Husbandry (Alt A)", code: null });
   assert.deepEqual(nameFromFile("further-mathematics-or-mathematics-elective.pdf"), { name: "Further Mathematics or Mathematics Elective", code: null });
   assert.deepEqual(nameFromFile("christian-religious-studies-new.pdf"), { name: "Christian Religious Studies", code: null });
+  assert.deepEqual(nameFromFile("igcse-biology-0610.pdf"), { name: "Biology", code: "0610" });
+  assert.deepEqual(nameFromFile("jamb-biology.pdf"), { name: "Biology", code: null });
 });
 
 test("JAMB's centred 'A: …' themes and IGCSE's numbered topics are outlines too", () => {
