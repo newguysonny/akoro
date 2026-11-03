@@ -17,8 +17,9 @@ import { openai } from "../base-orchestrator.js";
 // agentContext.golden.personas.test.mjs.
 import {
   buildProctorQuestionsPrompt, buildProctorEvaluatePrompt,
-  buildProctorHintPrompt, buildProctorVerdictPrompt,
+  buildProctorHintPrompt, buildProctorVerdictPrompt, buildProctorProbePrompt,
 } from "../../../agent-context/personas/sargeant.js";
+import { assessmentScore, computeVerdict } from "../../practice/workflow.js";
 
 const MODEL = "gpt-4.1-mini";
 
@@ -61,48 +62,83 @@ export class SergeantProctor {
     return this.questions[this.index] || null;
   }
 
-  /* ── Evaluate one human answer, decide next step ──────────── */
-  async evaluateAnswer(answer, { cheatProbability = 0 } = {}) {
-    const q = this.currentQuestion();
-    if (!q) return { done: true };
+  /* ── Phase 9: the turn is split into steps; the practice controller picks
+   *    which one runs (practice/controller.js). Sergeant judges (a proposal),
+   *    writes hints, probes and the verdict text — it decides none of them. ── */
 
+  /** The per-question record the harness scores from (practice/workflow.js). */
+  record(i = this.index) {
+    const q = this.questions[i];
+    if (!q) return null;
+    this.records ||= [];
+    return (this.records[i] ||= { qIndex: i, objective: q.objective || null, difficulty: q.difficulty || null, judged: null, probe: null, hints: 0, probes: 0, pendingProbe: null, attempts: 0 });
+  }
+
+  /** Judge the answer to the current question — or to its pending follow-up. Assessor role (locked, D23). */
+  async judge(answer) {
+    const q = this.currentQuestion();
+    if (!q) return null;
+    const rec = this.record();
+    const probing = !!rec.pendingProbe;
+    const asked = probing ? rec.pendingProbe : q.q;
     const res = await openai.chat.completions.create({
       model: MODEL, temperature: 0.1,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: await buildProctorEvaluatePrompt({ difficulty: q.difficulty, objective: q.objective }) },
-        { role: "user", content: JSON.stringify({ question: q.q, answer, objective: q.objective }) },
+        { role: "user", content: JSON.stringify({ question: asked, answer, objective: q.objective }) },
       ],
+      __role: "assessor", __feature: "assessment_judge",
     });
-    const ev = JSON.parse(res.choices[0].message.content);
-
-    this.answers.push({ qIndex: this.index, answer, eval: ev, hinted: false });
+    let ev = {};
+    try { ev = JSON.parse(res.choices[0].message.content) || {}; } catch { ev = {}; }
+    ev.score = Math.max(0, Math.min(100, Math.round(Number(ev.score) || 0)));
+    rec.attempts++;
+    if (probing) { rec.probe = ev.score; rec.pendingProbe = null; }
+    else rec.judged = rec.judged == null ? ev.score : Math.max(rec.judged, ev.score);
+    this.answers.push({ qIndex: this.index, answer, eval: ev, hinted: rec.hints > 0, probe: probing });
     if (ev.score < 50) this.struggles++; else this.struggles = 0;
+    return { ...ev, probing };
+  }
 
-    // Offer a hint at most once per question, and only when it helps.
-    const offerHint = ev.needsHint && ev.score < 70 && !this._alreadyHinted(this.index);
+  /** A hint on the current question (the harness has already checked the hint policy). */
+  async hint(answer, ev) {
+    const q = this.currentQuestion();
+    const text = await this._generateHint(q, answer, ev || {});
+    this.record().hints++;
+    this.hintsUsed++;
+    if (this.answers.length) this.answers[this.answers.length - 1].hinted = true;
+    return text;
+  }
 
-    let hint = null;
-    if (offerHint) {
-      hint = await this._generateHint(q, answer, ev);
-      this.hintsUsed++;
-      this.answers[this.answers.length - 1].hinted = true;
-    } else {
-      this.index++;   // move on only when not hinting
-    }
+  /** One follow-up on the same question, to see how deep the understanding goes. */
+  async probe(answer, ev, { focus = "" } = {}) {
+    const q = this.currentQuestion();
+    const res = await openai.chat.completions.create({
+      model: MODEL, temperature: 0.4,
+      messages: [
+        { role: "system", content: await buildProctorProbePrompt() },
+        { role: "user", content: JSON.stringify({ question: q.q, objective: q.objective, answer: String(answer || "").slice(0, 1500), feedback: ev?.feedback || "", focus: String(focus || "").slice(0, 200) }) },
+      ],
+      __role: "assessor", __feature: "assessment_probe",
+    });
+    const text = String(res.choices?.[0]?.message?.content || "").trim().slice(0, 400);
+    if (!text) return null;
+    const rec = this.record();
+    rec.probes++;
+    rec.pendingProbe = text;
+    return text;
+  }
 
-    // Note when proctoring flags a high cheat score on a strong answer.
-    const suspicious = cheatProbability >= 0.5 && ev.score >= 70;
+  /** Move to the next question in the generated order. */
+  advance() {
+    this.index++;
+    return this.currentQuestion();
+  }
 
-    return {
-      eval:        ev,
-      hint,
-      advanced:    !offerHint,
-      done:        this.index >= this.questions.length,
-      nextQuestion: !offerHint ? this.currentQuestion() : null,
-      progress:    { index: this.index, total: this.questions.length },
-      suspicious,
-    };
+  /** Every question's record, for the harness score. */
+  scoredRecords() {
+    return (this.records || []).filter(Boolean).map(({ pendingProbe, ...r }) => r);
   }
 
   _alreadyHinted(qIndex) {
@@ -116,52 +152,55 @@ export class SergeantProctor {
         { role: "system", content: await buildProctorHintPrompt() },
         { role: "user", content: JSON.stringify({ question: q.q, answer, missing: ev.feedback }) },
       ],
+      __feature: "assessment_hint",
     });
     return res.choices[0].message.content.trim();
   }
 
-  /* ── Final verdict, cheat-probability aware ───────────────── */
-  async finalVerdict({ cheatProbability = 0, cheatEvents = [] } = {}) {
+  /* ── Final verdict: the score and the verdict come from code (practice/workflow.js);
+   *    Sergeant writes only the explanation (verdict_detail). ──────────── */
+  async finalVerdict({ cheatProbability = 0, cheatEvents = [], terminated = false } = {}) {
+    const records = this.scoredRecords();
+    const avg = assessmentScore(records);
+    const verdictLabel = computeVerdict({ score: avg, cheatProbability, terminated });
     const scored = this.answers.filter(a => a.eval);
-    const avg = scored.length
-      ? Math.round(scored.reduce((s, a) => s + (a.eval.score || 0), 0) / scored.length)
-      : 0;
 
-    // Cheat probability gates the verdict regardless of academic score.
-    let verdictLabel;
-    if (cheatProbability >= 0.7)       verdictLabel = "terminated";
-    else if (cheatProbability >= 0.4)  verdictLabel = "flagged";
-    else if (avg >= 70)                verdictLabel = "pass";
-    else                               verdictLabel = "fail";
-
-    const res = await openai.chat.completions.create({
-      model: MODEL, temperature: 0.3,
-      messages: [
-        { role: "system", content: await buildProctorVerdictPrompt({
-          topic: this.topic,
-          avg,
-          cheatPercent: (cheatProbability * 100).toFixed(0),
-          verdictLabel,
-          verdictTail: verdictLabel === "terminated" || verdictLabel === "flagged"
-            ? "state plainly that proctoring flags require review before this result counts."
-            : "give one concrete next step.",
-        }) },
-        { role: "user", content: JSON.stringify({
-            avg, verdictLabel, cheatProbability,
-            cheatEvents: cheatEvents.slice(0, 8),
-            evaluations: scored.map(a => ({ score: a.eval.score, feedback: a.eval.feedback })),
+    let verdictDetail = "";
+    try {
+      const res = await openai.chat.completions.create({
+        model: MODEL, temperature: 0.3,
+        messages: [
+          { role: "system", content: await buildProctorVerdictPrompt({
+            topic: this.topic,
+            avg,
+            cheatPercent: (cheatProbability * 100).toFixed(0),
+            verdictLabel,
+            verdictTail: verdictLabel === "terminated" || verdictLabel === "flagged"
+              ? "state plainly that proctoring flags require review before this result counts."
+              : "give one concrete next step.",
           }) },
-      ],
-    });
+          { role: "user", content: JSON.stringify({
+              avg, verdictLabel, cheatProbability,
+              cheatEvents: cheatEvents.slice(0, 8),
+              evaluations: scored.map(a => ({ score: a.eval.score, feedback: a.eval.feedback })),
+            }) },
+        ],
+        __feature: "assessment_verdict",
+      });
+      verdictDetail = res.choices[0].message.content.trim();
+    } catch (e) {
+      verdictDetail = `Score ${avg}/100 — ${verdictLabel}.`;
+    }
 
     return {
       assessmentScore: avg,
       cheatProbability,
       verdict:         verdictLabel,
-      verdictDetail:   res.choices[0].message.content.trim(),
+      verdictDetail,
       hintsUsed:       this.hintsUsed,
-      questionsAnswered: scored.length,
+      questionsAnswered: records.filter(r => r.judged != null).length,
       totalQuestions:  this.questions.length,
+      records,
     };
   }
 }

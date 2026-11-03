@@ -17,15 +17,11 @@
  * Every line is code-written from the battle's facts — no model call, no cost.
  * Injectable; wiring.js supplies the engine, the queries and the chat.
  */
-import { defineWorkflow } from "../../workflows/definition.js";
-import { registerWorkflow } from "../../workflows/registry.js";
+// The `practice` type is shared with the proctored assessment (Phase 9): one definition, in
+// practice/workflow.js. An Agent Check run is created straight in `running`, as before.
+import { practiceWorkflow } from "../practice/workflow.js";
 
-export const agentCheckWorkflow = registerWorkflow(defineWorkflow({
-  type: "practice", version: "agent_check.1",
-  states: ["running", "completed", "stopped", "abandoned"], initial: "running",
-  transitions: { running: ["completed", "stopped", "abandoned"], completed: [], stopped: [], abandoned: [] },
-  statusOf: { running: "active", completed: "completed", stopped: "cancelled", abandoned: "abandoned" },
-}));
+export const agentCheckWorkflow = practiceWorkflow;
 
 export const START_CHECK_TOOL = "study_prep.start_agent_check";
 export const CHECK_QUESTION_TOOL = "study_prep.check_question";

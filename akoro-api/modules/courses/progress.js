@@ -17,6 +17,7 @@
 import { Router }                         from "express";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
+import { requireCourseManager }          from "./courseAccess.js";
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -394,8 +395,8 @@ router.get ("/user/progress/course/:courseId",            authenticateToken, stu
 router.get ("/user/activity",                             authenticateToken, studentHandlers.activity);
 router.post("/user/progress/export",                      authenticateToken, studentHandlers.export);
 
-// Instructor analytics
-router.get ("/courses/:courseId/analytics/engagement",    authenticateToken, requireRole(["instructor", "admin"]), instructorHandlers.engagement);
-router.get ("/courses/:courseId/analytics/sessions",      authenticateToken, requireRole(["instructor", "admin"]), instructorHandlers.sessions);
+// Instructor analytics — the course's own instructor (or an admin), not every instructor.
+router.get ("/courses/:courseId/analytics/engagement",    authenticateToken, requireRole(["instructor", "admin"]), requireCourseManager(), instructorHandlers.engagement);
+router.get ("/courses/:courseId/analytics/sessions",      authenticateToken, requireRole(["instructor", "admin"]), requireCourseManager(), instructorHandlers.sessions);
 
 export default router;

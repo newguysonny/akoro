@@ -3,11 +3,13 @@ import {BookMarked, Upload, FileText, Table2, PenLine, Trash2, Plus, AlertTriang
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Toast, Skeleton } from '../components/Primitives.jsx';
 import SyllabusEditor from './syllabus/SyllabusEditor.jsx';
+import ImportReview from './syllabus/ImportReview.jsx';
 import { apiGet, apiPost, apiDelete, API } from '../services/api.js';
 import { AMBER, INK, MUTED, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../constants.js';
 import { confirmDialog } from '../components/ConfirmHost.jsx';
 
-const EXAMS = ['WASSCE', 'JAMB', 'NECO', 'GCE', 'Other'];
+const EXAMS = ['WASSCE', 'NECO', 'JAMB', 'BECE', 'IGCSE', 'NCEE'];
+const IMPORT_STATUS = { extracting: ['Reading…', BLUE], draft: ['Draft — review', AMBER], failed: ['Failed', RED], published: ['Published', GREEN] };
 
 // ── Tiny CSV parser (handles quoted fields, embedded commas/newlines) ────────
 function parseCSV(text) {
@@ -75,6 +77,8 @@ export default function SyllabusPage() {
   const [toast, setToast] = useState(null);
   const [editSlug, setEditSlug] = useState(null);
   const [notice, setNotice] = useState(null);   // inline warning (e.g. scanned PDF)
+  const [imports, setImports] = useState([]);   // PDF imports: drafts waiting for review
+  const [reviewId, setReviewId] = useState(null);
 
   // form state
   const [exam, setExam] = useState('WASSCE');
@@ -83,7 +87,7 @@ export default function SyllabusPage() {
   const [aims, setAims] = useState('');
   const [topicsText, setTopicsText] = useState('');
   const [file, setFile] = useState(null);
-  const [useVision, setUseVision] = useState(false);
+  const [pdfFiles, setPdfFiles] = useState([]);   // several PDFs → one batch import
 
   const show = (message, type = 'success') => { setToast({ message, type }); setTimeout(() => setToast(null), 4000); };
 
@@ -92,8 +96,18 @@ export default function SyllabusPage() {
     catch (e) { setSubjects([]); show(e.message || 'Failed to load', 'error'); }
   }, []);
   useEffect(() => { load(); }, [load]);
+  const loadImports = useCallback(async () => {
+    try { const r = await apiGet('/api/adaptive/syllabus/imports'); setImports(r?.data ?? []); } catch { /* the list stays as it was */ }
+  }, []);
+  useEffect(() => { loadImports(); }, [loadImports]);
+  // While an import is being read, follow it.
+  useEffect(() => {
+    if (!imports.some((i) => i.status === 'extracting')) return undefined;
+    const t = setInterval(loadImports, 5000);
+    return () => clearInterval(t);
+  }, [imports, loadImports]);
 
-  const reset = () => { setName(''); setCode(''); setAims(''); setTopicsText(''); setFile(null); };
+  const reset = () => { setName(''); setCode(''); setAims(''); setTopicsText(''); setFile(null); setPdfFiles([]); };
 
   const ingestDoc = async (doc) => {
     const r = await apiPost('/api/adaptive/syllabus/ingest', { doc });
@@ -115,19 +129,32 @@ export default function SyllabusPage() {
         let subs = 0; for (const d of docs) { const r = await ingestDoc(d); subs += r.subtopics; }
         show(`Imported ${docs.length} subject(s), ${subs} subtopics`);
       } else {
+        if (pdfFiles.length > 1) {
+          // Several PDFs: one batch, queued on the server two at a time; each becomes its own draft (name from the file name).
+          const fd = new FormData();
+          for (const f of pdfFiles) fd.append('files', f);
+          fd.append('exam', exam);
+          const r = await fetch(`${API}/api/adaptive/syllabus/imports/batch`, {
+            method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'admin' }, body: fd,
+          });
+          const j = await r.json();
+          if (!r.ok || !j.success) throw new Error(j.message || 'Import failed');
+          show(`${j.data.queued.length} syllabuses queued — each appears under “Imports for review” as it is read.`);
+          setModal(false); reset(); loadImports(); setBusy(false); return;
+        }
         if (!file) throw new Error('Choose a PDF file');
+        // A PDF becomes a DRAFT for review (syllabus-import); nothing goes live until it is published.
         const fd = new FormData();
         fd.append('file', file);
         fd.append('exam', exam);
-        fd.append('vision', useVision ? 'true' : 'false');
         if (name.trim()) fd.append('name', name.trim());
-        const r = await fetch(`${API}/api/adaptive/syllabus/ingest-pdf`, {
+        const r = await fetch(`${API}/api/adaptive/syllabus/imports`, {
           method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'admin' }, body: fd,
         });
         const j = await r.json();
-        if (j.code === 'scanned_pdf') { setNotice(j.message); setBusy(false); return; }
-        if (!r.ok || !j.success) throw new Error(j.message || 'Extraction failed');
-        show(`Extracted “${j.data.name}” — ${j.data.topics} topics, ${j.data.subtopics} subtopics${j.data.via === 'vision' ? ' (AI vision)' : ''}`);
+        if (!r.ok || !j.success) throw new Error(j.message || 'Import failed');
+        show('Reading the syllabus — the draft appears under “Imports for review” in a minute or two.');
+        loadImports();
       }
       setModal(false); reset(); load();
     } catch (e) { show(e.message || 'Upload failed', 'error'); }
@@ -151,6 +178,29 @@ export default function SyllabusPage() {
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
           <Btn variant="primary" onClick={() => { reset(); setModal(true); }}><Plus size={15} style={{ marginRight: 6 }} />Add syllabus</Btn>
         </div>
+
+        {imports.length > 0 && (
+          <div data-syllabus-imports="" style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, marginBottom: 16, overflow: 'hidden' }}>
+            <div style={{ padding: '12px 14px', fontSize: 13, fontWeight: 800, color: INK, fontFamily: FONT, borderBottom: `1px solid ${BORDER}`, background: LIGHT }}>Imports for review</div>
+            {imports.map((im) => {
+              const [label, color] = IMPORT_STATUS[im.status] || [im.status, MUTED];
+              return (
+                <div key={im.id} onClick={() => setReviewId(im.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderTop: `1px solid ${BORDER}`, cursor: 'pointer', fontFamily: FONT }}>
+                  <span style={{ fontWeight: 700, fontSize: 11, padding: '2px 8px', borderRadius: 20, background: `${PURPLE}15`, color: PURPLE }}>{im.exam}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: INK }}>{im.name || im.source_file || 'Syllabus'}</div>
+                    <div style={{ fontSize: 11.5, color: MUTED }}>
+                      {im.source_file}{im.stats ? ` · ${im.stats.topics} topics · ${im.stats.subtopics} subtopics · ${im.stats.pages} pages` : ''}
+                      {im.status === 'extracting' && im.progress?.of ? ` · part ${im.progress.done || 0} of ${im.progress.of}` : ''}
+                      {(im.warnings || []).length ? ` · ${im.warnings.length} to check` : ''}
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20, background: `${color}18`, color }}>{label}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, overflow: 'hidden', overflowX: 'auto' }}>
           {subjects === null ? (
@@ -230,16 +280,14 @@ export default function SyllabusPage() {
         {method === 'pdf' && (
           <>
             <div style={{ fontSize: 12.5, color: MUTED, margin: '4px 0 10px', fontFamily: FONT, lineHeight: 1.6 }}>
-              Upload the official syllabus PDF. The text is extracted and structured by AI into topics, subtopics and objectives, then saved. <b>Text-based PDFs only</b> (scanned images won't extract).
+              Upload the official syllabus PDF. It is read page by page with its tables kept, structured into topics, subtopics, notes and objectives, and saved as a <b>draft</b> — you review it, then publish. <b>Digital PDFs</b> (with selectable text).
             </div>
-            <input type="file" accept="application/pdf,.pdf" onChange={(e) => { setFile(e.target.files?.[0] || null); setNotice(null); }} style={{ fontFamily: FONT, fontSize: 13 }} />
-            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 12, cursor: 'pointer', fontFamily: FONT }}>
-              <input type="checkbox" checked={useVision} onChange={(e) => setUseVision(e.target.checked)} style={{ marginTop: 2 }} />
-              <span style={{ fontSize: 12.5, color: INK }}>
-                <b>Use AI vision extraction</b>
-                <span style={{ color: MUTED }}> — reads the pages as images. Best for multi-column tables and scanned PDFs; slower and costs a few cents per subject. Leave off for simple text PDFs.</span>
-              </span>
-            </label>
+            <input type="file" multiple accept="application/pdf,.pdf" onChange={(e) => { const list = [...(e.target.files || [])]; setPdfFiles(list); setFile(list[0] || null); setNotice(null); }} style={{ fontFamily: FONT, fontSize: 13 }} />
+            {pdfFiles.length > 1 && (
+              <div style={{ marginTop: 8, fontSize: 12.5, color: INK, fontFamily: FONT }}>
+                <b>{pdfFiles.length} PDFs</b> — all imported as <b>{exam}</b>; each subject's name comes from its file name, and each becomes its own draft. Up to 70 at a time.
+              </div>
+            )}
             {notice && (
               <div style={{ marginTop: 12, padding: '11px 13px', borderRadius: 10, background: '#FEF3C7', border: '1px solid #FDE68A', color: '#92400E', fontSize: 12.5, fontWeight: 600, lineHeight: 1.55, fontFamily: FONT }}>
                 <div style={{ fontWeight: 800, marginBottom: 3, display: 'flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={13} color="#D97706" /> This PDF looks scanned</div>
@@ -256,6 +304,10 @@ export default function SyllabusPage() {
           </Btn>
         </div>
       </Modal>
+
+      {reviewId && (
+        <ImportReview importId={reviewId} show={show} onClose={() => setReviewId(null)} onChanged={() => { loadImports(); load(); }} />
+      )}
 
       {editSlug && (
         <SyllabusEditor slug={editSlug} show={show} onClose={() => setEditSlug(null)} onSaved={load} />

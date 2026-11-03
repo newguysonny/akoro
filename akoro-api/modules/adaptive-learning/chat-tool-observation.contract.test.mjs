@@ -19,7 +19,7 @@ const util = await read("../../utils/toolObservation.js");
 
 test("learner Agent Chat observes tools through the structured envelope", () => {
   assert.match(chat, /import \{ newToolRequestId, toolObservation \} from "\.\.\/\.\.\/utils\/toolObservation\.js"/);
-  assert.match(chat, /toolObservation\(\{ action: tool, result: toolResult, requestId: newToolRequestId\(\) \}\)/);
+  assert.match(chat, /toolObservation\(\{ action: tool, result: toolResult, requestId: newToolRequestId\(\), extra: repeat \? \{ reminder: repeat\.text \} : null \}\)/);
   assert.match(chat, /content: JSON\.stringify\(observation\)/);
   // The model is taught the envelope so confirmations stay grounded.
   // P1: the guide loads from the workspace through the doctrine seam.

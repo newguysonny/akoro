@@ -68,7 +68,10 @@ export const GENERATED_OUTLINE_LABEL = "AI-drafted outline — not your school's
  * protege.say({ learnerId, session, text, battle }) — the protégé's message in chat.
  * Without agentCheck the legacy human-answered practice (topicWorkflow) runs.
  */
-export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentCheck = null, protege = null, workflowMirror = null, checkRun = null, now = () => new Date().toISOString() }) {
+/** Without a journal: an outside step just runs (the behaviour before Phase 18 item 5). */
+const runDirectly = { once: async ({ act }) => ({ result: await act() }), undo: async () => {} };
+
+export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentCheck = null, protege = null, workflowMirror = null, checkRun = null, steps = runDirectly, now = () => new Date().toISOString() }) {
   // Every session and topic status write is checked against the workflow
   // definition (F7) and, with a mirror, dual-written to the engine (Phase 1).
   const store = guardStudyPrepStore(rawStore, { mirror: workflowMirror });
@@ -453,9 +456,15 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     }
 
     const coins = STUDY_PREP_COST.COINS_PER_PRACTICE;
+    // Store first (Phase 18 item 5): this attempt's charge and battle are journaled steps, so a
+    // restart mid-step resumes — the charge is not taken twice and a battle already made is reused.
+    // The topic row's updated_at: unchanged while this attempt is mid-step, new after a stop or a
+    // deferred retry (which reset attempts_used) — so each real attempt has its own key.
+    const stepKey = `study_prep_check:${topic.id}:${Number(topic.attempts_used) + 1}:${topic.updated_at || ""}`;
     let charge;
     try {
-      charge = await store.chargeCoins({ learnerId, coins, feature: "study_prep_practice", ref: `study_prep:${session.id}` });
+      charge = (await steps.once({ kind: "study_prep_charge", key: `${stepKey}:charge`, userId: learnerId,
+        act: () => store.chargeCoins({ learnerId, coins, feature: "study_prep_practice", ref: `study_prep:${session.id}` }) })).result;
     } catch (error) {
       if (error instanceof InsufficientBalanceError || error?.code === "insufficient_balance") {
         await pause(session, "insufficient_balance", { topic: topic.label });
@@ -470,10 +479,15 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
       const basedOn = session.syllabus_source === "documents" && session.syllabus_ref && syllabus.materialQuestions
         ? await syllabus.materialQuestions({ folderId: session.syllabus_ref, learnerId, topic: topic.label }).catch(() => [])
         : [];
-      check = await agentCheck.start({ learnerId, subject: session.subject, topic: topic.label, studyPrepTopicId: topic.id, mode, ...(basedOn.length ? { basedOn } : {}) });
+      check = (await steps.once({ kind: "study_prep_check", key: `${stepKey}:battle`, userId: learnerId,
+        act: () => agentCheck.start({ learnerId, subject: session.subject, topic: topic.label, studyPrepTopicId: topic.id, mode, ...(basedOn.length ? { basedOn } : {}) }),
+        // Interrupted mid-step: the battle this attempt already made, if any — never a second one.
+        check: (journal) => agentCheck.find?.({ studyPrepTopicId: topic.id, since: journal.created_at }) ?? null,
+      })).result;
     } catch (error) {
-      // The check never ran — refund, keep the session intact.
+      // The check never ran — refund, keep the session intact (the next try charges afresh).
       await store.refundCoins({ charge, feature: "study_prep_practice", ref: `study_prep:${session.id}` });
+      await steps.undo(`${stepKey}:charge`).catch(() => {});
       throw error;
     }
     const updatedTopic = await store.updateTopicConditional(topic.id, "active", {

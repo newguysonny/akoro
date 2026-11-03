@@ -2047,7 +2047,15 @@ router.get("/battles/:battleId/log", authenticateToken, asyncHandler(async (req,
 
 // ─── QUESTION BANK ────────────────────────────────────────────────────────────
 
-router.get("/courses/:courseId/questions-bank", authenticateToken, requireRole(["instructor", "admin"]), asyncHandler(async (req, res) => {
+// A course's bank (answers included) is its own teacher's: the instructor role
+// alone used to read and write any course's bank (Phase 15 item 6).
+const requireBankOwner = asyncHandler(async (req, res, next) => {
+  const { isInstructor } = await canRunCourseBattles(req.user.id, req.user.role, req.params.courseId);
+  if (!isInstructor) return res403(res, "Not your course");
+  next();
+});
+
+router.get("/courses/:courseId/questions-bank", authenticateToken, requireRole(["instructor", "admin"]), requireBankOwner, asyncHandler(async (req, res) => {
   const { topic, subject, difficulty } = req.query;
   let query = db.from("question_bank").select("*").eq("course_id", req.params.courseId).eq("is_active", true);
   if (topic)      query = query.eq("topic", topic);
@@ -2057,7 +2065,7 @@ router.get("/courses/:courseId/questions-bank", authenticateToken, requireRole([
   res.json({ questions: (data ?? []).map((q) => ({ ...q, options: JSON.parse(q.options_json) })), total: data?.length ?? 0 });
 }));
 
-router.post("/courses/:courseId/questions-bank", authenticateToken, requireRole(["instructor", "admin"]), asyncHandler(async (req, res) => {
+router.post("/courses/:courseId/questions-bank", authenticateToken, requireRole(["instructor", "admin"]), requireBankOwner, asyncHandler(async (req, res) => {
   const { question_text, options, correct_answer_index, topic, subject, difficulty, xp_value } = req.body;
   if (!question_text || !options?.length || correct_answer_index === undefined) return res.status(400).json({ error: "question_text, options, and correct_answer_index are required" });
   if (!Array.isArray(options) || options.length !== 4) return res.status(400).json({ error: "options must be an array of exactly 4 strings" });
@@ -2093,7 +2101,7 @@ router.delete("/questions-bank/:questionId", authenticateToken, requireRole(["in
 }));
 
 // POST /api/courses/:courseId/questions-bank/generate  (AI generation via Anthropic)
-router.post("/courses/:courseId/questions-bank/generate", authenticateToken, requireRole(["instructor", "admin"]), asyncHandler(async (req, res) => {
+router.post("/courses/:courseId/questions-bank/generate", authenticateToken, requireRole(["instructor", "admin"]), requireBankOwner, asyncHandler(async (req, res) => {
   const { topic, subject, difficulty = "intermediate", count = 15 } = req.body;
   if (!topic || !subject) return res.status(400).json({ error: "topic and subject are required" });
 

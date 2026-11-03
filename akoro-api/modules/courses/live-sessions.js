@@ -1010,6 +1010,18 @@ const curriculumHandler = asyncHandler(async (req, res) => {
 
 const router = Router();
 
+/**
+ * The session's own instructor (or an admin). The participant list carries
+ * learners' emails, so the instructor role alone is not enough (Phase 15 item 6).
+ */
+const requireSessionHost = asyncHandler(async (req, res, next) => {
+  const { data: session } = await db.from("live_sessions")
+    .select("instructor_id").eq("id", req.params.sessionId).maybeSingle();
+  if (!session) return res404(res, "Session not found");
+  if (session.instructor_id !== req.user.id && req.user.role !== "admin") return res403(res, "Not your session");
+  next();
+});
+
 // Session CRUD
 router.post  ("/courses/:courseId/live-sessions",            authenticateToken, requireRole(["instructor", "admin"]), rules.create, runValidation, sessionHandlers.create);
 router.get   ("/courses/:courseId/live-sessions",            authenticateToken, sessionHandlers.list);
@@ -1027,8 +1039,8 @@ router.post("/live-sessions/:sessionId/feedback",            authenticateToken, 
 router.post("/live-sessions/:sessionId/start",               authenticateToken, requireRole(["instructor", "admin"]), participantHandlers.start);
 router.post("/live-sessions/:sessionId/end",                 authenticateToken, requireRole(["instructor", "admin"]), participantHandlers.end);
 router.put ("/live-sessions/:sessionId/recording",           authenticateToken, requireRole(["instructor", "admin"]), participantHandlers.updateRecording);
-router.get ("/live-sessions/:sessionId/participants",        authenticateToken, requireRole(["instructor", "admin"]), participantHandlers.listParticipants);
-router.get ("/live-sessions/:sessionId/analytics",           authenticateToken, requireRole(["instructor", "admin"]), analyticsHandler);
+router.get ("/live-sessions/:sessionId/participants",        authenticateToken, requireRole(["instructor", "admin"]), requireSessionHost, participantHandlers.listParticipants);
+router.get ("/live-sessions/:sessionId/analytics",           authenticateToken, requireRole(["instructor", "admin"]), requireSessionHost, analyticsHandler);
 
 // Dashboards
 router.get("/courses/:courseId/curriculum",                  authenticateToken, curriculumHandler);

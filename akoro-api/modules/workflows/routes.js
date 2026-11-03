@@ -6,6 +6,10 @@
  *   GET /api/workflows/study-prep/:sessionId the session's workflow id (made on first ask
  *                                             for a session from before the engine)
  *   POST /api/workflows/admin/backfill-study-prep?limit=  admin: backfill older sessions
+ *   GET /api/workflows/dashboard         the learner's open runs as dashboard descriptors
+ *                                        + the "needs you" list (Phase 11, Phase 18 item 2)
+ *   GET /api/workflows/dashboard/:id     one run's descriptor (owner only) — what ?workflow= opens
+ *   GET /api/workflows/needs-you         the "needs you" list (an instructor gets theirs)
  * Live events also reach the learner's Socket.IO room as `workflow_event`.
  */
 import { Router } from "express";
@@ -17,11 +21,15 @@ import { makeSupabaseWorkflowStore } from "./store.js";
 import { forLearner, toEnvelope } from "./envelope.js";
 import { workflowBus } from "./bus.js";
 import { streamWorkflowEvents } from "./stream.js";
+import { makeDashboardApi } from "./dashboardApi.js";
+import { makeNeedsYouSources } from "./needsYouSources.js";
 
 const router = Router();
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 let _engine = null;
 const engine = () => (_engine ||= createWorkflowEngine({ store: makeSupabaseWorkflowStore(db) }));
+let _dashboard = null;
+const dashboard = () => (_dashboard ||= makeDashboardApi({ engine: engine(), sources: makeNeedsYouSources({ db, engine: engine() }) }));
 const afterOf = (v) => { const n = Number.parseInt(v, 10); return Number.isInteger(n) && n >= -1 ? n : -1; };
 
 async function owned(req, res) {
@@ -39,6 +47,27 @@ router.get("/study-prep/:sessionId", authenticateToken, async (req, res, next) =
     const workflowId = await ensureStudyPrepWorkflow(req.params.sessionId, req.user.id);
     if (!workflowId) return res.status(404).json({ success: false, error: "That session was not found" });
     return res.json({ success: true, workflowId });
+  } catch (e) { return next(e); }
+});
+
+router.get("/dashboard", authenticateToken, async (req, res, next) => {
+  try {
+    return res.json({ success: true, ...await dashboard().forLearner(req.user.id) });
+  } catch (e) { return next(e); }
+});
+
+router.get("/dashboard/:id", authenticateToken, async (req, res, next) => {
+  try {
+    if (!UUID.test(req.params.id)) return res.status(422).json({ success: false, error: "id is invalid" });
+    const workflow = await dashboard().one(req.user.id, req.params.id);
+    if (!workflow) return res.status(404).json({ success: false, error: "That workflow was not found" });
+    return res.json({ success: true, workflow });
+  } catch (e) { return next(e); }
+});
+
+router.get("/needs-you", authenticateToken, async (req, res, next) => {
+  try {
+    return res.json({ success: true, ...await dashboard().needsYouFor(req.user) });
   } catch (e) { return next(e); }
 });
 

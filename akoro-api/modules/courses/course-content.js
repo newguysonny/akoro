@@ -36,6 +36,7 @@ import db                                 from "../../db.js";
 import { autoTranscribeContent } from "../records/avTranscribeLib.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { awardXP, XP }                     from "../ranking/routes.js";
+import { canManageCourse, canUseCourse, courseOfModule, courseOfLesson } from "./courseAccess.js";
 
 // ─── § HELPERS ────────────────────────────────────────────────────────────────
 
@@ -84,6 +85,29 @@ const requireEnrollment = asyncHandler(async (req, res, next) => {
   req.enrollment = enrollment;
   next();
 });
+
+/**
+ * The course's own instructor (or an admin) may change its modules and
+ * lessons. The instructor role alone is not enough: every teacher has it
+ * (Phase 15 item 6). Answers 404 for a missing row, 403 for someone else's.
+ */
+async function guardModuleWrite(req, res, moduleId) {
+  const courseId = await courseOfModule(moduleId);
+  if (!courseId) { res404(res, "Module not found"); return false; }
+  if (!(await canManageCourse(req.user, courseId))) { res403(res, "You do not own this course"); return false; }
+  return true;
+}
+
+async function guardLessonWrite(req, res, lessonId) {
+  const courseId = await courseOfLesson(lessonId);
+  if (!courseId) { res404(res, "Lesson not found"); return false; }
+  if (!(await canManageCourse(req.user, courseId))) { res403(res, "You do not own this course"); return false; }
+  return true;
+}
+
+/** A learner completes or answers a lesson only where they may open it: a preview, or a course they belong to. */
+const mayOpenLesson = async (user, lesson) =>
+  !!lesson.is_preview || canUseCourse(user, lesson.course_modules?.course_id);
 
 /**
  * fireLessonTranscription — "always extract" for course videos. Whenever a
@@ -261,6 +285,7 @@ const moduleHandlers = {
   update: asyncHandler(async (req, res) => {
     const { moduleId } = req.params;
     const { title, description, order_index } = req.body;
+    if (!(await guardModuleWrite(req, res, moduleId))) return;
 
     const { data, error } = await db
       .from("course_modules")
@@ -277,6 +302,7 @@ const moduleHandlers = {
    * DELETE /api/modules/:moduleId
    */
   delete: asyncHandler(async (req, res) => {
+    if (!(await guardModuleWrite(req, res, req.params.moduleId))) return;
     const { error } = await db
       .from("course_modules")
       .delete()
@@ -355,7 +381,10 @@ const lessonHandlers = {
    * Create lesson (instructor only).
    */
   create: asyncHandler(async (req, res) => {
-    const { moduleId } = req.params;
+    const { courseId, moduleId } = req.params;
+    // The module must sit in the course named in the path, and the course must be the caller's.
+    if ((await courseOfModule(moduleId)) !== courseId) return res404(res, "Module not found in this course");
+    if (!(await canManageCourse(req.user, courseId))) return res403(res, "You do not own this course");
     const {
       title, description, lesson_type = "video",
       order_index = 0, is_preview = false,
@@ -392,6 +421,7 @@ const lessonHandlers = {
     const updates = Object.fromEntries(
       Object.entries(req.body).filter(([k]) => allowed.includes(k))
     );
+    if (!(await guardLessonWrite(req, res, req.params.lessonId))) return;
 
     const { data, error } = await db
       .from("lessons")
@@ -409,6 +439,7 @@ const lessonHandlers = {
    * DELETE /api/lessons/:lessonId
    */
   delete: asyncHandler(async (req, res) => {
+    if (!(await guardLessonWrite(req, res, req.params.lessonId))) return;
     const { error } = await db.from("lessons").delete().eq("id", req.params.lessonId);
     if (error) throw new Error(error.message);
     res204(res);
@@ -460,11 +491,12 @@ const lessonHandlers = {
 
     const { data: lesson } = await db
       .from("lessons")
-      .select("id, course_modules(course_id)")
+      .select("id, is_preview, course_modules(course_id)")
       .eq("id", lessonId)
       .single();
 
     if (!lesson) return res404(res, "Lesson not found");
+    if (!(await mayOpenLesson(req.user, lesson))) return res403(res, "Enrol in this course to complete this lesson");
     const courseId = lesson.course_modules?.course_id;
 
     // Was it already completed? (so XP is awarded once, not on every re-complete)
@@ -525,11 +557,12 @@ const lessonHandlers = {
 
     const { data: lesson } = await db
       .from("lessons")
-      .select("id, lesson_type, content_json, course_modules(course_id)")
+      .select("id, lesson_type, is_preview, content_json, course_modules(course_id)")
       .eq("id", lessonId)
       .single();
 
     if (!lesson)                       return res404(res, "Lesson not found");
+    if (!(await mayOpenLesson(req.user, lesson))) return res403(res, "Enrol in this course to take this quiz");
     if (lesson.lesson_type !== "quiz") return res400(res, "This lesson is not a quiz");
     if (!lesson.content_json?.questions) return res400(res, "Quiz has no questions configured");
 

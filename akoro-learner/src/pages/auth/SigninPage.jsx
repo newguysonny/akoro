@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext.jsx';
+import { nextPath } from '../../utils/nextPath.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import AkoroLogo from '../../components/common/AkoroLogo.jsx';
 
@@ -21,6 +22,7 @@ function GoogleIcon() {
 export default function SigninPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  const after = nextPath(params.toString()) || '/app';   // e.g. back to a /join/:token invite
   const { login, verifyTwoFactor, loginWithGoogle, loading, clearError } = useAuth();
   const { t } = useLang();
   const [email,     setEmail]    = useState('');
@@ -36,14 +38,14 @@ export default function SigninPage() {
     try {
       const data = await login({ email, password });
       if (data?.twoFactorRequired) { setChallenge(data.challengeToken); return; }
-      navigate('/app', { replace:true });
+      navigate(after, { replace:true });
     } catch (err) { setFormErr(err.message); }
   };
 
   const handleVerify = async (e) => {
     e.preventDefault(); setFormErr('');
     if (!/^\d{6}$/.test(code)) { setFormErr(t('auth.enter_6digit')); return; }
-    try { await verifyTwoFactor({ challengeToken: challenge, code }); navigate('/app', { replace:true }); }
+    try { await verifyTwoFactor({ challengeToken: challenge, code }); navigate(after, { replace:true }); }
     catch (err) { setFormErr(err.message); }
   };
 
@@ -97,7 +99,7 @@ export default function SigninPage() {
           <>
             <h1 style={{ fontSize:22, fontWeight:900, color:'var(--ak-text)', margin:'0 0 6px' }}>{t('auth.welcome_back')}</h1>
             <p style={{ fontSize:13, color:'var(--ak-text-sub)', margin:'0 0 24px' }}>{t('auth.continue_learning')}</p>
-            <button onClick={() => loginWithGoogle('/app')}
+            <button onClick={() => loginWithGoogle(after)}
               style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'center',
                 gap:10, padding:'12px', borderRadius:14, border:'1.5px solid var(--ak-border2)',
                 background:'var(--ak-surface)', cursor:'pointer', fontSize:14, fontWeight:700,
@@ -145,7 +147,7 @@ export default function SigninPage() {
             </p>
             <p style={{ textAlign:'center', fontSize:13, color:'var(--ak-text-sub)', marginTop:20, marginBottom:0 }}>
               {t('auth.no_account')}{' '}
-              <Link to="/signup" style={{ color:BRAND, fontWeight:800, textDecoration:'none' }}>{t('auth.signup')}</Link>
+              <Link to={after === '/app' ? '/signup' : `/signup?next=${encodeURIComponent(after)}`} style={{ color:BRAND, fontWeight:800, textDecoration:'none' }}>{t('auth.signup')}</Link>
             </p>
           </>
         )}

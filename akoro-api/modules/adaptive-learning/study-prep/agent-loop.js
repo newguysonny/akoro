@@ -105,7 +105,8 @@ export async function runAgentStep({
           iteration, eventType: step.tool ? "agent_tool_call" : "agent_action", origin: "agent_stated_intent",
           topicId: topicId || null, tool: step.tool || null, action: step.action || null,
           // How long it thought before this decision (the chat's "Thought for N seconds").
-          agentIntent: step.intent || null, facts: { args: step.args || {} }, durationMs: thoughtMs,
+          // Asked or inferred (Phase 18 item 6): the agent's own move, and the workflow policy that allowed it.
+          agentIntent: step.intent || null, facts: { args: step.args || {}, ...(entry.basis ? { basis: entry.basis.basis, rule: entry.basis.rule } : {}) }, durationMs: thoughtMs,
         });
       }
       if (entry.kind === "observation") {

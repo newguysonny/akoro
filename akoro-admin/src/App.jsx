@@ -42,8 +42,10 @@ import SettingsPage         from './pages/SettingsPage.jsx';
 import WalletPage           from './pages/WalletPage.jsx';
 import AgentToolRequestsPage from './pages/AgentToolRequestsPage.jsx';
 import AgentToolsPage from './pages/AgentToolsPage.jsx';
+import AgentPromptsPage from './pages/AgentPromptsPage.jsx';
 import AgentCapabilitiesPage from './pages/AgentCapabilitiesPage.jsx';
 import RealAccountChecksPage from './pages/RealAccountChecksPage.jsx';
+import ProactiveKindsPage from './pages/ProactiveKindsPage.jsx';
 import PrivacyPolicyPage    from './pages/PrivacyPolicyPage.jsx';
 import TermsOfServicePage   from './pages/TermsOfServicePage.jsx';
 import SigninPage           from './pages/auth/SigninPage.jsx';
@@ -166,8 +168,10 @@ export default function App() {
           <Route path="/agent-capabilities/tools" element={<AdminRoute><AgentCapabilitiesPage kind="tools" /></AdminRoute>} />
           <Route path="/agent-capabilities/learner-tools" element={<AdminRoute><AgentToolsPage /></AdminRoute>} />
           <Route path="/agent-capabilities/features" element={<AdminRoute><AgentCapabilitiesPage kind="features" /></AdminRoute>} />
+          <Route path="/agent-capabilities/prompts" element={<AdminRoute><AgentPromptsPage /></AdminRoute>} />
           <Route path="/agent-tools" element={<Navigate to="/agent-capabilities/learner-tools" replace />} />
           <Route path="/real-account-checks" element={<AdminRoute><RealAccountChecksPage /></AdminRoute>} />
+          <Route path="/proactive-kinds" element={<AdminRoute><ProactiveKindsPage /></AdminRoute>} />
           <Route path="/privacy"           element={<PrivacyPolicyPage />} />
           <Route path="/terms"             element={<TermsOfServicePage />} />
           <Route path="/signin"            element={<GuestRoute><SigninPage /></GuestRoute>} />

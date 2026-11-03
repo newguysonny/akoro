@@ -164,6 +164,13 @@ async function findCommunity(id) {
   return data ?? null;
 }
 
+/** Is this user a member (owner included) of the community? */
+async function isMember(communityId, userId) {
+  const { data } = await step("membership", edu().from("community_members")
+    .select("user_id").eq("community_id", communityId).eq("user_id", userId).maybeSingle());
+  return !!data;
+}
+
 /** Fetch one community, with extras, or respond 404. */
 async function communityOr404(res, id) {
   const c = await findCommunity(id);
@@ -550,6 +557,8 @@ router.get("/:id", asyncHandler(async (req, res) => {
 router.get("/:id/activities", asyncHandler(async (req, res) => {
   const c = await communityOr404(res, req.params.id);
   if (!c) return;
+  // A private community's work is for its members (Phase 15 item 6).
+  if (!c.is_public && !(await isMember(c.id, req.user.id))) return denied(res, "Join this community to see its activities.");
 
   const { data, error } = await step("activities", edu().from("community_activities")
     .select("*").eq("community_id", c.id)
@@ -652,6 +661,9 @@ router.get("/:id/items", asyncHandler(async (req, res) => {
 router.get("/:id/members", asyncHandler(async (req, res) => {
   const c = await communityOr404(res, req.params.id);
   if (!c) return;
+  // Who's in a community is for the people in it — it used to answer anyone,
+  // private communities included (Phase 15 item 6).
+  if (!(await isMember(c.id, req.user.id))) return denied(res, "Join this community to see who's in it.");
 
   const { data: mem, error } = await edu().from("community_members")
     .select("user_id, role, joined_at")
@@ -680,6 +692,8 @@ router.get("/:id/members", asyncHandler(async (req, res) => {
 router.get("/:id/analytics", asyncHandler(async (req, res) => {
   const c = await communityOr404(res, req.params.id);
   if (!c) return;
+  // A creator tool: who submitted what, by name (Phase 15 item 6).
+  if (c.owner_id !== req.user.id) return denied(res, "Only the community creator can see its analytics.");
 
   const { data: acts } = await edu().from("community_activities")
     .select("id, name").eq("community_id", c.id);

@@ -7,7 +7,8 @@
  *   register_reference  → reference_saved      (identity baseline photo)
  *   start_assessment    → assessment_ready     (Sergeant generates questions)
  *   proctor_frame       → proctor_result       (per-frame cheat analysis)
- *   assessment_message  → assessment_turn      (one Q&A turn, hints, advance)
+ *   assessment_message  → assessment_turn      (one Q&A turn: Sergeant judges, the
+ *                                              agent picks next/probe/hint — practice/controller.js)
  *   request_summary     → assessment_summary   (final, cheat-aware verdict)
  *   end_assessment      → assessment_ended
  *
@@ -20,6 +21,11 @@ import { TemporalScorer }    from "./proctoring/temporalScorer.js";
 import { analyzeFrame, proctorServiceEnabled } from "./proctoring/frameAnalyzer.js";
 import db                    from "../../db.js";
 import { runWithAiContext }  from "../../lib/aiContext.js";
+// Phase 9: each exam is a `practice` workflow run; the agent picks each next
+// move (practice/controller.js); score, verdict and evidence are code's.
+import { conductPracticeTurn } from "./practice/controller.js";
+import { practiceRun }       from "./practice/service.js";
+import { PRACTICE_POLICY }   from "./practice/workflow.js";
 
 // sessionId → { proctor, scorer, referenceImage, dbId, blocks, cheatEvents, studentId, lastFrameTs }
 const assessments = new Map();
@@ -27,7 +33,7 @@ const assessments = new Map();
 // Frames arrive every ~2s; ignore bursts under this to bound CPU.
 const MIN_FRAME_INTERVAL_MS = 1200;
 // Auto-terminate threshold — sustained high cheat probability ends the exam.
-const TERMINATE_PROBABILITY = 0.85;
+const TERMINATE_PROBABILITY = PRACTICE_POLICY.TERMINATE_AT;   // 0.85
 // How long a live session survives a socket drop before it's abandoned.
 // Mobile connections flap constantly; deleting on the first disconnect made
 // every submit after a blip vanish silently (new socket.id, no session).
@@ -113,9 +119,15 @@ export function setupAssessmentGateway(io) {
           proctorTier: proctorServiceEnabled() ? "full" : "client",
         });
 
-        // Persist the row in the background — never blocks exam start.
-        _createRecord(state, { studentId, topic, subject, questions, openingBlocks })
+        // Persist the row and the workflow run in the background — never blocks exam start.
+        state.topic = topic; state.subject = subject || null;
+        const rowP = _createRecord(state, { studentId, topic, subject, questions, openingBlocks })
           .catch(e => console.warn("[assessment create]", e.message));
+        const runP = practiceRun()
+          .then(run => run.begin({ learnerId: studentId, topic, subject, totalQuestions: questions.length, assessmentId: id, identityVerified: Boolean(state.referenceImage) }))
+          .then(wid => { state.workflowId = wid || null; })
+          .catch(e => console.warn("[assessment workflow]", e.message));
+        state.ready = Promise.all([rowP, runP]).then(() => _linkWorkflow(state)).catch(() => {});
       } catch (e) {
         console.error("[start_assessment]", e);
         socket.emit("assessment_error", { message: e.message });
@@ -168,7 +180,7 @@ export function setupAssessmentGateway(io) {
             reason: "Sustained proctoring violations.",
             probability: result.probability,
           });
-          await _finalize(state, socket, id, { forcedVerdict: "terminated" });
+          await _finalize(state, socket, id, { terminated: true });
         }
       } catch (e) {
         // Never let a bad frame break the session.
@@ -187,6 +199,7 @@ export function setupAssessmentGateway(io) {
       if (state.studentId && socket.data.user?.id !== state.studentId)
         return socket.emit("assessment_error", { code: "no_session", message: "This assessment session belongs to another user." });
       if (state._expireTimer) { clearTimeout(state._expireTimer); state._expireTimer = null; }
+      if (state.workflowId) practiceRun().then(run => run.resume(state.workflowId)).catch(() => {});
       socket.data.assessmentId  = assessmentId;
       socket.data.referenceImage = state.referenceImage;
       socket.data.referenceUrl   = state.referenceUrl;
@@ -205,7 +218,8 @@ export function setupAssessmentGateway(io) {
         socket.emit("assessment_typing");
         const cheatProbability = state.scorer.score().probability;
         const billCtx = { userId: socket.data.user?.id, feature: "assessment", billTo: socket.data.billTo };
-        const turn = await runWithAiContext(billCtx, () => state.proctor.evaluateAnswer(message, { cheatProbability }));
+        const turn = await runWithAiContext(billCtx, () => conductPracticeTurn({ proctor: state.proctor, answer: message, cheatProbability, userId: socket.data.user?.id }));
+        if (!turn.eval) return;
 
         const newBlocks = [
           { type: "user", text: message },
@@ -213,6 +227,9 @@ export function setupAssessmentGateway(io) {
             text: turn.eval.feedback, score: turn.eval.score, correct: turn.eval.correct },
         ];
         if (turn.hint)        newBlocks.push({ type: "hint", text: turn.hint });
+        // A follow-up on the same question renders as a question block (the room's UI is unchanged, D28).
+        if (turn.probe)       newBlocks.push({ type: "question", idx: turn.progress.index + 1, total: turn.progress.total,
+                                               text: turn.probe, followUp: true, difficulty: state.proctor.currentQuestion()?.difficulty });
         if (turn.suspicious)  newBlocks.push({ type: "proctor-flag", text: "Strong answer under elevated proctoring signals — flagged for review." });
         if (turn.advanced && turn.nextQuestion)
           newBlocks.push({ type: "question", idx: turn.progress.index + 1, total: turn.progress.total,
@@ -225,6 +242,7 @@ export function setupAssessmentGateway(io) {
           done:     turn.done,
         });
         _appendBlocks(state, newBlocks).catch(() => {});
+        if (state.workflowId) practiceRun().then(run => run.turn(state.workflowId, { agent: turn.agent, progress: turn.progress, probing: turn.eval?.probing, judgedScore: turn.eval?.score })).catch(() => {});
 
         if (turn.done) {
           // All questions answered — finalize automatically.
@@ -249,7 +267,9 @@ export function setupAssessmentGateway(io) {
       const id = socket.data.assessmentId;
       const state = id && assessments.get(id);
       if (state) {
+        state.completed = true;
         await _markStatus(state, "abandoned").catch(() => {});
+        if (state.workflowId) await practiceRun().then(run => run.abandon(state.workflowId, "ended")).catch(() => {});
         assessments.delete(id);
       }
     });
@@ -261,10 +281,12 @@ export function setupAssessmentGateway(io) {
         // Grace period: keep the session alive so a reconnecting client can
         // resume_assessment. Only abandon if nobody comes back in time.
         if (state._expireTimer) clearTimeout(state._expireTimer);
+        if (state.workflowId) practiceRun().then(run => run.pause(state.workflowId)).catch(() => {});
         state._expireTimer = setTimeout(() => {
           const s = assessments.get(id);
           if (s && !s.completed) {
             _markStatus(s, "abandoned").catch(() => {});
+            if (s.workflowId) practiceRun().then(run => run.abandon(s.workflowId, "grace_expired")).catch(() => {});
             assessments.delete(id);
           }
         }, RESUME_GRACE_MS);
@@ -274,22 +296,29 @@ export function setupAssessmentGateway(io) {
 }
 
 /* ── Finalization (shared by done / summary / terminate) ───── */
-async function _finalize(state, socket, id, { forcedVerdict = null } = {}) {
+async function _finalize(state, socket, id, { terminated = false } = {}) {
   if (state.completed) return;
   state.completed = true;
   try {
     const snap = state.scorer.snapshot();
     const billCtx = { userId: socket.data.user?.id, feature: "assessment", billTo: socket.data.billTo };
-    const summary = await runWithAiContext(billCtx, () => state.proctor.finalVerdict({
+    // Score and verdict are computed in code (practice/workflow.js); Sergeant writes only verdictDetail.
+    const { records, ...summary } = await runWithAiContext(billCtx, () => state.proctor.finalVerdict({
       cheatProbability: snap.peakProbability,
       cheatEvents:      state.cheatEvents,
+      terminated,
     }));
-    if (forcedVerdict) summary.verdict = forcedVerdict;
+
+    await state.ready?.catch?.(() => {});
+    const run = state.workflowId ? await practiceRun().catch(() => null) : null;
+    const outcome = run ? await run.finish(state.workflowId, { learnerId: state.studentId, topic: state.topic, subject: state.subject, summary: { ...summary, records }, terminated }) : null;
 
     socket.emit("assessment_summary", {
       ...summary,
       proctoring: snap,
       cheatEvents: state.cheatEvents,
+      workflowId: state.workflowId || null,
+      recommendedNextAction: outcome?.recommendedNextAction || null,
     });
     await _completeRecord(state, summary, snap).catch(e => console.warn("[assessment complete]", e.message));
   } catch (e) {
@@ -315,6 +344,13 @@ async function _createRecord(state, { studentId, topic, subject, questions, open
   }).select("id").single();
   if (error) throw error;
   state.dbId = data.id;
+}
+
+/** assessment_sessions.workflow_id → the practice run (Phase 9). Tolerates the column not being there yet. */
+async function _linkWorkflow(state) {
+  if (!state.dbId || !state.workflowId) return;
+  const { error } = await db.schema("edu").from("assessment_sessions").update({ workflow_id: state.workflowId }).eq("id", state.dbId);
+  if (error) console.warn("[assessment link workflow]", error.message);
 }
 
 async function _appendBlocks(state, newBlocks) {

@@ -32,6 +32,8 @@ import TraceBlocks from './agentChat/TraceBlocks.jsx';
 import { applyTraceEvent, blocksFromSavedTrace, ingestRunBlocks, promoteActivity, settleRunning, splitWakes, studyPrepEventBlocks, workflowRunBlocks } from '../../lib/agentChatTrace.js';
 import { CHAT_STARTERS, cleanIdeas, cleanMaterials, protegeMoves } from '../../lib/chatIdeas.js';
 import { useNavigate } from 'react-router-dom';
+import NeedsYouList, { useNeedsYou } from './agentChat/NeedsYouList.jsx';
+import ReplyRating, { ratableId, useReplyRatings } from './agentChat/ReplyRating.jsx';
 import AgentCards from '../network/AgentCards.jsx';
 import ChallengeRequestCards from '../network/ChallengeRequestCards.jsx';
 import ConfirmChangeCard from './agentChat/ConfirmChangeCard.jsx';
@@ -596,6 +598,16 @@ function AgentChatTab({
   // Ideas (§7.16.4): buildable briefs the agent brings overnight. "Do it" sends the brief as
   // the learner's own chat message — the ordinary, already-tested path from there.
   const [ideas,setIdeas]=useState([]);
+  // Needs you (Phase 18 item 2): one list of what waits for the learner, from the server.
+  const needsYou=useNeedsYou();
+  // Ratings on replies (Phase 18 item 4): the learner's own, never shown to the agent.
+  const [replyRatings,setReplyRating]=useReplyRatings(messages);
+  const openNeed=(it)=>{
+    const href=it?.action?.href||'';
+    if(href.includes('inbox=')){ setTaskFilter('suggestions'); return; }
+    if(href==='/app?tab=agent'){ setInnerTab('chat'); return; }
+    if(href) navigate(href);
+  };
   const [ideaBusy,setIdeaBusy]=useState(null);
   const refetchIdeas=async()=>{ try{ const d=await apiGet('/api/agent/ideas'); setIdeas(Array.isArray(d?.data)?d.data:[]); }catch{} };
   useEffect(()=>{ refetchIdeas(); },[]);
@@ -692,27 +704,18 @@ function AgentChatTab({
   const PRI_LABEL = {high:t('agent.pri_high_label'),medium:t('agent.pri_medium_label'),low:t('agent.pri_low_label')};
   const PRI_BG    = {high:`${RED}15`,medium:`${GOLD}15`,low:`${GREEN}15`};
 
-  // The study-prep session is the durable layer — it outlives chats. On mount,
-  // restore an active session as an agent message carrying the session card,
-  // exactly like a fresh start_study_prep_session tool echo would.
+  // The study-prep session is the durable layer — it outlives chats. An active one this chat doesn't show
+  // gets a slim bar above the message box: Continue starts the agent's turn, and the card comes in that turn
+  // (it used to be pushed onto the end of the chat as a message of its own, below the latest turn).
+  const [activePrep, setActivePrep] = useState(null);
   useEffect(() => {
     let cancelled = false;
     fetchActiveStudyPrepSession()
-      .then((response) => {
-        if (cancelled || !response?.session?.id) return;
-        setMessages((prev) => prev.some((m) => m.studyPrepSessionId === response.session.id) ? prev : [...prev, {
-          id: `study-prep-${response.session.id}`,
-          from: "agent",
-          text: "Your study-prep session is active — pick up where you left off:",
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          at: new Date().toISOString(),
-          phase: "done",
-          studyPrepSessionId: response.session.id,
-        }]);
-      })
+      .then((response) => { if (!cancelled && response?.session?.id) setActivePrep({ id: response.session.id, subject: response.session.subject || null }); })
       .catch(() => {});
     return () => { cancelled = true; };
   }, []);
+  const [showWaiting, setShowWaiting] = useState(false);
 
   // The parent fetches the agent profile asynchronously; if it resolves after
   // this tab mounts, sync the incoming name/emoji so the header isn't blank.
@@ -977,7 +980,7 @@ function AgentChatTab({
         onDelta: appendDelta,
         onThinking: appendThinking,
         onStatus: (s)=>{ if(!started) setStatusLabel(t(statusKey[s?.step]||"") || s?.label || ""); },
-        onDone: ({ reply, syllabus, pastQuestions, thinking, toolExecutions, trace, stopped })=>{
+        onDone: ({ reply, syllabus, pastQuestions, thinking, toolExecutions, trace, stopped, messageId })=>{
           gotDone=true;
           ensureBubble(); setStatusLabel("");
           // Settle every step; if the live steps never arrived (an older API),
@@ -986,7 +989,7 @@ function AgentChatTab({
           // Study-prep sessions ride the reply as a session echo (the
           // activity-draft pattern) — render the interactive session card.
           const studyPrepSession = (toolExecutions || []).find((entry) => entry?.session?.id && entry?.success)?.session || null;
-          setMessages(prev=>prev.map(m=>m.id===replyId?{...m,...(reply!=null?{text:reply}:{}),thinking:thinking||m.thinking,syllabus:syllabus||[],pastQuestions:pastQuestions||[],phase:"done",...(stopped?{stopped:true}:{}),...(studyPrepSession?{studyPrepSessionId:studyPrepSession.id}:{}),...protegeMoves(toolExecutions)}:m));
+          setMessages(prev=>prev.map(m=>m.id===replyId?{...m,...(reply!=null?{text:reply}:{}),thinking:thinking||m.thinking,syllabus:syllabus||[],pastQuestions:pastQuestions||[],phase:"done",...(stopped?{stopped:true}:{}),...(messageId?{serverId:messageId}:{}),...(studyPrepSession?{studyPrepSessionId:studyPrepSession.id}:{}),...protegeMoves(toolExecutions)}:m));
           turnTools=toolExecutions||[];
           if ((toolExecutions || []).some((entry) => entry?.tool === "create_task" && entry?.success)) refetchTasks();
           if ((toolExecutions || []).some((entry) => entry?.tool === "suggest_help" && entry?.success)) refetchInbox();
@@ -1316,7 +1319,9 @@ function AgentChatTab({
                       <span style={{ width:8,height:8,borderRadius:2,background:"var(--ak-text-muted)",display:"inline-block" }}/>{t('agent.stopped')}
                     </div>
                   )}
-                  {!isMe&&msg.studyPrepSessionId&&(pinnedPrep===msg.studyPrepSessionId&&lastPrepCardId===msg.id
+                  {!isMe&&msg.studyPrepSessionId&&lastPrepCardIdOf(msg.studyPrepSessionId)!==msg.id
+                    ? <div data-workflow-earlier-card="" style={{ display:"flex",alignItems:"center",gap:6,marginTop:6,fontSize:11.5,fontWeight:750,color:"var(--ak-text-muted)" }}><Icon name="ti-arrow-down" size={13}/>Study Prep — continued further down</div>
+                    : !isMe&&msg.studyPrepSessionId&&(pinnedPrep===msg.studyPrepSessionId&&lastPrepCardId===msg.id
                     ? <div data-workflow-pinned-note="" style={{ display:"flex",alignItems:"center",gap:6,marginTop:6,fontSize:11.5,fontWeight:750,color:"var(--ak-text-muted)" }}><Icon name="ti-pin" size={13}/>Study Prep is running — pinned above the message box</div>
                     : <StudyPrepChatCard sessionId={msg.studyPrepSessionId} onEvents={onStudyPrepEvents} onRunning={onStudyPrepRunning} developer={devView} onNotes={onStudyPrepNotes} conversationId={sessionId}/>)}
                   {!isMe&&msg.proposal?.status==="proposed"&&msg.proposal.preview&&<ProposalPreview preview={msg.proposal.preview}/>}
@@ -1388,7 +1393,7 @@ function AgentChatTab({
                       ))}
                     </div>
                   )}
-                  <div style={{ fontSize:10,color:"var(--ak-text-muted)",marginTop:3,display:"flex",alignItems:"center",gap:4 }}>
+                  <div style={{ fontSize:10,color:"var(--ak-text-muted)",marginTop:3,display:"flex",alignItems:"center",gap:4,flexWrap:"wrap" }}>
                     {msg.time}
                     {msg.text&&<CopyMessageButton text={msg.text} />}
                     {msg.text&&msg.phase!=="answering"&&msg.phase!=="thinking"&&(
@@ -1398,14 +1403,15 @@ function AgentChatTab({
                         {tts.loadingId===msg.id?<Spinner size={11}/>:<Icon name={tts.speakingId===msg.id?"ti-player-stop":"ti-volume"} size={13}/>}
                       </button>
                     )}
+                    {msg.text&&msg.phase!=="answering"&&msg.phase!=="thinking"&&ratableId(msg)&&(
+                      <ReplyRating messageId={ratableId(msg)} value={replyRatings[ratableId(msg)]} onChange={(v)=>setReplyRating(ratableId(msg),v)}/>
+                    )}
                   </div>
                   {/* The agent keeps working after its reply: the workflow's run, live (thought → tool → its words). */}
                   {!isMe&&msg.studyPrepSessionId&&lastPrepCardIdOf(msg.studyPrepSessionId)===msg.id&&(()=>{ const run=workflowRun(msg.studyPrepSessionId); return run.length>0&&<div data-workflow-run="" style={{ marginTop:10 }}>{devView?<TraceBlocks blocks={run}/>:<PlannerNotes blocks={run}/>}</div>; })()}
                 </div>
               );
             })}
-            {/* Changes a built tool proposed that are still waiting for the learner's tap — shown again after a reload (S6). */}
-            {pendingChanges.filter((c)=>!messages.some((m)=>m.confirm?.confirmationId===c.confirmationId)).map((c)=><ConfirmChangeCard key={c.confirmationId} confirm={c} onDone={onCardDone}/>)}
             {loading&&(
               <div style={{ display:"flex",alignItems:"center",gap:8,color:"var(--ak-text-muted)",fontSize:12.5,fontWeight:600 }}>
                 <span style={{ display:"flex",gap:5 }}>{[0,.25,.5].map((d,i)=><span key={i} style={{ width:6,height:6,borderRadius:"50%",background:BRAND,display:"inline-block",animation:`bounce-dot .7s ease-in-out ${d}s infinite alternate` }}/>)}</span>
@@ -1452,6 +1458,23 @@ function AgentChatTab({
                 ))}
               </div>
             )}
+            {/* What is still open but not in the turns on screen: one slim bar, never cards stacked under the latest turn. */}
+            {(()=>{
+              const waiting=pendingChanges.filter((c)=>c.sessionId&&c.sessionId===sessionId&&!messages.some((m)=>m.confirm?.confirmationId===c.confirmationId));
+              const prep=activePrep&&!pinnedPrep&&!messages.some((m)=>m.studyPrepSessionId===activePrep.id)?activePrep:null;
+              if(!waiting.length&&!prep) return null;
+              const bar={ display:"flex",alignItems:"center",gap:8,padding:"7px 11px",borderRadius:12,border:"1px solid var(--ak-border)",background:"var(--ak-surface-hover)",fontSize:12,fontWeight:800,color:"var(--ak-text)",fontFamily:"'Nunito',sans-serif" };
+              const btn={ marginLeft:"auto",padding:"5px 12px",borderRadius:999,border:"none",background:BRAND,color:"#fff",fontSize:11.5,fontWeight:900,cursor:"pointer",fontFamily:"'Nunito',sans-serif" };
+              return (
+                <div data-open-bar="" style={{ display:"flex",flexDirection:"column",gap:6,margin:"0 0 8px" }}>
+                  {prep&&<div style={bar}><Icon name="ti-route" size={14} color={BRAND}/><span>Study Prep{prep.subject?` · ${prep.subject}`:""} — in progress</span>
+                    <button type="button" disabled={loading||running} style={btn} onClick={()=>sendMessage("Continue my study prep session.")}>Continue</button></div>}
+                  {waiting.length>0&&<div style={bar}><Icon name="ti-shield-check" size={14} color={BRAND}/><span>{waiting.length} change{waiting.length===1?"":"s"} waiting for your OK</span>
+                    <button type="button" style={btn} onClick={()=>setShowWaiting((v)=>!v)}>{showWaiting?"Hide":"Show"}</button></div>}
+                  {waiting.length>0&&showWaiting&&<div style={{ maxHeight:"36vh",overflowY:"auto" }}>{waiting.map((c)=><ConfirmChangeCard key={c.confirmationId} confirm={c} onDone={onCardDone}/>)}</div>}
+                </div>
+              );
+            })()}
             {pinnedPrep && (
               <div data-workflow-pinned="" style={{ width:"min(560px,100%)",maxHeight:"42vh",overflowY:"auto",margin:"0 0 8px",boxShadow:"0 4px 18px rgba(30,20,60,.12)",borderRadius:14 }}>
                 <StudyPrepChatCard sessionId={pinnedPrep} onEvents={onStudyPrepEvents} onRunning={onStudyPrepRunning} pinned developer={devView} onNotes={onStudyPrepNotes} conversationId={sessionId}/>
@@ -1501,8 +1524,8 @@ function AgentChatTab({
             ))}
           </div>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px 8px" }}>
-            <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>{[["pending",t('agent.to_do')],["done",t('agent.done')],["suggestions",t('agent.suggestions')],["ideas",t('agent.ideas')]].map(([k,l])=><button key={k} onClick={()=>setTaskFilter(k)} style={{ padding:"5px 12px",borderRadius:20,border:`1.5px solid ${taskFilter===k?BRAND:"var(--ak-border2)"}`,background:taskFilter===k?`${BRAND}10`:"transparent",color:taskFilter===k?BRAND:"var(--ak-text-muted)",fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",gap:5 }}>{k==="ideas"&&<Icon name="ti-bulb" size={12}/>}{l}{k==="ideas"&&ideas.length>0&&<span style={{ fontSize:9,fontWeight:900,background:taskFilter===k?BRAND:"var(--ak-border)",color:taskFilter===k?"#fff":"var(--ak-text-muted)",borderRadius:8,padding:"1px 5px" }}>{ideas.length}</span>}{k==="suggestions"&&suggestionCount>0&&<span style={{ fontSize:9,fontWeight:900,background:taskFilter===k?BRAND:"var(--ak-border)",color:taskFilter===k?"#fff":"var(--ak-text-muted)",borderRadius:8,padding:"1px 5px" }}>{suggestionCount}</span>}</button>)}</div>
-            {taskFilter!=="suggestions"&&taskFilter!=="ideas"&&<button onClick={openNewTask} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:11.5,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
+            <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>{[["pending",t('agent.to_do')],["done",t('agent.done')],["needs",t('agent.needs_you')],["suggestions",t('agent.suggestions')],["ideas",t('agent.ideas')]].map(([k,l])=><button key={k} onClick={()=>{ setTaskFilter(k); if(k==="needs") needsYou.reload(); }} style={{ padding:"5px 12px",borderRadius:20,border:`1.5px solid ${taskFilter===k?BRAND:"var(--ak-border2)"}`,background:taskFilter===k?`${BRAND}10`:"transparent",color:taskFilter===k?BRAND:"var(--ak-text-muted)",fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",gap:5 }}>{k==="ideas"&&<Icon name="ti-bulb" size={12}/>}{k==="needs"&&<Icon name="ti-bell-ringing" size={12}/>}{l}{k==="needs"&&needsYou.count>0&&<span style={{ fontSize:9,fontWeight:900,background:taskFilter===k?BRAND:"var(--ak-border)",color:taskFilter===k?"#fff":"var(--ak-text-muted)",borderRadius:8,padding:"1px 5px" }}>{needsYou.count}</span>}{k==="ideas"&&ideas.length>0&&<span style={{ fontSize:9,fontWeight:900,background:taskFilter===k?BRAND:"var(--ak-border)",color:taskFilter===k?"#fff":"var(--ak-text-muted)",borderRadius:8,padding:"1px 5px" }}>{ideas.length}</span>}{k==="suggestions"&&suggestionCount>0&&<span style={{ fontSize:9,fontWeight:900,background:taskFilter===k?BRAND:"var(--ak-border)",color:taskFilter===k?"#fff":"var(--ak-text-muted)",borderRadius:8,padding:"1px 5px" }}>{suggestionCount}</span>}</button>)}</div>
+            {taskFilter!=="suggestions"&&taskFilter!=="ideas"&&taskFilter!=="needs"&&<button onClick={openNewTask} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:11.5,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
               <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>{t('agent.new_task')}
             </button>}
           </div>
@@ -1513,7 +1536,9 @@ function AgentChatTab({
             </div>
           )}
           <div style={{ flex:1,padding:"0 16px 16px",display:"flex",flexDirection:"column",gap:8 }}>
-            {taskFilter==="ideas"?(
+            {taskFilter==="needs"?(
+              <NeedsYouList state={needsYou} onOpen={openNeed}/>
+            ):taskFilter==="ideas"?(
               ideas.length===0?<div style={{ textAlign:"center",padding:"32px 16px",color:"var(--ak-text-muted)" }}><Icon name="ti-bulb" size={40} color="var(--ak-text-muted)" style={{opacity:.3}}/><p style={{ fontSize:13,fontWeight:700,marginTop:8,maxWidth:260,marginInline:"auto",lineHeight:1.5 }}>{t('agent.ideas_empty')}</p></div>
               :(<div data-ideas="">{ideas.map(idea=>(
                 <div key={idea.id} data-idea={idea.id} style={{ display:"flex",gap:11,alignItems:"flex-start",flexWrap:"wrap",padding:"12px 13px",borderRadius:14,border:"1px solid var(--ak-border)",background:"var(--ak-surface)",marginBottom:8 }}>

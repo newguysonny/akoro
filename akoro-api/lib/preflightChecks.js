@@ -41,7 +41,7 @@ export function runConfigChecks(env = process.env) {
   const secret = env.JWT_SECRET || "";
   if (rsa) pass("JWT uses an RSA keypair", "RS256 keypair set");
   else if (!set(secret) || PLACEHOLDER.test(secret) || secret.length < 32)
-    fail("JWT signing key is weak/default/unset", set(secret) ? "use a random ≥32-char JWT_SECRET or an RSA keypair" : "JWT_SECRET unset → falls back to the public dev secret");
+    fail("JWT signing key is weak/default/unset", set(secret) ? "use a random ≥32-char JWT_SECRET or an RSA keypair" : "no JWT key → sign-in is off and the server refuses to boot in production");
   else pass("JWT_SECRET set (HS256)", `${secret.length} chars`);
 
   // 4. Supabase creds
@@ -71,6 +71,14 @@ export function runConfigChecks(env = process.env) {
   if (!set(psk)) warn("PAYSTACK_SECRET_KEY unset", "payments + webhook signature verification disabled");
   else if (/sk_test_/.test(psk)) fail("PAYSTACK_SECRET_KEY is a TEST key", "use the live key (sk_live_…) in production");
   else pass("PAYSTACK_SECRET_KEY set", psk.startsWith("sk_live_") ? "live key" : "set");
+
+  // 8b. Shared secrets that have no default — unset means that feature is off, never open
+  set(env.INTERNAL_SECRET)
+    ? pass("INTERNAL_SECRET set", "video worker, scheduler ticks and /internal/* are callable")
+    : warn("INTERNAL_SECRET unset", "video-worker callbacks, scheduler ticks and /internal/* answer 503");
+  (set(env.OAUTH_STATE_SECRET) || set(env.COOKIE_SECRET))
+    ? pass("OAuth state key set")
+    : warn("OAUTH_STATE_SECRET unset", "connecting meeting/streaming and school social accounts is off");
 
   // 9. Frontend redirect URLs from env (not hardcoded hosts)
   const urls = { FRONTEND_URL: env.FRONTEND_URL, INSTRUCTOR_URL: env.INSTRUCTOR_URL || env.INSTRUCTOR_FRONTEND_URL, SCHOOL_FRONTEND_URL: env.SCHOOL_FRONTEND_URL, ADMIN_FRONTEND_URL: env.ADMIN_FRONTEND_URL };

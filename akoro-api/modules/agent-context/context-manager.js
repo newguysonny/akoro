@@ -26,6 +26,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MANIFEST_VERSION, PENDING_ADOPTION, SETS } from "./manifest.mjs";
+import { overrideFor } from "./overrides.js";
 
 const WORKSPACE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../akoro-agent");
 
@@ -53,7 +54,14 @@ function workspacePath(relative) {
   return resolved;
 }
 
-async function loadFile(relative, { required = false } = {}) {
+async function loadFile(relative, { required = false, defaults = false } = {}) {
+  // An admin's override of this part (Phase 18 item 7) wins over the file —
+  // only once the boot installed a store (overrides.js); never in tests. It
+  // is never cached here: the override cache owns its own short TTL.
+  if (!defaults) {
+    const override = await overrideFor(relative);
+    if (override) return { file: relative, content: override.text, overridden: true };
+  }
   if (cache.has(relative)) return cache.get(relative);
   const resolved = workspacePath(relative);
   let content;
@@ -125,6 +133,15 @@ export async function loadRaw(relative) {
 }
 
 /**
+ * The shipped default of one part — its file's exact bytes, never an
+ * override. The admin prompt page diffs against it.
+ */
+export async function loadDefaultRaw(relative) {
+  const entry = await loadFile(relative, { required: true, defaults: true });
+  return entry.content;
+}
+
+/**
  * contextVersion (D8): a short content hash over every file referenced by the
  * manifest. Boot logs it; doctrine changes become observable. Deterministic:
  * same files + manifest version → same hash.
@@ -133,7 +150,7 @@ export async function contextVersion() {
   const referenced = [...new Set(Object.values(SETS).flatMap((definition) => [...definition.files]))].sort();
   const parts = [];
   for (const relative of referenced) {
-    const entry = await loadFile(relative, { required: true });
+    const entry = await loadFile(relative, { required: true, defaults: true });
     parts.push(`${relative}:${createHash("sha256").update(entry.content).digest("hex").slice(0, 16)}`);
   }
   return createHash("sha256").update(`v${MANIFEST_VERSION}\n${parts.join("\n")}`).digest("hex").slice(0, 12);
@@ -154,7 +171,7 @@ export async function preflight({ sets = SETS } = {}) {
     let present = 0;
     for (const file of definition.files) {
       try {
-        const entry = await loadFile(file, { required: false });
+        const entry = await loadFile(file, { required: false, defaults: true });
         if (!entry) { problems.push(`${name}: missing file ${file}`); continue; }
         bytes += entry.content.length;
         present += 1;

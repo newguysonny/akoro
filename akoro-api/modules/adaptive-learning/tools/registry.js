@@ -16,6 +16,7 @@
  */
 
 import { bindRegistry } from "../../agent-runtime/tools.js";
+import { RULES } from "../../agent-runtime/actionBasis.js";
 
 // Study Prep's levels (the runtime adds `persona`; Study Prep has none yet).
 export const TOOL_LEVELS = Object.freeze(["read", "propose", "execute"]);
@@ -135,5 +136,8 @@ export function buildRegistry({ readTools, harness, learnerId, sessionId, conten
     definitions: TOOL_DEFINITIONS, args: TOOL_ARGS, harnessOnly: HARNESS_ONLY_OPERATIONS, handlers,
     // content.search stays a definition but is offered only once enabled (Decision 14).
     isEnabled: (name) => name !== "content.search" || contentSearchEnabled,
+    // The agent's own moves (Phase 18 item 6): inferred, allowed by Study Prep's workflow policy —
+    // the learner started the session and confirms the plan card; coins and gates stay the harness's.
+    basis: { basis: "inferred", rule: RULES.workflow("study_prep") },
   });
 }

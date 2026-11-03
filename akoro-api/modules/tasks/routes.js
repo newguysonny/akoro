@@ -422,9 +422,13 @@ router.post("/:taskId/trigger", async (req, res) => {
 });
 
 // ─── GET /api/tasks/:taskId/runs ──────────────────────────────────────────────
+// Runs and outputs are the task creator's, like the task itself: these two
+// used to answer for any task id (Phase 15 item 6).
 router.get("/:taskId/runs", async (req, res) => {
   try {
-    const runs = await TaskRunDB.listByTask(req.params.taskId);
+    const task = await TaskDB.findById(req.params.taskId);
+    if (!task || task.creator_id !== req.user.id) return res.status(404).json({ error: "Task not found" });
+    const runs = await TaskRunDB.listByTask(task.id);
     res.json({ runs });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -434,7 +438,9 @@ router.get("/:taskId/runs", async (req, res) => {
 // ─── GET /api/tasks/:taskId/outputs ──────────────────────────────────────────
 router.get("/:taskId/outputs", async (req, res) => {
   try {
-    const outputs = await TaskOutputDB.listByTask(req.params.taskId);
+    const task = await TaskDB.findById(req.params.taskId);
+    if (!task || task.creator_id !== req.user.id) return res.status(404).json({ error: "Task not found" });
+    const outputs = await TaskOutputDB.listByTask(task.id);
     res.json({ outputs });
   } catch (err) {
     res.status(500).json({ error: err.message });

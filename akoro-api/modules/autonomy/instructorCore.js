@@ -16,7 +16,7 @@ const DAY = 86_400_000;
 const clip = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 const when = (iso) => new Date(iso).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "Africa/Lagos" });
 
-export function instructorProposals(activities = [], { now = new Date() } = {}) {
+export function instructorProposals(activities = [], { now = new Date(), limit = INSTRUCTOR_LIMITS.PER_RUN } = {}) {
   const out = [];
   const t = now.getTime();
   for (const a of activities) {
@@ -63,7 +63,7 @@ export function instructorProposals(activities = [], { now = new Date() } = {}) 
         preview: { kind: "next", activity: title, done, total: targets.length } });
     }
   }
-  return out.sort((x, y) => y.urgency - x.urgency).slice(0, INSTRUCTOR_LIMITS.PER_RUN).map(({ urgency, ...p }) => p);
+  return out.sort((x, y) => y.urgency - x.urgency).slice(0, limit).map(({ urgency, ...p }) => p);
 }
 
 /** The next syllabus topic after this one, else a practice on the same topic (they review the draft either way). */

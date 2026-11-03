@@ -20,6 +20,7 @@ import TeachAgentModal   from '../components/teaching/TeachAgentModal.jsx';
 import ConceptTrackerModal from '../components/teaching/ConceptTrackerModal.jsx';
 import AdaptiveControlsModal from '../components/teaching/AdaptiveControlsModal.jsx';
 import DecaySessionModal from '../components/teaching/DecaySessionModal.jsx';
+import DecayReviewModal from '../components/teaching/DecayReviewModal.jsx';
 import ConfigModal       from '../components/teaching/ConfigModal.jsx';
 import AssessmentRoom     from '../components/assessment/AssessmentRoom.jsx';
 import ExamPrepConfidenceModal from '../components/assessment/ExamPrepConfidenceModal.jsx';
@@ -53,6 +54,7 @@ import { useAgentProfile } from '../hooks/useAgentProfile.js';
 import { useSessionAPI }   from '../hooks/useSessionAPI.js';
 import { useDecayAlerts }  from '../hooks/useDecayAlerts.js';
 import { useBattleAPI }    from '../hooks/useBattleAPI.js';
+import { openFor, workflowIdFromSearch } from '../lib/workflowRoute.js';
 
 
 export default function LearnerDashboard() {
@@ -185,6 +187,41 @@ export default function LearnerDashboard() {
     setTab("battles");
     setLiveBattleModal((open) => (open?.id === id ? open : { id, status: "live" }));
   }, [location.search]);
+
+  // A link straight to one workflow (?workflow=<id>, Grand Plan §13.1): the
+  // server's descriptor names what opens — the modal or tab, with the
+  // workflowId — and the app follows it; it never guesses from a session's
+  // shape. The param is dropped once followed, so a later render can't reopen it.
+  useEffect(() => {
+    const workflowId = workflowIdFromSearch(location.search);
+    if (!workflowId) return undefined;
+    let gone = false;
+    const rest = new URLSearchParams(location.search);
+    rest.delete("workflow");
+    const left = rest.toString();
+    apiGet(`/api/workflows/dashboard/${workflowId}`)
+      .then((d) => {
+        if (gone) return;
+        const open = openFor(d?.workflow);
+        if (!open) return;
+        if (open.kind === "teaching") {
+          setTeachSession({ topic: open.topic, subject: open.subject, mode: open.mode, sessionId: open.sessionId, workflowId: open.workflowId, agentName: agentProfile.name, agentEmoji: agentProfile.emoji });
+        } else if (open.kind === "decay_review") {
+          setDecaySession({ id: null, topic: open.topic, subject: open.subject, workflowId: open.workflowId });
+        } else if (open.kind === "assessment") {
+          setAssessSession({ topic: open.topic, subject: open.subject, workflowId: open.workflowId, assessmentId: open.assessmentId });
+        } else if (open.kind === "battle") {
+          navigate(`/app?tab=battles&battle=${encodeURIComponent(open.battleId)}`, { replace: true });
+          return;
+        } else if (open.kind === "agent_chat") {
+          navigate("/app?tab=agent", { replace: true });
+          return;
+        }
+        navigate(left ? `/app?${left}` : "/app", { replace: true });
+      })
+      .catch((e) => { console.warn("[workflow] could not open", workflowId, e?.message || e); });
+    return () => { gone = true; };
+  }, [location.search]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── API-driven state ─────────────────────────────────────────────────────
   const [sessions,     setSessions]     = useState([]);
@@ -1348,12 +1385,11 @@ export default function LearnerDashboard() {
 
         {/* DecaySessionModal — triggered from agent alerts tab */}
         {decaySession && (
-          <DecaySessionModal
-            onMinimize={minimizeDecaySession}
-            alert={decaySession}
-            agentProfile={agentProfile}
-            onClose={() => { setDecaySession(null); loadAgentSessions(); }}
-          />
+          // Phase 8: a Review is the Decay Review workflow (check → recall → retest → re-teach); a parked
+          // live decay session still reopens in its own modal.
+          decaySession.resumeSessionId
+            ? <DecaySessionModal onMinimize={minimizeDecaySession} alert={decaySession} agentProfile={agentProfile} onClose={() => { setDecaySession(null); loadAgentSessions(); }} />
+            : <DecayReviewModal alert={decaySession} agentProfile={agentProfile} onMinimize={minimizeDecaySession} onClose={() => { setDecaySession(null); loadAgentSessions(); }} />
         )}
 
         {selectedChallenge && <ChallengeModal challenge={selectedChallenge} onAccept={handleAcceptChallenge} onDecline={handleDeclineChallenge} onClose={()=>setSelectedChallenge(null)}/>}
@@ -1363,6 +1399,8 @@ export default function LearnerDashboard() {
             topic={assessSession.topic}
             subject={assessSession.subject}
             objectives={assessSession.objectives || []}
+            workflowId={assessSession.workflowId || null}
+            assessmentId={assessSession.assessmentId || null}
             onClose={() => setAssessSession(null)}
           />
         )}

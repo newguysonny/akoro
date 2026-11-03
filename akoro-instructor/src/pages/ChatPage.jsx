@@ -1129,7 +1129,7 @@ export default function ChatPage() {
 
       {innerTab === 'tasks' && (
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: isMobile ? 12 : 16 }}>
-          <PageEmbed><TasksTab /></PageEmbed>
+          <PageEmbed><TasksTab onChat={() => setInnerTab('chat')} /></PageEmbed>
         </div>
       )}
       {innerTab === 'stats' && <AgentStatsPanel agentName={agentName} agentLevel={agentLevel} isMobile={isMobile} />}

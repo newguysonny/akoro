@@ -223,7 +223,15 @@
     "2026-agent-knowledge-retention.sql",
     "2026-study-prep-agent-check.sql",
     "2026-workflow-engine.sql",
-    "2026-search-text-fallback.sql"
+    "2026-search-text-fallback.sql",
+    "2026-practice-workflow.sql",
+    "2026-agent-action-basis.sql",
+    "2026-school-struggle-support-views.sql",
+    "2026-proactive-kind-modes.sql",
+    "2026-outbox.sql",
+    "2026-agent-reply-ratings.sql",
+    "2026-agent-prompt-overrides.sql",
+    "2026-syllabus-imports.sql"
   ],
   "demo": [
     "2026-seed-school-passwords.sql",

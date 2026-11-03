@@ -121,8 +121,12 @@ export class StudentAgent {
       recentHistory,
     });
 
+    // The teaching agent's choice for this reply (Phase 6, teaching-session/controller.js): a move, and maybe the concept to aim it at.
+    const turnMove = teachingContext?.protegeMove
+      ? `\n\nThis reply, as the student: ${teachingContext.protegeMove}${teachingContext.focusConcept ? ` — about ${String(teachingContext.focusConcept).slice(0, 120)}` : ""}.`
+      : "";
     const messages = [
-      { role: "system", content: systemPrompt },
+      { role: "system", content: systemPrompt + turnMove },
       { role: "user",   content: humanMessage },
     ];
 

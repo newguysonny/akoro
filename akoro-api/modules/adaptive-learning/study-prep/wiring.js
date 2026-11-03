@@ -25,6 +25,7 @@ import { planReadyMessage } from "./planReady.js";
 
 export { planReadyMessage };
 import db from "../../../db.js";
+import { outsideAction, undoOutsideAction } from "../../../lib/outbox.js";
 import { createWorkflowEngine } from "../../workflows/engine.js";
 import { makeSupabaseWorkflowStore } from "../../workflows/store.js";
 import { publishLiveDeveloper } from "../../workflows/bus.js";
@@ -82,7 +83,19 @@ const makeAgentCheck = ({ questions, secondsPerQuestion } = {}) => ({
     const { checkResults } = await import("../../battle/agentCheck.js");
     return checkResults(battleId);
   },
+  /** Recovery (Phase 18 item 5): the check battle an interrupted start already made for this topic. */
+  async find({ studyPrepTopicId, since }) {
+    const { data } = await db.from("battles").select("id, total_questions, title").eq("study_prep_topic_id", studyPrepTopicId)
+      .eq("battle_type", "check").gte("created_at", since).neq("status", "cancelled").order("created_at", { ascending: false }).limit(1);
+    const b = data?.[0];
+    return b ? { battleId: b.id, placed: b.total_questions, title: b.title } : null;
+  },
 });
+/** Outside steps journaled in the outbox (lib/outbox.js): done once, resumed after a restart. */
+const steps = {
+  once: (spec) => outsideAction(spec),
+  undo: (key) => undoOutsideAction(key),
+};
 const agentCheck = makeAgentCheck();
 
 /** The protégé's messages: one chat thread per Study Prep session, carrying the battle to watch. */
@@ -135,12 +148,23 @@ export const teachingHandoff = () => (_handoff ||= makeTeachingHandoff({
     if (error) throw error;
     return data || [];
   },
+  // Approved before `beforeIso` with no session row yet: a step a restart cut off (resumed by the sweep).
+  async listStalled(beforeIso) {
+    const { data, error } = await workflowRows().select("*").eq("workflow_type", "teaching").eq("state", "scheduled")
+      .is("metadata->>adaptiveSessionId", null).lte("metadata->>approvedAt", beforeIso).limit(10);
+    if (error) throw error;
+    return data || [];
+  },
   studyPrep: {
     openWake: openRunMessage,
     confirmTeachBack: ({ sessionId, learnerId, topicId }) => getHarness().confirmTeachBack({ sessionId, learnerId, topicId }),
     // start_teaching_session's row: an ordinary teaching session in the dashboard's list, with one
     // opening note (so the list offers it to continue, and the modal opens it by id).
     async createSessionRow({ learnerId, workflowId, topic, subject, focus }) {
+      // Check what already happened (Phase 18 item 5): a resumed approval reuses the row it made.
+      const { data: made } = await db.schema("edu").from("adaptive_sessions").select("id")
+        .eq("student_id", learnerId).eq("objectives->studyPrep->>workflowId", String(workflowId)).limit(1);
+      if (made?.[0]?.id) return made[0].id;
       const what = focus.length ? ` — teach me ${focus.map((f) => f.toLowerCase()).join(" and ")}` : "";
       const at = new Date().toISOString();
       const { data, error } = await db.schema("edu").from("adaptive_sessions").insert({
@@ -298,7 +322,7 @@ export async function backfillStudyPrepWorkflows({ limit = 200 } = {}) {
 }
 
 export function getHarness() {
-  return createHarness({ store, topicWorkflow, syllabus,
+  return createHarness({ store, topicWorkflow, syllabus, steps,
     ...(agentCheckEnabled() ? { agentCheck, protege, checkRun: checkRunOrNull() } : {}),
     ...(workflowEngineEnabled() ? { workflowMirror: workflowMirror() } : {}) });
 }
@@ -308,7 +332,7 @@ export function getHarness() {
  * gate's scenario (a test learner), never for a learner's request.
  */
 export function getWorkflowHarness() {
-  return createHarness({ store, topicWorkflow, syllabus, ...(agentCheckEnabled() ? { agentCheck, protege, checkRun: agentCheckRun() } : {}), workflowMirror: workflowMirror() });
+  return createHarness({ store, topicWorkflow, syllabus, steps, ...(agentCheckEnabled() ? { agentCheck, protege, checkRun: agentCheckRun() } : {}), workflowMirror: workflowMirror() });
 }
 
 /**
@@ -317,7 +341,7 @@ export function getWorkflowHarness() {
  * `questions` / `secondsPerQuestion` shorten the battle for a gate run.
  */
 export function getAgentCheckHarness({ questions, secondsPerQuestion } = {}) {
-  return createHarness({ store, topicWorkflow, syllabus, agentCheck: makeAgentCheck({ questions, secondsPerQuestion }), protege,
+  return createHarness({ store, topicWorkflow, syllabus, steps, agentCheck: makeAgentCheck({ questions, secondsPerQuestion }), protege,
     checkRun: agentCheckRun(), workflowMirror: workflowMirror() });
 }
 

@@ -20,6 +20,7 @@ import { SCENARIOS } from "./scenarios/index.js";
 import { startRun } from "./runner.js";
 import { resolveAccount, realUserWritesEnabled, PolicyError, TARGET } from "./policy.js";
 import { refusal, ownerNotice, firstName, MAX_PER_ACCOUNT_PER_DAY } from "./realUserRules.js";
+import { basisColumns, basisOfRow } from "../agent-runtime/actionBasis.js";
 
 const edu = () => db.schema("edu");
 const TABLE = "verify_real_user_runs";
@@ -148,6 +149,8 @@ export async function startRealUserRun({ admin, account: handle, scenario, reaso
   const { data: row, error } = await edu().from(TABLE).insert({
     admin_id: admin?.id || null, admin_label: String(admin?.label || "admin").slice(0, 80), account_id: account.id,
     scenario, reason: String(reason).trim().slice(0, 500), status: "approved", expires_at: new Date(Date.now() + APPROVAL_TTL_MS).toISOString(),
+    // Asked or inferred (Phase 18 item 6): an admin asked for this run, by name, with a reason.
+    ...basisColumns({ basis: "explicit" }),
   }).select("*").single();
   if (error) throw httpError(503, `couldn't record the approval: ${error.message}`);
   if (!(await claimApproval(row.id))) throw httpError(409, "The approval was already used or expired.");
@@ -182,5 +185,6 @@ export async function listRealUserRuns({ limit = 30, id = null } = {}) {
     account: byId.get(r.account_id) ? { username: byId.get(r.account_id).username, name: byId.get(r.account_id).full_name, role: byId.get(r.account_id).role } : null,
     runId: r.run_id, verdict: r.verdict, cleanupOk: r.cleanup_ok, residue: r.residue, notified: r.notified,
     createdAt: r.created_at, startedAt: r.started_at, finishedAt: r.finished_at,
+    ...basisOfRow(r, { basis: "explicit" }),
   }));
 }

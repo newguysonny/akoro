@@ -38,6 +38,7 @@ import {
 } from "./middleware/security.js";
 
 import config                     from "./config/index.js";
+import { requireSharedSecret }    from "./lib/safeCompare.js";
 import { runConfigChecks }         from "./lib/preflightChecks.js";
 import { runWithRouteUsage } from "./lib/usageMeter.js";
 import { schoolBillTo }            from "./lib/coins.js";
@@ -479,18 +480,13 @@ app.get("/ready", (_req, res) =>
 // GET /internal/preflight — the SECURITY_CHECKLIST §1 config-blocker gate as an
 // endpoint (same checks as `npm run preflight`). A posture report is sensitive
 // (it names what's misconfigured), so it is NOT public: it requires the
-// x-internal-secret header (same guard as the worker-callback endpoints). In dev
-// (no INTERNAL_SECRET set) it's open for convenience. Returns 200 when all
-// blockers pass, 503 when any fail — so an uptime monitor / deploy step can gate.
+// x-internal-secret header (same guard as the worker-callback endpoints). With
+// INTERNAL_SECRET unset it answers 503 — off, never open (Phase 15 item 4).
+// Returns 200 when all blockers pass, 503 when any fail — so an uptime
+// monitor / deploy step can gate.
 // GET /internal/egress — the per-route answer to "what is eating the
-// bandwidth". Same guard as preflight: x-internal-secret, or dev when no
-// secret is configured.
-app.get("/internal/egress", (req, res) => {
-  const secret = config.internalSecret;
-  const authorized = secret
-    ? req.headers["x-internal-secret"] === secret
-    : config.isDev;
-  if (!authorized) return res.status(403).json({ success: false, message: "Forbidden" });
+// bandwidth". Same guard as preflight.
+app.get("/internal/egress", requireSharedSecret("INTERNAL_SECRET"), (req, res) => {
   res.json({
     since: egress.since,
     totalBytes: egress.totalBytes,
@@ -503,12 +499,7 @@ app.get("/internal/egress", (req, res) => {
       .slice(0, 30),
   });
 });
-app.get("/internal/preflight", (req, res) => {
-  const secret = config.internalSecret;
-  const authorized = secret
-    ? req.headers["x-internal-secret"] === secret
-    : config.isDev;   // no secret configured → allow only in dev
-  if (!authorized) return res.status(403).json({ success: false, message: "Forbidden" });
+app.get("/internal/preflight", requireSharedSecret("INTERNAL_SECRET"), (req, res) => {
   const result = runConfigChecks(process.env);
   res.status(result.ok ? 200 : 503).json({
     ready: result.ok, instance: config.instanceId, env: config.nodeEnv, ...result,
@@ -844,6 +835,13 @@ if (process.env.REDIS_URL && !skipJob("session notifier")) {
     .then((m) => { m.startSessionNotifier(); console.log("[sessionNotifier] worker started at boot"); })
     .catch((e) => console.error("[sessionNotifier] failed to start:", e.message));
 }
+// Store first, send after (Phase 18 item 5): the outbox's clock retries failed
+// sends with backoff and resumes what a restart left. Postgres only — no Redis.
+if (!skipJob("outbox")) {
+  import("./lib/outbox.js")
+    .then((m) => { m.startOutbox(); console.log("[outbox] clock started (every 15 s)"); })
+    .catch((e) => console.error("[outbox] failed to start:", e.message));
+}
 if (process.env.REDIS_URL && !skipJob("deferred jobs")) {
   import("./lib/deferredJobs.js")
     .then((m) => { m.startDeferredRelease(); console.log("[deferred-jobs] release clock started (every minute)"); })
@@ -987,6 +985,11 @@ if (!skipJob("routine scheduler")) startRoutineScheduler();
     process.exit(1);
   }
   console.log(`[context-layer] ok v${contextLayer.version} — ${contextLayer.sets.length} sets, manifest v${contextLayer.manifestVersion}`);
+  // Admin-edited prompt parts (Phase 18 item 7): from now on a part with an
+  // override loads the admin's text (30-second cache; AGENT_PROMPT_OVERRIDES=off
+  // turns them all off). The preflight above checked the shipped defaults.
+  const { installPromptOverrides } = await import("./modules/agent-context/override-store.js");
+  if (installPromptOverrides()) console.log("[context-layer] prompt overrides on");
 }
 
 httpServer.listen(config.server.port, config.server.host, () => {
@@ -1016,6 +1019,7 @@ httpServer.listen(config.server.port, config.server.host, () => {
 [ENDPOINTS]
     /api/profiles/instructor/students    global student list
     /api/profiles/teacher/invite         magic invite link
+    /api/profiles/invite/:token          invite preview (public) · POST /invite/redeem joins
     /api/profiles/teacher/students/import CSV bulk import
     /api/profiles/students/:id           edit + message student
     /api/battle/instructor/stats         battle dashboard stats

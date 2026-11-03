@@ -175,7 +175,7 @@ export default function RealAccountChecksPage() {
                         <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: MUTED }}>{when(r.createdAt)}</td>
                         <td style={{ padding: '10px 12px', color: INK }}>{r.account ? <>{r.account.name || r.account.username}<div style={{ fontSize: 11, color: MUTED2 }}>@{r.account.username}</div></> : '—'}</td>
                         <td style={{ padding: '10px 12px', color: INK }}>{s ? s.what : r.scenario}</td>
-                        <td style={{ padding: '10px 12px', color: MUTED, maxWidth: 260 }}>{r.adminLabel}<div style={{ fontSize: 12, color: MUTED2, overflowWrap: 'anywhere' }}>{r.reason}</div></td>
+                        <td style={{ padding: '10px 12px', color: MUTED, maxWidth: 260 }}>{r.adminLabel}<div style={{ fontSize: 12, color: MUTED2, overflowWrap: 'anywhere' }}>{r.reason}</div>{r.basis && <div style={{ fontSize: 11, color: MUTED2, marginTop: 4 }} title="Asked or inferred (Phase 18)">{r.basis === 'inferred' ? `Inferred · ${r.rule || 'no rule'}` : 'Asked'}</div>}</td>
                         <td style={{ padding: '10px 12px' }}>{statusPill(r)}{r.runId && <div style={{ fontSize: 11, color: MUTED2, marginTop: 4 }} title={r.runId}>run {r.runId.slice(0, 8)}</div>}</td>
                         <td style={{ padding: '10px 12px' }}>
                           {r.cleanupOk === true ? <span style={{ color: GREEN, display: 'inline-flex', gap: 4, alignItems: 'center' }}><CheckCircle2 size={14} /> Yes</span>

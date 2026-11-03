@@ -9,7 +9,7 @@ import SessionChatView from './SessionChatView.jsx';
 import WhiteboardModal from './WhiteboardModal.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
-function DecaySessionModal({ alert, onClose, onMinimize, agentProfile }) {
+function DecaySessionModal({ alert, onClose, onMinimize, agentProfile, reviewWorkflowId = null }) {
   // Hold the activity lock so an auto-reload can't interrupt a decay session.
   useEffect(() => acquireActivityLock(), []);
   // Keep the screen awake through the revision session (no-op where the
@@ -72,6 +72,8 @@ function DecaySessionModal({ alert, onClose, onMinimize, agentProfile }) {
         subject,        topic,
         mode:           resumeFailed && parkedSid ? "continuation" : "decay",
         ...(resumeFailed && parkedSid ? { sessionId: parkedSid } : { notificationId: alert.id }),
+        // The re-teaching step of a Decay Review (Phase 8): its end starts the review's last retest.
+        ...(reviewWorkflowId ? { decayReviewWorkflowId: reviewWorkflowId } : {}),
       });
 
       ws.on("connect", () => {

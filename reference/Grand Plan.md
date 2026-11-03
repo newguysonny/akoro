@@ -3080,8 +3080,22 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   fallback on timeout/malformed, loop stops on reply, cap enforced,
   `propose_complete` rejected until objective met, phases unchanged vs
   today's gate tests (`state-machine.test.mjs`, `runner.test.mjs` equivalents).
-- **Status: 🟡 partly built (2026-10-20), paused — we come back to it later.**
-  Built: a teaching session is a workflow of the engine
+- **Status (2026-11-01): ✅ built — `teaching.agent_turns` green on the sandbox.** Open (circle back): a run to full mastery, the full Scenario B chain.
+  Each turn is agent-driven (`teaching-session/controller.js`, policy in
+  `policy.js`): the fixed pre-steps (load state, observe evidence), then the
+  teaching agent — ≤3 decisions, 8 s each — reads the state, picks a strategy
+  (cap 2), sets a coaching focus, then ONE reply: `protege.respond` in a move
+  (teach_agent) or `guide.teach` in a move (learn_with_guide, NaNa replies,
+  the protégé is never called); `teaching.propose_complete` is accepted only
+  when the gate is at MASTERY with every part verified (then the session ends
+  itself); `teaching.propose_pause`. Invalid / slow / missing → the fallback
+  move from the evidence (`decision.fallback`, audited on the workflow). The
+  post-steps (assess, persist, record, coach, gate) always run. §9.5 bounds:
+  60 turns, 2 strategy changes → bounded end. The modal's guide chat runs on
+  the live session (`set_teaching_mode`, `teacher_message {mode}`,
+  `guide_reply_token`) and shows a session that ended itself.
+  `AKORO_TEACHING_AGENT=off` keeps the fixed sequence for teach mode.
+  Earlier (2026-10-20): a teaching session is a workflow of the engine
   (`teaching-session/workflow.js`: proposed → scheduled → teaching_active ↔
   adapt_strategy → assessment → completed); `start_adaptive_session` with
   `workflowId` ties the live socket to it (owner and open state checked); its
@@ -3099,7 +3113,17 @@ planning loop's tool names, the double practice charge, empty syllabus data).
 - Outcome delivery → `StudyPrepController.onChildOutcome` → `retest_ready`.
 - Abandon/unmet handling.
 - **Exit:** Scenario B (critical end-to-end) passes, including app close and later resume.
-- **Status: 🟡 mostly built (2026-10-20), paused with Phase 6.** Built
+- **Status (2026-11-01): ✅ built — `studyprep.teaching_outcomes` green on the sandbox.** Open (circle back): the mid-session assessment tool (`teaching.request_assessment`).
+  Ended before any teaching → `abandoned` (reason learner_ended), no
+  teach-back, offered once more on the card (a fresh proposal; once), wake
+  `teaching_abandoned`. Ended with parts missing (the learner, or a bound) →
+  completed with `objectiveMet: false`, `objectiveEvidence`,
+  `recommendedNextAction` (`flag_gap` on a bound); the retest still unlocks;
+  wake `teaching_unmet`. `open_workflow { workflowId }` reopens a workflow
+  after closing the app (the live session → `resume_session`; otherwise a
+  continuation of its row) with its learner-visible events. Study Prep hears
+  each step as its own agent message — no cards pushed under the turns.
+  Earlier: **🟡 mostly built (2026-10-20).** Built
   (`study-prep/teaching-handoff.js`): an Agent Check below the pass mark with
   tries left offers a teaching session on its gaps (`learner.action_required`
   card, auto-approve after a minute); approve → `start_teaching_session` puts it
@@ -3116,6 +3140,15 @@ planning loop's tool names, the double practice charge, empty syllabus data).
 - `decay-review/controller.js`, tools, states; intervention reuses the teaching turn runtime.
 - `mode: "decay"` becomes a compatibility adapter.
 - **Exit:** Scenario C.
+- **Status: ✅ built, exit met (2026-11-02)** — `adaptive-learning/decay-review/`: `workflow.js`
+  (states §10.1, `DECAY_POLICY`, retention / recall outcome / hint ladder /
+  per-concept outcomes, all pure), `service.js` (start → a 3-question Agent Check
+  → retained or recall rounds with hints, scored server-side → retest → re-teach
+  through the decay teaching session → last retest; 2 retests at most),
+  `wiring.js`, routes at `/api/adaptive/decay-reviews`; the battle worker hands
+  each check's end to the review; `DecayReviewModal` shows it step by step.
+  Gate `decay.review_flow` green on the sandbox. Not done yet: moving the
+  retention functions out of `decayEngine.js` into the Education Engine.
 
 ### Phase 9 — Practice Workflow (proctored assessment)
 - `practice/controller.js` on top of `assessmentGateway.js`; `assessment_sessions.workflow_id`.
@@ -3123,6 +3156,20 @@ planning loop's tool names, the double practice charge, empty syllabus data).
 - Verdict computed in code; Sergeant's judgement normalised by the Education Engine; assessor model locked.
 - `AssessmentRoom` UI unchanged.
 - **Exit:** Scenario D and its integrity variants; existing assessment gateway tests green.
+- **Status: ✅ done (2026-11-02)** — `adaptive-learning/practice/`: `workflow.js` (one
+  `practice` definition shared with the Agent Check; `PRACTICE_POLICY`; score
+  with hint deductions, verdict, evidence rule and outcome in code),
+  `controller.js` (Sergeant judges with the assessor role; the agent picks next
+  question / one probe / a hint within policy, 3 picks, 8 s, fallback to the
+  generated order; each turn audited), `service.js` (run lifecycle, pause/resume
+  on socket drops, outcome, evidence only for a clean pass/fail). SergeantProctor
+  is split into judge/hint/probe/advance; `finalVerdict` only writes
+  `verdict_detail`. Migration `2026-practice-workflow.sql`
+  (`assessment_sessions.workflow_id`). Gates `practice.proctored_flow` and
+  `practice.integrity_flagged` green on the sandbox; termination is covered by the
+  contract test. Open: with browser-only signals the cheat probability peaks
+  near 0.41, so the 0.85 auto-terminate needs the proctor service (it fires only
+  when nearly every signal is on).
 
 ### Phase 10 — Learner model unification
 - Fold `decideNextAction` into Adaptive Learning Engine recommendations.
@@ -3142,6 +3189,13 @@ planning loop's tool names, the double practice charge, empty syllabus data).
 - Developer mode.
 - Model picker in the chat box (§7.11.5) behind `AI_MODEL_PICKER_ENABLED`.
 - **Exit:** UI acceptance checks in §18; Scenario K.
+- **Status (2026-11-02):** backends built and green on the sandbox: dashboard
+  descriptors + deterministic routes + modals open by `workflowId`
+  (`workflow.dashboard_descriptors`), the school struggles view for linked
+  learners (`school.struggles_scope`; reads `edu.learning_struggles` once Phase 4a
+  builds it), the model-picker flag and cost hints (`models.picker_resolution`), and
+  a shared `streamReducer`. Visible UI waits for preview approval. Open: tier lists
+  for the picker, `POST /api/teaching/workflows`.
 
 ### Phase 12 — Hardening and rollout
 - Failure tests §19; data migration §14.3; flag-by-flag rollout; observability
@@ -3202,23 +3256,53 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   2. **Payments router mounted twice** (`/api` and `/api/payments`), which makes
      7 `/api/payments/payments/…` copies. Check which webhook URL is set in the
      Paystack dashboard, then drop the extra mount.
-  3. **Course invite emails link to `akoro.app/join/…`, a page no app has.**
+  3. ✅ **Course invite emails link to `akoro.app/join/…`, a page no app has.**
      Either build a join page with redemption on a properly signed token
      (not `JWT_SECRET ?? "akoro-dev-secret"`), or remove invite sending
      (`POST /api/profiles/teacher/invite`).
-  4. **Shared secrets fail open when unset.** The video-worker routes
+     *Done 2026-11-01 (`dc578fe5`): built, since the instructor and school apps'
+     Invite Link tab call it — typed `course_invite` token from the auth signer
+     (no fallback, never a login), link `FRONTEND_URL/join/:token`, public
+     preview `GET /api/profiles/invite/:token`, signed-in
+     `POST /api/profiles/invite/redeem`, learner-app `/join/:token` page with
+     sign-in/up `?next=` back to it. Gate: `security.course_invite_join`.*
+  4. ✅ **Shared secrets fail open when unset.** The video-worker routes
      (`/api/stream/internal/*`) compare `x-internal-secret` to
      `INTERNAL_SECRET` with `!==`, so an unset secret lets everyone in (set on
      both servers today). Refuse when unset, as `admin/ticks.js` does, and
      compare with `timingSafeEqual`; the same constant-time compare for the
      Paystack signature checks.
-  5. **No hard-coded fallback secrets.** Remove the `JWT_SECRET ?? "akoro-dev-…"`
+     *Done 2026-11-01 (`d9186852`): `lib/safeCompare.js` (constant-time, unset →
+     refuse) used by the worker routes, ticks, `/internal/*`, all four Paystack
+     signature checks and the console/gate keys; the payout webhook (which threw
+     on `require()`) now verifies. Gate: `security.shared_secrets_fail_closed`.*
+  5. ✅ **No hard-coded fallback secrets.** Remove the `JWT_SECRET ?? "akoro-dev-…"`
      fallbacks that remain in code; a missing key stops the server (preflight
      already flags it).
+     *Done 2026-11-01 (`0cb4bff4`): no JWT default in auth, token peek or config
+     (no key → sign-in off; production refuses to boot without an RSA keypair or
+     `JWT_SECRET`); the OAuth state keys lost `"akoro-oauth-state"` (unset →
+     account connection off); preflight warns on `INTERNAL_SECRET` /
+     `OAUTH_STATE_SECRET`. Gate: `security.no_fallback_secrets`.*
+     *Owner, before/at deploy (Render env, prod and sandbox): a JWT key must be
+     set (RSA keypair or `JWT_SECRET`) — a non-production server without one
+     now has sign-in off instead of using the old default; `OAUTH_STATE_SECRET`
+     (or `COOKIE_SECRET`) for meeting/streaming/social account connection;
+     `FRONTEND_URL` = the learner app's URL for invite links. Then run the three
+     gate scenarios above with items 1–2's.*
   6. **Authorisation on the 1,094 signed-in routes.** Sign-in is checked
      everywhere; ownership is not yet audited route by route (a route that
      takes `:studentId`, `:userId` or a row id must check it belongs to the
      caller). Next pass of the audit.
+     *Audited 2026-11-01: 521 id-taking routes, 444 OK, 45 fixed
+     (`4da56c30` courses: content writes, student lists, transactions for
+     non-student roles, live-session participants, chat, Q&A, subtitles,
+     scheduler; `a186ca35` teacher rosters/students/messages, battle question
+     banks; `ccef161a` task runs, community members/analytics, training runs),
+     32 open — top: teaching history by session id (High, lead's area), battle
+     reads by id (needs a visibility rule, with F4), whole-class assignment to
+     another teacher's class, live-session join links. Table in the Security
+     Audit plan; gate `security.ownership_reads` (not yet run).*
 - **Exit:** items 1–5 fixed, each with a gate scenario on the sandbox; item 6
   audited with its findings listed here.
 
@@ -3272,11 +3356,17 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   rest summarised once by the model, marked), `intentStep.js` (kind,
   multi-step, missing — fail-open, `AGENT_INTENT_STEP=off` to disable); evals
   `agent-checks` (21 recorded cases, no model, all pass) and `intent` (16
-  cases incl. hand-offs, needs a model). **Not yet run against a model** —
-  waits for AI credit: the intent eval, the agent-tasks eval with the ledger
-  on, and the chat gate scenarios on the sandbox. Not done: an eval that runs
-  the chat loop itself with tools failing on purpose (the recovery rule is
-  covered by recorded cases only).
+  cases incl. hand-offs, needs a model).
+- **Status (2026-11-01):** ✅ run against DeepSeek on the sandbox (through the
+  gate's `evals.run`): Agent Chat checks 21/21, Intent reading 18/19 (19
+  cases now, incl. "what must be asked" — the step asks only for what has no
+  sensible default), Agent loop 8/8, and the Phase 17 benchmark — which runs
+  the chat loop itself with tools failing on purpose — 98/110. Chat gate
+  scenarios green on the sandbox. Fixed on the way: false "Correction" on
+  honest failures, over-asking from the intent step. Follow-ups shipped the
+  same day: approve card in the same reply, one change card, Approve/Confirm
+  and an admin's approval continue the chat as a real agent turn, open work
+  never stacked under the latest turn.
 
 ### Phase 17 — Akoro Agent Model (fine-tuned Qwen3-4B; started 2026-10-31)
 - **Goal.** A small model specialised in operating the Akoro agent runtime
@@ -3316,6 +3406,167 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   step's "not said yet" line tips it into asking), one empty knowledge map
   answer. The first run (88/110) also found a live bug: honest failures drew
   a false "Correction" (fixed in turnCheck.js).
+
+### Phase 18 — Attention and agent hygiene (from the DeepSeek Harness review, 2026-11-02)
+- **Source.** A study of DeepSeek Harness (`deepseek-ai/deepseek-harness`, a
+  coding-agent runtime) and its research prototype `dsh-superagent` (both MIT).
+  The runtime itself is not adopted (shell, sandboxes, LSP, computer use,
+  GitHub/Feishu sources); seven of its design rules are, each mapped onto what
+  Akoro already has.
+- **Principle (from their "Philosophy").** Take as little of a person's
+  attention as possible and give as much value as possible: the agent speaks
+  when someone must act or can use a result, confirms once, stays quiet while
+  it works, asks one structured question at a time, and reports failure as
+  failure. Every item below is judged by the attention it costs.
+- **Items, in order:**
+  1. **Watch-only mode for proactive work.** Each proactive proposal kind
+     (§7.16, `modules/autonomy/`, `readyKinds.js`) gets a mode: `off` ·
+     `observe` (default for a new kind: the cycle records "would have
+     proposed X, because…" — never shown to the learner, never charged to
+     their budget) · `live`. An admin page lists the observe records per kind
+     with real outcomes beside them; switching a kind to `live` is an admin
+     decision, recorded with who and when. Instructor proactive work (P13.7)
+     follows the same modes.
+     *Exit:* a gate scenario: an observe kind runs a cycle, records, shows
+     nothing to the learner and spends nothing; after the switch it delivers.
+  2. **One "needs you" list.** A learner's and an instructor's open work across
+     workflows, proposals, approvals and change cards, sorted by what it waits
+     for — an answer, a review, a decision, blocked, failed — worked out by
+     code from workflow states (`status_bucket`, `waiting_learner`,
+     pending confirmations), never from reply text. Categories are checkable,
+     mutually exclusive and cover every case; each row says whom it waits for
+     and carries its action; a healthy state takes no space; a count equals
+     the list it links to. Builds on the unified inbox (P13) and the dashboard
+     descriptors (Phase 11); no new card stacks (turns, not cards).
+     *Exit:* a contract test over every workflow state → exactly one category
+     (or none); a UI gate on learner and instructor dashboards.
+  3. **Loop guard and per-tool time limits.** In `modules/agent-runtime/`
+     (`loop.js`, `harness.js`) and the chat tool loop: the same tool with the
+     same arguments called again in a row → a short reminder in the next
+     observation to change approach or finish; at a second threshold, a
+     firmer one naming the tool and the count. Every tool declares a time
+     limit (default per family); a call past it returns a `timeout`
+     observation code (the recovery rule, Phase 16 step 3, takes it from
+     there) instead of stalling the turn.
+     *Exit:* unit tests for both thresholds and the timeout; a Phase 17
+     benchmark case with a repeating stub; no regression in the agent-loop
+     eval.
+  4. **Ratings on agent replies.** A thumbs up / down (with an optional
+     short reason) on each Agent Chat reply and each workflow summary. Ratings
+     never reach the model's context. They are stored per message and join
+     the Phase 17 episode as a human label next to the code-computed verdict
+     (opt-out rules and anonymisation as in `training/SPEC.md`); the admin
+     evals page shows the rate per surface and the worst-rated turns.
+     *Exit:* migration + route + UI; a gate scenario that a rating is saved,
+     is absent from the next prompt, and appears on the episode.
+  5. **Store first, send after.** Every outgoing message (push, email,
+     WhatsApp, chat notices from the agent) and every outside action a
+     workflow takes is written as stored work before it is attempted, then
+     sent with growing backoff, in order per conversation, and kept with its
+     outcome (sent · failed after N tries · dropped and why) so it is never
+     sent twice. Reuses the Postgres deferred-job queue (#83). After a
+     deploy or restart, a workflow interrupted mid-step resumes with a
+     recovery note: check what already happened (battle created? message
+     sent?) before repeating any outside action.
+     *Exit:* failure tests (§19): a send that fails twice then succeeds is
+     delivered once and in order; a restart mid-step repeats nothing.
+  6. **Asked or inferred, on every agent action.** Each side-effecting agent
+     action records its basis: `explicit` (the learner, instructor or admin
+     asked in this conversation) or `inferred` (the agent decided), with the
+     rule that allowed an inferred one (a consent, a proactive kind, a
+     workflow policy). An inferred action with no rule is refused by the
+     harness. Shown on the self-tooling audit, the approvals page (V4) and in
+     developer mode.
+     *Exit:* contract test — an inferred write without a rule is refused; the
+     audit row carries the basis on every write.
+  7. **Admin-editable prompts with "default updated".** An admin page over the
+     persona and runtime prompt files (`akoro-api/akoro-agent/`, the D4
+     single-source workspace): edit, see the full assembled prompt, history,
+     reset. An override records the default it was based on; when a deploy
+     changes that default, the part is marked "Default updated" with the
+     difference, and the admin keeps their text or takes the new one. Code-
+     enforced rules (gates, policies, verdicts, tool checks) are never
+     prompt text and are not editable here. Golden tests compare the
+     defaults, not the overrides.
+     *Exit:* an override survives a deploy; a changed default is flagged; the
+     persona golden tests stay green.
+- **Order of work:** 3 and 6 first (small, in the runtime), then 1 and 4,
+  then 2 (needs the Phase 11 descriptors), then 5, then 7.
+- **Status (2026-11-02):** backend for all seven built and green on the sandbox
+  (gates `agent.loop_guard_time_limits`, `agent.action_basis`,
+  `agent.kind_observe_then_live`, `outbox.delivery`, `workflow.needs_you_categories`,
+  `ratings.saved_not_in_prompt`, `prompts.override_flagged`; API suite 1763/1763).
+  Admin pages built (proactive kinds, prompts, ratings on Evals). Learner/instructor
+  UI for items 2 and 4 waits for preview approval. Open: Teaching, Decay and
+  Practice don't run on the shared agent loop yet (no loop guard / basis refusal
+  there); in-app rows, socket events and some check-battle starts are not on the
+  outbox; the agent-loop eval needs a model run.
+
+
+### Phase 19 — Code structure: modules, layers, guardrails (from the DeepSeek Harness review, 2026-11-02)
+- **Why.** Measured 2026-11-02: the API is 655 files / 131k lines; `adaptive-learning/`
+  alone is 26.5k lines in 119 files (50 loose at its top level) and imports from 30+
+  other areas; `chat.js` is 5,001 lines (41 functions, 30 routes); five route files
+  are over 2,000 lines (school routes and mgmt, battle, instructor, profiles). The
+  learner app has `SessionReaderModal` 2,181, `AgentChatTab` 1,757 and
+  `LearnerDashboard` 1,467 lines. The four frontends each keep their own `api.js`
+  (four versions, 262–500 lines), WebSocket hook, constants and Sign in / Sign up /
+  Wallet / Settings / Terms pages; 28 files are byte-identical copies. DeepSeek
+  Harness (~2,950 source files) stays navigable because every package lives in one
+  group with one owner and a README, business rules sit in their own package and
+  attach through registration, and scripts enforce the import graph.
+- **Rules adopted (DeepSeek's, mapped):**
+  - *One home per feature.* A module owns one domain and exposes one entry
+    (`index.js`); other modules import only that, never its internals.
+  - *One layer pattern per module:* `routes.js` (thin HTTP: auth, parse, respond) →
+    `service.js` (the use cases) → pure rules (`policy.js` / `workflow.js`, no db,
+    no model, no clock) → `store.js` (the db). Phase 8/9 code (`decay-review/`,
+    `practice/`) is the reference.
+  - *Generic code doesn't know business branches.* The chat loop, the agent runtime,
+    the workflow engine and the gateways carry orchestration; each domain registers
+    its tools / workflow / routes into them.
+  - *Shared state has an owner.* No new module-level singletons; existing ones
+    (`decayReview()`, `practiceRun()`, …) move behind the module entry.
+  - *Frontend by feature, not by file type:* `features/<name>/{components,hooks,
+    api,lib}`; features import only shared pieces and never each other; only the
+    app shell assembles them.
+- **Steps, in order:**
+  1. **Guardrails first** (they stop new sprawl before any move): contract tests for
+     (a) the import graph — no cycles between modules, no import of another
+     module's internals; (b) a size ratchet — new files ≤ 600 lines, today's
+     oversized files listed in an allowlist that may only shrink; (c) a README per
+     module (purpose, entry, how to extend, known limits). Same tests for the
+     learner app's feature folders.
+  2. **Split `adaptive-learning/`** into owned areas — `chat/`, the workflows
+     (`study-prep/`, `teaching-*`, `decay-review/`, `practice/` already exist),
+     `proactive/`, `learner-model/`, `personas/` — and move every loose file to
+     its owner (`git mv`, imports updated, no behaviour change).
+  3. **Break up `chat.js`:** routes, the turn pipeline, the tool loop, and the tool
+     handlers per domain (registered, not imported by name).
+  4. **The big route files** (school routes/mgmt, battle, instructor, profiles,
+     records, auth, self-study) to routes → service → rules → store, one module at
+     a time.
+  5. **One shared client core** for the four apps — API client, auth, WebSocket,
+     i18n, and the Sign in / Sign up / Wallet / Settings / Terms pages — through
+     the existing copy-and-check method (`design-system/sync.mjs`, extended from
+     the UI kit to all four apps, with its contract test).
+  6. **Learner app by feature,** starting with Agent Chat (message list, composer,
+     trace rows on `streamReducer`, inbox, Tasks) and the dashboard; the giant
+     modals split into data hooks + view pieces. Each screen is moved when its
+     approved UI work touches it anyway.
+  7. **Tidy the repo root:** ✅ `update18/` (a 7 Oct copy of the API and learner
+     app) moved to `archive/update18-2026-10-07/` (2026-11-02). `cf/` stays (Akoro's
+     cron ticker). `kpemu-*` (Vercel) and `lead-scout` (Railway) deploy from their
+     folders: they move to `archive/` or their own repositories only after their
+     hosting root directory is changed (owner action); nothing is deleted.
+- **Safety.** No behaviour changes; files move with `git mv`; the API suite, the
+  learner build and the gate's regression suite stay green after every step; one
+  module per commit.
+- **Exit:** the three guardrail tests on and green; no module cycle; no file over
+  the ratchet that isn't on the shrinking list; `chat.js` under 1,000 lines;
+  `adaptive-learning/` with no loose top-level files; the four apps on one client
+  core.
+- **Status (2026-11-02):** planned.
 
 ---
 

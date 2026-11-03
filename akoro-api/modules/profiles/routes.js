@@ -39,7 +39,8 @@ import bcrypt                             from "bcrypt";
 import crypto                             from "crypto";
 import db                                 from "../../db.js";
 import { notifyUser }                      from "../notify.js";
-import { authenticateToken, requireRole, endSession, invalidateCachedUser } from "../auth/routes.js";
+import { authenticateToken, requireRole, endSession, invalidateCachedUser,
+         signCourseInvite, verifyCourseInvite, INVITE_MAX_DAYS } from "../auth/routes.js";
 import multerLib                           from "multer";
 
 const asyncHandler = (fn) => (req, res, next) =>
@@ -1029,6 +1030,9 @@ router.patch("/me", authenticateToken, [
     console.error("[profiles/me PATCH]", updateError.message);
     return res.status(500).json({ success: false, message: "Failed to update profile" });
   }
+  // The auth cache holds full_name and onboarding_completed for 45 s: finishing onboarding and then
+  // reloading (or opening a second tab) read the stale "not onboarded" and sent the learner back to it.
+  invalidateCachedUser(userId);
 
   // Match GET /me's compatibility behaviour while additive columns are
   // rolling out. The base projection includes the values returned below,
@@ -1124,7 +1128,10 @@ router.get("/instructor/students", authenticateToken, requireRole(["instructor",
   const courseIds = (courses ?? []).map((c) => c.id);
   if (!courseIds.length) return res200(res, [], { total: 0 });
 
-  // Filter to specific course if requested
+  // Filter to specific course if requested — one of the caller's own: any
+  // course_id used to be trusted, which listed another course's students with
+  // their emails and phones (Phase 15 item 6).
+  if (course_id && !courseIds.includes(course_id)) return res403(res, "Not your course");
   const targetIds = course_id ? [course_id] : courseIds;
 
   let q = db.from("enrollments")
@@ -1164,12 +1171,17 @@ router.get("/instructor/students", authenticateToken, requireRole(["instructor",
 
 /**
  * POST /api/profiles/teacher/invite
- * Generate a signed invite link for a course.
- * Student opens link → auto-enrolled + account created if needed.
- * URL format: https://akoro.app/join/:token
+ * A signed invite link into the teacher's own courses (one or several). The
+ * learner opens it in the learner app at FRONTEND_URL/join/:token, signs in or
+ * up, and redeems it (POST /api/profiles/invite/redeem). The token is a typed
+ * `course_invite` signed by the auth module's key — it never signs anyone in.
  */
+const LEARNER_APP_URL = () => (process.env.FRONTEND_URL || "https://akoro.app").replace(/\/+$/, "");
+const escHtml = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
 router.post("/teacher/invite", authenticateToken, requireRole(["instructor", "admin"]), asyncHandler(async (req, res) => {
-  const { course_id, course_ids, expires_in_days = 7, send_to_emails = [] } = req.body;
+  const { course_id, course_ids, send_to_emails = [] } = req.body;
+  const expires_in_days = Math.min(INVITE_MAX_DAYS, Math.max(1, Math.round(Number(req.body.expires_in_days) || 7)));
 
   // Accept a single course_id (back-compat) or a course_ids array (multi-course).
   const requestedIds = [...new Set(
@@ -1191,20 +1203,14 @@ router.post("/teacher/invite", authenticateToken, requireRole(["instructor", "ad
   const courseIds   = owned.map((c) => c.id);
   const courseTitle = owned.length === 1 ? owned[0].title : `${owned.length} courses`;
 
-  const jwt = await import("jsonwebtoken");
-  const token = jwt.default.sign(
-    // Encode all course IDs; keep courseId for back-compat with older redeemers.
-    { courseIds, courseId: courseIds[0], teacherId: req.user.id, type: "course_invite" },
-    process.env.JWT_SECRET ?? "akoro-dev-secret",
-    { expiresIn: `${expires_in_days}d` }
-  );
-
-  const inviteUrl = `https://akoro.app/join/${token}`;
-  const course = { title: courseTitle };
+  const token     = signCourseInvite({ teacherId: req.user.id, courseIds }, expires_in_days);
+  const inviteUrl = `${LEARNER_APP_URL()}/join/${token}`;
 
   // Optionally send invite emails
+  const emails = (Array.isArray(send_to_emails) ? send_to_emails : [])
+    .filter((e) => typeof e === "string" && /^[^\s@]+@[^\s@]+$/.test(e)).slice(0, 50);
   const emailResults = [];
-  if (send_to_emails.length > 0) {
+  if (emails.length > 0) {
     try {
       const nodemailer = await import("nodemailer");
       const transport = nodemailer.default.createTransport({
@@ -1213,12 +1219,12 @@ router.post("/teacher/invite", authenticateToken, requireRole(["instructor", "ad
         auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
       });
       const { data: teacher } = await db.from("users").select("full_name").eq("id", req.user.id).single();
-      for (const email of send_to_emails) {
+      for (const email of emails) {
         await transport.sendMail({
           from:    `"Akoro Learning" <${process.env.SMTP_FROM_EMAIL ?? "noreply@akoro.app"}>`,
           to:      email,
-          subject: `You're invited to join "${course.title}" on Akoro`,
-          html:    `<div style="font-family:sans-serif;max-width:520px"><h2>You're invited! 🎓</h2><p><strong>${teacher?.full_name ?? "A teacher"}</strong> has invited you to join <strong>${course.title}</strong> on Akoro Learning.</p><a href="${inviteUrl}" style="display:inline-block;padding:12px 24px;background:#E8884A;color:#fff;border-radius:100px;text-decoration:none;font-weight:700">Join course →</a><p style="color:#999;font-size:12px;margin-top:16px">Link expires in ${expires_in_days} days.</p></div>`,
+          subject: `You're invited to join "${courseTitle}" on Akoro`,
+          html:    `<div style="font-family:sans-serif;max-width:520px"><h2>You're invited! 🎓</h2><p><strong>${escHtml(teacher?.full_name ?? "A teacher")}</strong> has invited you to join <strong>${escHtml(courseTitle)}</strong> on Akoro Learning.</p><a href="${escHtml(inviteUrl)}" style="display:inline-block;padding:12px 24px;background:#E8884A;color:#fff;border-radius:100px;text-decoration:none;font-weight:700">Join course →</a><p style="color:#999;font-size:12px;margin-top:16px">Link expires in ${expires_in_days} days.</p></div>`,
         });
         emailResults.push({ email, sent: true });
       }
@@ -1229,9 +1235,81 @@ router.post("/teacher/invite", authenticateToken, requireRole(["instructor", "ad
 
   res201(res, {
     invite_url:    inviteUrl,
-    course_title:  course.title,
+    course_title:  courseTitle,
     expires_in_days,
     emails_sent:   emailResults.filter((r) => r.sent).length,
+  });
+}));
+
+/** The invite's courses still owned by the teacher who signed it (a course handed on since drops out). */
+async function inviteCourses(invite) {
+  const { data } = await db.from("courses").select("id, title")
+    .in("id", invite.courseIds).eq("instructor_id", invite.teacherId);
+  return data ?? [];
+}
+
+/**
+ * GET /api/profiles/invite/:token — public: what the join page shows before
+ * sign-in (course titles, teacher name, expiry). Only what the teacher put in
+ * the link; an invalid, expired or non-invite token is 400.
+ */
+router.get("/invite/:token", asyncHandler(async (req, res) => {
+  const invite = verifyCourseInvite(req.params.token);
+  if (!invite) return res400(res, "Invalid or expired invite link");
+  const courses = await inviteCourses(invite);
+  if (!courses.length) return res400(res, "Invalid or expired invite link");
+  const { data: teacher } = await db.from("users").select("full_name").eq("id", invite.teacherId).maybeSingle();
+  res200(res, { courses, teacher_name: teacher?.full_name ?? null, expires_at: invite.expiresAt });
+}));
+
+/**
+ * POST /api/profiles/invite/redeem  { token }
+ * The signed-in learner joins every course in the invite. Idempotent: courses
+ * they are already active in are skipped and listed in already_enrolled.
+ */
+router.post("/invite/redeem", authenticateToken, asyncHandler(async (req, res) => {
+  const invite = verifyCourseInvite(req.body?.token);
+  if (!invite) return res400(res, "Invalid or expired invite link");
+  const userId = req.user.id;
+  if (userId === invite.teacherId) return res400(res, "This is your own invite link");
+  const courses = await inviteCourses(invite);
+  if (!courses.length) return res400(res, "Invalid or expired invite link");
+  const ids = courses.map((c) => c.id);
+
+  const { data: existingRows } = await db.from("enrollments")
+    .select("course_id, status").eq("user_id", userId).in("course_id", ids);
+  const activeSet = new Set((existingRows ?? []).filter((r) => r.status === "active").map((r) => r.course_id));
+  const toEnrol = ids.filter((id) => !activeSet.has(id));
+
+  for (const id of toEnrol) {
+    const { error } = await db.from("enrollments").upsert(
+      { user_id: userId, course_id: id, status: "active" },
+      { onConflict: "user_id,course_id" }
+    );
+    if (error) throw error;
+    try { await db.rpc("increment_course_students", { course_id_input: id }); } catch {}
+  }
+
+  const titles = courses.filter((c) => toEnrol.includes(c.id)).map((c) => c.title);
+  if (toEnrol.length) {
+    const label = titles.length === 1 ? `"${titles[0]}"` : `${titles.length} courses`;
+    const { data: student } = await db.from("users").select("full_name, email").eq("id", userId).maybeSingle();
+    try {
+      const { error: notifErr } = await db.from("notifications").insert([
+        { user_id: userId, type: "enrolled_in_course", title: `You're enrolled in ${label}`, content: "You joined via an invite link", related_id: toEnrol[0] },
+        { user_id: invite.teacherId, type: "student_enrolled", title: `${student?.full_name || student?.email || "A student"} joined`, content: `Joined ${label} via invite link`, related_id: toEnrol[0] },
+      ]);
+      if (notifErr) console.warn("[notify] invite-redeem insert failed:", notifErr.message);
+    } catch (e) {
+      console.warn("[notify] invite-redeem insert threw:", e.message);
+    }
+  }
+
+  res200(res, {
+    enrolled:         toEnrol.length > 0,
+    course_ids:       toEnrol,
+    course_titles:    titles,
+    already_enrolled: courses.filter((c) => activeSet.has(c.id)).map((c) => c.title),
   });
 }));
 
@@ -1365,6 +1443,23 @@ router.post("/teacher/students/import", authenticateToken, requireRole(["instruc
   });
 });
 
+/** Does this teacher teach this learner — an enrolment in one of their courses, or a seat in one of their classes? */
+async function teachesLearner(teacherId, userId) {
+  const { data: courses } = await db.from("courses").select("id").eq("instructor_id", teacherId);
+  const courseIds = (courses ?? []).map((c) => c.id);
+  if (courseIds.length) {
+    const { data: enrolled } = await db.from("enrollments").select("id")
+      .eq("user_id", userId).in("course_id", courseIds).limit(1);
+    if (enrolled?.length) return true;
+  }
+  const { data: rooms } = await db.from("classrooms").select("id").eq("teacher_id", teacherId);
+  const roomIds = (rooms ?? []).map((r) => r.id);
+  if (!roomIds.length) return false;
+  const { data: seat } = await db.from("classroom_students").select("id")
+    .eq("user_id", userId).in("classroom_id", roomIds).eq("status", "active").limit(1);
+  return !!seat?.length;
+}
+
 /**
  * PATCH /api/profiles/students/:userId
  * Teacher edits a student's details (name, phone, access level).
@@ -1402,6 +1497,9 @@ router.post("/students/:userId/message", authenticateToken, requireRole(["instru
   const { subject, message, channel = "in_app" } = req.body;
 
   if (!message?.trim()) return res400(res, "message is required");
+  // Only a learner this teacher actually teaches (Phase 15 item 6): this used to
+  // send an in-app message and a platform email to any account id.
+  if (req.user.role !== "admin" && !(await teachesLearner(req.user.id, userId))) return res403(res, "This student is not in your courses or classes");
 
   const { data: student } = await db.from("users").select("id, full_name, email").eq("id", userId).single();
   if (!student) return res404(res, "Student not found");

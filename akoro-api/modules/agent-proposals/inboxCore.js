@@ -3,6 +3,7 @@
  * merging both sources, refs, dismiss reasons, title normalisation.
  */
 import { READY } from "../autonomy/readyKinds.js";
+import { RULES } from "../agent-runtime/actionBasis.js";
 export const DISMISS_REASONS = Object.freeze(["not_useful", "wrong_time", "too_much", "already_doing", "other"]);
 export const reasonOf = (r) => (DISMISS_REASONS.includes(r) ? r : "other");
 export const normalizeTitle = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -19,6 +20,8 @@ export function mergeInbox({ suggestions = [], proposals = [] } = {}) {
       title: p.title, why: p.rationale || null, createdAt: p.created_at, expiresAt: p.expires_at || null,
       // What it prepared and what Yes does (§7.16.3): shown on the Suggestions card too.
       ...(p.preview ? { preview: p.preview } : {}), yes: READY[p.kind]?.yes || null, ...(READY[p.kind]?.cost ? { cost: READY[p.kind].cost } : {}),
+      // Asked or inferred (Phase 18 item 6): the agent's idea, and the proactive kind that allowed it.
+      basis: p.basis || "inferred", rule: p.basis_rule || RULES.proactive(p.kind),
     })),
   ].sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
   const seen = new Set();

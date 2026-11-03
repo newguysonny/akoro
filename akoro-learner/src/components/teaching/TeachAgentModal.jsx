@@ -76,7 +76,8 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
   const [connState,  setConnState]  = useState("connecting");
   const timerRef      = useRef(null);
   const wsRef         = useRef(null);
-  const sessionIdRef  = useRef(resumeSid);   // live session id — drives seamless resume on reconnect AND on minimize→restore
+  const sessionIdRef  = useRef(resumeSid);
+  const endedRef      = useRef(false);    // the session ended (by the learner, or by itself: every part taught / a limit)   // live session id — drives seamless resume on reconnect AND on minimize→restore
   // True the moment the learner minimizes: the unmount cleanup must NOT end
   // the server session then — a park keeps it resumable.
   const parkedRef     = useRef(false);
@@ -277,7 +278,19 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
   const guideLoadedRef  = useRef(false);
   const guideApi        = content?.guide || null;
   const guideOpening    = () => ({ role: "guide", text: t('teaching.guide_open').replace('{name}', guide.name) });
+  // A live teaching session takes the guide mode too (Phase 6, D24): NaNa teaches over the same session —
+  // her answers are evidence and the progress gate reads them. Without a live session (a document guide),
+  // the guide chat stays the reader's own (POST /api/records/guide).
+  const liveSession = () => !!(wsRef.current?.connected && sessionIdRef.current && !endedRef.current);
+  const patchPendingGuide = (patch) => setGuideMessages(prev => {
+    const next = [...prev];
+    const at = next.map((m) => m.pending).lastIndexOf(true);
+    if (at >= 0) next[at] = { ...next[at], ...patch };
+    return next;
+  });
   const toggleChatMode  = () => {
+    const nextMode = chatMode === "teach" ? "guide" : "teach";
+    if (liveSession()) wsRef.current.emit("set_teaching_mode", { mode: nextMode === "guide" ? "learn_with_guide" : "teach_agent" });
     setChatMode(m => (m === "teach" ? "guide" : "teach"));
     setGuideMessages(prev => prev.length ? prev : [guideOpening()]);
     // The learner's earlier guide lesson on this document, once.
@@ -312,6 +325,8 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
     setQuote(null);
     setGuideBusy(true);
     setGuideMessages(prev => [...prev, { role: "user", text: clean }, { role: "guide", text: "", pending: true }]);
+    // Live session: the turn runs on the server (evidence, gate); the reply streams on guide_reply_token.
+    if (liveSession()) { wsRef.current.emit("teacher_message", { message: clean, mode: "learn_with_guide" }); return; }
     const setReply = (patch) => setGuideMessages(prev => {
       const next = [...prev];
       const at = next.map((m) => m.pending).lastIndexOf(true);
@@ -355,6 +370,9 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
         // { recordId } | { contentKey } — the server checks access, then
         // grounds every turn in the passages most relevant to it.
         document:       config?.document || null,
+        // Opened from a dashboard descriptor (§13.1): the teaching workflow this
+        // session belongs to. The server checks it is this learner's and open.
+        ...((config?.workflowId || session?.workflowId) ? { workflowId: config?.workflowId || session?.workflowId } : {}),
       });
 
       ws.on("connect", () => {
@@ -469,9 +487,23 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       ws.on("student_token", (d) => setLiveStudent(prev => (prev || "") + (d?.token ?? d?.text ?? "")));
       // The guide's tip isn't shown as it streams: it arrives as ideas on the protégé's reply (turn_complete).
       ws.on("guide_token",   () => {});
-      ws.on("turn_complete", ({ blocks: newBlocks, currentPhase }) => {
+      // Guide mode on the live session: NaNa's reply streams into the guide chat.
+      ws.on("guide_reply_token", (d) => setGuideMessages(prev => {
+        const next = [...prev];
+        const at = next.map((m) => m.pending).lastIndexOf(true);
+        if (at >= 0) next[at] = { ...next[at], text: (next[at].text || "") + (d?.token ?? "") };
+        return next;
+      }));
+      ws.on("turn_complete", ({ blocks: newBlocks, currentPhase, teachingMode }) => {
         setLoading(false);
         clearLiveStream();
+        if (teachingMode === "learn_with_guide") {
+          const g = (newBlocks || []).find(b => b.type === "guide");
+          patchPendingGuide({ text: g?.text || "", citations: g?.citations || [], pending: false });
+          setGuideBusy(false);
+          ws.emit("get_state");
+          return;
+        }
         if (newBlocks?.length) {
           setBlocks(prev => [...prev, ...newBlocks]);
           // TTS only when the human used voice — modality mirrors input.
@@ -516,6 +548,16 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
             ? [{ type:"guide", agent:newGuideName, emoji:d.guideProfile?.emoji || "🧠", text:d.message }]
             : []),
         ]);
+      });
+      // The session ended itself (every part verified and the agent finished it, or a limit was reached).
+      ws.on("session_ended", (d) => {
+        endedRef.current = true;
+        setLoading(false); setGuideBusy(false);
+        if (d?.endedBy && d.endedBy !== "learner") {
+          setBlocks(prev => [...prev, { type: "session-complete", text: d.endedBy === "objective_met"
+            ? `Every part is taught — the session is complete.${d.summary?.xpEarned ? ` +${d.summary.xpEarned} XP earned.` : ""}`
+            : "This session has reached its limit — what you taught is saved. You can start another any time." }]);
+        }
       });
       ws.on("student_done", ()=>{});
       ws.on("guide_done",   ()=>{});
@@ -657,7 +699,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       // park_session ensured the DB row, and the disconnect grace window
       // keeps the orchestrator resumable — ending here would kill the very
       // session the Now-Studying bar is about to offer back.
-      if (!parkedRef.current) wsRef.current?.emit("end_session");
+      if (!parkedRef.current && !endedRef.current) wsRef.current?.emit("end_session");
       wsRef.current?.disconnect();
       clearInterval(timerRef.current);
     };

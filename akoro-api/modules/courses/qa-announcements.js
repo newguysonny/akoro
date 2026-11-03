@@ -15,6 +15,7 @@ import { body, query, validationResult }  from "express-validator";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { sendDirectNotification }         from "../../services/notificationService.js";
+import { canManageCourse }                from "./courseAccess.js";
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -226,13 +227,14 @@ const qaHandlers = {
   resolveQuestion: asyncHandler(async (req, res) => {
     const { data: question } = await db
       .from("questions")
-      .select("user_id, is_resolved")
+      .select("user_id, course_id, is_resolved")
       .eq("id", req.params.questionId)
       .single();
 
     if (!question) return res404(res, "Question not found");
 
-    const canResolve = question.user_id === req.user.id || ["instructor", "admin"].includes(req.user.role);
+    // The author, or this course's teacher (or an admin) — not every instructor (Phase 15 item 6).
+    const canResolve = question.user_id === req.user.id || await canManageCourse(req.user, question.course_id);
     if (!canResolve) return res403(res, "Only the question author or teacher can resolve this");
 
     const { data } = await db
@@ -251,13 +253,13 @@ const qaHandlers = {
   deleteQuestion: asyncHandler(async (req, res) => {
     const { data: question } = await db
       .from("questions")
-      .select("user_id")
+      .select("user_id, course_id")
       .eq("id", req.params.questionId)
       .single();
 
     if (!question) return res404(res, "Question not found");
 
-    const canDelete = question.user_id === req.user.id || ["instructor", "admin"].includes(req.user.role);
+    const canDelete = question.user_id === req.user.id || await canManageCourse(req.user, question.course_id);
     if (!canDelete) return res403(res, "Not authorised");
 
     await db.from("questions").delete().eq("id", req.params.questionId);

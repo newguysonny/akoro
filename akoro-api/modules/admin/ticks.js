@@ -8,18 +8,12 @@
 
 import { Router } from "express";
 import { runTick, listTicks } from "../../lib/cronTicks.js";
+import { requireSharedSecret } from "../../lib/safeCompare.js";
 
 const router = Router();
 
-const secret = (req, res, next) => {
-  if (!process.env.INTERNAL_SECRET) {
-    return res.status(503).json({ success: false, error: "INTERNAL_SECRET is not set — ticks are not callable." });
-  }
-  if (req.headers["x-internal-secret"] !== process.env.INTERNAL_SECRET) {
-    return res.status(403).json({ success: false, error: "Forbidden" });
-  }
-  next();
-};
+// Unset INTERNAL_SECRET → 503 (ticks not callable); wrong/missing header → 403. Constant-time.
+const secret = requireSharedSecret("INTERNAL_SECRET");
 
 router.get("/", secret, (_req, res) => {
   res.json({ success: true, data: { ticks: listTicks() } });

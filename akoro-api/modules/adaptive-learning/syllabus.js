@@ -293,6 +293,50 @@ syllabusRouter.post("/ingest-pdf", adminOnly, (req, res) => {
   });
 });
 
+// ── Imports: a syllabus PDF → a draft for review → publish (syllabus-import/) ──
+const imports = () => import("./syllabus-import/service.js");
+const importError = (res, e) => res.status(e?.status || 500).json({ success: false, message: e?.message || "Import failed" });
+
+syllabusRouter.post("/imports", adminOnly, (req, res) => {
+  pdfUpload(req, res, async (err) => {
+    if (err) return res.status(400).json({ success: false, message: err.message });
+    try {
+      if (!req.file?.buffer) return res.status(400).json({ success: false, message: "Attach the syllabus PDF as `file`" });
+      const { start } = await imports();
+      const out = await start({ buffer: req.file.buffer, fileName: req.file.originalname, exam: req.body?.exam, name: req.body?.name, code: req.body?.code, userId: req.user.id });
+      res.status(202).json({ success: true, data: out });
+    } catch (e) { importError(res, e); }
+  });
+});
+const pdfBatch = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024, files: 70 } }).array("files", 70);
+syllabusRouter.post("/imports/batch", adminOnly, (req, res) => {
+  pdfBatch(req, res, async (err) => {
+    if (err) return res.status(400).json({ success: false, message: err.message });
+    try {
+      const files = (req.files || []).filter((f) => /\.pdf$/i.test(f.originalname) || f.mimetype === "application/pdf");
+      if (!files.length) return res.status(400).json({ success: false, message: "Attach the syllabus PDFs as `files`" });
+      const { startBatch } = await imports();
+      res.status(202).json({ success: true, data: await startBatch({ files, exam: req.body?.exam, userId: req.user.id }) });
+    } catch (e) { importError(res, e); }
+  });
+});
+syllabusRouter.get("/imports", adminOnly, async (_req, res) => {
+  try { res.json({ success: true, data: await (await imports()).list() }); } catch (e) { importError(res, e); }
+});
+syllabusRouter.get("/imports/:id", adminOnly, async (req, res) => {
+  try {
+    const row = await (await imports()).get(req.params.id);
+    if (!row) return res.status(404).json({ success: false, message: "Import not found" });
+    res.json({ success: true, data: row });
+  } catch (e) { importError(res, e); }
+});
+syllabusRouter.post("/imports/:id/publish", adminOnly, async (req, res) => {
+  try { res.json({ success: true, data: await (await imports()).publish(req.params.id, req.user.id) }); } catch (e) { importError(res, e); }
+});
+syllabusRouter.delete("/imports/:id", adminOnly, async (req, res) => {
+  try { res.json({ success: true, data: await (await imports()).discard(req.params.id) }); } catch (e) { importError(res, e); }
+});
+
 syllabusRouter.delete("/:slug", adminOnly, async (req, res) => {
   try { await deleteSubject(req.params.slug); res.json({ success: true }); }
   catch (e) { res.status(500).json({ success: false, message: e.message }); }

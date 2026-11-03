@@ -59,7 +59,9 @@ import { authenticateToken,
 const toOAuth = (p) => (p === "meet" ? "google" : p);
 const toUi    = (p) => (p === "google" ? "meet" : p);
 
-const STATE_SECRET   = process.env.OAUTH_STATE_SECRET || process.env.COOKIE_SECRET || "akoro-oauth-state";
+// No default: with neither set, connecting a meeting/streaming account is off (a
+// known key would let anyone forge a state and bind their tokens to another user).
+const STATE_SECRET   = process.env.OAUTH_STATE_SECRET || process.env.COOKIE_SECRET || null;
 const INSTRUCTOR_URL = process.env.INSTRUCTOR_URL || "https://instructor.akoro.app";
 
 const signState = (userId, provider) =>
@@ -546,6 +548,7 @@ const meetingHandlers = {
 
     // CSRF + identity binding: the callback authenticates from this signed state,
     // not the session cookie (which may not survive the provider round-trip).
+    if (!STATE_SECRET) return res.status(503).json({ success: false, message: "Account connection is not configured — set OAUTH_STATE_SECRET" });
     const state = encodeURIComponent(signState(req.user.id, provider));
     const redir = encodeURIComponent(cfg.redirectUri);
     let authUrl;

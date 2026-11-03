@@ -53,6 +53,11 @@ export async function buildProctorHintPrompt() {
   return renderPersona(`${DIR}/PROCTOR_HINT.md`, {});
 }
 
+/** Phase 9: ONE follow-up on the same exam question (the practice agent's assessment_probe). */
+export async function buildProctorProbePrompt() {
+  return renderPersona(`${DIR}/PROCTOR_PROBE.md`, {});
+}
+
 /**
  * Final exam verdict. `cheatPercent` is the caller-computed
  * (cheatProbability * 100).toFixed(0); `verdictTail` is the caller's

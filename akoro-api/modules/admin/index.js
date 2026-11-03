@@ -17,6 +17,9 @@ import couponsRouter from "./coupons.js";
 import messagesRouter from "./messages.js";
 import reportsRouter from "./reports.js";
 import verifyRealUserRouter from "./verify-real-user.js";
+import proactiveKindsRouter from "./proactiveKinds.js";
+import agentRatingsRouter from "./agent-ratings.js";
+import agentPromptsRouter from "./agent-prompts.js";
 
 const router = Router();
 router.use("/", coreRouter);
@@ -37,5 +40,8 @@ router.use("/", couponsRouter);
 router.use("/", messagesRouter);
 router.use("/", reportsRouter);
 router.use("/", verifyRealUserRouter);
+router.use("/", proactiveKindsRouter);
+router.use("/", agentRatingsRouter);
+router.use("/", agentPromptsRouter);
 
 export default router;

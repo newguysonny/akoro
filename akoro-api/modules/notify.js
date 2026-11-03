@@ -12,7 +12,10 @@
  */
 import db from "../db.js";
 import { sendNotificationEmail } from "./auth/emails.js";
-import { sendPushToUser } from "./notifications/webpush.js";
+import { isPushEnabled, sendPushToUser } from "./notifications/webpush.js";
+import { randomUUID } from "node:crypto";
+import { outboxSend } from "../lib/outbox.js";
+import { idemKey } from "../lib/outboxCore.js";
 
 // Socket.io is exposed as global.io (app.js) and global._io (websocket.js) —
 // historically both aliases were used. Resolve whichever is set.
@@ -52,18 +55,28 @@ export async function notifyUser({ userId, type, title, content = null, relatedI
     if (prefs && prefs.push_enabled === false) pushEnabled = false;
     if (prefs && prefs.email_enabled === false) emailEnabled = false;
   } catch { /* default both on */ }
+  // Store first, send after (Phase 18 item 5): push and email are written to the
+  // outbox before they are tried, retried with backoff in order per recipient,
+  // and never sent twice. If the outbox can't take them, the direct send as before.
+  const key = row?.id || randomUUID();
   try {
-    if (pushEnabled) sendPushToUser(userId, { title, body: content || title, link, type });
+    if (pushEnabled && isPushEnabled()) {
+      const push = { title, body: content || title, link, type };
+      outboxSend("push", { orderKey: `push:${userId}`, idemKey: idemKey("notify", key, "push"), userId, payload: { userId, ...push } },
+        () => sendPushToUser(userId, push)).catch(() => {});
+    }
   } catch { /* push best-effort */ }
 
   if (email?.to) {
     // emailEnabled comes from the shared preferences read above.
     if (emailEnabled) {
-      sendNotificationEmail({
+      const mail = {
         to: email.to, name: email.name,
         subject: email.subject || title, heading: email.heading || title,
         body: email.body || content || title, ctaUrl: email.ctaUrl || link, ctaLabel: email.ctaLabel,
-      }).catch((e) => console.warn("[notify] email failed:", e.message));
+      };
+      outboxSend("email", { orderKey: `email:${userId}`, idemKey: idemKey("notify", key, "email"), userId, payload: mail },
+        () => sendNotificationEmail(mail).catch((e) => console.warn("[notify] email failed:", e.message))).catch(() => {});
     }
   }
 

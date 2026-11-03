@@ -1785,6 +1785,20 @@ const listClassrooms = asyncHandler(async (req, res) => {
  */
 const listClassroomStudents = asyncHandler(async (req, res) => {
   try {
+    // Only a class this caller may list (GET /classrooms): one they teach, one in
+    // the school they run, or any for an admin. It used to answer any class id
+    // to any instructor (Phase 15 item 6).
+    const { data: room } = await db.from("classrooms")
+      .select("id, teacher_id, school_id").eq("id", req.params.id).maybeSingle();
+    if (!room) return err404(res, "Class not found");
+    let allowed = req.user.role === "admin" || room.teacher_id === req.user.id;
+    if (!allowed && room.school_id) {
+      const { data: school } = await db.from("school_profiles")
+        .select("id").eq("admin_user_id", req.user.id).eq("id", room.school_id).maybeSingle();
+      allowed = !!school;
+    }
+    if (!allowed) return err403(res, "You do not teach this class");
+
     const { data: rows } = await db.from("classroom_students")
       .select("user_id, users!inner(id, username, full_name, avatar_url, avatar_emoji)")
       .eq("classroom_id", req.params.id).eq("status", "active");

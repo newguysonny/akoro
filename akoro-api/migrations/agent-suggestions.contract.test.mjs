@@ -64,8 +64,8 @@ test("the agent files suggestions through the suggest_help chat tool", () => {
   assert.match(chat, /"create_task", "suggest_help",/, "registered as side-effecting in the tool transcript");
 });
 
-test("the Tasks tab is To do / Done / Suggestions, and suggestions are advice only", () => {
-  assert.match(page, /\["pending",t\('agent\.to_do'\)\],\["done",t\('agent\.done'\)\],\["suggestions",t\('agent\.suggestions'\)\]/);
+test("the Tasks tab is To do / Done / Needs you / Suggestions, and suggestions are advice only", () => {
+  assert.match(page, /\["pending",t\('agent\.to_do'\)\],\["done",t\('agent\.done'\)\],\["needs",t\('agent\.needs_you'\)\],\["suggestions",t\('agent\.suggestions'\)\]/);
   assert.match(page, /agent\.suggestions_empty/);
   // One list over chat suggestions and the planner's proposals (the one inbox).
   assert.match(page, /apiGet\('\/api\/agent\/proposals\/inbox'\)/);

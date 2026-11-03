@@ -21,10 +21,12 @@ import { XIcon, Icon } from '../common/Icons.jsx';
  * same socket the Q&A runs on; the backend returns proctor_result (live meter)
  * and assessment_turn (Q&A) on that connection.
  */
-function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, onClose }) {
+// workflowId / assessmentId: opened from a dashboard descriptor (Grand Plan §13.1) —
+// a run already under way rejoins its live assessment instead of starting another.
+function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, onClose, workflowId = null, assessmentId = null }) {
   // Hold the activity lock so an auto-reload can't interrupt the assessment.
   useEffect(() => acquireActivityLock(), []);
-  const [phase,   setPhase]   = useState("consent");   // consent | exam | summary
+  const [phase,   setPhase]   = useState(assessmentId ? "exam" : "consent");   // consent | exam | summary
   const [blocks,  setBlocks]  = useState([]);
   const [input,   setInput]   = useState("");
   const [loading, setLoading] = useState(false);
@@ -38,7 +40,7 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
   const [voiceMode, setVoiceMode] = useState(false);
   const [lastAnswer, setLastAnswer] = useState("");   // echo the just-sent answer
   const wsRef = useRef(null);
-  const assessIdRef = useRef(null);
+  const assessIdRef = useRef(assessmentId);
   const pendingRef = useRef(null);   // answer awaiting a server turn (survives reconnects)
   const spokenRef = useRef(0);       // index of last block spoken aloud
 
@@ -175,7 +177,7 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
   // ── Consent / identity capture screen ──────────────────────
   if (phase === "consent") {
     return (
-      <Shell onClose={onClose} title="Live Assessment">
+      <Shell workflowId={workflowId} onClose={onClose} title="Live Assessment">
         <div style={{ maxWidth:460, margin:"0 auto", padding:"8px 4px", textAlign:"center" }}>
           <div style={{ borderRadius:18, overflow:"hidden", background:"#000", marginBottom:16,
             border:"2px solid rgba(255,255,255,.1)", aspectRatio:"4/3" }}>
@@ -208,7 +210,7 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
   if (phase === "summary" && summary) {
     const vColor = { pass: GREEN, fail: RED, flagged: GOLD, terminated: RED }[summary.verdict] || GOLD;
     return (
-      <Shell onClose={onClose} title="Assessment Result">
+      <Shell workflowId={workflowId} onClose={onClose} title="Assessment Result">
         <div style={{ maxWidth:480, margin:"0 auto", display:"flex", flexDirection:"column", gap:14 }}>
           <div style={{ background:`${vColor}1A`, border:`1.5px solid ${vColor}40`, borderRadius:18, padding:"20px 18px", textAlign:"center" }}>
             <p style={{ fontSize:11, fontWeight:800, color:vColor, margin:"0 0 6px", letterSpacing:.5 }}>{summary.verdict.toUpperCase()}</p>
@@ -244,7 +246,7 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
 
   // ── Exam (split view) ──────────────────────────────────────
   return (
-    <Shell onClose={onClose} title={`Assessment · ${topic}`}>
+    <Shell workflowId={workflowId} onClose={onClose} title={`Assessment · ${topic}`}>
       {terminated && (
         <div style={{ background:"rgba(248,113,113,.12)", border:"1px solid rgba(248,113,113,.3)", borderRadius:12,
           padding:"10px 14px", marginBottom:12, fontSize:12.5, fontWeight:700, color:"#FCA5A5", textAlign:"center" }}>
@@ -263,9 +265,9 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
   );
 }
 
-function Shell({ children, onClose, title }) {
+function Shell({ children, onClose, title, workflowId = null }) {
   return (
-    <div style={{ position:"fixed", inset:0, zIndex:3000, background:"#080812",
+    <div data-workflow-id={workflowId || undefined} style={{ position:"fixed", inset:0, zIndex:3000, background:"#080812",
       display:"flex", flexDirection:"column", fontFamily:"'Nunito',sans-serif" }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
         padding:"calc(env(safe-area-inset-top, 0px) + 12px) 14px 12px", borderBottom:"1px solid rgba(255,255,255,.06)" }}>

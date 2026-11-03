@@ -72,6 +72,9 @@ export function makeLlmAgent({
       // agent that spent its budget reading still finishes instead of being
       // cut off by the loop cap.
       const offered = finalOnly ? tools.filter((t) => finalOnly.includes(toRegistry.get(t.function.name))) : tools;
+      // The loop guard's reminder on the latest call (loopGuard.js) is said on its own line too:
+      // the observation list is cut from the end when long, and the reminder is about the newest call.
+      const reminder = observations.length ? observations[observations.length - 1]?.reminder : null;
       const messages = [
         { role: "system", content: system },
         {
@@ -85,6 +88,7 @@ export function makeLlmAgent({
             observations.length
               ? `Observations so far:\n${observations.map((observation, index) => `${index + 1}. ${JSON.stringify(observation)}`).join("\n").slice(0, 6000)}`
               : "No observations yet — start by inspecting what you need.",
+            ...(typeof reminder === "string" && reminder ? [`About your last call: ${reminder}`] : []),
             "Choose exactly one tool for this iteration.",
           ].join("\n\n"),
         },

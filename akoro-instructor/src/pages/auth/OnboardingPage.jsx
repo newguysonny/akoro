@@ -21,7 +21,6 @@ import {
 } from '../../lib/onboardingChat.js';
 import './onboarding/onboarding.css';
 
-const HEADERS = { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'instructor' };
 const SUBJECTS_SHOWN = 9;
 
 /** **bold** → <strong>; nothing else is interpreted. */
@@ -126,11 +125,11 @@ export default function OnboardingPage() {
     setSaving(true); setFailed(false); setErr('');
     const a = ansRef.current;
     try {
-      const res = await fetch(`${API}/api/profiles/me`, { method: 'PATCH', credentials: 'include', headers: HEADERS, body: JSON.stringify(profilePayload(a)) });
+      const res = await fetch(`${API}/api/profiles/me`, { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'instructor' }, body: JSON.stringify(profilePayload(a)) });
       if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.message || 'Could not save your setup'); }
       // Request to join the chosen school (approval by the school admin).
       if (a.schoolId) {
-        await fetch(`${API}/api/profiles/me/school-request`, { method: 'POST', credentials: 'include', headers: HEADERS, body: JSON.stringify({ school_id: a.schoolId }) }).catch(() => {});
+        await fetch(`${API}/api/profiles/me/school-request`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'instructor' }, body: JSON.stringify({ school_id: a.schoolId }) }).catch(() => {});
       }
       setSaving(false);
       ask(STEP_IDS.indexOf('done'));

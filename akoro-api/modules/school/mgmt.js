@@ -28,6 +28,7 @@ import { openai } from "../../lib/aiModel.js";
 import { renderPdfToImages } from "../adaptive-learning/pdfRender.js";
 import { DEFAULT_DOC_TEMPLATES, getDefaultDoc } from "./defaultDocs/index.js";
 import { PERIOD_DEFS, TEACH_PERIOD_NAMES, TEMPLATE_SUBJECTS, JUNIOR_GRID, SENIOR_GRID } from "./timetableTemplate.js";
+import { createStrugglesRouter } from "./learnerStruggles.js";
 
 const router = Router();
 const SCHOOL_ROLES = ["school", "school_admin", "admin"];
@@ -74,6 +75,18 @@ function requireMgmtWrite(req, res, next) {
   return res.status(403).json({ error: "Not permitted for this resource" });
 }
 const MGMT_ROLES = [...SCHOOL_ROLES, "instructor"];
+// What an approved TEACHER may read over the generic list (audit 2026-10-25, F-item 1): the resources they
+// can write plus the classroom ones they need to see. Everything else — fees and finance, payroll, staff and
+// HR, health records, admissions, complaints, assets, transport, hostels, inventory, the website — is the
+// school admin's.
+const TEACHER_READABLE = new Set([...INSTRUCTOR_WRITABLE,
+  "class-subjects", "class-teachers", "section-types", "exam-types", "exams", "exam-schedules", "exam-marks",
+  "grade-scales", "teacher-remarks", "lesson-plans", "syllabus-items", "classwork-logs", "homework-assignments",
+  "learning-resources", "live-classes", "forecast-weeks", "notices", "school-events",
+]);
+const isSchoolAdmin = (req) => SCHOOL_ROLES.includes(req.user?.role);
+// School-admin-only routes (finance, HR, documents, the website, pupils' locations) — a teacher is 403.
+const schoolAdminOnly = requireRole(SCHOOL_ROLES);
 
 const studentLabel = (s) => [s.first_name, s.last_name].filter(Boolean).join(" ");
 
@@ -342,7 +355,7 @@ async function attachRefs(cfg, rows, schoolId) {
 /* ═══════════════ Custom endpoints (registered before generic CRUD) ═══════ */
 
 // ── Dashboards ────────────────────────────────────────────────────────────
-router.get("/dashboard/:area", authenticateToken, async (req, res) => {
+router.get("/dashboard/:area", authenticateToken, schoolAdminOnly, async (req, res) => {
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
@@ -616,7 +629,7 @@ async function computeDues(schoolId, { student_id, class_id } = {}) {
   });
 }
 
-router.get("/fees/dues", authenticateToken, async (req, res) => {
+router.get("/fees/dues", authenticateToken, schoolAdminOnly, async (req, res) => {
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
@@ -679,7 +692,8 @@ router.get("/students/:id/profile", authenticateToken, async (req, res) => {
       data: {
         ...safeRow, name: studentLabel(student),
         hasStudentPassword: !!student_password_hash, hasParentPassword: !!parent_password_hash,
-        fees: dues[0] || { assigned: 0, paid: 0, due: 0 },
+        // A pupil's fee totals are the school admin's, not their teacher's.
+        ...(isSchoolAdmin(req) ? { fees: dues[0] || { assigned: 0, paid: 0, due: 0 } } : {}),
         attendance: { present, absent, late, total: (attRows || []).length },
       },
     });
@@ -715,7 +729,7 @@ router.post("/students/:id/credentials/regenerate", authenticateToken, requireRo
 
 // ── Transport & Hostel summary for a student ──────────────────────────────
 // ── Fees: assigned/collected/concession/balance + grouped, itemised rows ──
-router.get("/students/:id/fees", authenticateToken, async (req, res) => {
+router.get("/students/:id/fees", authenticateToken, schoolAdminOnly, async (req, res) => {
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
@@ -788,7 +802,7 @@ router.get("/students/:id/behavior-summary", authenticateToken, async (req, res)
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.get("/students/:id/transport", authenticateToken, async (req, res) => {
+router.get("/students/:id/transport", authenticateToken, schoolAdminOnly, async (req, res) => {
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
@@ -1308,7 +1322,7 @@ router.post("/staff/:id/logout", authenticateToken, requireRole(SCHOOL_ROLES), a
 });
 
 // ── Staff attendance register (mirrors the student one) ──────────────────
-router.get("/hr/attendance/register", authenticateToken, async (req, res) => {
+router.get("/hr/attendance/register", authenticateToken, schoolAdminOnly, async (req, res) => {
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
@@ -1563,7 +1577,7 @@ router.post("/inventory/sale", authenticateToken, requireRole(SCHOOL_ROLES), asy
 });
 
 // ── Transport: latest position per vehicle ────────────────────────────────
-router.get("/transport/latest-locations", authenticateToken, async (req, res) => {
+router.get("/transport/latest-locations", authenticateToken, schoolAdminOnly, async (req, res) => {
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
@@ -1678,7 +1692,7 @@ router.post("/result-pins/generate", authenticateToken, requireRole(SCHOOL_ROLES
 /* ── Website Builder: Pages (WordPress-style list + trash) ────────────────-
    Overrides the generic GET /site-pages so we can hide/soft-delete via
    deleted_at. Create/update/permanent-delete still use the generic routes.  */
-router.get("/site-pages", authenticateToken, async (req, res) => {
+router.get("/site-pages", authenticateToken, schoolAdminOnly, async (req, res) => {
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
@@ -1694,7 +1708,7 @@ router.get("/site-pages", authenticateToken, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.get("/site-pages/:id", authenticateToken, async (req, res) => {
+router.get("/site-pages/:id", authenticateToken, schoolAdminOnly, async (req, res) => {
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
@@ -1765,7 +1779,7 @@ router.post("/site-media/upload", authenticateToken, requireRole(SCHOOL_ROLES), 
 });
 
 /* ── Website Builder: Media (list + trash, mirrors Pages) ─────────────────- */
-router.get("/site-media", authenticateToken, async (req, res) => {
+router.get("/site-media", authenticateToken, schoolAdminOnly, async (req, res) => {
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
@@ -1781,7 +1795,7 @@ router.get("/site-media", authenticateToken, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.get("/site-media/:id", authenticateToken, async (req, res) => {
+router.get("/site-media/:id", authenticateToken, schoolAdminOnly, async (req, res) => {
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
@@ -1819,7 +1833,7 @@ router.post("/site-media/:id/restore", authenticateToken, requireRole(SCHOOL_ROL
 
 // List the school's templates + the shared default gallery (lesson plan,
 // report card, worksheet, certificate). Overrides generic GET for the resource.
-router.get("/document-templates", authenticateToken, async (req, res) => {
+router.get("/document-templates", authenticateToken, schoolAdminOnly, async (req, res) => {
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
@@ -1836,7 +1850,7 @@ router.get("/document-templates", authenticateToken, async (req, res) => {
 });
 
 // View a template rendered as a real file. ?sample=1 fills the demo data.
-router.get("/document-templates/:id/html", authenticateToken, async (req, res) => {
+router.get("/document-templates/:id/html", authenticateToken, schoolAdminOnly, async (req, res) => {
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
@@ -1908,7 +1922,7 @@ router.post("/document-templates/:id/render", authenticateToken, requireRole(SCH
 });
 
 // A saved record rendered as a standalone print-ready page (open/print).
-router.get("/document-records/:id/html", authenticateToken, async (req, res) => {
+router.get("/document-records/:id/html", authenticateToken, schoolAdminOnly, async (req, res) => {
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
@@ -2411,12 +2425,17 @@ router.post("/attendance/mark", authenticateToken, requireRole(MGMT_ROLES), asyn
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Learners' struggles (D39): linked students only; the admin sees every class, a teacher only theirs ──
+// GET /api/school/mgmt/learning/struggles · /learning/struggles/:studentId/support (logged)
+router.use("/learning", createStrugglesRouter({ getMySchool, authenticate: authenticateToken }));
+
 /* ═══════════════════════ Generic CRUD ════════════════════════════════════ */
 
 // Never expose credential secrets over the generic list; financial columns are
 // admin-only (teachers resolve through getMySchool too, so a role gate matters).
 const ALWAYS_SECRET_COLS = ["password_hash", "student_password_hash", "parent_password_hash", "pin", "result_pin", "two_factor_secret", "access_token", "refresh_token"];
-const ADMIN_ONLY_COLS = ["monthly_salary", "salary", "bank_account_no", "bank_name", "account_number", "account_no"];
+const ADMIN_ONLY_COLS = ["monthly_salary", "salary", "bank_account_no", "bank_name", "account_number", "account_no",
+  "gross", "net", "basic", "basic_salary", "gross_salary", "net_salary", "allowances", "deductions"];
 function sanitizeMgmtRow(row, isAdmin) {
   const out = { ...row };
   for (const k of ALWAYS_SECRET_COLS) delete out[k];
@@ -2428,6 +2447,7 @@ router.get("/:resource", authenticateToken, async (req, res) => {
   try {
     const cfg = RESOURCES[req.params.resource];
     if (!cfg) return res.status(404).json({ error: "Unknown resource" });
+    if (!isSchoolAdmin(req) && !TEACHER_READABLE.has(req.params.resource)) return res.status(403).json({ error: "Not permitted for this resource" });
     const school = await getMySchool(req, res);
     if (!school) return;
     let q = M().from(cfg.table).select("*").eq("school_id", school.id)

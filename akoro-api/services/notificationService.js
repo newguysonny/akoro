@@ -19,6 +19,9 @@ import twilio      from "twilio";
 import webpush     from "web-push";
 import db          from "../db.js";
 import { getEmailTemplate } from "../utils/templates.js";
+import { createHash } from "node:crypto";
+import { outboxSend } from "../lib/outbox.js";
+import { idemKey } from "../lib/outboxCore.js";
 
 // ─── Transport setup ──────────────────────────────────────────────────────────
 
@@ -140,6 +143,43 @@ const logError = async (channel, error, userId, sessionId, type) => {
   } catch {}
 };
 
+// ─── Store first, send after (Phase 18 item 5) ───────────────────────────────
+
+const SENDERS = { session_email: sendEmail, sms: sendSMS, session_push: sendPush, whatsapp: sendWhatsApp };
+const LABEL = { session_email: "Email", sms: "SMS", session_push: "Push", whatsapp: "WhatsApp" };
+const digest = (x) => createHash("sha256").update(JSON.stringify(x)).digest("hex").slice(0, 16);
+
+/**
+ * One message on one channel, through the outbox (lib/outbox.js). log: the
+ * notification_queue row written when it is sent (null: a direct notice, which
+ * only warns on failure, as before). The same message to the same person within
+ * the hour is one piece of work — a re-run never sends it twice.
+ */
+function dispatch(channel, who, msg, log) {
+  const logRow = log ? { userId: who.userId, sessionId: who.sessionId, notificationType: who.type, ...log } : null;
+  const direct = () => SENDERS[channel](msg)
+    .then(() => logRow && logToQueue({ ...logRow, status: "sent" }))
+    .catch((err) => (logRow ? logError(log.channel, err, who.userId, who.sessionId, who.type) : console.warn(`[notificationService] ${LABEL[channel]} failed:`, err.message)));
+  const key = idemKey(who.direct ? "direct" : "session", who.sessionId, who.type, who.userId, channel, digest(msg), new Date().toISOString().slice(0, 13));
+  return outboxSend(channel, { orderKey: `${channel}:${who.userId}`, idemKey: key, userId: who.userId, payload: { msg, log: logRow } }, direct)
+    .then((r) => r.done);
+}
+
+/** The outbox's send for these channels (lib/outboxChannels.js). Throws to retry. */
+export async function outboxSessionSend(channel, payload = {}) {
+  await SENDERS[channel](payload.msg || {});
+  if (payload.log) await logToQueue({ ...payload.log, status: "sent" });
+  return {};
+}
+
+/** Failed after its tries, or dropped: recorded as before. */
+export async function outboxSessionFailed(channel, row) {
+  const log = row?.payload?.log;
+  const err = new Error(row?.last_error || row?.drop_reason || "failed");
+  if (log) return logError(log.channel, err, log.userId, log.sessionId, log.notificationType);
+  console.warn(`[notificationService] ${LABEL[channel] || channel} failed:`, err.message);
+}
+
 // ─── Main dispatcher ──────────────────────────────────────────────────────────
 
 /**
@@ -169,42 +209,33 @@ export const sendSessionNotifications = async ({
       instructor, userName: participant.full_name ?? participant.username ?? "Student",
     });
 
+    // Store first, send after (Phase 18 item 5): each channel is written to the
+    // outbox before it is tried, retried with backoff in order per recipient,
+    // and never sent twice; the message is exactly the template's.
+    const who = { userId: participant.user_id, sessionId, type };
+
     // ── Email ────────────────────────────────────────────────────────────────
     if (prefs.email_enabled && participant.email) {
-      dispatches.push(
-        sendEmail({ to: participant.email, subject: content.email.subject, html: content.email.html, text: content.email.text })
-          .then(() => logToQueue({ userId: participant.user_id, sessionId, notificationType: type, channel: "email", recipient: participant.email, subject: content.email.subject, status: "sent" }))
-          .catch((err) => logError("email", err, participant.user_id, sessionId, type))
-      );
+      dispatches.push(dispatch("session_email", who, { to: participant.email, subject: content.email.subject, html: content.email.html, text: content.email.text },
+        { channel: "email", recipient: participant.email, subject: content.email.subject }));
     }
 
     // ── SMS ──────────────────────────────────────────────────────────────────
     const phone = participant.phone ?? prefs.phone_number;
     if (prefs.sms_enabled && phone) {
-      dispatches.push(
-        sendSMS({ to: phone, body: content.sms.body })
-          .then(() => logToQueue({ userId: participant.user_id, sessionId, notificationType: type, channel: "sms", recipient: phone, status: "sent" }))
-          .catch((err) => logError("sms", err, participant.user_id, sessionId, type))
-      );
+      dispatches.push(dispatch("sms", who, { to: phone, body: content.sms.body }, { channel: "sms", recipient: phone }));
     }
 
     // ── Push ─────────────────────────────────────────────────────────────────
     if (prefs.push_enabled && prefs.push_token) {
-      dispatches.push(
-        sendPush({ token: prefs.push_token, title: content.push.title, body: content.push.body, data: { sessionId, type, url: meetingUrl } })
-          .then(() => logToQueue({ userId: participant.user_id, sessionId, notificationType: type, channel: "push", recipient: "push_token", status: "sent" }))
-          .catch((err) => logError("push", err, participant.user_id, sessionId, type))
-      );
+      dispatches.push(dispatch("session_push", who, { token: prefs.push_token, title: content.push.title, body: content.push.body, data: { sessionId, type, url: meetingUrl } },
+        { channel: "push", recipient: "push_token" }));
     }
 
     // ── WhatsApp ─────────────────────────────────────────────────────────────
     const waNumber = prefs.whatsapp_number ?? phone;
     if (prefs.whatsapp_enabled && waNumber) {
-      dispatches.push(
-        sendWhatsApp({ to: waNumber, body: content.sms.body })
-          .then(() => logToQueue({ userId: participant.user_id, sessionId, notificationType: type, channel: "whatsapp", recipient: waNumber, status: "sent" }))
-          .catch((err) => logError("whatsapp", err, participant.user_id, sessionId, type))
-      );
+      dispatches.push(dispatch("whatsapp", who, { to: waNumber, body: content.sms.body }, { channel: "whatsapp", recipient: waNumber }));
     }
 
     // ── In-app notification ───────────────────────────────────────────────────
@@ -241,13 +272,12 @@ export const sendDirectNotification = async ({
     });
   } catch {}
 
+  const who = { userId, sessionId: relatedId ?? null, type, direct: true };
   if (prefs.email_enabled && user?.email && emailSubject && emailHtml) {
-    await sendEmail({ to: user.email, subject: emailSubject, html: emailHtml, text: content ?? "" })
-      .catch((e) => console.warn("[notificationService] Email failed:", e.message));
+    await dispatch("session_email", who, { to: user.email, subject: emailSubject, html: emailHtml, text: content ?? "" }, null);
   }
 
   if (prefs.sms_enabled && user?.phone && smsBody) {
-    await sendSMS({ to: user.phone, body: smsBody })
-      .catch((e) => console.warn("[notificationService] SMS failed:", e.message));
+    await dispatch("sms", who, { to: user.phone, body: smsBody }, null);
   }
 };

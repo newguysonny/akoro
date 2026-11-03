@@ -30,7 +30,8 @@ function toyRegistry({ handlers: extra = {} } = {}) {
     "tutor.say": async () => { calls.push("tutor.say"); return "Well done."; },
     ...extra,
   };
-  return { calls, registry: bindRegistry({ definitions, args, harnessOnly: ["wallet.charge"], handlers }) };
+  // A workflow names the policy its agent's changes run under (Phase 18 item 6).
+  return { calls, registry: bindRegistry({ definitions, args, harnessOnly: ["wallet.charge"], handlers, basis: { basis: "inferred", rule: "workflow:toy" } }) };
 }
 
 const caps = { maxIterations: 4, maxToolCalls: 10, decisionTimeoutMs: 200 };
@@ -160,7 +161,7 @@ test("argsProblem: required, types, enums, list items; lenient on extra keys", (
 test("a workflow's own checks plug in after the generic ones", async () => {
   const definitions = [{ name: "teach.start", level: "propose", description: "Start teaching" }];
   let state = "planning";
-  const registry = bindRegistry({ definitions, handlers: { "teach.start": async () => ({ started: true }) },
+  const registry = bindRegistry({ definitions, handlers: { "teach.start": async () => ({ started: true }) }, basis: { basis: "inferred", rule: "workflow:teaching" },
     checks: [(name) => (state !== "ready" ? { code: "operation_not_permitted", message: `${name} is not allowed while ${state}` } : null)] });
   assert.deepEqual(registry.validate("teach.start", {}), { ok: false, code: "operation_not_permitted", message: "teach.start is not allowed while planning" });
   state = "ready";

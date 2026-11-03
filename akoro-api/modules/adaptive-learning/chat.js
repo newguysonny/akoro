@@ -44,7 +44,7 @@ export const protegeDeps = {
     return data || [];
   },
 };
-import { publicModelList, resolveChatModel } from "../../lib/modelCatalogue.js";
+import { publicModelList, resolveChatModel, pickerInfo } from "../../lib/modelCatalogue.js";
 const { Pool } = pkg;
 import db from "../../db.js";
 import config from "../../config/index.js";
@@ -103,11 +103,15 @@ import { adminRequestOf, requestClaimCorrection } from "./requestClaims.js";
 import { UPDATE_PLAN_TOOL, applyPlanUpdate, nextLedger, renderLedger, summaryMarkOf } from "./taskLedger.js";
 import { turnCorrections } from "./turnCheck.js";
 import { failed as toolFailed, shouldRetry, recoveryHint } from "./toolRecovery.js";
+import { runWithinLimit } from "./toolLimits.js";
+import { createLoopGuard } from "../agent-runtime/loopGuard.js";
+import { actionBasis, basisRefusal, currentActionBasis, withActionBasis } from "../agent-runtime/actionBasis.js";
 import { fitDialogue, summariseEarlier } from "./contextBudget.js";
 import { runIntentStep, renderIntent } from "./intentStep.js";
 // Phase 17: a live turn is recorded per AGENT_EPISODES — opted-in learners, or everyone who hasn't opted out (agent-contract/store.js).
 import { createEpisodeRecorder } from "../agent-contract/episode.js";
 import { recordsRealTraffic, saveEpisode } from "../agent-contract/store.js";
+import { labelKeyFor } from "../agent-ratings/ratings.js";
 import { requiresAgentCapabilitiesTool, requiresActivityPreparation, isDraftFollowUp, isToolDraftFollowUp, requiredLearnerDataTool, requiredStudyPrepTool, classForExam } from "./agent-chat-intent.js";
 import { agentToolActivity } from "../../lib/agentActivity.js";
 import { noteChatTurn } from "../agent-memory/quietLearning.js";
@@ -149,8 +153,8 @@ const router     = express.Router();
 router.use((req, res, next) => {
   const key = process.env.AGENT_CONSOLE_KEY;
   if (!key) return next();
-  const dry = req.get("x-agent-console-dry") === key;
-  const inspect = req.get("x-agent-console-inspect") === key;
+  const dry = safeCompare(req.get("x-agent-console-dry"), key);
+  const inspect = safeCompare(req.get("x-agent-console-inspect"), key);
   let go = next;
   if (inspect) { const inner = go; go = () => runInspected(inner); }
   if (dry) { const inner = go; go = () => runDry(inner); }
@@ -1409,7 +1413,28 @@ export function selfToolDeps(userId, role = "student") {
 const toolAudience = (role) => (role === "instructor" ? "instructor" : "learner");
 const SELF_TOOLING_ROLES = new Set(["student", "instructor"]);
 
-export async function executeChatTool(name, input, studentId, { conversationId = null, role = "student", channel = "ai_chat" } = {}) {
+/**
+ * Asked or inferred (Phase 18 item 6, agent-runtime/actionBasis.js). Every
+ * caller of a chat tool acts for a person who asked: a chat message, an
+ * Approve / Confirm tap, an admin's check, the agent console — so the default
+ * is explicit. Work the agent started itself passes { basis: "inferred", rule };
+ * a call made inside other work (a learner's own tool running a capability)
+ * inherits that work's basis. An inferred change with no rule is refused.
+ */
+export function chatToolBasis({ basis = null, rule = null } = {}) {
+  const given = basis == null ? null : typeof basis === "string" ? { basis, rule } : { ...basis, ...(rule ? { rule } : {}) };
+  return actionBasis(given) || currentActionBasis() || { basis: "explicit", rule: null };
+}
+
+export async function executeChatTool(name, input, studentId, options = {}) {
+  const b = chatToolBasis(options);
+  const refused = isSideEffecting(name, input) ? basisRefusal(b, { action: name }) : null;
+  if (refused) return { success: false, code: refused.code, error: refused.message };
+  // The writers below (the self-tooling audit, change cards) read it from the scope.
+  return withActionBasis(b, () => runChatTool(name, input, studentId, options));
+}
+
+async function runChatTool(name, input, studentId, { conversationId = null, role = "student", channel = "ai_chat" } = {}) {
   // Agent console, DRY mode: anything that would change data is answered with
   // what it would have done — read-only tools still run for real.
   // create_tool handles dry mode itself: it builds and verifies, but doesn't save.
@@ -3605,6 +3630,7 @@ async function processAttachments(attachments = []) {
 // directly — a re-export-only line made every chat turn throw
 // ReferenceError: assembleChatDoctrine is not defined.
 import { tutorSystemPrompt, assembleChatDoctrine } from "../agent-context/chat-doctrine.js";
+import { safeCompare } from "../../lib/safeCompare.js";
 export { tutorSystemPrompt, assembleChatDoctrine };
 
 /* chat.completions streaming → `delta` events. Returns the full text. */
@@ -3783,7 +3809,7 @@ function agentSessionId(conversationId) {
   return `${AGENT_CHAT_SESSION_PREFIX}${String(conversationId).replace(/-/g, "")}`;
 }
 
-function safeHistory(history) {
+export function safeHistory(history) {
   return (Array.isArray(history) ? history : [])
     .filter((item) => item && (item.role === "user" || item.role === "assistant") && typeof item.content === "string")
     .map((item) => ({ role: item.role, content: item.content.trim().slice(0, 12_000) }))
@@ -3977,8 +4003,14 @@ export function clarify(field, question, extra = {}) {
 // Exported (below) for the benchmark (lib/evals/benchmark.js), which runs this same loop with stub tools.
 // `callTool` is the one seam: production executes the real tools; the benchmark passes stubs.
 // `recorder`: an agent-contract/episode.js recorder when the turn is recorded.
-async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, status, tools = openAiChatTools(), requiredTool = null, role = "student", trace = null, isAborted = () => false, think = false, streamText = true, model = null, teacherWords = null, ledger = null, callTool = null, recorder = null, meta = null }) {
-  const runTool = callTool || ((name, input) => executeChatTool(name, input, studentId, { conversationId, role }));
+// `basis` (Phase 18 item 6): a turn a person's message started is explicit; a turn
+// started for them (a proactive kind, a workflow) passes { basis: "inferred", rule }.
+// `toolLimitMs`: one time limit for every call (tests, the benchmark); else each tool's own (toolLimits.js).
+async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, status, tools = openAiChatTools(), requiredTool = null, role = "student", trace = null, isAborted = () => false, think = false, streamText = true, model = null, teacherWords = null, ledger = null, callTool = null, recorder = null, meta = null, basis = "explicit", toolLimitMs = null }) {
+  const turnBasis = actionBasis(basis, { basis: "explicit" });
+  const runTool = callTool || ((name, input) => executeChatTool(name, input, studentId, { conversationId, role, basis: turnBasis }));
+  // The loop guard (loopGuard.js): the same call again in a row gets a reminder in its observation.
+  const guard = createLoopGuard();
   // The task ledger (taskLedger.js): the agent keeps its goal and steps with update_plan; offered every turn.
   let ledgerNow = ledger;
   if (!tools.some((t) => t.function?.name === UPDATE_PLAN_TOOL.name)) {
@@ -4099,18 +4131,24 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
       // The important fields come from the TEACHER (activityFields.js): a subject, an audience or a
       // topic they never said is asked for, not filled in — nothing is prepared until they answer.
       const unsaid = role === "instructor" ? await unsaidActivityFields(tool, input, transcript).catch(() => null) : null;
+      const changes = isSideEffecting(tool, input);
+      // Asked or inferred (actionBasis.js): an inferred change with no rule allowing it is refused, not run.
+      const refused = changes ? basisRefusal(turnBasis, { action: tool }) : null;
+      // Each call within its time limit (toolLimits.js): past it, a `timeout` observation, never a stalled turn.
+      const timed = () => runWithinLimit(() => runTool(tool, input), tool, { sideEffecting: changes, limitMs: toolLimitMs });
       if (tool === UPDATE_PLAN_TOOL.name) {
         // The ledger: checked here (a step is done only when a successful call this turn backs it), saved after the turn.
         const applied = applyPlanUpdate(ledgerNow, input, executions);
         ledgerNow = applied.ledger;
         toolResult = applied.result;
       } else if (unsaid) toolResult = unsaid;
+      else if (refused) toolResult = { success: false, code: refused.code, error: refused.message };
       else try {
-        toolResult = await runTool(tool, input);
-        // Recovery (toolRecovery.js): a temporary failure is tried once more before the agent sees it.
-        if (shouldRetry(tool, toolResult, { sideEffecting: isSideEffecting(tool, input) })) {
+        toolResult = await timed();
+        // Recovery (toolRecovery.js): a temporary failure (a time-out included) is tried once more before the agent sees it.
+        if (shouldRetry(tool, toolResult, { sideEffecting: changes })) {
           console.log(`[agent-chat] tool ${tool} failed temporarily — retrying once`);
-          const again = await runTool(tool, input).catch(() => null);
+          const again = await timed().catch(() => null);
           if (again != null) toolResult = toolFailed(again) ? { ...(typeof again === "object" ? again : {}), retried: true } : again;
         }
       }
@@ -4142,7 +4180,10 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         const hint = recoveryHint(tool, toolResult, { retried: toolResult.retried === true, offered: tools.map((t) => t.function?.name) });
         if (hint) toolResult = { ...toolResult, recovery: hint.next };
       }
-      const observation = toolObservation({ action: tool, result: toolResult, requestId: newToolRequestId() });
+      // The same tool with the same arguments again in a row: a reminder rides on this observation (the ledger is bookkeeping, not counted).
+      const repeat = tool === UPDATE_PLAN_TOOL.name ? null : guard.note(tool, input);
+      if (repeat) console.log(`[agent-chat] tool ${tool} repeated ${repeat.count}× in a row — ${repeat.level} added`);
+      const observation = toolObservation({ action: tool, result: toolResult, requestId: newToolRequestId(), extra: repeat ? { reminder: repeat.text } : null });
       recorder?.observation(observation);
       // Every tool call is logged: with nothing here, "the agent ignores my
       // data" is undiagnosable from server logs — zero lines means the model
@@ -4154,6 +4195,9 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         requestId: observation.request_id,
         sideEffecting: SIDE_EFFECT_TOOLS.includes(tool)
           || isSideEffectingAction(tool, input),
+        // Asked or inferred, on every change (Phase 18 item 6) — shown in developer mode.
+        ...(changes ? { basis: turnBasis.basis, rule: turnBasis.rule } : {}),
+        ...(repeat ? { repeated: repeat.count } : {}),
         // Did this turn really put a request in front of an admin? (requestClaims.js checks the reply against it.)
         ...(tool === "submit_tool_request" || tool === "create_tool" ? { adminRequest: adminRequestOf(tool, toolResult) } : {}),
         ...(isInspected() ? { input, result: inspectResult(toolResult) } : {}),
@@ -4229,8 +4273,9 @@ router.get("/models", (_req, res) => {
   res.set("Cache-Control", "private, max-age=300");
   // modes: the chat's modes and their models; models: the catalogue a
   // learner may pick for the standard mode (Grand Plan §7.11) — each says
-  // whether this server can use it, or why not ("coming soon").
-  res.json({ modes: chatModelMenu(), models: publicModelList() });
+  // whether this server can use it, or why not ("coming soon"), and its cost
+  // against the default; picker: whether the §7.11.5 picker is on here.
+  res.json({ modes: chatModelMenu(), models: publicModelList(), picker: pickerInfo() });
 });
 
 /**
@@ -4550,7 +4595,9 @@ router.post("/agent", async (req, res) => {
       } catch { ingests = []; }
     }
     // The reply's trace and meta (previews, materials, the uploads' cards), and the uploads pointed at it.
+    let savedReplyId = null;   // the stored reply's id: the episode's label key comes from it
     const saveTurn = async (messageId) => {
+      savedReplyId = messageId || null;
       const meta = { ...(previewMetaFrom(prepared.toolExecutions) || {}),
         ...(ingests.length ? { ingest: { id: ingests[0].id }, ingests: ingests.map((r) => ({ id: r.id })) } : {}) };
       await saveMessageTrace({ messageId, userId: req.user.id, trace: traceBlocks, meta: Object.keys(meta).length ? meta : null });
@@ -4824,10 +4871,11 @@ router.post("/agent", async (req, res) => {
     if (!reply.trim()) reply = "I'm here to help with your studies — ask me anything about your subjects!";
     // The episode (per AGENT_EPISODES; never for an opted-out user): the reply as shown, code-computed checks,
     // stored anonymised; never holds up the reply.
+    // Stored once the reply is saved, keyed to it (labelKeyFor) so a later rating joins it as a human label.
+    let episode = null;
     if (recorder && !stopped()) {
       recorder.decision({ reply });
-      const episode = recorder.finish({ ledger: prepared.ledger || ledgerIn, sideEffecting: (t) => isSideEffecting(t, {}), capabilities: intent?.multiStep ? ["planning"] : [] });
-      void saveEpisode(episode, { names: [req.user.username, req.user.fullName, req.user.email].filter(Boolean) }).catch(() => {});
+      episode = recorder.finish({ ledger: prepared.ledger || ledgerIn, sideEffecting: (t) => isSideEffecting(t, {}), capabilities: intent?.multiStep ? ["planning"] : [] });
     }
     const traceBlocks = trace.blocks();
 
@@ -4875,6 +4923,10 @@ router.post("/agent", async (req, res) => {
       warnedUnsavedTurn = true;
       console.warn("[/chat/agent] a completed turn was NOT saved (client sent no conversationId) — that reply cannot be restored on reload");
     }
+    if (episode) {
+      void saveEpisode(episode, { names: [req.user.username, req.user.fullName, req.user.email].filter(Boolean),
+        labelKey: labelKeyFor("agent_chat", savedReplyId) }).catch(() => {});
+    }
     // One line per completed turn, success or failure: with this, "my history
     // is empty" is diagnosable from the logs alone — saved=false names the
     // failing write above, saved=true with an empty reload points at the read
@@ -4894,9 +4946,9 @@ router.post("/agent", async (req, res) => {
       ...(durable ? { durableContext: true } : {}),
     };
     if (!wantsStream) {
-      return res.json({ success: true, reply, response: reply, thinking, syllabus: syllabusRefs, pastQuestions: pastRefs, curriculum: curriculumRefs, mode, metadata, toolExecutions: prepared.toolExecutions, trace: traceBlocks });
+      return res.json({ success: true, reply, response: reply, thinking, syllabus: syllabusRefs, pastQuestions: pastRefs, curriculum: curriculumRefs, mode, metadata, toolExecutions: prepared.toolExecutions, trace: traceBlocks, messageId: savedReplyId });
     }
-    send("done", { reply, thinking, syllabus: syllabusRefs, pastQuestions: pastRefs, curriculum: curriculumRefs, mode, metadata, toolExecutions: prepared.toolExecutions, trace: traceBlocks, stopped: stopped() });
+    send("done", { reply, thinking, syllabus: syllabusRefs, pastQuestions: pastRefs, curriculum: curriculumRefs, mode, metadata, toolExecutions: prepared.toolExecutions, trace: traceBlocks, stopped: stopped(), messageId: savedReplyId });
     return res.end();
   } catch (error) {
     console.error("[/chat/agent]", error);

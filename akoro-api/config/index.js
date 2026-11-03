@@ -83,7 +83,10 @@ const config = {
 
   // ── Auth / JWT ───────────────────────────────────────────────────────────
   auth: {
-    jwtSecret:    env.JWT_SECRET    ?? "akoro-dev-secret-change-in-production",
+    // No default: a missing key stops sign-in (and boot, in production) rather than
+    // signing with a value that is in the repository.
+    jwtSecret:    env.JWT_SECRET || null,
+    jwtRsa:       (env.JWT_PRIVATE_KEY || "").includes("-----BEGIN") && (env.JWT_PUBLIC_KEY || "").includes("-----BEGIN"),
     jwtExpiresIn: env.JWT_EXPIRES_IN ?? "7d",
     bcryptRounds: parseInt(env.BCRYPT_ROUNDS ?? "10", 10),
   },
@@ -164,7 +167,7 @@ if (isProd) {
   const required = [
     ["SUPABASE_URL",        config.supabase.url],
     ["SUPABASE_SERVICE_KEY",config.supabase.serviceKey],
-    ["JWT_SECRET",          config.auth.jwtSecret !== "akoro-dev-secret-change-in-production" ? "ok" : null],
+    ["JWT_PRIVATE_KEY+JWT_PUBLIC_KEY or JWT_SECRET", config.auth.jwtRsa || config.auth.jwtSecret ? "ok" : null],
     ["REDIS_URL",           config.redis.url !== "redis://localhost:6379" ? "ok" : null],
   ];
 

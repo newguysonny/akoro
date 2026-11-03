@@ -188,7 +188,9 @@ export const supabaseStore = {
         claim_status: "not_checked",
         evidence_summary: (source === "agent_recall"
           ? `Study-prep Agent Check: the learner's agent answered ${Math.round((Number(score) || 0) * 100)}% from their notes (mastery → ${mastery?.next ?? "n/a"})`
-          : `Study-prep ${passed ? "passed" : "attempt"}: score ${Math.round((Number(score) || 0) * 100)}% (mastery → ${mastery?.next ?? "n/a"})`).slice(0, 1200),
+          : source === "proctored_assessment"
+            ? `Proctored assessment ${passed ? "passed" : "attempt"}: score ${Math.round((Number(score) || 0) * 100)}% (mastery → ${mastery?.next ?? "n/a"})`
+            : `Study-prep ${passed ? "passed" : "attempt"}: score ${Math.round((Number(score) || 0) * 100)}% (mastery → ${mastery?.next ?? "n/a"})`).slice(0, 1200),
         provenance: { source, mastery },
       }, { onConflict: "learner_id,source_session_id,source_turn_id,concept_id" });
       if (evidenceError) console.error("[study-prep-store/mastery-evidence]", evidenceError.message);

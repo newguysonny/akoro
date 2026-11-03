@@ -35,6 +35,7 @@ import { meetingsPost, meetingsDelete } from "../../lib/meetingsBreaker.js";
 import db            from "../../db.js";
 import { createMeeting } from "./meeting-integration.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
+import { isEnrolled } from "./courseAccess.js";
 import { workerTick } from "../../lib/workerLog.js";
 
 // This scheduler is now backed by the `live_sessions` Postgres table — the same
@@ -526,34 +527,49 @@ const loadSession = async (id) => {
   return data;
 };
 
+/**
+ * The session the caller may act on, or null after answering 404/403. Only the
+ * session's own instructor (or an admin) may provision its link or force it
+ * live/ended — those calls use the host's meeting account (Phase 15 item 6).
+ * Reading the link (`learners: true`) is also open to learners enrolled in the course.
+ */
+async function sessionFor(req, res, { learners = false } = {}) {
+  const s = await loadSession(req.params.sessionId);
+  if (!s) { res.status(404).json({ success: false, message: "Session not found" }); return null; }
+  if (s.instructor_id === req.user.id || req.user.role === "admin") return s;
+  if (learners && await isEnrolled(req.user.id, s.course_id)) return s;
+  res.status(403).json({ success: false, message: "Not your session" });
+  return null;
+}
+
 const schedulerHandlers = {
   // POST /api/scheduler/links/:sessionId — provision the meeting link now.
   createLink: wrap(async (req, res) => {
-    const s = await loadSession(req.params.sessionId);
-    if (!s) return res.status(404).json({ success: false, message: "Session not found" });
+    const s = await sessionFor(req, res);
+    if (!s) return;
     const updated = await createLiveLink(s);
     res.status(201).json({ success: true, data: { joinUrl: updated.join_url ?? updated.meeting_url ?? null } });
   }),
 
   // GET /api/scheduler/links/:sessionId — read the current link.
   getLinkBySession: wrap(async (req, res) => {
-    const s = await loadSession(req.params.sessionId);
-    if (!s) return res.status(404).json({ success: false, message: "Session not found" });
+    const s = await sessionFor(req, res, { learners: true });
+    if (!s) return;
     res.json({ success: true, data: { joinUrl: s.join_url ?? s.meeting_url ?? null, meetingId: s.meeting_id ?? null } });
   }),
 
   // POST /api/scheduler/activate/:sessionId — force scheduled → live.
   activate: wrap(async (req, res) => {
-    const s = await loadSession(req.params.sessionId);
-    if (!s) return res.status(404).json({ success: false, message: "Session not found" });
+    const s = await sessionFor(req, res);
+    if (!s) return;
     await activateSession(s);
     res.json({ success: true, data: await loadSession(req.params.sessionId) });
   }),
 
   // POST /api/scheduler/end/:sessionId — force live → ended.
   end: wrap(async (req, res) => {
-    const s = await loadSession(req.params.sessionId);
-    if (!s) return res.status(404).json({ success: false, message: "Session not found" });
+    const s = await sessionFor(req, res);
+    if (!s) return;
     await expireSession(s);
     res.json({ success: true, data: await loadSession(req.params.sessionId) });
   }),

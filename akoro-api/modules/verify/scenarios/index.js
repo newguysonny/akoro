@@ -22,6 +22,7 @@ import { inboxOneList } from "./inbox.js";
 import { quietLearningPass } from "./quietLearning.js";
 import { plannerRichGather } from "./richGather.js";
 import { proactiveInChat } from "./proactiveChat.js";
+import { kindObserveThenLive, outboxDelivery } from "./proactiveModes.js";
 import { readerBackend } from "./reader.js";
 import { socketSession, guideIdeasSession } from "./socket.js";
 import { SELFTOOL_CHANGES } from "./selftoolChanges.js";
@@ -36,12 +37,21 @@ import { battleChatScenarios } from "./battleChat.js";
 import { activityReviewRuns, activityReviewPlay } from "./activityReview.js";
 import { activityChatScenarios } from "./activityChat.js";
 import { evalsRun, evalsResult } from "./evals.js";
+import { agentTurns, teachingOutcomes } from "./teachingAgent.js";
+import { decayReviewFlow } from "./decayReview.js";
+import { syllabusImportExample, syllabusImportCost } from "./syllabusImport.js";
+import { practiceProctoredFlow, practiceIntegrityFlagged } from "./practice.js";
+import { dashboardDescriptors, needsYouCategories } from "./dashboard.js";
+import { ratingSavedNotInPrompt, promptOverrideFlagged } from "./ratingsPrompts.js";
+import { teacherSchoolReads, paymentsSingleMount, courseInviteJoin, sharedSecretsFailClosed, noFallbackSecrets, ownershipReads } from "./security.js";
+import { loopGuardTimeLimits, actionBasis } from "./agentHygiene.js";
+import { schoolStrugglesScope, modelPickerResolution } from "./schoolStruggles.js";
 
 const ALL = [healthBuild, toolsCatalogue, sessionTokensOnly, r2Live, embeddingsLive, embeddingsCompare, searchTextFallback, scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity,
   privacyEdges, rateLimitCountedOnce, battleEntryGates, followUpDeliverIntoChat, taskDueInMinutes, noResidue,
   viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, suggestionsSurviveRefresh, studyToolRouting, untaughtFlashcards, tailoredChips, chatUploadFiled, pastPaperStructured, sortOwnFolders, materialsMultiFileDiag, readyProposal, goalWork, ideasFlow, consentsQuietBudget, instructorProactive, voiceSpeak, voiceLive, sweepStale, agentCheckBattle, agentCheckStop, classSyllabusFirst, historyPages, workflowMirror, agentWakes, replaceAndCancel, teachingHandoff, eventStream, paperStructured, ...chatToSubmissionScenarios, authoringVersionsParts, authoringDiagramsEdits, inboxOneList, quietLearningPass, plannerRichGather, proactiveInChat, readerBackend, socketSession, guideIdeasSession, courseOneRecord,
   teachingToolRouting, teachingToolRuns, activityToolRouting, draftLifecycle, routineLifecycle,
-  battleFromChat, battleReviewFromChat, selfStudyFull, assignmentPreviewAssign, journeyBattleStage, ...teachingToolScenarios, teachingToolVersions, teachingToolTry, toolsAllOpen, deferredRelease, sessionReminders, guideReviewRuns, battleSeriesRuns, ...battleChatScenarios, activityReviewRuns, activityReviewPlay, ...activityChatScenarios, permissionRequestIsReal, toolJourney, deleteTasks, ...SELFTOOL_CHANGES, evalsRun, evalsResult];
+  battleFromChat, battleReviewFromChat, selfStudyFull, assignmentPreviewAssign, journeyBattleStage, ...teachingToolScenarios, teachingToolVersions, teachingToolTry, toolsAllOpen, deferredRelease, sessionReminders, guideReviewRuns, battleSeriesRuns, ...battleChatScenarios, activityReviewRuns, activityReviewPlay, ...activityChatScenarios, permissionRequestIsReal, toolJourney, deleteTasks, ...SELFTOOL_CHANGES, evalsRun, evalsResult, teacherSchoolReads, paymentsSingleMount, courseInviteJoin, agentTurns, teachingOutcomes, sharedSecretsFailClosed, noFallbackSecrets, ownershipReads, decayReviewFlow, practiceProctoredFlow, practiceIntegrityFlagged, dashboardDescriptors, needsYouCategories, loopGuardTimeLimits, actionBasis, schoolStrugglesScope, modelPickerResolution, kindObserveThenLive, outboxDelivery, ratingSavedNotInPrompt, promptOverrideFlagged, syllabusImportExample, syllabusImportCost];
 
 export const SCENARIOS = Object.fromEntries(ALL.map((s) => [s.name, s]));
 
@@ -61,7 +71,7 @@ export const SUITES = {
   // Teachers' follow-ups in one conversation: versions, parts, edits to specific questions, diagrams.
   authoring: ["activity.authoring_versions_parts", "activity.authoring_diagrams_edits", "writes.no_residue"],
   // The proactive agent (Grand Plan §7.16): one inbox, by-kind accept, dismiss reasons.
-  proactive: ["agent.inbox_one_list", "agent.quiet_learning", "agent.planner_rich_gather", "agent.proactive_in_chat", "agent.ready_proposal", "agent.goal_work", "agent.ideas", "agent.consents_quiet", "agent.instructor_proactive", "writes.no_residue"],
+  proactive: ["agent.inbox_one_list", "agent.quiet_learning", "agent.planner_rich_gather", "agent.proactive_in_chat", "agent.ready_proposal", "agent.goal_work", "agent.ideas", "agent.consents_quiet", "agent.instructor_proactive", "agent.kind_observe_then_live", "writes.no_residue"],
   // Real changes on test learners, then proof nothing was left behind.
   writes: ["tasks.create_due_in_minutes", "followups.deliver_into_chat", "writes.no_residue"],
   // Phase V4 end to end (sandbox only: BLOCKED on production).
@@ -82,6 +92,8 @@ export const SUITES = {
   "instructor-teaching-tools": ["instructor.tools_all_open", ...teachingToolScenarios.map((t) => t.name), "instructor.teaching_tool_versions", "writes.no_residue"],
   teaching: ["teaching.bridge_persists"],
   decay: ["decay.concept_curve"],
+  // Phase 11 / Phase 18 item 2: dashboard descriptors with deterministic routes, and the one "needs you" list.
+  dashboard: ["workflow.dashboard_descriptors", "workflow.needs_you_categories"],
   suggestions: ["chat.suggestions_answer", "chat.tailored_chips", "chat.suggestions_survive_refresh", "chat.study_tool_routing", "chat.untaught_flashcards", "writes.no_residue"],
   // Materials to study (§7.17): chat uploads filed in a Library folder, Undo.
   voice: ["voice.speak_deepgram", "voice.live_deepgram"],
@@ -91,7 +103,12 @@ export const SUITES = {
   "study-prep": ["studyprep.plan_completes", "studyprep.practice_charged_once", "studyprep.generated_outline", "studyprep.class_syllabus_first", "studyprep.workflow_mirror", "studyprep.agent_wakes", "studyprep.replace_and_cancel", "studyprep.teaching_handoff", "workflow.event_stream", "writes.no_residue"],
   "agent-check": ["studyprep.agent_check_battle", "studyprep.agent_check_stop", "writes.no_residue"],
   "agent-network": ["network.privacy_edges"],
+  // Phase 18 items 3 and 6: the loop guard, tool time limits, asked or inferred;
+  // items 4 and 7: ratings on agent replies, admin-editable prompts.
+  "agent-hygiene": ["agent.loop_guard_time_limits", "agent.action_basis", "ratings.saved_not_in_prompt", "prompts.override_flagged", "writes.no_residue"],
   battles: ["battles.entry_gates"],
+  // Phase 11 UI backends: the school's struggles view (D39) and the chat's model picker (§7.11.5).
+  "phase11-ui": ["school.struggles_scope", "models.picker_resolution"],
   "self-tooling": ["selftool.views_match_schema", "selftool.schema_lookup_safe", "selftool.create_spec_matches_db", "selftool.create_rejects_forbidden",
     "selftool.agent_builds_tool", "selftool.agent_uses_schema_lookup", "selftool.agent_escalates", "selftool.sandbox_contained", "selftool.code_tool",
     "selftool.instructor_scope", "selftool.instructor_tool_matches_db", "selftool.instructor_agent_builds"],

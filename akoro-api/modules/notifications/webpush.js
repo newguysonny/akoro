@@ -41,17 +41,28 @@ export const getPublicKey  = () => PUBLIC_KEY;
  * @param {{title:string, body?:string, link?:string, tag?:string, type?:string}} payload
  */
 export async function sendPushToUser(userId, payload) {
-  if (!enabled || !userId) return;
+  try { await deliverPush(userId, payload); } catch (e) { console.warn("[webpush] load subs failed:", e.message); }
+}
 
-  let subs = [];
-  try {
-    const { data } = await db
-      .from("web_push_subscriptions")
-      .select("id, endpoint, p256dh, auth")
-      .eq("user_id", userId);
-    subs = data ?? [];
-  } catch (e) { console.warn("[webpush] load subs failed:", e.message); return; }
-  if (!subs.length) return;
+/**
+ * The same send, reporting per device (the outbox's push channel, Phase 18
+ * item 5): devices in skipIds were reached by an earlier try and are not
+ * pushed again. Throws only when the subscriptions can't be read.
+ * → { sent: [ids], dead: [ids], failed: [{ id, error }], none?: true }
+ */
+export async function deliverPush(userId, payload, { skipIds = [] } = {}) {
+  const out = { sent: [], dead: [], failed: [] };
+  if (!enabled || !userId) return { ...out, none: true };
+
+  const { data, error } = await db
+    .from("web_push_subscriptions")
+    .select("id, endpoint, p256dh, auth")
+    .eq("user_id", userId);
+  if (error) throw new Error(error.message);
+  const skip = new Set((skipIds || []).map(String));
+  const subs = (data ?? []).filter((s) => !skip.has(String(s.id)));
+  if (!(data ?? []).length) return { ...out, none: true };
+  if (!subs.length) return out;
 
   // 120 chars is the visible ceiling on most lock screens; the rest is bytes
   // the device never shows. TTL stops offline devices from queuing stale
@@ -67,7 +78,7 @@ export async function sendPushToUser(userId, payload) {
   const topic = String(payload.tag || payload.type || "akoro")
     .replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 32) || "akoro";
 
-  const dead = [];
+  const dead = out.dead;
   await Promise.all(subs.map(async (s) => {
     try {
       await webpush.sendNotification(
@@ -75,14 +86,19 @@ export async function sendPushToUser(userId, payload) {
         body,
         { TTL: 3600, topic },
       );
+      out.sent.push(s.id);
     } catch (err) {
       // 404/410 → the subscription is gone; prune it.
       if (err?.statusCode === 404 || err?.statusCode === 410) dead.push(s.id);
-      else console.warn("[webpush] send failed:", err?.statusCode, err?.message);
+      else {
+        console.warn("[webpush] send failed:", err?.statusCode, err?.message);
+        out.failed.push({ id: s.id, error: `${err?.statusCode || ""} ${err?.message || "failed"}`.trim() });
+      }
     }
   }));
 
   if (dead.length) {
     try { await db.from("web_push_subscriptions").delete().in("id", dead); } catch {}
   }
+  return out;
 }

@@ -7,6 +7,7 @@
  *   POST /api/admin/agent-tools/:id/status       { status: active|disabled|revoked }
  *   POST /api/admin/agent-tools/:id/promote      { name?, label?, goal?, replaces?: [ids] }
  *   GET  /api/admin/self-tooling/analytics?days=
+ *   GET  /api/admin/self-tooling/audit?days=&limit=   builds and changes, each asked or inferred (+ rule)
  *   GET  /api/admin/agent-capabilities/tools      built-in + promoted, with examples
  *   GET  /api/admin/agent-capabilities/features   what the agent does that isn't a tool
  *
@@ -17,7 +18,7 @@ import { Router } from "express";
 
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { agentFeaturesCatalogue, agentToolsCatalogue } from "../agent-capabilities/catalogue.js";
-import { listTools, getTool, setToolStatus, promoteTool, similarTools, analytics } from "../self-tooling/library.js";
+import { listTools, getTool, setToolStatus, promoteTool, similarTools, analytics, auditRows } from "../self-tooling/library.js";
 
 const router = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];
@@ -67,6 +68,10 @@ router.post("/agent-tools/:id/promote", adminOnly, asyncHandler(async (req, res)
 
 router.get("/self-tooling/analytics", adminOnly, asyncHandler(async (req, res) => {
   res.json({ success: true, analytics: await analytics({ days: req.query.days }) });
+}));
+
+router.get("/self-tooling/audit", adminOnly, asyncHandler(async (req, res) => {
+  res.json({ success: true, rows: await auditRows({ days: req.query.days, limit: req.query.limit }) });
 }));
 
 router.get("/agent-capabilities/tools", adminOnly, asyncHandler(async (_req, res) => {
