@@ -81,3 +81,41 @@ test("the bundled WAEC Biology PDF reads with its layout (35 pages, the table ro
   assert.match(pages[0].text, /AIMS AND OBJECTIVES/);
   assert.ok(pages.some((p) => /Levels of organization/.test(p.text)));
 });
+
+test("the outline: SECTION lines and lettered themes at the margin; front-matter 'Section A :' lines are not headings", () => {
+  const pages = [
+    { page: 2, text: "      Section A : Will consist of four questions drawn from Section A of" },
+    { page: 3, text: "SECTION A\n  A.      Concept of Living\n      1. Classification" },
+    { page: 13, text: "  B.   Plant and Animal Nutrition            oviparity notes here" },
+    { page: 29, text: "SECTION C\n  A.      Concept of Living" },
+  ];
+  const o = S.outlineFromPages(pages);
+  assert.deepEqual(o.map((e) => `${e.kind}:${e.label}:${e.section}`), [
+    "section:Section A:Section A", "theme:A. Concept of Living:Section A", "theme:B. Plant and Animal Nutrition:Section A",
+    "section:Section C:Section C", "theme:A. Concept of Living:Section C",
+  ]);
+  assert.deepEqual(S.outlineAt(o, { from: 13, to: 14 }), { section: "Section A", theme: "A. Concept of Living", inside: ["B. Plant and Animal Nutrition"] });
+});
+
+test("fitting the outline: numbered items fold back under their theme, SECTION pseudo-topics dissolve, sections follow the outline", () => {
+  const outline = [
+    { page: 3, kind: "section", label: "Section A", section: "Section A" }, { page: 3, kind: "theme", label: "A. Concept of Living", section: "Section A" },
+    { page: 13, kind: "theme", label: "B. Plant and Animal Nutrition", section: "Section A" },
+    { page: 29, kind: "section", label: "Section C", section: "Section C" }, { page: 29, kind: "theme", label: "A. Concept of Living", section: "Section C" },
+  ];
+  const sub = (title) => ({ title, content: "c", objectives: [], notes: null });
+  const fitted = S.fitOutline([
+    { title: "A. Concept of Living", section: "Section A", subtopics: [sub("1. Classification")] },
+    { title: "8. Transport System", section: null, subtopics: [sub("(a) Need for transport")] },
+    { title: "Respiratory System", section: null, subtopics: [sub("Body surface")] },
+    { title: "B. Plant and Animal Nutrition", section: null, subtopics: [sub("1. Plant Nutrition")] },
+    { title: "SECTION C (For candidates in Nigeria)", section: "Section C", subtopics: [sub("A. Concept of Living"), sub("1. Cell theory")] },
+  ], outline);
+  assert.deepEqual(fitted.map((t) => `${t.section}|${t.title}|${t.subtopics.length}`), [
+    "Section A|A. Concept of Living|3", "Section A|B. Plant and Animal Nutrition|1", "Section C|A. Concept of Living|1",
+  ]);
+  assert.equal(fitted[0].subtopics[1].title, "8. Transport System");
+  assert.match(fitted[0].subtopics[1].content, /Need for transport/);
+  const checked = S.checkImport({ topics: fitted, pages: [] });
+  assert.ok(!checked.warnings.some((w) => w.kind === "duplicate_topic"), "the same theme in two sections is not a duplicate");
+});

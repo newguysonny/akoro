@@ -45,6 +45,38 @@ export function chunkPages(pages = [], max = CHUNK_CHARS) {
   return chunks;
 }
 
+/**
+ * PURE: the syllabus's outline, read deterministically from the layout text:
+ * SECTION headings ("SECTION A" alone on a line) and lettered themes at the
+ * left margin ("A.      Concept of Living   …notes column…"). Front matter like
+ * "Section A : Will consist of…" is not a heading. → [{ page, kind, label, section }]
+ */
+export function outlineFromPages(pages = []) {
+  const out = [];
+  let section = null;
+  for (const p of pages) {
+    for (const line of p.text.split("\n")) {
+      const sec = line.match(/^\s*SECTION\s+([A-Z]|[IVX]+)\b(?!\s*:)(.*)$/);
+      if (sec && !/[a-z]{3,}\s*:/.test(line)) { section = `Section ${sec[1]}`; out.push({ page: p.page, kind: "section", label: section, section }); continue; }
+      const th = line.match(/^\s{0,30}([A-Z])\.\s+([A-Z][^\n]*?)(?:\s{3,}.*)?$/);
+      if (th && th[2].replace(/[^A-Za-z]/g, "").length >= 4) out.push({ page: p.page, kind: "theme", label: `${th[1]}. ${th[2].replace(/[:.]\s*$/, "").trim()}`, section });
+    }
+  }
+  return out;
+}
+
+/** PURE: where the outline stands when a chunk starts (the last section/theme on earlier pages), and the themes inside it. */
+export function outlineAt(outline, chunk) {
+  const before = outline.filter((e) => e.page < chunk.from);
+  const lastTheme = [...before].reverse().find((e) => e.kind === "theme") || null;
+  const lastSection = [...before].reverse().find((e) => e.kind === "section") || null;
+  return {
+    section: lastSection?.label || lastTheme?.section || null,
+    theme: lastTheme && (!lastSection || outline.indexOf(lastTheme) > outline.indexOf(lastSection)) ? lastTheme.label : null,
+    inside: outline.filter((e) => e.page >= chunk.from && e.page <= chunk.to).map((e) => (e.kind === "section" ? `[${e.label}]` : e.label)),
+  };
+}
+
 export const FRONT_SYSTEM = `You read the opening pages of an exam syllabus and return ONLY JSON:
 { "name": the subject, e.g. "Biology", "code": the subject code if printed or null,
   "aims": the aims/objectives of the syllabus as one paragraph (keep the numbered points, joined with "; "),
@@ -60,6 +92,7 @@ Return ONLY JSON:
                      "notes": the NOTES column for this row, faithfully, or null } ] } ] }
 Rules:
 - A main heading (e.g. "A. BASIC CONCEPTS", "SECTION I: …", "THEME 1 …") is a topic; each numbered item under it (1., 2., …) is a subtopic; its lettered/roman points are its content.
+- When the outline is given, its lettered headings are the ONLY topics in this part: a numbered item (e.g. "8. Transport System") is always a subtopic of the heading above it, never a topic. A "SECTION A/B/C" line is not a topic — put it in "section" of the topics under it.
 - If the part begins in the middle of a topic, start with that topic's title (given as context) and "continues": true.
 - Keep every item and every note. Do not summarise, merge different items, or invent. Fix only broken spacing.
 - Front matter (preamble, aims, scheme of examination) and lists of recommended books are NOT topics — skip them.`;
@@ -107,6 +140,52 @@ export function mergeTopics(perChunk = []) {
   return topics;
 }
 
+const lettered = (title) => /^\s*[A-Z]\.\s+\S/.test(String(title || ""));
+
+/**
+ * PURE: hold the merged topics to the outline. A topic that is really a
+ * numbered item ("8. Transport System"), or an unlettered heading the outline
+ * doesn't know, folds into the topic before it as a subtopic; a "SECTION …"
+ * pseudo-topic is dropped (its lettered entries become topics). Each topic gets
+ * the section its heading sits in, in order (Section C repeats Section A's
+ * themes, so matching walks forward through the outline).
+ */
+export function fitOutline(topics = [], outline = []) {
+  const themes = outline.filter((e) => e.kind === "theme");
+  if (themes.length < 2) return topics;
+  const known = new Set(themes.map((t) => key(t.label)));
+  const out = [];
+  const asSubtopic = (t) => ({ title: t.title, content: t.subtopics.map((s) => [s.title, s.content].filter(Boolean).join(": ")).join("; ") || null, objectives: t.subtopics.flatMap((s) => s.objectives), notes: t.subtopics.map((s) => s.notes).filter(Boolean).join(" ") || null });
+  const queue = [...topics];
+  while (queue.length) {
+    const t = queue.shift();
+    if (/^\s*section\b/i.test(t.title)) {
+      // Its lettered subtopics are the section's first topics; the rest belong under the last one.
+      const fresh = [];
+      for (const s of t.subtopics) {
+        if (lettered(s.title)) fresh.push({ title: s.title, section: t.section, continues: false, subtopics: [] });
+        else if (fresh.length) fresh[fresh.length - 1].subtopics.push(s);
+        else if (out.length) out[out.length - 1].subtopics.push(s);
+      }
+      queue.unshift(...fresh);
+      continue;
+    }
+    const isTheme = lettered(t.title) || known.has(key(t.title));
+    if (!isTheme && out.length) { out[out.length - 1].subtopics.push(asSubtopic(t)); continue; }
+    out.push({ ...t });
+  }
+  // Sections in order: walk forward through the outline's themes.
+  let cursor = 0;
+  let section = out[0]?.section || null;
+  for (const t of out) {
+    const k = key(t.title);
+    const at = themes.findIndex((e, i) => i >= cursor && key(e.label) === k);
+    if (at >= 0) { cursor = at + 1; section = themes[at].section || section; }
+    t.section = section || t.section || null;
+  }
+  return out;
+}
+
 /** PURE: what a reviewer should look at. */
 export function checkImport({ topics = [], pages = [], failed = [] }) {
   const subtopics = topics.flatMap((t) => t.subtopics);
@@ -114,8 +193,9 @@ export function checkImport({ topics = [], pages = [], failed = [] }) {
   for (const c of failed) warnings.push({ kind: "chunk_failed", text: `Pages ${c.from}–${c.to} could not be read — check them by hand.` });
   for (const t of topics) if (!t.subtopics.length) warnings.push({ kind: "empty_topic", text: `“${t.title}” has no subtopics.` });
   const seen = new Map();
-  for (const t of topics) seen.set(key(t.title), (seen.get(key(t.title)) || 0) + 1);
-  for (const [k, n] of seen) if (n > 1 && k) warnings.push({ kind: "duplicate_topic", text: `A topic appears ${n} times: “${topics.find((t) => key(t.title) === k).title}”.` });
+  const tk = (t) => `${t.section || ""}|${key(t.title)}`;
+  for (const t of topics) seen.set(tk(t), (seen.get(tk(t)) || 0) + 1);
+  for (const [k, n] of seen) if (n > 1 && k.split("|")[1]) warnings.push({ kind: "duplicate_topic", text: `A topic appears ${n} times in the same section: “${topics.find((t) => tk(t) === k).title}”.` });
   const bare = subtopics.filter((s) => !s.content && !s.objectives.length && !s.notes).length;
   if (bare) warnings.push({ kind: "bare_subtopics", text: `${bare} subtopic(s) have a title only.` });
   // Numbered items in the source vs subtopics found: a rough coverage signal.
@@ -148,6 +228,7 @@ async function pool(items, size, fn) {
 export async function structureSyllabus({ pages, hint = {}, ask, concurrency = 3, onProgress = () => {} }) {
   const front = pages.slice(0, 4).map((p) => p.text).join("\n").slice(0, 12_000);
   const chunks = chunkPages(pages);
+  const outline = outlineFromPages(pages);
   let meta = {};
   try { meta = parseJson(await ask({ system: FRONT_SYSTEM, user: `${hint.exam ? `Exam: ${hint.exam}. ` : ""}${hint.name ? `Subject: ${hint.name}. ` : ""}\n\n${front}`, maxTokens: 1500 })); }
   catch { meta = {}; }
@@ -155,7 +236,10 @@ export async function structureSyllabus({ pages, hint = {}, ask, concurrency = 3
   const failed = [];
   const perChunk = await pool(chunks, concurrency, async (c, i) => {
     const before = i ? chunks[i - 1].text.slice(-CONTEXT_CHARS) : "";
+    const at = outline.length >= 2 ? outlineAt(outline, c) : null;
     const user = `${hint.exam ? `Exam: ${hint.exam}. ` : ""}Subject: ${hint.name || meta.name || "unknown"}. Pages ${c.from}–${c.to}.`
+      + (at ? `\nOutline — this part starts in ${at.section || "the syllabus"}${at.theme ? `, inside the heading "${at.theme}" (if the part begins mid-heading, output it first with "continues": true)` : ""}.`
+        + (at.inside.length ? ` Headings that begin in this part, in order: ${at.inside.join(" · ")}.` : " No new heading begins in this part.") : "")
       + (before ? `\n\nThe previous part ended with (context only, do not output it):\n"""${before}"""` : "")
       + `\n\nConvert this part:\n"""${c.text}"""`;
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -169,7 +253,7 @@ export async function structureSyllabus({ pages, hint = {}, ask, concurrency = 3
     onProgress({ done: ++done, of: chunks.length });
     return [];
   });
-  const topics = mergeTopics(perChunk);
+  const topics = fitOutline(mergeTopics(perChunk), outline);
   const doc = {
     exam: hint.exam || "WASSCE",
     name: hint.name || clip(meta.name, 120) || "Untitled",
