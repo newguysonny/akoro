@@ -3568,6 +3568,80 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   core.
 - **Status (2026-11-02):** planned.
 
+### Phase 20 — Session plugins: learner-made teaching recipes (from DeepSeek Harness Creator Mode, 2026-11-03)
+- **Why.** DeepSeek Harness's Creator Mode (the `cordis` preset in
+  `deepseek-ai/deepseek-harness`) lets the agent write plugins that hot-reload into
+  the running harness: build skills (`cordis-plugin-development` + templates), a
+  `plugin_manager` tool behind per-call approval, and `dsh-hmr` to swap code
+  without a restart. The idea suits Akoro: a learner reads that past questions
+  helped another student (a blog post, a friend) and asks their protégé "make my
+  sessions like that"; the protégé builds a plugin that changes how every teaching
+  session runs. Their *method* does not suit Akoro: their plugins are code running
+  in-process outside the sandbox. For students we take the idea, not the method.
+- **The rule: recipes, not code.** A session plugin is a structured recipe
+  (JSON, schema-checked) that the protégé composes from **building blocks we write
+  and test**. The teaching engine runs the recipe; nothing the protégé or learner
+  writes executes. New blocks are added by us (or promoted, like platform tools).
+- **Hook points** (on the existing teaching session, `teaching-session/`):
+  - `concept_start` — before a must-know concept is taught;
+  - `concept_end` — after the concept, before `applyTeachingProgress` may advance;
+  - `phase_enter` — on entering a phase (e.g. Phase 3, teach it back);
+  - `wrong_answer` — after the learner misses a check;
+  - `session_start` / `session_end`.
+- **First building blocks:** ask a question (own words / MCQ / short answer);
+  past question for this concept (from the past-question bank and the syllabus
+  importer, matched to the learner's exam — WAEC / JAMB / BECE / IGCSE — and class);
+  easier similar question; recall from an earlier session (spaced recall); timed
+  mini-quiz; summary card; explain-in-language (Pidgin / Yoruba / Igbo / Hausa
+  first); relate-to-interest (football, music…); teach-it-back to a younger level.
+- **Example — "Past question per concept":** `{ hook: "concept_end", block:
+  "past_question", params: { exam: "auto", count: 1, difficulty: "match",
+  onWrong: "easier_similar" } }`. Shown to the learner as "Adds 1 past question
+  after each concept · about 2 min per concept".
+- **Safety (non-negotiable):**
+  - Plugins **only add steps**. They can never skip, shorten or pass the
+    progression gate, mark a concept verified, or change mastery evidence — the
+    gate stays in code (`applyTeachingProgress`). A plugin's answers MAY count as
+    evidence only through the existing evidence path.
+  - Limits per session: extra minutes, extra model calls and cost (USD), like the
+    agent tool limits; a plugin over its limit is skipped for the rest of the
+    session with a visible note.
+  - The learner sees which plugins are on in the session header and can switch any
+    off for this session or for good. Proctored practice (Phase 9) and battles run
+    **without** plugins.
+  - Under-13 / school accounts: a school or parent setting can allow, limit or
+    turn off learner-made plugins.
+- **Lifecycle:** the protégé proposes (a chat card with the recipe in plain words +
+  an estimated cost in time) → the learner turns it on (private) → optionally shares
+  with classmates or a study group → admin approval before it appears in the
+  marketplace (the same promote flow as platform tools) → instructors / schools
+  can attach an approved plugin to a class or course.
+- **Steps, in order:**
+  1. **UI preview first** (learner): the protégé's proposal card, the "plugins on"
+     strip in the session header, a plugin block running inside a concept turn, and
+     the My plugins list. Build after approval.
+  2. **Recipe schema + validator + block registry** (pure; contract tests: unknown
+     block / hook refused, add-only enforced, limits required).
+  3. **Runner in the teaching session:** hooks called around the concept turn;
+     blocks emit normal turn blocks on the existing event stream (Phase 3), so chat
+     and the session view render them without new transport.
+  4. **Past-question block** on the past-question bank (needs the past-question
+     importer; until then, the syllabus objectives + generated exam-style questions
+     marked "practice, not a real past question").
+  5. **Protégé tool `propose_session_plugin`** (draft only; turning on is the
+     learner's tap) + `edu.session_plugins` (owner, recipe, version, status,
+     shared_with) + per-session usage log (time, calls, cost).
+  6. **Sharing and marketplace:** share to classmates; admin review queue;
+     instructor/school attach.
+  7. **Gate scenarios:** `plugins.add_only` (a recipe that tries to advance is
+     refused; the gate decides), `plugins.past_question_per_concept` (each concept
+     ends with one past question; wrong → easier one), `plugins.limits` (over-budget
+     plugin skipped with a note), `plugins.off_in_practice`.
+- **Exit:** a learner can ask for "past questions on every concept", approve the
+  protégé's card, and the next teaching session runs it on every concept, with the
+  gate unchanged and all four gate scenarios green.
+- **Status (2026-11-03):** planned. Next: the UI preview (step 1).
+
 ---
 
 ## 18. Acceptance tests
