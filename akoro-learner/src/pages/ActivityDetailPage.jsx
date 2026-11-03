@@ -148,11 +148,17 @@ function BoxTool({ icon, label, onClick, disabled }) {
 }
 
 /* The answer box under the question. */
-function AnswerBox({ q, idx, value, onType, files, onPick, onRemove, onOpenFile, onDraw, onWrite, uploading, removing, status, saveErr, onRetry, fileErr }) {
+function AnswerBox({ format = 'all', q, idx, value, onType, files, onPick, onRemove, onOpenFile, onDraw, onWrite, uploading, removing, status, saveErr, onRetry, fileErr }) {
   const fileRef = useRef(null);
   const [focus, setFocus] = useState(false);
   const full = files.length >= PER_QUESTION_FILES;
   const mcq = isMcq(q);
+  // How this assignment may be answered (details.answer_format; none = everything). Picking an option for a
+  // multiple-choice question is always allowed; the API enforces the rest.
+  const canType = format !== 'images' || mcq;
+  const canImages = format !== 'text';
+  const canDocs = format === 'all';
+  const formatNote = mcq ? '' : { images: 'Photos only', text: 'Typed only', images_text: 'Typed or photos' }[format] || '';
   const labelling = q?.format === 'label' && Array.isArray(q.labels);
   const typed = typeof value === 'string' ? value.trim() : '';
   const pick = mcq && typed ? readChoice(q, typed) : null;
@@ -160,13 +166,21 @@ function AnswerBox({ q, idx, value, onType, files, onPick, onRemove, onOpenFile,
     : mcq ? `Type your answer — the letter (${letterOf(0)}–${letterOf(q.options.length - 1)}) or the option` : 'Type your answer…';
   return (
     <div style={{ marginTop: 14, padding: '12px 12px 10px', border: `1px solid ${focus ? BRAND : 'var(--ak-border)'}`, boxShadow: focus ? `0 0 0 3px ${BRAND}1C` : '0 4px 14px rgba(30,41,59,.055)', borderRadius: 22, background: 'var(--ak-surface)', transition: 'border-color .16s, box-shadow .16s' }}>
-      <div style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: '.05em', textTransform: 'uppercase', color: BRAND, margin: '0 3px 6px', fontFamily: "'Nunito',sans-serif" }}>Your answer</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 10.5, fontWeight: 900, letterSpacing: '.05em', textTransform: 'uppercase', color: BRAND, margin: '0 3px 6px', fontFamily: "'Nunito',sans-serif" }}>
+        <span>Your answer</span>{formatNote && <span style={{ color: 'var(--ak-text-muted)' }}>{formatNote}</span>}
+      </div>
       {files.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '0 0 8px' }}>
           {files.map((f) => <FileCard key={f.id} file={f} onOpen={onOpenFile} onRemove={onRemove} busy={removing === f.id} sans="'Nunito',sans-serif"/>)}
         </div>
       )}
-      {labelling ? (
+      {!canType ? (
+        /* A photo-only assignment: the answer is a picture of the work, not typed words. */
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', margin: '0 0 8px', borderRadius: 14, background: 'var(--ak-bg)', border: '1px dashed var(--ak-border2)', fontFamily: "'Nunito',sans-serif" }}>
+          <Icon name="ti-camera" size={20} color={BRAND}/>
+          <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--ak-text-sec)', lineHeight: 1.45 }}>Take a photo of your answer{canImages ? ', or draw it on the whiteboard' : ''}. Up to {PER_QUESTION_FILES} photos.</span>
+        </div>
+      ) : labelling ? (
         /* Labelling: name each marked part of the diagram. */
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
           {(() => {
@@ -188,17 +202,17 @@ function AnswerBox({ q, idx, value, onType, files, onPick, onRemove, onOpenFile,
           placeholder={placeholder} maxLength={4000} rows={mcq ? 2 : 4}
           style={{ display: 'block', width: '100%', minHeight: mcq ? 52 : 96, padding: '2px 3px 8px', border: 0, outline: 'none', resize: 'vertical', background: 'transparent', color: 'var(--ak-text)', fontSize: 15, lineHeight: 1.55, fontWeight: 600, fontFamily: "'Nunito',sans-serif", boxSizing: 'border-box' }}/>
       )}
-      {mcq && typed && (
+      {canType && mcq && typed && (
         <div style={{ fontSize: 11.5, fontWeight: 800, margin: '0 3px 8px', color: pick != null ? '#047857' : '#B45309', fontFamily: "'Nunito',sans-serif" }}>
           {pick != null ? `Read as ${letterOf(pick)} · ${q.options[pick]}` : 'Not one of the options — your teacher will read it. Type a letter to be marked straight away.'}
         </div>
       )}
-      <input ref={fileRef} type="file" multiple style={{ display: 'none' }} accept=".pdf,.jpg,.jpeg,.png,.docx,.txt"
+      <input ref={fileRef} type="file" multiple style={{ display: 'none' }} accept={canDocs ? '.pdf,.jpg,.jpeg,.png,.docx,.txt' : '.jpg,.jpeg,.png'}
         onChange={(e) => { onPick(e.target.files); e.target.value = ''; }}/>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-        <BoxTool icon="ti-paperclip" label={full ? 'Up to 3 files per question' : 'Attach a file (PDF, photo, Word, text · 5MB)'} onClick={() => fileRef.current?.click()} disabled={full || uploading}/>
-        <BoxTool icon="ti-pencil" label="Draw it on the whiteboard" onClick={onDraw} disabled={uploading}/>
-        <BoxTool icon="ti-file-type-docx" label="Write it in a document (like Word)" onClick={onWrite} disabled={uploading}/>
+        {canImages && <BoxTool icon={canDocs ? 'ti-paperclip' : 'ti-camera'} label={full ? 'Up to 3 files per question' : canDocs ? 'Attach a file (PDF, photo, Word, text · 5MB)' : 'Add a photo of your answer (JPG or PNG · 5MB)'} onClick={() => fileRef.current?.click()} disabled={full || uploading}/>}
+        {canImages && <BoxTool icon="ti-pencil" label="Draw it on the whiteboard" onClick={onDraw} disabled={uploading}/>}
+        {canDocs && <BoxTool icon="ti-file-type-docx" label="Write it in a document (like Word)" onClick={onWrite} disabled={uploading}/>}
         {uploading
           ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 800, color: 'var(--ak-text-muted)', fontFamily: "'Nunito',sans-serif" }}><Spinner size={11}/> Uploading…</span>
           : files.length > 0 && <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--ak-text-muted)', fontFamily: "'Nunito',sans-serif" }}>{files.length}/{PER_QUESTION_FILES} files</span>}
@@ -348,7 +362,7 @@ function Stepper({ questions, paper, work, saved, files, fileCounts, onType, onF
         )}
       </div>
 
-      <AnswerBox q={q} idx={idx} value={work.answers[idx]} onType={(v) => onType(idx, v)}
+      <AnswerBox format={paper?.answer_format} q={q} idx={idx} value={work.answers[idx]} onType={(v) => onType(idx, v)}
         files={qFiles} onPick={(list) => onPick(idx, list)} onRemove={onRemove} onOpenFile={onOpenFile} onDraw={() => onDraw(idx)} onWrite={() => onWrite(idx)}
         uploading={uploading === idx} removing={removing} status={status} saveErr={saveErrs[idx]} onRetry={() => onFlush(idx).catch(() => {})}
         fileErr={fileErr?.index === idx ? fileErr.message : ''}/>
@@ -670,7 +684,9 @@ export default function ActivityDetailPage() {
     let count = files.filter((f) => f.question != null && Number(f.question) === i).length;
     for (const file of picked) {
       if (count >= PER_QUESTION_FILES) { setFileErr({ index: i, message: `Up to ${PER_QUESTION_FILES} files per question.` }); break; }
-      if (!FILE_OK.test(file.name)) { setFileErr({ index: i, message: `${file.name}: only PDF, JPG, PNG, Word (.docx) or text files.` }); continue; }
+      // What the assignment takes (details.answer_format): photos only, or everything (the API checks too).
+      const photosOnly = ['images', 'images_text'].includes(row.briefDetails?.answer_format);
+      if (photosOnly ? !/\.(jpe?g|png)$/i.test(file.name) : !FILE_OK.test(file.name)) { setFileErr({ index: i, message: photosOnly ? `${file.name}: this assignment takes photos (JPG or PNG) of your answers.` : `${file.name}: only PDF, JPG, PNG, Word (.docx) or text files.` }); continue; }
       if (file.size > 5 * 1024 * 1024) { setFileErr({ index: i, message: `${file.name} is larger than 5MB.` }); continue; }
       setUploadingQ(i);
       try {

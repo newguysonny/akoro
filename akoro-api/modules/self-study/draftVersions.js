@@ -20,6 +20,8 @@
 import db from "../../db.js";
 import { cleanPaperDetails } from "./paperLayout.js";
 import { draftPaper, revisePaper, summarizePaper, describePlan, mergePlan, parseQuestionRequest, MAX_VERSIONS } from "./questionPaper.js";
+import { cleanAnswerFormat } from "./answerFormat.js";
+import { assignScheme } from "./markScheme.js";
 
 export { MAX_VERSIONS };
 const VERSION_TIMEOUT_MS = 170_000;   // two bounded model calls (45s ×1 retry each) and the writes
@@ -88,7 +90,7 @@ const classLevelOf = (draft) => String(draft?.audience?.class_name || draft?.aud
  * Build one version in the background. Never throws: a failure is written
  * onto the version ("failed" + why) for the preview to offer a retry.
  */
-export async function runVersionJob(draftId, n, { chat }) {
+export async function runVersionJob(draftId, n, { chat, onReady = null }) {
   let startedAt = null;
   const work = (async () => {
     const { data: draft } = await db.from("activity_drafts").select("*").eq("id", draftId).maybeSingle();
@@ -118,6 +120,8 @@ export async function runVersionJob(draftId, n, { chat }) {
       p.versions[i] = { ...p.versions[i], status: "ready", paper, summary: summarizePaper(paper), note: out.note, warning: out.warning || null, changes: out.changes || {}, error: null, readyAt: new Date().toISOString() };
       return p;
     });
+    // Auto-grading on: the questions are in, so the rubric is written next (never fails the version).
+    try { await onReady?.(n); } catch (e) { console.warn(`[draft-versions] ${draftId} v${n} onReady:`, String(e?.message || e).slice(0, 160)); }
   })();
   const deadline = new Promise((_, rej) => { const t = setTimeout(() => rej(new Error("Drafting took too long.")), VERSION_TIMEOUT_MS); t.unref?.(); });
   try {
@@ -165,6 +169,9 @@ export function detailsFromVersion(details, v) {
     total_points: total,
     ai_auto_allocate_points: false,
     ai_auto_grade: !!details?.ai_auto_grade,
+    // How learners may answer (missing = everything, as before) and, with auto-grading on, the rubric the AI marker follows.
+    answer_format: cleanAnswerFormat(details?.answer_format),
+    ...(details?.ai_auto_grade && assignScheme(v) ? { mark_scheme: assignScheme(v) } : {}),
     question_types: [...new Set((p.questions || []).map((q) => q.type).filter(Boolean))],
     version: v.n,
   };

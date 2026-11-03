@@ -93,6 +93,8 @@ export default function QuestionMarker({ questions, paper = null, step, setStep,
   const answered = raw !== undefined && raw !== null && String(raw).trim() !== '';
   const qFiles = (files || []).filter((f) => f?.question != null && Number(f.question) === step);
   const aiQ = ai?.status === 'ready' ? (ai.questions || []).find((x) => x.index === step) : null;
+  // With a mark scheme: the level the AI picked for each marking point of this question.
+  const aiMarking = ai?.status === 'ready' ? (ai.marking || []).find((x) => x.index === step) : null;
   const marked = mark.awarded != null && mark.awarded !== '';
   const isLast = step === n - 1;
   // The paper around this question: its section's instructions, its passage.
@@ -169,6 +171,8 @@ export default function QuestionMarker({ questions, paper = null, step, setStep,
         </div>
       )}
 
+      {aiMarking && <MarkingBreakdown entry={aiMarking} />}
+
       {/* Points */}
       <div>
         <div style={{ fontSize: 12.5, fontWeight: 800, color: C.ink, marginBottom: 6 }}>Mark</div>
@@ -214,6 +218,35 @@ export default function QuestionMarker({ questions, paper = null, step, setStep,
           {marked ? (isLast ? 'Save mark & review' : 'Save mark & next') : (isLast ? 'Review' : 'Skip for now')} <Ico ti="ti-chevron-right" size={14} />
         </button>
       </div>
+    </div>
+  );
+}
+
+/* The mark scheme at work: for each marking point, what it looks for, the level the AI picked and why.
+   The teacher still sets the mark; this shows the reasoning the AI followed. */
+function MarkingBreakdown({ entry }) {
+  return (
+    <div data-marking-breakdown="" style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: '9px 11px', background: C.surface, marginTop: -4 }}>
+      <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.07em', textTransform: 'uppercase', color: C.muted2, marginBottom: 6 }}>Marked against the mark scheme</div>
+      {(entry.criteria || []).map((c) => (
+        <div key={c.id} style={{ marginBottom: 6 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 800, color: C.ink, marginBottom: 3 }}>{c.title}</div>
+          {(c.points || []).map((m) => {
+            const ratio = m.max > 0 ? m.awarded / m.max : 0;
+            const col = ratio >= 1 ? '#16A34A' : ratio <= 0 ? '#DC2626' : '#B45309';
+            return (
+              <div key={m.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '3px 0', fontSize: 11.5, lineHeight: 1.45 }}>
+                <span style={{ flexShrink: 0, minWidth: 34, textAlign: 'center', padding: '1px 7px', borderRadius: 999, fontWeight: 800, color: col, background: `color-mix(in srgb, ${col} 12%, transparent)`, border: `1px solid color-mix(in srgb, ${col} 35%, transparent)` }}>{m.awarded}/{m.max}</span>
+                <span style={{ color: C.ink2 }}>
+                  <span style={{ color: C.muted }}>{m.looks_for}</span>
+                  <br /><b style={{ color: C.ink }}>{m.label}</b>{m.why ? ` — ${m.why}` : ''}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+      {entry.unassessed ? <div style={{ fontSize: 11, fontWeight: 700, color: '#B45309' }}>{entry.unassessed} marking point{entry.unassessed === 1 ? ' wasn\'t' : 's weren\'t'} assessed — check {entry.unassessed === 1 ? 'it' : 'them'}.</div> : null}
     </div>
   );
 }

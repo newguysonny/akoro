@@ -64,7 +64,9 @@ import {
   createActivityDraft, assignActivityDraft, DRAFT_TYPES,
   listActivityDrafts, getActivityDraft, updateActivityDraft, discardActivityDraft,
   saveDraftVersion, retryDraftVersion, restoreDraftHistory, classroomName, prepareReviewQuestions,
+  setAssignmentSettings, generateVersionRubric, saveVersionRubric,
 } from "./drafts.js";
+import { rubricView } from "./markScheme.js";
 import {
   listRoutines, createRoutine, updateRoutine, deleteRoutine,
 } from "./routines.js";
@@ -73,6 +75,7 @@ import {
   SUBMISSION_FILE_LIMITS, sniffSubmissionFile, storeSubmissionFile, readSubmissionFile, isDrawingName, cropDrawing,
   removeSubmissionObject, contentDisposition,
 } from "./submissionFiles.js";
+import { answerFormatOf, fileRefusal, typedRefusal } from "./answerFormat.js";
 import {
   buildSubmissionArtifacts, readSubmissionArtifact, loadSubmissionDocument, buildMarkedCopyLater, readMarkedCopy, aiGradeTarget,
 } from "./submissionArtifacts.js";
@@ -232,7 +235,9 @@ router.get("/drafts/:id", requireRole(TEACHER_ROLES), asyncHandler(async (req, r
     if (draft.audience?.classroom_id && !draft.audience.class_name) {
       draft.audience = { ...draft.audience, class_name: await classroomName(draft.audience.classroom_id) };
     }
-    ok(res, { draft });
+    // Each version's rubric as the preview reads it: status, the scheme, and whether the questions moved on since.
+    const versions = Array.isArray(draft.payload?.versions) ? draft.payload.versions.map((v) => (v.rubric ? { ...v, rubric: rubricView(v) } : v)) : null;
+    ok(res, { draft: versions ? { ...draft, payload: { ...draft.payload, versions } } : draft });
   }
   catch (e) { if (e.status === 404) return missing(res, e.message); if (e.status === 403) return denied(res, e.message); throw e; }
 }));
@@ -284,6 +289,24 @@ const draftError = (res, e) => {
 /** PUT /api/self-study/drafts/:id/versions/:n — the teacher's edits to one version (saved in place, marked edited). */
 router.put("/drafts/:id/versions/:n", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
   try { ok(res, { version: await saveDraftVersion(req.user, req.params.id, req.params.n, req.body) }); }
+  catch (e) { return draftError(res, e); }
+}));
+
+/** PUT /api/self-study/drafts/:id/settings { ai_auto_grade?, answer_format?, version? } — an assignment's grading settings. */
+router.put("/drafts/:id/settings", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
+  try { ok(res, await setAssignmentSettings(req.user, req.params.id, req.body)); }
+  catch (e) { return draftError(res, e); }
+}));
+
+/** POST /api/self-study/drafts/:id/versions/:n/rubric { request? } — write a version's rubric, or improve it as asked. */
+router.post("/drafts/:id/versions/:n/rubric", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
+  try { ok(res, await generateVersionRubric(req.user, req.params.id, req.params.n, { request: req.body?.request })); }
+  catch (e) { return draftError(res, e); }
+}));
+
+/** PUT /api/self-study/drafts/:id/versions/:n/rubric { scheme } — the teacher's edits to a version's rubric. */
+router.put("/drafts/:id/versions/:n/rubric", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
+  try { ok(res, { rubric: rubricView({ rubric: await saveVersionRubric(req.user, req.params.id, req.params.n, req.body?.scheme), paper: null }) }); }
   catch (e) { return draftError(res, e); }
 }));
 
@@ -927,8 +950,8 @@ router.post("/:id/files", asyncHandler(async (req, res) => {
   // The question this file answers (assignments with questions): a real one,
   // up to PER_QUESTION files each. Without one it belongs to the submission.
   let qIndex = null;
+  const { data: brief } = await edu().from("self_study_assignments").select("details").eq("id", req.params.id).maybeSingle();
   if (question !== undefined && question !== null && question !== "") {
-    const { data: brief } = await edu().from("self_study_assignments").select("details").eq("id", req.params.id).maybeSingle();
     const n = Number(question);
     if (!Number.isInteger(n) || n < 0 || n >= (brief?.details?.questions || []).length) return bad(res, "No such question");
     qIndex = n;
@@ -943,6 +966,9 @@ router.post("/:id/files", asyncHandler(async (req, res) => {
   // What it IS, from its bytes — the browser's type is only a hint.
   const sniffed = sniffSubmissionFile(bytes, clean);
   if (!sniffed) return bad(res, "Upload a PDF, a photo (JPG or PNG), a Word .docx or a text file");
+  // The assignment's answer format decides what may be attached (details.answer_format; none = everything).
+  const refused = fileRefusal(answerFormatOf(brief?.details), sniffed.kind);
+  if (refused) return bad(res, refused);
 
   let countQ = edu().from("self_study_files").select("id", { count: "exact", head: true }).eq("target_id", target.id);
   countQ = qIndex === null ? countQ.is("question_index", null) : countQ.eq("question_index", qIndex);
@@ -1140,6 +1166,11 @@ router.put("/:id/draft/:index", asyncHandler(async (req, res) => {
   if (!target) return missing(res, "This assignment was not given to you");
   if (target.grade != null || target.status === "complete") return res.status(409).json({ success: false, error: "Already handed in — answers can't change now" });
   const { data: assignment } = await edu().from("self_study_assignments").select("details").eq("id", req.params.id).maybeSingle();
+  // A photo-only assignment takes no typed answers to open questions (picking an option is not typing;
+  // clearing an answer is always fine).
+  const typedNo = typedRefusal(answerFormatOf(assignment?.details));
+  const asked = (assignment?.details?.questions || [])[Number(req.params.index)];
+  if (typedNo && !Array.isArray(asked?.options) && String(req.body?.value ?? "").trim() !== "") return bad(res, typedNo);
   const c = cleanAnswer(assignment?.details?.questions || [], req.params.index, req.body?.value);
   if (c.error) return bad(res, c.error);
 
@@ -1163,6 +1194,9 @@ router.put("/:id/draft-text", asyncHandler(async (req, res) => {
   if (!target) return missing(res, "This assignment was not given to you");
   if (target.grade != null || target.status === "complete") return res.status(409).json({ success: false, error: "Already handed in — it can't change now" });
   if (typeof req.body?.text !== "string") return bad(res, "text must be a string");
+  const { data: brief } = await edu().from("self_study_assignments").select("details").eq("id", req.params.id).maybeSingle();
+  const typedNo = typedRefusal(answerFormatOf(brief?.details));
+  if (typedNo && req.body.text.trim() !== "") return bad(res, typedNo);
   const draft = { ...(target.draft || {}), text: req.body.text.slice(0, 8000), savedAt: now() };
   const { error } = await edu().from("self_study_targets")
     .update({ draft, ...(target.status === "assigned" ? { status: "started", started_at: now() } : {}) })
@@ -1242,14 +1276,17 @@ router.post("/:id/complete", asyncHandler(async (req, res) => {
   //    is capped so the row stays small. Backward compatible — completing
   //    with no body still works and stores an empty submission.
   const body = req.body ?? {};
+  // A photo-only assignment keeps no typed words, whatever was sent with the hand-in.
+  const typedNo = typedRefusal(answerFormatOf(brief?.details));
   const sentText = typeof body.text === "string" ? body.text.slice(0, 8000) : "";
-  const text = sentText.trim() ? sentText : String(target.draft?.text || "").slice(0, 8000);
+  const text = typedNo ? "" : sentText.trim() ? sentText : String(target.draft?.text || "").slice(0, 8000);
   const answers = {};
   // The answers saved question by question are the work; answers sent with
   // the hand-in win where both exist. Each is checked like an autosave.
   const sent = body.answers && typeof body.answers === "object" && !Array.isArray(body.answers) ? body.answers : {};
   const merged = { ...(target.draft?.answers || {}), ...sent };
   for (const [k, v] of Object.entries(merged).slice(0, 60)) {
+    if (typedNo && !Array.isArray(questions[Number(k)]?.options)) continue;   // an open answer typed on a photo-only assignment
     const c = cleanAnswer(questions, k, v);
     if (!c.error && c.value !== null) answers[String(c.index)] = c.value;
   }

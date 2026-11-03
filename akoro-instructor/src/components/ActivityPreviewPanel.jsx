@@ -26,6 +26,8 @@ import { apiPut } from '../services/api.js';
 import BattleDraftPreview from './preview/BattleDraftPreview.jsx';
 import SelfStudyDraftPreview from './preview/SelfStudyDraftPreview.jsx';
 import AssignmentDraftPreview from './preview/AssignmentDraftPreview.jsx';
+import GradingSettings from './preview/GradingSettings.jsx';
+import RubricTab from './preview/RubricTab.jsx';
 import ReviewBattleSettings, { REVIEW_DEFAULT } from './preview/ReviewBattleSettings.jsx';
 import { useBattlesAPI } from '../hooks/useBattlesAPI.js';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
@@ -141,7 +143,7 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
   useEffect(() => { setVSel(initialVersion); setVEditing(false); }, [revision, initialVersion, draftId]);
 
   /* While a version is drafting, look again every few seconds (quietly). */
-  const drafting = versionsOf(draft).some((v) => v.status === 'drafting');
+  const drafting = versionsOf(draft).some((v) => v.status === 'drafting' || v.rubric?.status === 'drafting');
   useEffect(() => {
     if (!drafting) return undefined;
     const t = setInterval(() => {
@@ -157,6 +159,14 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
       const d = await apiGet(`/api/self-study/drafts/${draftId}`);
       setDraft(d?.data?.draft ?? d?.draft ?? draft);
     } finally { setVBusy(false); }
+  };
+  /* Look at the draft again without the loading screen (the rubric changed, a setting was saved). */
+  const reloadQuiet = useCallback(async () => {
+    try { const d = await apiGet(`/api/self-study/drafts/${draftId}`); const next = d?.data?.draft ?? d?.draft; if (next) setDraft(next); } catch { /* the next poll will */ }
+  }, [draftId]);
+  const onGradingSaved = (details, started) => {
+    setDraft((d) => (d ? { ...d, payload: { ...d.payload, details } } : d));
+    if (started) reloadQuiet();
   };
   const retryVersion = async (n) => {
     setVBusy(true); setError('');
@@ -322,7 +332,12 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
   const dueUnset = !isLive && !isBattle && !isJourney && !isTool && !!payload.due_hint && !dueValue;
   // The review battle's questions are being (re)written: assign once they're on screen.
   const reviewWriting = !!reviewBattle?.on && (reviewQsBusy || (!reviewQs?.note && reviewQs?.count !== review.questions));
-  const assignBlock = needsFigure ? 'Add the missing figure first (Edit on the version).' : dueUnset ? `Set the exact due date for “${payload.due_hint}” first.` : '';
+  // Auto-grading on: the rubric is part of what is assigned — wait while it is written, and ask for it if there is none.
+  const autoGrade = !!payload.details?.ai_auto_grade && draft.type === 'assignment';
+  const hasMarked = (shown?.paper?.questions || []).some((q) => !(q && Array.isArray(q.options) && q.correct != null));
+  const rubricWriting = autoGrade && shown?.rubric?.status === 'drafting';
+  const rubricMissing = autoGrade && shown?.status === 'ready' && hasMarked && !rubricWriting && !shown?.rubric?.scheme;
+  const assignBlock = rubricMissing ? 'Auto-grading is on — write the rubric first (Rubric tab), or turn it off.' : needsFigure ? 'Add the missing figure first (Edit on the version).' : dueUnset ? `Set the exact due date for “${payload.due_hint}” first.` : '';
   const downloadPdf = () => {
     // A version with questions downloads as the paper, with its marking scheme after it.
     if (shown?.status === 'ready' && (shown.paper?.questions || []).length) {
@@ -479,10 +494,15 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
       ) : draft.type === 'assignment' && versions.length > 0 ? (
         <div style={{ flex: 1, overflowY: 'auto', paddingRight: 2 }}>
           <AssignmentDraftPreview version={shown} title={payload.title || draft.title} topic={payload.topic} battle={reviewBattle}
+            showRubric={autoGrade}
+            rubric={<RubricTab draftId={draftId} version={shown} onChanged={reloadQuiet} />}
             settings={(
               <div>
                 {renderBrief()}
                 <Row label="Instructions to learners">{shown?.paper?.instructions || payload.instructions || <span style={{ color: C.muted2 }}>None</span>}</Row>
+                <div style={{ marginBottom: 4, borderTop: `1px solid ${C.border}` }}>
+                  <GradingSettings draftId={draftId} details={payload.details} version={shown?.n} onSaved={onGradingSaved} />
+                </div>
                 <div style={{ marginBottom: 12, borderTop: `1px solid ${C.border}` }}>
                   <ReviewBattleSettings value={review} onChange={setReview} dueLocal={dueValue} defaultOpen={false} />
                 </div>
@@ -596,11 +616,11 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, initialVer
               {isTool ? 'Saves' : 'Assigns'} <b style={{ color: C.ink }}>Version {shown.n}</b>{!isTool && audience.label ? <> to {audience.label}</> : null}
             </span>
           )}
-          <button onClick={() => assign(assignOverrides())} disabled={phase === 'assigning' || vEditing || (shown && shown.status !== 'ready') || !!assignBlock || reviewWriting}
+          <button onClick={() => assign(assignOverrides())} disabled={phase === 'assigning' || vEditing || (shown && shown.status !== 'ready') || !!assignBlock || reviewWriting || rubricWriting}
             data-review-writing={reviewWriting ? '' : undefined}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 11, border: 'none', background: phase === 'assigning' || assignBlock || reviewWriting ? C.border : C.hero, color: '#fff', fontSize: 12.5, fontWeight: 900, cursor: phase === 'assigning' || reviewWriting ? 'wait' : assignBlock ? 'not-allowed' : 'pointer', fontFamily: C.font }}>
-            {phase === 'assigning' || reviewWriting ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti={isTool ? 'ti-books' : 'ti-send'} size={13} />}
-            {phase === 'assigning' ? (isTool ? 'Saving…' : 'Assigning…') : reviewWriting ? 'Writing review questions…' : isTool ? 'Save to Library' : 'Assign'}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 11, border: 'none', background: phase === 'assigning' || assignBlock || reviewWriting || rubricWriting ? C.border : C.hero, color: '#fff', fontSize: 12.5, fontWeight: 900, cursor: phase === 'assigning' || reviewWriting || rubricWriting ? 'wait' : assignBlock ? 'not-allowed' : 'pointer', fontFamily: C.font }}>
+            {phase === 'assigning' || reviewWriting || rubricWriting ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti={isTool ? 'ti-books' : 'ti-send'} size={13} />}
+            {phase === 'assigning' ? (isTool ? 'Saving…' : 'Assigning…') : reviewWriting ? 'Writing review questions…' : rubricWriting ? 'Writing the rubric…' : isTool ? 'Save to Library' : 'Assign'}
           </button>
         </div>
       )}

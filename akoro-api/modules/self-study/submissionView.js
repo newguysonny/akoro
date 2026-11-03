@@ -6,9 +6,12 @@
 /** The brief as a learner may see it: MCQ answer keys stay hidden until the
  *  work is graded (then the review marks right and wrong). */
 export function briefForLearner(details, graded) {
-  if (graded || !details || !Array.isArray(details.questions)) return details ?? {};
+  // The mark scheme holds the model answers and what earns (or loses) marks: it never reaches a learner,
+  // before or after grading. Everything else about the brief is unchanged.
+  const safe = details && typeof details === "object" && "mark_scheme" in details ? (({ mark_scheme, ...rest }) => rest)(details) : details;   // eslint-disable-line no-unused-vars
+  if (graded || !safe || !Array.isArray(safe.questions)) return safe ?? {};
   return {
-    ...details,
+    ...safe,
     questions: details.questions.map((q) => {
       if (!q || typeof q !== "object") return q;
       const { correct, answer, explanation, marking, ...rest } = q;   // eslint-disable-line no-unused-vars

@@ -1,9 +1,10 @@
 /*
  * AssignmentDraftPreview — an assignment drafted in chat, in the same three
- * tabs as battles and self study: Settings (who, when, the review battle),
+ * tabs as battles and self study: Settings (who, when, grading and answer format, the review battle),
  * Preview (Play: a sample learner answers it and submits, as in the learner
  * app — AssignmentSimulator, sample data only) and Questions (the versions
- * and their paper, edited and switched as before).
+ * and their paper, edited and switched as before) — plus a Rubric tab when AI auto-grading is on (the mark
+ * scheme the AI marker follows, written from the questions and editable).
  *
  * The panel hands in what each tab shows; this owns the tabs and the play.
  */
@@ -14,15 +15,17 @@ import { PreviewTabs, PlayStage } from './PreviewKit.jsx';
 import AssignmentSimulator from './AssignmentSimulator.jsx';
 import { MathText } from '../paper/PaperView.jsx';
 
-export default function AssignmentDraftPreview({ settings, questions, version, title, topic, battle = null, initialTab = 'settings' }) {
-  const [tab, setTab] = useState(initialTab);
+export default function AssignmentDraftPreview({ settings, questions, rubric = null, showRubric = false, version, title, topic, battle = null, initialTab = 'settings' }) {
+  const [picked, setTab] = useState(initialTab);
+  // Auto-grading switched off while the Rubric tab is open: back to Settings.
+  const tab = picked === 'rubric' && !showRubric ? 'settings' : picked;
   const [playing, setPlaying] = useState(false);
   const paper = version?.status === 'ready' ? version.paper : null;
   const count = paper?.questions?.length || 0;
   return (
     <div data-assignment-preview="" style={{ fontFamily: C.font }}>
       <PreviewTabs value={tab} onChange={(t) => { setTab(t); setPlaying(false); }}
-        tabs={[['settings', 'Settings'], ['preview', 'Preview'], ['questions', count ? `Questions (${count})` : 'Questions'], ...reviewBattleTabs(battle)]} />
+        tabs={[['settings', 'Settings'], ['preview', 'Preview'], ['questions', count ? `Questions (${count})` : 'Questions'], ...(showRubric ? [['rubric', 'Rubric']] : []), ...reviewBattleTabs(battle)]} />
       {tab === 'settings' && settings}
       {tab === 'preview' && (!paper ? (
         <div style={{ padding: '30px 16px', textAlign: 'center', fontSize: 12.5, color: C.muted }}>
@@ -36,6 +39,7 @@ export default function AssignmentDraftPreview({ settings, questions, version, t
           glimpse={<Glimpse paper={paper} />} />
       ))}
       {tab === 'questions' && questions}
+      {tab === 'rubric' && showRubric && rubric}
       {tab.startsWith('battle-') && <ReviewBattleTab key={tab} tab={tab} battle={battle} />}
     </div>
   );

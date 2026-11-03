@@ -44,7 +44,7 @@ test("assign: the due date is pinned, Edit details keeps it and resolves the car
   assert.ok(drafts.includes("Set the exact due date for"));
   assert.ok(panel.includes("dueAt: datetimeLocal(payload.due_at)"));
   assert.ok(panel.includes("onAssigned={(count) => markResolved('assigned', count)}"));
-  assert.ok(panel.includes("const needsFigure =") && panel.includes("disabled={phase === 'assigning' || vEditing || (shown && shown.status !== 'ready') || !!assignBlock || reviewWriting}"));
+  assert.ok(panel.includes("const needsFigure =") && panel.includes("disabled={phase === 'assigning' || vEditing || (shown && shown.status !== 'ready') || !!assignBlock || reviewWriting || rubricWriting}"));
   assert.ok(form.includes(".slice(0, 30);"));
   assert.ok(chat.includes('due_at: { type: "string", description: "A new exact due instant') && drafts.includes('applied.push("audience")'));
   assert.ok(createA.includes('await edu().from("self_study_assignments").delete().eq("id", assignment.id)'));

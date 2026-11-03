@@ -1180,6 +1180,8 @@ export const INSTRUCTOR_TOOLS = [
           questions: { type: "number", description: "battle stage only: how many questions (5-20, default 5)." },
         }, required: ["topic"] } },
         question_request: { type: "string", description: "assignment only: the instructor's own words about the questions, verbatim — count, mix of types, diagrams, marks." },
+        ai_auto_grade: { type: "boolean", description: "assignment only: true ONLY when the instructor asked for AI / auto grading (the server then writes a marking rubric from the questions, which they review in the Rubric tab). Leave out otherwise." },
+        answer_format: { type: "string", enum: ["images", "text", "images_text", "all"], description: "assignment only: how learners may answer — ONLY when the instructor said (images = photos of answers, text = typed, images_text = both, all = anything incl. PDF/Word). Leave out otherwise." },
         question_plan: { type: "object", description: "assignment only: the same request as structure. Only what the instructor said — leave the rest out.", properties: {
           total: { type: "number", description: "How many questions in all." },
           mix: { type: "array", description: "Each kind of question and how many, e.g. [{label:'MCQ',kind:'mcq',count:3},{label:'Theory',kind:'open',count:2}]. 'direct theory', 'short answer', 'essay' are open. Named kinds keep their shape — use these labels: 'True or false' (mcq), 'Assertion and reason' (mcq), 'Labelling' (label: name the marked parts of a diagram), 'Case study' (open: a scenario then its questions — count the questions).", items: { type: "object", properties: {

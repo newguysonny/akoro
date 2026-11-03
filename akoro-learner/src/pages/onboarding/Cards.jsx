@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Icon } from '../../components/common/Icons.jsx';
 import { AgentAvatar } from '../../components/common/AgentAvatar.jsx';
-import { initials } from '../../lib/onboardingChat.js';
+import { initials, GUIDE_EMOJIS } from '../../lib/onboardingChat.js';
 
 const GRADIENTS = ['linear-gradient(135deg,#6C3BFF,#9B7BFF)', 'linear-gradient(135deg,#4DA3FF,#38C9A0)', 'linear-gradient(135deg,#EC4899,#F59E0B)', 'linear-gradient(135deg,#10B981,#3B82F6)'];
 
@@ -19,7 +19,7 @@ export function AgentCard({ emoji, onPick, accent }) {
   return (
     <div className="ob-pick" role="radiogroup" aria-label="Pick an avatar">
       <div className="ob-avas">
-        {['🧠', '🤖', '👾', '🦉', '🎓', '⚡', '🌟', '🔮', '🦋', '🎯', '🚀', '💡'].map((em) => (
+        {GUIDE_EMOJIS.map((em) => (
           <button key={em} type="button" role="radio" aria-checked={emoji === em} aria-label={`Avatar ${em}`} onClick={() => onPick(em)}
             className={`ob-avopt${emoji === em ? ' on' : ''}`} style={emoji === em ? { borderColor: accent, boxShadow: `0 0 0 4px ${accent}26` } : undefined}>
             <AgentAvatar emoji={em} size={30}/>

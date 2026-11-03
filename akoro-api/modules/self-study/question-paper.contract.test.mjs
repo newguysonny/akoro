@@ -166,7 +166,7 @@ test("wiring: chat tools carry the request; drafts build versions in the backgro
   assert.match(chat, /base_version: \{ type: "number"/);
   assert.match(chat, /\.\.\.\(toolResult\.version \? \{ version: toolResult\.version \} : \{\}\)/);
   assert.match(drafts, /payload\.versions = \[newVersion\(payload, \{ request: request \|\| `Questions on \$\{topic\}` \}\)\]/);
-  assert.match(drafts, /void runVersionJob\(draft\.id, 1, \{ chat: questionChat\(instructor\.id\) \}\)/);
+  assert.match(drafts, /void runVersionJob\(draft\.id, 1, \{ chat: questionChat\(instructor\.id\), onReady: autoRubric\(draft\.id, instructor\.id\) \}\)/);
   assert.match(drafts, /is still being drafted — wait for it, then ask again/);
   assert.match(drafts, /payload\.details = detailsFromVersion\(payload\.details, v\)/);
   assert.match(drafts, /delete payload\.versions;/);

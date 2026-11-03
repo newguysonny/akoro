@@ -16,7 +16,8 @@ const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
 const [avatars, navIcons, onboard, noAgent, shared, sheets, chat, stats, blocks, chatView, voice, battle, parts, constants, en, ar, es] = await Promise.all([
   read("../../akoro-learner/src/components/common/AgentAvatar.jsx"),
   read("../../akoro-learner/src/components/common/NavIcons.jsx"),
-  read("../../akoro-learner/src/pages/OnboardingPage.jsx"),
+  // The onboarding chat: the avatar list lives in lib/onboardingChat.js, the picker that draws it in onboarding/Cards.jsx.
+  Promise.all([read("../../akoro-learner/src/lib/onboardingChat.js"), read("../../akoro-learner/src/pages/onboarding/Cards.jsx")]).then(([lib, cards]) => ({ lib, cards, includes: (s) => cards.includes(s) })),
   read("../../akoro-learner/src/components/battles/NoAgentSheet.jsx"),
   read("../../akoro-learner/src/pages/settings/shared.jsx"),
   read("../../akoro-learner/src/pages/settings/sheets.jsx"),
@@ -55,7 +56,7 @@ test("every pickable avatar key has a drawing", () => {
 
   const drawn = normAll(avatars);
   const keys = new Set([
-    ...keyList(onboard, "GUIDE_EMOJIS"),
+    ...keyList(onboard.lib, "GUIDE_EMOJIS"),
     ...keyList(noAgent, "EMOJIS"),
     ...keyList(shared, "EMOJI_LIST"),
     ...keyList(shared, "AVATAR_LIST"),
@@ -68,8 +69,8 @@ test("every pickable avatar key has a drawing", () => {
 
 test("no surface renders an avatar emoji as a glyph", () => {
   // The pickers draw the choices; the stored string is only ever a key.
-  assert.ok(onboard.includes("<AgentAvatar emoji={agentEmoji}"), "onboarding preview draws");
   assert.ok(onboard.includes("<AgentAvatar emoji={em}"), "onboarding picker draws");
+  assert.ok(onboard.cards.includes("GUIDE_EMOJIS.map"), "the picker offers exactly the list the keys are checked against");
   assert.ok(noAgent.includes("<DrawnAvatar emoji={em}"), "no-agent picker draws");
   assert.ok(sheets.includes("<DrawnAvatar emoji={em}"), "settings picker draws");
   assert.ok(shared.includes("<DrawnAvatar emoji={emoji}"), "settings AvatarCircle draws");

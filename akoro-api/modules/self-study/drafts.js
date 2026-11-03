@@ -33,10 +33,24 @@ import {
   updateDraftPayload, newVersion, runVersionJob, paperRequestFrom, versionAt, versionsOf, latestReady,
   editedVersion, detailsFromVersion, expireStaleVersions,
 } from "./draftVersions.js";
+import { beginRubric, runMarkSchemeJob, saveRubric } from "./draftRubric.js";
+import { assignGate } from "./markScheme.js";
+import { ANSWER_FORMATS } from "./answerFormat.js";
 
 /** The model call behind an assignment draft's questions, billed to its instructor. */
 const questionChat = (instructorId) => (messages, opts = {}) =>
   nana.generateAssignmentQuestions({ messages, ...opts, billing: { __userId: instructorId, __feature: "assignment_questions" } });
+
+/** The model call behind an assignment's rubric, billed to its instructor. */
+const schemeChat = (instructorId) => (messages, opts = {}) =>
+  nana.generateAssignmentQuestions({ messages, ...opts, billing: { __userId: instructorId, __feature: "assignment_markscheme" } });
+
+/** When a version's questions are in and auto-grading is on, write its rubric next. */
+const autoRubric = (draftId, instructorId) => async (n) => {
+  const { data } = await db.from("activity_drafts").select("status, payload").eq("id", draftId).maybeSingle();
+  if (data?.status !== "draft" || !data.payload?.details?.ai_auto_grade) return;
+  if (await beginRubric(draftId, n)) void runMarkSchemeJob(draftId, n, { chat: schemeChat(instructorId) });
+};
 
 /** Battles ride the same drafting flow but assign through their battle form
  *  (the one shared BattleForm), so they are valid drafts, not bench assigns. */
@@ -365,6 +379,11 @@ export async function createActivityDraft({ instructor, input, sessionId = null,
       const { request, plan } = paperRequestFrom(input);
       payload.paper_request = { request, plan };
       payload.versions = [newVersion(payload, { request: request || `Questions on ${topic}` })];
+      // Only what the instructor said about grading and answers; the preview's Settings tab sets the rest.
+      const grading = {};
+      if (typeof input?.ai_auto_grade === "boolean") grading.ai_auto_grade = input.ai_auto_grade;
+      if (ANSWER_FORMATS.includes(input?.answer_format)) grading.answer_format = input.answer_format;
+      if (Object.keys(grading).length) payload.details = grading;
     }
   }
 
@@ -409,7 +428,7 @@ export async function createActivityDraft({ instructor, input, sessionId = null,
   // reply (and the Preview button) arrive instantly while the model fills
   // the plan. Its catch is internal — never an unhandled rejection.
   if (payload.plan_status === "pending") enrichDraftPlan(draft.id, topic, subject || "General");
-  if (versionsOf(payload).length) void runVersionJob(draft.id, 1, { chat: questionChat(instructor.id) });
+  if (versionsOf(payload).length) void runVersionJob(draft.id, 1, { chat: questionChat(instructor.id), onReady: autoRubric(draft.id, instructor.id) });
 
   return { draft, audienceLabel, clarified: false };
 }
@@ -719,7 +738,7 @@ export async function reviseDraftPayload(instructor, id, changes) {
   if (audienceRow) await db.from("activity_drafts").update({ audience: audienceRow }).eq("id", draft.id);
   const { data, error } = await db.from("activity_drafts").select().eq("id", draft.id).single();
   if (error) throw invalid(error.message, 500);
-  if (newVersionN) void runVersionJob(draft.id, newVersionN, { chat: questionChat(instructor.id) });
+  if (newVersionN) void runVersionJob(draft.id, newVersionN, { chat: questionChat(instructor.id), onReady: autoRubric(draft.id, instructor.id) });
   return { draft: data, applied, version: newVersionN };
 }
 
@@ -807,6 +826,12 @@ export async function assignActivityDraft({ instructor, id, overrides = null }) 
     if (!v || v.status !== "ready") {
       await db.from("activity_drafts").update({ status: "draft", resolved_at: null }).eq("id", draft.id).eq("status", "assigned");
       throw invalid(pickedVersion != null ? `Version ${pickedVersion} isn't ready to assign.` : "The questions are still being drafted — try again in a moment.", 409);
+    }
+    // Auto-grading on: the rubric must be there (and finished) before learners get the work.
+    const gate = payload.details?.ai_auto_grade ? assignGate(v) : null;
+    if (gate) {
+      await db.from("activity_drafts").update({ status: "draft", resolved_at: null }).eq("id", draft.id).eq("status", "assigned");
+      throw invalid(gate, 409);
     }
     payload.details = detailsFromVersion(payload.details, v);
     if (!payload.instructions && v.paper?.instructions) payload.instructions = v.paper.instructions;
@@ -923,6 +948,58 @@ export async function retryDraftVersion(instructor, id, n) {
     p.versions[i] = { ...p.versions[i], status: "drafting", error: null, startedAt: new Date().toISOString() };
     return p;
   });
-  void runVersionJob(draft.id, v.n, { chat: questionChat(instructor.id) });
+  void runVersionJob(draft.id, v.n, { chat: questionChat(instructor.id), onReady: autoRubric(draft.id, instructor.id) });
   return { n: v.n, status: "drafting" };
+}
+
+
+/* ── Settings and the rubric (the preview's Settings and Rubric tabs) ───── */
+
+/**
+ * The grading settings of an assignment draft: { ai_auto_grade?, answer_format? } → saved on the draft.
+ * Turning auto-grading on writes the rubric for the version on screen (`version`, else the newest ready one).
+ * → { details, started }  (started: the version whose rubric is now being written, or null)
+ */
+export async function setAssignmentSettings(instructor, id, body = {}) {
+  const draft = await getActivityDraft(instructor, id);
+  if (draft.status !== "draft") throw invalid("Only pending drafts can be changed", 409);
+  if (draft.type !== "assignment") throw invalid("Grading settings are for assignments", 400);
+  const patch = {};
+  if (body.ai_auto_grade !== undefined) patch.ai_auto_grade = !!body.ai_auto_grade;
+  if (body.answer_format !== undefined) {
+    if (!ANSWER_FORMATS.includes(body.answer_format)) throw invalid(`answer_format must be one of ${ANSWER_FORMATS.join(", ")}`, 400);
+    patch.answer_format = body.answer_format;
+  }
+  if (!Object.keys(patch).length) throw invalid("Nothing to change", 400);
+  const payload = await updateDraftPayload(draft.id, (p) => ({ ...p, details: { ...(p.details || {}), ...patch } }));
+  let started = null;
+  if (patch.ai_auto_grade) {
+    const v = body.version != null ? versionAt(payload, body.version) : latestReady(payload);
+    if (v?.status === "ready" && !v.rubric?.scheme && (await beginRubric(draft.id, v.n))) {
+      started = v.n;
+      void runMarkSchemeJob(draft.id, v.n, { chat: schemeChat(instructor.id) });
+    }
+  }
+  return { details: payload.details, started };
+}
+
+/** (Re)write one version's rubric — or improve it, when the teacher says how. → { n, status } */
+export async function generateVersionRubric(instructor, id, n, { request = null } = {}) {
+  const draft = await getActivityDraft(instructor, id);
+  if (draft.status !== "draft") throw invalid("Only pending drafts can be changed", 409);
+  const v = versionAt(draft.payload, n);
+  if (!v) throw invalid("No such version", 404);
+  if (v.status !== "ready") throw invalid(`Version ${v.n} is still being drafted.`, 409);
+  const ask = String(request || "").trim().slice(0, 600) || null;
+  if (!(await beginRubric(draft.id, v.n, { request: ask && v.rubric?.scheme ? ask : null }))) throw invalid("The rubric is already being written.", 409);
+  void runMarkSchemeJob(draft.id, v.n, { chat: schemeChat(instructor.id) });
+  return { n: v.n, status: "drafting" };
+}
+
+/** Save the teacher's edits to one version's rubric. → the saved rubric */
+export async function saveVersionRubric(instructor, id, n, scheme) {
+  const draft = await getActivityDraft(instructor, id);
+  if (draft.status !== "draft") throw invalid("Only pending drafts can be edited", 409);
+  try { return await saveRubric(draft.id, n, scheme); }
+  catch (e) { throw invalid(e.message, e.status || 400); }
 }

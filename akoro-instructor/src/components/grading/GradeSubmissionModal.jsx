@@ -279,7 +279,7 @@ function AiDraftCard({ ai, onApply, onRequest, requesting }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 8 }}>
         {(ai.questions || []).map((q) => (
           <div key={q.index} style={{ fontSize: 12, color: C.ink, lineHeight: 1.45 }}>
-            <b>Q{q.index + 1}</b> {q.awarded}/{q.max}{q.auto ? <span style={{ color: C.muted2, fontWeight: 700 }}> · auto</span> : null} <span style={{ color: C.muted }}>— {q.why}</span>
+            <b>Q{q.index + 1}</b> {q.awarded}/{q.max}{q.auto ? <span style={{ color: C.muted2, fontWeight: 700 }}> · auto</span> : (ai.marking || []).some((m) => m.index === q.index) ? <span style={{ color: C.muted2, fontWeight: 700 }}> · by rubric</span> : null} <span style={{ color: C.muted }}>— {q.why}</span>
           </div>
         ))}
         {(ai.rubric || []).map((r) => (
