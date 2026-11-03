@@ -55,6 +55,77 @@ function Topic({ topic, index, open, onToggle }) {
   );
 }
 
+/* A curriculum draft (NERDC): class → theme → sub-theme → topics; each topic opens to its six columns. */
+const COLS = [['performanceObjectives', 'Performance objectives'], ['content', 'Content'], ['teacherActivities', 'Teacher activities'], ['studentActivities', 'Pupil / student activities'], ['materials', 'Teaching and learning resources'], ['evaluation', 'Evaluation guide']];
+function CurriculumTopic({ t }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ borderTop: `1px solid ${BORDER}` }}>
+      <button type="button" onClick={() => setOpen(!open)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px 9px 34px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: FONT }}>
+        {open ? <ChevronDown size={14} color={MUTED} /> : <ChevronRight size={14} color={MUTED} />}
+        <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: INK }}>{t.title}</span>
+        <span style={{ fontSize: 11.5, color: MUTED }}>{t.performanceObjectives.length} objectives · p. {t.sourcePage ?? '?'}</span>
+      </button>
+      {open && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, padding: '4px 14px 14px 34px' }}>
+          {COLS.map(([k, label]) => (
+            <div key={k} style={{ background: LIGHT, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '8px 10px' }}>
+              <div style={{ fontSize: 10.5, fontWeight: 800, color: MUTED, textTransform: 'uppercase', marginBottom: 4, fontFamily: FONT }}>{label}</div>
+              {(t[k] || []).length ? <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12.5, color: INK, lineHeight: 1.5, fontFamily: FONT }}>{t[k].map((x, i) => <li key={i}>{x}</li>)}</ul>
+                : <div style={{ fontSize: 12, color: MUTED, fontFamily: FONT }}>—</div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+function CurriculumBody({ doc, st }) {
+  const groups = [];
+  for (const t of doc.topics) {
+    const k = `${t.class || ''}|${t.theme || ''}|${t.subtheme || ''}`;
+    let g = groups[groups.length - 1];
+    if (!g || g.k !== k) { g = { k, class: t.class, theme: t.theme, subtheme: t.subtheme, topics: [] }; groups.push(g); }
+    g.topics.push(t);
+  }
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <Stat label="Pages read" value={st.pages} />
+        <Stat label="Classes" value={(st.classes || []).length} />
+        <Stat label="Themes" value={st.themes} />
+        <Stat label="Sub-themes" value={st.subthemes} />
+        <Stat label="Topics" value={st.topics} />
+        <Stat label="Objectives" value={st.objectives} />
+      </div>
+      {(doc.foreword || doc.introduction || doc.objectives) && (
+        <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '12px 14px' }}>
+          {[['Foreword', doc.foreword], ['Introduction', doc.introduction], ['Objectives', doc.objectives]].filter(([, v]) => v).map(([label, v]) => (
+            <div key={label} style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: MUTED, textTransform: 'uppercase', fontFamily: FONT }}>{label}</div>
+              <div style={{ fontSize: 12.5, color: INK, lineHeight: 1.55, fontFamily: FONT }}>{v.length > 600 ? `${v.slice(0, 600)}…` : v}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {doc.frontMatterOnly && <div style={{ fontSize: 12.5, color: MUTED, fontFamily: FONT }}>Front matter only (a foreword): publishing fills the foreword / introduction of the {doc.subject} curriculum.</div>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {groups.map((g, i) => (
+          <div key={i} style={{ border: `1px solid ${BORDER}`, borderRadius: 12, background: WHITE, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#FAF8F5', fontFamily: FONT }}>
+              {g.class && <span style={chip(`${PURPLE}12`, PURPLE)}>{g.class}</span>}
+              <span style={{ fontSize: 13.5, fontWeight: 800, color: INK }}>{g.theme || 'No theme'}</span>
+              {g.subtheme && <span style={{ fontSize: 12.5, color: MUTED }}>› {g.subtheme}</span>}
+              <span style={{ marginLeft: 'auto', fontSize: 12, color: MUTED }}>{g.topics.length} topics</span>
+            </div>
+            {g.topics.map((t, k) => <CurriculumTopic key={k} t={t} />)}
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
 export default function ImportReview({ importId, onClose, onChanged, show }) {
   const [row, setRow] = useState(null);
   const [open, setOpen] = useState(() => new Set([0]));
@@ -71,7 +142,8 @@ export default function ImportReview({ importId, onClose, onChanged, show }) {
   const st = row?.stats || {};
   const papers = doc?.paper_structure?.papers || [];
   const publish = async () => {
-    if (!await confirmDialog(`Publish “${doc.exam} ${doc.name}”? It replaces any live ${doc.exam} ${doc.name} syllabus the agents teach from.`)) return;
+    const what = doc.kind === 'curriculum' ? `the NERDC ${doc.subject} curriculum (${(doc.classes || []).join(', ')})` : `${doc.exam} ${doc.name}`;
+    if (!await confirmDialog(`Publish ${what}? It replaces the live ${doc.kind === 'curriculum' ? 'curriculum' : 'syllabus'} the agents teach from.`)) return;
     setBusy(true);
     try { const r = await apiPost(`/api/adaptive/syllabus/imports/${importId}/publish`, {}); show?.(`Published — ${r?.data?.topics ?? ''} topics, ${r?.data?.subtopics ?? ''} subtopics`); onChanged?.(); onClose(); }
     catch (e) { show?.(e.message || 'Publish failed', 'error'); }
@@ -88,7 +160,7 @@ export default function ImportReview({ importId, onClose, onChanged, show }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px', background: WHITE, borderBottom: `1px solid ${BORDER}` }}>
           <FileText size={20} color={AMBER} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 17, fontWeight: 800, color: INK, fontFamily: FONT }}>{doc ? `${doc.exam} · ${doc.name}` : 'Syllabus import'}{doc?.code ? <span style={{ color: MUTED, fontWeight: 600 }}> · {doc.code}</span> : null}</div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: INK, fontFamily: FONT }}>{doc ? (doc.kind === 'curriculum' ? `NERDC · ${doc.subject} curriculum` : `${doc.exam} · ${doc.name}`) : 'Syllabus import'}{doc?.code ? <span style={{ color: MUTED, fontWeight: 600 }}> · {doc.code}</span> : null}</div>
             <div style={{ fontSize: 12, color: MUTED, fontFamily: FONT }}>{row?.source_file || ''}{row?.created_at ? ` · imported ${new Date(row.created_at).toLocaleString()}` : ''}</div>
           </div>
           {row && <span style={chip(row.status === 'draft' ? `${AMBER}18` : row.status === 'published' ? `${GREEN}18` : '#E5E7EB', row.status === 'draft' ? AMBER : row.status === 'published' ? GREEN : MUTED)}>{row.status === 'draft' ? 'Draft — not live' : row.status}</span>}
@@ -100,6 +172,16 @@ export default function ImportReview({ importId, onClose, onChanged, show }) {
             <div style={{ padding: 30, textAlign: 'center', color: MUTED, fontFamily: FONT }}>Reading the syllabus… {row.progress?.done != null ? `part ${row.progress.done} of ${row.progress.of}` : ''}</div>
           ) : row.status === 'failed' ? (
             <div style={{ padding: 16, borderRadius: 12, background: '#FEF2F2', color: '#991B1B', fontFamily: FONT, fontSize: 13 }}>{row.error}</div>
+          ) : doc?.kind === 'curriculum' ? (
+            <>
+              {(row.warnings || []).length > 0 && (
+                <div style={{ padding: '11px 14px', borderRadius: 12, background: '#FEF3C7', border: '1px solid #FDE68A', fontFamily: FONT }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 800, color: '#92400E' }}><AlertTriangle size={14} color="#D97706" /> Check before publishing</div>
+                  {row.warnings.map((w, i) => <div key={i} style={{ fontSize: 12.5, color: '#92400E', marginTop: 4 }}>{w.text}</div>)}
+                </div>
+              )}
+              <CurriculumBody doc={doc} st={st} />
+            </>
           ) : (
             <>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>

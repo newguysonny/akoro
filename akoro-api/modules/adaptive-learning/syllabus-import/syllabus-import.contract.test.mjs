@@ -177,3 +177,51 @@ test("a combined syllabus splits into one part per subject: Chapter One starts i
   assert.equal(P.subjectNamed("The underlying principle … curriculum for Christian Religious Studies is"), "Christian Religious Studies");
   assert.equal(P.subjectNamed("prepare for your BECE in English Language"), "English Studies");
 });
+
+test("curriculum mode: headers per page (English, Igbo, Hausa), NERDC file names, contd. topics joined, garbled text refused", async () => {
+  const C = await import("./curriculum.js");
+  assert.equal(C.classLabel("THEME: NUMBERS          JSS ONE"), "JSS 1");
+  assert.equal(C.classLabel("PRIMARY FOUR"), "Primary 4");
+  const h = C.pageHeaders([
+    { page: 1, text: "   THEME:    NUMBERS AND NUMERATION                       JSS   ONE\n   SUB-THEME:     WHOLE NUMBERS" },
+    { page: 2, text: "   1. Whole numbers contd." },
+    { page: 3, text: "   JIGO:                    HARSHE                         AJI ƊAYA\n   КARAMIN JIGO:            SAURARO DA MAGANA" },
+  ], { stage: "junior" });
+  assert.deepEqual(h.map((x) => [x.theme, x.subtheme, x.class, x.headed]), [
+    ["NUMBERS AND NUMERATION", "WHOLE NUMBERS", "JSS 1", true],
+    ["NUMBERS AND NUMERATION", "WHOLE NUMBERS", "JSS 1", false],
+    ["HARSHE", "SAURARO DA MAGANA", "JSS 1", true],
+  ]);
+  assert.deepEqual(C.nerdcFromFile("pri4-6_basic_science_technology.pdf"), { subject: "Basic Science and Technology", stage: "primary", classes: ["Primary 4", "Primary 5", "Primary 6"], intro: false });
+  assert.equal(C.nerdcFromFile("jss1-3_crsf.pdf").intro, true);
+  const byPage = new Map(h.map((x) => [x.page, x]));
+  const a = C.placeTopics({ topics: [{ title: "1. Whole numbers", page: 1, performanceObjectives: ["count"], content: ["i. counting"] }] }, byPage, { from: 1, to: 1 });
+  const b = C.placeTopics({ topics: [{ title: "Whole numbers contd.", page: 2, performanceObjectives: ["read Roman numerals"], content: [] }] }, byPage, { from: 2, to: 2 });
+  const merged = C.mergeCurriculumTopics([a, b]);
+  assert.equal(merged.length, 1);
+  assert.deepEqual(merged[0].performanceObjectives, ["count", "read Roman numerals"]);
+  assert.equal(merged[0].class, "JSS 1");
+  assert.ok(C.fragmentRatio([{ page: 1, text: "R AK K NI N Ak k j 1. ṣ ṣ ọ ọ ka y r" }]) > 0.6, "fragments: unreadable");
+  assert.ok(C.fragmentRatio([{ page: 1, text: "Students should be able to identify common factors of whole numbers" }]) < 0.4);
+});
+
+test("a NERDC curriculum structures with a fake model: placed under its page headers, front matter read, outline built", async () => {
+  const C = await import("./curriculum.js");
+  const pages = [
+    { page: 1, text: "FOREWORD This curriculum ..." },
+    { page: 2, text: "   THEME:    NUMBERS AND NUMERATION                       JSS   ONE\n   SUB-THEME:     WHOLE NUMBERS\n   1. HCF   Students should be able to: 1. identify common factors" },
+    { page: 3, text: "   THEME:    ALGEBRAIC PROCESSES                       JSS   TWO\n   SUB-THEME:     SIMPLE EQUATIONS\n   1. Equations" },
+  ];
+  const ask = async ({ system, user }) => {
+    if (system === C.CURRICULUM_FRONT_SYSTEM) return JSON.stringify({ title: "Mathematics Curriculum", foreword: "This curriculum …", edition_year: 2012 });
+    const [, a, z] = user.match(/Pages (\d+)–(\d+)/).map(Number);
+    const pagesIn = [2, 3].filter((n) => n >= a && n <= z);
+    return JSON.stringify({ topics: pagesIn.map((page) => ({ title: page === 2 ? "1. HCF" : "1. Equations", page, performanceObjectives: ["identify"], content: ["i."], teacherActivities: ["leads"], studentActivities: ["write"], materials: ["chart"], evaluation: ["find"] })) });
+  };
+  const out = await C.structureCurriculum({ pages, ask, hint: { subject: "Mathematics", stage: "junior", classes: ["JSS 1", "JSS 2", "JSS 3"] }, concurrency: 1 });
+  assert.equal(out.doc.kind, "curriculum");
+  assert.equal(out.doc.foreword, "This curriculum …");
+  assert.deepEqual(out.doc.themes.map((t) => t.title), ["NUMBERS AND NUMERATION", "ALGEBRAIC PROCESSES"]);
+  assert.deepEqual(out.doc.topics.map((t) => [t.title, t.class, t.subtheme]), [["1. HCF", "JSS 1", "WHOLE NUMBERS"], ["1. Equations", "JSS 2", "SIMPLE EQUATIONS"]]);
+  assert.equal(out.stats.topics, 2);
+});

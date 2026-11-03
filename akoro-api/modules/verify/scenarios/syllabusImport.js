@@ -133,3 +133,39 @@ export const syllabusImportSplit = {
     ctx.expect.eq("the book list is left out (Basic Science and Technology ends before Chapter Three)", rows[0]?.stats?.pages, 4);
   },
 };
+
+/**
+ * The importer's curriculum mode: a NERDC curriculum (JSS 1–3 Mathematics,
+ * 36 pages) imported as exam "NERDC" — theme, sub-theme and class from every
+ * page's header, the six columns per topic — saved as a draft (published, it
+ * goes to the curriculum bank, not the exam syllabi).
+ */
+export const curriculumImportExample = {
+  name: "curriculum.import_example", area: "syllabus", risk: "write", timeoutMs: 900_000,
+  description: "Imports the NERDC JSS 1–3 Mathematics curriculum through the syllabus importer's curriculum mode: classes, themes, sub-themes and topics with objectives, content, activities, resources and evaluation, as a draft.",
+  params: { file: { default: "nerdc-jss1-3_maths.pdf" }, dump: { default: true } },
+  async run(ctx, p) {
+    const name = String(p.file).replace(/[^a-z0-9._-]/gi, "");
+    const buffer = fs.readFileSync(new URL(`../../../data/syllabus/sources/${name}`, import.meta.url));
+    const { run } = await import("../../adaptive-learning/syllabus-import/service.js");
+    const t0 = Date.now();
+    const row = await run({ buffer, fileName: name.replace(/^nerdc-/, ""), exam: "NERDC" });
+    ctx.note(`import ${row?.id} → ${row?.status} in ${Math.round((Date.now() - t0) / 1000)}s · ${row?.name}`);
+    ctx.expect.eq("the import finishes as a draft", row?.status, "draft");
+    if (row?.status !== "draft") { ctx.note(`error: ${row?.error}`); return; }
+    const doc = row.doc;
+    const st = row.stats || {};
+    ctx.note(`stats: ${JSON.stringify(st)}`);
+    for (const w of row.warnings || []) ctx.note(`warning: ${w.text}`);
+    ctx.expect.eq("it is a curriculum", `${doc.kind}/${doc.body}/${doc.subject}/${doc.stage}`, "curriculum/nerdc/Mathematics/junior");
+    ctx.expect.eq("all three classes", (st.classes || []).join(","), "JSS 1,JSS 2,JSS 3");
+    ctx.expect.ok("themes and sub-themes from the page headers", st.themes >= 4 && st.subthemes >= 10, { themes: st.themes, subthemes: st.subthemes });
+    ctx.expect.ok("topics with their columns", st.topics >= 30 && st.objectives >= st.topics && st.activities >= st.topics, st);
+    ctx.expect.ok("every topic sits under a theme and a class", doc.topics.every((t) => t.theme && t.class));
+    ctx.expect.ok("no part failed", !(row.warnings || []).some((w) => w.kind === "chunk_failed"), row.warnings);
+    if (p.dump) {
+      const json = JSON.stringify({ id: row.id, stats: st, warnings: row.warnings, doc });
+      for (let i = 0; i < json.length; i += 480) ctx.note(`DUMP ${String(i / 480).padStart(4, "0")} ${json.slice(i, i + 480)}`);
+    }
+  },
+};

@@ -8,7 +8,7 @@ import { apiGet, apiPost, apiDelete, API } from '../services/api.js';
 import { AMBER, INK, MUTED, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../constants.js';
 import { confirmDialog } from '../components/ConfirmHost.jsx';
 
-const EXAMS = ['WASSCE', 'NECO', 'JAMB', 'BECE', 'IGCSE', 'NCEE'];
+const EXAMS = ['WASSCE', 'NECO', 'JAMB', 'BECE', 'IGCSE', 'NCEE', 'NERDC'];   // NERDC = a curriculum: publishes to the curriculum bank
 const IMPORT_STATUS = { extracting: ['Reading…', BLUE], draft: ['Draft — review', AMBER], failed: ['Failed', RED], published: ['Published', GREEN] };
 
 // ── Tiny CSV parser (handles quoted fields, embedded commas/newlines) ────────
