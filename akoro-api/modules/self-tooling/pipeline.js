@@ -312,7 +312,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   // Never offer a DIFFERENT change than the one asked for (a rename must not become a delete card).
   const fallback = locked.find((c) => !asksForChange(goal) || CAPABILITIES[c]?.kind !== "write" || c === ownChangeAsked(goal));
   if (fallback && !resumed && !draftCap && inexpressible) return toEscalate(fallback, lastProblem);
-  return finish("rejected", reject(`Couldn't build it safely: ${String(lastProblem || "no stage could express it").slice(0, 240)}`, resumed ? { tried: tried.map((t) => t.slice(0, 300)) } : {}));
+  return finish("rejected", reject(`Couldn't build it safely: ${String(lastProblem || "no stage could express it").slice(0, 240)}`, (resumed || dry) ? { tried: tried.map((t) => t.slice(0, 300)) } : {}));
 
   /** Save the built tool switched OFF and ask the learner on a card, showing what it would change right now. */
   async function draftAndAsk({ def, runNow }) {
