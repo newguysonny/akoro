@@ -455,6 +455,7 @@ function questionLi(item, images, marks) {
   return `<li class="q" data-n="${item.number}" data-index="${item.index}" data-type="${h(item.answerSpace)}" data-points="${item.points ?? ""}" data-status="${h(item.status)}"${item.answer?.selected ? ` data-selected="${h(item.answer.selected)}"` : ""}>
         <div class="q__body">
           <p class="q__stem">${item.format === "assertion_reason" && item.assertion ? `Assertion: ${text(item.assertion)}<br>Reason: ${text(item.reason || "")}` : item.answerSpace === "blank" ? gap(item.text) : text(item.text)}</p>
+          ${figureHtml({ figure: item.figureData, figure_note: item.figureNote })}
           ${submittedHtml(item, images)}
         </div>
         <div class="mark"><span>Marks</span><b${got}>/ ${item.points ?? "—"}</b>${m.comment ? `<em>${h(m.comment)}</em>` : ""}</div>

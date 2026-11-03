@@ -299,3 +299,16 @@ test("model text never becomes markup in the paper", () => {
   assert.ok(!html.includes("<script>alert(1)</script>") && !html.includes("<img src=x") && !html.includes("<b>x</b>"));
   assert.ok(html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"));
 });
+
+test("the submission paper carries the question's diagram under its question (so a labelling answer has its figure)", async () => {
+  const { submissionDocument } = await import("./paperSchema.js");
+  const { renderSubmissionHtml } = await import("./paperTemplate.js");
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10"/></svg>';
+  const doc = submissionDocument({
+    assignment: { title: "T", details: { questions: [{ q: "Label A.", format: "label", labels: ["A"], figure: { svg, alt: "a box", caption: "Fig. 1" }, max_points: 1 }] } },
+    target: { submission: { answers: { 0: "A: top" }, files: [] } }, learner: { name: "Ada" },
+  });
+  const html = renderSubmissionHtml({ doc });
+  assert.match(html, /<figure class="figure"><img src="data:image\/svg\+xml/);
+  assert.match(html, /Fig\. 1/);
+});
