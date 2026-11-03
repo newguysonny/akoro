@@ -44,3 +44,31 @@ export const syllabusImportExample = {
     }
   },
 };
+
+/**
+ * What syllabus imports cost: every model call the importer made (feature
+ * syllabus_import in edu.ai_call_log), totalled, per model, and per import
+ * (calls inside each import's created → finished window). Read only.
+ */
+export const syllabusImportCost = {
+  name: "syllabus.import_cost", area: "syllabus", risk: "read",
+  description: "Totals the model calls the syllabus importer made (tokens, cost, model) overall and per import, from edu.ai_call_log.",
+  params: {},
+  async run(ctx) {
+    const calls = await ctx.db.rows("edu.ai_call_log", { feature: "syllabus_import" }, { columns: "model, tokens_in, tokens_out, cached_in, cost_usd, ok, ms, created_at", limit: 2000, order: { column: "created_at", ascending: true } });
+    ctx.expect.ok("the importer's model calls are recorded", calls.length > 0, calls.length);
+    const sum = (rows) => rows.reduce((a, r) => ({ calls: a.calls + 1, failed: a.failed + (r.ok ? 0 : 1), tokensIn: a.tokensIn + (r.tokens_in || 0), tokensOut: a.tokensOut + (r.tokens_out || 0), costUsd: a.costUsd + Number(r.cost_usd || 0) }), { calls: 0, failed: 0, tokensIn: 0, tokensOut: 0, costUsd: 0 });
+    const all = sum(calls);
+    ctx.note(`all imports: ${JSON.stringify({ ...all, costUsd: +all.costUsd.toFixed(4) })}`);
+    const byModel = {};
+    for (const r of calls) (byModel[r.model] ||= []).push(r);
+    for (const [m, rows] of Object.entries(byModel)) { const s = sum(rows); ctx.note(`model ${m}: ${s.calls} calls, ${s.tokensIn} in / ${s.tokensOut} out, $${s.costUsd.toFixed(4)}`); }
+    const imports = await ctx.db.rows("edu.syllabus_imports", {}, { columns: "id, name, exam, status, stats, created_at, updated_at", limit: 50, order: { column: "created_at", ascending: true } });
+    for (const im of imports) {
+      const from = Date.parse(im.created_at) - 2000;
+      const to = Date.parse(im.updated_at) + 15_000;
+      const s = sum(calls.filter((r) => { const t = Date.parse(r.created_at); return t >= from && t <= to; }));
+      ctx.note(`import ${im.exam} ${im.name} (${im.status}, ${im.stats?.pages ?? "?"} pages, ${im.stats?.chars ?? "?"} chars): ${s.calls} calls, ${s.tokensIn} in / ${s.tokensOut} out, $${s.costUsd.toFixed(4)}`);
+    }
+  },
+};
