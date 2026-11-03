@@ -214,7 +214,9 @@ export const rubricToInstantScore = {
     const early = (await draftOf(ctx, p.instructor, draftId))?.payload?.versions?.[0];
     if (early?.rubric?.status === "drafting") {
       const gate = await ctx.http({ as: p.instructor, method: "POST", path: `/api/self-study/drafts/${draftId}/assign`, body: { title: `${ctx.marker} Photosynthesis`, version: 1 } });
-      ctx.expect.eq("Assign waits while the rubric is being written", gate.status, 409);
+      // The API answers a blocked assign with 400 and the reason (its 409 is mapped by the route's bad()).
+      ctx.expect.eq("Assign waits while the rubric is being written", gate.status, 400);
+      ctx.expect.ok("…and says why", /rubric is still being written/i.test(gate.body?.error || ""), gate.body);
     } else ctx.note(`the rubric was already ${early?.rubric?.status} when Assign was tried — the wait wasn't observable`);
 
     // 3. The rubric lands, and it adds up.
