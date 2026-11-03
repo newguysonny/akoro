@@ -16,7 +16,7 @@
 export const CHUNK_CHARS = 10_000;
 const CONTEXT_CHARS = 700;
 const clip = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
-const key = (s) => String(s ?? "").toLowerCase().replace(/^\s*\d{1,2}(\.\d+)*\s+(?=[a-z])/, "").replace(/^[\s\d.()a-z]{0,6}\s*[.):]\s+/, "").replace(/[^a-z0-9]+/g, " ").trim();
+const key = (s) => String(s ?? "").toLowerCase().replace(/\s*[(-]?\s*continued\s*\)?\s*$/, "").replace(/^\s*\d{1,2}(\.\d+)*\s+(?=[a-z])/, "").replace(/^[\s\d.()a-z]{0,6}\s*[.):]\s+/, "").replace(/[^a-z0-9]+/g, " ").trim();
 
 /** PURE: pages → chunks of whole pages, each ≤ CHUNK_CHARS (a single long page is split at line breaks). */
 export function chunkPages(pages = [], max = CHUNK_CHARS) {
@@ -125,6 +125,7 @@ Rules:
 - A main heading (e.g. "A. BASIC CONCEPTS", "SECTION I: …", "THEME 1 …") is a topic; each numbered item under it (1., 2., …) is a subtopic; its lettered/roman points are its content.
 - When the outline is given, its headings (lettered like "A." or numbered like "3   Movement into and out of cells") are the ONLY topics in this part: a numbered item (e.g. "8. Transport System") is always a subtopic of the heading above it, never a topic. A "SECTION A/B/C" line is not a topic — put it in "section" of the topics under it.
 - If the part begins in the middle of a topic, start with that topic's title (given as context) and "continues": true.
+- Cambridge-style tables with "Core" and "Supplement" columns: every numbered statement ("1 Describe diffusion as…") is a learning objective — put them ALL in "objectives" in order, prefixing each Supplement one with "Supplement: "; leave "content" for any plain description and "notes" null.
 - Keep every item and every note. Do not summarise, merge different items, or invent. Fix only broken spacing.
 - Front matter (preamble, aims, scheme of examination), lists of recommended books, assessment details, practical-skills/assessment-objective tables, grade descriptions, glossaries of command words and administrative notes are NOT topics — skip them (return {"topics": []} for a part that has none).`;
 
@@ -203,7 +204,22 @@ export function fitOutline(topics = [], outline = []) {
     }
     const isTheme = lettered(t.title) || known.has(key(t.title));
     if (!isTheme && out.length) { out[out.length - 1].subtopics.push(asSubtopic(t)); continue; }
-    out.push({ ...t });
+    // The document's own heading is the title ("3. Movement into and out of cells", whatever the model wrote).
+    const label = themes.find((e) => key(e.label) === key(t.title))?.label;
+    out.push({ ...t, title: label || t.title });
+  }
+  // A subtopic cut by a page ("21.3 Genetic modification" … "21.3 Genetic modification continued") is one subtopic.
+  for (const t of out) {
+    const joined = [];
+    for (const s of t.subtopics) {
+      const prev = joined[joined.length - 1];
+      if (prev && key(prev.title) === key(s.title)) {
+        prev.content = [prev.content, s.content].filter(Boolean).join("; ") || null;
+        prev.objectives = [...prev.objectives, ...s.objectives];
+        prev.notes = [prev.notes, s.notes].filter(Boolean).join(" ") || null;
+      } else joined.push({ ...s });
+    }
+    t.subtopics = joined;
   }
   // Sections in order: walk forward through the outline's themes.
   let cursor = 0;
@@ -257,10 +273,14 @@ async function pool(items, size, fn) {
  * hint: { exam, name, code } from the uploader. → { doc, stats, warnings }
  */
 export async function structureSyllabus({ pages, hint = {}, ask, concurrency = 3, onProgress = () => {} }) {
-  const front = pages.slice(0, 4).map((p) => p.text).join("\n").slice(0, 12_000);
   const outline = outlineFromPages(pages);
   // Parts that end before the first heading are front matter (the front pass reads it): not structured.
   const firstTheme = outline.find((e) => e.kind === "theme")?.page;
+  // The front pass reads everything before the first heading (Cambridge puts aims and the assessment
+  // overview on pages 7–11), at least the first 4 pages, at most 24k characters.
+  const before = pages.filter((p) => firstTheme && p.page < firstTheme);
+  const frontPages = before.length >= 4 ? before : pages.slice(0, 4);
+  const front = frontPages.map((p) => p.text).join("\n").slice(0, 24_000);
   const chunks = chunkPages(pages).filter((c) => !(outline.length >= 2 && firstTheme && c.to < firstTheme));
   let meta = {};
   try { meta = parseJson(await ask({ system: FRONT_SYSTEM, user: `${hint.exam ? `Exam: ${hint.exam}. ` : ""}${hint.name ? `Subject: ${hint.name}. ` : ""}\n\n${front}`, maxTokens: 1500 })); }

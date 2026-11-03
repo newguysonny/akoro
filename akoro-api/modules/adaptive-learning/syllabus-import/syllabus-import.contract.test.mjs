@@ -127,6 +127,8 @@ test("a batch names each subject from its file name (code, 9-1, Alt A, years dro
   assert.deepEqual(nameFromFile("animal-husbandry-alt-a.pdf"), { name: "Animal Husbandry (Alt A)", code: null });
   assert.deepEqual(nameFromFile("further-mathematics-or-mathematics-elective.pdf"), { name: "Further Mathematics or Mathematics Elective", code: null });
   assert.deepEqual(nameFromFile("christian-religious-studies-new.pdf"), { name: "Christian Religious Studies", code: null });
+  assert.deepEqual(nameFromFile("igcse-biology-0610.pdf"), { name: "Biology", code: "0610" });
+  assert.deepEqual(nameFromFile("jamb-biology.pdf"), { name: "Biology", code: null });
 });
 
 test("JAMB's centred 'A: …' themes and IGCSE's numbered topics are outlines too", () => {
@@ -142,4 +144,36 @@ test("JAMB's centred 'A: …' themes and IGCSE's numbered topics are outlines to
     { page: 14, text: "            2   Topic number two" },
   ]);
   assert.deepEqual(igcse.map((e) => `${e.page}:${e.label}`), ["12:1. Topic number one", "14:2. Topic number two"], "numbered objectives are not topics; topics sit where they reappear");
+});
+
+test("titles take the document's own heading, and a '… continued' subtopic joins its first half", () => {
+  const outline = [{ page: 12, kind: "theme", label: "1. Characteristics of living things", section: null }, { page: 46, kind: "theme", label: "21. Biotechnology and genetic modification", section: null }];
+  const sub = (title, objectives) => ({ title, content: null, objectives, notes: null });
+  const out = S.fitOutline([
+    { title: "1 Characteristics of living things", section: null, subtopics: [sub("1.1 Characteristics", ["a"])] },
+    { title: "21 Biotechnology and genetic modification", section: null, subtopics: [sub("21.3 Genetic modification", ["x"]), sub("21.3 Genetic modification continued", ["y"])] },
+  ], outline);
+  assert.deepEqual(out.map((t) => t.title), ["1. Characteristics of living things", "21. Biotechnology and genetic modification"]);
+  assert.equal(out[1].subtopics.length, 1);
+  assert.deepEqual(out[1].subtopics[0].objectives, ["x", "y"]);
+});
+
+test("a combined syllabus splits into one part per subject: Chapter One starts it, Chapter Three (book list) ends it", async () => {
+  const P = await import("./split.js");
+  const pages = [
+    { page: 2, text: "TABLE OF CONTENTS\nChapter One\nAim & Objectives.............................. Page 4" },
+    { page: 7, text: "Chapter One\nAims & Objectives\nIntroduction The BECE Basic Science and Technology syllabus covers Basic Science, Basic Technology…" },
+    { page: 8, text: "Chapter Two\nSyllabus\n1 MATERIALS  I. Properties of material" },
+    { page: 9, text: "Chapter Three\nRecommended Textbooks\n1. Some book" },
+    { page: 10, text: "Chapter Four\nFrequently Asked Questions" },
+    { page: 12, text: "Chapter One\nAims & Objectives\nIntroduction This syllabus is designed for candidates whose L1 (Mother Tongue) is Edo" },
+    { page: 13, text: "Chapter Two\nSyllabus" },
+  ];
+  assert.deepEqual(P.splitCombined(pages), [
+    { from: 7, to: 8, name: "Basic Science and Technology" },
+    { from: 12, to: 13, name: "Edo" },
+  ]);
+  assert.deepEqual(P.splitCombined(pages.slice(0, 4)), [], "one subject: imported whole, not split");
+  assert.equal(P.subjectNamed("The underlying principle … curriculum for Christian Religious Studies is"), "Christian Religious Studies");
+  assert.equal(P.subjectNamed("prepare for your BECE in English Language"), "English Studies");
 });

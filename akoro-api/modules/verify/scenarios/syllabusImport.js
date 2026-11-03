@@ -72,3 +72,64 @@ export const syllabusImportCost = {
     }
   },
 };
+
+/**
+ * The batch path: several bundled PDFs through startBatch (the admin page's
+ * multi-file upload) — named from their file names, queued two at a time,
+ * each ending as its own draft.
+ */
+export const syllabusImportBatch = {
+  name: "syllabus.import_batch", area: "syllabus", risk: "write", timeoutMs: 900_000,
+  description: "Queues two bundled syllabus PDFs as one batch: each is named from its file name, runs through the queue, and ends as its own draft.",
+  params: { files: { default: "jamb-biology.pdf,igcse-biology-0610.pdf" }, exam: { default: "JAMB" } },
+  async run(ctx, p) {
+    const names = String(p.files).split(",").map((f) => f.trim().replace(/[^a-z0-9._-]/gi, "")).filter(Boolean);
+    const files = names.map((n) => ({ originalname: n, buffer: fs.readFileSync(new URL(`../../../data/syllabus/sources/${n}`, import.meta.url)) }));
+    const { startBatch, get } = await import("../../adaptive-learning/syllabus-import/service.js");
+    const { queued } = await startBatch({ files, exam: p.exam });
+    ctx.expect.eq("every file is queued", queued.length, files.length);
+    ctx.note(`queued: ${queued.map((q) => `${q.file} → ${q.name}${q.code ? ` (${q.code})` : ""}`).join(" · ")}`);
+    const until = Date.now() + 600_000;
+    let rows = [];
+    while (Date.now() < until) {
+      rows = await Promise.all(queued.map((q) => get(q.importId)));
+      if (rows.every((r) => r && r.status !== "extracting")) break;
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+    for (const r of rows) ctx.note(`${r?.source_file}: ${r?.status} · ${r?.stats?.topics ?? "?"} topics · ${r?.stats?.subtopics ?? "?"} subtopics · ${r?.stats?.objectives ?? "?"} objectives · model ${r?.stats?.model ?? "?"}`);
+    ctx.expect.ok("each file ends as its own draft", rows.every((r) => r?.status === "draft"), rows.map((r) => r?.status));
+    ctx.expect.ok("each draft is named from its file", rows.every((r, i) => r?.name === queued[i].name), rows.map((r) => r?.name));
+  },
+};
+
+/**
+ * A combined syllabus (several subjects in one PDF, like the BECE compilation)
+ * splits into one draft per subject: a 15-page cut of the BECE file with Basic
+ * Science and Technology, Business Studies and Edo.
+ */
+export const syllabusImportSplit = {
+  name: "syllabus.import_split", area: "syllabus", risk: "write", timeoutMs: 900_000,
+  description: "Uploads a 3-subject cut of the combined BECE syllabus: it splits into Basic Science and Technology, Business Studies and Edo, each its own draft, book lists left out.",
+  params: { file: { default: "bece-combined-sample.pdf" }, exam: { default: "BECE" } },
+  async run(ctx, p) {
+    const name = String(p.file).replace(/[^a-z0-9._-]/gi, "");
+    const buffer = fs.readFileSync(new URL(`../../../data/syllabus/sources/${name}`, import.meta.url));
+    const { startBatch } = await import("../../adaptive-learning/syllabus-import/service.js");
+    const since = new Date(Date.now() - 1000).toISOString();
+    await startBatch({ files: [{ originalname: name, buffer }], exam: p.exam });
+    const until = Date.now() + 600_000;
+    let rows = [];
+    while (Date.now() < until) {
+      await new Promise((r) => setTimeout(r, 6000));
+      rows = (await ctx.db.rows("edu.syllabus_imports", { source_file: { like: `${name}%` } }, { columns: "id, name, exam, status, source_file, stats, created_at", limit: 50, order: { column: "created_at", ascending: true } }))
+        .filter((r) => r.created_at >= since);
+      if (rows.length >= 3 && rows.every((r) => r.status !== "extracting")) break;
+    }
+    for (const r of rows) ctx.note(`${r.source_file} → ${r.name}: ${r.status} · ${r.stats?.topics ?? "?"} topics · ${r.stats?.subtopics ?? "?"} subtopics · ${r.stats?.pages ?? "?"} pages`);
+    ctx.expect.eq("it splits into three subjects", rows.length, 3);
+    ctx.expect.eq("…named from their introductions", rows.map((r) => r.name).join(" | "), "Basic Science and Technology | Business Studies | Edo");
+    ctx.expect.ok("each subject is its own draft", rows.every((r) => r.status === "draft"), rows.map((r) => r.status));
+    ctx.expect.ok("each draft has topics", rows.every((r) => (r.stats?.topics || 0) >= 1), rows.map((r) => r.stats?.topics));
+    ctx.expect.eq("the book list is left out (Basic Science and Technology ends before Chapter Three)", rows[0]?.stats?.pages, 4);
+  },
+};
