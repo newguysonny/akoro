@@ -16,7 +16,7 @@
 export const CHUNK_CHARS = 10_000;
 const CONTEXT_CHARS = 700;
 const clip = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
-const key = (s) => String(s ?? "").toLowerCase().replace(/^\s*\d{1,2}(\.\d+)*\s+(?=[a-z])/, "").replace(/^[\s\d.()a-z]{0,6}\s*[.):]\s+/, "").replace(/[^a-z0-9]+/g, " ").trim();
+const key = (s) => String(s ?? "").toLowerCase().replace(/\s*[(-]?\s*continued\s*\)?\s*$/, "").replace(/^\s*\d{1,2}(\.\d+)*\s+(?=[a-z])/, "").replace(/^[\s\d.()a-z]{0,6}\s*[.):]\s+/, "").replace(/[^a-z0-9]+/g, " ").trim();
 
 /** PURE: pages → chunks of whole pages, each ≤ CHUNK_CHARS (a single long page is split at line breaks). */
 export function chunkPages(pages = [], max = CHUNK_CHARS) {
@@ -204,7 +204,22 @@ export function fitOutline(topics = [], outline = []) {
     }
     const isTheme = lettered(t.title) || known.has(key(t.title));
     if (!isTheme && out.length) { out[out.length - 1].subtopics.push(asSubtopic(t)); continue; }
-    out.push({ ...t });
+    // The document's own heading is the title ("3. Movement into and out of cells", whatever the model wrote).
+    const label = themes.find((e) => key(e.label) === key(t.title))?.label;
+    out.push({ ...t, title: label || t.title });
+  }
+  // A subtopic cut by a page ("21.3 Genetic modification" … "21.3 Genetic modification continued") is one subtopic.
+  for (const t of out) {
+    const joined = [];
+    for (const s of t.subtopics) {
+      const prev = joined[joined.length - 1];
+      if (prev && key(prev.title) === key(s.title)) {
+        prev.content = [prev.content, s.content].filter(Boolean).join("; ") || null;
+        prev.objectives = [...prev.objectives, ...s.objectives];
+        prev.notes = [prev.notes, s.notes].filter(Boolean).join(" ") || null;
+      } else joined.push({ ...s });
+    }
+    t.subtopics = joined;
   }
   // Sections in order: walk forward through the outline's themes.
   let cursor = 0;

@@ -143,3 +143,15 @@ test("JAMB's centred 'A: …' themes and IGCSE's numbered topics are outlines to
   ]);
   assert.deepEqual(igcse.map((e) => `${e.page}:${e.label}`), ["12:1. Topic number one", "14:2. Topic number two"], "numbered objectives are not topics; topics sit where they reappear");
 });
+
+test("titles take the document's own heading, and a '… continued' subtopic joins its first half", () => {
+  const outline = [{ page: 12, kind: "theme", label: "1. Characteristics of living things", section: null }, { page: 46, kind: "theme", label: "21. Biotechnology and genetic modification", section: null }];
+  const sub = (title, objectives) => ({ title, content: null, objectives, notes: null });
+  const out = S.fitOutline([
+    { title: "1 Characteristics of living things", section: null, subtopics: [sub("1.1 Characteristics", ["a"])] },
+    { title: "21 Biotechnology and genetic modification", section: null, subtopics: [sub("21.3 Genetic modification", ["x"]), sub("21.3 Genetic modification continued", ["y"])] },
+  ], outline);
+  assert.deepEqual(out.map((t) => t.title), ["1. Characteristics of living things", "21. Biotechnology and genetic modification"]);
+  assert.equal(out[1].subtopics.length, 1);
+  assert.deepEqual(out[1].subtopics[0].objectives, ["x", "y"]);
+});
