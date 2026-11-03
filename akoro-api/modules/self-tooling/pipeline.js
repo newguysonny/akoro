@@ -282,6 +282,8 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
         lastProblem = built.notExpressible; inexpressible = true; tried.push(`${stage}#${attempt}: not expressible: ${lastProblem}`);
         // What was approved for this goal answers it: one repair before giving up.
         if (mustUse.length && attempt === 1) { feedback = `"${built.notExpressible}" — but ${mustUse.join(", ")} was approved for this goal: use it`; continue; }
+        // At the code stage "needs scheduling/logic" is not a reason — code IS the logic. One repair.
+        if (stage === "code" && attempt === 1 && /schedul|logic|per day|spread|skip/i.test(String(built.notExpressible))) { feedback = `"${built.notExpressible}" — you are writing code: write run() that does exactly that`; continue; }
         break;
       }
       if (!built.definition) { feedback = built.error || "no definition"; lastProblem = feedback; tried.push(`${stage}#${attempt}: ${feedback}`); continue; }

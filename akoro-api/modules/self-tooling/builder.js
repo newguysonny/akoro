@@ -90,6 +90,11 @@ export async function buildDefinition({ stage, goal, params, slice, feedback = n
   ];
   // A resume: these capabilities were approved FOR this goal (by an admin, or the learner) — they are what answers it.
   // `approved`: one line per capability, saying how to use it (pipeline.howToUse).
+  // The shared rules tell recipe/spec builds to answer "needs scheduling logic" —
+  // that answer means "use CODE". At the code stage it is wrong: writing that
+  // logic is this stage's whole job (a DeepSeek builder obeyed the shared rule
+  // here in 2 of 3 gate repeats, 2026-11-03).
+  if (stage === "code") messages.push({ role: "user", content: "You are writing CODE now. Plans over dates, spreading items across days, N per day, skipping days and rules that depend on earlier choices are exactly what this stage is for — write run() for them. Answer notExpressible only if the DATA needed isn't in `available` (e.g. other learners' rows)." });
   if (approved.length) messages.push({ role: "user", content: `This was approved for exactly this goal — build it with what was approved: ${approved.join("; ")}. Don't answer notExpressible.` });
   if (feedback) messages.push({ role: "user", content: `Your previous attempt failed: ${feedback}\nFix it and answer again with ONE JSON object.` });
   const resp = await openai.chat.completions.create({
