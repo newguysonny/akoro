@@ -141,18 +141,44 @@ const STEP_LOOK = {
 function BoxTool({ icon, label, onClick, disabled }) {
   return (
     <button type="button" onClick={onClick} disabled={disabled} title={label} aria-label={label}
-      style={{ width: 32, height: 32, padding: 0, borderRadius: '50%', border: '1px solid var(--ak-border)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#526078', background: 'var(--ak-surface)', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.45 : 1 }}>
+      style={{ width: 30, height: 30, padding: 0, borderRadius: '50%', border: '1px solid var(--ak-border)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#526078', background: 'var(--ak-surface)', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.45 : 1 }}>
       <Icon name={icon} size={16}/>
     </button>
   );
 }
 
-/* The answer box under the question. */
-function AnswerBox({ format = 'all', q, idx, value, onType, files, onPick, onRemove, onOpenFile, onDraw, onWrite, uploading, removing, status, saveErr, onRetry, fileErr }) {
+/* A file in the answer box: type chip, name, and — while it goes up — a spinner (X cancels it); done, a tick (X removes it). */
+function AnswerTile({ name, busy = false, uploading = false, onRemove, onOpen }) {
+  const ext = (String(name || '').match(/\.([a-z0-9]+)$/i)?.[1] || 'file').toUpperCase().replace('JPEG', 'JPG').slice(0, 4);
+  const doc = DOC_RE.test(name || '');
+  const shown = doc ? 'Document' : DRAWING_RE.test(name || '') ? 'Drawing' : name;
+  return (
+    <div role="group" aria-label={`${shown}${uploading ? ' — uploading' : ''}`} data-testid={uploading ? 'upload-tile' : 'file-tile'}
+      style={{ position: 'relative', width: 104, minHeight: 72, flexShrink: 0, boxSizing: 'border-box', padding: '6px 8px', borderRadius: 14, border: '1px solid var(--ak-border)', background: 'var(--ak-surface)', fontFamily: "'Nunito',sans-serif", opacity: busy ? 0.55 : 1 }}>
+      <span style={{ display: 'inline-block', fontSize: 10.5, fontWeight: 900, letterSpacing: '.03em', padding: '1px 8px', borderRadius: 999, border: '1px solid var(--ak-border)', color: 'var(--ak-text)' }}>{doc ? 'DOCX' : ext}</span>
+      {onRemove && (
+        <button type="button" onClick={onRemove} disabled={busy} aria-label={uploading ? `Cancel ${shown}` : `Remove ${shown}`}
+          style={{ position: 'absolute', top: 5, right: 5, width: 20, height: 20, padding: 0, border: 'none', borderRadius: '50%', background: '#111', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <Icon name="ti-x" size={12}/>
+        </button>
+      )}
+      <button type="button" onClick={onOpen} disabled={!onOpen || uploading}
+        style={{ display: 'block', width: '100%', padding: 0, margin: '6px 0 0', border: 'none', background: 'none', textAlign: 'left', cursor: onOpen && !uploading ? 'pointer' : 'default', fontFamily: "'Nunito',sans-serif" }}>
+        <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text)', lineHeight: 1.25, wordBreak: 'break-all', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', paddingRight: uploading ? 26 : 0 }}>{shown}</span>
+      </button>
+      <span style={{ position: 'absolute', right: 8, bottom: 7 }}>
+        {uploading ? <Spinner size={20} color={BRAND}/> : <Icon name="ti-circle-check-filled" size={16} color="#10B981"/>}
+      </span>
+    </div>
+  );
+}
+
+/* The answer box under the question — compact; for written answers it opens a document to type in. */
+function AnswerBox({ format = 'all', q, idx, value, onType, files, pending = [], onCancelPending, onPick, onRemove, onOpenFile, onDraw, onWrite, uploading, removing, status, saveErr, onRetry, fileErr }) {
   const fileRef = useRef(null);
   const camRef = useRef(null);
   const [focus, setFocus] = useState(false);
-  const full = files.length >= PER_QUESTION_FILES;
+  const full = files.length + pending.length >= PER_QUESTION_FILES;
   const mcq = isMcq(q);
   // How this assignment may be answered (details.answer_format; none = everything). Picking an option for a
   // multiple-choice question is always allowed; the API enforces the rest.
@@ -162,17 +188,18 @@ function AnswerBox({ format = 'all', q, idx, value, onType, files, onPick, onRem
   const formatNote = mcq ? '' : { images: 'Photos only', text: 'Typed only', images_text: 'Typed or photos' }[format] || '';
   const labelling = q?.format === 'label' && Array.isArray(q.labels);
   const typed = typeof value === 'string' ? value.trim() : '';
+  // A written answer (not a choice, gap or label) is typed in a document when the assignment takes documents.
+  const inDoc = canDocs && !mcq && !labelling && q?.answer_space !== 'blank' && !typed;
+  const hasDoc = files.some((f) => DOC_RE.test(f.name || ''));
   const pick = mcq && typed ? readChoice(q, typed) : null;
   const placeholder = q?.format === 'true_false' ? 'Type True or False'
-    : mcq ? `Type your answer — the letter (${letterOf(0)}–${letterOf(q.options.length - 1)}) or the option` : 'Type your answer…';
+    : mcq ? `Type the letter (${letterOf(0)}–${letterOf(q.options.length - 1)})` : 'Type your answer…';
   return (
-    <div style={{ marginTop: 14, padding: '12px 12px 10px', border: `1px solid ${focus ? BRAND : 'var(--ak-border)'}`, boxShadow: focus ? `0 0 0 3px ${BRAND}1C` : '0 4px 14px rgba(30,41,59,.055)', borderRadius: 22, background: 'var(--ak-surface)', transition: 'border-color .16s, box-shadow .16s' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 10.5, fontWeight: 900, letterSpacing: '.05em', textTransform: 'uppercase', color: BRAND, margin: '0 3px 6px', fontFamily: "'Nunito',sans-serif" }}>
-        <span>Your answer</span>{formatNote && <span style={{ color: 'var(--ak-text-muted)' }}>{formatNote}</span>}
-      </div>
-      {files.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '0 0 8px' }}>
-          {files.map((f) => <FileCard key={f.id} file={f} onOpen={onOpenFile} onRemove={onRemove} busy={removing === f.id} sans="'Nunito',sans-serif"/>)}
+    <div style={{ marginTop: 8, padding: '8px 10px 6px', border: `1px solid ${focus ? BRAND : 'var(--ak-border)'}`, boxShadow: focus ? `0 0 0 3px ${BRAND}1C` : '0 3px 10px rgba(30,41,59,.05)', borderRadius: 18, background: 'var(--ak-surface)', transition: 'border-color .16s, box-shadow .16s' }}>
+      {(files.length > 0 || pending.length > 0) && (
+        <div style={{ display: 'flex', gap: 8, margin: '0 0 8px', overflowX: 'auto', paddingBottom: 2 }}>
+          {files.map((f) => <AnswerTile key={f.id} name={f.name} busy={removing === f.id} onOpen={onOpenFile ? () => onOpenFile(f) : undefined} onRemove={() => onRemove(f)}/>)}
+          {pending.map((pf) => <AnswerTile key={pf.key} name={pf.name} uploading onRemove={() => onCancelPending?.(pf.key)}/>)}
         </div>
       )}
       {!canType ? (
@@ -197,11 +224,18 @@ function AnswerBox({ format = 'all', q, idx, value, onType, files, onPick, onRem
             ));
           })()}
         </div>
+      ) : inDoc ? (
+        /* A written answer is typed in a document: tapping the box opens it. */
+        <button type="button" onClick={onWrite} disabled={uploading} data-testid="write-in-doc" aria-label={`Write the answer to question ${idx + 1} in a document`}
+          style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '9px 4px', margin: '0 0 4px', border: 'none', background: 'transparent', color: 'var(--ak-text-muted)', cursor: uploading ? 'default' : 'text', textAlign: 'left', fontSize: 14, fontWeight: 600, fontFamily: "'Nunito',sans-serif" }}>
+          <Icon name="ti-file-type-docx" size={18} color="#2B579A"/>
+          <span>{hasDoc ? 'Tap to keep writing in your document…' : 'Tap to write your answer in a document…'}</span>
+        </button>
       ) : (
         <textarea value={value ?? ''} onChange={(e) => onType(e.target.value)} aria-label={`Answer to question ${idx + 1}`}
           onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
-          placeholder={placeholder} maxLength={4000} rows={mcq ? 2 : 4}
-          style={{ display: 'block', width: '100%', minHeight: mcq ? 52 : 96, padding: '2px 3px 8px', border: 0, outline: 'none', resize: 'vertical', background: 'transparent', color: 'var(--ak-text)', fontSize: 15, lineHeight: 1.55, fontWeight: 600, fontFamily: "'Nunito',sans-serif", boxSizing: 'border-box' }}/>
+          placeholder={placeholder} maxLength={4000} rows={mcq ? 1 : 2}
+          style={{ display: 'block', width: '100%', minHeight: mcq ? 30 : 50, padding: '2px 3px 4px', border: 0, outline: 'none', resize: 'none', background: 'transparent', color: 'var(--ak-text)', fontSize: 14, lineHeight: 1.5, fontWeight: 600, fontFamily: "'Nunito',sans-serif", boxSizing: 'border-box' }}/>
       )}
       {canType && mcq && typed && (
         <div style={{ fontSize: 11.5, fontWeight: 800, margin: '0 3px 8px', color: pick != null ? '#047857' : '#B45309', fontFamily: "'Nunito',sans-serif" }}>
@@ -213,19 +247,18 @@ function AnswerBox({ format = 'all', q, idx, value, onType, files, onPick, onRem
       <input ref={camRef} type="file" accept="image/*" capture="environment" data-testid="camera-input" style={{ display: 'none' }}
         onChange={(e) => { onPick(e.target.files); e.target.value = ''; }}/>
       {canImages && files.length > 0 && !full && (
-        <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)', margin: '0 3px 8px', fontFamily: "'Nunito',sans-serif" }}>
+        <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)', margin: '0 3px 6px', fontFamily: "'Nunito',sans-serif" }}>
           Answer carries on to another page? Add another photo.
         </div>
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-        {canImages && <BoxTool icon="ti-camera" label={full ? 'Up to 3 photos per question' : 'Take a photo of your answer'} onClick={() => camRef.current?.click()} disabled={full || uploading}/>}
-        {canImages && canDocs && <BoxTool icon="ti-photo" label="Choose from gallery or files" onClick={() => fileRef.current?.click()} disabled={full || uploading}/>}
-        {canImages && !canDocs && <BoxTool icon="ti-photo" label="Choose a photo from your gallery" onClick={() => fileRef.current?.click()} disabled={full || uploading}/>}
+        {canImages && <BoxTool icon="ti-camera" label={full ? 'Up to 3 photos per question' : 'Take a photo of your answer'} onClick={() => camRef.current?.click()} disabled={full}/>}
+        {canImages && canDocs && <BoxTool icon="ti-photo" label="Choose from gallery or files" onClick={() => fileRef.current?.click()} disabled={full}/>}
+        {canImages && !canDocs && <BoxTool icon="ti-photo" label="Choose a photo from your gallery" onClick={() => fileRef.current?.click()} disabled={full}/>}
         {canImages && <BoxTool icon="ti-pencil" label="Draw it on the whiteboard" onClick={onDraw} disabled={uploading}/>}
         {canDocs && <BoxTool icon="ti-file-type-docx" label="Write it in a document (like Word)" onClick={onWrite} disabled={uploading}/>}
-        {uploading
-          ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 800, color: 'var(--ak-text-muted)', fontFamily: "'Nunito',sans-serif" }}><Spinner size={11}/> Uploading…</span>
-          : files.length > 0 && <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--ak-text-muted)', fontFamily: "'Nunito',sans-serif" }}>{files.length}/{PER_QUESTION_FILES} files</span>}
+        {formatNote && <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--ak-text-muted)', fontFamily: "'Nunito',sans-serif" }}>{formatNote}</span>}
+        {files.length > 0 && <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--ak-text-muted)', fontFamily: "'Nunito',sans-serif" }}>{files.length + pending.length}/{PER_QUESTION_FILES}</span>}
         <span style={{ marginLeft: 'auto', fontSize: 11.5, fontWeight: 800, fontFamily: "'Nunito',sans-serif", display: 'inline-flex', alignItems: 'center', gap: 5 }}>
           {saveErr ? (
             <button type="button" onClick={onRetry} style={{ border: 'none', background: 'none', padding: 0, color: RED, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: "'Nunito',sans-serif" }}>Not saved · Retry</button>
@@ -241,7 +274,7 @@ function AnswerBox({ format = 'all', q, idx, value, onType, files, onPick, onRem
   );
 }
 
-function Stepper({ questions, paper, work, saved, files, fileCounts, onType, onFlush, saveErrs, onPick, onRemove, onOpenFile, onDraw, onWrite, uploading, removing, fileErr, mid, dark, onHandIn, submitting, jumpRef, targetId }) {
+function Stepper({ questions, paper, work, saved, files, fileCounts, onType, onFlush, saveErrs, onPick, onRemove, onOpenFile, onDraw, onWrite, uploading, removing, fileErr, pending, onCancelPending, mid, dark, onHandIn, submitting, jumpRef, targetId }) {
   const total = questions.length;
   const [idx, setIdx] = useState(() => resumeStep(questions, work.answers, saved, fileCounts));
   const [moving, setMoving] = useState(false);
@@ -403,7 +436,7 @@ function Stepper({ questions, paper, work, saved, files, fileCounts, onType, onF
       <div style={{ maxWidth: 760, margin: '0 auto', padding: '2px 20px 12px' }}>
       <div style={{ maxHeight: '44vh', overflowY: 'auto', padding: '0 2px' }}>
       <AnswerBox format={paper?.answer_format} q={q} idx={idx} value={work.answers[idx]} onType={(v) => onType(idx, v)}
-        files={qFiles} onPick={(list) => onPick(idx, list)} onRemove={onRemove} onOpenFile={onOpenFile} onDraw={() => onDraw(idx)} onWrite={() => onWrite(idx)}
+        files={qFiles} pending={(pending || []).filter((x) => x.question === idx)} onCancelPending={onCancelPending} onPick={(list) => onPick(idx, list)} onRemove={onRemove} onOpenFile={onOpenFile} onDraw={() => onDraw(idx)} onWrite={() => onWrite(idx)}
         uploading={uploading === idx} removing={removing} status={status} saveErr={saveErrs[idx]} onRetry={() => onFlush(idx).catch(() => {})}
         fileErr={fileErr?.index === idx ? fileErr.message : ''}/>
 
@@ -614,6 +647,12 @@ export default function ActivityDetailPage() {
   const [saved, setSaved] = useState({});   // answers the server holds per question (autosaved)
   const [files, setFiles] = useState([]);   // uploaded so far — each with its question
   const [uploadingQ, setUploadingQ] = useState(null);
+  // Files on their way up (a tile with a spinner each) — cancelling one removes it again if it lands.
+  const [pending, setPending] = useState([]);
+  const cancelledUploads = useRef(new Set());
+  const addPending = (question, name) => { const key = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`; setPending((p) => [...p, { key, name, question }]); return key; };
+  const dropPending = (key) => setPending((p) => p.filter((x) => x.key !== key));
+  const cancelPending = (key) => { cancelledUploads.current.add(key); dropPending(key); };
   const [textSave, setTextSave] = useState('');   // the written answer's autosave: saving | saved | error
   const [removing, setRemoving] = useState(null);
   const [fileErr, setFileErr] = useState(null);   // { index, message }
@@ -761,28 +800,47 @@ export default function ActivityDetailPage() {
   };
 
   /* Files belong to a question — up to 3 each, 5MB, uploaded straight away. */
-  const pickFiles = async (i, list) => {
+  // Files are validated at once, each gets its spinner tile straight away, and they upload one after another
+  // (picking more while some are going up queues them instead of being ignored).
+  const uploadChain = useRef(Promise.resolve());
+  const inFlight = useRef(0);
+  const pickFiles = (i, list) => {
     const picked = Array.from(list || []);
-    if (!picked.length || uploadingQ !== null) return;
+    if (!picked.length) return Promise.resolve();
     setFileErr(null);
-    let count = files.filter((f) => f.question != null && Number(f.question) === i).length;
+    let count = files.filter((f) => f.question != null && Number(f.question) === i).length + pending.filter((x) => x.question === i).length;
+    const queue = [];
     for (const file of picked) {
       if (count >= PER_QUESTION_FILES) { setFileErr({ index: i, message: `Up to ${PER_QUESTION_FILES} files per question.` }); break; }
       // What the assignment takes (details.answer_format): photos only, or everything (the API checks too).
       const photosOnly = ['images', 'images_text'].includes(row.briefDetails?.answer_format);
       if (photosOnly ? !/\.(jpe?g|png)$/i.test(file.name) : !FILE_OK.test(file.name)) { setFileErr({ index: i, message: photosOnly ? `${file.name}: this assignment takes photos (JPG or PNG) of your answers.` : `${file.name}: only PDF, JPG, PNG, Word (.docx) or text files.` }); continue; }
       if (file.size > 5 * 1024 * 1024) { setFileErr({ index: i, message: `${file.name} is larger than 5MB.` }); continue; }
-      setUploadingQ(i);
-      try {
-        const meta = await uploadActivityFile(row.assignmentId, file, i);
-        if (!meta?.id) throw new Error('Upload failed.');
-        setFiles((fs) => [...fs, { ...meta, name: meta.name || file.name, size: meta.size || file.size, question: i }]);
-        count += 1;
-      } catch (e) {
-        setFileErr({ index: i, message: e?.message || 'Could not upload that file. Try again.' });
-      }
+      queue.push({ file, key: addPending(i, file.name) });
+      count += 1;
     }
-    setUploadingQ(null);
+    if (!queue.length) return Promise.resolve();
+    inFlight.current += queue.length; setUploadingQ(i);
+    const run = async () => {
+      for (const { file, key } of queue) {
+        try {
+          if (!cancelledUploads.current.has(key)) {
+            const meta = await uploadActivityFile(row.assignmentId, file, i);
+            if (!meta?.id) throw new Error('Upload failed.');
+            if (cancelledUploads.current.has(key)) await removeActivityFile(meta.id).catch(() => {});
+            else setFiles((fs) => [...fs, { ...meta, name: meta.name || file.name, size: meta.size || file.size, question: i }]);
+          }
+        } catch (e) {
+          if (!cancelledUploads.current.has(key)) setFileErr({ index: i, message: e?.message || 'Could not upload that file. Try again.' });
+        } finally {
+          dropPending(key);
+          inFlight.current -= 1;
+          if (inFlight.current <= 0) setUploadingQ(null);
+        }
+      }
+    };
+    uploadChain.current = uploadChain.current.then(run, run);
+    return uploadChain.current;
   };
 
   const removeFile = async (f) => {
@@ -850,12 +908,14 @@ export default function ActivityDetailPage() {
   const attachDrawing = async (blob, strokes) => {
     const i = board;
     setFileErr(null); setUploadingQ(i);
+    const pk = addPending(i, `drawing-q${i + 1}.png`);
     try {
       await replaceOwnFile(i, new File([blob], `drawing-q${i + 1}.png`, { type: 'image/png' }));
       setWork((w) => ({ ...w, drawings: { ...(w.drawings || {}), [i]: strokes } }));
     } catch (e) {
       setFileErr({ index: i, message: e?.message || 'Could not attach the drawing. Try again.' });
     } finally {
+      dropPending(pk);
       setUploadingQ(null);
       setBoard(null);
     }
@@ -885,10 +945,12 @@ export default function ActivityDetailPage() {
     const { docxBlob } = await import('../lib/wordDoc.js');
     const blob = await docxBlob(json, page, { title: `${row.title} — Question ${i + 1}` });
     setUploadingQ(i);
+    const pk = addPending(i, docFileName(i));
     try {
       await replaceOwnFile(i, new File([blob], docFileName(i), { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }));
       storeDoc(row.assignmentId, i, { json, page, saved: true });
     } finally {
+      dropPending(pk);
       setUploadingQ(null);
     }
   };
@@ -1239,7 +1301,7 @@ export default function ActivityDetailPage() {
                 <Stepper questions={questions} paper={row.briefDetails} work={work} saved={saved} files={files} fileCounts={fileCounts}
                   onType={typeAnswer} onFlush={flushAnswer} saveErrs={saveErrs}
                   onPick={pickFiles} onRemove={removeFile} onOpenFile={openFile} onDraw={(i) => { setFileErr(null); setBoard(i); }} onWrite={openDoc}
-                  uploading={uploadingQ} removing={removing} fileErr={fileErr}
+                  uploading={uploadingQ} removing={removing} fileErr={fileErr} pending={pending} onCancelPending={cancelPending}
                   mid={t.mid} dark={t.dark} onHandIn={() => { setSubmitErr(''); setChecking(true); }} submitting={submitting} jumpRef={stepperJump} targetId={row.targetId}/>
               ) : (
                 <>

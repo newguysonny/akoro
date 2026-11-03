@@ -8,6 +8,7 @@ import { edu } from "./createAssignment.js";
 import { paperOrg, renderAssignmentHtml, renderSubmissionHtml } from "./paperTemplate.js";
 import { loadSubmissionDocument } from "./submissionArtifacts.js";
 import { readSubmissionFile } from "./submissionFiles.js";
+import { docxToPages } from "../records/officeText.js";
 
 const SCHOOL_COLS = "id, name, city, lga, state";
 
@@ -69,6 +70,8 @@ export async function assignmentPaperHtml(assignment, { copy = "student", showKe
   return renderAssignmentHtml({ assignment, org: await orgFor(assignment), copy, showKey, changes, versionLabel, embed });
 }
 
+const DOC_ANSWER = /^document-q\d+\.docx$/i;
+
 /** A target's submission paper, with its drawings and photos in the page. */
 export async function submissionPaperHtml(targetId, { only = null, embed = false, draft = false } = {}) {
   const doc = await loadSubmissionDocument(targetId, { draft });
@@ -87,6 +90,22 @@ export async function submissionPaperHtml(targetId, { only = null, embed = false
     const { data: rows } = await edu().from("self_study_files").select("id, mime, storage_key, data").in("id", wanted.map((f) => f.id).filter(Boolean));
     await Promise.all((rows || []).map(async (r) => {
       try { const url = await imageDataUrl(await readSubmissionFile(r), r.mime || "image/png"); if (url) images.set(r.id, url); } catch { /* shown as its name */ }
+    }));
+  }
+  // An answer written in the app's document editor (document-q3.docx) reads on the paper as the learner's text.
+  const docs = (doc.parts || []).flatMap((p) => p.questions || [])
+    .filter((q) => only == null || q.index === only)
+    .flatMap((q) => (q.answer?.files || []).filter((f) => DOC_ANSWER.test(f.name || "")).map((f) => ({ q, f })));
+  if (docs.length) {
+    const { data: rows } = await edu().from("self_study_files").select("id, name, mime, kind, storage_key, data").in("id", docs.map((d) => d.f.id).filter(Boolean));
+    const byId = new Map((rows || []).map((r) => [r.id, r]));
+    await Promise.all(docs.map(async ({ q, f }) => {
+      const r = byId.get(f.id);
+      if (!r) return;
+      try {
+        const written = docxToPages(await readSubmissionFile(r)).map((pg) => pg.markdown || pg.text || "").join("\n\n").trim();
+        if (written) { q.answer.docText = written.slice(0, 20000); q.answer.files = q.answer.files.filter((x) => x.id !== f.id); }
+      } catch { /* unreadable — it stays listed as an attached file */ }
     }));
   }
   return renderSubmissionHtml({ doc, images, only, embed });

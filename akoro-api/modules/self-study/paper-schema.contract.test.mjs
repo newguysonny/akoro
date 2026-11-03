@@ -312,3 +312,20 @@ test("the submission paper carries the question's diagram under its question (so
   assert.match(html, /<figure class="figure"><img src="data:image\/svg\+xml/);
   assert.match(html, /Fig\. 1/);
 });
+
+test("an answer written in the document editor reads on the submission paper as the learner's text", async () => {
+  const { submissionDocument } = await import("./paperSchema.js");
+  const { renderSubmissionHtml } = await import("./paperTemplate.js");
+  const doc = submissionDocument({
+    assignment: { title: "T", details: { questions: [{ q: "Explain.", type: "short_answer", max_points: 3 }] } },
+    target: { submission: { answers: {}, files: [{ id: "f1", question: 0 }] } }, learner: { name: "Ada" },
+    files: [{ id: "f1", name: "document-q1.docx", kind: "docx", question: 0 }],
+  });
+  const q = doc.parts[0].questions[0];
+  q.answer.docText = "Leaves are green because of chlorophyll.";
+  q.answer.files = [];
+  const html = renderSubmissionHtml({ doc });
+  assert.match(html, /typed typed--doc[^>]*>Leaves are green because of chlorophyll\./);
+  assert.doesNotMatch(html, /No answer submitted/);
+  assert.doesNotMatch(html, /<p class="files">/);
+});

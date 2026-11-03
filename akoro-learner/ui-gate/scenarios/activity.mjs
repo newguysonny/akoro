@@ -129,7 +129,21 @@ export const scenarios = [
 
       const next = () => page.getByRole('button', { name: /Submit answer & (next|review)|Skip for now|Review answers/ }).click();
       const type = (n, text) => page.getByLabel(`Answer to question ${n}`).fill(text);
-      const attached = (name) => page.getByText(name, { exact: false }).first().waitFor({ timeout: 25_000 }).then(() => true, () => false);
+      // A written answer is typed in the document editor: tap the box, type, close — the document becomes a file under the question.
+      const writeInDoc = async (n, text) => {
+        await page.getByTestId('write-in-doc').click();
+        const editor = page.locator('.ProseMirror').first();
+        await editor.waitFor({ timeout: 25_000 });
+        await editor.click();
+        await page.keyboard.type(text);
+        await page.getByRole('button', { name: /Save to answer/ }).click();
+        await page.getByRole('button', { name: /^Saved/ }).waitFor({ timeout: 30_000 }).catch(() => {});
+        await page.getByRole('button', { name: 'Close the document' }).click();
+        const tile = page.locator('[data-testid="file-tile"]', { hasText: 'Document' });
+        t.check(`question ${n}: the document is attached to the answer`, await tile.first().waitFor({ timeout: 30_000 }).then(() => true, () => false));
+      };
+      // A finished upload is a file tile; while it goes up it is an upload tile with a spinner.
+      const attached = (name) => page.locator('[data-testid="file-tile"]', { hasText: name }).first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
 
       await page.goto(`${t.app}/activities/${id}`, { waitUntil: 'domcontentloaded' });
       await page.getByTestId('answer-dock').waitFor({ timeout: 25_000 });
@@ -141,18 +155,20 @@ export const scenarios = [
       await type(3, 'photosynthesis'); await next();
 
       // Theory + an uploaded file (a photo from the gallery and a text file).
-      await page.getByLabel('Answer to question 4').waitFor();
-      await type(4, 'Leaves contain chlorophyll, which reflects green light.');
+      await page.getByTestId('write-in-doc').waitFor({ timeout: 15_000 });
+      t.check('a written answer opens a document, not a text box', (await page.locator('textarea[aria-label="Answer to question 4"]').count()) === 0);
       const files = page.locator('input[type=file]:not([capture])');
       await files.setInputFiles([{ name: 'workings-gallery.png', mimeType: 'image/png', buffer: PNG }]);
+      t.check('a spinner tile shows while it uploads (or it has already landed)', (await page.getByTestId('upload-tile').count()) > 0 || (await page.getByTestId('file-tile').count()) > 0);
       t.check('an uploaded photo is attached to the question', await attached('workings-gallery.png'));
       await files.setInputFiles([{ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('chlorophyll reflects green light') }]);
       t.check('an uploaded text file is attached too', await attached('notes.txt'));
+      await writeInDoc(4, 'Leaves contain chlorophyll, which reflects green light.');
       await t.shot('theory-upload'); await next();
 
       // Essay.
-      await page.getByLabel('Answer to question 5').waitFor();
-      await type(5, 'Photosynthesis feeds almost every food chain and releases the oxygen we breathe. '.repeat(3)); await next();
+      await page.getByTestId('write-in-doc').waitFor({ timeout: 15_000 });
+      await writeInDoc(5, 'Photosynthesis feeds almost every food chain and releases the oxygen we breathe. '.repeat(3)); await next();
 
       // Labelled diagram: the figure is on the page and each part has a box.
       await page.getByLabel('Part A').waitFor({ timeout: 10_000 });
@@ -161,8 +177,8 @@ export const scenarios = [
       await t.shot('diagram'); await next();
 
       // Calculation + camera capture (the camera input's file is what a phone's camera hands back).
-      await page.getByLabel('Answer to question 7').waitFor();
-      await type(7, 'speed = 150 / 30 = 5 m/s');
+      await page.getByTestId('write-in-doc').waitFor({ timeout: 15_000 });
+      await writeInDoc(7, 'speed = 150 / 30 = 5 m/s');
       const cam = page.getByTestId('camera-input');
       await cam.setInputFiles([{ name: 'capture-1.png', mimeType: 'image/png', buffer: PNG }]);
       t.check('a camera photo is attached', await attached('capture-1.png'));
@@ -198,8 +214,8 @@ export const scenarios = [
       t.equal('seven questions on the paper', qsOut.length, 7);
       t.equal('all seven answered', doc.body?.data?.document?.summary?.answered, 7);
       const filesOf = (i) => (qsOut[i]?.answer?.files || []).map((f) => f.name).sort().join(',');
-      t.equal('theory: the photo and the text file are under question 4', filesOf(3), 'notes.txt,workings-gallery.png');
-      t.equal('calculation: both camera photos are under question 7', filesOf(6), 'capture-1.png,capture-2.png');
+      t.equal('theory: the photo, the text file and the document are under question 4', filesOf(3), 'document-q4.docx,notes.txt,workings-gallery.png');
+      t.equal('calculation: both camera photos and the document are under question 7', filesOf(6), 'capture-1.png,capture-2.png,document-q7.docx');
       t.equal('the diagram answer was kept', /Corner one/.test(JSON.stringify(qsOut[5]?.answer || {})), true);
       t.check('no page errors', errors.length === 0, { errors: errors.slice(0, 3) });
     },

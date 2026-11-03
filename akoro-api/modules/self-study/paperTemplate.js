@@ -437,6 +437,7 @@ function submittedHtml(item, images) {
     out.push(`<ol class="options" role="list">${item.options.map((o) => `<li${o.selected ? ' class="is-selected"' : ""}>${text(o.text)}</li>`).join("")}</ol>`);
   }
   if (a.text) out.push(`<div class="typed">${text(a.text)}</div>`);
+  if (a.docText) out.push(`<div class="typed typed--doc">${text(a.docText)}</div>`);
   for (const f of a.drawings || []) {
     const src = images?.get(f.id);
     out.push(`<figure class="drawing" data-file="${h(f.name)}">${src ? `<img src="${h(src)}" alt="Handwritten working for question ${item.number}">` : ""}</figure>`);
@@ -446,7 +447,7 @@ function submittedHtml(item, images) {
   for (const f of photos) out.push(`<figure class="drawing" data-file="${h(f.name)}"><img src="${h(images.get(f.id))}" alt="Photo for question ${item.number}"></figure>`);
   const others = (a.files || []).filter((f) => !images?.get(f.id));
   if (others.length) out.push(`<p class="files">Attached: ${others.map((f) => h(f.name)).join(", ")}</p>`);
-  if (!a.text && !a.selected && !(a.drawings || []).length && !(a.files || []).length) out.push('<div class="noanswer">No answer submitted</div>');
+  if (!a.text && !a.docText && !a.selected && !(a.drawings || []).length && !(a.files || []).length) out.push('<div class="noanswer">No answer submitted</div>');
   return out.join("\n");
 }
 function questionLi(item, images, marks) {
