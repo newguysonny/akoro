@@ -3741,7 +3741,7 @@ planning loop's tool names, the double practice charge, empty syllabus data).
        Agent, NaNa guide, ladder), mirroring the teaching flow; the API reaches it
        only through `agent-tools/python-action-relay.js`
        (`PYTHON_AGENT_SERVICE_URL`). Teaching logic can drift between the two.
-     - *Decision:* keep **one** agent core, the API's, moving to TypeScript. Like
+     - *Decision (agreed 2026-11-03):* keep **one** agent core, the API's, moving to TypeScript. Like
        DeepSeek, Python never runs a second teaching loop. Unlike DeepSeek's SDK,
        Python's job is a **specialist service the core calls** (core → Python),
        for work Python does best: mastery / knowledge-tracing models, analytics,
@@ -3755,11 +3755,6 @@ planning loop's tool names, the double practice charge, empty syllabus data).
        Pydantic models from them, so recipes, events and session shapes match in
        both languages (a contract test fails on drift); (d) type-check the Python
        code in CI (`pyright` or `mypy` in strict mode).
-     - *Optional later: a DeepSeek-style remote control.* Only if outside users
-       (schools' developers, researchers) need to drive Akoro's agent from
-       Python: a small `akoro-sdk` package over the public API (auth, start a
-       session, send turns, read the event stream). It would be a client and
-       never a second agent.
 - **Safety:** no behaviour change in a conversion commit; one module per commit; the
   API suite, the four app builds, `typecheck` and the gate's regression suite stay
   green after every step; runtime checks (recipe validators, `validateDefinition`)
@@ -3768,8 +3763,8 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   types fully `.ts` under strict settings; the `.js` ratchet list shrinking each
   release; no `any` in the shared types.
 - **Status (2026-11-03):** planned. Step 1 can start any time. Steps 2–3 come with
-  the Phase 20 build, and step 4 with Phase 19. Step 6 (a) can start any time;
-  (b) after (a) is agreed.
+  the Phase 20 build, and step 4 with Phase 19. Step 6 is agreed; (a)
+  can start any time, and (b) follows (a).
 
 ---
 
