@@ -13,6 +13,7 @@
 import db from "../../../db.js";
 import { pdfLayoutPages } from "./layoutText.js";
 import { structureSyllabus, toIngestDoc } from "./structure.js";
+import { splitCombined } from "./split.js";
 
 const T = () => db.schema("edu").from("syllabus_imports");
 const now = () => new Date().toISOString();
@@ -44,9 +45,9 @@ async function ask({ system, user, maxTokens }) {
   return res.choices?.[0]?.message?.content || "";
 }
 
-async function work(id, { buffer, fileName, exam, name, code }, { askFn = ask } = {}) {
+async function work(id, { buffer, pages: given = null, fileName, exam, name, code }, { askFn = ask } = {}) {
   try {
-    const pages = await pdfLayoutPages(buffer);
+    const pages = given || await pdfLayoutPages(buffer);
     const textChars = pages.reduce((n, p) => n + p.text.replace(/\s+/g, "").length, 0);
     if (textChars < 200) throw Object.assign(new Error("This PDF has no readable text layer (a scan). Scanned syllabi need the page reader; this importer reads digital PDFs."), { code: "scanned_pdf" });
     await T().update({ progress: { step: "structuring", pages: pages.length }, updated_at: now() }).eq("id", id);
@@ -76,10 +77,36 @@ async function create({ fileName, exam, name, userId }) {
   return data;
 }
 
-/** Start an import; the work runs in the background. */
+/**
+ * One uploaded file. A PDF that holds several subjects' syllabi (the combined
+ * BECE syllabus) is split first (split.js): this file's row becomes the first
+ * subject and every other subject gets its own row in the queue — one draft
+ * per subject. A single syllabus imports whole. Runs in the background.
+ */
+async function runFile(id, input, opts = {}) {
+  let pages;
+  try { pages = await pdfLayoutPages(input.buffer); }
+  catch (e) { return work(id, input, opts); }   // work reports the read failure on the row
+  const parts = splitCombined(pages);
+  if (!parts.length) return work(id, { ...input, pages }, opts);
+  const slice = (part) => pages.filter((p) => p.page >= part.from && p.page <= part.to);
+  const label = (part) => `${input.fileName} (pages ${part.from}–${part.to})`;
+  const [first, ...rest] = parts;
+  await T().update({ name: first.name, source_file: clip(label(first), 300), progress: { step: "queued", split: { of: parts.length } }, updated_at: now() }).eq("id", id);
+  for (const part of rest) {
+    const row = await create({ fileName: label(part), exam: input.exam, name: part.name, userId: input.userId });
+    await T().update({ progress: { step: "queued" } }).eq("id", row.id);
+    queue.push({ id: row.id, input: { pages: slice(part), fileName: label(part), exam: row.exam, name: part.name || undefined } });
+  }
+  pump();
+  return work(id, { pages: slice(first), fileName: label(first), exam: input.exam, name: first.name || undefined }, opts);
+}
+
+/** Start an import; the work runs in the background (queued like a batch of one). */
 export async function start({ buffer, fileName, exam, name, code, userId }) {
   const row = await create({ fileName, exam, name, userId });
-  setImmediate(() => { work(row.id, { buffer, fileName, exam: row.exam, name, code }).catch(() => {}); });
+  queue.push({ id: row.id, file: true, input: { buffer, fileName, exam: row.exam, name, code, userId } });
+  pump();
   return { importId: row.id };
 }
 
@@ -116,7 +143,7 @@ function pump() {
   while (running < MAX_RUNNING && queue.length) {
     const job = queue.shift();
     running++;
-    work(job.id, job.input).catch(() => {}).finally(() => { running--; pump(); });
+    (job.file ? runFile(job.id, job.input) : work(job.id, job.input)).catch(() => {}).finally(() => { running--; pump(); });
   }
 }
 
@@ -127,7 +154,7 @@ export async function startBatch({ files = [], exam, userId }) {
     const { name, code } = nameFromFile(f.originalname);
     const row = await create({ fileName: f.originalname, exam, name, userId });
     await T().update({ progress: { step: "queued" } }).eq("id", row.id);
-    queue.push({ id: row.id, input: { buffer: f.buffer, fileName: f.originalname, exam: row.exam, name, code } });
+    queue.push({ id: row.id, file: true, input: { buffer: f.buffer, fileName: f.originalname, exam: row.exam, name, code, userId } });
     ids.push({ importId: row.id, file: f.originalname, name, code });
   }
   pump();
@@ -137,7 +164,7 @@ export async function startBatch({ files = [], exam, userId }) {
 /** Run an import to the end (scripts, the gate). */
 export async function run({ buffer, fileName, exam, name, code, userId, askFn }) {
   const row = await create({ fileName, exam, name, userId });
-  return work(row.id, { buffer, fileName, exam: row.exam, name, code }, askFn ? { askFn } : {});
+  return runFile(row.id, { buffer, fileName, exam: row.exam, name, code, userId }, askFn ? { askFn } : {});
 }
 
 const STALE_MS = 20 * 60_000;

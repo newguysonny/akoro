@@ -157,3 +157,23 @@ test("titles take the document's own heading, and a '… continued' subtopic joi
   assert.equal(out[1].subtopics.length, 1);
   assert.deepEqual(out[1].subtopics[0].objectives, ["x", "y"]);
 });
+
+test("a combined syllabus splits into one part per subject: Chapter One starts it, Chapter Three (book list) ends it", async () => {
+  const P = await import("./split.js");
+  const pages = [
+    { page: 2, text: "TABLE OF CONTENTS\nChapter One\nAim & Objectives.............................. Page 4" },
+    { page: 7, text: "Chapter One\nAims & Objectives\nIntroduction The BECE Basic Science and Technology syllabus covers Basic Science, Basic Technology…" },
+    { page: 8, text: "Chapter Two\nSyllabus\n1 MATERIALS  I. Properties of material" },
+    { page: 9, text: "Chapter Three\nRecommended Textbooks\n1. Some book" },
+    { page: 10, text: "Chapter Four\nFrequently Asked Questions" },
+    { page: 12, text: "Chapter One\nAims & Objectives\nIntroduction This syllabus is designed for candidates whose L1 (Mother Tongue) is Edo" },
+    { page: 13, text: "Chapter Two\nSyllabus" },
+  ];
+  assert.deepEqual(P.splitCombined(pages), [
+    { from: 7, to: 8, name: "Basic Science and Technology" },
+    { from: 12, to: 13, name: "Edo" },
+  ]);
+  assert.deepEqual(P.splitCombined(pages.slice(0, 4)), [], "one subject: imported whole, not split");
+  assert.equal(P.subjectNamed("The underlying principle … curriculum for Christian Religious Studies is"), "Christian Religious Studies");
+  assert.equal(P.subjectNamed("prepare for your BECE in English Language"), "English Studies");
+});
