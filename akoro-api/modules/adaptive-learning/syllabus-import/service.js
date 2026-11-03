@@ -14,11 +14,14 @@ import db from "../../../db.js";
 import { pdfLayoutPages } from "./layoutText.js";
 import { structureSyllabus, toIngestDoc } from "./structure.js";
 import { splitCombined } from "./split.js";
+import { structureCurriculum, nerdcFromFile, fragmentRatio } from "./curriculum.js";
 
 const T = () => db.schema("edu").from("syllabus_imports");
 const now = () => new Date().toISOString();
 const clip = (s, n) => String(s ?? "").trim().slice(0, n);
-export const EXAMS = Object.freeze(["WASSCE", "NECO", "JAMB", "NCEE", "BECE", "IGCSE"]);
+export const EXAMS = Object.freeze(["WASSCE", "NECO", "JAMB", "NCEE", "BECE", "IGCSE", "NERDC"]);
+/** "Exams" that are curriculum bodies: their imports take the curriculum shape and publish to the curriculum bank. */
+export const CURRICULUM_BODIES = Object.freeze({ NERDC: "nerdc" });
 
 /**
  * The importer's model: DeepSeek wherever the server has it set up (key,
@@ -50,13 +53,17 @@ async function work(id, { buffer, pages: given = null, fileName, exam, name, cod
     const pages = given || await pdfLayoutPages(buffer);
     const textChars = pages.reduce((n, p) => n + p.text.replace(/\s+/g, "").length, 0);
     if (textChars < 200) throw Object.assign(new Error("This PDF has no readable text layer (a scan). Scanned syllabi need the page reader; this importer reads digital PDFs."), { code: "scanned_pdf" });
+    if (fragmentRatio(pages) >= 0.6) throw Object.assign(new Error("This PDF's text layer is unreadable (its font has no character map — the words come out in fragments). It needs reading from the page images (the page reader); the text importer can't use it."), { code: "garbled_text" });
     await T().update({ progress: { step: "structuring", pages: pages.length }, updated_at: now() }).eq("id", id);
-    const out = await structureSyllabus({
-      pages, hint: { exam, name, code }, ask: askFn,
-      onProgress: (p) => { T().update({ progress: { step: "structuring", pages: pages.length, ...p }, updated_at: now() }).eq("id", id).then(() => {}, () => {}); },
-    });
+    const onProgress = (p) => { T().update({ progress: { step: "structuring", pages: pages.length, ...p }, updated_at: now() }).eq("id", id).then(() => {}, () => {}); };
+    const body = CURRICULUM_BODIES[String(exam || "").toUpperCase()];
+    const nerdc = body ? nerdcFromFile(fileName) : null;
+    const out = body
+      ? await structureCurriculum({ pages, ask: askFn, onProgress, hint: { body, subject: name || nerdc?.subject, stage: nerdc?.stage, classes: nerdc?.classes } })
+      : await structureSyllabus({ pages, hint: { exam, name, code }, ask: askFn, onProgress });
+    const label = body ? `${out.doc.subject}${out.doc.classes?.length ? ` (${out.doc.classes[0]}–${out.doc.classes.at(-1).replace(/^\D+/, "")})` : ""}${out.doc.frontMatterOnly ? " — foreword" : ""}` : out.doc.name;
     const { data } = await T().update({
-      status: "draft", name: out.doc.name, doc: out.doc, stats: { ...out.stats, model: await importModel() }, warnings: out.warnings,
+      status: "draft", name: label, doc: out.doc, stats: { ...out.stats, model: await importModel() }, warnings: out.warnings,
       progress: { step: "done", pages: pages.length }, updated_at: now(),
     }).eq("id", id).select("*").single();
     return data;
@@ -87,7 +94,7 @@ async function runFile(id, input, opts = {}) {
   let pages;
   try { pages = await pdfLayoutPages(input.buffer); }
   catch (e) { return work(id, input, opts); }   // work reports the read failure on the row
-  const parts = splitCombined(pages);
+  const parts = CURRICULUM_BODIES[String(input.exam || "").toUpperCase()] ? [] : splitCombined(pages);
   if (!parts.length) return work(id, { ...input, pages }, opts);
   const slice = (part) => pages.filter((p) => p.page >= part.from && p.page <= part.to);
   const label = (part) => `${input.fileName} (pages ${part.from}–${part.to})`;
@@ -151,7 +158,8 @@ function pump() {
 export async function startBatch({ files = [], exam, userId }) {
   const ids = [];
   for (const f of files) {
-    const { name, code } = nameFromFile(f.originalname);
+    const nerdc = CURRICULUM_BODIES[String(exam || "").toUpperCase()] ? nerdcFromFile(f.originalname) : null;
+    const { name, code } = nerdc ? { name: nerdc.subject, code: null } : nameFromFile(f.originalname);
     const row = await create({ fileName: f.originalname, exam, name, userId });
     await T().update({ progress: { step: "queued" } }).eq("id", row.id);
     queue.push({ id: row.id, file: true, input: { buffer: f.buffer, fileName: f.originalname, exam: row.exam, name, code, userId } });
@@ -189,6 +197,12 @@ export async function publish(id, userId) {
   const row = await get(id);
   if (!row) throw Object.assign(new Error("Import not found"), { status: 404 });
   if (row.status !== "draft") throw Object.assign(new Error(`Only a draft can be published (this one is ${row.status})`), { status: 409 });
+  if (row.doc?.kind === "curriculum") {
+    const { publishCurriculumDoc } = await import("../../curriculum/importDoc.js");
+    const result = await publishCurriculumDoc(row.doc, { source: row.source_file, pageCount: row.stats?.pages || null });
+    await T().update({ status: "published", published_by: userId || null, published_at: now(), updated_at: now() }).eq("id", id);
+    return { ...result, kind: "curriculum" };
+  }
   const { ingestSubject } = await import("../syllabus.js");
   const result = await ingestSubject(toIngestDoc(row.doc, `${row.source_file || "syllabus PDF"} (imported ${row.created_at?.slice(0, 10) || ""})`));
   const { data: subject } = await db.schema("edu").from("syllabus_subjects").select("id").eq("exam", row.doc.exam).eq("name", row.doc.name).maybeSingle();
