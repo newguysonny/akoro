@@ -10,6 +10,11 @@ import { isChunkError, recoverFromStaleChunk } from './utils/chunkRetry.js';
 import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 import './index.css';
 
+// The whole module graph loaded and is running — tell the boot watchdog in
+// index.html not to repair (it resets the SW/caches if this never happens).
+window.__akoroBooted = true;
+try { localStorage.removeItem('akoro_boot_repair'); } catch { /* private mode */ }
+
 // Global net for stale-chunk failures after a deploy — covers dynamic imports
 // that don't go through a React lazy boundary (Vite fires vite:preloadError;
 // unhandled rejections catch the rest). Recovery is guarded to reload once.

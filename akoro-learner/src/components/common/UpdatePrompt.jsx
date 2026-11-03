@@ -11,6 +11,14 @@
  * the current version until the next check. The countdown pauses while a
  * protected flow (live session, assessment) holds the activity lock.
  *
+ * Two quiet paths keep people off old versions without the banner (the
+ * pattern from pwa-today/basic-service-worker):
+ *  • at LAUNCH — if a new version is already waiting when the app opens (it
+ *    downloaded during the last visit), switch straight away while the splash
+ *    is still up, before the learner has done anything;
+ *  • on CLOSE — when the app is hidden/closed with a version waiting, activate
+ *    it, so the next open is already the new version.
+ *
  * Registers the SW itself via vite-plugin-pwa's registerSW (prompt mode). In
  * dev, `registerSW` is a no-op, so this renders nothing.
  */
@@ -19,6 +27,14 @@ import { registerSW } from 'virtual:pwa-register';
 import { isBusy, subscribeActivity } from '../../utils/activityLock.js';
 
 const COUNTDOWN = 10;
+// A waiting version found this soon after the page started is applied at once
+// (the learner is still on the splash / first paint).
+const LAUNCH_WINDOW_MS = 8000;
+
+// Activate any waiting worker without reloading — used when the app is closing.
+function activateWaiting(registration) {
+  try { registration?.waiting?.postMessage({ type: 'SKIP_WAITING' }); } catch { /* best-effort */ }
+}
 
 export default function UpdatePrompt() {
   const [show, setShow] = useState(false);
@@ -29,7 +45,11 @@ export default function UpdatePrompt() {
   useEffect(() => {
     updateSW.current = registerSW({
       immediate: true,
-      onNeedRefresh() { setSecs(COUNTDOWN); setShow(true); },
+      onNeedRefresh() {
+        const atLaunch = (typeof performance !== 'undefined' ? performance.now() : Infinity) < LAUNCH_WINDOW_MS;
+        if (atLaunch && !isBusy()) { updateSW.current?.(true); return; }   // swap before anyone starts working
+        setSecs(COUNTDOWN); setShow(true);
+      },
       // Proactively poll for a new deploy so the banner fires as soon as one
       // ships: shortly after load, every 60 seconds, and whenever the tab
       // refocuses. (registration.update() is a cheap conditional fetch of
@@ -42,6 +62,12 @@ export default function UpdatePrompt() {
         const onVis = () => { if (document.visibilityState === 'visible') check(); };
         document.addEventListener('visibilitychange', onVis);
         window.addEventListener('focus', check);
+        // Closing the app with a new version waiting → activate
+        // it now, so the next open is the new version (pagehide is the event
+        // mobile browsers fire when the app is swiped away; not on a mere tab
+        // switch, which would swap versions under a page still in use).
+        const onLeave = () => { if (!isBusy()) activateWaiting(registration); };
+        window.addEventListener('pagehide', onLeave);
         // (Listeners live for the app's lifetime — the prompt is always mounted.)
         void id;
       },

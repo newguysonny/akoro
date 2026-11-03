@@ -29,7 +29,7 @@ export default defineConfig({
       workbox: {
         // Pull our Web Push handlers (push / notificationclick) into the
         // generated service worker. Lives in public/ so it ships as /push-sw.js.
-        importScripts: ['/push-sw.js'],
+        importScripts: ['/push-sw.js', '/sw-repair.js'],
         // Precache the built app shell so the app opens with no connection.
         globPatterns: ['**/*.{js,css,html,svg,png,jpg,ico,woff2}'],
         // Keep the shell lean for low-bandwidth users: the heavy TensorFlow
@@ -54,17 +54,34 @@ export default defineConfig({
         manifestTransforms: [
           (entries) => {
             const MAX = 400 * 1024;
-            const manifest = entries.filter((e) => (e.size ?? 0) <= MAX);
+            // NEVER drop the app entry (index-*.js/.css, which index.html loads
+            // directly). It is >400 KB, so this filter used to drop it: the
+            // precached shell then pointed at an entry that lived only in the
+            // evictable runtime cache, and after a deploy the old file was gone
+            // from the server → blank screen until the user cleared site data.
+            // The shell and its entry must always be precached TOGETHER.
+            const isEntry = (url) => /^assets\/index-[^/]+\.(?:js|css)$/.test(String(url).replace(/^\//, ''));
+            const manifest = entries.filter((e) => isEntry(e.url) || (e.size ?? 0) <= MAX);
             return { manifest, warnings: [] };
           },
         ],
-        // NOTE: no `navigateFallback` — we deliberately do NOT serve the HTML
-        // shell cache-first from the precache. That was the root cause of the
-        // post-deploy blank screen: a returning visitor got the OLD cached
-        // index.html pointing at deleted chunks. Instead the navigation runtime
-        // rule below serves the document NETWORK-FIRST, so online visitors
-        // always get a fresh, self-consistent shell; offline falls back to the
-        // last good copy. The Vercel SPA rewrite handles deep links.
+        // App-shell navigation. IMPORTANT: vite-plugin-pwa ADDS
+        // `navigateFallback: 'index.html'` when the option is left out, so the
+        // old "no navigateFallback" comment here was never true — every launch
+        // was served the precached shell and the network-first HTML rule below
+        // never ran. We now set it on purpose: the shell comes from the
+        // precache (instant boot, works offline, never waits on a 3–5 KB/s
+        // network) and it is always self-consistent with the precached chunks
+        // of the SAME service worker. Freshness comes from the update flow
+        // (UpdatePrompt applies a waiting version at launch and when the app is
+        // closed), not from fetching HTML on every open. What broke the old
+        // setup was a missing lazy chunk being answered with index.html by the
+        // Vercel SPA rewrite and then CACHED as JavaScript — fixed by the
+        // vercel.json /assets exclusion and the content-type guard below.
+        navigateFallback: 'index.html',
+        // Never hand the learner shell to API calls, the separately built AI
+        // chat app, or anything that looks like a file.
+        navigateFallbackDenylist: [/^\/api\//, /^\/ai-chat(\/|$)/, /\/[^/?]+\.[a-z0-9]+$/i],
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         // NOTE: deliberately NO `skipWaiting` baked into the SW — a new build
@@ -78,22 +95,13 @@ export default defineConfig({
         // because the waiting phase it detects lasted ~0ms). With the waiting
         // flow the old SW keeps serving the old page its own cached chunks —
         // nothing 404s — until the banner's accept swaps versions atomically.
-        // The nets stay for edge cases: network-first HTML (no cache-first
-        // stale shell), no navigateFallback, chunkRetry + preloadError.
+        // The nets stay for edge cases: chunkRetry + preloadError, and the
+        // boot watchdog in index.html (repairs a shell that never starts).
         runtimeCaching: [
           {
-            // HTML documents (SPA navigations) → NetworkFirst so a returning
-            // visitor always gets the freshly-deployed shell that references the
-            // current chunk hashes. Falls back to the last cached copy only when
-            // offline / the network genuinely stalls.
-            //
-            // TIMEOUT: 3s was far too aggressive for our actual users. On a
-            // 3-5 KB/s mobile connection (normal in Nigeria) the document fetch
-            // ALWAYS exceeded 3s, so the SW served the stale cached shell on
-            // every navigation — pinning people to an old build permanently, no
-            // matter how many times we redeployed. 12s only costs a slow user
-            // extra wait in the rare case the network is truly dead, and that
-            // path still falls back to cache.
+            // Navigations the app-shell fallback skips (the denylist above:
+            // /ai-chat, file-like URLs) → NetworkFirst, last copy when offline.
+            // 12s, not 3s: on a 3–5 KB/s connection 3s always timed out.
             urlPattern: ({ request }) => request.mode === 'navigate',
             handler: 'NetworkFirst',
             options: {
@@ -111,7 +119,17 @@ export default defineConfig({
             options: {
               cacheName: 'akoro-assets',
               expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 * 30 },
-              cacheableResponse: { statuses: [0, 200] },
+              cacheableResponse: { statuses: [200] },
+              // Only ever store real JS/CSS. A missing chunk used to come back
+              // as index.html (200, text/html) and was cached under the .js
+              // URL — that feature then failed on every open until the user
+              // cleared site data.
+              plugins: [{
+                cacheWillUpdate: async ({ response }) => {
+                  const type = (response && response.headers.get('content-type')) || '';
+                  return response && response.status === 200 && /javascript|css/i.test(type) ? response : null;
+                },
+              }],
             },
           },
           {

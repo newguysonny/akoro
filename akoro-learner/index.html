@@ -45,6 +45,76 @@
       })();
     </script>
 
+    <!-- Boot watchdog — self-repair for a shell that never starts. If the main
+         bundle (or one of its imports) fails to load, or a service-worker-
+         served launch hasn't booted after 15 s, it drops the service worker and
+         the app caches (NOT localStorage — the learner stays signed in) and
+         reloads once. A second failure within 2 minutes shows a "Repair app"
+         button instead of looping. /?repair forces the same reset — a link
+         support can send. main.jsx sets window.__akoroBooted when it runs. -->
+    <script>
+      (function() {
+        var KEY = 'akoro_boot_repair', WINDOW_MS = 2 * 60 * 1000;
+        function lastRepair() { try { return Number(localStorage.getItem(KEY) || 0); } catch (e) { return 0; } }
+        function reset(then) {
+          try { localStorage.setItem(KEY, String(Date.now())); } catch (e) { /* private mode */ }
+          var jobs = [];
+          try {
+            if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+              jobs.push(navigator.serviceWorker.getRegistrations().then(function(rs) {
+                return Promise.all(rs.map(function(r) { return r.unregister(); }));
+              }));
+            }
+            if (window.caches && caches.keys) {
+              jobs.push(caches.keys().then(function(ks) {
+                return Promise.all(ks.map(function(k) { return caches.delete(k); }));
+              }));
+            }
+          } catch (e) { /* best-effort */ }
+          Promise.all(jobs).catch(function() {}).then(then, then);
+        }
+        function reloadClean() {
+          var u = location.pathname + location.search.replace(/([?&])repair(=[^&]*)?&?/, '$1').replace(/[?&]$/, '') + location.hash;
+          location.replace(u);
+        }
+        window.__akoroRepair = function() { reset(reloadClean); };
+
+        if (/[?&]repair\b/.test(location.search)) { reset(reloadClean); return; }
+
+        var fired = false;
+        function showRepair() {
+          var draw = function() {
+            var root = document.getElementById('root');
+            if (!root || root.childNodes.length) return;
+            var s = document.getElementById('akoro-splash'); if (s) s.remove();
+            root.innerHTML = '<div style="font-family:system-ui,sans-serif;padding:72px 24px;text-align:center;color:#6B6B80">' +
+              '<h2 style="color:#1A1A2E;font-size:20px;margin-bottom:8px">Akoro didn’t start properly</h2>' +
+              '<p style="margin-bottom:20px;font-size:14px">This can happen right after an update. Repairing keeps you signed in.</p>' +
+              '<button onclick="window.__akoroRepair()" style="padding:10px 22px;border-radius:10px;border:0;background:#6C3BFF;color:#fff;font-weight:800;font-size:14px;cursor:pointer">Repair app</button></div>';
+          };
+          if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', draw); else draw();
+        }
+        function bootFailed() {
+          if (fired || window.__akoroBooted) return;
+          fired = true;
+          if (Date.now() - lastRepair() < WINDOW_MS) { showRepair(); return; }
+          reset(function() { location.reload(); });
+        }
+        // A failed app bundle / stylesheet (a <script>/<link> under /assets/).
+        window.addEventListener('error', function(e) {
+          var t = e && e.target;
+          if (!t || t === window || window.__akoroBooted) return;
+          var url = t.src || t.href || '';
+          if (/\/assets\//.test(url)) bootFailed();
+        }, true);
+        // Served by a service worker the shell should be up within a few
+        // seconds; 15 s without booting means a stuck cache, not a slow network.
+        setTimeout(function() {
+          if (navigator.serviceWorker && navigator.serviceWorker.controller) bootFailed();
+        }, 15000);
+      })();
+    </script>
+
     <style>
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
