@@ -119,3 +119,12 @@ test("fitting the outline: numbered items fold back under their theme, SECTION p
   const checked = S.checkImport({ topics: fitted, pages: [] });
   assert.ok(!checked.warnings.some((w) => w.kind === "duplicate_topic"), "the same theme in two sections is not a duplicate");
 });
+
+test("a batch names each subject from its file name (code, 9-1, Alt A, years dropped)", async () => {
+  const { nameFromFile } = await import("./service.js");
+  assert.deepEqual(nameFromFile("biology-0610-2026-2028.pdf"), { name: "Biology", code: "0610" });
+  assert.deepEqual(nameFromFile("biology-9-1-0970-2026-2028.pdf"), { name: "Biology (9-1)", code: "0970" });
+  assert.deepEqual(nameFromFile("animal-husbandry-alt-a.pdf"), { name: "Animal Husbandry (Alt A)", code: null });
+  assert.deepEqual(nameFromFile("further-mathematics-or-mathematics-elective.pdf"), { name: "Further Mathematics or Mathematics Elective", code: null });
+  assert.deepEqual(nameFromFile("christian-religious-studies-new.pdf"), { name: "Christian Religious Studies", code: null });
+});

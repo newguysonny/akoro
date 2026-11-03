@@ -308,6 +308,18 @@ syllabusRouter.post("/imports", adminOnly, (req, res) => {
     } catch (e) { importError(res, e); }
   });
 });
+const pdfBatch = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024, files: 70 } }).array("files", 70);
+syllabusRouter.post("/imports/batch", adminOnly, (req, res) => {
+  pdfBatch(req, res, async (err) => {
+    if (err) return res.status(400).json({ success: false, message: err.message });
+    try {
+      const files = (req.files || []).filter((f) => /\.pdf$/i.test(f.originalname) || f.mimetype === "application/pdf");
+      if (!files.length) return res.status(400).json({ success: false, message: "Attach the syllabus PDFs as `files`" });
+      const { startBatch } = await imports();
+      res.status(202).json({ success: true, data: await startBatch({ files, exam: req.body?.exam, userId: req.user.id }) });
+    } catch (e) { importError(res, e); }
+  });
+});
 syllabusRouter.get("/imports", adminOnly, async (_req, res) => {
   try { res.json({ success: true, data: await (await imports()).list() }); } catch (e) { importError(res, e); }
 });

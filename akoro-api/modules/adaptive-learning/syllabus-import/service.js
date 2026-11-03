@@ -19,11 +19,25 @@ const now = () => new Date().toISOString();
 const clip = (s, n) => String(s ?? "").trim().slice(0, n);
 export const EXAMS = Object.freeze(["WASSCE", "NECO", "JAMB", "NCEE", "BECE", "IGCSE"]);
 
-/** The model call: background role, billed to the platform, JSON out. */
+/**
+ * The importer's model: DeepSeek wherever the server has it set up (key,
+ * DEEPSEEK_MODEL and a price), else gpt-4.1-mini — so an import never fails
+ * just because one provider isn't configured. SYLLABUS_IMPORT_MODEL overrides.
+ */
+export async function importModel() {
+  const { modelRegistry, availabilityOf } = await import("../../../lib/modelRegistry.js");
+  for (const id of [process.env.SYLLABUS_IMPORT_MODEL, "deepseek", "gpt-4.1-mini"].filter(Boolean)) {
+    const e = modelRegistry.get(id);
+    if (e && availabilityOf(e).available) return id;
+  }
+  return "gpt-4.1-mini";
+}
+
+/** The model call: billed to the platform, JSON out. */
 async function ask({ system, user, maxTokens }) {
   const { openai } = await import("../../../lib/aiModel.js");
   const res = await openai.chat.completions.create({
-    model: "gpt-4.1-mini", temperature: 0.1, max_tokens: maxTokens, response_format: { type: "json_object" },
+    model: await importModel(), temperature: 0.1, max_tokens: maxTokens, response_format: { type: "json_object" },
     messages: [{ role: "system", content: system }, { role: "user", content: user }],
     __role: "background", __payer: "platform", __feature: "syllabus_import",
   });
@@ -41,7 +55,7 @@ async function work(id, { buffer, fileName, exam, name, code }, { askFn = ask } 
       onProgress: (p) => { T().update({ progress: { step: "structuring", pages: pages.length, ...p }, updated_at: now() }).eq("id", id).then(() => {}, () => {}); },
     });
     const { data } = await T().update({
-      status: "draft", name: out.doc.name, doc: out.doc, stats: out.stats, warnings: out.warnings,
+      status: "draft", name: out.doc.name, doc: out.doc, stats: { ...out.stats, model: await importModel() }, warnings: out.warnings,
       progress: { step: "done", pages: pages.length }, updated_at: now(),
     }).eq("id", id).select("*").single();
     return data;
@@ -69,13 +83,68 @@ export async function start({ buffer, fileName, exam, name, code, userId }) {
   return { importId: row.id };
 }
 
+/**
+ * PURE: a subject name and code from a syllabus file name.
+ *   "biology-0610-2026-2028.pdf" → { name: "Biology", code: "0610" }
+ *   "biology-9-1-0970-2026-2028.pdf" → { name: "Biology (9-1)", code: "0970" }
+ *   "further-mathematics-or-mathematics-elective.pdf" → { name: "Further Mathematics or Mathematics Elective" }
+ *   "animal-husbandry-alt-a.pdf" → { name: "Animal Husbandry (Alt A)" }
+ */
+export function nameFromFile(fileName) {
+  let base = String(fileName || "").replace(/^.*[\\/]/, "").replace(/\.pdf$/i, "").replace(/^copy of\s+/i, "");
+  let code = null;
+  const graded = /(^|-)9-1(-|$)/.test(base);
+  base = base.replace(/(^|-)9-1(?=-|$)/, "$1");
+  base = base.replace(/(-(19|20)\d{2})+$/, "");                 // trailing years
+  const c = base.match(/-(\d{4})$/); if (c) { code = c[1]; base = base.slice(0, -5); }
+  const alt = base.match(/-alt-([a-z])$/i); if (alt) base = base.slice(0, alt.index);
+  base = base.replace(/-new$/i, "");
+  const small = new Set(["and", "of", "in", "or", "to", "the", "for", "with"]);
+  const words = base.split(/[-_\s]+/).filter(Boolean).map((w, i) => (i && small.has(w.toLowerCase()) ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1)));
+  let name = words.join(" ").replace(/\bIct\b/, "ICT").replace(/\bGsm\b/, "GSM").trim() || "Untitled";
+  if (graded) name += " (9-1)";
+  if (alt) name += ` (Alt ${alt[1].toUpperCase()})`;
+  return { name, code };
+}
+
+/** A small in-process queue: batch imports run two at a time. */
+const queue = [];
+let running = 0;
+const MAX_RUNNING = 2;
+function pump() {
+  while (running < MAX_RUNNING && queue.length) {
+    const job = queue.shift();
+    running++;
+    work(job.id, job.input).catch(() => {}).finally(() => { running--; pump(); });
+  }
+}
+
+/** Queue many PDFs at once (one exam per batch); each becomes its own draft. */
+export async function startBatch({ files = [], exam, userId }) {
+  const ids = [];
+  for (const f of files) {
+    const { name, code } = nameFromFile(f.originalname);
+    const row = await create({ fileName: f.originalname, exam, name, userId });
+    await T().update({ progress: { step: "queued" } }).eq("id", row.id);
+    queue.push({ id: row.id, input: { buffer: f.buffer, fileName: f.originalname, exam: row.exam, name, code } });
+    ids.push({ importId: row.id, file: f.originalname, name, code });
+  }
+  pump();
+  return { queued: ids };
+}
+
 /** Run an import to the end (scripts, the gate). */
 export async function run({ buffer, fileName, exam, name, code, userId, askFn }) {
   const row = await create({ fileName, exam, name, userId });
   return work(row.id, { buffer, fileName, exam: row.exam, name, code }, askFn ? { askFn } : {});
 }
 
-export async function list({ limit = 50 } = {}) {
+const STALE_MS = 20 * 60_000;
+
+export async function list({ limit = 200 } = {}) {
+  // An import still "extracting" long after its last update was cut off (a deploy or restart): say so, so it can be tried again.
+  await T().update({ status: "failed", error: "Stopped before it finished (the server restarted). Upload the PDF again.", updated_at: now() })
+    .eq("status", "extracting").lt("updated_at", new Date(Date.now() - STALE_MS).toISOString()).then(() => {}, () => {});
   const { data, error } = await T().select("id, exam, name, source_file, status, progress, stats, warnings, error, subject_id, created_at, updated_at, published_at")
     .neq("status", "discarded").order("created_at", { ascending: false }).limit(limit);
   if (error) throw error;

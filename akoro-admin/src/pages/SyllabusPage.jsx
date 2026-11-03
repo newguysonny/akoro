@@ -87,6 +87,7 @@ export default function SyllabusPage() {
   const [aims, setAims] = useState('');
   const [topicsText, setTopicsText] = useState('');
   const [file, setFile] = useState(null);
+  const [pdfFiles, setPdfFiles] = useState([]);   // several PDFs → one batch import
 
   const show = (message, type = 'success') => { setToast({ message, type }); setTimeout(() => setToast(null), 4000); };
 
@@ -106,7 +107,7 @@ export default function SyllabusPage() {
     return () => clearInterval(t);
   }, [imports, loadImports]);
 
-  const reset = () => { setName(''); setCode(''); setAims(''); setTopicsText(''); setFile(null); };
+  const reset = () => { setName(''); setCode(''); setAims(''); setTopicsText(''); setFile(null); setPdfFiles([]); };
 
   const ingestDoc = async (doc) => {
     const r = await apiPost('/api/adaptive/syllabus/ingest', { doc });
@@ -128,6 +129,19 @@ export default function SyllabusPage() {
         let subs = 0; for (const d of docs) { const r = await ingestDoc(d); subs += r.subtopics; }
         show(`Imported ${docs.length} subject(s), ${subs} subtopics`);
       } else {
+        if (pdfFiles.length > 1) {
+          // Several PDFs: one batch, queued on the server two at a time; each becomes its own draft (name from the file name).
+          const fd = new FormData();
+          for (const f of pdfFiles) fd.append('files', f);
+          fd.append('exam', exam);
+          const r = await fetch(`${API}/api/adaptive/syllabus/imports/batch`, {
+            method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'admin' }, body: fd,
+          });
+          const j = await r.json();
+          if (!r.ok || !j.success) throw new Error(j.message || 'Import failed');
+          show(`${j.data.queued.length} syllabuses queued — each appears under “Imports for review” as it is read.`);
+          setModal(false); reset(); loadImports(); setBusy(false); return;
+        }
         if (!file) throw new Error('Choose a PDF file');
         // A PDF becomes a DRAFT for review (syllabus-import); nothing goes live until it is published.
         const fd = new FormData();
@@ -268,7 +282,12 @@ export default function SyllabusPage() {
             <div style={{ fontSize: 12.5, color: MUTED, margin: '4px 0 10px', fontFamily: FONT, lineHeight: 1.6 }}>
               Upload the official syllabus PDF. It is read page by page with its tables kept, structured into topics, subtopics, notes and objectives, and saved as a <b>draft</b> — you review it, then publish. <b>Digital PDFs</b> (with selectable text).
             </div>
-            <input type="file" accept="application/pdf,.pdf" onChange={(e) => { setFile(e.target.files?.[0] || null); setNotice(null); }} style={{ fontFamily: FONT, fontSize: 13 }} />
+            <input type="file" multiple accept="application/pdf,.pdf" onChange={(e) => { const list = [...(e.target.files || [])]; setPdfFiles(list); setFile(list[0] || null); setNotice(null); }} style={{ fontFamily: FONT, fontSize: 13 }} />
+            {pdfFiles.length > 1 && (
+              <div style={{ marginTop: 8, fontSize: 12.5, color: INK, fontFamily: FONT }}>
+                <b>{pdfFiles.length} PDFs</b> — all imported as <b>{exam}</b>; each subject's name comes from its file name, and each becomes its own draft. Up to 70 at a time.
+              </div>
+            )}
             {notice && (
               <div style={{ marginTop: 12, padding: '11px 13px', borderRadius: 10, background: '#FEF3C7', border: '1px solid #FDE68A', color: '#92400E', fontSize: 12.5, fontWeight: 600, lineHeight: 1.55, fontFamily: FONT }}>
                 <div style={{ fontWeight: 800, marginBottom: 3, display: 'flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={13} color="#D97706" /> This PDF looks scanned</div>

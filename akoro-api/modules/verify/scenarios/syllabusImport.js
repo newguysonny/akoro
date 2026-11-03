@@ -11,7 +11,7 @@ import fs from "node:fs";
 export const syllabusImportExample = {
   name: "syllabus.import_example", area: "syllabus", risk: "write", timeoutMs: 900_000,
   description: "Imports the WAEC Biology syllabus PDF as a draft: layout text, chunked structuring, merged topics with subtopics, content, notes and the scheme of examination; checks coverage and that nothing is published.",
-  params: { file: { default: "waec-biology.pdf" }, exam: { default: "WASSCE" }, name: { default: "Biology" }, dump: { default: true } },
+  params: { file: { default: "waec-biology.pdf" }, exam: { default: "WASSCE" }, name: { default: "Biology" }, dump: { default: true }, pages: { default: 35 }, minTopics: { default: 5 }, minSubtopics: { default: 30 }, minNotes: { default: 10 }, minPapers: { default: 2 } },
   async run(ctx, p) {
     const file = new URL(`../../../data/syllabus/sources/${String(p.file).replace(/[^a-z0-9._-]/gi, "")}`, import.meta.url);
     const buffer = fs.readFileSync(file);
@@ -26,12 +26,12 @@ export const syllabusImportExample = {
     ctx.note(`stats: ${JSON.stringify(st)}`);
     for (const w of row.warnings || []) ctx.note(`warning: ${w.text}`);
     ctx.expect.eq("the exam and subject are set", `${doc.exam}/${doc.name}`, `${p.exam}/${p.name}`);
-    ctx.expect.ok("all 35 pages were read", st.pages === 35, st.pages);
-    ctx.expect.ok("it has topics", doc.topics.length >= 5, doc.topics.length);
-    ctx.expect.ok("…with many subtopics (the syllabus is long; nothing cut off at the end)", st.subtopics >= 30, st.subtopics);
-    ctx.expect.ok("the NOTES column is kept", st.withNotes >= 10, st.withNotes);
+    ctx.expect.ok(`all ${p.pages} pages were read`, st.pages === Number(p.pages), st.pages);
+    ctx.expect.ok("it has topics", doc.topics.length >= Number(p.minTopics), doc.topics.length);
+    ctx.expect.ok("…with many subtopics (the syllabus is long; nothing cut off at the end)", st.subtopics >= Number(p.minSubtopics), st.subtopics);
+    if (Number(p.minNotes) > 0) ctx.expect.ok("the NOTES column is kept", st.withNotes >= Number(p.minNotes), st.withNotes);
     ctx.expect.ok("the aims are read", String(doc.aims || "").length > 80);
-    ctx.expect.ok("the scheme of examination is read", (doc.paper_structure?.papers || []).length >= 2, doc.paper_structure);
+    if (Number(p.minPapers) > 0) ctx.expect.ok("the scheme of examination is read", (doc.paper_structure?.papers || []).length >= Number(p.minPapers), doc.paper_structure);
     ctx.expect.ok("no part of the document failed", !(row.warnings || []).some((w) => w.kind === "chunk_failed"), row.warnings);
     const last = doc.topics.at(-1);
     ctx.note(`topics: ${doc.topics.map((t) => `${t.title} (${t.subtopics.length})`).join(" · ").slice(0, 480)}`);
