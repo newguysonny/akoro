@@ -230,7 +230,8 @@
     "2026-proactive-kind-modes.sql",
     "2026-outbox.sql",
     "2026-agent-reply-ratings.sql",
-    "2026-agent-prompt-overrides.sql"
+    "2026-agent-prompt-overrides.sql",
+    "2026-syllabus-imports.sql"
   ],
   "demo": [
     "2026-seed-school-passwords.sql",

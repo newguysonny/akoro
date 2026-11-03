@@ -261,7 +261,7 @@ test("the migration is idempotent and registered last in the schema list", () =>
 test("the gate scenarios are registered", () => {
   const idx = read("../verify/scenarios/index.js");
   assert.match(idx, /import \{ ratingSavedNotInPrompt, promptOverrideFlagged \} from "\.\/ratingsPrompts\.js";/);
-  assert.match(idx, /ratingSavedNotInPrompt, promptOverrideFlagged\];/);
+  assert.match(idx, /ratingSavedNotInPrompt, promptOverrideFlagged[,\]]/);
   assert.match(idx, /"agent-hygiene": \[[^\]]*"ratings\.saved_not_in_prompt", "prompts\.override_flagged"/);
   const sc = read("../verify/scenarios/ratingsPrompts.js");
   assert.match(sc, /name: "ratings\.saved_not_in_prompt", area: "agent-chat", risk: "write"/);
