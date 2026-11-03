@@ -104,7 +104,24 @@ export async function buildDefinition({ stage, goal, params, slice, feedback = n
     __feature: "self_tooling", ...(platformPays ? { __payer: "platform" } : { __userId: learnerId }),
   });
   const raw = resp.choices?.[0]?.message?.content || "";
-  let parsed = null;
-  try { parsed = JSON.parse(raw); } catch { return { raw, notExpressible: null, error: `the builder didn't answer with JSON (${raw.length} chars: ${raw.slice(0, 60).replace(/\s+/g, " ")}…${raw.slice(-40).replace(/\s+/g, " ")})` }; }
+  const parsed = parseBuilderJson(raw);
+  if (!parsed) { return { raw, notExpressible: null, error: `the builder didn't answer with JSON (${raw.length} chars: ${raw.slice(0, 60).replace(/\s+/g, " ")}…${raw.slice(-40).replace(/\s+/g, " ")})` }; }
   return { raw, definition: parsed.definition || null, samples: Array.isArray(parsed.samples) ? parsed.samples.slice(0, 3) : [], notExpressible: parsed.notExpressible || null };
+}
+
+/**
+ * The builder's JSON, or null. `samples` comes LAST and is optional, and a
+ * model sometimes mangles it (DeepSeek, 2026-11-03: a correct definition
+ * followed by `"samples":[{},{"}]}`) — then keep everything before it rather
+ * than throwing away a good build. The definition is still fully validated
+ * and verified after this, so nothing unchecked gets through.
+ */
+export function parseBuilderJson(raw) {
+  const text = String(raw || "").trim();
+  try { return JSON.parse(text); } catch { /* try the salvage below */ }
+  const cut = text.lastIndexOf(',"samples"');
+  if (cut > 0) {
+    try { return JSON.parse(text.slice(0, cut) + "}"); } catch { /* not salvageable */ }
+  }
+  return null;
 }
