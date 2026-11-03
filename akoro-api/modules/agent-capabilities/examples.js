@@ -80,6 +80,7 @@ export const TOOL_EXAMPLES = Object.freeze({
   // Chats and memory
   list_chats: e("chats", "Show my chats."),
   read_chat: e("chats", "Continue from my physics chat."),
+  search_chats: e("chats", "What did we say about osmosis last week?"),
   post_to_chat: e("chats", "Post a summary of this into my Chemistry chat."),
   get_chat_memory: e("chats", "What do you remember about me?"),
 

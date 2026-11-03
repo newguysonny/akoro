@@ -157,6 +157,7 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
       agentRecord,
       subject:     this.subject,   // scope expressed intelligence to this subject
       referenceMaterial: this.referenceMaterial,
+      learnerNotes: this.learnerNotes || [],   // set by prepareTeachingSession before initialize()
     });
 
     // Load initial state

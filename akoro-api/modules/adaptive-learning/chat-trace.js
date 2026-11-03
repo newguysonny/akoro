@@ -44,6 +44,7 @@ export const CHAT_TOOL_DISPLAY = Object.freeze({
   schema_lookup:                  { category: "research", headline: "Checking what I can look at",          description: "Seeing what a new tool could use" },
   list_chats:                     { category: "research", headline: "Checking your chats",                 description: "Listing your conversations" },
   read_chat:                      { category: "research", headline: "Reading another chat",                description: "Picking up what was said there" },
+  search_chats:                   { category: "research", headline: "Searching your past chats",          description: "Finding where this was discussed" },
   post_to_chat:                   { category: "action",   headline: "Posting to a chat",                   description: "Dropping a message into another chat", done: "Posted a message" },
   consult_peer_agents:            { category: "research", headline: "Asking other learners' agents",       description: "Collecting ideas from other study agents" },
   search_agents:                  { category: "research", headline: "Finding agents",                       description: "Looking for other learners' agents that match" },

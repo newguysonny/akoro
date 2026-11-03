@@ -120,7 +120,7 @@ import { toResponsesInput, toResponsesTools } from "./responses-input.js";
 import { hasExplicitToolRequestConsent } from "./agent-tool-request-intent.js";
 import { getLearnerProfileContext } from "./learner-profile-context.js";
 import { validateLearnerTaskInput } from "./learner-task-validation.js";
-import { listChats, readChat, postToChat, ownedChatId } from "./chat-history-tools.js";
+import { listChats, readChat, postToChat, ownedChatId, searchChats } from "./chat-history-tools.js";
 import { schemaLookup } from "../self-tooling/registry.js";
 import { createTool, runLearnerTool, learnerToolDefs, forcedSelfTool } from "../self-tooling/pipeline.js";
 import { agreesToBuild } from "../self-tooling/capabilities.js";
@@ -452,7 +452,7 @@ export const CHAT_TOOLS = [
   },
   {
     name: "list_chats",
-    description: "List the learner's Agent Chat conversations (newest first) with their chatId and title. Use when they refer to another chat ('the chat about fractions', 'my last chat'), or before read_chat / post_to_chat / schedule_chat_follow_up with where='chat'. isThisChat marks the current one.",
+    description: "List the learner's Agent Chat conversations (newest first) with their chatId and title. Use when they refer to another chat by name ('my last chat', 'the Physics chat') — to find a chat by what was DISCUSSED in it use search_chats — or before read_chat / post_to_chat / schedule_chat_follow_up with where='chat'. isThisChat marks the current one.",
     input_schema: {
       type: "object",
       properties: {
@@ -468,10 +468,23 @@ export const CHAT_TOOLS = [
     input_schema: {
       type: "object",
       properties: {
-        chatId: { type: "string", description: "The chatId from list_chats." },
-        limit: { type: "number", description: "How many latest messages (default 30, max 60)." },
+        chatId: { type: "string", description: "The chatId from list_chats or search_chats." },
+        limit: { type: "number", description: "How many messages (default 30, max 60)." },
+        around: { type: "string", description: "Optional: a matchedAt time from search_chats — read the messages around that point instead of the latest ones." },
       },
       required: ["chatId"],
+    },
+  },
+  {
+    name: "search_chats",
+    description: "Search the learner's PAST chats by what was discussed (meaning and exact words), not just titles — 'what did we say about osmosis last week?', 'find the chat where you explained photosynthesis', 'which chat had my WAEC 2019 question?'. Returns the matching chats (chatId, title, a snippet, matchedAt). Then call read_chat with around=matchedAt to read that part. Use this BEFORE saying you don't remember something the learner says was discussed before. What was said in a chat is not proof of the learner's current progress — check records for that.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "What to look for, in the learner's words (a topic, a question, a phrase)." },
+        limit: { type: "number", description: "How many chats (default 6, max 10)." },
+      },
+      required: ["query"],
     },
   },
   {
@@ -2303,8 +2316,13 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
     }
     case "read_chat": {
       if (!input?.chatId) return clarify("chatId", "Which chat should I read? I can list your chats.", { action: "read_chat" });
-      try { return await readChat(studentId, input.chatId, { limit: input.limit }); }
+      try { return await readChat(studentId, input.chatId, { limit: input.limit, around: input.around }); }
       catch (error) { return { error: error.message || "Could not read that chat" }; }
+    }
+    case "search_chats": {
+      if (!input?.query || !String(input.query).trim()) return clarify("query", "What should I look for in your past chats?", { action: "search_chats" });
+      try { return await searchChats(studentId, { query: input.query, limit: input.limit, currentChatId: conversationId }); }
+      catch (error) { return { error: error.message || "Could not search your chats" }; }
     }
     case "post_to_chat": {
       if (!input?.chatId) return clarify("chatId", "Which chat should I post it in? I can list your chats.", { action: "post_to_chat" });
