@@ -85,6 +85,12 @@ export const scenarios = [
       const secs = Math.round((Date.now() - t0) / 100) / 10;
       t.note(`the score card appeared ${secs}s after Submit`);
       t.check('the score appears without leaving the page', shown);
+      if (!shown) {
+        // Why: what the server holds for this hand-in (the instructor's view of the target).
+        const view = await teach('GET', `/api/self-study/${id}`);
+        const tg = (view.body?.data?.targets || []).find((x) => x.student_id === t.learner.id);
+        t.note(`no score after 60s — server: status=${tg?.status}, grade=${tg?.grade ?? null}, ai_grade=${JSON.stringify(tg?.ai_grade || null).slice(0, 300)}`);
+      }
       if (shown) {
         t.check('1 of 2 right → 50%', /50%/.test(await score.innerText()), { text: (await score.innerText()).slice(0, 80) });
         t.check('flagged as marked by AI', /Marked by AI/i.test(await score.innerText()));
