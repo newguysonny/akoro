@@ -3617,9 +3617,30 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   marketplace (the same promote flow as platform tools) → instructors / schools
   can attach an approved plugin to a class or course.
 - **Steps, in order:**
-  1. **UI preview first** (learner): the protégé's proposal card, the "plugins on"
-     strip in the session header, a plugin block running inside a concept turn, and
-     the My plugins list. Build after approval.
+  1. **UI preview first** (learner) — done 2026-11-03, awaiting approval. Where
+     plugins live and how they're used (like DeepSeek's sidebar Plugins page +
+     Creator Mode chat, adapted):
+     - **(1) Chat drawer → Plugins.** A "Plugins · N on" row under New chat opens
+       the Plugins sheet with tabs **Mine** (on/off switch, what it does, extra
+       time, where it runs; tap for Edit · Share · Delete), **From classmates**
+       and **Discover** (admin-approved only). An empty-state hint points to chat
+       ("tell your protégé: ask me a question on every concept").
+     - **(2) Chat → the plugin card.** Plugins are made by talking: the protégé
+       answers with one **New plugin** card in its own turn — name, plain-words
+       steps, where it runs, exam matched, extra time, the add-only note — and
+       **Turn on / Change / Not now**. "Make it 2 questions" → an updated card.
+       The protégé may also offer one proactively (as Suggestions / Ideas).
+     - **(3) Session start card.** The teaching start card (from Study Prep or
+       chat) lists "Plugins this session" as chips, adds their time to the
+       estimate ("About 35 min (+12 min plugins)") and has **Change for this
+       session** (session-only; saved settings unchanged).
+     - **(4) Inside the session.** A "Plugins on" strip under the header shows
+       the active plugins; tapping it opens per-session switches with usage
+       ("Used 1 of 6") and Manage plugins. Each plugin step is a normal turn
+       with a label and source ("Past question · WAEC 2019 Q14", "From your
+       plugin …"), so it's never confused with the lesson. No strip in proctored
+       practice or battles; an over-limit plugin is skipped with a note here.
+     Build after approval.
   2. **Recipe schema + validator + block registry** (pure; contract tests: unknown
      block / hook refused, add-only enforced, limits required).
   3. **Runner in the teaching session:** hooks called around the concept turn;
@@ -3640,7 +3661,7 @@ planning loop's tool names, the double practice charge, empty syllabus data).
 - **Exit:** a learner can ask for "past questions on every concept", approve the
   protégé's card, and the next teaching session runs it on every concept, with the
   gate unchanged and all four gate scenarios green.
-- **Status (2026-11-03):** planned. Next: the UI preview (step 1).
+- **Status (2026-11-03):** planned. UI preview (step 1) made; waiting for approval before building.
 
 ---
 
