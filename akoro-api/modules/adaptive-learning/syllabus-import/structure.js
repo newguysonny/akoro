@@ -16,7 +16,7 @@
 export const CHUNK_CHARS = 10_000;
 const CONTEXT_CHARS = 700;
 const clip = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
-const key = (s) => String(s ?? "").toLowerCase().replace(/^[\s\d.()a-z]{0,6}[.)]\s+/, "").replace(/[^a-z0-9]+/g, " ").trim();
+const key = (s) => String(s ?? "").toLowerCase().replace(/^\s*\d{1,2}(\.\d+)*\s+(?=[a-z])/, "").replace(/^[\s\d.()a-z]{0,6}\s*[.):]\s+/, "").replace(/[^a-z0-9]+/g, " ").trim();
 
 /** PURE: pages → chunks of whole pages, each ≤ CHUNK_CHARS (a single long page is split at line breaks). */
 export function chunkPages(pages = [], max = CHUNK_CHARS) {
@@ -58,8 +58,39 @@ export function outlineFromPages(pages = []) {
     for (const line of p.text.split("\n")) {
       const sec = line.match(/^\s*SECTION\s+([A-Z]|[IVX]+)\b(?!\s*:)(.*)$/);
       if (sec && !/[a-z]{3,}\s*:/.test(line)) { section = `Section ${sec[1]}`; out.push({ page: p.page, kind: "section", label: section, section }); continue; }
-      const th = line.match(/^\s{0,30}([A-Z])\.\s+([A-Z][^\n]*?)(?:\s{3,}.*)?$/);
-      if (th && th[2].replace(/[^A-Za-z]/g, "").length >= 4) out.push({ page: p.page, kind: "theme", label: `${th[1]}. ${th[2].replace(/[:.]\s*$/, "").trim()}`, section });
+      // "A.  Concept of Living" at the margin (WAEC), or "A: VARIETY OF ORGANISMS" / "C : ECOLOGY" — JAMB centres
+      // its all-caps theme headings, so a heading alone on its line may sit anywhere.
+      const th = line.match(/^(\s*)([A-Z])\s*[.:]\s+([A-Z][^\n]*?)(?:\s{3,}(.*))?$/);
+      if (th) {
+        const title = th[3].replace(/[:.]\s*$/, "").trim();
+        const caps = title.replace(/[^A-Za-z]/g, "");
+        const ok = caps.length >= 4 && (th[1].length <= 30 || (!th[4] && caps === caps.toUpperCase()));
+        if (ok) out.push({ page: p.page, kind: "theme", label: `${th[2]}. ${title}`, section });
+      }
+    }
+  }
+  // No lettered themes (Cambridge IGCSE): the topics are the one consecutive "1 … N" list of numbered
+  // headings on a single page (the syllabus overview — "1   Characteristics and classification…");
+  // numbered objectives inside a topic don't form such a run. Each topic's place is where its title
+  // reappears after that page (the subject content).
+  if (out.filter((e) => e.kind === "theme").length < 2) {
+    const numbered = (line) => { const m = line.match(/^\s{0,16}(\d{1,2})\s{2,}([A-Z][A-Za-z ,()'&/-]{3,90})$/); return m && !/\.{4,}/.test(line) ? { n: Number(m[1]), title: m[2].trim() } : null; };
+    let best = { page: null, list: [] };
+    for (const p of pages) {
+      const run = [];
+      for (const line of p.text.split("\n")) { const h = numbered(line); if (h && h.n === run.length + 1) run.push(h); }
+      if (run.length > best.list.length) best = { page: p.page, list: run };
+    }
+    if (best.list.length >= 5) {
+      const wanted = new Map(best.list.map((h) => [key(h.title), h]));
+      const placed = new Set();
+      for (const p of pages.filter((x) => x.page > best.page)) {
+        for (const line of p.text.split("\n")) {
+          const h = numbered(line);
+          const k = h && key(h.title);
+          if (h && wanted.has(k) && !placed.has(k) && wanted.get(k).n === h.n) { placed.add(k); out.push({ page: p.page, kind: "theme", label: `${h.n}. ${h.title}`, section: null }); }
+        }
+      }
     }
   }
   return out;
@@ -92,10 +123,10 @@ Return ONLY JSON:
                      "notes": the NOTES column for this row, faithfully, or null } ] } ] }
 Rules:
 - A main heading (e.g. "A. BASIC CONCEPTS", "SECTION I: …", "THEME 1 …") is a topic; each numbered item under it (1., 2., …) is a subtopic; its lettered/roman points are its content.
-- When the outline is given, its lettered headings are the ONLY topics in this part: a numbered item (e.g. "8. Transport System") is always a subtopic of the heading above it, never a topic. A "SECTION A/B/C" line is not a topic — put it in "section" of the topics under it.
+- When the outline is given, its headings (lettered like "A." or numbered like "3   Movement into and out of cells") are the ONLY topics in this part: a numbered item (e.g. "8. Transport System") is always a subtopic of the heading above it, never a topic. A "SECTION A/B/C" line is not a topic — put it in "section" of the topics under it.
 - If the part begins in the middle of a topic, start with that topic's title (given as context) and "continues": true.
 - Keep every item and every note. Do not summarise, merge different items, or invent. Fix only broken spacing.
-- Front matter (preamble, aims, scheme of examination) and lists of recommended books are NOT topics — skip them.`;
+- Front matter (preamble, aims, scheme of examination), lists of recommended books, assessment details, practical-skills/assessment-objective tables, grade descriptions, glossaries of command words and administrative notes are NOT topics — skip them (return {"topics": []} for a part that has none).`;
 
 function parseJson(text) {
   let s = String(text || "").trim();
@@ -140,7 +171,7 @@ export function mergeTopics(perChunk = []) {
   return topics;
 }
 
-const lettered = (title) => /^\s*[A-Z]\.\s+\S/.test(String(title || ""));
+const lettered = (title) => /^\s*[A-Z]\s*[.:]\s+\S/.test(String(title || ""));
 
 /**
  * PURE: hold the merged topics to the outline. A topic that is really a
@@ -227,8 +258,10 @@ async function pool(items, size, fn) {
  */
 export async function structureSyllabus({ pages, hint = {}, ask, concurrency = 3, onProgress = () => {} }) {
   const front = pages.slice(0, 4).map((p) => p.text).join("\n").slice(0, 12_000);
-  const chunks = chunkPages(pages);
   const outline = outlineFromPages(pages);
+  // Parts that end before the first heading are front matter (the front pass reads it): not structured.
+  const firstTheme = outline.find((e) => e.kind === "theme")?.page;
+  const chunks = chunkPages(pages).filter((c) => !(outline.length >= 2 && firstTheme && c.to < firstTheme));
   let meta = {};
   try { meta = parseJson(await ask({ system: FRONT_SYSTEM, user: `${hint.exam ? `Exam: ${hint.exam}. ` : ""}${hint.name ? `Subject: ${hint.name}. ` : ""}\n\n${front}`, maxTokens: 1500 })); }
   catch { meta = {}; }

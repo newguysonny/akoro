@@ -128,3 +128,18 @@ test("a batch names each subject from its file name (code, 9-1, Alt A, years dro
   assert.deepEqual(nameFromFile("further-mathematics-or-mathematics-elective.pdf"), { name: "Further Mathematics or Mathematics Elective", code: null });
   assert.deepEqual(nameFromFile("christian-religious-studies-new.pdf"), { name: "Christian Religious Studies", code: null });
 });
+
+test("JAMB's centred 'A: …' themes and IGCSE's numbered topics are outlines too", () => {
+  const jamb = S.outlineFromPages([
+    { page: 1, text: "                                                   A: VARIETY OF ORGANISMS\n        1. Living organisms:                    Candidates should be able to:" },
+    { page: 6, text: "                                                           C : ECOLOGY" },
+  ]);
+  assert.deepEqual(jamb.map((e) => e.label), ["A. VARIETY OF ORGANISMS", "C. ECOLOGY"]);
+  const overview = Array.from({ length: 6 }, (_, i) => `            ${i + 1}   Topic number ${["one", "two", "three", "four", "five", "six"][i]}`).join("\n");
+  const igcse = S.outlineFromPages([
+    { page: 8, text: overview },
+    { page: 12, text: "            1   Topic number one\n            1   Describe the characteristics of living organisms\n            2   Describe a species" },
+    { page: 14, text: "            2   Topic number two" },
+  ]);
+  assert.deepEqual(igcse.map((e) => `${e.page}:${e.label}`), ["12:1. Topic number one", "14:2. Topic number two"], "numbered objectives are not topics; topics sit where they reappear");
+});
