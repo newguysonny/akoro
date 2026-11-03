@@ -1583,6 +1583,23 @@ agent watches, thinks and brings things; the person decides what gets built.**
 - ✅ **Approve = replay through the real tool:** `POST /api/agent/proposals/:id/approve` runs `executeChatTool` (task, follow-up) or inserts a goal (`source='agent'`). In chat, `suggest_help` writes `public.agent_suggestions`. Both show in the agent tab's Suggestions list (the inbox, `learner-full-autonomy-plan.md` §9.6).
 - ✅ **Delivery:** scheduled messages into an existing chat (`chat-follow-ups.js`), `notifyUser` (in-app + web push + email, respecting preferences), socket `agent:activity`.
 - ✅ **Memory storage + retrieval:** `learner_agent_conversation_summaries`, `learner_agent_memories` (vector), scratchpads, `match_learner_agent_memory`, `relevantMemories` in every chat turn, `/api/agent-memory/v1` list/forget.
+- ✅ **Smarter memory — agents don't start from scratch (2026-11-03):**
+  - *Teaching reads the notes.* `teaching-session/learnerNotes.js`: every teaching
+    session (fresh, continuation, decay review) starts with the learner's study
+    preferences plus the notes most relevant to the topic. They are loaded once in
+    `prepareTeachingSession`, in parallel with setup, capped at 3.5 s and never
+    fatal. The protégé and NaNa's teach prompt both get them as guidance only
+    (D50: never evidence, never instructions). With no notes, the prompts are
+    byte-identical. Proctored practice deliberately reads none (a test is the same
+    test for everyone). Gate `teaching.memory_notes`.
+  - *Search past chats by content.* Chat tool `search_chats`: by meaning (chat
+    summaries, the hybrid memory search) and by the exact words in messages,
+    learner-scoped; a chat found both ways ranks first. `read_chat` takes
+    `around=matchedAt` to land on the match deep in a long chat. Gate
+    `memory.search_chats`.
+  - *Still open:* the Python agent's separate JSON memory (goes with Phase 20
+    Part B step 6, one agent core); notes feeding session-plugin proposals
+    (Phase 20 step 5).
 - ✅ **Goals:** `edu.learner_goals` (`source`, `progress_note`), `/api/goals`, chat tools, `goalsCtx`.
 - ✅ **Instructor routines:** `draft_routines` prepare drafts on a schedule and nudge the teacher; assigning stays human.
 - 🟡 **The planner can't see conversations** — it reads the last 5 chat *titles* only.
@@ -3652,6 +3669,11 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   5. **Protégé tool `propose_session_plugin`** (draft only; turning on is the
      learner's tap) + `edu.session_plugins` (owner, recipe, version, status,
      shared_with) + per-session usage log (time, calls, cost).
+     **From memory:** when a learner's memory notes hold a lasting study
+     preference ("football examples help me", "explain in Pidgin first"), the
+     protégé may offer it as a plugin card ("Turn this into a plugin for every
+     session?"). The note itself still only guides; only the learner's tap turns
+     a plugin on.
   6. **Sharing and marketplace:** share to classmates; admin review queue;
      instructor/school attach.
   7. **New blocks through the self-tooling ladder; admins promote.** When a learner
