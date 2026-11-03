@@ -279,3 +279,40 @@ test("a session's class source stops applying once the learner's enrollment chan
   fake.rows("mgmt.students").find((row) => row.id === "st1").class_id = JSS2;
   assert.deepEqual(await topicsForSource(args), []);
 });
+
+// ── exam for a learner's board and class (BECE / IGCSE) ────────────────────
+
+test("examForBoard: JSS classes sit the BECE (WAEC is everyone's default board); senior classes take the board", async () => {
+  const { examForBoard, isJuniorSecondary } = await import("./syllabus-resolver.js");
+  assert.equal(examForBoard("WAEC", "JSS2"), "BECE");
+  assert.equal(examForBoard("NECO", "JSS 3"), "BECE");
+  assert.equal(examForBoard(null, "Basic 8"), "BECE");
+  assert.equal(examForBoard("JAMB", "JSS2"), "JAMB", "a board that names another exam wins");
+  assert.equal(examForBoard("WAEC", "SS2"), "WASSCE");
+  assert.equal(examForBoard("SSCE", "SS3"), "WASSCE");
+  assert.equal(examForBoard("NECO", "SS1"), "NECO");
+  assert.equal(examForBoard("UTME", "SS3"), "JAMB");
+  assert.equal(examForBoard("Cambridge IGCSE", "SS1"), "IGCSE");
+  assert.equal(examForBoard("BECE", null), "BECE");
+  assert.equal(isJuniorSecondary("SS1"), false);
+});
+
+test("resolveTopics: a JSS learner on the default WAEC board gets the BECE syllabus; a senior learner gets WASSCE", async (t) => {
+  fakeFor(t, {
+    [SUBJECTS]: [
+      { id: "bst-bece", name: "Basic Science and Technology", code: null, exam: "BECE", created_at: "2026-01-01" },
+      { id: "bio-wassce", name: "Biology", code: null, exam: "WASSCE", created_at: "2026-01-02" },
+      { id: "bio-igcse", name: "Biology", code: "0610", exam: "IGCSE", created_at: "2026-01-03" },
+      { id: "bsc-wassce", name: "Basic Science", code: null, exam: "WASSCE", created_at: "2026-01-04" },
+    ],
+    [TOPICS]: [
+      { id: "a", subject_id: "bst-bece", title: "Materials", sort_order: 1 },
+      { id: "b", subject_id: "bio-wassce", title: "Concept of Living", sort_order: 1 },
+      { id: "c", subject_id: "bio-igcse", title: "Enzymes", sort_order: 1 },
+      { id: "d", subject_id: "bsc-wassce", title: "Old outline", sort_order: 1 },
+    ],
+  });
+  assert.deepEqual((await resolveTopics({ subject: "Basic Science", classLevel: "JSS2", exam: "WAEC" })).map((x) => x.label), ["Materials"]);
+  assert.deepEqual((await resolveTopics({ subject: "Biology", classLevel: "SS2", exam: "WAEC" })).map((x) => x.label), ["Concept of Living"]);
+  assert.deepEqual((await resolveTopics({ subject: "Biology", classLevel: "SS1", exam: "IGCSE" })).map((x) => x.label), ["Enzymes"]);
+});

@@ -28,13 +28,30 @@ export function shapeSyllabus(subjects, topicsBySubject) {
   return out;
 }
 
-const EXAM_FOR_BOARD = (board) => {
-  const normalized = String(board || "").toUpperCase();
-  if (normalized === "NECO") return "NECO";
-  if (normalized === "JAMB") return "JAMB";
-  if (normalized === "NCEE") return "NCEE";
-  return "WASSCE";
-};
+/** JSS1–3 (also "JSS 2", "Basic 7–9"): the class sits the BECE. */
+export const isJuniorSecondary = (classLevel) => /^(JSS|JS)\s*[1-3]$|^BASIC\s*[7-9]$/i.test(String(classLevel || "").trim());
+
+/**
+ * PURE: the syllabus exam (edu.syllabus_subjects.exam) a learner's board and
+ * class point to. "WAEC" is the default board everywhere, so it can't tell a
+ * JSS learner's exam: a junior secondary class sits the BECE unless the board
+ * names another exam outright (JAMB, IGCSE…). Senior classes take the board as
+ * given, aliases included.
+ */
+export function examForBoard(board, classLevel = null) {
+  const b = String(board || "").toUpperCase().replace(/[^A-Z]/g, "");
+  const has = (...names) => names.some((n) => b.includes(n));
+  const named = has("JAMB", "UTME") ? "JAMB"
+    : has("IGCSE", "CAMBRIDGE", "CAIE") ? "IGCSE"
+      : has("NCEE") ? "NCEE"
+        : has("BECE", "JSCE", "JUNIOR", "BASICCERTIFICATE", "BASICEDUCATION") ? "BECE"
+          : null;
+  if (named) return named;
+  if (isJuniorSecondary(classLevel)) return "BECE";   // WAEC / NECO / blank at JSS: the junior exam
+  if (has("NECO")) return "NECO";
+  return "WASSCE";   // WAEC, WASSCE, SSCE, GCE, blank
+}
+const EXAM_FOR_BOARD = examForBoard;
 
 /**
  * Resolve the topic list for a subject + class level. Class level is matched
@@ -56,8 +73,12 @@ export async function resolveTopics({ subject, classLevel = "JSS1", exam = "WAEC
   const classPattern = classToken ? new RegExp(`(^|[^A-Z0-9])${classToken.replace(/[^A-Z0-9]/g, "")}($|[^0-9])`) : null;
   const hasClass = (value) => !!classPattern && classPattern.test(String(value || "").toUpperCase().replace(/([A-Z])\s+(\d)/g, "$1$2"));
   const classScoped = rows.filter((row) => hasClass(row.code) || hasClass(row.name));
-  const examName = EXAM_FOR_BOARD(exam);
-  const examScoped = (classScoped.length ? classScoped : rows).filter((row) => row.exam === examName);
+  // The class's exam first (a JSS learner → BECE), then the board as written (WAEC → WASSCE) while
+  // BECE syllabi aren't loaded for that subject — never two exams' syllabi merged.
+  const pool = classScoped.length ? classScoped : rows;
+  const examNames = [...new Set([EXAM_FOR_BOARD(exam, classLevel), EXAM_FOR_BOARD(exam, null)])];
+  const examName = examNames.find((name) => pool.some((row) => row.exam === name)) || examNames[0];
+  const examScoped = pool.filter((row) => row.exam === examName);
   rows = examScoped.length ? examScoped : (classScoped.length ? classScoped : rows);
   if (!rows.length) return [];
 
