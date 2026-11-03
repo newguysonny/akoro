@@ -27,6 +27,7 @@ export default function GradingSettings({ draftId, details, version, onSaved }) 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const autoGrade = !!details?.ai_auto_grade;
+  const instant = details?.ai_release !== 'review';
   const format = ANSWER_FORMATS.some((f) => f.key === details?.answer_format) ? details.answer_format : 'all';
 
   const save = async (patch) => {
@@ -41,9 +42,14 @@ export default function GradingSettings({ draftId, details, version, onSaved }) 
   return (
     <Section title="Grading & answers" icon="ti-clipboard-check" defaultOpen
       summary={`${autoGrade ? 'AI auto-grading on' : 'AI auto-grading off'} · ${answerFormatLabel(format)}`}>
-      <Field inline label="AI auto-grading" hint={autoGrade ? 'The AI marks each answer against the rubric. You approve every mark before learners see it.' : 'Turn on to have the AI draft marks from a rubric you can edit.'}>
+      <Field inline label="AI auto-grading" hint={autoGrade ? 'The AI marks each answer against the rubric within seconds of hand-in.' : 'Turn on to have the AI draft marks from a rubric you can edit.'}>
         <Toggle on={autoGrade} onChange={(v) => save({ ai_auto_grade: v })} label="AI auto-grading" />
       </Field>
+      {autoGrade && (
+        <Field inline label="Show learners their score instantly" hint={instant ? 'Learners see the AI score and feedback straight away, marked as AI-marked. You can still adjust it.' : 'The AI marks are held as a draft until you approve them.'}>
+          <Toggle on={instant} onChange={(v) => save({ ai_release: v ? 'instant' : 'review' })} label="Show learners their score instantly" />
+        </Field>
+      )}
       <Field label="Answer submission" hint="What learners may hand in for each question.">
         <div role="radiogroup" aria-label="Answer submission method" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
           {ANSWER_FORMATS.map((f) => {

@@ -171,6 +171,8 @@ export function detailsFromVersion(details, v) {
     ai_auto_grade: !!details?.ai_auto_grade,
     // How learners may answer (missing = everything, as before) and, with auto-grading on, the rubric the AI marker follows.
     answer_format: cleanAnswerFormat(details?.answer_format),
+    // With auto-grading on: "instant" shows learners the AI score at once; "review" holds it for the teacher.
+    ai_release: details?.ai_release === "review" ? "review" : "instant",
     ...(details?.ai_auto_grade && assignScheme(v) ? { mark_scheme: assignScheme(v) } : {}),
     question_types: [...new Set((p.questions || []).map((q) => q.type).filter(Boolean))],
     version: v.n,

@@ -126,9 +126,15 @@ test("routes: marks saved by the owner, the marked copy on publish, AI drafts af
   assert.match(routes, /router\.post\("\/:id\/targets\/:studentId\/ai-grade", requireRole\(TEACHER_ROLES\)/);
   assert.match(routes, /if \(target\.submission\?\.submittedAt\) buildMarkedCopyLater\(target\.id\);/);
   assert.match(routes, /if \(isLearner && full\?\.grade == null\) return res\.status\(409\)/);       // learners only after grading
-  assert.match(routes, /brief\?\.details\?\.ai_auto_grade \? aiGradeTarget\(target\.id\) : null/);
+  // marking starts at once (not after the PDF) and releases the score unless the teacher holds it
+  assert.match(routes, /aiGradeTarget\(target\.id\)\s*\.then\(\(draft\) => \(draft && brief\.details\.ai_release !== "review" \? releaseAiGrade\(target\.id\) : null\)\)/);
+  assert.match(routes, /\.is\("grade", null\)/);   // never overwrites a teacher's grade
   assert.match(routes, /feedbackRubric: t\.grade != null/);
-  assert.doesNotMatch(routes.slice(routes.indexOf('router.get("/mine"'), routes.indexOf('router.get("/:id/analytics"')), /ai_grade|markup/);   // never to the learner
+  // the AI draft itself never reaches the learner — /mine may only read its status (the "marking…" flag)
+  const mine = routes.slice(routes.indexOf('router.get("/mine"'), routes.indexOf('router.get("/:id/analytics"'));
+  assert.doesNotMatch(mine, /markup/);
+  assert.equal((mine.match(/ai_grade/g) || []).length, 1);
+  assert.match(mine, /t\.ai_grade\?\.status === "making"/);
   assert.match(migration, /ADD COLUMN IF NOT EXISTS markup\s+JSONB/);
   assert.match(migration, /ADD COLUMN IF NOT EXISTS ai_grade\s+JSONB/);
   assert.ok(manifest.schema.includes("2026-submission-markup.sql"));

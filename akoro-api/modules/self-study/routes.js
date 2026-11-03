@@ -371,6 +371,35 @@ router.get("/", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
   ok(res, (rows ?? []).map((r) => ({ ...r, progress: progress[r.id] ?? { assigned: 0, started: 0, complete: 0 } })));
 }));
 
+/**
+ * Show the learner the AI's marks the moment they're ready (auto-grade on, release "instant").
+ * Provisional: feedback.ai is set, and the teacher can still adjust or unpublish. Never overwrites a teacher's grade.
+ */
+async function releaseAiGrade(targetId) {
+  const { data: t } = await edu().from("self_study_targets")
+    .select("id, assignment_id, student_id, grade, ai_grade, submission").eq("id", targetId).maybeSingle();
+  const ai = t?.ai_grade;
+  if (!t || t.grade != null || ai?.status !== "ready" || ai.score == null) return null;
+  const { data: a } = await edu().from("self_study_assignments").select("id, title").eq("id", t.assignment_id).maybeSingle();
+  const feedback = {
+    text: String(ai.feedback || "").slice(0, 4000),
+    rubric: (ai.rubric || []).filter((r) => r.level != null).slice(0, 12).map((r) => ({ name: r.name, max: r.max, level: r.level })),
+    questions: (ai.questions || []).map((q) => ({ index: q.index, awarded: q.awarded, max: q.max, comment: String(q.why || "").slice(0, 400) })),
+    ...(ai.marking?.length ? { marking: ai.marking } : {}),
+    mode: "questions", ai: true,
+  };
+  const patch = { grade: Math.round(ai.score), graded_at: now(), feedback };
+  const { data: done } = await edu().from("self_study_targets").update(patch).eq("id", t.id).is("grade", null).select("id").maybeSingle();
+  if (!done) return null;
+  await notifyAll([t.student_id], {
+    type: "activity_graded", title: `📋 Marked: ${a?.title || "your work"}`,
+    content: `Your score: ${patch.grade}%`, related_id: t.assignment_id, link: "/activities",
+  });
+  global.io?.to(`user:${t.student_id}`).emit("activity_graded", { assignmentId: t.assignment_id, grade: patch.grade });
+  buildMarkedCopyLater(t.id);
+  return patch.grade;
+}
+
 /** GET /api/self-study/mine — what I, a learner, have been assigned. */
 router.get("/mine", asyncHandler(async (req, res) => {
   const { data: targets } = await edu().from("self_study_targets")
@@ -494,6 +523,11 @@ router.get("/mine", asyncHandler(async (req, res) => {
         // Once graded: the rubric levels behind the score, and the marked copy.
         feedbackRubric: t.grade != null && Array.isArray(t.feedback?.rubric) ? t.feedback.rubric : [],
         feedbackQuestions: t.grade != null && Array.isArray(t.feedback?.questions) ? t.feedback.questions : [],
+        // Marked by the AI at once (the teacher can still adjust), and the marking points behind each question's mark.
+        feedbackAi: t.grade != null && !!t.feedback?.ai,
+        feedbackMarking: t.grade != null && Array.isArray(t.feedback?.marking) ? t.feedback.marking : [],
+        // The AI is marking right now (auto-grade on, score released instantly).
+        aiMarking: t.grade == null && t.ai_grade?.status === "making" && t.status === "complete" && !!a.details?.ai_auto_grade && a.details?.ai_release !== "review",
         // Answers submitted question by question, not yet handed in.
         draft:        t.draft?.answers ? { answers: t.draft.answers, savedAt: t.draft.savedAt ?? null } : null,
         // Files uploaded but not handed in yet — each with its question, so
@@ -1314,8 +1348,13 @@ router.post("/:id/complete", asyncHandler(async (req, res) => {
   if (brief?.details?.ai_auto_grade) {
     await edu().from("self_study_targets").update({ ai_grade: { status: "making", at: now() } }).eq("id", target.id).then(() => {}, () => {});
   }
+  // Marking starts at once, in parallel with the PDF — the learner's score takes seconds, not the PDF's time.
+  if (brief?.details?.ai_auto_grade) {
+    aiGradeTarget(target.id)
+      .then((draft) => (draft && brief.details.ai_release !== "review" ? releaseAiGrade(target.id) : null))
+      .catch((e) => console.warn("[self-study] instant marking failed:", String(e?.message || e).slice(0, 160)));
+  }
   buildSubmissionArtifacts(target.id)
-    .then(() => (brief?.details?.ai_auto_grade ? aiGradeTarget(target.id) : null))
     .catch((e) => console.warn("[self-study] post-submit build failed (built on first open):", String(e?.message || e).slice(0, 160)));
   // Event trigger: study work completed — fresh signal for the planner.
   emitAutonomyEvent(req.user.id, "self_study").catch(() => {});

@@ -382,6 +382,7 @@ export async function createActivityDraft({ instructor, input, sessionId = null,
       // Only what the instructor said about grading and answers; the preview's Settings tab sets the rest.
       const grading = {};
       if (typeof input?.ai_auto_grade === "boolean") grading.ai_auto_grade = input.ai_auto_grade;
+      if (input?.ai_release === "review") grading.ai_release = "review";
       if (ANSWER_FORMATS.includes(input?.answer_format)) grading.answer_format = input.answer_format;
       if (Object.keys(grading).length) payload.details = grading;
     }
@@ -966,6 +967,10 @@ export async function setAssignmentSettings(instructor, id, body = {}) {
   if (draft.type !== "assignment") throw invalid("Grading settings are for assignments", 400);
   const patch = {};
   if (body.ai_auto_grade !== undefined) patch.ai_auto_grade = !!body.ai_auto_grade;
+  if (body.ai_release !== undefined) {
+    if (!["instant", "review"].includes(body.ai_release)) throw invalid("ai_release must be instant or review", 400);
+    patch.ai_release = body.ai_release;
+  }
   if (body.answer_format !== undefined) {
     if (!ANSWER_FORMATS.includes(body.answer_format)) throw invalid(`answer_format must be one of ${ANSWER_FORMATS.join(", ")}`, 400);
     patch.answer_format = body.answer_format;

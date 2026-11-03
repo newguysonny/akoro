@@ -63,6 +63,9 @@ async function fetchSelfStudy() {
       feedbackQuestions: Array.isArray(a.feedbackQuestions) ? a.feedbackQuestions : [],
       submissionPdf: a.submissionPdf ?? null,   // { ready, pages } — the work as one PDF
       feedbackRubric: Array.isArray(a.feedbackRubric) ? a.feedbackRubric : [],   // [{name, max, level}] once graded
+      feedbackAi: !!a.feedbackAi,                // marked by the AI at once (the teacher may still adjust)
+      feedbackMarking: Array.isArray(a.feedbackMarking) ? a.feedbackMarking : [],
+      aiMarking:  !!a.aiMarking,                // the AI is marking this hand-in right now
       markedPdf:  !!a.markedPdf,                // the teacher's marked copy is available
       };
     });

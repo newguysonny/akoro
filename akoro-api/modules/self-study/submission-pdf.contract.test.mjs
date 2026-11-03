@@ -122,7 +122,7 @@ test("routes: sniffed uploads to storage, submit locks after grading and after h
   assert.match(routes, /if \(target\.grade != null\) return res\.status\(409\)/);
   assert.match(routes, /This work was already handed in — your teacher has it\./);   // one hand-in only
   assert.ok(!/const stray = /.test(routes), "every file on the target is handed in — nothing is pruned at submit");
-  assert.match(routes, /buildSubmissionArtifacts\(target\.id\)\n    \.then/);
+  assert.match(routes, /buildSubmissionArtifacts\(target\.id\)\n    \.catch/);
   assert.match(routes, /router\.get\(\/\^\\\/targets\\\/\(\[0-9a-f-\]\{36\}\)\\\/submission\\\.\(pdf\|md\)\$\/i/);
   assert.match(routes, /details:\s+briefForLearner\(a\.details, t\.grade != null\)/);
   assert.match(routes, /if \(sentFeedback == null\) \{/);               // a score-only publish keeps feedback

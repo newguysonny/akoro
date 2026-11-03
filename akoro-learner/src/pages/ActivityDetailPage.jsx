@@ -150,6 +150,7 @@ function BoxTool({ icon, label, onClick, disabled }) {
 /* The answer box under the question. */
 function AnswerBox({ format = 'all', q, idx, value, onType, files, onPick, onRemove, onOpenFile, onDraw, onWrite, uploading, removing, status, saveErr, onRetry, fileErr }) {
   const fileRef = useRef(null);
+  const camRef = useRef(null);
   const [focus, setFocus] = useState(false);
   const full = files.length >= PER_QUESTION_FILES;
   const mcq = isMcq(q);
@@ -209,8 +210,17 @@ function AnswerBox({ format = 'all', q, idx, value, onType, files, onPick, onRem
       )}
       <input ref={fileRef} type="file" multiple style={{ display: 'none' }} accept={canDocs ? '.pdf,.jpg,.jpeg,.png,.docx,.txt' : '.jpg,.jpeg,.png'}
         onChange={(e) => { onPick(e.target.files); e.target.value = ''; }}/>
+      <input ref={camRef} type="file" accept="image/*" capture="environment" data-testid="camera-input" style={{ display: 'none' }}
+        onChange={(e) => { onPick(e.target.files); e.target.value = ''; }}/>
+      {canImages && files.length > 0 && !full && (
+        <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)', margin: '0 3px 8px', fontFamily: "'Nunito',sans-serif" }}>
+          Answer carries on to another page? Add another photo.
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-        {canImages && <BoxTool icon={canDocs ? 'ti-paperclip' : 'ti-camera'} label={full ? 'Up to 3 files per question' : canDocs ? 'Attach a file (PDF, photo, Word, text · 5MB)' : 'Add a photo of your answer (JPG or PNG · 5MB)'} onClick={() => fileRef.current?.click()} disabled={full || uploading}/>}
+        {canImages && <BoxTool icon="ti-camera" label={full ? 'Up to 3 photos per question' : 'Take a photo of your answer'} onClick={() => camRef.current?.click()} disabled={full || uploading}/>}
+        {canImages && canDocs && <BoxTool icon="ti-photo" label="Choose from gallery or files" onClick={() => fileRef.current?.click()} disabled={full || uploading}/>}
+        {canImages && !canDocs && <BoxTool icon="ti-photo" label="Choose a photo from your gallery" onClick={() => fileRef.current?.click()} disabled={full || uploading}/>}
         {canImages && <BoxTool icon="ti-pencil" label="Draw it on the whiteboard" onClick={onDraw} disabled={uploading}/>}
         {canDocs && <BoxTool icon="ti-file-type-docx" label="Write it in a document (like Word)" onClick={onWrite} disabled={uploading}/>}
         {uploading
@@ -237,9 +247,22 @@ function Stepper({ questions, paper, work, saved, files, fileCounts, onType, onF
   const [moving, setMoving] = useState(false);
   const [stepErr, setStepErr] = useState('');
   const topRef = useRef(null);
+  const dockRef = useRef(null);
+  const [dockH, setDockH] = useState(220);
   const statuses = stepStatuses(questions, work.answers, saved, fileCounts);
   const answeredCount = statuses.filter((st) => st !== 'empty').length;
   const reviewing = idx >= total;
+  // Keep the question clear of the fixed dock, whatever height the answer box grows to.
+  useEffect(() => {
+    const el = dockRef.current;
+    if (!el) return undefined;
+    const measure = () => setDockH(el.getBoundingClientRect().height);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [reviewing, idx]);
 
   const go = (i) => {
     setStepErr('');
@@ -362,13 +385,20 @@ function Stepper({ questions, paper, work, saved, files, fileCounts, onType, onF
         )}
       </div>
 
+      {/* the dock: answer box + Back/Next are fixed to the bottom of the screen while the question scrolls above;
+          the spacer keeps the last of the question clear of it */}
+      <div aria-hidden style={{ height: dockH + 16 }}/>
+      <div ref={dockRef} data-testid="answer-dock" style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 60, background: 'var(--ak-bg)', boxShadow: '0 -10px 22px -10px rgba(17,24,39,.22)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+      <div style={{ maxWidth: 760, margin: '0 auto', padding: '2px 20px 12px' }}>
+      <div style={{ maxHeight: '44vh', overflowY: 'auto', padding: '0 2px' }}>
       <AnswerBox format={paper?.answer_format} q={q} idx={idx} value={work.answers[idx]} onType={(v) => onType(idx, v)}
         files={qFiles} onPick={(list) => onPick(idx, list)} onRemove={onRemove} onOpenFile={onOpenFile} onDraw={() => onDraw(idx)} onWrite={() => onWrite(idx)}
         uploading={uploading === idx} removing={removing} status={status} saveErr={saveErrs[idx]} onRetry={() => onFlush(idx).catch(() => {})}
         fileErr={fileErr?.index === idx ? fileErr.message : ''}/>
 
+      </div>
       {stepErr && <div style={{ fontSize: 12, fontWeight: 700, color: RED, marginTop: 10 }}>{stepErr}</div>}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
         <button onClick={() => go(idx - 1)} disabled={idx === 0 || moving}
           style={{ padding: '10px 18px', borderRadius: 20, border: '1px solid var(--ak-border)', background: 'var(--ak-surface)', color: 'var(--ak-text-muted)', fontSize: 12.5, fontWeight: 800, cursor: idx === 0 ? 'default' : 'pointer', opacity: idx === 0 ? 0.4 : 1, fontFamily: "'Nunito',sans-serif" }}>
           ← Back
@@ -379,6 +409,39 @@ function Stepper({ questions, paper, work, saved, files, fileCounts, onType, onF
           {moving ? <Spinner size={12}/> : <>{primary} →</>}
         </button>
       </div>
+      </div>
+      </div>
+    </div>
+  );
+}
+
+/* The score, big: a ring, points earned and missed (the result screen after marking). */
+function ScoreCard({ grade, questions, ai, text }) {
+  const earned = questions.reduce((n, m) => n + (Number(m.awarded) || 0), 0);
+  const max = questions.reduce((n, m) => n + (Number(m.max) || 0), 0);
+  const pct = Math.max(0, Math.min(100, Number(grade) || 0));
+  const tone = pct >= 70 ? '#047857' : pct >= 40 ? '#B45309' : '#B91C1C';
+  const R = 38, CIRC = 2 * Math.PI * R;
+  return (
+    <div data-testid="score-card" style={{ background: 'var(--ak-surface)', borderRadius: 20, padding: 18, marginBottom: 20, boxShadow: '0 4px 18px rgba(17,24,39,.08)', fontFamily: "'Nunito',sans-serif" }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <svg width="96" height="96" viewBox="0 0 96 96" role="img" aria-label={`Score ${pct}%`}>
+          <circle cx="48" cy="48" r={R} fill="none" stroke="var(--ak-border)" strokeWidth="9"/>
+          <circle cx="48" cy="48" r={R} fill="none" stroke={tone} strokeWidth="9" strokeLinecap="round" strokeDasharray={`${(pct / 100) * CIRC} ${CIRC}`} transform="rotate(-90 48 48)"/>
+          <text x="48" y="54" textAnchor="middle" fontSize="22" fontWeight="900" fill="var(--ak-text)">{pct}%</text>
+        </svg>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--ak-text)' }}>{pct >= 70 ? 'Well done!' : pct >= 40 ? 'Good effort' : 'Keep going'}</div>
+          {max > 0 && (
+            <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 11.5, fontWeight: 900, color: '#047857', background: 'rgba(16,185,129,.12)', padding: '3px 10px', borderRadius: 999 }}>{earned} points earned</span>
+              <span style={{ fontSize: 11.5, fontWeight: 900, color: '#B91C1C', background: 'rgba(239,68,68,.10)', padding: '3px 10px', borderRadius: 999 }}>{Math.max(0, max - earned)} missed</span>
+            </div>
+          )}
+        </div>
+      </div>
+      {text && <p style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ak-text)', margin: '14px 0 0', lineHeight: 1.55 }}>{text}</p>}
+      {ai && <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--ak-text-muted)', margin: '10px 0 0' }}><Icon name="ti-sparkles" size={12}/> Marked by AI against your teacher's mark scheme. Your teacher may adjust it.</p>}
     </div>
   );
 }
@@ -591,7 +654,17 @@ export default function ActivityDetailPage() {
     return () => { dead = true; };
   }, [id]);
 
-  // A teacher publishes the grade while this page is open: show it.
+  // The AI is marking: look again every 3s until the score lands (the socket event usually beats this).
+  useEffect(() => {
+    if (!row?.aiMarking || row.graded) return undefined;
+    const aid = row.assignmentId;
+    const timer = setInterval(() => {
+      fetchMyActivities().then((rows) => { const fresh = rows.find((r) => r.assignmentId === aid); if (fresh) setRow(fresh); }).catch(() => {});
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [row?.aiMarking, row?.graded, row?.assignmentId]);
+
+  // A teacher (or the AI) publishes the grade while this page is open: show it.
   useEffect(() => onActivityGraded((evt) => {
     const mine = rowRef.current;
     if (!mine || String(evt?.assignmentId) !== String(mine.assignmentId)) return;
@@ -633,7 +706,7 @@ export default function ActivityDetailPage() {
       const target = await completeActivity(row.assignmentId, payload);
       const handed = target?.submission?.files
         ?? files;
-      setRow((r) => ({ ...r, status: 'complete', completedAt: r.completedAt || new Date().toISOString(), submission: { text: payload.text, answers: target?.submission?.answers ?? payload.answers, files: handed, submittedAt: target?.submission?.submittedAt || new Date().toISOString() } }));
+      setRow((r) => ({ ...r, aiMarking: !!r.briefDetails?.ai_auto_grade && r.briefDetails?.ai_release !== 'review', status: 'complete', completedAt: r.completedAt || new Date().toISOString(), submission: { text: payload.text, answers: target?.submission?.answers ?? payload.answers, files: handed, submittedAt: target?.submission?.submittedAt || new Date().toISOString() } }));
       sheetRef.current?.scrollTo?.({ top: 0, behavior: 'smooth' });
       // The server now owns the work — the local draft is spent.
       try { localStorage.removeItem(storeKey(row.assignmentId)); } catch { /* private mode */ }
@@ -970,8 +1043,24 @@ export default function ActivityDetailPage() {
             </p>
           )}
 
+          {/* the AI is marking the hand-in right now */}
+          {row.aiMarking && !row.graded && (
+            <div data-testid="marking-card" style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--ak-surface)', borderRadius: 18, padding: '16px 16px', marginBottom: 20, boxShadow: '0 4px 18px rgba(17,24,39,.08)', fontFamily: "'Nunito',sans-serif" }}>
+              <Spinner size={22} color={BRAND}/>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--ak-text)' }}>Marking your answers…</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ak-text-muted)', marginTop: 2 }}>Your score will appear here in a few seconds.</div>
+              </div>
+            </div>
+          )}
+
+          {/* the result: the score, big */}
+          {row.graded && row.feedbackQuestions?.length > 0 && (
+            <ScoreCard grade={row.grade} questions={row.feedbackQuestions} ai={row.feedbackAi} text={row.feedbackText}/>
+          )}
+
           {/* graded banner — the published grade + feedback */}
-          {row.graded && (
+          {row.graded && !(row.feedbackQuestions?.length > 0) && (
             <div style={{ background: 'rgba(16,185,129,.10)', border: '1px solid rgba(16,185,129,.25)', borderRadius: 14, padding: '12px 14px', marginBottom: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                 <span style={{ width: 32, height: 32, borderRadius: 9, background: 'rgba(16,185,129,.18)', color: '#047857', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -1074,7 +1163,7 @@ export default function ActivityDetailPage() {
           )}
 
           {/* handed in, not marked yet: the receipt */}
-          {isDone && !row.graded && questions?.length > 0 && <Receipt questions={questions} submission={row.submission} completedAt={row.completedAt || row.submission?.submittedAt}/>}
+          {isDone && !row.graded && !row.aiMarking && questions?.length > 0 && <Receipt questions={questions} submission={row.submission} completedAt={row.completedAt || row.submission?.submittedAt}/>}
 
           {/* a question paper once handed in: the paper with every answer under
               its question — marked (key, each mark and comment) once graded */}

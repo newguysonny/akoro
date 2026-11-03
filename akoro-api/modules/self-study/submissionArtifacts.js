@@ -189,6 +189,24 @@ export async function readMarkedCopy(target) {
 
 /* ── AI auto-grade (drafts for the instructor) ────────────────────────── */
 
+/**
+ * The submission as markdown WITHOUT building the PDF — what the AI marker reads when the learner has just
+ * handed in and nothing is stored yet (typed answers, Word/text attachments; photos go to the model as images).
+ */
+async function quickMarkdown(targetId) {
+  const loaded = await loadSubmission(targetId);
+  if (!loaded) throw new Error("Submission not found.");
+  const files = [];
+  for (const row of loaded.fileRows) {
+    let text = null, kind = row.kind || "other";
+    if (kind === "text" || kind === "docx") {
+      try { text = await attachmentText(kind, await readSubmissionFile(row)); } catch { /* the model still sees the name */ }
+    }
+    files.push({ name: row.name, size: row.size || 0, kind, bytes: Buffer.alloc(0), text, question: row.question_index ?? undefined });
+  }
+  return submissionMarkdown({ assignment: loaded.assignment, learner: loaded.learner, submission: loaded.target.submission || {}, files });
+}
+
 /** Draft marks for one submission, billed to the activity's owner. */
 export async function aiGradeTarget(targetId) {
   const [{ runAiGrade }, { openai, OPENAI_MODEL }, { schoolBillTo }, { aiGradeSchema }] = await Promise.all([
@@ -204,7 +222,10 @@ export async function aiGradeTarget(targetId) {
       const { data: assignment } = await edu().from("self_study_assignments")
         .select("id, title, subject, details, created_by").eq("id", t.assignment_id).maybeSingle();
       owner = assignment?.created_by || null;
-      const markdown = (await readSubmissionArtifact(t, "md")).toString("utf8");
+      // Straight from the answers when the stored copy isn't ready — marking must not wait for the PDF.
+      const markdown = pdfIsCurrent(t) && t.submission_pdf?.mdKey
+        ? (await readSubmissionArtifact(t, "md")).toString("utf8")
+        : await quickMarkdown(t.id);
       const ids = (t.submission.files || []).map((f) => f.id);
       const { data: rows } = ids.length
         ? await edu().from("self_study_files").select("id, name, size, mime, kind, storage_key, data").in("id", ids)
