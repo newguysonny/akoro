@@ -3686,6 +3686,58 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   gate unchanged and all four gate scenarios green.
 - **Status (2026-11-03):** planned. UI preview (step 1) made; waiting for approval before building.
 
+#### Phase 20 · Part B — Convert Akoro to TypeScript (DeepSeek Harness's language, 2026-11-03)
+- **Why.** DeepSeek Harness is written in **TypeScript**: about 6,100 `.ts` and 830
+  `.tsx` files, plus a small Python SDK (45 `.py`). It is a pnpm monorepo on Node ≥ 24
+  with TypeScript 6, built with `tsdown` and tested with `vitest`. Its compiler
+  settings are strict (`strict`, `noUncheckedIndexedAccess`,
+  `exactOptionalPropertyTypes`). Akoro is plain **JavaScript**: Node ESM `.js`/`.mjs`
+  in the API and React `.jsx` in the four apps, about **1,650 files and 307k lines**
+  with **no** TypeScript. Types matter most where Phase 20 lives. The plugin recipe
+  format, the block registry, the self-tooling definitions, the workflow states and
+  the event-stream envelope are all data that must have one exact shape everywhere,
+  and today that is checked only at runtime and by tests.
+- **Same language, gradually.** TypeScript is JavaScript with types, so no rewrite is
+  needed: files are converted one at a time, and `.js` and `.ts` run side by side
+  throughout.
+- **Toolchain (keep it light):**
+  - **API:** Node's built-in type stripping runs `.ts` directly, with no build step.
+    Use erasable syntax only (no `enum` or `namespace`). Node is 22.22 today; move
+    Render to Node 24 LTS first, where stripping is on by default. `tsc --noEmit`
+    checks types in CI. `node --test` keeps running the tests.
+  - **The four apps:** Vite already compiles `.ts`/`.tsx`, so nothing changes in the
+    build. `tsc --noEmit` checks types in CI.
+  - **Shared settings:** one `tsconfig.base.json` with `allowJs` + `checkJs` off at
+    first; strictness is raised step by step (see order).
+- **Order:**
+  1. **Turn it on:** add `tsconfig` to the API and the learner app, add a
+     `typecheck` script, and make CI run it. Nothing is converted yet, and the
+     build is unchanged.
+  2. **Shared types first (`akoro-api/types/`, copied to the apps by
+     `design-system/sync.mjs` as in Phase 19 step 5):** the event-stream envelope,
+     workflow states, the self-tooling definition, the **session-plugin recipe and
+     block registry (this phase)**, the teaching state, and the API response shapes
+     the apps read.
+  3. **New code is `.ts`/`.tsx` from now on.** The Phase 20 plugin modules are written
+     in TypeScript from day one.
+  4. **Convert module by module along Phase 19's order.** When Phase 19 moves a
+     module, it is converted to `.ts` in the same change. Pure rules first (`policy`,
+     `workflow`, `state-machine`), then services and stores, then routes. In the
+     apps, convert by feature folder (Agent Chat, dashboard, then the large modals).
+  5. **Raise strictness** as each area finishes: `strict`, then
+     `noUncheckedIndexedAccess`, then `exactOptionalPropertyTypes` (DeepSeek's
+     level). A ratchet test lists the files still `.js`, and the list may only
+     shrink, the same rule as Phase 19's size ratchet.
+- **Safety:** no behaviour change in a conversion commit; one module per commit; the
+  API suite, the four app builds, `typecheck` and the gate's regression suite stay
+  green after every step; runtime checks (recipe validators, `validateDefinition`)
+  stay, because types don't check data that arrives from the model or the network.
+- **Exit:** `typecheck` in CI on all five projects; Phase 20 modules and the shared
+  types fully `.ts` under strict settings; the `.js` ratchet list shrinking each
+  release; no `any` in the shared types.
+- **Status (2026-11-03):** planned. Step 1 can start any time. Steps 2–3 come with
+  the Phase 20 build, and step 4 with Phase 19.
+
 ---
 
 ## 18. Acceptance tests
