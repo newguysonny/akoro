@@ -115,3 +115,44 @@ test('a rate limit that never lifts still ends with an error', async () => {
   });
   assert.match(res.error, /a lot at once/);
 });
+
+test('a dropped poll rides out the blip: the run continues and completes', async () => {
+  const api = fakeApi();
+  const realPoll = api.poll;
+  let drops = 0, attempts = 0;
+  api.poll = async () => {
+    attempts += 1;
+    if (attempts === 3 || attempts === 4) { drops += 1; throw new TypeError('Failed to fetch'); }
+    return realPoll();
+  };
+  const sleeps = [];
+  const out = await runExtraction({ ...api, recordId: 'r1', pages: pages(3),
+    pollMs: 0, sleep: (ms) => { sleeps.push(ms); return Promise.resolve(); } });
+  assert.equal(out.error, null);
+  assert.equal(out.pages.length, 3);
+  assert.equal(drops, 2);
+  assert.ok(sleeps.includes(5000), 'the backoff sleep ran between retries');
+});
+
+test('a submit that fails to fetch is retried, not fatal', async () => {
+  const api = fakeApi();
+  const realSubmit = api.submit;
+  let drops = 0;
+  api.submit = async (args) => {
+    if (api.calls.submits.length === 0 && drops === 0) { drops += 1; throw new TypeError('Failed to fetch'); }
+    return realSubmit(args);
+  };
+  const out = await runExtraction({ ...api, recordId: 'r1', pages: pages(2),
+    pollMs: 0, sleep: async () => {} });
+  assert.equal(out.error, null);
+  assert.equal(out.pages.length, 2);
+  assert.equal(drops, 1, 'the dropped submit was retried');
+});
+
+test('a sustained outage still ends the run with an error', async () => {
+  const api = fakeApi();
+  api.poll = async () => { api.calls.polls += 1; throw new TypeError('Failed to fetch'); };
+  const out = await runExtraction({ ...api, recordId: 'r1', pages: pages(1),
+    pollMs: 0, sleep: async () => {} });
+  assert.match(out.error, /Failed to fetch/);
+});
