@@ -109,7 +109,13 @@ export async function runExtraction({
         if (r === STOPPED) return { pages: [...byPage.values()], failed: [...failedByPage.values()], error: 'Stopped.' };
         if (r) { error = r; break; }
       }
-      if (!submitted && !error) error = 'This file is busy being extracted by someone else — try again shortly.';
+      // A 409 run that still collected every page it wanted (another opener's
+      // batch settled while we polled) is a success — the busy note is only
+      // an error when pages are genuinely still missing.
+      if (!submitted && !error
+          && batch.some((p) => !byPage.has(p.pageNumber) && !failedByPage.has(p.pageNumber))) {
+        error = 'This file is busy being extracted by someone else — try again shortly.';
+      }
     } catch (e) {
       error = e?.message || 'Extraction failed — try again in a moment.';
     }

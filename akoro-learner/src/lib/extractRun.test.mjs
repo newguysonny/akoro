@@ -156,3 +156,21 @@ test('a sustained outage still ends the run with an error', async () => {
     pollMs: 0, sleep: async () => {} });
   assert.match(out.error, /Failed to fetch/);
 });
+
+test('a 409 run that still collected every page reports clean, not busy', async () => {
+  // Another opener holds the claim the whole time, but their batch settles
+  // while we poll: the pages are ours from the cache — no error.
+  const calls = { submits: 0, polls: 0 };
+  const submit = async () => {
+    calls.submits += 1;
+    const e = new Error('busy'); e.status = 409; throw e;
+  };
+  const poll = async () => {
+    calls.polls += 1;
+    return { done: true, pages: [{ pageNumber: 1, markdown: 'cached', blocks: [] }], failed: [], pending: [] };
+  };
+  const out = await runExtraction({ submit, poll, recordId: 'r1', pages: pages(1), pollMs: 0, sleep: async () => {} });
+  assert.equal(out.error, null);
+  assert.equal(out.pages.length, 1);
+  assert.equal(out.pages[0].markdown, 'cached');
+});
