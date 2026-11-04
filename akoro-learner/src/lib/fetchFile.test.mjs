@@ -38,10 +38,26 @@ test('a 500 answers with a retry, a 404 comes back immediately', async () => {
   } finally { globalThis.fetch = real; }
 });
 
-test('a sustained outage still throws to the caller', async () => {
+test('a sustained outage still throws, saying the store was unreachable', async () => {
   const real = globalThis.fetch;
   globalThis.fetch = async () => { throw new TypeError('Failed to fetch'); };
   try {
-    await assert.rejects(() => fetchFileWithRetry('https://store/x.png', noSleep), /Failed to fetch/);
+    await assert.rejects(() => fetchFileWithRetry('https://store/x.png', noSleep), /could not be reached/);
+  } finally { globalThis.fetch = real; }
+});
+
+test('reachable-but-blocked is named as CORS, not a dead network', async () => {
+  const real = globalThis.fetch;
+  let opaqueProbed = false;
+  globalThis.fetch = async (url, opts = {}) => {
+    if (opts.mode === 'no-cors') { opaqueProbed = true; return { type: 'opaque' }; }
+    throw new TypeError('Failed to fetch');
+  };
+  try {
+    await assert.rejects(
+      () => fetchFileWithRetry('https://store/x.png', noSleep),
+      (e) => { assert.match(e.message, /CORS/); assert.equal(e.corsBlocked, true); return true; },
+    );
+    assert.equal(opaqueProbed, true, 'the opaque probe ran');
   } finally { globalThis.fetch = real; }
 });
