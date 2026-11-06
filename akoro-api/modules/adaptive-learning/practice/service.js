@@ -12,7 +12,7 @@
  *   abandon   → abandoned (ended early, or the reconnect grace ran out)
  */
 import { practiceOutcome, evidenceAllowed } from "./workflow.js";
-import { masteryWriteBack } from "../study-prep/education-engine.js";
+import { masteryWriteBack, toUnitScore } from "../study-prep/education-engine.js";
 
 const quiet = (what) => (e) => { console.warn(`[practice ${what}]`, e?.message || e); return null; };
 
@@ -63,7 +63,8 @@ export function makePracticeRun({ engine, evidence = null }) {
       await engine.emitOutcome(id, outcome).catch(quiet("outcome"));
       // Evidence: only a clean, completed run counts (§11.4).
       if (evidence && evidenceAllowed(outcome.verdict)) {
-        const score = (Number(outcome.score) || 0) / 100;
+        // assessment_score is 0–100; the learner model is 0–1 (scale guard).
+        const score = toUnitScore(Number(outcome.score) || 0, { scale: "percent" }) ?? 0;
         await evidence({
           learnerId, sessionRef: `practice:${id}`, topicLabel: topic, subject, passed: outcome.passed, score,
           mastery: masteryWriteBack({ score, passed: outcome.passed }), source: "proctored_assessment",

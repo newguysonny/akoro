@@ -42,6 +42,31 @@ export function topicOutcome({ passed, capped }) {
 }
 
 /**
+ * Scale guard at the learner-model boundary (§7.8, Phase 10). Concept state
+ * and evidence are 0–1; `edu.knowledge_confidence` and the proctored
+ * assessment score are 0–100. Every caller names the scale it holds:
+ *   toUnitScore(0.8)                      → 0.8
+ *   toUnitScore(80, { scale: "percent" }) → 0.8
+ *   toUnitScore(80)                       → null   (a 0–100 value passed as 0–1 is
+ *                                                    refused — never clamped to 1)
+ * Non-numbers and out-of-range values → null: no evidence, not a guess.
+ */
+export function toUnitScore(value, { scale = "unit" } = {}) {
+  if (value == null || value === "" || typeof value === "boolean") return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return null;
+  if (scale === "percent") return n <= 100 ? n / 100 : null;
+  if (scale === "unit") return n <= 1 ? n : null;
+  throw new Error(`unknown_scale:${scale}`);
+}
+
+/** 0–1 → 0–100 for the legacy/UI scale (rounded); null stays null. */
+export function toPercentScore(value) {
+  const unit = toUnitScore(value);
+  return unit == null ? null : Math.round(unit * 100);
+}
+
+/**
  * Deterministic mastery write-back (Master Plan §4.5): a passed attempt lifts
  * evidence toward the pass threshold band; a failed attempt decays it
  * slightly. `knowledge_confidence` (0–100) maps to the 0–1 scale as fallback
@@ -52,7 +77,7 @@ export function masteryWriteBack({ currentMastery = null, knowledgeConfidence = 
   const hasConfidence = knowledgeConfidence != null && Number.isFinite(Number(knowledgeConfidence));
   const baseline = hasMastery
     ? Number(currentMastery)
-    : hasConfidence ? Math.max(0, Math.min(100, Number(knowledgeConfidence))) / 100
+    : hasConfidence ? toUnitScore(Math.max(0, Math.min(100, Number(knowledgeConfidence))), { scale: "percent" })
       : null;
   const observed = Number(score);
   if (baseline == null) {

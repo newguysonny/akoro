@@ -23,6 +23,7 @@ import {
   normaliseMode, fallbackReply, validateDecision, objectiveMet, boundedEnd,
 } from "./policy.js";
 import { guideTeach } from "./guideTeacher.js";
+import { recommendNextAction } from "../adaptive-engine.js";
 
 export const AGENT_TURN_POLICY_VERSION = "adaptive-teaching-agent-v1";
 const LABELS = Object.fromEntries(TEACHING_TURN_TOOL_CATALOG.map((t) => [t.name, t.label]));
@@ -198,7 +199,7 @@ export async function executeAgentTeachingTurn({ orchestrator, humanMessage, cal
       understanding: pct(ev.learnerMastery ?? cog.understanding),
       confusion: ev.misconceptionPresent ? Math.max(pct(cog.confusion), 40) : Math.round(pct(cog.confusion) * 0.8),
       engagement: Math.max(pct(cog.engagement), 50),
-      mistakes: ev.misconceptionPresent ? [part] : [], strengths: ev.masteryStatus === "verified" ? [part] : [],
+      strengths: ev.masteryStatus === "verified" ? [part] : [],   // the misconception itself goes to the learner model (recordTeachingEvidence)
       misconceptionDetected: ev.misconceptionPresent ? part : null,
       newConceptLearned: ev.masteryStatus === "verified" ? part : null,
     };
@@ -211,7 +212,7 @@ export async function executeAgentTeachingTurn({ orchestrator, humanMessage, cal
     if (context.evidenceUpdate.current.masteryStatus === "verified") orchestrator.stats.conceptsLearned.push(part);
     if (context.evidenceUpdate.misconceptionRepaired) orchestrator.stats.misconceptionsCleared.push(part);
     step("record_verified_learning", "completed");
-    context.guideResult = { tip: null, nextAction: actionForDialogueMove?.[context.evidenceUpdate.dialogue.move] || "DIG_DEEPER", nextPhase: null, nextMustKnowIndex: context.mustKnowIndex, isUrgent: false };
+    context.guideResult = { tip: null, nextAction: recommendNextAction({ dialogueMove: context.evidenceUpdate.dialogue.move, actionForDialogueMove }).action, nextPhase: null, nextMustKnowIndex: context.mustKnowIndex, isUrgent: false };
   } else {
     await runFixed("record_verified_learning");
     await runFixed("coach_teaching_dialogue");

@@ -27,7 +27,8 @@ test("getLearnerState merges concept mastery (0-1) and knowledge_confidence (0-1
     "edu.learner_concept_state": [
       { learner_id: L, mastery: 0.41234, concept: { title: "States of Matter", subject: "Basic Science", topic_key: "states-of-matter" } },
       { learner_id: L, mastery: 0.9, concept: [{ title: "Living Things", subject: "Basic Science JSS1", topic_key: null }] }, // embed as array
-      { learner_id: L, mastery: 1.7, concept: { title: "Energy", subject: "Basic Science", topic_key: "Energy Forms" } }, // clamped
+      { learner_id: L, mastery: 1.7, concept: { title: "Energy", subject: "Basic Science", topic_key: "Energy Forms" } }, // off the 0–1 scale: refused (Phase 10 scale guard)
+      { learner_id: L, mastery: 0.3, misconception_active: true, concept: { title: "Evaporation", subject: "Basic Science", topic_key: "evaporation" } },
       { learner_id: L, mastery: 0.99, concept: { title: "Fractions", subject: "Mathematics", topic_key: "fractions" } }, // other subject
       { learner_id: L, mastery: 0.5, concept: null },
       { learner_id: "someone-else", mastery: 1, concept: { title: "Secret", subject: "Basic Science", topic_key: "secret" } },
@@ -39,8 +40,10 @@ test("getLearnerState merges concept mastery (0-1) and knowledge_confidence (0-1
     ],
   });
   const out = await getLearnerState({ learnerId: L, subject: "Basic Science" });
-  assert.deepEqual(out.topics, { "states-of-matter": 0.8, "living-things": 0.9, "energy-forms": 1 });
-  assert.deepEqual(out.misconceptions, ["a", "b", "c"]);
+  // Phase 10: an off-scale mastery (1.7) is refused by the scale guard instead of
+  // being clamped to a perfect 1; the learner model's active misconceptions come first.
+  assert.deepEqual(out.topics, { "states-of-matter": 0.8, "living-things": 0.9, evaporation: 0.3 });
+  assert.deepEqual(out.misconceptions, ["Evaporation", "a", "b", "c"]);
   assert.match(out.scale, /0-1/);
 });
 

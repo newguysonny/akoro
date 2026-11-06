@@ -8,6 +8,7 @@
  * nor NaNa's generated recommendation can bypass it — that property is
  * preserved exactly; only the location changed.
  */
+import { ACTION_FOR_DIALOGUE_MOVE, recommendNextAction } from "../adaptive-engine.js";
 
 /** Learner-facing phase labels (moved from agents/student/orchestrator.js). */
 export const STUDENT_PHASES = Object.freeze({
@@ -23,16 +24,10 @@ export const TEACHING_SESSION_PHASES = Object.freeze([
   "PHASE_1", "PHASE_2", "PHASE_3", "PHASE_4", "MASTERY",
 ]);
 
-/** What the guide does next for each observed dialogue move. */
-export const ACTION_FOR_DIALOGUE_MOVE = Object.freeze({
-  clarify_core: "DIG_DEEPER",
-  repair_misconception: "CLEAR_MISTAKE",
-  apply_in_context: "USE_ANALOGY",
-  connect_and_explain: "ONE_MORE_PUSH",
-  stretch_transfer: "CHALLENGE",
-  consolidate_and_advance: "GAP_CLOSED",
-  synthesise: "TRIGGER_RECALL",
-});
+// What the guide does next for each observed dialogue move. The table and
+// the decision now live in the Adaptive Learning Engine (Phase 10: one
+// next-action path); re-exported so existing importers keep working.
+export { ACTION_FOR_DIALOGUE_MOVE };
 
 /**
  * The deterministic progression gate. Pure: given where the session is and
@@ -71,7 +66,7 @@ export function applyTeachingProgress({
     subtopicAdvanced = true;
     nextAction = "NEXT_SUBTOPIC";
   } else {
-    nextAction = actionForDialogueMove[dialogueMove] || "DIG_DEEPER";
+    nextAction = recommendNextAction({ dialogueMove, actionForDialogueMove }).action;
   }
 
   const mayEnterMastery = mayAdvance && !hasNextSubtopic && Boolean(allConceptsVerified);

@@ -18,7 +18,7 @@ import {
 import { decayEngine } from "./decayEngine.js";
 import { outcomeForEvidence } from "./retention.js";
 import { getStudentState } from "../../student-state.js";
-import { createTeachingEvidenceState, publicTeachingEvidence } from "../../teaching-evidence.js";
+import { createTeachingEvidenceState, publicTeachingEvidence, applyCentralMisconceptions } from "../../teaching-evidence.js";
 import { createPublicLearningState } from "../../public-learning-state.js";
 import { executeTeachingTurnWorkflow } from "../../teaching-workflow/runner.js";
 import { executeAgentTeachingTurn } from "../../teaching-session/controller.js";
@@ -224,6 +224,18 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
       persisted: this.resumeTeachingEvidence,
       conceptCount: mustKnow.length || 1,
     });
+    // Phase 10: a resumed session's misconception flags come from the learner
+    // model (learner_concept_state), not from the stored session copy — a
+    // misconception repaired (or found) elsewhere since is honoured here.
+    if (this.resumeTeachingEvidence) {
+      try {
+        const { centralMisconceptionFlags } = await import("../../learner-model.js");
+        const flags = await centralMisconceptionFlags({ learnerId: this.studentId, subject: this.subject, topic, parts: mustKnow });
+        applyCentralMisconceptions(this.teachingEvidence, flags);
+      } catch (error) {
+        console.warn("[teaching-evidence] central misconception state unavailable:", error?.message || error);
+      }
+    }
     this.session.teachingEvidence = this.teachingEvidence;
 
     // Topic boundary

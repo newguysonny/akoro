@@ -8,6 +8,8 @@
 
 import db from "../../../db.js";
 import { resolveTopics, prerequisiteEdges } from "./syllabus-resolver.js";
+import { toUnitScore } from "./education-engine.js";
+import { misconceptionTitles } from "../learner-model.js";
 
 const text = (value, maximum) => String(value || "").replace(/[\r\n\x00]+/g, " ").trim().slice(0, maximum);
 const round4 = (value) => Math.round(Number(value || 0) * 10_000) / 10_000;
@@ -23,7 +25,7 @@ export async function getLearnerState({ learnerId, subject, topicIds = null }) {
     // Embedded read through the concept_catalog FK: mastery 0–1 per concept,
     // mapped onto topic slugs so the agent reasons in the same ids as the plan.
     db.schema("edu").from("learner_concept_state")
-      .select("mastery, concept:concept_catalog(title, subject, topic_key)")
+      .select("mastery, misconception_active, concept:concept_catalog(title, subject, topic_key)")
       .eq("learner_id", learnerId).limit(100),
   ]);
   if (confidence.error) throw confidence.error;
@@ -35,15 +37,19 @@ export async function getLearnerState({ learnerId, subject, topicIds = null }) {
     const rounded = round4(Math.max(0, Math.min(1, Number(value || 0))));
     state[key] = state[key] == null ? rounded : Math.max(state[key], rounded);
   };
+  const inSubject = [];
   for (const row of conceptState.data || []) {
     const concept = Array.isArray(row.concept) ? row.concept[0] : row.concept;
     if (!concept) continue;
     if (pattern !== "%%" && !String(concept.subject || "").toLowerCase().includes(String(subject || "").trim().toLowerCase())) continue;
-    record(concept.topic_key || concept.title, row.mastery);
+    inSubject.push(row);
+    // Scale guard: concept mastery is 0–1; anything else is refused, not clamped.
+    const mastery = toUnitScore(row.mastery);
+    if (mastery != null) record(concept.topic_key || concept.title, mastery);
   }
   // knowledge_confidence is 0–100 → 0–1 fallback (S4 §6 scale conversion).
   for (const row of confidence.data || []) {
-    record(row.topic, Math.max(0, Math.min(100, Number(row.confidence || 0))) / 100);
+    record(row.topic, toUnitScore(Math.max(0, Math.min(100, Number(row.confidence || 0))), { scale: "percent" }));
   }
   if (topicIds) {
     const allowed = new Set(topicIds);
@@ -52,7 +58,14 @@ export async function getLearnerState({ learnerId, subject, topicIds = null }) {
   return {
     scale: "0-1 mastery estimate from recorded evidence; a missing topic means no evidence yet",
     topics: state,
-    misconceptions: (confidence.data || []).flatMap((row) => Array.isArray(row.misconceptions) ? row.misconceptions.slice(0, 3) : []).slice(0, 8),
+    // Phase 10: the learner model's active misconceptions first (central
+    // learner_concept_state); the legacy knowledge_confidence lists only fill
+    // what it does not cover yet.
+    misconceptions: (() => {
+      const central = misconceptionTitles(inSubject);
+      const legacy = (confidence.data || []).flatMap((row) => Array.isArray(row.misconceptions) ? row.misconceptions.slice(0, 3) : []);
+      return [...central, ...legacy.filter((item) => !central.includes(item))].slice(0, 8);
+    })(),
   };
 }
 
