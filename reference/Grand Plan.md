@@ -3855,7 +3855,9 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   `set_agent_auto_reply`, migration, 4 gate scenarios, 7 unit tests); the agent acts
   when its **Agent Online** switch is on, and waits otherwise. Step 7 built after the
   preview was approved (Settings → Agent network → "Let my agent reply on its own").
-  Waiting on: the sandbox running this branch (gate runs).
+  **Verified on the sandbox (2026-11-06, build 40a87bf5/6ac1e0a8):** `network.friend_request_card`,
+  `network.auto_reply_consult` (handled by the background lane on arrival), `network.chat_reply_setting`,
+  `network.offline_waits` — all PASS. Still to run on production after deploy.
 
 ---
 
