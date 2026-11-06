@@ -17,6 +17,7 @@
 
 import { bindRegistry } from "../../agent-runtime/tools.js";
 import { RULES } from "../../agent-runtime/actionBasis.js";
+import { STRATEGY_LIBRARY } from "../study-prep/education-engine.js";
 
 // Study Prep's levels (the runtime adds `persona`; Study Prep has none yet).
 export const TOOL_LEVELS = Object.freeze(["read", "propose", "execute"]);
@@ -43,7 +44,7 @@ export const TOOL_ARGS = Object.freeze({
   "syllabus.generate": obj(),
   "plan.validate": obj({ topics: TOPIC_LIST }, ["topics"]),
   "propose_plan": obj({ topics: TOPIC_LIST }, ["topics"]),
-  "offer_strategy": obj({ topicId: TOPIC_ID, strategy: { type: "string", enum: ["teach_back", "different_analogy", "interleave", "space_out", "escalate_human"] } }, ["topicId", "strategy"]),
+  "offer_strategy": obj({ topicId: TOPIC_ID, strategy: { type: "string", enum: [...STRATEGY_LIBRARY] } }, ["topicId", "strategy"]),
   "advance_topic": obj(),
   "defer_topic": obj({ topicId: TOPIC_ID, reasonCode: str("Why, e.g. 'attempt_cap_reached'.") }, ["topicId", "reasonCode"]),
   "topic.flag": obj({ topicId: TOPIC_ID, reason: str("A short reason.") }, ["topicId", "reason"]),
@@ -67,7 +68,7 @@ export const TOOL_DEFINITIONS = Object.freeze([
   { name: "session.get_state", level: "read", description: "Read the current study session: status, goal, topics with their states, and recent activity. The agent sees the same state the harness does." },
   { name: "plan.validate", level: "read", description: "Dry-run the harness plan checks on an ordered topic list: syllabus membership, duplicates, prerequisite order, size cap, and the cost estimate." },
   { name: "propose_plan", level: "propose", description: "Propose the ordered study plan (terminal action during planning). The harness validates hard constraints; the LEARNER confirms on the plan card before anything is charged." },
-  { name: "offer_strategy", level: "propose", description: "Offer one strategy from the curated library (teach_back, different_analogy, interleave, space_out, escalate_human) for the active topic. The learner chooses whether to use it." },
+  { name: "offer_strategy", level: "propose", description: `Offer one strategy from the Strategy Library (${STRATEGY_LIBRARY.join(", ")}) for the active topic. The learner chooses whether to use it.` },
   { name: "advance_topic", level: "propose", description: "Propose moving to the next queued topic (terminal action). Only valid when the active topic is settled." },
   { name: "defer_topic", level: "propose", description: "Propose deferring the active topic with a reason code (terminal action). One deferred retry per session, attempts reset." },
   { name: "topic.flag", level: "propose", description: "Propose flagging the active topic as a knowledge gap with a short reason." },

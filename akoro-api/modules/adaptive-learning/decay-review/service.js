@@ -184,7 +184,7 @@ export function makeDecayReview({ engine, decay, checks, recall, agentOf, findBy
  * check is the agent recalling from its notes (agent_recall, ledger only —
  * as for Study Prep's Agent Check).
  */
-async function recordDecayEvidence({ learnerId, workflowId, subject, topic, outcomes = {}, recalls = [] }) {
+async function recordDecayEvidence({ learnerId, workflowId, subject, topic, outcomes = {}, recalls = [], strategy = null, retained = null }) {
   const { recordLearningEvent } = await import("../learning-events.js");
   const asked = new Set(recalls.map((r) => String(r.concept || "").toLowerCase()));
   const out = [];
@@ -195,10 +195,17 @@ async function recordDecayEvidence({ learnerId, workflowId, subject, topic, outc
       sessionRef: `decay:${workflowId}`, turnRef: `${concept.slice(0, 80)}:${kind}`, workflowId,
       quality: result === "correct" ? 0.85 : result === "partial" ? 0.5 : 0.2,
       summary: `Decay review: ${concept} ${result === "correct" ? "came back" : result === "partial" ? "partly came back" : "had faded"}${human ? " (the learner recalled it)" : " (from the agent's notes)"}`,
-      details: { concept, result } };
+      // What brought it back (a breakthrough's what_worked_strategy).
+      details: { concept, result, ...(strategy && kind === "recall_success" ? { strategy } : {}) } };
     let r = await recordLearningEvent({ ...base, topic: concept });
     if (!r.recorded) r = await recordLearningEvent({ ...base, topic });
     out.push({ concept, kind, ...r });
+  }
+  // How the review's strategy turned out (Phase 4a slice 3).
+  if (strategy && retained != null) {
+    const { recordStrategyOutcome } = await import("../strategies/outcomes.js");
+    out.push({ kind: "strategy_outcome", strategy, ...(await recordStrategyOutcome({ learnerId, strategyId: strategy, outcome: retained ? "worked" : "did_not_work",
+      workflow: "decay_review", sessionRef: `decay:${workflowId}`, turnRef: "complete", subject, topic, struggleType: "decay" })) });
   }
   return out;
 }
@@ -217,7 +224,7 @@ async function recordDecayEvidence({ learnerId, workflowId, subject, topic, outc
     const done = await engine.transition(wf.id, { from, to: "completed", patch: { metadata: { ...m, outcome, endedAt: now() } } });
     await event(done.id, "workflow.completed", { outcome, narrative: retained ? "Still remembered — reinforced" : "Not retained yet — it comes back sooner" });
     // Phase 4a (D37): each concept's recall result goes to the learner model.
-    void recordDecayEvidence({ learnerId: wf.learner_id, workflowId: wf.id, subject: m.subject, topic: m.topic, outcomes, recalls }).catch(quiet("evidence"));
+    void recordDecayEvidence({ learnerId: wf.learner_id, workflowId: wf.id, subject: m.subject, topic: m.topic, outcomes, recalls, strategy: m.strategy || null, retained }).catch(quiet("evidence"));
     return done;
   }
 

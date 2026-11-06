@@ -6,6 +6,7 @@
  * in, so contract tests run with fixed fixtures and no time bombs. The agent
  * uses this engine; it never replaces it.
  */
+import { getStrategy, isPermittedStrategy as libraryPermits, strategiesFor } from "../strategies/library.js";
 
 /** Deterministic answer-key scoring. The LLM never scores anything. */
 export function scoreAttempt(answerKey, answers) {
@@ -97,14 +98,14 @@ export function estimateSessionCost({ topicCount, maxIterationsPerStep = 6 }) {
 }
 
 /**
- * Strategy library (Master Plan §4.2/§4.12 Decision 3): the agent may only
- * offer strategies from this curated list — anything else is rejected with
- * strategy_not_permitted. `escalate_human` is the fifth entry from S5.
+ * Strategy library (Master Plan §4.2/§4.12 Decision 3; Grand Plan §7.7.2 v3):
+ * the agent may only offer a strategy the ONE library (strategies/library.js)
+ * allows in Study Prep — anything else, or anything switched off, is
+ * rejected with strategy_not_permitted.
  */
-export const STRATEGY_LIBRARY = Object.freeze([
-  "teach_back", "different_analogy", "interleave", "space_out", "escalate_human",
-]);
+export const STRATEGY_LIBRARY = Object.freeze(strategiesFor("study_prep", { includeDisabled: true }));
 
 export function isPermittedStrategy(strategy) {
-  return STRATEGY_LIBRARY.includes(String(strategy || "").trim());
+  const id = String(strategy || "").trim();
+  return getStrategy(id)?.id === id && libraryPermits(id, "study_prep");
 }

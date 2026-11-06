@@ -13,6 +13,8 @@ import {
 } from "../teaching-evidence.js";
 import { TEACHING_TURN_TOOL_CATALOG } from "./catalog.js";
 import { applyTeachingProgress } from "../teaching-session/state-machine.js";
+import { normaliseMode } from "../teaching-session/policy.js";
+import { getStrategy } from "../strategies/library.js";
 
 export { TEACHING_TURN_TOOL_CATALOG };
 
@@ -43,17 +45,61 @@ export async function recordTeachingEvidence(orchestrator, context) {
   const kinds = [];
   if (update.observation?.misconceptionPresent) kinds.push("misconception_detected");
   if (update.misconceptionRepaired) kinds.push("misconception_cleared");
+  const strategy = currentTeachingStrategy(orchestrator);
   const out = [];
   for (const kind of kinds) {
-    // The must-know part first (finer), then the session's topic.
+    // The must-know part first (finer), then the session's topic. A repair
+    // names the strategy in use: it is what worked (the breakthrough's what_worked_strategy).
     const base = { learnerId, subject, kind, source: "teaching", sessionRef, turnRef: `${turn}:${kind}`,
       summary: kind === "misconception_detected" ? `Teaching: a misconception about ${part || topic}` : `Teaching: the misconception about ${part || topic} was repaired`,
-      details: { part: part || null, mustKnowIndex: context.mustKnowIndex ?? 0 } };
+      details: { part: part || null, mustKnowIndex: context.mustKnowIndex ?? 0, ...(kind === "misconception_cleared" && strategy ? { strategy } : {}) } };
     let r = part ? await recordLearningEvent({ ...base, topic: part }) : { recorded: false };
     if (!r.recorded) r = await recordLearningEvent({ ...base, topic });
     out.push({ kind, ...r });
+    if (kind === "misconception_cleared" && strategy) {
+      const outcome = await recordTeachingStrategyOutcome(orchestrator, { strategy, outcome: "worked", turnRef: `${turn}:${kind}`,
+        conceptId: r.conceptId || null, topic: part || topic, struggleType: "misconception" });
+      out.push({ kind: "strategy_outcome", strategy, ...outcome });
+    }
   }
   return out;
+}
+
+/** The strategy a teaching session is running: the one chosen, else teach_back when the learner teaches the agent. */
+export function currentTeachingStrategy(orchestrator) {
+  const session = orchestrator?.session || {};
+  const chosen = getStrategy(session.strategy);
+  if (chosen) return chosen.id;
+  return normaliseMode(session.teachingMode) === "teach_agent" ? "teach_back" : null;
+}
+
+/**
+ * PURE: how the session's strategy turned out when it ends → outcome | null
+ * (nothing taught). Every part verified (or the objective met) → worked;
+ * some progress → partial; none → did_not_work.
+ */
+export function teachingSessionOutcome({ endedBy = null, totalTurns = 0, teachingEvidence = null } = {}) {
+  if (!(Number(totalTurns) > 0)) return null;
+  const concepts = Array.isArray(teachingEvidence?.concepts) ? teachingEvidence.concepts.filter((c) => (c?.attempts || 0) > 0) : [];
+  if (endedBy === "objective_met" || (concepts.length && concepts.every((c) => c.masteryStatus === "verified"))) return "worked";
+  if (concepts.some((c) => c.masteryStatus === "verified" || c.masteryStatus === "developing")) return "partial";
+  return "did_not_work";
+}
+
+/** A teaching strategy's result → recordStrategyOutcome (never throws; no session row → nothing). */
+export async function recordTeachingStrategyOutcome(orchestrator, { strategy, outcome, turnRef, conceptId = null, topic = null, struggleType = null, details = {} }) {
+  const learnerId = orchestrator?.sessionMeta?.studentId || orchestrator?.studentId;
+  const sessionRef = orchestrator?.dbSessionId ? `teaching:${orchestrator.dbSessionId}` : null;
+  if (!learnerId || !sessionRef || !strategy) return { recorded: false, reason: "no_reference" };
+  try {
+    const { recordStrategyOutcome } = await import("../strategies/outcomes.js");
+    return await recordStrategyOutcome({ learnerId, strategyId: strategy, outcome, workflow: "teaching", sessionRef, turnRef,
+      conceptId, subject: orchestrator?.sessionMeta?.subject || orchestrator?.subject || null,
+      topic: conceptId ? null : (topic || orchestrator?.sessionMeta?.topic || null), struggleType, details });
+  } catch (e) {
+    console.warn("[teaching] strategy outcome:", e?.message || e);
+    return { recorded: false, reason: "error" };
+  }
 }
 
 export function createTeachingTurnTools() {

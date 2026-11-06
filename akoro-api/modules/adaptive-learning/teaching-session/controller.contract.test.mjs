@@ -99,7 +99,11 @@ test("guide mode: NaNa replies, the protégé is never called, and its tools are
 });
 
 test("policy: strategy cap, bounded end, fallback table", () => {
-  assert.equal(validateDecision("teach_agent", { tool: "strategy_select", args: { strategy: "socratic" } }, { strategyChanges: 2 }).error, "strategy_cap_reached");
+  assert.equal(validateDecision("teach_agent", { tool: "strategy_select", args: { strategy: "contrast_pairs" } }, { strategyChanges: 2 }).error, "strategy_cap_reached");
+  // Strategy Library v3: in-session strategies only; unknown names are invalid, harness ones not permitted mid-session.
+  assert.equal(validateDecision("teach_agent", { tool: "strategy_select", args: { strategy: "socratic" } }).error, "invalid_arguments");
+  assert.equal(validateDecision("teach_agent", { tool: "strategy_select", args: { strategy: "chunk_plan" } }).error, "invalid_arguments");
+  assert.equal(validateDecision("teach_agent", { tool: "strategy_select", args: { strategy: "worked_example" } }).ok, true, "the pre-v3 name maps to worked_examples");
   assert.equal(boundedEnd({ turnCount: 60 }), "turn_cap");
   assert.equal(boundedEnd({ turnCount: 10 }), null);
   assert.deepEqual(fallbackReply("learn_with_guide", "repair_misconception"), { tool: "guide_teach", args: { move: "correct_misconception" } });

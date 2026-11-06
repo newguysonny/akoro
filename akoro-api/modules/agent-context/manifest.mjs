@@ -23,6 +23,8 @@
  * pins this list EXACTLY so additions are conscious. Must be empty by P7.
  */
 
+import { GUIDE_FILES } from "../adaptive-learning/strategies/library.js";
+
 export const MANIFEST_VERSION = 1;
 
 export const SETS = Object.freeze({
@@ -57,6 +59,20 @@ export const SETS = Object.freeze({
     mode: "joined",
     consumer: "study-prep agent-loop — strategy selection",
     files: Object.freeze(["AGENT.md", "strategies/STRATEGIES.md", "policies/TOOL_RULES.md"]),
+  }),
+  // ── Strategy Library v3 guides (§7.7.1): one file per strategy, listed by
+  //    strategies/library.js (adding a strategy adds its guide here). Only the
+  //    chosen strategy's guide is loaded (loadDoctrine), into the context of
+  //    whatever runs it.
+  strategy_guides_teaching: Object.freeze({
+    mode: "verbatim",
+    consumer: "Teaching session — the chosen strategy's guide in NaNa's context (teaching-session/guideTeacher.js)",
+    files: GUIDE_FILES.teaching,
+  }),
+  strategy_guides_harness: Object.freeze({
+    mode: "verbatim",
+    consumer: "workflow harness strategies (replan, schedule, export, recall rounds) — the guide for the agent offering them",
+    files: GUIDE_FILES.harness,
   }),
   safety: Object.freeze({
     mode: "joined",

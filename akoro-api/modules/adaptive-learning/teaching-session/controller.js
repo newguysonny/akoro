@@ -16,11 +16,11 @@
  * The learner always gets exactly one reply per turn. `decide` is injectable
  * (tests); production asks the controller model with function tools.
  */
-import { createTeachingTurnTools } from "../teaching-workflow/tools.js";
+import { createTeachingTurnTools, currentTeachingStrategy, recordTeachingStrategyOutcome } from "../teaching-workflow/tools.js";
 import { TEACHING_TURN_TOOL_CATALOG } from "../teaching-workflow/catalog.js";
 import {
   TEACHING_POLICY, PROTEGE_MOVES, GUIDE_MOVES, TEACHING_STRATEGIES, TOOLS_BY_MODE, TERMINAL_TOOLS, PLAN_NAME,
-  normaliseMode, fallbackReply, validateDecision, objectiveMet, boundedEnd,
+  normaliseMode, fallbackReply, validateDecision, objectiveMet, boundedEnd, teachingStrategy,
 } from "./policy.js";
 import { guideTeach } from "./guideTeacher.js";
 
@@ -143,9 +143,16 @@ export async function executeAgentTeachingTurn({ orchestrator, humanMessage, cal
     step(decision.tool, "started");
     if (decision.tool === "teaching_get_state") observations.push({ tool: decision.tool, result: decisionState(context) });
     else if (decision.tool === "strategy_select") {
-      session.strategy = args.strategy;
+      // The way it was being taught wasn't landing: that is its outcome (§7.7.1 step 6).
+      const previous = currentTeachingStrategy(orchestrator);
+      const chosen = teachingStrategy(args.strategy);
+      session.strategy = chosen;
       session.strategyChanges = (Number(session.strategyChanges) || 0) + 1;
-      observations.push({ tool: decision.tool, result: { strategy: args.strategy, changesUsed: session.strategyChanges } });
+      if (previous && previous !== chosen) {
+        void recordTeachingStrategyOutcome(orchestrator, { strategy: previous, outcome: "did_not_work", turnRef: `switch${session.strategyChanges}:t${session.turnCount || 0}`,
+          details: { switchedTo: chosen, reason: String(args.reason || "").slice(0, 200) || null } });
+      }
+      observations.push({ tool: decision.tool, result: { strategy: chosen, changesUsed: session.strategyChanges } });
     } else if (decision.tool === "guide_coach") {
       context.coachFocus = String(args.focus || "").slice(0, 200);
       observations.push({ tool: decision.tool, result: { ok: true } });

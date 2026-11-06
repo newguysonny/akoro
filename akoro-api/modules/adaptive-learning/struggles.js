@@ -5,11 +5,13 @@
  *
  *   recordStruggle({ learnerId, type, detectedBy, conceptId?, subject?, topic?,
  *                    observation, evidenceRefs, sourceWorkflow })
- *       → { status: "opened" | "updated", id } | { status: "refused", reason }
+ *       → { status: "opened" | "updated" | "unchanged" (a replay), id } | { status: "refused", reason }
  *   resolveStruggles({ learnerId, type, conceptId?, evidenceRef, whatWorkedStrategy?,
  *                      whatWorked?, scoreAfter? }) → { resolved: n, ids }
  *   struggleEffects(event)   PURE: what a learning event opens / resolves
- *   afterLearningEvent(event)  called by the recorder after every write
+ *   afterLearningEvent(event)  called by the recorder after every write; a
+ *       resolution credits the event's strategy, else the one recorded as
+ *       working in that session (strategies/outcomes.js)
  *
  * Rules (§7.15.2): the type must be on the closed list and the detector one
  * the type allows (health_energy only from the learner's own words, never
@@ -20,6 +22,8 @@
  */
 import db from "../../db.js";
 import { struggleType, DETECTED_BY, STRUGGLE_TYPES_VERSION, HEALTH_EXPIRY_DAYS } from "./struggleTypes.js";
+import { strategyLabel } from "./strategies/library.js";
+import { strategyThatWorked } from "./strategies/outcomes.js";
 
 const E = () => db.schema("edu");
 const clip = (s, n) => { const t = String(s ?? "").replace(/\s+/g, " ").trim(); return t ? t.slice(0, n) : null; };
@@ -59,6 +63,8 @@ export async function recordStruggle({ learnerId, type, detectedBy, conceptId = 
     const { data: open } = await q.limit(1);
     if (open?.[0]) {
       const row = open[0];
+      // A replay of evidence it already cites (a re-run, the backfill) is no new attempt.
+      if (refs.length && refs.every((r) => (row.evidence_refs || []).includes(r))) return { status: "unchanged", id: row.id };
       const merged = [...new Set([...(row.evidence_refs || []), ...refs])].slice(-40);
       await E().from("learning_struggles").update({ attempts_before: (row.attempts_before || 0) + 1, evidence_refs: merged, updated_at: new Date().toISOString() }).eq("id", row.id);
       return { status: "updated", id: row.id };
@@ -127,9 +133,12 @@ export async function afterLearningEvent(event) {
         observation: `${event.kind.replace(/_/g, " ")} (${event.source})`, evidenceRefs: [ref], sourceWorkflow: event.source,
         scoreBefore: event.quality })) });
     } else {
+      // What worked: the strategy the event names, else the one recorded as
+      // working in this session (recordStrategyOutcome, slice 3).
+      const strategy = event.details?.strategy || await strategyThatWorked({ learnerId: event.learnerId, conceptId: event.conceptId, sessionRef: event.sessionRef });
       out.push({ ...fx, ...(await resolveStruggles({ learnerId: event.learnerId, type: fx.type, conceptId: event.conceptId, evidenceRef: ref,
-        whatWorkedStrategy: event.details?.strategy || null, scoreAfter: event.quality,
-        whatWorked: event.details?.strategy ? `${String(event.details.strategy).replace(/_/g, " ")} in ${event.source}` : null })) });
+        whatWorkedStrategy: strategy || null, scoreAfter: event.quality,
+        whatWorked: strategy ? `${strategyLabel(strategy)} in ${event.source}` : null })) });
     }
   }
   return out;

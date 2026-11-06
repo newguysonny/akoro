@@ -7,6 +7,7 @@
  * The progression gate (state-machine.js applyTeachingProgress) stays the only
  * thing that moves a session forward.
  */
+import { isPermittedStrategy, normaliseStrategyId, strategiesFor } from "../strategies/library.js";
 
 /** §9.5 — the session's bounds. */
 export const TEACHING_POLICY = Object.freeze({
@@ -43,8 +44,19 @@ export const GUIDE_MOVES = Object.freeze({
   summarise: "sum up what they now know in 2-3 short lines and say what comes next",
 });
 
-/** Strategies the agent may switch to (§7.7; the full library is Phase 4a). */
-export const TEACHING_STRATEGIES = Object.freeze(["teach_back", "different_analogy", "worked_example", "socratic", "chunking", "retrieval_practice"]);
+/**
+ * Strategies the agent may switch to inside a session: the ONE library's
+ * entries allowed in Teaching that a Teaching session runs itself (§7.7.2 v3).
+ * Harness strategies (replan, schedule, export, escalate, peer stories) are
+ * chosen by the workflow that owns them, never mid-session.
+ */
+export const TEACHING_STRATEGIES = Object.freeze(strategiesFor("teaching", { executor: "teaching", includeDisabled: true }));
+
+/** PURE: the library id for a strategy_select argument (legacy names map), or null when not allowed now. */
+export function teachingStrategy(strategy) {
+  const id = normaliseStrategyId(strategy);
+  return TEACHING_STRATEGIES.includes(id) && isPermittedStrategy(id, "teaching") ? id : null;
+}
 
 /** The evidence's dialogue move → the protégé's default move (the fallback). */
 export const PROTEGE_MOVE_FOR_DIALOGUE = Object.freeze({
@@ -99,7 +111,8 @@ export function validateDecision(mode, decision, { strategyChanges = 0 } = {}) {
   if (tool === "protege_respond" && !Object.hasOwn(PROTEGE_MOVES, args.move)) return { ok: false, error: "invalid_arguments" };
   if (tool === "guide_teach" && !Object.hasOwn(GUIDE_MOVES, args.move)) return { ok: false, error: "invalid_arguments" };
   if (tool === "strategy_select") {
-    if (!TEACHING_STRATEGIES.includes(args.strategy)) return { ok: false, error: "invalid_arguments" };
+    if (!TEACHING_STRATEGIES.includes(normaliseStrategyId(args.strategy))) return { ok: false, error: "invalid_arguments" };
+    if (!teachingStrategy(args.strategy)) return { ok: false, error: "strategy_not_permitted" };
     if (strategyChanges >= TEACHING_POLICY.MAX_STRATEGY_CHANGES) return { ok: false, error: "strategy_cap_reached" };
   }
   return { ok: true };

@@ -51,7 +51,7 @@ test("the harness policy constants are the decided numbers", () => {
   assert.equal(POLICY.SESSION_TOOL_CALL_CAP, 40);
   assert.equal(POLICY.DEFERRED_RETRIES_PER_SESSION, 1);
   assert.equal(POLICY.INTENT_MAX_CHARS, 240);
-  assert.deepEqual(POLICY.STRATEGY_LIBRARY, ["teach_back", "different_analogy", "interleave", "space_out", "escalate_human"]);
+  assert.deepEqual(POLICY.STRATEGY_LIBRARY, ["teach_back", "different_analogy", "interleave", "space_out", "escalate_human", "peer_help", "contrast_pairs", "prerequisite_review", "vocabulary_focus", "worked_examples", "varied_formats", "easy_wins_first", "chunk_plan", "make_concrete", "schedule_plan", "offline_pack", "format_practice", "self_check", "goal_clarify"]);
 });
 
 test("hard plan validation: membership, duplicates, size cap, prerequisite order", () => {
