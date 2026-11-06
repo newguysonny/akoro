@@ -168,36 +168,24 @@ export const supabaseStore = {
    * concept matches this subject+topic; skipped (never invented) otherwise.
    */
   async recordMasteryEvidence({ learnerId, sessionRef, topicLabel, subject, passed, score, mastery, source = "study_prep" }) {
-    try {
-      const slug = String(topicLabel || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-      // Two plain filters, not an or() string: a label with a comma or
-      // parenthesis ("Forces, Motion and Energy") broke the or() syntax and
-      // the evidence was silently dropped.
-      const approved = () => db.schema("edu").from("concept_catalog")
-        .select("id").eq("status", "approved").ilike("subject", `%${String(subject || "").trim()}%`);
-      let { data: concepts, error } = await approved().ilike("topic_key", `%${slug}%`).limit(1);
-      if (!error && !concepts?.length) ({ data: concepts, error } = await approved().ilike("title", `%${String(topicLabel || "").trim()}%`).limit(1));
-      if (error || !concepts?.length) return null;
-      // An Agent Check is the AGENT's answers from the learner's notes (§7.12.2).
-      const turnRef = source === "agent_recall" ? `${sessionRef}:check` : `${sessionRef}:attempt`;
-      const { error: evidenceError } = await db.schema("edu").from("learner_concept_evidence").upsert({
-        learner_id: learnerId, concept_id: concepts[0].id,
-        source_session_id: sessionRef.slice(0, 180), source_turn_id: turnRef.slice(0, 180),
-        observation_kind: passed ? "assessment_result" : "partial_understanding",
-        response_quality: Number(score) || 0, claim_validity: 1, model_confidence: 1,
-        claim_status: "not_checked",
-        evidence_summary: (source === "agent_recall"
-          ? `Study-prep Agent Check: the learner's agent answered ${Math.round((Number(score) || 0) * 100)}% from their notes (mastery → ${mastery?.next ?? "n/a"})`
-          : source === "proctored_assessment"
-            ? `Proctored assessment ${passed ? "passed" : "attempt"}: score ${Math.round((Number(score) || 0) * 100)}% (mastery → ${mastery?.next ?? "n/a"})`
-            : `Study-prep ${passed ? "passed" : "attempt"}: score ${Math.round((Number(score) || 0) * 100)}% (mastery → ${mastery?.next ?? "n/a"})`).slice(0, 1200),
-        provenance: { source, mastery },
-      }, { onConflict: "learner_id,source_session_id,source_turn_id,concept_id" });
-      if (evidenceError) console.error("[study-prep-store/mastery-evidence]", evidenceError.message);
-      return concepts[0].id;
-    } catch (error) {
-      console.error("[study-prep-store/mastery-evidence]", error?.message || error);
-      return null;
-    }
+    // Through the ONE recorder (Phase 4a, learning-events.js). Same row as
+    // before: an approved concept for subject + topic or nothing, and
+    // "not_checked" — the ledger keeps it, the learner state doesn't move.
+    const { recordLearningEvent } = await import("../learning-events.js");
+    const turnRef = source === "agent_recall" ? `${sessionRef}:check` : `${sessionRef}:attempt`;
+    const pct = Math.round((Number(score) || 0) * 100);
+    const r = await recordLearningEvent({
+      learnerId, subject, topic: topicLabel, kind: passed ? "assessment_result" : "partial_understanding",
+      source: source === "proctored_assessment" ? "proctored" : source === "agent_recall" ? "agent_recall" : "study_prep",
+      sessionRef, turnRef, quality: Number(score) || 0, checked: false,
+      summary: source === "agent_recall"
+        ? `Study-prep Agent Check: the learner's agent answered ${pct}% from their notes (mastery → ${mastery?.next ?? "n/a"})`
+        : source === "proctored_assessment"
+          ? `Proctored assessment ${passed ? "passed" : "attempt"}: score ${pct}% (mastery → ${mastery?.next ?? "n/a"})`
+          : `Study-prep ${passed ? "passed" : "attempt"}: score ${pct}% (mastery → ${mastery?.next ?? "n/a"})`,
+      details: { mastery },
+    });
+    // The matched concept, even if the write itself failed (callers key on the match).
+    return r.conceptId || null;
   },
 };

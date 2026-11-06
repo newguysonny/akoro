@@ -28,6 +28,34 @@ function teachingContext(orchestrator) {
  * Tool implementations are created per invocation so no turn's messages or
  * state can leak into another authenticated session.
  */
+/** The misconception moments of one observed turn → the learner model (never throws). */
+export async function recordTeachingEvidence(orchestrator, context) {
+  const update = context?.evidenceUpdate;
+  const learnerId = orchestrator?.sessionMeta?.studentId || orchestrator?.studentId;
+  if (!update || !learnerId || update.observation?.notChecked) return [];
+  const { recordLearningEvent } = await import("../learning-events.js");
+  const part = String(activeConcept(context) || "").trim();
+  const topic = orchestrator?.sessionMeta?.topic || context.topic;
+  const subject = orchestrator?.sessionMeta?.subject || orchestrator?.subject || null;
+  const sessionRef = orchestrator?.dbSessionId ? `teaching:${orchestrator.dbSessionId}` : null;
+  if (!sessionRef) return [];
+  const turn = `p${context.mustKnowIndex ?? 0}:a${update.current?.attempts ?? 0}`;
+  const kinds = [];
+  if (update.observation?.misconceptionPresent) kinds.push("misconception_detected");
+  if (update.misconceptionRepaired) kinds.push("misconception_cleared");
+  const out = [];
+  for (const kind of kinds) {
+    // The must-know part first (finer), then the session's topic.
+    const base = { learnerId, subject, kind, source: "teaching", sessionRef, turnRef: `${turn}:${kind}`,
+      summary: kind === "misconception_detected" ? `Teaching: a misconception about ${part || topic}` : `Teaching: the misconception about ${part || topic} was repaired`,
+      details: { part: part || null, mustKnowIndex: context.mustKnowIndex ?? 0 } };
+    let r = part ? await recordLearningEvent({ ...base, topic: part }) : { recorded: false };
+    if (!r.recorded) r = await recordLearningEvent({ ...base, topic });
+    out.push({ kind, ...r });
+  }
+  return out;
+}
+
 export function createTeachingTurnTools() {
   return Object.freeze({
     load_session_state: {
@@ -68,6 +96,10 @@ export function createTeachingTurnTools() {
         );
         orchestrator.teachingEvidence = context.evidenceUpdate.state;
         orchestrator.session.teachingEvidence = orchestrator.teachingEvidence;
+        // Phase 4a (D37): a misconception found, or repaired, goes to the learner
+        // model — not only into this session's JSON. Fire-and-forget: a lesson
+        // never waits on, or fails because of, the evidence write.
+        void recordTeachingEvidence(orchestrator, context);
       },
     },
 
