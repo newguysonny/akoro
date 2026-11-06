@@ -70,4 +70,33 @@ export const dailyFollowUp = {
   },
 };
 
-export const CHAT_CONTINUITY = [historyOrder, dailyFollowUp];
+export const turnSavedOnce = {
+  name: "chat.turn_saved_once", area: "agent-chat", risk: "write",
+  description: "A long chat's turn (progress summary > 1200 chars, an 8-step plan) is saved once: two messages, scratchpad stored, nothing appended twice.",
+  params: { learner: { default: "@tester28" } },
+  async run(ctx, p) {
+    const me = await ctx.as(p.learner);
+    const made = await ctx.http({ as: p.learner, method: "POST", path: "/api/adaptive/chat/sessions", body: { title: `${ctx.marker} long` } });
+    const chatId = made.body?.session?.id;
+    if (!chatId) ctx.expect.blocked(`couldn't create the chat (${made.status})`);
+    ctx.cleanup(() => ctx.db.deleteOwned("chat_sessions", { ownerColumn: "user_id", ownerId: me.id, filters: { id: chatId } }));
+    const { persistLearnerAgentConversationTurn } = await import("../../agent-tools/conversation-context-routes.js");
+    const turnId = `gate-${Date.now().toString(36)}`;
+    const out = await persistLearnerAgentConversationTurn({
+      conversationId: chatId, userId: me.id, sessionId: `agentchat_${chatId.replace(/-/g, "")}`, turnId,
+      userMessage: `${ctx.marker} Message me here every day at 5pm.`, assistantMessage: "Done — a daily 5pm message here.",
+      summary: "Learner wants a daily 5pm reminder.",
+      scratchpad: { goal: "Daily revision reminders", progressSummary: `${"Long running progress. ".repeat(80)}latest`,
+        completed: [], nextSteps: [], openQuestions: [], toolState: [],
+        plan: Array.from({ length: 8 }, (_, i) => ({ step: `step ${i + 1}`, status: "pending" })) },
+    });
+    ctx.note(`persist: ${JSON.stringify(out)}`);
+    ctx.expect.ok("the turn is saved", out?.saved === true, out);
+    ctx.expect.ok("…with its full context (no write refused)", !out?.contextIncomplete, out?.contextIncomplete);
+    ctx.expect.eq("exactly two messages for the turn", await ctx.db.count("chat_messages", { session_id: chatId }), 2);
+    const [pad] = await ctx.db.rows("edu.learner_agent_conversation_scratchpads", { chat_session_id: chatId }, { columns: "progress_summary, plan" });
+    ctx.expect.ok("scratchpad stored, trimmed to the table's limits", pad && pad.progress_summary.length <= 1200 && pad.plan.length === 6, pad && { len: pad.progress_summary.length, plan: pad.plan.length });
+  },
+};
+
+export const CHAT_CONTINUITY = [historyOrder, dailyFollowUp, turnSavedOnce];

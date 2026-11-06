@@ -33,3 +33,13 @@ test("the character budget drops the OLDEST messages, never the latest", () => {
   assert.equal(out.at(-1).content.startsWith("message 6"), true);
   assert.ok(!out.some((m) => m.content.startsWith("message 1 ")));
 });
+
+test("scratchpad fits the table: a long progress summary and a long plan are trimmed, not refused", async () => {
+  const { normaliseScratchpad } = await import("./conversation-context-validation.js");
+  const plan = Array.from({ length: 8 }, (_, i) => ({ step: `step ${i + 1}`, status: "pending" }));
+  const s = normaliseScratchpad({ goal: "Daily revision", progressSummary: `old ${"x".repeat(3000)} latest progress`, completed: [], nextSteps: [], openQuestions: [], plan, toolState: [] });
+  assert.ok(s.progressSummary.length <= 1200, `progress_summary ${s.progressSummary.length} > 1200`);
+  assert.ok(s.progressSummary.endsWith("latest progress"), "keeps the newest progress");
+  assert.equal(s.plan.length, 6, "the table holds 6 plan steps");
+  assert.equal(s.plan.at(-1).step, "step 8", "keeps the newest steps");
+});

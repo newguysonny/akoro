@@ -140,6 +140,7 @@ import {
 import { localiseInstant } from "./learner-time-context.js";
 import {
   completedLearnerAgentConversationTurn,
+  savedTurnReplyId,
   loadLearnerAgentConversationContext,
   persistLearnerAgentConversationTurn,
   retrieveLearnerAgentMemory,
@@ -4949,7 +4950,11 @@ router.post("/agent", async (req, res) => {
           // The reply already happened — never lose the transcript to a
           // durable-write hiccup. Fall back to the plain two-row append.
           console.error("[/chat/agent] durable persist failed — appending basic transcript:", persistError.message);
-          await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply })
+          // Never write the turn twice: if its messages were saved before the
+          // failure, keep those (a second append duplicated every turn).
+          const already = await savedTurnReplyId({ conversationId, userId: req.user.id, turnId }).catch(() => null);
+          if (already) { turnSaved = true; await saveTurn(already).catch(() => {}); }
+          else await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply })
             .then(async (saved) => { turnSaved = true; await saveTurn(saved?.assistantMessageId); })
             .catch((e) => console.error("[/chat/agent] basic transcript append failed:", e.message));
         }

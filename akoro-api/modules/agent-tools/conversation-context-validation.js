@@ -27,6 +27,12 @@ export function conversationRequest(body = {}) {
   return { sessionId, toolContext, conversationId };
 }
 
+/** The END of a long text (the latest progress matters most), at most `max` characters. */
+function clipEnd(value, max) {
+  const t = typeof value === "string" ? value.trim() : "";
+  return t.length > max ? `…${t.slice(-(max - 1))}`.trim() : t;
+}
+
 export function normaliseScratchpad(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("scratchpad is invalid");
   const goal = boundedText(value.goal, 500);
@@ -37,12 +43,16 @@ export function normaliseScratchpad(value) {
     if (clean.length !== new Set(clean).size) throw new Error("scratchpad checklist must not contain duplicates");
     return clean;
   };
-  const scratchpad = { goal, progressSummary: boundedText(value.progressSummary, 2_000) };
+  // Bounded to the TABLE's limits (progress_summary ≤ 1200 chars, plan ≤ 6):
+  // 2000 / 8 here made the scratchpad write fail on every turn of a long chat
+  // once the summary grew past 1200 characters (2026-11-04).
+  const scratchpad = { goal, progressSummary: boundedText(clipEnd(value.progressSummary, 1_200), 1_200) };
   for (const name of SCRATCHPAD_SECTIONS) scratchpad[name] = normaliseItems(value[name]);
   // Agent Chat's task ledger (adaptive-learning/taskLedger.js, Phase 16): up to 8
   // steps, each with the tool that did it; "done" is the ledger's word for completed.
-  if (!Array.isArray(value.plan) || value.plan.length > 8) throw new Error("scratchpad plan is invalid");
-  scratchpad.plan = value.plan.map((item) => {
+  if (!Array.isArray(value.plan)) throw new Error("scratchpad plan is invalid");
+  // The newest 6 steps (the table holds 6).
+  scratchpad.plan = value.plan.slice(-6).map((item) => {
     if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("scratchpad plan is invalid");
     const step = boundedText(item.step, 320);
     const raw = boundedText(item.status, 32).toLowerCase() || "pending";
