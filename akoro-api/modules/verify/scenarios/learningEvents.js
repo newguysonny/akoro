@@ -108,4 +108,129 @@ export const struggleBreakthrough = {
   },
 };
 
-export const LEARNING_EVENTS = [recorderMisconception, struggleBreakthrough];
+/** A marked, approved test concept (removed afterwards with what this run wrote about it). */
+async function gateConcept(ctx, db, me, name) {
+  const tag = ctx.marker.replace(/[^a-z0-9]/gi, "").toLowerCase().slice(-10);
+  const title = `${name} gate ${tag}`;
+  const key = `${name.toLowerCase().replace(/[^a-z]+/g, "-")}-gate-${tag}`;
+  const { data: concept, error } = await db.schema("edu").from("concept_catalog").insert({
+    curriculum_key: "verify-gate", subject: "Biology", topic_key: key, code: `gate.${key}`,
+    title, objective: `Explain ${name.toLowerCase()}.`, source_type: "reviewed_content",
+    source_ref: { gate: ctx.marker }, status: "approved",
+  }).select("id").single();
+  if (error) ctx.expect.blocked(`couldn't add the test concept: ${error.message}`);
+  return { concept, title };
+}
+
+/**
+ * Phase 4a slice 3 — learning.strategy_outcome: a strategy's result is
+ * recorded once (versioned; a replay adds nothing; one not allowed in the
+ * workflow is refused), joins the open struggle's strategies_tried, and when
+ * the struggle resolves in that session it is the breakthrough's what_worked.
+ */
+export const strategyOutcome = {
+  name: "learning.strategy_outcome", area: "learning", risk: "write",
+  description: "recordStrategyOutcome stores a strategy's result once (versioned), refuses one not allowed in the workflow, and the strategy appears as what_worked when the struggle resolves.",
+  params: { learner: { default: "@tester31" } },
+  async run(ctx, p) {
+    const me = await ctx.as(p.learner);
+    const { default: db } = await import("../../../db.js");
+    const E = () => db.schema("edu");
+    const { concept } = await gateConcept(ctx, db, me, "Transpiration");
+    const sessionRef = `teaching:${randomUUID()}`;
+    ctx.cleanup(async () => {
+      await E().from("learning_strategy_outcomes").delete().eq("learner_id", me.id).eq("session_ref", sessionRef);
+      await E().from("learning_struggles").delete().eq("learner_id", me.id).eq("concept_id", concept.id);
+      await E().from("concept_catalog").delete().eq("id", concept.id);
+    });
+    for (const table of ["learning_strategy_outcomes", "learning_struggles"]) {
+      const probe = await E().from(table).select("id").limit(1);
+      if (probe.error) ctx.expect.blocked(`edu.${table} not there yet: ${probe.error.message}`);
+    }
+    const { recordLearningEvent } = await import("../../adaptive-learning/learning-events.js");
+    const { recordStrategyOutcome } = await import("../../adaptive-learning/strategies/outcomes.js");
+    const base = { learnerId: me.id, conceptId: concept.id, source: "teaching", sessionRef };
+
+    const found = await recordLearningEvent({ ...base, kind: "misconception_detected", turnRef: "t1:misconception_detected" });
+    ctx.expect.ok("a misconception opens a struggle", found.recorded && (found.struggles || []).some((s) => s.status === "opened" || s.status === "updated"), found);
+
+    const refused = await recordStrategyOutcome({ learnerId: me.id, strategyId: "retrieval_practice", outcome: "worked", workflow: "teaching", sessionRef, conceptId: concept.id });
+    ctx.expect.eq("a strategy not allowed in Teaching is refused", refused.reason, "strategy_not_permitted");
+
+    const input = { learnerId: me.id, strategyId: "contrast_pairs", outcome: "worked", workflow: "teaching", sessionRef, turnRef: "t2:outcome", conceptId: concept.id, struggleType: "misconception" };
+    const first = await recordStrategyOutcome(input);
+    ctx.note(`outcome: ${JSON.stringify(first)}`);
+    ctx.expect.ok("the outcome is recorded", first.recorded && !first.duplicate && !!first.id, first);
+    const again = await recordStrategyOutcome(input);
+    ctx.expect.ok("…a replay adds nothing", again.recorded && again.duplicate, again);
+    const rows = await ctx.db.rows("edu.learning_strategy_outcomes", { learner_id: me.id, session_ref: sessionRef }, { columns: "strategy_id, strategy_version, library_version, outcome, workflow" });
+    ctx.expect.eq("one outcome row", rows.length, 1);
+    ctx.expect.ok("…versioned (strategy v3, library v3)", rows[0]?.strategy_version === 3 && rows[0]?.library_version === 3, rows[0]);
+    const [open] = await ctx.db.rows("edu.learning_struggles", { learner_id: me.id, concept_id: concept.id }, { columns: "status, strategies_tried" });
+    ctx.expect.ok("the open struggle lists it as tried", open?.status === "open" && (open.strategies_tried || []).includes("contrast_pairs"), open);
+
+    // The repair names no strategy: the one recorded as working in this session is credited.
+    await recordLearningEvent({ ...base, kind: "misconception_cleared", turnRef: "t3:misconception_cleared" });
+    const [done] = await ctx.db.rows("edu.learning_struggles", { learner_id: me.id, concept_id: concept.id }, { columns: "status, what_worked_strategy, what_worked, resolved_at" });
+    ctx.note(`resolved: ${JSON.stringify(done)}`);
+    ctx.expect.eq("the struggle resolves (a breakthrough)", done?.status, "resolved");
+    ctx.expect.eq("…and what worked is the recorded strategy", done?.what_worked_strategy, "contrast_pairs");
+    ctx.expect.ok("…in words too", /contrast pairs/i.test(done?.what_worked || ""), done?.what_worked);
+  },
+};
+
+/**
+ * Phase 4a slice 4 — learning.backfill_idempotent: a teaching session whose
+ * misconception lived only in adaptive_sessions.teaching_evidence is
+ * backfilled through the recorder (source "backfill"): its evidence row and
+ * struggle appear once, and a second run adds nothing.
+ */
+export const backfillIdempotent = {
+  name: "learning.backfill_idempotent", area: "learning", risk: "write",
+  description: "The one-off backfill turns a teaching session's stored misconception into evidence + a struggle; running it twice adds nothing.",
+  params: { learner: { default: "@tester32" } },
+  async run(ctx, p) {
+    const me = await ctx.as(p.learner);
+    const { default: db } = await import("../../../db.js");
+    const E = () => db.schema("edu");
+    const { concept, title } = await gateConcept(ctx, db, me, "Capillarity");
+    const at = new Date().toISOString();
+    const { data: session, error } = await E().from("adaptive_sessions").insert({
+      student_id: me.id, topic: title, subject: "Biology", subtopics: [], objectives: { gate: ctx.marker },
+      current_subtopic_idx: 0, current_phase: "1", status: "abandoned", started_at: at, updated_at: at,
+      session_history: [], objectives_covered: {}, confidence_by_subtopic: {},
+      teaching_evidence: { concepts: [{ attempts: 2, unresolvedMisconception: true, masteryStatus: "developing", coreExplanation: 0.4 }] },
+    }).select("id").single();
+    if (error) ctx.expect.blocked(`couldn't add the marked teaching session: ${error.message}`);
+    ctx.cleanup(async () => {
+      await E().from("learning_struggles").delete().eq("learner_id", me.id).eq("concept_id", concept.id);
+      await E().from("adaptive_sessions").delete().eq("id", session.id);
+      await E().from("concept_catalog").delete().eq("id", concept.id);   // cascades the evidence + state
+    });
+    const probe = await E().from("learning_struggles").select("id").limit(1);
+    if (probe.error) ctx.expect.blocked(`edu.learning_struggles not there yet: ${probe.error.message}`);
+
+    const { backfillLearningEvidence } = await import("../../adaptive-learning/learning-backfill.js");
+    const counts = async () => ({
+      evidence: await ctx.db.rows("edu.learner_concept_evidence", { learner_id: me.id, concept_id: concept.id }, { columns: "observation_kind, provenance, source_session_id" }),
+      struggles: await ctx.db.rows("edu.learning_struggles", { learner_id: me.id, concept_id: concept.id }, { columns: "id, attempts_before, status" }),
+    });
+    // Only this session: the marked row is newer than the live-recording cutoff, so `before` is lifted.
+    const first = await backfillLearningEvidence({ learnerId: me.id, sessionIds: [session.id], before: null });
+    ctx.note(`first: ${JSON.stringify(first)}`);
+    const a = await counts();
+    ctx.expect.ok("the stored misconception becomes one evidence row, source backfill",
+      a.evidence.length === 1 && a.evidence[0].observation_kind === "misconception_detected" && a.evidence[0].provenance?.source === "backfill"
+        && a.evidence[0].source_session_id === `backfill:teaching:${session.id}`, a.evidence);
+    ctx.expect.ok("…and opens one struggle", a.struggles.length === 1 && a.struggles[0].status === "open", a.struggles);
+
+    const second = await backfillLearningEvidence({ learnerId: me.id, sessionIds: [session.id], before: null });
+    ctx.note(`second: ${JSON.stringify(second)}`);
+    const b = await counts();
+    ctx.expect.eq("a second run adds no evidence row", b.evidence.length, a.evidence.length);
+    ctx.expect.eq("…no struggle row", b.struggles.length, a.struggles.length);
+    ctx.expect.eq("…and no extra attempt on it", b.struggles[0]?.attempts_before, a.struggles[0]?.attempts_before);
+  },
+};
+
+export const LEARNING_EVENTS = [recorderMisconception, struggleBreakthrough, strategyOutcome, backfillIdempotent];
