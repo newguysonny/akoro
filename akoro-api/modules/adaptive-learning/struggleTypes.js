@@ -81,3 +81,22 @@ export const SENSITIVE_TYPES = Object.freeze(ROWS.filter((r) => !r[4]).map((r) =
 export const HEALTH_EXPIRY_DAYS = 30;
 
 export const struggleType = (id) => (Object.prototype.hasOwnProperty.call(STRUGGLE_TYPES, id) ? STRUGGLE_TYPES[id] : null);
+
+/**
+ * Who may record each type (§7.15 "Detected by"): `rule` = computed by code,
+ * `agent` = observed by the controller / Sergeant (needs a cited observation),
+ * `learner` = the learner said it. recordStruggle refuses any other detector —
+ * e.g. `health_energy` is never inferred, only the learner's own words.
+ */
+export const DETECTED_BY = Object.freeze({
+  misconception: ["rule"], partial_understanding: ["rule", "agent"], fragile_knowledge: ["rule"],
+  vocabulary_language: ["agent"], prior_knowledge_conflict: ["agent"], overgeneralization: ["agent"], prerequisite_gap: ["rule"],
+  decay: ["rule"], encoding_failure: ["rule"], retrieval_failure: ["rule"], interference: ["rule"], context_dependence: ["rule"],
+  wrong_strategy: ["rule"], strategy_plateau: ["rule"], no_strategy: ["learner", "agent"], inefficient_strategy: ["rule"],
+  streak_break: ["rule"], confidence_collapse: ["rule", "agent"], frustration_giving_up: ["rule", "agent"],
+  anxiety: ["learner", "rule"], boredom_disengagement: ["agent"], overload: ["learner", "rule"],
+  procrastination: ["rule"], poor_planning: ["rule"], time_management: ["rule"], inconsistent_practice: ["rule"], no_self_monitoring: ["rule"],
+  time_pressure: ["rule"], distraction_context: ["learner", "rule"], resource_gap: ["rule"], device_access: ["rule"], health_energy: ["learner"],
+  test_anxiety: ["rule", "learner"], format_mismatch: ["rule"], careless_error: ["agent"], speed: ["rule"], retest_failure: ["rule"],
+  help_seeking_failure: ["rule", "agent"], feedback_misuse: ["rule"], fixed_mindset: ["agent"], goal_confusion: ["agent", "learner"],
+});

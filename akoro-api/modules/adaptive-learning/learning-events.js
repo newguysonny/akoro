@@ -90,7 +90,10 @@ export async function recordLearningEvent({
     const state = Array.isArray(data) ? data[0] || null : data || null;
     const event = { learnerId, conceptId: concept, kind, source, subject, topic, sessionRef, turnRef, quality: shape.response_quality, state, workflowId, details };
     for (const fn of listeners) { try { await fn(event); } catch (e) { console.warn("[learning-events] listener:", e?.message || e); } }
-    return { recorded: true, conceptId: concept, state };
+    // Struggles open / become breakthroughs (slice 2). Never fails the write.
+    let struggles = [];
+    try { struggles = await (await import("./struggles.js")).afterLearningEvent(event); } catch (e) { console.warn("[learning-events] struggles:", e?.message || e); }
+    return { recorded: true, conceptId: concept, state, struggles };
   } catch (e) {
     console.warn(`[learning-events] ${kind} failed:`, e?.message || e);
     return { recorded: false, reason: "error" };

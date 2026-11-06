@@ -53,4 +53,59 @@ export const recorderMisconception = {
   },
 };
 
-export const LEARNING_EVENTS = [recorderMisconception];
+/**
+ * Phase 4a slice 2 — learning.struggle_breakthrough: the same misconception
+ * found in teaching opens ONE struggle (rule-detected, concept-scoped); a
+ * replay adds no second row; its repair resolves it — a breakthrough with
+ * resolved_at and days_to_overcome.
+ */
+export const struggleBreakthrough = {
+  name: "learning.struggle_breakthrough", area: "learning", risk: "write",
+  description: "A misconception found in teaching opens one struggle; its repair turns it into a breakthrough (resolved_at, days_to_overcome).",
+  params: { learner: { default: "@tester30" } },
+  async run(ctx, p) {
+    const me = await ctx.as(p.learner);
+    const { default: db } = await import("../../../db.js");
+    const tag = ctx.marker.replace(/[^a-z0-9]/gi, "").toLowerCase().slice(-10);
+    const title = `Diffusion gate ${tag}`;
+    const { data: concept, error } = await db.schema("edu").from("concept_catalog").insert({
+      curriculum_key: "verify-gate", subject: "Biology", topic_key: `diffusion-gate-${tag}`, code: `gate.diffusion.${tag}`,
+      title, objective: "Explain diffusion as movement from high to low concentration.", source_type: "reviewed_content",
+      source_ref: { gate: ctx.marker }, status: "approved",
+    }).select("id").single();
+    if (error) ctx.expect.blocked(`couldn't add the test concept: ${error.message}`);
+    // Struggles keep their row if a concept goes (SET NULL) — remove this run's first.
+    ctx.cleanup(async () => {
+      await db.schema("edu").from("learning_struggles").delete().eq("learner_id", me.id).eq("concept_id", concept.id);
+      await db.schema("edu").from("concept_catalog").delete().eq("id", concept.id);
+    });
+    const probe = await db.schema("edu").from("learning_struggles").select("id").limit(1);
+    if (probe.error) ctx.expect.blocked(`edu.learning_struggles not there yet (run 2026-learning-struggles.sql): ${probe.error.message}`);
+
+    const { recordTeachingEvidence } = await import("../../adaptive-learning/teaching-workflow/tools.js");
+    const orchestrator = { sessionMeta: { studentId: me.id, topic: title, subject: "Biology" }, dbSessionId: randomUUID() };
+    const turn = (attempts, present, repaired) => ({ topic: title, mustKnowIndex: 0, mustKnowParts: [], currentSubtopic: null,
+      evidenceUpdate: { observation: { misconceptionPresent: present }, current: { attempts }, misconceptionRepaired: repaired } });
+    const struggles = () => ctx.db.rows("edu.learning_struggles", { learner_id: me.id, concept_id: concept.id },
+      { columns: "id, struggle_type, category, detected_by, status, resolved_at, days_to_overcome, evidence_refs, attempts_before, sensitive" });
+
+    const found = await recordTeachingEvidence(orchestrator, turn(1, true, false));
+    ctx.note(`found: ${JSON.stringify(found).slice(0, 300)}`);
+    const [open] = await struggles();
+    ctx.expect.ok("a misconception struggle is opened, rule-detected", open?.struggle_type === "misconception" && open.detected_by === "rule" && open.status === "open", open);
+    ctx.expect.ok("…citing the teaching turn", (open?.evidence_refs || []).some((r) => r.startsWith("teaching:")), open?.evidence_refs);
+
+    await recordTeachingEvidence({ ...orchestrator, dbSessionId: randomUUID() }, turn(1, true, false));
+    const afterRepeat = await struggles();
+    ctx.expect.eq("the same misconception again adds no second struggle", afterRepeat.length, 1);
+    ctx.expect.ok("…but counts the attempt", (afterRepeat[0]?.attempts_before || 0) >= 1, afterRepeat[0]);
+
+    await recordTeachingEvidence(orchestrator, turn(2, false, true));
+    const [done] = await struggles();
+    ctx.note(`resolved: ${JSON.stringify(done)}`);
+    ctx.expect.eq("its repair resolves it (a breakthrough)", done?.status, "resolved");
+    ctx.expect.ok("…with resolved_at and days_to_overcome", !!done?.resolved_at && Number.isInteger(done?.days_to_overcome), done);
+  },
+};
+
+export const LEARNING_EVENTS = [recorderMisconception, struggleBreakthrough];
