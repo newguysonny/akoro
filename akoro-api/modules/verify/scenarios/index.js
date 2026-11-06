@@ -124,6 +124,8 @@ export const SUITES = {
   battles: ["battles.entry_gates"],
   // Phase 11 UI backends: the school's struggles view (D39) and the chat's model picker (§7.11.5).
   "phase11-ui": ["school.struggles_scope", "models.picker_resolution", "models.tier_lists", "teaching.direct_workflow", "school.struggles_recorded"],
+  // Phases 4, 4a, 5, 10, 11 close-out (2026-11-06): every new and affected check in one run.
+  "phase-closeout": ["learning.recorder_misconception", "learning.struggle_breakthrough", "learning.strategy_outcome", "learning.backfill_idempotent", "learner_model.next_action", "context.sets_per_operation", "studyprep.inline_full", "studyprep.plan_rejection", "studyprep.budget_ceiling", "studyprep.cap_out", "school.struggles_scope", "models.picker_resolution", "models.tier_lists", "teaching.direct_workflow", "school.struggles_recorded", "workflow.dashboard_descriptors", "writes.no_residue"],
   "self-tooling": ["selftool.views_match_schema", "selftool.schema_lookup_safe", "selftool.create_spec_matches_db", "selftool.create_rejects_forbidden",
     "selftool.agent_builds_tool", "selftool.agent_uses_schema_lookup", "selftool.agent_escalates", "selftool.sandbox_contained", "selftool.code_tool",
     "selftool.instructor_scope", "selftool.instructor_tool_matches_db", "selftool.instructor_agent_builds"],
