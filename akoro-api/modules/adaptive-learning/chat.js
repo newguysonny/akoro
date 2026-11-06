@@ -44,7 +44,8 @@ export const protegeDeps = {
     return data || [];
   },
 };
-import { publicModelList, resolveChatModel, pickerInfo } from "../../lib/modelCatalogue.js";
+import { publicModelList, resolveChatChoice, pickerInfo, pickerEnabled } from "../../lib/modelCatalogue.js";
+import { allowedModelsFor } from "../../lib/modelTiers.js";
 const { Pool } = pkg;
 import db from "../../db.js";
 import config from "../../config/index.js";
@@ -4333,13 +4334,20 @@ export const chatModelMenu = () => ([
   { id: "think",    model: THINK_MODEL,    kind: "Thinking", description: "Reasons step by step before answering — best for hard problems." },
   { id: "research", model: RESEARCH_MODEL, kind: "Research", description: "A deeper pass with more syllabus and past-question references." },
 ]);
-router.get("/models", (_req, res) => {
+router.get("/models", async (req, res) => {
   res.set("Cache-Control", "private, max-age=300");
   // modes: the chat's modes and their models; models: the catalogue a
   // learner may pick for the standard mode (Grand Plan §7.11) — each says
   // whether this server can use it, or why not ("coming soon"), and its cost
-  // against the default; picker: whether the §7.11.5 picker is on here.
-  res.json({ modes: chatModelMenu(), models: publicModelList(), picker: pickerInfo() });
+  // against the default; picker: whether the §7.11.5 picker is on here and,
+  // when it is, the payer's tier (§7.11.5a) — a model outside its list is
+  // listed as locked to a plan.
+  const tier = pickerEnabled() && req.user?.id ? await allowedModelsFor(req.user.id).catch(() => null) : null;
+  res.json({
+    modes: chatModelMenu(),
+    models: publicModelList(process.env, { allowedModels: tier?.allowedModels ?? null }),
+    picker: { ...pickerInfo(), ...(tier ? { tier: tier.tier?.name || null, tierSource: tier.source, allowedModels: tier.allowedModels } : {}) },
+  });
 });
 
 /**
@@ -4545,8 +4553,14 @@ router.post("/agent", async (req, res) => {
     const isResearch = mode === "research";
     // The learner's model pick (a catalogue id) drives the standard mode's
     // decisions and answer; Think and Research keep their own models. An
-    // unknown or unavailable pick is ignored — the default answers.
-    const chatModel = mode === "default" ? resolveChatModel(req.body?.model) : null;
+    // unknown or unavailable pick is ignored — the default answers. With the
+    // §7.11.5 picker on, the pick must also be in the payer's tier list
+    // (§7.11.5a); a refused pick says why (modelNotice) and the default answers.
+    const picked = mode === "default" && typeof req.body?.model === "string" && req.body.model ? req.body.model : null;
+    const tierModels = picked && pickerEnabled() ? await allowedModelsFor(req.user.id).catch(() => null) : null;
+    const { apiModel: chatModel, notice: modelNotice } = picked
+      ? resolveChatChoice(picked, process.env, { allowedModels: tierModels?.allowedModels ?? null })
+      : { apiModel: null, notice: null };
     const role = ["instructor", "teacher", "school", "school_admin", "admin"].includes(req.user?.role)
       ? "instructor" : "student";
     // The instructor app asked, but the session is a learner's: a request that
@@ -4566,6 +4580,7 @@ router.post("/agent", async (req, res) => {
     let dialogue = safeHistory(history);
 
     if (wantsStream) beginStream();
+    if (modelNotice && wantsStream) status("model", modelNotice);
     if (durable) {
       // A durable-context failure (pending migration, transient DB error)
       // must never take the chat down: degrade to the plain-transcript path,
@@ -5023,6 +5038,7 @@ router.post("/agent", async (req, res) => {
       retrieval,
       toolExecutions: prepared.toolExecutions,
       ...(durable ? { durableContext: true } : {}),
+      ...(modelNotice ? { modelNotice } : {}),
     };
     if (!wantsStream) {
       return res.json({ success: true, reply, response: reply, thinking, syllabus: syllabusRefs, pastQuestions: pastRefs, curriculum: curriculumRefs, mode, metadata, toolExecutions: prepared.toolExecutions, trace: traceBlocks, messageId: savedReplyId });

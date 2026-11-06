@@ -54,8 +54,10 @@ test("a learner's pick resolves to an API model only when available", () => {
 });
 
 test("the chat: the pick drives the standard mode only, and /models lists the catalogue", () => {
-  assert.match(chat, /const chatModel = mode === "default" \? resolveChatModel\(req\.body\?\.model\) : null;/);
+  assert.match(chat, /const picked = mode === "default" && typeof req\.body\?\.model === "string"/);
+  assert.match(chat, /resolveChatChoice\(picked, process\.env, \{ allowedModels: tierModels\?\.allowedModels \?\? null \}\)/);
   assert.match(chat, /model: chatModel,/);
   assert.match(chat, /model: model \|\| OPENAI_MODEL,/);
-  assert.match(chat, /res\.json\(\{ modes: chatModelMenu\(\), models: publicModelList\(\), picker: pickerInfo\(\) \}\);/);
+  assert.match(chat, /models: publicModelList\(process\.env, \{ allowedModels: tier\?\.allowedModels \?\? null \}\),/);
+  assert.match(chat, /picker: \{ \.\.\.pickerInfo\(\),/);
 });

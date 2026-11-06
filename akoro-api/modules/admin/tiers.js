@@ -51,7 +51,7 @@ const tierAuditView = (t) => t && ({
   name: t.name, platform: t.platform, access: t.access,
   price_monthly: t.price_monthly, price_annual: t.price_annual,
   cap: t.cap, student_cap: t.student_cap, instructor_cap: t.instructor_cap,
-  duration_days: t.duration_days, gated_features: t.gated_features,
+  duration_days: t.duration_days, gated_features: t.gated_features, allowed_models: t.allowed_models ?? null,
 });
 
 /* ── Tier catalog ──────────────────────────────────────────────────────────── */

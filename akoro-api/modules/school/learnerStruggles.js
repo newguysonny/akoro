@@ -164,7 +164,7 @@ export function buildStruggleView({ students = [], classes = [], struggles = [],
   const learners = [];
   const totals = new Map(classes.map((c) => [c.id, {
     classId: c.id, name: c.name || null,
-    linked: 0, unlinked: 0, learnersStruggling: 0, open: 0, resolved: 0, mayNeedSupport: 0,
+    linked: 0, unlinked: 0, learnersStruggling: 0, open: 0, resolved: 0, mayNeedSupport: 0, sensitiveOpen: 0,
     byCategory: new Map(), byType: new Map(), byTopic: new Map(),
   }]));
   for (const st of students) {
@@ -194,6 +194,8 @@ export function buildStruggleView({ students = [], classes = [], struggles = [],
     }
     if (open.length) t.learnersStruggling += 1;
     if (flag) t.mayNeedSupport += 1;
+    // Sensitive struggles are counted for the class, never described (no type, topic or learner).
+    t.sensitiveOpen += list.filter((s) => s.status === "open" && struggleType(s.type).sensitive).length;
     if (!open.length && !resolved.length && !flag) continue;  // healthy takes no space
     learners.push({
       studentId: student.id, name: [student.first_name, student.last_name].filter(Boolean).join(" ") || null,
@@ -208,7 +210,7 @@ export function buildStruggleView({ students = [], classes = [], struggles = [],
     version: STRUGGLE_TYPES_VERSION,
     classes: [...totals.values()].map((t) => ({
       classId: t.classId, name: t.name, linked: t.linked, unlinked: t.unlinked,
-      learnersStruggling: t.learnersStruggling, open: t.open, resolved: t.resolved, mayNeedSupport: t.mayNeedSupport,
+      learnersStruggling: t.learnersStruggling, open: t.open, resolved: t.resolved, mayNeedSupport: t.mayNeedSupport, sensitiveOpen: t.sensitiveOpen,
       byCategory: Object.keys(STRUGGLE_CATEGORIES).filter((c) => t.byCategory.get(c)).map((c) => ({ category: c, label: STRUGGLE_CATEGORIES[c], open: t.byCategory.get(c) })),
       topTypes: top(t.byType, 5), topTopics: top(t.byTopic, 5),
     })),
@@ -260,7 +262,7 @@ export async function viewerScope(schoolId, viewer) {
 async function recordedStruggles(learnerIds) {
   const { data, error } = await E().from("learning_struggles")
     .select("learner_id, struggle_type, category, subject, concept_id, topic_label, detected_by, detected_at, status, struggle_summary, what_worked, what_worked_strategy, resolved_at, sensitive, expires_at")
-    .in("learner_id", learnerIds).limit(5000);
+    .in("learner_id", learnerIds).in("status", ["open", "resolved"]).limit(5000);
   if (error) {
     if (MISSING_TABLE.has(error.code) || /does not exist|schema cache/i.test(error.message || "")) return [];  // the recorder isn't deployed yet
     throw new Error(`learning_struggles: ${error.message}`);
