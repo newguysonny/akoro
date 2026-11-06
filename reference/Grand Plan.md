@@ -3066,6 +3066,24 @@ planning loop's tool names, the double practice charge, empty syllabus data).
 - **Exit:** a misconception detected and repaired in a live teaching session
   appears in `learner_concept_evidence` and produces a breakthrough row;
   backfill is idempotent; existing tests green.
+- **Status (2026-11-06):** built in four slices, each gated on the sandbox.
+  - ✅ **Slice 1 — the recorder.** `recordLearningEvent`
+    (`adaptive-learning/learning-events.js`): every event carries a required,
+    weighted `source`; approved catalogue concepts only; idempotent per session +
+    turn + concept; never throws; listeners for slice 2. Teaching now records
+    `misconception_detected` / `misconception_cleared` (they lived only in the
+    session JSON); Study Prep and proctored Practice write through it (same
+    ledger-only rows); Decay Review records per-concept `recall_success` /
+    `recall_gap`. **Found and fixed:** `edu.record_learner_concept_evidence` had
+    failed on every call since it was written ("column reference learner_id is
+    ambiguous") — no evidence, the agent gateway's included, was ever recorded
+    through it (`2026-concept-evidence-ambiguity-fix.sql`). Gate
+    `learning.recorder_misconception` PASS: misconception_active on, then off.
+  - ⏳ Slice 2 — `learning_struggles`, the 41-type taxonomy, `recordStruggle`, rule
+    detectors, breakthrough resolution.
+  - ⏳ Slice 3 — Strategy Library v3 (one `library.js`, 22 entries + guides),
+    `recordStrategyOutcome`.
+  - ⏳ Slice 4 — backfill and the exit gate (a breakthrough row).
 
 ### Phase 5 — Study Prep completion
 - Topic state machine §8.3; exam-prep run reduced to attempt record.
