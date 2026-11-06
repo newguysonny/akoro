@@ -86,7 +86,7 @@ export async function recordLearningEvent({
       p_provenance: { source, ...(workflowId ? { workflowId } : {}), ...(subject ? { subject: clip(subject, 80) } : {}), ...(topic ? { topic: clip(topic, 160) } : {}), ...details },
       ...(observedAt ? { p_observed_at: observedAt } : {}),
     });
-    if (error) { console.error(`[learning-events] ${kind} not recorded:`, error.message); return { recorded: false, reason: "write_failed", conceptId: concept }; }
+    if (error) { console.error(`[learning-events] ${kind} not recorded:`, error.message); return { recorded: false, reason: "write_failed", detail: String(error.message || "").slice(0, 200), conceptId: concept }; }
     const state = Array.isArray(data) ? data[0] || null : data || null;
     const event = { learnerId, conceptId: concept, kind, source, subject, topic, sessionRef, turnRef, quality: shape.response_quality, state, workflowId, details };
     for (const fn of listeners) { try { await fn(event); } catch (e) { console.warn("[learning-events] listener:", e?.message || e); } }
