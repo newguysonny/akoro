@@ -3079,8 +3079,14 @@ planning loop's tool names, the double practice charge, empty syllabus data).
     ambiguous") — no evidence, the agent gateway's included, was ever recorded
     through it (`2026-concept-evidence-ambiguity-fix.sql`). Gate
     `learning.recorder_misconception` PASS: misconception_active on, then off.
-  - ⏳ Slice 2 — `learning_struggles`, the 41-type taxonomy, `recordStruggle`, rule
-    detectors, breakthrough resolution.
+  - ✅ Slice 2 (2026-11-06) — `edu.learning_struggles` (`2026-learning-struggles.sql`,
+    one open row per learner + type + concept), the 41-type taxonomy with who may
+    detect each (`DETECTED_BY`; health_energy only from the learner), `struggles.js`
+    (`recordStruggle`, `resolveStruggles`, rule detectors). The recorder runs them
+    after every write: misconception found → open, repaired → resolved (a
+    breakthrough with `resolved_at`, `days_to_overcome`); recall gap/success in
+    decay review → decay. Sensitive types keep type + date only. Gate
+    `learning.struggle_breakthrough` PASS on the sandbox.
   - ⏳ Slice 3 — Strategy Library v3 (one `library.js`, 22 entries + guides),
     `recordStrategyOutcome`.
   - ⏳ Slice 4 — backfill and the exit gate (a breakthrough row).
