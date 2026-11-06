@@ -6,6 +6,7 @@
  *                                            ⇄ paused → completed|abandoned|cancelled
  *   Topic:   queued → active → understood | flagged_gap | capped_out | deferred
  */
+import { strategiesFor } from "../strategies/library.js";
 
 export const SESSION_STATES = Object.freeze([
   "planning", "awaiting_confirmation", "topic_active", "replanning", "paused", "completed", "abandoned", "cancelled",
@@ -60,7 +61,8 @@ export const POLICY = Object.freeze({
   DEFERRED_RETRIES_PER_SESSION: 1,// Decision 5
   INTENT_MAX_CHARS: 240,          // S5 still-open, adopted
   FAN_OUT_CONCURRENCY: 4,         // S4: generation fan-out ≤ 3–4
-  STRATEGY_LIBRARY: Object.freeze(["teach_back", "different_analogy", "interleave", "space_out", "escalate_human"]),
+  // The ONE library's Study Prep strategies (strategies/library.js, §7.7.2 v3).
+  STRATEGY_LIBRARY: Object.freeze(strategiesFor("study_prep", { includeDisabled: true })),
 });
 
 /**

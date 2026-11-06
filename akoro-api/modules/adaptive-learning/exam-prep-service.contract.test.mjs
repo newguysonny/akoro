@@ -108,8 +108,11 @@ test("estimateSessionCost prices practice plus ROUNDED per-loop LLM cost", () =>
   assert.equal(engine.estimateSessionCost({ topicCount: 99 }).practiceCoins, 12 * 2 * 2);
 });
 
-test("the strategy library is the curated five and nothing else", () => {
-  assert.deepEqual(engine.STRATEGY_LIBRARY, ["teach_back", "different_analogy", "interleave", "space_out", "escalate_human"]);
+// Strategy Library v3 (§7.7.2, D40): the Study Prep column of the one library.
+test("the strategy library is the v3 Study Prep set and nothing else", () => {
+  assert.deepEqual(engine.STRATEGY_LIBRARY, ["teach_back", "different_analogy", "interleave", "space_out", "escalate_human", "peer_help", "contrast_pairs", "prerequisite_review", "vocabulary_focus", "worked_examples", "varied_formats", "easy_wins_first", "chunk_plan", "make_concrete", "schedule_plan", "offline_pack", "format_practice", "self_check", "goal_clarify"]);
+  assert.equal(engine.isPermittedStrategy("retrieval_practice"), false, "review and practice only");
+  assert.equal(engine.isPermittedStrategy("worked_example"), false, "a legacy alias is not a library id here");
   assert.equal(engine.isPermittedStrategy("teach_back"), true);
   assert.equal(engine.isPermittedStrategy("drop_the_topic"), false);
   assert.equal(engine.isPermittedStrategy(null), false);
