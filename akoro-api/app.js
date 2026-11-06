@@ -716,6 +716,17 @@ if (process.env.REDIS_URL && !skipJob("battle worker")) {
 
   // Learner-requested agent check-ins are durable delayed jobs. Their worker
   // creates the persistent chat and notification at the requested time.
+  // Phase 21: agents handle each other's messages on their own lane
+  // (a message arriving / the agent coming online wakes it; a 5-min sweep).
+  try {
+    if (!skipJob("agent inbox worker")) {
+      const { startAgentInboxWorker } = await import("./modules/agent-network/autoReply.js");
+      startAgentInboxWorker();
+      console.log("[agent-inbox] worker started at boot");
+    }
+  } catch (e) {
+    console.error("[agent-inbox] worker failed to start:", e.message);
+  }
   try {
     if (!skipJob("chat follow-ups worker")) {
       startChatFollowUpWorker();

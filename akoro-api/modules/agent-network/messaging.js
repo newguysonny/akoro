@@ -85,7 +85,7 @@ export function shapeAnswer(raw) {
 }
 
 /** One online agent answers now (billed to the asker). */
-async function answerNow({ asker, target, question, subject, topic, deps }) {
+export async function answerNow({ asker, target, question, subject, topic, deps }) {
   const [{ data: agent }, { data: askerAgent }] = await Promise.all([
     db.from("user_agents").select("agent_name, agent_emoji").eq("user_id", target.id).maybeSingle(),
     db.from("user_agents").select("agent_name").eq("user_id", asker).maybeSingle(),
@@ -124,13 +124,22 @@ async function checkLimits(fromId, toId) {
 
 /** Send a consult or a suggestion to another agent. */
 export async function messageAgent(fromId, input = {}, { deps } = {}) {
-  const kind = input.kind === "suggestion" ? "suggestion" : "consult";
+  // Phase 21: "chat" (friendly conversation) and "friend_request" join consult / suggestion.
+  const kind = ["suggestion", "chat", "friend_request"].includes(input.kind) ? input.kind : "consult";
   const target = await resolveUser(input.to ?? input.userId ?? input.username);
   if (target.id === fromId) throw fail("That's your own agent.");
   const screened = screenMessage(input.question ?? input.body ?? input.message);
   if (!screened.ok) throw fail(SCREEN_REASON[screened.reason] || "That message can't be sent.");
   await checkMessageable(fromId, target);
   await checkLimits(fromId, target.id);
+  if (kind === "friend_request") {
+    const [a, b] = [fromId, target.id].sort();
+    const { data: f } = await edu().from("agent_friends").select("status").eq("user_a", a).eq("user_b", b).maybeSingle();
+    if (f?.status === "accepted") throw fail("You're already friends.", 409);
+    const { count: open } = await edu().from("agent_messages").select("id", { count: "exact", head: true })
+      .eq("from_user", fromId).eq("to_user", target.id).eq("kind", "friend_request").in("status", ["pending", "awaiting_learner", "delivered"]);
+    if (open) throw fail("A friend request to them is already waiting for an answer.", 409);
+  }
 
   const { data: me } = await db.from("users").select("full_name, username").eq("id", fromId).maybeSingle();
   const { data: myAgent } = await db.from("user_agents").select("agent_name, agent_emoji").eq("user_id", fromId).maybeSingle();
@@ -151,10 +160,13 @@ export async function messageAgent(fromId, input = {}, { deps } = {}) {
   }).select("id, status").single();
   if (error) throw new Error(error.message);
 
+  // Phase 21: the recipient's agent handles it on its own lane (now if it is Online, else when it comes online).
+  import("./autoReply.js").then((m) => m.wakeInbox(target.id, "message")).catch(() => {});
   const asker = `${first(me?.full_name, me?.username)}'s agent ${myAgent?.agent_name || ""}`.trim();
   await notifyUser({
     userId: target.id, type: "agent_message",
-    title: kind === "suggestion" ? `💡 ${asker} left your agent an idea` : answered ? `💬 ${asker} asked your agent — it answered` : `💬 ${asker} asked your agent something`,
+    title: kind === "suggestion" ? `💡 ${asker} left your agent an idea` : kind === "friend_request" ? `🤝 ${asker} wants to be friends`
+      : kind === "chat" ? `💬 ${asker} sent your agent a message` : answered ? `💬 ${asker} asked your agent — it answered` : `💬 ${asker} asked your agent something`,
     content: screened.question.slice(0, 140), relatedId: row.id, link: "/app?tab=agent",
   }).catch(() => {});
 

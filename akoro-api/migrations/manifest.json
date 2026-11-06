@@ -232,7 +232,8 @@
     "2026-agent-reply-ratings.sql",
     "2026-agent-prompt-overrides.sql",
     "2026-syllabus-imports.sql",
-    "2026-repeating-chat-follow-ups.sql"
+    "2026-repeating-chat-follow-ups.sql",
+    "2026-agent-conversations.sql"
   ],
   "demo": [
     "2026-seed-school-passwords.sql",

@@ -3788,6 +3788,65 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   the Phase 20 build, and step 4 with Phase 19. Step 6 is agreed; (a)
   can start any time, and (b) follows (a).
 
+
+### Phase 21 — Agents talk on their own: autonomous agent-to-agent messages (2026-11-06)
+- **Why.** Agents can message each other (`agent-network/messaging.js`: screened, rate
+  limited, "who can message my agent", blocks), and an ONLINE agent already answers a
+  study question (consult) from what its learner taught it. Everything else waited in
+  the inbox until the learner asked: in a live chat (4 Nov) the learner had to ask "Do
+  you have a message?" to learn that Oyibo had replied, and "Tega wants to be friends"
+  had no way to reach them as a decision.
+- **Message kinds:** `consult` (study question), `suggestion` (an idea), **`chat`**
+  (friendly conversation, new) and **`friend_request`** (new); battle and study-buddy
+  invites keep their own flows.
+- **Who decides — the policy (pure, `agent-network/autoReplyCore.js`):**
+
+  | Message | The protégé on its own | Asks the learner (card in chat) |
+  |---|---|---|
+  | Study question | answers from what it was taught | — (setting Off → asks) |
+  | Friendly chat | short polite reply, only with the setting "study + chat" | anything else |
+  | Friend request | never | always: **Be friends / Later / No** |
+  | Suggestion | — | told in chat, no decision needed |
+  | Anything about the learner (progress, school, plans) | never | always |
+
+  Setting **"Let my agent reply on its own"** (`agent_network_settings.auto_reply`):
+  `off` / `study` (default) / `study_chat`. Primary and JSS learners are always asked
+  for chat (a cautious stand-in until accounts carry an age). At most **3 automatic
+  replies per pair of agents a day** — two agents can never loop; past it, the learner
+  is asked. Every automatic reply is screened like any message and records why it was
+  allowed (actionBasis: inferred, rule `agent_message:<kind>`).
+- **When the agent acts — its own lane, event-driven (not the planner heartbeat):**
+  (1) a message arrives → a background job for the recipient (`agent-inbox`, one per
+  learner at a time); (2) the recipient comes online (presence goes offline → online)
+  → its backlog is processed at once; (3) a light sweep every 5 min covers only
+  learners with unprocessed messages who are online. Offline agents act when they
+  come online. The planner keeps its slow cadence; messages never wait for it.
+- **Telling the learner — in chat, one card per turn:** a decision is an approval card
+  (the existing proposal card: `agent_proposals` kinds `agent_friend` and
+  `agent_reply`), e.g. *"Tega just sent me a message — he wants to be friends. Would you
+  like us to be friends?"* **[Be friends] [Later] [No]**; an automatic reply is one line
+  (*"Tega's agent asked about osmosis — I answered from what you taught me."*). Posted
+  into the latest chat at once; in quiet hours the push notification is held back (the
+  card still waits in chat for whenever they look).
+  Approving a friend request makes the two learners **agent friends**
+  (`edu.agent_friends`) and tells the other agent; approving a reply sends the drafted
+  reply; "No" declines politely (the sender's agent is told "not now").
+- **Chat tools:** `message_agent` takes `kind: chat | friend_request` too;
+  `set_agent_auto_reply` lets the learner change the setting by asking ("let my agent
+  chat for me").
+- **Steps:** (1) migration `2026-agent-conversations.sql` (kinds, statuses,
+  `processed_at`, `auto_reply`, `agent_friends`, proposal kinds); (2) policy core + tests;
+  (3) processor + triggers (arrival, online, sweep); (4) approve/dismiss handlers;
+  (5) tools; (6) gate scenarios `network.auto_reply_consult`, `network.friend_request_card`,
+  `network.no_loop`, `network.offline_waits`; (7) **UI preview** of the setting under
+  Settings → Agent (the cards reuse the approved proposal card — no new chat UI).
+- **Status (2026-11-06):** steps 1–6 built (`autoReplyCore.js` policy, `autoReply.js`
+  processor + `agent-inbox` lane + 5-min sweep, `friends.js` approve/decline,
+  `set_agent_auto_reply`, migration, 4 gate scenarios, 7 unit tests); the agent acts
+  when its **Agent Online** switch is on, and waits otherwise. Waiting on: the sandbox
+  running this branch (gate runs), and approval of the setting's preview (step 7) —
+  until then the default `study` applies and the learner can change it in chat.
+
 ---
 
 ## 18. Acceptance tests

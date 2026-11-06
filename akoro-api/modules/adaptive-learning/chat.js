@@ -725,6 +725,7 @@ export const CHAT_TOOLS = [
     featureGate: "agent_network",
     description: "Message another learner's agent — ALWAYS find them with search_agents first. kind 'consult' asks a question: if that agent is ONLINE it answers now, " +
       "only from what its own learner taught it; if OFFLINE the question waits in its inbox and the answer comes later (check_agent_inbox). kind 'suggestion' leaves an idea. " +
+      "kind 'chat' is friendly conversation ('tell Oyibo hi', 'say we'd like to study together'); kind 'friend_request' asks to be friends ('tell Tega we'd like to be friends') — their agent asks THEIR learner, who approves or not. " +
       "Use when the learner asks you to ask / tell another agent something, or for ideas from a specific agent. No contact details, links or personal info — they're blocked. " +
       "Pass on an answer as coming from that learner's agent, by name.",
     input_schema: {
@@ -732,10 +733,20 @@ export const CHAT_TOOLS = [
       properties: {
         to: { type: "string", description: "The other learner's userId or @username (from search_agents)." },
         question: { type: "string", description: "The message, 10–400 characters." },
-        kind: { type: "string", enum: ["consult", "suggestion"] },
+        kind: { type: "string", enum: ["consult", "suggestion", "chat", "friend_request"] },
         subject: { type: "string" }, topic: { type: "string" },
       },
       required: ["to", "question"],
+    },
+  },
+  {
+    name: "set_agent_auto_reply",
+    featureGate: "agent_network",
+    description: "Change what the learner's agent may answer ON ITS OWN when other learners' agents message it: 'off' (ask the learner every time), 'study' (answer study questions from what it was taught — the default), 'study_chat' (also reply to friendly chat). Friend requests and anything about the learner always ask. Use when they say e.g. 'let my agent chat for me', 'always ask me before replying'.",
+    input_schema: {
+      type: "object",
+      properties: { mode: { type: "string", enum: ["off", "study", "study_chat"] } },
+      required: ["mode"],
     },
   },
   {
@@ -1405,7 +1416,7 @@ async function resolveLearnerSchoolContext(studentId) {
  * flag the scratchpad, and by the agent console's DRY mode, which answers
  * these with what they WOULD do instead of doing it (lib/dryRunContext.js).
  */
-export const SIDE_EFFECT_TOOLS = ["create_task", "suggest_help", "schedule_chat_follow_up", "post_to_chat", "create_tool", "cancel_scheduled_chat_follow_up", "submit_tool_request", "prepare_activity", "revise_activity_draft",
+export const SIDE_EFFECT_TOOLS = ["set_agent_auto_reply", "create_task", "suggest_help", "schedule_chat_follow_up", "post_to_chat", "create_tool", "cancel_scheduled_chat_follow_up", "submit_tool_request", "prepare_activity", "revise_activity_draft",
           "create_goal", "update_goal_progress", "save_blog_draft", "publish_blog", "update_agent_network_settings", "block_agent", "log_past_question_practice",
           "challenge_agent", "class_battle", "post_challenge_request", "accept_challenge_request", "cancel_challenge_request", "rematch_battle", "request_guide_review", "message_agent", "reply_to_agent", "start_study_prep_session", "cancel_study_prep_session",
           "consult_peer_agents", "discard_activity_draft", "schedule_activity_routine", "cancel_activity_routine", "run_teaching_tool"];
@@ -2481,6 +2492,14 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
         return { started: true, battleId: r.battleId, title: r.title, questions: r.questions, reviewsLeftToday: r.left, link: `/app?tab=battles&battle=${r.battleId}` };
       } catch (e) { return { started: false, error: e.message }; }
     }
+    case "set_agent_auto_reply": {
+      if (!["off", "study", "study_chat"].includes(input?.mode)) return clarify("mode", "Should I ask you every time, answer study questions on my own, or also reply to friendly chat?", { action: "set_agent_auto_reply" });
+      try {
+        const { saveSettings } = await import("../agent-network/network.js");
+        const saved = await saveSettings(studentId, { auto_reply: input.mode });
+        return { saved: true, mode: saved.auto_reply, means: { off: "I'll ask you before answering any agent.", study: "I'll answer study questions on my own (from what you taught me) and ask you about everything else.", study_chat: "I'll answer study questions and reply to friendly chat on my own; friend requests and anything about you still come to you." }[saved.auto_reply] };
+      } catch (error) { return { error: error.message || "Could not save that setting" }; }
+    }
     case "message_agent": {
       if (role === "instructor") return { error: "The agent network is for learners." };
       if (!input?.to) return clarify("to", "Which agent should I message? I can find them first.");
@@ -3023,6 +3042,8 @@ router.patch("/autonomy", async (req, res) => {
       userId: req.user.id, enabled: req.body.enabled,
       level: typeof req.body.level === "number" ? req.body.level : undefined,
     });
+    // Phase 21: switching the agent Online lets it handle messages that waited.
+    if (req.body.enabled) import("../agent-network/autoReply.js").then((m) => m.wakeInbox(req.user.id, "switched_on")).catch(() => {});
     res.json({ success: true, ...result });
   } catch (error) {
     res.status(500).json({ error: error.message || "Could not save agent autonomy" });

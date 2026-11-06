@@ -32,8 +32,12 @@ const firstName = (full, username) => String(full || "").trim().split(/\s+/)[0] 
 const lastWrite = new Map();   // this process: don't write more than every 45s per learner
 export async function heartbeat(userId, surface = null) {
   const now = Date.now();
-  if (now - (lastWrite.get(userId) || 0) < 45_000) return { ok: true, skipped: true };
+  const prev = lastWrite.get(userId) || 0;
+  if (now - prev < 45_000) return { ok: true, skipped: true };
   lastWrite.set(userId, now);
+  // Phase 21: coming back online (no heartbeat within the online window) wakes the
+  // agent's inbox — messages that waited while away are handled now.
+  if (now - prev > ONLINE_WINDOW_MS) import("./autoReply.js").then((m) => m.wakeInbox(userId, "online")).catch(() => {});
   if (lastWrite.size > 50_000) lastWrite.clear();
   const { error } = await edu().from("learner_presence")
     .upsert({ user_id: userId, last_seen_at: new Date(now).toISOString(), surface: surface ? String(surface).slice(0, 40) : null }, { onConflict: "user_id" });
@@ -64,6 +68,8 @@ export async function inBattleIds(ids) {
 export const DEFAULT_SETTINGS = Object.freeze({
   visibility: "everyone", accept_messages: "everyone", open_to_challenges: true,
   battle_times: [], battle_types: [], show_on_leaderboards: true, daily_subject: null,
+  // Phase 21: what the agent may answer on its own — off | study (study questions) | study_chat (+ friendly chat).
+  auto_reply: "study",
 });
 
 export async function getSettings(userId) {
@@ -80,6 +86,7 @@ export function cleanSettings(input = {}) {
   if (Array.isArray(input.battle_times)) out.battle_times = [...new Set(input.battle_times.filter((t) => BATTLE_TIMES.includes(t)))];
   if (typeof input.daily_subject === "string") out.daily_subject = input.daily_subject.trim().slice(0, 60) || null;
   else if (input.daily_subject === null) out.daily_subject = null;
+  if (["off", "study", "study_chat"].includes(input.auto_reply)) out.auto_reply = input.auto_reply;
   if (Array.isArray(input.battle_types)) out.battle_types = [...new Set(input.battle_types.filter((t) => ["1v1", "open", "team", "review"].includes(t)))];
   return out;
 }
