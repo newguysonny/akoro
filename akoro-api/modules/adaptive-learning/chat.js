@@ -377,7 +377,7 @@ export const CHAT_TOOLS = [
   },
   {
     name: "schedule_chat_follow_up",
-    description: "Schedule the agent to SEND THE LEARNER A MESSAGE later — 'message me in 10 minutes', 'remind me here at 5pm', 'check on me tomorrow at 9'. Use this (not create_task) whenever they want to receive a message. Delivery: where='here' posts it into THIS chat (use when they say 'here' / 'in this chat'), where='chat' posts into the chat given by chatId (from list_chats), where='new' (default) opens a new chat. Timing: inMinutes for relative times ('in 10 minutes' = 10, 'in 2 hours' = 120), or scheduledAt for a clock time (call get_learner_context first; ISO 8601 with offset, e.g. 2026-09-08T14:00:00+01:00). At least 1 minute ahead.",
+    description: "Schedule the agent to SEND THE LEARNER A MESSAGE later — 'message me in 10 minutes', 'remind me here at 5pm', 'check on me tomorrow at 9', 'remind me EVERY DAY at 4:30pm' (repeat='daily'). Use this (not create_task) whenever they want to receive a message. Delivery: where='here' posts it into THIS chat (use when they say 'here' / 'in this chat'), where='chat' posts into the chat given by chatId (from list_chats), where='new' (default) opens a new chat. Timing: inMinutes for relative times ('in 10 minutes' = 10, 'in 2 hours' = 120), or scheduledAt for a clock time (call get_learner_context first; ISO 8601 with offset, e.g. 2026-09-08T14:00:00+01:00). At least 1 minute ahead.",
     input_schema: {
       type: "object",
       properties: {
@@ -388,6 +388,9 @@ export const CHAT_TOOLS = [
         chatId: { type: "string", description: "With where='chat': the chatId from list_chats." },
         timezone: { type: "string", description: "Optional IANA timezone for display, for example Africa/Lagos. Defaults to the account timezone returned by get_learner_context." },
         title: { type: "string", description: "Optional title for the new chat, for example 'Biology revision check-in'." },
+        repeat: { type: "string", enum: ["daily", "weekdays"], description: "Repeat at the same clock time: 'daily' (every day) or 'weekdays' (Mon–Fri). For 'every day', 'each morning', 'remind me daily'. The first send is scheduledAt; each later one goes into the same chat." },
+        repeatDays: { type: "number", description: "With repeat: how many days the series runs (default 30, max 90)." },
+        runTool: { type: "string", description: "Optional: the name of one of the learner's OWN read tools (from Settings → Agent → My tools / their tool list) to run fresh at each send; its answer is added under the message — e.g. a 'subjects I haven't studied' tool for a daily reminder." },
       },
       required: ["message"],
     },
@@ -2242,6 +2245,14 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
           targetSessionId = await ownedChatId(studentId, input.chatId);
           if (!targetSessionId) return { error: "That chat wasn't found among the learner's chats — call list_chats for a valid chatId." };
         }
+        // runTool must be one of THIS learner's own tools (it runs as them, read-only, at each send).
+        if (input.runTool) {
+          const { listMyTools } = await import("../self-tooling/pipeline.js");
+          const mine = await listMyTools(studentId).catch(() => []);
+          if (!mine.some((t) => t.name === input.runTool && t.status === "active")) {
+            return { error: `"${input.runTool}" isn't one of the learner's active tools — build it first with create_tool, or schedule the reminder without runTool.` };
+          }
+        }
         const context = await getLearnerProfileContext(studentId);
         const schedule = await scheduleChatFollowUp({
           userId: studentId,
@@ -3977,6 +3988,16 @@ function inspectResult(value) {
 
 /** Before an activity tool runs from the instructor's chat: what the teacher never said → a clarify result, else null. */
 /** The learner's latest message in this turn's transcript (text parts only). */
+/** The agent's last reply in the kept dialogue ("" if none). */
+function lastAgentText(messages = []) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m?.role !== "assistant") continue;
+    return typeof m.content === "string" ? m.content : Array.isArray(m.content) ? m.content.filter((x) => x?.type === "text").map((x) => x.text).join(" ") : "";
+  }
+  return "";
+}
+
 function latestUserText(transcript = []) {
   for (let i = transcript.length - 1; i >= 0; i--) {
     const m = transcript[i];
@@ -4765,7 +4786,7 @@ router.post("/agent", async (req, res) => {
       conversationId,
       status: wantsStream ? status : null,
       tools: role === "student" ? openAiChatTools({
-        allowToolRequest: hasExplicitToolRequestConsent(userMessage),
+        allowToolRequest: hasExplicitToolRequestConsent(userMessage, { previousAgentText: lastAgentText(fit.kept) }),
         selfTooling: selfToolOn,
       }).concat(selfToolOn ? await learnerToolDefs(req.user.id).catch(() => []) : []) : instructorTools,
       // Learners: capability questions are answered from the live catalogue.

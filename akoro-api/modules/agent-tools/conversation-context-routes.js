@@ -94,11 +94,16 @@ async function ownedConversation(conversationId, userId) {
   return data;
 }
 
-function boundedConversationMessages(rows) {
+export function boundedConversationMessages(rows) {
   // Keep the most recent, role-correct dialogue inside the same explicit
   // budget the Python LLM adapter accepts. This bounds the private HTTP body as
   // well as provider context cost; the full raw history remains in Akoro.
-  const recentFirst = (rows || []).reverse().map(publicConversationMessage).filter(Boolean);
+  // `rows` arrive NEWEST FIRST (the query orders created_at descending). They
+  // used to be reversed here first, so the loop kept the OLDEST messages and
+  // the final reverse handed the model the chat backwards: the first question
+  // read as the latest one and was answered again in every reply, and replies
+  // like "Yes" or "4:30 pm" lost the turn they answered (2026-11-06).
+  const recentFirst = [...(rows || [])].map(publicConversationMessage).filter(Boolean);
   const selected = [];
   let remaining = 24_000;
   for (const message of recentFirst) {

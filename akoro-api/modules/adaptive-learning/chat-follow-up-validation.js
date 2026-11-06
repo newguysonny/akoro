@@ -46,7 +46,49 @@ export function validateFollowUpInput(input = {}, { defaultTimezone = TIME_ZONE_
   const delayMs = time.getTime() - Date.now();
   if (delayMs < MIN_DELAY_MS) throw new Error("scheduledAt must be at least one minute in the future");
   if (delayMs > MAX_DELAY_MS) throw new Error("scheduledAt must be within 180 days");
-  return { message, title, timezone, scheduledAt: time.toISOString(), delayMs };
+  // Repeating check-ins ("every day at 4:30pm"): the series ends after
+  // repeatDays (default 30, max 90); cancelling the pending one ends it sooner.
+  const repeat = input.repeat == null || input.repeat === "" || input.repeat === "none" ? null : String(input.repeat);
+  if (repeat && !REPEATS.has(repeat)) throw new Error("repeat must be 'daily' or 'weekdays'");
+  let repeatUntil = null;
+  if (repeat) {
+    const days = input.repeatDays == null ? 30 : Number(input.repeatDays);
+    if (!Number.isInteger(days) || days < 1 || days > 90) throw new Error("repeatDays must be a whole number from 1 to 90");
+    repeatUntil = new Date(time.getTime() + days * DAY_MS).toISOString();
+  }
+  // One of the learner's own read tools, run fresh at each send (its answer is added to the message).
+  const runTool = input.runTool == null || input.runTool === "" ? null : String(input.runTool);
+  if (runTool && !TOOL_NAME.test(runTool)) throw new Error("runTool must be the name of one of your tools");
+  return { message, title, timezone, scheduledAt: time.toISOString(), delayMs, repeat, repeatUntil, runTool };
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const REPEATS = new Set(["daily", "weekdays"]);
+const TOOL_NAME = /^[a-z][a-z0-9_]{2,47}$/;
+
+/** Day of week (0 = Sunday) of an instant in a time zone. */
+function weekdayIn(date, timeZone) {
+  const name = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }).format(date);
+  return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(name);
+}
+
+/**
+ * PURE: the next send time of a repeating check-in, or null when the series
+ * is over. Same clock time the next day (weekdays: skips Saturday and Sunday
+ * in the learner's time zone). Never earlier than `now` + 1 minute, so a late
+ * delivery doesn't fire a backlog of past days.
+ */
+export function nextOccurrence({ scheduledAt, repeat, repeatUntil, timezone = TIME_ZONE_FALLBACK, now = Date.now() }) {
+  if (!REPEATS.has(repeat)) return null;
+  let t = new Date(scheduledAt).getTime();
+  if (!Number.isFinite(t)) return null;
+  for (let guard = 0; guard < 400; guard++) {
+    t += DAY_MS;
+    if (repeat === "weekdays" && [0, 6].includes(weekdayIn(new Date(t), timezone))) continue;
+    if (t > now + MIN_DELAY_MS) break;
+  }
+  if (repeatUntil && t > new Date(repeatUntil).getTime()) return null;
+  return new Date(t).toISOString();
 }
 
 export function validateFollowUpId(value) {

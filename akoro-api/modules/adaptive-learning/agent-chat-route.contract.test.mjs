@@ -81,7 +81,8 @@ test("learner study projections remain bounded tools and product feedback needs 
     "get_concept_tracker_summary", "get_learning_insights_summary", "get_exam_prep_status",
     "get_chat_memory", "get_agent_preferences", "get_autonomy_status", "submit_tool_request",
   ]) assert.match(source, new RegExp(`name: "${tool}"`));
-  assert.match(source, /hasExplicitToolRequestConsent\(userMessage\)/);
+  // Consent is the learner's own message (a plain yes counts only after the agent's own offer).
+  assert.match(source, /hasExplicitToolRequestConsent\(userMessage, \{ previousAgentText: lastAgentText\(fit\.kept\) \}\)/);
   // P1: the agent-chat operating doctrine loads from the workspace.
   assert.match(agentChatDoctrine, /never submit one automatically/);
   assert.match(source, /assembleChatDoctrine/);
