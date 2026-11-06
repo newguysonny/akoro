@@ -235,7 +235,8 @@
     "2026-repeating-chat-follow-ups.sql",
     "2026-agent-conversations.sql",
     "2026-concept-evidence-ambiguity-fix.sql",
-    "2026-learning-struggles.sql"
+    "2026-learning-struggles.sql",
+    "2026-tier-allowed-models.sql"
   ],
   "demo": [
     "2026-seed-school-passwords.sql",
