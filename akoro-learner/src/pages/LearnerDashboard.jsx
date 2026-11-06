@@ -1348,8 +1348,13 @@ export default function LearnerDashboard() {
             onStart={cfg => {
               setConfigOpen(false);
               setConfigInitial(null);
+              // A direct session is a teaching workflow first (Grand Plan §13.1,
+              // Scenario A): the modal opens at once and joins the workflow's id
+              // to its start when it arrives. A failure never blocks the lesson.
+              const workflowReady = apiPost('/api/teaching/workflows', { topic: cfg.topic, subject: cfg.subject || null })
+                .then((r) => r?.workflowId || null).catch(() => null);
               // Inject the fetched student AI agent into the config
-              setTeachSession({ ...cfg, agentName: agentProfile.name, agentEmoji: agentProfile.emoji });
+              setTeachSession({ ...cfg, workflowReady, agentName: agentProfile.name, agentEmoji: agentProfile.emoji });
             }}
             onCancel={() => { setConfigOpen(false); setConfigInitial(null); }}
           />
