@@ -73,9 +73,17 @@ export const autoReplyConsult = {
     const sent = await send("consult", "How do you find the area of a triangle?");
     const out = await process();
     const a = (out.actions || []).find((x) => x.messageId === sent.messageId);
-    ctx.note(`action: ${JSON.stringify(a)} delivered=${sent.delivered}`);
-    ctx.expect.ok("answered on its own (now, or live when it arrived)", ["auto_answer", "tell_learner"].includes(a?.action), a);
-    const [m] = await ctx.db.rows("edu.agent_messages", { id: sent.messageId }, { columns: "status, answer, auto_replied, processed_at" });
+    // The arrival itself wakes the recipient's agent (its own background lane), which
+    // may have claimed the message before this run: wait for whichever handled it.
+    let m = null;
+    for (let i = 0; i < 20; i++) {
+      [m] = await ctx.db.rows("edu.agent_messages", { id: sent.messageId }, { columns: "status, answer, auto_replied, processed_at" });
+      if (m?.status === "answered" && m.answer) break;
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    ctx.note(`action here: ${JSON.stringify(a) || "handled by the background lane"} · delivered=${sent.delivered} · row=${JSON.stringify(m)}`);
+    ctx.expect.ok("answered on its own (here, by the background lane, or live on arrival)",
+      ["auto_answer", "tell_learner"].includes(a?.action) || (!a && m?.status === "answered" && (m.auto_replied || sent.delivered === "answered_now")), { a, m });
     ctx.expect.ok("the answer went back to the asking agent", m?.status === "answered" && !!m?.answer, m);
     ctx.expect.ok("handled once (processed)", !!m?.processed_at);
     const again = await process();
