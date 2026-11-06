@@ -3050,6 +3050,14 @@ planning loop's tool names, the double practice charge, empty syllabus data).
 - **Exit:** context tests prove planning loads `planning`, strategy selection
   loads `strategies`, teaching turns load `teaching_controller`, etc.; all
   sets within budget; boot preflight green.
+- **Status (2026-11-06):** ✅ exit met. `agent-context/operations.mjs` holds the
+  §7.4 operation → set table (Study Prep, Teaching, Decay, Practice);
+  `contextSetFor()` and `loadContext()` raise `context_unavailable` for an unknown
+  operation/set. Study Prep `wiring.js` has no set literals. `AGENT.md` is
+  workflow-neutral; `workflows/STUDY_PREP.md` carries the role; new
+  `TEACHING.md`, `GUIDE_MODE.md`, `DECAY_REVIEW.md`, `PRACTICE.md`,
+  `learning/RETENTION.md` and six sets (dormant until Phases 6/8/9 wire their
+  controllers). Tests `operations.contract.test.mjs`; gate `context.sets_per_operation`.
 
 ### Phase 4a — Learning evidence everywhere (D37)
 - `recordLearningEvent` in the Education Engine; `source` on every event.
@@ -3087,9 +3095,27 @@ planning loop's tool names, the double practice charge, empty syllabus data).
     breakthrough with `resolved_at`, `days_to_overcome`); recall gap/success in
     decay review → decay. Sensitive types keep type + date only. Gate
     `learning.struggle_breakthrough` PASS on the sandbox.
-  - ⏳ Slice 3 — Strategy Library v3 (one `library.js`, 22 entries + guides),
-    `recordStrategyOutcome`.
-  - ⏳ Slice 4 — backfill and the exit gate (a breakthrough row).
+  - ✅ Slice 3 (2026-11-06) — Strategy Library v3: one `strategies/library.js`
+    (22 entries: targets, workflows, executor Teaching | harness, guide, limits;
+    kill switch `AKORO_STRATEGIES_DISABLED`) + 22 guides
+    `akoro-agent/strategies/<id>.md` (two manifest sets). The duplicated lists
+    (education-engine, state-machine POLICY, teaching policy, offer_strategy
+    schema) read from it; NaNa gets the chosen strategy's guide.
+    `recordStrategyOutcome` (`edu.learning_strategy_outcomes`,
+    `2026-strategy-outcomes.sql`): versioned, idempotent, refuses off-library /
+    not-permitted; recorded on a teaching repair (worked), a strategy switch
+    (did_not_work), session end and decay review; a resolved struggle's
+    `what_worked_strategy` is that strategy. Gate `learning.strategy_outcome`.
+  - ✅ Slice 4 (2026-11-06) — one-off backfill (`learning-backfill.js`,
+    `scripts/backfill-learning-evidence.mjs`): teaching_evidence misconceptions
+    and exam-prep attempts → the recorder, source `backfill`, refs derived from
+    the source rows (a re-run adds nothing; rows after live recording began are
+    left to it). Gate `learning.backfill_idempotent`.
+  - ⏳ Still open: harness execution of the non-Teaching strategies (replan,
+    schedule, offline export) and Study Prep offer → outcome; question tags,
+    confusion pairs, timings (§7.15.1); `recommendStrategies` ranking; enforcing
+    `limits.maxUsesPerTopic`; the Python concept-state gateway routed through the
+    recorder (needs a validated-claim input).
 
 ### Phase 5 — Study Prep completion
 - Topic state machine §8.3; exam-prep run reduced to attempt record.
@@ -3107,6 +3133,16 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   `syllabus_exists` precondition, plan-card labelling.
 - **Exit:** full Study Prep scenario passes without Teaching (inline strategy
   path), plus plan-rejection, budget-ceiling and cap-out scenarios.
+- **Status (2026-11-06):** exit scenarios built (suite `study-prep-exit`:
+  `studyprep.inline_full`, `plan_rejection`, `budget_ceiling`, `cap_out`); the
+  submit-status guard (double submit / scored run → 409 invalid_state_transition)
+  and topic outcome written right after scoring. Built earlier: syllabus chain
+  §8.7, wakes, Teaching handoff, Agent Check as battles, materials-folder sessions.
+  Open: topic state machine §8.3 + absorbing `workflow-state.js` /
+  `adaptive-workflows.js`; `request_teaching` for every intervention (D15);
+  Agent Check tool names + locked models; §8.8 agent tools and goal type; blog
+  passage search; peer help §7.13; a single-transaction submit
+  (`edu.study_prep_submit_attempt`).
 
 ### Phase 6 — Teaching Workflow (agent-driven)
 - `teaching/controller.js`, `teaching/tools.js` (agent catalogue + fixed steps), `TEACHING_POLICY`.
@@ -3218,6 +3254,15 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   `teaching_evidence` misconception fields) now that Phase 4a records them centrally.
 - All workflows write through Education Engine; scale guards (0–1 vs 0–100).
 - **Exit:** no direct writes to concept state outside the Education Engine (grep-enforced contract test).
+- **Status (2026-11-06):** ✅ exit met in tests. One next-action path
+  (`adaptive-engine.js` `recommendNextAction`; `decideNextAction` removed);
+  student-state `mistakes`/`strengths` retired; a resumed lesson and
+  `learner.get_state` read misconceptions from `learner_concept_state`
+  (`learner-model.js`); `teaching_evidence.unresolvedMisconception` stays only as
+  the live turn's working copy. Scale guards `toUnitScore` (a 0–100 value given as
+  0–1 is refused). `learner-model-writes.contract.test.mjs` scans the repo (client
+  writes, raw SQL, SQL writer functions) — no violations. Gate
+  `learner_model.next_action`. Open: the Python gateway via the recorder.
 
 ### Phase 11 — UI
 - Agent Chat tab per §13.4 (can start right after Phase 3: it only needs the event
@@ -3237,6 +3282,18 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   builds it), the model-picker flag and cost hints (`models.picker_resolution`), and
   a shared `streamReducer`. Visible UI waits for preview approval. Open: tier lists
   for the picker, `POST /api/teaching/workflows`.
+- **Status (2026-11-06):** backends complete. Picker tier lists
+  (`tiers.allowed_models`, `2026-tier-allowed-models.sql`; payer: school →
+  subscription → pilot school → Freemium; locked models + refusal notice);
+  `POST /api/teaching/workflows` (+ `GET /:id`, `/:id/resume`), used by the
+  teaching modal; school struggles view reads `edu.learning_struggles` with a
+  `sensitiveOpen` count. Gates `models.tier_lists`, `teaching.direct_workflow`,
+  `school.struggles_recorded`. Previews waiting for approval: school-portal
+  struggles page, picker with cost hints/locks, shared stream cards (ScoreCard,
+  PlanCard, TeachingHandoffCard, GateButton, WorkflowStateBadge), Home
+  WorkflowCard/WorkflowResumeCard. Open for Scenario K: saving the pick on the
+  thread/workflow + `model.changed`, the pick reaching controller/persona calls,
+  refusal / tool_choice checks; developer-mode audience (Q9).
 
 ### Phase 12 — Hardening and rollout
 - Failure tests §19; data migration §14.3; flag-by-flag rollout; observability
