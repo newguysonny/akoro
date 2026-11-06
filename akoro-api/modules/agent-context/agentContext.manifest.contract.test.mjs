@@ -62,7 +62,7 @@ test("manifest and manager agree: joined sets are exactly the S3 study-prep sets
   );
   // byte-order matters: study-prep assembly order is pinned by its own tests
   assert.deepEqual(CONTEXT_SETS.planning, [
-    "AGENT.md", "learning/LEARNING.md", "reasoning/PLANNING.md", "policies/EDUCATION_RULES.md",
+    "AGENT.md", "workflows/STUDY_PREP.md", "learning/LEARNING.md", "reasoning/PLANNING.md", "policies/EDUCATION_RULES.md",
   ]);
 });
 

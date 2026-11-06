@@ -18,7 +18,7 @@ import { materialQuestions, materialTopics } from "../../materials/studySource.j
 import * as readToolsModule from "./read-tools.js";
 import { makeLlmAgent } from "./llm-agent.js";
 import { buildRegistry } from "../tools/registry.js";
-import { buildAgentContext } from "./context-manager.js";
+import { buildAgentContext, contextSetFor } from "./context-manager.js";
 import { runAgentStep } from "./agent-loop.js";
 import { pauseCopy } from "./narration.js";
 import { planReadyMessage } from "./planReady.js";
@@ -386,12 +386,23 @@ export async function runStudyPrepPlanningStep({ sessionId, learnerId }) {
   const harness = getHarness();
   const view = await harness.getSessionView({ sessionId, learnerId, eventLimit: 10 });
   if (!["planning", "replanning"].includes(view.session.status)) return view;
-  const context = await buildAgentContext({
-    setName: "planning",
-    goal: view.session.goal,
+  // Operation → set (§7.4): the session's state names the operation; the
+  // mapping (agent-context/operations.mjs) names the set. A context that
+  // can't be built ends the step with context_unavailable, state unchanged.
+  const operation = view.session.status;
+  const setName = contextSetFor("study_prep", operation);
+  let context;
+  try {
+    context = await buildAgentContext({
+      setName,
+      goal: view.session.goal,
     session: view.session,
-    dynamic: { hint: "Research before you plan: the syllabus, the learner's state, their practice history, what earlier sessions showed (memory) and the prerequisites. Then validate and propose one plan, ordered weakest-first within the prerequisites." },
-  });
+      dynamic: { hint: "Research before you plan: the syllabus, the learner's state, their practice history, what earlier sessions showed (memory) and the prerequisites. Then validate and propose one plan, ordered weakest-first within the prerequisites." },
+    });
+  } catch (error) {
+    console.warn(`[study-prep] context_unavailable for ${sessionId} (${operation}): ${error?.message || error}`);
+    return { ...view, loop: { ended: "context_unavailable", iterations: 0, terminal: null } };
+  }
   const sessionReadTools = {
     ...readTools,
     getSessionState: readToolsModule.makeSessionStateReader(harness).bind(null),
@@ -403,7 +414,7 @@ export async function runStudyPrepPlanningStep({ sessionId, learnerId }) {
   // planner reads the syllabus, the learner's state, history, memory and the
   // prerequisites before it may propose (on its last decision it always may).
   const step = await runAgentStep({
-    sessionId, goal: view.session.goal, agent, registry, store: harness.store || store, harness, contextSetName: "planning",
+    sessionId, goal: view.session.goal, agent, registry, store: harness.store || store, harness, contextSetName: setName,
     requireReads: PLANNING_READS,
     // Developer view: the planner's notes per decision, pushed live to its workflow stream, never stored.
     onThought: view.session.workflowId ? (t) => publishLiveDeveloper(view.session.workflowId, t) : null,
@@ -550,7 +561,7 @@ export async function runStudyPrepWake({ sessionId, learnerId = null, trigger, f
   } else try {
     const context = await buildAgentContext({
       // The wake doctrine (reasoning/WAKES.md): its rules, what runs by itself, what to do after a check.
-      setName: "wake", goal: view.session.goal, session: view.session,
+      setName: contextSetFor("study_prep", "wake"), goal: view.session.goal, session: view.session,
       dynamic: { hint: wakeGoal(trigger, facts) },
     });
     const registry = buildRegistry({ readTools: { ...readTools, getSessionState: readToolsModule.makeSessionStateReader(harness).bind(null) }, harness, learnerId: owner, sessionId });
@@ -559,7 +570,7 @@ export async function runStudyPrepWake({ sessionId, learnerId = null, trigger, f
     const agent = makeLlmAgent({ system: context.system, learnerId: owner, feature: "study_prep_wake", maxTokens: 1200, ref: `study_prep:${sessionId}`,
       finishHint: "This is your last decision: end the turn — wait_for_learner, or move the session on if that is what the result calls for." });
     step = await runAgentStep({
-      sessionId, goal: wakeGoal(trigger, facts), agent, registry, store: harness.store || store, harness, contextSetName: "wake",
+      sessionId, goal: wakeGoal(trigger, facts), agent, registry, store: harness.store || store, harness, contextSetName: contextSetFor("study_prep", "wake"),
       maxIterations: decisions, terminalActions: [...TERMINAL_ACTIONS, "wait_for_learner"], finalActions: WAKE_FINAL_ACTIONS, pauseOnCap: false,
       // Developer view: its notes per decision, tagged with the wake (iterations restart at 1 each wake).
       onThought: view.session.workflowId ? (t) => publishLiveDeveloper(view.session.workflowId, { ...t, wakeId }) : null,

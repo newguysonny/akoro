@@ -9,5 +9,5 @@
 export {
   CONTEXT_BUDGET, CONTEXT_MANIFEST, CONTEXT_SETS, CONTEXT_SET_NAMES,
   MANIFEST_VERSION, PENDING_ADOPTION,
-  buildAgentContext, clearContextCache, contextVersion, loadContext, loadDoctrine, preflight,
+  buildAgentContext, clearContextCache, contextSetFor, contextVersion, loadContext, loadDoctrine, preflight,
 } from "../../agent-context/context-manager.js";

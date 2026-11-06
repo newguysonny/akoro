@@ -52,6 +52,8 @@ export const STUDY_PREP_CHECKS = Object.freeze({
     stateIs("topic_active", "Practice can only start while a topic is active"),
     stateIs("active", "That topic is not the active topic", { key: "topic" }),
   ],
+  // Submit-status guard (Phase 5): a stopped or paused session takes no answers.
+  submit_practice: [stateIs("topic_active", "Answers can only be submitted while the session is running")],
   advance_topic: [stateIs("topic_active", "No topic is active")],
   resume_session: [stateIs("paused", "The session is not paused")],
 });
@@ -602,18 +604,35 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
   async function submitPractice({ sessionId, learnerId, topicId, answers, intent = null }) {
     const session = await ownedSession(sessionId, learnerId);
     if (!session) throw new HarnessRejection("session_not_found", "Study-prep session was not found", 404);
+    await check("submit_practice", { session });
     const topics = await store.getTopics(session.id);
     const topic = topics.find((row) => row.id === topicId);
     if (!topic || topic.status !== "active" || !topic.exam_prep_run_id) {
       return reject(session, "invalid_state_transition", "That topic has no open practice");
     }
-    const result = await topicWorkflow.submit({ learnerId, runId: topic.exam_prep_run_id, answers });
+    // The attempt write is the referee: exactly one submit flips it (the run's
+    // conditional submitted_at). A second submit, or one for a run already
+    // scored, is a recorded rejection — never a 500 or a second score.
+    let result;
+    try {
+      result = await topicWorkflow.submit({ learnerId, runId: topic.exam_prep_run_id, answers });
+    } catch (error) {
+      if (["attempt_not_ready", "attempt_already_submitted"].includes(error?.code)) {
+        return reject(session, "invalid_state_transition", "This practice was already submitted", { topic: topic.label, cause: error.code });
+      }
+      throw error;
+    }
+    if (!result || result.notFound) return reject(session, "invalid_state_transition", "That topic's practice was not found", { topic: topic.label });
     const policy = await topicWorkflow.policyFor({ examBoard: session.exam_board, subject: session.subject });
     const threshold = applyThreshold({
       score: result.score, passThreshold: policy.pass_threshold,
       attemptsUsed: Number(topic.attempts_used), maxAttempts: policy.max_attempts,
     });
     const outcome = threshold.passed ? "understood" : threshold.capped ? "capped_out" : "retest_offered";
+    // The topic outcome follows the score at once (before the event and the
+    // evidence), so nothing after scoring can leave a scored topic active.
+    const settled = outcome === "retest_offered" ? null
+      : await store.updateTopicConditional(topic.id, "active", { status: outcome, updated_at: now() });
     const percentage = result.total ? Math.round((result.score || 0) * 100) : 0;
     await log(session.id, topic.id, {
       eventType: "engine_result", origin: "engine",
@@ -635,14 +654,8 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
       learnerId, sessionRef: `study_prep:${session.id}`, topicLabel: topic.label, subject: session.subject,
       passed: threshold.passed, score: result.score, mastery,
     });
-    if (outcome === "retest_offered") {
-      // The topic stays active; the retest is gated on the teach-back confirm.
-      return { session: publicSession(session), topic: publicTopic(topic), result, outcome, mastery };
-    }
-    const updatedTopic = await store.updateTopicConditional(topic.id, "active", {
-      status: outcome, updated_at: now(),
-    });
-    return { session: publicSession(session), topic: publicTopic(updatedTopic || topic), result, outcome, mastery };
+    // retest_offered: the topic stays active; the retest is gated on the teach-back confirm.
+    return { session: publicSession(session), topic: publicTopic(settled || topic), result, outcome, mastery };
   }
 
   /** The human gate: only the learner's own confirmation unlocks a retest. */
