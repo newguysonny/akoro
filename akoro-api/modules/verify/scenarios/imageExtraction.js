@@ -44,6 +44,11 @@ export const imageExtraction = {
       body: { recordId: record.id, pages: [{ pageNumber: 1, imageBase64: PAGE_B64, width: 900, height: 360, unit: "px" }] } });
     ctx.note(`submit: ${sub.status} ${JSON.stringify(sub.body).slice(0, 300)}`);
     if (sub.status === 501) ctx.expect.blocked("extraction isn't configured on this server");
+    ctx.expect.ok("a refusal is never a 502 (Cloudflare would hide it as 'Failed to fetch')", sub.status !== 502, sub.status);
+    if (sub.status === 424 && sub.body?.code === "worker_paused") {
+      ctx.note(`the learner would read: "${sub.body.error}"`);
+      ctx.expect.blocked("the RunPod parse endpoint is paused (max_workers=0) — owner action: set max workers > 0 in RunPod");
+    }
     ctx.expect.ok("the parse worker accepted the page", sub.status === 202 && (sub.body?.data?.pending || []).includes(1), sub.body);
 
     // 4. Poll until the page is saved.
