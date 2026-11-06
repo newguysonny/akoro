@@ -373,6 +373,8 @@ export function createChatTrace({ send = null, now = () => Date.now(), developer
       });
       return block;
     },
+    /** A card the learner acts on (a change to confirm, a permission) — sent the moment it exists. */
+    card(data) { emit("card", data); },
     activity(text) {
       const value = clipParagraphs(text, TRACE_LIMITS.MAX_TEXT_CHARS);
       if (!value) return null;

@@ -139,7 +139,8 @@ export async function deliverProactive(userId, { now = new Date(), ignoreQuietHo
     title: "Your agent noticed something",
     content: String(p.title).slice(0, 200),
   }).catch(() => {});
-  try { global.io?.to(`user:${userId}`).emit("chat_follow_up_ready", { sessionId: target.chatId, proposalId: p.id, title: p.title }); } catch { /* the notification links to it */ }
+  try { global.io?.to(`user:${userId}`).emit("chat_follow_up_ready", { sessionId: target.chatId, proposalId: p.id, title: p.title,
+    message: { id: msg.id, role: "agent", text: proactiveMessage(p, { timeZone: quiet.timeZone }), meta, created_at: now.toISOString() } }); } catch { /* the notification links to it */ }
   return { posted: true, proposalId: p.id, chatId: target.chatId, messageId: msg.id, why: target.why };
 }
 

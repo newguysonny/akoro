@@ -71,7 +71,9 @@ test("study tools: the agent sends learners to the reader, the link opens it on 
 });
 
 test("the chips under a reply survive a refresh (saved on its meta)", () => {
-  assert.match(chat, /void saveReplyIdeas\(\{ userId: req\.user\?\.id, conversationId: req\.body\?\.conversationId, reply, ideas: suggestions \}\)/);
+  // Saved by suggestionsFor — the same for POST /suggestions and the chips sent on the reply's stream.
+  assert.match(chat, /void saveReplyIdeas\(\{ userId: user\?\.id, conversationId: body\?\.conversationId, reply, ideas: suggestions \}\)/);
+  assert.match(chat, /send\("suggestions", \{ suggestions \}\)/, "the chips ride the reply's stream");
   assert.match(chat, /\.eq\("role", "agent"\)\.order\("created_at", \{ ascending: false \}\)\.limit\(1\)/, "only the latest agent message");
   assert.match(chat, /if \(!last \|\| norm\(last\.text\) !== norm\(reply\)\) return false;/, "only the reply they were made for");
 });

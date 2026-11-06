@@ -3840,12 +3840,22 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   (5) tools; (6) gate scenarios `network.auto_reply_consult`, `network.friend_request_card`,
   `network.no_loop`, `network.offline_waits`; (7) **UI preview** of the setting under
   Settings → Agent (the cards reuse the approved proposal card — no new chat UI).
+- **One approval card (2026-11-06, owner decision):** every approval row — proposal
+  cards (incl. agent messages), change confirmations and tool permissions — is the same
+  **Allow / Reject / Later** (`agentChat/ApprovalButtons.jsx`). *Later* changes nothing on
+  the server: the item stays pending in Tasks → Needs you (it used to dismiss with
+  "wrong_time", which for a friend request would have declined it).
+- **Faster cards and chips (2026-11-06):** a confirm/permission card is sent on the stream
+  as a `card` event the moment its tool makes it (it used to wait for `done`, i.e. the
+  whole reply); the reply's chips come as a `suggestions` event on the same stream
+  (`suggestionsFor`, its two lookups in parallel) instead of a second request; a posted
+  agent/proactive message rides its socket ping, so the app shows it without a refetch.
 - **Status (2026-11-06):** steps 1–6 built (`autoReplyCore.js` policy, `autoReply.js`
   processor + `agent-inbox` lane + 5-min sweep, `friends.js` approve/decline,
   `set_agent_auto_reply`, migration, 4 gate scenarios, 7 unit tests); the agent acts
-  when its **Agent Online** switch is on, and waits otherwise. Waiting on: the sandbox
-  running this branch (gate runs), and approval of the setting's preview (step 7) —
-  until then the default `study` applies and the learner can change it in chat.
+  when its **Agent Online** switch is on, and waits otherwise. Step 7 built after the
+  preview was approved (Settings → Agent network → "Let my agent reply on its own").
+  Waiting on: the sandbox running this branch (gate runs).
 
 ---
 

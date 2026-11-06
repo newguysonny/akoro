@@ -70,9 +70,11 @@ async function post(userId, text, meta = null) {
   const target = await chatFor(userId, null, "From your agent");
   if (!target) return null;
   const now = new Date().toISOString();
-  const { data: msg } = await db.from("chat_messages").insert({ session_id: target.chatId, user_id: userId, role: "agent", text, ...(meta ? { meta } : {}) }).select("id").single();
+  const { data: msg } = await db.from("chat_messages").insert({ session_id: target.chatId, user_id: userId, role: "agent", text, ...(meta ? { meta } : {}) }).select("id, created_at").single();
   await db.from("chat_sessions").update({ last_message_at: now }).eq("id", target.chatId).eq("user_id", userId);
-  try { global.io?.to(`user:${userId}`).emit("chat_follow_up_ready", { sessionId: target.chatId, title: "Agent messages" }); } catch { /* the chat shows it on open */ }
+  // The message itself rides the ping: the app shows it at once, without refetching the chat.
+  try { global.io?.to(`user:${userId}`).emit("chat_follow_up_ready", { sessionId: target.chatId, title: "Agent messages",
+    ...(msg ? { message: { id: msg.id, role: "agent", text, meta, created_at: msg.created_at } } : {}) }); } catch { /* the chat shows it on open */ }
   return { chatId: target.chatId, messageId: msg?.id || null };
 }
 

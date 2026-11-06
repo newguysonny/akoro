@@ -41,7 +41,7 @@ test("wired: the planner tags the source note and posts after a run; a sweep ret
   assert.match(index, /if \(\+\+deliveryTicks % 10 === 0\) deliverDue\(\)/);
   assert.equal((inbox.match(/await markPostedDecision\(/g) || []).length, 3, "executed, failed, dismissed");
   assert.match(tab, /\.\.\.\(m\.role !== "user" && m\.meta\?\.proposal \? \{ proposal: m\.meta\.proposal \} : \{\}\)/);
-  assert.match(tab, /onClick=\{\(\)=>decidePosted\(msg,"accept"\)\}/);
-  assert.match(tab, /decidePosted\(msg,"wrong_time"\)/);
-  assert.match(tab, /decidePosted\(msg,"not_useful"\)/);
+  // One approval row everywhere (2026-11-06): Allow / Reject / Later — Later keeps it pending.
+  assert.match(tab, /<ApprovalButtons busy=\{inboxBusyRef===`p:\$\{msg\.proposal\.id\}`\} onAllow=\{\(\)=>decidePosted\(msg,"accept"\)\} onReject=\{\(\)=>decidePosted\(msg,"not_useful"\)\}\/>/);
+  assert.doesNotMatch(tab, /decidePosted\(msg,"wrong_time"\)/, "Later never dismisses (a friend request would be declined)");
 });

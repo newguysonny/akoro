@@ -39,6 +39,7 @@ import ChallengeRequestCards from '../network/ChallengeRequestCards.jsx';
 import ConfirmChangeCard from './agentChat/ConfirmChangeCard.jsx';
 import IngestCard from './agentChat/IngestCard.jsx';
 import ChatFilesStrip from './agentChat/ChatFilesStrip.jsx';
+import ApprovalButtons from './agentChat/ApprovalButtons.jsx';
 import ProposalPreview from './agentChat/ProposalPreview.jsx';
 import { addSimilar, chatFiles, chooseFolder, chooseSubject, dismissSimilar, fileIngest, filesOf, getIngest, isLibraryFile, restoreIngest, similarFor, startIngest, structureIngest, undoIngest } from '../../lib/chatUploads.js';
 import SimilarPicker from './agentChat/SimilarPicker.jsx';
@@ -441,8 +442,10 @@ function AgentChatTab({
         loadSessions().catch(() => {});
         if (!data?.sessionId || data.sessionId !== sessionIdRef.current) return;
         try {
-          // The new message is among the newest: one page is enough.
-          const d = await apiGet(`${CHAT_BASE}/sessions/${data.sessionId}/messages?limit=${HISTORY_PAGE}`);
+          // The ping carries the message itself (agent messages, proactive cards): shown at
+          // once. Otherwise the new message is among the newest: one page is enough.
+          const d = data.message?.id ? { messages: [data.message] }
+            : await apiGet(`${CHAT_BASE}/sessions/${data.sessionId}/messages?limit=${HISTORY_PAGE}`);
           if (data.sessionId !== sessionIdRef.current) return;
           setMessages((prev) => {
             const ids = new Set(prev.map((m) => m.id));
@@ -922,7 +925,7 @@ function AgentChatTab({
     turnIdRef.current = turnId;
     // The picked model rides the standard mode only (the server checks it).
     const modelPick = mode === "default" && chatModelId ? { model: chatModelId } : {};
-    const payload = { message: text, history: history.slice(-24), agentName, mode, ...modelPick,
+    const payload = { message: text, inlineSuggestions: true, history: history.slice(-24), agentName, mode, ...modelPick,
       conversationId: sid, turnId,
       ...(ingest ? { ingestId: ingest.id, ingestIds } : {}),
       ...(devView ? { developer: true } : {}),
@@ -965,6 +968,7 @@ function AgentChatTab({
     let finalReply="";
     let turnTools=[];   // what ran this turn — the chips follow it (a not-taught reply gets "ask your teaching guide")
     let gotDone=false;
+    let inlineIdeas=false;   // the stream already carried this reply's chips
     // A turn that started but never got its "done" (the stream errored or the
     // connection closed mid-way): stop the spinners, say what happened, and
     // keep what already arrived. It used to stay "thinking" for ever.
@@ -980,6 +984,10 @@ function AgentChatTab({
         onDelta: appendDelta,
         onThinking: appendThinking,
         onStatus: (s)=>{ if(!started) setStatusLabel(t(statusKey[s?.step]||"") || s?.label || ""); },
+        // The confirm / permission card shows as soon as the tool made it — not after the whole reply.
+        onCard: (c)=>{ if(!c?.confirm?.confirmationId) return; ensureBubble(); setMessages(prev=>prev.map(m=>m.id===replyId?{...m,confirm:c.confirm}:m)); },
+        // The chips arrive on the same stream (no second request).
+        onSuggestions: (list)=>{ inlineIdeas=true; const ideas=cleanIdeas(list); if(ideas.length) setMessages(prev=>prev.map(m=>m.id===replyId?{...m,ideas}:m)); },
         onDone: ({ reply, syllabus, pastQuestions, thinking, toolExecutions, trace, stopped, messageId })=>{
           gotDone=true;
           ensureBubble(); setStatusLabel("");
@@ -1045,7 +1053,7 @@ function AgentChatTab({
     if((spokenTurn||readAloud) && finalReply && !controller?.signal.aborted) tts.speak(replyId, finalReply);
     // Suggestions for every reply: three follow-ups, asked for AFTER the
     // reply has arrived (it never waits on them); a failure is just no chips.
-    if(finalReply && !controller?.signal.aborted){
+    if(finalReply && !controller?.signal.aborted && !inlineIdeas){
       apiPost('/api/adaptive/chat/suggestions', { ask: text, reply: finalReply, role: 'student',
         tools: turnTools.map((x)=>({ tool: x?.tool, topic: x?.teach?.topic || x?.guide?.teach?.topic || null })),
         conversationId: sid,   // the chips are saved with the reply, so a refresh keeps them
@@ -1326,16 +1334,8 @@ function AgentChatTab({
                     : <StudyPrepChatCard sessionId={msg.studyPrepSessionId} onEvents={onStudyPrepEvents} onRunning={onStudyPrepRunning} developer={devView} onNotes={onStudyPrepNotes} conversationId={sessionId}/>)}
                   {!isMe&&msg.proposal?.status==="proposed"&&msg.proposal.preview&&<ProposalPreview preview={msg.proposal.preview}/>}
                   {!isMe&&msg.proposal&&(msg.proposal.status==="proposed"?(
-                    <div style={{ display:"flex",flexWrap:"wrap",gap:7,marginTop:9 }}>
-                      <button type="button" onClick={()=>decidePosted(msg,"accept")} disabled={!!inboxBusyRef}
-                        style={{ display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:20,border:"none",background:inboxBusyRef?"var(--ak-border)":`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:12.5,fontWeight:800,cursor:inboxBusyRef?"wait":"pointer",fontFamily:"'Nunito',sans-serif" }}>
-                        {inboxBusyRef===`p:${msg.proposal.id}`?<Spinner size={11} color="#fff"/>:<Icon name="ti-check" size={13}/>}{msg.proposal.yes||t('agent.posted_yes')}{msg.proposal.cost==="free"&&<span style={{ fontSize:10.5,fontWeight:800,opacity:.85 }}>· free</span>}
-                      </button>
-                      <button type="button" onClick={()=>decidePosted(msg,"wrong_time")} disabled={!!inboxBusyRef}
-                        style={{ padding:"8px 14px",borderRadius:20,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface)",color:"var(--ak-text)",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('agent.posted_later')}</button>
-                      <button type="button" onClick={()=>decidePosted(msg,"not_useful")} disabled={!!inboxBusyRef}
-                        style={{ padding:"8px 14px",borderRadius:20,border:"none",background:"none",color:"var(--ak-text-muted)",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('agent.posted_no')}</button>
-                    </div>
+                    /* The one approval row (Allow / Reject / Later) — Later keeps it pending in Needs you. */
+                    <ApprovalButtons busy={inboxBusyRef===`p:${msg.proposal.id}`} onAllow={()=>decidePosted(msg,"accept")} onReject={()=>decidePosted(msg,"not_useful")}/>
                   ):(
                     <div style={{ display:"inline-flex",alignItems:"center",gap:5,marginTop:8,fontSize:11.5,fontWeight:800,color:msg.proposal.status==="executed"?GREEN:"var(--ak-text-muted)" }}>
                       <Icon name={msg.proposal.status==="executed"?"ti-circle-check":"ti-circle-x"} size={13}/>

@@ -16,6 +16,42 @@ const MSG = [['everyone', 'Everyone'], ['school', 'My school'], ['classmates', '
 const TIMES = [['morning', 'Mornings'], ['afternoon', 'Afternoons'], ['evening', 'Evenings'], ['night', 'Nights'], ['weekend', 'Weekends']];
 const TYPES = [['1v1', '1v1'], ['open', 'Open lobby'], ['team', 'Team (2v2)'], ['review', 'Study review']];
 const NUNITO = "'Nunito',sans-serif";
+// Phase 21: what the agent may answer on its own when other agents message it.
+const AUTO_REPLY = [
+  ['off', 'Ask me every time', 'Your agent asks you before answering any agent.'],
+  ['study', 'Study questions', 'Your agent answers questions from what you taught it, and tells you after.'],
+  ['study_chat', 'Study questions and friendly chat', 'Your agent also replies to short friendly messages — politely, never sharing anything about you.'],
+];
+
+function AutoReply({ value, onPick }) {
+  const v = value || 'study';
+  return (
+    <div data-auto-reply="" style={{ margin: '4px 14px 12px', border: '1px solid var(--ak-border)', borderRadius: 14, overflow: 'hidden', fontFamily: NUNITO }}>
+      <div style={{ padding: '10px 13px 8px' }}>
+        <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--ak-text)' }}>Let my agent reply on its own</div>
+        <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ak-text-muted)', lineHeight: 1.45, marginTop: 2 }}>Only while your agent is Online. You can change this any time — or just tell your agent in chat.</div>
+      </div>
+      {AUTO_REPLY.map(([k, label, hint]) => (
+        <button key={k} type="button" role="radio" aria-checked={v === k} onClick={() => onPick(k)}
+          style={{ display: 'flex', gap: 10, width: '100%', textAlign: 'left', padding: '10px 13px', border: 'none', borderTop: '1px solid var(--ak-border)', background: 'var(--ak-surface)', cursor: 'pointer', fontFamily: NUNITO }}>
+          <span style={{ width: 18, height: 18, borderRadius: '50%', flexShrink: 0, marginTop: 1, border: v === k ? `6px solid ${BRAND}` : '2px solid var(--ak-border2)' }} />
+          <span>
+            <span style={{ display: 'block', fontSize: 13, fontWeight: 800, color: 'var(--ak-text)' }}>{label}{k === 'study' && <span style={{ fontSize: 10, fontWeight: 900, padding: '2px 7px', borderRadius: 99, background: `${BRAND}14`, color: BRAND, marginLeft: 6 }}>Default</span>}</span>
+            <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ak-text-muted)', lineHeight: 1.4 }}>{hint}</span>
+          </span>
+        </button>
+      ))}
+      <div style={{ display: 'flex', gap: 8, padding: '10px 13px', borderTop: '1px solid var(--ak-border)', background: `${BRAND}0A`, fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-sec)', lineHeight: 1.45 }}>
+        <Icon name="ti-shield-check" size={16} color={BRAND} />
+        <span>Always asks you: friend requests, battle and study-buddy invites, and anything about you (your school, progress or plans).</span>
+      </div>
+      <div style={{ display: 'flex', gap: 6, padding: '8px 13px 10px', fontSize: 11.5, fontWeight: 700, color: '#B45309' }}>
+        <Icon name="ti-lock" size={14} color="#B45309" />
+        <span>For JSS and primary learners, friendly chat always asks you first.</span>
+      </div>
+    </div>
+  );
+}
 
 function Choice({ options, value, onPick }) {
   return (
@@ -66,6 +102,7 @@ export default function AgentNetworkSection() {
         <Choice options={WHO} value={s.visibility} onPick={(v) => save({ visibility: v })} />
         <Label>Who can message my agent</Label>
         <Choice options={MSG} value={s.accept_messages} onPick={(v) => save({ accept_messages: v })} />
+        <AutoReply value={s.auto_reply} onPick={(v) => save({ auto_reply: v })} />
         <Row icon="ti-swords" label="Open to battle challenges" noArrow>
           <Toggle on={s.open_to_challenges !== false} onChange={() => save({ open_to_challenges: s.open_to_challenges === false })} />
         </Row>

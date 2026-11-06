@@ -4297,6 +4297,9 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
           return {};
         })(),
       });
+      // A card the learner must act on goes out NOW, not with "done": it used to
+      // appear only after the whole reply had been written (2026-11-06).
+      if (executions.at(-1)?.confirm) trace?.card?.({ tool, confirm: executions.at(-1).confirm });
       transcript.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(observation) });
     }
   }
@@ -4362,25 +4365,32 @@ export async function saveReplyIdeas({ userId, conversationId, reply, ideas }) {
   } catch { return false; }
 }
 
-router.post("/suggestions", async (req, res) => {
-  const reply = String(req.body?.reply || "").trim();
-  if (!reply) return res.json({ success: true, suggestions: [] });
+/**
+ * The three follow-up chips for a reply. Shared by POST /suggestions and the
+ * Agent Chat stream, which now sends them as a "suggestions" event right after
+ * "done" — no second round trip from the app (2026-11-06). Never throws.
+ */
+export async function suggestionsFor({ user, body }) {
+  const reply = String(body?.reply || "").trim();
+  if (!reply) return [];
   // The teacher's ideas only for a non-learner account that asks for them.
-  const role = req.body?.role === "instructor" && req.user?.role !== "student" ? "instructor" : "student";
-  const tools = Array.isArray(req.body?.tools) ? req.body.tools.slice(0, 12) : [];
+  const role = body?.role === "instructor" && user?.role !== "student" ? "instructor" : "student";
+  const tools = Array.isArray(body?.tools) ? body.tools.slice(0, 12) : [];
   const notTaught = role === "student" ? notTaughtFrom({ reply, tools }) : null;
-  const uploads = role === "student" ? uploadsFrom(req.body?.attachments) : [];
+  const uploads = role === "student" ? uploadsFrom(body?.attachments) : [];
   // Fixed chips first: the guide when it wasn't taught, the study step after an upload.
   const fixed = [guideChip(notTaught), uploadChip(uploads)].filter(Boolean);
   const isFixed = (x) => /teaching guide/i.test(x) || fixed.some((f) => f.toLowerCase() === String(x).toLowerCase());
   try {
-    // What this agent can actually do: its live capability card, plus the tools
-    // the learner's agent built for them — chips stay within reach.
     const capabilities = [];
     if (role === "student") {
-      const card = await executeChatTool("get_agent_capabilities", {}, req.user.id, { role: "student" }).catch(() => null);
+      // Both lookups at once (they used to run one after the other before the model call).
+      const [card, own] = await Promise.all([
+        executeChatTool("get_agent_capabilities", {}, user.id, { role: "student" }).catch(() => null),
+        learnerToolDefs(user.id).catch(() => []),
+      ]);
       for (const sec of card?.sections || []) if (sec.title !== "Limits") capabilities.push(...(sec.items || []));
-      for (const t of await learnerToolDefs(req.user.id).catch(() => [])) {
+      for (const t of own) {
         const d = t?.function?.description || t?.function?.name;
         if (d) capabilities.push(`Your own tool: ${String(d).slice(0, 120)}`);
       }
@@ -4389,18 +4399,22 @@ router.post("/suggestions", async (req, res) => {
       model: process.env.OPENAI_SUGGEST_MODEL || "gpt-4o-mini", temperature: 0.5, max_tokens: 160,
       __timeoutMs: 12_000, __maxRetries: 0,
       response_format: { type: "json_object" },
-      messages: buildSuggestionMessages({ role, ask: req.body?.ask, reply, context: req.body?.context, capabilities, notTaught, uploads }),
-      __userId: req.user?.id, __feature: "chat_suggestions",
+      messages: buildSuggestionMessages({ role, ask: body?.ask, reply, context: body?.context, capabilities, notTaught, uploads }),
+      __userId: user?.id, __feature: "chat_suggestions",
     });
     const ideas = shapeSuggestions(completion.choices?.[0]?.message?.content);
     const suggestions = fixed.length ? [...fixed, ...ideas.filter((x) => !isFixed(x))].slice(0, 3) : ideas;
-    res.json({ success: true, suggestions });
-    void saveReplyIdeas({ userId: req.user?.id, conversationId: req.body?.conversationId, reply, ideas: suggestions });
+    void saveReplyIdeas({ userId: user?.id, conversationId: body?.conversationId, reply, ideas: suggestions });
+    return suggestions;
   } catch (e) {
     console.warn("[chat/suggestions] none this time:", String(e?.message || e).slice(0, 120));
-    res.json({ success: true, suggestions: fixed });
-    if (fixed.length) void saveReplyIdeas({ userId: req.user?.id, conversationId: req.body?.conversationId, reply, ideas: fixed });
+    if (fixed.length) void saveReplyIdeas({ userId: user?.id, conversationId: body?.conversationId, reply, ideas: fixed });
+    return fixed;
   }
+}
+
+router.post("/suggestions", async (req, res) => {
+  res.json({ success: true, suggestions: await suggestionsFor({ user: req.user, body: req.body }) });
 });
 
 /**
@@ -4714,7 +4728,7 @@ router.post("/agent", async (req, res) => {
     const selfToolCtx = selfToolOn && role === "instructor"
       ? "\n\n## Building tools (preview)\nWhen the instructor asks for something none of your tools gives directly — a total, average, count, ranking or breakdown over THEIR OWN classes and activities (average grade per activity, who hasn't started, completion by class, students below a mark) — call create_tool (schema_lookup first if unsure what it can use) and answer from its result; don't say you don't have the data. check_activity_outcomes is for ONE activity's summary — a question across several activities (each activity's average, who hasn't started anything) is a create_tool question. Tools only ever see this instructor's own classes and the work set in them — students by name only, never another teacher's class or a learner's private chats or notes. Only say it can't be done after create_tool is rejected, and say why."
       : selfToolOn
-      ? "\n\n## Building tools (preview)\nWhen the learner asks for something none of your tools gives directly — a total, average, count or breakdown over their own data (hours of sessions per month, tasks finished per week, accuracy by year) — don't say you don't have the data and don't piece it together from unrelated tools. Call create_tool (schema_lookup first if unsure what it can use), then answer from its result. The same goes for comparisons with other learners (how others scored in battles they played together): create_tool either builds it or, if it needs a permission, asks an admin and the answer comes back in this chat — tell the learner that plainly. Only say it can't be done after create_tool is rejected, and say why.\nWhen the learner asks you to CHANGE their own things and no tool does it (delete or complete their tasks, end a study buddy) — don't just say you can't. Call schema_lookup: if it lists that change as needs_your_ok, call create_tool with it in hint.capabilities in this same turn — don't ask 'shall I build it?' first. The tool is drafted (off) and they get a card showing what it would change; Approve on the card is their yes. Say briefly that you've drafted it and they can approve it on the card. Never file submit_tool_request for these.\nWhen their message says they approved a tool, or asks you to run one of your tools by name (after the Akoro team approved it), run that tool now — a read: explain what it found in plain words; a change: it finds what to change and shows the Confirm card — say what it would change (the app tells you when they confirm; don't ask them to tell you). When their message says they confirmed a change, look again (run the same tool, or list the items) to check it went through: say what changed and whether anything is still left. Nothing is done until you've checked."
+      ? "\n\n## Building tools (preview)\nWhen the learner asks for something none of your tools gives directly — a total, average, count or breakdown over their own data (hours of sessions per month, tasks finished per week, accuracy by year) — don't say you don't have the data and don't piece it together from unrelated tools. Call create_tool (schema_lookup first if unsure what it can use), then answer from its result. The same goes for comparisons with other learners (how others scored in battles they played together): create_tool either builds it or, if it needs a permission, asks an admin and the answer comes back in this chat — tell the learner that plainly. Only say it can't be done after create_tool is rejected, and say why.\nWhen the learner asks you to CHANGE their own things and no tool does it (delete or complete their tasks, end a study buddy) — don't just say you can't. Call schema_lookup: if it lists that change as needs_your_ok, call create_tool with it in hint.capabilities in this same turn — don't ask 'shall I build it?' first. The tool is drafted (off) and they get a card showing what it would change; Allow on the card is their yes. Say briefly that you've drafted it and they can tap Allow on the card. Never file submit_tool_request for these.\nWhen their message says they approved a tool, or asks you to run one of your tools by name (after the Akoro team approved it), run that tool now — a read: explain what it found in plain words; a change: it finds what to change and shows the Allow card — say what it would change (the app tells you when they confirm; don't ask them to tell you). When their message says they confirmed a change, look again (run the same tool, or list the items) to check it went through: say what changed and whether anything is still left. Nothing is done until you've checked."
       : "";
     // Who this learner's agent is (their protégé): its name, level and
     // sessions from edu.student_agents, and the learner's first name.
@@ -5014,6 +5028,13 @@ router.post("/agent", async (req, res) => {
       return res.json({ success: true, reply, response: reply, thinking, syllabus: syllabusRefs, pastQuestions: pastRefs, curriculum: curriculumRefs, mode, metadata, toolExecutions: prepared.toolExecutions, trace: traceBlocks, messageId: savedReplyId });
     }
     send("done", { reply, thinking, syllabus: syllabusRefs, pastQuestions: pastRefs, curriculum: curriculumRefs, mode, metadata, toolExecutions: prepared.toolExecutions, trace: traceBlocks, stopped: stopped(), messageId: savedReplyId });
+    // The chips on the same stream, straight after the reply (the app used to ask
+    // for them with a second request once the reply ended).
+    if (role === "student" && reply && !stopped() && req.body?.inlineSuggestions === true) {
+      const suggestions = await suggestionsFor({ user: req.user, body: { reply, ask: userMessage, role: "student", conversationId,
+        tools: prepared.toolExecutions.map((x) => ({ tool: x?.tool, topic: x?.teach?.topic || x?.guide?.teach?.topic || null })) } }).catch(() => []);
+      send("suggestions", { suggestions });
+    }
     return res.end();
   } catch (error) {
     console.error("[/chat/agent]", error);
