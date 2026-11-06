@@ -57,7 +57,7 @@ export const imageExtraction = {
     }
     ctx.note(`status after ${Math.round((Date.now() - t0) / 1000)}s: ${JSON.stringify(st?.body).slice(0, 400)}`);
     if (!page) {
-      const saved = await ctx.http({ as: p.learner, path: `/api/records/extract?recordId=${record.id}` });
+      const saved = await ctx.http({ as: p.learner, path: `/api/records/extract/${record.id}` });
       page = (saved.body?.data?.pages || []).find((x) => x.pageNumber === 1) || null;
     }
     ctx.expect.ok("the page was read and saved", !!page, st?.body?.data);
