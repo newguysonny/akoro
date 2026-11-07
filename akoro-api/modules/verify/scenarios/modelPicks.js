@@ -135,7 +135,8 @@ export const pickReachesWorkflows = {
       const name = body.tools?.[0]?.function?.name;
       return { choices: [{ index: 0, finish_reason: name ? "tool_calls" : "stop", message: { role: "assistant", content: name ? null : "Hi", ...(name ? { tool_calls: [{ id: "c", type: "function", function: { name, arguments: JSON.stringify({ intent: "x", thinking: "t", message: "m", args: {}, move: "challenge" }) } }] } : {}) } }], usage: { prompt_tokens: 10, completion_tokens: 2 } };
     } });
-    const providers = { openai: stub("openai"), anthropic: stub("anthropic"), openai_compatible: stub("openai_compatible") };
+    // noForce: a sandbox's AI_FORCE_MODEL would hide which model the pick chose; the stand-ins see the choice itself.
+    const providers = { openai: stub("openai"), anthropic: stub("anthropic"), openai_compatible: stub("openai_compatible"), noForce: true };
     const { makeLlmAgent } = await import("../../adaptive-learning/study-prep/llm-agent.js");
     const { modelDecide } = await import("../../adaptive-learning/teaching-session/controller.js");
     const { guideTeach } = await import("../../adaptive-learning/teaching-session/guideTeacher.js");

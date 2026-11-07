@@ -192,6 +192,23 @@ test("a refusal becomes model_refusal: billed as it ran, answered once by the fa
   assert.equal(refusalOf({ choices: [{ finish_reason: "stop", message: { content: "ok" } }] }), null);
 });
 
+test("…the fallback obeys AI_FORCE_MODEL (a sandbox with OpenAI off retries on the forced model)", async () => {
+  const { refusalFallbackFor } = await import("./aiModel.js");
+  const { createModelRegistry } = await import("./modelRegistry.js");
+  const env = { OPENAI_API_KEY: "k", ANTHROPIC_API_KEY: "k", DEEPSEEK_API_KEY: "k", DEEPSEEK_MODEL: "deepseek-chat",
+    AI_MODELS: JSON.stringify([{ id: "deepseek", price: { in: 0.3, out: 1.2 } }]), AI_FORCE_MODEL: "deepseek" };
+  const registry = createModelRegistry(env);
+  const sonnet = registry.get("claude-sonnet");
+  assert.equal(refusalFallbackFor(sonnet, { registry, env }).id, "deepseek", "forced like every call");
+  assert.equal(refusalFallbackFor(sonnet, { registry, env, noForce: true }).id, "gpt-4o-mini", "a check's stand-ins see the unforced choice");
+  assert.equal(refusalFallbackFor(sonnet, { registry, env: { ...env, AI_FORCE_MODEL: "" } }).id, "gpt-4o-mini", "no force: the default");
+  assert.equal(refusalFallbackFor(registry.get("deepseek"), { registry, env }).id, "gpt-4o-mini", "never back to itself");
+  // A check's stand-ins: noForce reaches the call itself.
+  const r2 = recorder();
+  await runWithProviders({ ...r2.providers, noForce: true }, () => openai.chat.completions.create({ model: "gpt-4o-mini", messages: [{ role: "user", content: "x" }] }));
+  assert.deepEqual(r2.calls.map((c) => c.entry), ["gpt-4o-mini"]);
+});
+
 test("…and in an agent loop it is a model_refusal record and observation, not a malformed step or a crash", async () => {
   const both = recorder({
     anthropicReply: () => ({ choices: [{ index: 0, finish_reason: "content_filter", message: { role: "assistant", content: null, refusal: "No." } }], usage }),

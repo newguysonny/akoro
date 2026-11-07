@@ -45,10 +45,17 @@ export function refusalOf(res) {
   return null;
 }
 
-/** Where a refused call goes next: the entry's fallbackModel, else the default — never itself. */
-function refusalFallbackFor(entry) {
-  const target = (entry?.fallbackModel && modelRegistry.get(entry.fallbackModel)) || modelRegistry.get(modelRegistry.defaultId);
-  return target && entry && target.id !== entry.id && target.enabled ? target : null;
+/**
+ * Where a refused call goes next: the entry's fallbackModel, else the default —
+ * never itself — and, like every call, AI_FORCE_MODEL applies (a sandbox with
+ * OpenAI off retries on the forced model). noForce: a check's stand-ins.
+ */
+export function refusalFallbackFor(entry, { registry = modelRegistry, env = process.env, noForce = false } = {}) {
+  const base = (entry?.fallbackModel && registry.get(entry.fallbackModel)) || registry.get(registry.defaultId);
+  const target = base && entry && base.id !== entry.id && base.enabled ? base : null;
+  if (!target || noForce) return target;
+  const forced = forcedModelFor(target, target.apiModel, { registry, env });
+  return forced && forced.id !== entry.id ? forced : target;
 }
 
 // One breaker per endpoint family. Every model call in the app — chat,
@@ -108,10 +115,11 @@ async function meteredCreate(params = {}) {
     : modelRegistry.resolveModel({ role: params.__role || "chat", learnerChoice: params.__learnerChoice || null, allowedModels: params.__allowedModels || null });
   // AI_FORCE_MODEL (a test sandbox switch, e.g. OpenAI out of credit): every
   // chat call that would go to OpenAI is served by this catalogue model instead.
-  const forced = forcedModelFor(entry, clean.model);
+  // A check's stand-in providers can ask to see the unforced choice (`noForce`).
+  const overrides = providerOverrides.getStore() || null;
+  const forced = overrides?.noForce ? null : forcedModelFor(entry, clean.model);
   if (forced) entry = forced;
   if (entry) clean.model = entry.apiModel;
-  const overrides = providerOverrides.getStore() || null;
   const serve = (e, body, opts) => {
     const provider = e?.provider || "openai";
     if (overrides?.[provider]) return overrides[provider].create(body, opts, e);
@@ -197,7 +205,7 @@ async function meteredCreate(params = {}) {
   // an agent loop records a model_refusal observation, never a malformed one.
   const refused = entry ? refusalOf(res) : null;
   if (refused) {
-    const target = refusalFallbackFor(entry);
+    const target = refusalFallbackFor(entry, { noForce: !!overrides?.noForce });
     const note = { model: entry.id, reason: refused.reason, category: refused.category, fallbackModel: target?.id || null };
     console.warn(`[ai] model_refusal on ${entry.id} (${feature})${target ? ` — retrying on ${target.id}` : ""}`);
     if (!target) return Object.assign(res, { model_refusal: note });
