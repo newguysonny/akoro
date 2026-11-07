@@ -4656,29 +4656,22 @@ router.post("/agent", async (req, res) => {
       // which still saves every turn to the session.
       try {
         if (wantsStream) status("memory", "Loading your saved study context…");
-        conversation = await loadLearnerAgentConversationContext({
-          conversationId,
-          userId: req.user.id,
-        });
+        // The transcript, the memories and the retry check are independent: one wait, not three
+        // (realtime, 2026-11-07). A completed retry must return the original durable answer
+        // without re-running an action tool — the session-bound turn key covers the visible
+        // response as well as transcript persistence.
+        const [loaded, retrieved, completedReply] = await Promise.all([
+          loadLearnerAgentConversationContext({ conversationId, userId: req.user.id }),
+          retrieveLearnerAgentMemory({ query: userMessage, userId: req.user.id }),
+          completedLearnerAgentConversationTurn({ conversationId, userId: req.user.id, sessionId: agentSessionId(conversationId), turnId }),
+        ]);
+        conversation = loaded;
         // The server-owned exact transcript is authoritative for durable Agent
         // Chat. Browser history is only a compatibility fallback for callers
         // without a session (for example, the instructor assistant).
         dialogue = conversation.messages;
-        const retrieved = await retrieveLearnerAgentMemory({
-          query: userMessage,
-          userId: req.user.id,
-        });
         retrieval = retrieved.mode;
         relevantMemories = retrieved.memories;
-        // A completed retry must return the original durable answer without
-        // re-running an action tool. The session-bound turn key therefore covers
-        // the visible response as well as transcript persistence.
-        const completedReply = await completedLearnerAgentConversationTurn({
-          conversationId,
-          userId: req.user.id,
-          sessionId: agentSessionId(conversationId),
-          turnId,
-        });
         if (completedReply) {
           const metadata = { responseTimeMs: Date.now() - t0, retrieval, durableContext: true, replayed: true, toolExecutions: [] };
           if (!wantsStream) return res.json({ success: true, reply: completedReply, response: completedReply, thinking: "", syllabus: [], pastQuestions: [], curriculum: [], mode, metadata, toolExecutions: [] });
@@ -4704,28 +4697,23 @@ router.post("/agent", async (req, res) => {
     // The learner's active goals steer everything the agent says and (once
     // Full Autonomy ships) everything it proposes. Cheap indexed read, best
     // effort — a goals hiccup must never dim the chat.
-    let goalsCtx = "";
-    if (role === "student") {
+    // Realtime (2026-11-07): every lookup below is independent — they all start now and the
+    // turn waits once, for the slowest, instead of one after another (3–5 s on the sandbox).
+    const goalsP = role === "student" ? (async () => {
       try {
         const { data: goalRows } = await db.schema("edu").from("learner_goals")
           .select("title, category, exam, target_date, metric")
           .eq("user_id", req.user.id).eq("status", "active")
           .order("updated_at", { ascending: false }).limit(5);
-        if (goalRows?.length) {
-          goalsCtx = "\n\n## The learner's active goals (align advice and suggestions with these)\n" +
-            goalRows.map((g) => {
-              const bits = [g.category, g.exam, g.target_date ? `by ${g.target_date}` : g.metric].filter(Boolean).join(" · ");
-              return `- ${g.title}${bits ? ` (${bits})` : ""}`;
-            }).join("\n");
-        }
-      } catch { /* table not migrated yet — the chat works without goals */ }
-    }
-    const [
-      { context: syllabusCtx, refs: syllabusRefs },
-      { context: pastCtx, refs: pastRefs },
-      { context: curriculumCtx, refs: curriculumRefs },
-      taught,
-    ] = await Promise.all([
+        if (!goalRows?.length) return "";
+        return "\n\n## The learner's active goals (align advice and suggestions with these)\n" +
+          goalRows.map((g) => {
+            const bits = [g.category, g.exam, g.target_date ? `by ${g.target_date}` : g.metric].filter(Boolean).join(" · ");
+            return `- ${g.title}${bits ? ` (${bits})` : ""}`;
+          }).join("\n");
+      } catch { return ""; /* table not migrated yet — the chat works without goals */ }
+    })() : Promise.resolve("");
+    const groundingP = Promise.all([
       getSyllabusGrounding(userMessage, { limit: sylLimit }).catch(() => ({ context: "", refs: [] })),
       getPastQuestionGrounding(userMessage, { limit: pastLimit }).catch(() => ({ context: "", refs: [] })),
       wantsCurriculum
@@ -4739,21 +4727,68 @@ router.post("/agent", async (req, res) => {
           .catch((e) => { console.warn("[/chat/agent] taught knowledge unavailable:", e.message); return { chunks: [], topics: [], taughtAnything: false }; })
         : Promise.resolve(null),
     ]);
-    const protegeCtx = taught ? `\n\n${await loadDoctrine("policies/PROTEGE.md")}${renderTaughtContext(taught)}` : "";
     // Messages from other learners' agents waiting for this one.
     // Files this turn is saving to the Library (§7.17, D51): the reply says where, in one clause.
     // (A query builder is a thenable, not a promise: no .catch on it — await it inside try.)
     // One message's files can be sorted into several uploads (one per folder): ingestIds, or the older ingestId.
-    let ingests = [];
     const ingestIds = [...new Set([...(Array.isArray(req.body?.ingestIds) ? req.body.ingestIds : []), req.body?.ingestId].map(String))]
       .filter((x) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 5);
-    if (role === "student" && ingestIds.length) {
+    const ingestsP = role === "student" && ingestIds.length ? (async () => {
       try {
         const { data } = await db.schema("edu").from("material_ingests").select("id, folder_name, doc_kind, state, filing")
           .eq("user_id", req.user.id).in("id", ingestIds);
-        ingests = ingestIds.map((id) => (data || []).find((r) => r.id === id)).filter(Boolean);
-      } catch { ingests = []; }
-    }
+        return ingestIds.map((id) => (data || []).find((r) => r.id === id)).filter(Boolean);
+      } catch { return []; }
+    })() : Promise.resolve([]);
+    const chatFilesP = role === "student" && conversationId ? (async () => {
+      try {
+        const { data } = await db.schema("edu").from("material_ingests").select("names, state, structure")
+          .eq("user_id", req.user.id).eq("chat_session_id", conversationId).neq("state", "undone").order("created_at", { ascending: true }).limit(10);
+        const { chatFilesBrief } = await import("../materials/ingestCore.js");
+        return chatFilesBrief(data || []);
+      } catch { return ""; }
+    })() : Promise.resolve("");
+    const inboxP = role === "student" && agentNetworkEnabled
+      ? Promise.all([inboxBrief(req.user.id).catch(() => ""), buddyBrief(req.user.id).catch(() => "")]).then(([a, b]) => a + b)
+      : Promise.resolve("");
+    // Something is running outside the chat (an Agent Check battle, a teaching session): the
+    // rules for talking about it and changing it (akoro-agent/reasoning/RUNNING_WORK.md), and what it is.
+    const runningP = role === "student" && studyPrepEnabled ? runningWorkBrief(req.user.id).catch(() => "") : Promise.resolve("");
+    const hasAttachments = Array.isArray(rawAttachments) && rawAttachments.length > 0;
+    if (hasAttachments && wantsStream) status("attachments", "Reading your files…");
+    const attP = hasAttachments ? processAttachments(rawAttachments) : Promise.resolve({ visionParts: [], docContext: "", notes: [] });
+    // Self-tooling: without this the model tours unrelated tools and says
+    // "I don't have that data" instead of building the tool (verify run
+    // 1a8cb552, 2 of 3 repeats).
+    const selfToolP = (async () => {
+      const on = (role === "student" || role === "instructor") && await selfToolingAllowedFor(req.user.id);
+      const forced = on && role === "student" ? await forcedSelfTool(req.user.id, userMessage).catch(() => null) : null;
+      return { on, forced };
+    })();
+    // Who this learner's agent is (their protégé): its name, level and
+    // sessions from edu.student_agents, and the learner's first name.
+    const protegeP = role === "student" ? (async () => {
+      const [{ data: a }, { data: u }] = await Promise.all([
+        db.schema("edu").from("student_agents").select("name, level, total_sessions").eq("student_id", req.user.id).limit(1).maybeSingle(),
+        db.from("users").select("full_name, username").eq("id", req.user.id).maybeSingle(),
+      ]);
+      return {
+        agentName: (a?.name || safeAgentName || "Akoro").replace(/[\r\n]+/g, " ").slice(0, 80),
+        learnerName: String(u?.full_name || u?.username || "your learner").split(" ")[0].slice(0, 40),
+        level: Number(a?.level) || 1, sessions: Number(a?.total_sessions) || 0,
+      };
+    })().catch(() => null) : Promise.resolve(null);
+    // The instructor's pending drafts: follow-ups ("add a part", "make Q2
+    // harder", "go back to version 1") revise the newest one — without its id
+    // here the model could only start another draft.
+    const draftsP = role === "instructor" && openAiInstructorTools().length
+      ? listActivityDrafts({ id: req.user.id, role }).then((d) => d.slice(0, 3)).catch(() => []) : Promise.resolve([]);
+    const [
+      goalsCtx,
+      [{ context: syllabusCtx, refs: syllabusRefs }, { context: pastCtx, refs: pastRefs }, { context: curriculumCtx, refs: curriculumRefs }, taught],
+      ingests, chatFilesCtx, inboxCtx, runningCtx, att, { on: selfToolOn, forced: forceSelfTool }, protege, pendingDrafts,
+    ] = await Promise.all([goalsP, groundingP, ingestsP, chatFilesP, inboxP, runningP, attP, selfToolP, protegeP, draftsP]);
+    const protegeCtx = taught ? `\n\n${await loadDoctrine("policies/PROTEGE.md")}${renderTaughtContext(taught)}` : "";
     // The reply's trace and meta (previews, materials, the uploads' cards), and the uploads pointed at it.
     let savedReplyId = null;   // the stored reply's id: the episode's label key comes from it
     const saveTurn = async (messageId) => {
@@ -4773,28 +4808,7 @@ router.post("/agent", async (req, res) => {
     const ingestCtx = live.length
       ? `\n\n## The learner's upload\nThe file(s) they attached are being saved to their Library${where.length ? ` — ${[...new Set(where)].join(", ")}` : ""} (private to them) and read in the background; each folder's card shows its files with an Undo. Say so in one short clause — don't repeat the cards' details or any ids. Answer from what you can read now; if the file isn't readable yet, say you'll be able to work on it once it's read.`
       : "";
-    // The files already in this chat and what their reads found (materials/ingestCore.js chatFilesBrief).
-    let chatFilesCtx = "";
-    if (role === "student" && conversationId) {
-      try {
-        const { data } = await db.schema("edu").from("material_ingests").select("names, state, structure")
-          .eq("user_id", req.user.id).eq("chat_session_id", conversationId).neq("state", "undone").order("created_at", { ascending: true }).limit(10);
-        const { chatFilesBrief } = await import("../materials/ingestCore.js");
-        chatFilesCtx = chatFilesBrief(data || []);
-      } catch { chatFilesCtx = ""; }
-    }
-    const inboxCtx = role === "student" && agentNetworkEnabled
-      ? (await inboxBrief(req.user.id).catch(() => "")) + (await buddyBrief(req.user.id).catch(() => ""))
-      : "";
-    // Something is running outside the chat (an Agent Check battle, a teaching session): the
-    // rules for talking about it and changing it (akoro-agent/reasoning/RUNNING_WORK.md), and what it is.
-    const runningCtx = role === "student" && studyPrepEnabled ? await runningWorkBrief(req.user.id).catch(() => "") : "";
-
-    let att = { visionParts: [], docContext: "", notes: [] };
-    if (Array.isArray(rawAttachments) && rawAttachments.length) {
-      if (wantsStream) status("attachments", "Reading your files…");
-      att = await processAttachments(rawAttachments);
-    }
+    // The files already in this chat and what their reads found: chatFilesCtx (above).
 
     // The model cannot resolve "due tomorrow at 8pm" without knowing today.
     // Compute at request time; Africa/Lagos is the platform timezone.
@@ -4805,34 +4819,11 @@ router.post("/agent", async (req, res) => {
     const CURRENT_TIME_CONTEXT =
       `\n\nCurrent date and time: ${nowLagos} (Africa/Lagos). ` +
       `Use it to resolve relative dates — "tomorrow at 8pm" becomes an exact due_at ISO instant in +01:00. Never state a due date you could not compute from this.`;
-    // Self-tooling: without this the model tours unrelated tools and says
-    // "I don't have that data" instead of building the tool (verify run
-    // 1a8cb552, 2 of 3 repeats).
-    const selfToolOn = (role === "student" || role === "instructor") && await selfToolingAllowedFor(req.user.id);
-    const forceSelfTool = selfToolOn && role === "student" ? await forcedSelfTool(req.user.id, userMessage).catch(() => null) : null;
     const selfToolCtx = selfToolOn && role === "instructor"
       ? "\n\n## Building tools (preview)\nWhen the instructor asks for something none of your tools gives directly — a total, average, count, ranking or breakdown over THEIR OWN classes and activities (average grade per activity, who hasn't started, completion by class, students below a mark) — call create_tool (schema_lookup first if unsure what it can use) and answer from its result; don't say you don't have the data. check_activity_outcomes is for ONE activity's summary — a question across several activities (each activity's average, who hasn't started anything) is a create_tool question. Tools only ever see this instructor's own classes and the work set in them — students by name only, never another teacher's class or a learner's private chats or notes. Only say it can't be done after create_tool is rejected, and say why."
       : selfToolOn
       ? "\n\n## Building tools (preview)\nWhen the learner asks for something none of your tools gives directly — a total, average, count or breakdown over their own data (hours of sessions per month, tasks finished per week, accuracy by year) — don't say you don't have the data and don't piece it together from unrelated tools. Call create_tool (schema_lookup first if unsure what it can use), then answer from its result. The same goes for comparisons with other learners (how others scored in battles they played together): create_tool either builds it or, if it needs a permission, asks an admin and the answer comes back in this chat — tell the learner that plainly. Only say it can't be done after create_tool is rejected, and say why.\nWhen the learner asks you to CHANGE their own things and no tool does it (delete or complete their tasks, end a study buddy) — don't just say you can't. Call schema_lookup: if it lists that change as needs_your_ok, call create_tool with it in hint.capabilities in this same turn — don't ask 'shall I build it?' first. The tool is drafted (off) and they get a card showing what it would change; Allow on the card is their yes. Say briefly that you've drafted it and they can tap Allow on the card. Never file submit_tool_request for these.\nWhen their message says they approved a tool, or asks you to run one of your tools by name (after the Akoro team approved it), run that tool now — a read: explain what it found in plain words; a change: it finds what to change and shows the Allow card — say what it would change (the app tells you when they confirm; don't ask them to tell you). When their message says they confirmed a change, look again (run the same tool, or list the items) to check it went through: say what changed and whether anything is still left. Nothing is done until you've checked."
       : "";
-    // Who this learner's agent is (their protégé): its name, level and
-    // sessions from edu.student_agents, and the learner's first name.
-    const protege = role === "student" ? await (async () => {
-      const [{ data: a }, { data: u }] = await Promise.all([
-        db.schema("edu").from("student_agents").select("name, level, total_sessions").eq("student_id", req.user.id).limit(1).maybeSingle(),
-        db.from("users").select("full_name, username").eq("id", req.user.id).maybeSingle(),
-      ]);
-      return {
-        agentName: (a?.name || safeAgentName || "Akoro").replace(/[\r\n]+/g, " ").slice(0, 80),
-        learnerName: String(u?.full_name || u?.username || "your learner").split(" ")[0].slice(0, 40),
-        level: Number(a?.level) || 1, sessions: Number(a?.total_sessions) || 0,
-      };
-    })().catch(() => null) : null;
-    // The instructor's pending drafts: follow-ups ("add a part", "make Q2
-    // harder", "go back to version 1") revise the newest one — without its id
-    // here the model could only start another draft.
-    const pendingDrafts = role === "instructor" && openAiInstructorTools().length
-      ? await listActivityDrafts({ id: req.user.id, role }).then((d) => d.slice(0, 3)).catch(() => []) : [];
     const draftsCtx = pendingDrafts.length
       ? "\n\n## Pending drafts (newest first)\n" + pendingDrafts.map((d) => {
         const vs = Array.isArray(d.payload?.versions) ? d.payload.versions : [];
@@ -5054,6 +5045,12 @@ router.post("/agent", async (req, res) => {
     // Saving is always correct here: the reply is fully generated by this
     // point, and the durable write is turn-keyed idempotent — an abandoned
     // stream that is retried with the same turnId resumes/dedupes by design.
+    mark("answer");
+    // The chips start now, beside the save, not after it (realtime, 2026-11-07).
+    const suggestionsP = role === "student" && reply && wantsStream && req.body?.inlineSuggestions === true
+      ? suggestionsFor({ user: req.user, body: { reply, ask: userMessage, role: "student", conversationId,
+        tools: prepared.toolExecutions.map((x) => ({ tool: x?.tool, topic: x?.teach?.topic || x?.guide?.teach?.topic || null })) } }).catch(() => [])
+      : null;
     let turnSaved = false;   // one outcome line per turn — see the log below
     if (conversationId) {
       if (durable) {
@@ -5108,7 +5105,7 @@ router.post("/agent", async (req, res) => {
     // writes its summary and merges the learner's memories. Never blocks the reply.
     if (turnSaved && conversationId && role === "student") noteChatTurn({ userId: req.user.id, chatSessionId: conversationId }).catch(() => {});
 
-    mark("finishAndSave");
+    mark("save");
     timings.totalMs = Date.now() - t0;
     console.log(`[chat-timing] ${JSON.stringify(timings)}`);
     const metadata = {
@@ -5126,9 +5123,8 @@ router.post("/agent", async (req, res) => {
     send("done", { reply, thinking, syllabus: syllabusRefs, pastQuestions: pastRefs, curriculum: curriculumRefs, mode, metadata, toolExecutions: prepared.toolExecutions, trace: traceBlocks, stopped: stopped(), messageId: savedReplyId });
     // The chips on the same stream, straight after the reply (the app used to ask
     // for them with a second request once the reply ended).
-    if (role === "student" && reply && !stopped() && req.body?.inlineSuggestions === true) {
-      const suggestions = await suggestionsFor({ user: req.user, body: { reply, ask: userMessage, role: "student", conversationId,
-        tools: prepared.toolExecutions.map((x) => ({ tool: x?.tool, topic: x?.teach?.topic || x?.guide?.teach?.topic || null })) } }).catch(() => []);
+    if (suggestionsP && !stopped()) {
+      const suggestions = await suggestionsP;
       send("suggestions", { suggestions });
     }
     return res.end();
