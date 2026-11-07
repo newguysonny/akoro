@@ -109,3 +109,53 @@ export async function strategyThatWorked({ learnerId, conceptId = null, sessionR
     return !error && data?.[0] ? data[0].strategy_id : null;
   } catch { return null; }
 }
+
+/**
+ * PURE: how an accepted strategy turned out, judged from the NEXT attempt
+ * (§7.7.1 step 6): passed → worked; a clear gain (≥ 0.1) without passing →
+ * partial; otherwise did_not_work. Scores are 0–1.
+ */
+export function judgeStrategyOutcome({ scoreBefore = null, scoreAfter = null, passed = false } = {}) {
+  if (passed) return "worked";
+  const after = num(scoreAfter);
+  const before = num(scoreBefore);
+  if (after != null && before != null && after - before >= 0.1) return "partial";
+  return "did_not_work";
+}
+
+/** The sources whose events are an attempt that can judge a Study Prep strategy. */
+const ATTEMPT_SOURCES = new Set(["study_prep", "agent_recall"]);
+
+/**
+ * The recorder calls this after every write: an accepted Study Prep strategy
+ * waiting for its result (recorded as `abandoned` + details.pending when it
+ * was accepted — if no attempt ever follows, that is what it was) is judged by
+ * the next attempt on that topic in the same session. The update is
+ * conditional on the row still being pending, so a replay judges nothing
+ * twice. → [{ id, strategyId, outcome }]. Never throws.
+ */
+export async function settlePendingStrategyOutcomes(event) {
+  if (!event?.learnerId || !ATTEMPT_SOURCES.has(event.source) || !String(event.sessionRef || "").startsWith("study_prep:")) return [];
+  try {
+    const { data, error } = await E().from("learning_strategy_outcomes")
+      .select("id, strategy_id, concept_id, topic_label, score_before, details, outcome")
+      .eq("learner_id", event.learnerId).eq("session_ref", String(event.sessionRef).slice(0, 180)).eq("outcome", "abandoned").limit(20);
+    if (error) throw error;
+    const topic = String(event.topic || "").trim().toLowerCase();
+    const pending = (data || []).filter((r) => r.details?.pending
+      && ((event.conceptId && r.concept_id === event.conceptId) || (topic && String(r.topic_label || "").trim().toLowerCase() === topic)));
+    const out = [];
+    for (const row of pending) {
+      const outcome = judgeStrategyOutcome({ scoreBefore: row.score_before, scoreAfter: event.quality, passed: event.kind === "assessment_result" });
+      const { data: settled, error: e2 } = await E().from("learning_strategy_outcomes").update({
+        outcome, score_after: num(event.quality),
+        details: { ...row.details, pending: false, judgedBy: `${event.sessionRef}/${event.turnRef}`.slice(0, 200), judgedAt: new Date().toISOString() },
+      }).eq("id", row.id).eq("outcome", "abandoned").select("id");
+      if (!e2 && settled?.length) out.push({ id: row.id, strategyId: row.strategy_id, outcome });
+    }
+    return out;
+  } catch (e) {
+    console.warn("[strategy-outcomes] settle failed:", e?.message || e);
+    return [];
+  }
+}

@@ -503,3 +503,41 @@ test("dual-write is best effort: an engine failure never fails the learner's act
   assert.equal((await store.getSession(session.id)).status, "topic_active");
   assert.ok(warnings.some((w) => /workflow mirror: create failed/.test(w)));
 });
+
+// Phase 4a: an accepted harness strategy runs (here interleave → a replan
+// through the store's conditional writes) and starts its pending outcome; a
+// strategy past limits.maxUsesPerTopic is refused.
+test("offer_strategy: the learner's acceptance runs the harness strategy; past its limit it is refused", async () => {
+  const { runStrategyOffer } = await import("../strategies/executors.js");
+  const outcomes = [];
+  let uses = 0;
+  const strategyRun = (args) => runStrategyOffer({ ...args, deps: {
+    store: args.store, now: args.now, prerequisites: async () => PREREQS,
+    checkLimit: async () => (uses >= 2 ? { refusal: "strategy_limit_reached", usesOnTopic: uses, limit: 2 } : { refusal: null, usesOnTopic: uses, limit: 2 }),
+    recommend: async () => ({ ranked: [{ id: "interleave", reasons: ["targets_struggle"] }], struggleTypes: ["interference"] }),
+    recordOutcome: async (o) => { uses += 1; outcomes.push(o); return { recorded: true, id: `o${uses}` }; },
+  } });
+  const store = new MemoryStore();
+  const harness = createHarness({ store, topicWorkflow: makeTopicWorkflow(), syllabus, strategyRun, now: () => "2026-01-01T00:00:00Z" });
+  const session = await plannedSession(harness, { topicIds: ["water-cycle", "matter", "photosynthesis"] });
+  await harness.confirmPlan({ sessionId: session.id, learnerId: LEARNER });
+  const [active] = (await store.getTopics(session.id)).filter((t) => t.status === "active");
+
+  const offered = await harness.offerStrategy({ sessionId: session.id, learnerId: LEARNER, topicId: active.id, strategy: "interleave" });
+  assert.deepEqual(offered.recommended, [{ id: "interleave", reasons: ["targets_struggle"] }]);
+  assert.equal(offered.accepted, undefined, "the agent's offer runs nothing");
+  assert.deepEqual((await store.getTopics(session.id)).map((t) => t.label), ["Water Cycle", "Matter", "Photosynthesis"]);
+
+  const accepted = await harness.offerStrategy({ sessionId: session.id, learnerId: LEARNER, topicId: active.id, strategy: "interleave", accepted: true });
+  assert.equal(accepted.execution.executed, true);
+  assert.deepEqual((await store.getTopics(session.id)).map((t) => t.label), ["Water Cycle", "Photosynthesis", "Matter"], "the related topic comes next");
+  assert.equal(outcomes[0].details.pending, true);
+  const event = store.events.filter((e) => e.decision_node === "strategy_offered" || e.decisionNode === "strategy_offered").at(-1);
+  assert.ok(event, "the acceptance is logged");
+
+  await harness.offerStrategy({ sessionId: session.id, learnerId: LEARNER, topicId: active.id, strategy: "interleave", accepted: true });
+  await assert.rejects(
+    () => harness.offerStrategy({ sessionId: session.id, learnerId: LEARNER, topicId: active.id, strategy: "interleave", accepted: true }),
+    (error) => error.code === "strategy_not_permitted" && /limit 2/.test(error.message),
+  );
+});

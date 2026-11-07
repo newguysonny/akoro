@@ -3,12 +3,16 @@
  *
  * It is intentionally not a model function. The Python agent calls this
  * bounded resource around a teaching turn; Akoro derives the learner from the
- * signed capability and executes the database transition function. Browser
- * identifiers and arbitrary web/RAG facts never become concept evidence.
+ * signed capability and records the evidence through the Education Engine's
+ * ONE recorder (learning-events.js, Phase 4a): the curriculum guardian's
+ * validated claim is passed through, and the recorder's struggle detection
+ * runs on it (a misconception opens a struggle). Browser identifiers and
+ * arbitrary web/RAG facts never become concept evidence.
  */
 import { Router } from "express";
 
 import db from "../../db.js";
+import { recordLearningEvent, refreshConceptRetention } from "../adaptive-learning/learning-events.js";
 import {
   requireAgentToolsCredential,
   verifyAgentToolsCapability,
@@ -131,11 +135,8 @@ router.post("/snapshot", requireAgentToolsCredential, async (req, res) => {
     // Match canonical retention to the existing decay curve before handing a
     // bounded condition to Python. This is time-based state refresh only; it
     // cannot create tasks, notifications, or learner-side actions.
-    const { error: decayError } = await db.schema("edu").rpc("refresh_learner_concept_retention", {
-      p_learner_id: principal.id,
-      p_concept_ids: request.conceptIds,
-    });
-    if (decayError) throw new ConceptStateGatewayError(503, "Concept retention refresh is unavailable");
+    const refreshed = await refreshConceptRetention({ learnerId: principal.id, conceptIds: request.conceptIds });
+    if (!refreshed.ok) throw new ConceptStateGatewayError(503, "Concept retention refresh is unavailable");
     const { data, error } = await db.schema("edu").from("learner_concept_state")
       .select("concept_id, mastery, retention, evidence_confidence, misconception_active, evidence_count, last_evidence_at, next_review_due, last_retention_decay_at, state_version")
       .eq("learner_id", principal.id)
@@ -177,24 +178,16 @@ router.post("/observations", requireAgentToolsCredential, async (req, res) => {
 
     const states = [];
     for (const observation of request.observations) {
-      const { data, error } = await db.schema("edu").rpc("record_learner_concept_evidence", {
-        p_learner_id: principal.id,
-        p_concept_id: observation.conceptId,
-        p_source_session_id: request.sessionId,
-        p_source_turn_id: request.turnId,
-        p_observation_kind: observation.kind,
-        p_response_quality: observation.responseQuality,
-        p_claim_validity: observation.claimValidity,
-        p_model_confidence: observation.modelConfidence,
-        p_claim_status: observation.claimStatus,
-        p_evidence_summary: observation.evidenceSummary,
-        p_provenance: {
-          source: "akoro_python_agent",
-          contract: "concept-state-v1",
-          validation: "curriculum_guardian-v1",
-        },
+      const recorded = await recordLearningEvent({
+        learnerId: principal.id, conceptId: observation.conceptId,
+        kind: observation.kind, source: "python_agent",
+        sessionRef: request.sessionId, turnRef: request.turnId,
+        quality: observation.responseQuality,
+        claim: { status: observation.claimStatus, validity: observation.claimValidity, confidence: observation.modelConfidence },
+        summary: observation.evidenceSummary,
+        details: { agent: "akoro_python_agent", contract: "concept-state-v1", validation: "curriculum_guardian-v1" },
       });
-      if (error) throw new ConceptStateGatewayError(503, "Learner concept evidence could not be recorded");
+      if (!recorded.recorded) throw new ConceptStateGatewayError(503, "Learner concept evidence could not be recorded");
       await enqueueGuardianReview(principal.id, request, observation);
       if (trackerEnabled) {
         const { error: trackerError } = await db.schema("edu").rpc("record_learner_concept_tracker", {
@@ -204,7 +197,7 @@ router.post("/observations", requireAgentToolsCredential, async (req, res) => {
         });
         if (trackerError) throw new ConceptStateGatewayError(503, "Learner concept tracker could not be recorded");
       }
-      const state = Array.isArray(data) ? data[0] : data;
+      const state = recorded.state;
       if (!state) throw new ConceptStateGatewayError(503, "Learner concept state was not returned");
       states.push(publicState(state, observation.conceptId));
     }

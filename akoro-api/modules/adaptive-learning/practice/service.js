@@ -16,7 +16,7 @@ import { masteryWriteBack, toUnitScore } from "../study-prep/education-engine.js
 
 const quiet = (what) => (e) => { console.warn(`[practice ${what}]`, e?.message || e); return null; };
 
-export function makePracticeRun({ engine, evidence = null }) {
+export function makePracticeRun({ engine, evidence = null, signals = null }) {
   const event = (id, type, payload, actor = "system", visibility = "audit") =>
     engine.appendEvent(id, { event_type: type, category: "practice", actor, visibility, payload }).catch(quiet(type));
 
@@ -70,6 +70,10 @@ export function makePracticeRun({ engine, evidence = null }) {
           mastery: masteryWriteBack({ score, passed: outcome.passed }), source: "proctored_assessment",
         }).catch(quiet("evidence"));
       }
+      // Per-question tags and timings (§7.15.1) — the same clean runs only.
+      if (signals && evidenceAllowed(outcome.verdict)) {
+        await signals({ learnerId, source: "proctored", sessionRef: `practice:${id}`, subject, topic, records: summary.records || [] }).catch(quiet("signals"));
+      }
     } catch (e) { quiet("finish")(e); }
     return outcome;
   }
@@ -94,6 +98,10 @@ export async function practiceRun() {
   _run = makePracticeRun({
     engine: createWorkflowEngine({ store: makeSupabaseWorkflowStore(db) }),
     evidence: (args) => supabaseStore.recordMasteryEvidence(args),
+    signals: async ({ records, ...args }) => {
+      const { recordQuestionSignals, proctoredQuestionSignals } = await import("../question-signals.js");
+      return recordQuestionSignals({ ...args, questions: proctoredQuestionSignals(records) });
+    },
   });
   return _run;
 }

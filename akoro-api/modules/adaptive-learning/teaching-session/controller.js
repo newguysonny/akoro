@@ -99,7 +99,34 @@ const withTimeout = (promise, ms) => {
 };
 
 /** Run one agent-driven turn. Returns the same context shape the fixed runner did, plus the agent's record. */
-export async function executeAgentTeachingTurn({ orchestrator, humanMessage, callbacks = {}, phaseLabels, actionForDialogueMove, mode, decide = modelDecide, policy = TEACHING_POLICY, tools: harnessTools = null, teachGuide = guideTeach }) {
+/**
+ * Strategy Library advice for a teaching turn (Phase 4a, strategies/recommend.js):
+ * the ranked candidates for teaching_get_state, and the per-topic use limit for
+ * strategy_select. Loaded lazily; fails open (no database → no advice, no limit).
+ */
+const loadRecommend = () => (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY ? import("../strategies/recommend.js") : Promise.resolve(null));
+export const teachingStrategyAdvisor = Object.freeze({
+  async recommend(context) {
+    const m = await loadRecommend();
+    if (!m) return [];
+    const r = await m.recommendStrategies({ learnerId: context.studentId, subject: context.subject, topic: context.topic, workflow: "teaching", executor: "teaching" });
+    return (r.ranked || []).slice(0, 5).map((s) => ({ id: s.id, reasons: s.reasons }));
+  },
+  async limit(context, strategyId) {
+    const m = await loadRecommend();
+    return m ? m.checkStrategyLimit({ learnerId: context.studentId, strategyId, subject: context.subject, topic: context.topic }) : { refusal: null };
+  },
+});
+
+/** Switching TO a strategy already used up on this topic is refused (staying on the current one is not a new use). */
+async function strategyLimitReached(advisor, context, orchestrator, strategy) {
+  const chosen = teachingStrategy(strategy);
+  if (!chosen || chosen === currentTeachingStrategy(orchestrator)) return false;
+  const limit = await advisor.limit(context, chosen).catch(() => null);
+  return !!limit?.refusal;
+}
+
+export async function executeAgentTeachingTurn({ orchestrator, humanMessage, callbacks = {}, phaseLabels, actionForDialogueMove, mode, decide = modelDecide, policy = TEACHING_POLICY, tools: harnessTools = null, teachGuide = guideTeach, strategyAdvisor = teachingStrategyAdvisor }) {
   const session = orchestrator?.session;
   if (!orchestrator?.studentAgent || !orchestrator?.studentAgentRecord || !session?.topic) throw new Error("Adaptive teaching workflow requires an initialized session");
   const context = {
@@ -142,8 +169,14 @@ export async function executeAgentTeachingTurn({ orchestrator, humanMessage, cal
     if (!valid.ok) { observations.push({ tool: decision.tool, error: valid.error }); continue; }
     const args = decision.args || {};
     step(decision.tool, "started");
-    if (decision.tool === "teaching_get_state") observations.push({ tool: decision.tool, result: decisionState(context) });
-    else if (decision.tool === "strategy_select") {
+    if (decision.tool === "teaching_get_state") {
+      // The Strategy Library's ranked candidates for this learner and topic (Phase 4a), once per turn.
+      context.recommendedStrategies ??= await strategyAdvisor.recommend(context).catch(() => []);
+      observations.push({ tool: decision.tool, result: { ...decisionState(context), recommendedStrategies: context.recommendedStrategies } });
+    } else if (decision.tool === "strategy_select" && await strategyLimitReached(strategyAdvisor, context, orchestrator, args.strategy)) {
+      // limits.maxUsesPerTopic: this strategy has had its turns on this topic.
+      observations.push({ tool: decision.tool, error: "strategy_limit_reached" });
+    } else if (decision.tool === "strategy_select") {
       // The way it was being taught wasn't landing: that is its outcome (§7.7.1 step 6).
       const previous = currentTeachingStrategy(orchestrator);
       const chosen = teachingStrategy(args.strategy);

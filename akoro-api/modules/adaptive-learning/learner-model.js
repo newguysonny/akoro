@@ -78,3 +78,29 @@ export async function recommendForLearner({ learnerId, conceptId, cognitive = nu
   const recommendation = recommendNextAction({ conceptState: state, cognitive, now, hasHistory: Boolean(state) });
   return { ...recommendation, conceptId, misconceptionActive: state?.misconception_active === true, hasState: Boolean(state) };
 }
+
+/**
+ * The learner's per-question signals (§7.15.1: tags, time to answer, confusion
+ * pairs; question-signals.js), newest first, optionally for one subject /
+ * topic / concept, summarised per skill and format. → { questions, bySkill,
+ * byFormat, confusions, rows } — empty on failure.
+ */
+export async function readQuestionSignals({ learnerId, subject = null, topic = null, conceptId = null, limit = 200 } = {}) {
+  const { summariseQuestionSignals } = await import("./question-signals.js");
+  if (!learnerId) return { ...summariseQuestionSignals([]), rows: [] };
+  try {
+    let q = E().from("learning_question_signals")
+      .select("source, session_ref, question_ref, concept_id, subject, topic_label, skill, format, tag_source, time_budget_s, time_to_answer_ms, outcome, score, confused_with, confusion_concept, created_at")
+      .eq("learner_id", learnerId);
+    if (conceptId) q = q.eq("concept_id", conceptId);
+    if (subject) q = q.ilike("subject", String(subject).trim());
+    const { data, error } = await q.order("created_at", { ascending: false }).limit(Math.max(1, Math.min(500, limit)));
+    if (error) throw error;
+    const t = String(topic || "").trim().toLowerCase();
+    const rows = (data || []).filter((r) => !t || String(r.topic_label || "").trim().toLowerCase() === t);
+    return { ...summariseQuestionSignals(rows), rows };
+  } catch (e) {
+    console.warn("[learner-model] question signals unavailable:", e?.message || e);
+    return { ...summariseQuestionSignals([]), rows: [] };
+  }
+}

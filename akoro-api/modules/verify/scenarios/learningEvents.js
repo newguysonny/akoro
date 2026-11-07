@@ -8,6 +8,7 @@
  * the sandbox catalogue may be empty, and the recorder never invents one.
  */
 import { randomUUID } from "node:crypto";
+import { LEARNING_SIGNALS } from "./learningSignals.js";
 
 export const recorderMisconception = {
   name: "learning.recorder_misconception", area: "learning", risk: "write",
@@ -233,4 +234,5 @@ export const backfillIdempotent = {
   },
 };
 
-export const LEARNING_EVENTS = [recorderMisconception, struggleBreakthrough, strategyOutcome, backfillIdempotent];
+// Phase 4a open items (strategy_recommend, gateway_struggle, question_timings) live in learningSignals.js.
+export const LEARNING_EVENTS = [recorderMisconception, struggleBreakthrough, strategyOutcome, backfillIdempotent, ...LEARNING_SIGNALS];

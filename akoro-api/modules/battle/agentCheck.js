@@ -159,6 +159,37 @@ export async function checkResults(battleId, learnerId = null) {
 }
 
 /**
+ * §7.15.1 signals from a finished Agent Check: each seat's per-question tags,
+ * time to answer and confusion pairs, through the one recorder
+ * (adaptive-learning/question-signals.js). Idempotent; never throws.
+ * → [{ learnerId, recorded }]
+ */
+export async function recordCheckQuestionSignals(battleId) {
+  try {
+    const [{ data: battle }, { data: questions }, { data: seats }] = await Promise.all([
+      db.from("battles").select("id, battle_type, topic, subject").eq("id", battleId).maybeSingle(),
+      db.from("battle_questions").select("id, question_order, question_text, options_json, topic, correct_answer_index, time_limit_seconds").eq("battle_id", battleId).order("question_order", { ascending: true }),
+      db.from("battle_participants").select("id, user_id, role").eq("battle_id", battleId),
+    ]);
+    if (!battle || battle.battle_type !== "check" || !questions?.length) return [];
+    const { checkQuestionSignals, recordQuestionSignals } = await import("../adaptive-learning/question-signals.js");
+    const out = [];
+    for (const seat of (seats || []).filter((s) => s.role !== "teacher" && s.user_id)) {
+      const { data: answers } = await db.from("battle_answers").select("question_id, selected_index, is_correct, answer_basis, response_time_ms").eq("participant_id", seat.id);
+      const r = await recordQuestionSignals({
+        learnerId: seat.user_id, source: "agent_check", sessionRef: `check:${battleId}`, subject: battle.subject, topic: battle.topic,
+        questions: checkQuestionSignals({ battle, questions, answers: answers || [] }),
+      });
+      out.push({ learnerId: seat.user_id, recorded: r.recorded });
+    }
+    return out;
+  } catch (e) {
+    console.warn("[agent-check] question signals:", e?.message || e);
+    return [];
+  }
+}
+
+/**
  * Remove one Agent Check battle (the gate's cleanup) — only a check whose one
  * seat is this learner. Its questions, answers, seats and log go with it.
  * → number of battles deleted.
