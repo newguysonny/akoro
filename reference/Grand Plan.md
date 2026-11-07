@@ -3294,6 +3294,16 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   WorkflowCard/WorkflowResumeCard. Open for Scenario K: saving the pick on the
   thread/workflow + `model.changed`, the pick reaching controller/persona calls,
   refusal / tool_choice checks; developer-mode audience (Q9).
+- **Status (2026-11-07):** visible UI built (previews approved). Home: ONE Needs
+  you card — the resume card and Tasks → Needs you are the same list (lead = the
+  open workflow most worth continuing, "Needs you · N more" opens the list);
+  no separate WorkflowCard list. Shared `StreamCards.jsx` (WorkflowStateBadge,
+  ScoreRing, RejectedRow, DevLine); the Study Prep plan card on Allow / Reject /
+  Later (Reject cancels before any spend); Needs you rows carry the server badge;
+  refused steps are the red row. Model picker: plan badge, cost per message,
+  plan-locked models, confirm on dearer models, refusal notice. School portal
+  "Learner Struggles" page. UI gate suite `phase11` PASS (phone). Kept as is by
+  decision: the Study Prep teaching offer's own "Confirm teaching session".
 
 ### Phase 12 — Hardening and rollout
 - Failure tests §19; data migration §14.3; flag-by-flag rollout; observability
