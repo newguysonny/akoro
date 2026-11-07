@@ -254,7 +254,10 @@ router.post("/ingest/:id/records", asyncHandler(async (req, res) => {
     const first = !Array.isArray(row.filing?.fileIndexes) || row.filing.fileIndexes.includes(0);
     next = await addSteps(next, filedSteps({ ingestId: row.id, folderName: row.folder_name, first }));
   }
-  res.json({ success: true, data: ingestToApi(next) });
+  // §8.8: the files join the learner's open Study Prep session in this subject (best effort).
+  const { attachUploadsToStudyPrep } = await import("../adaptive-learning/study-prep/materials-source.js");
+  const studyPrep = await attachUploadsToStudyPrep({ learnerId: req.user.id, subject: row.subject, recordIds: ids });
+  res.json({ success: true, data: { ...ingestToApi(next), ...(studyPrep?.added ? { studyPrep } : {}) } });
 }));
 
 const PROGRESS = new Set(["extracting", "ready", "failed"]);

@@ -594,8 +594,12 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
       const basedOn = session.syllabus_source === "documents" && session.syllabus_ref && syllabus.materialQuestions
         ? await syllabus.materialQuestions({ folderId: session.syllabus_ref, learnerId, topic: topic.label }).catch(() => [])
         : [];
+      // Files the learner linked to this session (chat uploads, §8.8): the check's facts come from their own notes first.
+      const fromNotes = (session.material_record_ids || []).length && syllabus.materials?.search
+        ? (await syllabus.materials.search({ learnerId, recordIds: session.material_record_ids, query: topic.label, limit: 4 }).catch(() => [])).map((p) => p.snippet).filter(Boolean)
+        : [];
       check = (await steps.once({ kind: "study_prep_check", key: `${stepKey}:battle`, userId: learnerId,
-        act: () => agentCheck.start({ learnerId, subject: session.subject, topic: topic.label, studyPrepTopicId: topic.id, mode, ...(basedOn.length ? { basedOn } : {}) }),
+        act: () => agentCheck.start({ learnerId, subject: session.subject, topic: topic.label, studyPrepTopicId: topic.id, mode, ...(basedOn.length ? { basedOn } : {}), ...(fromNotes.length ? { fromNotes } : {}) }),
         // Interrupted mid-step: the battle this attempt already made, if any — never a second one.
         check: (journal) => agentCheck.find?.({ studyPrepTopicId: topic.id, since: journal.created_at }) ?? null,
       })).result;

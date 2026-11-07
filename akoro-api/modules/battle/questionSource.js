@@ -22,7 +22,7 @@
  * care which source filled it.
  */
 
-import { basedOnBlock } from "./basedOn.js";
+import { basedOnBlock, notesBlock } from "./basedOn.js";
 import db from "../../db.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
 import { chargeForAI, schoolBillTo, InsufficientCoins, coinsAvailable } from "../../lib/coins.js";
@@ -208,8 +208,9 @@ export async function generate({
   model = process.env.AI_MODEL_ROLE_QUESTION_GENERATOR || OPENAI_MODEL,
   feature = "battle_generate",
   basedOn = [],
+  fromNotes = [],
 }) {
-  const style = styleBlock(exemplars) + basedOnBlock(basedOn);
+  const style = styleBlock(exemplars) + basedOnBlock(basedOn) + notesBlock(fromNotes);
   const syllabus = await curriculumGrounding(subject, topic);
   const level = classLabel ? ` for ${classLabel} students` : " for Nigerian junior-secondary students";
   const optionCount = exemplars.length
@@ -307,7 +308,7 @@ export async function generate({
  */
 export async function collectQuestions({
   source = "auto", total = 15, subject, topic, difficulty = "intermediate", classLabel,
-  courseId = null, userId, basedOn = [], have = [],
+  courseId = null, userId, basedOn = [], fromNotes = [], have = [],
   // Only bank questions about the topic (a draft on "fractions" shouldn't open with simple interest); AI writes the rest on it.
   onTopic = false,
 }) {
@@ -340,6 +341,7 @@ export async function collectQuestions({
         subject, topic, difficulty, count: total - questions.length, classLabel, userId,
         exemplars: source === "ai" ? exemplars : questions,
         ...(basedOn?.length ? { basedOn } : {}),
+        ...(fromNotes?.length ? { fromNotes } : {}),
       });
       charged += res.charged || 0;
       const had = questions.length;
@@ -377,13 +379,15 @@ export async function buildQuestions({
   durationSeconds = null,
   // The learner's own past-paper questions to base generated ones on (§7.17.3).
   basedOn = [],
+  // Passages from the learner's own notes / files on the topic (§8.8): facts from there first.
+  fromNotes = [],
   // A draft's questions (collectQuestions): placed as they are, in order; topped up only if short.
   preset = null,
 }) {
   const have = presetQuestions(preset, topic);
   const { questions, charged, generated } = have.length >= total
     ? { questions: have.slice(0, total), charged: 0, generated: 0 }
-    : await collectQuestions({ source, total, subject, topic, difficulty, classLabel, courseId, userId, basedOn, have });
+    : await collectQuestions({ source, total, subject, topic, difficulty, classLabel, courseId, userId, basedOn, fromNotes, have });
   const secs = perQuestionSeconds(durationSeconds, questions.length);
   if (questions.length) {
     await db.from("battle_questions").insert(questions.map((q, i) => row(battleId, i + 1, q, secs)));
