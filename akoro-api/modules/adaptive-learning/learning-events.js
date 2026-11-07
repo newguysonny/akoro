@@ -99,8 +99,14 @@ export async function recordLearningEvent({
   if (claim && !claimed) return { recorded: false, reason: "invalid_claim" };
   try {
     const concept = conceptId || await resolveConceptId({ subject, topic });
-    if (!concept) return { recorded: false, reason: "no_approved_concept" };
     const shape = claimed || evidenceShape({ kind, source, quality, checked });
+    if (!concept) {
+      // No approved concept: nothing goes into the learner model, but an accepted strategy
+      // waiting on this topic is still judged by the attempt (matched by topic name).
+      let strategyOutcomes = [];
+      try { strategyOutcomes = await (await import("./strategies/outcomes.js")).settlePendingStrategyOutcomes({ learnerId, conceptId: null, kind, source, subject, topic, sessionRef, turnRef, quality: shape.response_quality }); } catch (e) { console.warn("[learning-events] strategy outcomes:", e?.message || e); }
+      return { recorded: false, reason: "no_approved_concept", ...(strategyOutcomes.length ? { strategyOutcomes } : {}) };
+    }
     const { data, error } = await db.schema("edu").rpc("record_learner_concept_evidence", {
       p_learner_id: learnerId, p_concept_id: concept,
       p_source_session_id: clip(sessionRef, 180), p_source_turn_id: clip(turnRef, 180),

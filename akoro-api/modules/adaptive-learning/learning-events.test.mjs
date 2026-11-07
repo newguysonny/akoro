@@ -37,3 +37,10 @@ test("wiring: Teaching, Study Prep, Practice and Decay Review all record through
   assert.match(practice, /source: "proctored_assessment"/);
   assert.match(decay, /void recordDecayEvidence\(/);
 });
+
+test("no approved concept: nothing enters the learner model, but a waiting strategy is still judged by the attempt", async () => {
+  const src = await read("./learning-events.js");
+  const i = src.indexOf("if (!concept) {");
+  assert.ok(i > 0 && src.indexOf("settlePendingStrategyOutcomes", i) > i && src.indexOf("record_learner_concept_evidence", i) > src.indexOf("settlePendingStrategyOutcomes", i));
+  assert.match(src, /reason: "no_approved_concept"/);
+});

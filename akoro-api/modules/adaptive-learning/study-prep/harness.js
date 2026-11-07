@@ -26,6 +26,7 @@ import {
   STRATEGY_LIBRARY, STUDY_PREP_COST, applyThreshold, estimateSessionCost, isPermittedStrategy, masteryWriteBack,
 } from "./education-engine.js";
 import { classifyGoal } from "./goal-type.js";
+import { getStrategy } from "../strategies/library.js";
 import { generateGate, isNonCurricular, makeMaterialsOps } from "./materials-ops.js";
 
 /** Thrown/mapped when the wallet cannot cover a charge → session pauses. */
@@ -111,6 +112,44 @@ async function defaultStrategyRun(args) {
   }
 }
 
+/**
+ * The strategy the agent offered and the learner hasn't answered yet, per
+ * topic (Phase 4a, preview approved 2026-11-07): the latest strategy_offered /
+ * strategy_declined event for a topic decides. PURE.
+ *   → { topicId, strategy, name, summary, operation, allowDoes } | null
+ */
+const ALLOW_DOES = Object.freeze({
+  schedule: "I'll add short reviews to your chat on different days.",
+  replan: "I'll change the order of your remaining topics.",
+  offline_export: "I'll save a summary and a self-test to your Records.",
+  notify_human: "I'll let your class teacher know you'd like help with this.",
+  peer_stories: "I'll share how other learners got past this, in your chat.",
+  goal_set: "I'll ask you in the chat what 'got it' should look like here.",
+});
+export function pendingStrategyOffer(events = [], topics = [], getEntry = () => null) {
+  const latest = new Map();
+  for (const e of events || []) {
+    if (e?.decision_node !== "strategy_offered" && e?.decision_node !== "strategy_declined") continue;
+    if (e.topic_id) latest.set(e.topic_id, e);
+  }
+  const inProgress = new Set((topics || []).filter((t) => t && TOPIC_IN_PROGRESS_STATES.includes(t.status)).map((t) => t.id));
+  for (const [topicId, e] of latest) {
+    if (!inProgress.has(topicId) || e.decision_node !== "strategy_offered" || e.facts?.accepted) continue;
+    const entry = getEntry(e.facts?.strategy);
+    if (!entry) continue;
+    const op = entry.runsAs?.executor === "harness" ? entry.runsAs.operation : "teach";
+    return { topicId, strategy: entry.id, name: entry.name, summary: entry.summary, operation: op,
+      allowDoes: ALLOW_DOES[op] || (op === "teach" ? "It's used in your next teaching session." : null) };
+  }
+  return null;
+}
+
+/** The plan card's label for a plan made from the learner's files. PURE. */
+export function documentsPlanLabel(row) {
+  const n = Array.isArray(row?.material_record_ids) ? row.material_record_ids.length : 0;
+  return `Outline drawn from your files${n ? ` (${n} file${n === 1 ? "" : "s"})` : ""}. Not your school's official syllabus.`;
+}
+
 export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentCheck = null, protege = null, workflowMirror = null, checkRun = null, teaching = null, steps = runDirectly, strategyRun = defaultStrategyRun, now = () => new Date().toISOString() }) {
   // Every session and topic status write is checked against the workflow
   // definition (F7) and, with a mirror, dual-written to the engine (Phase 1).
@@ -155,7 +194,10 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     syllabusSource: row.syllabus_source || "platform",
     // §8.8: a school exam, or a scholarship / competition / professional exam / own topic.
     goalType: row.goal_type || "curricular", materialsRequested: Boolean(row.materials_requested_at),
-    syllabusLabel: row.syllabus_source === "generated" ? GENERATED_OUTLINE_LABEL : null,
+    // The plan card says where the topics came from (preview approved 2026-11-07): an AI-drafted
+    // outline, or an outline drawn from the learner's own files — never passed off as the school's syllabus.
+    syllabusLabel: row.syllabus_source === "generated" ? GENERATED_OUTLINE_LABEL : row.syllabus_source === "documents" ? documentsPlanLabel(row) : null,
+    syllabusLabelKind: row.syllabus_source === "generated" ? "generated" : row.syllabus_source === "documents" ? "documents" : null,
     workflowId: row.workflow_id || null,
   });
 
@@ -552,8 +594,12 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
       const basedOn = session.syllabus_source === "documents" && session.syllabus_ref && syllabus.materialQuestions
         ? await syllabus.materialQuestions({ folderId: session.syllabus_ref, learnerId, topic: topic.label }).catch(() => [])
         : [];
+      // Files the learner linked to this session (chat uploads, §8.8): the check's facts come from their own notes first.
+      const fromNotes = (session.material_record_ids || []).length && syllabus.materials?.search
+        ? (await syllabus.materials.search({ learnerId, recordIds: session.material_record_ids, query: topic.label, limit: 4 }).catch(() => [])).map((p) => p.snippet).filter(Boolean)
+        : [];
       check = (await steps.once({ kind: "study_prep_check", key: `${stepKey}:battle`, userId: learnerId,
-        act: () => agentCheck.start({ learnerId, subject: session.subject, topic: topic.label, studyPrepTopicId: topic.id, mode, ...(basedOn.length ? { basedOn } : {}) }),
+        act: () => agentCheck.start({ learnerId, subject: session.subject, topic: topic.label, studyPrepTopicId: topic.id, mode, ...(basedOn.length ? { basedOn } : {}), ...(fromNotes.length ? { fromNotes } : {}) }),
         // Interrupted mid-step: the battle this attempt already made, if any — never a second one.
         check: (journal) => agentCheck.find?.({ studyPrepTopicId: topic.id, since: journal.created_at }) ?? null,
       })).result;
@@ -851,6 +897,20 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     return { session: publicSession(session), topic: publicTopic(updated || topic) };
   }
 
+  /** The learner's Reject on an offered strategy: recorded, nothing runs, the card stops offering it. */
+  async function declineStrategy({ sessionId, learnerId, topicId, strategy }) {
+    const session = await ownedSession(sessionId, learnerId);
+    if (!session) throw new HarnessRejection("session_not_found", "Study-prep session was not found", 404);
+    const topics = await store.getTopics(session.id);
+    const topic = topics.find((row) => row.id === topicId) || null;
+    await log(session.id, topic?.id || null, {
+      eventType: "harness_decision", origin: "learner", decisionNode: "strategy_declined",
+      facts: { strategy, topic: topic?.label || null },
+      narrative: deliberate("strategy_declined", { strategy, topicLabel: topic?.label })?.narrative,
+    });
+    return { strategy, declined: true, topic: topic ? publicTopic(topic) : null };
+  }
+
   /**
    * offer_strategy — propose level, curated library only (Decision 3). The
    * learner's acceptance (`accepted`, from the route) runs the harness
@@ -1114,6 +1174,9 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     // agentCheck: practice is the Agent Check (D45) — the card words its
     // buttons for it before the learner taps anything.
     const view = { session: publicSession(session, topics), topics: topics.map(publicTopic), events, agentCheck: !!agentCheck };
+    // The agent's open strategy offer, answered on the card with Allow / Reject / Later.
+    const offer = pendingStrategyOffer(events, topics, getStrategy);
+    if (offer) view.strategyOffer = offer;
     // When the next check starts by itself (the card's countdown), or that it needs the learner's OK.
     const active = view.topics.find((t) => t.status === "active");
     if (agentCheck && active && session.status === "topic_active") {
@@ -1159,7 +1222,7 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     store,
     ...materialsOps,
     createSession, proposePlan, confirmPlan, adjustPlan,
-    startTopicPractice, submitPractice, completeAgentCheck, confirmTeachBack, offerStrategy,
+    startTopicPractice, submitPractice, completeAgentCheck, confirmTeachBack, offerStrategy, declineStrategy,
     requestTeaching, completeTeaching, teachingAbandoned,
     advanceTopic, deferTopic, retryDeferredTopic, flagTopic,
     concludeSession, pauseSession, resumeSession, cancelSession,

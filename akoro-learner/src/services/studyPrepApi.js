@@ -83,6 +83,11 @@ export async function resumeStudyPrepSession(sessionId) {
   return apiPost(`${BASE}/sessions/${sessionId}/resume`, {});
 }
 
+/** The learner's answer to a strategy the agent offered: accepted runs it; false records a Reject. */
+export async function answerStudyPrepStrategy(sessionId, topicId, strategy, accepted) {
+  return apiPost(`${BASE}/sessions/${sessionId}/topics/${topicId}/strategy`, { strategy, accepted });
+}
+
 export async function cancelStudyPrepSession(sessionId) {
   return apiPost(`${BASE}/sessions/${sessionId}/cancel`, {});
 }

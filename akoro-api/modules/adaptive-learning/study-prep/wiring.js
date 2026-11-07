@@ -79,9 +79,9 @@ const makeAgentCheck = ({ questions, secondsPerQuestion } = {}) => ({
     const n = notes?.length || 0;
     return { notes: n, strength: n === 0 ? "none" : n < 3 ? "thin" : "good" };
   },
-  async start({ learnerId, subject, topic, studyPrepTopicId, mode, basedOn = [] }) {
+  async start({ learnerId, subject, topic, studyPrepTopicId, mode, basedOn = [], fromNotes = [] }) {
     const { createCheckBattle } = await import("../../battle/agentCheck.js");
-    return createCheckBattle({ learnerId, subject, topic, studyPrepTopicId, mode, basedOn,
+    return createCheckBattle({ learnerId, subject, topic, studyPrepTopicId, mode, basedOn, fromNotes,
       ...(questions ? { total: questions } : {}), ...(secondsPerQuestion ? { secondsPerQuestion } : {}) });
   },
   async results(battleId) {

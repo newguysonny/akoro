@@ -22,7 +22,7 @@
  * care which source filled it.
  */
 
-import { basedOnBlock } from "./basedOn.js";
+import { basedOnBlock, notesBlock } from "./basedOn.js";
 import db from "../../db.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
 import { chargeForAI, schoolBillTo, InsufficientCoins, coinsAvailable } from "../../lib/coins.js";
@@ -51,6 +51,8 @@ export function perQuestionSeconds(totalSeconds, questionCount) {
   return Math.min(180, Math.max(8, Math.floor(total / count)));
 }
 
+const TAG_SKILLS = ["recall", "apply", "transfer"];
+const TAG_FORMATS = ["mcq", "short", "diagram", "word_problem", "calculation"];
 const row = (battleId, order, q, seconds = 15) => ({
   battle_id:            battleId,
   question_order:       order,
@@ -60,6 +62,8 @@ const row = (battleId, order, q, seconds = 15) => ({
   topic:                q.topic || null,
   xp_value:             q.xp ?? 35,
   time_limit_seconds:   seconds,
+  // Question tags from the source (§7.15.1) — read by the Agent Check's question signals.
+  ...(q.skill ? { skill: q.skill } : {}), ...(q.format ? { format: q.format } : {}),
   // From a past paper: which one (the learner's past-question practice counts it).
   ...(q.exam ? { past_exam: q.exam, past_year: q.year ?? null } : {}),
   // The writer's one-line reason, when it gave one: Sergeant uses it at the reveal.
@@ -74,7 +78,7 @@ const row = (battleId, order, q, seconds = 15) => ({
  * So the answer must resolve to an option or the question is dropped, whatever
  * produced it.
  */
-function normalise(raw, fallbackTopic) {
+export function normalise(raw, fallbackTopic) {
   // `orig` keeps each option's position in the source list: correct_answer_index
   // refers to THAT list, so dropping an empty option must not shift the answer
   // onto its neighbour (a right answer was being marked wrong).
@@ -95,7 +99,10 @@ function normalise(raw, fallbackTopic) {
   if (idx < 0 && Number.isInteger(raw.correct_answer_index)) idx = opts.findIndex((o) => o.orig === raw.correct_answer_index);
   if (idx < 0 || idx >= opts.length) return null;
 
-  return { stem, options: opts.map(({ orig, ...o }) => o), correctIndex: idx, topic: raw.topic || fallbackTopic || null, xp: raw.xp_value ?? 35, ...(raw.explanation ? { explanation: String(raw.explanation).trim() } : {}) };
+  // The question source tags each question (§7.15.1); off-list values are dropped, never guessed here.
+  const skill = TAG_SKILLS.includes(String(raw.skill || "").toLowerCase()) ? String(raw.skill).toLowerCase() : null;
+  const format = TAG_FORMATS.includes(String(raw.format || "").toLowerCase()) ? String(raw.format).toLowerCase() : null;
+  return { stem, options: opts.map(({ orig, ...o }) => o), correctIndex: idx, topic: raw.topic || fallbackTopic || null, xp: raw.xp_value ?? 35, ...(raw.explanation ? { explanation: String(raw.explanation).trim() } : {}), ...(skill ? { skill } : {}), ...(format ? { format } : {}) };
 }
 
 const dedupeKey = (q) => q.stem.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 90);
@@ -201,8 +208,9 @@ export async function generate({
   model = process.env.AI_MODEL_ROLE_QUESTION_GENERATOR || OPENAI_MODEL,
   feature = "battle_generate",
   basedOn = [],
+  fromNotes = [],
 }) {
-  const style = styleBlock(exemplars) + basedOnBlock(basedOn);
+  const style = styleBlock(exemplars) + basedOnBlock(basedOn) + notesBlock(fromNotes);
   const syllabus = await curriculumGrounding(subject, topic);
   const level = classLabel ? ` for ${classLabel} students` : " for Nigerian junior-secondary students";
   const optionCount = exemplars.length
@@ -219,7 +227,8 @@ export async function generate({
     `Write ${count} ${difficulty} multiple-choice questions on ${topic ? `"${topic}"` : subject}` +
     `${topic ? ` (${subject})` : ""}.${syllabus}${style}\n\n` +
     `JSON shape:\n` +
-    `{"questions":[{"stem":"...","options":[{"label":"A","text":"..."}],"answer":"B","explanation":"one sentence","topic":"...","difficulty":"${difficulty}"}]}`;
+    `{"questions":[{"stem":"...","options":[{"label":"A","text":"..."}],"answer":"B","explanation":"one sentence","topic":"...","difficulty":"${difficulty}","skill":"recall|apply|transfer","format":"mcq|diagram|word_problem|calculation"}]}\n` +
+    `skill: recall = remember a fact; apply = use it in a familiar task; transfer = use it in a new situation. format: what the question is like.`;
 
   // The CREATOR pays for the questions — checked before the call, so an empty
   // wallet costs nothing. A platform-made battle (no creator) is the app's.
@@ -299,7 +308,7 @@ export async function generate({
  */
 export async function collectQuestions({
   source = "auto", total = 15, subject, topic, difficulty = "intermediate", classLabel,
-  courseId = null, userId, basedOn = [], have = [],
+  courseId = null, userId, basedOn = [], fromNotes = [], have = [],
   // Only bank questions about the topic (a draft on "fractions" shouldn't open with simple interest); AI writes the rest on it.
   onTopic = false,
 }) {
@@ -332,6 +341,7 @@ export async function collectQuestions({
         subject, topic, difficulty, count: total - questions.length, classLabel, userId,
         exemplars: source === "ai" ? exemplars : questions,
         ...(basedOn?.length ? { basedOn } : {}),
+        ...(fromNotes?.length ? { fromNotes } : {}),
       });
       charged += res.charged || 0;
       const had = questions.length;
@@ -369,13 +379,15 @@ export async function buildQuestions({
   durationSeconds = null,
   // The learner's own past-paper questions to base generated ones on (§7.17.3).
   basedOn = [],
+  // Passages from the learner's own notes / files on the topic (§8.8): facts from there first.
+  fromNotes = [],
   // A draft's questions (collectQuestions): placed as they are, in order; topped up only if short.
   preset = null,
 }) {
   const have = presetQuestions(preset, topic);
   const { questions, charged, generated } = have.length >= total
     ? { questions: have.slice(0, total), charged: 0, generated: 0 }
-    : await collectQuestions({ source, total, subject, topic, difficulty, classLabel, courseId, userId, basedOn, have });
+    : await collectQuestions({ source, total, subject, topic, difficulty, classLabel, courseId, userId, basedOn, fromNotes, have });
   const secs = perQuestionSeconds(durationSeconds, questions.length);
   if (questions.length) {
     await db.from("battle_questions").insert(questions.map((q, i) => row(battleId, i + 1, q, secs)));

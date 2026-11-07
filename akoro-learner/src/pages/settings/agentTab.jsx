@@ -15,6 +15,7 @@ import AgentNetworkSection from './networkSection.jsx';
 import MyToolsSection from './myToolsSection.jsx';
 import MemorySection from './memorySection.jsx';
 import AutonomySection from './autonomySection.jsx';
+import HelpOthersSection from './helpOthersSection.jsx';
 import { useInFlight } from '../../hooks/useInFlight.js';
 import { AGENT_CARDS, tr } from './groups.js';
 import { useNavigate } from 'react-router-dom';
@@ -264,7 +265,7 @@ function AgentTab({ agent, setAgent, onSaveAgent, group = null }) {
             catch { showToast('Failed to save'); }
           }}/>
       )}
-      {group==='agent/network' && <AgentNetworkSection/>}
+      {group==='agent/network' && (<><AgentNetworkSection/><HelpOthersSection/></>)}
       {group==='agent/autonomy' && <AutonomySection/>}
       {group==='agent/memory' && <MemorySection/>}
       {group==='agent/tools' && <MyToolsSection/>}

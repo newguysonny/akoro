@@ -205,6 +205,11 @@ router.post("/sessions/:id/topics/:topicId/strategy", async (req, res) => {
   const strategy = text(req.body?.strategy, 60);
   if (!strategy) return fail(res, 422, "tool_schema_invalid", "strategy is required");
   try {
+    // accepted: false is the learner's Reject — recorded, nothing runs.
+    if (req.body?.accepted === false) {
+      const declined = await getHarness().declineStrategy({ sessionId: id, learnerId: req.user.id, topicId, strategy });
+      return res.json({ success: true, strategy: declined.strategy, declined: true, topic: declined.topic });
+    }
     const result = await getHarness().offerStrategy({ sessionId: id, learnerId: req.user.id, topicId, strategy, accepted: true });
     return res.json({ success: true, strategy: result.strategy, topic: result.topic, execution: result.execution || null });
   } catch (error) { return rejection(res, error); }

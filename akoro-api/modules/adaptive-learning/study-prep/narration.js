@@ -35,6 +35,7 @@ const TEMPLATES = {
   agent_check_skipped: (f) => `Your agent has no notes on ${label(f)} yet, so there is nothing to check — teach it first. Nothing was charged.`,
   agent_check_scored: (f) => `Your agent answered ${f.correct} of ${f.total} from your notes (${f.percentage}%)${f.guessed ? `, and had to guess on ${f.guessed}` : ""}. ${f.passed ? "Above the pass mark — topic understood." : `Below the ${f.thresholdPercentage}% pass mark.`}`,
   practice_scored: (f) => `Scored ${f.score} of ${f.total} (${f.percentage}%). ${f.passed ? "Above the pass mark — topic understood." : `Below the ${f.thresholdPercentage}% pass mark.`}`,
+  strategy_declined: (f) => `You chose not to use the ${String(f.strategy || "").replace(/_/g, " ")} strategy for ${label(f)}.`,
   strategy_offered: (f) => `Offered the ${String(f.strategy || "").replace(/_/g, " ")} strategy for ${label(f)} — you choose whether to use it.`,
   teach_back_confirmed: (f) => `You confirmed the teach-back for ${label(f)}. A fresh retest is unlocked — same standard, new questions.`,
   // D15: every intervention is a teaching session; the retest unlocks when it is finished.

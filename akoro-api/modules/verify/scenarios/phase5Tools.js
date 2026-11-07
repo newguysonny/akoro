@@ -111,11 +111,12 @@ export const peerBreakthroughHelp = {
     const helpers = [];
     for (const h of String(p.helpers).split(",")) helpers.push(await ctx.as(h.trim()));
     const { default: db } = await import("../../../db.js");
-    const probe = await db.from("user_agents").select("user_id, help_others_opt_in").in("user_id", helpers.map((h) => h.id));
-    if (probe.error) ctx.expect.blocked(`2026-peer-help-opt-in.sql not applied yet: ${probe.error.message}`);
+    const probe = await db.from("user_agents").select("user_id, help_others_opt_in, help_others_chosen_at").in("user_id", helpers.map((h) => h.id));
+    if (probe.error) ctx.expect.blocked(`2026-peer-help-opt-in.sql / 2026-peer-help-default-on.sql not applied yet: ${probe.error.message}`);
     if ((probe.data || []).length < helpers.length) ctx.expect.blocked("a helper tester has no agent");
-    const before = new Map(probe.data.map((a) => [a.user_id, a.help_others_opt_in]));
-    ctx.cleanup(async () => { for (const [id, v] of before) await db.from("user_agents").update({ help_others_opt_in: v === true }).eq("user_id", id); });
+    // Restored exactly (choice and its time), so a tester who never chose is back to the default (on).
+    const before = new Map(probe.data.map((a) => [a.user_id, { help_others_opt_in: a.help_others_opt_in === true, help_others_chosen_at: a.help_others_chosen_at || null }]));
+    ctx.cleanup(async () => { for (const [id, v] of before) await db.from("user_agents").update(v).eq("user_id", id); });
 
     const tag = ctx.marker.replace(/[^a-z0-9]/gi, "").toLowerCase().slice(-10);
     const { data: concept, error } = await edu(db).from("concept_catalog").insert({

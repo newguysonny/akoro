@@ -183,11 +183,21 @@ async function meteredCreate(params = {}) {
     } catch (e) { report(null, { streamed: true, ok: false, errorKind: errorKindOf(e) }); throw e; }
 
     const fallback = { prompt_tokens: estimateTokens(clean.messages), completion_tokens: Math.min(clean.max_tokens || 700, 700) };
-    return meterStreamUsage(source, (usage, ttfbMs) => {
+    const metered = meterStreamUsage(source, (usage, ttfbMs) => {
       // Time to FIRST chunk is the number a user feels; total is what the bill
       // is made of. Kept apart, because averaging them hides the difference.
       report(usage || (bills ? fallback : null), { ttfbMs, streamed: true });
       if (bills) charge(usage || fallback);
+    });
+    if (!entry) return metered;
+    // A streamed refusal (§7.11.4): refused before any text → the fallback model's stream
+    // takes over (billed at its own price); refused mid-reply → it ends with the marker.
+    return withStreamRefusal(metered, {
+      entry,
+      target: () => refusalFallbackFor(entry, { noForce: !!overrides?.noForce }),
+      second: async (target) => meterStreamUsage(
+        await serve(target, { ...clean, model: target.apiModel, ...(bills ? { stream_options: { include_usage: true, ...(clean.stream_options || {}) } } : {}) }, reqOpts),
+        (usage, ttfbMs) => { report(usage || (bills ? fallback : null), { ttfbMs, streamed: true, as: target.id }); if (bills) charge(usage || fallback, target.id); }),
     });
   }
 
@@ -240,6 +250,31 @@ function meterStreamUsage(source, onDone) {
       }
     } finally {
       try { onDone(usage, ttfbMs); } catch { /* billing must not break the stream */ }
+    }
+  })();
+  if (source && source.controller) gen.controller = source.controller;
+  return gen;
+}
+
+/**
+ * A refused stream (finish_reason "content_filter"): yields a `{ choices: [],
+ * model_refusal }` marker chunk; if nothing had been written yet, the fallback
+ * model's stream follows in its place. Never throws past the caller's loop.
+ */
+export function withStreamRefusal(source, { entry, target, second }) {
+  const gen = (async function* () {
+    let wrote = false;
+    for await (const chunk of source) {
+      const choice = chunk?.choices?.[0];
+      if (choice?.delta?.content) wrote = true;
+      if (choice?.finish_reason !== "content_filter") { yield chunk; continue; }
+      const to = !wrote ? target() : null;
+      const note = { model: entry.id, reason: String(choice.delta?.refusal || "The model declined this request.").slice(0, 300), fallbackModel: to?.id || null, streamed: true, ...(wrote ? { partial: true } : {}) };
+      console.warn(`[ai] model_refusal (stream) on ${entry.id}${to ? ` — continuing on ${to.id}` : ""}`);
+      yield { choices: [], model_refusal: note };
+      if (!to) { yield chunk; continue; }
+      try { for await (const c of await second(to)) yield c; }
+      catch (e) { yield { choices: [], model_refusal: { ...note, fallbackError: String(e?.message || e).slice(0, 200) } }; yield chunk; }
     }
   })();
   if (source && source.controller) gen.controller = source.controller;

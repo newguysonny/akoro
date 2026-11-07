@@ -9,7 +9,7 @@ import { WorkflowHead, WorkflowSteps } from './WorkflowSteps.jsx';
 import {
   adjustStudyPrepPlan, advanceStudyPrepTopic, approveMoreStudyPrepCoins, approveStudyPrepTeaching, confirmStudyPrepPlan, confirmStudyPrepTeachBack,
   concludeStudyPrepSession, deferStudyPrepTopic, fetchStudyPrepSession, generateStudyPrepPractice,
-  resumeStudyPrepSession, retryStudyPrepDeferred, submitStudyPrepPractice, cancelStudyPrepSession,
+  resumeStudyPrepSession, retryStudyPrepDeferred, submitStudyPrepPractice, cancelStudyPrepSession, answerStudyPrepStrategy,
 } from '../../../services/studyPrepApi.js';
 import ApprovalButtons from '../agentChat/ApprovalButtons.jsx';
 import { DevLine, ScoreRing } from '../agentChat/StreamCards.jsx';
@@ -71,6 +71,8 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [adjusting, setAdjusting] = useState(false);
+  // The answer to the agent's strategy offer, as the card shows it after Allow / Reject.
+  const [offerDone, setOfferDone] = useState(null);
   const [dropPick, setDropPick] = useState({});
   const [order, setOrder] = useState(null);
   const [noNotes, setNoNotes] = useState(false);
@@ -258,6 +260,31 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
     setAdjusting(false);
   });
 
+  // A strategy the agent offered (Phase 4a, preview approved 2026-11-07): Allow runs it, Reject records no, Later waits.
+  const offer = view.strategyOffer || null;
+  const offerResult = (execution) => {
+    const fx = execution?.effect || {};
+    if (!execution?.executed) return execution?.operation === 'teach' ? 'Saved — it’s used in your next teaching session.' : 'Saved — I’ll use it from your next step.';
+    if (execution.operation === 'schedule') return `${(fx.scheduled || []).length || 'Some'} short reviews added to your chat.`;
+    if (execution.operation === 'replan') return 'Your remaining topics are re-ordered.';
+    if (execution.operation === 'offline_export') return 'A summary and self-test are saved to your Records.';
+    return 'Done.';
+  };
+  const answerOffer = (accepted) => void run(() => answerStudyPrepStrategy(session.id, offer.topicId, offer.strategy, accepted), (response) => {
+    setOfferDone(accepted ? offerResult(response?.execution) : 'Okay — I won’t use that one.');
+    refresh();
+  });
+  const offerBlock = offer && !offerDone ? (
+    <div data-strategy-offer={offer.strategy} style={{ display: 'grid', gap: 6, padding: '10px 11px', borderRadius: 12, background: `${BRAND}0A`, border: `1px solid ${BRAND}30` }}>
+      <div style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 12.5, fontWeight: 900, color: BRAND }}><Icon name="ti-bulb" size={15} color={BRAND}/>Try it differently: {offer.name}</div>
+      <div style={{ fontSize: 12, color: 'var(--ak-text)', lineHeight: 1.45 }}>{offer.summary}</div>
+      {offer.allowDoes && <div style={caption}>{offer.allowDoes}</div>}
+      <ApprovalButtons onAllow={() => answerOffer(true)} onReject={() => answerOffer(false)} busy={busy} busyLabel="Working…" style={{ marginTop: 2 }}/>
+    </div>
+  ) : offerDone ? (
+    <div data-strategy-done="" style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 12, fontWeight: 800, color: '#047857', background: '#10B98114', borderRadius: 10, padding: '8px 10px' }}><Icon name="ti-circle-check" size={14} color="#047857"/>{offerDone}</div>
+  ) : null;
+
   // Reject on the plan card ends this Study Prep before anything is spent (Allow / Reject / Later, 2026-11-06).
   const rejectPlan = () => void run(() => cancelStudyPrepSession(session.id), () => refresh());
 
@@ -398,6 +425,7 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
       )}
       {wfEvents && <WorkflowSteps steps={steps} limit={pinned ? 4 : 8}/>}
       {error && <div role="alert" style={errorBox}>{error}</div>}
+      {offerBlock}
       {developer && <DevLine parts={['study_prep', session.status, workflowId ? `wf ${String(workflowId).slice(0, 8)}` : null, wfEvents?.length ? `seq ${wfEvents[wfEvents.length - 1]?.sequence ?? wfEvents.length}` : null, activeTopic?.label || null, coins ? `coins ${coins.spent}/${coins.approved}` : null]}/>}
 
       {/* Pinned (running): the head and the latest steps only — the full card is back at its message once it settles. */}
@@ -414,7 +442,7 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
           {/* No real syllabus for this class + subject: the plan is made from an AI-drafted outline (§8.7). Always said. */}
           {session.syllabusLabel && (
             <div role="note" style={{ display: 'flex', gap: 7, alignItems: 'flex-start', fontSize: 11.5, fontWeight: 700, lineHeight: 1.45, color: 'var(--ak-text-sub)', padding: '7px 10px', borderRadius: 9, background: 'var(--ak-surface2, rgba(124,58,237,.06))', border: '1px solid var(--ak-border2)' }}>
-              <span className="ti ti-info-circle" aria-hidden="true" style={{ fontSize: 14, marginTop: 1 }} />
+              <span className={`ti ${session.syllabusLabelKind === 'documents' ? 'ti-folder' : 'ti-info-circle'}`} aria-hidden="true" style={{ fontSize: 14, marginTop: 1 }} />
               <span>{session.syllabusLabel}</span>
             </div>
           )}

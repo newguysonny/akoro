@@ -3123,10 +3123,20 @@ planning loop's tool names, the double practice charge, empty syllabus data).
     proctored practice. Gates `learning.strategy_recommend`, `learning.question_timings`
     PASS; `learning.gateway_struggle` BLOCKED on the sandbox (needs
     `AKORO_AGENT_TOOLS_SECRET` / `AKORO_AGENT_TOOLS_CAPABILITY_SECRET` there).
-  - ⏳ Still open: executors for escalate_human / peer_help / goal_clarify; tags set by
-    the question source (today derived from text); confusion-pair admin review; the
-    learner's strategy-accept button (needs a preview); outcomes for topics with no
-    approved concept are not judged.
+  - ✅ (2026-11-07, preview approved) The Study Prep card answers the agent's strategy
+    offer with Allow / Reject / Later (`view.strategyOffer`; Reject records
+    `strategy_declined`); plans from the learner's files carry "Outline drawn from your
+    files (N files). Not your school's official syllabus."; Settings → Agent "Let my
+    agent help other learners" built, ON by default (the learner's choice recorded in
+    `help_others_chosen_at`, `2026-peer-help-default-on.sql`). Sandbox PASS:
+    `studyprep.inline_full`, `peer.breakthrough_help`, `studyprep.topic_states`.
+  - ✅ (2026-11-07) Follow-ups closed: runners for escalate_human (notifies the class
+    teachers), peer_help (opted-in stories in chat), goal_clarify (asks in chat);
+    outcomes judged for topics with no approved concept (by topic name); question tags
+    set by the generator (`battle_questions.skill/format`,
+    `2026-battle-question-tags.sql`, tag_source 'question'); admin Confusion pairs
+    review (`edu.confusion_pair_reviews`, `2026-confusion-pair-reviews.sql`).
+    "Help other learners" starts off for primary / JSS learners who haven't chosen.
 
 ### Phase 5 — Study Prep completion
 - Topic state machine §8.3; exam-prep run reduced to attempt record.
@@ -3171,6 +3181,10 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   `studyprep.agent_check_tools` + the four exit scenarios. Open: chat uploads →
   Records for Study Prep; Agent Check questions from the learner's materials; blog
   source chips; plan-card documents label (needs a preview).
+  — **2026-11-07:** chat uploads join the open Study Prep session in their subject
+  (`attachUploadsToStudyPrep`); a check for a session with linked files takes its facts
+  from the learner's own notes first (`notesBlock`); plan-card files label built. Blog
+  source chips: preview drawn, waiting for approval.
 
 ### Phase 6 — Teaching Workflow (agent-driven)
 - `teaching/controller.js`, `teaching/tools.js` (agent catalogue + fixed steps), `TEACHING_POLICY`.
@@ -3222,7 +3236,7 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   hand-off → taught to mastery → Study Prep callback → retest unlocked → teaching_done
   wake). `teaching.request_assessment` built (NaNa asks, the protégé answers from what
   it was taught, Sergeant judges, a guess never counts; ≤ 2 per session); its result
-  card is not drawn in the lesson window yet.
+  card is not drawn in the lesson window yet (preview drawn 2026-11-07, waiting for approval).
 - **Status (2026-11-01): ✅ built — `studyprep.teaching_outcomes` green on the sandbox.** Open (circle back): the mid-session assessment tool (`teaching.request_assessment`).
   Ended before any teaching → `abandoned` (reason learner_ended), no
   teach-back, offered once more on the card (a fresh proposal; once), wake
@@ -3346,8 +3360,9 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   reaches Claude; a refusal comes back as `model_refusal` answered by the fallback
   (which obeys `AI_FORCE_MODEL`). Gates `models.pick_persisted`,
   `models.pick_reaches_workflows`, `models.no_forced_tool_choice_claude`,
-  `models.refusal_fallback`, `models.tier_lists`. Open: streamed refusals;
-  developer-mode audience (Q9).
+  `models.refusal_fallback`, `models.tier_lists`. Streamed refusals (2026-11-07): refused
+  before any text → the fallback model's stream takes over; mid-reply → ends with a
+  `model_refusal` marker. Q9 decided: developer mode stays open to anyone who turns it on.
 
 ### Phase 12 — Hardening and rollout
 - Failure tests §19; data migration §14.3; flag-by-flag rollout; observability

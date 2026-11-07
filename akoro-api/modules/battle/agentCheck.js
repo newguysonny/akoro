@@ -43,7 +43,7 @@ async function protegeOf(learnerId) {
  * until it starts); it starts at `startsAt` with whoever accepted. Each gets a
  * mark sheet. → also { seated, noAgent }.
  */
-export async function createCheckBattle({ learnerId = null, learnerIds = null, startsAt = null, subject, topic, total = CHECK_DEFAULTS.QUESTIONS, studyPrepTopicId = null, mode = "diagnostic", secondsPerQuestion = CHECK_DEFAULTS.SECONDS_PER_QUESTION, basedOn = [], title: titleIn = null, extra = {}, preset = null }) {
+export async function createCheckBattle({ learnerId = null, learnerIds = null, startsAt = null, subject, topic, total = CHECK_DEFAULTS.QUESTIONS, studyPrepTopicId = null, mode = "diagnostic", secondsPerQuestion = CHECK_DEFAULTS.SECONDS_PER_QUESTION, basedOn = [], fromNotes = [], title: titleIn = null, extra = {}, preset = null }) {
   const group = Array.isArray(learnerIds);
   const seats = [], noAgent = [];
   for (const id of group ? learnerIds : [learnerId]) {
@@ -83,6 +83,8 @@ export async function createCheckBattle({ learnerId = null, learnerIds = null, s
       difficulty: "intermediate", classLabel: null, userId: null, durationSeconds: count * seconds,
       // Planned from the learner's own past papers: ask what those papers ask (§7.17.3).
       ...(basedOn?.length ? { basedOn } : {}),
+      // The learner's own notes and files on this topic: the questions' facts come from there first (§8.8).
+      ...(fromNotes?.length ? { fromNotes } : {}),
       // Questions prepared ahead (an activity draft's review battle): asked as they are.
       ...(preset?.length ? { preset } : {}),
     });
@@ -168,7 +170,7 @@ export async function recordCheckQuestionSignals(battleId) {
   try {
     const [{ data: battle }, { data: questions }, { data: seats }] = await Promise.all([
       db.from("battles").select("id, battle_type, topic, subject").eq("id", battleId).maybeSingle(),
-      db.from("battle_questions").select("id, question_order, question_text, options_json, topic, correct_answer_index, time_limit_seconds").eq("battle_id", battleId).order("question_order", { ascending: true }),
+      db.from("battle_questions").select("id, question_order, question_text, options_json, topic, correct_answer_index, time_limit_seconds, skill, format").eq("battle_id", battleId).order("question_order", { ascending: true }),
       db.from("battle_participants").select("id, user_id, role").eq("battle_id", battleId),
     ]);
     if (!battle || battle.battle_type !== "check" || !questions?.length) return [];

@@ -78,6 +78,9 @@ const handlers = {
       agent = created;
     }
 
+    // §7.13.1a: "Let my agent help other learners" (on until the learner turns it off).
+    try { agent = { ...agent, help_others_opt_in: await (await import("../adaptive-learning/peerConsult.js")).readHelpOthersOptIn(req.user.id) }; } catch { /* the setting reads as on */ }
+
     // Also pull the active teacher agent's orchestration config
     // to return render_style + tts_voice if they've purchased one
     let guideRenderStyle = agent.guide_render_style || NANA_RENDER_STYLE;

@@ -81,3 +81,46 @@ export const studyPrepMaterials = Object.freeze({
   outlineFromDocuments: (args) => outlineFromDocuments(args),
   request: (args) => requestMaterials(args),
 });
+
+/** The Study Prep states a session can still use new materials in. */
+export const OPEN_SESSION_STATES = Object.freeze(["planning", "awaiting_confirmation", "topic_active", "replanning", "paused"]);
+
+/**
+ * PURE: which open session a chat upload belongs to — the one in the same
+ * subject (canonical names, so "Bio" and "Biology" match), else the only open
+ * session when the upload has no subject. → session row | null
+ */
+export function sessionForUpload(sessions = [], subject = null, canonical = (s) => String(s || "").trim().toLowerCase()) {
+  const open = (sessions || []).filter((s) => s && OPEN_SESSION_STATES.includes(s.status));
+  if (!open.length) return null;
+  const want = subject ? canonical(subject) : null;
+  if (want) return open.find((s) => canonical(s.subject) === want) || null;
+  return open.length === 1 ? open[0] : null;
+}
+
+/**
+ * Chat uploads → Study Prep (§8.8): files the learner adds in chat join their
+ * open Study Prep session in that subject, so the agent's materials tools
+ * (materials.list / materials.search / syllabus.from_documents) see them.
+ * Best effort: never fails the upload. → { sessionId, added } | null
+ */
+export async function attachUploadsToStudyPrep({ learnerId, subject = null, recordIds = [] }) {
+  const ids = [...new Set((recordIds || []).map(String))].filter(Boolean);
+  if (!learnerId || !ids.length) return null;
+  try {
+    const { canonicalSubject } = await import("../../materials/folderMatch.js");
+    const { data: sessions } = await db.schema("edu").from("study_prep_sessions")
+      .select("id, subject, status, material_record_ids").eq("learner_id", learnerId)
+      .in("status", OPEN_SESSION_STATES).order("updated_at", { ascending: false }).limit(10);
+    const session = sessionForUpload(sessions || [], subject, (s) => (canonicalSubject(s) || String(s || "")).trim().toLowerCase());
+    if (!session) return null;
+    const merged = [...new Set([...(session.material_record_ids || []), ...ids])].slice(-50);
+    const added = merged.length - (session.material_record_ids || []).length;
+    if (added <= 0) return { sessionId: session.id, added: 0 };
+    const { error } = await db.schema("edu").from("study_prep_sessions").update({ material_record_ids: merged }).eq("id", session.id).eq("learner_id", learnerId);
+    return error ? null : { sessionId: session.id, added };
+  } catch (e) {
+    console.warn("[study-prep] uploads not attached:", e?.message || e);
+    return null;
+  }
+}

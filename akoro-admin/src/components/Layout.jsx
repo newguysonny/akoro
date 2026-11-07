@@ -59,6 +59,7 @@ const NAV_GROUPS = [
     { to: '/agent-capabilities/learner-tools', icon: Wrench,   label: 'Learners’ tools' },
     { to: '/agent-capabilities/features',      icon: Sparkles, label: 'Agent features' },
     { to: '/proactive-kinds',                  icon: Eye,      label: 'Proactive kinds' },
+    { to: '/confusion-pairs',                  icon: Search,   label: 'Confusion pairs' },
     { to: '/agent-capabilities/prompts',       icon: FileText, label: 'Agent prompts' },
   ] },
   { label: 'People', icon: Users, children: [

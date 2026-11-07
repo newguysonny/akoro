@@ -122,7 +122,7 @@ const NODE_TYPE = {
   topic_started: "topic.state_changed", topic_advanced: "topic.state_changed", topic_deferred: "topic.state_changed", topic_flagged: "topic.state_changed",
   practice_generated: "assessment.started", agent_check_started: "assessment.started",
   practice_scored: "assessment.completed", agent_check_scored: "assessment.completed",
-  strategy_offered: "strategy.selected", teaching_requested: "strategy.selected", teaching_completed: "topic.state_changed", session_concluded: "workflow.completed", session_paused: "workflow.paused",
+  strategy_offered: "strategy.selected", strategy_declined: "strategy.selected", teaching_requested: "strategy.selected", teaching_completed: "topic.state_changed", session_concluded: "workflow.completed", session_paused: "workflow.paused",
   syllabus_resolved: "activity", syllabus_generated: "activity", agent_check_skipped: "activity",
 };
 /** The harness's "thought type" stamp as a controlled category (D14). */
