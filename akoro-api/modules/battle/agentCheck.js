@@ -168,7 +168,7 @@ export async function recordCheckQuestionSignals(battleId) {
   try {
     const [{ data: battle }, { data: questions }, { data: seats }] = await Promise.all([
       db.from("battles").select("id, battle_type, topic, subject").eq("id", battleId).maybeSingle(),
-      db.from("battle_questions").select("id, question_order, question_text, options_json, topic, correct_answer_index, time_limit_seconds").eq("battle_id", battleId).order("question_order", { ascending: true }),
+      db.from("battle_questions").select("id, question_order, question_text, options_json, topic, correct_answer_index, time_limit_seconds, skill, format").eq("battle_id", battleId).order("question_order", { ascending: true }),
       db.from("battle_participants").select("id, user_id, role").eq("battle_id", battleId),
     ]);
     if (!battle || battle.battle_type !== "check" || !questions?.length) return [];

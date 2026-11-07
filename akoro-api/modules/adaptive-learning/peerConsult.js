@@ -11,6 +11,7 @@
  * ideas, not data. The requesting learner's budget meters every call
  * (their coins, their feature), and replies are tightly capped.
  */
+import { isProtectedLearner } from "../agent-network/autoReplyCore.js";
 import db from "../../db.js";
 import { OPENAI_MODEL, openai } from "../../lib/aiModel.js";
 
@@ -206,23 +207,30 @@ export async function consultBreakthroughs({ userId, struggleType: type, concept
   if (ids.length && !def.sensitive) {
     // Fails closed: if the opt-in can't be read, nobody's story is shown.
     const { data: people, error: agentError } = await db.from("user_agents").select("user_id, agent_name, agent_emoji, help_others_opt_in, help_others_chosen_at").in("user_id", ids);
-    if (!agentError) for (const a of people || []) agents.set(a.user_id, { name: a.agent_name, emoji: a.agent_emoji, optedIn: helpsOthers(a) });
+    // A primary / JSS learner who never chose starts OFF (decided 2026-11-07): their level decides the default.
+    const { data: levels, error: levelError } = await db.from("users").select("id, study_level, year_group").in("id", ids);
+    const young = new Set(levelError ? ids : (levels || []).filter((u) => isProtectedLearner({ studyLevel: u.study_level, yearGroup: u.year_group })).map((u) => u.id));
+    if (!agentError) for (const a of people || []) agents.set(a.user_id, { name: a.agent_name, emoji: a.agent_emoji, optedIn: helpsOthers(a, { young: young.has(a.user_id) }) });
   }
   const { stories, pattern } = breakthroughsFrom(rows || [], { askerId: userId, agents, sensitiveType: def.sensitive, classLevel });
   return { struggleType: def.id, consulted: new Set((rows || []).map((r) => r.learner_id)).size, stories, pattern };
 }
 
 /**
- * "Let my agent help other learners" — ON by default (2026-11-07). A learner
- * who never chose helps others; once they choose (help_others_chosen_at), their
+ * "Let my agent help other learners" — ON by default (2026-11-07), OFF by
+ * default for primary / JSS learners. A learner who never chose follows that default; once they choose (help_others_chosen_at), their
  * choice stands. PURE.
  */
-export const helpsOthers = (row) => (row?.help_others_chosen_at ? row.help_others_opt_in === true : true);
+export const helpsOthers = (row, { young = false } = {}) => (row?.help_others_chosen_at ? row.help_others_opt_in === true : !young);
 
 /** The learner's own setting, as Settings shows it (on until they turn it off). */
 export async function readHelpOthersOptIn(userId) {
-  const { data, error } = await db.from("user_agents").select("help_others_opt_in, help_others_chosen_at").eq("user_id", userId).maybeSingle();
-  return error ? true : helpsOthers(data);
+  const [{ data, error }, { data: u }] = await Promise.all([
+    db.from("user_agents").select("help_others_opt_in, help_others_chosen_at").eq("user_id", userId).maybeSingle(),
+    db.from("users").select("study_level, year_group").eq("id", userId).maybeSingle(),
+  ]);
+  const young = isProtectedLearner({ studyLevel: u?.study_level, yearGroup: u?.year_group });
+  return error ? !young : helpsOthers(data, { young });
 }
 
 /**

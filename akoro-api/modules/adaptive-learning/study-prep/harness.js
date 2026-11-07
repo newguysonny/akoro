@@ -122,6 +122,9 @@ const ALLOW_DOES = Object.freeze({
   schedule: "I'll add short reviews to your chat on different days.",
   replan: "I'll change the order of your remaining topics.",
   offline_export: "I'll save a summary and a self-test to your Records.",
+  notify_human: "I'll let your class teacher know you'd like help with this.",
+  peer_stories: "I'll share how other learners got past this, in your chat.",
+  goal_set: "I'll ask you in the chat what 'got it' should look like here.",
 });
 export function pendingStrategyOffer(events = [], topics = [], getEntry = () => null) {
   const latest = new Map();

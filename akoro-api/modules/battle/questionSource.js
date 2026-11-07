@@ -51,6 +51,8 @@ export function perQuestionSeconds(totalSeconds, questionCount) {
   return Math.min(180, Math.max(8, Math.floor(total / count)));
 }
 
+const TAG_SKILLS = ["recall", "apply", "transfer"];
+const TAG_FORMATS = ["mcq", "short", "diagram", "word_problem", "calculation"];
 const row = (battleId, order, q, seconds = 15) => ({
   battle_id:            battleId,
   question_order:       order,
@@ -60,6 +62,8 @@ const row = (battleId, order, q, seconds = 15) => ({
   topic:                q.topic || null,
   xp_value:             q.xp ?? 35,
   time_limit_seconds:   seconds,
+  // Question tags from the source (§7.15.1) — read by the Agent Check's question signals.
+  ...(q.skill ? { skill: q.skill } : {}), ...(q.format ? { format: q.format } : {}),
   // From a past paper: which one (the learner's past-question practice counts it).
   ...(q.exam ? { past_exam: q.exam, past_year: q.year ?? null } : {}),
   // The writer's one-line reason, when it gave one: Sergeant uses it at the reveal.
@@ -74,7 +78,7 @@ const row = (battleId, order, q, seconds = 15) => ({
  * So the answer must resolve to an option or the question is dropped, whatever
  * produced it.
  */
-function normalise(raw, fallbackTopic) {
+export function normalise(raw, fallbackTopic) {
   // `orig` keeps each option's position in the source list: correct_answer_index
   // refers to THAT list, so dropping an empty option must not shift the answer
   // onto its neighbour (a right answer was being marked wrong).
@@ -95,7 +99,10 @@ function normalise(raw, fallbackTopic) {
   if (idx < 0 && Number.isInteger(raw.correct_answer_index)) idx = opts.findIndex((o) => o.orig === raw.correct_answer_index);
   if (idx < 0 || idx >= opts.length) return null;
 
-  return { stem, options: opts.map(({ orig, ...o }) => o), correctIndex: idx, topic: raw.topic || fallbackTopic || null, xp: raw.xp_value ?? 35, ...(raw.explanation ? { explanation: String(raw.explanation).trim() } : {}) };
+  // The question source tags each question (§7.15.1); off-list values are dropped, never guessed here.
+  const skill = TAG_SKILLS.includes(String(raw.skill || "").toLowerCase()) ? String(raw.skill).toLowerCase() : null;
+  const format = TAG_FORMATS.includes(String(raw.format || "").toLowerCase()) ? String(raw.format).toLowerCase() : null;
+  return { stem, options: opts.map(({ orig, ...o }) => o), correctIndex: idx, topic: raw.topic || fallbackTopic || null, xp: raw.xp_value ?? 35, ...(raw.explanation ? { explanation: String(raw.explanation).trim() } : {}), ...(skill ? { skill } : {}), ...(format ? { format } : {}) };
 }
 
 const dedupeKey = (q) => q.stem.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 90);
@@ -219,7 +226,8 @@ export async function generate({
     `Write ${count} ${difficulty} multiple-choice questions on ${topic ? `"${topic}"` : subject}` +
     `${topic ? ` (${subject})` : ""}.${syllabus}${style}\n\n` +
     `JSON shape:\n` +
-    `{"questions":[{"stem":"...","options":[{"label":"A","text":"..."}],"answer":"B","explanation":"one sentence","topic":"...","difficulty":"${difficulty}"}]}`;
+    `{"questions":[{"stem":"...","options":[{"label":"A","text":"..."}],"answer":"B","explanation":"one sentence","topic":"...","difficulty":"${difficulty}","skill":"recall|apply|transfer","format":"mcq|diagram|word_problem|calculation"}]}\n` +
+    `skill: recall = remember a fact; apply = use it in a familiar task; transfer = use it in a new situation. format: what the question is like.`;
 
   // The CREATOR pays for the questions — checked before the call, so an empty
   // wallet costs nothing. A platform-made battle (no creator) is the app's.

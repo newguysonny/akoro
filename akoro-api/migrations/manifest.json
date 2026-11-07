@@ -244,6 +244,7 @@
     "2026-peer-help-default-on.sql",
     "2026-blog-chunks.sql",
     "2026-learning-question-signals.sql",
+    "2026-battle-question-tags.sql",
     "2026-study-prep-topic-states.sql"
   ],
   "demo": [

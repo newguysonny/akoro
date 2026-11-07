@@ -106,7 +106,7 @@ test("executors: schedule (space_out, schedule_plan), offline_pack, chunk_plan, 
   const chunks = await executeHarnessStrategy({ strategy: "chunk_plan", learnerId: "u", session: SESSION, topic: null, topics: [T("a", 1, "active"), T("b", 2, "queued"), T("c", 3, "queued"), T("d", 4, "queued")], deps: d });
   assert.deepEqual(chunks.effect.parts, [["b", "c"], ["d"]]);
   assert.equal(chunks.effect.scheduled.length, 1);
-  assert.equal((await executeHarnessStrategy({ strategy: "escalate_human", session: SESSION, deps: d })).reason, "no_executor");
+  assert.equal((await executeHarnessStrategy({ strategy: "escalate_human", session: SESSION, deps: { ...d, teachersFor: async () => [] } })).reason, "no_linked_teacher", "no linked teacher: nothing sent");
   assert.equal((await executeHarnessStrategy({ strategy: "teach_back", session: SESSION, deps: d })).reason, "runs_in_teaching");
   const broken = await executeHarnessStrategy({ strategy: "space_out", session: SESSION, topic: null, deps: { ...d, scheduleFollowUp: async () => { throw new Error("queue down"); } } });
   assert.deepEqual([broken.executed, broken.reason], [false, "executor_failed"], "never throws");
@@ -138,4 +138,26 @@ test("runStrategyOffer: library + limit checks; an offer ranks candidates; accep
   assert.deepEqual([o.outcome, o.workflow, o.sessionRef, o.scoreBefore, o.details.pending, o.topic], ["abandoned", "study_prep", "study_prep:s1", 0.4, true, "Evaporation"]);
   assert.match(o.details.use, /^study_prep:s1#/);
   assert.match(o.turnRef, /^accept:t1:/);
+});
+
+test("executors: ask a teacher, peer stories, clarify the goal", async () => {
+  const notified = [], followUps = [];
+  const base = { ...deps(), scheduleFollowUp: async (input) => { followUps.push(input); return { followUpId: `f${followUps.length}`, scheduledAt: "2026-11-08T09:00:00Z" }; } };
+  const human = await executeHarnessStrategy({ strategy: "escalate_human", learnerId: "u", session: SESSION, topic: { label: "Transpiration", check_result: { gaps: ["stomata"] } },
+    deps: { ...base, teachersFor: async () => ["teacher-1", "teacher-2"], notify: async (rows) => { notified.push(...rows); return true; } } });
+  assert.deepEqual([human.executed, human.operation, human.effect.notified], [true, "notify_human", 2]);
+  assert.match(notified[0].title, /Transpiration/);
+  assert.match(notified[0].content, /stomata/);
+
+  const peers = await executeHarnessStrategy({ strategy: "peer_help", learnerId: "u", session: SESSION, topic: { label: "Transpiration" },
+    deps: { ...base, openStruggleType: async () => "interference", consultBreakthroughs: async (args) => ({ stories: [{ agent: "Owl", whatWorked: "drew the leaf" }], args }) } });
+  assert.deepEqual([peers.executed, peers.effect.stories, peers.effect.struggleType], [true, 1, "interference"]);
+  assert.match(followUps.at(-1).message, /Owl: drew the leaf/);
+  const none = await executeHarnessStrategy({ strategy: "peer_help", learnerId: "u", session: SESSION, topic: { label: "Transpiration" },
+    deps: { ...base, openStruggleType: async () => null, consultBreakthroughs: async () => ({ stories: [] }) } });
+  assert.deepEqual([none.executed, none.reason], [false, "no_peer_stories"]);
+
+  const goal = await executeHarnessStrategy({ strategy: "goal_clarify", learnerId: "u", session: SESSION, topic: { label: "Transpiration" }, deps: base });
+  assert.deepEqual([goal.executed, goal.operation], [true, "goal_set"]);
+  assert.match(followUps.at(-1).message, /understood/);
 });

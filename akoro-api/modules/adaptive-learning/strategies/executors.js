@@ -25,9 +25,14 @@
  *   offline_export  offline_pack — a Markdown summary + self-test from the
  *                   topic's last check, saved to the learner's Records with a
  *                   download link.
- * Strategies whose runner does not exist yet (escalate_human, peer_help,
- * goal_clarify) are offered and accepted as before, with execution
- * `no_executor`; Teaching strategies report `runs_in_teaching`.
+ *   notify_human    escalate_human — the learner's linked teachers (class
+ *                   teacher in their school) get a notification naming the topic
+ *                   and gaps (never sensitive struggles); none linked → not run.
+ *   peer_stories    peer_help — up to two "what worked" stories from learners who
+ *                   opted in (consultBreakthroughs), posted in the learner's chat.
+ *   goal_set        goal_clarify — the agent asks, in the chat, what "understood"
+ *                   should mean here and proposes one measurable goal.
+ * Teaching strategies report `runs_in_teaching`.
  *
  * Dependencies are injected (`deps`) so the harness contract tests run with
  * no database; the real ones load lazily.
@@ -188,11 +193,42 @@ async function offlineExport({ session, topic, learnerId, deps }) {
   return { executed: true, effect: { fileKey: saved.fileKey, downloadUrl: saved.downloadUrl || null, bytes: Buffer.byteLength(markdown, "utf8") } };
 }
 
+async function notifyHuman({ session, topic, learnerId, deps }) {
+  const teachers = await deps.teachersFor({ learnerId }).catch(() => []);
+  if (!teachers.length) return { executed: false, reason: "no_linked_teacher" };
+  const label = topic?.label || session.goal || "a topic";
+  const gaps = (topic?.check_result?.gaps || []).slice(0, 3);
+  const sent = await deps.notify(teachers.slice(0, 5).map((teacherId) => ({
+    user_id: teacherId, type: "learner_needs_help",
+    title: `A learner asked for help with ${label}`.slice(0, 200),
+    content: `${session.subject ? `${session.subject} · ` : ""}${label}${gaps.length ? ` — still unsure about: ${gaps.join(", ")}` : ""}. Open their struggles in your Tasks.`.slice(0, 500),
+    related_id: session.id,
+  })));
+  return sent ? { executed: true, effect: { notified: teachers.slice(0, 5).length } } : { executed: false, reason: "not_notified" };
+}
+
+async function peerStories({ session, topic, learnerId, deps }) {
+  const struggleType = await deps.openStruggleType({ learnerId, subject: session.subject, topic: topic?.label }).catch(() => null) || "partial_understanding";
+  const found = await deps.consultBreakthroughs({ userId: learnerId, struggleType, concept: topic?.label || null, subject: session.subject || null }).catch(() => null);
+  const stories = (found?.stories || []).slice(0, 2);
+  if (!stories.length) return { executed: false, reason: "no_peer_stories", effect: { struggleType } };
+  const lines = stories.map((st) => `• ${st.agent || "Another learner's agent"}: ${st.whatWorked || ""}`.trim());
+  const s = await deps.scheduleFollowUp({ title: "How others got past this", message: `Other learners got past ${topic?.label || "this"} like this:\n${lines.join("\n")}\nWant to try one of these?`, inMinutes: 1 });
+  return s?.followUpId ? { executed: true, effect: { stories: stories.length, struggleType, followUpId: s.followUpId } } : { executed: false, reason: "not_scheduled" };
+}
+
+async function goalSet({ session, topic, deps }) {
+  const label = topic?.label || session.goal || "this topic";
+  const s = await deps.scheduleFollowUp({ title: "What does 'got it' look like?", message: `Let's pin down what "understood" means for ${label}. For example: "I can explain it in my own words and get 4 of 5 on the Agent Check." What would you like your goal to be?`, inMinutes: 1 });
+  return s?.followUpId ? { executed: true, effect: { followUpId: s.followUpId } } : { executed: false, reason: "not_scheduled" };
+}
+
 /** strategy id → executor. Only the ones that exist; the library names the operation. */
 export const HARNESS_EXECUTORS = Object.freeze({
   interleave: replan, prerequisite_review: replan, chunk_plan: replan,
   space_out: schedule, schedule_plan: schedule,
   offline_pack: offlineExport,
+  escalate_human: notifyHuman, peer_help: peerStories, goal_clarify: goalSet,
 });
 
 /** The real dependencies (lazy: no database is touched until a strategy runs). */
@@ -216,6 +252,31 @@ export function defaultExecutorDeps({ learnerId, store, now = () => new Date().t
       const downloadUrl = await createPresignedDownload(fileKey, { downloadName: name.split("/").pop() }).catch(() => null);
       return { fileKey, downloadUrl: typeof downloadUrl === "string" ? downloadUrl : downloadUrl?.url || null };
     },
+    // escalate_human: the learner's class teachers in a school they are linked to (mgmt.students.user_id).
+    teachersFor: async () => {
+      const { default: db } = await import("../../../db.js");
+      const M = () => db.schema("mgmt");
+      const { data: st } = await M().from("students").select("class_id, school_id").eq("user_id", learnerId).limit(5);
+      const classes = [...new Set((st || []).map((r) => r.class_id).filter(Boolean))];
+      if (!classes.length) return [];
+      const { data: ct } = await M().from("class_teachers").select("teacher_id").in("class_id", classes);
+      return [...new Set((ct || []).map((r) => r.teacher_id).filter(Boolean))];
+    },
+    notify: async (rows) => {
+      const { default: db } = await import("../../../db.js");
+      const { error } = await db.from("notifications").insert(rows);
+      return !error;
+    },
+    openStruggleType: async ({ subject, topic }) => {
+      const { resolveConceptId } = await import("../learning-events.js");
+      const concept = await resolveConceptId({ subject, topic });
+      const { default: db } = await import("../../../db.js");
+      let q = db.schema("edu").from("learning_struggles").select("struggle_type").eq("learner_id", learnerId).eq("status", "open").eq("sensitive", false);
+      if (concept) q = q.eq("concept_id", concept);
+      const { data } = await q.order("detected_at", { ascending: false }).limit(1);
+      return data?.[0]?.struggle_type || null;
+    },
+    consultBreakthroughs: async (args) => (await import("../peerConsult.js")).consultBreakthroughs(args),
     checkLimit: async (args) => (await import("./recommend.js")).checkStrategyLimit(args),
     recommend: async (args) => (await import("./recommend.js")).recommendStrategies(args),
     recordOutcome: async (args) => (await import("./outcomes.js")).recordStrategyOutcome(args),

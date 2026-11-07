@@ -53,4 +53,6 @@ test("help others is ON by default: a learner who never chose helps; a recorded 
   assert.equal(helpsOthers({ help_others_opt_in: false }), true, "the column default alone is not a choice");
   assert.equal(helpsOthers({ help_others_opt_in: false, help_others_chosen_at: "2026-11-07T10:00:00Z" }), false, "turned off → off");
   assert.equal(helpsOthers({ help_others_opt_in: true, help_others_chosen_at: "2026-11-07T10:00:00Z" }), true);
+  assert.equal(helpsOthers({}, { young: true }), false, "a primary / JSS learner who never chose starts off");
+  assert.equal(helpsOthers({ help_others_opt_in: true, help_others_chosen_at: "2026-11-07T10:00:00Z" }, { young: true }), true, "…and can turn it on");
 });
