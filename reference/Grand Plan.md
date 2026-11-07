@@ -3424,6 +3424,51 @@ flag-by-flag rollout; old paths removed only after a release with flags on.
 - **Exit:** the inventory exists; one full rotation of a real secret done on the
   sandbox following the runbook with no downtime; the per-role permission tests
   pass in CI.
+- **Basic protections (added 2026-11-07)** — each built, then proved by a test:
+  1. *Sign-up and login rate-limited* — built (`strictLimit`: 5 per 15 min per IP;
+     `refreshLimit` on refresh). Add: a gate check that the 6th wrong login in 15
+     minutes gets 429, and a per-account lockout/backoff after repeated failures.
+  2. *Every AI endpoint on the AI limit* — today only tasks, voice, teaching tools and
+     self-study planning use `aiLimit` (10/min); `/api/adaptive` (Agent Chat, teaching)
+     is on `teachingLimit` (50/min) and records study tools, Study Prep and chat
+     uploads on `standardLimit` (100/min). Add: every route that calls a model gets a
+     per-user AI limit (chat may keep a higher one, but a model call never sits only
+     behind the read limit); a contract test lists model-calling routes and fails if
+     one has no AI limit.
+  3. *Monthly AI spend capped* — today: per-learner coins and the agent's weekly
+     budget (alert 80%, stop 100%). Add: a platform-wide monthly cap
+     (`AI_MONTHLY_BUDGET_USD`) from the AI telemetry costs — alert at 80%, at 100%
+     only paid / essential calls continue (learner-paid turns, grading) and background
+     work stops; shown on the AI spend page.
+  4. *Bot protection on public forms* — none today. Add: a challenge (e.g. Cloudflare
+     Turnstile) on sign-up, login after failures, password reset, contact / enquiry
+     and admission forms, verified server-side; honeypot fields as a fallback.
+  5. *No stack traces to users* — built (production 500s return only a message and an
+     instance id; the stack only in development). Add: a gate check that a forced
+     500 in production carries no `stack`, file path or SQL text.
+  6. *Every failed login logged* — not today (a wrong login only returns "Invalid
+     credentials"). Add: an `auth_events` record (account if known, IP, user agent,
+     reason, time — never the password) for failed and successful logins, resets and
+     2FA; an alert on a spike; visible in the admin audit log.
+  7. *Uptime alerts* — see 12.1 (`/health` failing alerts a person, from outside
+     Render, every minute).
+  8. *The AI API going down* — mostly built (breakers, fallback models, refusal
+     fallback, typed 503s, `AI_FORCE_MODEL`); the 12.2 failure table proves it, plus a
+     learner-facing "AI is busy, try again shortly" state in chat and lessons.
+  9. *Users' data isolated* — a gate and browser check of the exact attack: create
+     learners A and B; as A open a private record, a chat, a Study Prep session, an
+     upload folder, a teaching session and a task; copy each URL / API path; as B (a
+     separate browser session) open each → "not found" (404, never A's data, never a
+     403 that confirms it exists). Same for instructor-owned drafts and school data
+     across two schools. Finishes the Phase 15 ownership audit (`security.ownership_reads`)
+     route by route.
+  10. *Roles isolated* — admin, learner (user), teacher, instructor, school admin: for
+      every route group, each role that must not reach it gets 401/403/404 (a matrix
+      test generated from the route list), and the role can't be raised by the
+      client (no role in a request body or token claim is trusted without the server's
+      record).
+  - **Exit (basic protections):** all ten checks pass on the sandbox — the A/B URL
+    test and the role matrix included — and run in CI on every release.
 
 **12.4 Scalability — 10x and 100x traffic, and the first bottleneck.**
 - Have today: nothing measured.
