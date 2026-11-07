@@ -47,11 +47,11 @@ test("there is NO study-prep page, route or nav entry", () => {
   assert.doesNotMatch(shell, /study-prep/);
 });
 
-test("the plan card reproduces the reference sketch: Approve & Start / Adjust", () => {
+test("the plan card: the reference sketch, decided with Allow / Reject / Later; adjusting stays", () => {
   assert.match(card, /YOUR \{session\.subject\.toUpperCase\(\)\} PLAN/);
   assert.match(card, /estimated cost: \$\{estimate\.totalCoins\} coins/);
-  assert.match(card, /Approve & Start/);
-  assert.match(card, />Adjust</);
+  assert.match(card, /<ApprovalButtons onAllow=\{confirmPlan\} onReject=\{rejectPlan\}/);
+  assert.match(card, />Change the plan first</);
   assert.match(card, /\{topic\.position\}\. \{topic\.label\}/);
 });
 
