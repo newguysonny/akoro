@@ -4563,7 +4563,13 @@ router.post("/agent", async (req, res) => {
   // the event names and fields stay exactly as they were.
   const turnId = `turn_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
   let liveSequence = 0;
+  // Timings (realtime work, 2026-11-07): each preparation step and the first thing the
+  // learner sees, returned in metadata.timings and logged once per turn.
+  const timings = {};
+  let lastMark = t0;
+  const mark = (name) => { const now = Date.now(); timings[name] = (timings[name] || 0) + (now - lastMark); lastMark = now; };
   const send = (event, data) => {
+    if (timings.firstVisibleMs == null && event !== "status") timings.firstVisibleMs = Date.now() - t0;
     if (res.destroyed || res.writableEnded) return;
     const envelope = data && typeof data === "object" ? chatEnvelope(event, data, { turnId, sequence: liveSequence++ }) : null;
     res.write(`event: ${event}\ndata: ${JSON.stringify(envelope ? { ...data, envelope } : data)}\n\n`);
@@ -4692,6 +4698,7 @@ router.post("/agent", async (req, res) => {
     const wantsCurriculum = role === "instructor";
     const sylLimit = isResearch ? 8 : 5;
     const pastLimit = isResearch ? 5 : 3;
+    mark("contextAndMemory");
     if (isResearch && wantsStream) status("grounding", "Searching the syllabus and practice sources…");
 
     // The learner's active goals steer everything the agent says and (once
@@ -4833,6 +4840,7 @@ router.post("/agent", async (req, res) => {
         return `- draftId ${d.id} · ${String(d.title || "").replace(/[\r\n]+/g, " ").slice(0, 80)} · ${d.type}${topic ? ` · ${topic}` : ""}${vs.length ? ` · latest Version ${vs.at(-1).n}` : ""}`;
       }).join("\n") + "\nThe instructor's follow-ups about a draft — questions, parts, diagrams, marks, types, versions, title, instructions — change the NEWEST draft: call revise_activity_draft with its draftId (their words about the questions verbatim in question_request, or about a teaching resource verbatim in change_request; base_version when they name a version). Call prepare_activity only for a new activity, run_teaching_tool only for a new resource."
       : "";
+    mark("prework");
     const systemContent = (await assembleChatDoctrine({
       agentName: safeAgentName || "Akoro",
       protege,
@@ -4867,6 +4875,7 @@ router.post("/agent", async (req, res) => {
     const draftFollowUp = instructorTools.length > 0 && pendingDrafts.length > 0
       && (isDraftFollowUp(userMessage) || (pendingDrafts[0]?.type === "teaching_tool" && isToolDraftFollowUp(userMessage)));
     // Context budget (contextBudget.js): the whole prompt is counted; what falls out is summarised once.
+    mark("doctrine");
     const fit = fitDialogue(dialogue, { systemText: systemContent, current: { role: "user", content: userText } });
     let summaryNow = conversation?.scratchpad?.progressSummary || "";
     let summaryMark = summaryMarkOf(conversation?.scratchpad);
@@ -4877,11 +4886,13 @@ router.post("/agent", async (req, res) => {
       });
       if (merged) { summaryNow = merged.summary; summaryMark = merged.mark; }
     }
+    mark("summary");
     // The intent step (intentStep.js): what the learner wants, read before tool choice. Fail-open.
     const intent = process.env.AGENT_INTENT_STEP === "off" ? null : await runIntentStep({
       message: userMessage, recent: fit.kept,
       create: (body) => openai.chat.completions.create({ ...body, __role: "background", __payer: "platform", __feature: "chat_intent", __userId: req.user.id, __timeoutMs: 45_000, __maxRetries: 0 }),   // the turn waits 4 s (intentStep.js); a slow answer is ignored, never counted against the shared breaker
     });
+    mark("intent");
     const turnSystem = systemContent
       + (summaryNow ? `\n\n## Earlier in this chat (summary)\n${summaryNow}` : "")
       + renderIntent(intent);
@@ -4890,6 +4901,7 @@ router.post("/agent", async (req, res) => {
       ? createEpisodeRecorder({ surface: "agent_chat", role, system: turnSystem, source: "real",
         state: { ledger: ledgerIn, intent, summary: summaryNow || null }, messages: [...fit.kept, { role: "user", content: userText }] })
       : null;
+    mark("recorder");
     const prepared = await runAgentToolLoop({
       recorder,
       ledger: ledgerIn,
@@ -4937,6 +4949,7 @@ router.post("/agent", async (req, res) => {
       streamText: !isResearch,
       model: chatModel,
     });
+    mark("agentLoop");
     const stopped = () => Boolean(prepared.aborted) || isAborted();
     const finalMessages = [{ role: "system", content: systemContent }, ...prepared.messages];
     const tools = null;   // the preflight loop above is the only executor
@@ -5095,9 +5108,13 @@ router.post("/agent", async (req, res) => {
     // writes its summary and merges the learner's memories. Never blocks the reply.
     if (turnSaved && conversationId && role === "student") noteChatTurn({ userId: req.user.id, chatSessionId: conversationId }).catch(() => {});
 
+    mark("finishAndSave");
+    timings.totalMs = Date.now() - t0;
+    console.log(`[chat-timing] ${JSON.stringify(timings)}`);
     const metadata = {
       model: usedModel,
       responseTimeMs: Date.now() - t0,
+      timings,
       retrieval,
       toolExecutions: prepared.toolExecutions,
       ...(durable ? { durableContext: true } : {}),
