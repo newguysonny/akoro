@@ -194,6 +194,22 @@ router.post("/sessions/:id/topics/:topicId/teach-back-done", async (req, res) =>
   } catch (error) { return rejection(res, error); }
 });
 
+// POST /study-prep/sessions/:id/topics/:topicId/strategy — the learner accepts
+// a strategy their agent offered (Phase 4a): the harness runs it (replan,
+// schedule, offline pack) and its outcome is judged by the next attempt.
+router.post("/sessions/:id/topics/:topicId/strategy", async (req, res) => {
+  if (!guard(res)) return;
+  const id = paramId(res, req.params.id, "session id");
+  const topicId = paramId(res, req.params.topicId, "topic id");
+  if (!id || !topicId) return;
+  const strategy = text(req.body?.strategy, 60);
+  if (!strategy) return fail(res, 422, "tool_schema_invalid", "strategy is required");
+  try {
+    const result = await getHarness().offerStrategy({ sessionId: id, learnerId: req.user.id, topicId, strategy, accepted: true });
+    return res.json({ success: true, strategy: result.strategy, topic: result.topic, execution: result.execution || null });
+  } catch (error) { return rejection(res, error); }
+});
+
 // POST /study-prep/sessions/:id/topics/:topicId/teaching/approve — the learner
 // confirms the teaching session offered after a missed check (Phase 6); without
 // a tap it approves itself after a minute. It then waits on the dashboard.

@@ -79,7 +79,24 @@ export const GENERATED_OUTLINE_LABEL = "AI-drafted outline — not your school's
 /** Without a journal: an outside step just runs (the behaviour before Phase 18 item 5). */
 const runDirectly = { once: async ({ act }) => ({ result: await act() }), undo: async () => {} };
 
-export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentCheck = null, protege = null, workflowMirror = null, checkRun = null, steps = runDirectly, now = () => new Date().toISOString() }) {
+/**
+ * The Strategy Library's offer/accept step (strategies/executors.js, Phase
+ * 4a): per-topic limit, ranked candidates, and on acceptance the harness
+ * executor + a pending outcome. Loaded lazily; with no database configured it
+ * does nothing (the offer stands as before).
+ */
+async function defaultStrategyRun(args) {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) return {};
+  try {
+    const { runStrategyOffer, defaultExecutorDeps } = await import("../strategies/executors.js");
+    return await runStrategyOffer({ ...args, deps: defaultExecutorDeps(args) });
+  } catch (e) {
+    console.warn("[study-prep] strategy run:", e?.message || e);
+    return {};
+  }
+}
+
+export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentCheck = null, protege = null, workflowMirror = null, checkRun = null, steps = runDirectly, strategyRun = defaultStrategyRun, now = () => new Date().toISOString() }) {
   // Every session and topic status write is checked against the workflow
   // definition (F7) and, with a mirror, dual-written to the engine (Phase 1).
   const store = guardStudyPrepStore(rawStore, { mirror: workflowMirror });
@@ -697,8 +714,12 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     return { session: publicSession(session), topic: publicTopic(updated) };
   }
 
-  /** offer_strategy — propose level, curated library only (Decision 3). */
-  async function offerStrategy({ sessionId, learnerId, topicId, strategy, intent = null }) {
+  /**
+   * offer_strategy — propose level, curated library only (Decision 3). The
+   * learner's acceptance (`accepted`, from the route) runs the harness
+   * strategy (replan / schedule / offline export) and starts its outcome.
+   */
+  async function offerStrategy({ sessionId, learnerId, topicId, strategy, intent = null, accepted = false }) {
     const session = await ownedSession(sessionId, learnerId);
     if (!session) throw new HarnessRejection("session_not_found", "Study-prep session was not found", 404);
     if (!isPermittedStrategy(strategy)) {
@@ -706,6 +727,9 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     }
     const topics = await store.getTopics(session.id);
     const topic = topics.find((row) => row.id === topicId) || activeTopic(topics);
+    // Strategy Library (Phase 4a): limits.maxUsesPerTopic, ranked candidates, execution on acceptance.
+    const run = (await strategyRun({ strategy, accepted, learnerId, session, topic, topics, store, now })) || {};
+    if (run.refusal) return reject(session, "strategy_not_permitted", run.message || `“${strategy}” cannot be used here now`, { strategy, reason: run.refusal });
     if (intent != null) {
       await log(session.id, topic?.id || null, {
         eventType: "agent_action", origin: "agent_stated_intent", action: "offer_strategy",
@@ -714,10 +738,14 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     }
     await log(session.id, topic?.id || null, {
       eventType: "harness_decision", origin: "harness", decisionNode: "strategy_offered",
-      facts: { strategy, topic: topic?.label || null },
+      facts: { strategy, topic: topic?.label || null, ...(run.accepted ? { accepted: true, executed: !!run.execution?.executed, operation: run.execution?.operation || null, executionReason: run.execution?.reason || null } : {}) },
       narrative: deliberate("strategy_offered", { strategy, topicLabel: topic?.label })?.narrative,
     });
-    return { strategy, topic: topic ? publicTopic(topic) : null, library: STRATEGY_LIBRARY };
+    return {
+      strategy, topic: topic ? publicTopic(topic) : null, library: STRATEGY_LIBRARY,
+      ...(run.recommended ? { recommended: run.recommended } : {}),
+      ...(run.accepted ? { accepted: true, execution: run.execution || null } : {}),
+    };
   }
 
   /** advance_topic — terminal action; the next queued topic becomes active. */

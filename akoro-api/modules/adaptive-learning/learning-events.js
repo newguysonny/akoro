@@ -17,19 +17,25 @@
  *     learner model never mixes them silently.
  *   • a concept is only ever an APPROVED catalogue concept — matched from
  *     subject + topic, never invented; no match → skipped, never guessed.
+ *   • a VALIDATED claim (`claim: { status, validity, confidence }` — the
+ *     Python agent's curriculum guardian, via the concept-state gateway) is
+ *     passed through instead of derived from the kind; an invalid one is
+ *     refused (`invalid_claim`), never guessed.
  *   • never throws: a learning session must not fail because evidence could
  *     not be written. Listeners (struggle + breakthrough detection) run after
  *     a successful write and cannot fail it either.
  */
 import db from "../../db.js";
 
-export const LEARNING_SOURCES = Object.freeze(["teaching", "agent_recall", "learner_recall", "proctored", "study_prep", "chat", "backfill"]);
+export const LEARNING_SOURCES = Object.freeze(["teaching", "agent_recall", "learner_recall", "proctored", "study_prep", "chat", "backfill", "python_agent"]);
 export const LEARNING_KINDS = Object.freeze([
   "demonstrated_understanding", "partial_understanding", "recall_success", "recall_gap",
   "misconception_detected", "misconception_cleared", "assessment_result",
 ]);
 // How much a source's word counts (model_confidence on the evidence row).
-const SOURCE_WEIGHT = Object.freeze({ proctored: 1, learner_recall: 0.9, teaching: 0.8, agent_recall: 0.7, study_prep: 0.7, backfill: 0.6, chat: 0.4 });
+const SOURCE_WEIGHT = Object.freeze({ proctored: 1, learner_recall: 0.9, teaching: 0.8, agent_recall: 0.7, study_prep: 0.7, python_agent: 0.7, backfill: 0.6, chat: 0.4 });
+/** A validated claim's status (the curriculum guardian's word, passed through). */
+export const CLAIM_STATUSES = Object.freeze(["supported", "contradicted", "not_checked"]);
 
 const clamp01 = (n) => Math.max(0, Math.min(1, Number.isFinite(Number(n)) ? Number(n) : 0));
 const clip = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
@@ -40,6 +46,22 @@ export function evidenceShape({ kind, source, quality = null, checked = true }) 
   // A gap or a misconception contradicts the learner's current model; the rest supports it.
   const status = !checked ? "not_checked" : (kind === "recall_gap" || kind === "misconception_detected") ? "contradicted" : "supported";
   return { response_quality: q, claim_validity: status === "contradicted" ? 0.2 : 1, model_confidence: SOURCE_WEIGHT[source] ?? 0.5, claim_status: status };
+}
+
+const fraction = (n) => (typeof n === "number" || (typeof n === "string" && n.trim() !== "")) && Number.isFinite(Number(n)) && Number(n) >= 0 && Number(n) <= 1 ? Number(n) : null;
+
+/**
+ * PURE: the evidence row's numbers from a VALIDATED claim (the Python agent's
+ * curriculum guardian already judged status, validity and confidence) —
+ * passed through, not derived from the kind. → shape, or null when invalid.
+ */
+export function claimShape({ kind, source, quality = null, claim }) {
+  if (!claim || typeof claim !== "object" || !CLAIM_STATUSES.includes(claim.status)) return null;
+  const validity = fraction(claim.validity);
+  const confidence = fraction(claim.confidence);
+  if (validity == null || confidence == null) return null;
+  const base = evidenceShape({ kind, source, quality, checked: claim.status !== "not_checked" });
+  return { response_quality: quality == null ? base.response_quality : clamp01(quality), claim_validity: validity, model_confidence: confidence, claim_status: claim.status };
 }
 
 /** An approved catalogue concept for subject + topic (topic_key, then title). Never invented. */
@@ -66,16 +88,19 @@ export function onLearningEvent(fn) { listeners.add(fn); return () => listeners.
 
 export async function recordLearningEvent({
   learnerId, conceptId = null, subject = null, topic = null, kind, source,
-  sessionRef, turnRef, quality = null, checked = true, summary, details = {}, workflowId = null, observedAt = null,
+  sessionRef, turnRef, quality = null, checked = true, summary, details = {}, workflowId = null, observedAt = null, claim = null,
 } = {}) {
   if (!learnerId) return { recorded: false, reason: "no_learner" };
   if (!LEARNING_KINDS.includes(kind)) return { recorded: false, reason: "unknown_kind" };
   if (!LEARNING_SOURCES.includes(source)) return { recorded: false, reason: "unknown_source" };
   if (!sessionRef || !turnRef) return { recorded: false, reason: "no_reference" };
+  // A validated claim (the agent gateway) carries its own status/validity/confidence.
+  const claimed = claim ? claimShape({ kind, source, quality, claim }) : null;
+  if (claim && !claimed) return { recorded: false, reason: "invalid_claim" };
   try {
     const concept = conceptId || await resolveConceptId({ subject, topic });
     if (!concept) return { recorded: false, reason: "no_approved_concept" };
-    const shape = evidenceShape({ kind, source, quality, checked });
+    const shape = claimed || evidenceShape({ kind, source, quality, checked });
     const { data, error } = await db.schema("edu").rpc("record_learner_concept_evidence", {
       p_learner_id: learnerId, p_concept_id: concept,
       p_source_session_id: clip(sessionRef, 180), p_source_turn_id: clip(turnRef, 180),
@@ -90,12 +115,32 @@ export async function recordLearningEvent({
     const state = Array.isArray(data) ? data[0] || null : data || null;
     const event = { learnerId, conceptId: concept, kind, source, subject, topic, sessionRef, turnRef, quality: shape.response_quality, state, workflowId, details };
     for (const fn of listeners) { try { await fn(event); } catch (e) { console.warn("[learning-events] listener:", e?.message || e); } }
+    // An accepted Study Prep strategy waiting for its result is judged by this attempt (before
+    // struggles, so a breakthrough here can credit it).
+    let strategyOutcomes = [];
+    try { strategyOutcomes = await (await import("./strategies/outcomes.js")).settlePendingStrategyOutcomes(event); } catch (e) { console.warn("[learning-events] strategy outcomes:", e?.message || e); }
     // Struggles open / become breakthroughs (slice 2). Never fails the write.
     let struggles = [];
     try { struggles = await (await import("./struggles.js")).afterLearningEvent(event); } catch (e) { console.warn("[learning-events] struggles:", e?.message || e); }
-    return { recorded: true, conceptId: concept, state, struggles };
+    return { recorded: true, conceptId: concept, state, struggles, ...(strategyOutcomes.length ? { strategyOutcomes } : {}) };
   } catch (e) {
     console.warn(`[learning-events] ${kind} failed:`, e?.message || e);
     return { recorded: false, reason: "error" };
+  }
+}
+
+/**
+ * Time-based retention refresh for these concepts, by the Education Engine's
+ * SQL decay policy (edu.refresh_learner_concept_retention) — e.g. before a
+ * snapshot is handed to the agent. → { ok: true } | { ok: false, error }.
+ */
+export async function refreshConceptRetention({ learnerId, conceptIds = [] } = {}) {
+  const ids = [...new Set((conceptIds || []).filter(Boolean))];
+  if (!learnerId || !ids.length) return { ok: true };
+  try {
+    const { error } = await db.schema("edu").rpc("refresh_learner_concept_retention", { p_learner_id: learnerId, p_concept_ids: ids });
+    return error ? { ok: false, error: String(error.message || error).slice(0, 200) } : { ok: true };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e).slice(0, 200) };
   }
 }

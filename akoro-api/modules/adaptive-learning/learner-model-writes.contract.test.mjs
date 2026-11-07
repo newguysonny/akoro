@@ -34,16 +34,10 @@ const ALLOW = [
   // Tests and their fixtures.
   { path: /(?:\.test\.m?js|\.seam\.test\.mjs|\.contract\.test\.mjs)$/, all: true, why: "tests" },
   { path: /^akoro-python-agent\/tests\//, all: true, why: "python tests" },
-  // The one recorder.
-  { path: `${API_PREFIX}modules/adaptive-learning/learning-events.js`, rpc: ["record_learner_concept_evidence"], why: "the recorder (Phase 4a, D37)" },
-  // The Python agent's concept-state gateway calls the SAME SQL function. It
-  // carries the curriculum guardian's validated claim (status, validity,
-  // confidence), which the recorder's kind-derived evidence shape cannot take
-  // yet; and it refreshes retention through the Education Engine's SQL
-  // policy before a snapshot. Both are Education Engine functions, not
-  // direct table writes. (Follow-up: let recordLearningEvent take a
-  // validated claim, then route this through it.)
-  { path: `${API_PREFIX}modules/agent-tools/concept-state-routes.js`, rpc: ["record_learner_concept_evidence", "refresh_learner_concept_retention"], why: "agent gateway → Education Engine SQL" },
+  // The one recorder (and its retention refresh). The Python agent's
+  // concept-state gateway goes through it too, passing the curriculum
+  // guardian's validated claim (recordLearningEvent({ claim })).
+  { path: `${API_PREFIX}modules/adaptive-learning/learning-events.js`, rpc: ["record_learner_concept_evidence", "refresh_learner_concept_retention"], why: "the recorder (Phase 4a, D37)" },
   // Gate cleanup may remove what a scenario wrote (delete only).
   { path: new RegExp(`^${API_PREFIX}modules/verify/`), deleteOnly: true, why: "verify cleanup" },
 ];
