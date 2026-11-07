@@ -2,7 +2,8 @@
  * Settings — page shell (tab switch, data loading), composing UserTab/AgentTab.
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useNavigate }    from 'react-router-dom';
+import { useNavigate, useParams, Navigate } from 'react-router-dom';
+import { groupOf, isAgentGroup, tr } from './groups.js';
 import { useAuth }        from '../../contexts/AuthContext.jsx';
 import { useTheme, applyTheme, LS_DISPLAY, LS_ACCENT } from '../../contexts/ThemeContext.jsx';
 import { useLang, LS_LANGUAGE, LANG_NAME_TO_CODE }     from '../../contexts/LanguageContext.jsx';
@@ -20,7 +21,7 @@ import {
 import {
   BRAND, RED, ORANGE, Icon,
 } from './shared.jsx';
-import { Settings as SettingsIcon, MoreHorizontal, Pencil, LogOut } from 'lucide-react';
+import { MoreHorizontal, Pencil, LogOut } from 'lucide-react';
 import { LogoutModal } from './sheets.jsx';
 import { DrawnAvatar } from '../../components/common/AgentAvatar.jsx';
 import { UserTab } from './userTab.jsx';
@@ -45,11 +46,14 @@ function LoadingSkeleton() {
 /* ─── Main SettingsPage ───────────────────────────────────────── */
 export default function SettingsPage() {
   const navigate                   = useNavigate();
+  // /settings → the Account/Agent tabs; /settings/<group> → one group's own page.
+  const groupKey                   = useParams()['*'] || '';
+  const group                      = groupOf(groupKey);
   const { user, logout }           = useAuth();
   const { accentColor, setMode: onSetMode, setAccent: onSetAccent } = useTheme();
   const { language, setLanguage: onSetLanguage, t }                 = useLang();
 
-  const [tab,         setTab]         = useState('user');
+  const [tab,         setTab]         = useState(isAgentGroup(group) ? 'agent' : 'user');
   const [profile,     setProfile]     = useState(null);
   const [agent,       setAgent]       = useState(null);
   const [loading,     setLoading]     = useState(true);
@@ -235,6 +239,7 @@ export default function SettingsPage() {
   }, [moreOpen]);
 
   const color = accentColor;
+  if (groupKey && !group) return <Navigate to="/settings" replace/>;
 
   return (
     <AppShell>
@@ -249,7 +254,7 @@ export default function SettingsPage() {
            the app's isMobile breakpoint) the page spans the full width of
            the shell's content area — like the Discover hub / Contents and
            the Pharm D pages. */
-        .ak-settings-page{max-width:480px;margin:0 auto}
+        .ak-settings-page{width:100%;max-width:480px;margin:0 auto}
         @media (min-width:768px){
           .ak-settings-page{max-width:none;margin:0}
         }
@@ -261,7 +266,7 @@ export default function SettingsPage() {
         boxShadow:'0 1px 6px rgba(0,0,0,.06)',
         height:54,display:'flex',alignItems:'center',
         padding:'0 16px',gap:12 }}>
-        <button onClick={()=>navigate('/app')}
+        <button onClick={()=>navigate(group ? '/settings' : '/app')} aria-label={group ? 'Back to settings' : 'Back'}
           style={{ background:'none',border:'none',cursor:'pointer',
             padding:4,display:'flex',alignItems:'center',flexShrink:0 }}>
           <svg width={20} height={20} viewBox="0 0 24 24" fill="none"
@@ -269,6 +274,14 @@ export default function SettingsPage() {
             <polyline points="15 18 9 12 15 6"/>
           </svg>
         </button>
+        {group ? (
+          <div style={{ flex:1,minWidth:0 }}>
+            <h1 data-testid="settings-group-title" style={{ fontSize:16,fontWeight:900,color:'var(--ak-text)',margin:0,lineHeight:1.2,
+              overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>
+              {tr(t, group.titleKey, group.title)}
+            </h1>
+          </div>
+        ) : (<>
         <div style={{ width:34,height:34,borderRadius:'50%',overflow:'hidden',
           border:`2px solid ${color}`,flexShrink:0,
           display:'flex',alignItems:'center',justifyContent:'center',
@@ -285,12 +298,8 @@ export default function SettingsPage() {
           </p>
           <p style={{ fontSize:11,color:'var(--ak-text-muted)',margin:0 }}>@{profile?.username || user?.username || '…'}</p>
         </div>
+        </>)}
         <div ref={moreRef} style={{ display:'flex',alignItems:'center',gap:7,flexShrink:0,position:'relative' }}>
-          <button onClick={()=>showComingSoon()} title="Settings" aria-label="Settings"
-            style={{ width:34,height:34,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',
-              background:'var(--ak-tag-bg)',border:'1px solid var(--ak-border2)',cursor:'pointer',padding:0 }}>
-            <SettingsIcon size={15} color="var(--ak-text-sub)"/>
-          </button>
           <button onClick={()=>setMoreOpen(o=>!o)} title="More" aria-label="More options"
             aria-haspopup="menu" aria-expanded={moreOpen}
             style={{ width:34,height:34,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',
@@ -318,8 +327,8 @@ export default function SettingsPage() {
         </div>
       </header>
 
-      {/* Tabs */}
-      <div style={{ display:'flex',background:'var(--ak-surface)',borderBottom:'1px solid var(--ak-border)',padding:'0 16px' }}>
+      {/* Tabs — only on the settings home; a group page is just its own options */}
+      {!group && <div style={{ display:'flex',background:'var(--ak-surface)',borderBottom:'1px solid var(--ak-border)',padding:'0 16px' }}>
         {['user','agent'].map(tabKey=>(
           <button key={tabKey} onClick={()=>setTab(tabKey)}
             style={{ flex:1,padding:'11px 0',background:'none',border:'none',
@@ -337,10 +346,10 @@ export default function SettingsPage() {
             }
           </button>
         ))}
-      </div>
+      </div>}
 
       {loading ? <LoadingSkeleton /> : (
-        tab==='user'
+        (group ? !isAgentGroup(group) : tab==='user')
           ? <UserTab
               profile={profile} setProfile={setProfile}
               onSaveProfile={handleSaveProfile}
@@ -352,10 +361,12 @@ export default function SettingsPage() {
               onLogout={handleLogoutConfirm}
               onSetMode={onSetMode}
               onSetAccent={onSetAccent}
-              onSetLanguage={onSetLanguage}/>
+              onSetLanguage={onSetLanguage}
+              group={group?.key || null}/>
           : <AgentTab
               agent={agent} setAgent={setAgent}
-              onSaveAgent={handleSaveAgent}/>
+              onSaveAgent={handleSaveAgent}
+              group={isAgentGroup(group) ? group.key : null}/>
       )}
 
       {showLogout&&(

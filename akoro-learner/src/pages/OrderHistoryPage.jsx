@@ -36,7 +36,7 @@ const effectiveStatus = (o) =>
 export default function OrderHistoryPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const goBack = () => { (location.key && location.key !== 'default') ? navigate(-1) : navigate('/settings'); };
+  const goBack = () => { (location.key && location.key !== 'default') ? navigate(-1) : navigate('/app'); };
   const [orders, setOrders] = useState(null);   // null = loading
   const [refundOrder, setRefundOrder] = useState(null);   // order being refunded
   const [reason, setReason] = useState('');

@@ -17,14 +17,17 @@ import MemorySection from './memorySection.jsx';
 import AutonomySection from './autonomySection.jsx';
 import HelpOthersSection from './helpOthersSection.jsx';
 import { useInFlight } from '../../hooks/useInFlight.js';
+import { AGENT_CARDS, tr } from './groups.js';
+import { useNavigate } from 'react-router-dom';
 import { confirmDialog } from '../../components/common/ConfirmHost.jsx';
 
 /* "47 days left" for a goal with a date still ahead. */
 const daysLeft = (d) => { const n = d ? Math.ceil((new Date(d).getTime() - Date.now()) / 864e5) : null; return n != null && n >= 0 ? `${n} day${n === 1 ? '' : 's'} left` : ''; };
 
 /* ─── Agent tab ───────────────────────────────────────────────── */
-function AgentTab({ agent, setAgent, onSaveAgent }) {
+function AgentTab({ agent, setAgent, onSaveAgent, group = null }) {
   const { t } = useLang();
+  const navigate = useNavigate();
   const [sheet,        setSheet]        = useState(null);
   const [subjectSheet, setSubjectSheet] = useState(false);
   const [avatarSheet,  setAvatarSheet]  = useState(false);
@@ -101,6 +104,8 @@ function AgentTab({ agent, setAgent, onSaveAgent }) {
 
   return (
     <div style={{ padding:'20px 0 0' }}>
+      {/* Home: the agent's identity and numbers, then one card per group — each opens its own page. */}
+      {!group && (<>
       {/* Agent hero */}
       <div style={{ background:'var(--ak-surface)',margin:'0 16px 16px',borderRadius:18,
         padding:'18px 16px',border:`1.5px solid ${color}25`,
@@ -143,18 +148,38 @@ function AgentTab({ agent, setAgent, onSaveAgent }) {
       </div>
 
       {/* Stats grid */}
-      <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,margin:'0 16px 20px' }}>
+      <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,margin:'0 16px 16px' }}>
         {stats.map(({icon,label,value})=>(
           <div key={label} style={{ background:'var(--ak-surface)',borderRadius:13,
-            padding:'13px 14px',border:'1px solid var(--ak-border)',boxShadow:'0 1px 4px rgba(0,0,0,.04)' }}>
-            <Icon name={icon} size={19} color={color} style={{ marginBottom:5,display:'block' }}/>
-            <p style={{ margin:'0 0 1px',fontSize:18,fontWeight:900,
+            padding:'10px 10px',border:'1px solid var(--ak-border)',boxShadow:'0 1px 4px rgba(0,0,0,.04)' }}>
+            <Icon name={icon} size={17} color={color} style={{ marginBottom:5,display:'block' }}/>
+            <p style={{ margin:'0 0 1px',fontSize:16,fontWeight:900,
               color:'var(--ak-text)',fontFamily:"'Nunito',sans-serif" }}>{value}</p>
-            <p style={{ margin:0,fontSize:11,color:'var(--ak-text-muted)',fontFamily:"'Nunito',sans-serif" }}>{label}</p>
+            <p style={{ margin:0,fontSize:10,color:'var(--ak-text-muted)',fontFamily:"'Nunito',sans-serif",lineHeight:1.25 }}>{label}</p>
           </div>
         ))}
       </div>
 
+      {AGENT_CARDS.map((g) => {
+        const title = tr(t, g.titleKey, g.title);
+        return (
+          <button key={g.key} type="button" onClick={()=>navigate(`/settings/${g.key}`)} data-testid={`settings-card-${g.key.replace('/','-')}`}
+            style={{ display:'flex',alignItems:'center',gap:12,width:'calc(100% - 32px)',margin:'0 16px 12px',borderRadius:16,padding:'14px 16px',cursor:'pointer',
+              background:'var(--ak-surface)',border:'1px solid var(--ak-border)',boxShadow:'0 1px 6px rgba(0,0,0,.06)',fontFamily:"'Nunito',sans-serif",textAlign:'left' }}>
+            <span style={{ width:38,height:38,borderRadius:11,flexShrink:0,background:`${color}18`,display:'flex',alignItems:'center',justifyContent:'center' }}>
+              <Icon name={g.icon} size={19} color={color}/>
+            </span>
+            <span style={{ flex:1,minWidth:0 }}>
+              <span style={{ display:'block',fontSize:14,fontWeight:800,color:'var(--ak-text)' }}>{title}</span>
+              <span style={{ display:'block',fontSize:12,color:'var(--ak-text-muted)' }}>{tr(t, g.subKey, g.sub)}</span>
+            </span>
+            <Icon name="ti-chevron-right" size={18} color="var(--ak-text-muted)"/>
+          </button>
+        );
+      })}
+      </>)}
+
+      {group==='agent/profile' && (
       <Section title={t('settings.agent_profile')}>
         <Row icon="ti-tag" label={t('settings.agent_name')} value={agent.name}
           onClick={()=>openSheet('name',t('settings.agent_name'),'text')}/>
@@ -172,7 +197,9 @@ function AgentTab({ agent, setAgent, onSaveAgent }) {
             marginRight:6,flexShrink:0 }}/>
         </Row>
       </Section>
+      )}
 
+      {group==='agent/study' && (
       <Section title={t('settings.study_profile')}>
         <Row icon="ti-school"      label={t('settings.study_level')}  value={agent.studyLevel||t('settings.not_set')}
           onClick={()=>openSheet('studyLevel',t('settings.study_level'),'select',STUDY_LEVELS)}/>
@@ -183,7 +210,9 @@ function AgentTab({ agent, setAgent, onSaveAgent }) {
         <SubjectsRow subjects={agent.subjects||[]}
           onClick={()=>setSubjectSheet(true)} color={color}/>
       </Section>
+      )}
 
+      {group==='agent/goals' && (
       <Section title={t('settings.goals')}>
         {!goalsLoaded ? (
           <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 4px', fontSize:12, color:'var(--ak-text-muted)', fontFamily:"'Nunito',sans-serif" }}>
@@ -210,11 +239,14 @@ function AgentTab({ agent, setAgent, onSaveAgent }) {
           + {t('settings.goals_add')}
         </button>
       </Section>
+      )}
 
+      {group==='agent/focus' && (
       <Section title={t('settings.learning_goal')}>
         <Row icon="ti-target" label={t('settings.primary_goal')} value={agent.goal||t('settings.not_set')}
           onClick={()=>openSheet('goal',t('settings.primary_goal'),'select',GOALS)}/>
       </Section>
+      )}
       <div style={{ height:40 }}/>
 
       {avatarSheet&&(
@@ -233,11 +265,10 @@ function AgentTab({ agent, setAgent, onSaveAgent }) {
             catch { showToast('Failed to save'); }
           }}/>
       )}
-      <AgentNetworkSection/>
-      <AutonomySection/>
-      <HelpOthersSection/>
-      <MemorySection/>
-      <MyToolsSection/>
+      {group==='agent/network' && (<><AgentNetworkSection/><HelpOthersSection/></>)}
+      {group==='agent/autonomy' && <AutonomySection/>}
+      {group==='agent/memory' && <MemorySection/>}
+      {group==='agent/tools' && <MyToolsSection/>}
       {subjectSheet&&(
         <SubjectsSheet current={agent.subjects||[]} accentColor={color}
           onClose={()=>setSubjectSheet(false)}
