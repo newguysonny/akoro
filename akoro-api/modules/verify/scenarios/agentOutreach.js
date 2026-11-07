@@ -131,9 +131,10 @@ export const topicStartFriend = {
     if (!c) throw new BlockedError("No approved concept free to seed mastery on.");
     const t = topic(c.title);
     const { outreachOnTopicStart } = await import("../../adaptive-learning/study-prep/wiring.js");
-    await setAutonomy(ctx, A, true);
-    outreachOnTopicStart({ learnerId: a.id, topic: t, conceptId: c.id });
-    const m = await ctx.until(async () => (await sentRows(ctx, a, t))[0], { timeoutMs: 60_000, everyMs: 2000 }).catch(() => null);
+    // force: past Offline / quiet hours (the run may fall in the tester's night), never the permission rules.
+    const fired = await outreachOnTopicStart({ learnerId: a.id, topic: t, conceptId: c.id, force: true });
+    ctx.note(`topic start: ${JSON.stringify(fired)?.slice(0, 240)}`);
+    const m = await ctx.until(async () => (await sentRows(ctx, a, t))[0], { timeoutMs: 30_000, everyMs: 2000 }).catch(() => null);
     ctx.note(`message: ${JSON.stringify(m)?.slice(0, 240)}`);
     ctx.expect.ok("the topic start reached the friend's agent", m?.to_user === b.id && m?.trigger === "topic_start" && m?.origin === "agent", m);
 

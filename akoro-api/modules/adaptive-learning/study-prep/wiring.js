@@ -678,11 +678,11 @@ export function afterLearnerAction({ sessionId, learnerId, action, conversationI
  * mastered it how they were taught it (never a stranger, never a card).
  * Fire-and-forget; the outreach rules decide (Online, quiet hours, daily cap).
  */
-export function outreachOnTopicStart({ learnerId, topic, conceptId = null, subject = null }) {
-  if (!learnerId || !topic) return;
-  import("../../agent-network/outreach.js")
-    .then((o) => o.reachOut({ learnerId, trigger: "topic_start", purpose: "study_question", topic, conceptId, subject, friendsOnly: true }))
-    .catch(() => {});
+export function outreachOnTopicStart({ learnerId, topic, conceptId = null, subject = null, force = false }) {
+  if (!learnerId || !topic) return Promise.resolve(null);
+  return import("../../agent-network/outreach.js")
+    .then((o) => o.reachOut({ learnerId, trigger: "topic_start", purpose: "study_question", topic, conceptId, subject, friendsOnly: true, force }))
+    .catch(() => null);
 }
 
 /**
