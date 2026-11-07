@@ -94,7 +94,7 @@ function ThoughtBlock({ thinking, streaming }) {
 }
 
 const FIND_SIMILAR = "Find similar material";   // the API's structureChips label
-const MATERIAL_ICON = { study_tool:"ti-layout-grid", folder:"ti-folder", blog:"ti-article", my_blog:"ti-pencil", course:"ti-school", record:"ti-paperclip", topic:"ti-chalkboard", activity:"ti-list-check" };
+const MATERIAL_ICON = { study_tool:"ti-layout-grid", study_output:"ti-sparkles", folder:"ti-folder", blog:"ti-article", my_blog:"ti-pencil", course:"ti-school", record:"ti-paperclip", topic:"ti-chalkboard", activity:"ti-list-check" };
 
 /* Each suggestion kind's label and icon in Suggestions (the ready kinds, §7.16.3). */
 const SUGG_KIND = {
@@ -1371,7 +1371,7 @@ function AgentChatTab({
                   {/* Materials the tools found — each opens the material (or teaches the topic). */}
                   {!isMe&&msg.materials?.length>0&&(
                     <div aria-label={t('agent.materials')} style={{ display:"flex",flexWrap:"wrap",gap:6,marginTop:8 }}>
-                      {msg.materials.map((m)=>m.sub?(
+                      {msg.materials.map((m)=>m.sub&&m.kind==='blog_passage'?(
                         // A blog passage the answer used: the post and its section, opening the post (preview approved 2026-11-07).
                         <button key={m.href} type="button" data-material={m.kind} onClick={()=>navigate(m.href)}
                           style={{ display:"flex",alignItems:"center",gap:7,maxWidth:"100%",padding:"6px 10px",borderRadius:12,border:"1px solid var(--ak-border2)",background:"var(--ak-surface)",cursor:"pointer",fontFamily:"'Nunito',sans-serif",textAlign:"left" }}>

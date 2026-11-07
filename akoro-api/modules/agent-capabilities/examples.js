@@ -75,6 +75,7 @@ export const TOOL_EXAMPLES = Object.freeze({
 
   // Files and library
   search_my_library: e("files", "Find my notes on cell transport."),
+  make_study_material: e("files", "Create a quiz on the Basic Science material in my folder"),
   analyse_past_papers: e("files", "Which topics keep coming up in my past papers?"),
 
   // Chats and memory

@@ -1051,6 +1051,7 @@ export default function SessionReaderModal({
   pages = [],
   onClose,
   initialTool = null,   // open on this study tool's form (an Agent Chat link)
+  initialArtifactId = null,   // open on this saved tab (made in Agent Chat)
   chatNode = null,
   onOpenChat,
   onExplainSelection,
@@ -1428,9 +1429,14 @@ export default function SessionReaderModal({
       const open = [];
       const closed = [];
       for (const a of list || []) if (TAB_KINDS.has(a.kind)) (a.open ? open : closed).push(a);
+      // A tab made in Agent Chat opens even if the learner closed it since.
+      const wanted = initialArtifactId ? closed.find((a) => a.id === initialArtifactId) : null;
+      if (wanted) { closed.splice(closed.indexOf(wanted), 1); open.push(wanted); }
       const tabs = open.map((a) => artifactToTab(a, "r" + nextResultId.current++));
       tabs.forEach((t) => lastSavedRef.current.set(t.artifactId, JSON.stringify(tabContentPatch(t))));
       setResultTabs((rt) => [...tabs, ...rt]);
+      const focus = initialArtifactId ? tabs.find((t) => t.artifactId === initialArtifactId) : null;
+      if (focus) setActiveTabId(focus.id);
       setSavedItems(closed);
       const marks = marksFromArtifacts(list);
       setAnnotations((x) => [...marks.annotations, ...x]);

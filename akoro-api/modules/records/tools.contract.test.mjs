@@ -10,6 +10,8 @@ const {
   toolSchema, buildToolMessages, shapeToolResult, gatherToolPassages,
 } = await import("./toolsLib.js");
 const routes = await readFile(new URL("./routes.js", import.meta.url), "utf8");
+// The generation itself lives in studyMaterial.js (shared with Agent Chat).
+const shared = await readFile(new URL("./studyMaterial.js", import.meta.url), "utf8");
 const route = routes.slice(routes.indexOf('router.post("/tools/:tool"'), routes.indexOf("/* GET /api/records/ask/history"));
 
 const block = (y, text) => ({ bbox_2d: [50, y, 950, y + 60], text_content: text });
@@ -99,8 +101,10 @@ test("the route: auth, the Ask access rule, strict JSON, honest empty states", (
   assert.match(routes, /router\.post\("\/tools\/:tool", authenticateToken/);
   assert.match(route, /if \(!TOOL_IDS\.includes\(tool\)\) return res400/);
   assert.match(route, /const target = await resolveAskTarget\(req, req\.body\);/);
-  assert.match(route, /response_format: \{ type: "json_schema", json_schema: \{ name: `reader_\$\{tool\}`, strict: true, schema: toolSchema\(tool\) \} \}/);
-  assert.match(route, /has no readable text yet/);
-  assert.match(route, /out of AI credit/);
+  assert.match(route, /generateToolResult\(\{ target, tool, scope,/);
+  assert.match(route, /if \(g\.status\) return res\.status\(g\.status\)/);
+  assert.match(shared, /response_format: \{ type: "json_schema", json_schema: \{ name: `reader_\$\{tool\}`, strict: true, schema: toolSchema\(tool\) \} \}/);
+  assert.match(shared, /has no readable text yet/);
+  assert.match(shared, /out of AI credit/);
   assert.match(route, /pageText\.slice\(0, TOOL_LIMITS\.MAX_PAGE_TEXT_CHARS\)|req\.body\.pageText\.slice\(0, TOOL_LIMITS\.MAX_PAGE_TEXT_CHARS\)/, "client text is capped");
 });

@@ -10,6 +10,8 @@ const {
   narrateTurns, podcastInFlight, podcastForClient, runPodcastJob,
 } = await import("./podcastLib.js");
 const routes = await readFile(new URL("./routes.js", import.meta.url), "utf8");
+// The episode itself is made in studyMaterial.js (shared with Agent Chat).
+const shared = await readFile(new URL("./studyMaterial.js", import.meta.url), "utf8");
 const artifacts = await readFile(new URL("./artifactsLib.js", import.meta.url), "utf8");
 
 const passages = [
@@ -137,12 +139,15 @@ test("routes: made by the server, polled, never client-writable, audio deleted w
   assert.match(routes, /router\.get\("\/podcast\/:id", authenticateToken/);
   const post = routes.slice(routes.indexOf('router.post("/podcast"'), routes.indexOf('router.get("/podcast/:id"'));
   assert.match(post, /resolveAskTarget\(req, req\.body\)/);
-  assert.match(post, /coinsAvailable\(/);                       // hard block before any spend
-  assert.match(post, /podcastInFlight\(a\.content\)/);          // one episode at a time
-  assert.match(post, /res\.status\(202\)[\s\S]*void runPodcastJob/);   // answers first, works after
-  assert.match(post, /__userId: userId, __billTo: billTo/);
-  assert.match(post, /coinsForTtsChars\(spokeWith, chars\)/, "charged at the rate of the provider that narrated");
-  assert.match(post, /await speakBuffer\(\{ text: input, voice, openai \}\)/, "Deepgram first, OpenAI as fallback");
+  assert.match(post, /startPodcast\(\{ userId, target, scope, pageNumber: page, pageText, values: raw, deps: \{ speakBuffer, putRecordObject \} \}\)/);
+  assert.match(post, /res\.status\(202\)/);                                         // answers first
+  const start = shared.slice(shared.indexOf("export async function startPodcast"), shared.indexOf("async function podcastDeps"));
+  assert.match(start, /coinsAvailable\(/);                       // hard block before any spend
+  assert.match(start, /podcastInFlight\(a\.content\)/);          // one episode at a time
+  assert.match(start, /createArtifact\([\s\S]*void runPodcastJob/);   // the item exists first, the work after
+  assert.match(start, /__userId: userId, __billTo: billTo/);
+  assert.match(start, /coinsForTtsChars\(spokeWith, chars\)/, "charged at the rate of the provider that narrated");
+  assert.match(start, /await deps\.speakBuffer\(\{ text: input, voice, openai \}\)/, "Deepgram first, OpenAI as fallback");
   assert.match(routes, /SERVER_MADE_KINDS\.includes\(v\.row\.kind\)\) return res400/);   // no client-made podcasts
   assert.match(routes, /SERVER_MADE_KINDS\.includes\(row\.kind\)\) return res400/);      // no content patches
   assert.match(routes, /ownsRecordFileKey\(raw\.audioKey, userId\)/);                   // presign only own keys

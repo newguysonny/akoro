@@ -9,7 +9,7 @@
  *     action   { type: "teach", topic, subject } — a topic opens a teaching session
  */
 
-const ALLOWED = [/^\/blog\/[\w-]+$/, /^\/write\/blog\/[\w-]+$/, /^\/course\/[\w-]+$/, /^\/library\?record=[0-9a-f-]{36}(?:&tool=(?:quiz|flashcards|summary|notes|podcast))?$/i, /^\/library\?folder=[0-9a-f-]{36}$/i, /^\/activities\/[\w-]+$/];
+const ALLOWED = [/^\/blog\/[\w-]+$/, /^\/write\/blog\/[\w-]+$/, /^\/course\/[\w-]+$/, /^\/library\?record=[0-9a-f-]{36}(?:&tool=(?:quiz|flashcards|summary|notes|podcast))?$/i, /^\/library\?folder=[0-9a-f-]{36}$/i, /^\/library\?record=[0-9a-f-]{36}&artifact=[0-9a-f-]{36}$/i, /^\/activities\/[\w-]+$/];
 const MAX = 8;
 const TOOL_LABEL = { quiz: "Quiz", flashcards: "Flashcards", summary: "Summary", notes: "Notes", podcast: "Podcast" };
 const clip = (s, n = 90) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
@@ -42,6 +42,14 @@ export function materialsFrom(tool, result) {
       // With a study tool asked for, the link opens the reader on it ("Quiz · Cell notes").
       return (r.records || []).map((x) => link(x.tool ? "study_tool" : "record", x.tool ? `${TOOL_LABEL[x.tool] || x.tool} · ${x.name}` : x.name,
         `/library?record=${x.recordId}${x.tool ? `&tool=${x.tool}` : ""}`));
+    case "make_study_material": {
+      // What chat made: a saved reader tab — the card opens the reader on it.
+      if (!r.made) return (r.records || []).map((x) => link("record", x.name, `/library?record=${x.recordId}`));
+      const unit = r.tool === "quiz" ? "questions" : r.tool === "flashcards" ? "cards" : "points";
+      const sub = r.tool === "podcast" ? "Being made — ready in a minute or two" : r.count ? `${r.count} ${unit}` : null;
+      const m = withSub(link("study_output", `${TOOL_LABEL[r.tool] || r.tool} · ${r.name}`, r.href), sub);
+      return [m ? { ...m, tool: r.tool } : null];
+    }
     case "ask_to_be_taught":
       // Not taught yet: Akoro's own courses and posts on it, to read before teaching the protégé.
       return (r.materials || []).map((m) => link(m.kind, m.title, m.href));
