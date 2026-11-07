@@ -1,5 +1,16 @@
 # Landing / app split — runbook
 
+## Folders and Vercel projects
+
+The landing and the app are **the same folder** (`akoro-learner`) built twice with different env; the school is its own folder. That is three Vercel projects:
+
+| Vercel project | Root Directory | Key env | Domains |
+|---|---|---|---|
+| landing | `akoro-learner` | `VITE_TARGET=landing` | `akoro.name.ng`, `www.akoro.name.ng` |
+| app | `akoro-learner` | `VITE_TARGET=app` | `app.akoro.name.ng` |
+| school | `akoro-school` | see `akoro-school/.env.example` | `akoro-school.akoro.name.ng`, `*.akoro.name.ng`, custom domains |
+
+
 One codebase, two deployments, chosen by `VITE_TARGET` at build time (`src/config/target.js`):
 
 | Site | Host | `VITE_TARGET` | Build |
@@ -20,7 +31,9 @@ Overrides: `VITE_APP_URL`, `VITE_SITE_URL` (defaults are the two hosts above).
    current (unsplit) deployment until the school deployment takes them over (see below).
 3. **API env (Render)**: `FRONTEND_URL=https://app.akoro.name.ng` (emails, links), `MAIN_SITE_URL=https://akoro.name.ng`; set `SITE_BASE_DOMAIN=akoro.name.ng` explicitly.
    (Code already treats a leading `app.` as not part of the base domain and reserves `app`, `admin`, `api`, `instructors`, `school`… from schools.)
-4. **Sign-in providers** (Google etc.): add `https://app.akoro.name.ng/auth/callback` to the allowed redirect URIs before switching `FRONTEND_URL`.
+4. **Google sign-in: nothing to add for the app host.** Google redirects to the **API** (`GOOGLE_CALLBACK_URL`, `https://api.akoro.name.ng/api/auth/google/callback`), not to
+   the app; the API then sends the browser on to `FRONTEND_URL/auth/callback`. So the Google console's "Authorized redirect URIs" must contain exactly the API address and
+   it stays as it is — only change it if the API's own domain changes. (The app's `/auth/callback` is a page of ours, not something Google calls.)
 5. **Old links**: emails already sent point at the old host — keep `akoro.name.ng` forwarding product paths (done by the landing build) for a long time.
 6. **Users**: sessions don't carry across hosts (one re-sign-in); PWA installs are tied to the origin (reinstall from `app.`). The old service worker on
    `akoro.name.ng` is repaired by `sw-repair.js` on the next load of the landing build.
