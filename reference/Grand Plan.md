@@ -3184,7 +3184,7 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   — **2026-11-07:** chat uploads join the open Study Prep session in their subject
   (`attachUploadsToStudyPrep`); a check for a session with linked files takes its facts
   from the learner's own notes first (`notesBlock`); plan-card files label built. Blog
-  source chips: preview drawn, waiting for approval.
+  source chips built (post + section under the answer; UI gate `chat.blog_sources` PASS).
 
 ### Phase 6 — Teaching Workflow (agent-driven)
 - `teaching/controller.js`, `teaching/tools.js` (agent catalogue + fixed steps), `TEACHING_POLICY`.
@@ -3236,7 +3236,7 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   hand-off → taught to mastery → Study Prep callback → retest unlocked → teaching_done
   wake). `teaching.request_assessment` built (NaNa asks, the protégé answers from what
   it was taught, Sergeant judges, a guess never counts; ≤ 2 per session); its result
-  card is not drawn in the lesson window yet (preview drawn 2026-11-07, waiting for approval).
+  result card is drawn in the lesson window (`LessonCheckCard`, built 2026-11-07 after preview approval).
 - **Status (2026-11-01): ✅ built — `studyprep.teaching_outcomes` green on the sandbox.** Open (circle back): the mid-session assessment tool (`teaching.request_assessment`).
   Ended before any teaching → `abandoned` (reason learner_ended), no
   teach-back, offered once more on the card (a fresh proposal; once), wake
