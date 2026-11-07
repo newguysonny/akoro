@@ -72,3 +72,6 @@ export async function embedForSearch(text, { userId = null, feature = "search_em
     clearTimeout(timer);
   }
 }
+
+/** Tests only: forget the shared embeddings (seam tests count embedding calls). */
+export function resetSharedEmbeddings() { shared.clear(); }
