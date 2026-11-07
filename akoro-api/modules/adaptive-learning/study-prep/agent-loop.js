@@ -85,6 +85,10 @@ export async function runAgentStep({
         // A provider failure (rejected request, timeout) is in the session's log.
         return append({ iteration, eventType: "agent_action", origin: "harness", action: "agent_error", facts: { reason: entry.reason } });
       }
+      if (entry.kind === "model_refusal") {
+        // The model declined (§7.11.4): its fallback answered, or nothing did — in the log, not a crash.
+        return append({ iteration, eventType: "agent_action", origin: "harness", action: "model_refusal", facts: { model: entry.model, fallbackModel: entry.fallbackModel, category: entry.category } });
+      }
       if (entry.kind === "malformed") {
         return append({ iteration, eventType: "agent_action", origin: "harness", action: "malformed", facts: { reason: entry.reason } });
       }

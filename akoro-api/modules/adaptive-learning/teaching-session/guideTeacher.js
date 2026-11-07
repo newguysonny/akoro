@@ -42,7 +42,7 @@ export async function strategyGuideFor(strategy) {
 }
 
 /** NaNa's reply, streamed to onChunk when given. → text */
-export async function guideTeach({ orchestrator, humanMessage, topic, part, move, focusConcept, phaseLabel, evidence, history, onChunk = null }) {
+export async function guideTeach({ orchestrator, humanMessage, topic, part, move, focusConcept, phaseLabel, evidence, history, onChunk = null, modelPick = null }) {
   const system = guideTeachPrompt({
     guideName: orchestrator?.guideOrchestrator?.guide?.name || "NaNa Esumai",
     topic, part, move, focusConcept, phaseLabel, evidence, history,
@@ -52,7 +52,8 @@ export async function guideTeach({ orchestrator, humanMessage, topic, part, move
     notes: orchestrator?.learnerNotes || [],
   });
   const messages = [{ role: "system", content: system }, { role: "user", content: humanMessage }];
-  const meta = { __feature: "teaching_guide", __userId: orchestrator?.studentId || null };
+  // NaNa is a persona: the learner's model pick (Scenario K) applies, billed at its price.
+  const meta = { __role: "persona", ...(modelPick || {}), __feature: "teaching_guide", __userId: orchestrator?.studentId || null };
   if (onChunk) {
     const stream = await openai.chat.completions.create({ model: "gpt-4.1-mini", temperature: 0.5, stream: true, messages, ...meta });
     let full = "";

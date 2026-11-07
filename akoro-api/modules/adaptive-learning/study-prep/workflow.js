@@ -145,7 +145,7 @@ export function workflowEventFor(row) {
   const type = node && NODE_TYPE[node] ? NODE_TYPE[node]
     : kind === "agent_tool_call" ? "tool.started"
     : kind === "observation" ? (failed ? "tool.failed" : "tool.completed")
-    : kind === "agent_action" ? (action === "agent_error" || action === "malformed" ? "decision.fallback" : "decision.proposed")
+    : kind === "agent_action" ? (action === "agent_error" || action === "malformed" || action === "model_refusal" ? "decision.fallback" : "decision.proposed")
     : kind === "engine_result" ? "assessment.completed"
     : kind === "human_gate" ? "learner.action_received"
     : "decision.accepted";

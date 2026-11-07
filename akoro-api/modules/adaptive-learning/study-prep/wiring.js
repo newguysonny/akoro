@@ -408,7 +408,7 @@ export async function runStudyPrepPlanningStep({ sessionId, learnerId }) {
     getSessionState: readToolsModule.makeSessionStateReader(harness).bind(null),
   };
   const registry = buildRegistry({ readTools: sessionReadTools, harness, learnerId, sessionId });
-  const agent = makeLlmAgent({ system: context.system, learnerId });
+  const agent = makeLlmAgent({ system: context.system, learnerId, workflowId: view.session.workflowId || null });
   // Through the harness's guarded store, so every step reaches the workflow
   // stream (the card) — the raw store skipped the mirror. Deep research: the
   // planner reads the syllabus, the learner's state, history, memory and the
@@ -567,7 +567,7 @@ export async function runStudyPrepWake({ sessionId, learnerId = null, trigger, f
     const registry = buildRegistry({ readTools: { ...readTools, getSessionState: readToolsModule.makeSessionStateReader(harness).bind(null) }, harness, learnerId: owner, sessionId });
     // Billed to the learner, like planning: a wake is part of their session (study_prep_wake).
     // ref: its charges count against the session's approved coins (with its checks).
-    const agent = makeLlmAgent({ system: context.system, learnerId: owner, feature: "study_prep_wake", maxTokens: 1200, ref: `study_prep:${sessionId}`,
+    const agent = makeLlmAgent({ system: context.system, learnerId: owner, feature: "study_prep_wake", maxTokens: 1200, ref: `study_prep:${sessionId}`, workflowId: view.session.workflowId || null,
       finishHint: "This is your last decision: end the turn — wait_for_learner, or move the session on if that is what the result calls for." });
     step = await runAgentStep({
       sessionId, goal: wakeGoal(trigger, facts), agent, registry, store: harness.store || store, harness, contextSetName: contextSetFor("study_prep", "wake"),

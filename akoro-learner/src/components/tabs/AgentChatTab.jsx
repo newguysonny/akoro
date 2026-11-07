@@ -224,7 +224,16 @@ function AgentChatTab({
   const [chatModelId, setChatModelId] = useState(() => { try { return localStorage.getItem('ak_chat_model') || null; } catch { return null; } });
   useEffect(() => {
     let alive = true;
-    apiGet('/api/adaptive/chat/models').then(d => { if (alive && (Array.isArray(d?.modes) || Array.isArray(d?.models))) setServerModels(d); }).catch(() => {});
+    apiGet('/api/adaptive/chat/models').then(d => {
+      if (!alive || !(Array.isArray(d?.modes) || Array.isArray(d?.models))) return;
+      setServerModels(d);
+      // The pick saved on the server (any device) wins over this browser's copy.
+      const saved = d?.picker?.saved;
+      if (saved && 'modelId' in saved) {
+        setChatModelId(saved.modelId || null);
+        try { if (saved.modelId) localStorage.setItem('ak_chat_model', saved.modelId); else localStorage.removeItem('ak_chat_model'); } catch { /* private mode */ }
+      }
+    }).catch(() => {});
     return () => { alive = false; };
   }, []);
   const [researchMode, setResearchMode] = useState(false);
@@ -932,8 +941,9 @@ function AgentChatTab({
     // durable turn contract to repair a partial write without duplicate rows.
     const turnId = createAgentChatTurnId();
     turnIdRef.current = turnId;
-    // The picked model rides the standard mode only (the server checks it).
-    const modelPick = mode === "default" && chatModelId ? { model: chatModelId } : {};
+    // The picked model rides the standard mode only (the server checks it and
+    // remembers it on this chat; null = the default model).
+    const modelPick = mode === "default" ? { model: chatModelId || null } : {};
     const payload = { message: text, inlineSuggestions: true, history: history.slice(-24), agentName, mode, ...modelPick,
       conversationId: sid, turnId,
       ...(ingest ? { ingestId: ingest.id, ingestIds } : {}),

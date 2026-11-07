@@ -237,7 +237,8 @@
     "2026-concept-evidence-ambiguity-fix.sql",
     "2026-learning-struggles.sql",
     "2026-strategy-outcomes.sql",
-    "2026-tier-allowed-models.sql"
+    "2026-tier-allowed-models.sql",
+    "2026-chat-model-selection.sql"
   ],
   "demo": [
     "2026-seed-school-passwords.sql",

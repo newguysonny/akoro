@@ -46,6 +46,7 @@ export const protegeDeps = {
 };
 import { publicModelList, resolveChatChoice, pickerInfo, pickerEnabled } from "../../lib/modelCatalogue.js";
 import { allowedModelsFor } from "../../lib/modelTiers.js";
+import { modelPicks, supabaseThreads } from "../workflows/modelPicks.js";
 const { Pool } = pkg;
 import db from "../../db.js";
 import config from "../../config/index.js";
@@ -4343,11 +4344,51 @@ router.get("/models", async (req, res) => {
   // when it is, the payer's tier (§7.11.5a) — a model outside its list is
   // listed as locked to a plan.
   const tier = pickerEnabled() && req.user?.id ? await allowedModelsFor(req.user.id).catch(() => null) : null;
+  // saved: the learner's latest pick on any of their chats (Scenario K) — the
+  // app opens on it on every device, so it is never cached when there is one.
+  const saved = pickerEnabled() && req.user?.id ? await savedPickFor(req.user.id) : null;
+  if (saved) res.set("Cache-Control", "private, no-cache");
   res.json({
     modes: chatModelMenu(),
     models: publicModelList(process.env, { allowedModels: tier?.allowedModels ?? null }),
-    picker: { ...pickerInfo(), ...(tier ? { tier: tier.tier?.name || null, tierSource: tier.source, allowedModels: tier.allowedModels } : {}) },
+    picker: { ...pickerInfo(), ...(tier ? { tier: tier.tier?.name || null, tierSource: tier.source, allowedModels: tier.allowedModels } : {}), ...(saved ? { saved } : {}) },
   });
+});
+
+/** The learner's latest saved pick → { modelId, label, conversationId, changedAt } | null. Never throws. */
+async function savedPickFor(learnerId) {
+  try {
+    const pick = await (await modelPicks()).learnerPick(learnerId);
+    return pick?.changedAt ? { modelId: pick.modelId ?? null, label: pick.label || null, conversationId: pick.conversationId || null, changedAt: pick.changedAt } : null;
+  } catch { return null; }
+}
+
+// GET /sessions/:id/model — the pick saved on this chat ({} when never set).
+router.get("/sessions/:id/model", async (req, res) => {
+  try {
+    if (!CHAT_SESSION_ID.test(String(req.params.id))) return res.status(422).json({ error: "id is invalid" });
+    const thread = await supabaseThreads(db).get(req.params.id, req.user.id);
+    if (!thread) return res.status(404).json({ error: "Session not found" });
+    res.set("Cache-Control", "no-store");
+    res.json({ success: true, modelSelection: thread.selection || {} });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /sessions/:id/model { modelId } — save the chat's pick (null = the
+// default). It applies from the next message and also reaches the learner's
+// open Study Prep / Teaching workflows (a model.changed event on each).
+router.put("/sessions/:id/model", async (req, res) => {
+  try {
+    if (!CHAT_SESSION_ID.test(String(req.params.id))) return res.status(422).json({ error: "id is invalid" });
+    if (!pickerEnabled()) return res.status(409).json({ code: "picker_off", error: "Model choice is off on this server" });
+    const result = await (await modelPicks()).saveThreadPick({ learnerId: req.user.id, conversationId: req.params.id, modelId: req.body?.modelId ?? null });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    if (err?.code && err.status) return res.status(err.status).json({ code: err.code, error: err.message });
+    res.status(500).json({ error: err.message });
+  }
 });
 
 /**
@@ -4581,6 +4622,14 @@ router.post("/agent", async (req, res) => {
 
     if (wantsStream) beginStream();
     if (modelNotice && wantsStream) status("model", modelNotice);
+    // The pick is remembered on the chat (Scenario K): a send that names its
+    // model — a catalogue id, or null for the default — saves it on the thread
+    // and the learner's open workflows; a change is a model_changed event.
+    if (conversationId && mode === "default" && Object.prototype.hasOwnProperty.call(req.body || {}, "model") && pickerEnabled()) {
+      const remembered = await (await modelPicks()).saveThreadPick({ learnerId: req.user.id, conversationId, modelId: typeof req.body.model === "string" && req.body.model ? req.body.model : null })
+        .catch((e) => { if (!/not found|isn't a model/i.test(String(e?.message))) console.warn("[/chat/agent] model pick not saved:", e?.message || e); return null; });
+      if (remembered?.changed && wantsStream) send("model_changed", { modelId: remembered.selection.modelId, label: remembered.selection.label, previous: remembered.previous, workflows: remembered.workflows.length });
+    }
     if (durable) {
       // A durable-context failure (pending migration, transient DB error)
       // must never take the chat down: degrade to the plain-transcript path,

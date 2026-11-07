@@ -69,7 +69,7 @@ export function decisionState(context) {
 }
 
 /** The production decision: the controller model picks one function tool. → { tool, args } | null */
-async function modelDecide({ context, observations }) {
+export async function modelDecide({ context, observations }) {
   const { openai } = await import("../../../lib/aiModel.js");
   const system = [
     `You run one turn of a teaching session. Mode: ${context.mode === "learn_with_guide" ? "the guide (NaNa) teaches the learner directly" : "the learner teaches their protégé (a student agent); NaNa coaches on the side"}.`,
@@ -83,8 +83,11 @@ async function modelDecide({ context, observations }) {
   const res = await openai.chat.completions.create({
     model: "gpt-4.1-mini", temperature: 0, messages: [{ role: "system", content: system }, { role: "user", content: user }],
     tools: controllerTools(context.mode), tool_choice: "required",
+    // The learner's model pick (Scenario K) wins over the default model here; billed at its price.
+    ...(context.modelPick || {}),
     __role: "controller", __feature: "teaching_controller", __userId: context.studentId, __timeoutMs: TEACHING_POLICY.DECISION_TIMEOUT_MS + 4_000, __maxRetries: 0,
   });
+  if (res?.model_refusal) context.refusals = [...(context.refusals || []), { model: res.model_refusal.model, fallbackModel: res.model_refusal.fallbackModel || null }];
   const call = res.choices?.[0]?.message?.tool_calls?.[0];
   if (!call?.function?.name) return null;
   let args = {};
@@ -99,7 +102,13 @@ const withTimeout = (promise, ms) => {
 };
 
 /** Run one agent-driven turn. Returns the same context shape the fixed runner did, plus the agent's record. */
-export async function executeAgentTeachingTurn({ orchestrator, humanMessage, callbacks = {}, phaseLabels, actionForDialogueMove, mode, decide = modelDecide, policy = TEACHING_POLICY, tools: harnessTools = null, teachGuide = guideTeach }) {
+/** The learner's model pick for this turn's controller decisions and persona replies (never the locked assessor). */
+async function defaultPick({ orchestrator }) {
+  const { pickFields } = await import("../../workflows/modelPicks.js");
+  return pickFields({ learnerId: orchestrator.userId || orchestrator.studentId, workflow: orchestrator.teachingWorkflowId || null, role: "persona" });
+}
+
+export async function executeAgentTeachingTurn({ orchestrator, humanMessage, callbacks = {}, phaseLabels, actionForDialogueMove, mode, decide = modelDecide, policy = TEACHING_POLICY, tools: harnessTools = null, teachGuide = guideTeach, pickFor = defaultPick }) {
   const session = orchestrator?.session;
   if (!orchestrator?.studentAgent || !orchestrator?.studentAgentRecord || !session?.topic) throw new Error("Adaptive teaching workflow requires an initialized session");
   const context = {
@@ -113,6 +122,8 @@ export async function executeAgentTeachingTurn({ orchestrator, humanMessage, cal
     agentId: orchestrator.studentAgentRecord.id, studentId: orchestrator.studentId,
     completedTools: [], decisions: [], fallback: null,
   };
+  // Asked once per turn: a switch in the chat box applies from the next turn.
+  context.modelPick = await Promise.resolve(pickFor ? pickFor({ orchestrator }) : {}).catch(() => ({})) || {};
   const tools = harnessTools || createTeachingTurnTools();
   const step = (name, status) => callbacks.onWorkflowStep?.({ workflow: "adaptive_teaching_turn", policyVersion: AGENT_TURN_POLICY_VERSION, step: PLAN_NAME[name] || name, label: AGENT_LABELS[name] || LABELS[name] || "Updating teaching session", status });
   const runFixed = async (name) => {
@@ -181,14 +192,14 @@ export async function executeAgentTeachingTurn({ orchestrator, humanMessage, cal
     context.guideReply = await teachGuide({
       orchestrator, humanMessage, topic: context.topic, part, move: reply.args.move, focusConcept: reply.args.focusConcept,
       phaseLabel: phaseLabels?.[session.phase], evidence: context.evidenceUpdate?.current || {}, history: context.history,
-      onChunk: callbacks.onGuideReplyChunk || null,
+      onChunk: callbacks.onGuideReplyChunk || null, modelPick: context.modelPick,
     });
     context.studentReply = "";
   } else {
     context.studentReply = await orchestrator.studentAgent.reply(
       humanMessage, context.topic, context.state.cognitive, context.history, phaseLabels?.[session.phase],
       callbacks.onStudentChunk || null,
-      { dialogue: context.evidenceUpdate.dialogue, evidence: context.evidenceUpdate.current, protegeMove: PROTEGE_MOVES[reply.args.move], focusConcept: reply.args.focusConcept || null },
+      { dialogue: context.evidenceUpdate.dialogue, evidence: context.evidenceUpdate.current, protegeMove: PROTEGE_MOVES[reply.args.move], focusConcept: reply.args.focusConcept || null, modelPick: context.modelPick },
     );
   }
   step(reply.tool, "completed");

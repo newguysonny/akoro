@@ -88,6 +88,7 @@ export const TEMPLATES = Object.freeze({
   "topic.state_changed": (p) => T(topic(p), p.to ? stateWord(p.to) : ""),
   "teaching.phase_changed": (p) => T("Next teaching step", p.to ? stateWord(p.to) : ""),
   "wallet.updated": (p) => T("Coins updated", p.coins != null ? `${p.coins} coins` : ""),
+  "model.changed": (p) => T("Model changed", p.label ? clip(p.label, 60) : "", p.notice ? clip(p.notice, 160) : ""),
 });
 
 /** One event in the learner's words. */

@@ -134,9 +134,11 @@ export class StudentAgent {
       { role: "user",   content: humanMessage },
     ];
 
+    // The protégé is a persona: the learner's model pick (Scenario K) applies, billed at its price.
+    const pick = { __role: "persona", ...(teachingContext?.modelPick || {}) };
     if (onChunk) {
       const stream = await openai.chat.completions.create({
-        model: "gpt-4.1-mini", temperature: 0.65, stream: true, messages,
+        model: "gpt-4.1-mini", temperature: 0.65, stream: true, messages, ...pick,
       });
       let full = "";
       for await (const chunk of stream) {
@@ -147,7 +149,7 @@ export class StudentAgent {
     }
 
     const res = await openai.chat.completions.create({
-      model: "gpt-4.1-mini", temperature: 0.65, messages,
+      model: "gpt-4.1-mini", temperature: 0.65, messages, ...pick,
     });
     return res.choices[0].message.content;
   }
