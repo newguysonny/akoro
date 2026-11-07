@@ -25,9 +25,21 @@ Overrides: `VITE_APP_URL`, `VITE_SITE_URL` (defaults are the two hosts above).
 6. **Users**: sessions don't carry across hosts (one re-sign-in); PWA installs are tied to the origin (reinstall from `app.`). The old service worker on
    `akoro.name.ng` is repaired by `sw-repair.js` on the next load of the landing build.
 
-## Still to do (not in this change)
+## School sites → the school deployment (done in code, needs the domain move)
 
-- Move the wildcard `*.akoro.name.ng` and custom-domain school sites (today rendered by the tenant guard in `src/main.jsx` on the learner deployment, plus the
-  `/ai-chat` bundle) to the **school deployment**, on the primary domain. Needs the tenant guard ported to `akoro-school` and the Vercel wildcard re-pointed.
-- Prune the landing bundle (today it still ships the app's lazy chunks; they are never loaded) — a separate `akoro-landing` package is the clean fix.
-- The landing's "Install app" prompt: the landing has no manifest/service worker now; point it at `app.akoro.name.ng`.
+`akoro-school` now serves both the portal and the schools' public sites: `src/main.jsx` classifies the host (`src/utils/siteHost.js`) — portal hosts
+(localhost, `*.vercel.app`, `akoro-school.<base>`, `school.<base>`, and our reserved names `app`/`admin`/`api`/`instructors`…) boot the portal; any other host is a
+wildcard school subdomain or a custom domain and is rendered by the API (`/api/school/site/by-host`), with `/apply`, `/pay`, `/results` forwarded to the API.
+If the API says no school owns the host (404) the portal boots, so a mis-listed portal host can't lock admins out. Its build now also bundles the standalone
+AI chat under `/ai-chat` (`scripts/build-with-chat.sh`, `vercel.json`).
+
+Cut-over (infra): on the **school** Vercel project add env `VITE_API_URL` (the API) and, if the portal's host isn't `akoro-school.<base>`/`school.<base>`, `VITE_PORTAL_HOSTS`;
+then move `*.akoro.name.ng` and the verified custom domains from the learner project to the school project. Explicit hosts (`akoro.name.ng`, `www`, `app`, `admin`,
+`instructors`, `api`) stay on their own projects — Vercel serves an explicit domain before the wildcard. Check one school site, one custom domain, `/ai-chat` and the
+portal after the move. The learner deployment's own tenant guard (`src/main.jsx`) is then dead code and can be removed.
+
+## Bundles and the install button (done)
+
+- The two builds drop each other's pages at build time: the landing JS went from 10.7 MB (192 files) to 0.9 MB (48 files); the app from 10.7 MB to 10.4 MB (the marketing
+  pages are small). The landing no longer runs the presence heartbeat or the update prompt, and registers no service worker.
+- The landing's "Install app" button opens `app.akoro.name.ng` (a PWA installs from its own origin).

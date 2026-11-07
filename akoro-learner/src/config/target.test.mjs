@@ -40,8 +40,12 @@ test('whereTo app: product here, "/" is the app entry, other marketing paths go 
 
 test('wiring: App.jsx filters the routes by target and has the entry + other-site fallbacks; the landing build has no service worker; the build script skips the chat bundle', async () => {
   const app = await readFile(new URL('../App.jsx', import.meta.url), 'utf8');
-  assert.match(app, /const site = TARGET !== 'app'/);
-  assert.match(app, /const product = TARGET !== 'landing'/);
+  assert.match(app, /const SITE_BUILD    = import\.meta\.env\.VITE_TARGET !== 'app'/);
+  assert.match(app, /const PRODUCT_BUILD = import\.meta\.env\.VITE_TARGET !== 'landing'/);
+  assert.match(app, /const site = SITE_BUILD;/);
+  assert.match(app, /const product = PRODUCT_BUILD;/);
+  assert.match(app, /const AboutPage = SITE_BUILD \? lazyWithRetry/);
+  assert.match(app, /const SigninPage = PRODUCT_BUILD \? lazyWithRetry/);
   assert.match(app, /<Route path="\/" element=\{TARGET === 'app' \? <AppHome \/> : <LandingPage \/>\}\/>/);
   assert.match(app, /<Route path="\*" element=\{<OtherSite \/>\}\/>/);
   for (const marketing of ['/pricing', '/about', '/blog', '/blog/:slug', '/privacy']) assert.match(app, new RegExp(`\\{site && <Route path="${marketing}"`), marketing);

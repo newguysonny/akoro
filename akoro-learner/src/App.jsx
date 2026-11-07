@@ -13,55 +13,60 @@ import UpdatePrompt      from './components/common/UpdatePrompt.jsx';
 import PresenceHeartbeat from './components/network/PresenceHeartbeat.jsx';
 import { TARGET, whereTo } from './config/target.js';
 
+// Which site this build is (see config/target.js). These are literal at build time, so the other site's pages are
+// dropped from the bundle entirely — the landing doesn't ship the app, and the app doesn't ship the marketing pages.
+const SITE_BUILD    = import.meta.env.VITE_TARGET !== 'app';      // marketing pages: the landing (and a full build)
+const PRODUCT_BUILD = import.meta.env.VITE_TARGET !== 'landing';  // the learner product: the app (and a full build)
+
 // Route-level code splitting: each page is its own chunk, fetched on demand, so
 // the first load ships only the shell instead of the whole app in one bundle.
-const LandingPage        = lazyWithRetry(() => import('./pages/LandingPage.jsx'));
-const InstructorInfoPage = lazyWithRetry(() => import('./pages/InstructorInfoPage.jsx'));
-const SchoolInfoPage     = lazyWithRetry(() => import('./pages/SchoolInfoPage.jsx'));
-const StudentInfoPage    = lazyWithRetry(() => import('./pages/StudentInfoPage.jsx'));
-const OnboardingPage     = lazyWithRetry(() => import('./pages/OnboardingPage.jsx'));
-const LearnerDashboard   = lazyWithRetry(() => import('./pages/LearnerDashboard.jsx'));
-const SettingsPage       = lazyWithRetry(() => import('./pages/SettingsPage.jsx'));
-const SigninPage         = lazyWithRetry(() => import('./pages/auth/SigninPage.jsx'));
-const SignupPage         = lazyWithRetry(() => import('./pages/auth/SignupPage.jsx'));
-const AuthCallback       = lazyWithRetry(() => import('./pages/auth/AuthCallback.jsx'));
-const ForgotPasswordPage = lazyWithRetry(() => import('./pages/auth/ForgotPasswordPage.jsx'));
-const ResetPasswordPage  = lazyWithRetry(() => import('./pages/auth/ResetPasswordPage.jsx'));
-const FDEAdminPage       = lazyWithRetry(() => import('./pages/FDEAdminPage.jsx'));
-const NotificationsPage  = lazyWithRetry(() => import('./pages/NotificationsPage.jsx'));
-const ActivityPage       = lazyWithRetry(() => import('./pages/ActivityPage.jsx'));
-const ActivityDetailPage = lazyWithRetry(() => import('./pages/ActivityDetailPage.jsx'));
-const GradebookPage      = lazyWithRetry(() => import('./pages/GradebookPage.jsx'));
-const CommunityPage      = lazyWithRetry(() => import('./pages/CommunityPage.jsx'));
-const CommunityActivityPage  = lazyWithRetry(() => import('./pages/CommunityActivityPage.jsx'));
-const CommunitySettingsPage  = lazyWithRetry(() => import('./pages/CommunitySettingsPage.jsx'));
-const CommunityPeoplePage    = lazyWithRetry(() => import('./pages/CommunityPeoplePage.jsx'));
-const CommunityAnalyticsPage = lazyWithRetry(() => import('./pages/CommunityAnalyticsPage.jsx'));
-const CommunityProfilePage   = lazyWithRetry(() => import('./pages/CommunityProfilePage.jsx'));
-const LibraryPage        = lazyWithRetry(() => import('./pages/LibraryPage.jsx'));
-const DrawPage           = lazyWithRetry(() => import('./pages/DrawPage.jsx'));
-const PrivacyPolicyPage  = lazyWithRetry(() => import('./pages/PrivacyPolicyPage.jsx'));
-const TermsOfServicePage = lazyWithRetry(() => import('./pages/TermsOfServicePage.jsx'));
-const AboutPage          = lazyWithRetry(() => import('./pages/AboutPage.jsx'));
-const PricingPage        = lazyWithRetry(() => import('./pages/PricingPage.jsx'));
-const PilotApplicationPage = lazyWithRetry(() => import('./pages/PilotApplicationPage.jsx'));
-const UpgradePage          = lazyWithRetry(() => import('./pages/UpgradePage.jsx'));
-const ComparisonPage     = lazyWithRetry(() => import('./pages/ComparisonPage.jsx'));
-const ContactPage        = lazyWithRetry(() => import('./pages/ContactPage.jsx'));
-const CareersPage        = lazyWithRetry(() => import('./pages/CareersPage.jsx'));
-const BlogPage           = lazyWithRetry(() => import('./pages/BlogPage.jsx'));
-const BlogPostPage       = lazyWithRetry(() => import('./pages/BlogPostPage.jsx'));
-const BlogEditorPage     = lazyWithRetry(() => import('./pages/BlogEditorPage.jsx'));
-const PartnersPage       = lazyWithRetry(() => import('./pages/PartnersPage.jsx'));
-const AssessmentPage     = lazyWithRetry(() => import('./pages/AssessmentPage.jsx'));
-const CourseDetailsPage  = lazyWithRetry(() => import('./pages/CourseDetailsPage.jsx'));
-const AgentProfilePage   = lazyWithRetry(() => import('./pages/AgentProfilePage.jsx'));
-const CartPage           = lazyWithRetry(() => import('./pages/CartPage.jsx'));
-const WalletPage         = lazyWithRetry(() => import('./pages/WalletPage.jsx'));
-const CheckoutPage       = lazyWithRetry(() => import('./pages/CheckoutPage.jsx'));
-const OrderHistoryPage   = lazyWithRetry(() => import('./pages/OrderHistoryPage.jsx'));
+const LandingPage = SITE_BUILD ? lazyWithRetry(() => import('./pages/LandingPage.jsx')) : null;
+const InstructorInfoPage = SITE_BUILD ? lazyWithRetry(() => import('./pages/InstructorInfoPage.jsx')) : null;
+const SchoolInfoPage = SITE_BUILD ? lazyWithRetry(() => import('./pages/SchoolInfoPage.jsx')) : null;
+const StudentInfoPage = SITE_BUILD ? lazyWithRetry(() => import('./pages/StudentInfoPage.jsx')) : null;
+const OnboardingPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/OnboardingPage.jsx')) : null;
+const LearnerDashboard = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/LearnerDashboard.jsx')) : null;
+const SettingsPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/SettingsPage.jsx')) : null;
+const SigninPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/auth/SigninPage.jsx')) : null;
+const SignupPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/auth/SignupPage.jsx')) : null;
+const AuthCallback = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/auth/AuthCallback.jsx')) : null;
+const ForgotPasswordPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/auth/ForgotPasswordPage.jsx')) : null;
+const ResetPasswordPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/auth/ResetPasswordPage.jsx')) : null;
+const FDEAdminPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/FDEAdminPage.jsx')) : null;
+const NotificationsPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/NotificationsPage.jsx')) : null;
+const ActivityPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/ActivityPage.jsx')) : null;
+const ActivityDetailPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/ActivityDetailPage.jsx')) : null;
+const GradebookPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/GradebookPage.jsx')) : null;
+const CommunityPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/CommunityPage.jsx')) : null;
+const CommunityActivityPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/CommunityActivityPage.jsx')) : null;
+const CommunitySettingsPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/CommunitySettingsPage.jsx')) : null;
+const CommunityPeoplePage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/CommunityPeoplePage.jsx')) : null;
+const CommunityAnalyticsPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/CommunityAnalyticsPage.jsx')) : null;
+const CommunityProfilePage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/CommunityProfilePage.jsx')) : null;
+const LibraryPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/LibraryPage.jsx')) : null;
+const DrawPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/DrawPage.jsx')) : null;
+const PrivacyPolicyPage = SITE_BUILD ? lazyWithRetry(() => import('./pages/PrivacyPolicyPage.jsx')) : null;
+const TermsOfServicePage = SITE_BUILD ? lazyWithRetry(() => import('./pages/TermsOfServicePage.jsx')) : null;
+const AboutPage = SITE_BUILD ? lazyWithRetry(() => import('./pages/AboutPage.jsx')) : null;
+const PricingPage = SITE_BUILD ? lazyWithRetry(() => import('./pages/PricingPage.jsx')) : null;
+const PilotApplicationPage = SITE_BUILD ? lazyWithRetry(() => import('./pages/PilotApplicationPage.jsx')) : null;
+const UpgradePage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/UpgradePage.jsx')) : null;
+const ComparisonPage = SITE_BUILD ? lazyWithRetry(() => import('./pages/ComparisonPage.jsx')) : null;
+const ContactPage = SITE_BUILD ? lazyWithRetry(() => import('./pages/ContactPage.jsx')) : null;
+const CareersPage = SITE_BUILD ? lazyWithRetry(() => import('./pages/CareersPage.jsx')) : null;
+const BlogPage = SITE_BUILD ? lazyWithRetry(() => import('./pages/BlogPage.jsx')) : null;
+const BlogPostPage = SITE_BUILD ? lazyWithRetry(() => import('./pages/BlogPostPage.jsx')) : null;
+const BlogEditorPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/BlogEditorPage.jsx')) : null;
+const PartnersPage = SITE_BUILD ? lazyWithRetry(() => import('./pages/PartnersPage.jsx')) : null;
+const AssessmentPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/AssessmentPage.jsx')) : null;
+const CourseDetailsPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/CourseDetailsPage.jsx')) : null;
+const AgentProfilePage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/AgentProfilePage.jsx')) : null;
+const CartPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/CartPage.jsx')) : null;
+const WalletPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/WalletPage.jsx')) : null;
+const CheckoutPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/CheckoutPage.jsx')) : null;
+const OrderHistoryPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/OrderHistoryPage.jsx')) : null;
 const NotFoundPage       = lazyWithRetry(() => import('./pages/NotFoundPage.jsx'));
-const JoinPage           = lazyWithRetry(() => import('./pages/JoinPage.jsx'));
+const JoinPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/JoinPage.jsx')) : null;
 // DEV-ONLY layout preview (/dev/shell) — gated on import.meta.env.DEV so the
 // route, this reference and the chunk are all dead-code-eliminated from
 // production builds. Lets the AppShell sidebar / rail / bottom-nav behaviour
@@ -133,8 +138,8 @@ function RouteFallback() {
 }
 
 function AppRoutes() {
-  const site = TARGET !== 'app';        // marketing pages: the landing (and a full build)
-  const product = TARGET !== 'landing'; // the learner product: the app (and a full build)
+  const site = SITE_BUILD;        // marketing pages: the landing (and a full build)
+  const product = PRODUCT_BUILD;  // the learner product: the app (and a full build)
   return (
     <>
       <ScrollToTop />
@@ -211,8 +216,8 @@ export default function App() {
                 <OfflineBanner />
                 {/* One host for every confirmDialog() call in the app. */}
                 <ConfirmHost />
-                <UpdatePrompt />
-                <PresenceHeartbeat />
+                {PRODUCT_BUILD && <UpdatePrompt />}
+                {PRODUCT_BUILD && <PresenceHeartbeat />}
               </BrowserRouter>
             </CartProvider>
           </AuthProvider>
