@@ -23,6 +23,7 @@ import {
 } from "../../lib/aiPricing.js";
 import { initializeTransaction } from "../adaptive-learning/marketplace/paystackService.js";
 import { redeemVoucher, VoucherError, voucherRedeemConfigured } from "../../lib/voucherRedeem.js";
+import { urlFor, displayHost } from "../../lib/urls.js";
 
 const router = Router();
 const SCHOOL_ROLES = ["school", "school_admin", "admin"];
@@ -140,7 +141,7 @@ router.post("/topup/init", authenticateToken, async (req, res) => {
 
     await ensureAccount(ownerType, ownerId);
     const reference = `coins_${randomUUID()}`;
-    const email = req.user.email || `user_${req.user.id}@akoro.app`;
+    const email = req.user.email || `user_${req.user.id}@${displayHost(urlFor("MAIN_SITE_URL"))}`;
     const init = await initializeTransaction({
       email, amount_kobo: kobo, reference,
       metadata: { purpose: "coin_topup", owner_type: ownerType, owner_id: ownerId, coins, by: req.user.id },

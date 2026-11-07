@@ -11,6 +11,7 @@ import { getBalance, debit, credit, transactions } from "./lib/wallet.js";
 import { priceForQuantity } from "./lib/pricing.js";
 import { generateCodes } from "./lib/codes.js";
 import { initializeTransaction } from "./lib/paystack.js";
+import { urlFor, displayHost } from "../../lib/urls.js";
 
 const router = Router();
 router.use(authenticateToken);
@@ -82,7 +83,7 @@ router.post("/wallet/topup/init", async (req, res) => {
     if (kobo < 100) return res.status(400).json({ error: "Top-up amount is too small" });
 
     const reference = `vwallet_${randomUUID()}`;
-    const email = req.user.email || `user_${req.user.id}@akoro.app`;
+    const email = req.user.email || `user_${req.user.id}@${displayHost(urlFor("MAIN_SITE_URL"))}`;
     const frontend = process.env.VOUCHERS_FRONTEND_URL || process.env.FRONTEND_URL || "";
     const init = await initializeTransaction({
       email, amount_kobo: kobo, reference,

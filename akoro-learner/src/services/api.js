@@ -8,8 +8,9 @@
 
 import { cacheGet, cacheSet } from './offlineCache.js';
 import { enqueue, allItems, remove, queueSize } from './offlineQueue.js';
+import { API } from '../config/urls.js';
 
-export const API = import.meta.env.VITE_API_URL || "https://akoro.onrender.com";
+export { API };
 
 /* ── Session recovery ────────────────────────────────────────────────────────
  * The access token lives ~15 minutes. Leave a tab idle past that and the next

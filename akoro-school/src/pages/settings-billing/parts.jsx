@@ -15,6 +15,7 @@ import { PageLayout } from '../../components/Layout.jsx';
 import { apiGet, apiPut, apiPost, API } from '../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, BLUE, RED, FONT } from '../../constants.js';
 import { COUNTRIES as GEO_COUNTRIES, NG_STATES } from '../../data/locations.js';
+import { LEARNER_URL } from '../../config/urls.js';
 
 
 const EDUCATION_LEVELS = ['Nursery / Pre-school', 'Primary', 'Junior Secondary', 'Senior Secondary'];
@@ -27,7 +28,7 @@ const STUDENT_BANDS    = ['1 – 100', '101 – 300', '301 – 600', '601 – 1,
 /* ── Tab config ──────────────────────────────────────────────────── */
 // Public marketing site (Terms / Privacy / Contact live there) + support email,
 // from env so they're not hard-coded to akoro.app.
-const SITE_URL = (import.meta.env.VITE_LEARNER_URL || 'https://akoro.app').replace(/\/$/, '');
+const SITE_URL = LEARNER_URL;
 const SUPPORT_EMAIL = import.meta.env.VITE_SUPPORT_EMAIL || 'support@akoro.app';
 
 const TABS = [

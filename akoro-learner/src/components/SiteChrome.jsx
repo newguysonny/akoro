@@ -14,6 +14,7 @@ import { FaLinkedin, FaYoutube, FaInstagram, FaFacebook, FaXTwitter } from 'reac
 import AkoroLogo from './common/AkoroLogo.jsx';
 import InstallInstructionsSheet from './common/InstallInstructionsSheet.jsx';
 import { usePwaInstall } from '../hooks/usePwaInstall.js';
+import { TARGET, APP_URL } from '../config/target.js';
 
 /* ── Brand tokens (match landing page) ── */
 const B  = '#6C3BFF';
@@ -179,7 +180,10 @@ export function SFSHeader() {
   const { hidden: installHidden, canPrompt, platform, promptInstall } = usePwaInstall();
   const [sheetOpen, setSheetOpen] = useState(false);
 
+  // The landing is a plain website (no manifest, no service worker): the app is installed from the app's own host.
+  const toApp = TARGET === 'landing';
   const onInstallClick = async () => {
+    if (toApp) { window.location.assign(`${APP_URL}/`); return; }
     if (canPrompt) { await promptInstall(); return; }   // Android/desktop: native dialog
     setSheetOpen(true);                                 // no native prompt on this browser — its exact steps
   };
@@ -228,7 +232,7 @@ export function SFSHeader() {
 
       {/* Manual install steps for prompt-less browsers — the SAME sheet the
           in-app InstallBanner uses (exact steps for this browser/platform). */}
-      {!installHidden && (
+      {!installHidden && !toApp && (
         <InstallInstructionsSheet open={sheetOpen} onClose={() => setSheetOpen(false)} platform={platform} />
       )}
 

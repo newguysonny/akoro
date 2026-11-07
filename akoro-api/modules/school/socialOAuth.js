@@ -17,10 +17,11 @@ import jwt from "jsonwebtoken";
 import { randomUUID, randomBytes, createHash } from "crypto";
 import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
+import { urlFor } from "../../lib/urls.js";
 
 const router = Router();
 const SCHOOL_ROLES = ["instructor", "teacher", "admin"];
-const SCHOOL_PORTAL_URL = (process.env.SCHOOL_FRONTEND_URL || "https://akoro-school.akoro.name.ng").replace(/\/$/, "");
+const SCHOOL_PORTAL_URL = urlFor("SCHOOL_FRONTEND_URL");
 const API_BASE = (process.env.API_URL || "").replace(/\/$/, "");
 // No default: with neither set, connecting a social account is off (a known key
 // would let anyone forge a state). The callback's jwt.verify then fails → invalid_state.

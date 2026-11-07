@@ -4,6 +4,7 @@ import {Wallet, ListChecks, HelpCircle, Plus, Pencil, Trash2, Save, Loader2, Sha
 import { PageLayout } from '../components/Layout.jsx';
 import { apiGet, apiPut, apiPost, apiDelete } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
+import { ADMISSION_BASE_URL } from '../config/urls.js';
 
 const FIELD_TYPES = ['text', 'number', 'date', 'dropdown', 'file', 'textarea', 'checkbox'];
 const FIELD_TYPE_LABEL = { text: 'Text Input', number: 'Number', date: 'Date', dropdown: 'Dropdown', file: 'File', textarea: 'Textarea', checkbox: 'Checkbox' };
@@ -87,7 +88,7 @@ export default function AdmissionSettingsPage() {
     try { await apiDelete(`/api/school/admission/fields/${id}`); } catch { /* already removed locally */ }
   };
 
-  const admissionUrl = `https://apply.akoro.app/${slug || 'your-school'}`;
+  const admissionUrl = `${ADMISSION_BASE_URL}/${slug || 'your-school'}`;
   const copyLink = () => {
     navigator.clipboard?.writeText(admissionUrl);
     setCopied(true); setTimeout(() => setCopied(false), 1800);
@@ -121,7 +122,7 @@ export default function AdmissionSettingsPage() {
           <label style={{ fontSize: 12.5, fontWeight: 700, color: INK, fontFamily: FONT, display: 'block', marginBottom: 6 }}>Custom Public URL Slug</label>
           <input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="your-school-name" style={{ ...inputStyle, marginBottom: 6 }} />
           <p style={{ fontSize: 11, color: MUTED2, margin: '0 0 16px', fontFamily: FONT }}>
-            This will be your admission link: apply.akoro.app/<b style={{ color: INK }}>{slug || 'your-school'}</b>
+            This will be your admission link: {ADMISSION_BASE_URL.replace(/^https?:\/\//, '')}/<b style={{ color: INK }}>{slug || 'your-school'}</b>
           </p>
 
           <label style={{ fontSize: 12.5, fontWeight: 700, color: INK, fontFamily: FONT, display: 'block', marginBottom: 6 }}>Fee Amount (₦)</label>

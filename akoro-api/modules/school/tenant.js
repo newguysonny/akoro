@@ -6,21 +6,17 @@
  * verified custom domain in edu.school_domains.
  */
 import db from "../../db.js";
+import { hostOf, isReservedSubdomain } from "./hostNames.js";
+import { URL_DEFAULTS } from "../../lib/urls.js";
 
-// Bare registrable host from a URL (or host string): drops scheme, path, port
-// and a leading www./api. label. e.g. "https://akoro.name.ng/x" → "akoro.name.ng".
-export function hostOf(url) {
-  if (!url) return "";
-  let h = String(url).trim().toLowerCase().replace(/^[a-z]+:\/\//, "").split("/")[0].split(":")[0];
-  return h.replace(/^(www|api)\./, "");
-}
+export { hostOf };
 
 // Wildcard base domain(s). Not hardcoded — derived from the main learner/site
 // URL that Railway already defines (FRONTEND_URL / MAIN_SITE_URL). Change the
 // domain there and tenant subdomains follow. SITE_BASE_DOMAIN may still be set
 // explicitly (comma list) to add extra zones (e.g. keep the old akoro.app).
 const derivedBase = hostOf(process.env.FRONTEND_URL || process.env.MAIN_SITE_URL);
-export const SITE_BASE_DOMAINS = (process.env.SITE_BASE_DOMAIN || derivedBase || "akoro.name.ng")
+export const SITE_BASE_DOMAINS = (process.env.SITE_BASE_DOMAIN || derivedBase || hostOf(URL_DEFAULTS.MAIN_SITE_URL))
   .toLowerCase().split(",").map((s) => s.trim()).filter(Boolean);
 export const SITE_BASE_DOMAIN = SITE_BASE_DOMAINS[0];
 export const SCHOOL_SELECT = "id, name, slug, logo_url, address, phone, acronym, principal_name";
@@ -70,6 +66,7 @@ export function isTenantHost(host) {
     if (bare === base || !bare.endsWith(`.${base}`)) continue;
     const sub = bare.slice(0, -(base.length + 1));
     if (sub.includes(".")) return true;               // deeper nesting is never ours
+    if (isReservedSubdomain(sub)) return false;       // app., admin., api. … are our own apps, never a school
     if (!tenantCacheLoaded) return true;              // unknown → treat as a school
     return tenantSlugs.has(sub);
   }
@@ -87,7 +84,7 @@ export async function resolveSchoolByHost(rawHost) {
   for (const base of SITE_BASE_DOMAINS) {
     if (!bare.endsWith(`.${base}`)) continue;
     const sub = bare.slice(0, -(base.length + 1));
-    if (sub && !sub.includes(".")) {
+    if (sub && !sub.includes(".") && !isReservedSubdomain(sub)) {
       const { data } = await db.from("school_profiles").select(SCHOOL_SELECT).eq("slug", sub).maybeSingle();
       if (data) return data;
     }

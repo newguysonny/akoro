@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "build:chat": "vite build --config vite.chat.config.js",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test src/utils/siteHost.test.mjs"
   },
   "dependencies": {
     "@tensorflow-models/blazeface": "^0.1.0",

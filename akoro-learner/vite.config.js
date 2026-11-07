@@ -8,6 +8,9 @@ import { VitePWA } from 'vite-plugin-pwa';
 const QUEUEABLE_POST = ['/api/notifications/mark-read', '/api/profiles/me/teacher-request', '/api/adaptive/marketplace/set-default'];
 const QUEUEABLE_PATCH = ['/api/profiles/me', '/api/profiles/me/notifications'];
 
+// VITE_TARGET: 'landing' (marketing site, no PWA), 'app' (the learner product) or unset/'full' (both) — see src/config/target.js
+const LANDING = process.env.VITE_TARGET === 'landing';
+
 export default defineConfig({
   // @excalidraw/excalidraw 0.17.x reads process.env.IS_PREACT at import time;
   // Vite doesn't polyfill process in the browser, so define it (false = React).
@@ -17,6 +20,8 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      // The marketing site is a plain website: no service worker, nothing installable.
+      disable: LANDING,
       // Prompt mode: when a new build ships the SW waits, and the app shows a
       // "new version available" banner (auto-reloads after a countdown). We
       // register the SW ourselves (see UpdatePrompt) to receive onNeedRefresh.

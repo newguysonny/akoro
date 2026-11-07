@@ -41,6 +41,7 @@ import mgmtRouter from "./mgmt.js";
 import publicPortalRouter from "./publicPortal.js";
 import { resolveSchoolByHost, getSchoolGateway, SITE_BASE_DOMAIN, SITE_BASE_DOMAINS } from "./tenant.js";
 import { strictLimit } from "../../middleware/security.js";
+import { urlFor } from "../../lib/urls.js";
 
 const router = Router();
 const SCHOOL_ROLES = ["school", "school_admin", "admin"];
@@ -483,7 +484,7 @@ router.post("/students/enrol", authenticateToken, requireRole(SCHOOL_ROLES), asy
     // Email credentials on the invite path.
     const wantEmail = req.body.sendEmail === true || req.body.sendEmail === "true";
     if (wantEmail && isNew && tempPassword) {
-      const loginUrl = process.env.FRONTEND_URL || "https://akoro.name.ng";
+      const loginUrl = urlFor("FRONTEND_URL");
       notifyUser({
         userId: user.id, type: "account_created",
         title: `Welcome to ${school.name}`,
@@ -1347,7 +1348,7 @@ function templateColorStyle(colors) {
 // need the API to grant credentialed CORS to every <slug> subdomain — which is
 // exactly the hole that let a script on one school's site call the API as any
 // signed-in visitor. Nothing here needs it.
-const SCHOOL_PORTAL_URL = (process.env.SCHOOL_FRONTEND_URL || "https://akoro-school.akoro.name.ng").replace(/\/$/, "");
+const SCHOOL_PORTAL_URL = urlFor("SCHOOL_FRONTEND_URL");
 function aiChatWidgetHtml(apiOrigin) {
   const api = String(apiOrigin || "").replace(/\/$/, "");
   return `
@@ -1616,7 +1617,7 @@ router.post("/website/preview-site", authenticateToken, requireRole(SCHOOL_ROLES
 // subdomains, unverified custom domains). A real page, not a bare string,
 // so stray/typo'd subdomains never look broken or fall into the main app.
 // The "Go to Akoro" link reuses the main-site URL Railway already defines.
-const MAIN_SITE_URL = process.env.MAIN_SITE_URL || process.env.FRONTEND_URL || "https://akoro.name.ng";
+const MAIN_SITE_URL = urlFor("MAIN_SITE_URL");
 const schoolNotFoundHtml = (host) => `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>School not found — Akoro</title><meta name="robots" content="noindex">
@@ -2459,7 +2460,7 @@ router.delete("/admission/fields/:id", authenticateToken, requireRole(SCHOOL_ROL
 // kobo). Checkout mirrors the instructor tools Paystack flow.
 // =============================================================
 
-const SCHOOL_FRONTEND_URL = process.env.SCHOOL_FRONTEND_URL || "https://school.akoro.app";
+const SCHOOL_FRONTEND_URL = urlFor("SCHOOL_FRONTEND_URL");
 const toNaira = (kobo) => Math.round((kobo || 0) / 100);
 
 async function getMySubscription(schoolId) {

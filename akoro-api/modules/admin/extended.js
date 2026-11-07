@@ -39,6 +39,7 @@ import bcrypt from "bcrypt";
 import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { sendWelcomeEmail } from "../auth/emails.js";
+import { urlFor } from "../../lib/urls.js";
 
 const router   = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];
@@ -436,9 +437,9 @@ router.post("/users/invite-csv", adminOnly, asyncHandler(async (req, res) => {
 // admin can share it.
 const CREATE_ROLES = ["student", "instructor", "school_admin"];
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS ?? "12", 10);
-const FRONTEND_URL            = process.env.FRONTEND_URL            || "https://akoro.app";
-const INSTRUCTOR_FRONTEND_URL = process.env.INSTRUCTOR_FRONTEND_URL || "https://instructor.akoro.app";
-const SCHOOL_FRONTEND_URL     = process.env.SCHOOL_FRONTEND_URL     || "https://school.akoro.app";
+const FRONTEND_URL            = urlFor("FRONTEND_URL");
+const INSTRUCTOR_FRONTEND_URL = urlFor("INSTRUCTOR_FRONTEND_URL");
+const SCHOOL_FRONTEND_URL     = urlFor("SCHOOL_FRONTEND_URL");
 
 const genPassword = () =>
   Array.from({ length: 12 }, () =>

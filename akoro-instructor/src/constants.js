@@ -1,3 +1,4 @@
+import { API, WS_URL } from './config/urls.js';
 export const AMBER  = "#E8884A";
 export const INK    = "#1A1A2E";
 export const MUTED  = "#6B6B80";
@@ -11,5 +12,4 @@ export const PURPLE = "#7C3AED";
 export const BLUE   = "#3B82F6";
 export const FONT   = "'DM Sans', sans-serif";
 
-export const API    = import.meta.env.VITE_API_URL || "https://akoro.onrender.com";
-export const WS_URL = import.meta.env.VITE_WS_URL || "https://akoro.onrender.com";
+export { API, WS_URL };
